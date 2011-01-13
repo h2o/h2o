@@ -1,6 +1,6 @@
 /* The MIT License
 
-   Copyright (c) 2008, 2009 by Heng Li <lh3@live.co.uk>
+   Copyright (c) 2008, 2009 by Attractive Chaos <attractor@live.co.uk> 
 
    Permission is hereby granted, free of charge, to any person obtaining
    a copy of this software and associated documentation files (the
