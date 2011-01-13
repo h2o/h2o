@@ -1,7 +1,7 @@
 INTRODUCTION
 ============
 
-Klib is a standalone and lightweight C library. Currently all components are
+Klib is a standalone and lightweight C library. Currently most components are
 independent of external libraries, except the standard C library, and
 independent of each other. To use a component of this library, you only need to
 copy one or two files to your souce code tree without worrying about library
