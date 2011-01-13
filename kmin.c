@@ -1,6 +1,6 @@
 /* The MIT License
 
-   Copyright (c) 2008, by Heng Li <lh3@live.co.uk>
+   Copyright (c) 2008, 2010 by Attractive Chaos <attractor@live.co.uk>
 
    Permission is hereby granted, free of charge, to any person obtaining
    a copy of this software and associated documentation files (the
@@ -24,7 +24,6 @@
 */
 
 /* Hooke-Jeeves algorithm for nonlinear minimization
-   Heng Li, Februay 3, 2008
  
    Based on the pseudocodes by Bell and Pike (CACM 9(9):684-685), and
    the revision by Tomlin and Smith (CACM 12(11):637-638). Both of the
