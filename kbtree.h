@@ -52,14 +52,14 @@ typedef struct {
 	{																	\
 		kbtree_##name##_t *b;											\
 		b = (kbtree_##name##_t*)calloc(1, sizeof(kbtree_##name##_t));	\
-		b->t = ((size - 4 - sizeof(void*)) / (sizeof(void*) + sizeof(key_t)) + 1) / 2; \
+		b->t = ((size - 4 - sizeof(void*)) / (sizeof(void*) + sizeof(key_t)) + 1) >> 1; \
 		if (b->t < 2) {													\
 			free(b); return 0;											\
 		}																\
 		b->n = 2 * b->t - 1;											\
 		b->off_ptr = 4 + b->n * sizeof(key_t);							\
-		b->ilen = (4 + sizeof(void*) + b->n * (sizeof(void*) + sizeof(key_t)) + 3) / 4 * 4; \
-		b->elen = (b->off_ptr + 3) / 4 * 4;								\
+		b->ilen = (4 + sizeof(void*) + b->n * (sizeof(void*) + sizeof(key_t)) + 3) >> 2 << 2; \
+		b->elen = (b->off_ptr + 3) >> 2 << 2;							\
 		b->root = (kbnode_t*)calloc(1, b->ilen);						\
 		++b->n_nodes;													\
 		return b;														\
@@ -99,7 +99,7 @@ typedef struct {
 #define __KB_GET_AUX0(name, key_t, __cmp)								\
 	static inline int __kb_get_aux_##name(const kbnode_t * __restrict x, const key_t * __restrict k, int *r) \
 	{																	\
-		int tr, *rr, begin, end, n = x->n / 2;							\
+		int tr, *rr, begin, end, n = x->n >> 1;							\
 		if (x->n == 0) return -1;										\
 		if (__cmp(*k, __KB_KEY(key_t, x)[n]) < 0) {						\
 			begin = 0; end = n;											\
@@ -117,7 +117,7 @@ typedef struct {
 		if (x->n == 0) return -1;										\
 		rr = r? r : &tr;												\
 		while (begin < end) {											\
-			int mid = (begin + end) / 2;								\
+			int mid = (begin + end) >> 1;								\
 			if (__cmp(__KB_KEY(key_t, x)[mid], *k) < 0) begin = mid + 1; \
 			else end = mid;												\
 		}																\
