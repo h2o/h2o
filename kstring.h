@@ -44,6 +44,7 @@ typedef struct __kstring_t {
 
 typedef struct {
 	uint64_t tab[4];
+	int sep, finished;
 	const char *p; // end of the current token
 } ks_tokaux_t;
 
