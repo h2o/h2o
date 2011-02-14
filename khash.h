@@ -1,6 +1,6 @@
 /* The MIT License
 
-   Copyright (c) 2008, 2009 by Attractive Chaos <attractor@live.co.uk>
+   Copyright (c) 2008, 2009, 2011 by Attractive Chaos <attractor@live.co.uk>
 
    Permission is hereby granted, free of charge, to any person obtaining
    a copy of this software and associated documentation files (the
@@ -47,6 +47,10 @@ int main() {
 */
 
 /*
+  2011-02-14 (0.2.5):
+
+    * Allow to declare global functions.
+
   2009-09-26 (0.2.4):
 
     * Improve portability
@@ -90,7 +94,7 @@ int main() {
   @copyright Heng Li
  */
 
-#define AC_VERSION_KHASH_H "0.2.4"
+#define AC_VERSION_KHASH_H "0.2.5"
 
 #include <stdlib.h>
 #include <string.h>
@@ -139,17 +143,32 @@ static const khint32_t __ac_prime_list[__ac_HASH_PRIME_SIZE] =
 
 static const double __ac_HASH_UPPER = 0.77;
 
-#define KHASH_INIT(name, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal) \
+#define KHASH_DECLARE(name, khkey_t, khval_t)		 					\
 	typedef struct {													\
 		khint_t n_buckets, size, n_occupied, upper_bound;				\
 		khint32_t *flags;												\
 		khkey_t *keys;													\
 		khval_t *vals;													\
 	} kh_##name##_t;													\
-	static inline kh_##name##_t *kh_init_##name() {						\
+	extern kh_##name##_t *kh_init_##name();								\
+	extern void kh_destroy_##name(kh_##name##_t *h);					\
+	extern void kh_clear_##name(kh_##name##_t *h);						\
+	extern khint_t kh_get_##name(const kh_##name##_t *h, khkey_t key); 	\
+	extern void kh_resize_##name(kh_##name##_t *h, khint_t new_n_buckets); \
+	extern khint_t kh_put_##name(kh_##name##_t *h, khkey_t key, int *ret); \
+	extern void kh_del_##name(kh_##name##_t *h, khint_t x);
+
+#define KHASH_INIT2(name, SCOPE, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal) \
+	typedef struct {													\
+		khint_t n_buckets, size, n_occupied, upper_bound;				\
+		khint32_t *flags;												\
+		khkey_t *keys;													\
+		khval_t *vals;													\
+	} kh_##name##_t;													\
+	SCOPE kh_##name##_t *kh_init_##name() {								\
 		return (kh_##name##_t*)calloc(1, sizeof(kh_##name##_t));		\
 	}																	\
-	static inline void kh_destroy_##name(kh_##name##_t *h)				\
+	SCOPE void kh_destroy_##name(kh_##name##_t *h)						\
 	{																	\
 		if (h) {														\
 			free(h->keys); free(h->flags);								\
@@ -157,14 +176,14 @@ static const double __ac_HASH_UPPER = 0.77;
 			free(h);													\
 		}																\
 	}																	\
-	static inline void kh_clear_##name(kh_##name##_t *h)				\
+	SCOPE void kh_clear_##name(kh_##name##_t *h)						\
 	{																	\
 		if (h && h->flags) {											\
 			memset(h->flags, 0xaa, ((h->n_buckets>>4) + 1) * sizeof(khint32_t)); \
 			h->size = h->n_occupied = 0;								\
 		}																\
 	}																	\
-	static inline khint_t kh_get_##name(const kh_##name##_t *h, khkey_t key) \
+	SCOPE khint_t kh_get_##name(const kh_##name##_t *h, khkey_t key) 	\
 	{																	\
 		if (h->n_buckets) {												\
 			khint_t inc, k, i, last;									\
@@ -178,7 +197,7 @@ static const double __ac_HASH_UPPER = 0.77;
 			return __ac_iseither(h->flags, i)? h->n_buckets : i;		\
 		} else return 0;												\
 	}																	\
-	static inline void kh_resize_##name(kh_##name##_t *h, khint_t new_n_buckets) \
+	SCOPE void kh_resize_##name(kh_##name##_t *h, khint_t new_n_buckets) \
 	{																	\
 		khint32_t *new_flags = 0;										\
 		khint_t j = 1;													\
@@ -238,7 +257,7 @@ static const double __ac_HASH_UPPER = 0.77;
 			h->upper_bound = (khint_t)(h->n_buckets * __ac_HASH_UPPER + 0.5); \
 		}																\
 	}																	\
-	static inline khint_t kh_put_##name(kh_##name##_t *h, khkey_t key, int *ret) \
+	SCOPE khint_t kh_put_##name(kh_##name##_t *h, khkey_t key, int *ret) \
 	{																	\
 		khint_t x;														\
 		if (h->n_occupied >= h->upper_bound) {							\
@@ -276,13 +295,16 @@ static const double __ac_HASH_UPPER = 0.77;
 		} else *ret = 0;												\
 		return x;														\
 	}																	\
-	static inline void kh_del_##name(kh_##name##_t *h, khint_t x)		\
+	SCOPE void kh_del_##name(kh_##name##_t *h, khint_t x)				\
 	{																	\
 		if (x != h->n_buckets && !__ac_iseither(h->flags, x)) {			\
 			__ac_set_isdel_true(h->flags, x);							\
 			--h->size;													\
 		}																\
 	}
+
+#define KHASH_INIT(name, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal) \
+	KHASH_INIT2(name, static inline, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal)
 
 /* --- BEGIN OF HASH FUNCTIONS --- */
 
