@@ -65,6 +65,11 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	t1 = clock();
+	ks_mergesort(int, N, array, 0);
+	t2 = clock();
+	fprintf(stderr, "mergesort (sorted): %.3lf\n", (double)(t2-t1)/CLOCKS_PER_SEC);
+
 	srand48(11);
 	for (i = 0; i < N; ++i) array[i] = (int)lrand48();
 	t1 = clock();
