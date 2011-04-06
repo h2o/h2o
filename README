@@ -6,6 +6,11 @@ of external libraries, except the standard C library, and independent of each
 other. To use a component of this library, you only need to copy one or two
 files to your souce code tree without worrying about library dependencies.
 
+Klib strives for efficiency and a small memory footprint. Some components, such
+as khash.h, kbtree.h, ksort.h and kvec.h, are among the most efficient
+implementations of similar algorithms or data structures, while using less
+memory than many others.
+
 
 OVERVIEW
 ========
@@ -29,3 +34,4 @@ LICENSE
 =======
 
 Most of the source codes are released under the MIT/X11 or the BSD license.
+
