@@ -39,6 +39,7 @@
   string:split()
   io.xopen()
   table.ksmall()
+  table.shuffle()
   math.lgamma() >math.lbinom() >math.igamma()
   math.igamma() <math.lgamma() >matrix.chi2()
   math.erfc()
@@ -160,6 +161,13 @@ function table.ksmall(arr, k)
 		arr[low], arr[hh] = arr[hh], arr[low];
 		if hh <= k then low = ll end
 		if hh >= k then high = hh - 1 end
+	end
+end
+
+function table.shuffle(a)
+	for i = #a, 1, -1 do
+		local j = math.random(i)
+		a[j], a[i] = a[i], a[j]
 	end
 end
 
