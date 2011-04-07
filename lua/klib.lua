@@ -59,7 +59,7 @@
 
 -- Description: getopt() translated from the BSD getopt(); compatible with the default Unix getopt()
 --[[ Example:
-	for opt, optarg = os.getopt(arg, 'a:b') do
+	for opt, optarg in os.getopt(arg, 'a:b') do
 		if opt == 'a' then print(opt .. '=' .. optarg)
 		elseif opt == 'b' then print(opt) end -- optarg is nil
 	end
