@@ -57,7 +57,13 @@
   matrix.solve()
 ]]--
 
--- Description: getopt() translated from the BSD getopt()
+-- Description: getopt() translated from the BSD getopt(); compatible with the default Unix getopt()
+--[[ Example:
+	for opt, optarg = os.getopt(arg, 'a:b') do
+		if opt == 'a' then print(opt .. '=' .. optarg)
+		elseif opt == 'b' then print(opt) end -- optarg is nil
+	end
+]]--
 function os.getopt(args, ostr)
 	local arg, place = nil, 0;
 	return function ()
@@ -127,7 +133,7 @@ function string:split(sep, n)
 	return a;
 end
 
--- Description: intelligent file open
+-- Description: smart file open
 function io.xopen(fn, mode)
 	mode = mode or 'r';
 	if fn == nil then return io.stdin;
@@ -164,6 +170,7 @@ function table.ksmall(arr, k)
 	end
 end
 
+-- Description: shuffle/permutate an array
 function table.shuffle(a)
 	for i = #a, 1, -1 do
 		local j = math.random(i)
@@ -247,7 +254,7 @@ end
 math.M_SQRT2   = 1.41421356237309504880  -- sqrt(2)
 math.M_SQRT1_2 = 0.70710678118654752440  -- 1/sqrt(2)
 
--- Description: erfc(x): \Phi(x) = 0.5 * erfc(-x/M_SQRT2)
+-- Description: complement error function erfc(x): \Phi(x) = 0.5 * erfc(-x/M_SQRT2)
 function math.erfc(x)
 	local z = math.abs(x) * math.M_SQRT2
 	if z > 37 then return (x > 0 and 0) or 2 end
@@ -378,7 +385,7 @@ end
 
      Busing et al. (1999) Delete-m Jackknife for unequal m. Statistics and Computing, 9:3-8.
 ]]--
-function math.jackknife(g, m, t, t0) -- FIXME: not tested yet
+function math.jackknife(g, m, t, t0)
 	local h, n, sum = {}, 0, 0;
 	for j = 1, g do n = n + m[j] end
 	if t0 == nil then -- When t0 is absent, estimate it in a naive way
