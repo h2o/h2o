@@ -1,6 +1,6 @@
 /* The MIT License
 
-   Copyright (c) 2008 by Attractive Chaos <attractor@live.co.uk> 
+   Copyright (c) 2008, 2011 Attractive Chaos <attractor@live.co.uk>
 
    Permission is hereby granted, free of charge, to any person obtaining
    a copy of this software and associated documentation files (the
@@ -24,6 +24,14 @@
 */
 
 /*
+  2011-04-10 (0.1.6):
+
+  	* Added sample
+
+  2011-03 (0.1.5):
+
+	* Added shuffle/permutation
+
   2008-11-16 (0.1.4):
 
     * Fixed a bug in introsort() that happens in rare cases.
@@ -248,6 +256,26 @@ typedef struct {
 			if (hh <= k) low = ll;										\
 			if (hh >= k) high = hh - 1;									\
 		}																\
+	}																	\
+	void ks_shuffle_##name(size_t n, type_t a[])						\
+	{																	\
+		int i, j;														\
+		for (i = n; i > 1; --i) {										\
+			type_t tmp;													\
+			j = (int)(drand48() * i);									\
+			tmp = a[j]; a[j] = a[i-1]; a[i-1] = tmp;					\
+		}																\
+	}																	\
+	void ks_sample_##name(size_t n, size_t r, type_t a[]) /* FIXME: NOT TESTED!!! */ \
+	{ /* reference: http://code.activestate.com/recipes/272884/ */ \
+		int i, k, pop = n; \
+		for (i = (int)r, k = 0; i >= 0; --i) { \
+			double z = 1., x = drand48(); \
+			type_t tmp; \
+			while (x < z) z -= z * i / (pop--); \
+			if (k != n - pop - 1) tmp = a[k], a[k] = a[n-pop-1], a[n-pop-1] = tmp; \
+			++k; \
+		} \
 	}
 
 #define ks_mergesort(name, n, a, t) ks_mergesort_##name(n, a, t)
@@ -257,6 +285,7 @@ typedef struct {
 #define ks_heapmake(name, n, a) ks_heapmake_##name(n, a)
 #define ks_heapadjust(name, i, n, a) ks_heapadjust_##name(i, n, a)
 #define ks_ksmall(name, n, a, k) ks_ksmall_##name(n, a, k)
+#define ks_shuffle(name, n, a) ks_shuffle_##name(n, a)
 
 #define ks_lt_generic(a, b) ((a) < (b))
 #define ks_lt_str(a, b) (strcmp((a), (b)) < 0)
