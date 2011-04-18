@@ -85,8 +85,7 @@ end
 local function intvovlp(intv, bits)
 	-- sort and merge intervals
 	local function intvmerge(intv)
-		local function cmp(a, b) return a[1] < b[1] end
-		table.sort(intv, cmp)
+		table.sort(intv, function(a,b) return a[1] < b[1] end) -- sort by the start
 		local b, e, k = -1, -1, 1
 		for i = 1, #intv do
 			if e < intv[i][1] then
@@ -97,8 +96,9 @@ local function intvovlp(intv, bits)
 		if e >= 0 then intv[k] = {b, e} end
 		while #a > k do table.remove(a) end
 	end
-
-	bits = bits or 13
+	-- build the index for the list of intervals
+	bits = bits or 13 -- the default bin size is 8192 = 1<<13
+	intvmerge(intv)
 	local idx, size, max = {}, math.pow(2, bits), 0
 	for i = 1, #a do
 		local b = math.modf(intv[i][1] / size)
@@ -110,17 +110,17 @@ local function intvovlp(intv, bits)
 
 	return function(_beg, _end)
 		local x = math.modf(_beg / size)
-		x = (max < x and max) or x
-		local off = idx[x];
-		if off == nil then
-			for i = x - 1, 0, -1 do
+		if x > max then return false end
+		local off = idx[x]; -- the start bin
+		if off == nil then -- the following is not the best in efficiency
+			for i = x - 1, 0, -1 do -- find the minimum bin with a value
 				if idx[i] ~= nil then off = idx[i]; break; end
 			end
 			if off == nil then return false end
 		end
-		for i = off, #intv do
+		for i = off, #intv do -- start from off and search for overlaps
 			if intv[i][1] >= _end then return false end
-			if intv[i][2] > _beg and intv[i][1] < _end then return true end
+			if intv[i][2] > _beg and intv[i][1] < _end then return true end 
 		end
 	end
 end
