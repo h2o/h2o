@@ -80,34 +80,36 @@ local function faidxsub(fn)
 	end
 end
 
-
--- index a list of sorted intervals
+--Description: Index a list of intervals and test if a given interval overlaps with the list
+--Example: lua -lbio -e 'a={{100,201},{200,300},{400,600}};f=bio.intvovlp(a);print(f(600,700))'
+--[[
+  By default, we keep for each tiling 8192 window the interval overlaping the
+  window while having the smallest start position. This method may not work
+  well when most intervals are small but few intervals span a long distance.
+]]--
 local function intvovlp(intv, bits)
-	-- sort and merge intervals
-	local function intvmerge(intv)
-		table.sort(intv, function(a,b) return a[1] < b[1] end) -- sort by the start
-		local b, e, k = -1, -1, 1
-		for i = 1, #intv do
-			if e < intv[i][1] then
-				if e >= 0 then intv[k], k = {b, e}, k + 1 end
-				b, e = intv[i][1], intv[i][2]
-			else e = intv[i][2] end
-		end
-		if e >= 0 then intv[k] = {b, e} end
-		while #a > k do table.remove(a) end
-	end
-	-- build the index for the list of intervals
 	bits = bits or 13 -- the default bin size is 8192 = 1<<13
-	intvmerge(intv)
+	table.sort(intv, function(a,b) return a[1] < b[1] end) -- sort by the start
+	-- merge intervals; the step speeds up testing, but can be skipped
+	local b, e, k = -1, -1, 1
+	for i = 1, #intv do
+		if e < intv[i][1] then
+			if e >= 0 then intv[k], k = {b, e}, k + 1 end
+			b, e = intv[i][1], intv[i][2]
+		else e = intv[i][2] end
+	end
+	if e >= 0 then intv[k] = {b, e} end
+	while #a > k do table.remove(a) end -- truncate the interval list
+	-- build the index for the list of intervals
 	local idx, size, max = {}, math.pow(2, bits), 0
 	for i = 1, #a do
-		local b = math.modf(intv[i][1] / size)
-		local e = math.modf(intv[i][2] / size)
+		b = math.modf(intv[i][1] / size)
+		e = math.modf(intv[i][2] / size)
 		if b == e then idx[b] = idx[b] or i
 		else for j = b, e do idx[j] = idx[j] or i end end
 		max = (max > e and max) or e
 	end
-
+	-- return a function (closure)
 	return function(_beg, _end)
 		local x = math.modf(_beg / size)
 		if x > max then return false end
@@ -119,9 +121,10 @@ local function intvovlp(intv, bits)
 			if off == nil then return false end
 		end
 		for i = off, #intv do -- start from off and search for overlaps
-			if intv[i][1] >= _end then return false end
-			if intv[i][2] > _beg and intv[i][1] < _end then return true end 
+			if intv[i][1] >= _end then return false
+			elseif intv[i][2] > _beg then return true end 
 		end
+		return false
 	end
 end
 
