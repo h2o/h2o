@@ -80,9 +80,55 @@ local function faidxsub(fn)
 	end
 end
 
+
+-- index a list of sorted intervals
+local function intvovlp(intv, bits)
+	-- sort and merge intervals
+	local function intvmerge(intv)
+		local function cmp(a, b) return a[1] < b[1] end
+		table.sort(intv, cmp)
+		local b, e, k = -1, -1, 1
+		for i = 1, #intv do
+			if e < intv[i][1] then
+				if e >= 0 then intv[k], k = {b, e}, k + 1 end
+				b, e = intv[i][1], intv[i][2]
+			else e = intv[i][2] end
+		end
+		if e >= 0 then intv[k] = {b, e} end
+		while #a > k do table.remove(a) end
+	end
+
+	bits = bits or 13
+	local idx, size, max = {}, math.pow(2, bits), 0
+	for i = 1, #a do
+		local b = math.modf(intv[i][1] / size)
+		local e = math.modf(intv[i][2] / size)
+		if b == e then idx[b] = idx[b] or i
+		else for j = b, e do idx[j] = idx[j] or i end end
+		max = (max > e and max) or e
+	end
+
+	return function(_beg, _end)
+		local x = math.modf(_beg / size)
+		x = (max < x and max) or x
+		local off = idx[x];
+		if off == nil then
+			for i = x - 1, 0, -1 do
+				if idx[i] ~= nil then off = idx[i]; break; end
+			end
+			if off == nil then return false end
+		end
+		for i = off, #intv do
+			if intv[i][1] >= _end then return false end
+			if intv[i][2] > _beg and intv[i][1] < _end then return true end
+		end
+	end
+end
+
 bio = {
 	readseq = readseq,
-	faidxsub = faidxsub
+	faidxsub = faidxsub,
+	intvovlp = intvovlp
 }
 
 bio.nt16 = {
