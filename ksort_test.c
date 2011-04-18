@@ -34,6 +34,21 @@ int main(int argc, char *argv[])
 		}
 	}
 
+#ifndef _ALIGNED_ONLY
+	{ // test unaligned ksmall
+		srand48(11);
+		unsigned char *a;
+		int *b;
+		a = malloc(N * sizeof(int) + 1);
+		b = (int*)(a + 1);
+		for (i = 0; i < N; ++i) b[i] = (int)lrand48();
+		t1 = clock();
+		ks_introsort(int, N, b);
+		t2 = clock();
+		fprintf(stderr, "introsort [%d]: %.3lf (unaligned: 0x%lx) \n", b[10500], (double)(t2-t1)/CLOCKS_PER_SEC, (size_t)b);
+	}
+#endif
+
 	t1 = clock();
 	ks_introsort(int, N, array);
 	t2 = clock();
