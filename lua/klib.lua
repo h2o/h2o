@@ -40,6 +40,7 @@
   io.xopen()
   table.ksmall()
   table.shuffle()
+  table.pearson()
   math.lgamma() >math.lbinom() >math.igamma()
   math.igamma() <math.lgamma() >matrix.chi2()
   math.erfc()
@@ -176,6 +177,21 @@ function table.shuffle(a)
 		local j = math.random(i)
 		a[j], a[i] = a[i], a[j]
 	end
+end
+
+-- Description: Pearson correlation coefficient
+function table.pearson(a)
+	local x1, y1 = 0, 0
+	for _, v in pairs(a) do
+		x1, y1 = x1 + v[1], y1 + v[2]
+	end
+	x1, y1 = x1 / #a, y1 / #a
+	local x2, y2, xy = 0, 0, 0
+	for _, v in pairs(a) do
+		local tx, ty = v[1] - x1, v[2] - y1
+		xy, x2, y2 = xy + tx * ty, x2 + tx * tx, y2 + ty * ty
+	end
+	return xy / math.sqrt(x2) / math.sqrt(y2)
 end
 
 --
