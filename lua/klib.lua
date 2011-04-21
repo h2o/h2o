@@ -40,7 +40,6 @@
   io.xopen()
   table.ksmall()
   table.shuffle()
-  table.pearson()
   math.lgamma() >math.lbinom() >math.igamma()
   math.igamma() <math.lgamma() >matrix.chi2()
   math.erfc()
@@ -48,6 +47,8 @@
   math.bernstein_poly() <math.lbinom()
   math.fisher_exact() <math.lbinom()
   math.jackknife()
+  math.pearson()
+  math.spearman()
   math.fmin()
   matrix
   matrix.add()
@@ -177,21 +178,6 @@ function table.shuffle(a)
 		local j = math.random(i)
 		a[j], a[i] = a[i], a[j]
 	end
-end
-
--- Description: Pearson correlation coefficient
-function table.pearson(a)
-	local x1, y1 = 0, 0
-	for _, v in pairs(a) do
-		x1, y1 = x1 + v[1], y1 + v[2]
-	end
-	x1, y1 = x1 / #a, y1 / #a
-	local x2, y2, xy = 0, 0, 0
-	for _, v in pairs(a) do
-		local tx, ty = v[1] - x1, v[2] - y1
-		xy, x2, y2 = xy + tx * ty, x2 + tx * tx, y2 + ty * ty
-	end
-	return xy / math.sqrt(x2) / math.sqrt(y2)
 end
 
 --
@@ -421,6 +407,56 @@ function math.jackknife(g, m, t, t0)
 	end
 	var = var / g;
 	return mean, var;
+end
+
+-- Description: Pearson correlation coefficient
+-- Input: a is an n*2 table
+function math.pearson(a)
+	-- compute the mean
+	local x1, y1 = 0, 0
+	for _, v in pairs(a) do
+		x1, y1 = x1 + v[1], y1 + v[2]
+	end
+	-- compute the coefficient
+	x1, y1 = x1 / #a, y1 / #a
+	local x2, y2, xy = 0, 0, 0
+	for _, v in pairs(a) do
+		local tx, ty = v[1] - x1, v[2] - y1
+		xy, x2, y2 = xy + tx * ty, x2 + tx * tx, y2 + ty * ty
+	end
+	return xy / math.sqrt(x2) / math.sqrt(y2)
+end
+
+-- Description: Spearman correlation coefficient
+function math.spearman(a)
+	local function aux_func(t) -- auxiliary function
+		return (t == 1 and 0) or (t*t - 1) * t / 12
+	end
+
+	for _, v in pairs(a) do v.r = {} end
+	local T, S = {}, {}
+	-- compute the rank
+	for k = 1, 2 do
+		table.sort(a, function(u,v) return u[k]<v[k] end)
+		local same = 1
+		T[k] = 0
+		for i = 2, #a + 1 do
+			if i <= #a and a[i-1][k] == a[i][k] then same = same + 1
+			else
+				local rank = (i-1) * 2 - same + 1
+				for j = i - same, i - 1 do a[j].r[k] = rank end
+				if same > 1 then T[k], same = T[k] + aux_func(same), 1 end
+			end
+		end
+		S[k] = aux_func(#a) - T[k]
+	end
+	-- compute the coefficient
+	local sum = 0
+	for _, v in pairs(a) do -- TODO: use nested loops to reduce loss of precision
+		local t = (v.r[1] - v.r[2]) / 2
+		sum = sum + t * t
+	end
+	return (S[1] + S[2] - sum) / 2 / math.sqrt(S[1] * S[2])
 end
 
 -- Description: Hooke-Jeeves derivative-free optimization
