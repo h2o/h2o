@@ -29,6 +29,9 @@
   operations (e.g. Gauss-Jordan elimination). The routines are designed to be
   as independent as possible, such that one can copy-paste relevant pieces of
   code without worrying about additional library dependencies.
+
+  If you use routines from this library, please include the licensing
+  information above where appropriate.
 ]]--
 
 --[[
@@ -61,9 +64,8 @@
 
 -- Description: getopt() translated from the BSD getopt(); compatible with the default Unix getopt()
 --[[ Example:
-	for opt, optarg in os.getopt(arg, 'a:b') do
-		if opt == 'a' then print(opt .. '=' .. optarg)
-		elseif opt == 'b' then print(opt) end -- optarg is nil
+	for o, a in os.getopt(arg, 'a:b') do
+		print(o, a)
 	end
 ]]--
 function os.getopt(args, ostr)
@@ -263,8 +265,10 @@ function math.erfc(x)
 	local expntl = math.exp(-0.5 * z * z)
 	local p
 	if z < 10. / math.M_SQRT2 then -- for small z
-	    p = expntl * ((((((.03526249659989109 * z + .7003830644436881) * z + 6.37396220353165) * z + 33.912866078383) * z + 112.0792914978709) * z + 221.2135961699311) * z + 220.2068679123761)
-			/ (((((((.08838834764831844 * z + 1.755667163182642) * z + 16.06417757920695) * z + 86.78073220294608) * z + 296.5642487796737) * z + 637.3336333788311) * z + 793.8265125199484) * z + 440.4137358247522);
+	    p = expntl * ((((((.03526249659989109 * z + .7003830644436881) * z + 6.37396220353165) * z + 33.912866078383)
+				* z + 112.0792914978709) * z + 221.2135961699311) * z + 220.2068679123761)
+			/ (((((((.08838834764831844 * z + 1.755667163182642) * z + 16.06417757920695) * z + 86.78073220294608)
+				* z + 296.5642487796737) * z + 637.3336333788311) * z + 793.8265125199484) * z + 440.4137358247522);
 	else p = expntl / 2.506628274631001 / (z + 1. / (z + 2. / (z + 3. / (z + 4. / (z + .65))))) end
 	return (x > 0 and 2 * p) or 2 * (1 - p)
 end
