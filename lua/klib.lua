@@ -72,14 +72,16 @@ function os.getopt(args, ostr)
 	local arg, place = nil, 0;
 	return function ()
 		if place == 0 then -- update scanning pointer
-			if #args == 0 or args[1]:sub(1, 1) ~= '-' then return nil end
+			place = 1
+			if #args == 0 or args[1]:sub(1, 1) ~= '-' then place = 0; return nil end
 			if #args[1] >= 2 then
+				place = place + 1
 				if args[1]:sub(2, 2) == '-' then -- found "--"
+					place = 0
 					table.remove(args, 1);
 					return nil;
 				end
 			end
-			place = 2
 		end
 		local optopt = args[1]:sub(place, place);
 		place = place + 1;
