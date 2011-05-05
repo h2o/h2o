@@ -50,11 +50,11 @@ ksw_query_t *ksw_qinit(int p, int qlen, const uint8_t *query, int m, const int8_
 
 	slen = (qlen + p - 1) / p;
 	qlen16 = (qlen + 15) >> 4 << 4;
-	q = malloc(sizeof(ksw_query_t) + 256 + qlen16 * (m + 2)); // a single block of memory
+	q = malloc(sizeof(ksw_query_t) + 256 + qlen16 * (m + 3)); // a single block of memory
 	q->qp = (__m128i*)(((size_t)q + sizeof(ksw_query_t) + 15) >> 4 << 4); // align memory
-	q->H0 = q->qp + qlen16 * m;
-	q->H1 = q->H0 + qlen16;
-	q->E  = q->H1 + qlen16;
+	q->H0 = q->qp + (qlen16 * m) / 16;
+	q->H1 = q->H0 + qlen16 / 16;
+	q->E  = q->H1 + qlen16 / 16;
 	q->slen = slen;
 	// compute shift
 	tmp = m * m;
