@@ -3,8 +3,6 @@
 #include <emmintrin.h>
 #include "ksw.h"
 
-#include <stdio.h>
-
 #ifdef __GNUC__
 #define LIKELY(x) __builtin_expect((x),1)
 #define UNLIKELY(x) __builtin_expect((x),0)
@@ -22,7 +20,6 @@ struct _ksw_query_t {
 ksw_query_t *ksw_qinit(int qlen, const uint8_t *query, int p, int m, const int8_t *mat)
 {
 	ksw_query_t *q;
-	uint8_t *aligned;
 	int8_t *t;
 	int qlen16, slen, a, tmp;
 
@@ -67,7 +64,6 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 	} while (0)
 
 #define __max_16(ret, xx) do { \
-		__m128i t; \
 		(xx) = _mm_max_epu8((xx), _mm_srli_si128((xx), 8)); \
 		(xx) = _mm_max_epu8((xx), _mm_srli_si128((xx), 4)); \
 		(xx) = _mm_max_epu8((xx), _mm_srli_si128((xx), 2)); \
@@ -76,13 +72,13 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 	} while (0)
 
 	// initialization
-	zero = _mm_xor_si128(zero, zero);
-	gmax = _mm_xor_si128(gmax, gmax);
+	zero = _mm_set1_epi32(0);
+	shift = gmax = gapo = gape = zero; // only to avoid gcc warnings
 	__set_16(gapo, _o + _e);
 	__set_16(gape, _e);
+	__set_16(shift, q->shift);
 	H0 = q->H0; H1 = q->H1; E = q->E;
 	slen = q->slen;
-	__set_16(shift, q->shift);
 	for (i = 0; i < slen; ++i) {
 		_mm_store_si128(E + i, zero);
 		_mm_store_si128(H0 + i, zero);
@@ -90,12 +86,10 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 	// the core loop
 	for (i = 0; i < tlen; ++i) {
 		int j, k, cmp;
-		__m128i e, h, f, max, t, *S = q->qp + target[i] * slen; // s is the 1st score vector
-		max = _mm_xor_si128(max, max);
-		f = _mm_xor_si128(f, f);
+		__m128i e, h, f = zero, max = zero, *S = q->qp + target[i] * slen; // s is the 1st score vector
 		h = _mm_load_si128(H0 + slen - 1); // h={2,5,8,11,14,17,-1,-1} in the above example
 		h = _mm_slli_si128(h, 1); // h=H(i-1,-1); << instead of >> because x86 is little-endian
-		for (score=0;score<16;++score)printf("%d ", ((int8_t*)&S[0])[score]);printf("\n");
+//		for (score=0;score<16;++score)printf("%d ", ((int8_t*)&S[0])[score]);printf("\n");
 		for (j = 0; LIKELY(j < slen); ++j) {
 			// at the beginning, h=H'(i-1,j-1)
 			h = _mm_adds_epu8(h, S[j]);
@@ -117,6 +111,7 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 			h = _mm_load_si128(H0 + j); // h=H'(i-1,j)
 		}
 		gmax = _mm_max_epu8(gmax, max); // NB: H(i,j) updated in the lazy-F loop cannot exceed max
+//		for (score=0;score<16;++score)printf("%d ", ((int8_t*)&gmax)[score]);printf("\n");
 		// NB: we do not need to set E(i,j) as we disallow adjecent insertion and then deletion
 		for (k = 0; LIKELY(k < 16); ++k) {
 			f = _mm_slli_si128(f, 1);
@@ -137,14 +132,82 @@ end_loop:
 	return score;
 }
 
-int main()
+/*******************************************
+ * Main function (not compiled by default) *
+ *******************************************/
+
+#ifdef _KSW_MAIN
+
+#include <unistd.h>
+#include <stdio.h>
+#include <zlib.h>
+#include "kseq.h"
+KSEQ_INIT(gzFile, gzread)
+
+unsigned char seq_nt4_table[256] = {
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 0, 4, 1,  4, 4, 4, 2,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  3, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 0, 4, 1,  4, 4, 4, 2,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  3, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4
+};
+
+int main(int argc, char *argv[])
 {
-	int8_t mat[] = {1, -3, -3, 1};
-	uint8_t *t = (uint8_t*)"\1\0\1\1\0\0";
-	uint8_t *q = (uint8_t*)"\1\1";
-	ksw_query_t *qq = ksw_qinit(2, q, 16, 2, mat);
-	int s = ksw_sse2_16(qq, 6, t, 5, 2);
-	free(qq);
-	printf("%d\n", s);
+	int c, sa = 1, sb = 3, sq = 5, sr = 2, i, j, k;
+	int8_t mat[25];
+	gzFile fpt, fpq;
+	kseq_t *kst, *ksq;
+	// parse command line
+	while ((c = getopt(argc, argv, "a:b:q:r:")) >= 0) {
+		switch (c) {
+			case 'a': sa = atoi(optarg); break;
+			case 'b': sb = atoi(optarg); break;
+			case 'q': sq = atoi(optarg); break;
+			case 'r': sr = atoi(optarg); break;
+		}
+	}
+	if (optind + 2 > argc) {
+		fprintf(stderr, "Usage: ksw [-a%d] [-b%d] [-q%d] [-r%d] <target.fa> <query.fa>\n", sa, sb, sq, sr);
+		return 1;
+	}
+	// initialize scoring matrix
+	for (i = k = 0; i < 5; ++i) {
+		for (j = 0; j < 4; ++j)
+			mat[k++] = i == j? sa : -sb;
+		mat[k++] = 0; // ambiguous base
+	}
+	for (j = 0; j < 5; ++j) mat[k++] = 0;
+	// open file
+	fpt = gzopen(argv[optind],   "r"); kst = kseq_init(fpt);
+	fpq = gzopen(argv[optind+1], "r"); ksq = kseq_init(fpq);
+	// all-pair alignment
+	while (kseq_read(ksq) > 0) {
+		ksw_query_t *q;
+		for (i = 0; i < ksq->seq.l; ++i) ksq->seq.s[i] = seq_nt4_table[(int)ksq->seq.s[i]];
+		q = ksw_qinit(ksq->seq.l, (uint8_t*)ksq->seq.s, 16, 5, mat);
+		gzrewind(fpt); kseq_rewind(kst);
+		while (kseq_read(kst) > 0) {
+			int s;
+			for (i = 0; i < kst->seq.l; ++i) kst->seq.s[i] = seq_nt4_table[(int)kst->seq.s[i]];
+			s = ksw_sse2_16(q, kst->seq.l, (uint8_t*)kst->seq.s, sq, sr);
+			printf("%s\t%s\t%d\n", ksq->name.s, kst->name.s, s);
+		}
+		free(q);
+	}
+	kseq_destroy(kst); gzclose(fpt);
+	kseq_destroy(ksq); gzclose(fpq);
 	return 0;
 }
+#endif
