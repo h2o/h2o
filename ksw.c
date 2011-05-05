@@ -29,16 +29,16 @@ ksw_query_t *ksw_qinit(int qlen, const uint8_t *query, int p, int m, const int8_
 	slen = (qlen + p - 1) / p;
 	qlen16 = (qlen + 15) >> 4 << 4;
 	q = malloc(sizeof(ksw_query_t) + 256 + qlen16 * (m + 2)); // a single block of memory
-	q->slen = slen;
-	q->qp = (__m128i*)(((size_t)q + sizeof(ksw_query_t) + 15) >> 4 << 4);
+	q->qp = (__m128i*)(((size_t)q + sizeof(ksw_query_t) + 15) >> 4 << 4); // align memory
 	q->H0 = q->qp + qlen16 * m;
 	q->H1 = q->H0 + qlen16;
 	q->E  = q->H1 + qlen16;
+	q->slen = slen;
 	// compute shift
 	tmp = m * m;
 	for (a = 0, q->shift = 127; a < tmp; ++a) // find the minimum score (should be negative)
 		if (mat[a] < (int8_t)q->shift) q->shift = mat[a];
-	q->shift = 256 - q->shift;
+	q->shift = 256 - q->shift; // NB: q->shift is uint8_t
 	// An example: p=8, qlen=19, slen=3 and segmentation:
 	//  {{0,3,6,9,12,15,18,-1},{1,4,7,10,13,16,-1,-1},{2,5,8,11,14,17,-1,-1}}
 	t = (int8_t*)q->qp;
@@ -116,7 +116,8 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 			// get H'(i-1,j) and prepare for the next j
 			h = _mm_load_si128(H0 + j); // h=H'(i-1,j)
 		}
-		gmax = _mm_max_epu8(gmax, max);
+		gmax = _mm_max_epu8(gmax, max); // NB: H(i,j) updated in the lazy-F loop cannot exceed max
+		// NB: we do not need to set E(i,j) as we disallow adjecent insertion and then deletion
 		for (k = 0; LIKELY(k < 16); ++k) {
 			f = _mm_slli_si128(f, 1);
 			for (j = 0; LIKELY(j < slen); ++j) {
