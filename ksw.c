@@ -17,7 +17,6 @@ struct _ksw_query_t {
 	int slen;
 	uint8_t shift;
 	__m128i *qp, *H0, *H1, *E;
-	uint8_t *mem;
 };
 
 ksw_query_t *ksw_qinit(int qlen, const uint8_t *query, int p, int m, const int8_t *mat)
@@ -25,17 +24,16 @@ ksw_query_t *ksw_qinit(int qlen, const uint8_t *query, int p, int m, const int8_
 	ksw_query_t *q;
 	uint8_t *aligned;
 	int8_t *t;
-	int qlenp, slen, a, tmp;
+	int qlen16, slen, a, tmp;
 
-	q = calloc(1, sizeof(ksw_query_t));
-	q->slen = slen = (qlen + p - 1) / p; // length of segment
-	qlenp = slen * p; // qlenp can be divided by p
-	q->mem = malloc(64 + qlenp * (m + 2));
-	aligned = (uint8_t*)(((size_t)q->mem + 15) & ~0xful); // align memory
-	q->qp = (__m128i*)aligned;
-	q->H0 = q->qp + qlenp * m;
-	q->H1 = q->H0 + qlenp;
-	q->E  = q->H1 + qlenp;
+	slen = (qlen + p - 1) / p;
+	qlen16 = (qlen + 15) >> 4 << 4;
+	q = malloc(sizeof(ksw_query_t) + 256 + qlen16 * (m + 2)); // a single block of memory
+	q->slen = slen;
+	q->qp = (__m128i*)(((size_t)q + sizeof(ksw_query_t) + 15) >> 4 << 4);
+	q->H0 = q->qp + qlen16 * m;
+	q->H1 = q->H0 + qlen16;
+	q->E  = q->H1 + qlen16;
 	// compute shift
 	tmp = m * m;
 	for (a = 0, q->shift = 127; a < tmp; ++a) // find the minimum score (should be negative)
@@ -48,18 +46,12 @@ ksw_query_t *ksw_qinit(int qlen, const uint8_t *query, int p, int m, const int8_
 		int i, k;
 		const int8_t *ma = mat + a * m;
 		for (i = 0; i < slen; ++i)
-			for (k = i; k < qlenp; k += slen) { // p iterations
+			for (k = i; k < qlen16; k += slen) { // p iterations
 				*t++ = (k >= qlen? 0 : ma[query[k]]) + q->shift;
 				//printf("%d,%d,%d,%d\n", a, i, k, *(t-1));
 			}
 	}
 	return q;
-}
-
-void ksw_qdestroy(ksw_query_t *q)
-{
-	if (!q) return;
-	free(q->mem); free(q);
 }
 
 int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, unsigned _e) // the first gap costs -(_o+_e)
@@ -151,7 +143,7 @@ int main()
 	uint8_t *q = (uint8_t*)"\1\1";
 	ksw_query_t *qq = ksw_qinit(2, q, 16, 2, mat);
 	int s = ksw_sse2_16(qq, 6, t, 5, 2);
-	ksw_qdestroy(qq);
+	free(qq);
 	printf("%d\n", s);
 	return 0;
 }
