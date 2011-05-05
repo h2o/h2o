@@ -5,11 +5,19 @@
 
 #include <stdio.h>
 
+#ifdef __GNUC__
+#define LIKELY(x) __builtin_expect((x),1)
+#define UNLIKELY(x) __builtin_expect((x),0)
+#else
+#define LIKELY(x) (x)
+#define UNLIKELY(x) (x)
+#endif
+
 struct _ksw_query_t {
 	int slen;
 	uint8_t shift;
-	uint8_t *mem;
 	__m128i *qp, *H0, *H1, *E;
+	uint8_t *mem;
 };
 
 ksw_query_t *ksw_qinit(int qlen, const uint8_t *query, int p, int m, const int8_t *mat)
@@ -68,14 +76,10 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 
 #define __max_16(ret, xx) do { \
 		__m128i t; \
-		t = _mm_srli_si128((xx), 8); \
-		(xx) = _mm_max_epu8((xx), t); \
-		t = _mm_srli_si128((xx), 4); \
-		(xx) = _mm_max_epu8((xx), t); \
-		t = _mm_srli_si128((xx), 2); \
-		(xx) = _mm_max_epu8((xx), t); \
-		t = _mm_srli_si128((xx), 1); \
-		(xx) = _mm_max_epu8((xx), t); \
+		(xx) = _mm_max_epu8((xx), _mm_srli_si128((xx), 8)); \
+		(xx) = _mm_max_epu8((xx), _mm_srli_si128((xx), 4)); \
+		(xx) = _mm_max_epu8((xx), _mm_srli_si128((xx), 2)); \
+		(xx) = _mm_max_epu8((xx), _mm_srli_si128((xx), 1)); \
     	(ret) = _mm_extract_epi16((xx), 0) & 0x00ff; \
 	} while (0)
 
@@ -93,21 +97,21 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 	}
 	// the core loop
 	for (i = 0; i < tlen; ++i) {
-		int j, cmp;
+		int j, k, cmp;
 		__m128i e, h, f, max, t, *S = q->qp + target[i] * slen; // s is the 1st score vector
 		max = _mm_xor_si128(max, max);
 		f = _mm_xor_si128(f, f);
 		h = _mm_load_si128(H0 + slen - 1); // h={2,5,8,11,14,17,-1,-1} in the above example
 		h = _mm_slli_si128(h, 1); // h=H(i-1,-1); << instead of >> because x86 is little-endian
 		for (score=0;score<16;++score)printf("%d ", ((int8_t*)&S[0])[score]);printf("\n");
-		for (j = 0; j < slen; ++j) {
+		for (j = 0; LIKELY(j < slen); ++j) {
 			// at the beginning, h=H'(i-1,j-1)
-			h = _mm_adds_epu8(h, S[j]); h = _mm_subs_epu8(h, shift); // h=H'(i-1,j-1)+S(i,j)
+			h = _mm_adds_epu8(h, S[j]);
+			h = _mm_subs_epu8(h, shift); // h=H'(i-1,j-1)+S(i,j)
 			e = _mm_load_si128(E + j); // e=E'(i,j)
 			h = _mm_max_epu8(h, e);
 			h = _mm_max_epu8(h, f); // h=H'(i,j)
 			max = _mm_max_epu8(max, h); // set max
-			for (score=0;score<16;++score)printf("%d ", ((int8_t*)&h)[score]);printf("\n");
 			_mm_store_si128(H1 + j, h); // save to H'(i,j)
 			// now compute E(i+1,j)
 			h = _mm_subs_epu8(h, gapo); // h=H'(i,j)-gapo
@@ -121,24 +125,19 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 			h = _mm_load_si128(H0 + j); // h=H'(i-1,j)
 		}
 		gmax = _mm_max_epu8(gmax, max);
-		j = 0;
-		h = _mm_load_si128(H1); // h=H(i,0); h->{0,3,6,9,12,15,18,-1}
-		f = _mm_slli_si128(f, 1); // f->{-1,3,6,9,12,15,18,-1}
-		t = _mm_subs_epu8(h, gapo); t = _mm_subs_epu8(f, t);
-		t = _mm_cmpeq_epi8(t, zero); cmp = _mm_movemask_epi8(t); // test whether s>0
-		while (cmp != 0xffff) { // the lazy-F loop
-			h = _mm_max_epu8(h, f);
-			_mm_store_si128(H1 + j, h);
-			e = _mm_load_si128(E + j); // e=E'(i,j)
-			h = _mm_subs_epu8(h, gapo); // h=H(i,j)-gapo
-			e = _mm_max_epu8(e, h); // e=E(i,j)
-			_mm_store_si128(E + j, e); // save to E(i,j)
-			f = _mm_subs_epu8(f, gape); // f-=gape
-			if (++j >= slen) j = 0, f = _mm_slli_si128(f, 1); // restart
-			h = _mm_load_si128(H1 + j);
-			t = _mm_subs_epu8(h, gapo); t = _mm_subs_epu8(f, t);
-			t = _mm_cmpeq_epi8(t, zero); cmp = _mm_movemask_epi8(t);
+		for (k = 0; LIKELY(k < 16); ++k) {
+			f = _mm_slli_si128(f, 1);
+			for (j = 0; LIKELY(j < slen); ++j) {
+				h = _mm_load_si128(H1 + j);
+				h = _mm_max_epu8(h, f); // h=H'(i,j)
+				_mm_store_si128(H1 + j, h);
+				h = _mm_subs_epu8(h, gapo);
+				f = _mm_subs_epu8(f, gape);
+				cmp = _mm_movemask_epi8(_mm_cmpeq_epi8(_mm_subs_epu8(f, h), zero));
+				if (UNLIKELY(cmp == 0xffff)) goto end_loop;
+			}
 		}
+end_loop:
 		S = H1; H1 = H0; H0 = S; // swap H0 and H1
 	}
 	__max_16(score, gmax);
