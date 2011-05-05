@@ -68,10 +68,8 @@ ksw_query_t *ksw_qinit(int p, int qlen, const uint8_t *query, int m, const int8_
 		int i, k;
 		const int8_t *ma = mat + a * m;
 		for (i = 0; i < slen; ++i)
-			for (k = i; k < qlen16; k += slen) { // p iterations
+			for (k = i; k < qlen16; k += slen) // p iterations
 				*t++ = (k >= qlen? 0 : ma[query[k]]) + q->shift;
-				//printf("%d,%d,%d,%d\n", a, i, k, *(t-1));
-			}
 	}
 	return q;
 }
@@ -115,7 +113,12 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 		h = _mm_load_si128(H0 + slen - 1); // h={2,5,8,11,14,17,-1,-1} in the above example
 		h = _mm_slli_si128(h, 1); // h=H(i-1,-1); << instead of >> because x86 is little-endian
 		for (j = 0; LIKELY(j < slen); ++j) {
-			// at the beginning, h=H'(i-1,j-1)
+			/* SW cells are computed in the following order:
+			 *   H(i,j)   = max{H(i-1,j-1)+S(i,j), E(i,j), F(i,j)}
+			 *   E(i+1,j) = max{H(i,j)-q, E(i,j)-r}
+			 *   F(i,j+1) = max{H(i,j)-q, F(i,j)-r}
+			 */
+			// compute H'(i,j); note that at the beginning, h=H'(i-1,j-1)
 			h = _mm_adds_epu8(h, S[j]);
 			h = _mm_subs_epu8(h, shift); // h=H'(i-1,j-1)+S(i,j)
 			e = _mm_load_si128(E + j); // e=E'(i,j)
@@ -123,7 +126,7 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 			h = _mm_max_epu8(h, f); // h=H'(i,j)
 			max = _mm_max_epu8(max, h); // set max
 			_mm_store_si128(H1 + j, h); // save to H'(i,j)
-			// now compute E(i+1,j)
+			// now compute E'(i+1,j)
 			h = _mm_subs_epu8(h, gapo); // h=H'(i,j)-gapo
 			e = _mm_subs_epu8(e, gape); // e=E'(i,j)-gape
 			e = _mm_max_epu8(e, h); // e=E'(i+1,j)
