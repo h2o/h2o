@@ -1,3 +1,28 @@
+/* The MIT License
+
+   Copyright (c) 2011 by Attractive Chaos <attractor@live.co.uk>
+
+   Permission is hereby granted, free of charge, to any person obtaining
+   a copy of this software and associated documentation files (the
+   "Software"), to deal in the Software without restriction, including
+   without limitation the rights to use, copy, modify, merge, publish,
+   distribute, sublicense, and/or sell copies of the Software, and to
+   permit persons to whom the Software is furnished to do so, subject to
+   the following conditions:
+
+   The above copyright notice and this permission notice shall be
+   included in all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+   NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+   BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+   ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+   CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
+*/
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <emmintrin.h>
@@ -17,7 +42,7 @@ struct _ksw_query_t {
 	__m128i *qp, *H0, *H1, *E;
 };
 
-ksw_query_t *ksw_qinit(int qlen, const uint8_t *query, int p, int m, const int8_t *mat)
+ksw_query_t *ksw_qinit(int p, int qlen, const uint8_t *query, int m, const int8_t *mat)
 {
 	ksw_query_t *q;
 	int8_t *t;
@@ -89,7 +114,6 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 		__m128i e, h, f = zero, max = zero, *S = q->qp + target[i] * slen; // s is the 1st score vector
 		h = _mm_load_si128(H0 + slen - 1); // h={2,5,8,11,14,17,-1,-1} in the above example
 		h = _mm_slli_si128(h, 1); // h=H(i-1,-1); << instead of >> because x86 is little-endian
-//		for (score=0;score<16;++score)printf("%d ", ((int8_t*)&S[0])[score]);printf("\n");
 		for (j = 0; LIKELY(j < slen); ++j) {
 			// at the beginning, h=H'(i-1,j-1)
 			h = _mm_adds_epu8(h, S[j]);
@@ -111,9 +135,9 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 			h = _mm_load_si128(H0 + j); // h=H'(i-1,j)
 		}
 		gmax = _mm_max_epu8(gmax, max); // NB: H(i,j) updated in the lazy-F loop cannot exceed max
-//		for (score=0;score<16;++score)printf("%d ", ((int8_t*)&gmax)[score]);printf("\n");
+		//for (score=0;score<16;++score)printf("%d ", ((int8_t*)&gmax)[score]);printf("\n");
 		// NB: we do not need to set E(i,j) as we disallow adjecent insertion and then deletion
-		for (k = 0; LIKELY(k < 16); ++k) {
+		for (k = 0; LIKELY(k < 16); ++k) { // this block mimics SWPS3
 			f = _mm_slli_si128(f, 1);
 			for (j = 0; LIKELY(j < slen); ++j) {
 				h = _mm_load_si128(H1 + j);
@@ -196,7 +220,7 @@ int main(int argc, char *argv[])
 	while (kseq_read(ksq) > 0) {
 		ksw_query_t *q;
 		for (i = 0; i < ksq->seq.l; ++i) ksq->seq.s[i] = seq_nt4_table[(int)ksq->seq.s[i]];
-		q = ksw_qinit(ksq->seq.l, (uint8_t*)ksq->seq.s, 16, 5, mat);
+		q = ksw_qinit(16, ksq->seq.l, (uint8_t*)ksq->seq.s, 5, mat);
 		gzrewind(fpt); kseq_rewind(kst);
 		while (kseq_read(kst) > 0) {
 			int s;
