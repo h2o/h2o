@@ -8,8 +8,8 @@ files to your souce code tree without worrying about library dependencies.
 
 Klib strives for efficiency and a small memory footprint. Some components, such
 as khash.h, kbtree.h, ksort.h and kvec.h, are among the most efficient
-implementations of similar algorithms or data structures, while using less
-memory than many others.
+implementations of similar algorithms or data structures, and use less memory
+than many others.
 
 
 OVERVIEW
@@ -27,7 +27,10 @@ knetfile.{h,c}  Random access to remote files
 kfunc.c         Special mathematical functions
 kmin.{h,c}      Derivative-free non-linear programming
 khmm.{h,c}      Basic HMM library
+ksw.(h,c}       Smith-Waterman using SSE2
 knhx.{h,c}      Newick format parser
+
+lua/            Miscellaneous Lua libraries
 
 
 LICENSE
