@@ -79,8 +79,8 @@ ksw_query_t *ksw_qinit(int p, int qlen, const uint8_t *query, int m, const int8_
 
 int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, unsigned _e) // the first gap costs -(_o+_e)
 {
-	int slen, i, score;
-	__m128i zero, gapo, gape, shift, gmax, *H0, *H1, *E;
+	int slen, i, sum, score;
+	__m128i zero, gapo, gape, shift, gmax, reduce, thres, *H0, *H1, *E;
 
 #define __max_16(ret, xx) do { \
 		(xx) = _mm_max_epu8((xx), _mm_srli_si128((xx), 8)); \
@@ -95,6 +95,8 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 	gapo = _mm_set1_epi8(_o + _e);
 	gape = _mm_set1_epi8(_e);
 	shift = _mm_set1_epi8(q->shift);
+	thres = _mm_set1_epi8(254 - q->mdiff); // when max score exceeds this, shift all scores by "reduce" below
+	reduce = _mm_set1_epi8(127);
 	H0 = q->H0; H1 = q->H1; E = q->E;
 	slen = q->slen;
 	for (i = 0; i < slen; ++i) {
@@ -102,7 +104,7 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 		_mm_store_si128(H0 + i, zero);
 	}
 	// the core loop
-	for (i = 0; i < tlen; ++i) {
+	for (i = 0, sum = 0; i < tlen; ++i) {
 		int j, k, cmp;
 		__m128i e, h, f = zero, max = zero, *S = q->qp + target[i] * slen; // s is the 1st score vector
 		h = _mm_load_si128(H0 + slen - 1); // h={2,5,8,11,14,17,-1,-1} in the above example
@@ -133,7 +135,6 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 			h = _mm_load_si128(H0 + j); // h=H'(i-1,j)
 		}
 		gmax = _mm_max_epu8(gmax, max); // NB: H(i,j) updated in the lazy-F loop cannot exceed max
-		//for (score=0;score<16;++score)printf("%d ", ((int8_t*)&gmax)[score]);printf("\n");
 		// NB: we do not need to set E(i,j) as we disallow adjecent insertion and then deletion
 		for (k = 0; LIKELY(k < 16); ++k) { // this block mimics SWPS3
 			f = _mm_slli_si128(f, 1);
@@ -148,10 +149,23 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 			}
 		}
 end_loop:
+		if (_mm_movemask_epi8(_mm_cmpeq_epi8(_mm_subs_epu8(gmax, thres), zero)) != 0xffff) { // reduce
+			/* When overflow is going to happen, subtract 127 from all scores. This heuristic
+			 * may miss the best alignment, but in practice this should happen very rarely. */
+			sum += 127;
+			gmax = _mm_subs_epu8(gmax, reduce);
+			//int k;for (k=0;k<16;++k)printf("%d ", ((uint8_t*)&thres)[k]);printf("\n");
+			for (j = 0; LIKELY(j < slen); ++j) {
+				h = _mm_subs_epu8(_mm_load_si128(H1 + j), reduce);
+				_mm_store_si128(H1 + j, h);
+				e = _mm_subs_epu8(_mm_load_si128(E + j), reduce);
+				_mm_store_si128(E + j, e);
+			}
+		}
 		S = H1; H1 = H0; H0 = S; // swap H0 and H1
 	}
 	__max_16(score, gmax);
-	return score;
+	return score + sum;
 }
 
 /*******************************************
