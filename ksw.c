@@ -38,7 +38,7 @@
 
 struct _ksw_query_t {
 	int slen;
-	uint8_t shift;
+	uint8_t shift, mdiff;
 	__m128i *qp, *H0, *H1, *E;
 };
 
@@ -58,9 +58,12 @@ ksw_query_t *ksw_qinit(int p, int qlen, const uint8_t *query, int m, const int8_
 	q->slen = slen;
 	// compute shift
 	tmp = m * m;
-	for (a = 0, q->shift = 127; a < tmp; ++a) // find the minimum score (should be negative)
+	for (a = 0, q->shift = 127, q->mdiff = 0; a < tmp; ++a) { // find the minimum and maximum score
 		if (mat[a] < (int8_t)q->shift) q->shift = mat[a];
+		if (mat[a] > (int8_t)q->mdiff) q->mdiff = mat[a];
+	}
 	q->shift = 256 - q->shift; // NB: q->shift is uint8_t
+	q->mdiff += q->shift; // this is the difference between the min and max scores
 	// An example: p=8, qlen=19, slen=3 and segmentation:
 	//  {{0,3,6,9,12,15,18,-1},{1,4,7,10,13,16,-1,-1},{2,5,8,11,14,17,-1,-1}}
 	t = (int8_t*)q->qp;
@@ -79,13 +82,6 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 	int slen, i, score;
 	__m128i zero, gapo, gape, shift, gmax, *H0, *H1, *E;
 
-#define __set_16(ret, xx) do { \
-		uint16_t t16 = ((uint16_t)(xx) << 8) | ((uint16_t)(xx) & 0x00ff); \
-		(ret) = _mm_insert_epi16((ret), t16, 0); \
-		(ret) = _mm_shufflelo_epi16((ret), 0); \
-		(ret) = _mm_shuffle_epi32((ret), 0); \
-	} while (0)
-
 #define __max_16(ret, xx) do { \
 		(xx) = _mm_max_epu8((xx), _mm_srli_si128((xx), 8)); \
 		(xx) = _mm_max_epu8((xx), _mm_srli_si128((xx), 4)); \
@@ -95,11 +91,10 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 	} while (0)
 
 	// initialization
-	zero = _mm_set1_epi32(0);
-	shift = gmax = gapo = gape = zero; // only to avoid gcc warnings
-	__set_16(gapo, _o + _e);
-	__set_16(gape, _e);
-	__set_16(shift, q->shift);
+	gmax = zero = _mm_set1_epi32(0);
+	gapo = _mm_set1_epi8(_o + _e);
+	gape = _mm_set1_epi8(_e);
+	shift = _mm_set1_epi8(q->shift);
 	H0 = q->H0; H1 = q->H1; E = q->E;
 	slen = q->slen;
 	for (i = 0; i < slen; ++i) {
