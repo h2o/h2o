@@ -37,9 +37,9 @@
 #endif
 
 struct _ksw_query_t {
-	int slen;
+	int qlen, slen;
 	uint8_t shift, mdiff;
-	__m128i *qp, *H0, *H1, *E;
+	__m128i *qp, *H0, *H1, *E, *Hmax;
 };
 
 ksw_query_t *ksw_qinit(int p, int qlen, const uint8_t *query, int m, const int8_t *mat)
@@ -50,12 +50,13 @@ ksw_query_t *ksw_qinit(int p, int qlen, const uint8_t *query, int m, const int8_
 
 	slen = (qlen + p - 1) / p;
 	qlen16 = (qlen + 15) >> 4 << 4;
-	q = malloc(sizeof(ksw_query_t) + 256 + qlen16 * (m + 3)); // a single block of memory
+	q = malloc(sizeof(ksw_query_t) + 256 + qlen16 * (m + 4)); // a single block of memory
 	q->qp = (__m128i*)(((size_t)q + sizeof(ksw_query_t) + 15) >> 4 << 4); // align memory
 	q->H0 = q->qp + (qlen16 * m) / 16;
 	q->H1 = q->H0 + qlen16 / 16;
 	q->E  = q->H1 + qlen16 / 16;
-	q->slen = slen;
+	q->Hmax = q->E + qlen16 / 16;
+	q->slen = slen; q->qlen = qlen;
 	// compute shift
 	tmp = m * m;
 	for (a = 0, q->shift = 127, q->mdiff = 0; a < tmp; ++a) { // find the minimum and maximum score
@@ -77,10 +78,10 @@ ksw_query_t *ksw_qinit(int p, int qlen, const uint8_t *query, int m, const int8_
 	return q;
 }
 
-int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, unsigned _e) // the first gap costs -(_o+_e)
+int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) // the first gap costs -(_o+_e)
 {
 	int slen, i, sum, score;
-	__m128i zero, gapo, gape, shift, gmax, reduce, thres, *H0, *H1, *E;
+	__m128i zero, gapoe, gape, shift, gmax, reduce, thres, *H0, *H1, *E, *Hmax;
 
 #define __max_16(ret, xx) do { \
 		(xx) = _mm_max_epu8((xx), _mm_srli_si128((xx), 8)); \
@@ -91,13 +92,14 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 	} while (0)
 
 	// initialization
+	a->te = -1;
 	gmax = zero = _mm_set1_epi32(0);
-	gapo = _mm_set1_epi8(_o + _e);
-	gape = _mm_set1_epi8(_e);
+	gapoe = _mm_set1_epi8(a->gapo + a->gape);
+	gape = _mm_set1_epi8(a->gape);
 	shift = _mm_set1_epi8(q->shift);
 	thres = _mm_set1_epi8(254 - q->mdiff); // when max score exceeds this, shift all scores by "reduce" below
 	reduce = _mm_set1_epi8(127);
-	H0 = q->H0; H1 = q->H1; E = q->E;
+	H0 = q->H0; H1 = q->H1; E = q->E; Hmax = q->Hmax;
 	slen = q->slen;
 	for (i = 0; i < slen; ++i) {
 		_mm_store_si128(E + i, zero);
@@ -124,7 +126,7 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 			max = _mm_max_epu8(max, h); // set max
 			_mm_store_si128(H1 + j, h); // save to H'(i,j)
 			// now compute E'(i+1,j)
-			h = _mm_subs_epu8(h, gapo); // h=H'(i,j)-gapo
+			h = _mm_subs_epu8(h, gapoe); // h=H'(i,j)-gapo
 			e = _mm_subs_epu8(e, gape); // e=E'(i,j)-gape
 			e = _mm_max_epu8(e, h); // e=E'(i+1,j)
 			_mm_store_si128(E + j, e); // save to E'(i+1,j)
@@ -134,38 +136,55 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, unsigned _o, un
 			// get H'(i-1,j) and prepare for the next j
 			h = _mm_load_si128(H0 + j); // h=H'(i-1,j)
 		}
-		gmax = _mm_max_epu8(gmax, max); // NB: H(i,j) updated in the lazy-F loop cannot exceed max
 		// NB: we do not need to set E(i,j) as we disallow adjecent insertion and then deletion
-		for (k = 0; LIKELY(k < 16); ++k) { // this block mimics SWPS3
+		for (k = 0; LIKELY(k < 16); ++k) { // this block mimics SWPS3; NB: H(i,j) updated in the lazy-F loop cannot exceed max
 			f = _mm_slli_si128(f, 1);
 			for (j = 0; LIKELY(j < slen); ++j) {
 				h = _mm_load_si128(H1 + j);
 				h = _mm_max_epu8(h, f); // h=H'(i,j)
 				_mm_store_si128(H1 + j, h);
-				h = _mm_subs_epu8(h, gapo);
+				h = _mm_subs_epu8(h, gapoe);
 				f = _mm_subs_epu8(f, gape);
 				cmp = _mm_movemask_epi8(_mm_cmpeq_epi8(_mm_subs_epu8(f, h), zero));
 				if (UNLIKELY(cmp == 0xffff)) goto end_loop;
 			}
 		}
 end_loop:
-		if (_mm_movemask_epi8(_mm_cmpeq_epi8(_mm_subs_epu8(gmax, thres), zero)) != 0xffff) { // reduce
-			/* When overflow is going to happen, subtract 127 from all scores. This heuristic
-			 * may miss the best alignment, but in practice this should happen very rarely. */
-			sum += 127;
-			gmax = _mm_subs_epu8(gmax, reduce);
-			//int k;for (k=0;k<16;++k)printf("%d ", ((uint8_t*)&thres)[k]);printf("\n");
-			for (j = 0; LIKELY(j < slen); ++j) {
-				h = _mm_subs_epu8(_mm_load_si128(H1 + j), reduce);
-				_mm_store_si128(H1 + j, h);
-				e = _mm_subs_epu8(_mm_load_si128(E + j), reduce);
-				_mm_store_si128(E + j, e);
+		if (_mm_movemask_epi8(_mm_cmpeq_epi8(_mm_subs_epu8(max, gmax), zero)) != 0xffff) { // if max > gmax at any position
+			int imax, igmax;
+			__max_16(imax, max);   // maximum in max
+			__max_16(igmax, gmax); // maximum in gmax
+			if (imax > igmax) { // if the max has been updated
+				a->te = i; // the end position on the target
+				for (j = 0; LIKELY(j < slen); ++j) // keep the H1 vector
+					_mm_store_si128(Hmax + j, _mm_load_si128(H1 + j));
+			}
+			gmax = _mm_max_epu8(gmax, max); // update gmax
+			if (_mm_movemask_epi8(_mm_cmpeq_epi8(_mm_subs_epu8(gmax, thres), zero)) != 0xffff) { // reduce
+				/* When overflow is going to happen, subtract 127 from all scores. This heuristic
+				 * may miss the best alignment, but in practice this should happen very rarely. */
+				sum += 127;
+				gmax = _mm_subs_epu8(gmax, reduce);
+				//int k;for (k=0;k<16;++k)printf("%d ", ((uint8_t*)&thres)[k]);printf("\n");
+				for (j = 0; LIKELY(j < slen); ++j) {
+					h = _mm_subs_epu8(_mm_load_si128(H1 + j), reduce);
+					_mm_store_si128(H1 + j, h);
+					e = _mm_subs_epu8(_mm_load_si128(E + j), reduce);
+					_mm_store_si128(E + j, e);
+				}
 			}
 		}
 		S = H1; H1 = H0; H0 = S; // swap H0 and H1
 	}
 	__max_16(score, gmax);
-	return score + sum;
+	a->score = score + sum;
+	{ // get a->qe, the end of query match
+		int max = -1;
+		uint8_t *t = (uint8_t*)Hmax;
+		for (i = 0, score = 0, a->qe = -1; i < q->qlen; ++i, ++t)
+			if ((int)*t > max) max = *t, a->qe = i / 16 + i % 16 * slen;
+	}
+	return a->score;
 }
 
 /*******************************************
@@ -201,22 +220,25 @@ unsigned char seq_nt4_table[256] = {
 
 int main(int argc, char *argv[])
 {
-	int c, sa = 1, sb = 3, sq = 5, sr = 2, i, j, k, forward_only = 0;
+	int c, sa = 1, sb = 3, i, j, k, forward_only = 0;
 	int8_t mat[25];
+	ksw_aux_t a;
 	gzFile fpt, fpq;
 	kseq_t *kst, *ksq;
 	// parse command line
-	while ((c = getopt(argc, argv, "a:b:q:r:f")) >= 0) {
+	a.gapo = 5; a.gape = 2; a.T = 20;
+	while ((c = getopt(argc, argv, "a:b:q:r:ft:")) >= 0) {
 		switch (c) {
 			case 'a': sa = atoi(optarg); break;
 			case 'b': sb = atoi(optarg); break;
-			case 'q': sq = atoi(optarg); break;
-			case 'r': sr = atoi(optarg); break;
+			case 'q': a.gapo = atoi(optarg); break;
+			case 'r': a.gape = atoi(optarg); break;
+			case 't': a.T = atoi(optarg); break;
 			case 'f': forward_only = 1; break;
 		}
 	}
 	if (optind + 2 > argc) {
-		fprintf(stderr, "Usage: ksw [-a%d] [-b%d] [-q%d] [-r%d] <target.fa> <query.fa>\n", sa, sb, sq, sr);
+		fprintf(stderr, "Usage: ksw [-a%d] [-b%d] [-q%d] [-r%d] <target.fa> <query.fa>\n", sa, sb, a.gapo, a.gape);
 		return 1;
 	}
 	// initialize scoring matrix
@@ -248,11 +270,11 @@ int main(int argc, char *argv[])
 		while (kseq_read(kst) > 0) {
 			int s;
 			for (i = 0; i < kst->seq.l; ++i) kst->seq.s[i] = seq_nt4_table[(int)kst->seq.s[i]];
-			s = ksw_sse2_16(q[0], kst->seq.l, (uint8_t*)kst->seq.s, sq, sr);
-			printf("%s\t%s\t+\t%d\n", ksq->name.s, kst->name.s, s);
+			s = ksw_sse2_16(q[0], kst->seq.l, (uint8_t*)kst->seq.s, &a);
+			printf("%s\t%s\t+\t%d\t%d\t%d\n", ksq->name.s, kst->name.s, s, a.te+1, a.qe+1);
 			if (q[1]) {
-				s = ksw_sse2_16(q[1], kst->seq.l, (uint8_t*)kst->seq.s, sq, sr);
-				printf("%s\t%s\t-\t%d\n", ksq->name.s, kst->name.s, s);
+				s = ksw_sse2_16(q[1], kst->seq.l, (uint8_t*)kst->seq.s, &a);
+				printf("%s\t%s\t-\t%d\t%d\t%d\n", ksq->name.s, kst->name.s, s, a.te+1, a.qe+1);
 			}
 		}
 		free(q[0]); free(q[1]);
