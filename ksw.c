@@ -80,7 +80,7 @@ ksw_query_t *ksw_qinit(int p, int qlen, const uint8_t *query, int m, const int8_
 
 int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) // the first gap costs -(_o+_e)
 {
-	int slen, i, sum, score, m_b, n_b;
+	int slen, i, sum, score, m_b, n_b, te = -1;
 	uint64_t *b;
 	__m128i zero, gapoe, gape, shift, gmax, reduce, thres, *H0, *H1, *E, *Hmax;
 
@@ -94,7 +94,6 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) /
 
 	// initialization
 	m_b = n_b = 0; b = 0;
-	a->te = -1;
 	gmax = zero = _mm_set1_epi32(0);
 	gapoe = _mm_set1_epi8(a->gapo + a->gape);
 	gape = _mm_set1_epi8(a->gape);
@@ -167,7 +166,7 @@ end_loop:
 				int igmax;
 				__max_16(igmax, gmax); // maximum in gmax
 				if (imax > igmax) { // if the max has been updated
-					a->te = i; // the end position on the target
+					te = i; // the end position on the target
 					for (j = 0; LIKELY(j < slen); ++j) // keep the H1 vector
 						_mm_store_si128(Hmax + j, _mm_load_si128(H1 + j));
 				}
@@ -190,7 +189,7 @@ end_loop:
 		S = H1; H1 = H0; H0 = S; // swap H0 and H1
 	}
 	__max_16(score, gmax);
-	a->score = score + sum;
+	a->score = score + sum; a->te = te;
 	{ // get a->qe, the end of query match
 		int max = -1;
 		uint8_t *t = (uint8_t*)Hmax;
