@@ -37,8 +37,8 @@
 #endif
 
 struct _ksw_query_t {
-	int qlen, slen, T;
-	uint8_t shift, mdiff;
+	int qlen, slen;
+	uint8_t shift, mdiff, max;
 	__m128i *qp, *H0, *H1, *E, *Hmax;
 };
 
@@ -63,6 +63,7 @@ ksw_query_t *ksw_qinit(int p, int qlen, const uint8_t *query, int m, const int8_
 		if (mat[a] < (int8_t)q->shift) q->shift = mat[a];
 		if (mat[a] > (int8_t)q->mdiff) q->mdiff = mat[a];
 	}
+	q->max = q->mdiff;
 	q->shift = 256 - q->shift; // NB: q->shift is uint8_t
 	q->mdiff += q->shift; // this is the difference between the min and max scores
 	// An example: p=8, qlen=19, slen=3 and segmentation:
@@ -101,7 +102,6 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) /
 	thres = _mm_set1_epi8(_thres); // when max score exceeds this, shift all scores by "reduce" below
 	reduce = _mm_set1_epi8(127);
 	H0 = q->H0; H1 = q->H1; E = q->E; Hmax = q->Hmax;
-	q->T = a->T; // avoid potential cache miss
 	slen = q->slen;
 	for (i = 0; i < slen; ++i) {
 		_mm_store_si128(E + i, zero);
@@ -110,7 +110,7 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) /
 	}
 	// the core loop
 	for (i = 0, sum = 0; i < tlen; ++i) {
-		int j, k, cmp, imax, T = q->T;
+		int j, k, cmp, imax;
 		__m128i e, h, f = zero, max = zero, *S = q->qp + target[i] * slen; // s is the 1st score vector
 		h = _mm_load_si128(H0 + slen - 1); // h={2,5,8,11,14,17,-1,-1} in the above example
 		h = _mm_slli_si128(h, 1); // h=H(i-1,-1); << instead of >> because x64 is little-endian
@@ -155,14 +155,14 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) /
 end_loop:
 		//int k;for (k=0;k<16;++k)printf("%d ", ((uint8_t*)&max)[k]);printf("\n");
 		__max_16(imax, max); // imax is the maximum number in max
-		if (imax + sum >= T) { // write the b array; this condition adds branching unfornately
-			if (n_b == 0 || (uint32_t)b[n_b-1] + 1 != (uint32_t)i) { // then append
+		if (imax + sum >= a->T) { // write the b array; this condition adds branching unfornately
+			if (n_b == 0 || (int32_t)b[n_b-1] + 1 != i) { // then append
 				if (n_b == m_b) {
 					m_b = m_b? m_b<<1 : 8;
 					b = realloc(b, 8 * m_b);
 				}
 				b[n_b++] = (uint64_t)(imax + sum)<<32 | i;
-			} else if (b[n_b-1]>>32 < imax + sum) b[n_b-1] = (uint64_t)(imax + sum)<<32 | i; // modify the last
+			} else if ((int)(b[n_b-1]>>32) < imax + sum) b[n_b-1] = (uint64_t)(imax + sum)<<32 | i; // modify the last
 		}
 		if (imax > gmax) {
 			gmax = imax; te = i; // te is the end position on the target
@@ -183,11 +183,18 @@ end_loop:
 		S = H1; H1 = H0; H0 = S; // swap H0 and H1
 	}
 	a->score = gmax + sum; a->te = te;
-	{ // get a->qe, the end of query match
-		int max = -1;
+	{ // get a->qe, the end of query match; find the 2nd best score
+		int max = -1, low, high;
 		uint8_t *t = (uint8_t*)Hmax;
 		for (i = 0, a->qe = -1; i < q->qlen; ++i, ++t)
 			if ((int)*t > max) max = *t, a->qe = i / 16 + i % 16 * slen;
+		i = (a->score + q->max - 1) / q->max;
+		low = te - i; high = te + i;
+		for (i = 0, a->score2 = 0; i < n_b; ++i) {
+			int e = (int32_t)b[i];
+			if ((e < low || e > high) && b[i]>>32 > (uint32_t)a->score2)
+				a->score2 = b[i]>>32, a->te2 = e;
+		}
 	}
 	free(b);
 	return a->score;

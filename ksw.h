@@ -9,7 +9,7 @@ typedef struct {
 	unsigned gapo, gape; // the first gap costs gapo+gape
 	unsigned T; // threshold
 	// output
-	int score, te, qe;
+	int score, te, qe, score2, te2;
 } ksw_aux_t;
 
 #ifdef __cplusplus
