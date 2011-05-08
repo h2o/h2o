@@ -195,10 +195,11 @@ end_loop:
 	}
 	a->score = gmax + sum; a->te = te;
 	{ // get a->qe, the end of query match; find the 2nd best score
-		int max = -1, low, high;
+		int max = -1, low, high, qlen = slen * 16;
 		uint8_t *t = (uint8_t*)Hmax;
-		for (i = 0, a->qe = -1; i < q->qlen; ++i, ++t)
+		for (i = 0, a->qe = -1; i < qlen; ++i, ++t)
 			if ((int)*t > max) max = *t, a->qe = i / 16 + i % 16 * slen;
+		//printf("%d,%d\n", max, gmax);
 		i = (a->score + q->max - 1) / q->max;
 		low = te - i; high = te + i;
 		for (i = 0, a->score2 = 0; i < n_b; ++i) {
@@ -291,9 +292,9 @@ end_loop8:
 	}
 	a->score = gmax; a->te = te;
 	{
-		int max = -1, low, high;
+		int max = -1, low, high, qlen = slen * 8;
 		uint16_t *t = (uint16_t*)Hmax;
-		for (i = 0, a->qe = -1; i < q->qlen; ++i, ++t)
+		for (i = 0, a->qe = -1; i < qlen; ++i, ++t)
 			if ((int)*t > max) max = *t, a->qe = i / 8 + i % 8 * slen;
 		i = (a->score + q->max - 1) / q->max;
 		low = te - i; high = te + i;
