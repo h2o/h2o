@@ -84,7 +84,7 @@ ksw_query_t *ksw_qinit(int size, int qlen, const uint8_t *query, int m, const in
 			const int8_t *ma = mat + a * m;
 			for (i = 0; i < slen; ++i)
 				for (k = i; k < nlen; k += slen) // p iterations
-					*t++ = (k >= qlen? 0 : ma[query[k]]) + q->shift;
+					*t++ = (k >= qlen? 0 : ma[query[k]]);
 		}
 	}
 	return q;
@@ -216,7 +216,7 @@ int ksw_sse2_8(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) //
 {
 	int slen, i, m_b, n_b, te = -1, gmax = 0;
 	uint64_t *b;
-	__m128i zero, gapoe, shift, gape, *H0, *H1, *E, *Hmax;
+	__m128i zero, gapoe, gape, *H0, *H1, *E, *Hmax;
 
 #define __max_8(ret, xx) do { \
 		(xx) = _mm_max_epi16((xx), _mm_srli_si128((xx), 8)); \
@@ -230,7 +230,6 @@ int ksw_sse2_8(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) //
 	zero = _mm_set1_epi32(0);
 	gapoe = _mm_set1_epi16(a->gapo + a->gape);
 	gape = _mm_set1_epi16(a->gape);
-	shift = _mm_set1_epi16(q->shift);
 	H0 = q->H0; H1 = q->H1; E = q->E; Hmax = q->Hmax;
 	slen = q->slen;
 	for (i = 0; i < slen; ++i) {
@@ -245,9 +244,7 @@ int ksw_sse2_8(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) //
 		h = _mm_load_si128(H0 + slen - 1); // h={2,5,8,11,14,17,-1,-1} in the above example
 		h = _mm_slli_si128(h, 2);
 		for (j = 0; LIKELY(j < slen); ++j) {
-			h = _mm_adds_epu16(h, *S++);
-			h = _mm_subs_epu16(h, shift);
-			//int k;for (k=0;k<16;++k)printf("%d ", ((int16_t*)&h)[k]);printf("\n");
+			h = _mm_adds_epi16(h, *S++);
 			e = _mm_load_si128(E + j);
 			h = _mm_max_epi16(h, e);
 			h = _mm_max_epi16(h, f);
