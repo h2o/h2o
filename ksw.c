@@ -92,9 +92,9 @@ ksw_query_t *ksw_qinit(int size, int qlen, const uint8_t *query, int m, const in
 
 int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) // the first gap costs -(_o+_e)
 {
-	int slen, i, sum, m_b, n_b, te = -1, gmax = 0, _thres = 254 - q->mdiff;
+	int slen, i, sum, m_b, n_b, te = -1, gmax = 0;
 	uint64_t *b;
-	__m128i zero, gapoe, gape, shift, reduce, thres, *H0, *H1, *E, *Hmax;
+	__m128i zero, gapoe, gape, shift, reduce, *H0, *H1, *E, *Hmax;
 
 #define __max_16(ret, xx) do { \
 		(xx) = _mm_max_epu8((xx), _mm_srli_si128((xx), 8)); \
@@ -110,7 +110,6 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) /
 	gapoe = _mm_set1_epi8(a->gapo + a->gape);
 	gape = _mm_set1_epi8(a->gape);
 	shift = _mm_set1_epi8(q->shift);
-	thres = _mm_set1_epi8(_thres); // when max score exceeds this, shift all scores by "reduce" below
 	reduce = _mm_set1_epi8(127);
 	H0 = q->H0; H1 = q->H1; E = q->E; Hmax = q->Hmax;
 	slen = q->slen;
@@ -166,34 +165,24 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) /
 end_loop:
 		//int k;for (k=0;k<16;++k)printf("%d ", ((uint8_t*)&max)[k]);printf("\n");
 		__max_16(imax, max); // imax is the maximum number in max
-		if (imax + sum >= a->T) { // write the b array; this condition adds branching unfornately
+		if (imax >= a->T) { // write the b array; this condition adds branching unfornately
 			if (n_b == 0 || (int32_t)b[n_b-1] + 1 != i) { // then append
 				if (n_b == m_b) {
 					m_b = m_b? m_b<<1 : 8;
 					b = realloc(b, 8 * m_b);
 				}
-				b[n_b++] = (uint64_t)(imax + sum)<<32 | i;
-			} else if ((int)(b[n_b-1]>>32) < imax + sum) b[n_b-1] = (uint64_t)(imax + sum)<<32 | i; // modify the last
+				b[n_b++] = (uint64_t)imax<<32 | i;
+			} else if ((int)(b[n_b-1]>>32) < imax) b[n_b-1] = (uint64_t)imax<<32 | i; // modify the last
 		}
 		if (imax > gmax) {
 			gmax = imax; te = i; // te is the end position on the target
 			for (j = 0; LIKELY(j < slen); ++j) // keep the H1 vector
 				_mm_store_si128(Hmax + j, _mm_load_si128(H1 + j));
-		}
-		if (gmax >= _thres) { // reduce
-			// When overflow is going to happen, subtract 127 from all scores. This heuristic
-			// may miss the best alignment, but in practice this should happen very rarely.
-			sum += 127; gmax -= 127;
-			for (j = 0; LIKELY(j < slen); ++j) {
-				h = _mm_subs_epu8(_mm_load_si128(H1 + j), reduce);
-				_mm_store_si128(H1 + j, h);
-				e = _mm_subs_epu8(_mm_load_si128(E + j), reduce);
-				_mm_store_si128(E + j, e);
-			}
+			if (gmax + q->shift >= 255) break;
 		}
 		S = H1; H1 = H0; H0 = S; // swap H0 and H1
 	}
-	a->score = gmax + sum; a->te = te;
+	a->score = gmax; a->te = te;
 	{ // get a->qe, the end of query match; find the 2nd best score
 		int max = -1, low, high, qlen = slen * 16;
 		uint8_t *t = (uint8_t*)Hmax;
@@ -209,7 +198,7 @@ end_loop:
 		}
 	}
 	free(b);
-	return a->score;
+	return a->score + q->shift >= 255? 255 : a->score;
 }
 
 int ksw_sse2_8(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) // the first gap costs -(_o+_e)
@@ -363,7 +352,7 @@ int main(int argc, char *argv[])
 		}
 	}
 	if (optind + 2 > argc) {
-		fprintf(stderr, "Usage: ksw [-a%d] [-b%d] [-q%d] [-r%d] <target.fa> <query.fa>\n", sa, sb, a.gapo, a.gape);
+		fprintf(stderr, "Usage: ksw [-s%d] [-a%d] [-b%d] [-q%d] [-r%d] <target.fa> <query.fa>\n", size, sa, sb, a.gapo, a.gape);
 		return 1;
 	}
 	// initialize scoring matrix
