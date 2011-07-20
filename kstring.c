@@ -166,6 +166,107 @@ char *kstrnstr(const char *str, const char *pat, int n, int **_prep)
 	return (char*)kmemmem(str, n, pat, strlen(pat), _prep);
 }
 
+/****************
+ * fast sprintf *
+ ****************/
+
+static inline void enlarge(kstring_t *s, int l)
+{
+	if (s->l + l + 1 >= s->m) {
+		s->m = s->l + l + 2;
+		kroundup32(s->m);
+		s->s = (char*)realloc(s->s, s->m);
+	}
+}
+
+static int get_base(int c)
+{
+	if (c == 'o') return 8;
+	if (c == 'x') return 16;
+	return 10;
+}
+
+int ksprintf_fast(kstring_t *s, const char *fmt, ...)
+{
+
+#define write_integer(_ap, _s, _type, _base) do { \
+		_type c = va_arg(_ap, _type); \
+		if (c == 0) { \
+			enlarge(_s, 1); \
+			_s->s[_s->l++] = '0'; \
+			_s->s[_s->l] = 0; \
+		} else { \
+			char buf[32]; \
+			int l, ll; \
+			_type x; \
+			for (l = 0, x = c < 0? -c : c; x > 0; x /= _base) buf[l++] = "0123456789abcdef"[x%_base]; \
+			if (c < 0) buf[l++] = '-'; \
+			enlarge(_s, l); \
+			for (ll = l - 1; ll >= 0; --ll) _s->s[_s->l++] = buf[ll]; \
+			_s->s[_s->l] = 0; \
+		} \
+	} while (0)
+
+	va_list ap;
+	const char *p = fmt, *q;
+	va_start(ap, fmt);
+	while (*p) {
+		if (*p == '%') {
+			++p;
+			if (*p == '%') {
+				enlarge(s, 1);
+				s->s[s->l++] = '%';
+				s->s[s->l] = 0;
+			} else if (*p == 's') { // %s
+				char *r = va_arg(ap, char*);
+				int l = strlen(r);
+				enlarge(s, l);
+				memcpy(s->s + s->l, r, l);
+				s->l += l;
+				s->s[s->l] = 0;
+			} else if (*p == 'c') { // %c
+				enlarge(s, 1);
+				s->s[s->l++] = va_arg(ap, int);
+				s->s[s->l] = 0;
+			} else if (*p == 'd' || *p == 'i') { // %d or %i
+				write_integer(ap, s, int, 10);
+			} else if (*p == 'u' || *p == 'o' || *p == 'x') { // %u, %o or %x
+				int base = get_base(*p);
+				write_integer(ap, s, unsigned, base);
+			} else if (*p == 'l') {
+				++p;
+				if (*p == 'l') {
+					++p;
+					if (*p == 'd' || *p == 'i') { // %lld or %lli
+						write_integer(ap, s, long long, 10);
+					} else if (*p == 'u' || *p == 'o' || *p == 'x') {
+						int base = get_base(*p);
+						write_integer(ap, s, unsigned long long, base);
+					}
+				} else if (*p == 'd' || *p == 'i') { // %ld or %li
+					write_integer(ap, s, long, 10);
+				} else if (*p == 'u' || *p == 'o' || *p == 'x') {
+					int base = get_base(*p);
+					write_integer(ap, s, unsigned long, base);
+				}
+			}
+			++p;
+		} else {
+			q = p;
+			while (*p && *p != '%') ++p;
+			enlarge(s, p - q);
+			memcpy(s->s + s->l, q, p - q);
+			s->l += p - q;
+			s->s[s->l] = 0;
+		}
+	}
+	va_end(ap);
+
+#undef write_integer
+
+	return 0;
+}
+
 /***********************
  * The main() function *
  ***********************/
@@ -179,6 +280,10 @@ int main()
 	ks_tokaux_t aux;
 	char *p;
 	s = (kstring_t*)calloc(1, sizeof(kstring_t));
+	{ // test ksprintf_fast()
+		long xx = -10;
+		ksprintf_fast(s, " pooiu %% %s %ld %c %x", "+++", xx, '*', 100); printf("'%s'\n", s->s); s->l = 0;
+	}
 	// test ksprintf()
 	ksprintf(s, " abcdefg:    %d ", 100);
 	printf("'%s'\n", s->s);
