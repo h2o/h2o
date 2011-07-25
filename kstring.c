@@ -172,7 +172,7 @@ char *kstrnstr(const char *str, const char *pat, int n, int **_prep)
  ****************/
 
 typedef struct {
-	int base, width, fill, left_aln, n_ell, n_Ell;
+	int base, w, f, left_aln, n_ell, n_Ell;
 } printf_conv_t;
 
 static inline void enlarge(kstring_t *s, int l)
@@ -182,6 +182,30 @@ static inline void enlarge(kstring_t *s, int l)
 		kroundup32(s->m);
 		s->s = (char*)realloc(s->s, s->m);
 	}
+}
+
+double frexp10(double x, int *e)
+{
+	const double M_LOG_10_2 = M_LN2 / M_LN10;
+	double z;
+	int tmp;
+	if (x == 0.) {
+		*e = 0;
+		return 0.;
+	}
+	frexp(x, e);
+	if (*e >= 0) {
+		*e = (int)(*e * M_LOG_10_2);
+		for (z = .1, tmp = *e; tmp; z *= z, tmp >>= 1)
+			if (tmp & 1) x *= z;
+	} else {
+		*e = (int)((*e - 1) * M_LOG_10_2);
+		for (z = 10., tmp = -*e; tmp; z *= z, tmp >>= 1)
+			if (tmp & 1) x *= z;
+	}
+	if (x >= 10. || x <= -10.) ++(*e), x *= .1;
+	else if (x > -1. && x < 1.) --(*e), x *= 10.;
+	return x;
 }
 
 int ksprintf_fast(kstring_t *s, const char *fmt, ...)
@@ -195,8 +219,8 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 			for (x = _c < 0? -_c : _c; x > 0; x /= _z.base) buf[l++] = _conv[x%_z.base]; \
 			if (_c < 0) buf[l++] = '-'; \
 		} else buf[l++] = '0'; \
-		f = l > _z.fill? l : _z.fill; \
-		w = f > _z.width? f : _z.width; \
+		f = l > _z.f? l : _z.f; \
+		w = f > _z.w? f : _z.w; \
 		enlarge(_s, w); \
 		if (w > f && !_z.left_aln) \
 			for (k = f; k < w; ++k) _s->s[_s->l++] = ' '; \
@@ -212,12 +236,31 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 		write_integer0(c, _s, _type, _z, _conv); \
 	} while (0)
 
+#define write_fraction(_s, _f, _z, _trim0) do { \
+		int j, last; \
+		for (j = 0; j < _z.f - 1; ++j) { \
+			_f = (_f - (int)_f) * 10.; \
+			_s->s[_s->l++] = (int)_f + '0'; \
+		} \
+		_f = (_f - (int)_f) * 10.; \
+		last = (int)(_f + .499999999999999999); \
+		if (last >= 10) { \
+			_s->s[_s->l++] = '0'; \
+			for (j = _s->l - 2; _s->s[j] == '9'; --j) _s->s[j] = '0'; \
+			if (_s->s[j] != '.') ++_s->s[j]; \
+		} else _s->s[_s->l++] = last + '0'; \
+		if (_trim0) { \
+			while (_s->s[_s->l - 1] == '0') --_s->l; \
+			if (_s->s[_s->l - 1] == '.') --_s->l; \
+		} \
+	} while (0)
+
 	va_list ap;
 	const char *p = fmt, *q;
 	int state = 0;
 	printf_conv_t z, ztmp;
-	memset(&z, 0, sizeof(printf_conv_t)); z.fill = -1;
-	ztmp = z;
+	memset(&z, 0, sizeof(printf_conv_t)); z.f = -1;
+	ztmp = z; ztmp.base = 10;
 	va_start(ap, fmt);
 	while (*p) {
 		if (state == 1) {
@@ -226,13 +269,13 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 				enlarge(s, 1);
 				s->s[s->l++] = '%';
 				finished = 1;
-			} else if (*p >= '0' && *p <= '9') { // width
+			} else if (*p >= '0' && *p <= '9') { // w
 				char *r;
-				z.width = strtol(p, &r, 10);
+				z.w = strtol(p, &r, 10);
 				p = r - 1;
-			} else if (*p == '.') { // fill
+			} else if (*p == '.') { // f
 				char *r;
-				z.fill = strtol(p + 1, &r, 10);
+				z.f = strtol(p + 1, &r, 10);
 				p = r - 1;
 			} else if (*p == 'l') { // %l
 				++z.n_ell;
@@ -266,7 +309,7 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 				else if (z.n_ell == 1) write_integer(ap, s, unsigned long, z, conv);
 				else write_integer(ap, s, unsigned long long, z, conv);
 				finished = 1;
-			} else if (*p == 'f' || *p == 'e') {
+			} else if (*p == 'f' || *p == 'e' || *p == 'g') {
 				const char *t, *r = 0;
 				double x = va_arg(ap, double);
 				uint64_t *y = (uint64_t*)&x;
@@ -278,7 +321,52 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 					l = strlen(r);
 					enlarge(s, l);
 					for (t = r; *t; ++t) s->s[s->l++] = *t;
-				} else if (*p == 'f') {
+				} else {
+					double f;
+					int type = *p, e, w, trim0 = (*p == 'g')? 1 : 0;
+					if (z.f < 0) z.f = 6;
+					f = frexp10(x, &e);
+					if (*p == 'g') type = (e < -4 || e >= z.f)? 'e' : 'f'; // see the printf() manual page
+					if (type == 'e') {
+						int j, w = 8 + z.f > z.w? 8 + z.f : z.w;
+						enlarge(s, w);
+						if (f < 0) s->s[s->l++] = '-', f = -f;
+						s->s[s->l++] = (int)f + '0';
+						if (z.f > 0) {
+							s->s[s->l++] = '.';
+							write_fraction(s, f, z, trim0);
+						}
+						s->s[s->l++] = 'e';
+						if (e >= 0) s->s[s->l++] = '+';
+						ztmp.f = 2;
+						write_integer0(e, s, int, ztmp, "0123456789");
+					} else {
+						int j, w = abs(e) + 2 + z.f > z.w? abs(e) + 2 + z.f : z.w;
+						enlarge(s, w);
+						if (f < 0) s->s[s->l++] = '-', f = -f;
+						if (e >= 0) {
+							for (j = 0; j < e; ++j) {
+								s->s[s->l++] = (int)f + '0';
+								f = (f - (int)f) * 10.;
+							}
+							if (z.f != 0) {
+								s->s[s->l++] = (int)f + '0';
+								s->s[s->l++] = '.';
+								write_fraction(s, f, z, trim0);
+							} else s->s[s->l++] = (int)(f + .49999999999999999) + '0';
+						} else {
+							s->s[s->l++] = '0';
+							if (z.f != 0) {
+								s->s[s->l++] = '.';
+								for (j = 1; j < -e && j <= z.f; ++j) s->s[s->l++] = '0';
+								if (j - 1 < z.f) {
+									f *= .1;
+									z.f -= j - 1;
+									write_fraction(s, f, z, trim0);
+								}
+							}
+						}
+					}
 				}
 				finished = 1;
 			}
@@ -295,7 +383,7 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 			if (*p == '%') {
 				state = 1;
 				++p;
-				memset(&z, 0, sizeof(printf_conv_t)); z.fill = -1;
+				memset(&z, 0, sizeof(printf_conv_t)); z.f = -1;
 			}
 		}
 	}
@@ -319,8 +407,10 @@ int main()
 	s = (kstring_t*)calloc(1, sizeof(kstring_t));
 	{ // test ksprintf_fast()
 		long xx = -10;
-		ksprintf_fast(s, " pooiu %% %s %ld %c%-5.4X %f", "+++", xx, '*', 110, 2.45); printf("'%s'\n", s->s); s->l = 0;
-		printf("%4.3x, %.1f\n", 100, 1e30);
+		int e;
+		ksprintf_fast(s, " pooiu %% %s %ld %c%-5.4X %g", "+++", xx, '*', 110, 0.246); printf("'%s'\n", s->s); s->l = 0;
+		frexp10(-1.2e10, &e);
+		printf("%g, %.1f\n", 1e100, 1e30);
 	}
 	// test ksprintf()
 	ksprintf(s, " abcdefg:    %d ", 100);
