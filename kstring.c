@@ -325,7 +325,7 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 					s->s[s->l++] = '0';
 				} else { // other cases
 					double f, base, p10;
-					int type = *p, e, w, tmp;
+					int type = *p, e, tmp;
 					uint64_t y;
 					if (z.f < 0) z.f = 6; // default precision
 					if (z.f > 20) z.f = 20; // maximum precision. 1<<63 ~ 1e20
