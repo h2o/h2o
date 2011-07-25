@@ -236,25 +236,6 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 		write_integer0(c, _s, _type, _z, _conv); \
 	} while (0)
 
-#define write_fraction(_s, _f, _z, _trim0) do { \
-		int j, last; \
-		for (j = 0; j < _z.f - 1; ++j) { \
-			_f = (_f - (int)_f) * 10.; \
-			_s->s[_s->l++] = (int)_f + '0'; \
-		} \
-		_f = (_f - (int)_f) * 10.; \
-		last = (int)(_f + .499999999999999999); \
-		if (last >= 10) { \
-			_s->s[_s->l++] = '0'; \
-			for (j = _s->l - 2; _s->s[j] == '9'; --j) _s->s[j] = '0'; \
-			if (_s->s[j] != '.') ++_s->s[j]; \
-		} else _s->s[_s->l++] = last + '0'; \
-		if (_trim0) { \
-			while (_s->s[_s->l - 1] == '0') --_s->l; \
-			if (_s->s[_s->l - 1] == '.') --_s->l; \
-		} \
-	} while (0)
-
 	va_list ap;
 	const char *p = fmt, *q;
 	int state = 0;
@@ -285,14 +266,34 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 				z.left_aln = 1;
 			} else if (*p == 's') { // %s
 				char *r = va_arg(ap, char*);
-				int l = strlen(r);
-				enlarge(s, l);
-				memcpy(s->s + s->l, r, l);
-				s->l += l;
+				int j, l = strlen(r);
+				if (z.w > l) {
+					enlarge(s, z.w);
+					if (!z.left_aln)
+						for (j = 0; j < z.w - l; ++j) s->s[s->l++] = ' ';
+					memcpy(s->s + s->l, r, l);
+					s->l += l;
+					if (z.left_aln)
+						for (j = 0; j < z.w - l; ++j) s->s[s->l++] = ' ';
+				} else {
+					enlarge(s, z.w);
+					memcpy(s->s + s->l, r, l);
+					s->l += l;
+				}
 				finished = 1;
 			} else if (*p == 'c') { // %c
-				enlarge(s, 1);
-				s->s[s->l++] = va_arg(ap, int);
+				if (z.w > 1) {
+					int j;
+					enlarge(s, z.w);
+					if (!z.left_aln)
+						for (j = 0; j < z.w - 1; ++j) s->s[s->l++] = ' ';
+					s->s[s->l++] = va_arg(ap, int);
+					if (z.left_aln)
+						for (j = 0; j < z.w - 1; ++j) s->s[s->l++] = ' ';
+				} else {
+					enlarge(s, 1);
+					s->s[s->l++] = va_arg(ap, int);
+				}
 				finished = 1;
 			} else if (*p == 'd' || *p == 'i') { // %d or %i
 				z.base = 10;
@@ -309,64 +310,71 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 				else if (z.n_ell == 1) write_integer(ap, s, unsigned long, z, conv);
 				else write_integer(ap, s, unsigned long long, z, conv);
 				finished = 1;
-			} else if (*p == 'f' || *p == 'e' || *p == 'g') {
-				const char *t, *r = 0;
+			} else if (*p == 'g' || *p == 'e' || *p == 'f' || *p == 'G' || *p == 'E' || *p == 'F') { // double-precision
 				double x = va_arg(ap, double);
 				uint64_t *y = (uint64_t*)&x;
-				int l;
+				int l00 = s->l;
 				if ((*y >> 52 & 0x7ff) == 0x7ff) { // nan, inf or -inf
+					const char *t, *r = 0;
 					if (*y & 0x000fffffffffffffull) r = "nan";
 					else if (*y>>63) r = "-inf";
 					else r = "inf";
-					l = strlen(r);
-					enlarge(s, l);
+					enlarge(s, strlen(r));
 					for (t = r; *t; ++t) s->s[s->l++] = *t;
-				} else {
-					double f;
-					int type = *p, e, w, trim0 = (*p == 'g')? 1 : 0;
-					if (z.f < 0) z.f = 6;
-					f = frexp10(x, &e);
-					if (*p == 'g') type = (e < -4 || e >= z.f)? 'e' : 'f'; // see the printf() manual page
-					if (type == 'e') {
-						int j, w = 8 + z.f > z.w? 8 + z.f : z.w;
-						enlarge(s, w);
-						if (f < 0) s->s[s->l++] = '-', f = -f;
-						s->s[s->l++] = (int)f + '0';
-						if (z.f > 0) {
-							s->s[s->l++] = '.';
-							write_fraction(s, f, z, trim0);
-						}
-						s->s[s->l++] = 'e';
+				} else if (x == 0.) { // zero
+					s->s[s->l++] = '0';
+				} else { // other cases
+					double f, base, p10;
+					int type = *p, e, w, tmp;
+					uint64_t y;
+					if (z.f < 0) z.f = 6; // default precision
+					if (z.f > 20) z.f = 20; // maximum precision. 1<<63 ~ 1e20
+					f = frexp10(x, &e); // 10-based frexp()
+					type = (e < -4 || e >= z.f)? 'e' : 'f'; // see the printf() manual page
+					for (p10 = 1., base = 10., tmp = z.f - 1; tmp; base *= base, tmp >>= 1) // compute pow(10, z.f-1)
+						if (tmp & 1) p10 *= base;
+					if (f < 0) {
+						f = -f;
+						s->s[s->l++] = '-';
+					}
+					y = (uint64_t)round(f * p10); // perhaps (uint64_t)(f*p10+0.4999999999) is more portable?
+					enlarge(s, z.w > z.f + 7? z.w : z.f + 7);
+					if (type == 'e') { // scientific number
+						int j, l0 = s->l;
+						ztmp.f = -1; write_integer0(y, s, int64_t, ztmp, "0123456789");
+						if (s->l - l0 > z.f) ++e; // in case x=9.9999999e100
+						while (s->s[s->l - 1] == '0') --s->l; // trim trailing zeros
+						for (j = s->l; j > l0 + 1; --j) s->s[j] = s->s[j - 1]; // shift for the dot
+						s->s[j] = '.'; ++s->l; // add the dot
+						s->s[s->l++] = isupper(*p)? 'E' : 'e';
 						if (e >= 0) s->s[s->l++] = '+';
-						ztmp.f = 2;
-						write_integer0(e, s, int, ztmp, "0123456789");
-					} else {
-						int j, w = abs(e) + 2 + z.f > z.w? abs(e) + 2 + z.f : z.w;
-						enlarge(s, w);
-						if (f < 0) s->s[s->l++] = '-', f = -f;
-						if (e >= 0) {
-							for (j = 0; j < e; ++j) {
-								s->s[s->l++] = (int)f + '0';
-								f = (f - (int)f) * 10.;
-							}
-							if (z.f != 0) {
-								s->s[s->l++] = (int)f + '0';
-								s->s[s->l++] = '.';
-								write_fraction(s, f, z, trim0);
-							} else s->s[s->l++] = (int)(f + .49999999999999999) + '0';
+						ztmp.f = 2; write_integer0(e, s, int, ztmp, "0123456789"); // write the exp
+					} else { // type == 'f'
+						int j;
+						if (e >= 0) { // NB: here e < z.f by the definition of type
+							int l0 = s->l;
+							ztmp.f = -1; write_integer0(y, s, int64_t, ztmp, "0123456789");
+							if (s->l - l0 > z.f) ++e;
+							for (j = s->l; j > l0 + e + 1; --j) s->s[j] = s->s[j - 1]; // shift for the dot
+							s->s[j] = '.'; ++s->l; // add the dot
+							for (j = s->l - 1; s->s[j] == '0'; --j); // trim trailing zeros
+							s->l = (s->s[j] == '.')? j : j + 1; // trim dot if necessary
 						} else {
 							s->s[s->l++] = '0';
-							if (z.f != 0) {
-								s->s[s->l++] = '.';
-								for (j = 1; j < -e && j <= z.f; ++j) s->s[s->l++] = '0';
-								if (j - 1 < z.f) {
-									f *= .1;
-									z.f -= j - 1;
-									write_fraction(s, f, z, trim0);
-								}
-							}
+							s->s[s->l++] = '.';
+							for (j = 0; j < -e - 1; ++j) s->s[s->l++] = '0'; // fill enough zeros
+							ztmp.f = -1; write_integer0(y, s, int64_t, ztmp, "0123456789");
+							while (s->s[s->l - 1] == '0') --s->l;
 						}
 					}
+				}
+				if (z.w > s->l - l00) { // add spaces
+					int j, skip = z.w - (s->l - l00);
+					if (!z.left_aln) {
+						memmove(s->s + l00 + skip, s->s + l00, s->l - l00);
+						for (j = 0; j < skip; ++j) s->s[l00 + j] = ' ';
+						s->l += skip;
+					} else for (j = 0; j < skip; ++j) s->s[s->l++] = ' ';
 				}
 				finished = 1;
 			}
@@ -408,9 +416,9 @@ int main()
 	{ // test ksprintf_fast()
 		long xx = -10;
 		int e;
-		ksprintf_fast(s, " pooiu %% %s %ld %c%-5.4X %g", "+++", xx, '*', 110, 0.246); printf("'%s'\n", s->s); s->l = 0;
+		ksprintf_fast(s, " pooiu %% *|%10s| %ld %-5c%-5.4X |%-10.5g|", "+++", xx, '*', 110, -0.0222256); printf("'%s'\n", s->s); s->l = 0;
 		frexp10(-1.2e10, &e);
-		printf("%g, %.1f\n", 1e100, 1e30);
+		printf("%.3g, %.1f\n", 2461., 1e30);
 	}
 	// test ksprintf()
 	ksprintf(s, " abcdefg:    %d ", 100);
