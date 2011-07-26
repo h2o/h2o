@@ -248,7 +248,7 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 	int state = 0;
 	printf_conv_t z, ztmp;
 	memset(&z, 0, sizeof(printf_conv_t)); z.f = -1;
-	ztmp = z;
+	memset(&ztmp, 0, sizeof(printf_conv_t));
 	va_start(ap, fmt);
 	while (*p) {
 		if (state == 1) {
@@ -257,77 +257,12 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 				enlarge(s, 1);
 				s->s[s->l++] = '%';
 				finished = 1;
-			} else if (*p >= '0' && *p <= '9') { // w
-				char *r;
-				z.w = strtol(p, &r, 10);
-				p = r - 1;
-			} else if (*p == '.') { // f
-				char *r;
-				z.f = strtol(p + 1, &r, 10);
-				p = r - 1;
-			} else if (*p == 'l') { // %l
-				++z.n_ell;
-			} else if (*p == 'L') { // %L
-				++z.n_Ell;
-			} else if (*p == '-') { // %-
-				z.left_aln = 1;
-			} else if (*p == 's') { // %s
-				char *r = va_arg(ap, char*);
-				int j, l = strlen(r);
-				if (z.w > l) {
-					enlarge(s, z.w);
-					if (!z.left_aln)
-						for (j = 0; j < z.w - l; ++j) s->s[s->l++] = ' ';
-					memcpy(s->s + s->l, r, l);
-					s->l += l;
-					if (z.left_aln)
-						for (j = 0; j < z.w - l; ++j) s->s[s->l++] = ' ';
-				} else {
-					enlarge(s, z.w);
-					memcpy(s->s + s->l, r, l);
-					s->l += l;
-				}
-				finished = 1;
-			} else if (*p == 'c') { // %c
-				if (z.w > 1) {
-					int j;
-					enlarge(s, z.w);
-					if (!z.left_aln)
-						for (j = 0; j < z.w - 1; ++j) s->s[s->l++] = ' ';
-					s->s[s->l++] = va_arg(ap, int);
-					if (z.left_aln)
-						for (j = 0; j < z.w - 1; ++j) s->s[s->l++] = ' ';
-				} else {
-					enlarge(s, 1);
-					s->s[s->l++] = va_arg(ap, int);
-				}
-				finished = 1;
 			} else if (*p == 'd' || *p == 'i') { // %d or %i
 				if (z.n_ell == 0) write_integer(ap, s, int, z, 10, "0123456789");
 				else if (z.n_ell == 1) write_integer(ap, s, long, z, 10, "0123456789");
 				else write_integer(ap, s, long long, z, 10, "0123456789");
 				finished = 1;
-			} else if (*p == 'u') { // %u
-				if (z.n_ell == 0) write_integer(ap, s, unsigned, z, 10, "0123456789");
-				else if (z.n_ell == 1) write_integer(ap, s, unsigned long, z, 10, "0123456789");
-				else write_integer(ap, s, unsigned long long, z, 10, "0123456789");
-				finished = 1;
-			} else if (*p == 'x') { // %x
-				if (z.n_ell == 0) write_integer(ap, s, unsigned, z, 16, "0123456789abcdef");
-				else if (z.n_ell == 1) write_integer(ap, s, unsigned long, z, 16, "0123456789abcdef");
-				else write_integer(ap, s, unsigned long long, z, 16, "0123456789abcdef");
-				finished = 1;
-			} else if (*p == 'X') { // %X
-				if (z.n_ell == 0) write_integer(ap, s, unsigned, z, 16, "0123456789ABCDEF");
-				else if (z.n_ell == 1) write_integer(ap, s, unsigned long, z, 16, "0123456789ABCDEF");
-				else write_integer(ap, s, unsigned long long, z, 16, "0123456789ABCDEF");
-				finished = 1;
-			} else if (*p == 'o') { // %o
-				if (z.n_ell == 0) write_integer(ap, s, unsigned, z, 8, "01234567");
-				else if (z.n_ell == 1) write_integer(ap, s, unsigned long, z, 8, "01234567");
-				else write_integer(ap, s, unsigned long long, z, 8, "01234567");
-				finished = 1;
-			} else if (*p == 'g' || *p == 'e' || *p == 'f' || *p == 'G' || *p == 'E' || *p == 'F') { // double-precision
+			} else if (*p == 'g' || *p == 'G') { // double-precision
 				double x = va_arg(ap, double);
 				uint64_t *y = (uint64_t*)&x;
 				int l00 = s->l;
@@ -394,6 +329,71 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 					} else for (j = 0; j < skip; ++j) s->s[s->l++] = ' ';
 				}
 				finished = 1;
+			} else if (*p >= '0' && *p <= '9') { // w
+				char *r;
+				z.w = strtol(p, &r, 10);
+				p = r - 1;
+			} else if (*p == '.') { // f
+				char *r;
+				z.f = strtol(p + 1, &r, 10);
+				p = r - 1;
+			} else if (*p == 'l') { // %l
+				++z.n_ell;
+			} else if (*p == 's') { // %s
+				char *r = va_arg(ap, char*);
+				int j, l = strlen(r);
+				if (z.w > l) {
+					enlarge(s, z.w);
+					if (!z.left_aln)
+						for (j = 0; j < z.w - l; ++j) s->s[s->l++] = ' ';
+					memcpy(s->s + s->l, r, l);
+					s->l += l;
+					if (z.left_aln)
+						for (j = 0; j < z.w - l; ++j) s->s[s->l++] = ' ';
+				} else {
+					enlarge(s, z.w);
+					memcpy(s->s + s->l, r, l);
+					s->l += l;
+				}
+				finished = 1;
+			} else if (*p == 'c') { // %c
+				if (z.w > 1) {
+					int j;
+					enlarge(s, z.w);
+					if (!z.left_aln)
+						for (j = 0; j < z.w - 1; ++j) s->s[s->l++] = ' ';
+					s->s[s->l++] = va_arg(ap, int);
+					if (z.left_aln)
+						for (j = 0; j < z.w - 1; ++j) s->s[s->l++] = ' ';
+				} else {
+					enlarge(s, 1);
+					s->s[s->l++] = va_arg(ap, int);
+				}
+				finished = 1;
+			} else if (*p == 'u') { // %u
+				if (z.n_ell == 0) write_integer(ap, s, unsigned, z, 10, "0123456789");
+				else if (z.n_ell == 1) write_integer(ap, s, unsigned long, z, 10, "0123456789");
+				else write_integer(ap, s, unsigned long long, z, 10, "0123456789");
+				finished = 1;
+			} else if (*p == 'x') { // %x
+				if (z.n_ell == 0) write_integer(ap, s, unsigned, z, 16, "0123456789abcdef");
+				else if (z.n_ell == 1) write_integer(ap, s, unsigned long, z, 16, "0123456789abcdef");
+				else write_integer(ap, s, unsigned long long, z, 16, "0123456789abcdef");
+				finished = 1;
+			} else if (*p == 'X') { // %X
+				if (z.n_ell == 0) write_integer(ap, s, unsigned, z, 16, "0123456789ABCDEF");
+				else if (z.n_ell == 1) write_integer(ap, s, unsigned long, z, 16, "0123456789ABCDEF");
+				else write_integer(ap, s, unsigned long long, z, 16, "0123456789ABCDEF");
+				finished = 1;
+			} else if (*p == 'o') { // %o
+				if (z.n_ell == 0) write_integer(ap, s, unsigned, z, 8, "01234567");
+				else if (z.n_ell == 1) write_integer(ap, s, unsigned long, z, 8, "01234567");
+				else write_integer(ap, s, unsigned long long, z, 8, "01234567");
+				finished = 1;
+			} else if (*p == 'L') { // %L
+				++z.n_Ell;
+			} else if (*p == '-') { // %-
+				z.left_aln = 1;
 			}
 			++p;
 			if (finished) state = 0;
