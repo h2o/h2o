@@ -172,7 +172,8 @@ char *kstrnstr(const char *str, const char *pat, int n, int **_prep)
  ****************/
 
 typedef struct {
-	int base, w, f, left_aln, n_ell, n_Ell;
+	int32_t n_ell:5, n_Ell:5, left_aln:2, w:20;
+	int32_t f;
 } printf_conv_t;
 
 static inline void enlarge(kstring_t *s, int l)
@@ -212,23 +213,29 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 {
 
 #define write_integer0(_c, _s, _type, _z, _base, _conv) do { \
-		char buf[32]; \
-		int l = 0, k, w, f; \
+		char buf[24]; \
+		int l = 0, k; \
 		_type x; \
 		if (_c != 0) { \
-			for (x = _c < 0? -_c : _c; x > 0; x /= _base) buf[l++] = _conv[x%_base]; \
+			for (x = _c < 0? -_c : _c; x; x /= _base) buf[l++] = _conv[x%_base]; \
 			if (_c < 0) buf[l++] = '-'; \
 		} else buf[l++] = '0'; \
-		f = l > _z.f? l : _z.f; \
-		w = f > _z.w? f : _z.w; \
-		enlarge(_s, w); \
-		if (w > f && !_z.left_aln) \
-			for (k = f; k < w; ++k) _s->s[_s->l++] = ' '; \
-		if (f > l) \
-			for (k = l; k < f; ++k) _s->s[_s->l++] = '0'; \
-		for (k = l - 1; k >= 0; --k) _s->s[_s->l++] = buf[k]; \
-		if (w > f && _z.left_aln) \
-			for (k = f; k < w; ++k) _s->s[_s->l++] = ' '; \
+		if (_z.f > 0 || _z.w) { \
+			int f, w; \
+			f = l > _z.f? l : _z.f; \
+			w = f > _z.w? f : _z.w; \
+			enlarge(_s, w); \
+			if (w > f && !_z.left_aln) \
+				for (k = f; k < w; ++k) _s->s[_s->l++] = ' '; \
+			if (f > l) \
+				for (k = l; k < f; ++k) _s->s[_s->l++] = '0'; \
+			for (k = l - 1; k >= 0; --k) _s->s[_s->l++] = buf[k]; \
+			if (w > f && _z.left_aln) \
+				for (k = f; k < w; ++k) _s->s[_s->l++] = ' '; \
+		} else { \
+			enlarge(_s, l); \
+			for (k = l - 1; k >= 0; --k) _s->s[_s->l++] = buf[k]; \
+		} \
 	} while (0)
 
 #define write_integer(_ap, _s, _type, _z, _base, _conv) do { \
@@ -241,7 +248,7 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 	int state = 0;
 	printf_conv_t z, ztmp;
 	memset(&z, 0, sizeof(printf_conv_t)); z.f = -1;
-	ztmp = z; ztmp.base = 10;
+	ztmp = z;
 	va_start(ap, fmt);
 	while (*p) {
 		if (state == 1) {
@@ -296,19 +303,29 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 				}
 				finished = 1;
 			} else if (*p == 'd' || *p == 'i') { // %d or %i
-				z.base = 10;
 				if (z.n_ell == 0) write_integer(ap, s, int, z, 10, "0123456789");
 				else if (z.n_ell == 1) write_integer(ap, s, long, z, 10, "0123456789");
 				else write_integer(ap, s, long long, z, 10, "0123456789");
 				finished = 1;
-			} else if (*p == 'u' || *p == 'o' || *p == 'x' || *p == 'X') { // %u, %o or %x
-				const char *conv = (*p == 'X')? "0123456789ABCDEF" : "0123456789abcdef";
-				if (*p == 'u') z.base = 10;
-				else if (*p == 'o') z.base = 8;
-				else if (*p == 'x' || *p == 'X') z.base = 16;
-				if (z.n_ell == 0) write_integer(ap, s, unsigned, z, z.base, conv);
-				else if (z.n_ell == 1) write_integer(ap, s, unsigned long, z, z.base, conv);
-				else write_integer(ap, s, unsigned long long, z, z.base, conv);
+			} else if (*p == 'u') { // %u
+				if (z.n_ell == 0) write_integer(ap, s, unsigned, z, 10, "0123456789");
+				else if (z.n_ell == 1) write_integer(ap, s, unsigned long, z, 10, "0123456789");
+				else write_integer(ap, s, unsigned long long, z, 10, "0123456789");
+				finished = 1;
+			} else if (*p == 'x') { // %x
+				if (z.n_ell == 0) write_integer(ap, s, unsigned, z, 16, "0123456789abcdef");
+				else if (z.n_ell == 1) write_integer(ap, s, unsigned long, z, 16, "0123456789abcdef");
+				else write_integer(ap, s, unsigned long long, z, 16, "0123456789abcdef");
+				finished = 1;
+			} else if (*p == 'X') { // %X
+				if (z.n_ell == 0) write_integer(ap, s, unsigned, z, 16, "0123456789ABCDEF");
+				else if (z.n_ell == 1) write_integer(ap, s, unsigned long, z, 16, "0123456789ABCDEF");
+				else write_integer(ap, s, unsigned long long, z, 16, "0123456789ABCDEF");
+				finished = 1;
+			} else if (*p == 'o') { // %o
+				if (z.n_ell == 0) write_integer(ap, s, unsigned, z, 8, "01234567");
+				else if (z.n_ell == 1) write_integer(ap, s, unsigned long, z, 8, "01234567");
+				else write_integer(ap, s, unsigned long long, z, 8, "01234567");
 				finished = 1;
 			} else if (*p == 'g' || *p == 'e' || *p == 'f' || *p == 'G' || *p == 'E' || *p == 'F') { // double-precision
 				double x = va_arg(ap, double);
