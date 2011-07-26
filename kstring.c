@@ -99,13 +99,13 @@ typedef unsigned char ubyte_t;
 static int *ksBM_prep(const ubyte_t *pat, int m)
 {
 	int i, *suff, *prep, *bmGs, *bmBc;
-	prep = calloc(m + 256, sizeof(int));
+	prep = (int*)calloc(m + 256, sizeof(int));
 	bmGs = prep; bmBc = prep + m;
 	{ // preBmBc()
 		for (i = 0; i < 256; ++i) bmBc[i] = m;
 		for (i = 0; i < m - 1; ++i) bmBc[pat[i]] = m - i - 1;
 	}
-	suff = calloc(m, sizeof(int));
+	suff = (int*)calloc(m, sizeof(int));
 	{ // suffixes()
 		int f = 0, g;
 		suff[m - 1] = m;
