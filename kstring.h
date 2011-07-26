@@ -53,6 +53,7 @@ extern "C" {
 #endif
 
 	int ksprintf(kstring_t *s, const char *fmt, ...);
+	int ksprintf_fast(kstring_t *s, const char *fmt, ...);
 	int ksplit_core(char *s, int delimiter, int *_max, int **_offsets);
 	char *kstrstr(const char *str, const char *pat, int **_prep);
 	char *kstrnstr(const char *str, const char *pat, int n, int **_prep);

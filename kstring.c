@@ -211,12 +211,12 @@ double frexp10(double x, int *e)
 int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 {
 
-#define write_integer0(_c, _s, _type, _z, _conv) do { \
+#define write_integer0(_c, _s, _type, _z, _base, _conv) do { \
 		char buf[32]; \
 		int l = 0, k, w, f; \
 		_type x; \
 		if (_c != 0) { \
-			for (x = _c < 0? -_c : _c; x > 0; x /= _z.base) buf[l++] = _conv[x%_z.base]; \
+			for (x = _c < 0? -_c : _c; x > 0; x /= _base) buf[l++] = _conv[x%_base]; \
 			if (_c < 0) buf[l++] = '-'; \
 		} else buf[l++] = '0'; \
 		f = l > _z.f? l : _z.f; \
@@ -231,9 +231,9 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 			for (k = f; k < w; ++k) _s->s[_s->l++] = ' '; \
 	} while (0)
 
-#define write_integer(_ap, _s, _type, _z, _conv) do { \
+#define write_integer(_ap, _s, _type, _z, _base, _conv) do { \
 		_type c = va_arg(_ap, _type); \
-		write_integer0(c, _s, _type, _z, _conv); \
+		write_integer0(c, _s, _type, _z, _base, _conv); \
 	} while (0)
 
 	va_list ap;
@@ -297,18 +297,18 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 				finished = 1;
 			} else if (*p == 'd' || *p == 'i') { // %d or %i
 				z.base = 10;
-				if (z.n_ell == 0) write_integer(ap, s, int, z, "0123456789");
-				else if (z.n_ell == 1) write_integer(ap, s, long, z, "0123456789");
-				else write_integer(ap, s, long long, z, "0123456789");
+				if (z.n_ell == 0) write_integer(ap, s, int, z, 10, "0123456789");
+				else if (z.n_ell == 1) write_integer(ap, s, long, z, 10, "0123456789");
+				else write_integer(ap, s, long long, z, 10, "0123456789");
 				finished = 1;
 			} else if (*p == 'u' || *p == 'o' || *p == 'x' || *p == 'X') { // %u, %o or %x
 				const char *conv = (*p == 'X')? "0123456789ABCDEF" : "0123456789abcdef";
 				if (*p == 'u') z.base = 10;
 				else if (*p == 'o') z.base = 8;
 				else if (*p == 'x' || *p == 'X') z.base = 16;
-				if (z.n_ell == 0) write_integer(ap, s, unsigned, z, conv);
-				else if (z.n_ell == 1) write_integer(ap, s, unsigned long, z, conv);
-				else write_integer(ap, s, unsigned long long, z, conv);
+				if (z.n_ell == 0) write_integer(ap, s, unsigned, z, z.base, conv);
+				else if (z.n_ell == 1) write_integer(ap, s, unsigned long, z, z.base, conv);
+				else write_integer(ap, s, unsigned long long, z, z.base, conv);
 				finished = 1;
 			} else if (*p == 'g' || *p == 'e' || *p == 'f' || *p == 'G' || *p == 'E' || *p == 'F') { // double-precision
 				double x = va_arg(ap, double);
@@ -341,19 +341,19 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 					enlarge(s, z.w > z.f + 7? z.w : z.f + 7);
 					if (type == 'e') { // scientific number
 						int j, l0 = s->l;
-						ztmp.f = -1; write_integer0(y, s, int64_t, ztmp, "0123456789");
+						ztmp.f = -1; write_integer0(y, s, int64_t, ztmp, 10, "0123456789");
 						if (s->l - l0 > z.f) ++e; // in case x=9.9999999e100
 						while (s->s[s->l - 1] == '0') --s->l; // trim trailing zeros
 						for (j = s->l; j > l0 + 1; --j) s->s[j] = s->s[j - 1]; // shift for the dot
 						s->s[j] = '.'; ++s->l; // add the dot
 						s->s[s->l++] = isupper(*p)? 'E' : 'e';
 						if (e >= 0) s->s[s->l++] = '+';
-						ztmp.f = 2; write_integer0(e, s, int, ztmp, "0123456789"); // write the exp
+						ztmp.f = 2; write_integer0(e, s, int, ztmp, 10, "0123456789"); // write the exp
 					} else { // type == 'f'
 						int j;
 						if (e >= 0) { // NB: here e < z.f by the definition of type
 							int l0 = s->l;
-							ztmp.f = -1; write_integer0(y, s, int64_t, ztmp, "0123456789");
+							ztmp.f = -1; write_integer0(y, s, int64_t, ztmp, 10, "0123456789");
 							if (s->l - l0 > z.f) ++e;
 							for (j = s->l; j > l0 + e + 1; --j) s->s[j] = s->s[j - 1]; // shift for the dot
 							s->s[j] = '.'; ++s->l; // add the dot
@@ -363,7 +363,7 @@ int ksprintf_fast(kstring_t *s, const char *fmt, ...)
 							s->s[s->l++] = '0';
 							s->s[s->l++] = '.';
 							for (j = 0; j < -e - 1; ++j) s->s[s->l++] = '0'; // fill enough zeros
-							ztmp.f = -1; write_integer0(y, s, int64_t, ztmp, "0123456789");
+							ztmp.f = -1; write_integer0(y, s, int64_t, ztmp, 10, "0123456789");
 							while (s->s[s->l - 1] == '0') --s->l;
 						}
 					}
