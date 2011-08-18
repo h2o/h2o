@@ -1,6 +1,6 @@
 /* The MIT License
 
-   Copyright (c) 2008, 2009 Attractive Chaos <attractor@live.co.uk>
+   Copyright (c) 2008, 2009, 2011 Attractive Chaos <attractor@live.co.uk>
 
    Permission is hereby granted, free of charge, to any person obtaining
    a copy of this software and associated documentation files (the
@@ -92,10 +92,10 @@ typedef struct __kstring_t {
 #endif
 
 #define __KS_GETUNTIL(__read, __bufsize)								\
-	static int ks_getuntil(kstream_t *ks, int delimiter, kstring_t *str, int *dret) \
+	static int ks_getuntil2(kstream_t *ks, int delimiter, kstring_t *str, int *dret, int append) \
 	{																	\
 		if (dret) *dret = 0;											\
-		str->l = 0;														\
+		str->l = append? str->l : 0;									\
 		if (ks->begin >= ks->end && ks->is_eof) return -1;				\
 		for (;;) {														\
 			int i;														\
@@ -136,7 +136,9 @@ typedef struct __kstring_t {
 		}																\
 		str->s[str->l] = '\0';											\
 		return str->l;													\
-	}
+	} \
+	static inline int ks_getuntil(kstream_t *ks, int delimiter, kstring_t *str, int *dret) \
+	{ return ks_getuntil2(ks, delimiter, str, dret, 0); }
 
 #define KSTREAM_INIT(type_t, __read, __bufsize) \
 	__KS_TYPE(type_t)							\
@@ -169,8 +171,50 @@ typedef struct __kstring_t {
    -1   end-of-file
    -2   truncated quality string
  */
-#define __KSEQ_READ														\
-	static int kseq_read(kseq_t *seq)									\
+#define __KSEQ_READ \
+	static int kseq_read(kseq_t *seq) \
+	{ \
+		int c; \
+		kstream_t *ks = seq->f; \
+		if (seq->last_char == 0) { /* then jump to the next header line */ \
+			while ((c = ks_getc(ks)) != -1 && c != '>' && c != '@'); \
+			if (c == -1) return -1; /* end of file */ \
+			seq->last_char = c; \
+		} /* else: the first header char has been read in the previous call */ \
+		seq->comment.l = seq->seq.l = seq->qual.l = 0; /* reset all members */ \
+		if (ks_getuntil(ks, 0, &seq->name, &c) < 0) return -1; /* normal exit: EOF */ \
+		if (c != '\n') ks_getuntil(ks, '\n', &seq->comment, 0); /* read FASTA/Q comment */ \
+		if (seq->seq.s == 0) { /* we can do this in the loop below, but that is slower */ \
+			seq->seq.m = 256; \
+			seq->seq.s = (char*)malloc(seq->seq.m); \
+		} \
+		while ((c = ks_getc(ks)) != -1 && c != '>' && c != '+' && c != '@') { \
+			seq->seq.s[seq->seq.l++] = c; /* this is safe: we always have enough space for 1 char */ \
+			ks_getuntil2(ks, '\n', &seq->seq, 0, 1); /* read the rest of the line */ \
+		} \
+		if (c == '>' || c == '@') seq->last_char = c; /* the first header char has been read */	\
+		if (seq->seq.l + 1 >= seq->seq.m) { /* seq->seq.s[seq->seq.l] below may be out of boundary */ \
+			seq->seq.m = seq->seq.l + 2; \
+			kroundup32(seq->seq.m); /* rounded to the next closest 2^k */ \
+			seq->seq.s = (char*)realloc(seq->seq.s, seq->seq.m); \
+		} \
+		seq->seq.s[seq->seq.l] = 0;	/* null terminated string */ \
+		if (c != '+') return seq->seq.l; /* FASTA */ \
+		if (seq->qual.m < seq->seq.m) {	/* allocate memory for qual in case insufficient */ \
+			seq->qual.m = seq->seq.m; \
+			seq->qual.s = (char*)realloc(seq->qual.s, seq->qual.m); \
+		} \
+		while ((c = ks_getc(ks)) != -1 && c != '\n'); /* skip the rest of '+' line */ \
+		if (c == -1) return -2; /* error: no quality string */ \
+		while (ks_getuntil2(ks, '\n', &seq->qual, 0, 1) >= 0 && seq->qual.l < seq->seq.l); \
+		seq->last_char = 0;	/* we have not come to the next header line */ \
+		if (seq->seq.l != seq->qual.l) return -2; /* error: qual string is of a different length */ \
+		return seq->seq.l; \
+	}
+
+/* The following is another implementation of kseq_read(). It is 2.5 times as slow but is more robust. */
+#define __KSEQ_READ_ROBUST												\
+	static int kseq_read_robust(kseq_t *seq)							\
 	{																	\
 		int c;															\
 		kstream_t *ks = seq->f;											\
