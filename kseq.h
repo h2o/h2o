@@ -23,11 +23,7 @@
    SOFTWARE.
 */
 
-/*
-  2009-07-16 (lh3): in kstream_t, change "char*" to "unsigned char*"
- */
-
-/* Last Modified: 12APR2009 */
+/* Last Modified: 18AUG2011 */
 
 #ifndef AC_KSEQ_H
 #define AC_KSEQ_H
