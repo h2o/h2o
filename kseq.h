@@ -208,47 +208,6 @@ typedef struct __kstring_t {
 		return seq->seq.l; \
 	}
 
-/* The following is another implementation of kseq_read(). It is 2.5 times as slow but is more robust. */
-#define __KSEQ_READ_ROBUST												\
-	static int kseq_read_robust(kseq_t *seq)							\
-	{																	\
-		int c;															\
-		kstream_t *ks = seq->f;											\
-		if (seq->last_char == 0) { /* then jump to the next header line */ \
-			while ((c = ks_getc(ks)) != -1 && c != '>' && c != '@');	\
-			if (c == -1) return -1; /* end of file */					\
-			seq->last_char = c;											\
-		} /* the first header char has been read */						\
-		seq->comment.l = seq->seq.l = seq->qual.l = 0;					\
-		if (ks_getuntil(ks, 0, &seq->name, &c) < 0) return -1;			\
-		if (c != '\n') ks_getuntil(ks, '\n', &seq->comment, 0);			\
-		while ((c = ks_getc(ks)) != -1 && c != '>' && c != '+' && c != '@') { \
-			if (isgraph(c)) { /* printable non-space character */		\
-				if (seq->seq.l + 1 >= seq->seq.m) { /* double the memory */ \
-					seq->seq.m = seq->seq.l + 2;						\
-					kroundup32(seq->seq.m); /* rounded to next closest 2^k */ \
-					seq->seq.s = (char*)realloc(seq->seq.s, seq->seq.m); \
-				}														\
-				seq->seq.s[seq->seq.l++] = (char)c;						\
-			}															\
-		}																\
-		if (c == '>' || c == '@') seq->last_char = c; /* the first header char has been read */	\
-		seq->seq.s[seq->seq.l] = 0;	/* null terminated string */		\
-		if (c != '+') return seq->seq.l; /* FASTA */					\
-		if (seq->qual.m < seq->seq.m) {	/* allocate enough memory */	\
-			seq->qual.m = seq->seq.m;									\
-			seq->qual.s = (char*)realloc(seq->qual.s, seq->qual.m);		\
-		}																\
-		while ((c = ks_getc(ks)) != -1 && c != '\n'); /* skip the rest of '+' line */ \
-		if (c == -1) return -2; /* we should not stop here */			\
-		while ((c = ks_getc(ks)) != -1 && seq->qual.l < seq->seq.l)		\
-			if (c >= 33 && c <= 127) seq->qual.s[seq->qual.l++] = (unsigned char)c;	\
-		seq->qual.s[seq->qual.l] = 0; /* null terminated string */		\
-		seq->last_char = 0;	/* we have not come to the next header line */ \
-		if (seq->seq.l != seq->qual.l) return -2; /* qual string is shorter than seq string */ \
-		return seq->seq.l;												\
-	}
-
 #define __KSEQ_TYPE(type_t)						\
 	typedef struct {							\
 		kstring_t name, comment, seq, qual;		\
