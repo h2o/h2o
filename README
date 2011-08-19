@@ -22,6 +22,7 @@ kseq.h          Generic stream buffer plus a FASTA/Q parser
 kvec.h          Generic vector
 klist.h         Generic single-linked list plus a memory pool
 kstring.{h,c}   String library
+ksa.c           Constructing suffix arrays for strings with multiple sentinels
 knetfile.{h,c}  Random access to remote files
 
 kfunc.c         Special mathematical functions
