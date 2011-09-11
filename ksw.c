@@ -92,7 +92,7 @@ ksw_query_t *ksw_qinit(int size, int qlen, const uint8_t *query, int m, const in
 
 int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) // the first gap costs -(_o+_e)
 {
-	int slen, i, sum, m_b, n_b, te = -1, gmax = 0;
+	int slen, i, m_b, n_b, te = -1, gmax = 0;
 	uint64_t *b;
 	__m128i zero, gapoe, gape, shift, *H0, *H1, *E, *Hmax;
 
@@ -118,7 +118,7 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) /
 		_mm_store_si128(Hmax + i, zero);
 	}
 	// the core loop
-	for (i = 0, sum = 0; i < tlen; ++i) {
+	for (i = 0; i < tlen; ++i) {
 		int j, k, cmp, imax;
 		__m128i e, h, f = zero, max = zero, *S = q->qp + target[i] * slen; // s is the 1st score vector
 		h = _mm_load_si128(H0 + slen - 1); // h={2,5,8,11,14,17,-1,-1} in the above example
