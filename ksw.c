@@ -94,7 +94,7 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) /
 {
 	int slen, i, sum, m_b, n_b, te = -1, gmax = 0;
 	uint64_t *b;
-	__m128i zero, gapoe, gape, shift, reduce, *H0, *H1, *E, *Hmax;
+	__m128i zero, gapoe, gape, shift, *H0, *H1, *E, *Hmax;
 
 #define __max_16(ret, xx) do { \
 		(xx) = _mm_max_epu8((xx), _mm_srli_si128((xx), 8)); \
@@ -110,7 +110,6 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) /
 	gapoe = _mm_set1_epi8(a->gapo + a->gape);
 	gape = _mm_set1_epi8(a->gape);
 	shift = _mm_set1_epi8(q->shift);
-	reduce = _mm_set1_epi8(127);
 	H0 = q->H0; H1 = q->H1; E = q->E; Hmax = q->Hmax;
 	slen = q->slen;
 	for (i = 0; i < slen; ++i) {
@@ -159,10 +158,10 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) /
 				h = _mm_subs_epu8(h, gapoe);
 				f = _mm_subs_epu8(f, gape);
 				cmp = _mm_movemask_epi8(_mm_cmpeq_epi8(_mm_subs_epu8(f, h), zero));
-				if (UNLIKELY(cmp == 0xffff)) goto end_loop;
+				if (UNLIKELY(cmp == 0xffff)) goto end_loop16;
 			}
 		}
-end_loop:
+end_loop16:
 		//int k;for (k=0;k<16;++k)printf("%d ", ((uint8_t*)&max)[k]);printf("\n");
 		__max_16(imax, max); // imax is the maximum number in max
 		if (imax >= a->T) { // write the b array; this condition adds branching unfornately
