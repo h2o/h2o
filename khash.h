@@ -47,6 +47,16 @@ int main() {
 */
 
 /*
+  2011-09-16 (0.2.6):
+
+	* The capacity is a power of 2. This seems to dramatically improve the
+	  speed for simple keys. Thank Zilong Tan for the suggestion. Reference:
+
+	   - http://code.google.com/p/ulib/
+	   - http://nothings.org/computer/judy/
+
+	* Added Wang's integer hash function (not used by default)
+
   2011-02-14 (0.2.5):
 
     * Allow to declare global functions.
@@ -94,7 +104,7 @@ int main() {
   @copyright Heng Li
  */
 
-#define AC_VERSION_KHASH_H "0.2.5"
+#define AC_VERSION_KHASH_H "0.2.6"
 
 #include <stdlib.h>
 #include <string.h>
@@ -121,18 +131,6 @@ typedef unsigned long long khint64_t;
 typedef khint32_t khint_t;
 typedef khint_t khiter_t;
 
-#define __ac_HASH_PRIME_SIZE 32
-static const khint32_t __ac_prime_list[__ac_HASH_PRIME_SIZE] =
-{
-  0ul,          3ul,          11ul,         23ul,         53ul,
-  97ul,         193ul,        389ul,        769ul,        1543ul,
-  3079ul,       6151ul,       12289ul,      24593ul,      49157ul,
-  98317ul,      196613ul,     393241ul,     786433ul,     1572869ul,
-  3145739ul,    6291469ul,    12582917ul,   25165843ul,   50331653ul,
-  100663319ul,  201326611ul,  402653189ul,  805306457ul,  1610612741ul,
-  3221225473ul, 4294967291ul
-};
-
 #define __ac_isempty(flag, i) ((flag[i>>4]>>((i&0xfU)<<1))&2)
 #define __ac_isdel(flag, i) ((flag[i>>4]>>((i&0xfU)<<1))&1)
 #define __ac_iseither(flag, i) ((flag[i>>4]>>((i&0xfU)<<1))&3)
@@ -140,6 +138,9 @@ static const khint32_t __ac_prime_list[__ac_HASH_PRIME_SIZE] =
 #define __ac_set_isempty_false(flag, i) (flag[i>>4]&=~(2ul<<((i&0xfU)<<1)))
 #define __ac_set_isboth_false(flag, i) (flag[i>>4]&=~(3ul<<((i&0xfU)<<1)))
 #define __ac_set_isdel_true(flag, i) (flag[i>>4]|=1ul<<((i&0xfU)<<1))
+
+#define __ac_inc(k) ((k) | 1)
+#define __ac_fsize(m) ((m) < 16? 1 : (m)>>4)
 
 static const double __ac_HASH_UPPER = 0.77;
 
@@ -179,19 +180,19 @@ static const double __ac_HASH_UPPER = 0.77;
 	SCOPE void kh_clear_##name(kh_##name##_t *h)						\
 	{																	\
 		if (h && h->flags) {											\
-			memset(h->flags, 0xaa, ((h->n_buckets>>4) + 1) * sizeof(khint32_t)); \
+			memset(h->flags, 0xaa, __ac_fsize(h->n_buckets) * sizeof(khint32_t)); \
 			h->size = h->n_occupied = 0;								\
 		}																\
 	}																	\
 	SCOPE khint_t kh_get_##name(const kh_##name##_t *h, khkey_t key) 	\
 	{																	\
 		if (h->n_buckets) {												\
-			khint_t inc, k, i, last;									\
-			k = __hash_func(key); i = k % h->n_buckets;					\
-			inc = 1 + k % (h->n_buckets - 1); last = i;					\
+			khint_t inc, k, i, last, mask;								\
+			mask = h->n_buckets - 1;									\
+			k = __hash_func(key); i = k & mask;							\
+			inc = __ac_inc(k) & mask; last = i;							\
 			while (!__ac_isempty(h->flags, i) && (__ac_isdel(h->flags, i) || !__hash_equal(h->keys[i], key))) { \
-				if (i + inc >= h->n_buckets) i = i + inc - h->n_buckets; \
-				else i += inc;											\
+				i = (i + inc) & mask; 									\
 				if (i == last) return h->n_buckets;						\
 			}															\
 			return __ac_iseither(h->flags, i)? h->n_buckets : i;		\
@@ -202,13 +203,11 @@ static const double __ac_HASH_UPPER = 0.77;
 		khint32_t *new_flags = 0;										\
 		khint_t j = 1;													\
 		{																\
-			khint_t t = __ac_HASH_PRIME_SIZE - 1;						\
-			while (__ac_prime_list[t] > new_n_buckets) --t;				\
-			new_n_buckets = __ac_prime_list[t+1];						\
+			new_n_buckets = h->n_buckets? h->n_buckets<<1 : 4;			\
 			if (h->size >= (khint_t)(new_n_buckets * __ac_HASH_UPPER + 0.5)) j = 0;	\
 			else {														\
-				new_flags = (khint32_t*)malloc(((new_n_buckets>>4) + 1) * sizeof(khint32_t));	\
-				memset(new_flags, 0xaa, ((new_n_buckets>>4) + 1) * sizeof(khint32_t)); \
+				new_flags = (khint32_t*)malloc(__ac_fsize(new_n_buckets) * sizeof(khint32_t));	\
+				memset(new_flags, 0xaa, __ac_fsize(new_n_buckets) * sizeof(khint32_t)); \
 				if (h->n_buckets < new_n_buckets) {						\
 					h->keys = (khkey_t*)realloc(h->keys, new_n_buckets * sizeof(khkey_t)); \
 					if (kh_is_map)										\
@@ -224,14 +223,12 @@ static const double __ac_HASH_UPPER = 0.77;
 					if (kh_is_map) val = h->vals[j];					\
 					__ac_set_isdel_true(h->flags, j);					\
 					while (1) {											\
-						khint_t inc, k, i;								\
+						khint_t inc, k, i, new_mask;					\
+						new_mask = new_n_buckets - 1; 					\
 						k = __hash_func(key);							\
-						i = k % new_n_buckets;							\
-						inc = 1 + k % (new_n_buckets - 1);				\
-						while (!__ac_isempty(new_flags, i)) {			\
-							if (i + inc >= new_n_buckets) i = i + inc - new_n_buckets; \
-							else i += inc;								\
-						}												\
+						i = k & new_mask;								\
+						inc = __ac_inc(k) & new_mask;					\
+						while (!__ac_isempty(new_flags, i)) i = (i + inc) & new_mask; \
 						__ac_set_isempty_false(new_flags, i);			\
 						if (i < h->n_buckets && __ac_iseither(h->flags, i) == 0) { \
 							{ khkey_t tmp = h->keys[i]; h->keys[i] = key; key = tmp; } \
@@ -265,15 +262,14 @@ static const double __ac_HASH_UPPER = 0.77;
 			else kh_resize_##name(h, h->n_buckets + 1);					\
 		}																\
 		{																\
-			khint_t inc, k, i, site, last;								\
-			x = site = h->n_buckets; k = __hash_func(key); i = k % h->n_buckets; \
+			khint_t inc, k, i, site, last, mask = h->n_buckets - 1;		\
+			x = site = h->n_buckets; k = __hash_func(key); i = k & mask; \
 			if (__ac_isempty(h->flags, i)) x = i;						\
 			else {														\
-				inc = 1 + k % (h->n_buckets - 1); last = i;				\
+				inc = __ac_inc(k) & mask; last = i;						\
 				while (!__ac_isempty(h->flags, i) && (__ac_isdel(h->flags, i) || !__hash_equal(h->keys[i], key))) { \
 					if (__ac_isdel(h->flags, i)) site = i;				\
-					if (i + inc >= h->n_buckets) i = i + inc - h->n_buckets; \
-					else i += inc;										\
+					i = (i + inc) & mask; 								\
 					if (i == last) { x = site; break; }					\
 				}														\
 				if (x == h->n_buckets) {								\
@@ -350,9 +346,21 @@ static inline khint_t __ac_X31_hash_string(const char *s)
  */
 #define kh_str_hash_equal(a, b) (strcmp(a, b) == 0)
 
+static inline khint_t __ac_Wang_hash(khint_t key)
+{
+    key += ~(key << 15);
+    key ^=  (key >> 10);
+    key +=  (key << 3);
+    key ^=  (key >> 6);
+    key += ~(key << 11);
+    key ^=  (key >> 16);
+    return key;
+}
+#define kh_int_hash_func2(k) __ac_Wang_hash((khint_t)key)
+
 /* --- END OF HASH FUNCTIONS --- */
 
-/* Other necessary macros... */
+/* Other convenient macros... */
 
 /*!
   @abstract Type of the hash table.
@@ -417,7 +425,6 @@ static inline khint_t __ac_X31_hash_string(const char *s)
   @param  k     Iterator to the element to be deleted [khint_t]
  */
 #define kh_del(name, h, k) kh_del_##name(h, k)
-
 
 /*! @function
   @abstract     Test whether a bucket contains data.
