@@ -145,7 +145,7 @@ typedef khint_t khiter_t;
 #ifdef KHASH_LINEAR
 #define __ac_inc(k, m) 1
 #else
-#define __ac_inc(k, m) ((k)>>3 | 1) & (m)
+#define __ac_inc(k, m) (((k)>>3 ^ (k)<<3) | 1) & (m)
 #endif
 
 #define __ac_fsize(m) ((m) < 16? 1 : (m)>>4)
