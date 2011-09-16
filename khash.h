@@ -55,7 +55,12 @@ int main() {
 	   - http://code.google.com/p/ulib/
 	   - http://nothings.org/computer/judy/
 
-	* Added Wang's integer hash function (not used by default)
+	* Allow to optionally use linear probing which usually has better
+	  performance for random input. Double hashing is still the default as it
+	  is more robust to certain non-random input.
+
+	* Added Wang's integer hash function (not used by default). This hash
+	  function is more robust to certain non-random input.
 
   2011-02-14 (0.2.5):
 
@@ -137,7 +142,12 @@ typedef khint_t khiter_t;
 #define __ac_set_isboth_false(flag, i) (flag[i>>4]&=~(3ul<<((i&0xfU)<<1)))
 #define __ac_set_isdel_true(flag, i) (flag[i>>4]|=1ul<<((i&0xfU)<<1))
 
-#define __ac_inc(k) ((k) | 1)
+#ifdef KHASH_LINEAR
+#define __ac_inc(k, m) 1
+#else
+#define __ac_inc(k, m) ((k)>>3 | 1) & (m)
+#endif
+
 #define __ac_fsize(m) ((m) < 16? 1 : (m)>>4)
 
 #ifndef kroundup32
@@ -192,7 +202,7 @@ static const double __ac_HASH_UPPER = 0.77;
 			khint_t inc, k, i, last, mask;								\
 			mask = h->n_buckets - 1;									\
 			k = __hash_func(key); i = k & mask;							\
-			inc = __ac_inc(k) & mask; last = i; /* inc==1 for linear probing */ \
+			inc = __ac_inc(k, mask); last = i; /* inc==1 for linear probing */ \
 			while (!__ac_isempty(h->flags, i) && (__ac_isdel(h->flags, i) || !__hash_equal(h->keys[i], key))) { \
 				i = (i + inc) & mask; 									\
 				if (i == last) return h->n_buckets;						\
@@ -230,7 +240,7 @@ static const double __ac_HASH_UPPER = 0.77;
 						khint_t inc, k, i;								\
 						k = __hash_func(key);							\
 						i = k & new_mask;								\
-						inc = __ac_inc(k) & new_mask;					\
+						inc = __ac_inc(k, new_mask);					\
 						while (!__ac_isempty(new_flags, i)) i = (i + inc) & new_mask; \
 						__ac_set_isempty_false(new_flags, i);			\
 						if (i < h->n_buckets && __ac_iseither(h->flags, i) == 0) { /* kick out the existing element */ \
@@ -268,7 +278,7 @@ static const double __ac_HASH_UPPER = 0.77;
 			x = site = h->n_buckets; k = __hash_func(key); i = k & mask; \
 			if (__ac_isempty(h->flags, i)) x = i; /* for speed up */	\
 			else {														\
-				inc = __ac_inc(k) & mask; last = i;						\
+				inc = __ac_inc(k, mask); last = i;						\
 				while (!__ac_isempty(h->flags, i) && (__ac_isdel(h->flags, i) || !__hash_equal(h->keys[i], key))) { \
 					if (__ac_isdel(h->flags, i)) site = i;				\
 					i = (i + inc) & mask; 								\
