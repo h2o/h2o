@@ -76,6 +76,8 @@ extern "C" {
 	 */
 	BGZF* bgzf_dopen(int fd, const char *mode);
 
+	#define bgzf_fdopen(fd, mode) bgzf_dopen((fd), (mode)) // for backward compatibility
+
 	/**
 	 * Open the specified file for reading or writing.
 	 */
