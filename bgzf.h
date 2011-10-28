@@ -32,7 +32,8 @@
 #include <stdio.h>
 #include <zlib.h>
 
-#define BGZF_BLOCK_SIZE 0x10000 // 64k
+#define BGZF_BLOCK_SIZE     0x10000
+#define BGZF_MAX_BLOCK_SIZE 0x10000
 
 #define BGZF_ERR_ZLIB   1
 #define BGZF_ERR_HEADER 2
@@ -71,7 +72,7 @@ extern "C" {
 	 * @param fd    file descriptor
 	 * @param mode  mode matching /[rwu0-9]+/: 'r' for reading, 'w' for writing and a digit specifies
 	 *              the zlib compression level; if both 'r' and 'w' are present, 'w' is ignored.
-     * @return      BGZF file handler; 0 on error
+	 * @return      BGZF file handler; 0 on error
 	 */
 	BGZF* bgzf_dopen(int fd, const char *mode);
 
