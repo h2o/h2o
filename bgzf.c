@@ -325,7 +325,7 @@ static int load_block_from_cache(BGZF *fp, int64_t block_address) {return 0;}
 static void cache_block(BGZF *fp, int size) {}
 #endif
 
-static int bgzf_read_block(BGZF *fp)
+int bgzf_read_block(BGZF *fp)
 {
 	uint8_t header[BLOCK_HEADER_LENGTH], *compressed_block;
 	int count, size = 0, block_length, remaining;

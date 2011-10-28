@@ -181,6 +181,11 @@ extern "C" {
 	 */
 	int bgzf_getline(BGZF *fp, int delim, kstring_t *str);
 
+	/**
+	 * Read the next BGZF block.
+	 */
+	int bgzf_read_block(BGZF *fp);
+
 #ifdef __cplusplus
 }
 #endif
