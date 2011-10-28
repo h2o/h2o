@@ -352,7 +352,7 @@ int bgzf_read_block(BGZF *fp)
 		return -1;
 	}
 	size += count;
-	if (inflate_block(fp, block_length) < 0) return -1;
+	if ((count = inflate_block(fp, block_length)) < 0) return -1;
 	if (fp->block_length != 0) fp->block_offset = 0; // Do not reset offset if this read follows a seek.
 	fp->block_address = block_address;
 	fp->block_length = count;
