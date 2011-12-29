@@ -47,6 +47,10 @@ int main() {
 */
 
 /*
+  2011-12-29 (0.2.7):
+
+    * Minor code clean up; no actual effect.
+
   2011-09-16 (0.2.6):
 
 	* The capacity is a power of 2. This seems to dramatically improve the
@@ -156,13 +160,16 @@ typedef khint_t khiter_t;
 
 static const double __ac_HASH_UPPER = 0.77;
 
+#define __KHASH_TYPE(name, khkey_t, khval_t) \
+	typedef struct { \
+		khint_t n_buckets, size, n_occupied, upper_bound; \
+		khint32_t *flags; \
+		khkey_t *keys; \
+		khval_t *vals; \
+	} kh_##name##_t;
+
 #define KHASH_DECLARE(name, khkey_t, khval_t)		 					\
-	typedef struct {													\
-		khint_t n_buckets, size, n_occupied, upper_bound;				\
-		khint32_t *flags;												\
-		khkey_t *keys;													\
-		khval_t *vals;													\
-	} kh_##name##_t;													\
+	__KHASH_TYPE(name, khkey_t, khval_t) 								\
 	extern kh_##name##_t *kh_init_##name();								\
 	extern void kh_destroy_##name(kh_##name##_t *h);					\
 	extern void kh_clear_##name(kh_##name##_t *h);						\
@@ -172,12 +179,7 @@ static const double __ac_HASH_UPPER = 0.77;
 	extern void kh_del_##name(kh_##name##_t *h, khint_t x);
 
 #define KHASH_INIT2(name, SCOPE, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal) \
-	typedef struct {													\
-		khint_t n_buckets, size, n_occupied, upper_bound;				\
-		khint32_t *flags;												\
-		khkey_t *keys;													\
-		khval_t *vals;													\
-	} kh_##name##_t;													\
+	__KHASH_TYPE(name, khkey_t, khval_t) 								\
 	SCOPE kh_##name##_t *kh_init_##name() {								\
 		return (kh_##name##_t*)calloc(1, sizeof(kh_##name##_t));		\
 	}																	\
