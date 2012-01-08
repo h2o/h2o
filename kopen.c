@@ -328,6 +328,7 @@ int main(int argc, char *argv[])
 		if (feof(fp)) break;
 		putchar(c);
 	}
+	fclose(fp);
 	kclose(x);
 	return 0;
 }
