@@ -17,12 +17,11 @@
 
 struct _krand_t {
 	int mti;
-	krint64_t mt[KR_NN], mag01[2];
+	krint64_t mt[KR_NN];
 };
 
 static void kr_srand0(krint64_t seed, krand_t *kr)
 {
-	kr->mag01[0] = 0; kr->mag01[1] = 0xB5026F5AA96619E9ULL;
 	kr->mt[0] = seed;
 	for (kr->mti = 1; kr->mti < KR_NN; ++kr->mti) 
 		kr->mt[kr->mti] = 6364136223846793005ULL * (kr->mt[kr->mti - 1] ^ (kr->mt[kr->mti - 1] >> 62)) + kr->mti;
@@ -39,19 +38,20 @@ krand_t *kr_srand(krint64_t seed)
 krint64_t kr_rand(krand_t *kr)
 {
 	krint64_t x;
+	static const krint64_t mag01[2] = { 0, 0xB5026F5AA96619E9ULL };
     if (kr->mti >= KR_NN) {
 		int i;
 		if (kr->mti == KR_NN + 1) kr_srand0(5489ULL, kr);
         for (i = 0; i < KR_NN - KR_MM; ++i) {
             x = (kr->mt[i] & KR_UM) | (kr->mt[i+1] & KR_LM);
-            kr->mt[i] = kr->mt[i + KR_MM] ^ (x>>1) ^ kr->mag01[(int)(x&1)];
+            kr->mt[i] = kr->mt[i + KR_MM] ^ (x>>1) ^ mag01[(int)(x&1)];
         }
         for (; i < KR_NN - 1; ++i) {
             x = (kr->mt[i] & KR_UM) | (kr->mt[i+1] & KR_LM);
-            kr->mt[i] = kr->mt[i + (KR_MM - KR_NN)] ^ (x>>1) ^ kr->mag01[(int)(x&1)];
+            kr->mt[i] = kr->mt[i + (KR_MM - KR_NN)] ^ (x>>1) ^ mag01[(int)(x&1)];
         }
         x = (kr->mt[KR_NN - 1] & KR_UM) | (kr->mt[0] & KR_LM);
-        kr->mt[KR_NN - 1] = kr->mt[KR_MM - 1] ^ (x>>1) ^ kr->mag01[(int)(x&1)];
+        kr->mt[KR_NN - 1] = kr->mt[KR_MM - 1] ^ (x>>1) ^ mag01[(int)(x&1)];
         kr->mti = 0;
     }
     x = kr->mt[kr->mti++];
