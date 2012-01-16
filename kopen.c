@@ -250,12 +250,17 @@ void *kopen(const char *fn, int *_fd)
 		aux->type = KO_STDIN;
 		aux->fd = STDIN_FILENO;
 	} else {
-		const char *p;
+		const char *p, *q;
 		for (p = fn; *p; ++p)
 			if (!isspace(*p)) break;
 		if (*p == '<') { // pipe open
-			int pfd[2];
+			int need_shell, pfd[2];
 			pid_t pid;
+			// a simple check to see if we need to invoke a shell; not always working
+			for (q = p + 1; *q; ++q)
+				if (ispunct(*q) && *q != '.' && *q != '_' && *q != '-' && *q != ':')
+					break;
+			need_shell = (*q != 0);
 			pipe(pfd);
 			pid = vfork();
 			if (pid == -1) { /* vfork() error */
@@ -267,9 +272,11 @@ void *kopen(const char *fn, int *_fd)
 				close(pfd[0]);
 				dup2(pfd[1], STDOUT_FILENO);
 				close(pfd[1]);
-				argv = cmd2argv(p + 1);
-				execvp(argv[0], argv);
-				free(argv[0]); free(argv);
+				if (!need_shell) {
+					argv = cmd2argv(p + 1);
+					execvp(argv[0], argv);
+					free(argv[0]); free(argv);
+				} else execl("/bin/sh", "sh", "-c", p + 1, NULL);
 				exit(1);
 			} else { /* parent process */
 				close(pfd[1]);
