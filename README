@@ -24,8 +24,10 @@ klist.h         Generic single-linked list plus a memory pool
 kstring.{h,c}   String library
 ksa.c           Constructing suffix arrays for strings with multiple sentinels
 knetfile.{h,c}  Random access to remote files
+kopen.c         Smart stream opening
 
 kfunc.c         Special mathematical functions
+krand.{h,c}     Pseudo-random number generator mt19937
 kmin.{h,c}      Derivative-free non-linear programming
 khmm.{h,c}      Basic HMM library
 ksw.(h,c}       Smith-Waterman using SSE2
