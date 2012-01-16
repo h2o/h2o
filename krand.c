@@ -70,6 +70,8 @@ int main(int argc, char *argv[])
 	if (argc > 1) N = atol(argv[1]);
 	kr = kr_srand(11);
 	for (i = 0; i < N; ++i) kr_rand(kr);
+//	for (i = 0; i < N; ++i) lrand48();
+	free(kr);
 	return 0;
 }
 #endif
