@@ -308,10 +308,12 @@ int kclose(void *a)
 }
 
 #ifdef _KO_MAIN
+#define BUF_SIZE 0x10000
 int main(int argc, char *argv[])
 {
 	void *x;
-	int fd, c;
+	int l, fd;
+	unsigned char buf[BUF_SIZE];
 	FILE *fp;
 	if (argc == 1) {
 		fprintf(stderr, "Usage: kopen <file>\n");
@@ -323,11 +325,10 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "ERROR: fail to open the input\n");
 		return 1;
 	}
-	while (1) {
-		c = fgetc(fp);
-		if (feof(fp)) break;
-		putchar(c);
-	}
+	do {
+		if ((l = fread(buf, 1, BUF_SIZE, fp)) != 0)
+			fwrite(buf, 1, l, stdout);
+	} while (l == BUF_SIZE);
 	fclose(fp);
 	kclose(x);
 	return 0;
