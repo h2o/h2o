@@ -57,7 +57,8 @@ extern "C" {
 	 * and when the function returns, *qry will point to the profile, which can
 	 * be deallocated simply by free(). If one query is aligned against multiple
 	 * target sequences, *qry should be set to NULL during the first call and
-	 * freed after the last call.
+	 * freed after the last call. Note that qry can equal 0. In this case, the
+	 * query profile will be deallocated in ksw_align().
 	 */
 	kswr_t ksw_align(int qlen, uint8_t *query, int tlen, uint8_t *target, int m, const int8_t *mat, int gapo, int gape, int xtra, kswq_t **qry);
 

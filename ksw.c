@@ -194,7 +194,7 @@ end_loop16:
 			gmax = imax; te = i; // te is the end position on the target
 			for (j = 0; LIKELY(j < slen); ++j) // keep the H1 vector
 				_mm_store_si128(Hmax + j, _mm_load_si128(H1 + j));
-			if (gmax + q->shift >= 255 || gmax + q->shift >= endsc) break;
+			if (gmax + q->shift >= 255 || gmax >= endsc) break;
 		}
 		S = H1; H1 = H0; H0 = S; // swap H0 and H1
 	}
@@ -333,10 +333,12 @@ kswr_t ksw_align(int qlen, uint8_t *query, int tlen, uint8_t *target, int m, con
 	kswr_t r, rr;
 	kswr_t (*func)(kswq_t*, int, const uint8_t*, int, int, int);
 
-	if (*qry) q = *qry;
-	else *qry = q = ksw_qinit((xtra&KSW_XBYTE)? 1 : 2, qlen, query, m, mat);
+	if (qry == 0 || *qry == 0)
+		q = ksw_qinit((xtra&KSW_XBYTE)? 1 : 2, qlen, query, m, mat);
+	if (qry && *qry == 0) *qry = q;
 	func = q->size == 2? ksw_i16 : ksw_u8;
 	r = func(q, tlen, target, gapo, gape, xtra);
+	if (qry == 0) free(q);
 	if ((xtra&KSW_XSTART) == 0 || ((xtra&KSW_XSUBO) && r.score < (xtra&0xffff))) return r;
 	revseq(r.qe + 1, query); revseq(r.te + 1, target); // +1 because qe/te points to the exact end, not the position after the end
 	q = ksw_qinit((*qry)->size, r.qe + 1, query, m, mat);
