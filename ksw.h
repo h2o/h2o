@@ -1,54 +1,66 @@
 #ifndef __AC_KSW_H
 #define __AC_KSW_H
 
-struct _ksw_query_t;
-typedef struct _ksw_query_t ksw_query_t;
+#include <stdint.h>
+
+#define KSW_XBYTE  0x10000
+#define KSW_XSTOP  0x20000
+#define KSW_XSUBO  0x40000
+#define KSW_XSTART 0x80000
+
+struct _kswq_t;
+typedef struct _kswq_t kswq_t;
 
 typedef struct {
-	// input
-	unsigned gapo, gape; // the first gap costs gapo+gape
-	unsigned T; // threshold
-	// output
-	int score, te, qe, score2, te2;
-	int tb, qb; // tb and qb are only generated when calling ksw_align_16()
-} ksw_aux_t;
+	int score; // best score
+	int te, qe; // target end and query end
+	int score2, te2; // second best score and ending position on the target
+	int tb, qb; // target start and query start
+} kswr_t;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 	/**
-	 * Initialize the query data structure
+	 * Aligning two sequences
 	 *
-	 * @param size   Number of bytes used to store a score; valid valures are 1 or 2
-	 * @param qlen   Length of the query sequence
-	 * @param query  Query sequence
-	 * @param m      Size of the alphabet
-	 * @param mat    Scoring matrix in a one-dimension array
+	 * @param qlen    length of the query sequence (typically <tlen)
+	 * @param query   query sequence with 0 <= query[i] < m
+	 * @param tlen    length of the target sequence
+	 * @param target  target sequence
+	 * @param m       number of residue types
+	 * @param mat     m*m scoring matrix in one-dimention array
+	 * @param gapo    gap open penalty; a gap of length l cost "-(gapo+l*gape)"
+	 * @param gape    gap extension penalty
+	 * @param xtra    extra information (see below)
+	 * @param qry     query profile (see below)
 	 *
-	 * @return       Query data structure
+	 * @return        alignment information in a struct; unset values to -1
+	 *
+	 * When xtra==0, ksw_align() uses a signed two-byte integer to store a
+	 * score and only finds the best score and the end positions. The 2nd best
+	 * score or the start positions are not attempted. The default behavior can
+	 * be tuned by setting KSW_X* flags:
+	 *
+	 *   KSW_XBYTE:  use an unsigned byte to store a score. If overflow occurs,
+	 *               kswr_t::score will be set to 255
+	 *
+	 *   KSW_XSUBO:  track the 2nd best score and the ending position on the
+	 *               target if the 2nd best is higher than (xtra&0xffff)
+	 *
+	 *   KSW_XSTOP:  stop if the maximum score is above (xtra&0xffff). End
+	 *               users usually do not need to use this flag.
+	 *
+	 *   KSW_XSTART: find the start positions
+	 *
+	 * When *qry==NULL, ksw_align() will compute and allocate the query profile
+	 * and when the function returns, *qry will point to the profile, which can
+	 * be deallocated simply by free(). If one query is aligned against multiple
+	 * target sequences, *qry should be set to NULL during the first call and
+	 * freed after the last call.
 	 */
-	ksw_query_t *ksw_qinit(int size, int qlen, const uint8_t *query, int m, const int8_t *mat); // to free, simply call free()
-
-	/**
-	 * Compute the maximum local score for queries initialized with ksw_qinit(1, ...)
-	 *
-	 * @param q       Query data structure returned by ksw_qinit(1, ...)
-	 * @param tlen    Length of the target sequence
-	 * @param target  Target sequence
-	 * @param a       Auxiliary data structure (see ksw.h)
-	 *
-	 * @return        The maximum local score; if the returned value equals 255, the SW may not be finished
-	 */
-	int ksw_sse2_8(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a, int cutsc);
-
-	/** Compute the maximum local score for queries initialized with ksw_qinit(2, ...) */
-	int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a);
-
-	/** Unified interface for ksw_sse2_8() and ksw_sse2_16() */
-	int ksw_sse2(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a);
-
-	int ksw_align_short(int qlen, uint8_t *query, int tlen, uint8_t *target, int m, const int8_t *mat, ksw_aux_t *a);
+	kswr_t ksw_align(int qlen, uint8_t *query, int tlen, uint8_t *target, int m, const int8_t *mat, int gapo, int gape, int xtra, kswq_t **qry);
 
 #ifdef __cplusplus
 }

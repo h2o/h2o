@@ -36,22 +36,35 @@
 #define UNLIKELY(x) (x)
 #endif
 
-struct _ksw_query_t {
+const kswr_t g_defr = { 0, -1, -1, -1, -1, -1, -1 };
+
+struct _kswq_t {
 	int qlen, slen;
 	uint8_t shift, mdiff, max, size;
 	__m128i *qp, *H0, *H1, *E, *Hmax;
 };
 
-ksw_query_t *ksw_qinit(int size, int qlen, const uint8_t *query, int m, const int8_t *mat)
+/**
+ * Initialize the query data structure
+ *
+ * @param size   Number of bytes used to store a score; valid valures are 1 or 2
+ * @param qlen   Length of the query sequence
+ * @param query  Query sequence
+ * @param m      Size of the alphabet
+ * @param mat    Scoring matrix in a one-dimension array
+ *
+ * @return       Query data structure
+ */
+kswq_t *ksw_qinit(int size, int qlen, const uint8_t *query, int m, const int8_t *mat)
 {
-	ksw_query_t *q;
+	kswq_t *q;
 	int slen, a, tmp, p;
 
 	size = size > 1? 2 : 1;
 	p = 8 * (3 - size); // # values per __m128i
 	slen = (qlen + p - 1) / p; // segmented length
-	q = malloc(sizeof(ksw_query_t) + 256 + 16 * slen * (m + 4)); // a single block of memory
-	q->qp = (__m128i*)(((size_t)q + sizeof(ksw_query_t) + 15) >> 4 << 4); // align memory
+	q = malloc(sizeof(kswq_t) + 256 + 16 * slen * (m + 4)); // a single block of memory
+	q->qp = (__m128i*)(((size_t)q + sizeof(kswq_t) + 15) >> 4 << 4); // align memory
 	q->H0 = q->qp + slen * m;
 	q->H1 = q->H0 + slen;
 	q->E  = q->H1 + slen;
@@ -90,11 +103,12 @@ ksw_query_t *ksw_qinit(int size, int qlen, const uint8_t *query, int m, const in
 	return q;
 }
 
-int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) // the first gap costs -(_o+_e)
+kswr_t ksw_u8(kswq_t *q, int tlen, const uint8_t *target, int _gapo, int _gape, int xtra) // the first gap costs -(_o+_e)
 {
-	int slen, i, m_b, n_b, te = -1, gmax = 0;
+	int slen, i, m_b, n_b, te = -1, gmax = 0, minsc, endsc;
 	uint64_t *b;
 	__m128i zero, gapoe, gape, shift, *H0, *H1, *E, *Hmax;
+	kswr_t r;
 
 #define __max_16(ret, xx) do { \
 		(xx) = _mm_max_epu8((xx), _mm_srli_si128((xx), 8)); \
@@ -105,10 +119,13 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) /
 	} while (0)
 
 	// initialization
+	r = g_defr;
+	minsc = (xtra&KSW_XSUBO)? xtra&0xffff : 0x10000;
+	endsc = (xtra&KSW_XSTOP)? xtra&0xffff : 0;
 	m_b = n_b = 0; b = 0;
 	zero = _mm_set1_epi32(0);
-	gapoe = _mm_set1_epi8(a->gapo + a->gape);
-	gape = _mm_set1_epi8(a->gape);
+	gapoe = _mm_set1_epi8(_gapo + _gape);
+	gape = _mm_set1_epi8(_gape);
 	shift = _mm_set1_epi8(q->shift);
 	H0 = q->H0; H1 = q->H1; E = q->E; Hmax = q->Hmax;
 	slen = q->slen;
@@ -164,7 +181,7 @@ int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) /
 end_loop16:
 		//int k;for (k=0;k<16;++k)printf("%d ", ((uint8_t*)&max)[k]);printf("\n");
 		__max_16(imax, max); // imax is the maximum number in max
-		if (imax >= a->T) { // write the b array; this condition adds branching unfornately
+		if (imax >= minsc) { // write the b array; this condition adds branching unfornately
 			if (n_b == 0 || (int32_t)b[n_b-1] + 1 != i) { // then append
 				if (n_b == m_b) {
 					m_b = m_b? m_b<<1 : 8;
@@ -177,34 +194,38 @@ end_loop16:
 			gmax = imax; te = i; // te is the end position on the target
 			for (j = 0; LIKELY(j < slen); ++j) // keep the H1 vector
 				_mm_store_si128(Hmax + j, _mm_load_si128(H1 + j));
-			if (gmax + q->shift >= 255) break;
+			if (gmax + q->shift >= 255 || gmax + q->shift == endsc) break;
 		}
 		S = H1; H1 = H0; H0 = S; // swap H0 and H1
 	}
-	a->score = gmax; a->te = te;
-	{ // get a->qe, the end of query match; find the 2nd best score
+	r.score = gmax + q->shift < 255? gmax + q->shift : 255;
+	r.te = te;
+	if (r.score != 255) { // get a->qe, the end of query match; find the 2nd best score
 		int max = -1, low, high, qlen = slen * 16;
 		uint8_t *t = (uint8_t*)Hmax;
-		for (i = 0, a->qe = -1; i < qlen; ++i, ++t)
-			if ((int)*t > max) max = *t, a->qe = i / 16 + i % 16 * slen;
+		for (i = 0; i < qlen; ++i, ++t)
+			if ((int)*t > max) max = *t, r.qe = i / 16 + i % 16 * slen;
 		//printf("%d,%d\n", max, gmax);
-		i = (a->score + q->max - 1) / q->max;
-		low = te - i; high = te + i;
-		for (i = 0, a->score2 = 0; i < n_b; ++i) {
-			int e = (int32_t)b[i];
-			if ((e < low || e > high) && b[i]>>32 > (uint32_t)a->score2)
-				a->score2 = b[i]>>32, a->te2 = e;
+		if (b) {
+			i = (r.score + q->max - 1) / q->max;
+			low = te - i; high = te + i;
+			for (i = 0; i < n_b; ++i) {
+				int e = (int32_t)b[i];
+				if ((e < low || e > high) && b[i]>>32 > (uint32_t)r.score2)
+					r.score2 = b[i]>>32, r.te2 = e;
+			}
 		}
 	}
 	free(b);
-	return a->score + q->shift >= 255? 255 : a->score;
+	return r;
 }
 
-int ksw_sse2_8(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a, int cutsc) // the first gap costs -(_o+_e)
+kswr_t ksw_i16(kswq_t *q, int tlen, const uint8_t *target, int _gapo, int _gape, int xtra) // the first gap costs -(_o+_e)
 {
-	int slen, i, m_b, n_b, te = -1, gmax = 0;
+	int slen, i, m_b, n_b, te = -1, gmax = 0, minsc, endsc;
 	uint64_t *b;
 	__m128i zero, gapoe, gape, *H0, *H1, *E, *Hmax;
+	kswr_t r;
 
 #define __max_8(ret, xx) do { \
 		(xx) = _mm_max_epi16((xx), _mm_srli_si128((xx), 8)); \
@@ -214,10 +235,13 @@ int ksw_sse2_8(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a, in
 	} while (0)
 
 	// initialization
+	r = g_defr;
+	minsc = (xtra&KSW_XSUBO)? xtra&0xffff : 0x10000;
+	endsc = (xtra&KSW_XSTOP)? xtra&0xffff : 0;
 	m_b = n_b = 0; b = 0;
 	zero = _mm_set1_epi32(0);
-	gapoe = _mm_set1_epi16(a->gapo + a->gape);
-	gape = _mm_set1_epi16(a->gape);
+	gapoe = _mm_set1_epi16(_gapo + _gape);
+	gape = _mm_set1_epi16(_gape);
 	H0 = q->H0; H1 = q->H1; E = q->E; Hmax = q->Hmax;
 	slen = q->slen;
 	for (i = 0; i < slen; ++i) {
@@ -259,7 +283,7 @@ int ksw_sse2_8(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a, in
 		}
 end_loop8:
 		__max_8(imax, max);
-		if (imax >= a->T) {
+		if (imax >= minsc) {
 			if (n_b == 0 || (int32_t)b[n_b-1] + 1 != i) {
 				if (n_b == m_b) {
 					m_b = m_b? m_b<<1 : 8;
@@ -272,33 +296,28 @@ end_loop8:
 			gmax = imax; te = i;
 			for (j = 0; LIKELY(j < slen); ++j)
 				_mm_store_si128(Hmax + j, _mm_load_si128(H1 + j));
-			if (gmax == cutsc) break;
+			if (gmax == endsc) break;
 		}
 		S = H1; H1 = H0; H0 = S;
 	}
-	a->score = gmax; a->te = te;
+	r.score = gmax; r.te = te;
 	{
 		int max = -1, low, high, qlen = slen * 8;
 		uint16_t *t = (uint16_t*)Hmax;
-		for (i = 0, a->qe = -1; i < qlen; ++i, ++t)
-			if ((int)*t > max) max = *t, a->qe = i / 8 + i % 8 * slen;
-		i = (a->score + q->max - 1) / q->max;
-		low = te - i; high = te + i;
-		for (i = 0, a->score2 = 0; i < n_b; ++i) {
-			int e = (int32_t)b[i];
-			if ((e < low || e > high) && b[i]>>32 > (uint32_t)a->score2)
-				a->score2 = b[i]>>32, a->te2 = e;
+		for (i = 0, r.qe = -1; i < qlen; ++i, ++t)
+			if ((int)*t > max) max = *t, r.qe = i / 8 + i % 8 * slen;
+		if (b) {
+			i = (r.score + q->max - 1) / q->max;
+			low = te - i; high = te + i;
+			for (i = 0; i < n_b; ++i) {
+				int e = (int32_t)b[i];
+				if ((e < low || e > high) && b[i]>>32 > (uint32_t)r.score2)
+					r.score2 = b[i]>>32, r.te2 = e;
+			}
 		}
 	}
 	free(b);
-	return a->score;
-}
-
-int ksw_sse2(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a)
-{
-	a->qb = a->tb = -1;
-	if (q->size == 1) return ksw_sse2_16(q, tlen, target, a);
-	else return ksw_sse2_8(q, tlen, target, a, 0);
+	return r;
 }
 
 static void revseq(int l, uint8_t *s)
@@ -308,25 +327,26 @@ static void revseq(int l, uint8_t *s)
 		t = s[i], s[i] = s[l - 1 - i], s[l - 1 - i] = t;
 }
 
-int ksw_align_short(int qlen, uint8_t *query, int tlen, uint8_t *target, int m, const int8_t *mat, ksw_aux_t *a)
+kswr_t ksw_align(int qlen, uint8_t *query, int tlen, uint8_t *target, int m, const int8_t *mat, int gapo, int gape, int xtra, kswq_t **qry)
 {
-	ksw_query_t *q;
-	ksw_aux_t alt;
+	kswq_t *q;
+	kswr_t r, rr;
+	kswr_t (*func)(kswq_t*, int, const uint8_t*, int, int, int);
 
-	q = ksw_qinit(2, qlen, query, m, mat);
-	ksw_sse2_8(q, tlen, target, a, 0);
+	if (*qry) q = *qry;
+	else *qry = q = ksw_qinit((xtra&KSW_XBYTE)? 1 : 2, qlen, query, m, mat);
+	func = q->size == 2? ksw_i16 : ksw_u8;
+	r = func(q, tlen, target, gapo, gape, xtra);
+	if ((xtra&KSW_XSTART) == 0 || ((xtra&KSW_XSUBO) && r.score < (xtra&0xffff))) return r;
+	revseq(r.qe + 1, query); revseq(r.te + 1, target); // +1 because qe/te points to the exact end, not the position after the end
+	q = ksw_qinit((*qry)->size, r.qe + 1, query, m, mat);
+	xtra = KSW_XSTOP | r.score;
+	rr = func(q, tlen, target, gapo, gape, xtra);
+	revseq(r.qe + 1, query); revseq(r.te + 1, target);
 	free(q);
-	if (a->score == 0) return 0;
-	alt = *a;
-	revseq(a->qe + 1, query); revseq(a->te + 1, target); // +1 because qe/te points to the exact end, not the position after the end
-	q = ksw_qinit(2, a->qe + 1, query, m, mat);
-	ksw_sse2_8(q, a->te + 1, target, &alt, a->score);
-	revseq(a->qe + 1, query); revseq(a->te + 1, target);
-	free(q);
-	if (alt.score == a->score)
-		a->tb = a->te - alt.te, a->qb = a->qe - alt.qe;
-	else a->tb = a->qb = -1;
-	return a->score;
+	if (r.score == rr.score)
+		r.tb = r.te - rr.te, r.qb = r.qe - rr.qe;
+	return r;
 }
 
 /*******************************************
@@ -362,28 +382,31 @@ unsigned char seq_nt4_table[256] = {
 
 int main(int argc, char *argv[])
 {
-	int c, sa = 1, sb = 3, i, j, k, forward_only = 0, size = 2;
+	int c, sa = 1, sb = 3, i, j, k, forward_only = 0, max_rseq = 0;
 	int8_t mat[25];
-	ksw_aux_t a;
+	int gapo = 5, gape = 2, minsc = 0, xtra = KSW_XSTART;
+	uint8_t *rseq = 0;
 	gzFile fpt, fpq;
 	kseq_t *kst, *ksq;
+
 	// parse command line
-	a.gapo = 5; a.gape = 2; a.T = 10;
-	while ((c = getopt(argc, argv, "a:b:q:r:ft:s:")) >= 0) {
+	while ((c = getopt(argc, argv, "a:b:q:r:ft:1")) >= 0) {
 		switch (c) {
 			case 'a': sa = atoi(optarg); break;
 			case 'b': sb = atoi(optarg); break;
-			case 'q': a.gapo = atoi(optarg); break;
-			case 'r': a.gape = atoi(optarg); break;
-			case 't': a.T = atoi(optarg); break;
+			case 'q': gapo = atoi(optarg); break;
+			case 'r': gape = atoi(optarg); break;
+			case 't': minsc = atoi(optarg); break;
 			case 'f': forward_only = 1; break;
-			case 's': size = atoi(optarg); break;
+			case '1': xtra |= KSW_XBYTE; break;
 		}
 	}
 	if (optind + 2 > argc) {
-		fprintf(stderr, "Usage: ksw [-s%d] [-a%d] [-b%d] [-q%d] [-r%d] <target.fa> <query.fa>\n", size, sa, sb, a.gapo, a.gape);
+		fprintf(stderr, "Usage: ksw [-1] [-f] [-a%d] [-b%d] [-q%d] [-r%d] [-t%d] <target.fa> <query.fa>\n", sa, sb, gapo, gape, minsc);
 		return 1;
 	}
+	if (minsc > 0xffff) minsc = 0xffff;
+	if (minsc > 0) xtra |= KSW_XSUBO | minsc;
 	// initialize scoring matrix
 	for (i = k = 0; i < 4; ++i) {
 		for (j = 0; j < 4; ++j)
@@ -396,32 +419,32 @@ int main(int argc, char *argv[])
 	fpq = gzopen(argv[optind+1], "r"); ksq = kseq_init(fpq);
 	// all-pair alignment
 	while (kseq_read(ksq) > 0) {
-		ksw_query_t *q[2];
+		kswq_t *q[2] = {0, 0};
+		kswr_t r;
 		for (i = 0; i < ksq->seq.l; ++i) ksq->seq.s[i] = seq_nt4_table[(int)ksq->seq.s[i]];
-		q[0] = ksw_qinit(size, ksq->seq.l, (uint8_t*)ksq->seq.s, 5, mat);
 		if (!forward_only) { // reverse
-			for (i = 0; i < ksq->seq.l/2; ++i) {
-				int t = ksq->seq.s[i];
-				ksq->seq.s[i] = ksq->seq.s[ksq->seq.l-1-i];
-				ksq->seq.s[ksq->seq.l-1-i] = t;
+			if (ksq->seq.m > max_rseq) {
+				max_rseq = ksq->seq.m;
+				rseq = realloc(rseq, max_rseq);
 			}
-			for (i = 0; i < ksq->seq.l; ++i)
-				ksq->seq.s[i] = ksq->seq.s[i] == 4? 4 : 3 - ksq->seq.s[i];
-			q[1] = ksw_qinit(size, ksq->seq.l, (uint8_t*)ksq->seq.s, 5, mat);
-		} else q[1] = 0;
+			for (i = 0, j = ksq->seq.l - 1; i < ksq->seq.l; ++i, --j)
+				rseq[j] = ksq->seq.s[i] == 4? 4 : 3 - ksq->seq.s[i];
+		}
 		gzrewind(fpt); kseq_rewind(kst);
 		while (kseq_read(kst) > 0) {
-			int s;
 			for (i = 0; i < kst->seq.l; ++i) kst->seq.s[i] = seq_nt4_table[(int)kst->seq.s[i]];
-			s = ksw_sse2(q[0], kst->seq.l, (uint8_t*)kst->seq.s, &a);
-			printf("%s\t%s\t+\t%d\t%d\t%d\n", ksq->name.s, kst->name.s, s, a.te+1, a.qe+1);
-			if (q[1]) {
-				s = ksw_sse2(q[1], kst->seq.l, (uint8_t*)kst->seq.s, &a);
-				printf("%s\t%s\t-\t%d\t%d\t%d\n", ksq->name.s, kst->name.s, s, a.te+1, a.qe+1);
+			r = ksw_align(ksq->seq.l, (uint8_t*)ksq->seq.s, kst->seq.l, (uint8_t*)kst->seq.s, 5, mat, gapo, gape, xtra, &q[0]);
+			if (r.score >= minsc)
+				printf("%s\t%d\t%d\t%s\t%d\t%d\t%d\t%d\t%d\n", kst->name.s, r.tb, r.te+1, ksq->name.s, r.qb, r.qe+1, r.score, r.score2, r.te2);
+			if (rseq) {
+				r = ksw_align(ksq->seq.l, rseq, kst->seq.l, (uint8_t*)kst->seq.s, 5, mat, gapo, gape, xtra, &q[1]);
+				if (r.score >= minsc)
+					printf("%s\t%d\t%d\t%s\t%d\t%d\t%d\t%d\t%d\n", kst->name.s, r.tb, r.te+1, ksq->name.s, (int)ksq->seq.l - r.qb, (int)ksq->seq.l - 1 - r.qe, r.score, r.score2, r.te2);
 			}
 		}
 		free(q[0]); free(q[1]);
 	}
+	free(rseq);
 	kseq_destroy(kst); gzclose(fpt);
 	kseq_destroy(ksq); gzclose(fpq);
 	return 0;
