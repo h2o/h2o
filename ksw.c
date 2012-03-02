@@ -198,7 +198,7 @@ end_loop16:
 		}
 		S = H1; H1 = H0; H0 = S; // swap H0 and H1
 	}
-	r.score = gmax + q->shift < 255? gmax + q->shift : 255;
+	r.score = gmax + q->shift < 255? gmax : 255;
 	r.te = te;
 	if (r.score != 255) { // get a->qe, the end of query match; find the 2nd best score
 		int max = -1, low, high, qlen = slen * 16;
