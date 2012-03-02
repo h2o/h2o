@@ -49,8 +49,7 @@ extern "C" {
 	 *   KSW_XSUBO:  track the 2nd best score and the ending position on the
 	 *               target if the 2nd best is higher than (xtra&0xffff)
 	 *
-	 *   KSW_XSTOP:  stop if the maximum score is above (xtra&0xffff). End
-	 *               users usually do not need to use this flag.
+	 *   KSW_XSTOP:  stop if the maximum score is above (xtra&0xffff)
 	 *
 	 *   KSW_XSTART: find the start positions
 	 *

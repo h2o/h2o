@@ -296,7 +296,7 @@ end_loop8:
 			gmax = imax; te = i;
 			for (j = 0; LIKELY(j < slen); ++j)
 				_mm_store_si128(Hmax + j, _mm_load_si128(H1 + j));
-			if (gmax == endsc) break;
+			if (gmax >= endsc) break;
 		}
 		S = H1; H1 = H0; H0 = S;
 	}
