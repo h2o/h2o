@@ -121,7 +121,7 @@ kswr_t ksw_u8(kswq_t *q, int tlen, const uint8_t *target, int _gapo, int _gape, 
 	// initialization
 	r = g_defr;
 	minsc = (xtra&KSW_XSUBO)? xtra&0xffff : 0x10000;
-	endsc = (xtra&KSW_XSTOP)? xtra&0xffff : 0;
+	endsc = (xtra&KSW_XSTOP)? xtra&0xffff : 0x10000;
 	m_b = n_b = 0; b = 0;
 	zero = _mm_set1_epi32(0);
 	gapoe = _mm_set1_epi8(_gapo + _gape);
@@ -194,7 +194,7 @@ end_loop16:
 			gmax = imax; te = i; // te is the end position on the target
 			for (j = 0; LIKELY(j < slen); ++j) // keep the H1 vector
 				_mm_store_si128(Hmax + j, _mm_load_si128(H1 + j));
-			if (gmax + q->shift >= 255 || gmax + q->shift == endsc) break;
+			if (gmax + q->shift >= 255 || gmax + q->shift >= endsc) break;
 		}
 		S = H1; H1 = H0; H0 = S; // swap H0 and H1
 	}
@@ -237,7 +237,7 @@ kswr_t ksw_i16(kswq_t *q, int tlen, const uint8_t *target, int _gapo, int _gape,
 	// initialization
 	r = g_defr;
 	minsc = (xtra&KSW_XSUBO)? xtra&0xffff : 0x10000;
-	endsc = (xtra&KSW_XSTOP)? xtra&0xffff : 0;
+	endsc = (xtra&KSW_XSTOP)? xtra&0xffff : 0x10000;
 	m_b = n_b = 0; b = 0;
 	zero = _mm_set1_epi32(0);
 	gapoe = _mm_set1_epi16(_gapo + _gape);
@@ -340,8 +340,7 @@ kswr_t ksw_align(int qlen, uint8_t *query, int tlen, uint8_t *target, int m, con
 	if ((xtra&KSW_XSTART) == 0 || ((xtra&KSW_XSUBO) && r.score < (xtra&0xffff))) return r;
 	revseq(r.qe + 1, query); revseq(r.te + 1, target); // +1 because qe/te points to the exact end, not the position after the end
 	q = ksw_qinit((*qry)->size, r.qe + 1, query, m, mat);
-	xtra = KSW_XSTOP | r.score;
-	rr = func(q, tlen, target, gapo, gape, xtra);
+	rr = func(q, tlen, target, gapo, gape, KSW_XSTOP | r.score);
 	revseq(r.qe + 1, query); revseq(r.te + 1, target);
 	free(q);
 	if (r.score == rr.score)
