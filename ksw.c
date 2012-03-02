@@ -200,7 +200,7 @@ end_loop16:
 	return a->score + q->shift >= 255? 255 : a->score;
 }
 
-int ksw_sse2_8(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a) // the first gap costs -(_o+_e)
+int ksw_sse2_8(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a, int cutsc) // the first gap costs -(_o+_e)
 {
 	int slen, i, m_b, n_b, te = -1, gmax = 0;
 	uint64_t *b;
@@ -272,6 +272,7 @@ end_loop8:
 			gmax = imax; te = i;
 			for (j = 0; LIKELY(j < slen); ++j)
 				_mm_store_si128(Hmax + j, _mm_load_si128(H1 + j));
+			if (gmax == cutsc) break;
 		}
 		S = H1; H1 = H0; H0 = S;
 	}
@@ -295,8 +296,37 @@ end_loop8:
 
 int ksw_sse2(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a)
 {
+	a->qb = a->tb = -1;
 	if (q->size == 1) return ksw_sse2_16(q, tlen, target, a);
-	else return ksw_sse2_8(q, tlen, target, a);
+	else return ksw_sse2_8(q, tlen, target, a, 0);
+}
+
+static void revseq(int l, uint8_t *s)
+{
+	int i, t;
+	for (i = 0; i < l>>1; ++i)
+		t = s[i], s[i] = s[l - 1 - i], s[l - 1 - i] = t;
+}
+
+int ksw_align_short(int qlen, uint8_t *query, int tlen, uint8_t *target, int m, const int8_t *mat, ksw_aux_t *a)
+{
+	ksw_query_t *q;
+	ksw_aux_t alt;
+
+	q = ksw_qinit(2, qlen, query, m, mat);
+	ksw_sse2_8(q, tlen, target, a, 0);
+	free(q);
+	if (a->score == 0) return 0;
+	alt = *a;
+	revseq(a->qe + 1, query); revseq(a->te + 1, target); // +1 because qe/te points to the exact end, not the position after the end
+	q = ksw_qinit(2, a->qe + 1, query, m, mat);
+	ksw_sse2_8(q, a->te + 1, target, &alt, a->score);
+	revseq(a->qe + 1, query); revseq(a->te + 1, target);
+	free(q);
+	if (alt.score == a->score)
+		a->tb = a->te - alt.te, a->qb = a->qe - alt.qe;
+	else a->tb = a->qb = -1;
+	return a->score;
 }
 
 /*******************************************
@@ -355,7 +385,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 	// initialize scoring matrix
-	for (i = k = 0; i < 5; ++i) {
+	for (i = k = 0; i < 4; ++i) {
 		for (j = 0; j < 4; ++j)
 			mat[k++] = i == j? sa : -sb;
 		mat[k++] = 0; // ambiguous base

@@ -10,6 +10,7 @@ typedef struct {
 	unsigned T; // threshold
 	// output
 	int score, te, qe, score2, te2;
+	int tb, qb; // tb and qb are only generated when calling ksw_align_16()
 } ksw_aux_t;
 
 #ifdef __cplusplus
@@ -39,13 +40,15 @@ extern "C" {
 	 *
 	 * @return        The maximum local score; if the returned value equals 255, the SW may not be finished
 	 */
-	int ksw_sse2_8(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a);
+	int ksw_sse2_8(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a, int cutsc);
 
 	/** Compute the maximum local score for queries initialized with ksw_qinit(2, ...) */
 	int ksw_sse2_16(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a);
 
 	/** Unified interface for ksw_sse2_8() and ksw_sse2_16() */
 	int ksw_sse2(ksw_query_t *q, int tlen, const uint8_t *target, ksw_aux_t *a);
+
+	int ksw_align_short(int qlen, uint8_t *query, int tlen, uint8_t *target, int m, const int8_t *mat, ksw_aux_t *a);
 
 #ifdef __cplusplus
 }
