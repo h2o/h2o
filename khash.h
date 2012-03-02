@@ -33,7 +33,6 @@ int main() {
 	khiter_t k;
 	khash_t(32) *h = kh_init(32);
 	k = kh_put(32, h, 5, &ret);
-	if (!ret) kh_del(32, h, k);
 	kh_value(h, k) = 10;
 	k = kh_get(32, h, 10);
 	is_missing = (k == kh_end(h));
