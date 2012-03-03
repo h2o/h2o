@@ -333,8 +333,7 @@ kswr_t ksw_align(int qlen, uint8_t *query, int tlen, uint8_t *target, int m, con
 	kswr_t r, rr;
 	kswr_t (*func)(kswq_t*, int, const uint8_t*, int, int, int);
 
-	if (qry == 0 || *qry == 0)
-		q = ksw_qinit((xtra&KSW_XBYTE)? 1 : 2, qlen, query, m, mat);
+	q = (qry && *qry)? *qry : ksw_qinit((xtra&KSW_XBYTE)? 1 : 2, qlen, query, m, mat);
 	if (qry && *qry == 0) *qry = q;
 	func = q->size == 2? ksw_i16 : ksw_u8;
 	r = func(q, tlen, target, gapo, gape, xtra);
