@@ -228,7 +228,6 @@ typedef struct __kstring_t {
 	__KS_TYPE(type_t) \
 	__KSEQ_TYPE(type_t) \
 	extern kseq_t *kseq_init(type_t fd); \
-	extern void kseq_rewind(kseq_t *ks); \
 	void kseq_destroy(kseq_t *ks); \
 	int kseq_read(kseq_t *seq);
 
