@@ -329,6 +329,7 @@ static void revseq(int l, uint8_t *s)
 
 kswr_t ksw_align(int qlen, uint8_t *query, int tlen, uint8_t *target, int m, const int8_t *mat, int gapo, int gape, int xtra, kswq_t **qry)
 {
+	int size;
 	kswq_t *q;
 	kswr_t r, rr;
 	kswr_t (*func)(kswq_t*, int, const uint8_t*, int, int, int);
@@ -336,11 +337,12 @@ kswr_t ksw_align(int qlen, uint8_t *query, int tlen, uint8_t *target, int m, con
 	q = (qry && *qry)? *qry : ksw_qinit((xtra&KSW_XBYTE)? 1 : 2, qlen, query, m, mat);
 	if (qry && *qry == 0) *qry = q;
 	func = q->size == 2? ksw_i16 : ksw_u8;
+	size = q->size;
 	r = func(q, tlen, target, gapo, gape, xtra);
 	if (qry == 0) free(q);
 	if ((xtra&KSW_XSTART) == 0 || ((xtra&KSW_XSUBO) && r.score < (xtra&0xffff))) return r;
 	revseq(r.qe + 1, query); revseq(r.te + 1, target); // +1 because qe/te points to the exact end, not the position after the end
-	q = ksw_qinit((*qry)->size, r.qe + 1, query, m, mat);
+	q = ksw_qinit(size, r.qe + 1, query, m, mat);
 	rr = func(q, tlen, target, gapo, gape, KSW_XSTOP | r.score);
 	revseq(r.qe + 1, query); revseq(r.te + 1, target);
 	free(q);
