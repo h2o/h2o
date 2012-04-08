@@ -103,7 +103,32 @@ int main(void)
 	for (i = 0; i < N; ++i)
 		x[i] = (uint64_t)lrand48() << 32 | lrand48();
 
-	fprintf(stderr, "===> Count '%c' in 2-bit encoded integers <===\n", "ACGT"[c]);
+	fprintf(stderr, "\n===> Calculate # of 1 in an integer (popcount) <===\n");
+
+	t = clock();
+	for (j = 0, cnt = 0; j < M; ++j)
+		for (i = 0; i < N; ++i)
+			cnt += kbi_popcount64(x[i]);
+	fprintf(stderr, "%20s\t%20ld\t%10.3f\n", "kbit", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
+
+	t = clock();
+	for (j = 0, cnt = 0; j < M; ++j)
+		for (i = 0; i < N; ++i)
+			cnt += bt1_pop64(x[i]);
+	fprintf(stderr, "%20s\t%20ld\t%10.3f\n", "wiki-popcount_2", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
+
+	t = clock();
+	for (j = 0, cnt = 0; j < M; ++j)
+		for (i = 0; i < N; ++i)
+			cnt += __builtin_popcountl(x[i]);
+	fprintf(stderr, "%20s\t%20ld\t%10.3f\n", "__builtin_popcountl", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
+
+	t = clock();
+	for (j = 0, cnt = 0; j < M; ++j)
+		cnt += sse2_bit_count((__m128i*)x, (__m128i*)(x+N));
+	fprintf(stderr, "%20s\t%20ld\t%10.3f\n", "SSE2-32bit", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
+
+	fprintf(stderr, "\n===> Count '%c' in 2-bit encoded integers <===\n", "ACGT"[c]);
 
 	t = clock();
 	for (j = 0, cnt = 0; j < M; ++j)
@@ -117,31 +142,7 @@ int main(void)
 			cnt += bt1_countInU64(x[i], c);
 	fprintf(stderr, "%20s\t%20ld\t%10.3f\n", "bowtie1", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
 
-	fprintf(stderr, "\n===> Calculate # of 1 in an integer (popcount) <===\n");
-
-	t = clock();
-	for (j = 0, cnt = 0; j < M; ++j)
-		for (i = 0; i < N; ++i)
-			cnt += kbi_popcount64(x[i]);
-	fprintf(stderr, "%20s\t%20ld\t%10.3f\n", "kbit", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
-
-	t = clock();
-	for (j = 0, cnt = 0; j < M; ++j)
-		for (i = 0; i < N; ++i)
-			cnt += bt1_pop64(x[i]);
-	fprintf(stderr, "%20s\t%20ld\t%10.3f\n", "bowtie1", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
-
-	t = clock();
-	for (j = 0, cnt = 0; j < M; ++j)
-		for (i = 0; i < N; ++i)
-			cnt += __builtin_popcountl(x[i]);
-	fprintf(stderr, "%20s\t%20ld\t%10.3f\n", "__builtin_popcountl", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
-
-	t = clock();
-	for (j = 0, cnt = 0; j < M; ++j)
-		cnt += sse2_bit_count((__m128i*)x, (__m128i*)(x+N));
-	fprintf(stderr, "%20s\t%20ld\t%10.3f\n", "SSE2-32bit", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
-
+	fprintf(stderr, "\n");
 	free(x);
 	return 0;
 }
