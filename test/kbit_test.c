@@ -33,7 +33,7 @@ inline static int bt1_countInU64(uint64_t dw, int c) // the kbi_DNAcount64() equ
 }
 
 // from bigmagic
-static uint32_t sse2_bit_count(const __m128i* block, const __m128i* block_end)
+static uint32_t sse2_bit_count32(const __m128i* block, const __m128i* block_end)
 {
     const unsigned mu1 = 0x55555555;
     const unsigned mu2 = 0x33333333;
@@ -93,7 +93,7 @@ static uint32_t sse2_bit_count(const __m128i* block, const __m128i* block_end)
 
 int main(void)
 {
-	int i, j, N = 1000000, M = 200;
+	int i, N = 100000000;
 	uint64_t *x, cnt;
 	clock_t t;
 	int c = 1;
@@ -101,46 +101,35 @@ int main(void)
 	x = (uint64_t*)calloc(N, 8);
 	srand48(11);
 	for (i = 0; i < N; ++i)
-		x[i] = (uint64_t)lrand48() << 32 | lrand48();
+		x[i] = (uint64_t)lrand48() << 32 ^ lrand48();
 
 	fprintf(stderr, "\n===> Calculate # of 1 in an integer (popcount) <===\n");
 
-	t = clock();
-	for (j = 0, cnt = 0; j < M; ++j)
-		for (i = 0; i < N; ++i)
-			cnt += kbi_popcount64(x[i]);
-	fprintf(stderr, "%20s\t%20ld\t%10.3f\n", "kbit", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
+	t = clock(); cnt = 0;
+	for (i = 0; i < N; ++i) cnt += kbi_popcount64(x[i]);
+	fprintf(stderr, "%20s\t%20ld\t%10.6f\n", "kbit", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
 
-	t = clock();
-	for (j = 0, cnt = 0; j < M; ++j)
-		for (i = 0; i < N; ++i)
-			cnt += bt1_pop64(x[i]);
-	fprintf(stderr, "%20s\t%20ld\t%10.3f\n", "wiki-popcount_2", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
+	t = clock(); cnt = 0;
+	for (i = 0; i < N; ++i) cnt += bt1_pop64(x[i]);
+	fprintf(stderr, "%20s\t%20ld\t%10.6f\n", "wiki-popcount_2", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
 
-	t = clock();
-	for (j = 0, cnt = 0; j < M; ++j)
-		for (i = 0; i < N; ++i)
-			cnt += __builtin_popcountl(x[i]);
-	fprintf(stderr, "%20s\t%20ld\t%10.3f\n", "__builtin_popcountl", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
+	t = clock(); cnt = 0;
+	for (i = 0; i < N; ++i) cnt += __builtin_popcountl(x[i]);
+	fprintf(stderr, "%20s\t%20ld\t%10.6f\n", "__builtin_popcountl", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
 
-	t = clock();
-	for (j = 0, cnt = 0; j < M; ++j)
-		cnt += sse2_bit_count((__m128i*)x, (__m128i*)(x+N));
-	fprintf(stderr, "%20s\t%20ld\t%10.3f\n", "SSE2-32bit", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
+	t = clock(); cnt = 0;
+	cnt += sse2_bit_count32((__m128i*)x, (__m128i*)(x+N));
+	fprintf(stderr, "%20s\t%20ld\t%10.6f\n", "SSE2-32bit", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
 
 	fprintf(stderr, "\n===> Count '%c' in 2-bit encoded integers <===\n", "ACGT"[c]);
 
-	t = clock();
-	for (j = 0, cnt = 0; j < M; ++j)
-		for (i = 0; i < N; ++i)
-			cnt += kbi_DNAcount64(x[i], c);
-	fprintf(stderr, "%20s\t%20ld\t%10.3f\n", "kbit", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
+	t = clock(); cnt = 0;
+	for (i = 0; i < N; ++i) cnt += kbi_DNAcount64(x[i], c);
+	fprintf(stderr, "%20s\t%20ld\t%10.6f\n", "kbit", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
 
-	t = clock();
-	for (j = 0, cnt = 0; j < M; ++j)
-		for (i = 0; i < N; ++i)
-			cnt += bt1_countInU64(x[i], c);
-	fprintf(stderr, "%20s\t%20ld\t%10.3f\n", "bowtie1", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
+	t = clock(); cnt = 0;
+	for (i = 0; i < N; ++i) cnt += bt1_countInU64(x[i], c);
+	fprintf(stderr, "%20s\t%20ld\t%10.6f\n", "bowtie1", (long)cnt, (double)(clock() - t) / CLOCKS_PER_SEC);
 
 	fprintf(stderr, "\n");
 	free(x);
