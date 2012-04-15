@@ -186,6 +186,7 @@ typedef struct __kstring_t {
 			seq->seq.s = (char*)malloc(seq->seq.m); \
 		} \
 		while ((c = ks_getc(ks)) != -1 && c != '>' && c != '+' && c != '@') { \
+			if (c == '\n') continue; /* skip empty lines */ \
 			seq->seq.s[seq->seq.l++] = c; /* this is safe: we always have enough space for 1 char */ \
 			ks_getuntil2(ks, KS_SEP_LINE, &seq->seq, 0, 1); /* read the rest of the line */ \
 		} \
@@ -217,7 +218,7 @@ typedef struct __kstring_t {
 	} kseq_t;
 
 #define KSEQ_INIT2(SCOPE, type_t, __read)		\
-	KSTREAM_INIT(type_t, __read, 4096)			\
+	KSTREAM_INIT(type_t, __read, 16384)			\
 	__KSEQ_TYPE(type_t)							\
 	__KSEQ_BASIC(SCOPE, type_t)					\
 	__KSEQ_READ(SCOPE)
