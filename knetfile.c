@@ -215,7 +215,7 @@ static int kftp_get_response(knetFile *ftp)
 		//fputc(c, stderr);
 		if (n >= ftp->max_response) {
 			ftp->max_response = ftp->max_response? ftp->max_response<<1 : 256;
-			ftp->response = realloc(ftp->response, ftp->max_response);
+			ftp->response = (char*)realloc(ftp->response, ftp->max_response);
 		}
 		ftp->response[n++] = c;
 		if (c == '\n') {
@@ -298,18 +298,18 @@ knetFile *kftp_parse_url(const char *fn, const char *mode)
 	for (p = (char*)fn + 6; *p && *p != '/'; ++p);
 	if (*p != '/') return 0;
 	l = p - fn - 6;
-	fp = calloc(1, sizeof(knetFile));
+	fp = (knetFile*)calloc(1, sizeof(knetFile));
 	fp->type = KNF_TYPE_FTP;
 	fp->fd = -1;
 	/* the Linux/Mac version of socket_connect() also recognizes a port
 	 * like "ftp", but the Windows version does not. */
 	fp->port = strdup("21");
-	fp->host = calloc(l + 1, 1);
+	fp->host = (char*)calloc(l + 1, 1);
 	if (strchr(mode, 'c')) fp->no_reconnect = 1;
 	strncpy(fp->host, fn + 6, l);
-	fp->retr = calloc(strlen(p) + 8, 1);
+	fp->retr = (char*)calloc(strlen(p) + 8, 1);
 	sprintf(fp->retr, "RETR %s\r\n", p);
-    fp->size_cmd = calloc(strlen(p) + 8, 1);
+    fp->size_cmd = (char*)calloc(strlen(p) + 8, 1);
     sprintf(fp->size_cmd, "SIZE %s\r\n", p);
 	fp->seek_offset = 0;
 	return fp;
@@ -376,8 +376,8 @@ knetFile *khttp_parse_url(const char *fn, const char *mode)
 	// set ->http_host
 	for (p = (char*)fn + 7; *p && *p != '/'; ++p);
 	l = p - fn - 7;
-	fp = calloc(1, sizeof(knetFile));
-	fp->http_host = calloc(l + 1, 1);
+	fp = (knetFile*)calloc(1, sizeof(knetFile));
+	fp->http_host = (char*)calloc(l + 1, 1);
 	strncpy(fp->http_host, fn + 7, l);
 	fp->http_host[l] = 0;
 	for (q = fp->http_host; *q && *q != ':'; ++q);
@@ -408,7 +408,7 @@ int khttp_connect_file(knetFile *fp)
 	char *buf, *p;
 	if (fp->fd != -1) netclose(fp->fd);
 	fp->fd = socket_connect(fp->host, fp->port);
-	buf = calloc(0x10000, 1); // FIXME: I am lazy... But in principle, 64KB should be large enough.
+	buf = (char*)calloc(0x10000, 1); // FIXME: I am lazy... But in principle, 64KB should be large enough.
 	l += sprintf(buf + l, "GET %s HTTP/1.0\r\nHost: %s\r\n", fp->path, fp->http_host);
     l += sprintf(buf + l, "Range: bytes=%lld-\r\n", (long long)fp->offset);
 	l += sprintf(buf + l, "\r\n");
