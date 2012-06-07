@@ -568,7 +568,7 @@ int * tmpArray;
  * END OF PAUL'S IMPLEMENTATION *
  ********************************/
 
-#define rstype_t uint32_t
+#define rstype_t unsigned
 #define rskey(x) (x)
 
 #define RS_MIN_SIZE 63
@@ -682,7 +682,7 @@ int main(int argc, char *argv[])
 	srand48(11);
 	for (i = 0; i < N; ++i) array[i] = (int)lrand48();
 	t1 = clock();
-	rs_sort((uint32_t*)array, (uint32_t*)array + N, 8, 24);
+	rs_sort((unsigned*)array, (unsigned*)array + N, 8, 24);
 	t2 = clock();
 	fprintf(stderr, "radix sort: %.3lf\n", (double)(t2-t1)/CLOCKS_PER_SEC);
 	for (i = 0; i < N-1; ++i) {
@@ -692,7 +692,7 @@ int main(int argc, char *argv[])
 		}
 	}
 	t1 = clock();
-	rs_sort((uint32_t*)array, (uint32_t*)array + N, 8, 24);
+	rs_sort((unsigned*)array, (unsigned*)array + N, 8, 24);
 	t2 = clock();
 	fprintf(stderr, "radix sort (sorted): %.3lf\n", (double)(t2-t1)/CLOCKS_PER_SEC);
 
