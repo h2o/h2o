@@ -571,7 +571,7 @@ int * tmpArray;
 #define rstype_t unsigned
 #define rskey(x) (x)
 
-#define RS_MIN_SIZE 63
+#define RS_MIN_SIZE 32
 
 typedef struct {
 	rstype_t *b, *e;
@@ -584,29 +584,6 @@ static inline void rs_insertsort(rstype_t *s, rstype_t *t)
 		for (j = i; j > s && rskey(*j) < rskey(*(j-1)); --j) {
 			swap_tmp = *j; *j = *(j-1); *(j-1) = swap_tmp;
 		}
-}
-
-void rs_combsort(size_t n, rstype_t a[])
-{
-	const double shrink_factor = 1. / 1.2473309501039786540366528676643;
-	int do_swap;
-	size_t gap = n;
-	rstype_t tmp, *i, *j;
-	do {
-		if (gap > 2) {
-			gap = (size_t)(gap * shrink_factor);
-			if (gap == 9 || gap == 10) gap = 11;
-		}
-		do_swap = 0;
-		for (i = a; i < a + n - gap; ++i) {
-			j = i + gap;
-			if (rskey(*j) < rskey(*i)) {
-				tmp = *i; *i = *j; *j = tmp;
-				do_swap = 1;
-			}
-		}
-	} while (do_swap || gap > 2);
-	if (gap != 1) rs_insertsort(a, a + n);
 }
 
 void rs_classify(rstype_t *beg, rstype_t *end, int n_bits, int s, bucket_t *b)
@@ -625,7 +602,7 @@ void rs_classify(rstype_t *beg, rstype_t *end, int n_bits, int s, bucket_t *b)
 		if (k->b == k->e) { ++k; continue; }
 		l = b + (rskey(*k->b)>>s&m);
 		if (k == l) { ++k->b; continue; }
-		while (b + (rskey(*l->b)>>s&m) == l) ++l->b;
+//		while (b + (rskey(*l->b)>>s&m) == l) ++l->b;
 		tmp = *l->b; *l->b++ = *k->b; *k->b = tmp;
 	}
 	for (k = b + 1; k != be; ++k) k->b = (k-1)->e;
@@ -634,20 +611,17 @@ void rs_classify(rstype_t *beg, rstype_t *end, int n_bits, int s, bucket_t *b)
 
 void rs_sort(rstype_t *beg, rstype_t *end, int n_bits, int s)
 {
-	if (end - beg < 2) { // already sorted
-		return;
-	} else if (end - beg > RS_MIN_SIZE) {
+	if (end - beg > RS_MIN_SIZE) {
 		bucket_t *b;
 		int i;
-		b = (bucket_t*)malloc(sizeof(bucket_t) * (1<<n_bits));
+		b = (bucket_t*)alloca(sizeof(bucket_t) * (1<<n_bits));
 		rs_classify(beg, end, n_bits, s, b);
 		if (s) {
 			s = s > n_bits? s - n_bits : 0;
 			for (i = 0; i != 1<<n_bits; ++i)
 				if (b[i].e > b[i].b + 1) rs_sort(b[i].b, b[i].e, n_bits, s);
 		}
-		free(b);
-	} else rs_combsort(end - beg, beg);
+	} else if (end - beg > 1) rs_insertsort(beg, end);
 }
 
 /*************************
