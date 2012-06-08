@@ -568,27 +568,14 @@ int * tmpArray;
  * END OF PAUL'S IMPLEMENTATION *
  ********************************/
 
+/*************************************************
+ *** Implementation 1: faster on sorted arrays ***
+ *************************************************/
+
 #define rstype_t unsigned
 #define rskey(x) (x)
 
 #define RS_MIN_SIZE 64
-
-static inline void rs_insertsort(rstype_t *s, rstype_t *t)
-{
-	rstype_t *i;
-	for (i = s + 1; i < t; ++i) {
-		if (rskey(*i) < rskey(*(i - 1))) {
-			rstype_t *j, tmp = *i;
-			for (j = i; j > s && rskey(tmp) < rskey(*(j-1)); --j)
-				*j = *(j - 1);
-			*j = tmp;
-		}
-	}
-}
-
-/*************************************************
- *** Implementation 1: faster on sorted arrays ***
- *************************************************/
 
 typedef struct {
 	rstype_t *b, *e;
@@ -602,32 +589,34 @@ void rs_sort(rstype_t *beg, rstype_t *end, int n_bits, int s)
 
 	for (k = b; k != be; ++k) k->b = k->e = beg;
 	for (i = beg; i != end; ++i) ++b[rskey(*i)>>s&m].e;
-	if (b[0].e != end) {
-		for (k = b + 1; k != be; ++k)
-			k->e += (k-1)->e - beg, k->b = (k-1)->e;
-		for (k = b; k != be;) {
-			rstype_t t[2];
+	for (k = b + 1; k != be; ++k)
+		k->e += (k-1)->e - beg, k->b = (k-1)->e;
+	for (k = b; k != be;) {
+		if (k->b != k->e) {
 			rsbucket_t *l;
-			int curr = 0;
-			if (k->b == k->e) { ++k; continue; }
-			l = b + (rskey(*k->b)>>s&m);
-			if (k == l) { ++k->b; continue; }
-			t[curr] = *k->b;
-			do {
-				t[!curr] = *l->b; *l->b++ = t[curr];
-				curr = !curr;
-				l = b + (rskey(t[curr])>>s&m);
-			} while (l != k);
-			*k->b++ = t[curr];
-		}
-		for (b->b = beg, k = b + 1; k != be; ++k) k->b = (k-1)->e;
+			if ((l = b + (rskey(*k->b)>>s&m)) != k) {
+				rstype_t tmp = *k->b, swap;
+				do {
+					swap = tmp; tmp = *l->b; *l->b++ = swap;
+					l = b + (rskey(tmp)>>s&m);
+				} while (l != k);
+				*k->b++ = tmp;
+			} else ++k->b;
+		} else ++k;
 	}
+	for (b->b = beg, k = b + 1; k != be; ++k) k->b = (k-1)->e;
 	if (s) {
 		s = s > n_bits? s - n_bits : 0;
-		for (k = b; k != be; ++k) {
+		for (k = b; k != be; ++k)
 			if (k->e - k->b > RS_MIN_SIZE) rs_sort(k->b, k->e, n_bits, s);
-			else if (k->e - k->b > 1) rs_insertsort(k->b, k->e);
-		}
+			else if (k->e - k->b > 1)
+				for (i = k->b + 1; i < k->e; ++i)
+					if (rskey(*i) < rskey(*(i - 1))) {
+						rstype_t *j, tmp = *i;
+						for (j = i; j > k->b && rskey(tmp) < rskey(*(j-1)); --j)
+							*j = *(j - 1);
+						*j = tmp;
+					}
 	}
 }
 
@@ -635,6 +624,19 @@ void rs_sort(rstype_t *beg, rstype_t *end, int n_bits, int s)
  *** Implementation 2: faster on random arrays ***
  *************************************************/
 
+static inline void rs_insertsort(rstype_t *s, rstype_t *t)
+{
+	rstype_t *i;
+	for (i = s + 1; i < t; ++i) {
+		if (rskey(*i) < rskey(*(i - 1))) {
+			rstype_t *j, tmp = *i;
+			for (j = i; j > s && rskey(tmp) < rskey(*(j-1)); --j)
+				*j = *(j - 1);
+			*j = tmp;
+		}
+	}
+}
+/*
 void rs_sort2(rstype_t *beg, rstype_t *end, int n_bits, int s)
 {
 	int j, size = 1<<n_bits, m = size - 1;
@@ -667,7 +669,7 @@ void rs_sort2(rstype_t *beg, rstype_t *end, int n_bits, int s)
 		}
 	}
 }
-
+*/
 /*************************
  *** END OF RADIX SORT ***
  *************************/
@@ -778,23 +780,6 @@ int main(int argc, char *argv[])
 	rs_sort((unsigned*)array, (unsigned*)array + N, 8, 24);
 	t2 = clock();
 	fprintf(stderr, "radix sort (sorted): %.3lf\n", (double)(t2-t1)/CLOCKS_PER_SEC);
-
-	srand48(11);
-	for (i = 0; i < N; ++i) array[i] = (int)lrand48();
-	t1 = clock();
-	rs_sort2((unsigned*)array, (unsigned*)array + N, 8, 24);
-	t2 = clock();
-	fprintf(stderr, "radix sort2: %.3lf\n", (double)(t2-t1)/CLOCKS_PER_SEC);
-	for (i = 0; i < N-1; ++i) {
-		if (array[i] > array[i+1]) {
-			fprintf(stderr, "Bug in radix sort!\n");
-			exit(1);
-		}
-	}
-	t1 = clock();
-	rs_sort2((unsigned*)array, (unsigned*)array + N, 8, 24);
-	t2 = clock();
-	fprintf(stderr, "radix sort2 (sorted): %.3lf\n", (double)(t2-t1)/CLOCKS_PER_SEC);
 
 	srand48(11);
 	for (i = 0; i < N; ++i) array[i] = (int)lrand48();
