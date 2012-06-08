@@ -571,26 +571,34 @@ int * tmpArray;
 #define rstype_t unsigned
 #define rskey(x) (x)
 
-#define RS_MIN_SIZE 32
-
-typedef struct {
-	rstype_t *b, *e;
-} bucket_t;
+#define RS_MIN_SIZE 64
 
 static inline void rs_insertsort(rstype_t *s, rstype_t *t)
 {
-	rstype_t *i, *j, swap_tmp;
-	for (i = s + 1; i < t; ++i)
-		for (j = i; j > s && rskey(*j) < rskey(*(j-1)); --j) {
-			swap_tmp = *j; *j = *(j-1); *(j-1) = swap_tmp;
+	rstype_t *i;
+	for (i = s + 1; i < t; ++i) {
+		if (rskey(*i) < rskey(*(i - 1))) {
+			rstype_t *j, tmp = *i;
+			for (j = i; j > s && rskey(tmp) < rskey(*(j-1)); --j)
+				*j = *(j - 1);
+			*j = tmp;
 		}
+	}
 }
 
-void rs_classify(rstype_t *beg, rstype_t *end, int n_bits, int s, bucket_t *b)
+/*************************************************
+ *** Implementation 1: faster on sorted arrays ***
+ *************************************************/
+
+typedef struct {
+	rstype_t *b, *e;
+} rsbucket_t;
+
+void rs_classify(rstype_t *beg, rstype_t *end, int n_bits, int s, rsbucket_t *b)
 {
 	rstype_t *i, tmp;
 	int m = (1<<n_bits) - 1;
-	bucket_t *k, *l, *be;
+	rsbucket_t *k, *l, *be;
 
 	be = b + (1<<n_bits);
 	for (k = b; k != be; ++k) k->b = k->e = beg;
@@ -602,7 +610,6 @@ void rs_classify(rstype_t *beg, rstype_t *end, int n_bits, int s, bucket_t *b)
 		if (k->b == k->e) { ++k; continue; }
 		l = b + (rskey(*k->b)>>s&m);
 		if (k == l) { ++k->b; continue; }
-//		while (b + (rskey(*l->b)>>s&m) == l) ++l->b;
 		tmp = *l->b; *l->b++ = *k->b; *k->b = tmp;
 	}
 	for (k = b + 1; k != be; ++k) k->b = (k-1)->e;
@@ -612,9 +619,9 @@ void rs_classify(rstype_t *beg, rstype_t *end, int n_bits, int s, bucket_t *b)
 void rs_sort(rstype_t *beg, rstype_t *end, int n_bits, int s)
 {
 	if (end - beg > RS_MIN_SIZE) {
-		bucket_t *b;
+		rsbucket_t *b;
 		int i;
-		b = (bucket_t*)alloca(sizeof(bucket_t) * (1<<n_bits));
+		b = (rsbucket_t*)alloca(sizeof(rsbucket_t) * (1<<n_bits));
 		rs_classify(beg, end, n_bits, s, b);
 		if (s) {
 			s = s > n_bits? s - n_bits : 0;
@@ -624,9 +631,111 @@ void rs_sort(rstype_t *beg, rstype_t *end, int n_bits, int s)
 	} else if (end - beg > 1) rs_insertsort(beg, end);
 }
 
+/*************************************************
+ *** Implementation 2: faster on random arrays ***
+ *************************************************/
+
+void rs_sort2(rstype_t *beg, rstype_t *end, int n_bits, int s)
+{
+	int j, size = 1<<n_bits, m = size - 1;
+	unsigned long c[size];
+	rstype_t *i, *b[size], *e[size];
+
+	for (j = 0; j < size; ++j) c[j] = 0;
+	for (i = beg; i != end; ++i) ++c[rskey(*i)>>s&m];
+	b[0] = e[0] = beg;
+	for (j = 1; j != size; ++j) b[j] = e[j] = b[j - 1] + c[j - 1];
+	for (i = beg, j = 0; i != end;) {
+		rstype_t tmp = *i, swap;
+		int x;
+		for (;;) {
+			x = rskey(tmp)>>s&m;
+			if (e[x] == i) break;
+			swap = tmp; tmp = *e[x]; *e[x]++ = swap;
+		}
+		*i++ = tmp;
+		++e[x];
+		while (j != size && i >= b[j]) ++j;
+		while (j != size && e[j-1] == b[j]) ++j;
+		if (i < e[j-1]) i = e[j-1];
+	}
+	if (s) {
+		s = s > n_bits? s - n_bits : 0;
+		for (j = 0; j < size; ++j) {
+			if (c[j] >= RS_MIN_SIZE) rs_sort2(b[j], e[j], n_bits, s);
+			else if (c[j] >= 2) rs_insertsort(b[j], e[j]);
+		}
+	}
+}
+
 /*************************
  *** END OF RADIX SORT ***
  *************************/
+
+template< class _Type, unsigned long PowerOfTwoRadix, unsigned long Log2ofPowerOfTwoRadix, long Threshold >
+inline void _RadixSort_Unsigned_PowerOf2Radix_1( _Type* a, long last, _Type bitMask, unsigned long shiftRightAmount )
+{
+	const unsigned long numberOfBins = PowerOfTwoRadix;
+	unsigned long count[ numberOfBins ];
+	for( unsigned long i = 0; i < numberOfBins; i++ )
+		count[ i ] = 0;
+	for ( long _current = 0; _current <= last; _current++ ) // Scan the array and count the number of times each value appears
+	{
+		unsigned long digit = (unsigned long)(( a[ _current ] & bitMask ) >> shiftRightAmount ); // extract the digit we are sorting based on
+		count[ digit ]++;
+	}
+	long startOfBin[ numberOfBins ], endOfBin[ numberOfBins ], nextBin;
+	startOfBin[ 0 ] = endOfBin[ 0 ] = nextBin = 0;
+	for( unsigned long i = 1; i < numberOfBins; i++ )
+		startOfBin[ i ] = endOfBin[ i ] = startOfBin[ i - 1 ] + count[ i - 1 ];
+	for ( long _current = 0; _current <= last; )
+	{
+		unsigned long digit;
+		_Type tmp = a[ _current ];  // get the compiler to recognize that a register can be used for the loop instead of a[_current] memory location
+		while ( true ) {
+			digit = (unsigned long)(( tmp & bitMask ) >> shiftRightAmount );   // extract the digit we are sorting based on
+			if ( endOfBin[ digit ] == _current )
+				break;
+			_Type tmp2;
+			//_swap( tmp, a[ endOfBin[ digit ] ] );
+			tmp2 = a[endOfBin[digit]]; a[endOfBin[digit]] = tmp; tmp = tmp2;
+			endOfBin[ digit ]++;
+		}
+		a[ _current ] = tmp;
+		endOfBin[ digit ]++;   // leave the element at its location and grow the bin
+		_current++;  // advance the current pointer to the next element
+		while( _current >= startOfBin[ nextBin ] && nextBin < numberOfBins )
+			nextBin++;
+		while( endOfBin[ nextBin - 1 ] == startOfBin[ nextBin ] && nextBin < numberOfBins )
+			nextBin++;
+		if ( _current < endOfBin[ nextBin - 1 ] )
+			_current = endOfBin[ nextBin - 1 ];
+	}
+	bitMask >>= Log2ofPowerOfTwoRadix;
+	if ( bitMask != 0 )   // end recursion when all the bits have been processes
+	{
+		if ( shiftRightAmount >= Log2ofPowerOfTwoRadix ) shiftRightAmount -= Log2ofPowerOfTwoRadix;
+		else shiftRightAmount  = 0;
+		for( unsigned long i = 0; i < numberOfBins; i++ )
+		{
+			long numberOfElements = endOfBin[ i ] - startOfBin[ i ];
+			if ( numberOfElements >= Threshold )  // endOfBin actually points to one beyond the bin
+				_RadixSort_Unsigned_PowerOf2Radix_1< _Type, PowerOfTwoRadix, Log2ofPowerOfTwoRadix, Threshold >( &a[ startOfBin[ i ]], numberOfElements - 1, bitMask, shiftRightAmount );
+			else if ( numberOfElements >= 2 )
+				rs_insertsort(&a[ startOfBin[ i ]], &a[ endOfBin[ i ]]);
+		}
+	}
+}
+inline void RadixSortInPlace_HybridUnsigned_Radix256( unsigned* a, unsigned long a_size )
+{
+	if ( a_size < 2 ) return;
+	unsigned long bitMask = 0xFF000000; // bitMask controls how many bits we process at a time
+	unsigned long shiftRightAmount = 24;
+	if ( a_size >= 32 )
+		_RadixSort_Unsigned_PowerOf2Radix_1<unsigned, 256, 8, 32>(a, a_size - 1, bitMask, shiftRightAmount );
+	else
+		rs_insertsort(a, a + a_size);
+}
 
 struct intcmp_t {
 	inline int operator() (int a, int b) const {
@@ -669,6 +778,40 @@ int main(int argc, char *argv[])
 	rs_sort((unsigned*)array, (unsigned*)array + N, 8, 24);
 	t2 = clock();
 	fprintf(stderr, "radix sort (sorted): %.3lf\n", (double)(t2-t1)/CLOCKS_PER_SEC);
+
+	srand48(11);
+	for (i = 0; i < N; ++i) array[i] = (int)lrand48();
+	t1 = clock();
+	rs_sort2((unsigned*)array, (unsigned*)array + N, 8, 24);
+	t2 = clock();
+	fprintf(stderr, "radix sort2: %.3lf\n", (double)(t2-t1)/CLOCKS_PER_SEC);
+	for (i = 0; i < N-1; ++i) {
+		if (array[i] > array[i+1]) {
+			fprintf(stderr, "Bug in radix sort!\n");
+			exit(1);
+		}
+	}
+	t1 = clock();
+	rs_sort2((unsigned*)array, (unsigned*)array + N, 8, 24);
+	t2 = clock();
+	fprintf(stderr, "radix sort2 (sorted): %.3lf\n", (double)(t2-t1)/CLOCKS_PER_SEC);
+
+	srand48(11);
+	for (i = 0; i < N; ++i) array[i] = (int)lrand48();
+	t1 = clock();
+	RadixSortInPlace_HybridUnsigned_Radix256((unsigned*)array, N);
+	t2 = clock();
+	fprintf(stderr, "vd's radix sort: %.3lf\n", (double)(t2-t1)/CLOCKS_PER_SEC);
+	for (i = 0; i < N-1; ++i) {
+		if (array[i] > array[i+1]) {
+			fprintf(stderr, "Bug in radix sort!\n");
+			exit(1);
+		}
+	}
+	t1 = clock();
+	RadixSortInPlace_HybridUnsigned_Radix256((unsigned*)array, N);
+	t2 = clock();
+	fprintf(stderr, "vd's radix sort (sorted): %.3lf\n", (double)(t2-t1)/CLOCKS_PER_SEC);
 
 	srand48(11);
 	for (i = 0; i < N; ++i) array[i] = (int)lrand48();
