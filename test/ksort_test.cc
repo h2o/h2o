@@ -594,41 +594,41 @@ typedef struct {
 	rstype_t *b, *e;
 } rsbucket_t;
 
-void rs_classify(rstype_t *beg, rstype_t *end, int n_bits, int s, rsbucket_t *b)
-{
-	rstype_t *i, tmp;
-	int m = (1<<n_bits) - 1;
-	rsbucket_t *k, *l, *be;
-
-	be = b + (1<<n_bits);
-	for (k = b; k != be; ++k) k->b = k->e = beg;
-	for (i = beg; i != end; ++i) ++b[rskey(*i)>>s&m].e;
-	if (b[0].e == end) return; // no need to sort
-	for (k = b + 1; k != be; ++k)
-		k->e += (k-1)->e - beg, k->b = (k-1)->e;
-	for (k = b; k != be;) {
-		if (k->b == k->e) { ++k; continue; }
-		l = b + (rskey(*k->b)>>s&m);
-		if (k == l) { ++k->b; continue; }
-		tmp = *l->b; *l->b++ = *k->b; *k->b = tmp;
-	}
-	for (k = b + 1; k != be; ++k) k->b = (k-1)->e;
-	b->b = beg;
-}
-
 void rs_sort(rstype_t *beg, rstype_t *end, int n_bits, int s)
 {
-	if (end - beg > RS_MIN_SIZE) {
-		rsbucket_t *b;
-		int i;
-		b = (rsbucket_t*)alloca(sizeof(rsbucket_t) * (1<<n_bits));
-		rs_classify(beg, end, n_bits, s, b);
-		if (s) {
-			s = s > n_bits? s - n_bits : 0;
-			for (i = 0; i != 1<<n_bits; ++i)
-				if (b[i].e > b[i].b + 1) rs_sort(b[i].b, b[i].e, n_bits, s);
+	rstype_t *i;
+	int size = 1<<n_bits, m = size - 1;
+	rsbucket_t *k, b[size], *be = b + size;
+
+	for (k = b; k != be; ++k) k->b = k->e = beg;
+	for (i = beg; i != end; ++i) ++b[rskey(*i)>>s&m].e;
+	if (b[0].e != end) {
+		for (k = b + 1; k != be; ++k)
+			k->e += (k-1)->e - beg, k->b = (k-1)->e;
+		for (k = b; k != be;) {
+			rstype_t t[2];
+			rsbucket_t *l;
+			int curr = 0;
+			if (k->b == k->e) { ++k; continue; }
+			l = b + (rskey(*k->b)>>s&m);
+			if (k == l) { ++k->b; continue; }
+			t[curr] = *k->b;
+			do {
+				t[!curr] = *l->b; *l->b++ = t[curr];
+				curr = !curr;
+				l = b + (rskey(t[curr])>>s&m);
+			} while (l != k);
+			*k->b++ = t[curr];
 		}
-	} else if (end - beg > 1) rs_insertsort(beg, end);
+		for (b->b = beg, k = b + 1; k != be; ++k) k->b = (k-1)->e;
+	}
+	if (s) {
+		s = s > n_bits? s - n_bits : 0;
+		for (k = b; k != be; ++k) {
+			if (k->e - k->b > RS_MIN_SIZE) rs_sort(k->b, k->e, n_bits, s);
+			else if (k->e - k->b > 1) rs_insertsort(k->b, k->e);
+		}
+	}
 }
 
 /*************************************************
