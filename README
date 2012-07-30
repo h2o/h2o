@@ -26,9 +26,7 @@ ksa.c           Constructing suffix arrays for strings with multiple sentinels
 knetfile.{h,c}  Random access to remote files
 kopen.c         Smart stream opening
 
-kfunc.c         Special mathematical functions
-krand.{h,c}     Pseudo-random number generator mt19937
-kmin.{h,c}      Derivative-free non-linear programming
+kmath.{h,c}     Numerical routines
 khmm.{h,c}      Basic HMM library
 ksw.(h,c}       Smith-Waterman using SSE2
 knhx.{h,c}      Newick format parser
