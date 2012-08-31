@@ -531,6 +531,34 @@ static kh_inline khint_t __ac_Wang_hash(khint_t key)
  */
 #define kh_n_buckets(h) ((h)->n_buckets)
 
+/*! @function
+  @abstract     Iterate over the entries in the hash table
+  @param  h     Pointer to the hash table [khash_t(name)*]
+  @param  kvar  Variable to which key will be assigned
+  @param  vvar  Variable to which value will be assigned
+  @param  code  Block of code to execute
+ */
+#define kh_foreach(h, kvar, vvar, code) { khint_t __i;		\
+	for (__i = kh_begin(h); __i != kh_end(h); ++__i) {		\
+		if (!kh_exist(h,__i)) continue;						\
+		(kvar) = kh_key(h,__i);								\
+		(vvar) = kh_val(h,__i);								\
+		code;												\
+	} }
+
+/*! @function
+  @abstract     Iterate over the values in the hash table
+  @param  h     Pointer to the hash table [khash_t(name)*]
+  @param  vvar  Variable to which value will be assigned
+  @param  code  Block of code to execute
+ */
+#define kh_foreach_value(h, vvar, code) { khint_t __i;		\
+	for (__i = kh_begin(h); __i != kh_end(h); ++__i) {		\
+		if (!kh_exist(h,__i)) continue;						\
+		(vvar) = kh_val(h,__i);								\
+		code;												\
+	} }
+
 /* More conenient interfaces */
 
 /*! @function
