@@ -43,8 +43,8 @@ ksort_test-stl:ksort_test.cc ../ksort.h
 kvec_test:kvec_test.cc ../kvec.h
 		$(CXX) $(CXXFLAGS) -o $@ kvec_test.cc
 
-kmin_test:kmin_test.c ../kmin.h ../kmin.c
-		$(CC) $(CFLAGS) -o $@ kmin_test.c ../kmin.c
+kmin_test:kmin_test.c ../kmath.h ../kmath.c
+		$(CC) $(CFLAGS) -o $@ kmin_test.c ../kmath.c
 
 kstring_bench:kstring_bench.c ../kstring.h ../kstring.c
 		$(CC) $(CFLAGS) -o $@ kstring_bench.c ../kstring.c
