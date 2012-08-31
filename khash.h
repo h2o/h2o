@@ -167,9 +167,8 @@ static const double __ac_HASH_UPPER = 0.77;
 		khval_t *vals; \
 	} kh_##name##_t;
 
-#define KHASH_DECLARE(name, khkey_t, khval_t)		 					\
-	__KHASH_TYPE(name, khkey_t, khval_t) 								\
-	extern kh_##name##_t *kh_init_##name();								\
+#define __KHASH_PROTOTYPES(name, khkey_t, khval_t)	 					\
+	extern kh_##name##_t *kh_init_##name(void);							\
 	extern void kh_destroy_##name(kh_##name##_t *h);					\
 	extern void kh_clear_##name(kh_##name##_t *h);						\
 	extern khint_t kh_get_##name(const kh_##name##_t *h, khkey_t key); 	\
@@ -177,10 +176,9 @@ static const double __ac_HASH_UPPER = 0.77;
 	extern khint_t kh_put_##name(kh_##name##_t *h, khkey_t key, int *ret); \
 	extern void kh_del_##name(kh_##name##_t *h, khint_t x);
 
-#define KHASH_INIT2(name, SCOPE, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal) \
-	__KHASH_TYPE(name, khkey_t, khval_t) 								\
-	SCOPE kh_##name##_t *kh_init_##name() {								\
-		return (kh_##name##_t*)calloc(1, sizeof(kh_##name##_t));		\
+#define __KHASH_IMPL(name, SCOPE, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal) \
+	SCOPE kh_##name##_t *kh_init_##name(void) {							\
+		return (kh_##name##_t*)kcalloc(1, sizeof(kh_##name##_t));		\
 	}																	\
 	SCOPE void kh_destroy_##name(kh_##name##_t *h)						\
 	{																	\
@@ -312,8 +310,16 @@ static const double __ac_HASH_UPPER = 0.77;
 		}																\
 	}
 
+#define KHASH_DECLARE(name, khkey_t, khval_t)		 					\
+	__KHASH_TYPE(name, khkey_t, khval_t) 								\
+	__KHASH_PROTOTYPES(name, khkey_t, khval_t)
+
+#define KHASH_INIT2(name, SCOPE, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal) \
+	__KHASH_TYPE(name, khkey_t, khval_t) 								\
+	__KHASH_IMPL(name, SCOPE, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal)
+
 #define KHASH_INIT(name, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal) \
-	KHASH_INIT2(name, static inline, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal)
+	KHASH_INIT2(name, static kh_inline, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal)
 
 /* --- BEGIN OF HASH FUNCTIONS --- */
 
