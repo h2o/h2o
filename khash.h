@@ -131,7 +131,9 @@ typedef unsigned long long khint64_t;
 #endif
 
 #ifdef _MSC_VER
-#define inline __inline
+#define kh_inline __inline
+#else
+#define kh_inline inline
 #endif
 
 typedef khint32_t khint_t;
@@ -374,7 +376,7 @@ static const double __ac_HASH_UPPER = 0.77;
   @param  s     Pointer to a null terminated string
   @return       The hash value
  */
-static inline khint_t __ac_X31_hash_string(const char *s)
+static kh_inline khint_t __ac_X31_hash_string(const char *s)
 {
 	khint_t h = *s;
 	if (h) for (++s ; *s; ++s) h = (h << 5) - h + *s;
@@ -391,7 +393,7 @@ static inline khint_t __ac_X31_hash_string(const char *s)
  */
 #define kh_str_hash_equal(a, b) (strcmp(a, b) == 0)
 
-static inline khint_t __ac_Wang_hash(khint_t key)
+static kh_inline khint_t __ac_Wang_hash(khint_t key)
 {
     key += ~(key << 15);
     key ^=  (key >> 10);
