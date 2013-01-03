@@ -416,12 +416,37 @@ double kf_betai(double a, double b, double x)
 	return x < (a + 1.) / (a + b + 2.)? kf_betai_aux(a, b, x) : 1. - kf_betai_aux(b, a, 1. - x);
 }
 
+/******************
+ *** Statistics ***
+ ******************/
+
+double km_ks_dist(int na, const double a[], int nb, const double b[]) // a[] and b[] MUST BE sorted
+{
+	int ia = 0, ib = 0;
+	double fa = 0, fb = 0, sup = 0, na1 = 1. / na, nb1 = 1. / nb;
+	while (ia < na || ib < nb) {
+		if (ia == na) fb += nb1, ++ib;
+		else if (ib == nb) fa += na1, ++ia;
+		else if (a[ia] < b[ib]) fa += na1, ++ia;
+		else if (a[ia] > b[ib]) fb += nb1, ++ib;
+		else fa += na1, fb += nb1, ++ia, ++ib;
+		if (sup < fabs(fa - fb)) sup = fabs(fa - fb);
+	}
+	return sup;
+}
+
 #ifdef KF_MAIN
 #include <stdio.h>
+#include "ksort.h"
+KSORT_INIT_GENERIC(double)
 int main(int argc, char *argv[])
 {
 	double x = 5.5, y = 3;
 	double a, b;
+	double xx[] = {0.22, -0.87, -2.39, -1.79, 0.37, -1.54, 1.28, -0.31, -0.74, 1.72, 0.38, -0.17, -0.62, -1.10, 0.30, 0.15, 2.30, 0.19, -0.50, -0.09};
+	double yy[] = {-5.13, -2.19, -2.43, -3.83, 0.50, -3.25, 4.32, 1.63, 5.18, -0.43, 7.11, 4.87, -3.10, -5.81, 3.76, 6.31, 2.58, 0.07, 5.76, 3.50};
+	ks_introsort(double, 20, xx); ks_introsort(double, 20, yy);
+	printf("K-S distance: %f\n", km_ks_dist(20, xx, 20, yy));
 	printf("erfc(%lg): %lg, %lg\n", x, erfc(x), kf_erfc(x));
 	printf("upper-gamma(%lg,%lg): %lg\n", x, y, kf_gammaq(y, x)*tgamma(y));
 	a = 2; b = 2; x = 0.5;
