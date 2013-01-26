@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <math.h>
-#include "kmin.h"
+#include "kmath.h"
 
 static int n_evals;
 
