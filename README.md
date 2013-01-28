@@ -40,7 +40,7 @@ For the implementation of generic [containers][21], klib extensively uses C
 marcos. To use these data structures, we usually need to instantiate methods by
 expanding a long macro. This makes the source code look unusual or even ugly
 and adds difficulty to debugging. Unfortunately, for efficient generic
-programming in C where there is no C++-like [template][22], using marcos is the only
+programming in C that lacks [template][22], using marcos is the only
 solution. Only with marcos, we can write a generic container which, once
 instantiated, compete with a type-specific container in efficiency. Some
 generic libraries in C, such as [Glib][23], use the `void*` type to implement
