@@ -5,7 +5,7 @@
 Klib is a standalone and lightweight C library distributed under [MIT/X11
 license][1]. Most components are independent of external libraries, except the
 standard C library, and independent of each other. To use a component of this
-library, you only need to copy a couple of files to your souce code tree
+library, you only need to copy a couple of files to your source code tree
 without worrying about library dependencies.
 
 Klib strives for efficiency and a small memory footprint. Some components, such
@@ -37,11 +37,11 @@ languages, in terms of both speed and memory use.
 ##<a name="methodology"></a>Methodology
 
 For the implementation of generic [containers][21], klib extensively uses C
-marcos. To use these data structures, we usually need to instantiate methods by
+macros. To use these data structures, we usually need to instantiate methods by
 expanding a long macro. This makes the source code look unusual or even ugly
 and adds difficulty to debugging. Unfortunately, for efficient generic
-programming in C that lacks [template][22], using marcos is the only
-solution. Only with marcos, we can write a generic container which, once
+programming in C that lacks [template][22], using macros is the only
+solution. Only with macros, we can write a generic container which, once
 instantiated, compete with a type-specific container in efficiency. Some
 generic libraries in C, such as [Glib][23], use the `void*` type to implement
 containers. These implementations are usually slower and use more memory than
@@ -116,13 +116,13 @@ like:
     #define KHASH_MAP_INIT_INT(name, val_t) \
     	KHASH_INIT(name, static, unsigned, val_t, is_map, _int_hf, _int_heq)
 
-`KHASH_INIT()` is a huge marco defining all the structs and methods. When this
-marco is called, all the code inside it will be inserted by the [C
-preprocess][37] to the place where it is called. If the marco is called
+`KHASH_INIT()` is a huge macro defining all the structs and methods. When this
+macro is called, all the code inside it will be inserted by the [C
+preprocess][37] to the place where it is called. If the macro is called
 multiple times, multiple copies of the code will be inserted. To avoid naming
 conflict of hash tables with different key-value types, the library uses [token
 concatenation][36], which is a preprocessor feature whereby we can substitute
-part of a symbol based on the parameter of the marco. In the end, the C
+part of a symbol based on the parameter of the macro. In the end, the C
 preprocessor will generate the following code and feed it to the compiler
 (macro `kh_exist(h,k)` is a little complex and not expanded for simplicity):
 
@@ -162,10 +162,10 @@ preprocessor will generate the following code and feed it to the compiler
 
 This is the C program we know.
 
-From this example, we can see that marcos and the C preprocessor plays a key
+From this example, we can see that macros and the C preprocessor plays a key
 role in klib. Klib is fast partly because the compiler knows the key-value
 type at the compile time and is able to optimize the code to the same level
-as type-specific code. A generic library writen with `void*` will not get such
+as type-specific code. A generic library written with `void*` will not get such
 performance boost.
 
 Massively inserting code upon instantiation may remind us of C++'s slow
@@ -175,10 +175,10 @@ Inserting several hundreds lines of code won't make compiling obviously slower.
 
 ##<a name="resources"></a>Resources
 
-* Library documentations, if present, are available in the header files. Examples
+* Library documentation, if present, is available in the header files. Examples
 can be found in the [test/][24] directory.
-* An **obsolete** documentation of the hash table library can be found at
-[SourceForget][25]. This README is partly adapted from the old documentation.
+* **Obsolete** documentation of the hash table library can be found at
+[SourceForge][25]. This README is partly adapted from the old documentation.
 * [Blog post][26] describing the hash table library.
 * [Blog post][27] on why using `void*` for generic programming may be inefficient.
 * [Blog post][28] on the generic stream buffer.
