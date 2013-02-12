@@ -211,7 +211,7 @@ end_loop16:
 			low = te - i; high = te + i;
 			for (i = 0; i < n_b; ++i) {
 				int e = (int32_t)b[i];
-				if ((e < low || e > high) && b[i]>>32 > (uint32_t)r.score2)
+				if ((e < low || e > high) && (int)(b[i]>>32) > r.score2)
 					r.score2 = b[i]>>32, r.te2 = e;
 			}
 		}
@@ -311,7 +311,7 @@ end_loop8:
 			low = te - i; high = te + i;
 			for (i = 0; i < n_b; ++i) {
 				int e = (int32_t)b[i];
-				if ((e < low || e > high) && b[i]>>32 > (uint32_t)r.score2)
+				if ((e < low || e > high) && (int)(b[i]>>32) > r.score2)
 					r.score2 = b[i]>>32, r.te2 = e;
 			}
 		}
@@ -587,7 +587,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 	if (minsc > 0xffff) minsc = 0xffff;
-	if (minsc > 0) xtra |= KSW_XSUBO | minsc;
+	xtra |= KSW_XSUBO | minsc;
 	// initialize scoring matrix
 	for (i = k = 0; i < 4; ++i) {
 		for (j = 0; j < 4; ++j)
