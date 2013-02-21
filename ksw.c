@@ -447,7 +447,7 @@ static inline uint32_t *push_cigar(int *n_cigar, int *m_cigar, uint32_t *cigar, 
 	if (*n_cigar == 0 || op != (cigar[(*n_cigar) - 1]&0xf)) {
 		if (*n_cigar == *m_cigar) {
 			*m_cigar = *m_cigar? (*m_cigar)<<1 : 4;
-			cigar = realloc(cigar, (*m_cigar) << 4);
+			cigar = realloc(cigar, (*m_cigar) << 2);
 		}
 		cigar[(*n_cigar)++] = len<<4 | op;
 	} else cigar[(*n_cigar)-1] += len<<4;
@@ -520,8 +520,8 @@ int ksw_global(int qlen, const uint8_t *query, int tlen, const uint8_t *target, 
 			else if (which == 1) cigar = push_cigar(&n_cigar, &m_cigar, cigar, 2, 1), --i;
 			else                 cigar = push_cigar(&n_cigar, &m_cigar, cigar, 1, 1), --k;
 		}
-		if (i >= 0) push_cigar(&n_cigar, &m_cigar, cigar, 2, i + 1);
-		if (k >= 0) push_cigar(&n_cigar, &m_cigar, cigar, 1, k + 1);
+		if (i >= 0) cigar = push_cigar(&n_cigar, &m_cigar, cigar, 2, i + 1);
+		if (k >= 0) cigar = push_cigar(&n_cigar, &m_cigar, cigar, 1, k + 1);
 		for (i = 0; i < n_cigar>>1; ++i) // reverse CIGAR
 			tmp = cigar[i], cigar[i] = cigar[n_cigar-1-i], cigar[n_cigar-1-i] = tmp;
 		*n_cigar_ = n_cigar, *cigar_ = cigar;
