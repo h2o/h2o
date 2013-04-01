@@ -461,7 +461,7 @@ static kh_inline khint_t __ac_Wang_hash(khint_t key)
   @param  name  Name of the hash table [symbol]
   @param  h     Pointer to the hash table [khash_t(name)*]
   @param  k     Key [type of keys]
-  @return       Iterator to the found element, or kh_end(h) is the element is absent [khint_t]
+  @return       Iterator to the found element, or kh_end(h) if the element is absent [khint_t]
  */
 #define kh_get(name, h, k) kh_get_##name(h, k)
 
