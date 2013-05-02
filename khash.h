@@ -46,6 +46,19 @@ int main() {
 */
 
 /*
+  2013-05-02 (0.2.8):
+
+	* Use quadratic probing. When the capacity is power of 2, stepping function
+	  i*(i+1)/2 guarantees to traverse each bucket. It is better than double
+	  hashing on cache performance and is more robust than linear probing.
+
+	  In theory, double hashing should be more robust than quadratic probing.
+	  However, my implementation is probably not for large hash tables, because
+	  the second hash function is closely tied to the first hash function,
+	  which reduce the effectiveness of double hashing.
+
+	Reference: http://research.cs.vt.edu/AVresearch/hashing/quadratic.php
+
   2011-12-29 (0.2.7):
 
     * Minor code clean up; no actual effect.
@@ -110,7 +123,7 @@ int main() {
   Generic hash table library.
  */
 
-#define AC_VERSION_KHASH_H "0.2.6"
+#define AC_VERSION_KHASH_H "0.2.8"
 
 #include <stdlib.h>
 #include <string.h>
@@ -146,12 +159,6 @@ typedef khint_t khiter_t;
 #define __ac_set_isempty_false(flag, i) (flag[i>>4]&=~(2ul<<((i&0xfU)<<1)))
 #define __ac_set_isboth_false(flag, i) (flag[i>>4]&=~(3ul<<((i&0xfU)<<1)))
 #define __ac_set_isdel_true(flag, i) (flag[i>>4]|=1ul<<((i&0xfU)<<1))
-
-#ifdef KHASH_LINEAR
-#define __ac_inc(k, m) 1
-#else
-#define __ac_inc(k, m) (((k)>>3 ^ (k)<<3) | 1) & (m)
-#endif
 
 #define __ac_fsize(m) ((m) < 16? 1 : (m)>>4)
 
@@ -213,12 +220,12 @@ static const double __ac_HASH_UPPER = 0.77;
 	SCOPE khint_t kh_get_##name(const kh_##name##_t *h, khkey_t key) 	\
 	{																	\
 		if (h->n_buckets) {												\
-			khint_t inc, k, i, last, mask;								\
+			khint_t k, i, last, mask, step = 0; \
 			mask = h->n_buckets - 1;									\
 			k = __hash_func(key); i = k & mask;							\
-			inc = __ac_inc(k, mask); last = i; /* inc==1 for linear probing */ \
+			last = i; \
 			while (!__ac_isempty(h->flags, i) && (__ac_isdel(h->flags, i) || !__hash_equal(h->keys[i], key))) { \
-				i = (i + inc) & mask; 									\
+				i = (i + (++step)) & mask; \
 				if (i == last) return h->n_buckets;						\
 			}															\
 			return __ac_iseither(h->flags, i)? h->n_buckets : i;		\
@@ -258,11 +265,10 @@ static const double __ac_HASH_UPPER = 0.77;
 					if (kh_is_map) val = h->vals[j];					\
 					__ac_set_isdel_true(h->flags, j);					\
 					while (1) { /* kick-out process; sort of like in Cuckoo hashing */ \
-						khint_t inc, k, i;								\
+						khint_t k, i, step = 0; \
 						k = __hash_func(key);							\
 						i = k & new_mask;								\
-						inc = __ac_inc(k, new_mask);					\
-						while (!__ac_isempty(new_flags, i)) i = (i + inc) & new_mask; \
+						while (!__ac_isempty(new_flags, i)) i = (i + (++step)) & new_mask; \
 						__ac_set_isempty_false(new_flags, i);			\
 						if (i < h->n_buckets && __ac_iseither(h->flags, i) == 0) { /* kick out the existing element */ \
 							{ khkey_t tmp = h->keys[i]; h->keys[i] = key; key = tmp; } \
@@ -301,14 +307,14 @@ static const double __ac_HASH_UPPER = 0.77;
 			}															\
 		} /* TODO: to implement automatically shrinking; resize() already support shrinking */ \
 		{																\
-			khint_t inc, k, i, site, last, mask = h->n_buckets - 1;		\
+			khint_t k, i, site, last, mask = h->n_buckets - 1, step = 0; \
 			x = site = h->n_buckets; k = __hash_func(key); i = k & mask; \
 			if (__ac_isempty(h->flags, i)) x = i; /* for speed up */	\
 			else {														\
-				inc = __ac_inc(k, mask); last = i;						\
+				last = i; \
 				while (!__ac_isempty(h->flags, i) && (__ac_isdel(h->flags, i) || !__hash_equal(h->keys[i], key))) { \
 					if (__ac_isdel(h->flags, i)) site = i;				\
-					i = (i + inc) & mask; 								\
+					i = (i + (++step)) & mask; \
 					if (i == last) { x = site; break; }					\
 				}														\
 				if (x == h->n_buckets) {								\
