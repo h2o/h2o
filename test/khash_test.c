@@ -6,7 +6,7 @@
 
 #include "khash.h"
 KHASH_SET_INIT_STR(str)
-KHASH_SET_INIT_INT(int)
+KHASH_MAP_INIT_INT(int, unsigned char)
 
 typedef struct {
 	unsigned key;
@@ -62,6 +62,7 @@ void ht_khash_int()
 	h = kh_init(int);
 	for (i = 0; i < data_size; ++i) {
 		k = kh_put(int, h, data[i], &ret);
+		kh_val(h, k) = i&0xff;
 		if (!ret) kh_del(int, h, k);
 	}
 	printf("[ht_khash_int] size: %u\n", kh_size(h));
