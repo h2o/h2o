@@ -35,6 +35,13 @@
 #define kroundup32(x) (--(x), (x)|=(x)>>1, (x)|=(x)>>2, (x)|=(x)>>4, (x)|=(x)>>8, (x)|=(x)>>16, ++(x))
 #endif
 
+#if __GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ > 4)
+#define KS_ATTR_PRINTF(fmt, arg) __attribute__((__format__ (__printf__, fmt, arg)))
+#else
+#define KS_ATTR_PRINTF(fmt, arg)
+#endif
+
+
 #ifndef KSTRING_T
 #define KSTRING_T kstring_t
 typedef struct __kstring_t {
@@ -53,8 +60,8 @@ typedef struct {
 extern "C" {
 #endif
 
-	int kvsprintf(kstring_t *s, const char *fmt, va_list ap);
-	int ksprintf(kstring_t *s, const char *fmt, ...);
+	int kvsprintf(kstring_t *s, const char *fmt, va_list ap) KS_ATTR_PRINTF(2,0);
+	int ksprintf(kstring_t *s, const char *fmt, ...) KS_ATTR_PRINTF(2,3);
 	int ksplit_core(char *s, int delimiter, int *_max, int **_offsets);
 	char *kstrstr(const char *str, const char *pat, int **_prep);
 	char *kstrnstr(const char *str, const char *pat, int n, int **_prep);
