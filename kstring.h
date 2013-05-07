@@ -28,6 +28,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include <stdint.h>
 
 #ifndef kroundup32
@@ -52,6 +53,7 @@ typedef struct {
 extern "C" {
 #endif
 
+	int kvsprintf(kstring_t *s, const char *fmt, va_list ap);
 	int ksprintf(kstring_t *s, const char *fmt, ...);
 	int ksplit_core(char *s, int delimiter, int *_max, int **_offsets);
 	char *kstrstr(const char *str, const char *pat, int **_prep);
