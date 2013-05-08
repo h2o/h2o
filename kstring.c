@@ -5,22 +5,32 @@
 #include <stdint.h>
 #include "kstring.h"
 
+int kvsprintf(kstring_t *s, const char *fmt, va_list ap)
+{
+	va_list args;
+	int l;
+	va_copy(args, ap);
+	l = vsnprintf(s->s + s->l, s->m - s->l, fmt, args); // This line does not work with glibc 2.0. See `man snprintf'.
+	va_end(args);
+	if (l + 1 > s->m - s->l) {
+		s->m = s->l + l + 2;
+		kroundup32(s->m);
+		s->s = (char*)realloc(s->s, s->m);
+		va_copy(args, ap);
+		l = vsnprintf(s->s + s->l, s->m - s->l, fmt, args);
+		va_end(args);
+	}
+	s->l += l;
+	return l;
+}
+
 int ksprintf(kstring_t *s, const char *fmt, ...)
 {
 	va_list ap;
 	int l;
 	va_start(ap, fmt);
-	l = vsnprintf(s->s + s->l, s->m - s->l, fmt, ap); // This line does not work with glibc 2.0. See `man snprintf'.
+	l = kvsprintf(s, fmt, ap);
 	va_end(ap);
-	if (l + 1 > s->m - s->l) {
-		s->m = s->l + l + 2;
-		kroundup32(s->m);
-		s->s = (char*)realloc(s->s, s->m);
-		va_start(ap, fmt);
-		l = vsnprintf(s->s + s->l, s->m - s->l, fmt, ap);
-	}
-	va_end(ap);
-	s->l += l;
 	return l;
 }
 
