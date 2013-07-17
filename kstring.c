@@ -67,15 +67,22 @@ int ksplit_core(char *s, int delimiter, int *_max, int **_offsets)
 	n = 0; max = *_max; offsets = *_offsets;
 	l = strlen(s);
 	
-#define __ksplit_aux do {												\
-		if (_offsets) {													\
-			s[i] = 0;													\
-			if (n == max) {												\
-				max = max? max<<1 : 2;									\
-				offsets = (int*)realloc(offsets, sizeof(int) * max);	\
-			}															\
-			offsets[n++] = last_start;									\
-		} else ++n;														\
+#define __ksplit_aux do {						\
+		if (_offsets) {						\
+			s[i] = 0;					\
+			if (n == max) {					\
+				int *tmp;				\
+				max = max? max<<1 : 2;			\
+				if ((tmp = (int*)realloc(offsets, sizeof(int) * max))) {  \
+					offsets = tmp;			\
+				} else	{				\
+					free(offsets);			\
+					*_offsets = NULL;		\
+					return 0;			\
+				}					\
+			}						\
+			offsets[n++] = last_start;			\
+		} else ++n;						\
 	} while (0)
 
 	for (i = 0, last_char = last_start = 0; i <= l; ++i) {
