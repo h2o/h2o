@@ -36,4 +36,5 @@ test/ksort_test
 test/ksort_test-stl
 test/kstring_bench
 test/kstring_bench2
+test/kstring_test
 test/kvec_test
