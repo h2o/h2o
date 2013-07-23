@@ -174,10 +174,10 @@ static inline int kputsn_(const void *p, int l, kstring_t *s)
 static inline int kputw(int c, kstring_t *s)
 {
 	char buf[16];
-	int l, x;
-	if (c == 0) return kputc('0', s);
-	if (c < 0) for (l = 0, x = c; x < 0; x /= 10) buf[l++] = '0' - (x%10);
-	else for (l = 0, x = c; x > 0; x /= 10) buf[l++] = x%10 + '0';
+	int i, l = 0;
+	unsigned int x = c;
+	if (c < 0) x = -x;
+	do { buf[l++] = x%10 + '0'; x /= 10; } while (x > 0);
 	if (c < 0) buf[l++] = '-';
 	if (s->l + l + 1 >= s->m) {
 		char *tmp;
@@ -188,7 +188,7 @@ static inline int kputw(int c, kstring_t *s)
 		else
 			return EOF;
 	}
-	for (x = l - 1; x >= 0; --x) s->s[s->l++] = buf[x];
+	for (i = l - 1; i >= 0; --i) s->s[s->l++] = buf[i];
 	s->s[s->l] = 0;
 	return 0;
 }
@@ -217,9 +217,10 @@ static inline int kputuw(unsigned c, kstring_t *s)
 static inline int kputl(long c, kstring_t *s)
 {
 	char buf[32];
-	long l, x;
-	if (c == 0) return kputc('0', s);
-	for (l = 0, x = c < 0? -c : c; x > 0; x /= 10) buf[l++] = x%10 + '0';
+	int i, l = 0;
+	unsigned long x = c;
+	if (c < 0) x = -x;
+	do { buf[l++] = x%10 + '0'; x /= 10; } while (x > 0);
 	if (c < 0) buf[l++] = '-';
 	if (s->l + l + 1 >= s->m) {
 		char *tmp;
@@ -230,7 +231,7 @@ static inline int kputl(long c, kstring_t *s)
 		else
 			return EOF;
 	}
-	for (x = l - 1; x >= 0; --x) s->s[s->l++] = buf[x];
+	for (i = l - 1; i >= 0; --i) s->s[s->l++] = buf[i];
 	s->s[s->l] = 0;
 	return 0;
 }
