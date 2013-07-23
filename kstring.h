@@ -89,6 +89,7 @@ static inline int ks_resize(kstring_t *s, size_t size)
 		else
 			return -1;
 	}
+	s->s[s->l] = '\0';
 	return 0;
 }
 
