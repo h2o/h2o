@@ -43,6 +43,15 @@
 #endif
 
 
+/* kstring_t is a simple non-opaque type whose fields are likely to be
+ * used directly by user code (but see also ks_str() and ks_len() below).
+ * A kstring_t object is initialised by either of
+ *       kstring_t str = { 0, 0, NULL };
+ *       kstring_t str; ...; str.l = str.m = 0; str.s = NULL;
+ * and either ownership of the underlying buffer should be given away before
+ * the object disappears (i.e., the str.s pointer copied and something else
+ * responsible for freeing it), or the kstring_t should be destroyed with
+ *       free(str.s);  */
 #ifndef KSTRING_T
 #define KSTRING_T kstring_t
 typedef struct __kstring_t {
