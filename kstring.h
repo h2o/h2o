@@ -43,6 +43,15 @@
 #endif
 
 
+/* kstring_t is a simple non-opaque type whose fields are likely to be
+ * used directly by user code (but see also ks_str() and ks_len() below).
+ * A kstring_t object is initialised by either of
+ *       kstring_t str = { 0, 0, NULL };
+ *       kstring_t str; ...; str.l = str.m = 0; str.s = NULL;
+ * and either ownership of the underlying buffer should be given away before
+ * the object disappears (i.e., the str.s pointer copied and something else
+ * responsible for freeing it), or the kstring_t should be destroyed with
+ *       free(str.s);  */
 #ifndef KSTRING_T
 #define KSTRING_T kstring_t
 typedef struct __kstring_t {
@@ -78,6 +87,9 @@ extern "C" {
 }
 #endif
 
+/* Ensures that the string has space for at least SIZE bytes, and ensures that
+ * it is NUL-terminated if there is room.  Thus ks_resize(&s,s.l+1) can be used
+ * to make sure that a kstring_t is both allocated and NUL-terminated.  */
 static inline int ks_resize(kstring_t *s, size_t size)
 {
 	if (s->m < size) {
@@ -89,6 +101,7 @@ static inline int ks_resize(kstring_t *s, size_t size)
 		else
 			return -1;
 	}
+	if (s->l < s->m) s->s[s->l] = '\0';
 	return 0;
 }
 
