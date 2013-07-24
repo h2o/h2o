@@ -78,6 +78,9 @@ extern "C" {
 }
 #endif
 
+/* Ensures that the string has space for at least SIZE bytes, and ensures that
+ * it is NUL-terminated if there is room.  Thus ks_resize(&s,s.l+1) can be used
+ * to make sure that a kstring_t is both allocated and NUL-terminated.  */
 static inline int ks_resize(kstring_t *s, size_t size)
 {
 	if (s->m < size) {
@@ -89,7 +92,7 @@ static inline int ks_resize(kstring_t *s, size_t size)
 		else
 			return -1;
 	}
-	s->s[s->l] = '\0';
+	if (s->l < s->m) s->s[s->l] = '\0';
 	return 0;
 }
 
