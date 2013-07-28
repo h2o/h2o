@@ -28,6 +28,11 @@ Features
     from the server is separated from the sending operations.  You can
     even use a different thread to receive results asynchronously.
 
+* Optional compression with [LZ4][].
+
+    Large objects can be transparently compressed/uncompressed with
+    [LZ4][] compression algorithm.
+
 Build
 -----
 
@@ -45,5 +50,6 @@ See [USAGE.md](USAGE.md).
 
 [memcached]: http://memcached.org/
 [yrmcds]: http://cybozu.github.io/yrmcds/
-[binproto]: https://code.google.com/p/memcached/wiki/BinaryProtocolRevamped
+[binprot]: https://code.google.com/p/memcached/wiki/BinaryProtocolRevamped
 [locking]: https://github.com/cybozu/yrmcds/blob/master/docs/locking.md
+[LZ4]: https://code.google.com/p/lz4/
