@@ -1,0 +1,119 @@
+// (C) 2013 Cybozu.
+
+#include "yrmcds.h"
+
+#include <errno.h>
+#include <fcntl.h>
+#include <netdb.h>
+#include <poll.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+yrmcds_error yrmcds_connect(yrmcds* c, const char* node, uint16_t port) {
+    if( c == NULL || node == NULL )
+        return YRMCDS_BAD_ARGUMENT;
+
+    long fl;
+    char sport[8];
+    snprintf(sport, sizeof(sport), "%u", (unsigned int)port);
+
+    struct addrinfo hint, *res;
+    memset(&hint, 0, sizeof(hint));
+    hint.ai_family = AF_INET;  // prefer IPv4
+    hint.ai_socktype = SOCK_STREAM;
+    hint.ai_flags = AI_NUMERICSERV|AI_ADDRCONFIG;
+    int e = getaddrinfo(node, sport, &hint, &res);
+    if( e == EAI_FAMILY
+#ifdef _GNU_SOURCE
+        || e == EAI_ADDRFAMILY || e == EAI_NODATA
+#endif
+        ) {
+        hint.ai_family = AF_INET6;
+        hint.ai_flags |= AI_V4MAPPED;
+        e = getaddrinfo(node, sport, &hint, &res);
+    }
+    if( e == EAI_SYSTEM ) {
+        return YRMCDS_SYSTEM_ERROR;
+    } else if( e != 0 ) {
+        return YRMCDS_NOT_RESOLVED;
+    }
+
+    int s = socket(res->ai_family,
+                   res->ai_socktype
+#ifdef __linux__
+                   | SOCK_NONBLOCK | SOCK_CLOEXEC
+#endif
+                   , res->ai_protocol);
+    if( s == -1 ) {
+        freeaddrinfo(res);
+        return YRMCDS_SYSTEM_ERROR;
+    }
+#ifndef __linux__
+    fl = fcntl(s, F_GETFD, 0);
+    fcntl(s, F_SETFD, fl | FD_CLOEXEC);
+    fl = fcntl(s, F_GETFL, 0);
+    fcntl(s, F_SETFL, fl | O_NONBLOCK);
+#endif
+    e = connect(s, res->ai_addr, res->ai_addrlen);
+    freeaddrinfo(res);
+    if( e == -1 && errno != EINPROGRESS ) {
+        close(s);
+        return YRMCDS_SYSTEM_ERROR;
+    }
+
+    if( e != 0 ) {
+        struct pollfd fds;
+        fds.fd = s;
+        fds.events = POLLOUT;
+        int n = poll(&fds, 1, 5000);
+        if( n == 0 ) { // timeout
+            close(s);
+            return YRMCDS_TIMEOUT;
+        }
+        if( n == -1 ) {
+            close(s);
+            return YRMCDS_SYSTEM_ERROR;
+        }
+
+        if( fds.revents & (POLLERR|POLLHUP|POLLNVAL) ) {
+            close(s);
+            return YRMCDS_DISCONNECTED;
+        }
+        socklen_t l = sizeof(e);
+        if( getsockopt(s, SOL_SOCKET, SO_ERROR, &e, &l) == -1 ) {
+            close(s);
+            return YRMCDS_SYSTEM_ERROR;
+        }
+        if( e != 0 ) {
+            close(s);
+            errno = e;
+            return YRMCDS_DISCONNECTED;
+        }
+    }
+    fl = fcntl(s, F_GETFL, 0);
+    fcntl(s, F_SETFL, fl & ~O_NONBLOCK);
+
+    c->sock = s;
+    e = pthread_mutex_init(&(c->lock), NULL);
+    if( e != 0 ) {
+        errno = e;
+        return YRMCDS_SYSTEM_ERROR;
+    }
+    c->serial = 0;
+    c->compress_size = 0;
+    c->recvbuf = (char*)malloc(1 << 20);
+    if( c->recvbuf == NULL ) {
+        pthread_mutex_destroy(&(c->lock));
+        return YRMCDS_OUT_OF_MEMORY;
+    }
+    c->capacity = 1 << 20;
+    c->used = 0;
+    c->last_size = 0;
+    c->decompressed = NULL;
+    c->invalid = 0;
+    return YRMCDS_OK;
+}
