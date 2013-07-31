@@ -101,6 +101,15 @@ void async_recv(yrmcds* c, void (*notify)(uint32_t, yrmcds_response* r)) {
 }
 ```
 
+Transparent compression
+-----------------------
+
+libyrmcds provides optional transparent data compression by [LZ4][].
+
+The feature is disabled by default.  To enable it, set compression
+threshold with `yrmcds_set_compression()`.  Note that all clients
+must enable the compression to properly handle compressed data.
+
 API documents
 -------------
 
@@ -108,3 +117,4 @@ HTML documents generated with Doxygen is available [here][api].
 
 
 [api]: http://cybozu.github.io/libyrmcds/html/
+[LZ4]: https://code.google.com/p/lz4/
