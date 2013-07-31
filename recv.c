@@ -118,19 +118,20 @@ yrmcds_error yrmcds_recv(yrmcds* c, yrmcds_response* r) {
     size_t data_len = total_len - key_len - extras_len;
     const char* pdata = pkey + key_len;
 
-    if( r->command == YRMCDS_CMD_INCREMENT ||
-        r->command == YRMCDS_CMD_DECREMENT ) {
+    if( (r->command == YRMCDS_CMD_INCREMENT ||
+         r->command == YRMCDS_CMD_DECREMENT) &&
+        (r->status == YRMCDS_STATUS_OK) ) {
         r->data = NULL;
         r->data_len = 0;
-        if( r->status != YRMCDS_STATUS_OK )
-            return YRMCDS_OK;
         if( data_len != 8 ) {
             c->invalid = 1;
             return YRMCDS_PROTOCOL_ERROR;
         }
         r->value = ntoh64(pdata);
+        c->last_size = r->length;
         return YRMCDS_OK;
     }
+    r->value = 0;
 
     if( c->compress_size && (r->flags & YRMCDS_FLAG_COMPRESS) ) {
         if( data_len == 0 ) {
@@ -162,5 +163,6 @@ yrmcds_error yrmcds_recv(yrmcds* c, yrmcds_response* r) {
         r->data = data_len ? pdata : NULL;
         r->data_len = data_len;
     }
+    c->last_size = r->length;
     return YRMCDS_OK;
 }

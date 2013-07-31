@@ -4,6 +4,8 @@ libyrmcds
 libyrmcds is a [memcached][] client library written in C.  
 This is a companion to [yrmcds][], a memcached compatible KVS.
 
+In addition to the library itself, a client program called `yc` is included.
+
 Features
 --------
 

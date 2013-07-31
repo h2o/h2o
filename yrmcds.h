@@ -141,6 +141,7 @@ typedef enum {
     YRMCDS_TIMEOUT,           ///< time out for some network operations.
     YRMCDS_DISCONNECTED,      ///< connection was reset unexpectedly.
     YRMCDS_OUT_OF_MEMORY,     ///< malloc/realloc failed.
+    YRMCDS_COMPRESS_FAILED,   ///< LZ4 compression failed.
     YRMCDS_PROTOCOL_ERROR,    ///< received malformed packet.
 } yrmcds_error;
 
@@ -207,15 +208,31 @@ yrmcds_error yrmcds_set_compression(yrmcds* c, size_t threshold);
 
 
 /**
+ * Return the underlying socket in ::yrmcds.
+ * @param  c     A pointer to ::yrmcds.
+ * @return       A UNIX file descriptor of a socket.
+ */
+int yrmcds_fileno(yrmcds* c);
+
+
+/**
+ * Set timeout seconds for send/recv operations.
+ * @param  c        A pointer to ::yrmcds.
+ * @param  timeout  Seconds before network operations time out.
+ * @return 0 if arguments are valid.  Other values indicate an error.
+ */
+yrmcds_error yrmcds_set_timeout(yrmcds* c, int timeout);
+
+
+/**
  * Receives a response packet.
  * @param  c     A pointer to ::yrmcds.
  * @param  r     A pointer to ::yrmcds_response.
  * @return 0 if succeeded.  Other values indicate an error.
  *
  * This function receives a response packet.  If no response is available,
- * the function will be blocked.  This function can be used in parallel
- * with sending command functions, though this function itself must be
- * called by only one thread.
+ * the function will be blocked.  For each \p c, only one thread can use
+ * this function, though command sending functions can be used in parallel.
  *
  * The response data stored in \p r keep valid until the next call of this
  * function or until yrmcds_close() is called.  \p r can be reused for the
@@ -226,15 +243,507 @@ yrmcds_error yrmcds_recv(yrmcds* c, yrmcds_response* r);
 
 /**
  * Send Noop command.
- * @param  c      A pointer to ::yrmcds.
+ * @param  c       A pointer to ::yrmcds.
  * @param  serial  A pointer to \p uint32_t, or \p NULL.
  * @return 0 if succeeded.  Other values indicate an error.
  *
  * This function sends Noop command to the server.
- * if \p serial is not \p NULL, the serial number of the request will be
+ * If \p serial is not \p NULL, the serial number of the request will be
  * stored if the command was sent successfully.
  */
 yrmcds_error yrmcds_noop(yrmcds* c, uint32_t* serial);
+
+
+/**
+ * Send Get/GetQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  quiet     0 to send Get, other values to send GetQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends Get/GetQ command to the server.
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_get(yrmcds* c, const char* key, size_t key_len,
+                        int quiet, uint32_t* serial);
+
+
+/**
+ * Send GetK/GetKQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  quiet     0 to send GetK, other values to send GetKQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends GetK/GetKQ command to the server.
+ * Unlike yrmcds_get(), the response to this request brings the key.
+ *
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_getk(yrmcds* c, const char* key, size_t key_len,
+                         int quiet, uint32_t* serial);
+
+
+/**
+ * Send GaT/GaTQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  expire    Expiration time.  0 disables expiration.
+ * @param  quiet     0 to send GaT, other values to send GaTQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends GaT/GaTQ (get and touch) command to the server.
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_get_touch(yrmcds* c, const char* key, size_t key_len,
+                              uint32_t expire, int quiet, uint32_t* serial);
+
+
+/**
+ * Send GaTK/GaTKQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  expire    Expiration time.  0 disables expiration.
+ * @param  quiet     0 to send GaTK, other values to send GaTKQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends GaTK/GaTKQ (get and touch) command to the server.
+ * Unlike yrmcds_get_touch(), the response to this request brings the key.
+ *
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_getk_touch(yrmcds* c, const char* key, size_t key_len,
+                               uint32_t expire, int quiet, uint32_t* serial);
+
+
+/**
+ * Send LaG/LaGQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  quiet     0 to send LaG, other values to send LaGQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends LaG/LaGQ command to the server.
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_lock_get(yrmcds* c, const char* key, size_t key_len,
+                             int quiet, uint32_t* serial);
+
+
+/**
+ * Send LaGK/LaGKQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  quiet     0 to send LaGK, other values to send LaGKQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends LaGK/LaGKQ command to the server.
+ * Unlike yrmcds_lock_get(), the response to this request brings the key.
+ *
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_lock_getk(yrmcds* c, const char* key, size_t key_len,
+                              int quiet, uint32_t* serial);
+
+
+/**
+ * Send Touch command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  expire    Expiration time.  0 disables expiration.
+ * @param  quiet     Reserved for future enhancement.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends Touch command to the server.
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_touch(yrmcds* c, const char* key, size_t key_len,
+                          uint32_t expire, int quiet, uint32_t* serial);
+
+
+/**
+ * Send Set/SetQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  data      Data to be stored.
+ * @param  data_len  Length of \p data.
+ * @param  flags     Flags stored along with the data.
+ * @param  expire    Expiration time.  0 disables expiration.
+ * @param  cas       Try compare-and-swap.  0 disables CAS.
+ * @param  quiet     0 to send Set, other values to send SetQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends Set/SetQ command to the server.
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_set(yrmcds* c, const char* key, size_t key_len,
+                        const char* data, size_t data_len,
+                        uint32_t flags, uint32_t expire, uint64_t cas,
+                        int quiet, uint32_t* serial);
+
+
+/**
+ * Send Replace/ReplaceQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  data      Data to be stored.
+ * @param  data_len  Length of \p data.
+ * @param  flags     Flags stored along with the data.
+ * @param  expire    Expiration time.  0 disables expiration.
+ * @param  cas       Try compare-and-swap.  0 disables CAS.
+ * @param  quiet     0 to send Replace, other values to send ReplaceQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends Replace/ReplaceQ command to the server.
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_replace(yrmcds* c, const char* key, size_t key_len,
+                            const char* data, size_t data_len,
+                            uint32_t flags, uint32_t expire, uint64_t cas,
+                            int quiet, uint32_t* serial);
+
+
+/**
+ * Send Add/AddQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  data      Data to be stored.
+ * @param  data_len  Length of \p data.
+ * @param  flags     Flags stored along with the data.
+ * @param  expire    Expiration time.  0 disables expiration.
+ * @param  cas       Try compare-and-swap.  0 disables CAS.
+ * @param  quiet     0 to send Add, other values to send AddQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends Add/AddQ command to the server.
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_add(yrmcds* c, const char* key, size_t key_len,
+                        const char* data, size_t data_len,
+                        uint32_t flags, uint32_t expire, uint64_t cas,
+                        int quiet, uint32_t* serial);
+
+
+/**
+ * Send RaU/RaUQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  data      Data to be stored.
+ * @param  data_len  Length of \p data.
+ * @param  flags     Flags stored along with the data.
+ * @param  expire    Expiration time.  0 disables expiration.
+ * @param  quiet     0 to send RaU, other values to send RaUQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends RaU/RaUQ (replace and unlock) command to the server.
+ * The command will fail unless the object is locked by the same session.
+ *
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_replace_unlock(yrmcds* c, const char* key, size_t key_len,
+                                   const char* data, size_t data_len,
+                                   uint32_t flags, uint32_t expire,
+                                   int quiet, uint32_t* serial);
+
+
+/**
+ * Send Increment/IncrementQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  value     Amount to add.
+ * @param  quiet     0 to send Increment, other values to send IncrementQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends Increment/IncrementQ command to the server.
+ * If \p key is not found, the command will fail.
+ *
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_incr(yrmcds* c, const char* key, size_t key_len,
+                         uint64_t value, int quiet, uint32_t* serial);
+
+
+/**
+ * Send Increment/IncrementQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  value     Amount to add.
+ * @param  initial   Initial value used when \p key does not exist.
+ * @param  expire    Expiration time.  0 disables expiration.
+ * @param  quiet     0 to send Increment, other values to send IncrementQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends Increment/IncrementQ command to the server.
+ * Unlike yrmcds_incr(), this function creates a new object with
+ * \p initial and \p expire when \p key is not found.
+ *
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_incr2(yrmcds* c, const char* key, size_t key_len,
+                          uint64_t value, uint64_t initial, uint32_t expire,
+                          int quiet, uint32_t* serial);
+
+
+/**
+ * Send Decrement/DecrementQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  value     Amount to add.
+ * @param  quiet     0 to send Decrement, other values to send DecrementQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends Decrement/DecrementQ command to the server.
+ * If \p key is not found, the command will fail.
+ *
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_decr(yrmcds* c, const char* key, size_t key_len,
+                         uint64_t value, int quiet, uint32_t* serial);
+
+
+/**
+ * Send Decrement/DecrementQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  value     Amount to add.
+ * @param  initial   Initial value used when \p key does not exist.
+ * @param  expire    Expiration time.  0 disables expiration.
+ * @param  quiet     0 to send Decrement, other values to send DecrementQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends Decrement/DecrementQ command to the server.
+ * Unlike yrmcds_decr(), this function creates a new object with
+ * \p initial and \p expire when \p key is not found.
+ *
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_decr2(yrmcds* c, const char* key, size_t key_len,
+                          uint64_t value, uint64_t initial, uint32_t expire,
+                          int quiet, uint32_t* serial);
+
+
+/**
+ * Send Append/AppendQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  data      Data.
+ * @param  data_len  Length of \p data.
+ * @param  quiet     0 to send Append, other values to send AppendQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends Append/AppendQ command to the server.
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ *
+ * \b WARNING: if compression is enabled, this may collapse the data!
+ */
+yrmcds_error yrmcds_append(yrmcds* c, const char* key, size_t key_len,
+                           const char* data, size_t data_len,
+                           int quiet, uint32_t* serial);
+
+
+/**
+ * Send Prepend/PrependQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  data      Data.
+ * @param  data_len  Length of \p data.
+ * @param  quiet     0 to send Prepend, other values to send PrependQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends Prepend/PrependQ command to the server.
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ *
+ * \b WARNING: if compression is enabled, this may collapse the data!
+ */
+yrmcds_error yrmcds_prepend(yrmcds* c, const char* key, size_t key_len,
+                            const char* data, size_t data_len,
+                            int quiet, uint32_t* serial);
+
+
+/**
+ * Send Delete/DeleteQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  quiet     0 to send Delete, other values to send DeleteQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends Delete/DeleteQ command to the server.
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_remove(yrmcds* c, const char* key, size_t key_len,
+                           int quiet, uint32_t* serial);
+
+
+/**
+ * Send Lock/LockQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  quiet     0 to send Lock, other values to send LockQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends Lock/LockQ command to the server.
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_lock(yrmcds* c, const char* key, size_t key_len,
+                         int quiet, uint32_t* serial);
+
+
+/**
+ * Send Unlock/UnlockQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  key       Key data.
+ * @param  key_len   Length of \p key.
+ * @param  quiet     0 to send Unlock, other values to send UnlockQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends Unlock/UnlockQ command to the server.
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_unlock(yrmcds* c, const char* key, size_t key_len,
+                           int quiet, uint32_t* serial);
+
+
+/**
+ * Send UnlockAll/UnlockAllQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  quiet     0 to send UnlockAll, other values to send UnlockAllQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends UnlockAll/UnlockAllQ command to the server.
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_unlockall(yrmcds* c, int quiet, uint32_t* serial);
+
+
+/**
+ * Send Flush/FlushQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  delay     delay seconds before flush.
+ * @param  quiet     0 to send Flush, other values to send FlushQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function sends Flush/FlushQ command to the server.
+ * If \p serial is not \p NULL, the serial number of the request will be
+ * stored if the command was sent successfully.
+ */
+yrmcds_error yrmcds_flush(yrmcds* c, uint32_t delay,
+                          int quiet, uint32_t* serial);
+
+/**
+ * Send Stat command to obtain general statistics.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ */
+yrmcds_error yrmcds_stat_general(yrmcds* c, uint32_t* serial);
+
+
+/**
+ * Send Stat command to obtain setting statistics.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ */
+yrmcds_error yrmcds_stat_settings(yrmcds* c, uint32_t* serial);
+
+
+/**
+ * Send Stat command to obtain item statistics.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ */
+yrmcds_error yrmcds_stat_items(yrmcds* c, uint32_t* serial);
+
+
+/**
+ * Send Stat command to obtain size statistics.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ */
+yrmcds_error yrmcds_stat_sizes(yrmcds* c, uint32_t* serial);
+
+
+/**
+ * Send Version command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ */
+yrmcds_error yrmcds_version(yrmcds* c, uint32_t* serial);
+
+
+/**
+ * Send Quit/QuitQ command.
+ * @param  c         A pointer to ::yrmcds.
+ * @param  quiet     0 to send Quit, other values to send QuitQ.
+ * @param  serial    A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ */
+yrmcds_error yrmcds_quit(yrmcds* c, int quiet, uint32_t* serial);
 
 
 /**

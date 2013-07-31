@@ -18,6 +18,8 @@ const char* yrmcds_strerror(yrmcds_error e) {
         return "Connection was reset by peer";
     case YRMCDS_OUT_OF_MEMORY:
         return "Failed to allocate memory";
+    case YRMCDS_COMPRESS_FAILED:
+        return "Failed to compress data";
     case YRMCDS_PROTOCOL_ERROR:
         return "Received malformed packet";
     default:

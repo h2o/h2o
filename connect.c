@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
+#include <netinet/tcp.h>
 #include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,7 +50,9 @@ yrmcds_error yrmcds_connect(yrmcds* c, const char* node, uint16_t port) {
 #endif
                    , res->ai_protocol);
     if( s == -1 ) {
+        e = errno;
         freeaddrinfo(res);
+        errno = e;
         return YRMCDS_SYSTEM_ERROR;
     }
 #ifndef __linux__
@@ -61,7 +64,9 @@ yrmcds_error yrmcds_connect(yrmcds* c, const char* node, uint16_t port) {
     e = connect(s, res->ai_addr, res->ai_addrlen);
     freeaddrinfo(res);
     if( e == -1 && errno != EINPROGRESS ) {
+        e = errno;
         close(s);
+        errno = e;
         return YRMCDS_SYSTEM_ERROR;
     }
 
@@ -75,7 +80,9 @@ yrmcds_error yrmcds_connect(yrmcds* c, const char* node, uint16_t port) {
             return YRMCDS_TIMEOUT;
         }
         if( n == -1 ) {
+            e = errno;
             close(s);
+            errno = e;
             return YRMCDS_SYSTEM_ERROR;
         }
 
@@ -91,15 +98,28 @@ yrmcds_error yrmcds_connect(yrmcds* c, const char* node, uint16_t port) {
         if( e != 0 ) {
             close(s);
             errno = e;
-            return YRMCDS_DISCONNECTED;
+            return YRMCDS_SYSTEM_ERROR;
         }
     }
     fl = fcntl(s, F_GETFL, 0);
-    fcntl(s, F_SETFL, fl & ~O_NONBLOCK);
+    if( fcntl(s, F_SETFL, fl & ~O_NONBLOCK) == -1 ) {
+        e = errno;
+        close(s);
+        errno = e;
+        return YRMCDS_SYSTEM_ERROR;
+    }
+    int ok = 1;
+    if( setsockopt(s, IPPROTO_TCP, TCP_NODELAY, &ok, sizeof(ok)) == -1 ) {
+        e = errno;
+        close(s);
+        errno = e;
+        return YRMCDS_SYSTEM_ERROR;
+    }
 
     c->sock = s;
     e = pthread_mutex_init(&(c->lock), NULL);
     if( e != 0 ) {
+        close(s);
         errno = e;
         return YRMCDS_SYSTEM_ERROR;
     }
@@ -107,6 +127,7 @@ yrmcds_error yrmcds_connect(yrmcds* c, const char* node, uint16_t port) {
     c->compress_size = 0;
     c->recvbuf = (char*)malloc(1 << 20);
     if( c->recvbuf == NULL ) {
+        close(s);
         pthread_mutex_destroy(&(c->lock));
         return YRMCDS_OUT_OF_MEMORY;
     }
