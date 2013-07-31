@@ -5,7 +5,7 @@ PREFIX = /usr/local
 CC = gcc
 CXX = g++ -std=gnu++11
 CPPFLAGS = -D_GNU_SOURCE
-OPTFLAGS = -gdwarf-3 #-O2
+OPTFLAGS = -gdwarf-3 -O2
 CFLAGS = -Wall $(OPTFLAGS)
 CXXFLAGS = $(CFLAGS) -Wnon-virtual-dtor -Woverloaded-virtual
 LDFLAGS = -L.
