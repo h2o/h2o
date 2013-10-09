@@ -23,10 +23,10 @@ typedef struct {
 deque_t *dq_init(int n_bits)
 {
 	deque_t *d;
-	d = calloc(1, sizeof(deque_t));
+	d = (deque_t*)calloc(1, sizeof(deque_t));
 	d->n_bits = n_bits;
 	d->mask = (1U<<n_bits) - 1;
-	d->a = calloc(1<<n_bits, sizeof(dqval_t));
+	d->a = (dqval_t*)calloc(1<<n_bits, sizeof(dqval_t));
 	return d;
 }
 
@@ -87,13 +87,13 @@ static void *ktf_worker(void *data)
 	ktf_worker_t *w = (ktf_worker_t*)data;
 	for (;;) {
 		int k = -1;
-		if (dq_size(w->q) == 0) { // work-stealing
+		if (dq_deq(w->q, 1, &k) < 0) {
 			int i, max, max_i;
 			for (i = 0, max = -1, max_i = -1; i < w->f->n; ++i)
 				if (max < dq_size(w->f->w[i].q))
 					max = dq_size(w->f->w[i].q), max_i = i;
 			if (dq_deq(w->f->w[max_i].q, 0, &k) < 0) k = -1;
-		} else if (dq_deq(w->q, 1, &k) < 0) k = -1;
+		}
 		if (k >= 0) w->f->func(w->f->global, (uint8_t*)w->f->local + w->f->size * k);
 		else if (w->f->finished) break;
 	}
@@ -107,19 +107,19 @@ void kt_for(int n, int (*func)(void*,void*), void *global, int m, int size, void
 	int i, k;
 
 	if (dq_bits <= 0) dq_bits = 10;
-	f = calloc(1, sizeof(kt_for_t));
+	f = (kt_for_t*)calloc(1, sizeof(kt_for_t));
 	f->n = n - 1, f->size = size;
 	f->global = global, f->local = local;
 	f->func = func;
 
-	f->w = calloc(f->n, sizeof(ktf_worker_t));
+	f->w = (ktf_worker_t*)calloc(f->n, sizeof(ktf_worker_t));
 	for (i = 0; i < f->n; ++i) {
 		ktf_worker_t *wi = &f->w[i];
 		wi->f = f, wi->i = i;
 		wi->q = dq_init(dq_bits);
 	}
 
-	tid = calloc(f->n, sizeof(pthread_t));
+	tid = (pthread_t*)calloc(f->n, sizeof(pthread_t));
 	for (i = 0; i < f->n; ++i) pthread_create(&tid[i], 0, ktf_worker, &f->w[i]);
 
 	for (k = 0; k < m; ++k) {
