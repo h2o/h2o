@@ -38,26 +38,26 @@ void dq_destroy(deque_t *d)
 int dq_enq(deque_t *q, int is_back, const dqval_t *v)
 {
 	int ret = 0;
-	while (!__sync_bool_compare_and_swap(&q->lock, 0, 1));
+	while (__sync_lock_test_and_set(&q->lock, 1));
 	if (!dq_is_full(q)) {
 		q->a[(is_back? q->first + q->count : q->first + q->mask) & q->mask] = *v;
 		q->first = is_back? q->first : q->first? q->first - 1 : q->mask;
 		++q->count;
 	} else ret = -1;
-	while (!__sync_bool_compare_and_swap(&q->lock, 1, 0));
+	__sync_lock_release(&q->lock);
 	return ret;
 }
 
 int dq_deq(deque_t *q, int is_back, dqval_t *v)
 {
 	int ret = 0;
-	while (!__sync_bool_compare_and_swap(&q->lock, 0, 1));
+	while (__sync_lock_test_and_set(&q->lock, 1));
 	if (dq_size(q)) {
 		*v = q->a[is_back? (q->first + q->count + q->mask) & q->mask : q->first];
 		q->first = is_back? q->first : q->first == q->mask? 0 : q->first + 1;
 		--q->count;
 	} else ret = -1;
-	while (!__sync_bool_compare_and_swap(&q->lock, 1, 0));
+	__sync_lock_release(&q->lock);
 	return 0;
 }
 
