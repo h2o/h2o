@@ -1,22 +1,24 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
 
-/**************************************************************
- *** Fixed-sized single-writer-multi-reader lock-free deque ***
- **************************************************************/
+/*************************
+ *** Fixed-sized deque ***
+ *************************/
 
 typedef int dqval_t;
 
 typedef struct {
+	int lock;
 	int n_bits;
+	int first, count;
 	unsigned mask;
-	volatile uint64_t anchor;
 	dqval_t *a;
 } deque_t;
 
-#define dq_is_full(q) ((uint32_t)(q)->anchor == 1U<<(q)->n_bits)
-#define dq_size(q) ((int32_t)(q)->anchor)
+#define dq_is_full(q) ((uint32_t)(q)->count == 1U<<(q)->n_bits)
+#define dq_size(q) ((q)->count)
 
 deque_t *dq_init(int n_bits)
 {
@@ -35,25 +37,27 @@ void dq_destroy(deque_t *d)
 
 int dq_enq(deque_t *q, int is_back, const dqval_t *v)
 {
-	uint64_t ov, nv;
-	do {
-		if (dq_is_full(q)) return -1;
-		ov = q->anchor;
-		q->a[(is_back? ((ov>>32) + (uint32_t)ov) : (ov>>32) + q->mask) & q->mask] = *v;
-		nv = is_back? ov + 1 : ov>>32 == 0? (uint64_t)q->mask<<32 | ((uint32_t)ov + 1) : ov - 0xffffffffU;
-	} while (!__sync_bool_compare_and_swap(&q->anchor, ov, nv));
-	return 0;
+	int ret = 0;
+	while (!__sync_bool_compare_and_swap(&q->lock, 0, 1));
+	if (!dq_is_full(q)) {
+		q->a[(is_back? q->first + q->count : q->first + q->mask) & q->mask] = *v;
+		q->first = is_back? q->first : q->first? q->first - 1 : q->mask;
+		++q->count;
+	} else ret = -1;
+	while (!__sync_bool_compare_and_swap(&q->lock, 1, 0));
+	return ret;
 }
 
 int dq_deq(deque_t *q, int is_back, dqval_t *v)
 {
-	uint64_t ov, nv;
-	do {
-		if (dq_size(q) == 0) return -1;
-		ov = q->anchor;
-		*v = q->a[is_back? ((ov>>32) + (uint32_t)ov - 1) & q->mask : ov>>32];
-		nv = is_back? ov - 1 : ov>>32 == q->mask? (uint32_t)ov - 1 : ov + 0xffffffffU;
-	} while (!__sync_bool_compare_and_swap(&q->anchor, ov, nv));
+	int ret = 0;
+	while (!__sync_bool_compare_and_swap(&q->lock, 0, 1));
+	if (dq_size(q)) {
+		*v = q->a[is_back? (q->first + q->count + q->mask) & q->mask : q->first];
+		q->first = is_back? q->first : q->first == q->mask? 0 : q->first + 1;
+		--q->count;
+	} else ret = -1;
+	while (!__sync_bool_compare_and_swap(&q->lock, 1, 0));
 	return 0;
 }
 
@@ -81,7 +85,7 @@ typedef struct ktf_worker_t {
 static void *ktf_worker(void *data)
 {
 	ktf_worker_t *w = (ktf_worker_t*)data;
-	while (!w->f->finished) {
+	for (;;) {
 		int k = -1;
 		if (dq_size(w->q) == 0) { // work-stealing
 			int i, max, max_i;
@@ -91,6 +95,7 @@ static void *ktf_worker(void *data)
 			if (dq_deq(w->f->w[max_i].q, 0, &k) < 0) k = -1;
 		} else if (dq_deq(w->q, 1, &k) < 0) k = -1;
 		if (k >= 0) w->f->func(w->f->global, (uint8_t*)w->f->local + w->f->size * k);
+		else if (w->f->finished) break;
 	}
 	return 0;
 }
