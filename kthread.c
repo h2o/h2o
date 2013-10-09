@@ -87,7 +87,7 @@ static inline int steal_work(kt_for_t *f) // steal work from the worker with the
 	for (i = 0; i < f->n; ++i)
 		if (max < dq_size(f->w[i].q)) // max is not accurate as other workers may steal from the same queue, but it does not matter.
 			max = dq_size(f->w[i].q), max_i = i;
-	if (dq_deq(f->w[max_i].q, 0, &k) < 0) k = -1;
+	if (max_i < 0 || dq_deq(f->w[max_i].q, 0, &k) < 0) k = -1;
 	return k;
 }
 
