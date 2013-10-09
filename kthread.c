@@ -136,11 +136,8 @@ void kt_for(int n_threads, int (*func)(void*,void*), void *shared, int n_items, 
 	f->func = func;
 
 	f->w = (ktf_worker_t*)calloc(f->n, sizeof(ktf_worker_t));
-	for (i = 0; i < f->n; ++i) {
-		ktf_worker_t *wi = &f->w[i];
-		wi->f = f, wi->i = i;
-		wi->q = dq_init(dq_bits);
-	}
+	for (i = 0; i < f->n; ++i)
+		f->w[i].f = f, f->w[i].i = i, f->w[i].q = dq_init(dq_bits);
 
 	tid = (pthread_t*)calloc(f->n, sizeof(pthread_t));
 	for (i = 0; i < f->n; ++i) pthread_create(&tid[i], 0, ktf_worker, &f->w[i]);
