@@ -81,7 +81,7 @@ typedef struct ktf_worker_t {
 	int i;
 } ktf_worker_t;
 
-static inline uint64_t steal_work(kt_for_t *f) // steal work from the worker with the highest load
+static inline int steal_work(kt_for_t *f) // steal work from the worker with the highest load
 {
 	int i, max = -1, max_i = -1, k = -1;
 	for (i = 0; i < f->n; ++i)
