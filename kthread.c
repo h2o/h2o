@@ -93,7 +93,6 @@ static void *ktf_worker(void *data)
 				if (max < dq_size(w->f->w[i].q))
 					max = dq_size(w->f->w[i].q), max_i = i;
 			if (dq_deq(w->f->w[max_i].q, 0, &k) < 0) k = -1;
-			k = -1;
 		}
 		if (k >= 0) w->f->func(w->f->global, (uint8_t*)w->f->local + w->f->size * k);
 		else if (w->f->finished) break;
