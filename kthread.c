@@ -122,7 +122,6 @@ static void *slave(void *data)
 			w->type = 0; // wait
 			while (w->type == 0) pthread_cond_wait(&w->cv, &w->lock);
 			pthread_mutex_unlock(&w->lock);
-			if (w->type == 2) break;
 		} else do_task(w->t, sid);
 	}
 	return 0;
