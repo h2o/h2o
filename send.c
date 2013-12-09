@@ -3,7 +3,11 @@
 #include "yrmcds.h"
 #include "lz4/lz4.h"
 
+#ifdef __APPLE__
+#include "osx.h"
+#else
 #include <endian.h>
+#endif
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>

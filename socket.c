@@ -4,6 +4,7 @@
 
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/time.h>
 
 int yrmcds_fileno(yrmcds* c) {
     return c->sock;
