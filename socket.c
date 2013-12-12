@@ -1,4 +1,4 @@
-// (C) 2013 Cybozu.
+// (C) 2013 Cybozu et al.
 
 #include "yrmcds.h"
 
