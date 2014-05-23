@@ -8,8 +8,8 @@
 #ifndef YRMCDS_H_INCLUDED
 #define YRMCDS_H_INCLUDED
 
-#define LIBYRMCDS_VERSION        "1.0.0"
-#define LIBYRMCDS_VERSION_NUMBER  10000
+#define LIBYRMCDS_VERSION        "1.0.1"
+#define LIBYRMCDS_VERSION_NUMBER  10001
 
 #include <pthread.h>
 #include <stddef.h>
