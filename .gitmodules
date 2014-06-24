@@ -1,0 +1,6 @@
+[submodule "deps/picohttpparser"]
+	path = deps/picohttpparser
+	url = git@github.com:kazuho/picohttpparser.git
+[submodule "deps/klib"]
+	path = deps/klib
+	url = git@github.com:attractivechaos/klib.git

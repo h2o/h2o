@@ -1,0 +1,75 @@
+#include <alloca.h>
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include "h2o.h"
+
+typedef struct st_chunked_encoder_t {
+    h2o_ostream_t super;
+    char buf[64];
+} chunked_encoder_t;
+
+static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *inbufs, size_t inbufcnt, int *is_final)
+{
+    chunked_encoder_t *self = (void*)_self;
+    uv_buf_t *outbufs = alloca(sizeof(uv_buf_t) * (inbufcnt + 2));
+    size_t chunk_size, outbufcnt = 0, i;
+
+    /* calc chunk size */
+    chunk_size = 0;
+    for (i = 0; i != inbufcnt; ++i)
+        chunk_size += inbufs[i].len;
+
+    /* create chunk header */
+    if (chunk_size != 0) {
+        outbufs[outbufcnt].base = self->buf;
+        outbufs[outbufcnt].len = h2o_snprintf(self->buf, sizeof(self->buf), "%zx\r\n", chunk_size);
+        outbufcnt++;
+    }
+    /* set output data */
+    memcpy(outbufs + outbufcnt, inbufs, sizeof(uv_buf_t) * inbufcnt);
+    outbufcnt += inbufcnt;
+    /* set EOF chunk header if is_final */
+    if (*is_final) {
+        outbufs[outbufcnt].base = "\r\n0\r\n\r\n";
+        outbufs[outbufcnt].len = 7;
+        outbufcnt++;
+    } else {
+        outbufs[outbufcnt].base = "\r\n";
+        outbufs[outbufcnt].len = 2;
+    }
+
+    h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, is_final);
+}
+
+static void on_start_response(h2o_filter_t *self, h2o_req_t *req)
+{
+    chunked_encoder_t *encoder;
+
+    /* do nothing if content-length is known */
+    if (req->res.content_length != SIZE_MAX)
+        goto Next;
+    /* we cannot handle certain responses (like 101 switching protocols) */
+    if (req->res.status != 200)
+        goto Next;
+    /* skip if content-encoding header is being set */
+    if (h2o_find_header(&req->res.headers, H2O_TOKEN_TRANSFER_ENCODING).value != NULL)
+        goto Next;
+
+    /* set content-encoding header */
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, H2O_STRLIT("chunked"));
+
+    /* setup filter */
+    encoder = (void*)h2o_prepend_output_filter(req, sizeof(chunked_encoder_t));
+    encoder->super.do_send = send_chunk;
+
+Next:
+    if (self->next != NULL)
+        self->next->on_start_response(self->next, req);
+}
+
+void h2o_add_chunked_encoder(h2o_loop_context_t *context)
+{
+    h2o_filter_t *filter = h2o_define_filter(context, sizeof(h2o_filter_t));
+    filter->on_start_response = on_start_response;
+}

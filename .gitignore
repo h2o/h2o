@@ -1,0 +1,10 @@
+*.swp
+.DS_Store
+CMakeCache.txt
+CMakeFiles/
+Makefile
+build/
+cmake_install.cmake
+xcuserdata
+examples/simple
+*/*.dSYM/
