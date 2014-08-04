@@ -22,7 +22,7 @@ Features
 
 * Support for [yrmcds][] extensions.
 
-    Specifically, [the server-side locking][locking] is supported.
+    Specifically, [the server-side locking][locking] and [the counter extension][counter] is supported.
 
 * Separated send / recv operations.
 
@@ -54,4 +54,5 @@ See [USAGE.md](USAGE.md).
 [yrmcds]: http://cybozu.github.io/yrmcds/
 [binprot]: https://code.google.com/p/memcached/wiki/BinaryProtocolRevamped
 [locking]: https://github.com/cybozu/yrmcds/blob/master/docs/locking.md
+[counter]: https://github.com/cybozu/yrmcds/blob/master/docs/counter.md
 [LZ4]: https://code.google.com/p/lz4/

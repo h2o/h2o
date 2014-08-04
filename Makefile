@@ -11,14 +11,14 @@ CXXFLAGS = $(CFLAGS) -Wnon-virtual-dtor -Woverloaded-virtual
 LDFLAGS = -L.
 LDLIBS = -lyrmcds -lpthread
 
-EXE = yc
+EXE = yc yc-cnt
 LIB = libyrmcds.a
 PACKAGES = build-essential subversion doxygen
 
 CHEADERS = $(wildcard *.h)
 CSOURCES = $(wildcard *.c)
 COBJECTS = $(patsubst %.c,%.o,$(CSOURCES))
-LIB_OBJECTS = $(filter-out yc.o,$(COBJECTS)) lz4/lz4.o
+LIB_OBJECTS = $(filter-out yc.o yc-cnt.o,$(COBJECTS)) lz4/lz4.o
 
 all: lib $(EXE)
 lib: $(LIB)
@@ -29,6 +29,9 @@ lz4/lz4.o: lz4/lz4.c
 	$(CC) -std=c99 -O3 -Ilz4 -c -o $@ $<
 
 yc: yc.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
+
+yc-cnt: yc-cnt.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
 $(COBJECTS): $(CHEADERS)
