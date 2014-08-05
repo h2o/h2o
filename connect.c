@@ -14,8 +14,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-yrmcds_error yrmcds_connect(yrmcds* c, const char* node, uint16_t port) {
-    if( c == NULL || node == NULL )
+static yrmcds_error connect_to_server(const char* node, uint16_t port, int* server_fd) {
+    if( node == NULL )
         return YRMCDS_BAD_ARGUMENT;
 
     long fl;
@@ -115,19 +115,28 @@ yrmcds_error yrmcds_connect(yrmcds* c, const char* node, uint16_t port) {
         errno = e;
         return YRMCDS_SYSTEM_ERROR;
     }
+    *server_fd = s;
+    return YRMCDS_OK;
+}
 
-    c->sock = s;
-    e = pthread_mutex_init(&(c->lock), NULL);
+yrmcds_error yrmcds_connect(yrmcds* c, const char* node, uint16_t port) {
+    if( c == NULL )
+        return YRMCDS_BAD_ARGUMENT;
+    int e = pthread_mutex_init(&(c->lock), NULL);
     if( e != 0 ) {
-        close(s);
         errno = e;
         return YRMCDS_SYSTEM_ERROR;
     }
+    int server_fd;
+    yrmcds_error err = connect_to_server(node, port, &server_fd);
+    if( err != YRMCDS_OK )
+        return err;
+    c->sock = server_fd;
     c->serial = 0;
     c->compress_size = 0;
     c->recvbuf = (char*)malloc(1 << 20);
     if( c->recvbuf == NULL ) {
-        close(s);
+        close(server_fd);
         pthread_mutex_destroy(&(c->lock));
         return YRMCDS_OUT_OF_MEMORY;
     }
@@ -136,5 +145,34 @@ yrmcds_error yrmcds_connect(yrmcds* c, const char* node, uint16_t port) {
     c->last_size = 0;
     c->decompressed = NULL;
     c->invalid = 0;
+    return YRMCDS_OK;
+}
+
+yrmcds_error yrmcds_cnt_connect(yrmcds_cnt* c, const char* node, uint16_t port) {
+    if( c == NULL )
+        return YRMCDS_BAD_ARGUMENT;
+    int e = pthread_mutex_init(&(c->lock), NULL);
+    if( e != 0 ) {
+        errno = e;
+        return YRMCDS_SYSTEM_ERROR;
+    }
+    int server_fd;
+    yrmcds_error err = connect_to_server(node, port, &server_fd);
+    if( err != YRMCDS_OK )
+        return err;
+    c->sock = server_fd;
+    c->serial = 0;
+    c->recvbuf = (char*)malloc(4096);
+    if( c->recvbuf == NULL ) {
+        close(server_fd);
+        pthread_mutex_destroy(&(c->lock));
+        return YRMCDS_OUT_OF_MEMORY;
+    }
+    c->capacity = 4096;
+    c->used = 0;
+    c->last_size = 0;
+    c->invalid = 0;
+    c->stats.count = c->stats.capacity = 0;
+    c->stats.records = NULL;
     return YRMCDS_OK;
 }
