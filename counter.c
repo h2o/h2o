@@ -160,18 +160,18 @@ parse_dump_record(yrmcds_cnt* c, yrmcds_cnt_response* r) {
         // End of dump
         return YRMCDS_OK;
     }
-    if( r->body_length < 14 ) {
+    if( r->body_length < 10 ) {
         c->invalid = 1;
         return YRMCDS_PROTOCOL_ERROR;
     }
     r->current_consumption = ntoh32(r->body);
-    r->max_consumption = ntoh32(r->body + 8);
-    r->name_length = ntoh16(r->body + 12);
-    if( r->body_length < 14 + r->name_length ) {
+    r->max_consumption = ntoh32(r->body + 4);
+    r->name_length = ntoh16(r->body + 8);
+    if( r->body_length < 10 + r->name_length ) {
         c->invalid = 1;
         return YRMCDS_PROTOCOL_ERROR;
     }
-    r->name = r->body + 14;
+    r->name = r->body + 10;
     return YRMCDS_OK;
 }
 
