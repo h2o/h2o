@@ -29,7 +29,7 @@ typedef struct st_h2o_req_t h2o_req_t;
 
 typedef struct st_h2o_token_t {
     uv_buf_t buf;
-    int http2_static_table_name_index;
+    int http2_static_table_name_index; /* non-zero if any */
 } h2o_token_t;
 
 #include "h2o/token.h"
@@ -136,7 +136,8 @@ typedef void (*h2o_req_cb)(h2o_req_t *req);
 
 /* token */
 
-extern const h2o_token_t h2o__tokens[H2O_MAX_TOKENS];
+extern h2o_token_t h2o__tokens[H2O_MAX_TOKENS];
+extern size_t h2o__num_tokens;
 const h2o_token_t *h2o_lookup_token(const char *name, size_t len);
 int h2o_buf_is_token(const uv_buf_t *buf);
 

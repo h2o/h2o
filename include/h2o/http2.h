@@ -3,6 +3,8 @@
 
 /* hpack */
 
+#define H2O_HTTP2_ENCODE_INT_MAX_LENGTH 5
+
 typedef struct st_h2o_hpack_header_table_t {
     /* ring buffer */
     struct st_h2o_hpack_header_table_entry_t *entries;
@@ -13,6 +15,7 @@ typedef struct st_h2o_hpack_header_table_t {
 } h2o_hpack_header_table_t;
 
 void h2o_dispose_hpack_header_table(h2o_mempool_t *pool, h2o_hpack_header_table_t *header_table);
+size_t h2o_http2_encode_string(uint8_t *dst, const char *s, size_t len);
 uv_buf_t h2o_http2_flatten_headers(h2o_mempool_t *pool, size_t max_frame_size, h2o_res_t *res);
 
 /* settings */

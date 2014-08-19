@@ -8,7 +8,6 @@
 #define HEADER_TABLE_OFFSET 62
 #define HEADER_TABLE_ENTRY_SIZE_OFFSET 32
 #define STATUS_HEADER_MAX_SIZE 4
-#define MAX_ENCODE_INT_SIZE 5
 
 struct st_h2o_hpack_static_table_entry_t {
     const h2o_token_t *name;
@@ -57,7 +56,7 @@ static int32_t decode_int(const uint8_t **src, const uint8_t *src_end, size_t pr
     if (src_end - *src > 4)
         src_end = *src + 4;
 
-    value = 0;
+    value = prefix_max;
     for (mult = 1; ; mult *= 128) {
         if (*src == src_end)
             return -1;
@@ -393,6 +392,7 @@ static uint8_t *encode_int(uint8_t *dst, uint32_t value, size_t prefix_bits)
         *dst++ |= value;
     } else {
         /* see also: MAX_ENCODE_INT_LENGTH */
+        value -= (1 << prefix_bits) - 1;
         if (value > 0x0fffffff)
             h2o_fatal("value out of range");
         *dst++ |= (1 << prefix_bits) - 1;
@@ -404,13 +404,63 @@ static uint8_t *encode_int(uint8_t *dst, uint32_t value, size_t prefix_bits)
     return dst;
 }
 
-static uint8_t *encode_string(uint8_t *dst, const char *s, size_t len)
+static size_t encode_huffman(uint8_t *_dst, const uint8_t *src, size_t len)
 {
+    uint8_t *dst = _dst, *dst_end = dst + len;
+    const uint8_t *src_end = src + len;
+    uint64_t bits = 0;
+    int bits_left = 40;
+
+    while (src != src_end) {
+        const nghttp2_huff_sym *sym = huff_sym_table + *src++;
+        bits |= (uint64_t)sym->code << (bits_left - sym->nbits);
+        bits_left -= sym->nbits;
+        while (bits_left <= 32) {
+            *dst++ = bits >> 32;
+            bits <<= 8;
+            bits_left += 8;
+            if (dst == dst_end) {
+                return -1;
+            }
+        }
+    }
+
+    if (bits_left != 40) {
+        bits |= ((uint64_t)1 << bits_left) - 1;
+        *dst++ = bits >> 32;
+    }
+    if (dst == dst_end) {
+        return 0;
+    }
+
+    return dst - _dst;
+}
+
+size_t h2o_http2_encode_string(uint8_t *_dst, const char *s, size_t len)
+{
+    uint8_t *dst = _dst;
+    uint8_t huffbuf[4096];
+
+    /* try to encode in huffman */
+    if (0 < len && len < sizeof(huffbuf)) {
+        size_t hufflen = encode_huffman(huffbuf, (const uint8_t*)s, len);
+        if (hufflen != 0) {
+            *dst = '\x80';
+            dst = encode_int(dst, (uint32_t)hufflen, 7);
+            memcpy(dst, huffbuf, hufflen);
+            dst += hufflen;
+            goto Exit;
+        }
+    }
+
+    /* encode as-is */
     *dst = '\0';
     dst = encode_int(dst, (uint32_t)len, 7);
     memcpy(dst, s, len);
     dst += len;
-    return dst;
+
+Exit:
+    return dst - _dst;
 }
 
 static uint8_t *encode_header(uint8_t *dst, const uv_buf_t *name, const uv_buf_t *value)
@@ -429,9 +479,9 @@ static uint8_t *encode_header(uint8_t *dst, const uv_buf_t *name, const uv_buf_t
     } else {
         /* literal header field without indexing (new name) */
         *dst++ = '\0';
-        dst = encode_string(dst, name->base, name->len);
+        dst += h2o_http2_encode_string(dst, name->base, name->len);
     }
-    dst = encode_string(dst, value->base, value->len);
+    dst += h2o_http2_encode_string(dst, value->base, value->len);
     return dst;
 }
 
@@ -447,7 +497,7 @@ uv_buf_t h2o_http2_flatten_headers(h2o_mempool_t *pool, size_t max_frame_size, h
         uv_buf_t *name;
 
         for (iter.value = NULL; (iter = h2o_next_header(&res->headers, iter, &name)).value != NULL; ) {
-            size_t max_header_size = name->len + iter.value->len + 1 + MAX_ENCODE_INT_SIZE * 2;
+            size_t max_header_size = name->len + iter.value->len + 1 + H2O_HTTP2_ENCODE_INT_MAX_LENGTH * 2;
             if (max_header_size > 16383)
                 goto Error;
             if (max_cur_frame_size + max_header_size > max_frame_size) {
@@ -480,7 +530,7 @@ uv_buf_t h2o_http2_flatten_headers(h2o_mempool_t *pool, size_t max_frame_size, h
         dst += H2O_HTTP2_FRAME_HEADER_SIZE;
         dst = encode_status(dst, res->status);
         for (iter.value = NULL; (iter = h2o_next_header(&res->headers, iter, &name)).value != NULL; ) {
-            size_t max_header_size = name->len + iter.value->len + 1 + MAX_ENCODE_INT_SIZE * 2;
+            size_t max_header_size = name->len + iter.value->len + 1 + H2O_HTTP2_ENCODE_INT_MAX_LENGTH * 2;
             if (dst - cur_frame - H2O_HTTP2_FRAME_HEADER_SIZE + max_header_size > max_frame_size) {
                 EMIT_HEADER();
                 cur_frame = dst;
@@ -595,12 +645,12 @@ void hpack_test()
         TEST("\x00", 0);
         TEST("\x03", 3);
         TEST("\x81", 1);
-        TEST("\x7f\x00", 0);
-        TEST("\x7f\x01", 1);
-        TEST("\x7f\x7f", 127);
-        TEST("\x7f\x81\x00", 1);
-        TEST("\x7f\x80\x01", 128);
-        TEST("\x7f\xff\xff\xff\x7f", 0xfffffff);
+        TEST("\x7f\x00", 127);
+        TEST("\x7f\x01", 128);
+        TEST("\x7f\x7f", 254);
+        TEST("\x7f\x81\x00", 128);
+        TEST("\x7f\x80\x01", 255);
+        TEST("\x7f\xff\xff\xff\x7f", 0xfffffff + 127);
         /* failures */
         TEST("", -1);
         TEST("\x7f", -1);
@@ -713,6 +763,15 @@ void hpack_test()
         uv_buf_init(H2O_STRLIT("\x82\x86\x84\x41\x8c\xf1\xe3\xc2\xe5\xf2\x3a\x6b\xa0\xab\x90\xf4\xff")),
         uv_buf_init(H2O_STRLIT("\x82\x86\x84\xbe\x58\x86\xa8\xeb\x10\x64\x9c\xbf")),
         uv_buf_init(H2O_STRLIT("\x82\x87\x85\xbf\x40\x88\x25\xa8\x49\xe9\x5b\xa9\x7d\x7f\x89\x25\xa8\x49\xe9\x5b\xb8\xe8\xb4\xbf")));
+
+    note("encode_huffman");
+    {
+        uv_buf_t huffcode = { H2O_STRLIT("\xf1\xe3\xc2\xe5\xf2\x3a\x6b\xa0\xab\x90\xf4\xff") };
+        char buf[sizeof("www.example.com")];
+        size_t l = encode_huffman(buf, H2O_STRLIT("www.example.com"));
+        ok(l == huffcode.len);
+        ok(memcmp(buf, huffcode.base, huffcode.len) == 0);
+    }
 
     h2o_mempool_destroy(&pool, 0);
 }
