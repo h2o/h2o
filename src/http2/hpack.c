@@ -415,8 +415,22 @@ static uint8_t *encode_string(uint8_t *dst, const char *s, size_t len)
 
 static uint8_t *encode_header(uint8_t *dst, const uv_buf_t *name, const uv_buf_t *value)
 {
-    *dst++ = '\0'; /* literal header field without indexing (new name) */
-    dst = encode_string(dst, name->base, name->len);
+    int static_table_name_index = 0;
+
+    if (h2o_buf_is_token(name)) {
+        const h2o_token_t *name_token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
+        static_table_name_index = name_token->http2_static_table_name_index;
+    }
+
+    if (static_table_name_index != 0) {
+        /* literal header field without indexing (indexed name) */
+        *dst = 0;
+        dst = encode_int(dst, static_table_name_index, 4);
+    } else {
+        /* literal header field without indexing (new name) */
+        *dst++ = '\0';
+        dst = encode_string(dst, name->base, name->len);
+    }
     dst = encode_string(dst, value->base, value->len);
     return dst;
 }

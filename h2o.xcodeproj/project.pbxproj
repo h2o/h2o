@@ -61,6 +61,7 @@
 		1079245019A3266700C52AD6 /* timeout.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BE19A3217300C52AD6 /* timeout.c */; };
 		1079245119A3266700C52AD6 /* token.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BF19A3217300C52AD6 /* token.c */; };
 		1079245219A3266700C52AD6 /* util.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923C019A3217300C52AD6 /* util.c */; };
+		1079245419A32C0800C52AD6 /* token_table.h in Headers */ = {isa = PBXBuildFile; fileRef = 1079245319A32C0800C52AD6 /* token_table.h */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -140,8 +141,7 @@
 		107923A219A3215F00C52AD6 /* token.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = token.h; sourceTree = "<group>"; };
 		107923A319A3215F00C52AD6 /* websocket.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = websocket.h; sourceTree = "<group>"; };
 		107923A419A3215F00C52AD6 /* h2o.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = h2o.h; sourceTree = "<group>"; };
-		107923AB19A3216B00C52AD6 /* hpack.pl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = hpack.pl; sourceTree = "<group>"; };
-		107923AC19A3216B00C52AD6 /* tokens.pl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = tokens.pl; sourceTree = "<group>"; };
+		107923AB19A3216B00C52AD6 /* tokens.pl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = tokens.pl; sourceTree = "<group>"; };
 		107923AE19A3217300C52AD6 /* chunked_encoder.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = chunked_encoder.c; sourceTree = "<group>"; };
 		107923AF19A3217300C52AD6 /* file.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = file.c; sourceTree = "<group>"; };
 		107923B019A3217300C52AD6 /* headers.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers.c; sourceTree = "<group>"; };
@@ -169,6 +169,7 @@
 		1079242519A3252C00C52AD6 /* http2 */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = http2; sourceTree = BUILT_PRODUCTS_DIR; };
 		1079242619A3254700C52AD6 /* http2.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2.c; sourceTree = "<group>"; };
 		1079243519A3260E00C52AD6 /* picotest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = picotest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1079245319A32C0800C52AD6 /* token_table.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = token_table.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -316,8 +317,7 @@
 		107923AA19A3216B00C52AD6 /* misc */ = {
 			isa = PBXGroup;
 			children = (
-				107923AB19A3216B00C52AD6 /* hpack.pl */,
-				107923AC19A3216B00C52AD6 /* tokens.pl */,
+				107923AB19A3216B00C52AD6 /* tokens.pl */,
 			);
 			path = misc;
 			sourceTree = "<group>";
@@ -337,6 +337,7 @@
 				107923BD19A3217300C52AD6 /* rproxy.c */,
 				107923BE19A3217300C52AD6 /* timeout.c */,
 				107923BF19A3217300C52AD6 /* token.c */,
+				1079245319A32C0800C52AD6 /* token_table.h */,
 				107923C019A3217300C52AD6 /* util.c */,
 				107923C119A3217300C52AD6 /* websocket.c */,
 			);
@@ -382,6 +383,7 @@
 				107923CA19A3217300C52AD6 /* internal.h in Headers */,
 				1079239719A3210E00C52AD6 /* picohttpparser.h in Headers */,
 				107923C819A3217300C52AD6 /* hpack_huffman_table.h in Headers */,
+				1079245419A32C0800C52AD6 /* token_table.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

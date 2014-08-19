@@ -2,20 +2,16 @@
 #ifndef h2o__token_h
 #define h2o__token_h
 
-typedef struct st_h2o_token_t {
-    uv_buf_t buf;
-} h2o_token_t;
-
 #define H2O_TOKEN_AUTHORITY (h2o__tokens + 0)
 #define H2O_TOKEN_METHOD (h2o__tokens + 1)
 #define H2O_TOKEN_PATH (h2o__tokens + 2)
 #define H2O_TOKEN_SCHEME (h2o__tokens + 3)
 #define H2O_TOKEN_STATUS (h2o__tokens + 4)
-#define H2O_TOKEN_ACCEPT_CHARSET (h2o__tokens + 5)
-#define H2O_TOKEN_ACCEPT_ENCODING (h2o__tokens + 6)
-#define H2O_TOKEN_ACCEPT_LANGUAGE (h2o__tokens + 7)
-#define H2O_TOKEN_ACCEPT_RANGES (h2o__tokens + 8)
-#define H2O_TOKEN_ACCEPT (h2o__tokens + 9)
+#define H2O_TOKEN_ACCEPT (h2o__tokens + 5)
+#define H2O_TOKEN_ACCEPT_CHARSET (h2o__tokens + 6)
+#define H2O_TOKEN_ACCEPT_ENCODING (h2o__tokens + 7)
+#define H2O_TOKEN_ACCEPT_LANGUAGE (h2o__tokens + 8)
+#define H2O_TOKEN_ACCEPT_RANGES (h2o__tokens + 9)
 #define H2O_TOKEN_ACCESS_CONTROL_ALLOW_ORIGIN (h2o__tokens + 10)
 #define H2O_TOKEN_AGE (h2o__tokens + 11)
 #define H2O_TOKEN_ALLOW (h2o__tokens + 12)
@@ -62,9 +58,5 @@ typedef struct st_h2o_token_t {
 #define H2O_TOKEN_VIA (h2o__tokens + 53)
 #define H2O_TOKEN_WWW_AUTHENTICATE (h2o__tokens + 54)
 #define H2O_TOKEN_X_REPROXY_URL (h2o__tokens + 55)
-
-extern const h2o_token_t h2o__tokens[56];
-const h2o_token_t *h2o_lookup_token(const char *name, size_t len);
-int h2o_buf_is_token(const uv_buf_t *buf);
 
 #endif

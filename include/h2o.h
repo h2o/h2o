@@ -10,7 +10,6 @@ extern "C" {
 #include <time.h>
 #include <uv.h>
 #include "picohttpparser.h"
-#include "h2o/token.h"
 
 #ifndef H2O_MAX_HEADERS
 # define H2O_MAX_HEADERS 100
@@ -19,10 +18,21 @@ extern "C" {
 # define H2O_MAX_REQLEN (8192+4096*(H2O_MAX_HEADERS))
 #endif
 
+#ifndef H2O_MAX_TOKENS
+# define H2O_MAX_TOKENS 10240
+#endif
+
 #define H2O_STRLIT(s) (s), sizeof(s) - 1
 #define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s*)((char*)(p) - offsetof(s, m)))
 
 typedef struct st_h2o_req_t h2o_req_t;
+
+typedef struct st_h2o_token_t {
+    uv_buf_t buf;
+    int http2_static_table_name_index;
+} h2o_token_t;
+
+#include "h2o/token.h"
 
 typedef struct st_h2o_mempool_t {
     struct st_h2o_mempool_chunk_t *chunks;
@@ -123,6 +133,12 @@ struct st_h2o_req_t {
 };
 
 typedef void (*h2o_req_cb)(h2o_req_t *req);
+
+/* token */
+
+extern const h2o_token_t h2o__tokens[H2O_MAX_TOKENS];
+const h2o_token_t *h2o_lookup_token(const char *name, size_t len);
+int h2o_buf_is_token(const uv_buf_t *buf);
 
 /* mempool */
 
