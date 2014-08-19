@@ -6,6 +6,7 @@ extern "C" {
 #endif
 
 #include <assert.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <time.h>
 #include <uv.h>
@@ -286,6 +287,9 @@ inline void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, uv_buf_t 
 
 inline void h2o_send(h2o_req_t *req, uv_buf_t *bufs, size_t bufcnt, int is_final)
 {
+    assert(req->_generator != NULL);
+    if (is_final)
+        req->_generator = NULL;
     req->_ostr_top->do_send(req->_ostr_top, req, bufs, bufcnt, &is_final);
 }
 

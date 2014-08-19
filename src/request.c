@@ -73,6 +73,7 @@ void h2o_init_request(h2o_req_t *req, void *conn, h2o_loop_context_t *ctx, h2o_r
 
 void h2o_dispose_request(h2o_req_t *req)
 {
+    /* FIXME close generator and ostreams */
     h2o_timeout_unlink_entry(&req->ctx->request_next_timeout, &req->_timeout_entry);
     h2o_mempool_destroy(&req->pool, 0);
 }

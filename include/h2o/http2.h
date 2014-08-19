@@ -1,6 +1,13 @@
 #ifndef h2o__http2_h
 #define h2o__http2_h
 
+#include "khash.h"
+
+typedef struct st_h2o_http2_conn_t h2o_http2_conn_t;
+
+#define H2O_HTTP2_DECODE_INCOMPLETE -2
+#define H2O_HTTP2_DECODE_ERROR -1
+
 /* hpack */
 
 #define H2O_HTTP2_ENCODE_INT_MAX_LENGTH 5
@@ -14,13 +21,12 @@ typedef struct st_h2o_hpack_header_table_t {
     size_t hpack_capacity;
 } h2o_hpack_header_table_t;
 
-void h2o_dispose_hpack_header_table(h2o_mempool_t *pool, h2o_hpack_header_table_t *header_table);
-size_t h2o_http2_encode_string(uint8_t *dst, const char *s, size_t len);
-uv_buf_t h2o_http2_flatten_headers(h2o_mempool_t *pool, size_t max_frame_size, h2o_res_t *res);
+void h2o_hpack_dispose_header_table(h2o_mempool_t *pool, h2o_hpack_header_table_t *header_table);
+int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, int *allow_psuedo, const uint8_t *src, size_t len);
+size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len);
+uv_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, uint32_t stream_id, size_t max_frame_size, h2o_res_t *res);
 
 /* settings */
-
-typedef struct st_h2o_http2_conn_t h2o_http2_conn_t;
 
 #define H2O_HTTP2_SETTINGS_HEADER_TABLE_SIZE 1
 #define H2O_HTTP2_SETTINGS_ENABLE_PUSH 2
@@ -37,41 +43,63 @@ typedef struct st_h2o_http2_settings_t {
     uint32_t max_frame_size;
 } h2o_http2_settings_t;
 
+const h2o_http2_settings_t H2O_HTTP2_SETTINGS_DEFAULT;
+
 /* frames */
 
 #define H2O_HTTP2_FRAME_HEADER_SIZE 9
 
-#define H2O_HTTP2_DATA_FRAME_TYPE 0
-#define H2O_HTTP2_HEADERS_FRAME_TYPE 1
-#define H2O_HTTP2_PRIORITY_FRAME_TYPE 2
-#define H2O_HTTP2_RST_STREAM_FRAME_TYPE 3
-#define H2O_HTTP2_SETTINGS_FRAME_TYPE 4
-#define H2O_HTTP2_PUSH_PROMISE_FRAME_TYPE 5
-#define H2O_HTTP2_PING_FRAME_TYPE 6
-#define H2O_HTTP2_GOAWAY_FRAME_TYPE 7
-#define H2O_HTTP2_WINDOW_UPDATE_FRAME_TYPE 8
-#define H2O_HTTP2_CONTINUATION_FRAME_TYPE 9
+#define H2O_HTTP2_FRAME_TYPE_DATA 0
+#define H2O_HTTP2_FRAME_TYPE_HEADERS 1
+#define H2O_HTTP2_FRAME_TYPE_PRIORITY 2
+#define H2O_HTTP2_FRAME_TYPE_RST_STREAM 3
+#define H2O_HTTP2_FRAME_TYPE_SETTINGS 4
+#define H2O_HTTP2_FRAME_TYPE_PUSH_PROMISE 5
+#define H2O_HTTP2_FRAME_TYPE_PING 6
+#define H2O_HTTP2_FRAME_TYPE_GOAWAY 7
+#define H2O_HTTP2_FRAME_TYPE_WINDOW_UPDATE 8
+#define H2O_HTTP2_FRAME_TYPE_CONTINUATION 9
 
-#define H2O_HTTP2_END_STREAM_FRAME_FLAG 0x1
-#define H2O_HTTP2_END_HEADERS_FRAME_FLAG 0x4
+#define H2O_HTTP2_FRAME_FLAG_END_STREAM 0x1
+#define H2O_HTTP2_FRAME_FLAG_ACK 0x1
+#define H2O_HTTP2_FRAME_FLAG_END_HEADERS 0x4
+#define H2O_HTTP2_FRAME_FLAG_PADDED 0x8
+#define H2O_HTTP2_FRAME_FLAG_PRIORITY 0x20
 
-typedef struct st_h2o_http2_frame_header_t {
+typedef struct st_h2o_http2_frame_t {
     uint32_t length;
     uint8_t type;
     uint8_t flags;
     uint32_t stream_id;
-} h2o_http2_frame_header_t;
+    const uint8_t *payload;
+} h2o_http2_frame_t;
 
-typedef struct st_h2o_http2_finalostream_t {
-    h2o_ostream_t super;
-    int sent_headers;
-    struct {
-        h2o_http2_frame_header_t *bufs;
-        size_t capacity;
-    } header_bufs;
-} h2o_http2_finalostream_t;
+typedef struct st_h2o_http2_headers_payload_t {
+    int exclusive;
+    uint32_t stream_dependency; /* 0 if not set */
+    uint16_t weight; /* 0 if not set */
+    const uint8_t *headers;
+    size_t headers_len;
+} h2o_http2_headers_payload_t;
 
 typedef void (*h2o_http2_close_cb)(h2o_http2_conn_t *conn);
+
+typedef enum enum_h2o_http2_stream_state_t {
+    H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS,
+    H2O_HTTP2_STREAM_STATE_RECV_HEADERS,
+    H2O_HTTP2_STREAM_STATE_SEND_HEADERS,
+    H2O_HTTP2_STREAM_STATE_SEND_BODY
+} h2o_http2_stream_state_t;
+
+typedef struct st_h2o_http2_stream_t {
+    uint32_t stream_id;
+    h2o_req_t req;
+    h2o_ostream_t _ostr_final;
+    h2o_http2_stream_state_t _state;
+    uv_write_t _wreq;
+} h2o_http2_stream_t;
+
+KHASH_MAP_INIT_INT64(h2o_http2_stream_t, h2o_http2_stream_t*)
 
 struct st_h2o_http2_conn_t {
     uv_stream_t *stream;
@@ -81,28 +109,27 @@ struct st_h2o_http2_conn_t {
     h2o_http2_close_cb close_cb;
     /* settings */
     h2o_http2_settings_t peer_settings;
-    /* only handle one request at a time */
-    h2o_req_t req;
+    /* streams */
+    khash_t(h2o_http2_stream_t) *active_streams;
+    uint32_t max_stream_id;
     /* internal */
-    int (*_read_expect)(h2o_http2_conn_t *conn);
+    ssize_t (*_read_expect)(h2o_http2_conn_t *conn, const uint8_t *src, size_t len);
     h2o_input_buffer_t *_input;
     h2o_input_buffer_t *_http1_req_input; /* contains data referred to by original request via HTTP/1.1 */
-    uv_write_t _wreq;
-    h2o_http2_finalostream_t _ostr_final;
+    h2o_hpack_header_table_t _input_header_table;
+    uv_write_t _conn_wreq;
 };
 
-void h2o_http2_settings_init(h2o_http2_settings_t *settings);
-int h2o_http2_settings_set_header_table_size(h2o_http2_settings_t *settings, uint32_t value);
-int h2o_http2_settings_set_enable_push(h2o_http2_settings_t *settings, uint32_t value);
-int h2o_http2_settings_set_max_concurrent_streams(h2o_http2_settings_t *settings, uint32_t value);
-int h2o_http2_settings_set_initial_window_size(h2o_http2_settings_t *settings, uint32_t value);
-int h2o_http2_settings_set_max_frame_size(h2o_http2_settings_t *settings, uint32_t value);
-int h2o_http2_settings_decode_payload(h2o_http2_settings_t *settings, uint8_t *src, size_t len);
+int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t *src, size_t len);
+
+/* frames */
+
+void h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type, uint8_t flags, int32_t stream_id);
+ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, const h2o_http2_settings_t *host_settings);
+int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const h2o_http2_frame_t *frame);
 
 /* core */
-void h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type, uint8_t flags, int32_t stream_id);
 void h2o_http2_close_and_free(h2o_http2_conn_t *conn);
-int h2o_http2_parse_request(h2o_mempool_t *pool, h2o_req_t *req, h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len);
 int h2o_http2_handle_upgrade(h2o_req_t *req, h2o_http2_conn_t *conn);
 
 #endif

@@ -311,7 +311,7 @@ static uint8_t *encode_status(uint8_t *dst, int status)
     return dst;
 }
 
-void h2o_dispose_hpack_header_table(h2o_mempool_t *pool, h2o_hpack_header_table_t *header_table)
+void h2o_hpack_dispose_header_table(h2o_mempool_t *pool, h2o_hpack_header_table_t *header_table)
 {
     if (header_table->num_entries != 0) {
         size_t index = header_table->entry_start_index;
@@ -325,20 +325,17 @@ void h2o_dispose_hpack_header_table(h2o_mempool_t *pool, h2o_hpack_header_table_
     }
 }
 
-int h2o_http2_parse_request(h2o_mempool_t *pool, h2o_req_t *req, h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len)
+int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, int *allow_psuedo, const uint8_t *src, size_t len)
 {
     const uint8_t *src_end = src + len;
-    int allow_psuedo = 1;
-
-    assert(req->authority == NULL && req->method == NULL && req->path == NULL && req->scheme == NULL && req->headers.count == 0);
 
     while (src != src_end) {
         struct st_h2o_decode_header_result_t r;
-        if (decode_header(pool, &r, header_table, &src, src_end) != 0)
+        if (decode_header(&req->pool, &r, header_table, &src, src_end) != 0)
             return -1;
         if (r.name_token != NULL) {
             if (r.name_token->buf.base[0] == ':') {
-                if (allow_psuedo) {
+                if (*allow_psuedo) {
                     if (r.name_token == H2O_TOKEN_AUTHORITY) {
                         /* FIXME should we perform this check? */
                         if (req->authority != NULL)
@@ -367,22 +364,18 @@ int h2o_http2_parse_request(h2o_mempool_t *pool, h2o_req_t *req, h2o_hpack_heade
                     return -1;
                 }
             } else {
-                allow_psuedo = 0;
-                h2o_add_header(pool, &req->headers, r.name_token, r.value->base, r.value->len);
+                *allow_psuedo = 0;
+                h2o_add_header(&req->pool, &req->headers, r.name_token, r.value->base, r.value->len);
             }
         } else {
             if (r.name_not_token->len >= 1 && r.name_not_token->base[0] == ':') {
                 /* unknown psuedo header is never accepted */
                 return -1;
             }
-            h2o_add_header_by_str(pool, &req->headers, r.name_not_token->base, r.name_not_token->len, 0, r.value->base, r.value->len);
+            h2o_add_header_by_str(&req->pool, &req->headers, r.name_not_token->base, r.name_not_token->len, 0, r.value->base, r.value->len);
         }
     }
 
-    if (req->method == NULL || req->path == NULL)
-        return -1;
-
-    req->version = 0x200;
     return 0;
 }
 
@@ -436,7 +429,7 @@ static size_t encode_huffman(uint8_t *_dst, const uint8_t *src, size_t len)
     return dst - _dst;
 }
 
-size_t h2o_http2_encode_string(uint8_t *_dst, const char *s, size_t len)
+size_t h2o_hpack_encode_string(uint8_t *_dst, const char *s, size_t len)
 {
     uint8_t *dst = _dst;
     uint8_t huffbuf[4096];
@@ -479,13 +472,13 @@ static uint8_t *encode_header(uint8_t *dst, const uv_buf_t *name, const uv_buf_t
     } else {
         /* literal header field without indexing (new name) */
         *dst++ = '\0';
-        dst += h2o_http2_encode_string(dst, name->base, name->len);
+        dst += h2o_hpack_encode_string(dst, name->base, name->len);
     }
-    dst += h2o_http2_encode_string(dst, value->base, value->len);
+    dst += h2o_hpack_encode_string(dst, value->base, value->len);
     return dst;
 }
 
-uv_buf_t h2o_http2_flatten_headers(h2o_mempool_t *pool, size_t max_frame_size, h2o_res_t *res)
+uv_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, uint32_t stream_id, size_t max_frame_size, h2o_res_t *res)
 {
     size_t max_capacity = 0;
     uv_buf_t ret;
@@ -522,9 +515,9 @@ uv_buf_t h2o_http2_flatten_headers(h2o_mempool_t *pool, size_t max_frame_size, h
 #define EMIT_HEADER() h2o_http2_encode_frame_header( \
     cur_frame, \
     dst - cur_frame - H2O_HTTP2_FRAME_HEADER_SIZE, \
-    cur_frame == (uint8_t*)ret.base ? H2O_HTTP2_HEADERS_FRAME_TYPE : H2O_HTTP2_CONTINUATION_FRAME_TYPE, \
-    cur_frame == (uint8_t*)ret.base ? H2O_HTTP2_END_HEADERS_FRAME_FLAG : 0, \
-    1)
+    cur_frame == (uint8_t*)ret.base ? H2O_HTTP2_FRAME_TYPE_HEADERS : H2O_HTTP2_FRAME_TYPE_CONTINUATION, \
+    cur_frame == (uint8_t*)ret.base ? H2O_HTTP2_FRAME_FLAG_END_HEADERS : 0, \
+    stream_id)
 
         cur_frame = dst;
         dst += H2O_HTTP2_FRAME_HEADER_SIZE;
