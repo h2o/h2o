@@ -40,16 +40,15 @@ static int parse_url(h2o_mempool_t *pool, const char *url, char const **host, ui
     return 1;
 }
 
-static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *inbufs, size_t inbufcnt, int *is_final)
+static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *inbufs, size_t inbufcnt, int is_final)
 {
     struct rproxy_t *self = (void*)_self;
     const char *host, *path;
     uint16_t port;
 
     /* throw away all data */
-    if (! *is_final) {
-        h2o_request_next(req);
-        *is_final = 0;
+    if (! is_final) {
+        h2o_schedule_proceed_response(req);
         return;
     }
 
@@ -79,7 +78,7 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *inbufs, s
     if (self->filter->next != NULL)
         self->filter->next->on_start_response(self->filter->next, req);
 
-    assert(*is_final);
+    assert(is_final);
     h2o_ostream_send_next(&self->super, req, &body, 1, is_final);
 }
 

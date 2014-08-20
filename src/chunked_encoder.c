@@ -9,7 +9,7 @@ typedef struct st_chunked_encoder_t {
     char buf[64];
 } chunked_encoder_t;
 
-static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *inbufs, size_t inbufcnt, int *is_final)
+static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *inbufs, size_t inbufcnt, int is_final)
 {
     chunked_encoder_t *self = (void*)_self;
     uv_buf_t *outbufs = alloca(sizeof(uv_buf_t) * (inbufcnt + 2));
@@ -30,7 +30,7 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *inbufs, s
     memcpy(outbufs + outbufcnt, inbufs, sizeof(uv_buf_t) * inbufcnt);
     outbufcnt += inbufcnt;
     /* set EOF chunk header if is_final */
-    if (*is_final) {
+    if (is_final) {
         outbufs[outbufcnt].base = "\r\n0\r\n\r\n";
         outbufs[outbufcnt].len = 7;
         outbufcnt++;

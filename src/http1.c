@@ -4,7 +4,7 @@
 #include "h2o.h"
 #include "h2o/http1.h"
 
-static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *inbufs, size_t inbufcnt, int *is_final);
+static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *inbufs, size_t inbufcnt, int is_final);
 
 static void init_request(h2o_http1_conn_t *conn, int reinit)
 {
@@ -130,7 +130,7 @@ static void on_send_next(uv_write_t *wreq, int status)
     if (status != 0)
         close_connection(conn);
     else
-        conn->req._generator->proceed(conn->req._generator, &conn->req, status);
+        h2o_proceed_response(&conn->req, 0);
 }
 
 static void on_send_complete(uv_write_t *wreq, int status)
@@ -219,7 +219,7 @@ static void flatten_headers(h2o_req_t *req, uv_buf_t *bufs, const char *connecti
     bufs[1] = h2o_flatten_headers(&req->pool, &req->res.headers);
 }
 
-void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *inbufs, size_t inbufcnt, int *is_final)
+void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *inbufs, size_t inbufcnt, int is_final)
 {
     h2o_http1_finalostream_t *self = (void*)_self;
     h2o_http1_conn_t *conn = req->conn;
@@ -238,7 +238,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *inbufs, s
     bufcnt += inbufcnt;
 
     if (bufcnt != 0) {
-        uv_write(&conn->_wreq, conn->stream, bufs, bufcnt, *is_final ? on_send_complete : on_send_next);
+        uv_write(&conn->_wreq, conn->stream, bufs, bufcnt, is_final ? on_send_complete : on_send_next);
     } else {
         on_send_complete(&conn->_wreq, 0);
     }

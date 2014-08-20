@@ -32,7 +32,7 @@ static const uv_buf_t HOST_SETTINGS_BIN = {
 };
 
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len);
-static void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, uv_buf_t *inbufs, size_t incnt, int *is_final);
+static void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, uv_buf_t *inbufs, size_t incnt, int is_final);
 
 static void free_stream(h2o_http2_stream_t *stream, h2o_input_buffer_t **http1_req_input)
 {
@@ -296,7 +296,7 @@ static void proceed(h2o_http2_conn_t *conn)
         for (iter = kh_begin(conn->active_streams); ! kh_exist(conn->active_streams, iter); ++iter)
             assert(iter != kh_end(conn->active_streams));
         stream = kh_val(conn->active_streams, iter);
-        stream->req._generator->proceed(stream->req._generator, &stream->req, 0);
+        h2o_proceed_response(&stream->req, 0);
     }
 }
 
@@ -339,7 +339,7 @@ static uv_buf_t build_frame_header(h2o_http2_stream_t *stream, size_t length, in
     return out;
 }
 
-void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, uv_buf_t *inbufs, size_t incnt, int *is_final)
+void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, uv_buf_t *inbufs, size_t incnt, int is_final)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _ostr_final, self);
     h2o_http2_conn_t *conn = req->conn;
@@ -357,7 +357,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, uv_buf_t *inbufs, si
                 total_data_size += inbufs[i].len;
             }
         }
-    } else if (*is_final) {
+    } else if (is_final) {
         ++alloc_cnt;
     }
 
@@ -382,7 +382,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, uv_buf_t *inbufs, si
                         outbufs[outcnt++] = build_frame_header(
                             stream,
                             sz_min(total_data_size, conn->peer_settings.max_frame_size),
-                            *is_final && total_data_size <= conn->peer_settings.max_frame_size);
+                            is_final && total_data_size <= conn->peer_settings.max_frame_size);
                     }
                     outbufs[outcnt++] = uv_buf_init(inbufs[i].base + off, (unsigned)emit_size);
                     cur_frame_size += emit_size;
@@ -394,14 +394,14 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, uv_buf_t *inbufs, si
             }
         }
         assert(total_data_size == 0);
-    } else if (*is_final) {
+    } else if (is_final) {
         outbufs[outcnt++] = build_frame_header(stream, 0, 1);
     }
 
     assert(outcnt != 0);
     assert(outcnt <= alloc_cnt);
 
-    uv_write(&stream->_wreq, conn->stream, outbufs, outcnt, *is_final ? on_stream_send_complete : on_stream_send_next);
+    uv_write(&stream->_wreq, conn->stream, outbufs, outcnt, is_final ? on_stream_send_complete : on_stream_send_next);
 
     if (is_final)
         unregister_stream(conn, stream->stream_id);

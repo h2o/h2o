@@ -95,7 +95,7 @@ typedef struct st_h2o_generator_t {
 
 typedef struct st_h2o_ostream_t {
     struct st_h2o_ostream_t *next;
-    void (*do_send)(struct st_h2o_ostream_t *self, h2o_req_t *req, uv_buf_t *bufs, size_t bufcnt, int *is_final);
+    void (*do_send)(struct st_h2o_ostream_t *self, h2o_req_t *req, uv_buf_t *bufs, size_t bufcnt, int is_final);
 } h2o_ostream_t;
 
 typedef struct st_h2o_res_t {
@@ -201,8 +201,9 @@ h2o_generator_t *h2o_start_response(h2o_req_t *req, size_t sz);
 h2o_ostream_t *h2o_prepend_output_filter(h2o_req_t *req, size_t sz);
 
 static void h2o_send(h2o_req_t *req, uv_buf_t *bufs, size_t bufcnt, int is_final);
-static void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, uv_buf_t *bufs, size_t bufcnt, int *is_final);
-void h2o_request_next(h2o_req_t *req); /* called by buffering output filters to request next content */
+static void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, uv_buf_t *bufs, size_t bufcnt, int is_final);
+void h2o_schedule_proceed_response(h2o_req_t *req); /* called by buffering output filters to request next content */
+static void h2o_proceed_response(h2o_req_t *req, int status);
 
 /* loop context */
 
@@ -276,9 +277,9 @@ inline int h2o_lcstris(const char *target, size_t target_len, const char *test, 
     return h2o_lcstris_core(target, test, test_len);
 }
 
-inline void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, uv_buf_t *bufs, size_t bufcnt, int *is_final)
+inline void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, uv_buf_t *bufs, size_t bufcnt, int is_final)
 {
-    if (*is_final) {
+    if (is_final) {
         assert(req->_ostr_top == ostr);
         req->_ostr_top = ostr->next;
     }
@@ -290,7 +291,16 @@ inline void h2o_send(h2o_req_t *req, uv_buf_t *bufs, size_t bufcnt, int is_final
     assert(req->_generator != NULL);
     if (is_final)
         req->_generator = NULL;
-    req->_ostr_top->do_send(req->_ostr_top, req, bufs, bufcnt, &is_final);
+    req->_ostr_top->do_send(req->_ostr_top, req, bufs, bufcnt, is_final);
+}
+
+inline void h2o_proceed_response(h2o_req_t *req, int status)
+{
+    if (req->_generator != NULL) {
+        req->_generator->proceed(req->_generator, req, status);
+    } else {
+        req->_ostr_top->do_send(req->_ostr_top, req, NULL, 0, 1);
+    }
 }
 
 #ifdef __cplusplus
