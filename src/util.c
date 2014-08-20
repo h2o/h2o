@@ -68,7 +68,8 @@ uv_buf_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t slen)
         if ((ret.base = malloc(slen + 1)) == NULL)
             h2o_fatal("no memory");
     }
-    memcpy(ret.base, s, slen + 1);
+    memcpy(ret.base, s, slen);
+    ret.base[slen] = '\0';
     ret.len = strlen(s);
     return ret;
 }
