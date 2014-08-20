@@ -32,7 +32,7 @@ static void timer_cb(uv_timer_t *_timer, int status)
             break;
         }
         unlink_timer(entry);
-        (*timer->_cb)(entry);
+        entry->cb(entry);
     }
 
     if (! timer_is_empty(timer)) {
@@ -41,13 +41,12 @@ static void timer_cb(uv_timer_t *_timer, int status)
     }
 }
 
-void h2o_timeout_init(h2o_timeout_t *timer, uint64_t timeout, void (*cb)(h2o_timeout_entry_t *entry), uv_loop_t *loop)
+void h2o_timeout_init(h2o_timeout_t *timer, uint64_t timeout, uv_loop_t *loop)
 {
     uv_timer_init(loop, &timer->timer);
     uv_unref((uv_handle_t*)&timer->timer);
 
     timer->timeout = timeout;
-    timer->_cb = cb;
     timer->_link.wake_at = UINT64_MAX;
     timer->_link._prev = timer->_link._next = &timer->_link;
 }

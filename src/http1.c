@@ -33,6 +33,19 @@ static void close_connection(h2o_http1_conn_t *conn)
     conn->close_cb(conn);
 }
 
+static void set_timeout(h2o_http1_conn_t *conn, h2o_timeout_t *timeout, h2o_timeout_cb cb)
+{
+    if (conn->_timeout != NULL) {
+        h2o_timeout_unlink_entry(conn->_timeout, &conn->_timeout_entry);
+        conn->_timeout_entry.cb = NULL;
+    }
+    conn->_timeout = timeout;
+    if (timeout != NULL) {
+        h2o_timeout_link_entry(timeout, &conn->_timeout_entry);
+        conn->_timeout_entry.cb = cb;
+    }
+}
+
 static void fixup_request(h2o_http1_conn_t *conn, struct phr_header *headers, size_t num_headers, int minor_version)
 {
     uv_buf_t connection = { NULL, 0 }, host = { NULL, 0 }, upgrade = { NULL, 0 };
@@ -77,7 +90,7 @@ static int handle_incoming(h2o_http1_conn_t *conn, size_t prevreqlen)
                                headers, &num_headers, prevreqlen);
     switch (reqlen) {
     default: // parse complete
-        h2o_http1_set_timeout(conn, NULL, NULL);
+        set_timeout(conn, NULL, NULL);
         uv_read_stop(conn->stream);
         conn->_reqsize = reqlen;
         fixup_request(conn, headers, num_headers, minor_version);
@@ -111,15 +124,18 @@ static void reqread_on_read(uv_stream_t *stream, ssize_t nread, uv_buf_t _buf)
     handle_incoming(conn, prevreqlen);
 }
 
-static void reqread_on_timeout(h2o_http1_conn_t *conn)
+static void reqread_on_timeout(h2o_timeout_entry_t *entry)
 {
+    h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http1_conn_t, _timeout_entry, entry);
+
+    /* TODO log */
     conn->req.http1_is_persistent = 0;
     close_connection(conn);
 }
 
 static inline void reqread_start(h2o_http1_conn_t *conn)
 {
-    h2o_http1_set_timeout(conn, &conn->ctx->http1_req_timeout, reqread_on_timeout);
+    set_timeout(conn, &conn->ctx->req_timeout, reqread_on_timeout);
     uv_read_start(conn->stream, alloc_inbuf, reqread_on_read);
 }
 
@@ -252,7 +268,6 @@ void h2o_http1_init(h2o_http1_conn_t *conn)
 
     /* init fields */
     conn->_timeout = NULL;
-    conn->_timeout_cb = NULL;
     memset(&conn->_timeout_entry, 0, sizeof(conn->_timeout_entry));
 
     conn->_input = NULL;
@@ -282,26 +297,4 @@ void h2o_http1_close_and_free(h2o_http1_conn_t *conn)
     if (conn->stream != NULL)
         uv_close((uv_handle_t*)conn->stream, (uv_close_cb)free);
     free(conn);
-}
-
-void h2o_http1_set_timeout(h2o_http1_conn_t *conn, h2o_timeout_t *timeout, h2o_http1_timeout_cb cb)
-{
-    if (conn->_timeout != NULL) {
-        h2o_timeout_unlink_entry(conn->_timeout, &conn->_timeout_entry);
-        conn->_timeout_cb = NULL;
-    }
-    conn->_timeout = timeout;
-    if (timeout != NULL) {
-        h2o_timeout_link_entry(timeout, &conn->_timeout_entry);
-        conn->_timeout_cb = cb;
-    }
-}
-
-void h2o_http1_on_timeout(h2o_timeout_entry_t *entry)
-{
-    /* TODO log */
-    h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http1_conn_t, _timeout_entry, entry);
-    h2o_http1_timeout_cb cb = conn->_timeout_cb;
-    conn->_timeout_cb = NULL;
-    cb(conn);
 }

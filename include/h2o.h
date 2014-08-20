@@ -27,6 +27,7 @@ extern "C" {
 #define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s*)((char*)(p) - offsetof(s, m)))
 
 typedef struct st_h2o_req_t h2o_req_t;
+typedef struct st_h2o_timeout_entry_t h2o_timeout_entry_t;
 
 typedef struct st_h2o_token_t {
     uv_buf_t buf;
@@ -40,16 +41,18 @@ typedef struct st_h2o_mempool_t {
     struct st_h2o_mempool_direct_t *directs;
 } h2o_mempool_t;
 
-typedef struct st_h2o_timeout_entry_t {
+typedef void (*h2o_timeout_cb)(h2o_timeout_entry_t *entry);
+
+struct st_h2o_timeout_entry_t {
     uint64_t wake_at;
+    h2o_timeout_cb cb;
     struct st_h2o_timeout_entry_t *_next;
     struct st_h2o_timeout_entry_t *_prev;
-} h2o_timeout_entry_t;
+};
 
 typedef struct st_h2o_timeout_t {
     uv_timer_t timer;
     uint64_t timeout;
-    void (*_cb)(h2o_timeout_entry_t *entry);
     h2o_timeout_entry_t _link;
 } h2o_timeout_t;
 
@@ -72,8 +75,8 @@ typedef struct st_h2o_mimemap_t {
 
 typedef struct h2o_loop_context_t {
     uv_loop_t *loop;
-    h2o_timeout_t request_next_timeout; /* for per-request deferred tasks */
-    h2o_timeout_t http1_req_timeout; /* for HTTP/1 request timeout */
+    h2o_timeout_t zero_timeout; /* for deferred tasks */
+    h2o_timeout_t req_timeout; /* for request timeout */
     h2o_filter_t *filters;
     h2o_mimemap_t mimemap;
 } h2o_loop_context_t;
@@ -188,7 +191,7 @@ uv_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len);
 
 /* timer */
 
-void h2o_timeout_init(h2o_timeout_t *timer, uint64_t timeout, void (*cb)(h2o_timeout_entry_t* entry), uv_loop_t *loop);
+void h2o_timeout_init(h2o_timeout_t *timer, uint64_t timeout, uv_loop_t *loop);
 void h2o_timeout_link_entry(h2o_timeout_t *timer, h2o_timeout_entry_t *entry);
 void h2o_timeout_unlink_entry(h2o_timeout_t *timer, h2o_timeout_entry_t *entry);
 
