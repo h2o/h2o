@@ -232,15 +232,12 @@ h2o_header_iterator_t h2o_delete_header(h2o_headers_t *headers, h2o_header_itera
     --headers->count;
     if (--(*iter._chunk_ref)->size == 0) {
         struct st_h2o_headers_chunk_t *new_next = (*iter._chunk_ref)->next;
-        if (*headers->_last_ref == *iter._chunk_ref) {
-            *headers->_last_ref = new_next;
-        }
-        *iter._chunk_ref = (*iter._chunk_ref)->next;
-        if (*iter._chunk_ref != NULL) {
-            iter.value = &(*iter._chunk_ref)->headers[0].value;
-        } else {
-            iter._chunk_ref = NULL;
+        *iter._chunk_ref = new_next;
+        if (new_next == NULL) {
+            /* last element has been removed */
             iter.value = NULL;
+        } else {
+            iter.value = &(*iter._chunk_ref)->headers[0].value;
         }
     } else {
         size_t index = H2O_STRUCT_FROM_MEMBER(struct st_h2o_header_t, value, iter.value) - (*iter._chunk_ref)->headers;

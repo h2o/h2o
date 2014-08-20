@@ -16,6 +16,8 @@ static void on_req(h2o_req_t *req)
 
             /* chunked test */
             uv_buf_t body = h2o_strdup(&req->pool, "hello world\n", SIZE_MAX);
+            req->res.status = 200;
+            req->res.reason = "OK";
             h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
             h2o_start_response(req, sizeof(h2o_generator_t));
             h2o_send(req, &body, 1, 1);
@@ -23,6 +25,8 @@ static void on_req(h2o_req_t *req)
         } else if (h2o_memis(req->path, req->path_len, H2O_STRLIT("/reproxy-test"))) {
 
             /* reproxy-test */
+            req->res.status = 200;
+            req->res.reason = "OK";
             h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT("http://example.com:81/bar"));
             h2o_send_inline(req, "you should never see this!\n");
 
