@@ -19,15 +19,28 @@ static void unlink_timer(h2o_timeout_entry_t *entry)
 static void timer_cb(uv_timer_t *_timer, int status)
 {
     h2o_timeout_t *timer = (void*)_timer;
+    h2o_timeout_entry_t detached_root;
     uint64_t now;
 
     if (status != 0) {
         return;
     }
 
+    if (timer_is_empty(timer)) {
+        return;
+    }
+
+    /* For zero timeout, we should only invoke the timers that were added prior to entering this function.
+     * To fullfill the purpose we detach all the linked entries from timer->_link and then iterate them.
+     */
+    detached_root = timer->_link;
+    detached_root._next->_prev = &detached_root;
+    detached_root._prev->_next = &detached_root;
+    timer->_link._prev = timer->_link._next = &timer->_link;
+
     now = uv_now(timer->timer.loop);
     while (1) {
-        h2o_timeout_entry_t *entry = timer->_link._next;
+        h2o_timeout_entry_t *entry = detached_root._next;
         if (entry->wake_at > now) {
             break;
         }
