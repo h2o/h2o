@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include <stdio.h>
 #include "h2o.h"
 
 struct st_h2o_header_t {

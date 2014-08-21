@@ -359,6 +359,19 @@ Rewrite:
     return rewrite_traversal(pool, path, len);
 }
 
+void h2o_vector__expand(h2o_mempool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)
+{
+    void *new_entries;
+    assert(vector->capacity < new_capacity);
+    if (vector->capacity == 0)
+        vector->capacity = 8;
+    while (vector->capacity < new_capacity)
+        vector->capacity *= 2;
+    new_entries = h2o_mempool_alloc(pool, element_size * vector->capacity);
+    memcpy(new_entries, vector->entries, element_size * vector->size);
+    vector->entries = new_entries;
+}
+
 void h2o_send_inline(h2o_req_t *req, const char *body)
 {
     h2o_generator_t *self;

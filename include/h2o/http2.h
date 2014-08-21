@@ -96,7 +96,6 @@ typedef struct st_h2o_http2_stream_t {
     h2o_req_t req;
     h2o_ostream_t _ostr_final;
     h2o_http2_stream_state_t _state;
-    uv_write_t _wreq;
 } h2o_http2_stream_t;
 
 KHASH_MAP_INIT_INT64(h2o_http2_stream_t, h2o_http2_stream_t*)
@@ -117,7 +116,13 @@ struct st_h2o_http2_conn_t {
     h2o_input_buffer_t *_input;
     h2o_input_buffer_t *_http1_req_input; /* contains data referred to by original request via HTTP/1.1 */
     h2o_hpack_header_table_t _input_header_table;
-    uv_write_t _conn_wreq;
+    struct {
+        h2o_mempool_t pool;
+        uv_write_t wreq;
+        H2O_VECTOR(uv_buf_t) bufs;
+        H2O_VECTOR(h2o_http2_stream_t*) closing_streams;
+        h2o_timeout_entry_t timeout_entry;
+    } _write;
 };
 
 int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t *src, size_t len);

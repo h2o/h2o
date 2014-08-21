@@ -62,6 +62,15 @@ typedef struct st_h2o_input_buffer_t {
     char bytes[1];
 } h2o_input_buffer_t;
 
+#define H2O_VECTOR(type) \
+    struct { \
+        type *entries; \
+        size_t size; \
+        size_t capacity; \
+    }
+
+typedef H2O_VECTOR(void) h2o_vector_t;
+
 typedef struct st_h2o_filter_t {
     struct st_h2o_filter_t *next;
     void (*dispose)(struct st_h2o_filter_t *self);
@@ -188,6 +197,8 @@ const char *h2o_get_filext(const char *path, size_t len);
 const char *h2o_next_token(const char* elements, size_t elements_len, size_t *element_len, const char *cur);
 int h2o_contains_token(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len);
 uv_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len);
+static void h2o_vector_reserve(h2o_mempool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
+void h2o_vector__expand(h2o_mempool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
 
 /* timer */
 
@@ -278,6 +289,13 @@ inline int h2o_lcstris(const char *target, size_t target_len, const char *test, 
     if (target_len != test_len)
         return 0;
     return h2o_lcstris_core(target, test, test_len);
+}
+
+inline void h2o_vector_reserve(h2o_mempool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)
+{
+    if (vector->capacity < new_capacity) {
+        h2o_vector__expand(pool, vector, element_size, new_capacity);
+    }
 }
 
 inline void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, uv_buf_t *bufs, size_t bufcnt, int is_final)
