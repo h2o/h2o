@@ -364,7 +364,7 @@ void h2o_vector__expand(h2o_mempool_t *pool, h2o_vector_t *vector, size_t elemen
     void *new_entries;
     assert(vector->capacity < new_capacity);
     if (vector->capacity == 0)
-        vector->capacity = 8;
+        vector->capacity = 4;
     while (vector->capacity < new_capacity)
         vector->capacity *= 2;
     new_entries = h2o_mempool_alloc(pool, element_size * vector->capacity);
@@ -389,7 +389,7 @@ void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *
 
     req->res.status = status;
     req->res.reason = reason;
-    h2o_clear_headers(&req->res.headers);
+    memset(&req->res.headers, 0, sizeof(req->res.headers));
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
 
     h2o_send_inline(req, body);

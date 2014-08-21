@@ -85,20 +85,22 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *inbufs, s
 static void on_start_response(h2o_filter_t *self, h2o_req_t *req)
 {
     struct rproxy_t *rproxy;
-    h2o_header_iterator_t reproxy_header;
+    ssize_t reproxy_header_index;
+    uv_buf_t reproxy_url;
 
     /* do nothing unless 200 */
     if (req->res.status != 200)
         goto SkipMe;
-    if ((reproxy_header = h2o_find_header(&req->res.headers, H2O_TOKEN_X_REPROXY_URL)).value == NULL)
+    if ((reproxy_header_index = h2o_find_header(&req->res.headers, H2O_TOKEN_X_REPROXY_URL, -1)) == -1)
         goto SkipMe;
-    h2o_delete_header(&req->res.headers, reproxy_header);
+    reproxy_url = req->res.headers.entries[reproxy_header_index].value;
+    h2o_delete_header(&req->res.headers, reproxy_header_index);
 
     /* setup */
     rproxy = (void*)h2o_prepend_output_filter(req, sizeof(struct rproxy_t));
     rproxy->filter = self;
     rproxy->super.do_send = send_chunk;
-    rproxy->reproxy_url = h2o_strdup(&req->pool, reproxy_header.value->base, reproxy_header.value->len).base;
+    rproxy->reproxy_url = h2o_strdup(&req->pool, reproxy_url.base, reproxy_url.len).base;
 
     /* next ostream is setup when send_chunk receives EOS */
     return;

@@ -5,7 +5,7 @@
 
 int h2o_is_websocket_handshake(h2o_req_t *req, const char **ws_client_key)
 {
-    h2o_header_iterator_t key_header;
+    ssize_t key_header_index;
 
     *ws_client_key = NULL;
 
@@ -23,15 +23,15 @@ int h2o_is_websocket_handshake(h2o_req_t *req, const char **ws_client_key)
         return 0;
     }
     /* sec-websocket-key header */
-    if ((key_header = h2o_find_header_by_str(&req->headers, H2O_STRLIT("sec-websocket-key"))).value != NULL) {
-        if (key_header.value->len != 24) {
+    if ((key_header_index = h2o_find_header_by_str(&req->headers, H2O_STRLIT("sec-websocket-key"), -1)) != -1) {
+        if (req->headers.entries[key_header_index].value.len != 24) {
             return -1;
         }
     } else {
         return 0;
     }
 
-    *ws_client_key = key_header.value->base;
+    *ws_client_key = req->headers.entries[key_header_index].value.base;
     return 0;
 }
 

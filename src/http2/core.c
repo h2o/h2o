@@ -424,7 +424,8 @@ void h2o_http2_close_and_free(h2o_http2_conn_t *conn)
 
 int h2o_http2_handle_upgrade(h2o_req_t *req, h2o_http2_conn_t *http2conn)
 {
-    uv_buf_t *connection, *settings_encoded, settings_decoded;
+    ssize_t connection_index, settings_index;
+    uv_buf_t settings_decoded;
 
     assert(req->version < 0x200); /* from HTTP/1.x */
 
@@ -443,17 +444,17 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, h2o_http2_conn_t *http2conn)
     http2conn->_write.timeout_entry.cb = emit_writereq;
 
     /* check that "HTTP2-Settings" is declared in the connection header */
-    connection = h2o_find_header(&req->headers, H2O_TOKEN_CONNECTION).value;
-    assert(connection != NULL);
-    if (! h2o_contains_token(connection->base, connection->len, H2O_STRLIT("http2-settings"))) {
+    connection_index = h2o_find_header(&req->headers, H2O_TOKEN_CONNECTION, -1);
+    assert(connection_index != -1);
+    if (! h2o_contains_token(req->headers.entries[connection_index].value.base, req->headers.entries[connection_index].value.len, H2O_STRLIT("http2-settings"))) {
         return -1;
     }
 
     /* decode the settings */
-    if ((settings_encoded = h2o_find_header(&req->headers, H2O_TOKEN_HTTP2_SETTINGS).value) == NULL) {
+    if ((settings_index = h2o_find_header(&req->headers, H2O_TOKEN_HTTP2_SETTINGS, -1)) == -1) {
         return -1;
     }
-    if ((settings_decoded = h2o_decode_base64url(&req->pool, settings_encoded->base, settings_encoded->len)).base == NULL) {
+    if ((settings_decoded = h2o_decode_base64url(&req->pool, req->headers.entries[settings_index].value.base, req->headers.entries[settings_index].value.len)).base == NULL) {
         return -1;
     }
     if (h2o_http2_update_peer_settings(&http2conn->peer_settings, (uint8_t*)settings_decoded.base, settings_decoded.len) != 0) {

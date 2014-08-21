@@ -6,7 +6,7 @@
 struct st_h2o_mempool_chunk_t {
     struct st_h2o_mempool_chunk_t *next;
     size_t offset;
-    char bytes[1024 - sizeof(void*) * 2];
+    char bytes[2048 - sizeof(void*) * 2];
 };
 
 struct st_h2o_mempool_direct_t {

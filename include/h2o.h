@@ -90,16 +90,15 @@ typedef struct h2o_loop_context_t {
     h2o_mimemap_t mimemap;
 } h2o_loop_context_t;
 
-typedef struct st_h2o_headers_t {
-    size_t count;
-    struct st_h2o_headers_chunk_t *_first;
-    struct st_h2o_headers_chunk_t **_last_ref;
-} h2o_headers_t;
+typedef struct st_h2o_header_t {
+    union {
+        h2o_token_t *token;
+        uv_buf_t *str;
+    } name;
+    uv_buf_t value;
+} h2o_header_t;
 
-typedef struct st_h2o_header_iterator_t {
-    uv_buf_t *value;
-    struct st_h2o_headers_chunk_t **_chunk_ref;
-} h2o_header_iterator_t;
+typedef H2O_VECTOR(h2o_header_t) h2o_headers_t;
 
 typedef struct st_h2o_generator_t {
     void (*proceed)(struct st_h2o_generator_t *self, h2o_req_t *req, int status);
@@ -164,19 +163,14 @@ void h2o_mempool_release(h2o_mempool_t *pool, void *p);
 
 /* headers */
 
-void h2o_clear_headers(h2o_headers_t *headers);
-void h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len, size_t extra, uv_buf_t *connection, uv_buf_t *host, uv_buf_t *upgrade);
-static h2o_header_iterator_t h2o_header_iterator_init();
-h2o_header_iterator_t h2o_next_header(const h2o_headers_t *headers, h2o_header_iterator_t iter, uv_buf_t **name);
-static h2o_header_iterator_t h2o_find_header(const h2o_headers_t *headers, const h2o_token_t *token);
-h2o_header_iterator_t h2o_find_next_header(const h2o_headers_t *headers, const h2o_token_t *token, h2o_header_iterator_t iter);
-static h2o_header_iterator_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, size_t name_len);
-h2o_header_iterator_t h2o_find_next_header_by_str(const h2o_headers_t *headers, const char *name, size_t name_len, h2o_header_iterator_t iter);
+void h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len, uv_buf_t *connection, uv_buf_t *host, uv_buf_t *upgrade);
+ssize_t h2o_find_header(const h2o_headers_t *headers, const h2o_token_t *token, ssize_t cursor);
+ssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, size_t name_len, ssize_t cursor);
 void h2o_add_header(h2o_mempool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len);
 void h2o_add_header_by_str(h2o_mempool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token, const char *value, size_t value_len);
 void h2o_set_header(h2o_mempool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len, int overwrite_if_exists);
 void h2o_set_header_by_str(h2o_mempool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token, const char *value, size_t value_len, int overwrite_if_exists);
-h2o_header_iterator_t h2o_delete_header(h2o_headers_t *headers, h2o_header_iterator_t iter);
+ssize_t h2o_delete_header(h2o_headers_t *headers, ssize_t cursor);
 uv_buf_t h2o_flatten_headers(h2o_mempool_t *pool, const h2o_headers_t *headers);
 
 /* util */
@@ -244,28 +238,6 @@ void h2o_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const char *ty
 uv_buf_t h2o_get_mimetype(h2o_mimemap_t *mimemap, const char *ext);
 
 /* inline defs */
-
-inline h2o_header_iterator_t h2o_header_iterator_init()
-{
-    h2o_header_iterator_t iter;
-    iter._chunk_ref = NULL;
-    iter.value = NULL;
-    return iter;
-}
-
-inline h2o_header_iterator_t h2o_find_header(const h2o_headers_t *headers, const h2o_token_t *token)
-{
-    h2o_header_iterator_t iter;
-    iter.value = NULL;
-    return h2o_find_next_header(headers, token, iter);
-}
-
-inline h2o_header_iterator_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, size_t name_len)
-{
-    h2o_header_iterator_t iter;
-    iter.value = NULL;
-    return h2o_find_next_header_by_str(headers, name, name_len, iter);
-}
 
 inline int h2o_tolower(int ch)
 {

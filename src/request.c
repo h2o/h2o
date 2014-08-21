@@ -32,12 +32,12 @@ void h2o_init_request(h2o_req_t *req, void *conn, h2o_loop_context_t *ctx, h2o_r
     req->scheme = NULL;
     req->scheme_len = 0;
     req->version = 0;
-    h2o_clear_headers(&req->headers);
+    memset(&req->headers, 0, sizeof(req->headers));
 
     req->res.status = 0;
     req->res.reason = NULL;
     req->res.content_length = SIZE_MAX;
-    h2o_clear_headers(&req->res.headers);
+    memset(&req->res.headers, 0, sizeof(req->res.headers));
 
     req->http1_is_persistent = 0;
     req->upgrade.base = NULL;
@@ -58,13 +58,12 @@ void h2o_init_request(h2o_req_t *req, void *conn, h2o_loop_context_t *ctx, h2o_r
         COPY(scheme, scheme_len);
         req->version = src->version;
         {
-            h2o_header_iterator_t iter;
-            uv_buf_t *name;
-            for (iter.value = NULL; (iter = h2o_next_header(&src->headers, iter, &name)).value != NULL; ) {
-                if (h2o_buf_is_token(name)) {
-                    h2o_add_header(&req->pool, &req->headers, H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name), iter.value->base, iter.value->len);
+            const h2o_header_t *header = src->headers.entries, * header_end = header + src->headers.size;
+            for (; header != header_end; ++header) {
+                if (h2o_buf_is_token(header->name.str)) {
+                    h2o_add_header(&req->pool, &req->headers, header->name.token, header->value.base, header->value.len);
                 } else {
-                    h2o_add_header_by_str(&req->pool, &req->headers, name->base, name->len, 0, iter.value->base, iter.value->len);
+                    h2o_add_header_by_str(&req->pool, &req->headers, header->name.str->base, header->name.str->len, 0, header->value.base, header->value.len);
                 }
             }
         }
@@ -90,7 +89,7 @@ void h2o_prepare_response(h2o_req_t *req)
 {
     req->res.status = 200;
     req->res.reason = "OK";
-    h2o_init_headers(&req->pool, &req->res.headers, NULL, 0, 8, NULL, NULL, NULL);
+    h2o_vector_reserve(&req->pool, (h2o_vector_t*)&req->res.headers, sizeof(h2o_header_t), 8);
     req->res.content_length = SIZE_MAX;
 }
 

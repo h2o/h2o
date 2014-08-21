@@ -55,7 +55,7 @@ static void fixup_request(h2o_http1_conn_t *conn, struct phr_header *headers, si
     conn->req.version = 0x100 | minor_version;
 
     /* init headers */
-    h2o_init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, 4, &connection, &host, &upgrade);
+    h2o_init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade);
 
     /* move host header to req->authority */
     if (host.base != NULL) {

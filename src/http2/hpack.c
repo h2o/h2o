@@ -480,17 +480,16 @@ static uint8_t *encode_header(uint8_t *dst, const uv_buf_t *name, const uv_buf_t
 
 uv_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, uint32_t stream_id, size_t max_frame_size, h2o_res_t *res)
 {
+    const h2o_header_t *header, *header_end;
     size_t max_capacity = 0;
     uv_buf_t ret;
     uint8_t *dst;
 
     { /* calculate maximum required memory */
         size_t max_cur_frame_size = STATUS_HEADER_MAX_SIZE; /* for :status: */
-        h2o_header_iterator_t iter;
-        uv_buf_t *name;
 
-        for (iter.value = NULL; (iter = h2o_next_header(&res->headers, iter, &name)).value != NULL; ) {
-            size_t max_header_size = name->len + iter.value->len + 1 + H2O_HTTP2_ENCODE_INT_MAX_LENGTH * 2;
+        for (header = res->headers.entries, header_end = header + res->headers.size; header != header_end; ++header) {
+            size_t max_header_size = header->name.str->len + header->value.len + 1 + H2O_HTTP2_ENCODE_INT_MAX_LENGTH * 2;
             if (max_header_size > 16383)
                 goto Error;
             if (max_cur_frame_size + max_header_size > max_frame_size) {
@@ -509,8 +508,6 @@ uv_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, uint32_t stream_id, size
 
     { /* encode */
         uint8_t *cur_frame;
-        h2o_header_iterator_t iter;
-        uv_buf_t *name;
         
 #define EMIT_HEADER() h2o_http2_encode_frame_header( \
     cur_frame, \
@@ -522,14 +519,14 @@ uv_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, uint32_t stream_id, size
         cur_frame = dst;
         dst += H2O_HTTP2_FRAME_HEADER_SIZE;
         dst = encode_status(dst, res->status);
-        for (iter.value = NULL; (iter = h2o_next_header(&res->headers, iter, &name)).value != NULL; ) {
-            size_t max_header_size = name->len + iter.value->len + 1 + H2O_HTTP2_ENCODE_INT_MAX_LENGTH * 2;
+        for (header = res->headers.entries, header_end = header + res->headers.size; header != header_end; ++header) {
+            size_t max_header_size = header->name.str->len + header->value.len + 1 + H2O_HTTP2_ENCODE_INT_MAX_LENGTH * 2;
             if (dst - cur_frame - H2O_HTTP2_FRAME_HEADER_SIZE + max_header_size > max_frame_size) {
                 EMIT_HEADER();
                 cur_frame = dst;
                 dst += H2O_HTTP2_FRAME_HEADER_SIZE;
             }
-            dst = encode_header(dst, name, iter.value);
+            dst = encode_header(dst, header->name.str, &header->value);
         }
         EMIT_HEADER();
 
