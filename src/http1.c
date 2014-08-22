@@ -219,17 +219,19 @@ static void flatten_headers(h2o_req_t *req, uv_buf_t *bufs, const char *connecti
     if (req->res.content_length != SIZE_MAX) {
         bufs[0] = h2o_sprintf(
             &req->pool,
-            "HTTP/1.1 %d %s\r\ndate: %s\r\nconnection: %s\r\ncontent-length: %zu\r\n",
+            "HTTP/1.1 %d %s\r\ndate: %s\r\nserver: %.*s\r\nconnection: %s\r\ncontent-length: %zu\r\n",
             req->res.status, req->res.reason,
             date_str,
+            (int)req->ctx->server_name.len, req->ctx->server_name.base,
             connection,
             req->res.content_length);
     } else {
         bufs[0] = h2o_sprintf(
             &req->pool,
-            "HTTP/1.1 %d %s\r\ndate: %s\r\nconnection: %s\r\n",
+            "HTTP/1.1 %d %s\r\ndate: %s\r\nserver: %.*s\r\nconnection: %s\r\n",
             req->res.status, req->res.reason,
             date_str,
+            (int)req->ctx->server_name.len, req->ctx->server_name.base,
             connection);
     }
     bufs[1] = h2o_flatten_headers(&req->pool, &req->res.headers);

@@ -88,6 +88,7 @@ typedef struct h2o_loop_context_t {
     h2o_timeout_t req_timeout; /* for request timeout */
     h2o_filter_t *filters;
     h2o_mimemap_t mimemap;
+    uv_buf_t server_name;
 } h2o_loop_context_t;
 
 typedef struct st_h2o_header_t {
