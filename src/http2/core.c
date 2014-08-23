@@ -96,7 +96,7 @@ static void close_connection(h2o_http2_conn_t *conn)
     kh_destroy(h2o_http2_stream_t, conn->active_streams);
     free(conn->_input);
     free(conn->_http1_req_input);
-    h2o_mempool_destroy(&conn->_write.pool, 0);
+    h2o_mempool_clear(&conn->_write.pool);
     conn->close_cb(conn);
 }
 
@@ -330,7 +330,7 @@ static void on_write_complete(uv_write_t *wreq, int status)
     }
 
     /* reinit */
-    h2o_mempool_destroy(&conn->_write.pool, 1);
+    h2o_mempool_clear(&conn->_write.pool);
     memset(&conn->_write.bufs, 0, sizeof(conn->_write.bufs));
     memset(&conn->_write.closing_streams, 0, sizeof(conn->_write.closing_streams));
 
@@ -440,7 +440,11 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, h2o_http2_conn_t *http2conn)
     http2conn->_http1_req_input = NULL;
     memset(&http2conn->_input_header_table, 0, sizeof(http2conn->_input_header_table));
     http2conn->_input_header_table.hpack_capacity = H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;
-    memset(&http2conn->_write, 0, sizeof(http2conn->_write));
+    h2o_mempool_init(&http2conn->_write.pool);
+    memset(&http2conn->_write.wreq, 0, sizeof(http2conn->_write.wreq));
+    memset(&http2conn->_write.bufs, 0, sizeof(http2conn->_write.bufs));
+    memset(&http2conn->_write.closing_streams, 0, sizeof(http2conn->_write.closing_streams));
+    memset(&http2conn->_write.timeout_entry, 0, sizeof(http2conn->_write.timeout_entry));
     http2conn->_write.timeout_entry.cb = emit_writereq;
 
     /* check that "HTTP2-Settings" is declared in the connection header */

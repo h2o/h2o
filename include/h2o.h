@@ -36,9 +36,16 @@ typedef struct st_h2o_token_t {
 
 #include "h2o/token.h"
 
+typedef struct st_h2o_mempool_chunk_t {
+    struct st_h2o_mempool_chunk_t *next;
+    size_t offset;
+    char bytes[4096 - sizeof(void*) * 2];
+} h2o_mempool_chunk_t;
+
 typedef struct st_h2o_mempool_t {
-    struct st_h2o_mempool_chunk_t *chunks;
+    h2o_mempool_chunk_t *chunks;
     struct st_h2o_mempool_direct_t *directs;
+    h2o_mempool_chunk_t _first_chunk;
 } h2o_mempool_t;
 
 typedef void (*h2o_timeout_cb)(h2o_timeout_entry_t *entry);
@@ -156,7 +163,8 @@ int h2o_buf_is_token(const uv_buf_t *buf);
 
 /* mempool */
 
-void h2o_mempool_destroy(h2o_mempool_t *pool, int keep_one);
+void h2o_mempool_init(h2o_mempool_t *pool);
+void h2o_mempool_clear(h2o_mempool_t *pool);
 void *h2o_mempool_alloc(h2o_mempool_t *pool, size_t sz);
 void *h2o_mempool_alloc_refcnt(h2o_mempool_t *pool, size_t sz);
 void h2o_mempool_addref(void *p);

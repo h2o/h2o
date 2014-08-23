@@ -15,12 +15,12 @@ void h2o_init_request(h2o_req_t *req, void *conn, h2o_loop_context_t *ctx, h2o_r
     if (conn != NULL) {
         req->conn = conn;
         req->ctx = ctx;
-        memset(&req->pool, 0, sizeof(req->pool));
+        h2o_mempool_init(&req->pool);
         memset(&req->_timeout_entry, 0, sizeof(req->_timeout_entry));
         req->_timeout_entry.cb = deferred_proceed_cb;
     } else {
         h2o_timeout_unlink_entry(&req->ctx->zero_timeout, &req->_timeout_entry);
-        h2o_mempool_destroy(&req->pool, 1);
+        h2o_mempool_clear(&req->pool);
     }
 
     req->authority = NULL;
@@ -82,7 +82,7 @@ void h2o_dispose_request(h2o_req_t *req)
 {
     /* FIXME close generator and ostreams */
     h2o_timeout_unlink_entry(&req->ctx->zero_timeout, &req->_timeout_entry);
-    h2o_mempool_destroy(&req->pool, 0);
+    h2o_mempool_clear(&req->pool);
 }
 
 void h2o_prepare_response(h2o_req_t *req)

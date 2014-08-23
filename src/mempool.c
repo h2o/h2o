@@ -3,12 +3,6 @@
 #include <stdlib.h>
 #include "h2o.h"
 
-struct st_h2o_mempool_chunk_t {
-    struct st_h2o_mempool_chunk_t *next;
-    size_t offset;
-    char bytes[2048 - sizeof(void*) * 2];
-};
-
 struct st_h2o_mempool_direct_t {
     struct st_h2o_mempool_direct_t *next;
     size_t refcnt;
@@ -17,22 +11,24 @@ struct st_h2o_mempool_direct_t {
 
 static struct st_h2o_mempool_direct_t direct_is_orphan;
 
-void h2o_mempool_destroy(h2o_mempool_t *pool, int keep_one)
+void h2o_mempool_init(h2o_mempool_t *pool)
 {
-    /* free chunks */
-    struct st_h2o_mempool_chunk_t *chunk = pool->chunks;
-    if (keep_one && chunk != NULL) {
-        chunk = chunk->next;
-        pool->chunks->next = NULL;
-        pool->chunks->offset = 0;
-    } else {
-        pool->chunks = NULL;
+    pool->chunks = &pool->_first_chunk;
+    pool->directs = NULL;
+    pool->_first_chunk.next = NULL;
+    pool->_first_chunk.offset = 0;
+}
+
+void h2o_mempool_clear(h2o_mempool_t *pool)
+{
+    /* free chunks, and reset the first chunk */
+    while (pool->chunks != &pool->_first_chunk) {
+        h2o_mempool_chunk_t *next = pool->chunks->next;
+        free(pool->chunks);
+        pool->chunks = next;
     }
-    while (chunk != NULL) {
-        struct st_h2o_mempool_chunk_t *next = chunk->next;
-        free(chunk);
-        chunk = next;
-    }
+    pool->_first_chunk.next = NULL;
+    pool->_first_chunk.offset = 0;
 
     /* free directs */
     while (pool->directs != NULL) {
@@ -57,9 +53,9 @@ void *h2o_mempool_alloc(h2o_mempool_t *pool, size_t sz)
 
     /* 16-bytes rounding */
     sz = (sz + 15) & ~15;
-    if (pool->chunks == NULL || sizeof(pool->chunks->bytes) < pool->chunks->offset + sz) {
+    if (sizeof(pool->chunks->bytes) < pool->chunks->offset + sz) {
         /* allocate new chunk */
-        struct st_h2o_mempool_chunk_t *newp = malloc(sizeof(struct st_h2o_mempool_chunk_t));
+        h2o_mempool_chunk_t *newp = malloc(sizeof(h2o_mempool_chunk_t));
         if (newp == NULL) {
             h2o_fatal("");
             return NULL;
