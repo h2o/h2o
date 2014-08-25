@@ -66,7 +66,7 @@ uv_buf_t h2o_http2_encode_rst_frame(h2o_mempool_t *pool, uint32_t stream_id, int
 {
     uint8_t *bytes = h2o_mempool_alloc(pool, H2O_HTTP2_FRAME_HEADER_SIZE + 4), *dst;
 
-    dst = h2o_http2_encode_frame_header(bytes, 8, H2O_HTTP2_FRAME_TYPE_RST_STREAM, 0, stream_id);
+    dst = h2o_http2_encode_frame_header(bytes, 4, H2O_HTTP2_FRAME_TYPE_RST_STREAM, 0, stream_id);
     dst = encode32u(dst, errno);
 
     return uv_buf_init((char*)bytes, (unsigned)(dst - bytes));
