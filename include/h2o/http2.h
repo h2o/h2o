@@ -133,6 +133,12 @@ typedef struct st_h2o_http2_stream_t {
 
 KHASH_MAP_INIT_INT64(h2o_http2_stream_t, h2o_http2_stream_t*)
 
+typedef enum enum_h2o_http2_conn_state_t {
+    H2O_HTTP2_CONN_STATE_OPEN,
+    H2O_HTTP2_CONN_STATE_RECVED_GOAWAY,
+    H2O_HTTP2_CONN_STATE_IS_CLOSING
+} h2o_http2_conn_state_t;
+
 struct st_h2o_http2_conn_t {
     uv_stream_t *stream;
     h2o_loop_context_t *ctx;
@@ -145,7 +151,7 @@ struct st_h2o_http2_conn_t {
     khash_t(h2o_http2_stream_t) *open_streams;
     uint32_t max_stream_id;
     /* internal */
-    int is_closing;
+    h2o_http2_conn_state_t state;
     ssize_t (*_read_expect)(h2o_http2_conn_t *conn, const uint8_t *src, size_t len);
     h2o_input_buffer_t *_input;
     h2o_input_buffer_t *_http1_req_input; /* contains data referred to by original request via HTTP/1.1 */
