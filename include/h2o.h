@@ -220,7 +220,7 @@ h2o_ostream_t *h2o_prepend_output_filter(h2o_req_t *req, size_t sz);
 static void h2o_send(h2o_req_t *req, uv_buf_t *bufs, size_t bufcnt, int is_final);
 static void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, uv_buf_t *bufs, size_t bufcnt, int is_final);
 void h2o_schedule_proceed_response(h2o_req_t *req); /* called by buffering output filters to request next content */
-static void h2o_proceed_response(h2o_req_t *req, int status);
+static void h2o_proceed_response(h2o_req_t *req);
 
 /* loop context */
 
@@ -296,10 +296,10 @@ inline void h2o_send(h2o_req_t *req, uv_buf_t *bufs, size_t bufcnt, int is_final
     req->_ostr_top->do_send(req->_ostr_top, req, bufs, bufcnt, is_final);
 }
 
-inline void h2o_proceed_response(h2o_req_t *req, int status)
+inline void h2o_proceed_response(h2o_req_t *req)
 {
     if (req->_generator != NULL) {
-        req->_generator->proceed(req->_generator, req, status);
+        req->_generator->proceed(req->_generator, req, 0);
     } else {
         req->_ostr_top->do_send(req->_ostr_top, req, NULL, 0, 1);
     }

@@ -146,7 +146,7 @@ static void on_send_next(uv_write_t *wreq, int status)
     if (status != 0)
         close_connection(conn);
     else
-        h2o_proceed_response(&conn->req, 0);
+        h2o_proceed_response(&conn->req);
 }
 
 static void on_send_complete(uv_write_t *wreq, int status)

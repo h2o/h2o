@@ -154,6 +154,6 @@ void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream
     if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
         h2o_http2_stream_close(conn, stream);
     } else if (status == 0) {
-        h2o_proceed_response(&stream->req, 0);
+        h2o_proceed_response(&stream->req);
     }
 }
