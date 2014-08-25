@@ -34,7 +34,9 @@ static yrmcds_error connect_to_server(const char* node, uint16_t port, int* serv
 #endif
         ) {
         hint.ai_family = AF_INET6;
-        hint.ai_flags |= AI_V4MAPPED;
+        // intentionally drop AI_ADDRCONFIG to support IPv6 link-local address.
+        // see https://github.com/cybozu/yrmcds/issues/40
+        hint.ai_flags = AI_NUMERICSERV|AI_V4MAPPED;
         e = getaddrinfo(node, sport, &hint, &res);
     }
     if( e == EAI_SYSTEM ) {
