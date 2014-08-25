@@ -104,8 +104,8 @@ typedef struct st_h2o_http2_stream_t {
     uint32_t stream_id;
     h2o_req_t req;
     h2o_ostream_t _ostr_final;
-    h2o_http2_stream_state_t _state;
-    h2o_http2_window_t _window;
+    h2o_http2_stream_state_t state;
+    h2o_http2_window_t window;
     struct {
         H2O_VECTOR(uv_buf_t) bufs;
     } _send_queue;
@@ -142,15 +142,22 @@ struct st_h2o_http2_conn_t {
 int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t *src, size_t len);
 
 /* frames */
-
 void h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type, uint8_t flags, int32_t stream_id);
 ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, const h2o_http2_settings_t *host_settings);
 int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const h2o_http2_frame_t *frame);
 int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *paylaod, const h2o_http2_frame_t *frame);
 
-/* core */
+/* connection */
 void h2o_http2_close_and_free(h2o_http2_conn_t *conn);
 int h2o_http2_handle_upgrade(h2o_req_t *req, h2o_http2_conn_t *conn);
+void h2o_http2_conn_enqueue_write(h2o_http2_conn_t *conn, uv_buf_t buf);
+void h2o_http2_conn_register_flushed_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int is_becoming_inactive);
+
+/* stream */
+h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req);
+void h2o_http2_stream_close(h2o_http2_stream_t *stream, h2o_input_buffer_t **http1_req_input);
+void h2o_http2_stream_send_pending(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
+void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int status);
 
 /* misc */
 static void h2o_http2_window_init(h2o_http2_window_t *window, const h2o_http2_settings_t *peer_settings);
