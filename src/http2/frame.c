@@ -139,3 +139,18 @@ int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *pa
 
     return 0;
 }
+
+int h2o_http2_decode_goaway_payload(h2o_http2_goaway_payload_t *payload, const h2o_http2_frame_t *frame)
+{
+    if (frame->length < 8)
+        return -1;
+
+    payload->last_stream_id = decode32u(frame->payload) & 0x7fffffff;
+    payload->error_code = decode32u(frame->payload + 4);
+    if ((payload->debug_data.len = frame->length - 8) != 0)
+        payload->debug_data.base = (char*)frame->payload + 8;
+    else
+        payload->debug_data.base = NULL;
+
+    return 0;
+}

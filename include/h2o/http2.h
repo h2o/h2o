@@ -96,9 +96,15 @@ typedef struct st_h2o_http2_headers_payload_t {
     size_t headers_len;
 } h2o_http2_headers_payload_t;
 
-typedef struct st_h2o_http_window_update_payload_t {
+typedef struct st_h2o_http2_window_update_payload_t {
     uint32_t window_size_increment;
 } h2o_http2_window_update_payload_t;
+
+typedef struct st_h2o_http2_goaway_payload_t {
+    uint32_t last_stream_id;
+    uint32_t error_code;
+    uv_buf_t debug_data;
+} h2o_http2_goaway_payload_t;
 
 typedef void (*h2o_http2_close_cb)(h2o_http2_conn_t *conn);
 
@@ -163,6 +169,7 @@ uv_buf_t h2o_http2_encode_rst_frame(h2o_mempool_t *pool, uint32_t stream_id, int
 ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, const h2o_http2_settings_t *host_settings);
 int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const h2o_http2_frame_t *frame);
 int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *paylaod, const h2o_http2_frame_t *frame);
+int h2o_http2_decode_goaway_payload(h2o_http2_goaway_payload_t *payload, const h2o_http2_frame_t *frame);
 
 /* connection */
 void h2o_http2_conn_register_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);

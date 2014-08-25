@@ -248,6 +248,18 @@ static void handle_window_update_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t
     }
 }
 
+static void handle_goaway_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
+{
+    h2o_http2_goaway_payload_t payload;
+
+    if (frame->stream_id != 0 || h2o_http2_decode_goaway_payload(&payload, frame) != 0) {
+        send_error(conn, 0, H2O_HTTP2_ERROR_PROTOCOL);
+        return;
+    }
+
+    /* FIXME log */
+}
+
 ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len)
 {
     h2o_http2_frame_t frame;
@@ -265,6 +277,9 @@ ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len)
         break;
     case H2O_HTTP2_FRAME_TYPE_WINDOW_UPDATE:
         handle_window_update_frame(conn, &frame);
+        break;
+    case H2O_HTTP2_FRAME_TYPE_GOAWAY:
+        handle_goaway_frame(conn, &frame);
         break;
     case H2O_HTTP2_FRAME_TYPE_CONTINUATION:
         send_error(conn, 0, H2O_HTTP2_ERROR_PROTOCOL);
