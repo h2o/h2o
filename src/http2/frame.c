@@ -104,3 +104,13 @@ int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const
 
     return 0;
 }
+
+int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *payload, const h2o_http2_frame_t *frame)
+{
+    if (frame->length != 4)
+        return -1;
+
+    payload->window_size_increment = decode32u(frame->payload) & 0x7fffffff;
+
+    return 0;
+}

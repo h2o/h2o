@@ -82,13 +82,22 @@ typedef struct st_h2o_http2_headers_payload_t {
     size_t headers_len;
 } h2o_http2_headers_payload_t;
 
+typedef struct st_h2o_http_window_update_payload_t {
+    uint32_t window_size_increment;
+} h2o_http2_window_update_payload_t;
+
 typedef void (*h2o_http2_close_cb)(h2o_http2_conn_t *conn);
+
+typedef struct st_h2o_http2_window_t {
+    ssize_t _avail;
+} h2o_http2_window_t;
 
 typedef enum enum_h2o_http2_stream_state_t {
     H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS,
     H2O_HTTP2_STREAM_STATE_RECV_HEADERS,
     H2O_HTTP2_STREAM_STATE_SEND_HEADERS,
-    H2O_HTTP2_STREAM_STATE_SEND_BODY
+    H2O_HTTP2_STREAM_STATE_SEND_BODY,
+    H2O_HTTP2_STREAM_STATE_END_STREAM
 } h2o_http2_stream_state_t;
 
 typedef struct st_h2o_http2_stream_t {
@@ -96,6 +105,10 @@ typedef struct st_h2o_http2_stream_t {
     h2o_req_t req;
     h2o_ostream_t _ostr_final;
     h2o_http2_stream_state_t _state;
+    h2o_http2_window_t _window;
+    struct {
+        H2O_VECTOR(uv_buf_t) bufs;
+    } _send_queue;
 } h2o_http2_stream_t;
 
 KHASH_MAP_INIT_INT64(h2o_http2_stream_t, h2o_http2_stream_t*)
@@ -120,8 +133,9 @@ struct st_h2o_http2_conn_t {
         h2o_mempool_t pool;
         uv_write_t wreq;
         H2O_VECTOR(uv_buf_t) bufs;
-        H2O_VECTOR(h2o_http2_stream_t*) closing_streams;
+        H2O_VECTOR(h2o_http2_stream_t*) flushed_streams;
         h2o_timeout_entry_t timeout_entry;
+        h2o_http2_window_t window;
     } _write;
 };
 
@@ -132,9 +146,38 @@ int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t
 void h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type, uint8_t flags, int32_t stream_id);
 ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, const h2o_http2_settings_t *host_settings);
 int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const h2o_http2_frame_t *frame);
+int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *paylaod, const h2o_http2_frame_t *frame);
 
 /* core */
 void h2o_http2_close_and_free(h2o_http2_conn_t *conn);
 int h2o_http2_handle_upgrade(h2o_req_t *req, h2o_http2_conn_t *conn);
+
+/* misc */
+static void h2o_http2_window_init(h2o_http2_window_t *window, const h2o_http2_settings_t *peer_settings);
+static void h2o_http2_window_update(h2o_http2_window_t *window, ssize_t delta);
+static ssize_t h2o_http2_window_get_window(h2o_http2_window_t *window);
+static void h2o_http2_window_consume_window(h2o_http2_window_t *window, size_t bytes);
+
+/* inline definitions */
+
+inline void h2o_http2_window_init(h2o_http2_window_t *window, const h2o_http2_settings_t *peer_settings)
+{
+    window->_avail = peer_settings->initial_window_size;
+}
+
+inline void h2o_http2_window_update(h2o_http2_window_t *window, ssize_t delta)
+{
+    window->_avail += delta;
+}
+
+inline ssize_t h2o_http2_window_get_window(h2o_http2_window_t *window)
+{
+    return window->_avail;
+}
+
+inline void h2o_http2_window_consume_window(h2o_http2_window_t *window, size_t bytes)
+{
+    window->_avail -= bytes;
+}
 
 #endif
