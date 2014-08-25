@@ -23,8 +23,9 @@ LIB_OBJECTS = $(filter-out yc.o yc-cnt.o,$(COBJECTS)) lz4/lz4.o
 all: lib $(EXE)
 lib: $(LIB)
 
-lz4/lz4.h lz4/lz4.c:
+lz4:
 	svn checkout http://lz4.googlecode.com/svn/trunk/ lz4
+lz4/lz4.h lz4/lz4.c: lz4
 lz4/lz4.o: lz4/lz4.c
 	$(CC) -std=c99 -O3 -Ilz4 -c -o $@ $<
 send.c recv.c: lz4/lz4.h
@@ -39,7 +40,7 @@ $(COBJECTS): $(CHEADERS)
 $(EXE): $(LIB)
 
 $(LIB): $(LIB_OBJECTS)
-	$(AR) rcus $@ $^
+	$(AR) rcs $@ $^
 
 html:
 	rm -rf html
