@@ -74,15 +74,15 @@ static void close_connection(h2o_http2_conn_t *conn)
     }
 }
 
-static void send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errno)
+static void send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum)
 {
     assert(! conn->is_closing);
 
     if (stream_id != 0) {
-        uv_buf_t rst_frame = h2o_http2_encode_rst_frame(&conn->_write.pool, stream_id, errno);
+        uv_buf_t rst_frame = h2o_http2_encode_rst_frame(&conn->_write.pool, stream_id, -errnum);
         h2o_http2_conn_enqueue_write(conn, rst_frame);
     } else {
-        uv_buf_t goaway_frame = h2o_http2_encode_goaway_frame(&conn->_write.pool, conn->max_stream_id, errno);
+        uv_buf_t goaway_frame = h2o_http2_encode_goaway_frame(&conn->_write.pool, conn->max_stream_id, -errnum);
         h2o_http2_conn_enqueue_write(conn, goaway_frame);
         close_connection(conn);
     }
