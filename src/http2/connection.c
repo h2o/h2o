@@ -379,18 +379,23 @@ void h2o_http2_conn_register_flushed_stream(h2o_http2_conn_t *conn, h2o_http2_st
 static void on_write_complete(uv_write_t *wreq, int status)
 {
     h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _write.wreq, wreq);
-    size_t i;
+    h2o_http2_stream_t **flushed_streams;
+    size_t i, num_flushed_streams;
 
-    /* free the streams */
-    for (i = 0; i != conn->_write.flushed_streams.size; ++i) {
-        h2o_http2_stream_t *stream = conn->_write.flushed_streams.entries[i];
-        h2o_http2_stream_proceed(conn, stream, status);
-    }
+    /* copy the list of flushed streams */
+    num_flushed_streams = conn->_write.flushed_streams.size;
+    flushed_streams = alloca(sizeof(h2o_http2_stream_t*) * num_flushed_streams);
+    memcpy(flushed_streams, conn->_write.flushed_streams.entries, sizeof(h2o_http2_stream_t*) * num_flushed_streams);
 
-    /* reinit */
+    /* reset the memory pool */
     h2o_mempool_clear(&conn->_write.pool);
     memset(&conn->_write.bufs, 0, sizeof(conn->_write.bufs));
     memset(&conn->_write.flushed_streams, 0, sizeof(conn->_write.flushed_streams));
+
+    /* update the streams */
+    for (i = 0; i != num_flushed_streams; ++i) {
+        h2o_http2_stream_proceed(conn, flushed_streams[i], status);
+    }
 
     if (status != 0) {
         conn->is_closing = 1;
