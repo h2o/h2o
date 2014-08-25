@@ -23,11 +23,6 @@ static const uv_buf_t HOST_SETTINGS_BIN = {
         "\x00\x00\x00\x00" /* stream id */
         "\x00\x02" "\x00\x00\x00\x00" /* enable_push = 0 */
         "\x00\x03" "\x00\x00\x00\x64" /* max_concurrent_streams = 100 */
-
-        "\x00\x00\x00" /* frame size */
-        "\x04" /* settings frame */
-        "\x01" /* ack flag */
-        "\x00\x00\x00\x00" /* stream id */
     )
 };
 
