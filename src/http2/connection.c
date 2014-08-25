@@ -146,18 +146,6 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
         (frame->flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) != 0);
 }
 
-static inline int handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
-{
-    if ((frame->flags & H2O_HTTP2_FRAME_FLAG_ACK) != 0) {
-        if (frame->length != 0)
-            return -1;
-        /* FIXME do we need to do something? */
-        return 0;
-    } else {
-        return h2o_http2_update_peer_settings(&conn->peer_settings, frame->payload, frame->length);
-    }
-}
-
 static void resume_send(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     if (h2o_http2_window_get_window(&conn->_write.window) <= 0)
@@ -175,6 +163,29 @@ static void resume_send(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
             }
         });
     }
+}
+
+static int handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
+{
+    if ((frame->flags & H2O_HTTP2_FRAME_FLAG_ACK) != 0) {
+        if (frame->length != 0)
+            return -1;
+        /* FIXME do we need to do something? */
+    } else {
+        uint32_t prev_initial_window_size = conn->peer_settings.initial_window_size;
+        if (h2o_http2_update_peer_settings(&conn->peer_settings, frame->payload, frame->length) != 0)
+            return -1;
+        if (prev_initial_window_size != conn->peer_settings.initial_window_size) {
+            ssize_t delta = conn->peer_settings.initial_window_size - prev_initial_window_size;
+            h2o_http2_stream_t *stream;
+            kh_foreach_value(conn->open_streams, stream, {
+                h2o_http2_window_update(&stream->window, delta);
+            });
+            h2o_http2_window_update(&conn->_write.window, delta);
+            resume_send(conn, NULL);
+        }
+    }
+    return 0;
 }
 
 static int handle_window_update_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
