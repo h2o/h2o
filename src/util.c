@@ -145,7 +145,7 @@ static uint32_t decode_base64url_quad(const char *src)
             decoded |= 62;
         } else if (*src == '_') {
             decoded |= 63;
-#ifdef HTTP2_BUGGY_CLIENT
+#if 1 /* curl uses normal base64 */
         } else if (*src == '+') {
             decoded |= 62;
         } else if (*src == '/') {
