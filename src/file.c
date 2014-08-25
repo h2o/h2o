@@ -15,14 +15,14 @@ static void sendfile_do_send(struct sendfile_t *self, uv_buf_t *bufs, size_t buf
 {
     h2o_req_t *req = self->req;
 
-    if (is_final == -1) {
-        req->http1_is_persistent = 0;
-        is_final = 1;
-    }
     if (is_final) {
         uv_fs_close(req->ctx->loop, self->fsreq, self->fd, NULL);
         uv_fs_req_cleanup(self->fsreq);
         self->fsreq = NULL;
+        if (is_final == -1) {
+            /* is closing due to an error */
+            return;
+        }
     }
     h2o_send(req, bufs, bufcnt, is_final);
 }
@@ -68,16 +68,6 @@ static void sendfile_proceed(h2o_generator_t *_self, h2o_req_t *req, int status)
     struct sendfile_t *self = (void*)_self;
 
     if (status != 0) {
-        /* TODO log */
-        switch (uv_last_error(req->ctx->loop).code) {
-        case UV_EPIPE:
-        case UV_ECONNRESET:
-            // normal case
-            break;
-        default:
-            fprintf(stderr, "%p:unexpected error:%s\n", req, uv_strerror(uv_last_error(req->ctx->loop)));
-            break;
-        }
         sendfile_do_send(self, NULL, 0, -1);
         return;
     }

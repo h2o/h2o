@@ -38,21 +38,44 @@ int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t
     return 0;
 }
 
-void h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type, uint8_t flags, int32_t stream_id)
+uint8_t *h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type, uint8_t flags, int32_t stream_id)
 {
     if (length > 0xffffff)
         h2o_fatal("invalid length");
-    encode24u(dst, (uint32_t)length);
-    dst += 3;
+
+    dst = encode24u(dst, (uint32_t)length);
     *dst++ = type;
     *dst++ = flags;
-    encode32u(dst, stream_id);
+    dst = encode32u(dst, stream_id);
+
+    return dst;
+}
+
+uv_buf_t h2o_http2_encode_goaway_frame(h2o_mempool_t *pool, uint32_t last_stream_id, int errno)
+{
+    uint8_t *bytes = h2o_mempool_alloc(pool, H2O_HTTP2_FRAME_HEADER_SIZE + 8), *dst;
+
+    dst = h2o_http2_encode_frame_header(bytes, 8, H2O_HTTP2_FRAME_TYPE_GOAWAY, 0, 0);
+    dst = encode32u(dst, last_stream_id);
+    dst = encode32u(dst, errno);
+
+    return uv_buf_init((char*)bytes, (unsigned)(dst - bytes));
+}
+
+uv_buf_t h2o_http2_encode_rst_frame(h2o_mempool_t *pool, uint32_t stream_id, int errno)
+{
+    uint8_t *bytes = h2o_mempool_alloc(pool, H2O_HTTP2_FRAME_HEADER_SIZE + 4), *dst;
+
+    dst = h2o_http2_encode_frame_header(bytes, 8, H2O_HTTP2_FRAME_TYPE_RST_STREAM, 0, stream_id);
+    dst = encode32u(dst, errno);
+
+    return uv_buf_init((char*)bytes, (unsigned)(dst - bytes));
 }
 
 ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, const h2o_http2_settings_t *host_settings)
 {
     if (len < H2O_HTTP2_FRAME_HEADER_SIZE)
-        return H2O_HTTP2_DECODE_INCOMPLETE;
+        return H2O_HTTP2_ERROR_INCOMPLETE;
 
     frame->length = decode24u(src);
     frame->type = src[3];
@@ -60,10 +83,10 @@ ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, siz
     frame->stream_id = decode32u(src + 5);
 
     if (frame->length > host_settings->max_frame_size)
-        return H2O_HTTP2_DECODE_ERROR;
+        return H2O_HTTP2_ERROR_FRAME_SIZE;
 
     if (len < H2O_HTTP2_FRAME_HEADER_SIZE + frame->length)
-        return H2O_HTTP2_DECODE_INCOMPLETE;
+        return H2O_HTTP2_ERROR_INCOMPLETE;
 
     frame->payload = src + H2O_HTTP2_FRAME_HEADER_SIZE;
 
@@ -111,6 +134,8 @@ int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *pa
         return -1;
 
     payload->window_size_increment = decode32u(frame->payload) & 0x7fffffff;
+    if (payload->window_size_increment == 0)
+        return -1;
 
     return 0;
 }

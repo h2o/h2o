@@ -208,6 +208,7 @@ void h2o_vector__expand(h2o_mempool_t *pool, h2o_vector_t *vector, size_t elemen
 void h2o_timeout_init(h2o_timeout_t *timer, uint64_t timeout, uv_loop_t *loop);
 void h2o_timeout_link_entry(h2o_timeout_t *timer, h2o_timeout_entry_t *entry);
 void h2o_timeout_unlink_entry(h2o_timeout_t *timer, h2o_timeout_entry_t *entry);
+static int h2o_timeout_entry_is_linked(h2o_timeout_entry_t *entry);
 
 /* request */
 
@@ -247,6 +248,11 @@ void h2o_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const char *ty
 uv_buf_t h2o_get_mimetype(h2o_mimemap_t *mimemap, const char *ext);
 
 /* inline defs */
+
+inline int h2o_timeout_entry_is_linked(h2o_timeout_entry_t *entry)
+{
+    return entry->_next != NULL;
+}
 
 inline int h2o_tolower(int ch)
 {

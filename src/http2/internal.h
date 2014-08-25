@@ -4,8 +4,8 @@
 static uint16_t decode16u(const uint8_t *src);
 static uint32_t decode24u(const uint8_t *src);
 static uint32_t decode32u(const uint8_t *src);
-static void encode24u(uint8_t *dst, uint32_t value);
-static void encode32u(uint8_t *dst, uint32_t value);
+static uint8_t *encode24u(uint8_t *dst, uint32_t value);
+static uint8_t *encode32u(uint8_t *dst, uint32_t value);
 
 static size_t sz_min(size_t x, size_t y);
 
@@ -24,19 +24,21 @@ inline uint32_t decode32u(const uint8_t *src)
     return (uint32_t)src[0] << 24 | (uint32_t)src[1] << 16 | (uint32_t)src[2] << 8 | src[3];
 }
 
-inline void encode24u(uint8_t *dst, uint32_t value)
+inline uint8_t *encode24u(uint8_t *dst, uint32_t value)
 {
     *dst++ = value >> 16;
     *dst++ = value >> 8;
     *dst++ = value;
+    return dst;
 }
 
-inline void encode32u(uint8_t *dst, uint32_t value)
+inline uint8_t *encode32u(uint8_t *dst, uint32_t value)
 {
     *dst++ = value >> 24;
     *dst++ = value >> 16;
     *dst++ = value >> 8;
     *dst++ = value;
+    return dst;
 }
 
 inline size_t sz_min(size_t x, size_t y)

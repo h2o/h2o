@@ -5,8 +5,22 @@
 
 typedef struct st_h2o_http2_conn_t h2o_http2_conn_t;
 
-#define H2O_HTTP2_DECODE_INCOMPLETE -2
-#define H2O_HTTP2_DECODE_ERROR -1
+/* defined as negated form of the error codes defined in HTTP2-spec section 7 */
+#define H2O_HTTP2_ERROR_NONE 0
+#define H2O_HTTP2_ERROR_PROTOCOL -1
+#define H2O_HTTP2_ERROR_INTERNAL -2
+#define H2O_HTTP2_ERROR_FLOW_CONTROL -3
+#define H2O_HTTP2_ERROR_SETTINGS_TIMEOUT -4
+#define H2O_HTTP2_ERROR_STREAM_CLOSED -5
+#define H2O_HTTP2_ERROR_FRAME_SIZE -6
+#define H2O_HTTP2_ERROR_REFUSED_STREAM -7
+#define H2O_HTTP2_ERROR_CANCEL -8
+#define H2O_HTTP2_ERROR_COMPRESSION -9
+#define H2O_HTTP2_ERROR_CONNECT -10
+#define H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM -11
+#define H2O_HTTP2_ERROR_INADEUATE_SECURITY -12
+#define H2O_HTTP2_ERROR_INCOMPLETE -255 /* an internal value indicating that all data is not ready */
+#define H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY -256
 
 /* hpack */
 
@@ -125,6 +139,7 @@ struct st_h2o_http2_conn_t {
     khash_t(h2o_http2_stream_t) *open_streams;
     uint32_t max_stream_id;
     /* internal */
+    int is_closing;
     ssize_t (*_read_expect)(h2o_http2_conn_t *conn, const uint8_t *src, size_t len);
     h2o_input_buffer_t *_input;
     h2o_input_buffer_t *_http1_req_input; /* contains data referred to by original request via HTTP/1.1 */
@@ -142,7 +157,9 @@ struct st_h2o_http2_conn_t {
 int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t *src, size_t len);
 
 /* frames */
-void h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type, uint8_t flags, int32_t stream_id);
+uint8_t *h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type, uint8_t flags, int32_t stream_id);
+uv_buf_t h2o_http2_encode_goaway_frame(h2o_mempool_t *pool, uint32_t last_stream_id, int errno);
+uv_buf_t h2o_http2_encode_rst_frame(h2o_mempool_t *pool, uint32_t stream_id, int errno);
 ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, const h2o_http2_settings_t *host_settings);
 int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const h2o_http2_frame_t *frame);
 int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *paylaod, const h2o_http2_frame_t *frame);
