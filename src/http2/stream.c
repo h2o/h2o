@@ -20,25 +20,18 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     h2o_http2_window_init(&stream->window, &conn->peer_settings);
     memset(&stream->_send_queue, 0, sizeof(stream->_send_queue));
 
-    { /* register the stream */
-        int r;
-        khiter_t iter = kh_put(h2o_http2_stream_t, conn->active_streams, stream->stream_id, &r);
-        assert(iter != kh_end(conn->active_streams));
-        kh_val(conn->active_streams, iter) = stream;
-    }
-
-    assert(conn->max_stream_id < stream_id);
-    conn->max_stream_id = stream_id;
+    h2o_http2_conn_register_stream(conn, stream);
 
     return stream;
 }
 
-void h2o_http2_stream_close(h2o_http2_stream_t *stream, h2o_input_buffer_t **http1_req_input)
+void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
+    h2o_http2_conn_unregister_stream(conn, stream->stream_id);
     h2o_dispose_request(&stream->req);
     if (stream->stream_id == 1) {
-        free(*http1_req_input);
-        *http1_req_input = NULL;
+        free(conn->_http1_req_input);
+        conn->_http1_req_input = NULL;
     }
     free(stream);
 }
@@ -124,7 +117,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, uv_buf_t *bufs, size
 
     if (bufcnt == 0) {
         /* sent all data */
-        h2o_http2_conn_register_flushed_stream(conn, stream, is_final);
+        h2o_http2_conn_register_flushed_stream(conn, stream);
     } else {
         /* save the rest of data in queue */
         h2o_vector_reserve(&req->pool, (h2o_vector_t*)&stream->_send_queue.bufs, sizeof(uv_buf_t), bufcnt);
@@ -147,7 +140,7 @@ void h2o_http2_stream_send_pending(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     if (nextbuf == stream->_send_queue.bufs.entries + stream->_send_queue.bufs.size) {
         /* sent all data */
         stream->_send_queue.bufs.size = 0;
-        h2o_http2_conn_register_flushed_stream(conn, stream, stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM);
+        h2o_http2_conn_register_flushed_stream(conn, stream);
     } else if (nextbuf != stream->_send_queue.bufs.entries) {
         /* adjust the buffer */
         size_t newsize = stream->_send_queue.bufs.size - (nextbuf - stream->_send_queue.bufs.entries);
@@ -159,7 +152,7 @@ void h2o_http2_stream_send_pending(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
 void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int status)
 {
     if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
-        h2o_http2_stream_close(stream, &conn->_http1_req_input);
+        h2o_http2_stream_close(conn, stream);
     } else if (status == 0) {
         h2o_proceed_response(&stream->req, 0);
     }

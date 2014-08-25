@@ -122,7 +122,7 @@ struct st_h2o_http2_conn_t {
     /* settings */
     h2o_http2_settings_t peer_settings;
     /* streams */
-    khash_t(h2o_http2_stream_t) *active_streams;
+    khash_t(h2o_http2_stream_t) *open_streams;
     uint32_t max_stream_id;
     /* internal */
     ssize_t (*_read_expect)(h2o_http2_conn_t *conn, const uint8_t *src, size_t len);
@@ -148,14 +148,17 @@ int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const
 int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *paylaod, const h2o_http2_frame_t *frame);
 
 /* connection */
+void h2o_http2_conn_register_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
+void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, uint32_t stream_id);
+static h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uint32_t stream_id);
 void h2o_http2_close_and_free(h2o_http2_conn_t *conn);
 int h2o_http2_handle_upgrade(h2o_req_t *req, h2o_http2_conn_t *conn);
 void h2o_http2_conn_enqueue_write(h2o_http2_conn_t *conn, uv_buf_t buf);
-void h2o_http2_conn_register_flushed_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int is_becoming_inactive);
+void h2o_http2_conn_register_flushed_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 
 /* stream */
 h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req);
-void h2o_http2_stream_close(h2o_http2_stream_t *stream, h2o_input_buffer_t **http1_req_input);
+void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_send_pending(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int status);
 
@@ -166,6 +169,14 @@ static ssize_t h2o_http2_window_get_window(h2o_http2_window_t *window);
 static void h2o_http2_window_consume_window(h2o_http2_window_t *window, size_t bytes);
 
 /* inline definitions */
+
+inline h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uint32_t stream_id)
+{
+    khiter_t iter = kh_get(h2o_http2_stream_t, conn->open_streams, stream_id);
+    if (iter != kh_end(conn->open_streams))
+        return kh_val(conn->open_streams, iter);
+    return NULL;
+}
 
 inline void h2o_http2_window_init(h2o_http2_window_t *window, const h2o_http2_settings_t *peer_settings)
 {
