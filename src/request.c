@@ -33,6 +33,7 @@ void h2o_init_request(h2o_req_t *req, void *conn, h2o_loop_context_t *ctx, h2o_r
     req->scheme_len = 0;
     req->version = 0;
     memset(&req->headers, 0, sizeof(req->headers));
+    req->entity = uv_buf_init(NULL, 0);
 
     req->res.status = 0;
     req->res.reason = NULL;

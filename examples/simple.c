@@ -28,7 +28,7 @@ static void on_req(h2o_req_t *req)
             req->res.status = 200;
             req->res.reason = "OK";
             h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT("http://example.com:81/bar"));
-            h2o_send_inline(req, "you should never see this!\n");
+            h2o_send_inline(req, H2O_STRLIT("you should never see this!\n"));
 
         } else {
 
@@ -53,6 +53,15 @@ static void on_req(h2o_req_t *req)
             }
 
         }
+
+    } else if (h2o_memis(req->method, req->method_len, H2O_STRLIT("POST"))
+        && h2o_memis(req->path, req->path_len, H2O_STRLIT("/post-test"))) {
+
+        /* post-test */
+        req->res.status = 200;
+        req->res.reason = "OK";
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
+        h2o_send_inline(req, req->entity.base, req->entity.len);
 
     } else {
         h2o_send_error(req, 403, "Request Forbidden", "only GET is allowed");

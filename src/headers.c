@@ -16,14 +16,15 @@ static h2o_header_t *add_header(h2o_mempool_t *pool, h2o_headers_t *headers, uv_
     return slot;
 }
 
-void h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len, uv_buf_t *connection, uv_buf_t *host, uv_buf_t *upgrade)
+ssize_t h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len, uv_buf_t *connection, uv_buf_t *host, uv_buf_t *upgrade)
 {
-    size_t i;
+    ssize_t entity_header_index = -1;
 
     assert(headers->size == 0);
 
     /* setup */
     if (len != 0) {
+        size_t i;
         h2o_vector_reserve(pool, (h2o_vector_t*)headers, sizeof(h2o_header_t), len);
         for (i = 0; i != len; ++i) {
             const h2o_token_t *name_token = h2o_lookup_token(src[i].name, src[i].name_len);
@@ -34,6 +35,11 @@ void h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const struct 
                 } else if (name_token == H2O_TOKEN_UPGRADE) {
                     upgrade->base = (char*)src[i].value;
                     upgrade->len = src[i].value_len;
+                } else if (name_token == H2O_TOKEN_CONTENT_LENGTH) {
+                    if (entity_header_index == -1)
+                        entity_header_index = i;
+                } else if (name_token == H2O_TOKEN_CONTENT_ENCODING) {
+                    entity_header_index = i;
                 } else {
                     h2o_header_t *added = add_header(pool, headers, (uv_buf_t*)name_token, src[i].value, src[i].value_len);
                     if (name_token == H2O_TOKEN_CONNECTION)
@@ -44,6 +50,8 @@ void h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const struct 
             }
         }
     }
+
+    return entity_header_index;
 }
 
 ssize_t h2o_find_header(const h2o_headers_t *headers, const h2o_token_t *token, ssize_t cursor)

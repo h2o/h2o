@@ -1,8 +1,14 @@
 #include <alloca.h>
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include "h2o.h"
 #include "h2o/http1.h"
+
+struct st_h2o_http1_req_entity_reader {
+    int (*handle_incoming)(h2o_http1_conn_t *conn);
+    size_t entity_offset;
+};
 
 static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *inbufs, size_t inbufcnt, int is_final);
 
@@ -30,6 +36,7 @@ static void close_connection(h2o_http1_conn_t *conn)
     h2o_timeout_unlink_entry(conn->_timeout, &conn->_timeout_entry);
     h2o_dispose_request(&conn->req);
     free(conn->_input);
+    free(conn->_req_entity_reader);
     conn->close_cb(conn);
 }
 
@@ -46,8 +53,63 @@ static void set_timeout(h2o_http1_conn_t *conn, h2o_timeout_t *timeout, h2o_time
     }
 }
 
-static void fixup_request(h2o_http1_conn_t *conn, struct phr_header *headers, size_t num_headers, int minor_version)
+static int create_chunked_entity_reader(h2o_http1_conn_t *conn)
 {
+    return -1;
+}
+
+static int handle_content_length_entity_read(h2o_http1_conn_t *conn)
+{
+    /* wait until: reqsize == conn->_input.size */
+    if (conn->_input->size < conn->_reqsize)
+        return -2;
+
+    /* all input has arrived */
+    conn->req.entity.base = conn->_input->bytes + conn->_req_entity_reader->entity_offset;
+    conn->req.entity.len = conn->_reqsize - conn->_req_entity_reader->entity_offset;
+    free(conn->_req_entity_reader);
+    conn->_req_entity_reader = NULL;
+    set_timeout(conn, NULL, NULL);
+    uv_read_stop(conn->stream);
+    conn->req_cb(&conn->req);
+
+    return 0;
+}
+
+static int create_content_length_entity_reader(h2o_http1_conn_t *conn, size_t content_length)
+{
+    struct st_h2o_http1_req_entity_reader *reader = malloc(sizeof(struct st_h2o_http1_req_entity_reader));
+    conn->_req_entity_reader = reader;
+
+    reader->handle_incoming = handle_content_length_entity_read;
+    reader->entity_offset = conn->_reqsize;
+    conn->_reqsize += content_length;
+
+    return 0;
+}
+
+static int create_entity_reader(h2o_http1_conn_t *conn, const struct phr_header *entity_header)
+{
+    if (entity_header->name_len == sizeof("content-encoding") - 1) {
+        /* content-encoding */
+        if (h2o_lcstris(entity_header->value, entity_header->value_len, H2O_STRLIT("chunked"))) {
+            return create_chunked_entity_reader(conn);
+        }
+    } else {
+        /* content-length */
+        char *endptr;
+        intmax_t content_length = strtoimax(h2o_strdup(&conn->req.pool, entity_header->value, entity_header->value_len).base, &endptr, 10);
+        if (*endptr == '\0' && content_length != INTMAX_MAX && 0 <= content_length && content_length <= conn->ctx->max_request_entity_size) {
+            return create_content_length_entity_reader(conn, (size_t)content_length);
+        }
+    }
+    /* failed */
+    return -1;
+}
+
+static ssize_t fixup_request(h2o_http1_conn_t *conn, struct phr_header *headers, size_t num_headers, int minor_version)
+{
+    ssize_t entity_header_index;
     uv_buf_t connection = { NULL, 0 }, host = { NULL, 0 }, upgrade = { NULL, 0 };
 
     conn->req.scheme = "http";
@@ -55,7 +117,7 @@ static void fixup_request(h2o_http1_conn_t *conn, struct phr_header *headers, si
     conn->req.version = 0x100 | minor_version;
 
     /* init headers */
-    h2o_init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade);
+    entity_header_index = h2o_init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade);
 
     /* move host header to req->authority */
     if (host.base != NULL) {
@@ -76,6 +138,8 @@ static void fixup_request(h2o_http1_conn_t *conn, struct phr_header *headers, si
         /* defaults to keep-alive if >= HTTP/1.1 */
             conn->req.http1_is_persistent = 1;
     }
+
+    return entity_header_index;
 }
 
 static int handle_incoming(h2o_http1_conn_t *conn, size_t prevreqlen)
@@ -84,17 +148,28 @@ static int handle_incoming(h2o_http1_conn_t *conn, size_t prevreqlen)
     int reqlen, minor_version;
     struct phr_header headers[H2O_MAX_HEADERS];
     size_t num_headers = H2O_MAX_HEADERS;
+    ssize_t entity_body_header_index;
 
     reqlen = phr_parse_request(conn->_input->bytes, inreqlen, &conn->req.method, &conn->req.method_len,
                                &conn->req.path, &conn->req.path_len, &minor_version,
                                headers, &num_headers, prevreqlen);
     switch (reqlen) {
     default: // parse complete
-        set_timeout(conn, NULL, NULL);
-        uv_read_stop(conn->stream);
         conn->_reqsize = reqlen;
-        fixup_request(conn, headers, num_headers, minor_version);
-        conn->req_cb(&conn->req);
+        if ((entity_body_header_index = fixup_request(conn, headers, num_headers, minor_version)) != -1) {
+            if (create_entity_reader(conn, headers + entity_body_header_index) != 0) {
+                set_timeout(conn, NULL, NULL);
+                uv_read_stop(conn->stream);
+                conn->req.http1_is_persistent = 0;
+                h2o_send_error(&conn->req, 400, "Invalid Request", "unknown entity encoding");
+                return 0;
+            }
+            return conn->_req_entity_reader->handle_incoming(conn);
+        } else {
+            set_timeout(conn, NULL, NULL);
+            uv_read_stop(conn->stream);
+            conn->req_cb(&conn->req);
+        }
         return 0;
     case -2: // incomplete
         if (inreqlen == H2O_MAX_REQLEN) {
@@ -121,7 +196,10 @@ static void reqread_on_read(uv_stream_t *stream, ssize_t nread, uv_buf_t _buf)
 
     prevreqlen = conn->_input->size;
     conn->_input->size += nread;
-    handle_incoming(conn, prevreqlen);
+    if (conn->_req_entity_reader == NULL)
+        handle_incoming(conn, prevreqlen);
+    else
+        conn->_req_entity_reader->handle_incoming(conn);
 }
 
 static void reqread_on_timeout(h2o_timeout_entry_t *entry)
@@ -165,7 +243,7 @@ static void on_send_complete(uv_write_t *wreq, int status)
     init_request(conn, 1);
     h2o_consume_input_buffer(&conn->_input, conn->_reqsize);
     if (conn->_input->size != 0) {
-        if (! handle_incoming(conn, 0)) {
+        if (handle_incoming(conn, 0) == 0) {
             return;
         }
     }
@@ -274,6 +352,7 @@ void h2o_http1_init(h2o_http1_conn_t *conn)
 
     conn->_input = NULL;
     conn->_reqsize = 0;
+    conn->_req_entity_reader = NULL;
     conn->_wreq.data = conn;
     memset(&conn->upgrade, 0, sizeof(conn->upgrade));
 

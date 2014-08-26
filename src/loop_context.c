@@ -18,6 +18,7 @@ void h2o_loop_context_init(h2o_loop_context_t *ctx, uv_loop_t *loop)
     h2o_add_chunked_encoder(ctx);
     h2o_init_mimemap(&ctx->mimemap, "application/octet-stream");
     ctx->server_name = uv_buf_init(H2O_STRLIT("h2o/0.1"));
+    ctx->max_request_entity_size = 1024 * 1024 * 1024;
 }
 
 void h2o_loop_context_dispose(h2o_loop_context_t *ctx)

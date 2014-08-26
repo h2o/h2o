@@ -96,6 +96,7 @@ typedef struct h2o_loop_context_t {
     h2o_filter_t *filters;
     h2o_mimemap_t mimemap;
     uv_buf_t server_name;
+    size_t max_request_entity_size;
 } h2o_loop_context_t;
 
 typedef struct st_h2o_header_t {
@@ -141,6 +142,7 @@ struct st_h2o_req_t {
     size_t scheme_len;
     int version;
     h2o_headers_t headers;
+    uv_buf_t entity;
     /* the response */
     h2o_res_t res;
     /* flags */
@@ -172,7 +174,7 @@ void h2o_mempool_release(h2o_mempool_t *pool, void *p);
 
 /* headers */
 
-void h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len, uv_buf_t *connection, uv_buf_t *host, uv_buf_t *upgrade);
+ssize_t h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len, uv_buf_t *connection, uv_buf_t *host, uv_buf_t *upgrade);
 ssize_t h2o_find_header(const h2o_headers_t *headers, const h2o_token_t *token, ssize_t cursor);
 ssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, size_t name_len, ssize_t cursor);
 void h2o_add_header(h2o_mempool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len);
@@ -231,7 +233,7 @@ h2o_filter_t *h2o_define_filter(h2o_loop_context_t *context, size_t sz);
 
 /* built-in generators */
 
-void h2o_send_inline(h2o_req_t *req, const char *body);
+void h2o_send_inline(h2o_req_t *req, const char *body, size_t len);
 void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body);
 int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *path, uv_buf_t *mime_type);
 

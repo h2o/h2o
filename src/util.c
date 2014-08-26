@@ -70,7 +70,7 @@ uv_buf_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t slen)
     }
     memcpy(ret.base, s, slen);
     ret.base[slen] = '\0';
-    ret.len = strlen(s);
+    ret.len = slen;
     return ret;
 }
 
@@ -372,10 +372,10 @@ void h2o_vector__expand(h2o_mempool_t *pool, h2o_vector_t *vector, size_t elemen
     vector->entries = new_entries;
 }
 
-void h2o_send_inline(h2o_req_t *req, const char *body)
+void h2o_send_inline(h2o_req_t *req, const char *body, size_t len)
 {
     h2o_generator_t *self;
-    uv_buf_t buf = h2o_strdup(&req->pool, body, SIZE_MAX);
+    uv_buf_t buf = h2o_strdup(&req->pool, body, len);
 
     req->res.content_length = buf.len;
     self = h2o_start_response(req, sizeof(h2o_generator_t));
@@ -392,5 +392,5 @@ void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *
     memset(&req->res.headers, 0, sizeof(req->res.headers));
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
 
-    h2o_send_inline(req, body);
+    h2o_send_inline(req, body, SIZE_MAX);
 }
