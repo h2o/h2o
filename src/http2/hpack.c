@@ -372,6 +372,7 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                 /* unknown psuedo header is never accepted */
                 return -1;
             }
+            *allow_psuedo = 0;
             h2o_add_header_by_str(&req->pool, &req->headers, r.name_not_token->base, r.name_not_token->len, 0, r.value->base, r.value->len);
         }
     }
