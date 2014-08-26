@@ -510,11 +510,11 @@ uv_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, uint32_t stream_id, size
     { /* encode */
         uint8_t *cur_frame;
         
-#define EMIT_HEADER() h2o_http2_encode_frame_header( \
+#define EMIT_HEADER(end_headers) h2o_http2_encode_frame_header( \
     cur_frame, \
     dst - cur_frame - H2O_HTTP2_FRAME_HEADER_SIZE, \
     cur_frame == (uint8_t*)ret.base ? H2O_HTTP2_FRAME_TYPE_HEADERS : H2O_HTTP2_FRAME_TYPE_CONTINUATION, \
-    cur_frame == (uint8_t*)ret.base ? H2O_HTTP2_FRAME_FLAG_END_HEADERS : 0, \
+    end_headers ? H2O_HTTP2_FRAME_FLAG_END_HEADERS : 0, \
     stream_id)
 
         cur_frame = dst;
@@ -523,13 +523,13 @@ uv_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, uint32_t stream_id, size
         for (header = res->headers.entries, header_end = header + res->headers.size; header != header_end; ++header) {
             size_t max_header_size = header->name.str->len + header->value.len + 1 + H2O_HTTP2_ENCODE_INT_MAX_LENGTH * 2;
             if (dst - cur_frame - H2O_HTTP2_FRAME_HEADER_SIZE + max_header_size > max_frame_size) {
-                EMIT_HEADER();
+                EMIT_HEADER(0);
                 cur_frame = dst;
                 dst += H2O_HTTP2_FRAME_HEADER_SIZE;
             }
             dst = encode_header(dst, header->name.str, &header->value);
         }
-        EMIT_HEADER();
+        EMIT_HEADER(1);
 
 #undef EMIT_HEADER
     }
