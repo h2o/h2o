@@ -546,21 +546,23 @@ Error:
 
 #include "picotest.h"
 
-static void test_request(h2o_mempool_t *pool, uv_buf_t first_req, uv_buf_t second_req, uv_buf_t third_req)
+static void test_request(uv_buf_t first_req, uv_buf_t second_req, uv_buf_t third_req)
 {
     h2o_hpack_header_table_t header_table;
     h2o_req_t req;
     uv_buf_t in, flattened;
-    int r;
+    int r, allow_psuedo;
 
     memset(&header_table, 0, sizeof(header_table));
     header_table.hpack_capacity = 4096;
 
     memset(&req, 0, sizeof(req));
-    h2o_clear_headers(&req.headers);
+    h2o_mempool_init(&req.pool);
+    allow_psuedo = 1;
     in = first_req;
-    r = h2o_http2_parse_request(pool, &req, &header_table, (const uint8_t*)in.base, in.len);
+    r = h2o_hpack_parse_headers(&req, &header_table, &allow_psuedo, (const uint8_t*)in.base, in.len);
     ok(r == 0);
+    ok(allow_psuedo == 1);
     ok(req.authority_len == 15);
     ok(memcmp(req.authority, H2O_STRLIT("www.example.com")) == 0);
     ok(req.method_len == 3);
@@ -569,57 +571,56 @@ static void test_request(h2o_mempool_t *pool, uv_buf_t first_req, uv_buf_t secon
     ok(memcmp(req.path, H2O_STRLIT("/")) == 0);
     ok(req.scheme_len == 4);
     ok(memcmp(req.scheme, H2O_STRLIT("http")) == 0);
-    ok(req.version == 0x0200);
-    ok(req.headers.count == 0);
+    ok(req.headers.size == 0);
 
-    h2o_mempool_destroy(pool, 1);
+    h2o_mempool_clear(&req.pool);
 
     memset(&req, 0, sizeof(req));
-    h2o_clear_headers(&req.headers);
+    h2o_mempool_init(&req.pool);
+    allow_psuedo = 1;
     in = second_req;
-    r = h2o_http2_parse_request(pool, &req, &header_table, (const uint8_t*)in.base, in.len);
+    r = h2o_hpack_parse_headers(&req, &header_table, &allow_psuedo, (const uint8_t*)in.base, in.len);
     ok(r == 0);
+    ok(allow_psuedo == 0);
     ok(req.authority_len == 15);
     ok(memcmp(req.authority, H2O_STRLIT("www.example.com")) == 0);
     ok(req.method_len == 3);
     ok(memcmp(req.method, H2O_STRLIT("GET")) == 0);
     ok(req.path_len == 1);
     ok(memcmp(req.path, H2O_STRLIT("/")) == 0);
-    ok(req.version == 0x0200);
     ok(req.scheme_len == 4);
     ok(memcmp(req.scheme, H2O_STRLIT("http")) == 0);
-    ok(req.version == 0x0200);
-    flattened = h2o_flatten_headers(pool, &req.headers);
+    flattened = h2o_flatten_headers(&req.pool, &req.headers);
     ok(h2o_lcstris(flattened.base, flattened.len, H2O_STRLIT("cache-control: no-cache\r\n\r\n")));
 
-    h2o_mempool_destroy(pool, 1);
+    h2o_mempool_clear(&req.pool);
 
     memset(&req, 0, sizeof(req));
-    h2o_clear_headers(&req.headers);
+    h2o_mempool_init(&req.pool);
+    allow_psuedo = 1;
     in = third_req;
-    r = h2o_http2_parse_request(pool, &req, &header_table, (const uint8_t*)in.base, in.len);
+    r = h2o_hpack_parse_headers(&req, &header_table, &allow_psuedo, (const uint8_t*)in.base, in.len);
     ok(r == 0);
+    ok(allow_psuedo == 0);
     ok(req.authority_len == 15);
     ok(memcmp(req.authority, H2O_STRLIT("www.example.com")) == 0);
     ok(req.method_len == 3);
     ok(memcmp(req.method, H2O_STRLIT("GET")) == 0);
     ok(req.path_len == 11);
     ok(memcmp(req.path, H2O_STRLIT("/index.html")) == 0);
-    ok(req.version == 0x0200);
     ok(req.scheme_len == 5);
     ok(memcmp(req.scheme, H2O_STRLIT("https")) == 0);
-    ok(req.version == 0x0200);
-    flattened = h2o_flatten_headers(pool, &req.headers);
+    flattened = h2o_flatten_headers(&req.pool, &req.headers);
     ok(h2o_lcstris(flattened.base, flattened.len, H2O_STRLIT("custom-key: custom-value\r\n\r\n")));
 
-    h2o_dispose_hpack_header_table(pool, &header_table);
-    h2o_mempool_destroy(pool, 1);
+    h2o_hpack_dispose_header_table(&req.pool, &header_table);
+    h2o_mempool_clear(&req.pool);
 }
 
 void hpack_test()
 {
     h2o_mempool_t pool;
-    memset(&pool, 0, sizeof(pool));
+    h2o_mempool_init(&pool);
 
     note("decode_int");
     {
@@ -656,7 +657,7 @@ void hpack_test()
         ok(decoded->len == sizeof("www.example.com") -1);
         ok(strcmp(decoded->base, "www.example.com") == 0);
     }
-    h2o_mempool_destroy(&pool, 1);
+    h2o_mempool_clear(&pool);
 
     note("decode_header (literal header field with indexing)");
     {
@@ -678,7 +679,7 @@ void hpack_test()
         ok(strcmp(result.value->base, "custom-header") == 0);
         ok(header_table.hpack_size == 55);
     }
-    h2o_mempool_destroy(&pool, 1);
+    h2o_mempool_clear(&pool);
 
     note("decode_header (literal header field without indexing)");
     {
@@ -698,7 +699,7 @@ void hpack_test()
         ok(strcmp(result.value->base, "/sample/path") == 0);
         ok(header_table.hpack_size == 0);
     }
-    h2o_mempool_destroy(&pool, 1);
+    h2o_mempool_clear(&pool);
 
     note("decode_header (literal header field never indexed)");
     {
@@ -720,7 +721,7 @@ void hpack_test()
         ok(strcmp(result.value->base, "secret") == 0);
         ok(header_table.hpack_size == 0);
     }
-    h2o_mempool_destroy(&pool, 1);
+    h2o_mempool_clear(&pool);
 
     note("decode_header (indexed header field)");
     {
@@ -740,16 +741,16 @@ void hpack_test()
         ok(strcmp(result.value->base, "GET") == 0);
         ok(header_table.hpack_size == 0);
     }
-    h2o_mempool_destroy(&pool, 1);
+    h2o_mempool_clear(&pool);
 
     note("request examples without huffman coding");
-    test_request(&pool,
+    test_request(
         uv_buf_init(H2O_STRLIT("\x82\x86\x84\x41\x0f\x77\x77\x77\x2e\x65\x78\x61\x6d\x70\x6c\x65\x2e\x63\x6f\x6d")),
         uv_buf_init(H2O_STRLIT("\x82\x86\x84\xbe\x58\x08\x6e\x6f\x2d\x63\x61\x63\x68\x65")),
         uv_buf_init(H2O_STRLIT("\x82\x87\x85\xbf\x40\x0a\x63\x75\x73\x74\x6f\x6d\x2d\x6b\x65\x79\x0c\x63\x75\x73\x74\x6f\x6d\x2d\x76\x61\x6c\x75\x65")));
 
     note("request examples with huffman coding");
-    test_request(&pool,
+    test_request(
         uv_buf_init(H2O_STRLIT("\x82\x86\x84\x41\x8c\xf1\xe3\xc2\xe5\xf2\x3a\x6b\xa0\xab\x90\xf4\xff")),
         uv_buf_init(H2O_STRLIT("\x82\x86\x84\xbe\x58\x86\xa8\xeb\x10\x64\x9c\xbf")),
         uv_buf_init(H2O_STRLIT("\x82\x87\x85\xbf\x40\x88\x25\xa8\x49\xe9\x5b\xa9\x7d\x7f\x89\x25\xa8\x49\xe9\x5b\xb8\xe8\xb4\xbf")));
@@ -758,11 +759,11 @@ void hpack_test()
     {
         uv_buf_t huffcode = { H2O_STRLIT("\xf1\xe3\xc2\xe5\xf2\x3a\x6b\xa0\xab\x90\xf4\xff") };
         char buf[sizeof("www.example.com")];
-        size_t l = encode_huffman(buf, H2O_STRLIT("www.example.com"));
+        size_t l = encode_huffman((uint8_t*)buf, (uint8_t*)H2O_STRLIT("www.example.com"));
         ok(l == huffcode.len);
         ok(memcmp(buf, huffcode.base, huffcode.len) == 0);
     }
 
-    h2o_mempool_destroy(&pool, 0);
+    h2o_mempool_clear(&pool);
 }
 #endif
