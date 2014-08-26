@@ -328,7 +328,8 @@ static void handle_input(h2o_http2_conn_t *conn)
             case H2O_HTTP2_ERROR_INCOMPLETE:
                 goto Incomplete;
             default:
-                /* FIXME send error frame before closing the connection */
+                /* send error */
+                send_error(conn, 0, (int)-ret);
                 /* fallthru */
             case H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY:
                 close_connection(conn);
