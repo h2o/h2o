@@ -92,6 +92,17 @@ uv_buf_t h2o_http2_encode_goaway_frame(h2o_mempool_t *pool, uint32_t last_stream
     return ret;
 }
 
+uv_buf_t h2o_http2_encode_window_update_frame(h2o_mempool_t *pool, uint32_t stream_id, int32_t window_size_increment)
+{
+    uv_buf_t ret;
+    uint8_t *dst = allocate_frame(&ret, pool, 4, H2O_HTTP2_FRAME_TYPE_WINDOW_UPDATE, 0, stream_id);
+
+    dst = encode32u(dst, window_size_increment);
+
+    assert(dst - (uint8_t*)ret.base == ret.len);
+    return ret;
+}
+
 ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, const h2o_http2_settings_t *host_settings)
 {
     if (len < H2O_HTTP2_FRAME_HEADER_SIZE)
@@ -111,6 +122,24 @@ ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, siz
     frame->payload = src + H2O_HTTP2_FRAME_HEADER_SIZE;
 
     return H2O_HTTP2_FRAME_HEADER_SIZE + frame->length;
+}
+
+int h2o_http2_decode_data_payload(h2o_http2_data_payload_t *payload, const h2o_http2_frame_t *frame)
+{
+    if ((frame->flags & H2O_HTTP2_FRAME_FLAG_PADDED) != 0) {
+        uint8_t padding_length;
+        if (frame->length < 1)
+            return -1;
+        padding_length = frame->payload[0];
+        if (frame->length < 1 + padding_length)
+            return -1;
+        payload->data = frame->payload + 1;
+        payload->length = frame->length - (1 + padding_length);
+    } else {
+        payload->data = frame->payload;
+        payload->length = frame->length;
+    }
+    return 0;
 }
 
 int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const h2o_http2_frame_t *frame)
