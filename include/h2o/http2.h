@@ -152,7 +152,8 @@ struct st_h2o_http2_conn_t {
     h2o_http2_settings_t peer_settings;
     /* streams */
     khash_t(h2o_http2_stream_t) *open_streams;
-    uint32_t max_stream_id;
+    uint32_t max_open_stream_id;
+    uint32_t max_processed_stream_id;
     /* internal */
     h2o_http2_conn_state_t state;
     ssize_t (*_read_expect)(h2o_http2_conn_t *conn, const uint8_t *src, size_t len);
