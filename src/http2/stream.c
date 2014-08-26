@@ -27,7 +27,7 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
 
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
-    assert(stream->_send_queue._next_flushed == NULL);
+    assert(! h2o_http2_conn_stream_is_registered_as_flushed(stream));
 
     h2o_http2_conn_unregister_stream(conn, stream->stream_id);
     h2o_dispose_request(&stream->req);
@@ -36,6 +36,30 @@ void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         conn->_http1_req_input = NULL;
     }
     free(stream);
+}
+
+void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int errnum)
+{
+    switch (stream->state) {
+    case H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS:
+    case H2O_HTTP2_STREAM_STATE_RECV_HEADERS:
+        h2o_http2_stream_close(conn, stream);
+        break;
+    case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
+    case H2O_HTTP2_STREAM_STATE_SEND_BODY:
+    case H2O_HTTP2_STREAM_STATE_END_STREAM:
+        /* change the state to EOS, clear all the queued bufs, and close the connection in the callback */
+        stream->state = H2O_HTTP2_STREAM_STATE_END_STREAM;
+        stream->_send_queue.bufs.size = 0;
+        if (h2o_http2_conn_has_writes_in_progress(conn)) {
+            if (! h2o_http2_conn_stream_is_registered_as_flushed(stream)) {
+                h2o_http2_conn_register_flushed_stream(conn, stream);
+            }
+        } else {
+            h2o_http2_stream_close(conn, stream);
+        }
+        break;
+    }
 }
 
 static size_t calc_max_payload_size(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
@@ -104,13 +128,21 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, uv_buf_t *bufs, size
 
     assert(stream->_send_queue.bufs.size == 0);
 
-    /* emit the headers if necessary */
-    if (stream->state == H2O_HTTP2_STREAM_STATE_SEND_HEADERS) {
+    switch (stream->state) {
+    case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
         h2o_http2_conn_enqueue_write(conn, h2o_hpack_flatten_headers(&req->pool, stream->stream_id, conn->peer_settings.max_frame_size, &req->res));
+        stream->state = H2O_HTTP2_STREAM_STATE_SEND_BODY;
+        break;
+    case H2O_HTTP2_STREAM_STATE_SEND_BODY:
+        if (is_final)
+            stream->state = H2O_HTTP2_STREAM_STATE_END_STREAM;
+        break;
+    case H2O_HTTP2_STREAM_STATE_END_STREAM:
+        /* might get set by h2o_http2_stream_reset */
+        return;
+    default:
+        assert(!"cannot be in a receiving state");
     }
-
-    /* update state */
-    stream->state = is_final ? H2O_HTTP2_STREAM_STATE_END_STREAM : H2O_HTTP2_STREAM_STATE_SEND_BODY;
 
     /* emit data */
     nextbuf = send_data(conn, stream, bufs, bufcnt, is_final);

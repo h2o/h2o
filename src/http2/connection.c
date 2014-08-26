@@ -69,6 +69,7 @@ static void close_connection(h2o_http2_conn_t *conn)
     conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
 
     if (conn->_write.bufs.size == 0) {
+        assert(conn->_write.flushed_streams == NULL);
         close_connection_now(conn);
     } else {
         /* there is a pending write, let on_write_complete actually close the connection */
@@ -95,7 +96,7 @@ static void send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum)
     assert(conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING);
 
     if (stream_id != 0) {
-        uv_buf_t rst_frame = h2o_http2_encode_rst_frame(&conn->_write.pool, stream_id, -errnum);
+        uv_buf_t rst_frame = h2o_http2_encode_rst_stream_frame(&conn->_write.pool, stream_id, -errnum);
         h2o_http2_conn_enqueue_write(conn, rst_frame);
     } else {
         enqueue_goaway_and_initiate_close(conn, errnum);
@@ -276,33 +277,75 @@ static void handle_goaway_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
     gracefully_shutdown_if_possible(conn);
 }
 
+static void handle_ping_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
+{
+    h2o_http2_ping_payload_t payload;
+    uv_buf_t pong;
+
+    if (frame->stream_id != 0 || h2o_http2_decode_ping_payload(&payload, frame) != 0) {
+        send_error(conn, 0, H2O_HTTP2_ERROR_PROTOCOL);
+        return;
+    }
+
+    pong = h2o_http2_encode_ping_frame(&conn->_write.pool, 1, payload.data);
+    h2o_http2_conn_enqueue_write(conn, pong);
+}
+
+static void handle_rst_stream_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
+{
+    h2o_http2_rst_stream_payload_t payload;
+    h2o_http2_stream_t *stream;
+
+    if (frame->stream_id == 0
+        || conn->max_open_stream_id < frame->stream_id
+        || h2o_http2_decode_rst_stream_payload(&payload, frame) != 0) {
+        send_error(conn, 0, H2O_HTTP2_ERROR_PROTOCOL);
+        return;
+    }
+
+    stream = h2o_http2_conn_get_stream(conn, frame->stream_id);
+    if (stream != NULL) {
+        /* reset the stream */
+        h2o_http2_stream_reset(conn, stream, -payload.error_code);
+    }
+    /* TODO log */
+}
+
+static void handle_frame_as_protocol_error(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
+{
+    fprintf(stderr, "received an unexpected frame (type:%d)\n", frame->type);
+    send_error(conn, 0, H2O_HTTP2_ERROR_PROTOCOL);
+}
+
+static void handle_frame_skip(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
+{
+    fprintf(stderr, "skipping frame (type:%d)\n", frame->type);
+}
+
 ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len)
 {
     h2o_http2_frame_t frame;
     ssize_t ret;
+    static void (*FRAME_HANDLERS[])(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame) = {
+        handle_frame_skip,              /* DATA */
+        handle_headers_frame,
+        handle_frame_skip,              /* PRIORITY */
+        handle_rst_stream_frame,
+        handle_settings_frame,
+        handle_frame_as_protocol_error, /* PUSH_PROMISE */
+        handle_ping_frame,
+        handle_goaway_frame,
+        handle_window_update_frame,
+        handle_frame_as_protocol_error  /* CONTINUATION */
+    };
 
     if ((ret = h2o_http2_decode_frame(&frame, src, len, &HOST_SETTINGS)) < 0)
         return ret;
 
-    switch (frame.type) {
-    case H2O_HTTP2_FRAME_TYPE_HEADERS:
-        handle_headers_frame(conn, &frame);
-        break;
-    case H2O_HTTP2_FRAME_TYPE_SETTINGS:
-        handle_settings_frame(conn, &frame);
-        break;
-    case H2O_HTTP2_FRAME_TYPE_WINDOW_UPDATE:
-        handle_window_update_frame(conn, &frame);
-        break;
-    case H2O_HTTP2_FRAME_TYPE_GOAWAY:
-        handle_goaway_frame(conn, &frame);
-        break;
-    case H2O_HTTP2_FRAME_TYPE_CONTINUATION:
-        send_error(conn, 0, H2O_HTTP2_ERROR_PROTOCOL);
-        break;
-    default:
+    if (frame.type < sizeof(FRAME_HANDLERS) / sizeof(FRAME_HANDLERS[0])) {
+        FRAME_HANDLERS[frame.type](conn, &frame);
+    } else {
         fprintf(stderr, "skipping frame (type:%d)\n", frame.type);
-        break;
     }
 
     return ret;
@@ -410,12 +453,16 @@ static void on_write_complete(uv_write_t *wreq, int status)
     conn->_write.flushed_streams = NULL;
 
     /* update the streams */
-    while (flushed_streams != NULL) {
-        h2o_http2_stream_t *next = flushed_streams->_send_queue._next_flushed;
-        flushed_streams->_send_queue._next_flushed = NULL;
-        if (conn->state != H2O_HTTP2_CONN_STATE_RECVED_GOAWAY)
-            h2o_http2_stream_proceed(conn, flushed_streams, status);
-        flushed_streams = next;
+    if (flushed_streams != NULL) {
+        while (1) {
+            h2o_http2_stream_t *next = flushed_streams->_send_queue._next_flushed;
+            flushed_streams->_send_queue._next_flushed = NULL;
+            if (conn->state != H2O_HTTP2_CONN_STATE_RECVED_GOAWAY)
+                h2o_http2_stream_proceed(conn, flushed_streams, status);
+            if (flushed_streams == next)
+                break;
+            flushed_streams = next;
+        }
     }
 
     /* close the connection if approprate */

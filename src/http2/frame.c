@@ -51,25 +51,45 @@ uint8_t *h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type
     return dst;
 }
 
+static uint8_t *allocate_frame(uv_buf_t *outbuf, h2o_mempool_t *pool, size_t length, uint8_t type, uint8_t flags, int32_t stream_id)
+{
+    *outbuf = uv_buf_init(h2o_mempool_alloc(pool, H2O_HTTP2_FRAME_HEADER_SIZE + length), (unsigned)(H2O_HTTP2_FRAME_HEADER_SIZE + length));
+    return h2o_http2_encode_frame_header((uint8_t*)outbuf->base, length, type, flags, stream_id);
+}
+
+uv_buf_t h2o_http2_encode_rst_stream_frame(h2o_mempool_t *pool, uint32_t stream_id, int errnum)
+{
+    uv_buf_t ret;
+    uint8_t *dst = allocate_frame(&ret, pool, 4, H2O_HTTP2_FRAME_TYPE_GOAWAY, 0, stream_id);
+
+    dst = encode32u(dst, errnum);
+
+    assert(dst - (uint8_t*)ret.base == ret.len);
+    return ret;
+}
+
+uv_buf_t h2o_http2_encode_ping_frame(h2o_mempool_t *pool, int is_ack, const uint8_t *data)
+{
+    uv_buf_t ret;
+    uint8_t *dst = allocate_frame(&ret, pool, 8, H2O_HTTP2_FRAME_TYPE_PING, is_ack ? H2O_HTTP2_FRAME_FLAG_ACK : 0, 0);
+
+    memcpy(dst, data, 8);
+    dst += 8;
+
+    assert(dst - (uint8_t*)ret.base == ret.len);
+    return ret;
+}
+
 uv_buf_t h2o_http2_encode_goaway_frame(h2o_mempool_t *pool, uint32_t last_stream_id, int errno)
 {
-    uint8_t *bytes = h2o_mempool_alloc(pool, H2O_HTTP2_FRAME_HEADER_SIZE + 8), *dst;
+    uv_buf_t ret;
+    uint8_t *dst = allocate_frame(&ret, pool, 8, H2O_HTTP2_FRAME_TYPE_GOAWAY, 0, 0);
 
-    dst = h2o_http2_encode_frame_header(bytes, 8, H2O_HTTP2_FRAME_TYPE_GOAWAY, 0, 0);
     dst = encode32u(dst, last_stream_id);
     dst = encode32u(dst, errno);
 
-    return uv_buf_init((char*)bytes, (unsigned)(dst - bytes));
-}
-
-uv_buf_t h2o_http2_encode_rst_frame(h2o_mempool_t *pool, uint32_t stream_id, int errno)
-{
-    uint8_t *bytes = h2o_mempool_alloc(pool, H2O_HTTP2_FRAME_HEADER_SIZE + 4), *dst;
-
-    dst = h2o_http2_encode_frame_header(bytes, 4, H2O_HTTP2_FRAME_TYPE_RST_STREAM, 0, stream_id);
-    dst = encode32u(dst, errno);
-
-    return uv_buf_init((char*)bytes, (unsigned)(dst - bytes));
+    assert(dst - (uint8_t*)ret.base == ret.len);
+    return ret;
 }
 
 ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, const h2o_http2_settings_t *host_settings)
@@ -128,15 +148,21 @@ int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const
     return 0;
 }
 
-int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *payload, const h2o_http2_frame_t *frame)
+int h2o_http2_decode_rst_stream_payload(h2o_http2_rst_stream_payload_t *payload, const h2o_http2_frame_t *frame)
 {
-    if (frame->length != 4)
+    if (frame->length != sizeof(payload->error_code))
         return -1;
 
-    payload->window_size_increment = decode32u(frame->payload) & 0x7fffffff;
-    if (payload->window_size_increment == 0)
+    payload->error_code = decode32u(frame->payload);
+    return 0;
+}
+
+int h2o_http2_decode_ping_payload(h2o_http2_ping_payload_t *payload, const h2o_http2_frame_t *frame)
+{
+    if (frame->length != sizeof(payload->data))
         return -1;
 
+    memcpy(payload->data, frame->payload, sizeof(payload->data));
     return 0;
 }
 
@@ -151,6 +177,18 @@ int h2o_http2_decode_goaway_payload(h2o_http2_goaway_payload_t *payload, const h
         payload->debug_data.base = (char*)frame->payload + 8;
     else
         payload->debug_data.base = NULL;
+
+    return 0;
+}
+
+int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *payload, const h2o_http2_frame_t *frame)
+{
+    if (frame->length != 4)
+        return -1;
+
+    payload->window_size_increment = decode32u(frame->payload) & 0x7fffffff;
+    if (payload->window_size_increment == 0)
+        return -1;
 
     return 0;
 }
