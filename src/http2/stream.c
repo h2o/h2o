@@ -27,6 +27,8 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
 
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
+    assert(stream->_send_queue._next_flushed == NULL);
+
     h2o_http2_conn_unregister_stream(conn, stream->stream_id);
     h2o_dispose_request(&stream->req);
     if (stream->stream_id == 1) {

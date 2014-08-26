@@ -393,32 +393,23 @@ void h2o_http2_conn_enqueue_write(h2o_http2_conn_t *conn, uv_buf_t buf)
     conn->_write.bufs.entries[conn->_write.bufs.size++] = buf;
 }
 
-void h2o_http2_conn_register_flushed_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
-{
-    assert(conn->_write.bufs.size != 0);
-    h2o_vector_reserve(&conn->_write.pool, (h2o_vector_t*)&conn->_write.flushed_streams, sizeof(h2o_http2_stream_t*), conn->_write.flushed_streams.size + 1);
-    conn->_write.flushed_streams.entries[conn->_write.flushed_streams.size++] = stream;
-}
-
 static void on_write_complete(uv_write_t *wreq, int status)
 {
     h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _write.wreq, wreq);
-    h2o_http2_stream_t **flushed_streams;
-    size_t i, num_flushed_streams;
-
-    /* copy the list of flushed streams */
-    num_flushed_streams = conn->_write.flushed_streams.size;
-    flushed_streams = alloca(sizeof(h2o_http2_stream_t*) * num_flushed_streams);
-    memcpy(flushed_streams, conn->_write.flushed_streams.entries, sizeof(h2o_http2_stream_t*) * num_flushed_streams);
+    h2o_http2_stream_t *flushed_streams = conn->_write.flushed_streams;
 
     /* reset the memory pool */
     h2o_mempool_clear(&conn->_write.pool);
     memset(&conn->_write.bufs, 0, sizeof(conn->_write.bufs));
-    memset(&conn->_write.flushed_streams, 0, sizeof(conn->_write.flushed_streams));
+    conn->_write.flushed_streams = NULL;
 
     /* update the streams */
-    for (i = 0; i != num_flushed_streams; ++i) {
-        h2o_http2_stream_proceed(conn, flushed_streams[i], status);
+    while (flushed_streams != NULL) {
+        h2o_http2_stream_t *next = flushed_streams->_send_queue._next_flushed;
+        flushed_streams->_send_queue._next_flushed = NULL;
+        if (conn->state != H2O_HTTP2_CONN_STATE_RECVED_GOAWAY)
+            h2o_http2_stream_proceed(conn, flushed_streams, status);
+        flushed_streams = next;
     }
 
     /* close the connection if approprate */
@@ -474,7 +465,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, h2o_http2_conn_t *http2conn)
     h2o_mempool_init(&http2conn->_write.pool);
     memset(&http2conn->_write.wreq, 0, sizeof(http2conn->_write.wreq));
     memset(&http2conn->_write.bufs, 0, sizeof(http2conn->_write.bufs));
-    memset(&http2conn->_write.flushed_streams, 0, sizeof(http2conn->_write.flushed_streams));
+    http2conn->_write.flushed_streams = NULL;
     memset(&http2conn->_write.timeout_entry, 0, sizeof(http2conn->_write.timeout_entry));
     http2conn->_write.timeout_entry.cb = emit_writereq;
     h2o_http2_window_init(&http2conn->_write.window, &http2conn->peer_settings);

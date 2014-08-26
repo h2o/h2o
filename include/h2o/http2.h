@@ -1,9 +1,11 @@
 #ifndef h2o__http2_h
 #define h2o__http2_h
 
+#include <assert.h>
 #include "khash.h"
 
 typedef struct st_h2o_http2_conn_t h2o_http2_conn_t;
+typedef struct st_h2o_http2_stream_t h2o_http2_stream_t;
 
 /* defined as negated form of the error codes defined in HTTP2-spec section 7 */
 #define H2O_HTTP2_ERROR_NONE 0
@@ -120,7 +122,7 @@ typedef enum enum_h2o_http2_stream_state_t {
     H2O_HTTP2_STREAM_STATE_END_STREAM
 } h2o_http2_stream_state_t;
 
-typedef struct st_h2o_http2_stream_t {
+struct st_h2o_http2_stream_t {
     uint32_t stream_id;
     h2o_req_t req;
     h2o_ostream_t _ostr_final;
@@ -128,8 +130,9 @@ typedef struct st_h2o_http2_stream_t {
     h2o_http2_window_t window;
     struct {
         H2O_VECTOR(uv_buf_t) bufs;
+        h2o_http2_stream_t *_next_flushed;
     } _send_queue;
-} h2o_http2_stream_t;
+};
 
 KHASH_MAP_INIT_INT64(h2o_http2_stream_t, h2o_http2_stream_t*)
 
@@ -160,7 +163,7 @@ struct st_h2o_http2_conn_t {
         h2o_mempool_t pool;
         uv_write_t wreq;
         H2O_VECTOR(uv_buf_t) bufs;
-        H2O_VECTOR(h2o_http2_stream_t*) flushed_streams;
+        h2o_http2_stream_t *flushed_streams;
         h2o_timeout_entry_t timeout_entry;
         h2o_http2_window_t window;
     } _write;
@@ -184,7 +187,7 @@ static h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uin
 void h2o_http2_close_and_free(h2o_http2_conn_t *conn);
 int h2o_http2_handle_upgrade(h2o_req_t *req, h2o_http2_conn_t *conn);
 void h2o_http2_conn_enqueue_write(h2o_http2_conn_t *conn, uv_buf_t buf);
-void h2o_http2_conn_register_flushed_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
+static void h2o_http2_conn_register_flushed_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 
 /* stream */
 h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req);
@@ -206,6 +209,13 @@ inline h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uin
     if (iter != kh_end(conn->open_streams))
         return kh_val(conn->open_streams, iter);
     return NULL;
+}
+
+inline void h2o_http2_conn_register_flushed_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+{
+    assert(stream->_send_queue._next_flushed == NULL);
+    stream->_send_queue._next_flushed = conn->_write.flushed_streams;
+    conn->_write.flushed_streams = stream;
 }
 
 inline void h2o_http2_window_init(h2o_http2_window_t *window, const h2o_http2_settings_t *peer_settings)
