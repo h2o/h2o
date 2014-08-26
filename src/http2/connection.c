@@ -487,8 +487,7 @@ static void on_upgrade_complete(void *_conn, uv_stream_t *stream, h2o_input_buff
     uv_read_start(conn->stream, alloc_inbuf, on_read);
 
     /* handle the request */
-    conn->max_processed_stream_id = 1;
-    conn->req_cb(&h2o_http2_conn_get_stream(conn, 1)->req);
+    handle_complete_request(conn, h2o_http2_conn_get_stream(conn, 1));
 
     if (conn->_http1_req_input->size != reqsize) {
         /* FIXME copy the remaining data to conn->_input and call handle_input */
