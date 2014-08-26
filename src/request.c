@@ -58,16 +58,10 @@ void h2o_init_request(h2o_req_t *req, void *conn, h2o_loop_context_t *ctx, h2o_r
         COPY(path, path_len);
         COPY(scheme, scheme_len);
         req->version = src->version;
-        {
-            const h2o_header_t *header = src->headers.entries, * header_end = header + src->headers.size;
-            for (; header != header_end; ++header) {
-                if (h2o_buf_is_token(header->name.str)) {
-                    h2o_add_header(&req->pool, &req->headers, header->name.token, header->value.base, header->value.len);
-                } else {
-                    h2o_add_header_by_str(&req->pool, &req->headers, header->name.str->base, header->name.str->len, 0, header->value.base, header->value.len);
-                }
-            }
-        }
+        h2o_vector_reserve(&req->pool, (h2o_vector_t*)&req->headers, sizeof(h2o_header_t), src->headers.size);
+        memcpy(req->headers.entries, src->headers.entries, src->headers.size);
+        req->headers.size = src->headers.size;
+        req->entity = src->entity;
         req->http1_is_persistent = src->http1_is_persistent;
         if (src->upgrade.base != NULL) {
             COPY(upgrade.base, upgrade.len);
