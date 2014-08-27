@@ -615,7 +615,7 @@ static void on_write_complete(uv_write_t *wreq, int status)
             h2o_http2_stream_t *stream = streams_to_proceed;
             assert(! h2o_http2_stream_has_pending_data(stream));
             unlink_stream(&streams_to_proceed, stream);
-            h2o_http2_stream_proceed(conn, stream, 0);
+            h2o_http2_stream_proceed(conn, stream);
         }
     }
 

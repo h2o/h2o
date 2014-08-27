@@ -228,7 +228,7 @@ void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int errnum);
 void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 static int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream);
-void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int status);
+void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 
 /* misc */
 static void h2o_http2_window_init(h2o_http2_window_t *window, const h2o_http2_settings_t *peer_settings);
