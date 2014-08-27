@@ -17,7 +17,7 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     stream->req._ostr_top = &stream->_ostr_final;
     stream->is_half_closed = src_req != NULL;
     stream->_ostr_final.do_send = finalostream_send;
-    stream->state = src_req != NULL ? H2O_HTTP2_STREAM_STATE_SEND_HEADERS : H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS;
+    stream->state = H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS;
     h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
     h2o_http2_window_init(&stream->input_window, &H2O_HTTP2_SETTINGS_HOST);
     stream->_req_body = NULL;
@@ -47,6 +47,7 @@ void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, 
     case H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS:
     case H2O_HTTP2_STREAM_STATE_RECV_HEADERS:
     case H2O_HTTP2_STREAM_STATE_RECV_BODY:
+    case H2O_HTTP2_STREAM_STATE_REQ_PENDING:
         h2o_http2_stream_close(conn, stream);
         break;
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:

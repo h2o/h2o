@@ -131,6 +131,7 @@ typedef struct st_h2o_http2_window_t {
 typedef enum enum_h2o_http2_stream_state_t {
     H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS,
     H2O_HTTP2_STREAM_STATE_RECV_HEADERS,
+    H2O_HTTP2_STREAM_STATE_REQ_PENDING,
     H2O_HTTP2_STREAM_STATE_RECV_BODY,
     H2O_HTTP2_STREAM_STATE_SEND_HEADERS,
     H2O_HTTP2_STREAM_STATE_SEND_BODY,
@@ -173,6 +174,7 @@ struct st_h2o_http2_conn_t {
     khash_t(h2o_http2_stream_t) *open_streams;
     uint32_t max_open_stream_id;
     uint32_t max_processed_stream_id;
+    uint32_t num_responding_streams;
     /* internal */
     h2o_http2_conn_state_t state;
     ssize_t (*_read_expect)(h2o_http2_conn_t *conn, const uint8_t *src, size_t len);
@@ -180,6 +182,7 @@ struct st_h2o_http2_conn_t {
     h2o_input_buffer_t *_http1_req_input; /* contains data referred to by original request via HTTP/1.1 */
     h2o_hpack_header_table_t _input_header_table;
     h2o_http2_window_t _input_window;
+    h2o_http2_stream_t *_pending_reqs;
     struct {
         h2o_mempool_t *pool; /* points to either of the _pools */
         h2o_mempool_t _pools[2];

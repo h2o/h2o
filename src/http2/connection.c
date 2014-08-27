@@ -30,6 +30,33 @@ static const uv_buf_t SETTINGS_HOST_BIN = {
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len);
 static void emit_writereq(h2o_timeout_entry_t *entry);
 
+static void run_pending_requests(h2o_http2_conn_t *conn)
+{
+    while (conn->num_responding_streams < conn->ctx->http2_max_concurrent_requests_per_connection) {
+        h2o_http2_stream_t *stream;
+        if (conn->_pending_reqs == NULL)
+            break;
+        /* fetch and detach a pending stream */
+        stream = conn->_pending_reqs;
+        h2o_http2_conn_unlink_stream(&conn->_pending_reqs, stream);
+        /* handle it */
+        assert(stream->state == H2O_HTTP2_STREAM_STATE_REQ_PENDING);
+        ++conn->num_responding_streams;
+        stream->state = H2O_HTTP2_STREAM_STATE_SEND_HEADERS;
+        if (conn->max_processed_stream_id < stream->stream_id)
+            conn->max_processed_stream_id = stream->stream_id;
+        conn->req_cb(&stream->req);
+    }
+}
+
+static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+{
+    assert(stream->state < H2O_HTTP2_STREAM_STATE_REQ_PENDING);
+    stream->state = H2O_HTTP2_STREAM_STATE_REQ_PENDING;
+    h2o_http2_conn_link_stream(&conn->_pending_reqs, stream);
+    run_pending_requests(conn);
+}
+
 void h2o_http2_conn_register_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     khiter_t iter;
@@ -55,9 +82,15 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
     case H2O_HTTP2_STREAM_STATE_RECV_BODY:
         assert(! h2o_http2_conn_stream_is_linked(stream));
         break;
+    case H2O_HTTP2_STREAM_STATE_REQ_PENDING:
+        if (h2o_http2_conn_stream_is_linked(stream)) {
+            h2o_http2_conn_unlink_stream(&conn->_pending_reqs, stream);
+        }
+        break;
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
     case H2O_HTTP2_STREAM_STATE_SEND_BODY:
     case H2O_HTTP2_STREAM_STATE_END_STREAM:
+        --conn->num_responding_streams;
         if (h2o_http2_conn_stream_is_linked(stream)) {
             h2o_http2_conn_unlink_stream(
                 h2o_http2_stream_has_pending_data(stream) ? &conn->_write.streams_with_pending_data : &conn->_write.streams_without_pending_data,
@@ -65,6 +98,8 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
         }
         break;
     }
+
+    run_pending_requests(conn);
 }
 
 static void close_connection_now(h2o_http2_conn_t *conn)
@@ -77,6 +112,7 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     kh_destroy(h2o_http2_stream_t, conn->open_streams);
     free(conn->_input);
     assert(conn->_http1_req_input == NULL);
+    assert(conn->_pending_reqs == NULL);
     h2o_mempool_clear(&conn->_write._pools[0]);
     h2o_mempool_clear(&conn->_write._pools[1]);
     assert(conn->_write.streams_with_pending_data == NULL);
@@ -90,10 +126,12 @@ static void close_connection(h2o_http2_conn_t *conn)
     assert(conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING);
     conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
 
-    if (conn->_write.bufs.size == 0) {
-        close_connection_now(conn);
-    } else {
+    if (conn->_write.wreq_in_flight) {
         /* there is a pending write, let on_write_complete actually close the connection */
+    } else {
+        if (h2o_timeout_entry_is_linked(&conn->_write.timeout_entry))
+            h2o_timeout_unlink_entry(&conn->ctx->zero_timeout, &conn->_write.timeout_entry);
+        close_connection_now(conn);
     }
 }
 
@@ -132,17 +170,6 @@ static void request_gathered_write(h2o_http2_conn_t *conn)
     }
 }
 
-static void handle_complete_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
-{
-    stream->state = H2O_HTTP2_STREAM_STATE_SEND_HEADERS;
-    conn->max_processed_stream_id = stream->stream_id;
-    if (stream->_req_body != NULL) {
-        stream->req.entity.base = stream->_req_body->bytes;
-        stream->req.entity.len = stream->_req_body->size;
-    }
-    conn->req_cb(&stream->req);
-}
-
 /* handles HEADERS frame or succeeding CONTINUATION frames */
 static void handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const uint8_t *src, size_t len, int is_end_of_headers)
 {
@@ -163,7 +190,7 @@ static void handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *
     conn->_read_expect = expect_default;
     if (kh_size(conn->open_streams) <= H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams) {
         if (stream->is_half_closed) {
-            handle_complete_request(conn, stream);
+            execute_or_enqueue_request(conn, stream);
         } else {
             stream->state = H2O_HTTP2_STREAM_STATE_RECV_BODY;
         }
@@ -235,7 +262,9 @@ static void handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
         /* handle request if request body is complete */
         if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0) {
             stream->is_half_closed = 1;
-            handle_complete_request(conn, stream);
+            stream->req.entity.base = stream->_req_body->bytes;
+            stream->req.entity.len = stream->_req_body->size;
+            execute_or_enqueue_request(conn, stream);
             stream = NULL; /* no need to send window update for this stream */
         }
     }
@@ -498,7 +527,7 @@ static void on_upgrade_complete(void *_conn, uv_stream_t *stream, h2o_input_buff
     uv_read_start(conn->stream, alloc_inbuf, on_read);
 
     /* handle the request */
-    handle_complete_request(conn, h2o_http2_conn_get_stream(conn, 1));
+    execute_or_enqueue_request(conn, h2o_http2_conn_get_stream(conn, 1));
 
     if (conn->_http1_req_input->size != reqsize) {
         /* FIXME copy the remaining data to conn->_input and call handle_input */
@@ -624,6 +653,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, h2o_http2_conn_t *http2conn)
     http2conn->open_streams = kh_init(h2o_http2_stream_t);
     http2conn->max_open_stream_id = 0;
     http2conn->max_processed_stream_id = 0;
+    http2conn->num_responding_streams = 0;
     http2conn->state = H2O_HTTP2_CONN_STATE_OPEN;
     http2conn->_read_expect = expect_preface;
     http2conn->_input = NULL;
@@ -631,6 +661,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, h2o_http2_conn_t *http2conn)
     memset(&http2conn->_input_header_table, 0, sizeof(http2conn->_input_header_table));
     http2conn->_input_header_table.hpack_capacity = H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;
     h2o_http2_window_init(&http2conn->_input_window, &H2O_HTTP2_SETTINGS_HOST);
+    http2conn->_pending_reqs = NULL;
     http2conn->_write.pool = http2conn->_write._pools;
     h2o_mempool_init(http2conn->_write._pools);
     h2o_mempool_init(http2conn->_write._pools + 1);
