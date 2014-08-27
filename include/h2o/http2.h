@@ -146,17 +146,18 @@ struct st_h2o_http2_stream_t {
     h2o_http2_window_t output_window;
     h2o_http2_window_t input_window;
     h2o_input_buffer_t *_req_body;
+    H2O_VECTOR(uv_buf_t) _data;
+    /* link list governed by connection.c for handling various things */
     struct {
-        H2O_VECTOR(uv_buf_t) bufs;
-        h2o_http2_stream_t *_next_flushed; /* governed by connection.c */
-    } _send_queue;
+        h2o_http2_stream_t *prev;
+        h2o_http2_stream_t *next;
+    } _link;
 };
 
 KHASH_MAP_INIT_INT64(h2o_http2_stream_t, h2o_http2_stream_t*)
 
 typedef enum enum_h2o_http2_conn_state_t {
     H2O_HTTP2_CONN_STATE_OPEN,
-    H2O_HTTP2_CONN_STATE_RECVED_GOAWAY,
     H2O_HTTP2_CONN_STATE_IS_CLOSING
 } h2o_http2_conn_state_t;
 
@@ -180,10 +181,13 @@ struct st_h2o_http2_conn_t {
     h2o_hpack_header_table_t _input_header_table;
     h2o_http2_window_t _input_window;
     struct {
-        h2o_mempool_t pool;
+        h2o_mempool_t *pool; /* points to either of the _pools */
+        h2o_mempool_t _pools[2];
         uv_write_t wreq;
+        int wreq_in_flight, write_once_more;
         H2O_VECTOR(uv_buf_t) bufs;
-        h2o_http2_stream_t *flushed_streams;
+        h2o_http2_stream_t *streams_with_pending_data;
+        h2o_http2_stream_t *streams_without_pending_data;
         h2o_timeout_entry_t timeout_entry;
         h2o_http2_window_t window;
     } _write;
@@ -207,20 +211,22 @@ int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *pa
 
 /* connection */
 void h2o_http2_conn_register_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
-void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, uint32_t stream_id);
+void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 static h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uint32_t stream_id);
 void h2o_http2_close_and_free(h2o_http2_conn_t *conn);
 int h2o_http2_handle_upgrade(h2o_req_t *req, h2o_http2_conn_t *conn);
 void h2o_http2_conn_enqueue_write(h2o_http2_conn_t *conn, uv_buf_t buf);
-static void h2o_http2_conn_register_flushed_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
-static int h2o_http2_conn_stream_is_registered_as_flushed(h2o_http2_stream_t *stream);
-static int h2o_http2_conn_has_writes_in_progress(h2o_http2_conn_t *conn);
+static int h2o_http2_conn_stream_is_linked(h2o_http2_stream_t *stream);
+static void h2o_http2_conn_link_stream(h2o_http2_stream_t **slot, h2o_http2_stream_t *stream);
+static h2o_http2_stream_t *h2o_http2_conn_unlink_stream(h2o_http2_stream_t **slot, h2o_http2_stream_t *stream);
+void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 
 /* stream */
 h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req);
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int errnum);
-void h2o_http2_stream_send_pending(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
+void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
+static int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream);
 void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int status);
 
 /* misc */
@@ -239,21 +245,50 @@ inline h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uin
     return NULL;
 }
 
-inline void h2o_http2_conn_register_flushed_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+inline int h2o_http2_conn_stream_is_linked(h2o_http2_stream_t *stream)
 {
-    assert(conn->_write.bufs.size != 0);
-    stream->_send_queue._next_flushed = conn->_write.flushed_streams != NULL ? conn->_write.flushed_streams : stream;
-    conn->_write.flushed_streams = stream;
+    return stream->_link.prev != NULL;
 }
 
-inline int h2o_http2_conn_stream_is_registered_as_flushed(h2o_http2_stream_t *stream)
+inline void h2o_http2_conn_link_stream(h2o_http2_stream_t **slot, h2o_http2_stream_t *stream)
 {
-    return stream->_send_queue._next_flushed != NULL;
+    assert(! h2o_http2_conn_stream_is_linked(stream));
+
+    if (*slot == NULL) {
+        *slot = stream->_link.prev = stream->_link.next = stream;
+    } else {
+        stream->_link.prev = (*slot)->_link.prev;
+        stream->_link.next = *slot;
+        (*slot)->_link.prev->_link.next = stream;
+        (*slot)->_link.prev = stream;
+    }
 }
 
-inline int h2o_http2_conn_has_writes_in_progress(h2o_http2_conn_t *conn)
+inline h2o_http2_stream_t *h2o_http2_conn_unlink_stream(h2o_http2_stream_t **slot, h2o_http2_stream_t *stream)
 {
-    return conn->_write.bufs.size != 0;
+    h2o_http2_stream_t *next;
+
+    assert(h2o_http2_conn_stream_is_linked(stream));
+
+    if (stream->_link.prev == stream) {
+        /* is the only entry */
+        assert(*slot == stream);
+        *slot = NULL;
+        next = NULL;
+    } else {
+        if (*slot == stream)
+            *slot = stream->_link.next;
+        stream->_link.prev->_link.next = stream->_link.next;
+        stream->_link.next->_link.prev = stream->_link.prev;
+        next = stream->_link.next;
+    }
+    stream->_link.prev = stream->_link.next = NULL;
+    return next;
+}
+
+inline int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream)
+{
+    return stream->_data.size != 0;
 }
 
 inline void h2o_http2_window_init(h2o_http2_window_t *window, const h2o_http2_settings_t *peer_settings)
