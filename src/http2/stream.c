@@ -135,7 +135,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, uv_buf_t *bufs, size
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
         h2o_http2_conn_enqueue_write(conn, h2o_hpack_flatten_headers(&req->pool, stream->stream_id, conn->peer_settings.max_frame_size, &req->res));
         stream->state = H2O_HTTP2_STREAM_STATE_SEND_BODY;
-        break;
+        /* fallthru */
     case H2O_HTTP2_STREAM_STATE_SEND_BODY:
         if (is_final)
             stream->state = H2O_HTTP2_STREAM_STATE_END_STREAM;
