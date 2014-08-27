@@ -220,8 +220,6 @@ void h2o_http2_close_and_free(h2o_http2_conn_t *conn);
 int h2o_http2_handle_upgrade(h2o_req_t *req, h2o_http2_conn_t *conn);
 void h2o_http2_conn_enqueue_write(h2o_http2_conn_t *conn, uv_buf_t buf);
 static int h2o_http2_conn_stream_is_linked(h2o_http2_stream_t *stream);
-static void h2o_http2_conn_link_stream(h2o_http2_stream_t **slot, h2o_http2_stream_t *stream);
-static h2o_http2_stream_t *h2o_http2_conn_unlink_stream(h2o_http2_stream_t **slot, h2o_http2_stream_t *stream);
 void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 
 /* stream */
@@ -251,42 +249,6 @@ inline h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uin
 inline int h2o_http2_conn_stream_is_linked(h2o_http2_stream_t *stream)
 {
     return stream->_link.prev != NULL;
-}
-
-inline void h2o_http2_conn_link_stream(h2o_http2_stream_t **slot, h2o_http2_stream_t *stream)
-{
-    assert(! h2o_http2_conn_stream_is_linked(stream));
-
-    if (*slot == NULL) {
-        *slot = stream->_link.prev = stream->_link.next = stream;
-    } else {
-        stream->_link.prev = (*slot)->_link.prev;
-        stream->_link.next = *slot;
-        (*slot)->_link.prev->_link.next = stream;
-        (*slot)->_link.prev = stream;
-    }
-}
-
-inline h2o_http2_stream_t *h2o_http2_conn_unlink_stream(h2o_http2_stream_t **slot, h2o_http2_stream_t *stream)
-{
-    h2o_http2_stream_t *next;
-
-    assert(h2o_http2_conn_stream_is_linked(stream));
-
-    if (stream->_link.prev == stream) {
-        /* is the only entry */
-        assert(*slot == stream);
-        *slot = NULL;
-        next = NULL;
-    } else {
-        if (*slot == stream)
-            *slot = stream->_link.next;
-        stream->_link.prev->_link.next = stream->_link.next;
-        stream->_link.next->_link.prev = stream->_link.prev;
-        next = stream->_link.next;
-    }
-    stream->_link.prev = stream->_link.next = NULL;
-    return next;
 }
 
 inline int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream)
