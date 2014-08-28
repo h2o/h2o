@@ -198,7 +198,7 @@ uv_buf_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t len);
 uv_buf_t h2o_sprintf(h2o_mempool_t *pool, const char *fmt, ...) __attribute__((format (printf, 2, 3)));
 size_t h2o_snprintf(char *buf, size_t bufsz, const char *fmt, ...) __attribute__((format (printf, 3, 4)));
 uv_buf_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len);
-uv_buf_t h2o_data2str(h2o_mempool_t *pool, time_t time);
+uv_buf_t h2o_date2str(h2o_mempool_t *pool, time_t time);
 const char *h2o_get_filext(const char *path, size_t len);
 const char *h2o_next_token(const char* elements, size_t elements_len, size_t *element_len, const char *cur);
 int h2o_contains_token(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len);

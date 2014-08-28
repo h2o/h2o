@@ -213,7 +213,7 @@ Error:
     return uv_buf_init(NULL, 0);
 }
 
-uv_buf_t h2o_data2str(h2o_mempool_t *pool, time_t time)
+uv_buf_t h2o_date2str(h2o_mempool_t *pool, time_t time)
 {
     struct tm gmt;
     gmtime_r(&time, &gmt);

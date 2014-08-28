@@ -278,12 +278,13 @@ static void on_upgrade_complete(uv_write_t *wreq, int status)
 static const char *get_datestr(uv_loop_t *loop)
 {
     static char *cached_str;
-    static time_t cached_at;
-    time_t now = uv_now(loop) / 1000;
+    static uint64_t cached_at = 0;
+    uint64_t now = uv_now(loop);
 
-    if (cached_at != now) {
+    /* update every 100 milliseconds */
+    if (cached_at == 0 || (now - cached_at) >= 100) {
         free(cached_str);
-        cached_str = h2o_data2str(NULL, now).base;
+        cached_str = h2o_date2str(NULL, time(NULL)).base;
         cached_at = now;
     }
 
