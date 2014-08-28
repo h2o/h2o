@@ -15,7 +15,7 @@ static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *in
 static void init_request(h2o_http1_conn_t *conn, int reinit)
 {
     if (! reinit) {
-        h2o_init_request(&conn->req, conn, conn->ctx, NULL);
+        h2o_init_request(&conn->req, conn, conn->super.ctx, NULL);
     } else {
         h2o_init_request(&conn->req, NULL, NULL, NULL);
     }
@@ -71,7 +71,7 @@ static int handle_content_length_entity_read(h2o_http1_conn_t *conn)
     conn->_req_entity_reader = NULL;
     set_timeout(conn, NULL, NULL);
     uv_read_stop(conn->stream);
-    conn->req_cb(&conn->req);
+    conn->super.req_cb(&conn->req);
 
     return 0;
 }
@@ -99,7 +99,7 @@ static int create_entity_reader(h2o_http1_conn_t *conn, const struct phr_header 
         /* content-length */
         char *endptr;
         intmax_t content_length = strtoimax(h2o_strdup(&conn->req.pool, entity_header->value, entity_header->value_len).base, &endptr, 10);
-        if (*endptr == '\0' && content_length != INTMAX_MAX && 0 <= content_length && content_length <= conn->ctx->max_request_entity_size) {
+        if (*endptr == '\0' && content_length != INTMAX_MAX && 0 <= content_length && content_length <= conn->super.ctx->max_request_entity_size) {
             return create_content_length_entity_reader(conn, (size_t)content_length);
         }
     }
@@ -168,7 +168,7 @@ static int handle_incoming(h2o_http1_conn_t *conn, size_t prevreqlen)
         } else {
             set_timeout(conn, NULL, NULL);
             uv_read_stop(conn->stream);
-            conn->req_cb(&conn->req);
+            conn->super.req_cb(&conn->req);
         }
         return 0;
     case -2: // incomplete
@@ -213,7 +213,7 @@ static void reqread_on_timeout(h2o_timeout_entry_t *entry)
 
 static inline void reqread_start(h2o_http1_conn_t *conn)
 {
-    set_timeout(conn, &conn->ctx->req_timeout, reqread_on_timeout);
+    set_timeout(conn, &conn->super.ctx->req_timeout, reqread_on_timeout);
     uv_read_start(conn->stream, alloc_inbuf, reqread_on_read);
 }
 
@@ -293,7 +293,7 @@ static const char *get_datestr(uv_loop_t *loop)
 
 static void flatten_headers(h2o_req_t *req, uv_buf_t *bufs, const char *connection)
 {
-    const char *date_str = get_datestr(req->ctx->loop);
+    const char *date_str = get_datestr(req->conn->ctx->loop);
 
     if (req->res.content_length != SIZE_MAX) {
         bufs[0] = h2o_sprintf(
@@ -301,7 +301,7 @@ static void flatten_headers(h2o_req_t *req, uv_buf_t *bufs, const char *connecti
             "HTTP/1.1 %d %s\r\ndate: %s\r\nserver: %.*s\r\nconnection: %s\r\ncontent-length: %zu\r\n",
             req->res.status, req->res.reason,
             date_str,
-            (int)req->ctx->server_name.len, req->ctx->server_name.base,
+            (int)req->conn->ctx->server_name.len, req->conn->ctx->server_name.base,
             connection,
             req->res.content_length);
     } else {
@@ -310,7 +310,7 @@ static void flatten_headers(h2o_req_t *req, uv_buf_t *bufs, const char *connecti
             "HTTP/1.1 %d %s\r\ndate: %s\r\nserver: %.*s\r\nconnection: %s\r\n",
             req->res.status, req->res.reason,
             date_str,
-            (int)req->ctx->server_name.len, req->ctx->server_name.base,
+            (int)req->conn->ctx->server_name.len, req->conn->ctx->server_name.base,
             connection);
     }
     bufs[1] = h2o_flatten_headers(&req->pool, &req->res.headers);
@@ -319,7 +319,7 @@ static void flatten_headers(h2o_req_t *req, uv_buf_t *bufs, const char *connecti
 void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *inbufs, size_t inbufcnt, int is_final)
 {
     h2o_http1_finalostream_t *self = (void*)_self;
-    h2o_http1_conn_t *conn = req->conn;
+    h2o_http1_conn_t *conn = (h2o_http1_conn_t*)req->conn;
     uv_buf_t *bufs = alloca(sizeof(uv_buf_t) * (inbufcnt + 2));
     int bufcnt = 0;
 
@@ -341,9 +341,19 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *inbufs, s
     }
 }
 
-void h2o_http1_init(h2o_http1_conn_t *conn)
+static int get_peername(h2o_conn_t *_conn, struct sockaddr *name, int *namelen)
 {
-    assert(conn->stream != NULL);
+    h2o_http1_conn_t *conn = (h2o_http1_conn_t*)_conn;
+    return uv_tcp_getpeername((uv_tcp_t*)conn->stream, name, namelen);
+}
+
+void h2o_http1_init(h2o_http1_conn_t *conn, uv_stream_t *stream, h2o_loop_context_t *ctx, h2o_req_cb req_cb, h2o_http1_close_cb close_cb)
+{
+    conn->super.ctx = ctx;
+    conn->super.req_cb = req_cb;
+    conn->super.getpeername = get_peername;
+    conn->stream = stream;
+    conn->close_cb = close_cb;
 
     conn->stream->data = conn;
 

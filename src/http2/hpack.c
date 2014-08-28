@@ -336,6 +336,7 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
         if (r.name_token != NULL) {
             if (r.name_token->buf.base[0] == ':') {
                 if (*allow_psuedo) {
+                    /* FIXME validate the chars in the value (e.g. reject SP in path) */
                     if (r.name_token == H2O_TOKEN_AUTHORITY) {
                         /* FIXME should we perform this check? */
                         if (req->authority != NULL)

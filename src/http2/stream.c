@@ -11,7 +11,7 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
         h2o_fatal("no memory");
 
     stream->stream_id = stream_id;
-    h2o_init_request(&stream->req, conn, conn->ctx, src_req);
+    h2o_init_request(&stream->req, conn, conn->super.ctx, src_req);
     stream->req.version = 0x200;
     stream->req.upgrade = uv_buf_init(NULL, 0);
     stream->req._ostr_top = &stream->_ostr_final;
@@ -126,7 +126,7 @@ Exit:
 void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, uv_buf_t *bufs, size_t bufcnt, int is_final)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _ostr_final, self);
-    h2o_http2_conn_t *conn = req->conn;
+    h2o_http2_conn_t *conn = (h2o_http2_conn_t*)req->conn;
 
     assert(stream->_data.size == 0);
 

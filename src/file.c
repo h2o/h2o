@@ -16,7 +16,7 @@ static void sendfile_do_send(struct sendfile_t *self, uv_buf_t *bufs, size_t buf
     h2o_req_t *req = self->req;
 
     if (is_final) {
-        uv_fs_close(req->ctx->loop, self->fsreq, self->fd, NULL);
+        uv_fs_close(req->conn->ctx->loop, self->fsreq, self->fd, NULL);
         uv_fs_req_cleanup(self->fsreq);
         self->fsreq = NULL;
         if (is_final == -1) {
@@ -58,7 +58,7 @@ static void sendfile_setup_next(struct sendfile_t *self)
 #if 0 /* TODO: keep LRU of the filenames and use sync mode if is has recently been read (likely in memory) */
     uv_fs_read(self->req->ctx->loop, self->fsreq, self->fd, self->buf, sizeof(self->buf), -1, (uv_fs_cb)sendfile_on_read);
 #else
-    uv_fs_read(self->req->ctx->loop, self->fsreq, self->fd, self->buf, sizeof(self->buf), -1, NULL);
+    uv_fs_read(self->req->conn->ctx->loop, self->fsreq, self->fd, self->buf, sizeof(self->buf), -1, NULL);
     sendfile_on_read(self);
 #endif
 }
@@ -84,18 +84,18 @@ int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *pa
     size_t bytesleft;
 
     if (mime_type == NULL)
-        *(mime_type = &mime_type_buf) = h2o_get_mimetype(&req->ctx->mimemap, h2o_get_filext(path, strlen(path)));
+        *(mime_type = &mime_type_buf) = h2o_get_mimetype(&req->conn->ctx->mimemap, h2o_get_filext(path, strlen(path)));
 
     /* open file and stat */
     fsreq = h2o_mempool_alloc(&req->pool, sizeof(*fsreq));
-    fd = uv_fs_open(req->ctx->loop, fsreq, path, O_RDONLY, 0, NULL);
+    fd = uv_fs_open(req->conn->ctx->loop, fsreq, path, O_RDONLY, 0, NULL);
     uv_fs_req_cleanup(fsreq);
     if (fd == -1) {
         return -1; /* file not found */
     }
 
     /* stat the file */
-    uv_fs_fstat(req->ctx->loop, fsreq, fd, NULL);
+    uv_fs_fstat(req->conn->ctx->loop, fsreq, fd, NULL);
     uv_fs_req_cleanup(fsreq);
     bytesleft = fsreq->statbuf.st_size;
 

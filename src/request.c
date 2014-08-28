@@ -14,13 +14,12 @@ void h2o_init_request(h2o_req_t *req, void *conn, h2o_loop_context_t *ctx, h2o_r
 {
     if (conn != NULL) {
         req->conn = conn;
-        req->ctx = ctx;
         h2o_mempool_init(&req->pool);
         memset(&req->_timeout_entry, 0, sizeof(req->_timeout_entry));
         req->_timeout_entry.cb = deferred_proceed_cb;
     } else {
-        h2o_timeout_unlink_entry(&req->ctx->zero_timeout, &req->_timeout_entry);
-        h2o_mempool_clear(&req->pool);
+        /* reinit */
+        h2o_dispose_request(req);
     }
 
     req->authority = NULL;
@@ -39,6 +38,7 @@ void h2o_init_request(h2o_req_t *req, void *conn, h2o_loop_context_t *ctx, h2o_r
     req->res.reason = NULL;
     req->res.content_length = SIZE_MAX;
     memset(&req->res.headers, 0, sizeof(req->res.headers));
+    req->bytes_sent = 0;
 
     req->http1_is_persistent = 0;
     req->upgrade.base = NULL;
@@ -81,7 +81,12 @@ void h2o_dispose_request(h2o_req_t *req)
         req->_generator = NULL;
     }
     /* FIXME close ostreams */
-    h2o_timeout_unlink_entry(&req->ctx->zero_timeout, &req->_timeout_entry);
+    h2o_timeout_unlink_entry(&req->conn->ctx->zero_timeout, &req->_timeout_entry);
+
+    if (req->version != 0 && req->conn->ctx->access_log != NULL) {
+        req->conn->ctx->access_log->log(req->conn->ctx->access_log, req);
+    }
+
     h2o_mempool_clear(&req->pool);
 }
 
@@ -99,12 +104,28 @@ h2o_generator_t *h2o_start_response(h2o_req_t *req, size_t sz)
     req->_generator->proceed = NULL;
 
     /* setup response filters */
-    if (req->ctx->filters != NULL) {
-        req->ctx->filters->on_start_response(req->ctx->filters, req);
+    if (req->conn->ctx->filters != NULL) {
+        req->conn->ctx->filters->on_start_response(req->conn->ctx->filters, req);
     }
 
     return req->_generator;
 }
+
+void h2o_send(h2o_req_t *req, uv_buf_t *bufs, size_t bufcnt, int is_final)
+{
+    size_t i;
+
+    assert(req->_generator != NULL);
+
+    if (is_final)
+        req->_generator = NULL;
+
+    for (i = 0; i != bufcnt; ++i)
+        req->bytes_sent += bufs[i].len;
+
+    req->_ostr_top->do_send(req->_ostr_top, req, bufs, bufcnt, is_final);
+}
+
 
 h2o_ostream_t *h2o_prepend_output_filter(h2o_req_t *req, size_t sz)
 {
@@ -119,5 +140,5 @@ h2o_ostream_t *h2o_prepend_output_filter(h2o_req_t *req, size_t sz)
 
 void h2o_schedule_proceed_response(h2o_req_t *req)
 {
-    h2o_timeout_link_entry(&req->ctx->zero_timeout, &req->_timeout_entry);
+    h2o_timeout_link_entry(&req->conn->ctx->zero_timeout, &req->_timeout_entry);
 }

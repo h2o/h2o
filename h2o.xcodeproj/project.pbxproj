@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		101B670C19ADD3380084A351 /* access_log.c in Sources */ = {isa = PBXBuildFile; fileRef = 101B670B19ADD3380084A351 /* access_log.c */; };
 		1079236A19A3210E00C52AD6 /* khash.h in Headers */ = {isa = PBXBuildFile; fileRef = 1079232619A3210D00C52AD6 /* khash.h */; };
 		1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */ = {isa = PBXBuildFile; fileRef = 1079235A19A3210D00C52AD6 /* picohttpparser.c */; };
 		1079239719A3210E00C52AD6 /* picohttpparser.h in Headers */ = {isa = PBXBuildFile; fileRef = 1079235B19A3210D00C52AD6 /* picohttpparser.h */; };
@@ -129,6 +130,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		101B670B19ADD3380084A351 /* access_log.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = access_log.c; sourceTree = "<group>"; };
 		1079231519A320A700C52AD6 /* libh2o.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libh2o.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		1079232619A3210D00C52AD6 /* khash.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = khash.h; sourceTree = "<group>"; };
 		1079235A19A3210D00C52AD6 /* picohttpparser.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picohttpparser.c; sourceTree = "<group>"; };
@@ -327,6 +329,7 @@
 		107923AD19A3217300C52AD6 /* src */ = {
 			isa = PBXGroup;
 			children = (
+				101B670B19ADD3380084A351 /* access_log.c */,
 				107923AE19A3217300C52AD6 /* chunked_encoder.c */,
 				107923AF19A3217300C52AD6 /* file.c */,
 				107923B019A3217300C52AD6 /* headers.c */,
@@ -553,6 +556,7 @@
 				107923CC19A3217300C52AD6 /* loop_context.c in Sources */,
 				107923C519A3217300C52AD6 /* http1.c in Sources */,
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
+				101B670C19ADD3380084A351 /* access_log.c in Sources */,
 				107923C419A3217300C52AD6 /* headers.c in Sources */,
 				10BA72AA19AAD6300059392A /* stream.c in Sources */,
 				107923CF19A3217300C52AD6 /* request.c in Sources */,

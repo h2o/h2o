@@ -68,7 +68,7 @@ static h2o_http2_stream_t *unlink_stream(h2o_http2_stream_t **slot, h2o_http2_st
 
 static void run_pending_requests(h2o_http2_conn_t *conn)
 {
-    while (conn->num_responding_streams < conn->ctx->http2_max_concurrent_requests_per_connection) {
+    while (conn->num_responding_streams < conn->super.ctx->http2_max_concurrent_requests_per_connection) {
         h2o_http2_stream_t *stream;
         if (conn->_pending_reqs == NULL)
             break;
@@ -81,7 +81,7 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
         stream->state = H2O_HTTP2_STREAM_STATE_SEND_HEADERS;
         if (conn->max_processed_stream_id < stream->stream_id)
             conn->max_processed_stream_id = stream->stream_id;
-        conn->req_cb(&stream->req);
+        conn->super.req_cb(&stream->req);
     }
 }
 
@@ -166,7 +166,7 @@ static void close_connection(h2o_http2_conn_t *conn)
         /* there is a pending write, let on_write_complete actually close the connection */
     } else {
         if (h2o_timeout_entry_is_linked(&conn->_write.timeout_entry))
-            h2o_timeout_unlink_entry(&conn->ctx->zero_timeout, &conn->_write.timeout_entry);
+            h2o_timeout_unlink_entry(&conn->super.ctx->zero_timeout, &conn->_write.timeout_entry);
         close_connection_now(conn);
     }
 }
@@ -202,7 +202,7 @@ static void request_gathered_write(h2o_http2_conn_t *conn)
         conn->_write.write_once_more = 1;
     } else {
         if (! h2o_timeout_entry_is_linked(&conn->_write.timeout_entry))
-            h2o_timeout_link_entry(&conn->ctx->zero_timeout, &conn->_write.timeout_entry);
+            h2o_timeout_link_entry(&conn->super.ctx->zero_timeout, &conn->_write.timeout_entry);
     }
 }
 
@@ -675,7 +675,7 @@ void h2o_http2_close_and_free(h2o_http2_conn_t *conn)
     free(conn);
 }
 
-int h2o_http2_handle_upgrade(h2o_req_t *req, h2o_http2_conn_t *http2conn)
+int h2o_http2_handle_upgrade(h2o_http2_conn_t *http2conn, h2o_req_t *req, h2o_req_cb req_cb, h2o_http2_close_cb close_cb)
 {
     ssize_t connection_index, settings_index;
     uv_buf_t settings_decoded;
@@ -683,8 +683,10 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, h2o_http2_conn_t *http2conn)
     assert(req->version < 0x200); /* from HTTP/1.x */
 
     /* init the connection */
+    http2conn->super.ctx = req->conn->ctx;
+    http2conn->super.req_cb = req_cb;
     http2conn->stream = NULL; /* not set until upgrade is complete */
-    http2conn->ctx = req->ctx;
+    http2conn->close_cb = close_cb;
     http2conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
     http2conn->open_streams = kh_init(h2o_http2_stream_t);
     http2conn->max_open_stream_id = 0;
@@ -736,7 +738,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, h2o_http2_conn_t *http2conn)
     req->res.status = 101;
     req->res.reason = "Switching Protocols";
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, H2O_STRLIT("h2c"));
-    h2o_http1_upgrade(req->conn, (uv_buf_t*)&SETTINGS_HOST_BIN, 1, on_upgrade_complete, http2conn);
+    h2o_http1_upgrade((h2o_http1_conn_t*)req->conn, (uv_buf_t*)&SETTINGS_HOST_BIN, 1, on_upgrade_complete, http2conn);
 
     return 0;
 }

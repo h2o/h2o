@@ -12,9 +12,7 @@ static void on_req(h2o_req_t *req)
 {
     if (req->upgrade.base != NULL && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("h2c-14"))) {
         h2o_http2_conn_t *conn = malloc(sizeof(*conn));
-        conn->req_cb = on_req;
-        conn->close_cb = h2o_http2_close_and_free;
-        if (h2o_http2_handle_upgrade(req, conn) == 0) {
+        if (h2o_http2_handle_upgrade(conn, req, on_req, h2o_http2_close_and_free) == 0) {
             return;
         }
         free(conn);
@@ -38,7 +36,7 @@ static void on_req(h2o_req_t *req)
         } else {
             dir_path[dir_path_len] = '\0';
         }
-        mime_type = h2o_get_mimetype(&req->ctx->mimemap, h2o_get_filext(dir_path, dir_path_len));
+        mime_type = h2o_get_mimetype(&req->conn->ctx->mimemap, h2o_get_filext(dir_path, dir_path_len));
         if (h2o_send_file(req, 200, "OK", dir_path, &mime_type) != 0) {
             h2o_send_error(req, 404, "File Not Found", "not found");
         }
@@ -76,11 +74,7 @@ static void on_connect(uv_stream_t *server, int status)
     }
 
     conn = malloc(sizeof(*conn));
-    conn->stream = (uv_stream_t*)tcp;
-    conn->ctx = &loop_ctx;
-    conn->req_cb = on_req;
-    conn->close_cb = h2o_http1_close_and_free;
-    h2o_http1_init(conn);
+    h2o_http1_init(conn, (uv_stream_t*)tcp, &loop_ctx, on_req, h2o_http1_close_and_free);
 }
 
 int main(int argc, char **argv)

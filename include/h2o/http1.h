@@ -11,10 +11,8 @@ typedef struct st_h2o_http1_finalostream_t {
 } h2o_http1_finalostream_t;
 
 struct st_h2o_http1_conn_t {
+    h2o_conn_t super;
     uv_stream_t *stream;
-    h2o_loop_context_t *ctx;
-    /* callbacks that should be set by the user */
-    h2o_req_cb req_cb;
     h2o_http1_close_cb close_cb;
     /* internal structure */
     h2o_timeout_t *_timeout;
@@ -34,7 +32,7 @@ struct st_h2o_http1_conn_t {
 
 /* http1 */
 
-void h2o_http1_init(h2o_http1_conn_t *conn);
+void h2o_http1_init(h2o_http1_conn_t *conn, uv_stream_t *stream, h2o_loop_context_t *ctx, h2o_req_cb req_cb, h2o_http1_close_cb close_cb);
 void h2o_http1_close_and_free(h2o_http1_conn_t *conn);
 void h2o_http1_upgrade(h2o_http1_conn_t *conn, uv_buf_t *inbufs, size_t inbufcnt, h2o_http1_upgrade_cb on_complete, void *user_data);
 

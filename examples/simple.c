@@ -47,7 +47,7 @@ static void on_req(h2o_req_t *req)
             } else {
                 dir_path[dir_path_len] = '\0';
             }
-            mime_type = h2o_get_mimetype(&req->ctx->mimemap, h2o_get_filext(dir_path, dir_path_len));
+            mime_type = h2o_get_mimetype(&req->conn->ctx->mimemap, h2o_get_filext(dir_path, dir_path_len));
             if (h2o_send_file(req, 200, "OK", dir_path, &mime_type) != 0) {
                 h2o_send_error(req, 404, "File Not Found", "not found");
             }
@@ -87,11 +87,7 @@ static void on_connect(uv_stream_t *server, int status)
     }
 
     conn = malloc(sizeof(*conn));
-    conn->stream = (uv_stream_t*)tcp;
-    conn->ctx = &loop_ctx;
-    conn->req_cb = on_req;
-    conn->close_cb = h2o_http1_close_and_free;
-    h2o_http1_init(conn);
+    h2o_http1_init(conn, (uv_stream_t*)tcp, &loop_ctx, on_req, h2o_http1_close_and_free);
 }
 
 int main(int argc, char **argv)
@@ -115,6 +111,7 @@ int main(int argc, char **argv)
     h2o_loop_context_init(&loop_ctx, loop);
     h2o_define_mimetype(&loop_ctx.mimemap, "html", "text/html");
     h2o_add_reproxy_url(&loop_ctx);
+    loop_ctx.access_log = h2o_open_access_log(loop, "/dev/stdout");
 
     return uv_run(loop, UV_RUN_DEFAULT);
 
