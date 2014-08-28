@@ -48,7 +48,8 @@ static void on_req(h2o_req_t *req)
         req->res.status = 200;
         req->res.reason = "OK";
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
-        h2o_send_inline(req, req->entity.base, req->entity.len);
+        h2o_start_response(req, sizeof(h2o_generator_t));
+        h2o_send(req, req->entity.entries, req->entity.size, 1);
 
     } else {
         h2o_send_error(req, 403, "Request Forbidden", "only GET is allowed");

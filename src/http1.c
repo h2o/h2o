@@ -65,8 +65,10 @@ static int handle_content_length_entity_read(h2o_http1_conn_t *conn)
         return -2;
 
     /* all input has arrived */
-    conn->req.entity.base = conn->_input->bytes + conn->_req_entity_reader->entity_offset;
-    conn->req.entity.len = conn->_reqsize - conn->_req_entity_reader->entity_offset;
+    h2o_vector_reserve(&conn->req.pool, (h2o_vector_t*)&conn->req.entity, sizeof(uv_buf_t), 1);
+    conn->req.entity.entries[0].base = conn->_input->bytes + conn->_req_entity_reader->entity_offset;
+    conn->req.entity.entries[0].len = conn->_reqsize - conn->_req_entity_reader->entity_offset;
+    conn->req.entity.size = 1;
     free(conn->_req_entity_reader);
     conn->_req_entity_reader = NULL;
     set_timeout(conn, NULL, NULL);

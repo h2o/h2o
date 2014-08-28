@@ -165,7 +165,7 @@ struct st_h2o_req_t {
     size_t scheme_len;
     int version;
     h2o_headers_t headers;
-    uv_buf_t entity;
+    H2O_VECTOR(uv_buf_t) entity;
     /* the response */
     h2o_res_t res;
     size_t bytes_sent;
