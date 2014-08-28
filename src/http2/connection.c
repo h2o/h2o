@@ -148,6 +148,7 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     kh_destroy(h2o_http2_stream_t, conn->open_streams);
     free(conn->_input);
     assert(conn->_http1_req_input == NULL);
+    h2o_hpack_dispose_header_table(&conn->_input_header_table);
     assert(conn->_pending_reqs == NULL);
     h2o_mempool_clear(&conn->_write._pools[0]);
     h2o_mempool_clear(&conn->_write._pools[1]);

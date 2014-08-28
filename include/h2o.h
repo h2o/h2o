@@ -8,6 +8,7 @@ extern "C" {
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <time.h>
 #include <uv.h>
 #include "picohttpparser.h"
@@ -45,8 +46,15 @@ typedef struct st_h2o_mempool_chunk_t {
     char bytes[4096 - sizeof(void*) * 2];
 } h2o_mempool_chunk_t;
 
+typedef struct st_h2o_mempool_shared_entry_t {
+    size_t refcnt;
+    size_t _dummy; /* align to 2*sizeof(void*) */
+    char bytes[1];
+} h2o_mempool_shared_entry_t;
+
 typedef struct st_h2o_mempool_t {
     h2o_mempool_chunk_t *chunks;
+    struct st_h2o_mempool_shared_ref_t *shared_refs;
     struct st_h2o_mempool_direct_t *directs;
     h2o_mempool_chunk_t _first_chunk;
 } h2o_mempool_t;
@@ -182,9 +190,10 @@ int h2o_buf_is_token(const uv_buf_t *buf);
 void h2o_mempool_init(h2o_mempool_t *pool);
 void h2o_mempool_clear(h2o_mempool_t *pool);
 void *h2o_mempool_alloc(h2o_mempool_t *pool, size_t sz);
-void *h2o_mempool_alloc_refcnt(h2o_mempool_t *pool, size_t sz);
-void h2o_mempool_addref(void *p);
-void h2o_mempool_release(h2o_mempool_t *pool, void *p);
+void *h2o_mempool_alloc_shared(h2o_mempool_t *pool, size_t sz);
+void h2o_mempool_link_shared(h2o_mempool_t *pool, void *p);
+static void h2o_mempool_addref_shared(void *p);
+static int h2o_mempool_release_shared(void *p);
 
 /* headers */
 
@@ -268,6 +277,23 @@ uv_buf_t h2o_get_mimetype(h2o_mimemap_t *mimemap, const char *ext);
 h2o_access_log_t *h2o_open_access_log(uv_loop_t *loop, const char *path);
 
 /* inline defs */
+
+inline void h2o_mempool_addref_shared(void *p)
+{
+    struct st_h2o_mempool_shared_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct st_h2o_mempool_shared_entry_t, bytes, p);
+    assert(entry->refcnt != 0);
+    ++entry->refcnt;
+}
+
+inline int h2o_mempool_release_shared(void *p)
+{
+    struct st_h2o_mempool_shared_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct st_h2o_mempool_shared_entry_t, bytes, p);
+    if (--entry->refcnt == 0) {
+        free(entry);
+        return 1;
+    }
+    return 0;
+}
 
 inline int h2o_timeout_entry_is_linked(h2o_timeout_entry_t *entry)
 {
