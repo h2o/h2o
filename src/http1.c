@@ -277,41 +277,27 @@ static void on_upgrade_complete(uv_write_t *wreq, int status)
     cb(data, stream, buffered_input, reqsize);
 }
 
-static const char *get_datestr(uv_loop_t *loop)
-{
-    static char *cached_str;
-    static uint64_t cached_at = 0;
-    uint64_t now = uv_now(loop);
-
-    /* update every 100 milliseconds */
-    if (cached_at == 0 || (now - cached_at) >= 100) {
-        free(cached_str);
-        cached_str = h2o_date2str(NULL, time(NULL)).base;
-        cached_at = now;
-    }
-
-    return cached_str;
-}
-
 static void flatten_headers(h2o_req_t *req, uv_buf_t *bufs, const char *connection)
 {
-    const char *date_str = get_datestr(req->conn->ctx->loop);
+    h2o_timestamp_t ts;
+
+    h2o_get_timestamp(req->conn->ctx, &req->pool, &ts);
 
     if (req->res.content_length != SIZE_MAX) {
         bufs[0] = h2o_sprintf(
             &req->pool,
-            "HTTP/1.1 %d %s\r\ndate: %s\r\nserver: %.*s\r\nconnection: %s\r\ncontent-length: %zu\r\n",
+            "HTTP/1.1 %d %s\r\ndate: %.*s\r\nserver: %.*s\r\nconnection: %s\r\ncontent-length: %zu\r\n",
             req->res.status, req->res.reason,
-            date_str,
+            (int)H2O_TIMESTR_RFC1123_LEN, ts.str->rfc1123,
             (int)req->conn->ctx->server_name.len, req->conn->ctx->server_name.base,
             connection,
             req->res.content_length);
     } else {
         bufs[0] = h2o_sprintf(
             &req->pool,
-            "HTTP/1.1 %d %s\r\ndate: %s\r\nserver: %.*s\r\nconnection: %s\r\n",
+            "HTTP/1.1 %d %s\r\ndate: %.*s\r\nserver: %.*s\r\nconnection: %s\r\n",
             req->res.status, req->res.reason,
-            date_str,
+            (int)H2O_TIMESTR_RFC1123_LEN, ts.str->rfc1123,
             (int)req->conn->ctx->server_name.len, req->conn->ctx->server_name.base,
             connection);
     }

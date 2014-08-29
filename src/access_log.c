@@ -15,6 +15,7 @@ static void access_log(h2o_access_log_t *_self, h2o_req_t *req)
     int sa_len = sizeof(sa);
     uv_buf_t line;
     uv_fs_t fsreq;
+    h2o_timestamp_t ts;
 
     if (req->conn->getpeername(req->conn, &sa, &sa_len) == 0 && sa.sa_family == AF_INET) {
         uint32_t addr = htonl(((struct sockaddr_in*)&sa)->sin_addr.s_addr);
@@ -23,10 +24,14 @@ static void access_log(h2o_access_log_t *_self, h2o_req_t *req)
         strcpy(peername, "-");
     }
 
+    /* FIXME use the timestamp stored in req (that records the time when the request was processed) */
+    h2o_get_timestamp(req->conn->ctx, &req->pool, &ts);
+
     line = h2o_sprintf(
         &req->pool,
-        "%s - - - \"%.*s %.*s HTTP/%d.%d\" %d %llu\n",
+        "%s - - [%.*s] \"%.*s %.*s HTTP/%d.%d\" %d %llu\n",
         peername,
+        (int)H2O_TIMESTR_LOG_LEN, ts.str->log,
         (int)req->method_len, req->method,
         (int)req->path_len, req->path,
         (int)(req->version >> 8),

@@ -103,7 +103,8 @@ void *h2o_mempool_alloc_shared(h2o_mempool_t *pool, size_t sz)
         return NULL;
     }
     entry->refcnt = 1;
-    link(pool, entry);
+    if (pool != NULL)
+        link(pool, entry);
     return entry->bytes;
 }
 

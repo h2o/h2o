@@ -213,13 +213,13 @@ Error:
     return uv_buf_init(NULL, 0);
 }
 
-uv_buf_t h2o_date2str(h2o_mempool_t *pool, time_t time)
+void h2o_time2str_rfc1123(char *buf, time_t time)
 {
     struct tm gmt;
     gmtime_r(&time, &gmt);
 
-    return h2o_sprintf(
-        pool,
+    int len = sprintf(
+        buf,
         "%s, %02d %s %d %02d:%02d:%02d GMT",
         ("Sun\0Mon\0Tue\0Wed\0Thu\0Fri\0Sat") + gmt.tm_wday * 4,
         gmt.tm_mday,
@@ -228,6 +228,36 @@ uv_buf_t h2o_date2str(h2o_mempool_t *pool, time_t time)
         gmt.tm_hour,
         gmt.tm_min,
         gmt.tm_sec);
+    assert(len == H2O_TIMESTR_RFC1123_LEN);
+}
+
+void h2o_time2str_log(char *buf, time_t time)
+{
+    struct tm localt;
+    localtime_r(&time, &localt);
+    int gmt_off = (int)(localt.tm_gmtoff / 60);
+    int gmt_sign;
+
+    if (gmt_off >= 0) {
+        gmt_sign = '+';
+    } else {
+        gmt_off = -gmt_off;
+        gmt_sign = '-';
+    }
+
+    int len = sprintf(
+        buf,
+        "%02d/%s/%d:%02d:%02d:%02d %c%02d%02d",
+        localt.tm_mday,
+        ("Jan\0Feb\0Mar\0Apr\0May\0Jun\0Jul\0Aug\0Sep\0Oct\0Nov\0Dec\0") + localt.tm_mon * 4,
+        localt.tm_year + 1900,
+        localt.tm_hour,
+        localt.tm_min,
+        localt.tm_sec,
+        gmt_sign,
+        gmt_off / 60,
+        gmt_off % 60);
+    assert(len == H2O_TIMESTR_LOG_LEN);
 }
 
 const char *h2o_get_filext(const char *path, size_t len)

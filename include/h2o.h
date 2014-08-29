@@ -9,6 +9,7 @@ extern "C" {
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <sys/time.h>
 #include <time.h>
 #include <uv.h>
 #include "picohttpparser.h"
@@ -26,6 +27,8 @@ extern "C" {
 
 #define H2O_STRLIT(s) (s), sizeof(s) - 1
 #define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s*)((char*)(p) - offsetof(s, m)))
+#define H2O_TIMESTR_RFC1123_LEN (sizeof("Sun, 06 Nov 1994 08:49:37 GMT") - 1)
+#define H2O_TIMESTR_LOG_LEN (sizeof("29/Aug/2014:15:34:38 +0900") - 1)
 
 typedef struct st_h2o_conn_t h2o_conn_t;
 typedef struct st_h2o_req_t h2o_req_t;
@@ -104,6 +107,16 @@ typedef struct st_h2o_access_log_t {
     void (*log)(struct st_h2o_access_log_t *self, h2o_req_t *req);
 } h2o_access_log_t;
 
+typedef struct st_h2o_timestamp_string_t {
+    char rfc1123[H2O_TIMESTR_RFC1123_LEN + 1];
+    char log[H2O_TIMESTR_LOG_LEN + 1];
+} h2o_timestamp_string_t;
+
+typedef struct st_h2o_timestamp_t {
+    struct timeval at;
+    h2o_timestamp_string_t *str;
+} h2o_timestamp_t;
+
 typedef struct h2o_loop_context_t {
     uv_loop_t *loop;
     h2o_timeout_t zero_timeout; /* for deferred tasks */
@@ -114,6 +127,11 @@ typedef struct h2o_loop_context_t {
     size_t max_request_entity_size;
     size_t http2_max_concurrent_requests_per_connection;
     h2o_access_log_t *access_log;
+    struct {
+        uint64_t uv_now_at;
+        struct timeval tv_at;
+        h2o_timestamp_string_t *value;
+    } _timestamp_cache;
 } h2o_loop_context_t;
 
 typedef struct st_h2o_header_t {
@@ -220,7 +238,8 @@ uv_buf_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t len);
 uv_buf_t h2o_sprintf(h2o_mempool_t *pool, const char *fmt, ...) __attribute__((format (printf, 2, 3)));
 size_t h2o_snprintf(char *buf, size_t bufsz, const char *fmt, ...) __attribute__((format (printf, 3, 4)));
 uv_buf_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len);
-uv_buf_t h2o_date2str(h2o_mempool_t *pool, time_t time);
+void h2o_time2str_rfc1123(char *buf, time_t time);
+void h2o_time2str_log(char *buf, time_t time);
 const char *h2o_get_filext(const char *path, size_t len);
 const char *h2o_next_token(const char* elements, size_t elements_len, size_t *element_len, const char *cur);
 int h2o_contains_token(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len);
@@ -253,6 +272,7 @@ static void h2o_proceed_response(h2o_req_t *req);
 void h2o_loop_context_init(h2o_loop_context_t *context, uv_loop_t *loop);
 void h2o_loop_context_dispose(h2o_loop_context_t *context);
 h2o_filter_t *h2o_define_filter(h2o_loop_context_t *context, size_t sz);
+void h2o_get_timestamp(h2o_loop_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts);
 
 /* built-in generators */
 
