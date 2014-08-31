@@ -37,7 +37,7 @@ static void on_req(h2o_req_t *req)
         return;
     }
     if (client_key != NULL) {
-        h2o_upgrade_to_websocket(req->conn, client_key, NULL, on_ws_message);
+        h2o_upgrade_to_websocket((h2o_http1_conn_t*)req->conn, client_key, NULL, on_ws_message);
     } else {
         h2o_send_error(req, 404, "File Not Found", "not found");
     }
@@ -62,11 +62,7 @@ static void on_connect(uv_stream_t *server, int status)
     }
 
     conn = malloc(sizeof(*conn));
-    conn->stream = (uv_stream_t*)tcp;
-    conn->ctx = &loop_ctx;
-    conn->req_cb = on_req;
-    conn->close_cb = h2o_http1_close_and_free;
-    h2o_http1_init(conn);
+    h2o_http1_init(conn, (uv_stream_t*)tcp, &loop_ctx, on_req, h2o_http1_close_and_free);
 }
 
 int main(int argc, char **argv)
