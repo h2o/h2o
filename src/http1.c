@@ -335,23 +335,17 @@ static int get_peername(h2o_conn_t *_conn, struct sockaddr *name, int *namelen)
 
 void h2o_http1_init(h2o_http1_conn_t *conn, uv_stream_t *stream, h2o_loop_context_t *ctx, h2o_req_cb req_cb, h2o_http1_close_cb close_cb)
 {
+    /* zero-fill all properties expect req */
+    memset(conn, 0, offsetof(h2o_http1_conn_t, req));
+
+    /* init properties that need to be non-zero */
     conn->super.ctx = ctx;
     conn->super.req_cb = req_cb;
     conn->super.getpeername = get_peername;
     conn->stream = stream;
-    conn->close_cb = close_cb;
-
     conn->stream->data = conn;
-
-    /* init fields */
-    conn->_timeout = NULL;
-    memset(&conn->_timeout_entry, 0, sizeof(conn->_timeout_entry));
-
-    conn->_input = NULL;
-    conn->_reqsize = 0;
-    conn->_req_entity_reader = NULL;
+    conn->close_cb = close_cb;
     conn->_wreq.data = conn;
-    memset(&conn->upgrade, 0, sizeof(conn->upgrade));
 
     init_request(conn, 0);
     reqread_start(conn);

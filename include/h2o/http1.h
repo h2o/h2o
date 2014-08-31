@@ -26,7 +26,7 @@ struct st_h2o_http1_conn_t {
         void *data;
         h2o_http1_upgrade_cb cb;
     } upgrade;
-    /* the HTTP request / response */
+    /* the HTTP request / response (intentionally placed at the last, since it is a large structure and has it's own ctor) */
     h2o_req_t req;
 };
 
