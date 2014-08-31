@@ -10,19 +10,22 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     if (stream == NULL)
         h2o_fatal("no memory");
 
+    /* init properties (other than req) */
+    memset(stream, 0, offsetof(h2o_http2_stream_t, req));
     stream->stream_id = stream_id;
-    h2o_init_request(&stream->req, &conn->super, src_req);
-    stream->req.version = 0x200;
-    stream->req.upgrade = uv_buf_init(NULL, 0);
-    stream->req._ostr_top = &stream->_ostr_final;
-    stream->is_half_closed = src_req != NULL;
+    if (src_req != NULL)
+        stream->is_half_closed = 1;
     stream->_ostr_final.do_send = finalostream_send;
     stream->state = H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS;
     h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
     h2o_http2_window_init(&stream->input_window, &H2O_HTTP2_SETTINGS_HOST);
-    stream->_req_body = NULL;
-    memset(&stream->_data, 0, sizeof(stream->_data));
-    memset(&stream->_link, 0, sizeof(stream->_link));
+
+    /* init request */
+    h2o_init_request(&stream->req, &conn->super, src_req);
+    stream->req.version = 0x200;
+    if (src_req != NULL)
+        memset(&stream->req.upgrade, 0, sizeof(stream->req.upgrade));
+    stream->req._ostr_top = &stream->_ostr_final;
 
     h2o_http2_conn_register_stream(conn, stream);
 

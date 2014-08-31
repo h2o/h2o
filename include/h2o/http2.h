@@ -140,7 +140,6 @@ typedef enum enum_h2o_http2_stream_state_t {
 
 struct st_h2o_http2_stream_t {
     uint32_t stream_id;
-    h2o_req_t req;
     int is_half_closed;
     h2o_ostream_t _ostr_final;
     h2o_http2_stream_state_t state;
@@ -153,6 +152,8 @@ struct st_h2o_http2_stream_t {
         h2o_http2_stream_t *prev;
         h2o_http2_stream_t *next;
     } _link;
+    /* placed at last since it is large and has it's own ctor */
+    h2o_req_t req;
 };
 
 KHASH_MAP_INIT_INT64(h2o_http2_stream_t, h2o_http2_stream_t*)
