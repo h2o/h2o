@@ -66,12 +66,10 @@ void h2o_dispose_request(h2o_req_t *req)
     h2o_mempool_clear(&req->pool);
 }
 
-void h2o_prepare_response(h2o_req_t *req)
+void h2o_process_request(h2o_req_t *req)
 {
-    req->res.status = 200;
-    req->res.reason = "OK";
-    h2o_vector_reserve(&req->pool, (h2o_vector_t*)&req->res.headers, sizeof(h2o_header_t), 8);
-    req->res.content_length = SIZE_MAX;
+    h2o_get_timestamp(req->conn->ctx, &req->pool, &req->processed_at);
+    req->conn->req_cb(req);
 }
 
 h2o_generator_t *h2o_start_response(h2o_req_t *req, size_t sz)

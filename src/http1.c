@@ -71,7 +71,7 @@ static int handle_content_length_entity_read(h2o_http1_conn_t *conn)
     conn->_req_entity_reader = NULL;
     set_timeout(conn, NULL, NULL);
     uv_read_stop(conn->stream);
-    conn->super.req_cb(&conn->req);
+    h2o_process_request(&conn->req);
 
     return 0;
 }
@@ -168,7 +168,7 @@ static int handle_incoming(h2o_http1_conn_t *conn, size_t prevreqlen)
         } else {
             set_timeout(conn, NULL, NULL);
             uv_read_stop(conn->stream);
-            conn->super.req_cb(&conn->req);
+            h2o_process_request(&conn->req);
         }
         return 0;
     case -2: // incomplete

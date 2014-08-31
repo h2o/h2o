@@ -81,7 +81,7 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
         stream->state = H2O_HTTP2_STREAM_STATE_SEND_HEADERS;
         if (conn->max_processed_stream_id < stream->stream_id)
             conn->max_processed_stream_id = stream->stream_id;
-        conn->super.req_cb(&stream->req);
+        h2o_process_request(&stream->req);
     }
 }
 

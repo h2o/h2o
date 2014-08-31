@@ -182,6 +182,7 @@ struct st_h2o_req_t {
     int version;
     h2o_headers_t headers;
     H2O_VECTOR(uv_buf_t) entity;
+    h2o_timestamp_t processed_at;
     /* the response */
     h2o_res_t res;
     size_t bytes_sent;
@@ -258,7 +259,7 @@ static int h2o_timeout_entry_is_linked(h2o_timeout_entry_t *entry);
 
 void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src);
 void h2o_dispose_request(h2o_req_t *req);
-void h2o_prepare_response(h2o_req_t *req);
+void h2o_process_request(h2o_req_t *req);
 h2o_generator_t *h2o_start_response(h2o_req_t *req, size_t sz);
 h2o_ostream_t *h2o_prepend_output_filter(h2o_req_t *req, size_t sz);
 
