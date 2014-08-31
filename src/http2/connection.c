@@ -682,35 +682,22 @@ int h2o_http2_handle_upgrade(h2o_http2_conn_t *http2conn, h2o_req_t *req, h2o_re
     assert(req->version < 0x200); /* from HTTP/1.x */
 
     /* init the connection */
+    memset(http2conn, 0, offsetof(h2o_http2_conn_t, _write._pools[0]));
     http2conn->super.ctx = req->conn->ctx;
     http2conn->super.req_cb = req_cb;
-    http2conn->stream = NULL; /* not set until upgrade is complete */
+    /* http2conn->stream = NULL; not set until upgrade is complete */
     http2conn->close_cb = close_cb;
     http2conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
     http2conn->open_streams = kh_init(h2o_http2_stream_t);
-    http2conn->max_open_stream_id = 0;
-    http2conn->max_processed_stream_id = 0;
-    http2conn->num_responding_streams = 0;
     http2conn->state = H2O_HTTP2_CONN_STATE_OPEN;
     http2conn->_read_expect = expect_preface;
-    http2conn->_input = NULL;
-    http2conn->_http1_req_input = NULL;
-    memset(&http2conn->_input_header_table, 0, sizeof(http2conn->_input_header_table));
     http2conn->_input_header_table.hpack_capacity = H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;
     h2o_http2_window_init(&http2conn->_input_window, &H2O_HTTP2_SETTINGS_HOST);
-    http2conn->_pending_reqs = NULL;
     http2conn->_write.pool = http2conn->_write._pools;
-    h2o_mempool_init(http2conn->_write._pools);
-    h2o_mempool_init(http2conn->_write._pools + 1);
-    memset(&http2conn->_write.wreq, 0, sizeof(http2conn->_write.wreq));
-    http2conn->_write.wreq_in_flight = 0;
-    http2conn->_write.write_once_more = 0;
-    memset(&http2conn->_write.bufs, 0, sizeof(http2conn->_write.bufs));
-    http2conn->_write.streams_with_pending_data = NULL;
-    http2conn->_write.streams_without_pending_data = NULL;
-    memset(&http2conn->_write.timeout_entry, 0, sizeof(http2conn->_write.timeout_entry));
     http2conn->_write.timeout_entry.cb = emit_writereq;
     h2o_http2_window_init(&http2conn->_write.window, &http2conn->peer_settings);
+    h2o_mempool_init(http2conn->_write._pools);
+    h2o_mempool_init(http2conn->_write._pools + 1);
 
     /* check that "HTTP2-Settings" is declared in the connection header */
     connection_index = h2o_find_header(&req->headers, H2O_TOKEN_CONNECTION, -1);

@@ -183,7 +183,6 @@ struct st_h2o_http2_conn_t {
     h2o_http2_stream_t *_pending_reqs;
     struct {
         h2o_mempool_t *pool; /* points to either of the _pools */
-        h2o_mempool_t _pools[2];
         uv_write_t wreq;
         int wreq_in_flight, write_once_more;
         H2O_VECTOR(uv_buf_t) bufs;
@@ -191,6 +190,7 @@ struct st_h2o_http2_conn_t {
         h2o_http2_stream_t *streams_without_pending_data;
         h2o_timeout_entry_t timeout_entry;
         h2o_http2_window_t window;
+        h2o_mempool_t _pools[2]; /* placed at the last of h2o_http2_conn_t, since it is large */
     } _write;
 };
 
