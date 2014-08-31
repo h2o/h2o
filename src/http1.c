@@ -14,11 +14,9 @@ static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *in
 
 static void init_request(h2o_http1_conn_t *conn, int reinit)
 {
-    if (! reinit) {
-        h2o_init_request(&conn->req, conn, conn->super.ctx, NULL);
-    } else {
-        h2o_init_request(&conn->req, NULL, NULL, NULL);
-    }
+    if (reinit)
+        h2o_dispose_request(&conn->req);
+    h2o_init_request(&conn->req, &conn->super, NULL);
 
     conn->req._ostr_top = &conn->_ostr_final.super;
     conn->_ostr_final.super.do_send = finalostream_send;

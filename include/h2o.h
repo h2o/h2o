@@ -170,8 +170,6 @@ struct st_h2o_conn_t {
 struct st_h2o_req_t {
     /* connection */
     h2o_conn_t *conn;
-    /* per-request memory pool */
-    h2o_mempool_t pool;
     /* the request */
     const char *authority;
     size_t authority_len;
@@ -194,6 +192,8 @@ struct st_h2o_req_t {
     h2o_generator_t *_generator;
     h2o_ostream_t *_ostr_top;
     h2o_timeout_entry_t _timeout_entry;
+    /* per-request memory pool (placed at the last since the structure is large) */
+    h2o_mempool_t pool;
 };
 
 /* token */
@@ -256,7 +256,7 @@ static int h2o_timeout_entry_is_linked(h2o_timeout_entry_t *entry);
 
 /* request */
 
-void h2o_init_request(h2o_req_t *req, void *conn, h2o_loop_context_t *ctx, h2o_req_t *src);
+void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src);
 void h2o_dispose_request(h2o_req_t *req);
 void h2o_prepare_response(h2o_req_t *req);
 h2o_generator_t *h2o_start_response(h2o_req_t *req, size_t sz);

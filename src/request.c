@@ -10,42 +10,18 @@ static void deferred_proceed_cb(h2o_timeout_entry_t *entry)
     h2o_proceed_response(req);
 }
 
-void h2o_init_request(h2o_req_t *req, void *conn, h2o_loop_context_t *ctx, h2o_req_t *src)
+void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
 {
-    if (conn != NULL) {
-        req->conn = conn;
-        h2o_mempool_init(&req->pool);
-        memset(&req->_timeout_entry, 0, sizeof(req->_timeout_entry));
-        req->_timeout_entry.cb = deferred_proceed_cb;
-    } else {
-        /* reinit */
-        h2o_dispose_request(req);
-    }
+    /* clear all memory (expect memory pool, since it is large) */
+    memset(req, 0, offsetof(h2o_req_t, pool));
 
-    req->authority = NULL;
-    req->authority_len = 0;
-    req->method = NULL;
-    req->method_len = 0;
-    req->path = NULL;
-    req->path_len = 0;
-    req->scheme = NULL;
-    req->scheme_len = 0;
-    req->version = 0;
-    memset(&req->headers, 0, sizeof(req->headers));
-    memset(&req->entity, 0, sizeof(req->entity));
+    /* init memory pool (before others, since it may be used) */
+    h2o_mempool_init(&req->pool);
 
-    req->res.status = 0;
-    req->res.reason = NULL;
+    /* init properties that should be initialized to non-zero */
+    req->conn = conn;
+    req->_timeout_entry.cb = deferred_proceed_cb;
     req->res.content_length = SIZE_MAX;
-    memset(&req->res.headers, 0, sizeof(req->res.headers));
-    req->bytes_sent = 0;
-
-    req->http1_is_persistent = 0;
-    req->upgrade.base = NULL;
-    req->upgrade.len = 0;
-
-    req->_generator = NULL;
-    req->_ostr_top = NULL;
 
     if (src != NULL) {
 #define COPY(s, len) do { \

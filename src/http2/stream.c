@@ -11,7 +11,7 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
         h2o_fatal("no memory");
 
     stream->stream_id = stream_id;
-    h2o_init_request(&stream->req, conn, conn->super.ctx, src_req);
+    h2o_init_request(&stream->req, &conn->super, src_req);
     stream->req.version = 0x200;
     stream->req.upgrade = uv_buf_init(NULL, 0);
     stream->req._ostr_top = &stream->_ostr_final;
