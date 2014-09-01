@@ -69,7 +69,7 @@ void h2o_dispose_request(h2o_req_t *req)
 void h2o_process_request(h2o_req_t *req)
 {
     h2o_get_timestamp(req->conn->ctx, &req->pool, &req->processed_at);
-    req->conn->req_cb(req);
+    req->conn->ctx->req_cb(req);
 }
 
 h2o_generator_t *h2o_start_response(h2o_req_t *req, size_t sz)

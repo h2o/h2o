@@ -122,8 +122,6 @@ typedef struct st_h2o_http2_window_update_payload_t {
     uint32_t window_size_increment;
 } h2o_http2_window_update_payload_t;
 
-typedef void (*h2o_http2_close_cb)(h2o_http2_conn_t *conn);
-
 typedef struct st_h2o_http2_window_t {
     ssize_t _avail;
 } h2o_http2_window_t;
@@ -166,7 +164,7 @@ typedef enum enum_h2o_http2_conn_state_t {
 struct st_h2o_http2_conn_t {
     h2o_conn_t super;
     uv_stream_t *stream;
-    h2o_http2_close_cb close_cb;
+    uv_close_cb close_cb;
     /* settings */
     h2o_http2_settings_t peer_settings;
     /* streams */
@@ -215,8 +213,7 @@ int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *pa
 void h2o_http2_conn_register_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 static h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uint32_t stream_id);
-void h2o_http2_close_and_free(h2o_http2_conn_t *conn);
-int h2o_http2_handle_upgrade(h2o_http2_conn_t *conn, h2o_req_t *req, h2o_req_cb req_cb, h2o_http2_close_cb close_cb);
+int h2o_http2_handle_upgrade(h2o_req_t *req);
 void h2o_http2_conn_enqueue_write(h2o_http2_conn_t *conn, uv_buf_t buf);
 static int h2o_http2_conn_stream_is_linked(h2o_http2_stream_t *stream);
 void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);

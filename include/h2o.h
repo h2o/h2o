@@ -119,12 +119,14 @@ typedef struct st_h2o_timestamp_t {
 
 typedef struct h2o_loop_context_t {
     uv_loop_t *loop;
+    h2o_req_cb req_cb;
     h2o_timeout_t zero_timeout; /* for deferred tasks */
     h2o_timeout_t req_timeout; /* for request timeout */
     h2o_filter_t *filters;
     h2o_mimemap_t mimemap;
     uv_buf_t server_name;
     size_t max_request_entity_size;
+    int http1_upgrade_to_http2;
     size_t http2_max_concurrent_requests_per_connection;
     h2o_access_log_t *access_log;
     struct {
@@ -162,7 +164,6 @@ typedef struct st_h2o_res_t {
 
 struct st_h2o_conn_t {
     h2o_loop_context_t *ctx;
-    h2o_req_cb req_cb;
     /* callbacks */
     int (*getpeername)(h2o_conn_t *conn, struct sockaddr *name, int *namelen);
 };
@@ -270,7 +271,7 @@ static void h2o_proceed_response(h2o_req_t *req);
 
 /* loop context */
 
-void h2o_loop_context_init(h2o_loop_context_t *context, uv_loop_t *loop);
+void h2o_loop_context_init(h2o_loop_context_t *context, uv_loop_t *loop, h2o_req_cb req_cb);
 void h2o_loop_context_dispose(h2o_loop_context_t *context);
 h2o_filter_t *h2o_define_filter(h2o_loop_context_t *context, size_t sz);
 void h2o_get_timestamp(h2o_loop_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts);

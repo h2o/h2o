@@ -10,16 +10,18 @@ static void default_dispose_filter(h2o_filter_t *filter)
         filter->next->dispose(filter->next);
 }
 
-void h2o_loop_context_init(h2o_loop_context_t *ctx, uv_loop_t *loop)
+void h2o_loop_context_init(h2o_loop_context_t *ctx, uv_loop_t *loop, h2o_req_cb req_cb)
 {
     memset(ctx, 0, sizeof(*ctx));
     ctx->loop = loop;
+    ctx->req_cb = req_cb;
     h2o_timeout_init(&ctx->zero_timeout, 0, loop);
     h2o_timeout_init(&ctx->req_timeout, 10000, loop);
     h2o_add_chunked_encoder(ctx);
     h2o_init_mimemap(&ctx->mimemap, "application/octet-stream");
     ctx->server_name = uv_buf_init(H2O_STRLIT("h2o/0.1"));
     ctx->max_request_entity_size = 1024 * 1024 * 1024;
+    ctx->http1_upgrade_to_http2 = 1;
     ctx->http2_max_concurrent_requests_per_connection = 16;
 }
 

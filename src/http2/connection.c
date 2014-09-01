@@ -155,7 +155,9 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     assert(conn->_write.streams_with_pending_data == NULL);
     assert(conn->_write.streams_without_pending_data == NULL);
     assert(! h2o_timeout_entry_is_linked(&conn->_write.timeout_entry));
-    conn->close_cb(conn);
+
+    uv_close((uv_handle_t*)conn->stream, conn->close_cb);
+    free(conn);
 }
 
 static void close_connection(h2o_http2_conn_t *conn)
@@ -667,26 +669,23 @@ void emit_writereq(h2o_timeout_entry_t *entry)
     }
 }
 
-void h2o_http2_close_and_free(h2o_http2_conn_t *conn)
+int h2o_http2_handle_upgrade(h2o_req_t *req)
 {
-    if (conn->stream != NULL)
-        uv_close((uv_handle_t*)conn->stream, (uv_close_cb)free);
-    free(conn);
-}
-
-int h2o_http2_handle_upgrade(h2o_http2_conn_t *http2conn, h2o_req_t *req, h2o_req_cb req_cb, h2o_http2_close_cb close_cb)
-{
+    h2o_http2_conn_t *http2conn = malloc(sizeof(h2o_http2_conn_t));
+    h2o_http1_conn_t *req_conn = (h2o_http1_conn_t*)req->conn;
     ssize_t connection_index, settings_index;
     uv_buf_t settings_decoded;
+
+    if (http2conn == NULL)
+        goto Error;
 
     assert(req->version < 0x200); /* from HTTP/1.x */
 
     /* init the connection */
     memset(http2conn, 0, offsetof(h2o_http2_conn_t, _write._pools[0]));
     http2conn->super.ctx = req->conn->ctx;
-    http2conn->super.req_cb = req_cb;
     /* http2conn->stream = NULL; not set until upgrade is complete */
-    http2conn->close_cb = close_cb;
+    http2conn->close_cb = req_conn->close_cb;
     http2conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
     http2conn->open_streams = kh_init(h2o_http2_stream_t);
     http2conn->state = H2O_HTTP2_CONN_STATE_OPEN;
@@ -703,18 +702,18 @@ int h2o_http2_handle_upgrade(h2o_http2_conn_t *http2conn, h2o_req_t *req, h2o_re
     connection_index = h2o_find_header(&req->headers, H2O_TOKEN_CONNECTION, -1);
     assert(connection_index != -1);
     if (! h2o_contains_token(req->headers.entries[connection_index].value.base, req->headers.entries[connection_index].value.len, H2O_STRLIT("http2-settings"))) {
-        return -1;
+        goto Error;
     }
 
     /* decode the settings */
     if ((settings_index = h2o_find_header(&req->headers, H2O_TOKEN_HTTP2_SETTINGS, -1)) == -1) {
-        return -1;
+        goto Error;
     }
     if ((settings_decoded = h2o_decode_base64url(&req->pool, req->headers.entries[settings_index].value.base, req->headers.entries[settings_index].value.len)).base == NULL) {
-        return -1;
+        goto Error;
     }
     if (h2o_http2_update_peer_settings(&http2conn->peer_settings, (uint8_t*)settings_decoded.base, settings_decoded.len) != 0) {
-        return -1;
+        goto Error;
     }
 
     /* open the stream, now that the function is guaranteed to succeed */
@@ -724,7 +723,10 @@ int h2o_http2_handle_upgrade(h2o_http2_conn_t *http2conn, h2o_req_t *req, h2o_re
     req->res.status = 101;
     req->res.reason = "Switching Protocols";
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, H2O_STRLIT("h2c"));
-    h2o_http1_upgrade((h2o_http1_conn_t*)req->conn, (uv_buf_t*)&SETTINGS_HOST_BIN, 1, on_upgrade_complete, http2conn);
+    h2o_http1_upgrade(req_conn, (uv_buf_t*)&SETTINGS_HOST_BIN, 1, on_upgrade_complete, http2conn);
 
     return 0;
+Error:
+    free(http2conn);
+    return -1;
 }

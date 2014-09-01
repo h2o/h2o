@@ -74,7 +74,6 @@ static h2o_loop_context_t loop_ctx;
 static void on_connect(uv_stream_t *server, int status)
 {
     uv_tcp_t *tcp;
-    h2o_http1_conn_t *conn;
 
     if (status == -1) {
         return;
@@ -87,8 +86,7 @@ static void on_connect(uv_stream_t *server, int status)
         return;
     }
 
-    conn = malloc(sizeof(*conn));
-    h2o_http1_init(conn, (uv_stream_t*)tcp, &loop_ctx, on_req, h2o_http1_close_and_free);
+    h2o_http1_accept(&loop_ctx, (uv_stream_t*)tcp, (uv_close_cb)free);
 }
 
 int main(int argc, char **argv)
@@ -109,7 +107,7 @@ int main(int argc, char **argv)
         goto Error;
     }
 
-    h2o_loop_context_init(&loop_ctx, loop);
+    h2o_loop_context_init(&loop_ctx, loop, on_req);
     h2o_define_mimetype(&loop_ctx.mimemap, "html", "text/html");
     h2o_add_reproxy_url(&loop_ctx);
     //loop_ctx.access_log = h2o_open_access_log(loop, "/dev/stdout");

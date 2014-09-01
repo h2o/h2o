@@ -41,8 +41,6 @@
 		1079240819A3247A00C52AD6 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		1079241619A324B400C52AD6 /* websocket.c in Sources */ = {isa = PBXBuildFile; fileRef = 1079241319A324B400C52AD6 /* websocket.c */; };
 		1079241919A324E700C52AD6 /* libh2o_websocket.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 107923F419A322F400C52AD6 /* libh2o_websocket.a */; };
-		1079242019A3252C00C52AD6 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
-		1079242819A3254C00C52AD6 /* http2.c in Sources */ = {isa = PBXBuildFile; fileRef = 1079242619A3254700C52AD6 /* http2.c */; };
 		1079242919A325BE00C52AD6 /* simple.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923FC19A3238500C52AD6 /* simple.c */; };
 		1079243019A3260E00C52AD6 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		1079244119A3264300C52AD6 /* picohttpparser.c in Sources */ = {isa = PBXBuildFile; fileRef = 1079235A19A3210D00C52AD6 /* picohttpparser.c */; };
@@ -81,13 +79,6 @@
 			remoteGlobalIDString = 107923F319A322F400C52AD6;
 			remoteInfo = h2o_websocket;
 		};
-		1079241C19A3252C00C52AD6 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 1079230D19A320A700C52AD6 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 1079231419A320A700C52AD6;
-			remoteInfo = h2o;
-		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -101,15 +92,6 @@
 			runOnlyForDeploymentPostprocessing = 1;
 		};
 		1079240919A3247A00C52AD6 /* CopyFiles */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = /usr/share/man/man1/;
-			dstSubfolderSpec = 0;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 1;
-		};
-		1079242119A3252C00C52AD6 /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = /usr/share/man/man1/;
@@ -169,8 +151,6 @@
 		107923FC19A3238500C52AD6 /* simple.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = simple.c; sourceTree = "<group>"; };
 		1079240D19A3247A00C52AD6 /* websocket */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = websocket; sourceTree = BUILT_PRODUCTS_DIR; };
 		1079241319A324B400C52AD6 /* websocket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = websocket.c; sourceTree = "<group>"; };
-		1079242519A3252C00C52AD6 /* http2 */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = http2; sourceTree = BUILT_PRODUCTS_DIR; };
-		1079242619A3254700C52AD6 /* http2.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2.c; sourceTree = "<group>"; };
 		1079243519A3260E00C52AD6 /* picotest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = picotest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1079245319A32C0800C52AD6 /* token_table.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = token_table.h; sourceTree = "<group>"; };
 		10BA72A919AAD6300059392A /* stream.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = stream.c; sourceTree = "<group>"; };
@@ -208,14 +188,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		1079241F19A3252C00C52AD6 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				1079242019A3252C00C52AD6 /* libh2o.a in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		1079242F19A3260E00C52AD6 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -246,7 +218,6 @@
 				107923D919A321F400C52AD6 /* simple */,
 				107923F419A322F400C52AD6 /* libh2o_websocket.a */,
 				1079240D19A3247A00C52AD6 /* websocket */,
-				1079242519A3252C00C52AD6 /* http2 */,
 				1079243519A3260E00C52AD6 /* picotest */,
 			);
 			name = Products;
@@ -366,7 +337,6 @@
 		107923FE19A3239200C52AD6 /* examples */ = {
 			isa = PBXGroup;
 			children = (
-				1079242619A3254700C52AD6 /* http2.c */,
 				107923FC19A3238500C52AD6 /* simple.c */,
 				1079241319A324B400C52AD6 /* websocket.c */,
 			);
@@ -475,24 +445,6 @@
 			productReference = 1079240D19A3247A00C52AD6 /* websocket */;
 			productType = "com.apple.product-type.tool";
 		};
-		1079241A19A3252C00C52AD6 /* http2 */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 1079242219A3252C00C52AD6 /* Build configuration list for PBXNativeTarget "http2" */;
-			buildPhases = (
-				1079241D19A3252C00C52AD6 /* Sources */,
-				1079241F19A3252C00C52AD6 /* Frameworks */,
-				1079242119A3252C00C52AD6 /* CopyFiles */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				1079241B19A3252C00C52AD6 /* PBXTargetDependency */,
-			);
-			name = http2;
-			productName = simple;
-			productReference = 1079242519A3252C00C52AD6 /* http2 */;
-			productType = "com.apple.product-type.tool";
-		};
 		1079242A19A3260E00C52AD6 /* picotest */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 1079243219A3260E00C52AD6 /* Build configuration list for PBXNativeTarget "picotest" */;
@@ -536,7 +488,6 @@
 				1079242A19A3260E00C52AD6 /* picotest */,
 				107923D819A321F400C52AD6 /* simple */,
 				1079240219A3247A00C52AD6 /* websocket */,
-				1079241A19A3252C00C52AD6 /* http2 */,
 			);
 		};
 /* End PBXProject section */
@@ -592,14 +543,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		1079241D19A3252C00C52AD6 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				1079242819A3254C00C52AD6 /* http2.c in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		1079242D19A3260E00C52AD6 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -636,11 +579,6 @@
 			isa = PBXTargetDependency;
 			target = 107923F319A322F400C52AD6 /* h2o_websocket */;
 			targetProxy = 1079241719A324DA00C52AD6 /* PBXContainerItemProxy */;
-		};
-		1079241B19A3252C00C52AD6 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 1079231419A320A700C52AD6 /* h2o */;
-			targetProxy = 1079241C19A3252C00C52AD6 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -851,40 +789,6 @@
 			};
 			name = Release;
 		};
-		1079242319A3252C00C52AD6 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
-					"$(inherited)",
-				);
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = /usr/local/lib;
-				OTHER_LDFLAGS = "-luv";
-				PRODUCT_NAME = http2;
-			};
-			name = Debug;
-		};
-		1079242419A3252C00C52AD6 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = /usr/local/lib;
-				OTHER_LDFLAGS = "-luv";
-				PRODUCT_NAME = http2;
-			};
-			name = Release;
-		};
 		1079243319A3260E00C52AD6 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -964,15 +868,6 @@
 			buildConfigurations = (
 				1079240B19A3247A00C52AD6 /* Debug */,
 				1079240C19A3247A00C52AD6 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		1079242219A3252C00C52AD6 /* Build configuration list for PBXNativeTarget "http2" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				1079242319A3252C00C52AD6 /* Debug */,
-				1079242419A3252C00C52AD6 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

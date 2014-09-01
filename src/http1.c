@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include "h2o.h"
 #include "h2o/http1.h"
+#include "h2o/http2.h"
 
 struct st_h2o_http1_req_entity_reader {
     int (*handle_incoming)(h2o_http1_conn_t *conn);
@@ -35,7 +36,10 @@ static void close_connection(h2o_http1_conn_t *conn)
     h2o_dispose_request(&conn->req);
     free(conn->_input);
     free(conn->_req_entity_reader);
-    conn->close_cb(conn);
+
+    if (conn->stream != NULL)
+        uv_close((uv_handle_t*)conn->stream, conn->close_cb);
+    free(conn);
 }
 
 static void set_timeout(h2o_http1_conn_t *conn, h2o_timeout_t *timeout, h2o_timeout_cb cb)
@@ -49,6 +53,16 @@ static void set_timeout(h2o_http1_conn_t *conn, h2o_timeout_t *timeout, h2o_time
         h2o_timeout_link_entry(timeout, &conn->_timeout_entry);
         conn->_timeout_entry.cb = cb;
     }
+}
+
+static void process_request(h2o_req_t *req)
+{
+    if (req->upgrade.base != NULL && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("h2c-14"))) {
+        if (h2o_http2_handle_upgrade(req) == 0) {
+            return;
+        }
+    }
+    h2o_process_request(req);
 }
 
 static int create_chunked_entity_reader(h2o_http1_conn_t *conn)
@@ -71,7 +85,7 @@ static int handle_content_length_entity_read(h2o_http1_conn_t *conn)
     conn->_req_entity_reader = NULL;
     set_timeout(conn, NULL, NULL);
     uv_read_stop(conn->stream);
-    h2o_process_request(&conn->req);
+    process_request(&conn->req);
 
     return 0;
 }
@@ -168,7 +182,7 @@ static int handle_incoming(h2o_http1_conn_t *conn, size_t prevreqlen)
         } else {
             set_timeout(conn, NULL, NULL);
             uv_read_stop(conn->stream);
-            h2o_process_request(&conn->req);
+            process_request(&conn->req);
         }
         return 0;
     case -2: // incomplete
@@ -264,13 +278,13 @@ static void on_upgrade_complete(uv_write_t *wreq, int status)
     /* call close_cb (with conn->tcp set to NULL) */
     if (status == 0) {
         stream = conn->stream;
-        conn->stream = NULL;
         buffered_input = conn->_input;
-        conn->_input = NULL;
         reqsize = conn->_reqsize;
+        free(conn);
+    } else {
+        uv_close((uv_handle_t*)conn->stream, conn->close_cb);
+        free(conn);
     }
-    conn->close_cb(conn);
-    conn = NULL;
 
     cb(data, stream, buffered_input, reqsize);
 }
@@ -333,14 +347,17 @@ static int get_peername(h2o_conn_t *_conn, struct sockaddr *name, int *namelen)
     return uv_tcp_getpeername((uv_tcp_t*)conn->stream, name, namelen);
 }
 
-void h2o_http1_init(h2o_http1_conn_t *conn, uv_stream_t *stream, h2o_loop_context_t *ctx, h2o_req_cb req_cb, h2o_http1_close_cb close_cb)
+void h2o_http1_accept(h2o_loop_context_t *ctx, uv_stream_t *stream, uv_close_cb close_cb)
 {
+    h2o_http1_conn_t *conn = malloc(sizeof(h2o_http1_conn_t));
+    if (conn == NULL)
+        h2o_fatal("no memory");
+
     /* zero-fill all properties expect req */
     memset(conn, 0, offsetof(h2o_http1_conn_t, req));
 
     /* init properties that need to be non-zero */
     conn->super.ctx = ctx;
-    conn->super.req_cb = req_cb;
     conn->super.getpeername = get_peername;
     conn->stream = stream;
     conn->stream->data = conn;
@@ -362,11 +379,4 @@ void h2o_http1_upgrade(h2o_http1_conn_t *conn, uv_buf_t *inbufs, size_t inbufcnt
     memcpy(bufs + 2, inbufs, sizeof(uv_buf_t) * inbufcnt);
 
     uv_write(&conn->_wreq, conn->stream, bufs, (int)(inbufcnt + 2), on_upgrade_complete);
-}
-
-void h2o_http1_close_and_free(h2o_http1_conn_t *conn)
-{
-    if (conn->stream != NULL)
-        uv_close((uv_handle_t*)conn->stream, (uv_close_cb)free);
-    free(conn);
 }
