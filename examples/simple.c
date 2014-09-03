@@ -5,7 +5,7 @@
 #include <sys/stat.h>
 #include <uv.h>
 #include "h2o.h"
-#include "h2o/http1.h"
+#include "h2o/http2.h"
 
 static void on_req(h2o_req_t *req)
 {
@@ -35,12 +35,12 @@ static void on_req(h2o_req_t *req)
             /* normalize path */
             uv_buf_t path_normalized = h2o_normalize_path(&req->pool, req->path, req->path_len);
             /* send file (FIXME handle directory traversal) */
-            char *dir_path = alloca(path_normalized.len + sizeof(".index.html"));
+            char *dir_path = alloca(path_normalized.len + sizeof("htdocsindex.html"));
             size_t dir_path_len;
             uv_buf_t mime_type;
-            dir_path[0] = '.';
-            memcpy(dir_path + 1, path_normalized.base, path_normalized.len);
-            dir_path_len = path_normalized.len + 1;
+            strcpy(dir_path, "htdocs");
+            memcpy(dir_path + 6, path_normalized.base, path_normalized.len);
+            dir_path_len = path_normalized.len + 6;
             if (dir_path[dir_path_len - 1] == '/') {
                 strcpy(dir_path + dir_path_len, "index.html");
                 dir_path_len += sizeof("index.html") - 1;
@@ -73,20 +73,16 @@ static h2o_loop_context_t loop_ctx;
 
 static void on_connect(uv_stream_t *server, int status)
 {
-    uv_tcp_t *tcp;
+    h2o_socket_t *sock;
 
     if (status == -1) {
         return;
     }
 
-    tcp = malloc(sizeof(*tcp));
-    uv_tcp_init(server->loop, tcp);
-    if (uv_accept(server, (uv_stream_t*)tcp) != 0) {
-        uv_close((uv_handle_t*)tcp, (uv_close_cb)free);
+    if ((sock = h2o_socket_accept(server)) == NULL) {
         return;
     }
-
-    h2o_http1_accept(&loop_ctx, (uv_stream_t*)tcp, (uv_close_cb)free);
+    h2o_accept(&loop_ctx, sock);
 }
 
 int main(int argc, char **argv)
@@ -110,6 +106,7 @@ int main(int argc, char **argv)
     h2o_loop_context_init(&loop_ctx, loop, on_req);
     h2o_define_mimetype(&loop_ctx.mimemap, "html", "text/html");
     h2o_add_reproxy_url(&loop_ctx);
+    //loop_ctx.ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers);
     //loop_ctx.access_log = h2o_open_access_log(loop, "/dev/stdout");
 
     return uv_run(loop, UV_RUN_DEFAULT);

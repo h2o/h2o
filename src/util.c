@@ -21,12 +21,22 @@ uv_buf_t h2o_allocate_input_buffer(h2o_input_buffer_t **_inbuf, size_t initial_s
             h2o_fatal("no memory");
         *_inbuf = inbuf;
         inbuf->size = 0;
+        inbuf->bytes = inbuf->_buf;
         inbuf->capacity = initial_size;
-    } else if (inbuf->size == inbuf->capacity) {
-        inbuf->capacity *= 2;
-        if ((inbuf = realloc(inbuf, offsetof(h2o_input_buffer_t, bytes) + inbuf->capacity)) == NULL)
-            h2o_fatal("no memory");
-        *_inbuf = inbuf;
+    } else {
+        if (inbuf->bytes != inbuf->_buf) {
+            assert(inbuf->size != 0);
+            memmove(inbuf->_buf, inbuf->bytes, inbuf->size);
+            inbuf->bytes = inbuf->_buf;
+        }
+        if (inbuf->size == inbuf->capacity) {
+            inbuf->capacity *= 2;
+            if ((inbuf = realloc(inbuf, offsetof(h2o_input_buffer_t, bytes) + inbuf->capacity)) == NULL)
+                h2o_fatal("no memory");
+            inbuf->bytes = inbuf->_buf;
+            *_inbuf = inbuf;
+        }
+        /* TODO shrink the size if possible */
     }
 
     ret.base = inbuf->bytes + inbuf->size;
@@ -41,9 +51,13 @@ void h2o_consume_input_buffer(h2o_input_buffer_t **_inbuf, size_t delta)
 
     if (delta != 0) {
         assert(inbuf != NULL);
-        memmove(inbuf->bytes, inbuf->bytes + delta, inbuf->size - delta);
-        /* TODO shrink the size */
-        inbuf->size -= delta;
+        if (inbuf->size == delta) {
+            inbuf->size = 0;
+            inbuf->bytes = inbuf->_buf;
+        } else {
+            inbuf->size -= delta;
+            inbuf->bytes += delta;
+        }
     }
 }
 

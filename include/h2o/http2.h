@@ -7,6 +7,8 @@
 typedef struct st_h2o_http2_conn_t h2o_http2_conn_t;
 typedef struct st_h2o_http2_stream_t h2o_http2_stream_t;
 
+extern const uv_buf_t *h2o_http2_tls_identifiers;
+
 /* defined as negated form of the error codes defined in HTTP2-spec section 7 */
 #define H2O_HTTP2_ERROR_NONE 0
 #define H2O_HTTP2_ERROR_PROTOCOL -1
@@ -163,8 +165,7 @@ typedef enum enum_h2o_http2_conn_state_t {
 
 struct st_h2o_http2_conn_t {
     h2o_conn_t super;
-    uv_stream_t *stream;
-    uv_close_cb close_cb;
+    h2o_socket_t *sock;
     /* settings */
     h2o_http2_settings_t peer_settings;
     /* streams */
@@ -175,7 +176,6 @@ struct st_h2o_http2_conn_t {
     /* internal */
     h2o_http2_conn_state_t state;
     ssize_t (*_read_expect)(h2o_http2_conn_t *conn, const uint8_t *src, size_t len);
-    h2o_input_buffer_t *_input;
     h2o_input_buffer_t *_http1_req_input; /* contains data referred to by original request via HTTP/1.1 */
     h2o_hpack_header_table_t _input_header_table;
     h2o_http2_window_t _input_window;
@@ -213,6 +213,7 @@ int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *pa
 void h2o_http2_conn_register_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 static h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uint32_t stream_id);
+void h2o_http2_accept(h2o_loop_context_t *ctx, h2o_socket_t *sock);
 int h2o_http2_handle_upgrade(h2o_req_t *req);
 void h2o_http2_conn_enqueue_write(h2o_http2_conn_t *conn, uv_buf_t buf);
 static int h2o_http2_conn_stream_is_linked(h2o_http2_stream_t *stream);

@@ -3,6 +3,7 @@
 #include <sys/time.h>
 #include "h2o.h"
 #include "h2o/http1.h"
+#include "h2o/http2.h"
 
 static void default_dispose_filter(h2o_filter_t *filter)
 {
@@ -70,4 +71,41 @@ void h2o_get_timestamp(h2o_loop_context_t *ctx, h2o_mempool_t *pool, h2o_timesta
     ts->at = ctx->_timestamp_cache.tv_at;
     h2o_mempool_link_shared(pool, ctx->_timestamp_cache.value);
     ts->str = ctx->_timestamp_cache.value;
+}
+
+static void on_ssl_handshake_complete(h2o_socket_t *sock, int status)
+{
+    const uv_buf_t *ident;
+    h2o_loop_context_t *ctx = sock->data;
+    sock->data = NULL;
+
+    uv_buf_t proto;
+    if (status != 0) {
+        h2o_socket_close(sock);
+        return;
+    }
+
+    proto = h2o_socket_ssl_get_selected_protocol(sock);
+    for (ident = h2o_http2_tls_identifiers; ident->len != 0; ++ident) {
+        if (proto.len == ident->len && memcmp(proto.base, ident->base, proto.len) == 0) {
+            goto Is_Http2;
+        }
+    }
+    /* connect as http1 */
+    h2o_http1_accept(ctx, sock);
+    return;
+
+Is_Http2:
+    /* connect as http2 */
+    h2o_http2_accept(ctx, sock);
+}
+
+void h2o_accept(h2o_loop_context_t *ctx, h2o_socket_t *sock)
+{
+    if (ctx->ssl_ctx != NULL) {
+        sock->data = ctx;
+        h2o_socket_ssl_server_handshake(sock, ctx->ssl_ctx, on_ssl_handshake_complete);
+    } else {
+        h2o_http1_accept(ctx, sock);
+    }
 }

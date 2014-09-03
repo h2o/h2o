@@ -33,8 +33,11 @@ extern "C" {
 typedef struct st_h2o_conn_t h2o_conn_t;
 typedef struct st_h2o_req_t h2o_req_t;
 typedef struct st_h2o_timeout_entry_t h2o_timeout_entry_t;
+typedef struct st_h2o_socket_t h2o_socket_t;
+typedef struct st_h2o_ssl_context_t h2o_ssl_context_t;
 
 typedef void (*h2o_req_cb)(h2o_req_t *req);
+typedef void (*h2o_socket_cb)(h2o_socket_t *sock, int status);
 
 typedef struct st_h2o_token_t {
     uv_buf_t buf;
@@ -80,7 +83,8 @@ typedef struct st_h2o_timeout_t {
 typedef struct st_h2o_input_buffer_t {
     size_t size;
     size_t capacity;
-    char bytes[1];
+    char *bytes;
+    char _buf[1];
 } h2o_input_buffer_t;
 
 #define H2O_VECTOR(type) \
@@ -91,6 +95,19 @@ typedef struct st_h2o_input_buffer_t {
     }
 
 typedef H2O_VECTOR(void) h2o_vector_t;
+
+struct st_h2o_socket_t {
+    uv_stream_t *stream;
+    void *data;
+    struct st_h2o_socket_ssl_t *ssl;
+    h2o_input_buffer_t *input;
+    struct {
+        h2o_socket_cb read;
+        h2o_socket_cb write;
+        uv_close_cb close;
+    } _cb;
+    uv_write_t _wreq;
+};
 
 typedef struct st_h2o_filter_t {
     struct st_h2o_filter_t *next;
@@ -129,6 +146,7 @@ typedef struct h2o_loop_context_t {
     int http1_upgrade_to_http2;
     size_t http2_max_concurrent_requests_per_connection;
     h2o_access_log_t *access_log;
+    h2o_ssl_context_t *ssl_ctx;
     struct {
         uint64_t uv_now_at;
         struct timeval tv_at;
@@ -215,6 +233,19 @@ void h2o_mempool_link_shared(h2o_mempool_t *pool, void *p);
 static void h2o_mempool_addref_shared(void *p);
 static int h2o_mempool_release_shared(void *p);
 
+/* socket */
+
+h2o_socket_t *h2o_socket_open(uv_stream_t *stream, uv_close_cb close_cb);
+h2o_socket_t *h2o_socket_accept(uv_stream_t *listener);
+void h2o_socket_close(h2o_socket_t *sock);
+void h2o_socket_write(h2o_socket_t *sock, uv_buf_t *bufs, size_t bufcnt, h2o_socket_cb cb);
+void h2o_socket_read_start(h2o_socket_t *sock, h2o_socket_cb cb);
+void h2o_socket_read_stop(h2o_socket_t *sock);
+static int h2o_socket_is_reading(h2o_socket_t *sock);
+void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, h2o_ssl_context_t *ssl_ctx, h2o_socket_cb handshake_cb);
+uv_buf_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock);
+h2o_ssl_context_t *h2o_ssl_new_server_context(const char *cert_file, const char *key_file, const uv_buf_t *protocols);
+
 /* headers */
 
 ssize_t h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len, uv_buf_t *connection, uv_buf_t *host, uv_buf_t *upgrade);
@@ -275,6 +306,7 @@ void h2o_loop_context_init(h2o_loop_context_t *context, uv_loop_t *loop, h2o_req
 void h2o_loop_context_dispose(h2o_loop_context_t *context);
 h2o_filter_t *h2o_define_filter(h2o_loop_context_t *context, size_t sz);
 void h2o_get_timestamp(h2o_loop_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts);
+void h2o_accept(h2o_loop_context_t *ctx, h2o_socket_t *sock);
 
 /* built-in generators */
 
@@ -315,6 +347,11 @@ inline int h2o_mempool_release_shared(void *p)
         return 1;
     }
     return 0;
+}
+
+inline int h2o_socket_is_reading(h2o_socket_t *sock)
+{
+    return sock->_cb.read != NULL;
 }
 
 inline int h2o_timeout_entry_is_linked(h2o_timeout_entry_t *entry)

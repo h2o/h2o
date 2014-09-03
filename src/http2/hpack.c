@@ -618,7 +618,7 @@ static void test_request(uv_buf_t first_req, uv_buf_t second_req, uv_buf_t third
     flattened = h2o_flatten_headers(&req.pool, &req.headers);
     ok(h2o_lcstris(flattened.base, flattened.len, H2O_STRLIT("custom-key: custom-value\r\n\r\n")));
 
-    h2o_hpack_dispose_header_table(&req.pool, &header_table);
+    h2o_hpack_dispose_header_table(&header_table);
     h2o_mempool_clear(&req.pool);
 }
 
