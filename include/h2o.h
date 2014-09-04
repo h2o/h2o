@@ -247,6 +247,8 @@ int h2o_buf_is_token(const uv_buf_t *buf);
 
 /* memory */
 
+static void *h2o_malloc(size_t sz);
+static void *h2o_realloc(void *oldp, size_t sz);
 void h2o_mempool_init(h2o_mempool_t *pool);
 void h2o_mempool_clear(h2o_mempool_t *pool);
 void *h2o_mempool_alloc(h2o_mempool_t *pool, size_t sz);
@@ -355,6 +357,24 @@ uv_buf_t h2o_get_mimetype(h2o_mimemap_t *mimemap, const char *ext);
 h2o_access_log_t *h2o_open_access_log(uv_loop_t *loop, const char *path);
 
 /* inline defs */
+
+inline void *h2o_malloc(size_t sz)
+{
+    void *p = malloc(sz);
+    if (p == NULL)
+        h2o_fatal("no memory");
+    return p;
+}
+
+inline void *h2o_realloc(void *oldp, size_t sz)
+{
+    void *newp = realloc(oldp, sz);
+    if (newp == NULL) {
+        h2o_fatal("no memory");
+        return oldp;
+    }
+    return newp;
+}
 
 inline void h2o_mempool_addref_shared(void *p)
 {

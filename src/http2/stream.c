@@ -27,9 +27,7 @@ static void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, uv_buf_t *buf
 
 h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req)
 {
-    h2o_http2_stream_t *stream = malloc(sizeof(*stream));
-    if (stream == NULL)
-        h2o_fatal("no memory");
+    h2o_http2_stream_t *stream = h2o_malloc(sizeof(*stream));
 
     /* init properties (other than req) */
     memset(stream, 0, offsetof(h2o_http2_stream_t, req));

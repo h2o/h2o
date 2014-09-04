@@ -145,10 +145,7 @@ static void flush_pending_ssl(h2o_socket_t *sock, h2o_socket_cb cb)
 
 static h2o_socket_t *create_socket(size_t sz)
 {
-    h2o_socket_t *sock = malloc(sz);
-    if (sock == NULL)
-        h2o_fatal("no memory");
-
+    h2o_socket_t *sock = h2o_malloc(sz);
     memset(sock, 0, sz);
     return sock;
 }
@@ -383,9 +380,7 @@ void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, h2o_ssl_context_t *ssl_
 
     BIO *bio;
 
-    if ((sock->ssl = malloc(sizeof(*sock->ssl))) == NULL)
-        h2o_fatal("no memory");
-
+    sock->ssl = h2o_malloc(sizeof(*sock->ssl));
     memset(sock->ssl, 0, offsetof(struct st_h2o_socket_ssl_t, output.pool));
     h2o_mempool_init(&sock->ssl->output.pool);
     bio = BIO_new(&bio_methods);
@@ -472,10 +467,7 @@ static int on_npn_advertise(SSL *ssl, const unsigned char **out, unsigned *outle
 
 h2o_ssl_context_t *h2o_ssl_new_server_context(const char *cert_file, const char *key_file, const uv_buf_t *protocols)
 {
-    h2o_ssl_context_t *ctx = malloc(sizeof(*ctx));
-
-    if (ctx == NULL)
-        h2o_fatal("no memory");
+    h2o_ssl_context_t *ctx = h2o_malloc(sizeof(*ctx));
 
     memset(ctx, 0, sizeof(*ctx));
 
@@ -510,7 +502,7 @@ h2o_ssl_context_t *h2o_ssl_new_server_context(const char *cert_file, const char 
             assert(protocols[i].len <= 255);
             ctx->_npn_list_of_protocols.len += 1 + protocols[i].len;
         }
-        ctx->_npn_list_of_protocols.base = malloc(ctx->_npn_list_of_protocols.len);
+        ctx->_npn_list_of_protocols.base = h2o_malloc(ctx->_npn_list_of_protocols.len);
         for (i = 0, off = 0; protocols[i].len != 0; ++i) {
             ((unsigned char*)ctx->_npn_list_of_protocols.base)[off++] = protocols[i].len;
             memcpy(ctx->_npn_list_of_protocols.base + off, protocols[i].base, protocols[i].len);

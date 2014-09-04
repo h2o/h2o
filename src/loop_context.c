@@ -57,10 +57,8 @@ void h2o_loop_context_dispose(h2o_loop_context_t *ctx)
 
 h2o_filter_t *h2o_define_filter(h2o_loop_context_t *context, size_t sz)
 {
-    h2o_filter_t *filter;
+    h2o_filter_t *filter = h2o_malloc(sz);
 
-    if ((filter = malloc(sz)) == NULL)
-        h2o_fatal("no memory");
     memset(filter, 0, sz);
     filter->next = context->filters;
     filter->dispose = default_dispose_filter;

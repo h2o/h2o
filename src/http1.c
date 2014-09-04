@@ -105,7 +105,7 @@ static int handle_content_length_entity_read(h2o_http1_conn_t *conn)
 
 static int create_content_length_entity_reader(h2o_http1_conn_t *conn, size_t content_length)
 {
-    struct st_h2o_http1_req_entity_reader *reader = malloc(sizeof(struct st_h2o_http1_req_entity_reader));
+    struct st_h2o_http1_req_entity_reader *reader = h2o_malloc(sizeof(*reader));
     conn->_req_entity_reader = reader;
 
     reader->handle_incoming = handle_content_length_entity_read;
@@ -353,9 +353,7 @@ static int get_peername(h2o_conn_t *_conn, struct sockaddr *name, int *namelen)
 
 void h2o_http1_accept(h2o_loop_context_t *ctx, h2o_socket_t *sock)
 {
-    h2o_http1_conn_t *conn = malloc(sizeof(h2o_http1_conn_t));
-    if (conn == NULL)
-        h2o_fatal("no memory");
+    h2o_http1_conn_t *conn = h2o_malloc(sizeof(*conn));
 
     /* zero-fill all properties expect req */
     memset(conn, 0, offsetof(h2o_http1_conn_t, req));

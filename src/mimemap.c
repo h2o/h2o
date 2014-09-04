@@ -32,9 +32,7 @@ struct st_h2o_mimemap_entry_t {
 
 void h2o_init_mimemap(h2o_mimemap_t *mimemap, const char *default_type)
 {
-    mimemap->top = malloc(sizeof(struct st_h2o_mimemap_entry_t));
-    if (mimemap->top == NULL)
-        h2o_fatal("no memory");
+    mimemap->top = h2o_malloc(sizeof(*mimemap->top));
     mimemap->top->table = kh_init(exttable);
     mimemap->default_type = h2o_strdup(NULL, default_type, SIZE_MAX);
 }

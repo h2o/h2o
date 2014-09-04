@@ -51,8 +51,7 @@ uv_buf_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t slen)
     if (pool != NULL) {
         ret.base = h2o_mempool_alloc(pool, slen + 1);
     } else {
-        if ((ret.base = malloc(slen + 1)) == NULL)
-            h2o_fatal("no memory");
+        ret.base = h2o_malloc(slen + 1);
     }
     memcpy(ret.base, s, slen);
     ret.base[slen] = '\0';
@@ -82,8 +81,7 @@ uv_buf_t h2o_sprintf(h2o_mempool_t *pool, const char *fmt, ...)
     if (pool != NULL) {
         ret.base = h2o_mempool_alloc(pool, len + 1);
     } else {
-        if ((ret.base = malloc(len + 1)) == NULL)
-            h2o_fatal("");
+        ret.base = h2o_malloc(len + 1);
     }
     ret.len = len;
 

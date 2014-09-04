@@ -79,11 +79,7 @@ void *h2o_mempool_alloc(h2o_mempool_t *pool, size_t sz)
 
     if (sz >= sizeof(pool->chunks->bytes) / 4) {
         /* allocate large requests directly */
-        struct st_h2o_mempool_direct_t *newp = malloc(offsetof(struct st_h2o_mempool_direct_t, bytes) + sz);
-        if (newp == NULL) {
-            h2o_fatal("");
-            return NULL;
-        }
+        struct st_h2o_mempool_direct_t *newp = h2o_malloc(offsetof(struct st_h2o_mempool_direct_t, bytes) + sz);
         newp->next = pool->directs;
         pool->directs = newp;
         return newp->bytes;
@@ -93,11 +89,7 @@ void *h2o_mempool_alloc(h2o_mempool_t *pool, size_t sz)
     sz = (sz + 15) & ~15;
     if (sizeof(pool->chunks->bytes) < pool->chunks->offset + sz) {
         /* allocate new chunk */
-        h2o_mempool_chunk_t *newp = malloc(sizeof(h2o_mempool_chunk_t));
-        if (newp == NULL) {
-            h2o_fatal("");
-            return NULL;
-        }
+        h2o_mempool_chunk_t *newp = h2o_malloc(sizeof(*newp));
         newp->next = pool->chunks;
         newp->offset = 0;
         pool->chunks = newp;
@@ -118,11 +110,7 @@ static void link(h2o_mempool_t *pool, struct st_h2o_mempool_shared_entry_t *entr
 
 void *h2o_mempool_alloc_shared(h2o_mempool_t *pool, size_t sz)
 {
-    struct st_h2o_mempool_shared_entry_t *entry = malloc(offsetof(struct st_h2o_mempool_shared_entry_t, bytes) + sz);
-    if (entry == NULL) {
-        h2o_fatal("");
-        return NULL;
-    }
+    struct st_h2o_mempool_shared_entry_t *entry = h2o_malloc(offsetof(struct st_h2o_mempool_shared_entry_t, bytes) + sz);
     entry->refcnt = 1;
     if (pool != NULL)
         link(pool, entry);
@@ -141,8 +129,7 @@ uv_buf_t h2o_allocate_input_buffer(h2o_input_buffer_t **_inbuf, size_t initial_s
     uv_buf_t ret;
 
     if (inbuf == NULL) {
-        if ((inbuf = malloc(offsetof(h2o_input_buffer_t, bytes) + initial_size)) == NULL)
-            h2o_fatal("no memory");
+        inbuf = h2o_malloc(offsetof(h2o_input_buffer_t, bytes) + initial_size);
         *_inbuf = inbuf;
         inbuf->size = 0;
         inbuf->bytes = inbuf->_buf;
@@ -155,8 +142,7 @@ uv_buf_t h2o_allocate_input_buffer(h2o_input_buffer_t **_inbuf, size_t initial_s
         }
         if (inbuf->size == inbuf->capacity) {
             inbuf->capacity *= 2;
-            if ((inbuf = realloc(inbuf, offsetof(h2o_input_buffer_t, bytes) + inbuf->capacity)) == NULL)
-                h2o_fatal("no memory");
+            inbuf = h2o_realloc(inbuf, offsetof(h2o_input_buffer_t, bytes) + inbuf->capacity);
             inbuf->bytes = inbuf->_buf;
             *_inbuf = inbuf;
         }

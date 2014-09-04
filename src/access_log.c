@@ -62,11 +62,8 @@ static void access_log(h2o_access_log_t *_self, h2o_req_t *req)
 
 h2o_access_log_t *h2o_open_access_log(uv_loop_t *loop, const char *path)
 {
-    struct st_h2o_default_access_log_t *self;
+    struct st_h2o_default_access_log_t *self = h2o_malloc(sizeof(*self));
     uv_fs_t fsreq;
-
-    if ((self = malloc(sizeof(struct st_h2o_default_access_log_t))) == NULL)
-        h2o_fatal("no memory");
 
     self->super.log = access_log;
     self->fd = uv_fs_open(loop, &fsreq, path, O_CREAT | O_WRONLY | O_APPEND, 0644, NULL);

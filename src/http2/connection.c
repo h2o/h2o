@@ -685,9 +685,7 @@ void emit_writereq(h2o_timeout_entry_t *entry)
 
 static h2o_http2_conn_t *create_conn(h2o_loop_context_t *ctx, h2o_socket_t *sock)
 {
-    h2o_http2_conn_t *conn = malloc(sizeof(h2o_http2_conn_t));
-    if (conn == NULL)
-        h2o_fatal("no memory");
+    h2o_http2_conn_t *conn = h2o_malloc(sizeof(*conn));
 
     /* init the connection */
     memset(conn, 0, offsetof(h2o_http2_conn_t, _write._pools[0]));
