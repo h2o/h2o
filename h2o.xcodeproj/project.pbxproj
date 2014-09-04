@@ -29,7 +29,7 @@
 		107923CA19A3217300C52AD6 /* internal.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923B719A3217300C52AD6 /* internal.h */; };
 		107923CB19A3217300C52AD6 /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B819A3217300C52AD6 /* frame.c */; };
 		107923CC19A3217300C52AD6 /* loop_context.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B919A3217300C52AD6 /* loop_context.c */; };
-		107923CD19A3217300C52AD6 /* mempool.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BA19A3217300C52AD6 /* mempool.c */; };
+		107923CD19A3217300C52AD6 /* memory.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BA19A3217300C52AD6 /* memory.c */; };
 		107923CE19A3217300C52AD6 /* mimemap.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BB19A3217300C52AD6 /* mimemap.c */; };
 		107923CF19A3217300C52AD6 /* request.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BC19A3217300C52AD6 /* request.c */; };
 		107923D019A3217300C52AD6 /* rproxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BD19A3217300C52AD6 /* rproxy.c */; };
@@ -51,7 +51,7 @@
 		1079244919A3265C00C52AD6 /* hpack.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B419A3217300C52AD6 /* hpack.c */; };
 		1079244A19A3266700C52AD6 /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B819A3217300C52AD6 /* frame.c */; };
 		1079244B19A3266700C52AD6 /* loop_context.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B919A3217300C52AD6 /* loop_context.c */; };
-		1079244C19A3266700C52AD6 /* mempool.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BA19A3217300C52AD6 /* mempool.c */; };
+		1079244C19A3266700C52AD6 /* memory.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BA19A3217300C52AD6 /* memory.c */; };
 		1079244D19A3266700C52AD6 /* mimemap.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BB19A3217300C52AD6 /* mimemap.c */; };
 		1079244E19A3266700C52AD6 /* request.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BC19A3217300C52AD6 /* request.c */; };
 		1079244F19A3266700C52AD6 /* rproxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BD19A3217300C52AD6 /* rproxy.c */; };
@@ -128,7 +128,7 @@
 		107923B719A3217300C52AD6 /* internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = internal.h; sourceTree = "<group>"; };
 		107923B819A3217300C52AD6 /* frame.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
 		107923B919A3217300C52AD6 /* loop_context.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = loop_context.c; sourceTree = "<group>"; };
-		107923BA19A3217300C52AD6 /* mempool.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = mempool.c; sourceTree = "<group>"; };
+		107923BA19A3217300C52AD6 /* memory.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = memory.c; sourceTree = "<group>"; };
 		107923BB19A3217300C52AD6 /* mimemap.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = mimemap.c; sourceTree = "<group>"; };
 		107923BC19A3217300C52AD6 /* request.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = request.c; sourceTree = "<group>"; };
 		107923BD19A3217300C52AD6 /* rproxy.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = rproxy.c; sourceTree = "<group>"; };
@@ -277,7 +277,7 @@
 				107923B119A3217300C52AD6 /* http1.c */,
 				107923B219A3217300C52AD6 /* http2 */,
 				107923B919A3217300C52AD6 /* loop_context.c */,
-				107923BA19A3217300C52AD6 /* mempool.c */,
+				107923BA19A3217300C52AD6 /* memory.c */,
 				107923BB19A3217300C52AD6 /* mimemap.c */,
 				107923BC19A3217300C52AD6 /* request.c */,
 				107923BD19A3217300C52AD6 /* rproxy.c */,
@@ -448,7 +448,7 @@
 				107923CE19A3217300C52AD6 /* mimemap.c in Sources */,
 				107923C619A3217300C52AD6 /* connection.c in Sources */,
 				107923C319A3217300C52AD6 /* file.c in Sources */,
-				107923CD19A3217300C52AD6 /* mempool.c in Sources */,
+				107923CD19A3217300C52AD6 /* memory.c in Sources */,
 				107923CC19A3217300C52AD6 /* loop_context.c in Sources */,
 				107923C519A3217300C52AD6 /* http1.c in Sources */,
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
@@ -486,7 +486,7 @@
 			files = (
 				1079244A19A3266700C52AD6 /* frame.c in Sources */,
 				1079244B19A3266700C52AD6 /* loop_context.c in Sources */,
-				1079244C19A3266700C52AD6 /* mempool.c in Sources */,
+				1079244C19A3266700C52AD6 /* memory.c in Sources */,
 				1079244D19A3266700C52AD6 /* mimemap.c in Sources */,
 				1079244E19A3266700C52AD6 /* request.c in Sources */,
 				1079244F19A3266700C52AD6 /* rproxy.c in Sources */,

@@ -87,21 +87,6 @@ typedef struct st_h2o_mempool_t {
     h2o_mempool_chunk_t _first_chunk;
 } h2o_mempool_t;
 
-typedef void (*h2o_timeout_cb)(h2o_timeout_entry_t *entry);
-
-struct st_h2o_timeout_entry_t {
-    uint64_t wake_at;
-    h2o_timeout_cb cb;
-    struct st_h2o_timeout_entry_t *_next;
-    struct st_h2o_timeout_entry_t *_prev;
-};
-
-typedef struct st_h2o_timeout_t {
-    uv_timer_t timer;
-    uint64_t timeout;
-    h2o_timeout_entry_t _link;
-} h2o_timeout_t;
-
 typedef struct st_h2o_input_buffer_t {
     size_t size;
     size_t capacity;
@@ -117,6 +102,21 @@ typedef struct st_h2o_input_buffer_t {
     }
 
 typedef H2O_VECTOR(void) h2o_vector_t;
+
+typedef void (*h2o_timeout_cb)(h2o_timeout_entry_t *entry);
+
+struct st_h2o_timeout_entry_t {
+    uint64_t wake_at;
+    h2o_timeout_cb cb;
+    struct st_h2o_timeout_entry_t *_next;
+    struct st_h2o_timeout_entry_t *_prev;
+};
+
+typedef struct st_h2o_timeout_t {
+    uv_timer_t timer;
+    uint64_t timeout;
+    h2o_timeout_entry_t _link;
+} h2o_timeout_t;
 
 struct st_h2o_socket_t {
     uv_stream_t *stream;
@@ -245,7 +245,7 @@ extern size_t h2o__num_tokens;
 const h2o_token_t *h2o_lookup_token(const char *name, size_t len);
 int h2o_buf_is_token(const uv_buf_t *buf);
 
-/* mempool */
+/* memory */
 
 void h2o_mempool_init(h2o_mempool_t *pool);
 void h2o_mempool_clear(h2o_mempool_t *pool);
@@ -254,6 +254,10 @@ void *h2o_mempool_alloc_shared(h2o_mempool_t *pool, size_t sz);
 void h2o_mempool_link_shared(h2o_mempool_t *pool, void *p);
 static void h2o_mempool_addref_shared(void *p);
 static int h2o_mempool_release_shared(void *p);
+uv_buf_t h2o_allocate_input_buffer(h2o_input_buffer_t **inbuf, size_t initial_size);
+void h2o_consume_input_buffer(h2o_input_buffer_t **inbuf, size_t delta);
+static void h2o_vector_reserve(h2o_mempool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
+void h2o_vector__expand(h2o_mempool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
 
 /* socket */
 
@@ -284,8 +288,6 @@ uv_buf_t h2o_flatten_headers(h2o_mempool_t *pool, const h2o_headers_t *headers);
 /* util */
 
 void h2o_fatal(const char *msg);
-uv_buf_t h2o_allocate_input_buffer(h2o_input_buffer_t **inbuf, size_t initial_size);
-void h2o_consume_input_buffer(h2o_input_buffer_t **inbuf, size_t delta);
 static int h2o_tolower(int ch);
 static int h2o_memis(const void *target, size_t target_len, const void *test, size_t test_len);
 static int h2o_lcstris(const char *target, size_t target_len, const char *test, size_t test_len);
@@ -301,8 +303,6 @@ const char *h2o_get_filext(const char *path, size_t len);
 const char *h2o_next_token(const char* elements, size_t elements_len, size_t *element_len, const char *cur);
 int h2o_contains_token(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len);
 uv_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len);
-static void h2o_vector_reserve(h2o_mempool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
-void h2o_vector__expand(h2o_mempool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
 
 /* timer */
 

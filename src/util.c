@@ -33,56 +33,6 @@ void h2o_fatal(const char *msg)
     abort();
 }
 
-uv_buf_t h2o_allocate_input_buffer(h2o_input_buffer_t **_inbuf, size_t initial_size)
-{
-    h2o_input_buffer_t *inbuf = *_inbuf;
-    uv_buf_t ret;
-
-    if (inbuf == NULL) {
-        if ((inbuf = malloc(offsetof(h2o_input_buffer_t, bytes) + initial_size)) == NULL)
-            h2o_fatal("no memory");
-        *_inbuf = inbuf;
-        inbuf->size = 0;
-        inbuf->bytes = inbuf->_buf;
-        inbuf->capacity = initial_size;
-    } else {
-        if (inbuf->bytes != inbuf->_buf) {
-            assert(inbuf->size != 0);
-            memmove(inbuf->_buf, inbuf->bytes, inbuf->size);
-            inbuf->bytes = inbuf->_buf;
-        }
-        if (inbuf->size == inbuf->capacity) {
-            inbuf->capacity *= 2;
-            if ((inbuf = realloc(inbuf, offsetof(h2o_input_buffer_t, bytes) + inbuf->capacity)) == NULL)
-                h2o_fatal("no memory");
-            inbuf->bytes = inbuf->_buf;
-            *_inbuf = inbuf;
-        }
-        /* TODO shrink the size if possible */
-    }
-
-    ret.base = inbuf->bytes + inbuf->size;
-    ret.len = inbuf->capacity - inbuf->size;
-
-    return ret;
-}
-
-void h2o_consume_input_buffer(h2o_input_buffer_t **_inbuf, size_t delta)
-{
-    h2o_input_buffer_t *inbuf = *_inbuf;
-
-    if (delta != 0) {
-        assert(inbuf != NULL);
-        if (inbuf->size == delta) {
-            inbuf->size = 0;
-            inbuf->bytes = inbuf->_buf;
-        } else {
-            inbuf->size -= delta;
-            inbuf->bytes += delta;
-        }
-    }
-}
-
 int h2o_lcstris_core(const char *target, const char *test, size_t test_len)
 {
     for (; test_len != 0; --test_len)
@@ -470,19 +420,6 @@ uv_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len)
 
 Rewrite:
     return rewrite_traversal(pool, path, len);
-}
-
-void h2o_vector__expand(h2o_mempool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)
-{
-    void *new_entries;
-    assert(vector->capacity < new_capacity);
-    if (vector->capacity == 0)
-        vector->capacity = 4;
-    while (vector->capacity < new_capacity)
-        vector->capacity *= 2;
-    new_entries = h2o_mempool_alloc(pool, element_size * vector->capacity);
-    memcpy(new_entries, vector->entries, element_size * vector->size);
-    vector->entries = new_entries;
 }
 
 void h2o_send_inline(h2o_req_t *req, const char *body, size_t len)
