@@ -29,6 +29,7 @@ extern "C" {
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #include <stdlib.h>
 #include <sys/time.h>
 #include <time.h>
