@@ -4,8 +4,8 @@
 #include <string.h>
 #include "picotest.h"
 
-#define _STR(s) #s
-#define STR(s) _STR(s)
+#define _STR(...) #__VA_ARGS__
+#define STR(...) _STR(__VA_ARGS__)
 
 static int numtests_in_subtest, subtest_success;
 static int all_success = 1;

@@ -145,10 +145,10 @@ size_t h2o_snprintf(char *buf, size_t bufsz, const char *fmt, ...)
 
 static uint32_t decode_base64url_quad(const char *src)
 {
+    const char *src_end = src + 4;
     uint32_t decoded = 0;
-    int i;
 
-    for (i = 0; i != 4; ++i, ++src, decoded <<= 6) {
+    while (1) {
         if ('A' <= *src && *src <= 'Z') {
             decoded |= *src - 'A';
         } else if ('a' <= *src && *src <= 'z') {
@@ -168,6 +168,9 @@ static uint32_t decode_base64url_quad(const char *src)
         } else {
             return UINT32_MAX;
         }
+        if (++src == src_end)
+            break;
+        decoded <<= 6;
     }
 
     return decoded;
@@ -203,7 +206,7 @@ uv_buf_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len)
         remaining_input[1] = *src++;
         remaining_input[2] = 'A';
         remaining_input[3] = 'A';
-        if ((t = decode_base64url_quad(src)) == UINT32_MAX)
+        if ((t = decode_base64url_quad(remaining_input)) == UINT32_MAX)
             goto Error;
         *dst++ = t >> 16;
         break;
@@ -212,7 +215,7 @@ uv_buf_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len)
         remaining_input[1] = *src++;
         remaining_input[2] = *src++;
         remaining_input[3] = 'A';
-        if ((t = decode_base64url_quad(src)) == UINT32_MAX)
+        if ((t = decode_base64url_quad(remaining_input)) == UINT32_MAX)
             goto Error;
         *dst++ = t >> 16;
         *dst++ = t >> 8;
@@ -225,6 +228,50 @@ uv_buf_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len)
 
 Error:
     return uv_buf_init(NULL, 0);
+}
+
+void h2o_base64_encode(char *dst, const uint8_t *src, size_t len, int url_encoded)
+{
+    static const char *MAP =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz"
+        "0123456789+/";
+    static const char *MAP_URL_ENCODED =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz"
+        "0123456789-_";
+
+    const char *map = url_encoded ? MAP_URL_ENCODED : MAP;
+    uint32_t quad;
+
+    for (; len >= 3; src += 3, len -= 3) {
+        quad = ((uint32_t)src[0] << 16)
+            | ((uint32_t)src[1] << 8)
+            | src[2];
+        *dst++ = map[quad >> 18];
+        *dst++ = map[(quad >> 12) & 63];
+        *dst++ = map[(quad >> 6) & 63];
+        *dst++ = map[quad & 63];
+    }
+    if (len != 0) {
+        quad = (uint32_t)src[0] << 16;
+        *dst++ = map[quad >> 18];
+        if (len == 2) {
+            quad |= (uint32_t)src[1] << 8;
+            *dst++ = map[(quad >> 12) & 63];
+            *dst++ = map[(quad >> 6) & 63];
+            if (! url_encoded)
+                *dst++ = '=';
+        } else {
+            *dst++ = map[(quad >> 12) & 63];
+            if (! url_encoded) {
+                *dst++ = '=';
+                *dst++ = '=';
+            }
+        }
+    }
+
+    *dst = '\0';
 }
 
 void h2o_time2str_rfc1123(char *buf, time_t time)
@@ -438,3 +485,28 @@ void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *
 
     h2o_send_inline(req, body, SIZE_MAX);
 }
+
+#ifdef PICOTEST_FUNCS
+
+#include "picotest.h"
+
+void util_test(void)
+{
+    h2o_mempool_t pool;
+
+    h2o_mempool_init(&pool);
+
+    note("base64");
+    {
+        char buf[256];
+        uv_buf_t src = { H2O_STRLIT("The quick brown fox jumps over the lazy dog.") }, decoded;
+        h2o_base64_encode(buf, (const uint8_t*)src.base, src.len, 1);
+        ok(strcmp(buf, "VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4") == 0);
+        decoded = h2o_decode_base64url(&pool, buf, strlen(buf));
+        ok(src.len == decoded.len);
+        ok(strcmp(decoded.base, src.base) == 0);
+    }
+    h2o_mempool_clear(&pool);
+}
+
+#endif
