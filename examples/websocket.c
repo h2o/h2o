@@ -9,11 +9,10 @@
 #include "h2o/http1.h"
 #include "h2o/websocket.h"
 
-static void on_ws_message(struct uvwslay_t *uvwslay, const struct wslay_event_on_msg_recv_arg *arg)
+static void on_ws_message(h2o_websocket_conn_t *conn, const struct wslay_event_on_msg_recv_arg *arg)
 {
     if (arg == NULL) {
-        uv_close((uv_handle_t*)uvwslay->stream, (uv_close_cb)free);
-        uvwslay_free(uvwslay);
+        h2o_websocket_close(conn);
         return;
     }
 
@@ -23,7 +22,7 @@ static void on_ws_message(struct uvwslay_t *uvwslay, const struct wslay_event_on
             arg->msg,
             arg->msg_length
         };
-        wslay_event_queue_msg(uvwslay->ws_ctx, &msgarg);
+        wslay_event_queue_msg(conn->ws_ctx, &msgarg);
     }
 }
 
@@ -47,20 +46,15 @@ static h2o_loop_context_t loop_ctx;
 
 static void on_connect(uv_stream_t *server, int status)
 {
-    uv_tcp_t *tcp;
+    h2o_socket_t *sock;
 
-    if (status == -1) {
+    if (status == -1)
         return;
-    }
 
-    tcp = malloc(sizeof(*tcp));
-    uv_tcp_init(server->loop, tcp);
-    if (uv_accept(server, (uv_stream_t*)tcp) != 0) {
-        uv_close((uv_handle_t*)tcp, (uv_close_cb)free);
+    if ((sock = h2o_socket_accept(server)) == NULL)
         return;
-    }
 
-    h2o_http1_accept(&loop_ctx, (uv_stream_t*)tcp, (uv_close_cb)free);
+    h2o_accept(&loop_ctx, sock);
 }
 
 int main(int argc, char **argv)
@@ -81,7 +75,8 @@ int main(int argc, char **argv)
         goto Error;
     }
 
-    h2o_loop_context_init(&loop_ctx, loop, on_req);
+    //h2o_loop_context_init(&loop_ctx, loop, on_req);
+    loop_ctx.ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", NULL);
 
     return uv_run(loop, UV_RUN_DEFAULT);
 

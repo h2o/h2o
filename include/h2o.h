@@ -241,6 +241,7 @@ void h2o_socket_close(h2o_socket_t *sock);
 void h2o_socket_write(h2o_socket_t *sock, uv_buf_t *bufs, size_t bufcnt, h2o_socket_cb cb);
 void h2o_socket_read_start(h2o_socket_t *sock, h2o_socket_cb cb);
 void h2o_socket_read_stop(h2o_socket_t *sock);
+static int h2o_socket_is_writing(h2o_socket_t *sock);
 static int h2o_socket_is_reading(h2o_socket_t *sock);
 void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, h2o_ssl_context_t *ssl_ctx, h2o_socket_cb handshake_cb);
 uv_buf_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock);
@@ -348,6 +349,11 @@ inline int h2o_mempool_release_shared(void *p)
         return 1;
     }
     return 0;
+}
+
+inline int h2o_socket_is_writing(h2o_socket_t *sock)
+{
+    return sock->_cb.write != NULL;
 }
 
 inline int h2o_socket_is_reading(h2o_socket_t *sock)

@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		101788B219B561AA0084C6D8 /* socket.c in Sources */ = {isa = PBXBuildFile; fileRef = 101788B119B561AA0084C6D8 /* socket.c */; };
 		101B670C19ADD3380084A351 /* access_log.c in Sources */ = {isa = PBXBuildFile; fileRef = 101B670B19ADD3380084A351 /* access_log.c */; };
+		1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923C119A3217300C52AD6 /* websocket.c */; };
+		1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923A319A3215F00C52AD6 /* websocket.h */; };
 		1079236A19A3210E00C52AD6 /* khash.h in Headers */ = {isa = PBXBuildFile; fileRef = 1079232619A3210D00C52AD6 /* khash.h */; };
 		1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */ = {isa = PBXBuildFile; fileRef = 1079235A19A3210D00C52AD6 /* picohttpparser.c */; };
 		1079239719A3210E00C52AD6 /* picohttpparser.h in Headers */ = {isa = PBXBuildFile; fileRef = 1079235B19A3210D00C52AD6 /* picohttpparser.h */; };
@@ -34,14 +36,9 @@
 		107923D119A3217300C52AD6 /* timeout.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BE19A3217300C52AD6 /* timeout.c */; };
 		107923D219A3217300C52AD6 /* token.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BF19A3217300C52AD6 /* token.c */; };
 		107923D319A3217300C52AD6 /* util.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923C019A3217300C52AD6 /* util.c */; };
-		107923F819A3232300C52AD6 /* uvwslay.c in Sources */ = {isa = PBXBuildFile; fileRef = 1079236319A3210E00C52AD6 /* uvwslay.c */; };
-		107923F919A3232300C52AD6 /* uvwslay.h in Headers */ = {isa = PBXBuildFile; fileRef = 1079236419A3210E00C52AD6 /* uvwslay.h */; };
-		107923FA19A3232900C52AD6 /* websocket.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923C119A3217300C52AD6 /* websocket.c */; };
-		107923FB19A3232F00C52AD6 /* websocket.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923A319A3215F00C52AD6 /* websocket.h */; };
 		1079240119A3241A00C52AD6 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		1079240819A3247A00C52AD6 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		1079241619A324B400C52AD6 /* websocket.c in Sources */ = {isa = PBXBuildFile; fileRef = 1079241319A324B400C52AD6 /* websocket.c */; };
-		1079241919A324E700C52AD6 /* libh2o_websocket.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 107923F419A322F400C52AD6 /* libh2o_websocket.a */; };
 		1079242919A325BE00C52AD6 /* simple.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923FC19A3238500C52AD6 /* simple.c */; };
 		1079243019A3260E00C52AD6 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		1079244119A3264300C52AD6 /* picohttpparser.c in Sources */ = {isa = PBXBuildFile; fileRef = 1079235A19A3210D00C52AD6 /* picohttpparser.c */; };
@@ -72,13 +69,6 @@
 			proxyType = 1;
 			remoteGlobalIDString = 1079231419A320A700C52AD6;
 			remoteInfo = h2o;
-		};
-		1079241719A324DA00C52AD6 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 1079230D19A320A700C52AD6 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 107923F319A322F400C52AD6;
-			remoteInfo = h2o_websocket;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -121,8 +111,6 @@
 		1079235B19A3210D00C52AD6 /* picohttpparser.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = picohttpparser.h; sourceTree = "<group>"; };
 		1079236019A3210E00C52AD6 /* picotest.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picotest.c; sourceTree = "<group>"; };
 		1079236119A3210E00C52AD6 /* picotest.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = picotest.h; sourceTree = "<group>"; };
-		1079236319A3210E00C52AD6 /* uvwslay.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = uvwslay.c; sourceTree = "<group>"; };
-		1079236419A3210E00C52AD6 /* uvwslay.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = uvwslay.h; sourceTree = "<group>"; };
 		107923A019A3215F00C52AD6 /* http1.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = http1.h; sourceTree = "<group>"; };
 		107923A119A3215F00C52AD6 /* http2.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = http2.h; sourceTree = "<group>"; };
 		107923A219A3215F00C52AD6 /* token.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = token.h; sourceTree = "<group>"; };
@@ -149,7 +137,6 @@
 		107923C019A3217300C52AD6 /* util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = util.c; sourceTree = "<group>"; };
 		107923C119A3217300C52AD6 /* websocket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = websocket.c; sourceTree = "<group>"; };
 		107923D919A321F400C52AD6 /* simple */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = simple; sourceTree = BUILT_PRODUCTS_DIR; };
-		107923F419A322F400C52AD6 /* libh2o_websocket.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libh2o_websocket.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		107923FC19A3238500C52AD6 /* simple.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = simple.c; sourceTree = "<group>"; };
 		1079240D19A3247A00C52AD6 /* websocket */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = websocket; sourceTree = BUILT_PRODUCTS_DIR; };
 		1079241319A324B400C52AD6 /* websocket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = websocket.c; sourceTree = "<group>"; };
@@ -174,18 +161,10 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		107923F119A322F400C52AD6 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		1079240719A3247A00C52AD6 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				1079241919A324E700C52AD6 /* libh2o_websocket.a in Frameworks */,
 				1079240819A3247A00C52AD6 /* libh2o.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -218,7 +197,6 @@
 			children = (
 				1079231519A320A700C52AD6 /* libh2o.a */,
 				107923D919A321F400C52AD6 /* simple */,
-				107923F419A322F400C52AD6 /* libh2o_websocket.a */,
 				1079240D19A3247A00C52AD6 /* websocket */,
 				1079243519A3260E00C52AD6 /* picotest */,
 			);
@@ -231,7 +209,6 @@
 				1079231F19A3210D00C52AD6 /* klib */,
 				1079235619A3210D00C52AD6 /* picohttpparser */,
 				1079235F19A3210D00C52AD6 /* picotest */,
-				1079236219A3210E00C52AD6 /* uvwslay */,
 			);
 			path = deps;
 			sourceTree = "<group>";
@@ -260,15 +237,6 @@
 				1079236119A3210E00C52AD6 /* picotest.h */,
 			);
 			path = picotest;
-			sourceTree = "<group>";
-		};
-		1079236219A3210E00C52AD6 /* uvwslay */ = {
-			isa = PBXGroup;
-			children = (
-				1079236319A3210E00C52AD6 /* uvwslay.c */,
-				1079236419A3210E00C52AD6 /* uvwslay.h */,
-			);
-			path = uvwslay;
 			sourceTree = "<group>";
 		};
 		1079239E19A3215F00C52AD6 /* include */ = {
@@ -362,16 +330,8 @@
 				107923CA19A3217300C52AD6 /* internal.h in Headers */,
 				1079239719A3210E00C52AD6 /* picohttpparser.h in Headers */,
 				107923C819A3217300C52AD6 /* hpack_huffman_table.h in Headers */,
+				1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */,
 				1079245419A32C0800C52AD6 /* token_table.h in Headers */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		107923F219A322F400C52AD6 /* Headers */ = {
-			isa = PBXHeadersBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				107923FB19A3232F00C52AD6 /* websocket.h in Headers */,
-				107923F919A3232300C52AD6 /* uvwslay.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -413,23 +373,6 @@
 			productReference = 107923D919A321F400C52AD6 /* simple */;
 			productType = "com.apple.product-type.tool";
 		};
-		107923F319A322F400C52AD6 /* h2o_websocket */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 107923F519A322F400C52AD6 /* Build configuration list for PBXNativeTarget "h2o_websocket" */;
-			buildPhases = (
-				107923F019A322F400C52AD6 /* Sources */,
-				107923F119A322F400C52AD6 /* Frameworks */,
-				107923F219A322F400C52AD6 /* Headers */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = h2o_websocket;
-			productName = h2o_websocket;
-			productReference = 107923F419A322F400C52AD6 /* libh2o_websocket.a */;
-			productType = "com.apple.product-type.library.static";
-		};
 		1079240219A3247A00C52AD6 /* websocket */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 1079240A19A3247A00C52AD6 /* Build configuration list for PBXNativeTarget "websocket" */;
@@ -441,7 +384,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				1079241819A324DA00C52AD6 /* PBXTargetDependency */,
 			);
 			name = websocket;
 			productName = simple;
@@ -487,7 +429,6 @@
 			projectRoot = "";
 			targets = (
 				1079231419A320A700C52AD6 /* h2o */,
-				107923F319A322F400C52AD6 /* h2o_websocket */,
 				1079242A19A3260E00C52AD6 /* picotest */,
 				107923D819A321F400C52AD6 /* simple */,
 				1079240219A3247A00C52AD6 /* websocket */,
@@ -511,6 +452,7 @@
 				107923CC19A3217300C52AD6 /* loop_context.c in Sources */,
 				107923C519A3217300C52AD6 /* http1.c in Sources */,
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
+				1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */,
 				101B670C19ADD3380084A351 /* access_log.c in Sources */,
 				107923C419A3217300C52AD6 /* headers.c in Sources */,
 				10BA72AA19AAD6300059392A /* stream.c in Sources */,
@@ -527,15 +469,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				1079242919A325BE00C52AD6 /* simple.c in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		107923F019A322F400C52AD6 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				107923F819A3232300C52AD6 /* uvwslay.c in Sources */,
-				107923FA19A3232900C52AD6 /* websocket.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -578,11 +511,6 @@
 			isa = PBXTargetDependency;
 			target = 1079231419A320A700C52AD6 /* h2o */;
 			targetProxy = 107923FF19A3241000C52AD6 /* PBXContainerItemProxy */;
-		};
-		1079241819A324DA00C52AD6 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 107923F319A322F400C52AD6 /* h2o_websocket */;
-			targetProxy = 1079241719A324DA00C52AD6 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -737,38 +665,6 @@
 			};
 			name = Release;
 		};
-		107923F619A322F400C52AD6 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				EXECUTABLE_PREFIX = lib;
-				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
-					"$(inherited)",
-				);
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				PRODUCT_NAME = "$(TARGET_NAME)";
-			};
-			name = Debug;
-		};
-		107923F719A322F400C52AD6 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				EXECUTABLE_PREFIX = lib;
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				PRODUCT_NAME = "$(TARGET_NAME)";
-			};
-			name = Release;
-		};
 		1079240B19A3247A00C52AD6 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -782,11 +678,16 @@
 					/usr/local/include,
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = /usr/local/lib;
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
 				OTHER_LDFLAGS = (
 					"-luv",
 					"-lwslay",
 					"-lnettle",
+					"-lssl",
+					"-lcrypto",
 				);
 				PRODUCT_NAME = websocket;
 			};
@@ -801,11 +702,16 @@
 					/usr/local/include,
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = /usr/local/lib;
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
 				OTHER_LDFLAGS = (
 					"-luv",
 					"-lwslay",
 					"-lnettle",
+					"-lssl",
+					"-lcrypto",
 				);
 				PRODUCT_NAME = websocket;
 			};
@@ -816,16 +722,20 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
-					"PICOTEST_FUNCS=hpack_test",
+					"PICOTEST_FUNCS=hpack_test,util_test",
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = /usr/local/lib;
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
 				OTHER_LDFLAGS = (
 					"-luv",
 					"-lssl",
@@ -839,12 +749,16 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = /usr/local/lib;
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
 				OTHER_LDFLAGS = (
 					"-luv",
 					"-lssl",
@@ -880,15 +794,6 @@
 			buildConfigurations = (
 				107923E019A321F400C52AD6 /* Debug */,
 				107923E119A321F400C52AD6 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		107923F519A322F400C52AD6 /* Build configuration list for PBXNativeTarget "h2o_websocket" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				107923F619A322F400C52AD6 /* Debug */,
-				107923F719A322F400C52AD6 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
