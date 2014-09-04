@@ -248,6 +248,7 @@ static int decode_header(h2o_mempool_t *pool, struct st_h2o_decode_header_result
         /* existing name (and value?) */
         if (index < HEADER_TABLE_OFFSET) {
             result->name_token = h2o_hpack_static_table[index - 1].name;
+            result->name_not_token = NULL;
             if (value_is_indexed) {
                 result->value = (uv_buf_t*)&h2o_hpack_static_table[index - 1].value;
                 value_is_const = 1;
@@ -256,6 +257,7 @@ static int decode_header(h2o_mempool_t *pool, struct st_h2o_decode_header_result
             struct st_h2o_hpack_header_table_entry_t *entry = header_table_get(hpack_header_table, index - HEADER_TABLE_OFFSET);
             if (entry->name_is_token) {
                 result->name_token = entry->name.token;
+                result->name_not_token = NULL;
             } else {
                 result->name_token = NULL;
                 result->name_not_token = entry->name.buf;
