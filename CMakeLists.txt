@@ -3,7 +3,7 @@ CMAKE_POLICY(SET CMP0003 NEW)
 
 PROJECT(h2o)
 
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wno-unused-function -g")
+SET(CMAKE_C_FLAGS "-O2 -g -Wall -Wno-unused-function ${CMAKE_C_FLAGS}")
 
 INCLUDE_DIRECTORIES(include deps/picohttpparser deps/klib)
 
