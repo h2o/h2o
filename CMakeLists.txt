@@ -11,3 +11,8 @@ ADD_LIBRARY(h2o STATIC deps/picohttpparser/picohttpparser.c src/access_log.c src
 
 ADD_EXECUTABLE(examples/simple examples/simple.c)
 TARGET_LINK_LIBRARIES(examples/simple h2o ssl crypto)
+
+IF(WIN32)
+    find_library(ws2_32_LIBRARY_PATH ws2_32)
+    TARGET_LINK_LIBRARIES(examples/simple ${ws2_32_LIBRARY_PATH})
+ENDIF()

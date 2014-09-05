@@ -19,8 +19,15 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <stdio.h>
-#include <sys/select.h>
+#ifdef _WIN32
+# include <ws2tcpip.h>
+# include <stdio.h>
+# undef FD_SETSIZE
+# define FD_SETSIZE 256
+#else
+# include <stdio.h>
+# include <sys/select.h>
+#endif
 
 #if 0
 # define DEBUG_LOG(...) fprintf(stderr, __VA_ARGS__)

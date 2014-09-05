@@ -92,7 +92,7 @@ int h2o_socket_loop_run(h2o_socket_loop_t *loop, uint64_t max_wait_millis)
 # endif
 #endif
 
-#if H2O_USE_SELECET
+#if H2O_USE_SELECT
 # include "socket_loop/select.h"
 #elif H2O_USE_EPOLL
 # include "socket_loop/epoll.h"
