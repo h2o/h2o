@@ -80,4 +80,4 @@ int h2o_socket_loop_run(h2o_socket_loop_t *loop, uint64_t max_wait_millis)
     return 0;
 }
 
-#include "socket_loop/select.c"
+#include "socket_loop/select.h"
