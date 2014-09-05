@@ -150,7 +150,10 @@ struct st_h2o_socket_t {
     struct {
         size_t cnt;
         h2o_buf_t *bufs;
-        h2o_buf_t smallbufs[4];
+        union {
+            h2o_buf_t *alloced_ptr;
+            h2o_buf_t smallbufs[4];
+        };
     } _wreq;
     h2o_socket_t *_next_pending;
     h2o_socket_t *_next_statechanged;

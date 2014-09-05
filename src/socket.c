@@ -154,6 +154,16 @@ static int on_read_core(int fd, h2o_input_buffer_t** input)
     return 0;
 }
 
+static void wreq_free_buffer_if_allocated(h2o_socket_t *sock)
+{
+    if (sock->_wreq.smallbufs <= sock->_wreq.bufs && sock->_wreq.bufs <= sock->_wreq.smallbufs + sizeof(sock->_wreq.smallbufs) / sizeof(sock->_wreq.smallbufs[0])) {
+        /* no need to free */
+    } else {
+        free(sock->_wreq.alloced_ptr);
+        sock->_wreq.bufs = sock->_wreq.smallbufs;
+    }
+}
+
 static int write_core(int fd, h2o_buf_t **bufs, size_t *bufcnt)
 {
     int iovcnt;
@@ -210,6 +220,7 @@ static void do_write(h2o_socket_t *sock, h2o_buf_t *bufs, size_t bufcnt, h2o_soc
         sock->_wreq.bufs = sock->_wreq.smallbufs;
     } else {
         sock->_wreq.bufs = h2o_malloc(sizeof(h2o_buf_t) * bufcnt);
+        sock->_wreq.alloced_ptr = sock->_wreq.bufs = sock->_wreq.bufs;
     }
     memcpy(sock->_wreq.bufs, bufs, sizeof(h2o_buf_t) * bufcnt);
     sock->_wreq.cnt = bufcnt;
@@ -233,6 +244,7 @@ h2o_socket_t *h2o_socket_create(h2o_socket_loop_t *loop, int fd)
     memset(sock, 0, sizeof(*sock));
     sock->loop = loop;
     sock->fd = fd;
+    sock->_wreq.bufs = sock->_wreq.smallbufs;
     sock->_next_pending = sock;
     sock->_next_statechanged = sock;
     return sock;
@@ -260,6 +272,7 @@ static void dispose_socket(h2o_socket_t *sock, int status)
         free(sock->ssl);
     }
     free(sock->input);
+    wreq_free_buffer_if_allocated(sock);
     close(sock->fd);
 
     sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED;
@@ -327,13 +340,7 @@ void h2o_socket__write_pending(h2o_socket_t *sock)
     if (write_core(sock->fd, &sock->_wreq.bufs, &sock->_wreq.cnt) != 0
         || sock->_wreq.cnt == 0) {
         /* either completed or failed */
-        /* release the buffer if no longer needed */
-        if (sock->_wreq.smallbufs <= sock->_wreq.bufs && sock->_wreq.bufs <= sock->_wreq.smallbufs) {
-            /* no need to free */
-        } else {
-            free(sock->_wreq.bufs);
-            sock->_wreq.bufs = NULL;
-        }
+        wreq_free_buffer_if_allocated(sock);
         if (sock->_wreq.cnt != 0) {
             /* pending data exists -> was an error */
             sock->_wreq.cnt = 0; /* clear it ! */
