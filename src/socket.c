@@ -247,6 +247,9 @@ h2o_socket_t *h2o_socket_create(h2o_socket_loop_t *loop, int fd)
     sock->_wreq.bufs = sock->_wreq.smallbufs;
     sock->_next_pending = sock;
     sock->_next_statechanged = sock;
+
+    sock->loop->_on_create(sock);
+
     return sock;
 }
 

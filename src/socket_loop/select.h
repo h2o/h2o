@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <sys/select.h>
 
-#if 1
+#if 0
 # define DEBUG_LOG(...) fprintf(stderr, __VA_ARGS__)
 #else
 # define DEBUG_LOG(...)
@@ -31,6 +31,7 @@
 struct st_h2o_socket_loop_select_t {
     h2o_socket_loop_t super;
     fd_set readfds, writefds;
+    int max_fd;
     h2o_socket_t *socks[FD_SETSIZE];
 };
 
@@ -100,7 +101,7 @@ static int proceed(h2o_socket_loop_t *_loop, uint64_t wake_at)
         memcpy(&rfds, &loop->readfds, sizeof(rfds));
         memcpy(&wfds, &loop->writefds, sizeof(wfds));
         /* call */
-        ret = select(FD_SETSIZE, &rfds, &wfds, NULL, &timeout);
+        ret = select(loop->max_fd + 1, &rfds, &wfds, NULL, &timeout);
     } while (ret == -1 && errno == EINTR);
     if (ret == -1)
         return -1;
@@ -110,7 +111,7 @@ static int proceed(h2o_socket_loop_t *_loop, uint64_t wake_at)
 
     /* update readable flags, perform writes */
     if (ret > 0) {
-        for (fd = 0; fd != FD_SETSIZE; ++fd) {
+        for (fd = 0; fd <= loop->max_fd; ++fd) {
             /* set read_ready flag before calling the write cb, since app. code invoked by hte latter may close the socket, clearing the former flag */
             if (FD_ISSET(fd, &rfds)) {
                 h2o_socket_t *sock = loop->socks[fd];
@@ -138,6 +139,9 @@ static int proceed(h2o_socket_loop_t *_loop, uint64_t wake_at)
 static void on_create(h2o_socket_t *sock)
 {
     struct st_h2o_socket_loop_select_t *loop = (struct st_h2o_socket_loop_select_t*)sock->loop;
+
+    if (loop->max_fd < sock->fd)
+        loop->max_fd = sock->fd;
 
     if (loop->socks[sock->fd] != NULL) {
         assert(loop->socks[sock->fd]->_flags == H2O_SOCKET_FLAG_IS_DISPOSED);
