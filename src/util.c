@@ -154,7 +154,7 @@ h2o_buf_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len)
     char remaining_input[4];
 
     decoded.len = len * 3 / 4;
-    decoded.base = h2o_mempool_alloc(pool, decoded.len);
+    decoded.base = h2o_mempool_alloc(pool, decoded.len + 1);
     dst = (uint8_t*)decoded.base;
 
     while (len >= 4) {
@@ -193,6 +193,7 @@ h2o_buf_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len)
     }
 
     assert((char*)dst - decoded.base == decoded.len);
+    decoded.base[decoded.len] = '\0';
 
     return decoded;
 
