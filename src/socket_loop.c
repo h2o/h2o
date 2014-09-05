@@ -126,8 +126,8 @@ static int proceed(h2o_socket_loop_t *_loop, uint64_t max_wait_millis)
 
     /* call select */
     do {
-        FD_COPY(&loop->readfds, &rfds);
-        FD_COPY(&loop->writefds, &wfds);
+        memcpy(&rfds, &loop->readfds, sizeof(rfds));
+        memcpy(&wfds, &loop->writefds, sizeof(wfds));
         timeout.tv_sec = max_wait_millis / 1000;
         timeout.tv_usec = max_wait_millis % 1000 * 1000;
         ret = select(FD_SETSIZE, &rfds, &wfds, NULL, &timeout);

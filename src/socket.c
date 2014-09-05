@@ -33,6 +33,10 @@
 # pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #endif
 
+#ifndef IOV_MAX
+# define IOV_MAX UIO_MAXIOV
+#endif
+
 struct st_h2o_socket_ssl_t {
     SSL *ssl;
     struct {
