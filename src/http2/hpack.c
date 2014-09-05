@@ -656,7 +656,7 @@ void hpack_test()
         const uint8_t *p;
         int32_t out;
 #define TEST(input, output) \
-    in = uv_buf_init(H2O_STRLIT(input)); \
+    in = h2o_buf_init(H2O_STRLIT(input)); \
     p = (const uint8_t*)in.base; \
     out = decode_int(&p, p + in.len, 7); \
     ok(out == output); \
@@ -696,7 +696,7 @@ void hpack_test()
 
         memset(&header_table, 0, sizeof(header_table));
         header_table.hpack_capacity = 4096;
-        in = uv_buf_init(H2O_STRLIT("\x40\x0a\x63\x75\x73\x74\x6f\x6d\x2d\x6b\x65\x79\x0d\x63\x75\x73\x74\x6f\x6d\x2d\x68\x65\x61\x64\x65\x72"));
+        in = h2o_buf_init(H2O_STRLIT("\x40\x0a\x63\x75\x73\x74\x6f\x6d\x2d\x6b\x65\x79\x0d\x63\x75\x73\x74\x6f\x6d\x2d\x68\x65\x61\x64\x65\x72"));
         const uint8_t *p = (const uint8_t*)in.base;
         r = decode_header(&pool, &result, &header_table, &p, p + in.len);
         ok(r == 0);
@@ -718,7 +718,7 @@ void hpack_test()
 
         memset(&header_table, 0, sizeof(header_table));
         header_table.hpack_capacity = 4096;
-        in = uv_buf_init(H2O_STRLIT("\x04\x0c\x2f\x73\x61\x6d\x70\x6c\x65\x2f\x70\x61\x74\x68"));
+        in = h2o_buf_init(H2O_STRLIT("\x04\x0c\x2f\x73\x61\x6d\x70\x6c\x65\x2f\x70\x61\x74\x68"));
         const uint8_t *p = (const uint8_t*)in.base;
         r = decode_header(&pool, &result, &header_table, &p, p + in.len);
         ok(r == 0);
@@ -738,7 +738,7 @@ void hpack_test()
 
         memset(&header_table, 0, sizeof(header_table));
         header_table.hpack_capacity = 4096;
-        in = uv_buf_init(H2O_STRLIT("\x10\x08\x70\x61\x73\x73\x77\x6f\x72\x64\x06\x73\x65\x63\x72\x65\x74"));
+        in = h2o_buf_init(H2O_STRLIT("\x10\x08\x70\x61\x73\x73\x77\x6f\x72\x64\x06\x73\x65\x63\x72\x65\x74"));
         const uint8_t *p = (const uint8_t*)in.base;
         r = decode_header(&pool, &result, &header_table, &p, p + in.len);
         ok(r == 0);
@@ -760,7 +760,7 @@ void hpack_test()
 
         memset(&header_table, 0, sizeof(header_table));
         header_table.hpack_capacity = 4096;
-        in = uv_buf_init(H2O_STRLIT("\x82"));
+        in = h2o_buf_init(H2O_STRLIT("\x82"));
         const uint8_t *p = (const uint8_t*)in.base;
         r = decode_header(&pool, &result, &header_table, &p, p + in.len);
         ok(r == 0);
@@ -773,15 +773,15 @@ void hpack_test()
 
     note("request examples without huffman coding");
     test_request(
-        uv_buf_init(H2O_STRLIT("\x82\x86\x84\x41\x0f\x77\x77\x77\x2e\x65\x78\x61\x6d\x70\x6c\x65\x2e\x63\x6f\x6d")),
-        uv_buf_init(H2O_STRLIT("\x82\x86\x84\xbe\x58\x08\x6e\x6f\x2d\x63\x61\x63\x68\x65")),
-        uv_buf_init(H2O_STRLIT("\x82\x87\x85\xbf\x40\x0a\x63\x75\x73\x74\x6f\x6d\x2d\x6b\x65\x79\x0c\x63\x75\x73\x74\x6f\x6d\x2d\x76\x61\x6c\x75\x65")));
+        h2o_buf_init(H2O_STRLIT("\x82\x86\x84\x41\x0f\x77\x77\x77\x2e\x65\x78\x61\x6d\x70\x6c\x65\x2e\x63\x6f\x6d")),
+        h2o_buf_init(H2O_STRLIT("\x82\x86\x84\xbe\x58\x08\x6e\x6f\x2d\x63\x61\x63\x68\x65")),
+        h2o_buf_init(H2O_STRLIT("\x82\x87\x85\xbf\x40\x0a\x63\x75\x73\x74\x6f\x6d\x2d\x6b\x65\x79\x0c\x63\x75\x73\x74\x6f\x6d\x2d\x76\x61\x6c\x75\x65")));
 
     note("request examples with huffman coding");
     test_request(
-        uv_buf_init(H2O_STRLIT("\x82\x86\x84\x41\x8c\xf1\xe3\xc2\xe5\xf2\x3a\x6b\xa0\xab\x90\xf4\xff")),
-        uv_buf_init(H2O_STRLIT("\x82\x86\x84\xbe\x58\x86\xa8\xeb\x10\x64\x9c\xbf")),
-        uv_buf_init(H2O_STRLIT("\x82\x87\x85\xbf\x40\x88\x25\xa8\x49\xe9\x5b\xa9\x7d\x7f\x89\x25\xa8\x49\xe9\x5b\xb8\xe8\xb4\xbf")));
+        h2o_buf_init(H2O_STRLIT("\x82\x86\x84\x41\x8c\xf1\xe3\xc2\xe5\xf2\x3a\x6b\xa0\xab\x90\xf4\xff")),
+        h2o_buf_init(H2O_STRLIT("\x82\x86\x84\xbe\x58\x86\xa8\xeb\x10\x64\x9c\xbf")),
+        h2o_buf_init(H2O_STRLIT("\x82\x87\x85\xbf\x40\x88\x25\xa8\x49\xe9\x5b\xa9\x7d\x7f\x89\x25\xa8\x49\xe9\x5b\xb8\xe8\xb4\xbf")));
 
     note("encode_huffman");
     {
