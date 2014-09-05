@@ -160,6 +160,7 @@ struct st_h2o_socket_t {
 };
 
 struct st_h2o_socket_loop_t {
+    uint64_t now;
     struct {
         h2o_socket_t *head;
         h2o_socket_t **tail_ref;
@@ -168,7 +169,7 @@ struct st_h2o_socket_loop_t {
         h2o_socket_t *head;
         h2o_socket_t **tail_ref;
     } _statechanged;
-    int (*_proceed)(h2o_socket_loop_t *loop, uint64_t max_wait_millis);
+    int (*_proceed)(h2o_socket_loop_t *loop, uint64_t wake_at);
     void (*_on_create)(h2o_socket_t *sock);
     void (*_on_close)(h2o_socket_t *sock);
 };
@@ -199,7 +200,6 @@ typedef struct st_h2o_timestamp_t {
 } h2o_timestamp_t;
 
 typedef struct h2o_loop_context_t {
-    uint64_t now;
     h2o_socket_loop_t *socket_loop;
     h2o_req_cb req_cb;
     h2o_timeout_t zero_timeout; /* for deferred tasks */
@@ -387,6 +387,7 @@ static void h2o_proceed_response(h2o_req_t *req);
 
 /* loop context */
 
+static uint64_t h2o_now(h2o_loop_context_t *ctx);
 void h2o_loop_context_init(h2o_loop_context_t *context, h2o_req_cb req_cb);
 void h2o_loop_context_dispose(h2o_loop_context_t *context);
 int h2o_loop_context_run(h2o_loop_context_t *context);
@@ -484,6 +485,10 @@ inline int h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *name, soc
     return getpeername(sock->fd, name, namelen);
 }
 
+inline uint64_t h2o_now(h2o_loop_context_t *ctx)
+{
+    return ctx->socket_loop->now;
+}
 
 inline int h2o_timeout_is_linked(h2o_timeout_entry_t *entry)
 {

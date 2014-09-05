@@ -45,13 +45,6 @@ static void proceed_timeout(h2o_timeout_t *timeout, uint64_t now)
     }
 }
 
-static void update_now(h2o_loop_context_t *ctx)
-{
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    ctx->now = (uint64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
-}
-
 void h2o_loop_context_init(h2o_loop_context_t *ctx, h2o_req_cb req_cb)
 {
     memset(ctx, 0, sizeof(*ctx));
@@ -79,8 +72,6 @@ int h2o_loop_context_run(h2o_loop_context_t *ctx)
 {
     uint64_t wake_at = UINT64_MAX;
 
-    update_now(ctx);
-    
     /* determine wake_at */
     if (ctx->_timeouts != NULL) {
         h2o_timeout_t *timeout = h2o_linklist_get_first(h2o_timeout_t, _link, ctx->_timeouts);
@@ -94,14 +85,14 @@ int h2o_loop_context_run(h2o_loop_context_t *ctx)
             != h2o_linklist_get_first(h2o_timeout_t, _link, ctx->_timeouts));
     }
 
-    if (h2o_socket_loop_run(ctx->socket_loop, ctx->now < wake_at ? wake_at - ctx->now : 0) != 0)
+    if (h2o_socket_loop_run(ctx->socket_loop, wake_at) != 0)
         return -1;
 
     /* run the timeouts */
     if (ctx->_timeouts != NULL) {
         h2o_timeout_t *timeout = h2o_linklist_get_first(h2o_timeout_t, _link, ctx->_timeouts);
         do {
-            proceed_timeout(timeout, ctx->now);
+            proceed_timeout(timeout, h2o_now(ctx));
         } while ((timeout = h2o_linklist_get_next(h2o_timeout_t, _link, timeout))
             != h2o_linklist_get_first(h2o_timeout_t, _link, ctx->_timeouts));
     }
@@ -125,7 +116,7 @@ h2o_filter_t *h2o_define_filter(h2o_loop_context_t *context, size_t sz)
 
 void h2o_get_timestamp(h2o_loop_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts)
 {
-    uint64_t now = ctx->now;
+    uint64_t now = h2o_now(ctx);
 
     if (ctx->_timestamp_cache.uv_now_at != now) {
         time_t prev_sec = ctx->_timestamp_cache.tv_at.tv_sec;
@@ -158,7 +149,7 @@ void h2o_timeout_link(h2o_loop_context_t *ctx, h2o_timeout_t *timeout, h2o_timeo
     /* insert at tail, so the entries are sorted in ascending order */
     h2o_linklist_insert(&timeout->_entries, timeout->_entries, &entry->_link);
     /* set data */
-    entry->wake_at = ctx->now + timeout->timeout;
+    entry->wake_at = h2o_now(ctx) + timeout->timeout;
 }
 
 void h2o_timeout_unlink(h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)

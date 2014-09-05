@@ -24,6 +24,13 @@
 #include <stdio.h>
 #include "h2o.h"
 
+static void update_now(h2o_socket_loop_t *loop)
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    loop->now = (uint64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
+
 static void run_socket(h2o_socket_t* sock)
 {
     if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
@@ -111,30 +118,38 @@ static void update_fdset(struct st_h2o_socket_loop_select_t *loop)
     loop->super._statechanged.tail_ref = &loop->super._statechanged.head;
 }
 
-static int proceed(h2o_socket_loop_t *_loop, uint64_t max_wait_millis)
+static int proceed(h2o_socket_loop_t *_loop, uint64_t wake_at)
 {
     struct st_h2o_socket_loop_select_t *loop = (struct st_h2o_socket_loop_select_t*)_loop;
     fd_set rfds, wfds;
     struct timeval timeout;
     int fd, ret;
-
-    if (max_wait_millis >= INT32_MAX)
-        max_wait_millis = INT32_MAX;
+    uint64_t max_wait_millis;
 
     /* update status */
     update_fdset(loop);
 
+
     /* call select */
     do {
-        memcpy(&rfds, &loop->readfds, sizeof(rfds));
-        memcpy(&wfds, &loop->writefds, sizeof(wfds));
+        /* calc timeout */
+        update_now(&loop->super);
+        max_wait_millis = wake_at - loop->super.now;
+        if (max_wait_millis > INT32_MAX)
+            max_wait_millis = INT32_MAX;
         timeout.tv_sec = max_wait_millis / 1000;
         timeout.tv_usec = max_wait_millis % 1000 * 1000;
+        /* set fds */
+        memcpy(&rfds, &loop->readfds, sizeof(rfds));
+        memcpy(&wfds, &loop->writefds, sizeof(wfds));
+        /* call */
         ret = select(FD_SETSIZE, &rfds, &wfds, NULL, &timeout);
     } while (ret == -1 && errno == EINTR);
     if (ret == -1)
         return -1;
 //fprintf(stderr, "select returned: %d\n", ret);
+
+    update_now(&loop->super);
 
     /* update readable flags, perform writes */
     if (ret > 0) {
