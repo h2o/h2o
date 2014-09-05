@@ -28,7 +28,7 @@
 typedef struct st_h2o_http2_conn_t h2o_http2_conn_t;
 typedef struct st_h2o_http2_stream_t h2o_http2_stream_t;
 
-extern const uv_buf_t *h2o_http2_tls_identifiers;
+extern const h2o_buf_t *h2o_http2_tls_identifiers;
 
 /* defined as negated form of the error codes defined in HTTP2-spec section 7 */
 #define H2O_HTTP2_ERROR_NONE 0
@@ -63,7 +63,7 @@ typedef struct st_h2o_hpack_header_table_t {
 void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table);
 int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, int *allow_psuedo, const uint8_t *src, size_t len);
 size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len);
-uv_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, uint32_t stream_id, size_t max_frame_size, h2o_res_t *res);
+h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, uint32_t stream_id, size_t max_frame_size, h2o_res_t *res);
 
 /* settings */
 
@@ -138,7 +138,7 @@ typedef struct st_h2o_http2_ping_payload_t {
 typedef struct st_h2o_http2_goaway_payload_t {
     uint32_t last_stream_id;
     uint32_t error_code;
-    uv_buf_t debug_data;
+    h2o_buf_t debug_data;
 } h2o_http2_goaway_payload_t;
 
 typedef struct st_h2o_http2_window_update_payload_t {
@@ -167,7 +167,7 @@ struct st_h2o_http2_stream_t {
     h2o_http2_window_t output_window;
     h2o_http2_window_t input_window;
     h2o_input_buffer_t *_req_body;
-    H2O_VECTOR(uv_buf_t) _data;
+    H2O_VECTOR(h2o_buf_t) _data;
     /* link list governed by connection.c for handling various things */
     struct {
         h2o_http2_stream_t *prev;
@@ -203,9 +203,8 @@ struct st_h2o_http2_conn_t {
     h2o_http2_stream_t *_pending_reqs;
     struct {
         h2o_mempool_t *pool; /* points to either of the _pools */
-        uv_write_t wreq;
         int wreq_in_flight, write_once_more;
-        H2O_VECTOR(uv_buf_t) bufs;
+        H2O_VECTOR(h2o_buf_t) bufs;
         h2o_http2_stream_t *streams_with_pending_data;
         h2o_http2_stream_t *streams_without_pending_data;
         h2o_timeout_entry_t timeout_entry;
@@ -218,10 +217,10 @@ int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t
 
 /* frames */
 uint8_t *h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type, uint8_t flags, int32_t stream_id);
-uv_buf_t h2o_http2_encode_rst_stream_frame(h2o_mempool_t *pool, uint32_t stream_id, int errno);
-uv_buf_t h2o_http2_encode_ping_frame(h2o_mempool_t *pool, int is_ack, const uint8_t *data);
-uv_buf_t h2o_http2_encode_goaway_frame(h2o_mempool_t *pool, uint32_t last_stream_id, int errno);
-uv_buf_t h2o_http2_encode_window_update_frame(h2o_mempool_t *pool, uint32_t stream_id, int32_t window_size_increment);
+h2o_buf_t h2o_http2_encode_rst_stream_frame(h2o_mempool_t *pool, uint32_t stream_id, int errno);
+h2o_buf_t h2o_http2_encode_ping_frame(h2o_mempool_t *pool, int is_ack, const uint8_t *data);
+h2o_buf_t h2o_http2_encode_goaway_frame(h2o_mempool_t *pool, uint32_t last_stream_id, int errno);
+h2o_buf_t h2o_http2_encode_window_update_frame(h2o_mempool_t *pool, uint32_t stream_id, int32_t window_size_increment);
 ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, const h2o_http2_settings_t *host_settings);
 int h2o_http2_decode_data_payload(h2o_http2_data_payload_t *payload, const h2o_http2_frame_t *frame);
 int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const h2o_http2_frame_t *frame);
@@ -236,7 +235,7 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
 static h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uint32_t stream_id);
 void h2o_http2_accept(h2o_loop_context_t *ctx, h2o_socket_t *sock);
 int h2o_http2_handle_upgrade(h2o_req_t *req);
-void h2o_http2_conn_enqueue_write(h2o_http2_conn_t *conn, uv_buf_t buf);
+void h2o_http2_conn_enqueue_write(h2o_http2_conn_t *conn, h2o_buf_t buf);
 static int h2o_http2_conn_stream_is_linked(h2o_http2_stream_t *stream);
 void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 

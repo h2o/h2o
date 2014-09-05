@@ -23,7 +23,7 @@
 #include "khash.h"
 #include "h2o.h"
 
-KHASH_MAP_INIT_STR(exttable, uv_buf_t)
+KHASH_MAP_INIT_STR(exttable, h2o_buf_t)
 
 struct st_h2o_mimemap_entry_t {
     /* struct st_h2o_mimemap_entry_t *next; */
@@ -40,7 +40,7 @@ void h2o_init_mimemap(h2o_mimemap_t *mimemap, const char *default_type)
 void h2o_dispose_mimemap(h2o_mimemap_t *mimemap)
 {
     const char *ext;
-    uv_buf_t type;
+    h2o_buf_t type;
 
     kh_foreach(mimemap->top->table, ext, type, {
         free((char*)ext);
@@ -66,7 +66,7 @@ void h2o_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const char *ty
     kh_val(mimemap->top->table, iter) = h2o_strdup(NULL, type, SIZE_MAX);
 }
 
-uv_buf_t h2o_get_mimetype(h2o_mimemap_t *mimemap, const char *ext)
+h2o_buf_t h2o_get_mimetype(h2o_mimemap_t *mimemap, const char *ext)
 {
     if (ext != NULL) {
         khiter_t iter = kh_get(exttable, mimemap->top->table, ext);

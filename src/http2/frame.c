@@ -72,15 +72,15 @@ uint8_t *h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type
     return dst;
 }
 
-static uint8_t *allocate_frame(uv_buf_t *outbuf, h2o_mempool_t *pool, size_t length, uint8_t type, uint8_t flags, int32_t stream_id)
+static uint8_t *allocate_frame(h2o_buf_t *outbuf, h2o_mempool_t *pool, size_t length, uint8_t type, uint8_t flags, int32_t stream_id)
 {
-    *outbuf = uv_buf_init(h2o_mempool_alloc(pool, H2O_HTTP2_FRAME_HEADER_SIZE + length), (unsigned)(H2O_HTTP2_FRAME_HEADER_SIZE + length));
+    *outbuf = h2o_buf_init(h2o_mempool_alloc(pool, H2O_HTTP2_FRAME_HEADER_SIZE + length), H2O_HTTP2_FRAME_HEADER_SIZE + length);
     return h2o_http2_encode_frame_header((uint8_t*)outbuf->base, length, type, flags, stream_id);
 }
 
-uv_buf_t h2o_http2_encode_rst_stream_frame(h2o_mempool_t *pool, uint32_t stream_id, int errnum)
+h2o_buf_t h2o_http2_encode_rst_stream_frame(h2o_mempool_t *pool, uint32_t stream_id, int errnum)
 {
-    uv_buf_t ret;
+    h2o_buf_t ret;
     uint8_t *dst = allocate_frame(&ret, pool, 4, H2O_HTTP2_FRAME_TYPE_GOAWAY, 0, stream_id);
 
     dst = encode32u(dst, errnum);
@@ -89,9 +89,9 @@ uv_buf_t h2o_http2_encode_rst_stream_frame(h2o_mempool_t *pool, uint32_t stream_
     return ret;
 }
 
-uv_buf_t h2o_http2_encode_ping_frame(h2o_mempool_t *pool, int is_ack, const uint8_t *data)
+h2o_buf_t h2o_http2_encode_ping_frame(h2o_mempool_t *pool, int is_ack, const uint8_t *data)
 {
-    uv_buf_t ret;
+    h2o_buf_t ret;
     uint8_t *dst = allocate_frame(&ret, pool, 8, H2O_HTTP2_FRAME_TYPE_PING, is_ack ? H2O_HTTP2_FRAME_FLAG_ACK : 0, 0);
 
     memcpy(dst, data, 8);
@@ -101,9 +101,9 @@ uv_buf_t h2o_http2_encode_ping_frame(h2o_mempool_t *pool, int is_ack, const uint
     return ret;
 }
 
-uv_buf_t h2o_http2_encode_goaway_frame(h2o_mempool_t *pool, uint32_t last_stream_id, int errno)
+h2o_buf_t h2o_http2_encode_goaway_frame(h2o_mempool_t *pool, uint32_t last_stream_id, int errno)
 {
-    uv_buf_t ret;
+    h2o_buf_t ret;
     uint8_t *dst = allocate_frame(&ret, pool, 8, H2O_HTTP2_FRAME_TYPE_GOAWAY, 0, 0);
 
     dst = encode32u(dst, last_stream_id);
@@ -113,9 +113,9 @@ uv_buf_t h2o_http2_encode_goaway_frame(h2o_mempool_t *pool, uint32_t last_stream
     return ret;
 }
 
-uv_buf_t h2o_http2_encode_window_update_frame(h2o_mempool_t *pool, uint32_t stream_id, int32_t window_size_increment)
+h2o_buf_t h2o_http2_encode_window_update_frame(h2o_mempool_t *pool, uint32_t stream_id, int32_t window_size_increment)
 {
-    uv_buf_t ret;
+    h2o_buf_t ret;
     uint8_t *dst = allocate_frame(&ret, pool, 4, H2O_HTTP2_FRAME_TYPE_WINDOW_UPDATE, 0, stream_id);
 
     dst = encode32u(dst, window_size_increment);

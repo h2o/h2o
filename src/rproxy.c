@@ -61,7 +61,7 @@ static int parse_url(h2o_mempool_t *pool, const char *url, char const **host, ui
     return 1;
 }
 
-static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *inbufs, size_t inbufcnt, int is_final)
+static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, size_t inbufcnt, int is_final)
 {
     struct rproxy_t *self = (void*)_self;
     const char *host, *path;
@@ -81,7 +81,7 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, uv_buf_t *inbufs, s
     }
 
     /* NOT IMPLEMENTED!!! */
-    uv_buf_t body = h2o_sprintf(
+    h2o_buf_t body = h2o_sprintf(
         &req->pool,
         "reproxy request to URL: %s\n"
         "  host: %s\n"
@@ -107,7 +107,7 @@ static void on_start_response(h2o_filter_t *self, h2o_req_t *req)
 {
     struct rproxy_t *rproxy;
     ssize_t reproxy_header_index;
-    uv_buf_t reproxy_url;
+    h2o_buf_t reproxy_url;
 
     /* do nothing unless 200 */
     if (req->res.status != 200)

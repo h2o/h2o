@@ -26,14 +26,14 @@
 #include "h2o/http2.h"
 #include "internal.h"
 
-static const uv_buf_t CONNECTION_PREFACE = { H2O_STRLIT("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n") };
+static const h2o_buf_t CONNECTION_PREFACE = { H2O_STRLIT("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n") };
 
-static const uv_buf_t tls_identifiers[] = {
+static const h2o_buf_t tls_identifiers[] = {
     { H2O_STRLIT("h2-14") },
     { NULL, 0 }
 };
 
-const uv_buf_t *h2o_http2_tls_identifiers = tls_identifiers;
+const h2o_buf_t *h2o_http2_tls_identifiers = tls_identifiers;
 
 const h2o_http2_settings_t H2O_HTTP2_SETTINGS_HOST = {
     /* header_table_size = */ 4096,
@@ -43,7 +43,7 @@ const h2o_http2_settings_t H2O_HTTP2_SETTINGS_HOST = {
     /* max_frame_size = */ 16384
 };
 
-static const uv_buf_t SETTINGS_HOST_BIN = {
+static const h2o_buf_t SETTINGS_HOST_BIN = {
     H2O_STRLIT(
         "\x00\x00\x12" /* frame size */
         "\x04" /* settings frame */
@@ -181,7 +181,7 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     h2o_mempool_clear(&conn->_write._pools[1]);
     assert(conn->_write.streams_with_pending_data == NULL);
     assert(conn->_write.streams_without_pending_data == NULL);
-    assert(! h2o_timeout_entry_is_linked(&conn->_write.timeout_entry));
+    assert(! h2o_timeout_is_linked(&conn->_write.timeout_entry));
 
     h2o_socket_close(conn->sock);
     free(conn);
@@ -195,15 +195,15 @@ static void close_connection(h2o_http2_conn_t *conn)
     if (conn->_write.wreq_in_flight) {
         /* there is a pending write, let on_write_complete actually close the connection */
     } else {
-        if (h2o_timeout_entry_is_linked(&conn->_write.timeout_entry))
-            h2o_timeout_unlink_entry(&conn->super.ctx->zero_timeout, &conn->_write.timeout_entry);
+        if (h2o_timeout_is_linked(&conn->_write.timeout_entry))
+            h2o_timeout_unlink(&conn->super.ctx->zero_timeout, &conn->_write.timeout_entry);
         close_connection_now(conn);
     }
 }
 
 static void enqueue_goaway_and_initiate_close(h2o_http2_conn_t *conn, int errnum)
 {
-    uv_buf_t goaway = h2o_http2_encode_goaway_frame(conn->_write.pool, conn->max_processed_stream_id, -errnum);
+    h2o_buf_t goaway = h2o_http2_encode_goaway_frame(conn->_write.pool, conn->max_processed_stream_id, -errnum);
     h2o_http2_conn_enqueue_write(conn, goaway);
     conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
 }
@@ -213,7 +213,7 @@ static void send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum)
     assert(conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING);
 
     if (stream_id != 0) {
-        uv_buf_t rst_frame = h2o_http2_encode_rst_stream_frame(conn->_write.pool, stream_id, -errnum);
+        h2o_buf_t rst_frame = h2o_http2_encode_rst_stream_frame(conn->_write.pool, stream_id, -errnum);
         h2o_http2_conn_enqueue_write(conn, rst_frame);
     } else {
         enqueue_goaway_and_initiate_close(conn, errnum);
@@ -225,8 +225,8 @@ static void request_gathered_write(h2o_http2_conn_t *conn)
     if (conn->_write.wreq_in_flight) {
         conn->_write.write_once_more = 1;
     } else {
-        if (! h2o_timeout_entry_is_linked(&conn->_write.timeout_entry))
-            h2o_timeout_link_entry(&conn->super.ctx->zero_timeout, &conn->_write.timeout_entry);
+        if (! h2o_timeout_is_linked(&conn->_write.timeout_entry))
+            h2o_timeout_link(conn->super.ctx, &conn->super.ctx->zero_timeout, &conn->_write.timeout_entry);
     }
 }
 
@@ -387,7 +387,7 @@ static void handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fra
         { /* schedule ack */
             uint8_t *header_buf = h2o_mempool_alloc(conn->_write.pool, H2O_HTTP2_FRAME_HEADER_SIZE);
             h2o_http2_encode_frame_header(header_buf, 0, H2O_HTTP2_FRAME_TYPE_SETTINGS, H2O_HTTP2_FRAME_FLAG_ACK, 0);
-            h2o_http2_conn_enqueue_write(conn, uv_buf_init((char*)header_buf, H2O_HTTP2_FRAME_HEADER_SIZE));
+            h2o_http2_conn_enqueue_write(conn, h2o_buf_init(header_buf, H2O_HTTP2_FRAME_HEADER_SIZE));
         }
         /* apply the change to window size */
         if (prev_initial_window_size != conn->peer_settings.initial_window_size) {
@@ -443,7 +443,7 @@ static void handle_goaway_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
 static void handle_ping_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
 {
     h2o_http2_ping_payload_t payload;
-    uv_buf_t pong;
+    h2o_buf_t pong;
 
     if (frame->stream_id != 0 || h2o_http2_decode_ping_payload(&payload, frame) != 0) {
         send_error(conn, 0, H2O_HTTP2_ERROR_PROTOCOL);
@@ -586,12 +586,12 @@ static void on_upgrade_complete(void *_conn, h2o_socket_t *sock, size_t reqsize)
     }
 }
 
-void h2o_http2_conn_enqueue_write(h2o_http2_conn_t *conn, uv_buf_t buf)
+void h2o_http2_conn_enqueue_write(h2o_http2_conn_t *conn, h2o_buf_t buf)
 {
     if (conn->state == H2O_HTTP2_CONN_STATE_IS_CLOSING)
         return;
     request_gathered_write(conn);
-    h2o_vector_reserve(conn->_write.pool, (h2o_vector_t*)&conn->_write.bufs, sizeof(uv_buf_t), conn->_write.bufs.size + 1);
+    h2o_vector_reserve(conn->_write.pool, (h2o_vector_t*)&conn->_write.bufs, sizeof(h2o_buf_t), conn->_write.bufs.size + 1);
     conn->_write.bufs.entries[conn->_write.bufs.size++] = buf;
 }
 
@@ -611,12 +611,7 @@ static void on_write_complete(h2o_socket_t *sock, int status)
 
     /* close by error if necessary */
     if (status != 0) {
-        if (uv_last_error(conn->sock->stream->loop).code == UV_ECANCELED) {
-            /* connection has been closed */
-        } else {
-            close_connection_now(conn);
-        }
-        return;
+        close_connection_now(conn);
     }
 
     /* reset the other memory pool */
@@ -718,7 +713,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req)
     h2o_http2_conn_t *http2conn = create_conn(req->conn->ctx, NULL);
     h2o_http1_conn_t *req_conn = (h2o_http1_conn_t*)req->conn;
     ssize_t connection_index, settings_index;
-    uv_buf_t settings_decoded;
+    h2o_buf_t settings_decoded;
 
     assert(req->version < 0x200); /* from HTTP/1.x */
 
@@ -747,7 +742,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req)
     req->res.status = 101;
     req->res.reason = "Switching Protocols";
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, H2O_STRLIT("h2c"));
-    h2o_http1_upgrade(req_conn, (uv_buf_t*)&SETTINGS_HOST_BIN, 1, on_upgrade_complete, http2conn);
+    h2o_http1_upgrade(req_conn, (h2o_buf_t*)&SETTINGS_HOST_BIN, 1, on_upgrade_complete, http2conn);
 
     return 0;
 Error:

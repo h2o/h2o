@@ -78,7 +78,7 @@ void h2o_dispose_request(h2o_req_t *req)
         req->_generator = NULL;
     }
     /* FIXME close ostreams */
-    h2o_timeout_unlink_entry(&req->conn->ctx->zero_timeout, &req->_timeout_entry);
+    h2o_timeout_unlink(&req->conn->ctx->zero_timeout, &req->_timeout_entry);
 
     if (req->version != 0 && req->conn->ctx->access_log != NULL) {
         req->conn->ctx->access_log->log(req->conn->ctx->access_log, req);
@@ -106,7 +106,7 @@ h2o_generator_t *h2o_start_response(h2o_req_t *req, size_t sz)
     return req->_generator;
 }
 
-void h2o_send(h2o_req_t *req, uv_buf_t *bufs, size_t bufcnt, int is_final)
+void h2o_send(h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final)
 {
     size_t i;
 
@@ -135,5 +135,5 @@ h2o_ostream_t *h2o_prepend_output_filter(h2o_req_t *req, size_t sz)
 
 void h2o_schedule_proceed_response(h2o_req_t *req)
 {
-    h2o_timeout_link_entry(&req->conn->ctx->zero_timeout, &req->_timeout_entry);
+    h2o_timeout_link(req->conn->ctx, &req->conn->ctx->zero_timeout, &req->_timeout_entry);
 }

@@ -23,7 +23,7 @@
 #include "h2o/http2.h"
 #include "internal.h"
 
-static void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, uv_buf_t *bufs, size_t bufcnt, int is_final);
+static void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final);
 
 h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req)
 {
@@ -106,7 +106,7 @@ static void encode_data_header_and_consume_window(h2o_http2_conn_t *conn, h2o_ht
     h2o_http2_window_consume_window(&stream->output_window, length);
 }
 
-static uv_buf_t *send_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, uv_buf_t *bufs, size_t bufcnt, int is_final)
+static h2o_buf_t *send_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_buf_t *bufs, size_t bufcnt, int is_final)
 {
     ssize_t max_payload_size = 0, payload_size = 0;
     uint8_t *data_header_slot = NULL;
@@ -121,12 +121,12 @@ static uv_buf_t *send_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, u
                 if ((max_payload_size = calc_max_payload_size(conn, stream)) == 0)
                     goto Exit;
                 data_header_slot = h2o_mempool_alloc(conn->_write.pool, H2O_HTTP2_FRAME_HEADER_SIZE);
-                h2o_http2_conn_enqueue_write(conn, uv_buf_init((char*)data_header_slot, H2O_HTTP2_FRAME_HEADER_SIZE));
+                h2o_http2_conn_enqueue_write(conn, h2o_buf_init(data_header_slot, H2O_HTTP2_FRAME_HEADER_SIZE));
                 payload_size = 0;
             }
             /* emit payload */
             fill_size = sz_min(max_payload_size, bufs->len);
-            h2o_http2_conn_enqueue_write(conn, uv_buf_init(bufs->base, (unsigned)fill_size));
+            h2o_http2_conn_enqueue_write(conn, h2o_buf_init(bufs->base, (unsigned)fill_size));
             bufs->base += fill_size;
             bufs->len -= fill_size;
             payload_size += fill_size;
@@ -137,7 +137,7 @@ static uv_buf_t *send_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, u
         encode_data_header_and_consume_window(conn, stream, data_header_slot, payload_size, is_final);
     } else if (is_final) {
         data_header_slot = h2o_mempool_alloc(conn->_write.pool, H2O_HTTP2_FRAME_HEADER_SIZE);
-        h2o_http2_conn_enqueue_write(conn, uv_buf_init((char*)data_header_slot, H2O_HTTP2_FRAME_HEADER_SIZE));
+        h2o_http2_conn_enqueue_write(conn, h2o_buf_init(data_header_slot, H2O_HTTP2_FRAME_HEADER_SIZE));
         encode_data_header_and_consume_window(conn, stream, data_header_slot, 0, 1);
     }
 
@@ -145,7 +145,7 @@ Exit:
     return bufs;
 }
 
-void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, uv_buf_t *bufs, size_t bufcnt, int is_final)
+void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _ostr_final, self);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t*)req->conn;
@@ -171,8 +171,8 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, uv_buf_t *bufs, size
 
     /* save the contents in queue */
     if (bufcnt != 0) {
-        h2o_vector_reserve(&req->pool, (h2o_vector_t*)&stream->_data, sizeof(uv_buf_t), bufcnt);
-        memcpy(stream->_data.entries, bufs, sizeof(uv_buf_t) * bufcnt);
+        h2o_vector_reserve(&req->pool, (h2o_vector_t*)&stream->_data, sizeof(h2o_buf_t), bufcnt);
+        memcpy(stream->_data.entries, bufs, sizeof(h2o_buf_t) * bufcnt);
         stream->_data.size = bufcnt;
     }
 
@@ -181,7 +181,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, uv_buf_t *bufs, size
 
 void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
-    uv_buf_t *nextbuf;
+    h2o_buf_t *nextbuf;
 
     if (stream->_data.size == 0 || h2o_http2_window_get_window(&stream->output_window) <= 0)
         return;
@@ -193,7 +193,7 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
     } else if (nextbuf != stream->_data.entries) {
         /* adjust the buffer */
         size_t newsize = stream->_data.size - (nextbuf - stream->_data.entries);
-        memmove(stream->_data.entries, nextbuf, sizeof(uv_buf_t) * newsize);
+        memmove(stream->_data.entries, nextbuf, sizeof(h2o_buf_t) * newsize);
         stream->_data.size = newsize;
     }
 }

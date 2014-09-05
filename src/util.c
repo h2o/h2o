@@ -41,9 +41,9 @@ int h2o_lcstris_core(const char *target, const char *test, size_t test_len)
     return 1;
 }
 
-uv_buf_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t slen)
+h2o_buf_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t slen)
 {
-    uv_buf_t ret;
+    h2o_buf_t ret;
 
     if (slen == SIZE_MAX)
         slen = strlen(s);
@@ -60,12 +60,12 @@ uv_buf_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t slen)
 }
 
 __attribute__((format (printf, 2, 3)))
-uv_buf_t h2o_sprintf(h2o_mempool_t *pool, const char *fmt, ...)
+h2o_buf_t h2o_sprintf(h2o_mempool_t *pool, const char *fmt, ...)
 {
     char smallbuf[1024];
     va_list arg;
     int len;
-    uv_buf_t ret;
+    h2o_buf_t ret;
 
     ret.base = NULL;
     ret.len = 0;
@@ -146,15 +146,15 @@ static uint32_t decode_base64url_quad(const char *src)
     return decoded;
 }
 
-uv_buf_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len)
+h2o_buf_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len)
 {
-    uv_buf_t decoded;
+    h2o_buf_t decoded;
     uint32_t t;
     uint8_t* dst;
     char remaining_input[4];
 
     decoded.len = len * 3 / 4;
-    decoded.base = h2o_mempool_alloc(pool, decoded.len);
+    decoded.base = h2o_mempool_alloc(pool, decoded.len + 1);
     dst = (uint8_t*)decoded.base;
 
     while (len >= 4) {
@@ -193,11 +193,12 @@ uv_buf_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len)
     }
 
     assert((char*)dst - decoded.base == decoded.len);
+    decoded.base[decoded.len] = '\0';
 
     return decoded;
 
 Error:
-    return uv_buf_init(NULL, 0);
+    return h2o_buf_init(NULL, 0);
 }
 
 void h2o_base64_encode(char *dst, const uint8_t *src, size_t len, int url_encoded)
@@ -362,11 +363,11 @@ int h2o_contains_token(const char *haysack, size_t haysack_len, const char *need
     return 0;
 }
 
-static uv_buf_t rewrite_traversal(h2o_mempool_t *pool, const char *path, size_t len)
+static h2o_buf_t rewrite_traversal(h2o_mempool_t *pool, const char *path, size_t len)
 {
     const char *src = path, *src_end = path + len;
     char *dst;
-    uv_buf_t ret;
+    h2o_buf_t ret;
 
     dst = ret.base = h2o_mempool_alloc(pool, len + 1);
     if (len == 0 || path[0] != '/')
@@ -388,10 +389,10 @@ static uv_buf_t rewrite_traversal(h2o_mempool_t *pool, const char *path, size_t 
     return ret;
 }
 
-uv_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len)
+h2o_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len)
 {
     const char *p = path, *end = path + len;
-    uv_buf_t ret;
+    h2o_buf_t ret;
 
     if (len == 0 || path[0] != '/')
         goto Rewrite;
@@ -423,7 +424,7 @@ Rewrite:
 void h2o_send_inline(h2o_req_t *req, const char *body, size_t len)
 {
     h2o_generator_t *self;
-    uv_buf_t buf = h2o_strdup(&req->pool, body, len);
+    h2o_buf_t buf = h2o_strdup(&req->pool, body, len);
 
     req->res.content_length = buf.len;
     self = h2o_start_response(req, sizeof(h2o_generator_t));
@@ -456,7 +457,7 @@ void util_test(void)
     note("base64");
     {
         char buf[256];
-        uv_buf_t src = { H2O_STRLIT("The quick brown fox jumps over the lazy dog.") }, decoded;
+        h2o_buf_t src = { H2O_STRLIT("The quick brown fox jumps over the lazy dog.") }, decoded;
         h2o_base64_encode(buf, (const uint8_t*)src.base, src.len, 1);
         ok(strcmp(buf, "VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4") == 0);
         decoded = h2o_decode_base64url(&pool, buf, strlen(buf));

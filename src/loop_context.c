@@ -32,16 +32,29 @@ static void default_dispose_filter(h2o_filter_t *filter)
         filter->next->dispose(filter->next);
 }
 
-void h2o_loop_context_init(h2o_loop_context_t *ctx, uv_loop_t *loop, h2o_req_cb req_cb)
+static void proceed_timeout(h2o_timeout_t *timeout, uint64_t now)
+{
+    while (timeout->_entries != NULL) {
+        h2o_timeout_entry_t *entry = h2o_linklist_get_first(h2o_timeout_entry_t, _link, timeout->_entries);
+        if (entry->wake_at > now) {
+            break;
+        }
+        h2o_linklist_unlink(&timeout->_entries, &entry->_link);
+        entry->wake_at = 0;
+        entry->cb(entry);
+    }
+}
+
+void h2o_loop_context_init(h2o_loop_context_t *ctx, h2o_req_cb req_cb)
 {
     memset(ctx, 0, sizeof(*ctx));
-    ctx->loop = loop;
+    ctx->socket_loop = h2o_socket_loop_create();
     ctx->req_cb = req_cb;
-    h2o_timeout_init(&ctx->zero_timeout, 0, loop);
-    h2o_timeout_init(&ctx->req_timeout, 10000, loop);
+    h2o_timeout_init(ctx, &ctx->zero_timeout, 0);
+    h2o_timeout_init(ctx, &ctx->req_timeout, 10000);
     h2o_add_chunked_encoder(ctx);
     h2o_init_mimemap(&ctx->mimemap, "application/octet-stream");
-    ctx->server_name = uv_buf_init(H2O_STRLIT("h2o/0.1"));
+    ctx->server_name = h2o_buf_init(H2O_STRLIT("h2o/0.1"));
     ctx->max_request_entity_size = 1024 * 1024 * 1024;
     ctx->http1_upgrade_to_http2 = 1;
     ctx->http2_max_concurrent_requests_per_connection = 16;
@@ -53,6 +66,38 @@ void h2o_loop_context_dispose(h2o_loop_context_t *ctx)
         ctx->filters->dispose(ctx->filters);
     }
     h2o_dispose_mimemap(&ctx->mimemap);
+}
+
+int h2o_loop_context_run(h2o_loop_context_t *ctx)
+{
+    uint64_t wake_at = UINT64_MAX;
+
+    /* determine wake_at */
+    if (ctx->_timeouts != NULL) {
+        h2o_timeout_t *timeout = h2o_linklist_get_first(h2o_timeout_t, _link, ctx->_timeouts);
+        do {
+            if (timeout->_entries != NULL) {
+                h2o_timeout_entry_t *entry = h2o_linklist_get_first(h2o_timeout_entry_t, _link, timeout->_entries);
+                if (entry->wake_at < wake_at)
+                    wake_at = entry->wake_at;
+            }
+        } while ((timeout = h2o_linklist_get_next(h2o_timeout_t, _link, timeout))
+            != h2o_linklist_get_first(h2o_timeout_t, _link, ctx->_timeouts));
+    }
+
+    if (h2o_socket_loop_run(ctx->socket_loop, wake_at) != 0)
+        return -1;
+
+    /* run the timeouts */
+    if (ctx->_timeouts != NULL) {
+        h2o_timeout_t *timeout = h2o_linklist_get_first(h2o_timeout_t, _link, ctx->_timeouts);
+        do {
+            proceed_timeout(timeout, h2o_now(ctx));
+        } while ((timeout = h2o_linklist_get_next(h2o_timeout_t, _link, timeout))
+            != h2o_linklist_get_first(h2o_timeout_t, _link, ctx->_timeouts));
+    }
+
+    return 0;
 }
 
 h2o_filter_t *h2o_define_filter(h2o_loop_context_t *context, size_t sz)
@@ -71,7 +116,7 @@ h2o_filter_t *h2o_define_filter(h2o_loop_context_t *context, size_t sz)
 
 void h2o_get_timestamp(h2o_loop_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts)
 {
-    uint64_t now = uv_now(ctx->loop);
+    uint64_t now = h2o_now(ctx);
 
     if (ctx->_timestamp_cache.uv_now_at != now) {
         time_t prev_sec = ctx->_timestamp_cache.tv_at.tv_sec;
@@ -92,13 +137,36 @@ void h2o_get_timestamp(h2o_loop_context_t *ctx, h2o_mempool_t *pool, h2o_timesta
     ts->str = ctx->_timestamp_cache.value;
 }
 
+void h2o_timeout_init(h2o_loop_context_t *ctx, h2o_timeout_t *timeout, uint64_t millis)
+{
+    memset(timeout, 0, sizeof(*timeout));
+    timeout->timeout = millis;
+    h2o_linklist_insert(&ctx->_timeouts, ctx->_timeouts, &timeout->_link);
+}
+
+void h2o_timeout_link(h2o_loop_context_t *ctx, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)
+{
+    /* insert at tail, so the entries are sorted in ascending order */
+    h2o_linklist_insert(&timeout->_entries, timeout->_entries, &entry->_link);
+    /* set data */
+    entry->wake_at = h2o_now(ctx) + timeout->timeout;
+}
+
+void h2o_timeout_unlink(h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)
+{
+    if (h2o_linklist_is_linked(&entry->_link)) {
+        h2o_linklist_unlink(&timeout->_entries, &entry->_link);
+        entry->wake_at = 0;
+    }
+}
+
 static void on_ssl_handshake_complete(h2o_socket_t *sock, int status)
 {
-    const uv_buf_t *ident;
+    const h2o_buf_t *ident;
     h2o_loop_context_t *ctx = sock->data;
     sock->data = NULL;
 
-    uv_buf_t proto;
+    h2o_buf_t proto;
     if (status != 0) {
         h2o_socket_close(sock);
         return;

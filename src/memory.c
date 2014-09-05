@@ -100,7 +100,7 @@ void *h2o_mempool_alloc(h2o_mempool_t *pool, size_t sz)
     return ret;
 }
 
-static void link(h2o_mempool_t *pool, struct st_h2o_mempool_shared_entry_t *entry)
+static void link_shared(h2o_mempool_t *pool, struct st_h2o_mempool_shared_entry_t *entry)
 {
     struct st_h2o_mempool_shared_ref_t *ref = h2o_mempool_alloc(pool, sizeof(struct st_h2o_mempool_shared_ref_t));
     ref->entry = entry;
@@ -113,20 +113,20 @@ void *h2o_mempool_alloc_shared(h2o_mempool_t *pool, size_t sz)
     struct st_h2o_mempool_shared_entry_t *entry = h2o_malloc(offsetof(struct st_h2o_mempool_shared_entry_t, bytes) + sz);
     entry->refcnt = 1;
     if (pool != NULL)
-        link(pool, entry);
+        link_shared(pool, entry);
     return entry->bytes;
 }
 
 void h2o_mempool_link_shared(h2o_mempool_t *pool, void *p)
 {
     h2o_mempool_addref_shared(p);
-    link(pool, H2O_STRUCT_FROM_MEMBER(h2o_mempool_shared_entry_t, bytes, p));
+    link_shared(pool, H2O_STRUCT_FROM_MEMBER(h2o_mempool_shared_entry_t, bytes, p));
 }
 
-uv_buf_t h2o_allocate_input_buffer(h2o_input_buffer_t **_inbuf, size_t initial_size)
+h2o_buf_t h2o_allocate_input_buffer(h2o_input_buffer_t **_inbuf, size_t initial_size)
 {
     h2o_input_buffer_t *inbuf = *_inbuf;
-    uv_buf_t ret;
+    h2o_buf_t ret;
 
     if (inbuf == NULL) {
         inbuf = h2o_malloc(offsetof(h2o_input_buffer_t, bytes) + initial_size);
