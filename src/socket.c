@@ -328,7 +328,7 @@ static void dispose_socket(h2o_socket_t *sock, int status)
     }
     free(sock->input);
     wreq_free_buffer_if_allocated(sock);
-    close(sock->fd);
+    close_socket(sock->fd);
 
     sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED;
     h2o_socket__link_to_statechanged(sock);
