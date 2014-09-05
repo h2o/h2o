@@ -646,7 +646,6 @@
 				);
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
-					"-luv",
 					"-lssl",
 					"-lcrypto",
 				);
@@ -669,7 +668,6 @@
 				);
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
-					"-luv",
 					"-lssl",
 					"-lcrypto",
 				);
@@ -695,7 +693,6 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
-					"-luv",
 					"-lwslay",
 					"-lnettle",
 					"-lssl",
@@ -719,7 +716,6 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
-					"-luv",
 					"-lwslay",
 					"-lnettle",
 					"-lssl",
@@ -749,7 +745,6 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
-					"-luv",
 					"-lssl",
 					"-lcrypto",
 				);
@@ -772,7 +767,6 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
-					"-luv",
 					"-lssl",
 					"-lcrypto",
 				);
