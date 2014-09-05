@@ -19,7 +19,14 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <stdio.h>
 #include <sys/select.h>
+
+#if 1
+# define DEBUG_LOG(...) fprintf(stderr, __VA_ARGS__)
+#else
+# define DEBUG_LOG(...)
+#endif
 
 struct st_h2o_socket_loop_select_t {
     h2o_socket_loop_t super;
@@ -46,20 +53,20 @@ static void update_fdset(struct st_h2o_socket_loop_select_t *loop)
                 assert(loop->socks[sock->fd] == sock);
             }
             if (h2o_socket_is_reading(sock)) {
-//fprintf(stderr, "setting READ for fd: %d\n", sock->fd);
+                DEBUG_LOG("setting READ for fd: %d\n", sock->fd);
                 FD_SET(sock->fd, &loop->readfds);
                 sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_READ;
             } else {
-//fprintf(stderr, "clearing READ for fd: %d\n", sock->fd);
+                DEBUG_LOG("clearing READ for fd: %d\n", sock->fd);
                 FD_CLR(sock->fd, &loop->readfds);
                 sock->_flags &= ~H2O_SOCKET_FLAG_IS_POLLED_FOR_READ;
             }
             if (h2o_socket_is_writing(sock) && sock->_wreq.cnt != 0) {
-//fprintf(stderr, "setting WRITE for fd: %d\n", sock->fd);
+                DEBUG_LOG("setting WRITE for fd: %d\n", sock->fd);
                 FD_SET(sock->fd, &loop->writefds);
                 sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE;
             } else {
-//fprintf(stderr, "clearing WRITE for fd: %d\n", sock->fd);
+                DEBUG_LOG("clearing WRITE for fd: %d\n", sock->fd);
                 FD_CLR(sock->fd, &loop->writefds);
                 sock->_flags &= ~H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE;
             }
@@ -97,7 +104,7 @@ static int proceed(h2o_socket_loop_t *_loop, uint64_t wake_at)
     } while (ret == -1 && errno == EINTR);
     if (ret == -1)
         return -1;
-//fprintf(stderr, "select returned: %d\n", ret);
+    DEBUG_LOG("select returned: %d\n", ret);
 
     update_now(&loop->super);
 
@@ -111,14 +118,14 @@ static int proceed(h2o_socket_loop_t *_loop, uint64_t wake_at)
                 if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED) {
                     sock->_flags |= H2O_SOCKET_FLAG_IS_READ_READY;
                     h2o_socket__link_to_pending(sock);
-//fprintf(stderr, "added fd %d as read_ready\n", fd);
+                    DEBUG_LOG("added fd %d as read_ready\n", fd);
                 }
             }
             if (FD_ISSET(fd, &wfds)) {
                 h2o_socket_t *sock = loop->socks[fd];
                 assert(sock != NULL);
                 if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED) {
-//fprintf(stderr, "handling pending writes on fd %d\n", fd);
+                    DEBUG_LOG("handling pending writes on fd %d\n", fd);
                     h2o_socket__write_pending(loop->socks[fd]);
                 }
             }
@@ -143,7 +150,7 @@ static void on_close(h2o_socket_t *sock)
 {
     struct st_h2o_socket_loop_select_t *loop = (struct st_h2o_socket_loop_select_t*)sock->loop;
     assert(loop->socks[sock->fd] != NULL);
-//fprintf(stderr, "clearing READ/WRITE for fd: %d\n", sock->fd);
+    DEBUG_LOG("clearing READ/WRITE for fd: %d\n", sock->fd);
     FD_CLR(sock->fd, &loop->readfds);
     FD_CLR(sock->fd, &loop->writefds);
 }
