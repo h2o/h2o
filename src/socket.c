@@ -77,9 +77,11 @@ writev(SOCKET fd, const struct iovec *iov, int iovcnt) {
 #ifdef _WIN32
 # define socket_error WSAGetLastError()
 # define read_socket(f, d, s) recv(f, d, s, 0)
+# define close_socket(f) closesocket(f)
 #else
 # define socket_error errno
 # define read_socket(f, d, s) read(fd, d, s)
+# define close_socket(f) close(f)
 #endif
 
 struct st_h2o_socket_ssl_t {
