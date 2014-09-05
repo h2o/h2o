@@ -87,7 +87,6 @@ static int proceed(h2o_socket_loop_t *_loop, uint64_t wake_at)
     /* update status */
     update_fdset(loop);
 
-
     /* call select */
     do {
         /* calc timeout */

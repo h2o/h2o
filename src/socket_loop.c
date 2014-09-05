@@ -80,4 +80,24 @@ int h2o_socket_loop_run(h2o_socket_loop_t *loop, uint64_t max_wait_millis)
     return 0;
 }
 
-#include "socket_loop/select.h"
+#if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_KQUEUE
+/* explicitely specified */
+#else
+# if defined(__APPLE__)
+#  define H2O_USE_KQUEUE 1
+# elif defined(__linux)
+#  define H2O_USE_EPOLL 1
+# else
+#  define H2O_USE_SELECT 1
+# endif
+#endif
+
+#if H2O_USE_SELECET
+# include "socket_loop/select.h"
+#elif H2O_USE_EPOLL
+# include "socket_loop/epoll.h"
+#elif H2O_USE_KQUEUE
+# include "socket_loop/kqueue.h"
+#else
+# error "poller not specified"
+#endif
