@@ -109,6 +109,7 @@
 		1065E6F119B953C900686E72 /* linklist.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = linklist.c; sourceTree = "<group>"; };
 		1065E6F419B996B400686E72 /* select.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = select.h; sourceTree = "<group>"; };
 		1065E6F619B99E6D00686E72 /* kqueue.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = kqueue.h; sourceTree = "<group>"; };
+		1065E6F719B9B1AC00686E72 /* epoll.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = epoll.h; sourceTree = "<group>"; };
 		1079231519A320A700C52AD6 /* libh2o.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libh2o.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		1079232619A3210D00C52AD6 /* khash.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = khash.h; sourceTree = "<group>"; };
 		1079235A19A3210D00C52AD6 /* picohttpparser.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picohttpparser.c; sourceTree = "<group>"; };
@@ -188,6 +189,7 @@
 			children = (
 				1065E6F419B996B400686E72 /* select.h */,
 				1065E6F619B99E6D00686E72 /* kqueue.h */,
+				1065E6F719B9B1AC00686E72 /* epoll.h */,
 			);
 			path = socket_loop;
 			sourceTree = "<group>";

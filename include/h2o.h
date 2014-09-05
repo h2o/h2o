@@ -137,6 +137,7 @@ typedef struct st_h2o_timeout_t {
 #define H2O_SOCKET_FLAG_IS_POLLED_FOR_READ 0x8
 #define H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE 0x10
 #define H2O_SOCKET_FLAG_IS_ACCEPT 0x20
+#define H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED 0x1000
 
 struct st_h2o_socket_t {
     int fd;
