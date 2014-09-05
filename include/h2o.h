@@ -62,6 +62,8 @@ typedef struct st_h2o_ssl_context_t h2o_ssl_context_t;
 
 typedef void (*h2o_req_cb)(h2o_req_t *req);
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, int err);
+typedef int (*h2o_socket_loop_proceed_cb)(h2o_socket_loop_t *loop, uint64_t wake_at);
+typedef void (*h2o_socket_loop_socket_state_change_cb)(h2o_socket_t *sock);
 
 typedef struct st_h2o_buf_t {
     char *base;
@@ -169,9 +171,9 @@ struct st_h2o_socket_loop_t {
         h2o_socket_t *head;
         h2o_socket_t **tail_ref;
     } _statechanged;
-    int (*_proceed)(h2o_socket_loop_t *loop, uint64_t wake_at);
-    void (*_on_create)(h2o_socket_t *sock);
-    void (*_on_close)(h2o_socket_t *sock);
+    h2o_socket_loop_proceed_cb _proceed;
+    h2o_socket_loop_socket_state_change_cb _on_create;
+    h2o_socket_loop_socket_state_change_cb _on_close;
 };
 
 typedef struct st_h2o_filter_t {
