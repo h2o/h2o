@@ -85,7 +85,7 @@ static ssize_t recv_callback(wslay_event_context_ptr ctx, uint8_t *buf, size_t l
 static ssize_t send_callback(wslay_event_context_ptr ctx, const uint8_t *data, size_t len, int flags, void *_conn)
 {
     h2o_websocket_conn_t *conn = _conn;
-    uv_buf_t buf;
+    h2o_buf_t buf;
 
     /* return WOULDBLOCK if pending (TODO: queue fixed number of chunks, instead of only one) */
     if (h2o_socket_is_writing(conn->sock)) {

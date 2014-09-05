@@ -42,7 +42,7 @@ static void sendfile_proceed(h2o_generator_t *_self, h2o_req_t *req, int status)
     struct sendfile_t *self = (void*)_self;
     size_t rlen;
     ssize_t rret;
-    uv_buf_t buf;
+    h2o_buf_t vec;
     int is_final;
 
     if (status != 0) {
@@ -64,19 +64,19 @@ static void sendfile_proceed(h2o_generator_t *_self, h2o_req_t *req, int status)
     is_final = self->bytesleft == 0;
 
     /* send */
-    buf.base = self->buf;
-    buf.len = rret;
-    h2o_send(req, &buf, 1, is_final);
+    vec.base = self->buf;
+    vec.len = rret;
+    h2o_send(req, &vec, 1, is_final);
 
 Exit:
     if (is_final)
         close(self->fd);
 }
 
-int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *path, uv_buf_t *mime_type)
+int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *path, h2o_buf_t *mime_type)
 {
     struct sendfile_t *self;
-    uv_buf_t mime_type_buf;
+    h2o_buf_t mime_type_buf;
     int fd;
     struct stat st;
     size_t bufsz;
