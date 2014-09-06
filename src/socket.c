@@ -414,9 +414,8 @@ Notify:
 void h2o_socket__link_to_pending(h2o_socket_t *sock)
 {
     if (sock->_next_pending == sock) {
-        sock->_next_pending = NULL;
-        *sock->loop->_pending.tail_ref = sock;
-        sock->loop->_pending.tail_ref = &sock->_next_pending;
+        sock->_next_pending = sock->loop->_pending;
+        sock->loop->_pending = sock;
     }
 }
 
