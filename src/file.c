@@ -19,12 +19,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <errno.h>
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/stat.h>
-#include <unistd.h>
 #include "h2o.h"
 
 #define MAX_BUF_SIZE 65536
@@ -40,8 +36,8 @@ struct sendfile_t {
 static void sendfile_proceed(h2o_generator_t *_self, h2o_req_t *req, int status)
 {
     struct sendfile_t *self = (void*)_self;
+    uv_fs_t fsreq;
     size_t rlen;
-    ssize_t rret;
     uv_buf_t buf;
     int is_final;
 
@@ -54,23 +50,26 @@ static void sendfile_proceed(h2o_generator_t *_self, h2o_req_t *req, int status)
     rlen = self->bytesleft;
     if (rlen > MAX_BUF_SIZE)
         rlen = MAX_BUF_SIZE;
-    while ((rret = read(self->fd, self->buf, rlen)) == -1 && errno == EINTR)
-        ;
-    if (rret == -1) {
+    uv_fs_read(req->conn->ctx->loop, &fsreq, self->fd, self->buf, rlen, -1, NULL);
+    uv_fs_req_cleanup(&fsreq);
+    if (fsreq.result <= 0) {
+        /* TODO notify the error downstream */
         is_final = 1;
         goto Exit;
     }
-    self->bytesleft -= rret;
+    self->bytesleft -= fsreq.result;
     is_final = self->bytesleft == 0;
 
     /* send */
     buf.base = self->buf;
-    buf.len = rret;
+    buf.len = fsreq.result;
     h2o_send(req, &buf, 1, is_final);
 
 Exit:
-    if (is_final)
-        close(self->fd);
+    if (is_final) {
+        uv_fs_close(req->conn->ctx->loop, &fsreq, self->fd, NULL);
+        uv_fs_req_cleanup(&fsreq);
+    }
 }
 
 int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *path, uv_buf_t *mime_type)
@@ -78,36 +77,37 @@ int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *pa
     struct sendfile_t *self;
     uv_buf_t mime_type_buf;
     int fd;
-    struct stat st;
+    uv_fs_t fsreq;
     size_t bufsz;
+    size_t bytesleft;
 
     if (mime_type == NULL)
         *(mime_type = &mime_type_buf) = h2o_get_mimetype(&req->conn->ctx->mimemap, h2o_get_filext(path, strlen(path)));
 
     /* open file and stat */
-    if ((fd = open(path, O_RDONLY)) == -1)
+    fd = uv_fs_open(req->conn->ctx->loop, &fsreq, path, O_RDONLY, 0, NULL);
+    uv_fs_req_cleanup(&fsreq);
+    if (fd == -1)
         return -1;
-    if (fstat(fd, &st) != 0) {
-        assert(!"FIMXE");
-        close(fd);
-        return -1;
-    }
+    uv_fs_fstat(req->conn->ctx->loop, &fsreq, fd, NULL);
+    uv_fs_req_cleanup(&fsreq);
+    bytesleft = fsreq.statbuf.st_size;
 
     /* build response */
     req->res.status = status;
     req->res.reason = reason;
-    req->res.content_length = st.st_size;
+    req->res.content_length = bytesleft;
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, mime_type->base, mime_type->len);
 
     /* instantiate the generator */
     bufsz = MAX_BUF_SIZE;
-    if (st.st_size < bufsz)
-        bufsz = st.st_size;
+    if (bytesleft < bufsz)
+        bufsz = bytesleft;
     self = (void*)h2o_start_response(req, offsetof(struct sendfile_t, buf) + bufsz);
     self->super.proceed = sendfile_proceed;
     self->fd = fd;
     self->req = req;
-    self->bytesleft = st.st_size;
+    self->bytesleft = bytesleft;
 
     /* send data */
     sendfile_proceed(&self->super, req, 0);
