@@ -612,6 +612,7 @@ static void on_write_complete(h2o_socket_t *sock, int status)
     /* close by error if necessary */
     if (status != 0) {
         close_connection_now(conn);
+        return;
     }
 
     /* reset the other memory pool */
