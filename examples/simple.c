@@ -137,6 +137,8 @@ static int create_listener(void)
 
 int main(int argc, char **argv)
 {
+    signal(SIGPIPE, SIG_IGN);
+
     h2o_loop_context_init(&loop_ctx, on_req);
     h2o_define_mimetype(&loop_ctx.mimemap, "html", "text/html");
     h2o_add_reproxy_url(&loop_ctx);
