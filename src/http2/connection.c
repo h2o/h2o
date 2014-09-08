@@ -225,7 +225,7 @@ static void send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum)
 
 static void request_gathered_write(h2o_http2_conn_t *conn)
 {
-    assert(! conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING);
+    assert(conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING);
     if (conn->_write.wreq_in_flight) {
         conn->_write.write_once_more = 1;
     } else {
