@@ -27,6 +27,26 @@
 #include <stdarg.h>
 #include "h2o.h"
 
+#ifdef _WIN32
+struct tm *
+localtime_r(const time_t *t, struct tm *r) {
+     struct tm *lt = localtime(t);
+     if (lt == NULL || r == NULL)
+         return NULL;
+     memcpy(r, lt, sizeof(struct tm));
+     return r;
+}
+
+struct tm *
+gmtime_r(const time_t *t, struct tm *r) {
+     struct tm *lt = gmtime(t);
+     if (lt == NULL || r == NULL)
+         return NULL;
+     memcpy(r, lt, sizeof(struct tm));
+     return r;
+}
+#endif
+
 void h2o_fatal(const char *msg)
 {
     fprintf(stderr, "fatal:%s\n", msg);
@@ -267,7 +287,12 @@ void h2o_time2str_log(char *buf, time_t time)
 {
     struct tm localt;
     localtime_r(&time, &localt);
+#ifdef _WIN32
+    extern __declspec(dllimport) long _timezone;
+    int gmt_off = (int)(_timezone / 60);
+#else
     int gmt_off = (int)(localt.tm_gmtoff / 60);
+#endif
     int gmt_sign;
 
     if (gmt_off >= 0) {

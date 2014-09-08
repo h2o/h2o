@@ -19,14 +19,20 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <alloca.h>
-#include <errno.h>
-#include <limits.h>
-#include <netinet/in.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
+#ifdef _WIN32
+# include <ws2tcpip.h>
+# include <malloc.h>
+# include <stdio.h>
+#else
+# include <alloca.h>
+# include <errno.h>
+# include <limits.h>
+# include <netinet/in.h>
+# include <stdio.h>
+# include <stdlib.h>
+# include <sys/socket.h>
+# include <sys/stat.h>
+#endif
 #include "h2o.h"
 #include "h2o/http2.h"
 
@@ -111,7 +117,12 @@ static void on_accept(h2o_socket_t *listener, int status)
 static int create_listener(void)
 {
     struct sockaddr_in addr;
-    int fd, reuseaddr_flag = 1;
+    int fd;
+#ifdef _WIN32
+    char reuseaddr_flag = 1;
+#else
+    int reuseaddr_flag = 1;
+#endif
     h2o_socket_t *sock;
 
     h2o_loop_context_init(&loop_ctx, on_req);
@@ -137,6 +148,10 @@ static int create_listener(void)
 
 int main(int argc, char **argv)
 {
+#ifdef _WIN32
+    WSADATA wsaData;
+    WSAStartup(MAKEWORD(2, 0), &wsaData);
+#endif
     h2o_loop_context_init(&loop_ctx, on_req);
     h2o_define_mimetype(&loop_ctx.mimemap, "html", "text/html");
     h2o_add_reproxy_url(&loop_ctx);

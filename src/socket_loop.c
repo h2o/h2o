@@ -55,7 +55,6 @@ static h2o_socket_loop_t *create_socket_loop(size_t sz, h2o_socket_loop_proceed_
     loop->_proceed = proceed;
     loop->_on_create = on_create;
     loop->_on_close = on_close;
-    loop->_pending.tail_ref = &loop->_pending.head;
     loop->_statechanged.tail_ref = &loop->_statechanged.head;
 
     return loop;
@@ -68,11 +67,10 @@ int h2o_socket_loop_run(h2o_socket_loop_t *loop, uint64_t max_wait_millis)
         return -1;
 
     /* call the pending callbacks */
-    while (loop->_pending.head != NULL) {
+    while (loop->_pending != NULL) {
         /* detach the first sock and run */
-        h2o_socket_t *sock = loop->_pending.head;
-        if ((loop->_pending.head = sock->_next_pending) == NULL)
-            loop->_pending.tail_ref = &loop->_pending.head;
+        h2o_socket_t *sock = loop->_pending;
+        loop->_pending = sock->_next_pending;
         sock->_next_pending = sock;
         run_socket(sock);
     }
@@ -92,8 +90,12 @@ int h2o_socket_loop_run(h2o_socket_loop_t *loop, uint64_t max_wait_millis)
 # endif
 #endif
 
-#if H2O_USE_SELECET
-# include "socket_loop/select.h"
+#if H2O_USE_SELECT
+# ifdef _WIN32
+#  include "socket_loop/select_w32.h"
+# else
+#  include "socket_loop/select.h"
+# endif
 #elif H2O_USE_EPOLL
 # include "socket_loop/epoll.h"
 #elif H2O_USE_KQUEUE

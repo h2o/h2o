@@ -19,10 +19,15 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <alloca.h>
+#ifdef _WIN32
+# include <malloc.h>
+#else
+# include <alloca.h>
+#endif
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <inttypes.h>
 #include "h2o.h"
 
 typedef struct st_chunked_encoder_t {
@@ -44,7 +49,7 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, 
     /* create chunk header */
     if (chunk_size != 0) {
         outbufs[outbufcnt].base = self->buf;
-        outbufs[outbufcnt].len = h2o_snprintf(self->buf, sizeof(self->buf), "%zx\r\n", chunk_size);
+        outbufs[outbufcnt].len = h2o_snprintf(self->buf, sizeof(self->buf), "%" PRIx32 "\r\n", chunk_size);
         outbufcnt++;
     }
     /* set output data */
