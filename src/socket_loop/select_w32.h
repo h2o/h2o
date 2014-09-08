@@ -69,7 +69,7 @@ static void update_fdset(struct st_h2o_socket_loop_select_t *loop)
                 sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_READ;
             } else {
                 DEBUG_LOG("clearing READ for fd: %d\n", sock->fd);
-                //FD_CLR(sock->fd, &loop->readfds);
+                FD_CLR(sock->fd, &loop->readfds);
                 sock->_flags &= ~H2O_SOCKET_FLAG_IS_POLLED_FOR_READ;
             }
             if (h2o_socket_is_writing(sock) && sock->_wreq.cnt != 0) {
@@ -78,7 +78,7 @@ static void update_fdset(struct st_h2o_socket_loop_select_t *loop)
                 sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE;
             } else {
                 DEBUG_LOG("clearing WRITE for fd: %d\n", sock->fd);
-                //FD_CLR(sock->fd, &loop->writefds);
+                FD_CLR(sock->fd, &loop->writefds);
                 sock->_flags &= ~H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE;
             }
         }
