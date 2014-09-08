@@ -19,7 +19,11 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <alloca.h>
+#ifdef _WIN32
+# include <malloc.h>
+#else
+# include <alloca.h>
+#endif
 #include <inttypes.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -302,7 +306,7 @@ static void flatten_headers(h2o_req_t *req, h2o_buf_t *bufs, const char *connect
     if (req->res.content_length != SIZE_MAX) {
         bufs[0] = h2o_sprintf(
             &req->pool,
-            "HTTP/1.1 %d %s\r\ndate: %.*s\r\nserver: %.*s\r\nconnection: %s\r\ncontent-length: %zu\r\n",
+            "HTTP/1.1 %d %s\r\ndate: %.*s\r\nserver: %.*s\r\nconnection: %s\r\ncontent-length: %" PRIu32 "\r\n",
             req->res.status, req->res.reason,
             (int)H2O_TIMESTR_RFC1123_LEN, ts.str->rfc1123,
             (int)req->conn->ctx->server_name.len, req->conn->ctx->server_name.base,

@@ -19,11 +19,19 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/socket.h>
+#ifdef _WIN32
+# include <ws2tcpip.h>
+# include <fcntl.h>
+# include <stdio.h>
+# include <stdlib.h>
+# include <inttypes.h>
+#else
+# include <fcntl.h>
+# include <netinet/in.h>
+# include <stdio.h>
+# include <stdlib.h>
+# include <sys/socket.h>
+#endif
 #include "h2o.h"
 
 struct st_h2o_default_access_log_t {
@@ -48,7 +56,7 @@ static void access_log(h2o_access_log_t *_self, h2o_req_t *req)
 
     line = h2o_sprintf(
         &req->pool,
-        "%s - - [%.*s] \"%.*s %.*s HTTP/%d.%d\" %d %llu\n",
+        "%s - - [%.*s] \"%.*s %.*s HTTP/%d.%d\" %d %" PRIu64 "\n",
         peername,
         (int)H2O_TIMESTR_LOG_LEN, req->processed_at.str->log,
         (int)req->method_len, req->method,

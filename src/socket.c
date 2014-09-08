@@ -19,14 +19,20 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#ifdef _WIN32
+# include <ws2tcpip.h>
+# define IOV_MAX 65536
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <string.h>
 #include <openssl/ssl.h>
 #include <unistd.h>
-#include <sys/socket.h>
-#include <sys/uio.h>
+#ifndef _WIN32
+# include <sys/socket.h>
+# include <sys/uio.h>
+#endif
 #include "h2o.h"
 
 #if defined(__APPLE__) && defined(__clang__)
@@ -35,6 +41,47 @@
 
 #ifndef IOV_MAX
 # define IOV_MAX UIO_MAXIOV
+#endif
+
+#ifdef _WIN32
+struct iovec {
+	unsigned long len;
+	char *buf;
+};
+
+static ssize_t
+writev(SOCKET fd, const struct iovec *iov, int iovcnt) {
+    DWORD count = 0;
+    int i, res = 0;
+    h2o_buf_t *bufs = (h2o_buf_t*) iov;
+    for (i = 0; i < iovcnt; i++) {
+        res = send(fd, bufs[i].base, bufs[i].len, 0);
+        if (res == -1)
+            break;
+        ++count;
+    }
+    return (res == 0 ? count : -1);
+}
+
+# undef  read_socket
+# undef  EINTR
+# define EINTR        WSAEINTR
+# undef  EWOULDBLOCK
+# define EWOULDBLOCK  WSAEWOULDBLOCK
+# undef  EAGAIN
+# define EAGAIN       WSAEWOULDBLOCK
+# undef  EINPROGRESS
+# define EINPROGRESS  WSAEINPROGRESS
+#endif
+
+#ifdef _WIN32
+# define socket_error WSAGetLastError()
+# define read_socket(f, d, s) recv(f, d, s, 0)
+# define close_socket(f) closesocket(f)
+#else
+# define socket_error errno
+# define read_socket(f, d, s) read(fd, d, s)
+# define close_socket(f) close(f)
 #endif
 
 struct st_h2o_socket_ssl_t {
@@ -136,10 +183,10 @@ static int on_read_core(int fd, h2o_input_buffer_t** input)
     while (1) {
         h2o_buf_t buf = h2o_allocate_input_buffer(input, 8192);
         ssize_t rret;
-        while ((rret = read(fd, buf.base, buf.len)) == -1 && errno == EINTR)
+        while ((rret = read_socket(fd, buf.base, buf.len)) == -1 && socket_error == EINTR)
             ;
         if (rret == -1) {
-            if (errno == EAGAIN)
+            if (socket_error == EAGAIN)
                 break;
             else
                 return -1;
@@ -174,10 +221,10 @@ static int write_core(int fd, h2o_buf_t **bufs, size_t *bufcnt)
         iovcnt = IOV_MAX;
         if (*bufcnt < iovcnt)
             iovcnt = (int)*bufcnt;
-        while ((wret = writev(fd, (struct iovec*)*bufs, iovcnt)) == -1 && errno == EINTR)
+        while ((wret = writev(fd, (struct iovec*)*bufs, iovcnt)) == -1 && socket_error == EINTR)
             ;
         if (wret == -1) {
-            if (errno != EAGAIN)
+            if (socket_error != EAGAIN)
                 return -1;
             break;
         }
@@ -238,7 +285,12 @@ h2o_socket_t *h2o_socket_create(h2o_socket_loop_t *loop, int fd)
 {
     h2o_socket_t *sock;
 
+#ifdef _WIN32
+    u_long nonblock = 1;
+    ioctlsocket(fd, FIONBIO, &nonblock);
+#else
     fcntl(fd, F_SETFL, O_NONBLOCK);
+#endif
 
     sock = h2o_malloc(sizeof(*sock));
     memset(sock, 0, sizeof(*sock));
@@ -276,7 +328,7 @@ static void dispose_socket(h2o_socket_t *sock, int status)
     }
     free(sock->input);
     wreq_free_buffer_if_allocated(sock);
-    close(sock->fd);
+    close_socket(sock->fd);
 
     sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED;
     h2o_socket__link_to_statechanged(sock);
@@ -414,8 +466,9 @@ Notify:
 void h2o_socket__link_to_pending(h2o_socket_t *sock)
 {
     if (sock->_next_pending == sock) {
-        sock->_next_pending = sock->loop->_pending;
-        sock->loop->_pending = sock;
+        sock->_next_pending = NULL;
+        *sock->loop->_pending.tail_ref = sock;
+        sock->loop->_pending.tail_ref = &sock->_next_pending;
     }
 }
 
@@ -497,10 +550,10 @@ void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, h2o_ssl_context_t *ssl_
     proceed_handshake(sock, 0);
 }
 
-#if OPENSSL_VERSION_NUMBER >= 0x10002000L
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L && !defined(_WIN32)
 # define USE_ALPN 1
 # define USE_NPN 1
-#elif OPENSSL_VERSION_NUMBER >= 0x10001000L
+#elif OPENSSL_VERSION_NUMBER >= 0x10001000L && !defined(_WIN32)
 # define USE_ALPN 0
 # define USE_NPN 1
 #else
