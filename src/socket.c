@@ -550,10 +550,10 @@ void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, h2o_ssl_context_t *ssl_
     proceed_handshake(sock, 0);
 }
 
-#if OPENSSL_VERSION_NUMBER >= 0x01000200L && !defined(_WIN32)
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L && !defined(_WIN32)
 # define USE_ALPN 1
 # define USE_NPN 1
-#elif OPENSSL_VERSION_NUMBER >= 0x01000100L && !defined(_WIN32)
+#elif OPENSSL_VERSION_NUMBER >= 0x10001000L && !defined(_WIN32)
 # define USE_ALPN 0
 # define USE_NPN 1
 #else

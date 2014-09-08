@@ -149,8 +149,8 @@ static int create_listener(void)
 int main(int argc, char **argv)
 {
 #ifdef _WIN32
-	WSADATA wsaData;
-	WSAStartup(MAKEWORD(2, 0), &wsaData);
+    WSADATA wsaData;
+    WSAStartup(MAKEWORD(2, 0), &wsaData);
 #endif
     h2o_loop_context_init(&loop_ctx, on_req);
     h2o_define_mimetype(&loop_ctx.mimemap, "html", "text/html");
