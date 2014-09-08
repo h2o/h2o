@@ -173,6 +173,7 @@ struct st_h2o_socket_loop_t {
     h2o_socket_loop_socket_state_change_cb _on_create;
     h2o_socket_loop_socket_state_change_cb _on_close;
     h2o_linklist_t *_timeouts; /* list of h2o_timeout_t */
+    h2o_timeout_t zero_timeout; /* for deferred tasks (0 second timeout is handled separately, since all of them togeter with pending cbs should be invoked before poll) */
 };
 
 typedef struct st_h2o_filter_t {
@@ -203,7 +204,6 @@ typedef struct st_h2o_timestamp_t {
 typedef struct h2o_loop_context_t {
     h2o_socket_loop_t *socket_loop;
     h2o_req_cb req_cb;
-    h2o_timeout_t zero_timeout; /* for deferred tasks */
     h2o_timeout_t req_timeout; /* for request timeout */
     h2o_filter_t *filters;
     h2o_mimemap_t mimemap;

@@ -115,25 +115,23 @@ int h2o_socket_loop_run(h2o_socket_loop_t *loop, uint64_t wake_at)
     run_pending(loop);
 
     /* run the timeouts */
-    while (1) {
-        size_t ncalled = 0;
-        if (loop->_timeouts != NULL) {
-            h2o_timeout_t *timeout = h2o_linklist_get_first(h2o_timeout_t, _link, loop->_timeouts);
-            do {
-                ncalled += proceed_timeout(timeout, loop->now);
-            } while ((timeout = h2o_linklist_get_next(h2o_timeout_t, _link, timeout))
-                != h2o_linklist_get_first(h2o_timeout_t, _link, loop->_timeouts));
-        }
-        ncalled += run_pending(loop);
-        if (ncalled == 0)
-            break;
+    if (loop->_timeouts != NULL) {
+        h2o_timeout_t *timeout = h2o_linklist_get_first(h2o_timeout_t, _link, loop->_timeouts);
+        do {
+            proceed_timeout(timeout, loop->now);
+        } while ((timeout = h2o_linklist_get_next(h2o_timeout_t, _link, timeout))
+            != h2o_linklist_get_first(h2o_timeout_t, _link, loop->_timeouts));
     }
+    /* run deferred tasks and pending callbacks */
+    while (proceed_timeout(&loop->zero_timeout, loop->now) + run_pending(loop) != 0)
+        ;
 
     return 0;
 }
 
 void h2o_timeout_init(h2o_socket_loop_t *loop, h2o_timeout_t *timeout, uint64_t millis)
 {
+    assert(millis != 0 && "use loop->zero_timeout for delayed tasks");
     memset(timeout, 0, sizeof(*timeout));
     timeout->timeout = millis;
     h2o_linklist_insert(&loop->_timeouts, loop->_timeouts, &timeout->_link);
