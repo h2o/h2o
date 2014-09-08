@@ -54,15 +54,16 @@ struct iovec {
 static ssize_t
 writev(SOCKET fd, const struct iovec *iov, int iovcnt) {
     DWORD sent = 0;
+    h2o_buf_t* psend = (h2o_buf_t*) iov;
     LPWSABUF pbuf = alloca(sizeof(WSABUF) * iovcnt);
     int i;
     for (i = 0; i < iovcnt; ++i) {
-        pbuf[i].len = ((h2o_buf_t*) iov)[i].len;
-        pbuf[i].buf = ((h2o_buf_t*) iov)[i].base;
+        pbuf[i].len = psend[i].len;
+        pbuf[i].buf = psend[i].base;
+        sent += pbuf[i].len;
     }
-    if (WSASend(fd, pbuf, iovcnt, &sent, 0, NULL, NULL) == 0) {
-        return sent;
-    }
+    if (WSASend(fd, pbuf, iovcnt, NULL, 0, NULL, NULL) == 0)
+        return (ssize_t) sent;
     return -1;
 }
 
