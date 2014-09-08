@@ -163,7 +163,8 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
         break;
     }
 
-    run_pending_requests(conn);
+    if (conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING)
+        run_pending_requests(conn);
 }
 
 static void close_connection_now(h2o_http2_conn_t *conn)
