@@ -168,10 +168,7 @@ struct st_h2o_socket_t {
 
 struct st_h2o_socket_loop_t {
     uint64_t now;
-    struct {
-        h2o_socket_t *head;
-        h2o_socket_t **tail_ref;
-    } _pending;
+    h2o_socket_t *_pending;
     struct {
         h2o_socket_t *head;
         h2o_socket_t **tail_ref;
