@@ -23,6 +23,7 @@
 #include <errno.h>
 #include <limits.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
