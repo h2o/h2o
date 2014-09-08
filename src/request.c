@@ -135,5 +135,5 @@ h2o_ostream_t *h2o_prepend_output_filter(h2o_req_t *req, size_t sz)
 
 void h2o_schedule_proceed_response(h2o_req_t *req)
 {
-    h2o_timeout_link(req->conn->ctx, &req->conn->ctx->zero_timeout, &req->_timeout_entry);
+    h2o_timeout_link(req->conn->ctx->socket_loop, &req->conn->ctx->zero_timeout, &req->_timeout_entry);
 }

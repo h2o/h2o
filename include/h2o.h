@@ -172,6 +172,7 @@ struct st_h2o_socket_loop_t {
     h2o_socket_loop_proceed_cb _proceed;
     h2o_socket_loop_socket_state_change_cb _on_create;
     h2o_socket_loop_socket_state_change_cb _on_close;
+    h2o_linklist_t *_timeouts; /* list of h2o_timeout_t */
 };
 
 typedef struct st_h2o_filter_t {
@@ -212,7 +213,6 @@ typedef struct h2o_loop_context_t {
     size_t http2_max_concurrent_requests_per_connection;
     h2o_access_log_t *access_log;
     h2o_ssl_context_t *ssl_ctx;
-    h2o_linklist_t *_timeouts; /* list of h2o_timeout_t */
     struct {
         uint64_t uv_now_at;
         struct timeval tv_at;
@@ -341,6 +341,11 @@ h2o_socket_loop_t *h2o_socket_loop_create(void);
 void h2o_socket_loop_destroy(h2o_socket_loop_t* loop);
 int h2o_socket_loop_run(h2o_socket_loop_t *loop, uint64_t max_wait_millis);
 
+void h2o_timeout_init(h2o_socket_loop_t *loop, h2o_timeout_t *timer, uint64_t timeout);
+void h2o_timeout_link(h2o_socket_loop_t *loop, h2o_timeout_t *timer, h2o_timeout_entry_t *entry);
+void h2o_timeout_unlink(h2o_timeout_t *timer, h2o_timeout_entry_t *entry);
+static int h2o_timeout_is_linked(h2o_timeout_entry_t *entry);
+
 /* headers */
 
 ssize_t h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len, h2o_buf_t *connection, h2o_buf_t *host, h2o_buf_t *upgrade);
@@ -394,11 +399,6 @@ int h2o_loop_context_run(h2o_loop_context_t *context);
 
 h2o_filter_t *h2o_define_filter(h2o_loop_context_t *context, size_t sz);
 void h2o_get_timestamp(h2o_loop_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts);
-
-void h2o_timeout_init(h2o_loop_context_t *ctx, h2o_timeout_t *timer, uint64_t timeout);
-void h2o_timeout_link(h2o_loop_context_t *ctx, h2o_timeout_t *timer, h2o_timeout_entry_t *entry);
-void h2o_timeout_unlink(h2o_timeout_t *timer, h2o_timeout_entry_t *entry);
-static int h2o_timeout_is_linked(h2o_timeout_entry_t *entry);
 
 void h2o_accept(h2o_loop_context_t *ctx, h2o_socket_t *sock);
 

@@ -171,6 +171,8 @@ static void close_connection_now(h2o_http2_conn_t *conn)
 {
     h2o_http2_stream_t *stream;
 
+    assert(! h2o_timeout_is_linked(&conn->_write.timeout_entry));
+
     kh_foreach_value(conn->open_streams, stream, {
         h2o_http2_stream_close(conn, stream);
     });
@@ -223,11 +225,12 @@ static void send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum)
 
 static void request_gathered_write(h2o_http2_conn_t *conn)
 {
+    assert(! conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING);
     if (conn->_write.wreq_in_flight) {
         conn->_write.write_once_more = 1;
     } else {
         if (! h2o_timeout_is_linked(&conn->_write.timeout_entry))
-            h2o_timeout_link(conn->super.ctx, &conn->super.ctx->zero_timeout, &conn->_write.timeout_entry);
+            h2o_timeout_link(conn->super.ctx->socket_loop, &conn->super.ctx->zero_timeout, &conn->_write.timeout_entry);
     }
 }
 
