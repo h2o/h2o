@@ -48,6 +48,7 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
         } else {
             int changed = 0;
             struct epoll_event ev;
+            ev.events = 0;
             if (h2o_socket_is_reading(&sock->super)) {
                 if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_READ) == 0) {
                     sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_READ;
