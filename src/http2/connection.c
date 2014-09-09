@@ -199,7 +199,7 @@ static void close_connection(h2o_http2_conn_t *conn)
         /* there is a pending write, let on_write_complete actually close the connection */
     } else {
         if (h2o_timeout_is_linked(&conn->_write.timeout_entry))
-            h2o_timeout_unlink(&conn->super.ctx->timeouts.zero_timeout, &conn->_write.timeout_entry);
+            h2o_timeout_unlink(&conn->super.ctx->zero_timeout, &conn->_write.timeout_entry);
         close_connection_now(conn);
     }
 }
@@ -230,7 +230,7 @@ static void request_gathered_write(h2o_http2_conn_t *conn)
         conn->_write.write_once_more = 1;
     } else {
         if (! h2o_timeout_is_linked(&conn->_write.timeout_entry))
-            h2o_timeout_link(&conn->super.ctx->timeouts, &conn->super.ctx->timeouts.zero_timeout, &conn->_write.timeout_entry);
+            h2o_timeout_link(conn->super.ctx->loop, &conn->super.ctx->zero_timeout, &conn->_write.timeout_entry);
     }
 }
 

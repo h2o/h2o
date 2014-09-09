@@ -24,13 +24,6 @@
 #include <limits.h>
 #include <string.h>
 #include <openssl/ssl.h>
-#ifdef H2O_USE_LIBUV
-#include <uv.h>
-#else
-#include <unistd.h>
-#include <sys/socket.h>
-#include <sys/uio.h>
-#endif
 #include "h2o.h"
 
 #if defined(__APPLE__) && defined(__clang__)
@@ -61,7 +54,21 @@ struct st_h2o_ssl_context_t {
     h2o_buf_t _npn_list_of_protocols;
 };
 
-static void proceed_handshake(h2o_socket_t *sock, int status);
+/* backend functions */
+static void do_dispose_socket(h2o_socket_t *sock);
+static void do_write(h2o_socket_t *sock, h2o_buf_t *bufs, size_t bufcnt, h2o_socket_cb cb);
+static void do_read_start(h2o_socket_t *sock);
+static void do_read_stop(h2o_socket_t *sock);
+
+/* internal functions called from the backend */
+static int decode_ssl_input(h2o_socket_t *sock);
+static void on_write_complete(h2o_socket_t *sock, int status);
+
+#if H2O_USE_LIBUV
+# include "socket/uv-binding.c.h"
+#else
+# include "socket/evloop.c.h"
+#endif
 
 static int read_bio(BIO *b, char *out, int len)
 {
@@ -135,7 +142,7 @@ static int free_bio(BIO *b)
     return b != NULL;
 }
 
-static int decode_ssl_input(h2o_socket_t *sock)
+int decode_ssl_input(h2o_socket_t *sock)
 {
     assert(sock->ssl != NULL);
     assert(sock->ssl->handshake.cb == NULL);
@@ -158,270 +165,6 @@ static int decode_ssl_input(h2o_socket_t *sock)
     return 0;
 }
 
-#ifdef H2O_USE_LIBUV
-
-static void alloc_inbuf_tcp(uv_handle_t *handle, size_t suggested_size, uv_buf_t *_buf)
-{
-    h2o_socket_t *sock = (h2o_socket_t*)handle;
-    h2o_buf_t buf = h2o_allocate_input_buffer(&sock->input, 8192);
-    memcpy(_buf, &buf, sizeof(buf));
-}
-
-static void alloc_inbuf_ssl(uv_handle_t *handle, size_t suggested_size, uv_buf_t *_buf)
-{
-    h2o_socket_t *sock = (h2o_socket_t*)handle;
-    h2o_buf_t buf = h2o_allocate_input_buffer(&sock->ssl->input.encrypted, 8192);
-    memcpy(_buf, &buf, sizeof(buf));
-}
-
-static void on_read_tcp(uv_stream_t *stream, ssize_t nread, const uv_buf_t* _unused)
-{
-    h2o_socket_t *sock = (h2o_socket_t*)stream;
-
-    if (nread < 0) {
-        sock->_cb.read(sock, -1);
-        return;
-    }
-
-    sock->input->size += nread;
-    sock->_cb.read(sock, 0);
-}
-
-static void on_read_ssl(uv_stream_t *stream, ssize_t nread, const uv_buf_t *_unused)
-{
-    h2o_socket_t *sock = (h2o_socket_t*)stream;
-    int status = -1;
-
-    if (nread != -1) {
-        sock->ssl->input.encrypted->size += nread;
-        status = decode_ssl_input(sock);
-    }
-    sock->_cb.read(sock, status);
-}
-
-static void on_write_complete(uv_write_t *wreq, int status)
-{
-    h2o_socket_t *sock = H2O_STRUCT_FROM_MEMBER(h2o_socket_t, _wreq, wreq);
-    h2o_socket_cb cb;
-
-    if (sock->ssl != NULL) {
-        memset(&sock->ssl->output.bufs, 0, sizeof(sock->ssl->output.bufs));
-        h2o_mempool_clear(&sock->ssl->output.pool);
-    }
-
-    cb = sock->_cb.write;
-    sock->_cb.write = NULL;
-    cb(sock, status);
-}
-
-static void do_write(h2o_socket_t *sock, h2o_buf_t *bufs, size_t bufcnt, h2o_socket_cb cb)
-{
-    assert(sock->_cb.write == NULL);
-    sock->_cb.write = cb;
-
-    uv_write(&sock->_wreq, &sock->uv.stream, (uv_buf_t*)bufs, (int)bufcnt, on_write_complete);
-}
-
-h2o_socket_t *h2o_socket_accept(uv_stream_t *listener)
-{
-    h2o_socket_t *sock = h2o_malloc(sizeof(*sock));
-    memset(sock, 0, sizeof(*sock));
-    uv_tcp_init(listener->loop, &sock->uv.tcp);
-    if (uv_accept(listener, &sock->uv.stream) != 0)
-        goto Error;
-    return sock;
-Error:
-    free(sock);
-    return NULL;
-}
-
-#else
-
-static int on_read_core(int fd, h2o_input_buffer_t** input)
-{
-    int read_any = 0;
-
-    while (1) {
-        h2o_buf_t buf = h2o_allocate_input_buffer(input, 8192);
-        ssize_t rret;
-        while ((rret = read(fd, buf.base, buf.len)) == -1 && errno == EINTR)
-            ;
-        if (rret == -1) {
-            if (errno == EAGAIN)
-                break;
-            else
-                return -1;
-        } else if (rret == 0) {
-            if (! read_any)
-                return -1; /* TODO notify close */
-            break;
-        }
-        (*input)->size += rret;
-        read_any = 1;
-    }
-    return 0;
-}
-
-static void wreq_free_buffer_if_allocated(h2o_socket_t *sock)
-{
-    if (sock->_wreq.smallbufs <= sock->_wreq.bufs && sock->_wreq.bufs <= sock->_wreq.smallbufs + sizeof(sock->_wreq.smallbufs) / sizeof(sock->_wreq.smallbufs[0])) {
-        /* no need to free */
-    } else {
-        free(sock->_wreq.alloced_ptr);
-        sock->_wreq.bufs = sock->_wreq.smallbufs;
-    }
-}
-
-static int write_core(int fd, h2o_buf_t **bufs, size_t *bufcnt)
-{
-    int iovcnt;
-    ssize_t wret;
-
-    while (*bufcnt != 0) {
-        /* write */
-        iovcnt = IOV_MAX;
-        if (*bufcnt < iovcnt)
-            iovcnt = (int)*bufcnt;
-        while ((wret = writev(fd, (struct iovec*)*bufs, iovcnt)) == -1 && errno == EINTR)
-            ;
-        if (wret == -1) {
-            if (errno != EAGAIN)
-                return -1;
-            break;
-        }
-        /* adjust the buffer */
-        while ((*bufs)->len < wret) {
-            wret -= (*bufs)->len;
-            ++*bufs;
-            --*bufcnt;
-            assert(*bufcnt != 0);
-        }
-        if (((*bufs)->len -= wret) == 0) {
-            ++*bufs;
-            --*bufcnt;
-        }
-    }
-
-    return 0;
-}
-
-static void do_write(h2o_socket_t *sock, h2o_buf_t *bufs, size_t bufcnt, h2o_socket_cb cb)
-{
-    assert(sock->_cb.write == NULL);
-    assert(sock->_wreq.cnt == 0);
-    sock->_cb.write = cb;
-
-    /* try to write now */
-    if (write_core(sock->fd, &bufs, &bufcnt) != 0) {
-        sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_ERROR;
-        h2o_socket__link_to_pending(sock);
-        return;
-    }
-    if (bufcnt == 0) {
-        /* write complete, schedule the callback */
-        h2o_socket__link_to_pending(sock);
-        return;
-    }
-
-    /* setup the buffer to send pending data */
-    if (bufcnt <= sizeof(sock->_wreq.smallbufs) / sizeof(sock->_wreq.smallbufs[0])) {
-        sock->_wreq.bufs = sock->_wreq.smallbufs;
-    } else {
-        sock->_wreq.bufs = h2o_malloc(sizeof(h2o_buf_t) * bufcnt);
-        sock->_wreq.alloced_ptr = sock->_wreq.bufs = sock->_wreq.bufs;
-    }
-    memcpy(sock->_wreq.bufs, bufs, sizeof(h2o_buf_t) * bufcnt);
-    sock->_wreq.cnt = bufcnt;
-
-    /* schedule the write */
-    h2o_socket__link_to_statechanged(sock);
-}
-
-h2o_socket_t *h2o_socket_create(h2o_socket_loop_t *loop, int fd)
-{
-    h2o_socket_t *sock;
-
-    fcntl(fd, F_SETFL, O_NONBLOCK);
-
-    sock = h2o_malloc(sizeof(*sock));
-    memset(sock, 0, sizeof(*sock));
-    sock->loop = loop;
-    sock->fd = fd;
-    sock->_wreq.bufs = sock->_wreq.smallbufs;
-    sock->_next_pending = sock;
-    sock->_next_statechanged = sock;
-
-    sock->loop->_on_create(sock);
-
-    return sock;
-}
-
-void h2o_socket__write_pending(h2o_socket_t *sock)
-{
-    assert(sock->_cb.write != NULL);
-    assert(sock->_wreq.cnt != 0);
-
-    /* write */
-    if (write_core(sock->fd, &sock->_wreq.bufs, &sock->_wreq.cnt) != 0
-        || sock->_wreq.cnt == 0) {
-        /* either completed or failed */
-        wreq_free_buffer_if_allocated(sock);
-        if (sock->_wreq.cnt != 0) {
-            /* pending data exists -> was an error */
-            sock->_wreq.cnt = 0; /* clear it ! */
-            sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_ERROR;
-        }
-        h2o_socket__link_to_pending(sock);
-        h2o_socket__link_to_statechanged(sock); /* might need to disable the write polling */
-    }
-}
-
-void h2o_socket__read_on_ready(h2o_socket_t *sock)
-{
-    int status = 0;
-
-    if ((sock->_flags & H2O_SOCKET_FLAG_IS_ACCEPT) != 0)
-        goto Notify;
-
-    if ((status = on_read_core(sock->fd, &sock->input)) != 0)
-        goto Notify;
-
-    if (sock->ssl != NULL && sock->ssl->handshake.cb == NULL)
-        status = decode_ssl_input(sock);
-
-Notify:
-    sock->_cb.read(sock, status);
-}
-
-void h2o_socket__link_to_pending(h2o_socket_t *sock)
-{
-    if (sock->_next_pending == sock) {
-        sock->_next_pending = sock->loop->_pending;
-        sock->loop->_pending = sock;
-    }
-}
-
-void h2o_socket__link_to_statechanged(h2o_socket_t *sock)
-{
-    if (sock->_next_statechanged == sock) {
-        sock->_next_statechanged = NULL;
-        *sock->loop->_statechanged.tail_ref = sock;
-        sock->loop->_statechanged.tail_ref = &sock->_next_statechanged;
-    }
-}
-
-h2o_socket_t *h2o_socket_accept(h2o_socket_t *listener)
-{
-    h2o_socket_t *sock;
-    int fd = accept(listener->fd, NULL, NULL);
-    if (fd == -1)
-        return NULL;
-    sock = h2o_socket_create(listener->loop, fd);
-    return sock;
-}
-
-#endif
-
 static void flush_pending_ssl(h2o_socket_t *sock, h2o_socket_cb cb)
 {
     do_write(sock, sock->ssl->output.bufs.entries, (int)sock->ssl->output.bufs.size, cb);
@@ -429,6 +172,8 @@ static void flush_pending_ssl(h2o_socket_t *sock, h2o_socket_cb cb)
 
 static void dispose_socket(h2o_socket_t *sock, int status)
 {
+    do_dispose_socket(sock);
+
     if (sock->ssl != NULL) {
         SSL_free(sock->ssl->ssl);
         free(sock->ssl->input.encrypted);
@@ -436,16 +181,6 @@ static void dispose_socket(h2o_socket_t *sock, int status)
         free(sock->ssl);
     }
     free(sock->input);
-
-#ifdef H2O_USE_LIBUV
-    uv_close(&sock->uv.handle, (uv_close_cb)free);
-#else
-    sock->loop->_on_close(sock);
-    wreq_free_buffer_if_allocated(sock);
-    close(sock->fd);
-    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED;
-    h2o_socket__link_to_statechanged(sock);
-#endif
 }
 
 static void shutdown_ssl(h2o_socket_t *sock, int status)
@@ -500,7 +235,7 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_buf_t *bufs, size_t bufcnt, h2o_so
     }
 }
 
-void h2o_socket__write_on_complete(h2o_socket_t *sock, int status)
+void on_write_complete(h2o_socket_t *sock, int status)
 {
     h2o_socket_cb cb;
 
@@ -517,25 +252,13 @@ void h2o_socket__write_on_complete(h2o_socket_t *sock, int status)
 void h2o_socket_read_start(h2o_socket_t *sock, h2o_socket_cb cb)
 {
     sock->_cb.read = cb;
-#ifdef H2O_USE_LIBUV
-    if (sock->ssl == NULL)
-        uv_read_start(&sock->uv.stream, alloc_inbuf_tcp, on_read_tcp);
-    else
-        uv_read_start(&sock->uv.stream, alloc_inbuf_ssl, on_read_ssl);
-#else
-    h2o_socket__link_to_statechanged(sock);
-#endif
+    do_read_start(sock);
 }
 
 void h2o_socket_read_stop(h2o_socket_t *sock)
 {
     sock->_cb.read = NULL;
-#ifdef H2O_USE_LIBUV
-    uv_read_stop(&sock->uv.stream);
-#else
-    sock->_flags &= ~H2O_SOCKET_FLAG_IS_READ_READY;
-    h2o_socket__link_to_statechanged(sock);
-#endif
+    do_read_stop(sock);
 }
 
 static void on_handshake_complete(h2o_socket_t *sock, int status)

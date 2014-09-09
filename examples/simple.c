@@ -95,7 +95,7 @@ static void on_req(h2o_req_t *req)
 
 static h2o_loop_context_t loop_ctx;
 
-#ifdef H2O_USE_LIBUV
+#if H2O_USE_LIBUV
 
 static void on_accept(uv_stream_t *listener, int status)
 {
@@ -104,7 +104,7 @@ static void on_accept(uv_stream_t *listener, int status)
     if (status != 0)
         return;
 
-    if ((sock = h2o_socket_accept(listener)) == NULL) {
+    if ((sock = h2o_uv_socket_accept(listener)) == NULL) {
         return;
     }
     h2o_accept(&loop_ctx, sock);
@@ -116,7 +116,7 @@ static int create_listener(void)
     struct sockaddr_in addr;
     int r;
 
-    uv_tcp_init(&loop_ctx.uv.loop, &listener);
+    uv_tcp_init(loop_ctx.loop, &listener);
     uv_ip4_addr("127.0.0.1", 7890, &addr);
     if ((r = uv_tcp_bind(&listener, (struct sockaddr*)&addr, 0)) != 0) {
         fprintf(stderr, "uv_tcp_bind:%s\n", uv_strerror(r));
@@ -143,7 +143,7 @@ static void on_accept(h2o_socket_t *listener, int status)
         return;
     }
 
-    if ((sock = h2o_socket_accept(listener)) == NULL) {
+    if ((sock = h2o_evloop_socket_accept(listener)) == NULL) {
         return;
     }
     h2o_accept(&loop_ctx, sock);
@@ -154,8 +154,6 @@ static int create_listener(void)
     struct sockaddr_in addr;
     int fd, reuseaddr_flag = 1;
     h2o_socket_t *sock;
-
-    h2o_loop_context_init(&loop_ctx, on_req);
 
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
@@ -169,8 +167,7 @@ static int create_listener(void)
         return -1;
     }
 
-    sock = h2o_socket_create(loop_ctx.socket_loop, fd);
-    sock->_flags |= H2O_SOCKET_FLAG_IS_ACCEPT;
+    sock = h2o_evloop_socket_create(loop_ctx.loop, fd, H2O_SOCKET_FLAG_IS_ACCEPT);
     h2o_socket_read_start(sock, on_accept);
 
     return 0;
@@ -182,7 +179,13 @@ int main(int argc, char **argv)
 {
     signal(SIGPIPE, SIG_IGN);
 
-    h2o_loop_context_init(&loop_ctx, on_req);
+#if H2O_USE_LIBUV
+    uv_loop_t loop;
+    uv_loop_init(&loop);
+    h2o_loop_context_init(&loop_ctx, &loop, on_req);
+#else
+    h2o_loop_context_init(&loop_ctx, h2o_evloop_create(), on_req);
+#endif
     h2o_define_mimetype(&loop_ctx.mimemap, "html", "text/html");
     h2o_add_reproxy_url(&loop_ctx);
     //loop_ctx.ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers);
@@ -193,10 +196,10 @@ int main(int argc, char **argv)
         goto Error;
     }
 
-#ifdef H2O_USE_LIBUV
-    uv_run(&loop_ctx.uv.loop, UV_RUN_DEFAULT);
+#if H2O_USE_LIBUV
+    uv_run(loop_ctx.loop, UV_RUN_DEFAULT);
 #else
-    while (h2o_socket_loop_run(loop_ctx.socket_loop, &loop_ctx.timeouts) != 0)
+    while (h2o_evloop_run(loop_ctx.loop) == 0)
         ;
 #endif
 

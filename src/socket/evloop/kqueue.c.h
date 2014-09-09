@@ -32,7 +32,7 @@
 #endif
 
 struct st_h2o_socket_loop_kqueue_t {
-    h2o_socket_loop_t super;
+    h2o_evloop_t super;
     int kq;
 };
 
@@ -54,14 +54,14 @@ static int collect_status(struct st_h2o_socket_loop_kqueue_t *loop, struct keven
 
     while (loop->super._statechanged.head != NULL) {
         /* detach the top */
-        h2o_socket_t *sock = loop->super._statechanged.head;
+        struct st_h2o_evloop_socket_t *sock = loop->super._statechanged.head;
         loop->super._statechanged.head = sock->_next_statechanged;
         sock->_next_statechanged = sock;
         /* update the state */
         if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
             free(sock);
         } else {
-            if (h2o_socket_is_reading(sock)) {
+            if (h2o_socket_is_reading(&sock->super)) {
                 if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_READ) == 0) {
                     sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_READ;
                     SET_AND_UPDATE(EVFILT_READ, EV_ADD);
@@ -72,7 +72,7 @@ static int collect_status(struct st_h2o_socket_loop_kqueue_t *loop, struct keven
                     SET_AND_UPDATE(EVFILT_READ, EV_DELETE);
                 }
             }
-            if (h2o_socket_is_writing(sock) && sock->_wreq.cnt != 0) {
+            if (h2o_socket_is_writing(&sock->super) && sock->_wreq.cnt != 0) {
                 if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE) == 0) {
                     sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE;
                     SET_AND_UPDATE(EVFILT_WRITE, EV_ADD);
@@ -92,7 +92,7 @@ static int collect_status(struct st_h2o_socket_loop_kqueue_t *loop, struct keven
 #undef SET_AND_UPDATE
 }
 
-static int proceed(h2o_socket_loop_t *_loop, h2o_timeout_manager_t *timeouts)
+int evloop_do_proceed(h2o_evloop_t *_loop)
 {
     struct st_h2o_socket_loop_kqueue_t *loop = (struct st_h2o_socket_loop_kqueue_t*)_loop;
     struct kevent changelist[64], events[128];
@@ -105,7 +105,7 @@ static int proceed(h2o_socket_loop_t *_loop, h2o_timeout_manager_t *timeouts)
 
     /* poll */
     do {
-        int32_t max_wait = h2o_timeout_get_max_wait(timeouts);
+        int32_t max_wait = get_max_wait(&loop->super);
         ts.tv_sec = max_wait / 1000;
         ts.tv_nsec = max_wait % 1000 * 1000 * 1000;
     } while ((nevents = kevent(loop->kq, changelist, nchanges, events, sizeof(events) / sizeof(events[0]), &ts)) == -1
@@ -113,22 +113,22 @@ static int proceed(h2o_socket_loop_t *_loop, h2o_timeout_manager_t *timeouts)
     if (nevents == -1)
         return -1;
 
-    h2o_timeout_update_now(timeouts);
+    update_now(&loop->super);
 
     /* update readable flags, perform writes */
     for (i = 0; i != nevents; ++i) {
-        h2o_socket_t *sock = events[i].udata;
+        struct st_h2o_evloop_socket_t *sock = events[i].udata;
         assert(sock->fd == events[i].ident);
         switch (events[i].filter) {
         case EVFILT_READ:
             if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED) {
                 sock->_flags |= H2O_SOCKET_FLAG_IS_READ_READY;
-                h2o_socket__link_to_pending(sock);
+                link_to_pending(sock);
             }
             break;
         case EVFILT_WRITE:
             if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED) {
-                h2o_socket__write_pending(sock);
+                write_pending(sock);
             }
             break;
         default:
@@ -139,21 +139,17 @@ static int proceed(h2o_socket_loop_t *_loop, h2o_timeout_manager_t *timeouts)
     return 0;
 }
 
-static void on_create(h2o_socket_t *sock)
+static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock)
 {
 }
 
-static void on_close(h2o_socket_t *sock)
+static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
 {
 }
 
-h2o_socket_loop_t *h2o_socket_loop_create(void)
+h2o_evloop_t *h2o_evloop_create(void)
 {
-    struct st_h2o_socket_loop_kqueue_t *loop = (struct st_h2o_socket_loop_kqueue_t*)create_socket_loop(
-        sizeof(*loop),
-        proceed,
-        on_create,
-        on_close);
+    struct st_h2o_socket_loop_kqueue_t *loop = (struct st_h2o_socket_loop_kqueue_t*)create_evloop(sizeof(*loop));
 
     loop->kq = kqueue();
 
