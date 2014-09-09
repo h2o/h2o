@@ -88,29 +88,25 @@ static int update_status(struct st_h2o_socket_loop_epoll_t *loop)
     return 0;
 }
 
-static int proceed(h2o_socket_loop_t *_loop, uint64_t wake_at)
+static int proceed(h2o_socket_loop_t *_loop, h2o_timeout_manager_t *timeouts)
 {
     struct st_h2o_socket_loop_epoll_t *loop = (struct st_h2o_socket_loop_epoll_t*)_loop;
     struct epoll_event events[256];
     int nevents, i;
-    uint64_t max_wait;
 
     /* collect (and update) status */
     if (update_status(loop) != 0)
         return -1;
 
     /* poll */
-    do {
-        update_now(&loop->super);
-        max_wait = loop->super.now < wake_at ? wake_at - loop->super.now : 0;
-        if (max_wait >= INT_MAX)
-            max_wait = INT_MAX;
-    } while ((nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), (int)max_wait)) == -1
-        && errno == EINTR);
+    while (
+        (nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), h2o_timeout_get_max_wait(timeouts))) == -1
+        && errno == EINTR)
+        ;
     if (nevents == -1)
         return -1;
 
-    update_now(&loop->super);
+    h2o_timeout_update_now(timeouts);
 
     /* update readable flags, perform writes */
     for (i = 0; i != nevents; ++i) {

@@ -63,7 +63,7 @@ static void set_timeout(h2o_http1_conn_t *conn, h2o_timeout_t *timeout, h2o_time
     }
     conn->_timeout = timeout;
     if (timeout != NULL) {
-        h2o_timeout_link(conn->super.ctx->socket_loop, timeout, &conn->_timeout_entry);
+        h2o_timeout_link(&conn->super.ctx->timeouts, timeout, &conn->_timeout_entry);
         conn->_timeout_entry.cb = cb;
     }
 }

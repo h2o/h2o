@@ -76,13 +76,13 @@ static void update_fdset(struct st_h2o_socket_loop_select_t *loop)
     loop->super._statechanged.tail_ref = &loop->super._statechanged.head;
 }
 
-static int proceed(h2o_socket_loop_t *_loop, uint64_t wake_at)
+static int proceed(h2o_socket_loop_t *_loop, h2o_timeout_manager_t *timeouts)
 {
     struct st_h2o_socket_loop_select_t *loop = (struct st_h2o_socket_loop_select_t*)_loop;
     fd_set rfds, wfds;
     struct timeval timeout;
     int fd, ret;
-    uint64_t max_wait_millis;
+    int32_t max_wait_millis;
 
     /* update status */
     update_fdset(loop);
@@ -90,10 +90,7 @@ static int proceed(h2o_socket_loop_t *_loop, uint64_t wake_at)
     /* call select */
     do {
         /* calc timeout */
-        update_now(&loop->super);
-        max_wait_millis = wake_at - loop->super.now;
-        if (max_wait_millis > INT32_MAX)
-            max_wait_millis = INT32_MAX;
+        max_wait_millis = h2o_timeout_get_max_wait(timeouts);
         timeout.tv_sec = max_wait_millis / 1000;
         timeout.tv_usec = max_wait_millis % 1000 * 1000;
         /* set fds */
@@ -106,7 +103,7 @@ static int proceed(h2o_socket_loop_t *_loop, uint64_t wake_at)
         return -1;
     DEBUG_LOG("select returned: %d\n", ret);
 
-    update_now(&loop->super);
+    h2o_timeout_update_now(timeouts);
 
     /* update readable flags, perform writes */
     if (ret > 0) {

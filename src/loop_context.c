@@ -37,7 +37,7 @@ void h2o_loop_context_init(h2o_loop_context_t *ctx, h2o_req_cb req_cb)
     memset(ctx, 0, sizeof(*ctx));
     ctx->socket_loop = h2o_socket_loop_create();
     ctx->req_cb = req_cb;
-    h2o_timeout_init(ctx->socket_loop, &ctx->req_timeout, 10000);
+    h2o_timeout_init(&ctx->timeouts, &ctx->req_timeout, 10000);
     h2o_add_chunked_encoder(ctx);
     h2o_init_mimemap(&ctx->mimemap, "application/octet-stream");
     ctx->server_name = h2o_buf_init(H2O_STRLIT("h2o/0.1"));
@@ -56,7 +56,7 @@ void h2o_loop_context_dispose(h2o_loop_context_t *ctx)
 
 int h2o_loop_context_run(h2o_loop_context_t *ctx)
 {
-    return h2o_socket_loop_run(ctx->socket_loop, UINT64_MAX);
+    return h2o_socket_loop_run(ctx->socket_loop, &ctx->timeouts);
 }
 
 h2o_filter_t *h2o_define_filter(h2o_loop_context_t *context, size_t sz)

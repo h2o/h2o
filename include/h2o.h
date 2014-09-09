@@ -56,13 +56,14 @@ extern "C" {
 typedef struct st_h2o_conn_t h2o_conn_t;
 typedef struct st_h2o_req_t h2o_req_t;
 typedef struct st_h2o_timeout_entry_t h2o_timeout_entry_t;
+typedef struct st_h2o_timeout_manager_t h2o_timeout_manager_t;
 typedef struct st_h2o_socket_t h2o_socket_t;
 typedef struct st_h2o_socket_loop_t h2o_socket_loop_t;
 typedef struct st_h2o_ssl_context_t h2o_ssl_context_t;
 
 typedef void (*h2o_req_cb)(h2o_req_t *req);
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, int err);
-typedef int (*h2o_socket_loop_proceed_cb)(h2o_socket_loop_t *loop, uint64_t wake_at);
+typedef int (*h2o_socket_loop_proceed_cb)(h2o_socket_loop_t *loop, h2o_timeout_manager_t *timeouts);
 typedef void (*h2o_socket_loop_socket_state_change_cb)(h2o_socket_t *sock);
 
 typedef struct st_h2o_buf_t {
@@ -131,6 +132,12 @@ typedef struct st_h2o_timeout_t {
     h2o_linklist_t *_entries; /* link list of h2o_timeout_entry_t */
 } h2o_timeout_t;
 
+struct st_h2o_timeout_manager_t {
+    uint64_t now;
+    h2o_linklist_t *_timeouts; /* list of h2o_timeout_t */
+    h2o_timeout_t zero_timeout; /* for deferred tasks (0 second timeout is handled separately, since all of them togeter with pending cbs should be invoked before poll) */
+};
+
 #define H2O_SOCKET_FLAG_IS_DISPOSED 0x1
 #define H2O_SOCKET_FLAG_IS_READ_READY 0x2
 #define H2O_SOCKET_FLAG_IS_WRITE_ERROR 0x4
@@ -163,7 +170,6 @@ struct st_h2o_socket_t {
 };
 
 struct st_h2o_socket_loop_t {
-    uint64_t now;
     h2o_socket_t *_pending;
     struct {
         h2o_socket_t *head;
@@ -172,8 +178,6 @@ struct st_h2o_socket_loop_t {
     h2o_socket_loop_proceed_cb _proceed;
     h2o_socket_loop_socket_state_change_cb _on_create;
     h2o_socket_loop_socket_state_change_cb _on_close;
-    h2o_linklist_t *_timeouts; /* list of h2o_timeout_t */
-    h2o_timeout_t zero_timeout; /* for deferred tasks (0 second timeout is handled separately, since all of them togeter with pending cbs should be invoked before poll) */
 };
 
 typedef struct st_h2o_filter_t {
@@ -204,6 +208,7 @@ typedef struct st_h2o_timestamp_t {
 typedef struct h2o_loop_context_t {
     h2o_socket_loop_t *socket_loop;
     h2o_req_cb req_cb;
+    h2o_timeout_manager_t timeouts;
     h2o_timeout_t req_timeout; /* for request timeout */
     h2o_filter_t *filters;
     h2o_mimemap_t mimemap;
@@ -339,10 +344,15 @@ h2o_ssl_context_t *h2o_ssl_new_server_context(const char *cert_file, const char 
 
 h2o_socket_loop_t *h2o_socket_loop_create(void);
 void h2o_socket_loop_destroy(h2o_socket_loop_t* loop);
-int h2o_socket_loop_run(h2o_socket_loop_t *loop, uint64_t max_wait_millis);
+int h2o_socket_loop_run(h2o_socket_loop_t *loop, h2o_timeout_manager_t *timeouts);
 
-void h2o_timeout_init(h2o_socket_loop_t *loop, h2o_timeout_t *timer, uint64_t timeout);
-void h2o_timeout_link(h2o_socket_loop_t *loop, h2o_timeout_t *timer, h2o_timeout_entry_t *entry);
+/* timeout */
+
+void h2o_timeout_update_now(h2o_timeout_manager_t *manager);
+size_t h2o_timeout_run(h2o_timeout_manager_t *manager, int zero_timeout_only);
+int32_t h2o_timeout_get_max_wait(h2o_timeout_manager_t *manager);
+void h2o_timeout_init(h2o_timeout_manager_t *manager, h2o_timeout_t *timer, uint64_t timeout);
+void h2o_timeout_link(h2o_timeout_manager_t *manager, h2o_timeout_t *timer, h2o_timeout_entry_t *entry);
 void h2o_timeout_unlink(h2o_timeout_t *timer, h2o_timeout_entry_t *entry);
 static int h2o_timeout_is_linked(h2o_timeout_entry_t *entry);
 
@@ -487,7 +497,7 @@ inline int h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *name, soc
 
 inline uint64_t h2o_now(h2o_loop_context_t *ctx)
 {
-    return ctx->socket_loop->now;
+    return ctx->timeouts.now;
 }
 
 inline int h2o_timeout_is_linked(h2o_timeout_entry_t *entry)

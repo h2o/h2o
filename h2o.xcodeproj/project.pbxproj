@@ -13,6 +13,7 @@
 		1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923A319A3215F00C52AD6 /* websocket.h */; };
 		1065E6F019B8C64200686E72 /* socket_loop.c in Sources */ = {isa = PBXBuildFile; fileRef = 1065E6EF19B8C64200686E72 /* socket_loop.c */; };
 		1065E6F219B953C900686E72 /* linklist.c in Sources */ = {isa = PBXBuildFile; fileRef = 1065E6F119B953C900686E72 /* linklist.c */; };
+		1065E6F919BEBAC600686E72 /* timeout.c in Sources */ = {isa = PBXBuildFile; fileRef = 1065E6F819BEBAC600686E72 /* timeout.c */; };
 		1079236A19A3210E00C52AD6 /* khash.h in Headers */ = {isa = PBXBuildFile; fileRef = 1079232619A3210D00C52AD6 /* khash.h */; };
 		1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */ = {isa = PBXBuildFile; fileRef = 1079235A19A3210D00C52AD6 /* picohttpparser.c */; };
 		1079239719A3210E00C52AD6 /* picohttpparser.h in Headers */ = {isa = PBXBuildFile; fileRef = 1079235B19A3210D00C52AD6 /* picohttpparser.h */; };
@@ -110,6 +111,7 @@
 		1065E6F419B996B400686E72 /* select.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = select.h; sourceTree = "<group>"; };
 		1065E6F619B99E6D00686E72 /* kqueue.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = kqueue.h; sourceTree = "<group>"; };
 		1065E6F719B9B1AC00686E72 /* epoll.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = epoll.h; sourceTree = "<group>"; };
+		1065E6F819BEBAC600686E72 /* timeout.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = timeout.c; sourceTree = "<group>"; };
 		1079231519A320A700C52AD6 /* libh2o.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libh2o.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		1079232619A3210D00C52AD6 /* khash.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = khash.h; sourceTree = "<group>"; };
 		1079235A19A3210D00C52AD6 /* picohttpparser.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picohttpparser.c; sourceTree = "<group>"; };
@@ -291,6 +293,7 @@
 				107923B119A3217300C52AD6 /* http1.c */,
 				107923B219A3217300C52AD6 /* http2 */,
 				107923B919A3217300C52AD6 /* loop_context.c */,
+				1065E6F119B953C900686E72 /* linklist.c */,
 				107923BA19A3217300C52AD6 /* memory.c */,
 				107923BB19A3217300C52AD6 /* mimemap.c */,
 				107923BC19A3217300C52AD6 /* request.c */,
@@ -298,11 +301,11 @@
 				101788B119B561AA0084C6D8 /* socket.c */,
 				1065E6F319B9969000686E72 /* socket_loop */,
 				1065E6EF19B8C64200686E72 /* socket_loop.c */,
+				1065E6F819BEBAC600686E72 /* timeout.c */,
 				107923BF19A3217300C52AD6 /* token.c */,
 				1079245319A32C0800C52AD6 /* token_table.h */,
 				107923C019A3217300C52AD6 /* util.c */,
 				107923C119A3217300C52AD6 /* websocket.c */,
-				1065E6F119B953C900686E72 /* linklist.c */,
 			);
 			path = src;
 			sourceTree = "<group>";
@@ -468,6 +471,7 @@
 				107923CC19A3217300C52AD6 /* loop_context.c in Sources */,
 				107923C519A3217300C52AD6 /* http1.c in Sources */,
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
+				1065E6F919BEBAC600686E72 /* timeout.c in Sources */,
 				1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */,
 				101B670C19ADD3380084A351 /* access_log.c in Sources */,
 				107923C419A3217300C52AD6 /* headers.c in Sources */,

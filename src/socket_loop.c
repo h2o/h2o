@@ -23,13 +23,6 @@
 #include <errno.h>
 #include "h2o.h"
 
-static void update_now(h2o_socket_loop_t *loop)
-{
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    loop->now = (uint64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
-}
-
 static void run_socket(h2o_socket_t* sock)
 {
     if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
@@ -75,82 +68,19 @@ static size_t run_pending(h2o_socket_loop_t *loop)
     return n;
 }
 
-static size_t proceed_timeout(h2o_timeout_t *timeout, uint64_t now)
+int h2o_socket_loop_run(h2o_socket_loop_t *loop, h2o_timeout_manager_t *timeouts)
 {
-    size_t n = 0;
-
-    for (; timeout->_entries != NULL; ++n) {
-        h2o_timeout_entry_t *entry = h2o_linklist_get_first(h2o_timeout_entry_t, _link, timeout->_entries);
-        if (entry->wake_at > now) {
-            break;
-        }
-        h2o_linklist_unlink(&timeout->_entries, &entry->_link);
-        entry->wake_at = 0;
-        entry->cb(entry);
-    }
-
-    return n;
-}
-
-int h2o_socket_loop_run(h2o_socket_loop_t *loop, uint64_t wake_at)
-{
-    /* change wake_at to the minimum value of the timeouts */
-    if (loop->_timeouts != NULL) {
-        h2o_timeout_t *timeout = h2o_linklist_get_first(h2o_timeout_t, _link, loop->_timeouts);
-        do {
-            if (timeout->_entries != NULL) {
-                h2o_timeout_entry_t *entry = h2o_linklist_get_first(h2o_timeout_entry_t, _link, timeout->_entries);
-                if (entry->wake_at < wake_at)
-                    wake_at = entry->wake_at;
-            }
-        } while ((timeout = h2o_linklist_get_next(h2o_timeout_t, _link, timeout))
-            != h2o_linklist_get_first(h2o_timeout_t, _link, loop->_timeouts));
-    }
-
     /* update socket states, poll, set readable flags, perform pending writes */
-    if (loop->_proceed(loop, wake_at) != 0)
+    if (loop->_proceed(loop, timeouts) != 0)
         return -1;
 
-    /* call the pending callbacks */
-    run_pending(loop);
-
-    /* run the timeouts */
-    if (loop->_timeouts != NULL) {
-        h2o_timeout_t *timeout = h2o_linklist_get_first(h2o_timeout_t, _link, loop->_timeouts);
-        do {
-            proceed_timeout(timeout, loop->now);
-        } while ((timeout = h2o_linklist_get_next(h2o_timeout_t, _link, timeout))
-            != h2o_linklist_get_first(h2o_timeout_t, _link, loop->_timeouts));
+    { /* run the timeouts and pending callbacks */
+        int zero_timeout_only = 0;
+        while (run_pending(loop) + h2o_timeout_run(timeouts, zero_timeout_only) != 0)
+            zero_timeout_only = 1;
     }
-    /* run deferred tasks and pending callbacks */
-    while (proceed_timeout(&loop->zero_timeout, loop->now) + run_pending(loop) != 0)
-        ;
 
     return 0;
-}
-
-void h2o_timeout_init(h2o_socket_loop_t *loop, h2o_timeout_t *timeout, uint64_t millis)
-{
-    assert(millis != 0 && "use loop->zero_timeout for delayed tasks");
-    memset(timeout, 0, sizeof(*timeout));
-    timeout->timeout = millis;
-    h2o_linklist_insert(&loop->_timeouts, loop->_timeouts, &timeout->_link);
-}
-
-void h2o_timeout_link(h2o_socket_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)
-{
-    /* insert at tail, so the entries are sorted in ascending order */
-    h2o_linklist_insert(&timeout->_entries, timeout->_entries, &entry->_link);
-    /* set data */
-    entry->wake_at = loop->now + timeout->timeout;
-}
-
-void h2o_timeout_unlink(h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)
-{
-    if (h2o_linklist_is_linked(&entry->_link)) {
-        h2o_linklist_unlink(&timeout->_entries, &entry->_link);
-        entry->wake_at = 0;
-    }
 }
 
 #if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_KQUEUE
@@ -165,7 +95,7 @@ void h2o_timeout_unlink(h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)
 # endif
 #endif
 
-#if H2O_USE_SELECET
+#if H2O_USE_SELECT
 # include "socket_loop/select.h"
 #elif H2O_USE_EPOLL
 # include "socket_loop/epoll.h"
