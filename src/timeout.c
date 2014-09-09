@@ -37,15 +37,11 @@ static void unlink_timer(h2o_timeout_entry_t *entry)
     entry->wake_at = 0;
 }
 
-static void timer_cb(uv_timer_t *_timer, int status)
+static void timer_cb(uv_timer_t *_timer)
 {
     h2o_timeout_t *timer = (void*)_timer;
     h2o_timeout_entry_t detached_root;
     uint64_t now;
-
-    if (status != 0) {
-        return;
-    }
 
     if (timer_is_empty(timer)) {
         return;

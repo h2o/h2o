@@ -611,7 +611,7 @@ static void on_write_complete(h2o_socket_t *sock, int status)
 
     /* close by error if necessary */
     if (status != 0) {
-        if (uv_last_error(conn->sock->stream->loop).code == UV_ECANCELED) {
+        if (status == UV_ECANCELED) {
             /* connection has been closed */
         } else {
             close_connection_now(conn);

@@ -56,7 +56,7 @@ static void access_log(h2o_access_log_t *_self, h2o_req_t *req)
         req->res.status,
         (unsigned long long)req->bytes_sent);
 
-    uv_fs_write(req->conn->ctx->loop, &fsreq, self->fd, line.base, line.len, -1, NULL);
+    uv_fs_write(req->conn->ctx->loop, &fsreq, self->fd, &line, 1, -1, NULL);
     uv_fs_req_cleanup(&fsreq);
 }
 

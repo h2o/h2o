@@ -110,17 +110,20 @@ int main(int argc, char **argv)
 {
     uv_loop_t *loop = uv_default_loop();
     uv_tcp_t listener;
+    struct sockaddr_in addr;
+    int r;
 
-    if (uv_tcp_init(loop, &listener) != 0) {
-        fprintf(stderr, "uv_tcp_init:%s\n", uv_strerror(uv_last_error(loop)));
+    if ((r = uv_tcp_init(loop, &listener)) != 0) {
+        fprintf(stderr, "uv_tcp_init:%s\n", uv_strerror(r));
         goto Error;
     }
-    if (uv_tcp_bind(&listener, uv_ip4_addr("127.0.0.1", 7890)) != 0) {
-        fprintf(stderr, "uv_tcp_bind:%s\n", uv_strerror(uv_last_error(loop)));
+    uv_ip4_addr("127.0.0.1", 7890, &addr);
+    if ((r = uv_tcp_bind(&listener, (struct sockaddr*)&addr, 0)) != 0) {
+        fprintf(stderr, "uv_tcp_bind:%s\n", uv_strerror(r));
         goto Error;
     }
-    if (uv_listen((uv_stream_t*)&listener, 128, (uv_connection_cb)on_connect) != 0) {
-        fprintf(stderr, "uv_listen:%s\n", uv_strerror(uv_last_error(loop)));
+    if ((r = uv_listen((uv_stream_t*)&listener, 128, (uv_connection_cb)on_connect)) != 0) {
+        fprintf(stderr, "uv_listen:%s\n", uv_strerror(r));
         goto Error;
     }
 

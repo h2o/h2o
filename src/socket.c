@@ -179,13 +179,13 @@ static void dispose_socket(h2o_socket_t *sock, int status)
     uv_close((uv_handle_t*)sock->stream, sock->_cb.close);
 }
 
-static uv_buf_t alloc_inbuf_ssl(uv_handle_t *handle, size_t suggested_size)
+static void alloc_inbuf_ssl(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf)
 {
     h2o_socket_t *sock = handle->data;
-    return h2o_allocate_input_buffer(&sock->ssl->input.encrypted, 8192);
+    *buf = h2o_allocate_input_buffer(&sock->ssl->input.encrypted, 8192);
 }
 
-static void on_read_ssl_in_handshake(uv_stream_t *stream, ssize_t nread, uv_buf_t buf)
+static void on_read_ssl_in_handshake(uv_stream_t *stream, ssize_t nread, const uv_buf_t *_unused)
 {
     h2o_socket_t *sock = stream->data;
 
@@ -257,17 +257,17 @@ Close:
     dispose_socket(sock, status);
 }
 
-static uv_buf_t alloc_inbuf_tcp(uv_handle_t *handle, size_t suggested_size)
+static void alloc_inbuf_tcp(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf)
 {
     h2o_socket_t *sock = handle->data;
-    return h2o_allocate_input_buffer(&sock->input, 8192);
+    *buf = h2o_allocate_input_buffer(&sock->input, 8192);
 }
 
-static void on_read_tcp(uv_stream_t *stream, ssize_t nread, uv_buf_t buf)
+static void on_read_tcp(uv_stream_t *stream, ssize_t nread, const uv_buf_t* _unused)
 {
     h2o_socket_t *sock = stream->data;
 
-    if (nread == -1) {
+    if (nread < 0) {
         sock->_cb.read(sock, -1);
         return;
     }
@@ -276,7 +276,7 @@ static void on_read_tcp(uv_stream_t *stream, ssize_t nread, uv_buf_t buf)
     sock->_cb.read(sock, 0);
 }
 
-static void on_read_ssl(uv_stream_t *stream, ssize_t nread, uv_buf_t buf)
+static void on_read_ssl(uv_stream_t *stream, ssize_t nread, const uv_buf_t *_unused)
 {
     h2o_socket_t *sock = stream->data;
     int status = -1;
