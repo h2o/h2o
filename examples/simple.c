@@ -95,6 +95,46 @@ static void on_req(h2o_req_t *req)
 
 static h2o_loop_context_t loop_ctx;
 
+#ifdef H2O_USE_LIBUV
+
+static void on_accept(uv_stream_t *listener, int status)
+{
+    h2o_socket_t *sock;
+
+    if (status != 0)
+        return;
+
+    if ((sock = h2o_socket_accept(listener)) == NULL) {
+        return;
+    }
+    h2o_accept(&loop_ctx, sock);
+}
+
+static int create_listener(void)
+{
+    static uv_tcp_t listener;
+    struct sockaddr_in addr;
+    int r;
+
+    uv_tcp_init(&loop_ctx.uv.loop, &listener);
+    uv_ip4_addr("127.0.0.1", 7890, &addr);
+    if ((r = uv_tcp_bind(&listener, (struct sockaddr*)&addr, 0)) != 0) {
+        fprintf(stderr, "uv_tcp_bind:%s\n", uv_strerror(r));
+        goto Error;
+    }
+    if ((r = uv_listen((uv_stream_t*)&listener, 128, on_accept)) != 0) {
+        fprintf(stderr, "uv_listen:%s\n", uv_strerror(r));
+        goto Error;
+    }
+
+    return 0;
+Error:
+    uv_close((uv_handle_t*)&listener, NULL);
+    return r;
+}
+
+#else
+
 static void on_accept(h2o_socket_t *listener, int status)
 {
     h2o_socket_t *sock;
@@ -136,6 +176,8 @@ static int create_listener(void)
     return 0;
 }
 
+#endif
+
 int main(int argc, char **argv)
 {
     signal(SIGPIPE, SIG_IGN);
@@ -151,8 +193,12 @@ int main(int argc, char **argv)
         goto Error;
     }
 
-    while (h2o_loop_context_run(&loop_ctx) == 0)
+#ifdef H2O_USE_LIBUV
+    uv_run(&loop_ctx.uv.loop, UV_RUN_DEFAULT);
+#else
+    while (h2o_socket_loop_run(loop_ctx.socket_loop, &loop_ctx.timeouts) != 0)
         ;
+#endif
 
 Error:
     return 1;

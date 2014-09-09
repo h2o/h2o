@@ -23,6 +23,10 @@
 #include <errno.h>
 #include "h2o.h"
 
+#ifdef H2O_USE_LIBUV
+/* skip this file */
+#else
+
 static void run_socket(h2o_socket_t* sock)
 {
     if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
@@ -103,4 +107,6 @@ int h2o_socket_loop_run(h2o_socket_loop_t *loop, h2o_timeout_manager_t *timeouts
 # include "socket_loop/kqueue.h"
 #else
 # error "poller not specified"
+#endif
+
 #endif

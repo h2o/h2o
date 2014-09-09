@@ -38,6 +38,9 @@ static size_t proceed_timeout(h2o_timeout_t *timeout, uint64_t now)
     return n;
 }
 
+#ifdef H2O_USE_LIBUV
+#else
+
 void h2o_timeout_update_now(h2o_timeout_manager_t *manager)
 {
     struct timeval tv;
@@ -91,20 +94,31 @@ int32_t h2o_timeout_get_max_wait(h2o_timeout_manager_t *manager)
     return (int32_t)max_wait;
 }
 
+#endif
+
 void h2o_timeout_init(h2o_timeout_manager_t *manager, h2o_timeout_t *timeout, uint64_t millis)
 {
     assert(millis != 0 && "use loop->zero_timeout for delayed tasks");
     memset(timeout, 0, sizeof(*timeout));
     timeout->timeout = millis;
+#ifdef H2O_USE_LIBUV
+#else
     h2o_linklist_insert(&manager->_timeouts, manager->_timeouts, &timeout->_link);
+#endif
 }
 
 void h2o_timeout_link(h2o_timeout_manager_t *manager, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)
 {
+#ifdef H2O_USE_LIBUV
+    uint64_t now = uv_now(manager->loop);
+#else
+    uint64_t now = manager->now;
+#endif
+
     /* insert at tail, so the entries are sorted in ascending order */
     h2o_linklist_insert(&timeout->_entries, timeout->_entries, &entry->_link);
     /* set data */
-    entry->wake_at = manager->now + timeout->timeout;
+    entry->wake_at = now + timeout->timeout;
 }
 
 void h2o_timeout_unlink(h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)
