@@ -49,6 +49,11 @@ struct st_h2o_ssl_context_t {
 
 static void proceed_handshake(h2o_socket_t *sock, int status);
 
+static struct {
+    h2o_socket_t *sock;
+    int status;
+} _pending_write_cb;
+
 static int read_bio(BIO *b, char *out, int len)
 {
     h2o_socket_t *sock = b->ptr;
@@ -274,6 +279,14 @@ static void on_read_tcp(uv_stream_t *stream, ssize_t nread, const uv_buf_t* _unu
 
     sock->input->size += nread;
     sock->_cb.read(sock, 0);
+
+    if (_pending_write_cb.sock != NULL) {
+        h2o_socket_t *sock = _pending_write_cb.sock;
+        h2o_socket_cb cb = sock->_cb.write;
+        _pending_write_cb.sock = NULL;
+        sock->_cb.write = NULL;
+        cb(sock, _pending_write_cb.status);
+    }
 }
 
 static void on_read_ssl(uv_stream_t *stream, ssize_t nread, const uv_buf_t *_unused)
@@ -332,8 +345,32 @@ void h2o_socket_close(h2o_socket_t *sock)
 void h2o_socket_write(h2o_socket_t *sock, uv_buf_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
     if (sock->ssl == NULL) {
+        ssize_t wret;
         assert(sock->_cb.write == NULL);
         sock->_cb.write = cb;
+        if (_pending_write_cb.sock == NULL) {
+            wret = uv_try_write(sock->stream, bufs, (int)bufcnt);
+            if (wret <= 0) {
+                _pending_write_cb.sock = sock;
+                _pending_write_cb.status = (int)wret;
+                return;
+            }
+            do {
+                if (wret < bufs->len) {
+                    bufs->base += wret;
+                    bufs->len -= wret;
+                    break;
+                }
+                wret -= bufs->len;
+                ++bufs;
+                --bufcnt;
+            } while (wret != 0);
+            if (bufcnt == 0) {
+                _pending_write_cb.sock = sock;
+                _pending_write_cb.status = 0;
+                return;
+            }
+        }
         uv_write(&sock->_wreq, sock->stream, bufs, (int)bufcnt, on_write_complete);
     } else {
         size_t i;
