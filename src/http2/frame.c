@@ -101,13 +101,13 @@ h2o_buf_t h2o_http2_encode_ping_frame(h2o_mempool_t *pool, int is_ack, const uin
     return ret;
 }
 
-h2o_buf_t h2o_http2_encode_goaway_frame(h2o_mempool_t *pool, uint32_t last_stream_id, int errno)
+h2o_buf_t h2o_http2_encode_goaway_frame(h2o_mempool_t *pool, uint32_t last_stream_id, int errnum)
 {
     h2o_buf_t ret;
     uint8_t *dst = allocate_frame(&ret, pool, 8, H2O_HTTP2_FRAME_TYPE_GOAWAY, 0, 0);
 
     dst = encode32u(dst, last_stream_id);
-    dst = encode32u(dst, errno);
+    dst = encode32u(dst, errnum);
 
     assert(dst - (uint8_t*)ret.base == ret.len);
     return ret;
