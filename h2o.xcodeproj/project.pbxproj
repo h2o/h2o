@@ -217,7 +217,7 @@
 				1079231E19A3210D00C52AD6 /* deps */,
 				1079239E19A3215F00C52AD6 /* include */,
 				107923AA19A3216B00C52AD6 /* misc */,
-				107923AD19A3217300C52AD6 /* src */,
+				107923AD19A3217300C52AD6 /* lib */,
 				107923FE19A3239200C52AD6 /* examples */,
 				1079231619A320A700C52AD6 /* Products */,
 			);
@@ -300,7 +300,7 @@
 			path = misc;
 			sourceTree = "<group>";
 		};
-		107923AD19A3217300C52AD6 /* src */ = {
+		107923AD19A3217300C52AD6 /* lib */ = {
 			isa = PBXGroup;
 			children = (
 				101B670B19ADD3380084A351 /* access_log.c */,
@@ -323,7 +323,7 @@
 				107923C019A3217300C52AD6 /* util.c */,
 				107923C119A3217300C52AD6 /* websocket.c */,
 			);
-			path = src;
+			path = lib;
 			sourceTree = "<group>";
 		};
 		107923B219A3217300C52AD6 /* http2 */ = {

@@ -7,7 +7,7 @@ SET(CMAKE_C_FLAGS "-O2 -g -Wall -Wno-unused-function -DH2O_USE_LIBUV=0 ${CMAKE_C
 
 INCLUDE_DIRECTORIES(include deps/picohttpparser deps/klib)
 
-ADD_LIBRARY(h2o STATIC deps/picohttpparser/picohttpparser.c src/access_log.c src/chunked_encoder.c src/file.c src/headers.c src/http1.c src/http2/connection.c src/http2/frame.c src/http2/hpack.c src/http2/stream.c src/loop_context.c src/memory.c src/mimemap.c src/request.c src/rproxy.c src/socket.c src/timeout.c src/token.c src/util.c)
+ADD_LIBRARY(h2o STATIC deps/picohttpparser/picohttpparser.c lib/access_log.c lib/chunked_encoder.c lib/context.c lib/file.c lib/headers.c lib/http1.c lib/http2/connection.c lib/http2/frame.c lib/http2/hpack.c lib/http2/stream.c lib/memory.c lib/mimemap.c lib/request.c lib/rproxy.c lib/socket.c lib/timeout.c lib/token.c lib/util.c)
 
 ADD_EXECUTABLE(examples/simple examples/simple.c)
 TARGET_LINK_LIBRARIES(examples/simple h2o ssl crypto)
