@@ -36,6 +36,7 @@ struct st_h2o_http1_conn_t {
     /* internal structure */
     h2o_timeout_t *_timeout;
     h2o_timeout_entry_t _timeout_entry;
+    size_t _prevreqlen;
     size_t _reqsize;
     struct st_h2o_http1_req_entity_reader *_req_entity_reader;
     h2o_http1_finalostream_t _ostr_final;

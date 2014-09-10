@@ -28,7 +28,7 @@
 #include "h2o/http2.h"
 
 struct st_h2o_http1_req_entity_reader {
-    int (*handle_incoming)(h2o_http1_conn_t *conn);
+    int (*handle_incoming_entity)(h2o_http1_conn_t *conn);
     size_t entity_offset;
 };
 
@@ -108,7 +108,7 @@ static int create_content_length_entity_reader(h2o_http1_conn_t *conn, size_t co
     struct st_h2o_http1_req_entity_reader *reader = h2o_malloc(sizeof(*reader));
     conn->_req_entity_reader = reader;
 
-    reader->handle_incoming = handle_content_length_entity_read;
+    reader->handle_incoming_entity = handle_content_length_entity_read;
     reader->entity_offset = conn->_reqsize;
     conn->_reqsize += content_length;
 
@@ -169,7 +169,7 @@ static ssize_t fixup_request(h2o_http1_conn_t *conn, struct phr_header *headers,
     return entity_header_index;
 }
 
-static int handle_incoming(h2o_http1_conn_t *conn, size_t prevreqlen)
+static int handle_incoming_request(h2o_http1_conn_t *conn)
 {
     size_t inreqlen = conn->sock->input->size < H2O_MAX_REQLEN ? conn->sock->input->size : H2O_MAX_REQLEN;
     int reqlen, minor_version;
@@ -179,7 +179,9 @@ static int handle_incoming(h2o_http1_conn_t *conn, size_t prevreqlen)
 
     reqlen = phr_parse_request(conn->sock->input->bytes, inreqlen, &conn->req.method, &conn->req.method_len,
                                &conn->req.path, &conn->req.path_len, &minor_version,
-                               headers, &num_headers, prevreqlen);
+                               headers, &num_headers, conn->_prevreqlen);
+    conn->_prevreqlen = inreqlen;
+
     switch (reqlen) {
     default: // parse complete
         conn->_reqsize = reqlen;
@@ -191,7 +193,7 @@ static int handle_incoming(h2o_http1_conn_t *conn, size_t prevreqlen)
                 h2o_send_error(&conn->req, 400, "Invalid Request", "unknown entity encoding");
                 return 0;
             }
-            return conn->_req_entity_reader->handle_incoming(conn);
+            return conn->_req_entity_reader->handle_incoming_entity(conn);
         } else {
             set_timeout(conn, NULL, NULL);
             h2o_socket_read_stop(conn->sock);
@@ -221,9 +223,9 @@ static void reqread_on_read(h2o_socket_t *sock, int status)
     }
 
     if (conn->_req_entity_reader == NULL)
-        handle_incoming(conn, 0 /* FIXME pass in prevreqlen */);
+        handle_incoming_request(conn);
     else
-        conn->_req_entity_reader->handle_incoming(conn);
+        conn->_req_entity_reader->handle_incoming_entity(conn);
 }
 
 static void reqread_on_timeout(h2o_timeout_entry_t *entry)
@@ -266,8 +268,10 @@ static void on_send_complete(h2o_socket_t *sock, int status)
     /* handle next request */
     init_request(conn, 1);
     h2o_consume_input_buffer(&conn->sock->input, conn->_reqsize);
+    conn->_prevreqlen = 0;
+    conn->_reqsize = 0;
     if (conn->sock->input->size != 0) {
-        if (handle_incoming(conn, 0) == 0) {
+        if (handle_incoming_request(conn) == 0) {
             return;
         }
     }
