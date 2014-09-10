@@ -181,6 +181,7 @@ static void dispose_socket(h2o_socket_t *sock, int status)
         free(sock->ssl);
     }
     free(sock->input);
+    free(sock);
 }
 
 static void shutdown_ssl(h2o_socket_t *sock, int status)

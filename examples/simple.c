@@ -99,14 +99,21 @@ static h2o_loop_context_t loop_ctx;
 
 static void on_accept(uv_stream_t *listener, int status)
 {
+    uv_tcp_t *conn;
     h2o_socket_t *sock;
 
     if (status != 0)
         return;
 
-    if ((sock = h2o_uv_socket_accept(listener)) == NULL) {
+    conn = h2o_malloc(sizeof(*conn));
+    uv_tcp_init(listener->loop, conn);
+
+    if (uv_accept(listener, (uv_stream_t*)conn) != 0) {
+        uv_close((uv_handle_t*)conn, (uv_close_cb)free);
         return;
     }
+
+    sock = h2o_uv_socket_create((uv_stream_t*)conn, (uv_close_cb)free);
     h2o_accept(&loop_ctx, sock);
 }
 
