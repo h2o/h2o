@@ -98,11 +98,10 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
         /* call */
         ret = select(loop->max_fd + 1, &rfds, &wfds, NULL, &timeout);
     } while (ret == -1 && errno == EINTR);
+    update_now(&loop->super);
     if (ret == -1)
         return -1;
     DEBUG_LOG("select returned: %d\n", ret);
-
-    update_now(&loop->super);
 
     /* update readable flags, perform writes */
     if (ret > 0) {
