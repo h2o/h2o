@@ -183,7 +183,7 @@ typedef struct st_h2o_timestamp_t {
     h2o_timestamp_string_t *str;
 } h2o_timestamp_t;
 
-typedef struct h2o_loop_context_t {
+typedef struct h2o_context_t {
     h2o_loop_t *loop;
     h2o_req_cb req_cb;
     h2o_timeout_t zero_timeout;
@@ -201,7 +201,7 @@ typedef struct h2o_loop_context_t {
         struct timeval tv_at;
         h2o_timestamp_string_t *value;
     } _timestamp_cache;
-} h2o_loop_context_t;
+} h2o_context_t;
 
 typedef struct st_h2o_header_t {
     union {
@@ -232,7 +232,7 @@ typedef struct st_h2o_res_t {
 } h2o_res_t;
 
 struct st_h2o_conn_t {
-    h2o_loop_context_t *ctx;
+    h2o_context_t *ctx;
     /* callbacks */
     int (*getpeername)(h2o_conn_t *conn, struct sockaddr *name, socklen_t *namelen);
 };
@@ -373,16 +373,16 @@ static void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, h2o_buf_t
 void h2o_schedule_proceed_response(h2o_req_t *req); /* called by buffering output filters to request next content */
 static void h2o_proceed_response(h2o_req_t *req);
 
-/* loop context */
+/* context */
 
-void h2o_loop_context_init(h2o_loop_context_t *context, h2o_loop_t *loop, h2o_req_cb req_cb);
-void h2o_loop_context_dispose(h2o_loop_context_t *context);
-int h2o_loop_context_run(h2o_loop_context_t *context);
+void h2o_context_init(h2o_context_t *context, h2o_loop_t *loop, h2o_req_cb req_cb);
+void h2o_context_dispose(h2o_context_t *context);
+int h2o_context_run(h2o_context_t *context);
 
-h2o_filter_t *h2o_define_filter(h2o_loop_context_t *context, size_t sz);
-void h2o_get_timestamp(h2o_loop_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts);
+h2o_filter_t *h2o_define_filter(h2o_context_t *context, size_t sz);
+void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts);
 
-void h2o_accept(h2o_loop_context_t *ctx, h2o_socket_t *sock);
+void h2o_accept(h2o_context_t *ctx, h2o_socket_t *sock);
 
 /* built-in generators */
 
@@ -392,8 +392,8 @@ int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *pa
 
 /* output filters */
 
-void h2o_add_chunked_encoder(h2o_loop_context_t *context); /* added by default */
-void h2o_add_reproxy_url(h2o_loop_context_t *context);
+void h2o_add_chunked_encoder(h2o_context_t *context); /* added by default */
+void h2o_add_reproxy_url(h2o_context_t *context);
 
 /* mime mapper */
 

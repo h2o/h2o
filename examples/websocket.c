@@ -63,41 +63,50 @@ static void on_req(h2o_req_t *req)
     }
 }
 
-static h2o_loop_context_t loop_ctx;
+static h2o_context_t ctx;
 
 static void on_connect(uv_stream_t *server, int status)
 {
+    uv_tcp_t *conn;
     h2o_socket_t *sock;
 
-    if (status == -1)
+    if (status != 0)
         return;
 
-    if ((sock = h2o_socket_accept(server)) == NULL)
+    conn = h2o_malloc(sizeof(*conn));
+    uv_tcp_init(server->loop, conn);
+    if (uv_accept(server, (uv_stream_t*)conn) != 0) {
+        uv_close((uv_handle_t*)conn, (uv_close_cb)free);
         return;
+    }
 
-    h2o_accept(&loop_ctx, sock);
+    sock = h2o_uv_socket_create((uv_stream_t*)conn, (uv_close_cb)free);
+    h2o_accept(&ctx, sock);
 }
 
 int main(int argc, char **argv)
 {
     uv_loop_t *loop = uv_default_loop();
     uv_tcp_t listener;
+    struct sockaddr_in sockaddr;
+    int r;
 
-    if (uv_tcp_init(loop, &listener) != 0) {
-        fprintf(stderr, "uv_tcp_init:%s\n", uv_strerror(uv_last_error(loop)));
+    if ((r = uv_tcp_init(loop, &listener)) != 0) {
+        fprintf(stderr, "uv_tcp_init:%s\n", uv_strerror(r));
         goto Error;
     }
-    if (uv_tcp_bind(&listener, uv_ip4_addr("127.0.0.1", 7890)) != 0) {
-        fprintf(stderr, "uv_tcp_bind:%s\n", uv_strerror(uv_last_error(loop)));
+    uv_ip4_addr("127.0.0.1", 7890, &sockaddr);
+    if ((r = uv_tcp_bind(&listener, (struct sockaddr*)&sockaddr, sizeof(sockaddr))) != 0) {
+        fprintf(stderr, "uv_tcp_bind:%s\n", uv_strerror(r));
         goto Error;
     }
-    if (uv_listen((uv_stream_t*)&listener, 128, (uv_connection_cb)on_connect) != 0) {
-        fprintf(stderr, "uv_listen:%s\n", uv_strerror(uv_last_error(loop)));
+    if ((r = uv_listen((uv_stream_t*)&listener, 128, on_connect)) != 0) {
+        fprintf(stderr, "uv_listen:%s\n", uv_strerror(r));
         goto Error;
     }
 
-    //h2o_loop_context_init(&loop_ctx, loop, on_req);
-    loop_ctx.ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", NULL);
+    h2o_context_init(&ctx, loop, on_req);
+    //ctx.ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", NULL);
 
     return uv_run(loop, UV_RUN_DEFAULT);
 

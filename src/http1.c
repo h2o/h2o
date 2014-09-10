@@ -355,7 +355,7 @@ static int get_peername(h2o_conn_t *_conn, struct sockaddr *name, socklen_t *nam
     return h2o_socket_getpeername(conn->sock, name, namelen);
 }
 
-void h2o_http1_accept(h2o_loop_context_t *ctx, h2o_socket_t *sock)
+void h2o_http1_accept(h2o_context_t *ctx, h2o_socket_t *sock)
 {
     h2o_http1_conn_t *conn = h2o_malloc(sizeof(*conn));
 

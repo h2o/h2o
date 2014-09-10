@@ -72,7 +72,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
 
 void h2o_dispose_request(h2o_req_t *req)
 {
-    h2o_loop_context_t *ctx = req->conn->ctx;
+    h2o_context_t *ctx = req->conn->ctx;
 
     /* close the generator if it is still open */
     if (req->_generator != NULL) {

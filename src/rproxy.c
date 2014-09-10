@@ -131,7 +131,7 @@ SkipMe:
         self->next->on_start_response(self->next, req);
 }
 
-void h2o_add_reproxy_url(h2o_loop_context_t *context)
+void h2o_add_reproxy_url(h2o_context_t *context)
 {
     h2o_filter_t *filter = h2o_define_filter(context, sizeof(h2o_filter_t));
     filter->on_start_response = on_start_response;

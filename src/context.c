@@ -32,7 +32,7 @@ static void default_dispose_filter(h2o_filter_t *filter)
         filter->next->dispose(filter->next);
 }
 
-void h2o_loop_context_init(h2o_loop_context_t *ctx, h2o_loop_t *loop, h2o_req_cb req_cb)
+void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_req_cb req_cb)
 {
     memset(ctx, 0, sizeof(*ctx));
     ctx->loop = loop;
@@ -47,7 +47,7 @@ void h2o_loop_context_init(h2o_loop_context_t *ctx, h2o_loop_t *loop, h2o_req_cb
     ctx->http2_max_concurrent_requests_per_connection = 16;
 }
 
-void h2o_loop_context_dispose(h2o_loop_context_t *ctx)
+void h2o_context_dispose(h2o_context_t *ctx)
 {
     if (ctx->filters != NULL) {
         ctx->filters->dispose(ctx->filters);
@@ -55,7 +55,7 @@ void h2o_loop_context_dispose(h2o_loop_context_t *ctx)
     h2o_dispose_mimemap(&ctx->mimemap);
 }
 
-h2o_filter_t *h2o_define_filter(h2o_loop_context_t *context, size_t sz)
+h2o_filter_t *h2o_define_filter(h2o_context_t *context, size_t sz)
 {
     h2o_filter_t *filter = h2o_malloc(sz);
 
@@ -69,7 +69,7 @@ h2o_filter_t *h2o_define_filter(h2o_loop_context_t *context, size_t sz)
     return filter;
 }
 
-void h2o_get_timestamp(h2o_loop_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts)
+void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts)
 {
     uint64_t now = h2o_now(ctx->loop);
 
@@ -95,7 +95,7 @@ void h2o_get_timestamp(h2o_loop_context_t *ctx, h2o_mempool_t *pool, h2o_timesta
 static void on_ssl_handshake_complete(h2o_socket_t *sock, int status)
 {
     const h2o_buf_t *ident;
-    h2o_loop_context_t *ctx = sock->data;
+    h2o_context_t *ctx = sock->data;
     sock->data = NULL;
 
     h2o_buf_t proto;
@@ -119,7 +119,7 @@ Is_Http2:
     h2o_http2_accept(ctx, sock);
 }
 
-void h2o_accept(h2o_loop_context_t *ctx, h2o_socket_t *sock)
+void h2o_accept(h2o_context_t *ctx, h2o_socket_t *sock)
 {
     if (ctx->ssl_ctx != NULL) {
         sock->data = ctx;

@@ -233,7 +233,7 @@ int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *pa
 void h2o_http2_conn_register_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 static h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uint32_t stream_id);
-void h2o_http2_accept(h2o_loop_context_t *ctx, h2o_socket_t *sock);
+void h2o_http2_accept(h2o_context_t *ctx, h2o_socket_t *sock);
 int h2o_http2_handle_upgrade(h2o_req_t *req);
 void h2o_http2_conn_enqueue_write(h2o_http2_conn_t *conn, h2o_buf_t buf);
 static int h2o_http2_conn_stream_is_linked(h2o_http2_stream_t *stream);

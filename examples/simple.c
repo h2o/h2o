@@ -93,7 +93,7 @@ static void on_req(h2o_req_t *req)
     }
 }
 
-static h2o_loop_context_t loop_ctx;
+static h2o_context_t ctx;
 
 #if H2O_USE_LIBUV
 
@@ -114,7 +114,7 @@ static void on_accept(uv_stream_t *listener, int status)
     }
 
     sock = h2o_uv_socket_create((uv_stream_t*)conn, (uv_close_cb)free);
-    h2o_accept(&loop_ctx, sock);
+    h2o_accept(&ctx, sock);
 }
 
 static int create_listener(void)
@@ -123,7 +123,7 @@ static int create_listener(void)
     struct sockaddr_in addr;
     int r;
 
-    uv_tcp_init(loop_ctx.loop, &listener);
+    uv_tcp_init(ctx.loop, &listener);
     uv_ip4_addr("127.0.0.1", 7890, &addr);
     if ((r = uv_tcp_bind(&listener, (struct sockaddr*)&addr, 0)) != 0) {
         fprintf(stderr, "uv_tcp_bind:%s\n", uv_strerror(r));
@@ -153,7 +153,7 @@ static void on_accept(h2o_socket_t *listener, int status)
     if ((sock = h2o_evloop_socket_accept(listener)) == NULL) {
         return;
     }
-    h2o_accept(&loop_ctx, sock);
+    h2o_accept(&ctx, sock);
 }
 
 static int create_listener(void)
@@ -174,7 +174,7 @@ static int create_listener(void)
         return -1;
     }
 
-    sock = h2o_evloop_socket_create(loop_ctx.loop, fd, H2O_SOCKET_FLAG_IS_ACCEPT);
+    sock = h2o_evloop_socket_create(ctx.loop, fd, H2O_SOCKET_FLAG_IS_ACCEPT);
     h2o_socket_read_start(sock, on_accept);
 
     return 0;
@@ -189,14 +189,14 @@ int main(int argc, char **argv)
 #if H2O_USE_LIBUV
     uv_loop_t loop;
     uv_loop_init(&loop);
-    h2o_loop_context_init(&loop_ctx, &loop, on_req);
+    h2o_context_init(&ctx, &loop, on_req);
 #else
-    h2o_loop_context_init(&loop_ctx, h2o_evloop_create(), on_req);
+    h2o_context_init(&ctx, h2o_evloop_create(), on_req);
 #endif
-    h2o_define_mimetype(&loop_ctx.mimemap, "html", "text/html");
-    h2o_add_reproxy_url(&loop_ctx);
-    //loop_ctx.ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers);
-    //loop_ctx.access_log = h2o_open_access_log(loop, "/dev/stdout");
+    h2o_define_mimetype(&ctx.mimemap, "html", "text/html");
+    h2o_add_reproxy_url(&ctx);
+    //ctx.ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers);
+    //ctx.access_log = h2o_open_access_log(loop, "/dev/stdout");
 
     if (create_listener() != 0) {
         fprintf(stderr, "failed to listen to 127.0.0.1:7890:%s\n", strerror(errno));
@@ -204,9 +204,9 @@ int main(int argc, char **argv)
     }
 
 #if H2O_USE_LIBUV
-    uv_run(loop_ctx.loop, UV_RUN_DEFAULT);
+    uv_run(ctx.loop, UV_RUN_DEFAULT);
 #else
-    while (h2o_evloop_run(loop_ctx.loop) == 0)
+    while (h2o_evloop_run(ctx.loop) == 0)
         ;
 #endif
 

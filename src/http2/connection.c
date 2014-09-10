@@ -683,7 +683,7 @@ void emit_writereq(h2o_timeout_entry_t *entry)
     }
 }
 
-static h2o_http2_conn_t *create_conn(h2o_loop_context_t *ctx, h2o_socket_t *sock)
+static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock)
 {
     h2o_http2_conn_t *conn = h2o_malloc(sizeof(*conn));
 
@@ -706,7 +706,7 @@ static h2o_http2_conn_t *create_conn(h2o_loop_context_t *ctx, h2o_socket_t *sock
     return conn;
 }
 
-void h2o_http2_accept(h2o_loop_context_t *ctx, h2o_socket_t *sock)
+void h2o_http2_accept(h2o_context_t *ctx, h2o_socket_t *sock)
 {
     h2o_http2_conn_t *conn = create_conn(ctx, sock);
     sock->data = conn;
