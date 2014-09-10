@@ -37,18 +37,19 @@ struct sendfile_t {
     char buf[1];
 };
 
-static void sendfile_proceed(h2o_generator_t *_self, h2o_req_t *req, int status)
+static void sendfile_close(h2o_generator_t *_self, h2o_req_t *req)
 {
-    struct sendfile_t *self = (void*)_self;
+    struct sendfile_t *self = (struct sendfile_t*)_self;
+    close(self->fd);
+}
+
+static void sendfile_proceed(h2o_generator_t *_self, h2o_req_t *req)
+{
+    struct sendfile_t *self = (struct sendfile_t*)_self;
     size_t rlen;
     ssize_t rret;
     h2o_buf_t vec;
     int is_final;
-
-    if (status != 0) {
-        is_final = 1;
-        goto Exit;
-    }
 
     /* read the file */
     rlen = self->bytesleft;
@@ -70,7 +71,7 @@ static void sendfile_proceed(h2o_generator_t *_self, h2o_req_t *req, int status)
 
 Exit:
     if (is_final)
-        close(self->fd);
+        sendfile_close(&self->super, req);
 }
 
 int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *path, h2o_buf_t *mime_type)
@@ -96,7 +97,7 @@ int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *pa
     /* build response */
     req->res.status = status;
     req->res.reason = reason;
-    req->res.content_length = st.st_size;
+    //req->res.content_length = st.st_size;
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, mime_type->base, mime_type->len);
 
     /* instantiate the generator */
@@ -105,12 +106,13 @@ int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *pa
         bufsz = st.st_size;
     self = (void*)h2o_start_response(req, offsetof(struct sendfile_t, buf) + bufsz);
     self->super.proceed = sendfile_proceed;
+    self->super.stop = sendfile_close;
     self->fd = fd;
     self->req = req;
     self->bytesleft = st.st_size;
 
     /* send data */
-    sendfile_proceed(&self->super, req, 0);
+    sendfile_proceed(&self->super, req);
 
     return 0;
 }

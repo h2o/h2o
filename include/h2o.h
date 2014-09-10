@@ -214,12 +214,14 @@ typedef struct st_h2o_header_t {
 typedef H2O_VECTOR(h2o_header_t) h2o_headers_t;
 
 typedef struct st_h2o_generator_t {
-    void (*proceed)(struct st_h2o_generator_t *self, h2o_req_t *req, int status);
+    void (*proceed)(struct st_h2o_generator_t *self, h2o_req_t *req);
+    void (*stop)(struct st_h2o_generator_t *self, h2o_req_t *req);
 } h2o_generator_t;
 
 typedef struct st_h2o_ostream_t {
     struct st_h2o_ostream_t *next;
     void (*do_send)(struct st_h2o_ostream_t *self, h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final);
+    void (*stop)(struct st_h2o_ostream_t *self, h2o_req_t *req);
 } h2o_ostream_t;
 
 typedef struct st_h2o_res_t {
@@ -552,7 +554,7 @@ inline void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, h2o_buf_t
 inline void h2o_proceed_response(h2o_req_t *req)
 {
     if (req->_generator != NULL) {
-        req->_generator->proceed(req->_generator, req, 0);
+        req->_generator->proceed(req->_generator, req);
     } else {
         req->_ostr_top->do_send(req->_ostr_top, req, NULL, 0, 1);
     }

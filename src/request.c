@@ -74,12 +74,20 @@ void h2o_dispose_request(h2o_req_t *req)
 {
     h2o_loop_context_t *ctx = req->conn->ctx;
 
+    /* close the generator if it is still open */
     if (req->_generator != NULL) {
         /* close generator */
-        req->_generator->proceed(req->_generator, req, 1);
+        if (req->_generator->stop != NULL)
+            req->_generator->stop(req->_generator, req);
         req->_generator = NULL;
     }
-    /* FIXME close ostreams */
+    /* close the ostreams still open */
+    while (req->_ostr_top->next != NULL) {
+        if (req->_ostr_top->stop != NULL)
+            req->_ostr_top->stop(req->_ostr_top, req);
+        req->_ostr_top = req->_ostr_top->next;
+    }
+
     h2o_timeout_unlink(&ctx->zero_timeout, &req->_timeout_entry);
 
     if (req->version != 0 && ctx->access_log != NULL) {
