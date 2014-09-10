@@ -195,7 +195,7 @@ static void read_on_ready(struct st_h2o_evloop_socket_t *sock)
     if ((sock->_flags & H2O_SOCKET_FLAG_IS_ACCEPT) != 0)
         goto Notify;
 
-    if ((status = on_read_core(sock->fd, &sock->super.input)) != 0)
+    if ((status = on_read_core(sock->fd, sock->super.ssl == NULL ? &sock->super.input : &sock->super.ssl->input.encrypted)) != 0)
         goto Notify;
 
     if (sock->super.ssl != NULL && sock->super.ssl->handshake.cb == NULL)
