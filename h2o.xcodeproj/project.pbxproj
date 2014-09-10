@@ -11,9 +11,11 @@
 		101B670C19ADD3380084A351 /* access_log.c in Sources */ = {isa = PBXBuildFile; fileRef = 101B670B19ADD3380084A351 /* access_log.c */; };
 		1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923C119A3217300C52AD6 /* websocket.c */; };
 		1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923A319A3215F00C52AD6 /* websocket.h */; };
-		1065E6F019B8C64200686E72 /* socket_loop.c in Sources */ = {isa = PBXBuildFile; fileRef = 1065E6EF19B8C64200686E72 /* socket_loop.c */; };
 		1065E6F219B953C900686E72 /* linklist.c in Sources */ = {isa = PBXBuildFile; fileRef = 1065E6F119B953C900686E72 /* linklist.c */; };
 		1065E6F919BEBAC600686E72 /* timeout.c in Sources */ = {isa = PBXBuildFile; fileRef = 1065E6F819BEBAC600686E72 /* timeout.c */; };
+		1065E70C19BF664300686E72 /* evloop.h in Headers */ = {isa = PBXBuildFile; fileRef = 1065E70419BF145700686E72 /* evloop.h */; };
+		1065E70D19BF6D4600686E72 /* uv-binding.h in Headers */ = {isa = PBXBuildFile; fileRef = 1065E70619BF14E500686E72 /* uv-binding.h */; };
+		1065E70E19BF6D9400686E72 /* uv-binding.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 1065E70719BF17FE00686E72 /* uv-binding.c.h */; };
 		1079236A19A3210E00C52AD6 /* khash.h in Headers */ = {isa = PBXBuildFile; fileRef = 1079232619A3210D00C52AD6 /* khash.h */; };
 		1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */ = {isa = PBXBuildFile; fileRef = 1079235A19A3210D00C52AD6 /* picohttpparser.c */; };
 		1079239719A3210E00C52AD6 /* picohttpparser.h in Headers */ = {isa = PBXBuildFile; fileRef = 1079235B19A3210D00C52AD6 /* picohttpparser.h */; };
@@ -106,12 +108,15 @@
 /* Begin PBXFileReference section */
 		101788B119B561AA0084C6D8 /* socket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = socket.c; sourceTree = "<group>"; };
 		101B670B19ADD3380084A351 /* access_log.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = access_log.c; sourceTree = "<group>"; };
-		1065E6EF19B8C64200686E72 /* socket_loop.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = socket_loop.c; sourceTree = "<group>"; };
+		1065E6EF19B8C64200686E72 /* evloop.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = evloop.c.h; sourceTree = "<group>"; };
 		1065E6F119B953C900686E72 /* linklist.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = linklist.c; sourceTree = "<group>"; };
-		1065E6F419B996B400686E72 /* select.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = select.h; sourceTree = "<group>"; };
-		1065E6F619B99E6D00686E72 /* kqueue.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = kqueue.h; sourceTree = "<group>"; };
-		1065E6F719B9B1AC00686E72 /* epoll.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = epoll.h; sourceTree = "<group>"; };
+		1065E6F419B996B400686E72 /* select.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = select.c.h; sourceTree = "<group>"; };
+		1065E6F619B99E6D00686E72 /* kqueue.c.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = kqueue.c.h; sourceTree = "<group>"; };
+		1065E6F719B9B1AC00686E72 /* epoll.c.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = epoll.c.h; sourceTree = "<group>"; };
 		1065E6F819BEBAC600686E72 /* timeout.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = timeout.c; sourceTree = "<group>"; };
+		1065E70419BF145700686E72 /* evloop.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = evloop.h; sourceTree = "<group>"; };
+		1065E70619BF14E500686E72 /* uv-binding.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "uv-binding.h"; sourceTree = "<group>"; };
+		1065E70719BF17FE00686E72 /* uv-binding.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "uv-binding.c.h"; sourceTree = "<group>"; };
 		1079231519A320A700C52AD6 /* libh2o.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libh2o.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		1079232619A3210D00C52AD6 /* khash.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = khash.h; sourceTree = "<group>"; };
 		1079235A19A3210D00C52AD6 /* picohttpparser.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picohttpparser.c; sourceTree = "<group>"; };
@@ -186,14 +191,24 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		1065E6F319B9969000686E72 /* socket_loop */ = {
+		1065E6F319B9969000686E72 /* evloop */ = {
 			isa = PBXGroup;
 			children = (
-				1065E6F419B996B400686E72 /* select.h */,
-				1065E6F619B99E6D00686E72 /* kqueue.h */,
-				1065E6F719B9B1AC00686E72 /* epoll.h */,
+				1065E6F419B996B400686E72 /* select.c.h */,
+				1065E6F619B99E6D00686E72 /* kqueue.c.h */,
+				1065E6F719B9B1AC00686E72 /* epoll.c.h */,
 			);
-			path = socket_loop;
+			path = evloop;
+			sourceTree = "<group>";
+		};
+		1065E70919BF18A600686E72 /* socket */ = {
+			isa = PBXGroup;
+			children = (
+				1065E6EF19B8C64200686E72 /* evloop.c.h */,
+				1065E6F319B9969000686E72 /* evloop */,
+				1065E70719BF17FE00686E72 /* uv-binding.c.h */,
+			);
+			path = socket;
 			sourceTree = "<group>";
 		};
 		1079230C19A320A700C52AD6 = {
@@ -267,10 +282,12 @@
 		1079239F19A3215F00C52AD6 /* h2o */ = {
 			isa = PBXGroup;
 			children = (
+				1065E70419BF145700686E72 /* evloop.h */,
 				107923A019A3215F00C52AD6 /* http1.h */,
 				107923A119A3215F00C52AD6 /* http2.h */,
 				107923A219A3215F00C52AD6 /* token.h */,
 				107923A319A3215F00C52AD6 /* websocket.h */,
+				1065E70619BF14E500686E72 /* uv-binding.h */,
 			);
 			path = h2o;
 			sourceTree = "<group>";
@@ -299,8 +316,7 @@
 				107923BC19A3217300C52AD6 /* request.c */,
 				107923BD19A3217300C52AD6 /* rproxy.c */,
 				101788B119B561AA0084C6D8 /* socket.c */,
-				1065E6F319B9969000686E72 /* socket_loop */,
-				1065E6EF19B8C64200686E72 /* socket_loop.c */,
+				1065E70919BF18A600686E72 /* socket */,
 				1065E6F819BEBAC600686E72 /* timeout.c */,
 				107923BF19A3217300C52AD6 /* token.c */,
 				1079245319A32C0800C52AD6 /* token_table.h */,
@@ -348,9 +364,12 @@
 				107923A519A3215F00C52AD6 /* http1.h in Headers */,
 				107923CA19A3217300C52AD6 /* internal.h in Headers */,
 				1079239719A3210E00C52AD6 /* picohttpparser.h in Headers */,
+				1065E70C19BF664300686E72 /* evloop.h in Headers */,
 				107923C819A3217300C52AD6 /* hpack_huffman_table.h in Headers */,
 				1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */,
 				1079245419A32C0800C52AD6 /* token_table.h in Headers */,
+				1065E70D19BF6D4600686E72 /* uv-binding.h in Headers */,
+				1065E70E19BF6D9400686E72 /* uv-binding.c.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -479,7 +498,6 @@
 				107923CF19A3217300C52AD6 /* request.c in Sources */,
 				107923CB19A3217300C52AD6 /* frame.c in Sources */,
 				107923D019A3217300C52AD6 /* rproxy.c in Sources */,
-				1065E6F019B8C64200686E72 /* socket_loop.c in Sources */,
 				107923C219A3217300C52AD6 /* chunked_encoder.c in Sources */,
 				107923D319A3217300C52AD6 /* util.c in Sources */,
 			);
@@ -535,7 +553,7 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		1079231719A320A700C52AD6 /* Debug */ = {
+		1065E70F19BF752300686E72 /* libuv-debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -571,9 +589,105 @@
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
 			};
-			name = Debug;
+			name = "libuv-debug";
 		};
-		1079231819A320A700C52AD6 /* Release */ = {
+		1065E71019BF752300686E72 /* libuv-debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				EXECUTABLE_PREFIX = lib;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"/usr/local/openssl-1.0.2/include",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+				);
+				LIBRARY_SEARCH_PATHS = "";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "libuv-debug";
+		};
+		1065E71119BF752300686E72 /* libuv-debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"PICOTEST_FUNCS=hpack_test,util_test",
+					"$(inherited)",
+				);
+				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+				);
+				PRODUCT_NAME = picotest;
+			};
+			name = "libuv-debug";
+		};
+		1065E71219BF752300686E72 /* libuv-debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-luv",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "libuv-debug";
+		};
+		1065E71319BF752300686E72 /* libuv-debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_LDFLAGS = (
+					"-lwslay",
+					"-lnettle",
+					"-lssl",
+					"-lcrypto",
+				);
+				PRODUCT_NAME = websocket;
+			};
+			name = "libuv-debug";
+		};
+		1065E71419BF754100686E72 /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -603,9 +717,9 @@
 				MACOSX_DEPLOYMENT_TARGET = 10.9;
 				SDKROOT = macosx;
 			};
-			name = Release;
+			name = "libuv-release";
 		};
-		1079231A19A320A700C52AD6 /* Debug */ = {
+		1065E71519BF754100686E72 /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				EXECUTABLE_PREFIX = lib;
@@ -618,9 +732,149 @@
 				LIBRARY_SEARCH_PATHS = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
-			name = Debug;
+			name = "libuv-release";
 		};
-		1079231B19A320A700C52AD6 /* Release */ = {
+		1065E71619BF754100686E72 /* libuv-release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+				);
+				PRODUCT_NAME = picotest;
+			};
+			name = "libuv-release";
+		};
+		1065E71719BF754100686E72 /* libuv-release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-luv",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "libuv-release";
+		};
+		1065E71819BF754100686E72 /* libuv-release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_LDFLAGS = (
+					"-lwslay",
+					"-lnettle",
+					"-lssl",
+					"-lcrypto",
+				);
+				PRODUCT_NAME = websocket;
+			};
+			name = "libuv-release";
+		};
+		1079231719A320A700C52AD6 /* evloop-debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"H2O_USE_LIBUV=0",
+					"$(inherited)",
+				);
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.9;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+			};
+			name = "evloop-debug";
+		};
+		1079231819A320A700C52AD6 /* evloop-release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_PREPROCESSOR_DEFINITIONS = "H2O_USE_LIBUV=0";
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.9;
+				SDKROOT = macosx;
+			};
+			name = "evloop-release";
+		};
+		1079231A19A320A700C52AD6 /* evloop-debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				EXECUTABLE_PREFIX = lib;
@@ -633,9 +887,24 @@
 				LIBRARY_SEARCH_PATHS = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
-			name = Release;
+			name = "evloop-debug";
 		};
-		107923E019A321F400C52AD6 /* Debug */ = {
+		1079231B19A320A700C52AD6 /* evloop-release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				EXECUTABLE_PREFIX = lib;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"/usr/local/openssl-1.0.2/include",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+				);
+				LIBRARY_SEARCH_PATHS = "";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "evloop-release";
+		};
+		107923E019A321F400C52AD6 /* evloop-debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -659,9 +928,9 @@
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
-			name = Debug;
+			name = "evloop-debug";
 		};
-		107923E119A321F400C52AD6 /* Release */ = {
+		107923E119A321F400C52AD6 /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
@@ -681,9 +950,9 @@
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
-			name = Release;
+			name = "evloop-release";
 		};
-		1079240B19A3247A00C52AD6 /* Debug */ = {
+		1079240B19A3247A00C52AD6 /* evloop-debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -708,9 +977,9 @@
 				);
 				PRODUCT_NAME = websocket;
 			};
-			name = Debug;
+			name = "evloop-debug";
 		};
-		1079240C19A3247A00C52AD6 /* Release */ = {
+		1079240C19A3247A00C52AD6 /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
@@ -731,9 +1000,9 @@
 				);
 				PRODUCT_NAME = websocket;
 			};
-			name = Release;
+			name = "evloop-release";
 		};
-		1079243319A3260E00C52AD6 /* Debug */ = {
+		1079243319A3260E00C52AD6 /* evloop-debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -758,9 +1027,9 @@
 				);
 				PRODUCT_NAME = picotest;
 			};
-			name = Debug;
+			name = "evloop-debug";
 		};
-		1079243419A3260E00C52AD6 /* Release */ = {
+		1079243419A3260E00C52AD6 /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
@@ -780,7 +1049,7 @@
 				);
 				PRODUCT_NAME = picotest;
 			};
-			name = Release;
+			name = "evloop-release";
 		};
 /* End XCBuildConfiguration section */
 
@@ -788,47 +1057,57 @@
 		1079231019A320A700C52AD6 /* Build configuration list for PBXProject "h2o" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				1079231719A320A700C52AD6 /* Debug */,
-				1079231819A320A700C52AD6 /* Release */,
+				1079231719A320A700C52AD6 /* evloop-debug */,
+				1065E70F19BF752300686E72 /* libuv-debug */,
+				1079231819A320A700C52AD6 /* evloop-release */,
+				1065E71419BF754100686E72 /* libuv-release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = "evloop-release";
 		};
 		1079231919A320A700C52AD6 /* Build configuration list for PBXNativeTarget "h2o" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				1079231A19A320A700C52AD6 /* Debug */,
-				1079231B19A320A700C52AD6 /* Release */,
+				1079231A19A320A700C52AD6 /* evloop-debug */,
+				1065E71019BF752300686E72 /* libuv-debug */,
+				1079231B19A320A700C52AD6 /* evloop-release */,
+				1065E71519BF754100686E72 /* libuv-release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = "evloop-release";
 		};
 		107923DF19A321F400C52AD6 /* Build configuration list for PBXNativeTarget "simple" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				107923E019A321F400C52AD6 /* Debug */,
-				107923E119A321F400C52AD6 /* Release */,
+				107923E019A321F400C52AD6 /* evloop-debug */,
+				1065E71219BF752300686E72 /* libuv-debug */,
+				107923E119A321F400C52AD6 /* evloop-release */,
+				1065E71719BF754100686E72 /* libuv-release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = "evloop-release";
 		};
 		1079240A19A3247A00C52AD6 /* Build configuration list for PBXNativeTarget "websocket" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				1079240B19A3247A00C52AD6 /* Debug */,
-				1079240C19A3247A00C52AD6 /* Release */,
+				1079240B19A3247A00C52AD6 /* evloop-debug */,
+				1065E71319BF752300686E72 /* libuv-debug */,
+				1079240C19A3247A00C52AD6 /* evloop-release */,
+				1065E71819BF754100686E72 /* libuv-release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = "evloop-release";
 		};
 		1079243219A3260E00C52AD6 /* Build configuration list for PBXNativeTarget "picotest" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				1079243319A3260E00C52AD6 /* Debug */,
-				1079243419A3260E00C52AD6 /* Release */,
+				1079243319A3260E00C52AD6 /* evloop-debug */,
+				1065E71119BF752300686E72 /* libuv-debug */,
+				1079243419A3260E00C52AD6 /* evloop-release */,
+				1065E71619BF754100686E72 /* libuv-release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = "evloop-release";
 		};
 /* End XCConfigurationList section */
 	};

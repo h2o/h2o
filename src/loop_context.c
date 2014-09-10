@@ -32,12 +32,13 @@ static void default_dispose_filter(h2o_filter_t *filter)
         filter->next->dispose(filter->next);
 }
 
-void h2o_loop_context_init(h2o_loop_context_t *ctx, h2o_req_cb req_cb)
+void h2o_loop_context_init(h2o_loop_context_t *ctx, h2o_loop_t *loop, h2o_req_cb req_cb)
 {
     memset(ctx, 0, sizeof(*ctx));
-    ctx->socket_loop = h2o_socket_loop_create();
+    ctx->loop = loop;
     ctx->req_cb = req_cb;
-    h2o_timeout_init(&ctx->timeouts, &ctx->req_timeout, 10000);
+    h2o_timeout_init(ctx->loop, &ctx->zero_timeout, 0);
+    h2o_timeout_init(ctx->loop, &ctx->req_timeout, 10000);
     h2o_add_chunked_encoder(ctx);
     h2o_init_mimemap(&ctx->mimemap, "application/octet-stream");
     ctx->server_name = h2o_buf_init(H2O_STRLIT("h2o/0.1"));
@@ -52,11 +53,6 @@ void h2o_loop_context_dispose(h2o_loop_context_t *ctx)
         ctx->filters->dispose(ctx->filters);
     }
     h2o_dispose_mimemap(&ctx->mimemap);
-}
-
-int h2o_loop_context_run(h2o_loop_context_t *ctx)
-{
-    return h2o_socket_loop_run(ctx->socket_loop, &ctx->timeouts);
 }
 
 h2o_filter_t *h2o_define_filter(h2o_loop_context_t *context, size_t sz)
@@ -75,7 +71,7 @@ h2o_filter_t *h2o_define_filter(h2o_loop_context_t *context, size_t sz)
 
 void h2o_get_timestamp(h2o_loop_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts)
 {
-    uint64_t now = h2o_now(ctx);
+    uint64_t now = h2o_now(ctx->loop);
 
     if (ctx->_timestamp_cache.uv_now_at != now) {
         time_t prev_sec = ctx->_timestamp_cache.tv_at.tv_sec;

@@ -21,7 +21,7 @@
  */
 #include "h2o.h"
 
-static size_t proceed_timeout(h2o_timeout_t *timeout, uint64_t now)
+size_t h2o_timeout_run(h2o_timeout_t *timeout, uint64_t now)
 {
     size_t n = 0;
 
@@ -38,36 +38,28 @@ static size_t proceed_timeout(h2o_timeout_t *timeout, uint64_t now)
     return n;
 }
 
-void h2o_timeout_update_now(h2o_timeout_manager_t *manager)
-{
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    manager->now = (uint64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
-}
-
-size_t h2o_timeout_run(h2o_timeout_manager_t *manager, int zero_timeout_only)
+size_t h2o_timeout_run_all(h2o_linklist_t *timeouts, uint64_t now)
 {
     size_t n = 0;
 
-    if (! zero_timeout_only && manager->_timeouts != NULL) {
-        h2o_timeout_t *timeout = h2o_linklist_get_first(h2o_timeout_t, _link, manager->_timeouts);
+    if (timeouts != NULL) {
+        h2o_timeout_t *timeout = h2o_linklist_get_first(h2o_timeout_t, _link, timeouts);
         do {
-            n += proceed_timeout(timeout, manager->now);
+            n += h2o_timeout_run(timeout, now);
         } while ((timeout = h2o_linklist_get_next(h2o_timeout_t, _link, timeout))
-            != h2o_linklist_get_first(h2o_timeout_t, _link, manager->_timeouts));
+            != h2o_linklist_get_first(h2o_timeout_t, _link, timeouts));
     }
-    n += proceed_timeout(&manager->zero_timeout, manager->now);
 
     return n;
 }
 
-int32_t h2o_timeout_get_max_wait(h2o_timeout_manager_t *manager)
+uint64_t h2o_timeout_get_wake_at(h2o_linklist_t *timeouts)
 {
-    uint64_t wake_at = UINT64_MAX, max_wait;
+    uint64_t wake_at = UINT64_MAX;
 
     /* change wake_at to the minimum value of the timeouts */
-    if (manager->_timeouts != NULL) {
-        h2o_timeout_t *timeout = h2o_linklist_get_first(h2o_timeout_t, _link, manager->_timeouts);
+    if (timeouts != NULL) {
+        h2o_timeout_t *timeout = h2o_linklist_get_first(h2o_timeout_t, _link, timeouts);
         do {
             if (timeout->_entries != NULL) {
                 h2o_timeout_entry_t *entry = h2o_linklist_get_first(h2o_timeout_entry_t, _link, timeout->_entries);
@@ -75,36 +67,28 @@ int32_t h2o_timeout_get_max_wait(h2o_timeout_manager_t *manager)
                     wake_at = entry->wake_at;
             }
         } while ((timeout = h2o_linklist_get_next(h2o_timeout_t, _link, timeout))
-            != h2o_linklist_get_first(h2o_timeout_t, _link, manager->_timeouts));
+            != h2o_linklist_get_first(h2o_timeout_t, _link, timeouts));
     }
 
-    h2o_timeout_update_now(manager);
-
-    if (manager->now < wake_at) {
-        max_wait = wake_at - manager->now;
-        if (max_wait > INT32_MAX)
-            max_wait = INT32_MAX;
-    } else {
-        max_wait = 0;
-    }
-
-    return (int32_t)max_wait;
+    return wake_at;
 }
 
-void h2o_timeout_init(h2o_timeout_manager_t *manager, h2o_timeout_t *timeout, uint64_t millis)
+void h2o_timeout_init(h2o_loop_t *loop, h2o_timeout_t *timeout, uint64_t millis)
 {
-    assert(millis != 0 && "use loop->zero_timeout for delayed tasks");
     memset(timeout, 0, sizeof(*timeout));
     timeout->timeout = millis;
-    h2o_linklist_insert(&manager->_timeouts, manager->_timeouts, &timeout->_link);
+
+    h2o_timeout__do_init(loop, timeout);
 }
 
-void h2o_timeout_link(h2o_timeout_manager_t *manager, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)
+void h2o_timeout_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)
 {
     /* insert at tail, so the entries are sorted in ascending order */
     h2o_linklist_insert(&timeout->_entries, timeout->_entries, &entry->_link);
     /* set data */
-    entry->wake_at = manager->now + timeout->timeout;
+    entry->wake_at = h2o_now(loop) + timeout->timeout;
+
+    h2o_timeout__do_link(loop, timeout, entry);
 }
 
 void h2o_timeout_unlink(h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)
