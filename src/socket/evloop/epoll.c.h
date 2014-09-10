@@ -30,16 +30,16 @@
 # define DEBUG_LOG(...)
 #endif
 
-struct st_h2o_socket_loop_epoll_t {
-    h2o_socket_loop_t super;
+struct st_h2o_evloop_epoll_t {
+    h2o_evloop_t super;
     int ep;
 };
 
-static int update_status(struct st_h2o_socket_loop_epoll_t *loop)
+static int update_status(struct st_h2o_evloop_epoll_t *loop)
 {
     while (loop->super._statechanged.head != NULL) {
         /* detach the top */
-        h2o_socket_t *sock = loop->super._statechanged.head;
+        struct st_h2o_evloop_socket_t *sock = loop->super._statechanged.head;
         loop->super._statechanged.head = sock->_next_statechanged;
         sock->_next_statechanged = sock;
         /* update the state */
@@ -48,7 +48,7 @@ static int update_status(struct st_h2o_socket_loop_epoll_t *loop)
         } else {
             int changed = 0;
             struct epoll_event ev;
-            if (h2o_socket_is_reading(sock)) {
+            if (h2o_socket_is_reading(&sock->super)) {
                 if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_READ) == 0) {
                     sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_READ;
                     ev.events |= EPOLLIN;
@@ -60,7 +60,7 @@ static int update_status(struct st_h2o_socket_loop_epoll_t *loop)
                     changed = 1;
                 }
             }
-            if (h2o_socket_is_writing(sock) && sock->_wreq.cnt != 0) {
+            if (h2o_socket_is_writing(&sock->super) && sock->_wreq.cnt != 0) {
                 if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE) == 0) {
                     sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE;
                     ev.events |= EPOLLOUT;
@@ -88,9 +88,9 @@ static int update_status(struct st_h2o_socket_loop_epoll_t *loop)
     return 0;
 }
 
-static int proceed(h2o_socket_loop_t *_loop, h2o_timeout_manager_t *timeouts)
+int evloop_do_proceed(h2o_evloop_t *_loop)
 {
-    struct st_h2o_socket_loop_epoll_t *loop = (struct st_h2o_socket_loop_epoll_t*)_loop;
+    struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t*)_loop;
     struct epoll_event events[256];
     int nevents, i;
 
@@ -100,26 +100,25 @@ static int proceed(h2o_socket_loop_t *_loop, h2o_timeout_manager_t *timeouts)
 
     /* poll */
     while (
-        (nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), h2o_timeout_get_max_wait(timeouts))) == -1
+        (nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), get_max_wait(&loop->super))) == -1
         && errno == EINTR)
         ;
+    update_now(&loop->super);
     if (nevents == -1)
         return -1;
 
-    h2o_timeout_update_now(timeouts);
-
     /* update readable flags, perform writes */
     for (i = 0; i != nevents; ++i) {
-        h2o_socket_t *sock = events[i].data.ptr;
+        struct st_h2o_evloop_socket_t *sock = events[i].data.ptr;
         if ((events[i].events & EPOLLIN) != 0) {
             if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED) {
                 sock->_flags |= H2O_SOCKET_FLAG_IS_READ_READY;
-                h2o_socket__link_to_pending(sock);
+                link_to_pending(sock);
             }
         }
         if ((events[i].events & EPOLLOUT) != 0) {
             if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED) {
-                h2o_socket__write_pending(sock);
+                write_pending(sock);
             }
         }
     }
@@ -127,21 +126,17 @@ static int proceed(h2o_socket_loop_t *_loop, h2o_timeout_manager_t *timeouts)
     return 0;
 }
 
-static void on_create(h2o_socket_t *sock)
+static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock)
 {
 }
 
-static void on_close(h2o_socket_t *sock)
+static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
 {
 }
 
-h2o_socket_loop_t *h2o_socket_loop_create(void)
+h2o_evloop_t *h2o_evloop_create(void)
 {
-    struct st_h2o_socket_loop_epoll_t *loop = (struct st_h2o_socket_loop_epoll_t*)create_socket_loop(
-        sizeof(*loop),
-        proceed,
-        on_create,
-        on_close);
+    struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t*)create_evloop(sizeof(*loop));
 
     loop->ep = epoll_create(10);
 

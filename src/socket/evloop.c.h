@@ -375,11 +375,9 @@ int h2o_evloop_run(h2o_evloop_t *loop)
     if (evloop_do_proceed(loop) != 0)
         return -1;
 
-    { /* run the timeouts and pending callbacks */
-        int zero_timeout_only = 0;
-        while (run_pending(loop) + h2o_timeout_run_all(loop->_timeouts, loop->_now) != 0)
-            zero_timeout_only = 1;
-    }
+    /* run the timeouts and pending callbacks */
+    while (run_pending(loop) + h2o_timeout_run_all(loop->_timeouts, loop->_now) != 0)
+        ;
 
     return 0;
 }
