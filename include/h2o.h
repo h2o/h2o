@@ -27,7 +27,11 @@ extern "C" {
 #endif
 
 #ifndef H2O_USE_LIBUV
-# define H2O_USE_LIBUV 1
+# if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_KQUEUE
+#  define H2O_USE_LIBUV 0
+# else
+#  define H2O_USE_LIBUV 1
+# endif
 #endif
 
 #include <assert.h>
