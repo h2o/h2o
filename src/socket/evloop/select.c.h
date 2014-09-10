@@ -28,18 +28,18 @@
 # define DEBUG_LOG(...)
 #endif
 
-struct st_h2o_socket_loop_select_t {
-    h2o_socket_loop_t super;
+struct st_h2o_evloop_select_t {
+    h2o_evloop_t super;
     fd_set readfds, writefds;
     int max_fd;
-    h2o_socket_t *socks[FD_SETSIZE];
+    struct st_h2o_evloop_socket_t *socks[FD_SETSIZE];
 };
 
-static void update_fdset(struct st_h2o_socket_loop_select_t *loop)
+static void update_fdset(struct st_h2o_evloop_select_t *loop)
 {
     while (loop->super._statechanged.head != NULL) {
         /* detach the top */
-        h2o_socket_t *sock = loop->super._statechanged.head;
+        struct st_h2o_evloop_socket_t *sock = loop->super._statechanged.head;
         loop->super._statechanged.head = sock->_next_statechanged;
         sock->_next_statechanged = sock;
         /* update the state */
@@ -53,7 +53,7 @@ static void update_fdset(struct st_h2o_socket_loop_select_t *loop)
             } else {
                 assert(loop->socks[sock->fd] == sock);
             }
-            if (h2o_socket_is_reading(sock)) {
+            if (h2o_socket_is_reading(&sock->super)) {
                 DEBUG_LOG("setting READ for fd: %d\n", sock->fd);
                 FD_SET(sock->fd, &loop->readfds);
                 sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_READ;
@@ -62,7 +62,7 @@ static void update_fdset(struct st_h2o_socket_loop_select_t *loop)
                 FD_CLR(sock->fd, &loop->readfds);
                 sock->_flags &= ~H2O_SOCKET_FLAG_IS_POLLED_FOR_READ;
             }
-            if (h2o_socket_is_writing(sock) && sock->_wreq.cnt != 0) {
+            if (h2o_socket_is_writing(&sock->super) && sock->_wreq.cnt != 0) {
                 DEBUG_LOG("setting WRITE for fd: %d\n", sock->fd);
                 FD_SET(sock->fd, &loop->writefds);
                 sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE;
@@ -76,13 +76,12 @@ static void update_fdset(struct st_h2o_socket_loop_select_t *loop)
     loop->super._statechanged.tail_ref = &loop->super._statechanged.head;
 }
 
-static int proceed(h2o_socket_loop_t *_loop, h2o_timeout_manager_t *timeouts)
+int evloop_do_proceed(h2o_evloop_t *_loop)
 {
-    struct st_h2o_socket_loop_select_t *loop = (struct st_h2o_socket_loop_select_t*)_loop;
+    struct st_h2o_evloop_select_t *loop = (struct st_h2o_evloop_select_t*)_loop;
     fd_set rfds, wfds;
     struct timeval timeout;
     int fd, ret;
-    int32_t max_wait_millis;
 
     /* update status */
     update_fdset(loop);
@@ -90,9 +89,9 @@ static int proceed(h2o_socket_loop_t *_loop, h2o_timeout_manager_t *timeouts)
     /* call select */
     do {
         /* calc timeout */
-        max_wait_millis = h2o_timeout_get_max_wait(timeouts);
-        timeout.tv_sec = max_wait_millis / 1000;
-        timeout.tv_usec = max_wait_millis % 1000 * 1000;
+        int32_t max_wait = get_max_wait(&loop->super);
+        timeout.tv_sec = max_wait / 1000;
+        timeout.tv_usec = max_wait % 1000 * 1000;
         /* set fds */
         memcpy(&rfds, &loop->readfds, sizeof(rfds));
         memcpy(&wfds, &loop->writefds, sizeof(wfds));
@@ -103,27 +102,27 @@ static int proceed(h2o_socket_loop_t *_loop, h2o_timeout_manager_t *timeouts)
         return -1;
     DEBUG_LOG("select returned: %d\n", ret);
 
-    h2o_timeout_update_now(timeouts);
+    update_now(&loop->super);
 
     /* update readable flags, perform writes */
     if (ret > 0) {
         for (fd = 0; fd <= loop->max_fd; ++fd) {
             /* set read_ready flag before calling the write cb, since app. code invoked by hte latter may close the socket, clearing the former flag */
             if (FD_ISSET(fd, &rfds)) {
-                h2o_socket_t *sock = loop->socks[fd];
+                struct st_h2o_evloop_socket_t *sock = loop->socks[fd];
                 assert(sock != NULL);
                 if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED) {
                     sock->_flags |= H2O_SOCKET_FLAG_IS_READ_READY;
-                    h2o_socket__link_to_pending(sock);
+                    link_to_pending(sock);
                     DEBUG_LOG("added fd %d as read_ready\n", fd);
                 }
             }
             if (FD_ISSET(fd, &wfds)) {
-                h2o_socket_t *sock = loop->socks[fd];
+                struct st_h2o_evloop_socket_t *sock = loop->socks[fd];
                 assert(sock != NULL);
                 if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED) {
                     DEBUG_LOG("handling pending writes on fd %d\n", fd);
-                    h2o_socket__write_pending(loop->socks[fd]);
+                    write_pending(loop->socks[fd]);
                 }
             }
         }
@@ -132,9 +131,9 @@ static int proceed(h2o_socket_loop_t *_loop, h2o_timeout_manager_t *timeouts)
     return 0;
 }
 
-static void on_create(h2o_socket_t *sock)
+static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock)
 {
-    struct st_h2o_socket_loop_select_t *loop = (struct st_h2o_socket_loop_select_t*)sock->loop;
+    struct st_h2o_evloop_select_t *loop = (struct st_h2o_evloop_select_t*)sock->loop;
 
     if (loop->max_fd < sock->fd)
         loop->max_fd = sock->fd;
@@ -146,22 +145,17 @@ static void on_create(h2o_socket_t *sock)
     assert(! FD_ISSET(sock->fd, &loop->writefds));
 }
 
-static void on_close(h2o_socket_t *sock)
+static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
 {
-    struct st_h2o_socket_loop_select_t *loop = (struct st_h2o_socket_loop_select_t*)sock->loop;
+    struct st_h2o_evloop_select_t *loop = (struct st_h2o_evloop_select_t*)sock->loop;
     assert(loop->socks[sock->fd] != NULL);
     DEBUG_LOG("clearing READ/WRITE for fd: %d\n", sock->fd);
     FD_CLR(sock->fd, &loop->readfds);
     FD_CLR(sock->fd, &loop->writefds);
 }
 
-h2o_socket_loop_t *h2o_socket_loop_create(void)
+h2o_evloop_t *h2o_evloop_create(void)
 {
-    struct st_h2o_socket_loop_select_t *loop = (struct st_h2o_socket_loop_select_t*)create_socket_loop(
-            sizeof(*loop),
-            proceed,
-            on_create,
-            on_close);
-
+    struct st_h2o_evloop_select_t *loop = (struct st_h2o_evloop_select_t*)create_evloop(sizeof(*loop));
     return &loop->super;
 }
