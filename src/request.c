@@ -90,8 +90,11 @@ void h2o_dispose_request(h2o_req_t *req)
 
     h2o_timeout_unlink(&ctx->zero_timeout, &req->_timeout_entry);
 
-    if (req->version != 0 && ctx->access_log != NULL) {
-        ctx->access_log->log(ctx->access_log, req);
+    if (req->version != 0 && ctx->loggers != NULL) {
+        h2o_logger_t *logger = ctx->loggers;
+        do {
+            logger->log(logger, req);
+        } while ((logger = logger->next) != NULL);
     }
 
     h2o_mempool_clear(&req->pool);

@@ -55,7 +55,7 @@ void h2o_context_dispose(h2o_context_t *ctx)
     h2o_dispose_mimemap(&ctx->mimemap);
 }
 
-h2o_filter_t *h2o_define_filter(h2o_context_t *context, size_t sz)
+h2o_filter_t *h2o_add_filter(h2o_context_t *context, size_t sz)
 {
     h2o_filter_t *filter = h2o_malloc(sz);
 
@@ -67,6 +67,17 @@ h2o_filter_t *h2o_define_filter(h2o_context_t *context, size_t sz)
     context->filters = filter;
 
     return filter;
+}
+
+h2o_logger_t *h2o_add_logger(h2o_context_t *context, size_t sz)
+{
+    h2o_logger_t *logger = h2o_malloc(sz);
+
+    memset(logger, 0, sz);
+    logger->next = context->loggers;
+    context->loggers = logger;
+
+    return logger;
 }
 
 void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts)

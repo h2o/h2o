@@ -26,14 +26,14 @@
 #include <sys/socket.h>
 #include "h2o.h"
 
-struct st_h2o_default_access_log_t {
-    h2o_access_log_t super;
+struct st_h2o_access_logger_t {
+    h2o_logger_t super;
     int fd;
 };
 
-static void access_log(h2o_access_log_t *_self, h2o_req_t *req)
+static void log_access(h2o_logger_t *_self, h2o_req_t *req)
 {
-    struct st_h2o_default_access_log_t *self = (struct st_h2o_default_access_log_t*)_self;
+    struct st_h2o_access_logger_t *self = (struct st_h2o_access_logger_t*)_self;
     char peername[sizeof("255.255.255.255")];
     struct sockaddr sa;
     socklen_t sa_len = sizeof(sa);
@@ -61,11 +61,11 @@ static void access_log(h2o_access_log_t *_self, h2o_req_t *req)
     write(self->fd, line.base, line.len);
 }
 
-h2o_access_log_t *h2o_open_access_log(const char *path)
+h2o_logger_t *h2o_add_access_logger(h2o_context_t *ctx, const char *path)
 {
-    struct st_h2o_default_access_log_t *self = h2o_malloc(sizeof(*self));
+    struct st_h2o_access_logger_t *self = (struct st_h2o_access_logger_t*)h2o_add_logger(ctx, sizeof(*self));
 
-    self->super.log = access_log;
+    self->super.log = log_access;
     self->fd = open(path, O_CREAT | O_WRONLY | O_APPEND, 0644);
     if (self->fd == -1)
         return NULL;

@@ -169,9 +169,10 @@ typedef struct st_h2o_mimemap_t {
     h2o_buf_t default_type;
 } h2o_mimemap_t;
 
-typedef struct st_h2o_access_log_t {
-    void (*log)(struct st_h2o_access_log_t *self, h2o_req_t *req);
-} h2o_access_log_t;
+typedef struct st_h2o_logger_t {
+    struct st_h2o_logger_t *next;
+    void (*log)(struct st_h2o_logger_t *self, h2o_req_t *req);
+} h2o_logger_t;
 
 typedef struct st_h2o_timestamp_string_t {
     char rfc1123[H2O_TIMESTR_RFC1123_LEN + 1];
@@ -194,7 +195,7 @@ typedef struct h2o_context_t {
     size_t max_request_entity_size;
     int http1_upgrade_to_http2;
     size_t http2_max_concurrent_requests_per_connection;
-    h2o_access_log_t *access_log;
+    h2o_logger_t *loggers;
     h2o_ssl_context_t *ssl_ctx;
     struct {
         uint64_t uv_now_at;
@@ -379,7 +380,9 @@ void h2o_context_init(h2o_context_t *context, h2o_loop_t *loop, h2o_req_cb req_c
 void h2o_context_dispose(h2o_context_t *context);
 int h2o_context_run(h2o_context_t *context);
 
-h2o_filter_t *h2o_define_filter(h2o_context_t *context, size_t sz);
+h2o_filter_t *h2o_add_filter(h2o_context_t *context, size_t sz);
+h2o_logger_t *h2o_add_logger(h2o_context_t *context, size_t sz);
+
 void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts);
 
 void h2o_accept(h2o_context_t *ctx, h2o_socket_t *sock);
@@ -403,8 +406,7 @@ void h2o_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const char *ty
 h2o_buf_t h2o_get_mimetype(h2o_mimemap_t *mimemap, const char *ext);
 
 /* access log */
-
-h2o_access_log_t *h2o_open_access_log(const char *path);
+h2o_logger_t *h2o_add_access_logger(h2o_context_t *context, const char *path);
 
 /* inline defs */
 
