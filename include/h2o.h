@@ -73,7 +73,6 @@ typedef struct st_h2o_timeout_entry_t h2o_timeout_entry_t;
 typedef struct st_h2o_socket_t h2o_socket_t;
 typedef struct st_h2o_ssl_context_t h2o_ssl_context_t;
 
-typedef void (*h2o_req_cb)(h2o_req_t *req);
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, int err);
 
 #if H2O_USE_LIBUV
@@ -164,21 +163,28 @@ struct st_h2o_socket_t {
     } _cb;
 };
 
+typedef struct st_h2o_handler_t {
+    struct st_h2o_handler_t *next;
+    void (*dispose)(struct st_h2o_handler_t *self);
+    int (*on_req)(struct st_h2o_handler_t *self, h2o_req_t *req);
+} h2o_handler_t;
+ 
 typedef struct st_h2o_filter_t {
     struct st_h2o_filter_t *next;
     void (*dispose)(struct st_h2o_filter_t *self);
     void (*on_start_response)(struct st_h2o_filter_t *self, h2o_req_t *req);
 } h2o_filter_t;
 
+typedef struct st_h2o_logger_t {
+    struct st_h2o_logger_t *next;
+    void (*dispose)(struct st_h2o_logger_t *self);
+    void (*log)(struct st_h2o_logger_t *self, h2o_req_t *req);
+} h2o_logger_t;
+
 typedef struct st_h2o_mimemap_t {
     struct st_h2o_mimemap_entry_t *top;
     h2o_buf_t default_type;
 } h2o_mimemap_t;
-
-typedef struct st_h2o_logger_t {
-    struct st_h2o_logger_t *next;
-    void (*log)(struct st_h2o_logger_t *self, h2o_req_t *req);
-} h2o_logger_t;
 
 typedef struct st_h2o_timestamp_string_t {
     char rfc1123[H2O_TIMESTR_RFC1123_LEN + 1];
@@ -192,16 +198,16 @@ typedef struct st_h2o_timestamp_t {
 
 typedef struct h2o_context_t {
     h2o_loop_t *loop;
-    h2o_req_cb req_cb;
     h2o_timeout_t zero_timeout;
     h2o_timeout_t req_timeout; /* for request timeout */
+    h2o_handler_t *handlers;
     h2o_filter_t *filters;
+    h2o_logger_t *loggers;
     h2o_mimemap_t mimemap;
     h2o_buf_t server_name;
     size_t max_request_entity_size;
     int http1_upgrade_to_http2;
     size_t http2_max_concurrent_requests_per_connection;
-    h2o_logger_t *loggers;
     h2o_ssl_context_t *ssl_ctx;
     struct {
         uint64_t uv_now_at;
@@ -382,12 +388,13 @@ static void h2o_proceed_response(h2o_req_t *req);
 
 /* context */
 
-void h2o_context_init(h2o_context_t *context, h2o_loop_t *loop, h2o_req_cb req_cb);
+void h2o_context_init(h2o_context_t *context, h2o_loop_t *loop);
 void h2o_context_dispose(h2o_context_t *context);
 int h2o_context_run(h2o_context_t *context);
 
-h2o_filter_t *h2o_add_filter(h2o_context_t *context, size_t sz);
-h2o_logger_t *h2o_add_logger(h2o_context_t *context, size_t sz);
+h2o_handler_t *h2o_prepend_handler(h2o_context_t *context, size_t sz, int (*on_req)(h2o_handler_t *self, h2o_req_t *req));
+h2o_filter_t *h2o_prepend_filter(h2o_context_t *context, size_t sz, void (*on_start_response)(h2o_filter_t *self, h2o_req_t *req));
+h2o_logger_t *h2o_prepend_logger(h2o_context_t *context, size_t sz, void (*log)(h2o_logger_t *self, h2o_req_t *req));
 
 void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts);
 
@@ -401,8 +408,8 @@ int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *pa
 
 /* output filters */
 
-void h2o_add_chunked_encoder(h2o_context_t *context); /* added by default */
-void h2o_add_reproxy_url(h2o_context_t *context);
+void h2o_prepend_chunked_encoder(h2o_context_t *context); /* added by default */
+void h2o_prepend_reproxy_url(h2o_context_t *context);
 
 /* mime mapper */
 
@@ -412,7 +419,7 @@ void h2o_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const char *ty
 h2o_buf_t h2o_get_mimetype(h2o_mimemap_t *mimemap, const char *ext);
 
 /* access log */
-h2o_logger_t *h2o_add_access_logger(h2o_context_t *context, const char *path);
+h2o_logger_t *h2o_prepend_access_logger(h2o_context_t *context, const char *path);
 
 /* inline defs */
 

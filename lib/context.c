@@ -26,20 +26,13 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 
-static void default_dispose_filter(h2o_filter_t *filter)
-{
-    if (filter->next != NULL)
-        filter->next->dispose(filter->next);
-}
-
-void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_req_cb req_cb)
+void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop)
 {
     memset(ctx, 0, sizeof(*ctx));
     ctx->loop = loop;
-    ctx->req_cb = req_cb;
     h2o_timeout_init(ctx->loop, &ctx->zero_timeout, 0);
     h2o_timeout_init(ctx->loop, &ctx->req_timeout, H2O_DEFAULT_REQ_TIMEOUT);
-    h2o_add_chunked_encoder(ctx);
+    h2o_prepend_chunked_encoder(ctx);
     h2o_init_mimemap(&ctx->mimemap, H2O_DEFAULT_MIMETYPE);
     ctx->server_name = h2o_buf_init(H2O_STRLIT("h2o/0.1"));
     ctx->max_request_entity_size = H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE;
@@ -49,32 +42,58 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_req_cb req_cb)
 
 void h2o_context_dispose(h2o_context_t *ctx)
 {
-    if (ctx->filters != NULL) {
-        ctx->filters->dispose(ctx->filters);
-    }
+#define DISPOSE_LINKED(type, entries) do { \
+    while (entries != NULL) { \
+        type *e = entries; \
+        if (e->dispose != NULL) \
+            e->dispose(e); \
+        entries = e->next; \
+        free(e); \
+    } \
+} while (0)
+
+    DISPOSE_LINKED(h2o_handler_t, ctx->handlers);
+    DISPOSE_LINKED(h2o_filter_t, ctx->filters);
+    DISPOSE_LINKED(h2o_logger_t, ctx->loggers);
     h2o_dispose_mimemap(&ctx->mimemap);
+
+#undef DISPOSE_LINKED
 }
 
-h2o_filter_t *h2o_add_filter(h2o_context_t *context, size_t sz)
+h2o_handler_t *h2o_prepend_handler(h2o_context_t *context, size_t sz, int (*on_req)(h2o_handler_t *self, h2o_req_t *req))
+{
+    h2o_handler_t *handler = h2o_malloc(sz);
+
+    memset(handler, 0, sz);
+    handler->next = context->handlers;
+    handler->on_req = on_req;
+
+    context->handlers = handler;
+
+    return handler;
+}
+
+h2o_filter_t *h2o_prepend_filter(h2o_context_t *context, size_t sz, void (*on_start_response)(h2o_filter_t *self, h2o_req_t *req))
 {
     h2o_filter_t *filter = h2o_malloc(sz);
 
     memset(filter, 0, sz);
     filter->next = context->filters;
-    filter->dispose = default_dispose_filter;
-    filter->on_start_response = NULL; /* filters should always set this */
+    filter->on_start_response = on_start_response;
 
     context->filters = filter;
 
     return filter;
 }
 
-h2o_logger_t *h2o_add_logger(h2o_context_t *context, size_t sz)
+h2o_logger_t *h2o_prepend_logger(h2o_context_t *context, size_t sz, void (*log)(h2o_logger_t *self, h2o_req_t *req))
 {
     h2o_logger_t *logger = h2o_malloc(sz);
 
     memset(logger, 0, sz);
     logger->next = context->loggers;
+    logger->log = log;
+
     context->loggers = logger;
 
     return logger;

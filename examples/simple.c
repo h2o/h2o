@@ -31,66 +31,74 @@
 #include "h2o.h"
 #include "h2o/http2.h"
 
-static void on_req(h2o_req_t *req)
+static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
 {
     if (h2o_memis(req->method, req->method_len, H2O_STRLIT("GET"))
-        && req->path_len <= PATH_MAX) {
+        && h2o_memis(req->path, req->path_len, H2O_STRLIT("/chunked-test"))) {
+        h2o_buf_t body = h2o_strdup(&req->pool, "hello world\n", SIZE_MAX);
+        req->res.status = 200;
+        req->res.reason = "OK";
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
+        h2o_start_response(req, sizeof(h2o_generator_t));
+        h2o_send(req, &body, 1, 1);
+        return 0;
+    }
 
-        if (h2o_memis(req->path, req->path_len, H2O_STRLIT("/chunked-test"))) {
+    return -1;
+}
 
-            /* chunked test */
-            h2o_buf_t body = h2o_strdup(&req->pool, "hello world\n", SIZE_MAX);
-            req->res.status = 200;
-            req->res.reason = "OK";
-            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
-            h2o_start_response(req, sizeof(h2o_generator_t));
-            h2o_send(req, &body, 1, 1);
+static int reproxy_test(h2o_handler_t *self, h2o_req_t *req)
+{
+    if (h2o_memis(req->method, req->method_len, H2O_STRLIT("GET"))
+        && h2o_memis(req->path, req->path_len, H2O_STRLIT("/reproxy-test"))) {
+        req->res.status = 200;
+        req->res.reason = "OK";
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT("http://example.com:81/bar"));
+        h2o_send_inline(req, H2O_STRLIT("you should never see this!\n"));
+        return 0;
+    }
 
-        } else if (h2o_memis(req->path, req->path_len, H2O_STRLIT("/reproxy-test"))) {
+    return -1;
+}
 
-            /* reproxy-test */
-            req->res.status = 200;
-            req->res.reason = "OK";
-            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT("http://example.com:81/bar"));
-            h2o_send_inline(req, H2O_STRLIT("you should never see this!\n"));
-
+static int get_file(h2o_handler_t *self, h2o_req_t *req)
+{
+    if (h2o_memis(req->method, req->method_len, H2O_STRLIT("GET"))) {
+        /* normalize path */
+        h2o_buf_t path_normalized = h2o_normalize_path(&req->pool, req->path, req->path_len);
+        /* send file (FIXME handle directory traversal) */
+        char *dir_path = alloca(path_normalized.len + sizeof("htdocsindex.html"));
+        size_t dir_path_len;
+        h2o_buf_t mime_type;
+        strcpy(dir_path, "htdocs");
+        memcpy(dir_path + 6, path_normalized.base, path_normalized.len);
+        dir_path_len = path_normalized.len + 6;
+        if (dir_path[dir_path_len - 1] == '/') {
+            strcpy(dir_path + dir_path_len, "index.html");
+            dir_path_len += sizeof("index.html") - 1;
         } else {
-
-            /* normalize path */
-            h2o_buf_t path_normalized = h2o_normalize_path(&req->pool, req->path, req->path_len);
-            /* send file (FIXME handle directory traversal) */
-            char *dir_path = alloca(path_normalized.len + sizeof("htdocsindex.html"));
-            size_t dir_path_len;
-            h2o_buf_t mime_type;
-            strcpy(dir_path, "htdocs");
-            memcpy(dir_path + 6, path_normalized.base, path_normalized.len);
-            dir_path_len = path_normalized.len + 6;
-            if (dir_path[dir_path_len - 1] == '/') {
-                strcpy(dir_path + dir_path_len, "index.html");
-                dir_path_len += sizeof("index.html") - 1;
-            } else {
-                dir_path[dir_path_len] = '\0';
-            }
-            mime_type = h2o_get_mimetype(&req->conn->ctx->mimemap, h2o_get_filext(dir_path, dir_path_len));
-            if (h2o_send_file(req, 200, "OK", dir_path, &mime_type) != 0) {
-                h2o_send_error(req, 404, "File Not Found", "not found");
-            }
-
+            dir_path[dir_path_len] = '\0';
         }
+        mime_type = h2o_get_mimetype(&req->conn->ctx->mimemap, h2o_get_filext(dir_path, dir_path_len));
+        return h2o_send_file(req, 200, "OK", dir_path, &mime_type);
+    }
 
-    } else if (h2o_memis(req->method, req->method_len, H2O_STRLIT("POST"))
+    return -1;
+}
+
+static int post_test(h2o_handler_t *self, h2o_req_t *req)
+{
+    if (h2o_memis(req->method, req->method_len, H2O_STRLIT("POST"))
         && h2o_memis(req->path, req->path_len, H2O_STRLIT("/post-test"))) {
-
-        /* post-test */
         req->res.status = 200;
         req->res.reason = "OK";
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
         h2o_start_response(req, sizeof(h2o_generator_t));
         h2o_send(req, req->entity.entries, req->entity.size, 1);
-
-    } else {
-        h2o_send_error(req, 403, "Request Forbidden", "only GET is allowed");
+        return 0;
     }
+
+    return -1;
 }
 
 static h2o_context_t ctx;
@@ -189,14 +197,19 @@ int main(int argc, char **argv)
 #if H2O_USE_LIBUV
     uv_loop_t loop;
     uv_loop_init(&loop);
-    h2o_context_init(&ctx, &loop, on_req);
+    h2o_context_init(&ctx, &loop);
 #else
-    h2o_context_init(&ctx, h2o_evloop_create(), on_req);
+    h2o_context_init(&ctx, h2o_evloop_create());
 #endif
+
+    h2o_prepend_handler(&ctx, sizeof(h2o_handler_t), get_file);
+    h2o_prepend_handler(&ctx, sizeof(h2o_handler_t), post_test);
+    h2o_prepend_handler(&ctx, sizeof(h2o_handler_t), chunked_test);
+    h2o_prepend_handler(&ctx, sizeof(h2o_handler_t), reproxy_test);
     h2o_define_mimetype(&ctx.mimemap, "html", "text/html");
-    h2o_add_reproxy_url(&ctx);
+    h2o_prepend_reproxy_url(&ctx);
     //ctx.ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers);
-    //h2o_add_access_logger(&ctx, "/dev/stdout");
+    //h2o_prepend_access_logger(&ctx, "/dev/stdout");
 
     if (create_listener() != 0) {
         fprintf(stderr, "failed to listen to 127.0.0.1:7890:%s\n", strerror(errno));
