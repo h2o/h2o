@@ -406,10 +406,14 @@ void h2o_send_inline(h2o_req_t *req, const char *body, size_t len);
 void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body);
 int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *path, h2o_buf_t *mime_type);
 
+/* handlers */
+
+h2o_handler_t *h2o_prepend_file_handler(h2o_context_t *context, const char *virtual_path, const char *real_path, const char *index_file);
+
 /* output filters */
 
-void h2o_prepend_chunked_encoder(h2o_context_t *context); /* added by default */
-void h2o_prepend_reproxy_url(h2o_context_t *context);
+void h2o_prepend_chunked_filter(h2o_context_t *context); /* added by default */
+void h2o_prepend_reproxy_filter(h2o_context_t *context);
 
 /* mime mapper */
 

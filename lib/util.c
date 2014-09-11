@@ -373,6 +373,8 @@ static h2o_buf_t rewrite_traversal(h2o_mempool_t *pool, const char *path, size_t
     if (len == 0 || path[0] != '/')
         *dst++ = '/';
     while (src != src_end) {
+        if (*src == '?')
+            break;
         if ((src_end - src == 3 && memcmp(src, H2O_STRLIT("/..")) == 0)
             || (src_end - src > 3 && memcmp(src, H2O_STRLIT("/../")) == 0)) {
             for (--dst; ret.base < dst; --dst)
@@ -380,6 +382,9 @@ static h2o_buf_t rewrite_traversal(h2o_mempool_t *pool, const char *path, size_t
                     break;
             ++dst;
             src += src + 3 == src_end ? 3 : 4;
+        } else if ((src_end - src == 2 && memcmp(src, H2O_STRLIT("/.")) == 0)
+            || (src_end - src > 2 && memcmp(src, H2O_STRLIT("/./")) == 0)) {
+            src += src + 2 == src_end ? 2 : 3;
         } else {
             *dst++ = *src++;
         }
@@ -397,24 +402,23 @@ h2o_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len)
     if (len == 0 || path[0] != '/')
         goto Rewrite;
 
-    while (p + 3 <= end) {
-        if (p[0] == '/')
-            if (p[1] == '.')
-                if (p[2] == '.')
-                    if (p + 3 == end || p[3] == '/')
-                        goto Rewrite;
-                    else
-                        p += 4;
-                else
-                    p += 3;
-            else
-                p += 2;
-        else
-            p += 1;
+    for (; p + 1 < end; ++p) {
+        if (p[0] == '/' && p[1] == '.') {
+            /* detect false positives as well */
+            goto Rewrite;
+        } else if (p[0] == '?') {
+            goto Return;
+        }
+    }
+    for (; p < end; ++p) {
+        if (p[0] == '?') {
+            goto Return;
+        }
     }
 
+Return:
     ret.base = (char*)path;
-    ret.len = len;
+    ret.len = p - path;
     return ret;
 
 Rewrite:

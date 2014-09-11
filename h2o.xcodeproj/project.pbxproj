@@ -23,7 +23,7 @@
 		107923A619A3215F00C52AD6 /* http2.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923A119A3215F00C52AD6 /* http2.h */; };
 		107923A719A3215F00C52AD6 /* token.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923A219A3215F00C52AD6 /* token.h */; };
 		107923A919A3215F00C52AD6 /* h2o.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923A419A3215F00C52AD6 /* h2o.h */; };
-		107923C219A3217300C52AD6 /* chunked_encoder.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923AE19A3217300C52AD6 /* chunked_encoder.c */; };
+		107923C219A3217300C52AD6 /* chunked.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923AE19A3217300C52AD6 /* chunked.c */; };
 		107923C319A3217300C52AD6 /* file.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923AF19A3217300C52AD6 /* file.c */; };
 		107923C419A3217300C52AD6 /* headers.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B019A3217300C52AD6 /* headers.c */; };
 		107923C519A3217300C52AD6 /* http1.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B119A3217300C52AD6 /* http1.c */; };
@@ -47,7 +47,7 @@
 		1079243019A3260E00C52AD6 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		1079244119A3264300C52AD6 /* picohttpparser.c in Sources */ = {isa = PBXBuildFile; fileRef = 1079235A19A3210D00C52AD6 /* picohttpparser.c */; };
 		1079244219A3264600C52AD6 /* picotest.c in Sources */ = {isa = PBXBuildFile; fileRef = 1079236019A3210E00C52AD6 /* picotest.c */; };
-		1079244419A3265C00C52AD6 /* chunked_encoder.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923AE19A3217300C52AD6 /* chunked_encoder.c */; };
+		1079244419A3265C00C52AD6 /* chunked.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923AE19A3217300C52AD6 /* chunked.c */; };
 		1079244519A3265C00C52AD6 /* file.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923AF19A3217300C52AD6 /* file.c */; };
 		1079244619A3265C00C52AD6 /* headers.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B019A3217300C52AD6 /* headers.c */; };
 		1079244719A3265C00C52AD6 /* http1.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B119A3217300C52AD6 /* http1.c */; };
@@ -129,7 +129,7 @@
 		107923A319A3215F00C52AD6 /* websocket.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = websocket.h; sourceTree = "<group>"; };
 		107923A419A3215F00C52AD6 /* h2o.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = h2o.h; sourceTree = "<group>"; };
 		107923AB19A3216B00C52AD6 /* tokens.pl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = tokens.pl; sourceTree = "<group>"; };
-		107923AE19A3217300C52AD6 /* chunked_encoder.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = chunked_encoder.c; sourceTree = "<group>"; };
+		107923AE19A3217300C52AD6 /* chunked.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = chunked.c; sourceTree = "<group>"; };
 		107923AF19A3217300C52AD6 /* file.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = file.c; sourceTree = "<group>"; };
 		107923B019A3217300C52AD6 /* headers.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers.c; sourceTree = "<group>"; };
 		107923B119A3217300C52AD6 /* http1.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http1.c; sourceTree = "<group>"; };
@@ -304,7 +304,7 @@
 			isa = PBXGroup;
 			children = (
 				101B670B19ADD3380084A351 /* access_log.c */,
-				107923AE19A3217300C52AD6 /* chunked_encoder.c */,
+				107923AE19A3217300C52AD6 /* chunked.c */,
 				107923AF19A3217300C52AD6 /* file.c */,
 				107923B019A3217300C52AD6 /* headers.c */,
 				107923B119A3217300C52AD6 /* http1.c */,
@@ -498,7 +498,7 @@
 				107923CF19A3217300C52AD6 /* request.c in Sources */,
 				107923CB19A3217300C52AD6 /* frame.c in Sources */,
 				107923D019A3217300C52AD6 /* rproxy.c in Sources */,
-				107923C219A3217300C52AD6 /* chunked_encoder.c in Sources */,
+				107923C219A3217300C52AD6 /* chunked.c in Sources */,
 				107923D319A3217300C52AD6 /* util.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -531,7 +531,7 @@
 				1079244F19A3266700C52AD6 /* rproxy.c in Sources */,
 				1079245119A3266700C52AD6 /* token.c in Sources */,
 				1079245219A3266700C52AD6 /* util.c in Sources */,
-				1079244419A3265C00C52AD6 /* chunked_encoder.c in Sources */,
+				1079244419A3265C00C52AD6 /* chunked.c in Sources */,
 				1079244519A3265C00C52AD6 /* file.c in Sources */,
 				1079244619A3265C00C52AD6 /* headers.c in Sources */,
 				1079244719A3265C00C52AD6 /* http1.c in Sources */,

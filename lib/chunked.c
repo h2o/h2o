@@ -89,7 +89,7 @@ Next:
         self->next->on_start_response(self->next, req);
 }
 
-void h2o_prepend_chunked_encoder(h2o_context_t *context)
+void h2o_prepend_chunked_filter(h2o_context_t *context)
 {
     h2o_prepend_filter(context, sizeof(h2o_filter_t), on_start_response);
 }
