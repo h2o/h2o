@@ -6,6 +6,7 @@ Makefile
 build/
 cmake_install.cmake
 xcuserdata
+h2o
 examples/simple
 examples/websocket
 libh2o.a

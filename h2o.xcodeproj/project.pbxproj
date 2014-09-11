@@ -46,7 +46,6 @@
 		1079242919A325BE00C52AD6 /* simple.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923FC19A3238500C52AD6 /* simple.c */; };
 		1079243019A3260E00C52AD6 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		1079244119A3264300C52AD6 /* picohttpparser.c in Sources */ = {isa = PBXBuildFile; fileRef = 1079235A19A3210D00C52AD6 /* picohttpparser.c */; };
-		1079244219A3264600C52AD6 /* picotest.c in Sources */ = {isa = PBXBuildFile; fileRef = 1079236019A3210E00C52AD6 /* picotest.c */; };
 		1079244419A3265C00C52AD6 /* chunked.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923AE19A3217300C52AD6 /* chunked.c */; };
 		1079244519A3265C00C52AD6 /* file.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923AF19A3217300C52AD6 /* file.c */; };
 		1079244619A3265C00C52AD6 /* headers.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B019A3217300C52AD6 /* headers.c */; };
@@ -65,6 +64,8 @@
 		10BA72AA19AAD6300059392A /* stream.c in Sources */ = {isa = PBXBuildFile; fileRef = 10BA72A919AAD6300059392A /* stream.c */; };
 		10F417CC19C1907B00B6E31A /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		10F417D619C190F800B6E31A /* main.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F417D519C190F800B6E31A /* main.c */; };
+		10F417FF19C2D2F800B6E31A /* picotest.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F417FD19C2D2F800B6E31A /* picotest.c */; };
+		10F4180119C2D31600B6E31A /* yoml.h in Headers */ = {isa = PBXBuildFile; fileRef = 10F4180019C2D31600B6E31A /* yoml.h */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -139,8 +140,6 @@
 		1079232619A3210D00C52AD6 /* khash.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = khash.h; sourceTree = "<group>"; };
 		1079235A19A3210D00C52AD6 /* picohttpparser.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picohttpparser.c; sourceTree = "<group>"; };
 		1079235B19A3210D00C52AD6 /* picohttpparser.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = picohttpparser.h; sourceTree = "<group>"; };
-		1079236019A3210E00C52AD6 /* picotest.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picotest.c; sourceTree = "<group>"; };
-		1079236119A3210E00C52AD6 /* picotest.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = picotest.h; sourceTree = "<group>"; };
 		107923A019A3215F00C52AD6 /* http1.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = http1.h; sourceTree = "<group>"; };
 		107923A119A3215F00C52AD6 /* http2.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = http2.h; sourceTree = "<group>"; };
 		107923A219A3215F00C52AD6 /* token.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = token.h; sourceTree = "<group>"; };
@@ -165,15 +164,19 @@
 		107923BF19A3217300C52AD6 /* token.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = token.c; sourceTree = "<group>"; };
 		107923C019A3217300C52AD6 /* util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = util.c; sourceTree = "<group>"; };
 		107923C119A3217300C52AD6 /* websocket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = websocket.c; sourceTree = "<group>"; };
-		107923D919A321F400C52AD6 /* simple */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; name = simple; path = "examples-simple"; sourceTree = BUILT_PRODUCTS_DIR; };
+		107923D919A321F400C52AD6 /* examples-simple */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "examples-simple"; sourceTree = BUILT_PRODUCTS_DIR; };
 		107923FC19A3238500C52AD6 /* simple.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = simple.c; sourceTree = "<group>"; };
 		1079240D19A3247A00C52AD6 /* websocket */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = websocket; sourceTree = BUILT_PRODUCTS_DIR; };
 		1079241319A324B400C52AD6 /* websocket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = websocket.c; sourceTree = "<group>"; };
 		1079243519A3260E00C52AD6 /* picotest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = picotest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1079245319A32C0800C52AD6 /* token_table.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = token_table.h; sourceTree = "<group>"; };
 		10BA72A919AAD6300059392A /* stream.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = stream.c; sourceTree = "<group>"; };
-		10F417D319C1907B00B6E31A /* examples-simple copy */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; name = "examples-simple copy"; path = h2o; sourceTree = BUILT_PRODUCTS_DIR; };
+		10F417D319C1907B00B6E31A /* h2o */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = h2o; sourceTree = BUILT_PRODUCTS_DIR; };
 		10F417D519C190F800B6E31A /* main.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = main.c; sourceTree = "<group>"; };
+		10F417FD19C2D2F800B6E31A /* picotest.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picotest.c; sourceTree = "<group>"; };
+		10F417FE19C2D2F800B6E31A /* picotest.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = picotest.h; sourceTree = "<group>"; };
+		10F4180019C2D31600B6E31A /* yoml.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = yoml.h; path = yoml/yoml.h; sourceTree = "<group>"; };
+		10F4180219C2D32100B6E31A /* yoml-parser.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "yoml-parser.h"; path = "yoml/yoml-parser.h"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -256,10 +259,10 @@
 			isa = PBXGroup;
 			children = (
 				1079231519A320A700C52AD6 /* libh2o.a */,
-				107923D919A321F400C52AD6 /* simple */,
+				107923D919A321F400C52AD6 /* examples-simple */,
 				1079240D19A3247A00C52AD6 /* websocket */,
 				1079243519A3260E00C52AD6 /* picotest */,
-				10F417D319C1907B00B6E31A /* examples-simple copy */,
+				10F417D319C1907B00B6E31A /* h2o */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -269,7 +272,8 @@
 			children = (
 				1079231F19A3210D00C52AD6 /* klib */,
 				1079235619A3210D00C52AD6 /* picohttpparser */,
-				1079235F19A3210D00C52AD6 /* picotest */,
+				10F417FB19C2D2B400B6E31A /* picotest */,
+				10F417FC19C2D2BA00B6E31A /* yoml */,
 			);
 			path = deps;
 			sourceTree = "<group>";
@@ -289,15 +293,6 @@
 				1079235B19A3210D00C52AD6 /* picohttpparser.h */,
 			);
 			path = picohttpparser;
-			sourceTree = "<group>";
-		};
-		1079235F19A3210D00C52AD6 /* picotest */ = {
-			isa = PBXGroup;
-			children = (
-				1079236019A3210E00C52AD6 /* picotest.c */,
-				1079236119A3210E00C52AD6 /* picotest.h */,
-			);
-			path = picotest;
 			sourceTree = "<group>";
 		};
 		1079239E19A3215F00C52AD6 /* include */ = {
@@ -387,6 +382,24 @@
 			path = src;
 			sourceTree = "<group>";
 		};
+		10F417FB19C2D2B400B6E31A /* picotest */ = {
+			isa = PBXGroup;
+			children = (
+				10F417FD19C2D2F800B6E31A /* picotest.c */,
+				10F417FE19C2D2F800B6E31A /* picotest.h */,
+			);
+			path = picotest;
+			sourceTree = "<group>";
+		};
+		10F417FC19C2D2BA00B6E31A /* yoml */ = {
+			isa = PBXGroup;
+			children = (
+				10F4180219C2D32100B6E31A /* yoml-parser.h */,
+				10F4180019C2D31600B6E31A /* yoml.h */,
+			);
+			name = yoml;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXHeadersBuildPhase section */
@@ -404,6 +417,7 @@
 				1079239719A3210E00C52AD6 /* picohttpparser.h in Headers */,
 				1065E70C19BF664300686E72 /* evloop.h in Headers */,
 				107923C819A3217300C52AD6 /* hpack_huffman_table.h in Headers */,
+				10F4180119C2D31600B6E31A /* yoml.h in Headers */,
 				1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */,
 				1079245419A32C0800C52AD6 /* token_table.h in Headers */,
 				1065E70D19BF6D4600686E72 /* uv-binding.h in Headers */,
@@ -446,7 +460,7 @@
 			);
 			name = "examples-simple";
 			productName = simple;
-			productReference = 107923D919A321F400C52AD6 /* simple */;
+			productReference = 107923D919A321F400C52AD6 /* examples-simple */;
 			productType = "com.apple.product-type.tool";
 		};
 		1079240219A3247A00C52AD6 /* examples-websocket */ = {
@@ -498,7 +512,7 @@
 			);
 			name = server;
 			productName = simple;
-			productReference = 10F417D319C1907B00B6E31A /* examples-simple copy */;
+			productReference = 10F417D319C1907B00B6E31A /* h2o */;
 			productType = "com.apple.product-type.tool";
 		};
 /* End PBXNativeTarget section */
@@ -586,6 +600,7 @@
 				1079244D19A3266700C52AD6 /* mimemap.c in Sources */,
 				1079244E19A3266700C52AD6 /* request.c in Sources */,
 				1079244F19A3266700C52AD6 /* rproxy.c in Sources */,
+				10F417FF19C2D2F800B6E31A /* picotest.c in Sources */,
 				1079245119A3266700C52AD6 /* token.c in Sources */,
 				1079245219A3266700C52AD6 /* util.c in Sources */,
 				1079244419A3265C00C52AD6 /* chunked.c in Sources */,
@@ -594,7 +609,6 @@
 				1079244719A3265C00C52AD6 /* http1.c in Sources */,
 				1079244819A3265C00C52AD6 /* connection.c in Sources */,
 				1079244919A3265C00C52AD6 /* hpack.c in Sources */,
-				1079244219A3264600C52AD6 /* picotest.c in Sources */,
 				1079244119A3264300C52AD6 /* picohttpparser.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1149,6 +1163,7 @@
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
+					"-lyaml",
 				);
 				PRODUCT_NAME = h2o;
 			};
@@ -1176,6 +1191,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lyaml",
 				);
 				PRODUCT_NAME = h2o;
 			};
@@ -1198,6 +1214,7 @@
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
+					"-lyaml",
 				);
 				PRODUCT_NAME = h2o;
 			};
@@ -1221,6 +1238,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lyaml",
 				);
 				PRODUCT_NAME = h2o;
 			};
