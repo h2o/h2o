@@ -38,13 +38,13 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_req_cb req_cb)
     ctx->loop = loop;
     ctx->req_cb = req_cb;
     h2o_timeout_init(ctx->loop, &ctx->zero_timeout, 0);
-    h2o_timeout_init(ctx->loop, &ctx->req_timeout, 10000);
+    h2o_timeout_init(ctx->loop, &ctx->req_timeout, H2O_DEFAULT_REQ_TIMEOUT);
     h2o_add_chunked_encoder(ctx);
-    h2o_init_mimemap(&ctx->mimemap, "application/octet-stream");
+    h2o_init_mimemap(&ctx->mimemap, H2O_DEFAULT_MIMETYPE);
     ctx->server_name = h2o_buf_init(H2O_STRLIT("h2o/0.1"));
-    ctx->max_request_entity_size = 1024 * 1024 * 1024;
-    ctx->http1_upgrade_to_http2 = 1;
-    ctx->http2_max_concurrent_requests_per_connection = 16;
+    ctx->max_request_entity_size = H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE;
+    ctx->http1_upgrade_to_http2 = H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2;
+    ctx->http2_max_concurrent_requests_per_connection = H2O_DEFAULT_HTTP2_MAX_CONCURRENT_REQUESTS_PER_CONNECTION;
 }
 
 void h2o_context_dispose(h2o_context_t *ctx)

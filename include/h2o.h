@@ -61,6 +61,12 @@ extern "C" {
 #define H2O_TIMESTR_RFC1123_LEN (sizeof("Sun, 06 Nov 1994 08:49:37 GMT") - 1)
 #define H2O_TIMESTR_LOG_LEN (sizeof("29/Aug/2014:15:34:38 +0900") - 1)
 
+#define H2O_DEFAULT_REQ_TIMEOUT (10 * 1000)
+#define H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE (1024 * 1024 * 1024)
+#define H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2 1
+#define H2O_DEFAULT_HTTP2_MAX_CONCURRENT_REQUESTS_PER_CONNECTION 16
+#define H2O_DEFAULT_MIMETYPE "application/octet-stream"
+
 typedef struct st_h2o_conn_t h2o_conn_t;
 typedef struct st_h2o_req_t h2o_req_t;
 typedef struct st_h2o_timeout_entry_t h2o_timeout_entry_t;
