@@ -23,15 +23,16 @@
 
 size_t h2o_timeout_run(h2o_timeout_t *timeout, uint64_t now)
 {
+    uint64_t max_registered_at = now - timeout->timeout;
     size_t n = 0;
 
     for (; timeout->_entries != NULL; ++n) {
         h2o_timeout_entry_t *entry = h2o_linklist_get_first(h2o_timeout_entry_t, _link, timeout->_entries);
-        if (entry->wake_at > now) {
+        if (entry->registered_at > max_registered_at) {
             break;
         }
         h2o_linklist_unlink(&timeout->_entries, &entry->_link);
-        entry->wake_at = 0;
+        entry->registered_at = 0;
         entry->cb(entry);
     }
 
@@ -63,8 +64,9 @@ uint64_t h2o_timeout_get_wake_at(h2o_linklist_t *timeouts)
         do {
             if (timeout->_entries != NULL) {
                 h2o_timeout_entry_t *entry = h2o_linklist_get_first(h2o_timeout_entry_t, _link, timeout->_entries);
-                if (entry->wake_at < wake_at)
-                    wake_at = entry->wake_at;
+                uint64_t entry_wake_at = entry->registered_at + timeout->timeout;
+                if (entry_wake_at < wake_at)
+                    wake_at = entry_wake_at;
             }
         } while ((timeout = h2o_linklist_get_next(h2o_timeout_t, _link, timeout))
             != h2o_linklist_get_first(h2o_timeout_t, _link, timeouts));
@@ -86,7 +88,7 @@ void h2o_timeout_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entr
     /* insert at tail, so the entries are sorted in ascending order */
     h2o_linklist_insert(&timeout->_entries, timeout->_entries, &entry->_link);
     /* set data */
-    entry->wake_at = h2o_now(loop) + timeout->timeout;
+    entry->registered_at = h2o_now(loop);
 
     h2o_timeout__do_link(loop, timeout, entry);
 }
@@ -95,6 +97,6 @@ void h2o_timeout_unlink(h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)
 {
     if (h2o_linklist_is_linked(&entry->_link)) {
         h2o_linklist_unlink(&timeout->_entries, &entry->_link);
-        entry->wake_at = 0;
+        entry->registered_at = 0;
     }
 }

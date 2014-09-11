@@ -137,7 +137,7 @@ typedef struct h2o_linklist_t {
 } h2o_linklist_t;
 
 struct st_h2o_timeout_entry_t {
-    uint64_t wake_at;
+    uint64_t registered_at;
     h2o_timeout_cb cb;
     h2o_linklist_t _link;
 };

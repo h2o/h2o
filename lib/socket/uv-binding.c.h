@@ -146,7 +146,7 @@ static void on_timeout(uv_timer_t *timer)
 void schedule_timer(h2o_timeout_t *timeout)
 {
     h2o_timeout_entry_t *entry = h2o_linklist_get_first(h2o_timeout_entry_t, _link, timeout->_entries);
-    uv_timer_start(&timeout->_backend.timer, on_timeout, entry->wake_at - h2o_now(timeout->_backend.timer.loop), 0);
+    uv_timer_start(&timeout->_backend.timer, on_timeout, entry->registered_at + timeout->timeout - h2o_now(timeout->_backend.timer.loop), 0);
 }
 
 void h2o_timeout__do_init(h2o_loop_t *loop, h2o_timeout_t *timeout)
