@@ -404,7 +404,7 @@ void h2o_accept(h2o_context_t *ctx, h2o_socket_t *sock);
 
 void h2o_send_inline(h2o_req_t *req, const char *body, size_t len);
 void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body);
-int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *path, h2o_buf_t *mime_type);
+int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *path, h2o_buf_t mime_type);
 
 /* handlers */
 

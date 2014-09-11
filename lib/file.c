@@ -83,16 +83,12 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
         do_close(&self->super, req);
 }
 
-int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *path, h2o_buf_t *mime_type)
+int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *path, h2o_buf_t mime_type)
 {
     struct st_h2o_sendfile_generator_t *self;
-    h2o_buf_t mime_type_buf;
     int fd;
     struct stat st;
     size_t bufsz;
-
-    if (mime_type == NULL)
-        *(mime_type = &mime_type_buf) = h2o_get_mimetype(&req->conn->ctx->mimemap, h2o_get_filext(path, strlen(path)));
 
     /* open file and stat */
     if ((fd = open(path, O_RDONLY)) == -1)
@@ -107,7 +103,7 @@ int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *pa
     req->res.status = status;
     req->res.reason = reason;
     req->res.content_length = st.st_size;
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, mime_type->base, mime_type->len);
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, mime_type.base, mime_type.len);
 
     /* instantiate the generator */
     bufsz = MAX_BUF_SIZE;
@@ -168,7 +164,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     mime_type = h2o_get_mimetype(&req->conn->ctx->mimemap, h2o_get_filext(dir_path, dir_path_len));
 
     /* return file (on an error response) */
-    if (h2o_send_file(req, 200, "OK", dir_path, &mime_type) != 0) {
+    if (h2o_send_file(req, 200, "OK", dir_path, mime_type) != 0) {
         if (errno == ENOENT) {
             h2o_send_error(req, 404, "File Not Found", "file not found");
         } else {
