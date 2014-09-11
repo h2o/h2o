@@ -97,7 +97,7 @@ int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *pa
     /* build response */
     req->res.status = status;
     req->res.reason = reason;
-    //req->res.content_length = st.st_size;
+    req->res.content_length = st.st_size;
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, mime_type->base, mime_type->len);
 
     /* instantiate the generator */
