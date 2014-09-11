@@ -7,4 +7,7 @@ build/
 cmake_install.cmake
 xcuserdata
 examples/simple
+examples/websocket
+libh2o.a
 */*.dSYM/
+tmp/
