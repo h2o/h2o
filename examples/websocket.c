@@ -47,20 +47,15 @@ static void on_ws_message(h2o_websocket_conn_t *conn, const struct wslay_event_o
     }
 }
 
-static void on_req(h2o_req_t *req)
+static int on_req(h2o_handler_t *self, h2o_req_t *req)
 {
     const char *client_key;
 
-    if (h2o_is_websocket_handshake(req, &client_key) != 0) {
-        /* error, response is sent by  */
-        h2o_send_error(req, 400, "Invalid Request", "broken websocket handshake");
-        return;
+    if (h2o_is_websocket_handshake(req, &client_key) != 0 || client_key == NULL) {
+        return -1;
     }
-    if (client_key != NULL) {
-        h2o_upgrade_to_websocket((h2o_http1_conn_t*)req->conn, client_key, NULL, on_ws_message);
-    } else {
-        h2o_send_error(req, 404, "File Not Found", "not found");
-    }
+    h2o_upgrade_to_websocket((h2o_http1_conn_t*)req->conn, client_key, NULL, on_ws_message);
+    return 0;
 }
 
 static h2o_context_t ctx;
@@ -105,7 +100,8 @@ int main(int argc, char **argv)
         goto Error;
     }
 
-    h2o_context_init(&ctx, loop, on_req);
+    h2o_context_init(&ctx, loop);
+    h2o_prepend_handler(&ctx, sizeof(h2o_handler_t), on_req);
     //ctx.ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", NULL);
 
     return uv_run(loop, UV_RUN_DEFAULT);
