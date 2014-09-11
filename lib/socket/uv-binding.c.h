@@ -85,6 +85,7 @@ void do_dispose_socket(h2o_socket_t *_sock)
 {
     struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t*)_sock;
     uv_close((uv_handle_t*)sock->uv.stream, sock->uv.close_cb);
+    free(sock);
 }
 
 void do_read_start(h2o_socket_t *_sock)
