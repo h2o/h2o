@@ -15,8 +15,9 @@ Dependencies
 ---
 
 - [OpenSSL](https://www.openssl.org/) (mandatory)
-- [libuv 1.0.0](https://github.com/joyent/libuv) (optional; only required when using h2o as a library)
-- [wslay](https://github.com/tatsuhiro-t/wslay) (optional; only required if you need support for websocket)
+- [libyaml](http://pyyaml.org/wiki/LibYAML) (optional; required when building the server)
+- [libuv 1.0.0](https://github.com/joyent/libuv) (optional; required when using h2o as a library)
+- [wslay](https://github.com/tatsuhiro-t/wslay) (optional; required if you need support for websocket)
 
 Building and Running the Server
 ---
