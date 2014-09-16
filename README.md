@@ -26,7 +26,7 @@ Written from the ground up, H2O outperforms nginx by more than 2x.  The table be
 
 |Server \ size of content|6 bytes|4,096 bytes|
 |------------------------|------:|----------:|
-|nginx/1.7.4 ([conf](https://gist.github.com/kazuho/c9c12021567e3ab83809))            | 29,707|     29,617|
+|nginx/1.7.4 ([conf](https://gist.github.com/kazuho/c9c12021567e3ab83809))            | 35,822|     82,885|
 |H2O @ 810c6a7           | 73,719|     67,753|
 
 Building and Running the Server
