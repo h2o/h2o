@@ -32,7 +32,7 @@ Written from the ground up, H2O outperforms nginx by more than 2x.  The table be
 Building and Running the Server
 ---
 
-Run the commands below to build and run the H2O server.  The last command will read the configuration from [etc/h2o.conf](https://github.com/kazuho/h2o/blob/master/examples/h2o.conf) and start listening on port 8080.  Try accessing [http://127.0.0.1:8080/](http://127.0.0.1:8080/).
+Run the commands below to build and run the H2O server.  The last command will read the configuration from [examples/h2o.conf](https://github.com/kazuho/h2o/blob/master/examples/h2o.conf) and start listening on port 8080.  Try accessing [http://127.0.0.1:8080/](http://127.0.0.1:8080/).
 
 ```
 $ cmake .
@@ -48,4 +48,4 @@ $ cmake .
 $ make libh2o
 ```
 
-The library is designed to work together with the upcoming [libuv version 1.0.0](https://github.com/joyent/libuv).  Examples can be found within the [exmaples/](https://github.com/kazuho/h2o/blob/master/examples/) directory.
+The library is designed to work together with the upcoming [libuv version 1.0.0](https://github.com/joyent/libuv).  Examples can be found within the [examples/](https://github.com/kazuho/h2o/blob/master/examples/) directory.
