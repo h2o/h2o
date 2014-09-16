@@ -19,12 +19,87 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <stdarg.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
+
+static int on_config_files(h2o_configurator_t *configurator, h2o_context_t *ctx, const char *config_file, yoml_t *config_node)
+{
+    size_t i;
+
+    if (config_node->type != YOML_TYPE_MAPPING) {
+        h2o_context_print_config_error(configurator, config_file, config_node, "argument must be a mapping");
+        return -1;
+    }
+
+    for (i = 0; i != config_node->data.mapping.size; ++i) {
+        yoml_t *key = config_node->data.mapping.elements[i].key;
+        yoml_t *value = config_node->data.mapping.elements[i].value;
+        if (key->type != YOML_TYPE_SCALAR) {
+            h2o_context_print_config_error(configurator, config_file, key, "key (representing the virtual path) must be a string");
+            return -1;
+        }
+        if (value->type != YOML_TYPE_SCALAR) {
+            h2o_context_print_config_error(configurator, config_file, key, "value (representing the local path) must be a string");
+            return -1;
+        }
+        h2o_prepend_file_handler(ctx, key->data.scalar, value->data.scalar, "index.html" /* FIXME */);
+    }
+
+    return 0;
+}
+
+static int on_config_request_timeout(h2o_configurator_t *configurator, h2o_context_t *ctx, const char *config_file, yoml_t *config_node)
+{
+    unsigned timeout_in_secs;
+
+    if (config_node->type != YOML_TYPE_SCALAR
+        || sscanf(config_node->data.scalar, "%u", &timeout_in_secs) != 1) {
+        h2o_context_print_config_error(configurator, config_file, config_node, "argument must be a non-negative number");
+        return -1;
+    }
+
+    ctx->req_timeout.timeout = timeout_in_secs * 1000;
+    return 0;
+}
+
+static int on_config_mime_types(h2o_configurator_t *configurator, h2o_context_t *ctx, const char *config_file, yoml_t *config_node)
+{
+    size_t i;
+
+    if (config_node->type != YOML_TYPE_MAPPING) {
+        h2o_context_print_config_error(configurator, config_file, config_node, "argument must be a mapping");
+        return -1;
+    }
+
+    for (i = 0; i != config_node->data.mapping.size; ++i) {
+        yoml_t *key = config_node->data.mapping.elements[i].key;
+        yoml_t *value = config_node->data.mapping.elements[i].value;
+        if (key->type != YOML_TYPE_SCALAR) {
+            h2o_context_print_config_error(configurator, config_file, key, "key (representing the extension) must be a string");
+            return -1;
+        }
+        if (value->type != YOML_TYPE_SCALAR) {
+            h2o_context_print_config_error(configurator, config_file, config_node, "value (representing the mime-type) must be a string");
+            return -1;
+        }
+        h2o_define_mimetype(&ctx->mimemap, key->data.scalar, value->data.scalar);
+    }
+
+    return 0;
+}
+
+static void setup_global_configurator(h2o_context_t *ctx, h2o_configurator_t *configurator, const char *cmd, int (*on_cmd)(h2o_configurator_t *, h2o_context_t *, const char *, yoml_t*))
+{
+    configurator->cmd = cmd;
+    configurator->on_cmd = on_cmd;
+    h2o_register_configurator(ctx, configurator);
+}
 
 void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop)
 {
@@ -38,26 +113,73 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop)
     ctx->max_request_entity_size = H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE;
     ctx->http1_upgrade_to_http2 = H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2;
     ctx->http2_max_concurrent_requests_per_connection = H2O_DEFAULT_HTTP2_MAX_CONCURRENT_REQUESTS_PER_CONNECTION;
+    setup_global_configurator(ctx, &ctx->_global_configurators.files, "files", on_config_files);
+    setup_global_configurator(ctx, &ctx->_global_configurators.request_timeout, "request-timeout", on_config_request_timeout);
+    setup_global_configurator(ctx, &ctx->_global_configurators.mime_types, "mime-types", on_config_mime_types);
 }
 
 void h2o_context_dispose(h2o_context_t *ctx)
 {
-#define DISPOSE_LINKED(type, entries) do { \
+#define CLEANUP_LINKED(type, entries, func, call_free) do { \
     while (entries != NULL) { \
         type *e = entries; \
-        if (e->dispose != NULL) \
-            e->dispose(e); \
+        if (e->func != NULL) \
+            e->func(e); \
         entries = e->next; \
-        free(e); \
+        if (call_free) \
+            free(e); \
     } \
 } while (0)
 
-    DISPOSE_LINKED(h2o_handler_t, ctx->handlers);
-    DISPOSE_LINKED(h2o_filter_t, ctx->filters);
-    DISPOSE_LINKED(h2o_logger_t, ctx->loggers);
+    CLEANUP_LINKED(h2o_configurator_t, ctx->configurators, destroy, 0);
+    CLEANUP_LINKED(h2o_handler_t, ctx->handlers, dispose, 1);
+    CLEANUP_LINKED(h2o_filter_t, ctx->filters, dispose, 1);
+    CLEANUP_LINKED(h2o_logger_t, ctx->loggers, dispose, 1);
     h2o_dispose_mimemap(&ctx->mimemap);
 
 #undef DISPOSE_LINKED
+}
+
+int h2o_context_configure(h2o_context_t *context, const char *config_file, yoml_t *config_node)
+{
+    size_t i;
+
+    /* apply the configuration */
+    if (config_node->type != YOML_TYPE_MAPPING) {
+        h2o_context_print_config_error(NULL, config_file, config_node, "root node must be a MAPPING");
+        return -1;
+    }
+    for (i = 0; i != config_node->data.mapping.size; ++i) {
+        yoml_t *key = config_node->data.mapping.elements[i].key;
+        yoml_t *value = config_node->data.mapping.elements[i].value;
+        h2o_configurator_t *configurator;
+        if (key->type != YOML_TYPE_SCALAR) {
+            h2o_context_print_config_error(NULL, config_file, key, "command must be a string");
+            return -1;
+        }
+        for (configurator = context->configurators; configurator != NULL; configurator = configurator->next) {
+            if (strcmp(configurator->cmd, key->data.scalar) == 0) {
+                break;
+            }
+        }
+        if (configurator != NULL) {
+            if (configurator->on_cmd(configurator, context, config_file, value) != 0)
+                return -1;
+        } else {
+            h2o_context_print_config_error(NULL, config_file, key, "unknown command: %s", key->data.scalar);
+            return -1;
+        }
+    }
+
+    { /* call the complete callback */
+        h2o_configurator_t *configurator;
+        for (configurator = context->configurators; configurator != NULL; configurator = configurator->next)
+            if (configurator->on_complete != NULL)
+                if (configurator->on_complete(configurator, context) != 0)
+                    return -1;
+    }
+
+    return 0;
 }
 
 h2o_handler_t *h2o_prepend_handler(h2o_context_t *context, size_t sz, int (*on_req)(h2o_handler_t *self, h2o_req_t *req))
@@ -97,6 +219,25 @@ h2o_logger_t *h2o_prepend_logger(h2o_context_t *context, size_t sz, void (*log)(
     context->loggers = logger;
 
     return logger;
+}
+
+void h2o_register_configurator(h2o_context_t *context, h2o_configurator_t *configurator)
+{
+    configurator->next = context->configurators;
+    context->configurators = configurator;
+}
+
+void h2o_context_print_config_error(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *reason, ...)
+{
+    va_list args;
+
+    fprintf(stderr, "[%s:%zu] ", config_file, config_node->line + 1);
+    if (configurator != NULL)
+        fprintf(stderr, "in command %s, ", configurator->cmd);
+    va_start(args, reason);
+    vfprintf(stderr, reason, args);
+    va_end(args);
+    fputc('\n', stderr);
 }
 
 void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts)

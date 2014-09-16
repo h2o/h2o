@@ -44,6 +44,7 @@ extern "C" {
 #include <time.h>
 #include <unistd.h>
 #include "picohttpparser.h"
+#include "yoml.h"
 
 #ifndef H2O_MAX_HEADERS
 # define H2O_MAX_HEADERS 100
@@ -68,10 +69,11 @@ extern "C" {
 #define H2O_DEFAULT_MIMETYPE "application/octet-stream"
 
 typedef struct st_h2o_conn_t h2o_conn_t;
+typedef struct st_h2o_context_t h2o_context_t;
 typedef struct st_h2o_req_t h2o_req_t;
-typedef struct st_h2o_timeout_entry_t h2o_timeout_entry_t;
 typedef struct st_h2o_socket_t h2o_socket_t;
 typedef struct st_h2o_ssl_context_t h2o_ssl_context_t;
+typedef struct st_h2o_timeout_entry_t h2o_timeout_entry_t;
 
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, int err);
 
@@ -181,6 +183,14 @@ typedef struct st_h2o_logger_t {
     void (*log)(struct st_h2o_logger_t *self, h2o_req_t *req);
 } h2o_logger_t;
 
+typedef struct st_h2o_configurator_t {
+    struct st_h2o_configurator_t *next;
+    const char *cmd;
+    void (*destroy)(struct st_h2o_configurator_t *self);
+    int (*on_cmd)(struct st_h2o_configurator_t* self, h2o_context_t *ctx, const char *config_file, yoml_t *config_node);
+    int (*on_complete)(struct st_h2o_configurator_t *self, h2o_context_t *ctx);
+} h2o_configurator_t;
+
 typedef struct st_h2o_mimemap_t {
     struct st_h2o_mimemap_entry_t *top;
     h2o_buf_t default_type;
@@ -196,13 +206,14 @@ typedef struct st_h2o_timestamp_t {
     h2o_timestamp_string_t *str;
 } h2o_timestamp_t;
 
-typedef struct h2o_context_t {
+struct st_h2o_context_t {
     h2o_loop_t *loop;
     h2o_timeout_t zero_timeout;
     h2o_timeout_t req_timeout; /* for request timeout */
     h2o_handler_t *handlers;
     h2o_filter_t *filters;
     h2o_logger_t *loggers;
+    h2o_configurator_t *configurators;
     h2o_mimemap_t mimemap;
     h2o_buf_t server_name;
     size_t max_request_entity_size;
@@ -214,7 +225,12 @@ typedef struct h2o_context_t {
         struct timeval tv_at;
         h2o_timestamp_string_t *value;
     } _timestamp_cache;
-} h2o_context_t;
+    struct {
+        h2o_configurator_t files;
+        h2o_configurator_t mime_types;
+        h2o_configurator_t request_timeout;
+    } _global_configurators;
+};
 
 typedef struct st_h2o_header_t {
     union {
@@ -390,11 +406,13 @@ static void h2o_proceed_response(h2o_req_t *req);
 
 void h2o_context_init(h2o_context_t *context, h2o_loop_t *loop);
 void h2o_context_dispose(h2o_context_t *context);
-int h2o_context_run(h2o_context_t *context);
+int h2o_context_configure(h2o_context_t *context, const char *config_file, yoml_t *config_node);
 
 h2o_handler_t *h2o_prepend_handler(h2o_context_t *context, size_t sz, int (*on_req)(h2o_handler_t *self, h2o_req_t *req));
 h2o_filter_t *h2o_prepend_filter(h2o_context_t *context, size_t sz, void (*on_start_response)(h2o_filter_t *self, h2o_req_t *req));
 h2o_logger_t *h2o_prepend_logger(h2o_context_t *context, size_t sz, void (*log)(h2o_logger_t *self, h2o_req_t *req));
+void h2o_register_configurator(h2o_context_t *context, h2o_configurator_t *configurator);
+void h2o_context_print_config_error(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *reason, ...) __attribute__((format (printf, 4, 5)));
 
 void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts);
 
