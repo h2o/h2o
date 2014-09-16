@@ -47,7 +47,7 @@ struct st_h2o_evloop_t {
         struct st_h2o_evloop_socket_t **tail_ref;
     } _statechanged;
     uint64_t _now;
-    h2o_linklist_t *_timeouts; /* list of h2o_timeout_t */
+    h2o_linklist_node_t *_timeouts; /* list of h2o_timeout_t */
 };
 
 static void link_to_pending(struct st_h2o_evloop_socket_t *sock);

@@ -39,7 +39,7 @@ size_t h2o_timeout_run(h2o_timeout_t *timeout, uint64_t now)
     return n;
 }
 
-size_t h2o_timeout_run_all(h2o_linklist_t *timeouts, uint64_t now)
+size_t h2o_timeout_run_all(h2o_linklist_node_t *timeouts, uint64_t now)
 {
     size_t n = 0;
 
@@ -54,7 +54,7 @@ size_t h2o_timeout_run_all(h2o_linklist_t *timeouts, uint64_t now)
     return n;
 }
 
-uint64_t h2o_timeout_get_wake_at(h2o_linklist_t *timeouts)
+uint64_t h2o_timeout_get_wake_at(h2o_linklist_node_t *timeouts)
 {
     uint64_t wake_at = UINT64_MAX;
 

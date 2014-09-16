@@ -150,10 +150,14 @@ typedef H2O_VECTOR(void) h2o_vector_t;
 
 typedef void (*h2o_timeout_cb)(h2o_timeout_entry_t *entry);
 
-typedef struct h2o_linklist_t {
-    struct h2o_linklist_t *next;
-    struct h2o_linklist_t *prev;
-} h2o_linklist_t;
+/**
+ * linklist node
+ * Should be zero-filled upon initialization.
+ */
+typedef struct h2o_linklist_node_t {
+    struct h2o_linklist_node_t *next;
+    struct h2o_linklist_node_t *prev;
+} h2o_linklist_node_t;
 
 /**
  * an entry linked to h2o_timeout_t.
@@ -162,7 +166,7 @@ typedef struct h2o_linklist_t {
 struct st_h2o_timeout_entry_t {
     uint64_t registered_at;
     h2o_timeout_cb cb;
-    h2o_linklist_t _link;
+    h2o_linklist_node_t _link;
 };
 
 /**
@@ -170,8 +174,8 @@ struct st_h2o_timeout_entry_t {
  */
 typedef struct st_h2o_timeout_t {
     uint64_t timeout;
-    h2o_linklist_t _link;
-    h2o_linklist_t *_entries; /* link list of h2o_timeout_entry_t */
+    h2o_linklist_node_t _link;
+    h2o_linklist_node_t *_entries; /* link list of h2o_timeout_entry_t */
     struct st_h2o_timeout_backend_properties_t _backend;
 } h2o_timeout_t;
 
@@ -580,35 +584,114 @@ void h2o_vector__expand(h2o_mempool_t *pool, h2o_vector_t *vector, size_t elemen
 
 /* link list */
 
-static void h2o_linklist_init(h2o_linklist_t *link);
-static int h2o_linklist_is_linked(h2o_linklist_t *link);
-static void h2o_linklist_insert(h2o_linklist_t **head, h2o_linklist_t *pos, h2o_linklist_t *link);
-static void h2o_linklist_unlink(h2o_linklist_t **head, h2o_linklist_t *link);
+/**
+ * tests if the node is linked to a list
+ */
+static int h2o_linklist_is_linked(h2o_linklist_node_t *link);
+/**
+ * inserts a node to the linked list
+ * @param head reference to the head of the linked list
+ * @param pos insert position; the node will be inserted before pos (or NULL in case *head is NULL)
+ * @param node the node to be inserted
+ */
+static void h2o_linklist_insert(h2o_linklist_node_t **head, h2o_linklist_node_t *pos, h2o_linklist_node_t *node);
+/**
+ * unlinks a node from the linked list
+ */
+static void h2o_linklist_unlink(h2o_linklist_node_t **head, h2o_linklist_node_t *link);
+/**
+ * returns a pointer to the first element of the linked list
+ * @param type type of the element
+ * @param member property of the element structure of type h2o_linklist_node_t that is used to connect the object to the linked list
+ * @param head head of the linked list
+ */
 #define h2o_linklist_get_first(type, member, head) ((type*)((char*)head - offsetof(type, member)))
+/**
+ * returns a pointer to the next element of the linked list
+ * @param type type of the element
+ * @param member property of the element structure of type h2o_linklist_node_t that is used to connect the object to the linked list
+ * @param p pointer pointing to the current element
+ */
 #define h2o_linklist_get_next(type, member, p) ((type*)((char*)(p)->member.next - offsetof(type, member)))
+/**
+ * returns a pointer to the previous element of the linked list
+ * @param type type of the element
+ * @param member property of the element structure of type h2o_linklist_node_t that is used to connect the object to the linked list
+ * @param p pointer pointing to the current element
+ */
 #define h2o_linklist_get_prev(type, member, p) ((type*)((char*)(p)->member.prev - offsetof(type, member)))
-void h2o_linklist_merge(h2o_linklist_t *head, h2o_linklist_t **added);
+/**
+ * merges two linked lists by moving the elements of one list to the tail of the other
+ * @param head linked list to which new elements will be added
+ * @param added linked list from which elements should be moved
+ */
+void h2o_linklist_merge(h2o_linklist_node_t *head, h2o_linklist_node_t **added);
 
 /* socket */
 
+/**
+ * closes the socket
+ */
 void h2o_socket_close(h2o_socket_t *sock);
+/**
+ * writes given data to socket
+ * @param sock the socket
+ * @param bufs an array of buffers
+ * @param bufcnt length of the buffer array
+ * @param cb callback to be called when write is complete
+ */
 void h2o_socket_write(h2o_socket_t *sock, h2o_buf_t *bufs, size_t bufcnt, h2o_socket_cb cb);
+/**
+ * starts polling on the socket (for read) and calls given callback when data arrives
+ * @param sock the socket
+ * @param cb callback to be called when data arrives
+ */
+void h2o_socket_read_start(h2o_socket_t *sock, h2o_socket_cb cb);
+/**
+ * stops polling on the socket (for read)
+ * @param sock the socket
+ */
+void h2o_socket_read_stop(h2o_socket_t *sock);
+/**
+ * returns a boolean value indicating whether if there is a write is under operation
+ */
+static int h2o_socket_is_writing(h2o_socket_t *sock);
+/**
+ * returns a boolean value indicating whether if the socket is being polled for read
+ */
+static int h2o_socket_is_reading(h2o_socket_t *sock);
+/**
+ * getpeername(2) equivalent
+ */
+int h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *name, socklen_t *namelen);
+/**
+ * performs SSL handshake on a socket
+ * @param sock the socket
+ * @param ssl_ctx SSL context
+ * @param handshake_cb callback to be called when handshake is complete
+ */
+void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, h2o_ssl_context_t *ssl_ctx, h2o_socket_cb handshake_cb);
+/**
+ * returns the name of the protocol selected using either NPN or ALPN (ALPN has the precedence).
+ * @param sock the socket
+ */
+h2o_buf_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock);
+/**
+ * construct an SSL context
+ * @param cert_file the certificate file (in PEM format)
+ * @param key_file the private key file (in PEM format)
+ * @param protocols a NULL-terminated list of protocols used for negotiation using ALPN/NPN
+ */
+h2o_ssl_context_t *h2o_ssl_new_server_context(const char *cert_file, const char *key_file, const h2o_buf_t *protocols);
+
 void h2o_socket__write_pending(h2o_socket_t *sock);
 void h2o_socket__write_on_complete(h2o_socket_t *sock, int status);
-void h2o_socket_read_start(h2o_socket_t *sock, h2o_socket_cb cb);
-void h2o_socket_read_stop(h2o_socket_t *sock);
-static int h2o_socket_is_writing(h2o_socket_t *sock);
-static int h2o_socket_is_reading(h2o_socket_t *sock);
-int h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *name, socklen_t *namelen);
-void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, h2o_ssl_context_t *ssl_ctx, h2o_socket_cb handshake_cb);
-h2o_buf_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock);
-h2o_ssl_context_t *h2o_ssl_new_server_context(const char *cert_file, const char *key_file, const h2o_buf_t *protocols);
 
 /* timeout */
 
 size_t h2o_timeout_run(h2o_timeout_t *timeout, uint64_t now);
-size_t h2o_timeout_run_all(h2o_linklist_t *timeouts, uint64_t now);
-uint64_t h2o_timeout_get_wake_at(h2o_linklist_t *timeouts);
+size_t h2o_timeout_run_all(h2o_linklist_node_t *timeouts, uint64_t now);
+uint64_t h2o_timeout_get_wake_at(h2o_linklist_node_t *timeouts);
 void h2o_timeout_init(h2o_loop_t *loop, h2o_timeout_t *timeout, uint64_t millis);
 void h2o_timeout_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry);
 void h2o_timeout_unlink(h2o_timeout_t *timeout, h2o_timeout_entry_t *entry);
@@ -793,34 +876,29 @@ inline void h2o_vector_reserve(h2o_mempool_t *pool, h2o_vector_t *vector, size_t
     }
 }
 
-inline void h2o_linklist_init(h2o_linklist_t *link)
-{
-    link->next = link->prev = NULL;
-}
-
-inline int h2o_linklist_is_linked(h2o_linklist_t *link)
+inline int h2o_linklist_is_linked(h2o_linklist_node_t *link)
 {
     return link->next != NULL;
 }
 
-inline void h2o_linklist_insert(h2o_linklist_t **head, h2o_linklist_t *pos, h2o_linklist_t *link)
+inline void h2o_linklist_insert(h2o_linklist_node_t **head, h2o_linklist_node_t *pos, h2o_linklist_node_t *node)
 {
-    assert(! h2o_linklist_is_linked(link));
+    assert(! h2o_linklist_is_linked(node));
 
     if (*head == NULL) {
         assert(pos == NULL);
-        *head = link;
-        link->next = link->prev = link;
+        *head = node;
+        node->next = node->prev = node;
     } else {
         assert(pos != NULL);
-        link->prev = pos->prev;
-        link->next = pos;
-        link->prev->next = link;
-        link->next->prev = link;
+        node->prev = pos->prev;
+        node->next = pos;
+        node->prev->next = node;
+        node->next->prev = node;
     }
 }
 
-inline void h2o_linklist_unlink(h2o_linklist_t **head, h2o_linklist_t *link)
+inline void h2o_linklist_unlink(h2o_linklist_node_t **head, h2o_linklist_node_t *link)
 {
     assert(h2o_linklist_is_linked(link));
 
