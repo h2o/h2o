@@ -23,3 +23,5 @@ Building the Library
 $ cmake .
 $ make libh2o
 ```
+
+The library is designed to work together with the upcoming [libuv version 1.0.0](https://github.com/joyent/libuv).  Examples can be found within the [exmaples/](https://github.com/kazuho/h2o/blob/master/examples/) directory.
