@@ -19,6 +19,16 @@ Dependencies
 - [libuv 1.0.0](https://github.com/joyent/libuv) (optional; required when using h2o as a library)
 - [wslay](https://github.com/tatsuhiro-t/wslay) (optional; required if you need support for websocket)
 
+Benchmark
+---
+
+Written from the up, H2O outperforms nginx by more than 2x.  The table below is a benchmark taken using `ab -c 500 -n 100000 -k` on Ubuntu 14.04 running on VMWare Fusion.
+
+|Server \ size of content|6 bytes|4,096 bytes|
+|------------------------|------:|----------:|
+|nginx/1.7.4             | 29,707|     29,617|
+|H2O @ 810c6a7           | 73,719|     67,753|
+
 Building and Running the Server
 ---
 
