@@ -318,7 +318,7 @@ static void handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
         stream = NULL;
     } else {
         /* FIXME should be a single invocation to the allocation call */
-        while (stream->_req_body == NULL || stream->_req_body->capacity - stream->_req_body->size < payload.length) {
+        while (stream->_req_body == NULL || stream->_req_body->_capacity - stream->_req_body->size < payload.length) {
             h2o_allocate_input_buffer(&stream->_req_body, 8192);
         }
         memcpy(stream->_req_body->bytes + stream->_req_body->size, payload.data, payload.length);

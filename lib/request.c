@@ -45,15 +45,15 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
     req->res.content_length = SIZE_MAX;
 
     if (src != NULL) {
-#define COPY(s, len) do { \
-    req->s = h2o_mempool_alloc(&req->pool, src->len); \
-    memcpy((void*)req->s, src->s, src->len); \
-    req->len = src->len; \
+#define COPY(buf) do { \
+    req->buf.base = h2o_mempool_alloc(&req->pool, src->buf.len); \
+    memcpy(req->buf.base, src->buf.base, src->buf.len); \
+    req->buf.len = src->buf.len; \
 } while (0)
-        COPY(authority, authority_len);
-        COPY(method, method_len);
-        COPY(path, path_len);
-        COPY(scheme, scheme_len);
+        COPY(authority);
+        COPY(method);
+        COPY(path);
+        COPY(scheme);
         req->version = src->version;
         h2o_vector_reserve(&req->pool, (h2o_vector_t*)&req->headers, sizeof(h2o_header_t), src->headers.size);
         memcpy(req->headers.entries, src->headers.entries, src->headers.size);
@@ -61,7 +61,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
         req->entity = src->entity;
         req->http1_is_persistent = src->http1_is_persistent;
         if (src->upgrade.base != NULL) {
-            COPY(upgrade.base, upgrade.len);
+            COPY(upgrade);
         } else {
             req->upgrade.base = NULL;
             req->upgrade.len = 0;

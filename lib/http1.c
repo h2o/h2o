@@ -139,18 +139,15 @@ static ssize_t fixup_request(h2o_http1_conn_t *conn, struct phr_header *headers,
     ssize_t entity_header_index;
     h2o_buf_t connection = { NULL, 0 }, host = { NULL, 0 }, upgrade = { NULL, 0 };
 
-    conn->req.scheme = "http";
-    conn->req.scheme_len = 4;
+    conn->req.scheme = h2o_buf_init(H2O_STRLIT("http"));
     conn->req.version = 0x100 | minor_version;
 
     /* init headers */
     entity_header_index = h2o_init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade);
 
     /* move host header to req->authority */
-    if (host.base != NULL) {
-        conn->req.authority = host.base;
-        conn->req.authority_len = host.len;
-    }
+    if (host.base != NULL)
+        conn->req.authority = host;
 
     /* setup persistent flag (and upgrade info) */
     if (connection.base != NULL) {
@@ -177,9 +174,13 @@ static int handle_incoming_request(h2o_http1_conn_t *conn)
     size_t num_headers = H2O_MAX_HEADERS;
     ssize_t entity_body_header_index;
 
-    reqlen = phr_parse_request(conn->sock->input->bytes, inreqlen, &conn->req.method, &conn->req.method_len,
-                               &conn->req.path, &conn->req.path_len, &minor_version,
-                               headers, &num_headers, conn->_prevreqlen);
+    reqlen = phr_parse_request(
+        conn->sock->input->bytes, inreqlen,
+        (const char**)&conn->req.method.base, &conn->req.method.len,
+        (const char**)&conn->req.path.base, &conn->req.path.len,
+        &minor_version,
+        headers, &num_headers,
+        conn->_prevreqlen);
     conn->_prevreqlen = inreqlen;
 
     switch (reqlen) {

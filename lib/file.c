@@ -130,16 +130,16 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     size_t dir_path_len;
 
     /* only accept GET (TODO accept HEAD as well) */
-    if (! h2o_memis(req->method, req->method_len, H2O_STRLIT("GET")))
+    if (! h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
         return -1;
 
     /* prefix match */
-    if (req->path_len < self->virtual_path.len
-        || memcmp(req->path, self->virtual_path.base, self->virtual_path.len) != 0)
+    if (req->path.len < self->virtual_path.len
+        || memcmp(req->path.base, self->virtual_path.base, self->virtual_path.len) != 0)
         return -1;
 
     /* normalize path */
-    vpath = h2o_normalize_path(&req->pool, req->path, req->path_len);
+    vpath = h2o_normalize_path(&req->pool, req->path.base, req->path.len);
     if (vpath.len > PATH_MAX)
         return -1;
 

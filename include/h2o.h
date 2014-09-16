@@ -83,11 +83,17 @@ typedef void (*h2o_socket_cb)(h2o_socket_t *sock, int err);
 # include "h2o/evloop.h"
 #endif
 
+/**
+ * buffer structure compatible with iovec
+ */
 typedef struct st_h2o_buf_t {
     char *base;
     size_t len;
 } h2o_buf_t;
 
+/**
+ * a predefined, read-only, fast variant of h2o_buf_t, defined in h2o/token.h
+ */
 typedef struct st_h2o_token_t {
     h2o_buf_t buf;
     int http2_static_table_name_index; /* non-zero if any */
@@ -107,6 +113,9 @@ typedef struct st_h2o_mempool_shared_entry_t {
     char bytes[1];
 } h2o_mempool_shared_entry_t;
 
+/**
+ * the memory pool
+ */
 typedef struct st_h2o_mempool_t {
     h2o_mempool_chunk_t *chunks;
     struct st_h2o_mempool_shared_ref_t *shared_refs;
@@ -114,10 +123,19 @@ typedef struct st_h2o_mempool_t {
     h2o_mempool_chunk_t _first_chunk;
 } h2o_mempool_t;
 
+/**
+ * buffer used to store incoming octets
+ */
 typedef struct st_h2o_input_buffer_t {
+    /**
+     * amount of the data available
+     */
     size_t size;
-    size_t capacity;
+    /**
+     * pointer to the start of the data
+     */
     char *bytes;
+    size_t _capacity;
     char _buf[1];
 } h2o_input_buffer_t;
 
@@ -137,12 +155,19 @@ typedef struct h2o_linklist_t {
     struct h2o_linklist_t *prev;
 } h2o_linklist_t;
 
+/**
+ * an entry linked to h2o_timeout_t.
+ * Modules willing to use timeouts should embed this object as part of itself, and link it to a specific timeout by calling h2o_timeout_link.
+ */
 struct st_h2o_timeout_entry_t {
     uint64_t registered_at;
     h2o_timeout_cb cb;
     h2o_linklist_t _link;
 };
 
+/**
+ * represents a collection of h2o_timeout_entry_t linked to a single timeout value
+ */
 typedef struct st_h2o_timeout_t {
     uint64_t timeout;
     h2o_linklist_t _link;
@@ -150,11 +175,9 @@ typedef struct st_h2o_timeout_t {
     struct st_h2o_timeout_backend_properties_t _backend;
 } h2o_timeout_t;
 
-struct st_h2o_timeout_manager_t {
-    h2o_loop_t *loop;
-    h2o_timeout_t zero_timeout; /* for deferred tasks (0 second timeout is handled separately, since all of them togeter with pending cbs should be invoked before poll) */
-};
-
+/**
+ * abstraction layer for sockets (SSL vs. TCP)
+ */
 struct st_h2o_socket_t {
     void *data;
     struct st_h2o_socket_ssl_t *ssl;
@@ -165,60 +188,140 @@ struct st_h2o_socket_t {
     } _cb;
 };
 
+/**
+ * basic structure of a handler (an object that MAY generate a response)
+ * Applications should call h2o_prepend_handler to define new handlers.
+ */
 typedef struct st_h2o_handler_t {
     struct st_h2o_handler_t *next;
     void (*dispose)(struct st_h2o_handler_t *self);
     int (*on_req)(struct st_h2o_handler_t *self, h2o_req_t *req);
 } h2o_handler_t;
  
+/**
+ * basic structure of a filter (an object that MAY modify a response)
+ * Applications should call h2o_prepend_filter to define new filters.
+ */
 typedef struct st_h2o_filter_t {
     struct st_h2o_filter_t *next;
     void (*dispose)(struct st_h2o_filter_t *self);
     void (*on_start_response)(struct st_h2o_filter_t *self, h2o_req_t *req);
 } h2o_filter_t;
 
+/**
+ * basic structure of a logger (an object that MAY log a request)
+ * Applications should call h2o_prepend_logger to define new loggers.
+ */
 typedef struct st_h2o_logger_t {
     struct st_h2o_logger_t *next;
     void (*dispose)(struct st_h2o_logger_t *self);
     void (*log)(struct st_h2o_logger_t *self, h2o_req_t *req);
 } h2o_logger_t;
 
+/**
+ * basic structure of a configurator (handles a configuration command)
+ */
 typedef struct st_h2o_configurator_t {
     struct st_h2o_configurator_t *next;
+    /**
+     * name of the command handled by the configurator
+     */
     const char *cmd;
+    /**
+     * optional callback called when the context is being disposed
+     */
     void (*destroy)(struct st_h2o_configurator_t *self);
+    /**
+     * mandatory callcack called to handle the command
+     */
     int (*on_cmd)(struct st_h2o_configurator_t* self, h2o_context_t *ctx, const char *config_file, yoml_t *config_node);
+    /**
+     * optional callback called just before the server starts, after all the configuration commands are handled
+     */
     int (*on_complete)(struct st_h2o_configurator_t *self, h2o_context_t *ctx);
 } h2o_configurator_t;
 
+/**
+ * mime-map
+ */
 typedef struct st_h2o_mimemap_t {
     struct st_h2o_mimemap_entry_t *top;
     h2o_buf_t default_type;
 } h2o_mimemap_t;
 
+/**
+ * contains stringified representations of a timestamp
+ */
 typedef struct st_h2o_timestamp_string_t {
     char rfc1123[H2O_TIMESTR_RFC1123_LEN + 1];
     char log[H2O_TIMESTR_LOG_LEN + 1];
 } h2o_timestamp_string_t;
 
+/**
+ * a timestamp.
+ * Applications should call h2o_get_timestamp to obtain a timestamp.
+ */
 typedef struct st_h2o_timestamp_t {
     struct timeval at;
     h2o_timestamp_string_t *str;
 } h2o_timestamp_t;
 
+/**
+ * context of the http server.
+ */
 struct st_h2o_context_t {
+    /**
+     * points to the loop (either uv_loop_t or h2o_evloop_t, depending on the value of H2O_USE_LIBUV)
+     */
     h2o_loop_t *loop;
+    /**
+     * timeout structure to be used for registering deferred callbacks
+     */
     h2o_timeout_t zero_timeout;
-    h2o_timeout_t req_timeout; /* for request timeout */
+    /**
+     * request timeout
+     */
+    h2o_timeout_t req_timeout;
+    /**
+     * list of handlers
+     */
     h2o_handler_t *handlers;
+    /**
+     * list of filters
+     */
     h2o_filter_t *filters;
+    /**
+     * list of loggers
+     */
     h2o_logger_t *loggers;
+    /**
+     * list of configurators
+     */
     h2o_configurator_t *configurators;
+    /**
+     * mime-map
+     */
     h2o_mimemap_t mimemap;
+    /**
+     * name of the server (not the hostname)
+     */
     h2o_buf_t server_name;
+    /**
+     * maximum size of the accepted request entity (e.g. POST data)
+     */
     size_t max_request_entity_size;
+    /**
+     * a boolean value indicating whether or not to upgrade to HTTP/2
+     */
     int http1_upgrade_to_http2;
+    /**
+     * maximum number of HTTP2 requests (per connection) to be handled simultaneously internally.
+     * H2O accepts at most 256 requests over HTTP/2, but internally limits the number of in-flight requests to the value specified by this property in order to limit the resources allocated to a single connection.
+     */
     size_t http2_max_concurrent_requests_per_connection;
+    /**
+     * SSL context to be used (if set, the server runs in HTTPS mode)
+     */
     h2o_ssl_context_t *ssl_ctx;
     struct {
         uint64_t uv_now_at;
@@ -232,62 +335,157 @@ struct st_h2o_context_t {
     } _global_configurators;
 };
 
+/**
+ * represents a HTTP header
+ */
 typedef struct st_h2o_header_t {
-    union {
-        h2o_token_t *token;
-        h2o_buf_t *str;
-    } name;
+    /**
+     * name of the header (may point to h2o_token_t which is an optimized subclass of h2o_buf_t)
+     */
+    h2o_buf_t *name;
+    /**
+     * value of the header
+     */
     h2o_buf_t value;
 } h2o_header_t;
 
+/**
+ * list of headers
+ */
 typedef H2O_VECTOR(h2o_header_t) h2o_headers_t;
 
+/**
+ * an object that generates a response.
+ * The object is typically constructed by handlers calling the h2o_start_response function.
+ */
 typedef struct st_h2o_generator_t {
+    /**
+     * called by the core to request new data to be pushed via the h2o_send function.
+     */
     void (*proceed)(struct st_h2o_generator_t *self, h2o_req_t *req);
+    /**
+     * called by the core when there is a need to terminate the response abruptly
+     */
     void (*stop)(struct st_h2o_generator_t *self, h2o_req_t *req);
 } h2o_generator_t;
 
+/**
+ * an output stream that may alter the output.
+ * The object is typically constructed by filters calling the h2o_prepend_output_filter function.
+ */
 typedef struct st_h2o_ostream_t {
+    /**
+     * points to the next output stream
+     */
     struct st_h2o_ostream_t *next;
+    /**
+     * called by the core to send output.
+     * Intermediary output streams should process the given output and call the h2o_ostream_send_next function if any data can be sent.
+     */
     void (*do_send)(struct st_h2o_ostream_t *self, h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final);
+    /**
+     * called by the core when there is a need to terminate the response abruptly
+     */
     void (*stop)(struct st_h2o_ostream_t *self, h2o_req_t *req);
 } h2o_ostream_t;
 
+/**
+ * a HTTP response
+ */
 typedef struct st_h2o_res_t {
+    /**
+     * status code
+     */
     int status;
+    /**
+     * reason phrase
+     */
     const char *reason;
-    size_t content_length; /* SIZE_MAX if unavailable */
+    /**
+     * length of the content (that is sent as the Content-Length header).
+     * The default value is SIZE_MAX, which means that the length is undeterminate.
+     * Generators should set this value whenever possible.
+     */
+    size_t content_length;
+    /**
+     * list of response headers
+     */
     h2o_headers_t headers;
 } h2o_res_t;
 
+/**
+ * basic structure of an HTTP connection (HTTP/1, HTTP/2, etc.)
+ */
 struct st_h2o_conn_t {
+    /**
+     * the context of the server
+     */
     h2o_context_t *ctx;
-    /* callbacks */
+    /**
+     * a callback to obtain the address of the peer
+     */
     int (*getpeername)(h2o_conn_t *conn, struct sockaddr *name, socklen_t *namelen);
 };
 
+/**
+ * a HTTP request
+ */
 struct st_h2o_req_t {
-    /* connection */
+    /**
+     * the underlying connection
+     */
     h2o_conn_t *conn;
-    /* the request */
-    const char *authority;
-    size_t authority_len;
-    const char *method;
-    size_t method_len;
-    const char *path;
-    size_t path_len;
-    const char *scheme;
-    size_t scheme_len;
+    /**
+     * authority (a.k.a. the Host header; the value is { NULL, 0 } in case the header is unavailable)
+     */
+    h2o_buf_t authority;
+    /**
+     * HTTP method
+     * This is a non-terminated string of method_len bytes long.
+     */
+    h2o_buf_t method;
+    /**
+     * abs-path of the request
+     */
+    h2o_buf_t path;
+    /**
+     * scheme (http, https, etc.)
+     */
+    h2o_buf_t scheme;
+    /**
+     * the HTTP version (represented as 0xMMmm (M=major, m=minor))
+     */
     int version;
+    /**
+     * list of request headers
+     */
     h2o_headers_t headers;
+    /**
+     * the request entity
+     */
     H2O_VECTOR(h2o_buf_t) entity;
+    /**
+     * timestamp when the request was processed
+     */
     h2o_timestamp_t processed_at;
-    /* the response */
+    /**
+     * the response
+     */
     h2o_res_t res;
+    /**
+     * number of bytes sent by the generator (excluding headers)
+     */
     size_t bytes_sent;
-    /* flags */
+    /**
+     * whether or not the connection is persistent.
+     * Applications should set this flag to zero in case the connection cannot be kept keep-alive (due to an error etc.)
+     */
     int http1_is_persistent;
+    /**
+     * the Upgrade request header (or { NULL, 0 } if not available)
+     */
     h2o_buf_t upgrade;
+
     /* internal structure */
     h2o_generator_t *_generator;
     h2o_ostream_t *_ostr_top;
@@ -300,23 +498,83 @@ struct st_h2o_req_t {
 
 extern h2o_token_t h2o__tokens[H2O_MAX_TOKENS];
 extern size_t h2o__num_tokens;
+
+/**
+ * returns a token (an optimized subclass of h2o_buf_t) containing given string, or NULL if no such thing is available
+ */
 const h2o_token_t *h2o_lookup_token(const char *name, size_t len);
+/**
+ * returns an boolean value if given buffer is a h2o_token_t.
+ */
 int h2o_buf_is_token(const h2o_buf_t *buf);
 
 /* memory */
 
+/**
+ * constructor for h2o_buf_t
+ */
 static h2o_buf_t h2o_buf_init(const void *base, size_t len);
+/**
+ * wrapper of malloc; allocates given size of memory or dies if impossible
+ */
 static void *h2o_malloc(size_t sz);
+/**
+ * warpper of realloc; reallocs the given chunk or dies if impossible
+ */
 static void *h2o_realloc(void *oldp, size_t sz);
+/**
+ * initializes the memory pool.
+ */
 void h2o_mempool_init(h2o_mempool_t *pool);
+/**
+ * clears the memory pool.
+ * Applications may dispose the pool after calling the function or reuse it without calling h2o_mempool_init.
+ */
 void h2o_mempool_clear(h2o_mempool_t *pool);
+/**
+ * allocates given size of memory from the memory pool, or dies if impossible
+ */
 void *h2o_mempool_alloc(h2o_mempool_t *pool, size_t sz);
+/**
+ * allocates a ref-counted chunk of given size from the memory pool, or dies if impossible.
+ * The ref-count of the returned chunk is 1 regardless of whether or not the chunk is linked to a pool.
+ * @param pool pool to which the allocated chunk should be linked (or NULL to allocate an orphan chunk)
+ */
 void *h2o_mempool_alloc_shared(h2o_mempool_t *pool, size_t sz);
+/**
+ * links a ref-counted chunk to a memory pool.
+ * The ref-count of the chunk will be decremented when the pool is cleared.
+ * It is permitted to link a chunk more than once to a single pool.
+ */
 void h2o_mempool_link_shared(h2o_mempool_t *pool, void *p);
+/**
+ * increments the reference count of a ref-counted chunk.
+ */
 static void h2o_mempool_addref_shared(void *p);
+/**
+ * decrements the reference count of a ref-counted chunk.
+ * The chunk gets freed when the ref-count reaches zero.
+ */
 static int h2o_mempool_release_shared(void *p);
+/**
+ * allocates a input buffer.
+ * @param inbuf - pointer to a pointer pointing to the structure (set *inbuf to NULL to allocate a new buffer)
+ * @param initial_size an advisory value for the initial size of the input buffer
+ * @return buffer to which the next data should be stored
+ */
 h2o_buf_t h2o_allocate_input_buffer(h2o_input_buffer_t **inbuf, size_t initial_size);
+/**
+ * throws away given size of the data from the buffer.
+ * @param delta number of octets to be drained from the buffer
+ */
 void h2o_consume_input_buffer(h2o_input_buffer_t **inbuf, size_t delta);
+/**
+ * grows the vector so that it could store at least new_capacity elements of given size (or dies if impossible).
+ * @param pool memory pool that the vector is using
+ * @param vector the vector
+ * @param element_size size of the elements stored in the vector
+ * @param new_capacity the capacity of the buffer after the function returns
+ */
 static void h2o_vector_reserve(h2o_mempool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
 void h2o_vector__expand(h2o_mempool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
 

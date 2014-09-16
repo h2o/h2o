@@ -30,7 +30,7 @@ static h2o_header_t *add_header(h2o_mempool_t *pool, h2o_headers_t *headers, h2o
     h2o_vector_reserve(pool, (h2o_vector_t*)headers, sizeof(h2o_header_t), headers->size + 1);
     slot = headers->entries + headers->size++;
 
-    slot->name.str = name;
+    slot->name = name;
     slot->value.base = (char*)value;
     slot->value.len = value_len;
 
@@ -78,7 +78,7 @@ ssize_t h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const stru
 ssize_t h2o_find_header(const h2o_headers_t *headers, const h2o_token_t *token, ssize_t cursor)
 {
     for (++cursor; cursor < headers->size; ++cursor) {
-        if (headers->entries[cursor].name.token == token) {
+        if (headers->entries[cursor].name == &token->buf) {
             return cursor;
         }
     }
@@ -89,7 +89,7 @@ ssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, s
 {
     for (++cursor; cursor < headers->size; ++cursor) {
         h2o_header_t *t = headers->entries + cursor;
-        if (h2o_lcstris(t->name.str->base, t->name.str->len, name, name_len)) {
+        if (h2o_lcstris(t->name->base, t->name->len, name, name_len)) {
             return cursor;
         }
     }
@@ -178,15 +178,15 @@ h2o_buf_t h2o_flatten_headers(h2o_mempool_t *pool, const h2o_headers_t *headers)
     /* determine the length */
     ret.len = 0;
     for (header = headers->entries; header != header_end; ++header) {
-        ret.len += header->name.str->len + header->value.len + 4;
+        ret.len += header->name->len + header->value.len + 4;
     }
     ret.len += 2;
 
     /* build */
     dst = ret.base = h2o_mempool_alloc(pool, ret.len);
     for (header = headers->entries; header != header_end; ++header) {
-        memcpy(dst, header->name.str->base, header->name.str->len);
-        dst += header->name.str->len;
+        memcpy(dst, header->name->base, header->name->len);
+        dst += header->name->len;
         *dst++ = ':';
         *dst++ = ' ';
         memcpy(dst, header->value.base, header->value.len);

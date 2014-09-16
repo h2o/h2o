@@ -33,8 +33,8 @@
 
 static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
 {
-    if (h2o_memis(req->method, req->method_len, H2O_STRLIT("GET"))
-        && h2o_memis(req->path, req->path_len, H2O_STRLIT("/chunked-test"))) {
+    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))
+        && h2o_memis(req->path.base, req->path.len, H2O_STRLIT("/chunked-test"))) {
         h2o_buf_t body = h2o_strdup(&req->pool, "hello world\n", SIZE_MAX);
         req->res.status = 200;
         req->res.reason = "OK";
@@ -49,8 +49,8 @@ static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
 
 static int reproxy_test(h2o_handler_t *self, h2o_req_t *req)
 {
-    if (h2o_memis(req->method, req->method_len, H2O_STRLIT("GET"))
-        && h2o_memis(req->path, req->path_len, H2O_STRLIT("/reproxy-test"))) {
+    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))
+        && h2o_memis(req->path.base, req->path.len, H2O_STRLIT("/reproxy-test"))) {
         req->res.status = 200;
         req->res.reason = "OK";
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT("http://example.com:81/bar"));
@@ -63,8 +63,8 @@ static int reproxy_test(h2o_handler_t *self, h2o_req_t *req)
 
 static int post_test(h2o_handler_t *self, h2o_req_t *req)
 {
-    if (h2o_memis(req->method, req->method_len, H2O_STRLIT("POST"))
-        && h2o_memis(req->path, req->path_len, H2O_STRLIT("/post-test"))) {
+    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("POST"))
+        && h2o_memis(req->path.base, req->path.len, H2O_STRLIT("/post-test"))) {
         req->res.status = 200;
         req->res.reason = "OK";
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));

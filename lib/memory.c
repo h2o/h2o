@@ -133,16 +133,16 @@ h2o_buf_t h2o_allocate_input_buffer(h2o_input_buffer_t **_inbuf, size_t initial_
         *_inbuf = inbuf;
         inbuf->size = 0;
         inbuf->bytes = inbuf->_buf;
-        inbuf->capacity = initial_size;
+        inbuf->_capacity = initial_size;
     } else {
         if (inbuf->bytes != inbuf->_buf) {
             assert(inbuf->size != 0);
             memmove(inbuf->_buf, inbuf->bytes, inbuf->size);
             inbuf->bytes = inbuf->_buf;
         }
-        if (inbuf->size == inbuf->capacity) {
-            inbuf->capacity *= 2;
-            inbuf = h2o_realloc(inbuf, offsetof(h2o_input_buffer_t, bytes) + inbuf->capacity);
+        if (inbuf->size == inbuf->_capacity) {
+            inbuf->_capacity *= 2;
+            inbuf = h2o_realloc(inbuf, offsetof(h2o_input_buffer_t, bytes) + inbuf->_capacity);
             inbuf->bytes = inbuf->_buf;
             *_inbuf = inbuf;
         }
@@ -150,7 +150,7 @@ h2o_buf_t h2o_allocate_input_buffer(h2o_input_buffer_t **_inbuf, size_t initial_
     }
 
     ret.base = inbuf->bytes + inbuf->size;
-    ret.len = inbuf->capacity - inbuf->size;
+    ret.len = inbuf->_capacity - inbuf->size;
 
     return ret;
 }
