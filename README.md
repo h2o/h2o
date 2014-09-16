@@ -20,6 +20,6 @@ Building the Library
 ---
 
 ```
-$cmake .
+$ cmake .
 $ make libh2o
 ```
