@@ -22,7 +22,7 @@ Dependencies
 Benchmark
 ---
 
-Written from the up, H2O outperforms nginx by more than 2x.  The table below is a benchmark taken using `ab -c 500 -n 100000 -k` on Ubuntu 14.04 running on VMWare Fusion.
+Written from the up, H2O outperforms nginx by more than 2x.  The table below is a comparison of request-per-seconds taken using `ab -c 500 -n 100000 -k` on Ubuntu 14.04 running on VMWare Fusion (ref. [nginx.conf](https://gist.github.com/kazuho/c9c12021567e3ab83809) being used).
 
 |Server \ size of content|6 bytes|4,096 bytes|
 |------------------------|------:|----------:|
