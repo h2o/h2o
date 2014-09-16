@@ -1,7 +1,7 @@
 H2O - an optimized HTTP server / library implementation
 ===
 
-H2O is an optimized HTTP server implementation that can be used either as a standalone server or a library.  It uses libuv as its backend, but a tiny event loop is also provided in case speed / code footprint is important.
+H2O is an optimized HTTP server implementation that can be used either as a standalone server or a library.
 
 Supported Protocols
 ---
@@ -10,6 +10,13 @@ Supported Protocols
 - HTTP/1.1 (http and https)
 - Websocket (RFC6455, both ws and wss)
 - HTTP/2.0 (draft 14, via Upgrade, NPN, ALPN)
+
+Dependencies
+---
+
+- [OpenSSL](https://www.openssl.org/) (mandatory)
+- [libuv 1.0.0](https://github.com/joyent/libuv) (optional; only required when using h2o as a library)
+- [wslay](https://github.com/tatsuhiro-t/wslay) (optional; only required if you need support for websocket)
 
 Building and Running the Server
 ---
