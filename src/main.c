@@ -147,7 +147,7 @@ int main(int argc, char **argv)
     h2o_context_t ctx;
 
     /* parse options */
-    while ((opt_ch = getopt_long(argc, argv, "c:h:", longopts, NULL)) != -1) {
+    while ((opt_ch = getopt_long(argc, argv, "c:h", longopts, NULL)) != -1) {
         switch (opt_ch) {
         case 'c':
             conf_fn = optarg;
