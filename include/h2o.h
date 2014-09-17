@@ -689,26 +689,79 @@ void h2o_socket__write_on_complete(h2o_socket_t *sock, int status);
 
 /* timeout */
 
+/**
+ * initializes and registers a timeout
+ * @param loop loop to which the timeout should be registered
+ * @param timeout the timeout structure to be initialized
+ * @param millis timeout in milliseconds
+ */
+void h2o_timeout_init(h2o_loop_t *loop, h2o_timeout_t *timeout, uint64_t millis);
+/**
+ * activates a timeout entry, by linking it to a timeout
+ */
+void h2o_timeout_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry);
+/**
+ * disactivates a timeout entry, by unlinking it from a timeout
+ */
+void h2o_timeout_unlink(h2o_timeout_t *timeout, h2o_timeout_entry_t *entry);
+/**
+ * returns a boolean value indicating if the timeout is linked (i.e. active) or not
+ */
+static int h2o_timeout_is_linked(h2o_timeout_entry_t *entry);
+
 size_t h2o_timeout_run(h2o_timeout_t *timeout, uint64_t now);
 size_t h2o_timeout_run_all(h2o_linklist_node_t *timeouts, uint64_t now);
 uint64_t h2o_timeout_get_wake_at(h2o_linklist_node_t *timeouts);
-void h2o_timeout_init(h2o_loop_t *loop, h2o_timeout_t *timeout, uint64_t millis);
-void h2o_timeout_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry);
-void h2o_timeout_unlink(h2o_timeout_t *timeout, h2o_timeout_entry_t *entry);
-static int h2o_timeout_is_linked(h2o_timeout_entry_t *entry);
 void h2o_timeout__do_init(h2o_loop_t *loop, h2o_timeout_t *timeout);
 void h2o_timeout__do_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry);
 
 /* headers */
 
+/**
+ * fills in the headers list while returning references to special headers
+ * @return index of content-length or content-encoding header within src (or -1 if not found)
+ */
 ssize_t h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len, h2o_buf_t *connection, h2o_buf_t *host, h2o_buf_t *upgrade);
+/**
+ * searches for a header of given name (fast, by comparing tokens)
+ * @param headers header list
+ * @param token name of the header to search for
+ * @param cursor index of the last match (or set SIZE_MAX to start a new search)
+ * @return index of the found header (or SIZE_MAX if not found)
+ */
 ssize_t h2o_find_header(const h2o_headers_t *headers, const h2o_token_t *token, ssize_t cursor);
+/**
+ * searches for a header of given name (slow, by comparing strings)
+ * @param headers header list
+ * @param name name of the header to search for
+ * @param name_len length of the name
+ * @param cursor index of the last match (or set SIZE_MAX to start a new search)
+ * @return index of the found header (or SIZE_MAX if not found)
+ */
 ssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, size_t name_len, ssize_t cursor);
+/**
+ * adds a header to list
+ */
 void h2o_add_header(h2o_mempool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len);
+/**
+ * adds a header to list
+ */
 void h2o_add_header_by_str(h2o_mempool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token, const char *value, size_t value_len);
+/**
+ * adds or replaces a header into the list
+ */
 void h2o_set_header(h2o_mempool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len, int overwrite_if_exists);
+/**
+ * adds or replaces a header into the list
+ */
 void h2o_set_header_by_str(h2o_mempool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token, const char *value, size_t value_len, int overwrite_if_exists);
+/**
+ * deletes a header from list
+ */
 ssize_t h2o_delete_header(h2o_headers_t *headers, ssize_t cursor);
+/**
+ * serializes the header list into a string
+ */
 h2o_buf_t h2o_flatten_headers(h2o_mempool_t *pool, const h2o_headers_t *headers);
 
 /* util */
