@@ -192,7 +192,6 @@ static void close_connection_now(h2o_http2_conn_t *conn)
 
 static void close_connection(h2o_http2_conn_t *conn)
 {
-    assert(conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING);
     conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
 
     if (conn->_write.wreq_in_flight) {
