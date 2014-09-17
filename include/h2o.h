@@ -151,13 +151,15 @@ typedef H2O_VECTOR(void) h2o_vector_t;
 typedef void (*h2o_timeout_cb)(h2o_timeout_entry_t *entry);
 
 /**
- * linklist node
- * Should be zero-filled upon initialization.
+ * linklist
+ * The structure is used to represent both nodes and the head of the list.
+ * Nodes should be zero-filled upon initialization.
+ * Heads should be initialized by calling h2o_linklist_init_anchor.
  */
-typedef struct h2o_linklist_node_t {
-    struct h2o_linklist_node_t *next;
-    struct h2o_linklist_node_t *prev;
-} h2o_linklist_node_t;
+typedef struct st_h2o_linklist_t {
+    struct st_h2o_linklist_t *next;
+    struct st_h2o_linklist_t *prev;
+} h2o_linklist_t;
 
 /**
  * an entry linked to h2o_timeout_t.
@@ -166,7 +168,7 @@ typedef struct h2o_linklist_node_t {
 struct st_h2o_timeout_entry_t {
     uint64_t registered_at;
     h2o_timeout_cb cb;
-    h2o_linklist_node_t _link;
+    h2o_linklist_t _link;
 };
 
 /**
@@ -174,8 +176,8 @@ struct st_h2o_timeout_entry_t {
  */
 typedef struct st_h2o_timeout_t {
     uint64_t timeout;
-    h2o_linklist_node_t _link;
-    h2o_linklist_node_t *_entries; /* link list of h2o_timeout_entry_t */
+    h2o_linklist_t _link;
+    h2o_linklist_t _entries; /* link list of h2o_timeout_entry_t */
     struct st_h2o_timeout_backend_properties_t _backend;
 } h2o_timeout_t;
 
@@ -194,31 +196,31 @@ struct st_h2o_socket_t {
 
 /**
  * basic structure of a handler (an object that MAY generate a response)
- * Applications should call h2o_prepend_handler to define new handlers.
+ * The handlers should register themselves to h2o_context_t::handlers.
  */
 typedef struct st_h2o_handler_t {
-    struct st_h2o_handler_t *next;
-    void (*dispose)(struct st_h2o_handler_t *self);
+    h2o_linklist_t _link;
+    void (*destroy)(struct st_h2o_handler_t *self);
     int (*on_req)(struct st_h2o_handler_t *self, h2o_req_t *req);
 } h2o_handler_t;
  
 /**
  * basic structure of a filter (an object that MAY modify a response)
- * Applications should call h2o_prepend_filter to define new filters.
+ * The filters should register themselves to h2o_context_t::filters.
  */
 typedef struct st_h2o_filter_t {
-    struct st_h2o_filter_t *next;
-    void (*dispose)(struct st_h2o_filter_t *self);
+    h2o_linklist_t _link;
+    void (*destroy)(struct st_h2o_filter_t *self);
     void (*on_start_response)(struct st_h2o_filter_t *self, h2o_req_t *req);
 } h2o_filter_t;
 
 /**
  * basic structure of a logger (an object that MAY log a request)
- * Applications should call h2o_prepend_logger to define new loggers.
+ * The loggers should register themselves to h2o_context_t::loggers.
  */
 typedef struct st_h2o_logger_t {
-    struct st_h2o_logger_t *next;
-    void (*dispose)(struct st_h2o_logger_t *self);
+    h2o_linklist_t _link;
+    void (*destroy)(struct st_h2o_logger_t *self);
     void (*log)(struct st_h2o_logger_t *self, h2o_req_t *req);
 } h2o_logger_t;
 
@@ -226,7 +228,7 @@ typedef struct st_h2o_logger_t {
  * basic structure of a configurator (handles a configuration command)
  */
 typedef struct st_h2o_configurator_t {
-    struct st_h2o_configurator_t *next;
+    h2o_linklist_t _link;
     /**
      * name of the command handled by the configurator
      */
@@ -287,21 +289,21 @@ struct st_h2o_context_t {
      */
     h2o_timeout_t req_timeout;
     /**
-     * list of handlers
+     * list of handlers (h2o_handler_t)
      */
-    h2o_handler_t *handlers;
+    h2o_linklist_t handlers;
     /**
-     * list of filters
+     * list of filters (h2o_filter_t)
      */
-    h2o_filter_t *filters;
+    h2o_linklist_t filters;
     /**
-     * list of loggers
+     * list of loggers (h2o_logger_t)
      */
-    h2o_logger_t *loggers;
+    h2o_linklist_t loggers;
     /**
-     * list of configurators
+     * list of configurators (h2o_configurator_t)
      */
-    h2o_configurator_t *configurators;
+    h2o_linklist_t configurators;
     /**
      * mime-map
      */
@@ -375,7 +377,7 @@ typedef struct st_h2o_generator_t {
 
 /**
  * an output stream that may alter the output.
- * The object is typically constructed by filters calling the h2o_prepend_output_filter function.
+ * The object is typically constructed by filters calling the h2o_prepend_ostream function.
  */
 typedef struct st_h2o_ostream_t {
     /**
@@ -585,47 +587,27 @@ void h2o_vector__expand(h2o_mempool_t *pool, h2o_vector_t *vector, size_t elemen
 /* link list */
 
 /**
+ * initializes the anchor (i.e. head) of a linked list
+ */
+static void h2o_linklist_init_anchor(h2o_linklist_t *anchor);
+/**
+ * tests if the list is empty
+ */
+static int h2o_linklist_is_empty(h2o_linklist_t *anchor);
+/**
  * tests if the node is linked to a list
  */
-static int h2o_linklist_is_linked(h2o_linklist_node_t *link);
+static int h2o_linklist_is_linked(h2o_linklist_t *node);
 /**
  * inserts a node to the linked list
- * @param head reference to the head of the linked list
  * @param pos insert position; the node will be inserted before pos (or NULL in case *head is NULL)
  * @param node the node to be inserted
  */
-static void h2o_linklist_insert(h2o_linklist_node_t **head, h2o_linklist_node_t *pos, h2o_linklist_node_t *node);
+static void h2o_linklist_insert(h2o_linklist_t *pos, h2o_linklist_t *node);
 /**
  * unlinks a node from the linked list
  */
-static void h2o_linklist_unlink(h2o_linklist_node_t **head, h2o_linklist_node_t *link);
-/**
- * returns a pointer to the first element of the linked list
- * @param type type of the element
- * @param member property of the element structure of type h2o_linklist_node_t that is used to connect the object to the linked list
- * @param head head of the linked list
- */
-#define h2o_linklist_get_first(type, member, head) ((type*)((char*)head - offsetof(type, member)))
-/**
- * returns a pointer to the next element of the linked list
- * @param type type of the element
- * @param member property of the element structure of type h2o_linklist_node_t that is used to connect the object to the linked list
- * @param p pointer pointing to the current element
- */
-#define h2o_linklist_get_next(type, member, p) ((type*)((char*)(p)->member.next - offsetof(type, member)))
-/**
- * returns a pointer to the previous element of the linked list
- * @param type type of the element
- * @param member property of the element structure of type h2o_linklist_node_t that is used to connect the object to the linked list
- * @param p pointer pointing to the current element
- */
-#define h2o_linklist_get_prev(type, member, p) ((type*)((char*)(p)->member.prev - offsetof(type, member)))
-/**
- * merges two linked lists by moving the elements of one list to the tail of the other
- * @param head linked list to which new elements will be added
- * @param added linked list from which elements should be moved
- */
-void h2o_linklist_merge(h2o_linklist_node_t *head, h2o_linklist_node_t **added);
+static void h2o_linklist_unlink(h2o_linklist_t *node);
 
 /* socket */
 
@@ -710,8 +692,8 @@ void h2o_timeout_unlink(h2o_timeout_t *timeout, h2o_timeout_entry_t *entry);
 static int h2o_timeout_is_linked(h2o_timeout_entry_t *entry);
 
 size_t h2o_timeout_run(h2o_timeout_t *timeout, uint64_t now);
-size_t h2o_timeout_run_all(h2o_linklist_node_t *timeouts, uint64_t now);
-uint64_t h2o_timeout_get_wake_at(h2o_linklist_node_t *timeouts);
+size_t h2o_timeout_run_all(h2o_linklist_t *timeouts, uint64_t now);
+uint64_t h2o_timeout_get_wake_at(h2o_linklist_t *timeouts);
 void h2o_timeout__do_init(h2o_loop_t *loop, h2o_timeout_t *timeout);
 void h2o_timeout__do_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry);
 
@@ -789,7 +771,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src);
 void h2o_dispose_request(h2o_req_t *req);
 void h2o_process_request(h2o_req_t *req);
 h2o_generator_t *h2o_start_response(h2o_req_t *req, size_t sz);
-h2o_ostream_t *h2o_prepend_output_filter(h2o_req_t *req, size_t sz);
+h2o_ostream_t *h2o_prepend_ostream(h2o_req_t *req, size_t sz);
 
 void h2o_send(h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final);
 static void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final);
@@ -802,10 +784,6 @@ void h2o_context_init(h2o_context_t *context, h2o_loop_t *loop);
 void h2o_context_dispose(h2o_context_t *context);
 int h2o_context_configure(h2o_context_t *context, const char *config_file, yoml_t *config_node);
 
-h2o_handler_t *h2o_prepend_handler(h2o_context_t *context, size_t sz, int (*on_req)(h2o_handler_t *self, h2o_req_t *req));
-h2o_filter_t *h2o_prepend_filter(h2o_context_t *context, size_t sz, void (*on_start_response)(h2o_filter_t *self, h2o_req_t *req));
-h2o_logger_t *h2o_prepend_logger(h2o_context_t *context, size_t sz, void (*log)(h2o_logger_t *self, h2o_req_t *req));
-void h2o_register_configurator(h2o_context_t *context, h2o_configurator_t *configurator);
 void h2o_context_print_config_error(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *reason, ...) __attribute__((format (printf, 4, 5)));
 
 void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts);
@@ -820,12 +798,13 @@ int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *pa
 
 /* handlers */
 
-h2o_handler_t *h2o_prepend_file_handler(h2o_context_t *context, const char *virtual_path, const char *real_path, const char *index_file);
+void h2o_register_file_handler(h2o_context_t *context, const char *virtual_path, const char *real_path, const char *index_file);
 
 /* output filters */
 
-void h2o_prepend_chunked_filter(h2o_context_t *context); /* added by default */
-void h2o_prepend_reproxy_filter(h2o_context_t *context);
+static void h2o_init_next_filter(h2o_filter_t *self, h2o_req_t *req);
+void h2o_register_chunked_filter(h2o_context_t *context); /* added by default */
+void h2o_register_reproxy_filter(h2o_context_t *context);
 
 /* mime mapper */
 
@@ -929,43 +908,36 @@ inline void h2o_vector_reserve(h2o_mempool_t *pool, h2o_vector_t *vector, size_t
     }
 }
 
-inline int h2o_linklist_is_linked(h2o_linklist_node_t *link)
+inline void h2o_linklist_init_anchor(h2o_linklist_t *anchor)
 {
-    return link->next != NULL;
+    anchor->next = anchor->prev = anchor;
 }
 
-inline void h2o_linklist_insert(h2o_linklist_node_t **head, h2o_linklist_node_t *pos, h2o_linklist_node_t *node)
+inline int h2o_linklist_is_linked(h2o_linklist_t *node)
+{
+    return node->next != NULL;
+}
+
+inline int h2o_linklist_is_empty(h2o_linklist_t *anchor)
+{
+    return anchor->next == anchor;
+}
+
+inline void h2o_linklist_insert(h2o_linklist_t *pos, h2o_linklist_t *node)
 {
     assert(! h2o_linklist_is_linked(node));
 
-    if (*head == NULL) {
-        assert(pos == NULL);
-        *head = node;
-        node->next = node->prev = node;
-    } else {
-        assert(pos != NULL);
-        node->prev = pos->prev;
-        node->next = pos;
-        node->prev->next = node;
-        node->next->prev = node;
-    }
+    node->prev = pos->prev;
+    node->next = pos;
+    node->prev->next = node;
+    node->next->prev = node;
 }
 
-inline void h2o_linklist_unlink(h2o_linklist_node_t **head, h2o_linklist_node_t *link)
+inline void h2o_linklist_unlink(h2o_linklist_t *node)
 {
-    assert(h2o_linklist_is_linked(link));
-
-    if (link->next == link) {
-        assert(*head == link);
-        *head = NULL;
-    } else {
-        assert(*head != NULL);
-        link->next->prev = link->prev;
-        link->prev->next = link->next;
-        if (link == *head)
-            *head = link->next;
-    }
-    link->next = link->prev = NULL;
+    node->next->prev = node->prev;
+    node->prev->next = node->next;
+    node->next = node->prev = NULL;
 }
 
 inline void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final)
@@ -983,6 +955,14 @@ inline void h2o_proceed_response(h2o_req_t *req)
         req->_generator->proceed(req->_generator, req);
     } else {
         req->_ostr_top->do_send(req->_ostr_top, req, NULL, 0, 1);
+    }
+}
+
+inline void h2o_init_next_filter(h2o_filter_t *self, h2o_req_t *req)
+{
+    if (self->_link.next != &req->conn->ctx->filters) {
+        h2o_filter_t *next_filter = H2O_STRUCT_FROM_MEMBER(h2o_filter_t, _link, self->_link.next);
+        next_filter->on_start_response(next_filter, req);
     }
 }
 

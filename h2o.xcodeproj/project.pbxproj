@@ -11,7 +11,6 @@
 		101B670C19ADD3380084A351 /* access_log.c in Sources */ = {isa = PBXBuildFile; fileRef = 101B670B19ADD3380084A351 /* access_log.c */; };
 		1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923C119A3217300C52AD6 /* websocket.c */; };
 		1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923A319A3215F00C52AD6 /* websocket.h */; };
-		1065E6F219B953C900686E72 /* linklist.c in Sources */ = {isa = PBXBuildFile; fileRef = 1065E6F119B953C900686E72 /* linklist.c */; };
 		1065E6F919BEBAC600686E72 /* timeout.c in Sources */ = {isa = PBXBuildFile; fileRef = 1065E6F819BEBAC600686E72 /* timeout.c */; };
 		1065E70C19BF664300686E72 /* evloop.h in Headers */ = {isa = PBXBuildFile; fileRef = 1065E70419BF145700686E72 /* evloop.h */; };
 		1065E70D19BF6D4600686E72 /* uv-binding.h in Headers */ = {isa = PBXBuildFile; fileRef = 1065E70619BF14E500686E72 /* uv-binding.h */; };
@@ -128,7 +127,6 @@
 		101788B119B561AA0084C6D8 /* socket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = socket.c; sourceTree = "<group>"; };
 		101B670B19ADD3380084A351 /* access_log.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = access_log.c; sourceTree = "<group>"; };
 		1065E6EF19B8C64200686E72 /* evloop.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = evloop.c.h; sourceTree = "<group>"; };
-		1065E6F119B953C900686E72 /* linklist.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = linklist.c; sourceTree = "<group>"; };
 		1065E6F419B996B400686E72 /* select.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = select.c.h; sourceTree = "<group>"; };
 		1065E6F619B99E6D00686E72 /* kqueue.c.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = kqueue.c.h; sourceTree = "<group>"; };
 		1065E6F719B9B1AC00686E72 /* epoll.c.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = epoll.c.h; sourceTree = "<group>"; };
@@ -330,12 +328,11 @@
 			children = (
 				101B670B19ADD3380084A351 /* access_log.c */,
 				107923AE19A3217300C52AD6 /* chunked.c */,
+				107923B919A3217300C52AD6 /* context.c */,
 				107923AF19A3217300C52AD6 /* file.c */,
 				107923B019A3217300C52AD6 /* headers.c */,
 				107923B119A3217300C52AD6 /* http1.c */,
 				107923B219A3217300C52AD6 /* http2 */,
-				107923B919A3217300C52AD6 /* context.c */,
-				1065E6F119B953C900686E72 /* linklist.c */,
 				107923BA19A3217300C52AD6 /* memory.c */,
 				107923BB19A3217300C52AD6 /* mimemap.c */,
 				107923BC19A3217300C52AD6 /* request.c */,
@@ -552,7 +549,6 @@
 			files = (
 				107923C719A3217300C52AD6 /* hpack.c in Sources */,
 				101788B219B561AA0084C6D8 /* socket.c in Sources */,
-				1065E6F219B953C900686E72 /* linklist.c in Sources */,
 				107923D219A3217300C52AD6 /* token.c in Sources */,
 				107923CE19A3217300C52AD6 /* mimemap.c in Sources */,
 				107923C619A3217300C52AD6 /* connection.c in Sources */,

@@ -174,13 +174,15 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     return 0;
 }
 
-static void dispose_handler(h2o_handler_t *_self)
+static void on_destroy(h2o_handler_t *_self)
 {
     struct st_h2o_file_handler_t *self = (void*)_self;
 
     free(self->virtual_path.base);
     free(self->real_path.base);
     free(self->index_file.base);
+
+    free(self);
 }
 
 static h2o_buf_t append_slash_and_dup(const char *path)
@@ -200,14 +202,17 @@ static h2o_buf_t append_slash_and_dup(const char *path)
     return h2o_buf_init(buf, path_len);
 }
 
-h2o_handler_t *h2o_prepend_file_handler(h2o_context_t *context, const char *virtual_path, const char *real_path, const char *index_file)
+void h2o_register_file_handler(h2o_context_t *context, const char *virtual_path, const char *real_path, const char *index_file)
 {
-    struct st_h2o_file_handler_t *self = (void*)h2o_prepend_handler(context, sizeof(*self), on_req);
+    struct st_h2o_file_handler_t *self = malloc(sizeof(*self));
 
-    self->super.dispose = dispose_handler;
+    memset(self, 0, sizeof(*self));
+    self->super.destroy = on_destroy;
+    self->super.on_req = on_req;
+
     self->virtual_path = append_slash_and_dup(virtual_path);
     self->real_path = append_slash_and_dup(real_path);
     self->index_file = h2o_strdup(NULL, index_file, SIZE_MAX);
 
-    return &self->super;
+    h2o_linklist_insert(&context->handlers, &self->super._link);
 }

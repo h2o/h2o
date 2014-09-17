@@ -136,7 +136,7 @@ int main(int argc, char **argv)
         { NULL, 0, NULL, 0 }
     };
     static struct port_configurator_t port_configurator = {
-        { NULL, "port", NULL, on_config_port, on_config_port_complete },
+        { {}, "port", NULL, on_config_port, on_config_port_complete },
         0
     };
 
@@ -170,7 +170,7 @@ int main(int argc, char **argv)
 
     /* setup h2o context */
     h2o_context_init(&ctx, h2o_evloop_create());
-    h2o_register_configurator(&ctx, &port_configurator.super);
+    h2o_linklist_insert(&ctx.configurators, &port_configurator.super._link);
 
     /* apply the configuration */
     if (h2o_context_configure(&ctx, conf_fn, config) != 0)

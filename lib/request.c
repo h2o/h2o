@@ -90,11 +90,12 @@ void h2o_dispose_request(h2o_req_t *req)
 
     h2o_timeout_unlink(&ctx->zero_timeout, &req->_timeout_entry);
 
-    if (req->version != 0 && ctx->loggers != NULL) {
-        h2o_logger_t *logger = ctx->loggers;
-        do {
+    if (req->version != 0) {
+        h2o_linklist_t *node;
+        for (node = ctx->loggers.next; node != &ctx->loggers; node = node->next) {
+            h2o_logger_t *logger = H2O_STRUCT_FROM_MEMBER(h2o_logger_t, _link, node);
             logger->log(logger, req);
-        } while ((logger = logger->next) != NULL);
+        }
     }
 
     h2o_mempool_clear(&req->pool);
@@ -102,25 +103,33 @@ void h2o_dispose_request(h2o_req_t *req)
 
 void h2o_process_request(h2o_req_t *req)
 {
-    h2o_handler_t *handler;
+    h2o_linklist_t *handler_node, *handlers;
 
     h2o_get_timestamp(req->conn->ctx, &req->pool, &req->processed_at);
 
     /* call any of the handlers */
-    for (handler = req->conn->ctx->handlers; handler != NULL; handler = handler->next)
+    handlers = &req->conn->ctx->handlers;
+    for (handler_node = handlers->next; handler_node != handlers; handler_node = handler_node->next) {
+        h2o_handler_t *handler = H2O_STRUCT_FROM_MEMBER(h2o_handler_t, _link, handler_node);
         if (handler->on_req(handler, req) == 0)
             return;
+    }
+
     h2o_send_error(req, 404, "File Not Found", "not found");
 }
 
 h2o_generator_t *h2o_start_response(h2o_req_t *req, size_t sz)
 {
+    h2o_linklist_t *filters;
+
     req->_generator = h2o_mempool_alloc(&req->pool, sz);
     req->_generator->proceed = NULL;
 
     /* setup response filters */
-    if (req->conn->ctx->filters != NULL) {
-        req->conn->ctx->filters->on_start_response(req->conn->ctx->filters, req);
+    filters = &req->conn->ctx->filters;
+    if (! h2o_linklist_is_empty(filters)) {
+        h2o_filter_t *filter = H2O_STRUCT_FROM_MEMBER(h2o_filter_t, _link, filters->next);
+        filter->on_start_response(filter, req);
     }
 
     return req->_generator;
@@ -142,7 +151,7 @@ void h2o_send(h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final)
 }
 
 
-h2o_ostream_t *h2o_prepend_output_filter(h2o_req_t *req, size_t sz)
+h2o_ostream_t *h2o_prepend_ostream(h2o_req_t *req, size_t sz)
 {
     h2o_ostream_t *ostr = h2o_mempool_alloc(&req->pool, sz);
     ostr->next = req->_ostr_top;

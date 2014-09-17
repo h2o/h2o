@@ -96,8 +96,7 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, 
     req->res.content_length = body.len;
     h2o_set_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"), 1);
 
-    if (self->filter->next != NULL)
-        self->filter->next->on_start_response(self->filter->next, req);
+    h2o_init_next_filter(self->filter, req);
 
     assert(is_final);
     h2o_ostream_send_next(&self->super, req, &body, 1, is_final);
@@ -118,7 +117,7 @@ static void on_start_response(h2o_filter_t *self, h2o_req_t *req)
     h2o_delete_header(&req->res.headers, reproxy_header_index);
 
     /* setup */
-    rproxy = (void*)h2o_prepend_output_filter(req, sizeof(struct rproxy_t));
+    rproxy = (void*)h2o_prepend_ostream(req, sizeof(struct rproxy_t));
     rproxy->filter = self;
     rproxy->super.do_send = send_chunk;
     rproxy->reproxy_url = h2o_strdup(&req->pool, reproxy_url.base, reproxy_url.len).base;
@@ -127,11 +126,17 @@ static void on_start_response(h2o_filter_t *self, h2o_req_t *req)
     return;
 
 SkipMe:
-    if (self->next != NULL)
-        self->next->on_start_response(self->next, req);
+    h2o_init_next_filter(self, req);
 }
 
-void h2o_prepend_reproxy_filter(h2o_context_t *context)
+void h2o_register_reproxy_filter(h2o_context_t *context)
 {
-    h2o_prepend_filter(context, sizeof(h2o_filter_t), on_start_response);
+    h2o_filter_t *self = h2o_malloc(sizeof(*self));
+
+    memset(self, 0, sizeof(*self));
+    self->destroy = (void*)free;
+    self->on_start_response = on_start_response;
+
+    /* insert at the head! */
+    h2o_linklist_insert(context->filters.next, &self->_link);
 }

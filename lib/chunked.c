@@ -81,15 +81,20 @@ static void on_start_response(h2o_filter_t *self, h2o_req_t *req)
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, H2O_STRLIT("chunked"));
 
     /* setup filter */
-    encoder = (void*)h2o_prepend_output_filter(req, sizeof(chunked_encoder_t));
+    encoder = (void*)h2o_prepend_ostream(req, sizeof(chunked_encoder_t));
     encoder->super.do_send = send_chunk;
 
 Next:
-    if (self->next != NULL)
-        self->next->on_start_response(self->next, req);
+    h2o_init_next_filter(self, req);
 }
 
-void h2o_prepend_chunked_filter(h2o_context_t *context)
+void h2o_register_chunked_filter(h2o_context_t *context)
 {
-    h2o_prepend_filter(context, sizeof(h2o_filter_t), on_start_response);
+    h2o_filter_t *self = h2o_malloc(sizeof(*self));
+
+    memset(self, 0, sizeof(*self));
+    self->destroy = (void*)free;
+    self->on_start_response = on_start_response;
+
+    h2o_linklist_insert(&context->filters, &self->_link);
 }

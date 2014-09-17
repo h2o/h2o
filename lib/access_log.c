@@ -61,9 +61,13 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
     write(self->fd, line.base, line.len);
 }
 
-h2o_logger_t *h2o_prepend_access_logger(h2o_context_t *ctx, const char *path)
+h2o_logger_t *h2o_register_access_logger(h2o_context_t *ctx, const char *path)
 {
-    struct st_h2o_access_logger_t *self = (struct st_h2o_access_logger_t*)h2o_prepend_logger(ctx, sizeof(*self), log_access);
+    struct st_h2o_access_logger_t *self = h2o_malloc(sizeof(*self));
+
+    memset(self, 0, sizeof(*self));
+    self->super.destroy = (void*)free;
+    self->super.log = log_access;
 
     self->fd = open(path, O_CREAT | O_WRONLY | O_APPEND, 0644);
     if (self->fd == -1)

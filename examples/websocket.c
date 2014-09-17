@@ -84,6 +84,7 @@ int main(int argc, char **argv)
     uv_loop_t *loop = uv_default_loop();
     uv_tcp_t listener;
     struct sockaddr_in sockaddr;
+    h2o_handler_t ws_handler;
     int r;
 
     if ((r = uv_tcp_init(loop, &listener)) != 0) {
@@ -101,7 +102,9 @@ int main(int argc, char **argv)
     }
 
     h2o_context_init(&ctx, loop);
-    h2o_prepend_handler(&ctx, sizeof(h2o_handler_t), on_req);
+    memset(&ws_handler, 0, sizeof(ws_handler));
+    ws_handler.on_req = on_req;
+    h2o_linklist_insert(&ctx.handlers, &ws_handler._link);
     //ctx.ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", NULL);
 
     return uv_run(loop, UV_RUN_DEFAULT);

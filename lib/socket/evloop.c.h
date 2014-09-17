@@ -47,7 +47,7 @@ struct st_h2o_evloop_t {
         struct st_h2o_evloop_socket_t **tail_ref;
     } _statechanged;
     uint64_t _now;
-    h2o_linklist_node_t *_timeouts; /* list of h2o_timeout_t */
+    h2o_linklist_t _timeouts; /* list of h2o_timeout_t */
 };
 
 static void link_to_pending(struct st_h2o_evloop_socket_t *sock);
@@ -309,6 +309,7 @@ h2o_evloop_t *create_evloop(size_t sz)
 
     memset(loop, 0, sz);
     loop->_statechanged.tail_ref = &loop->_statechanged.head;
+    h2o_linklist_init_anchor(&loop->_timeouts);
 
     return loop;
 }
@@ -322,7 +323,7 @@ void update_now(h2o_evloop_t *loop)
 
 int32_t get_max_wait(h2o_evloop_t *loop)
 {
-    uint64_t wake_at = h2o_timeout_get_wake_at(loop->_timeouts), max_wait;
+    uint64_t wake_at = h2o_timeout_get_wake_at(&loop->_timeouts), max_wait;
 
     update_now(loop);
 
@@ -376,7 +377,7 @@ int h2o_evloop_run(h2o_evloop_t *loop)
         return -1;
 
     /* run the timeouts and pending callbacks */
-    while (run_pending(loop) + h2o_timeout_run_all(loop->_timeouts, loop->_now) != 0)
+    while (run_pending(loop) + h2o_timeout_run_all(&loop->_timeouts, loop->_now) != 0)
         ;
 
     return 0;
@@ -389,7 +390,7 @@ uint64_t h2o_now(h2o_evloop_t *loop)
 
 void h2o_timeout__do_init(h2o_evloop_t *loop, h2o_timeout_t *timeout)
 {
-    h2o_linklist_insert(&loop->_timeouts, loop->_timeouts, &timeout->_link);
+    h2o_linklist_insert(&loop->_timeouts, &timeout->_link);
 }
 
 void h2o_timeout__do_link(h2o_evloop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)

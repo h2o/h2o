@@ -31,6 +31,17 @@
 #include "h2o.h"
 #include "h2o/http2.h"
 
+static void register_handler(h2o_context_t *ctx, int (*on_req)(h2o_handler_t *, h2o_req_t *))
+{
+    h2o_handler_t *handler = h2o_malloc(sizeof(*handler));
+
+    memset(handler, 0, sizeof(*handler));
+    handler->destroy = (void*)free;
+    handler->on_req = on_req;
+
+    h2o_linklist_insert(&ctx->handlers, &handler->_link);
+}
+
 static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
 {
     if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))
@@ -177,12 +188,12 @@ int main(int argc, char **argv)
     h2o_context_init(&ctx, h2o_evloop_create());
 #endif
 
-    h2o_prepend_file_handler(&ctx, "/", "htdocs", "index.html");
-    h2o_prepend_handler(&ctx, sizeof(h2o_handler_t), post_test);
-    h2o_prepend_handler(&ctx, sizeof(h2o_handler_t), chunked_test);
-    h2o_prepend_handler(&ctx, sizeof(h2o_handler_t), reproxy_test);
+    register_handler(&ctx, post_test);
+    register_handler(&ctx, chunked_test);
+    register_handler(&ctx, reproxy_test);
+    h2o_register_file_handler(&ctx, "/", "htdocs", "index.html");
     h2o_define_mimetype(&ctx.mimemap, "html", "text/html");
-    h2o_prepend_reproxy_filter(&ctx);
+    h2o_register_reproxy_filter(&ctx);
     //ctx.ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers);
     //h2o_prepend_access_logger(&ctx, "/dev/stdout");
 

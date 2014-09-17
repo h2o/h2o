@@ -48,7 +48,7 @@ static int on_config_files(h2o_configurator_t *configurator, h2o_context_t *ctx,
             h2o_context_print_config_error(configurator, config_file, key, "value (representing the local path) must be a string");
             return -1;
         }
-        h2o_prepend_file_handler(ctx, key->data.scalar, value->data.scalar, "index.html" /* FIXME */);
+        h2o_register_file_handler(ctx, key->data.scalar, value->data.scalar, "index.html" /* FIXME */);
     }
 
     return 0;
@@ -98,7 +98,7 @@ static void setup_global_configurator(h2o_context_t *ctx, h2o_configurator_t *co
 {
     configurator->cmd = cmd;
     configurator->on_cmd = on_cmd;
-    h2o_register_configurator(ctx, configurator);
+    h2o_linklist_insert(&ctx->configurators, &configurator->_link);
 }
 
 void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop)
@@ -107,7 +107,11 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop)
     ctx->loop = loop;
     h2o_timeout_init(ctx->loop, &ctx->zero_timeout, 0);
     h2o_timeout_init(ctx->loop, &ctx->req_timeout, H2O_DEFAULT_REQ_TIMEOUT);
-    h2o_prepend_chunked_filter(ctx);
+    h2o_linklist_init_anchor(&ctx->handlers);
+    h2o_linklist_init_anchor(&ctx->filters);
+    h2o_linklist_init_anchor(&ctx->loggers);
+    h2o_linklist_init_anchor(&ctx->configurators);
+    h2o_register_chunked_filter(ctx);
     h2o_init_mimemap(&ctx->mimemap, H2O_DEFAULT_MIMETYPE);
     ctx->server_name = h2o_buf_init(H2O_STRLIT("h2o/0.1"));
     ctx->max_request_entity_size = H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE;
@@ -120,24 +124,22 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop)
 
 void h2o_context_dispose(h2o_context_t *ctx)
 {
-#define CLEANUP_LINKED(type, entries, func, call_free) do { \
-    while (entries != NULL) { \
-        type *e = entries; \
-        if (e->func != NULL) \
-            e->func(e); \
-        entries = e->next; \
-        if (call_free) \
-            free(e); \
+#define CLEANUP(type, anchor) do { \
+    while (! h2o_linklist_is_empty(&anchor)) { \
+        type *e = H2O_STRUCT_FROM_MEMBER(type, _link, anchor.next); \
+        h2o_linklist_unlink(&e->_link); \
+        if (e->destroy != NULL) \
+            e->destroy(e); \
     } \
 } while (0)
 
-    CLEANUP_LINKED(h2o_configurator_t, ctx->configurators, destroy, 0);
-    CLEANUP_LINKED(h2o_handler_t, ctx->handlers, dispose, 1);
-    CLEANUP_LINKED(h2o_filter_t, ctx->filters, dispose, 1);
-    CLEANUP_LINKED(h2o_logger_t, ctx->loggers, dispose, 1);
+    CLEANUP(h2o_configurator_t, ctx->configurators);
+    CLEANUP(h2o_handler_t, ctx->handlers);
+    CLEANUP(h2o_filter_t, ctx->filters);
+    CLEANUP(h2o_logger_t, ctx->loggers);
     h2o_dispose_mimemap(&ctx->mimemap);
 
-#undef DISPOSE_LINKED
+#undef CLEANUP
 }
 
 int h2o_context_configure(h2o_context_t *context, const char *config_file, yoml_t *config_node)
@@ -152,79 +154,36 @@ int h2o_context_configure(h2o_context_t *context, const char *config_file, yoml_
     for (i = 0; i != config_node->data.mapping.size; ++i) {
         yoml_t *key = config_node->data.mapping.elements[i].key;
         yoml_t *value = config_node->data.mapping.elements[i].value;
+        h2o_linklist_t *node;
         h2o_configurator_t *configurator;
         if (key->type != YOML_TYPE_SCALAR) {
             h2o_context_print_config_error(NULL, config_file, key, "command must be a string");
             return -1;
         }
-        for (configurator = context->configurators; configurator != NULL; configurator = configurator->next) {
-            if (strcmp(configurator->cmd, key->data.scalar) == 0) {
-                break;
-            }
+        for (node = context->configurators.next; node != &context->configurators; node = node->next) {
+            configurator = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, node);
+            if (strcmp(configurator->cmd, key->data.scalar) == 0)
+                goto Found;
         }
-        if (configurator != NULL) {
-            if (configurator->on_cmd(configurator, context, config_file, value) != 0)
-                return -1;
-        } else {
-            h2o_context_print_config_error(NULL, config_file, key, "unknown command: %s", key->data.scalar);
+        /* not found */
+        h2o_context_print_config_error(NULL, config_file, key, "unknown command: %s", key->data.scalar);
+        return -1;
+    Found:
+        if (configurator->on_cmd(configurator, context, config_file, value) != 0)
             return -1;
-        }
     }
 
     { /* call the complete callback */
-        h2o_configurator_t *configurator;
-        for (configurator = context->configurators; configurator != NULL; configurator = configurator->next)
+        h2o_linklist_t *node;
+        for (node = context->configurators.next; node != &context->configurators; node = node->next) {
+            h2o_configurator_t *configurator = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, node);
             if (configurator->on_complete != NULL)
                 if (configurator->on_complete(configurator, context) != 0)
                     return -1;
+        }
     }
 
     return 0;
-}
-
-h2o_handler_t *h2o_prepend_handler(h2o_context_t *context, size_t sz, int (*on_req)(h2o_handler_t *self, h2o_req_t *req))
-{
-    h2o_handler_t *handler = h2o_malloc(sz);
-
-    memset(handler, 0, sz);
-    handler->next = context->handlers;
-    handler->on_req = on_req;
-
-    context->handlers = handler;
-
-    return handler;
-}
-
-h2o_filter_t *h2o_prepend_filter(h2o_context_t *context, size_t sz, void (*on_start_response)(h2o_filter_t *self, h2o_req_t *req))
-{
-    h2o_filter_t *filter = h2o_malloc(sz);
-
-    memset(filter, 0, sz);
-    filter->next = context->filters;
-    filter->on_start_response = on_start_response;
-
-    context->filters = filter;
-
-    return filter;
-}
-
-h2o_logger_t *h2o_prepend_logger(h2o_context_t *context, size_t sz, void (*log)(h2o_logger_t *self, h2o_req_t *req))
-{
-    h2o_logger_t *logger = h2o_malloc(sz);
-
-    memset(logger, 0, sz);
-    logger->next = context->loggers;
-    logger->log = log;
-
-    context->loggers = logger;
-
-    return logger;
-}
-
-void h2o_register_configurator(h2o_context_t *context, h2o_configurator_t *configurator)
-{
-    configurator->next = context->configurators;
-    context->configurators = configurator;
 }
 
 void h2o_context_print_config_error(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *reason, ...)
