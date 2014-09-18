@@ -812,6 +812,10 @@ int h2o_contains_token(const char *haysack, size_t haysack_len, const char *need
  */
 h2o_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len);
 /**
+ * accepts a SSL connection
+ */
+void h2o_accept_ssl(h2o_context_t *ctx, h2o_socket_t *sock, h2o_ssl_context_t *ssl_ctx);
+/**
  * interprets the configuration value using sscanf, or prints an error upon failure
  * @param configurator configurator
  * @param config_file name of the configuration file
@@ -923,10 +927,6 @@ void h2o_context_print_config_error(h2o_configurator_t *configurator, const char
  * @param ts buffer to store the timestamp
  */
 void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts);
-/**
- * accepts a SSL connection
- */
-void h2o_accept_ssl(h2o_context_t *ctx, h2o_socket_t *sock, h2o_ssl_context_t *ssl_ctx);
 
 void h2o_context__init_global_configurators(h2o_context_t *context);
 
