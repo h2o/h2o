@@ -74,6 +74,7 @@ typedef struct st_h2o_req_t h2o_req_t;
 typedef struct st_h2o_socket_t h2o_socket_t;
 typedef struct st_h2o_ssl_context_t h2o_ssl_context_t;
 typedef struct st_h2o_timeout_entry_t h2o_timeout_entry_t;
+typedef struct st_h2o_ostream_t h2o_ostream_t;
 
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, int err);
 
@@ -211,7 +212,7 @@ typedef struct st_h2o_handler_t {
 typedef struct st_h2o_filter_t {
     h2o_linklist_t _link;
     void (*destroy)(struct st_h2o_filter_t *self);
-    void (*on_start_response)(struct st_h2o_filter_t *self, h2o_req_t *req);
+    void (*on_setup_ostream)(struct st_h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot);
 } h2o_filter_t;
 
 /**
@@ -374,7 +375,7 @@ typedef struct st_h2o_generator_t {
  * an output stream that may alter the output.
  * The object is typically constructed by filters calling the h2o_prepend_ostream function.
  */
-typedef struct st_h2o_ostream_t {
+struct st_h2o_ostream_t {
     /**
      * points to the next output stream
      */
@@ -388,7 +389,7 @@ typedef struct st_h2o_ostream_t {
      * called by the core when there is a need to terminate the response abruptly
      */
     void (*stop)(struct st_h2o_ostream_t *self, h2o_req_t *req);
-} h2o_ostream_t;
+};
 
 /**
  * a HTTP response
@@ -864,9 +865,10 @@ h2o_generator_t *h2o_start_response(h2o_req_t *req, size_t sz);
  * called by filters to insert output-stream filters for modifying the response
  * @param req the request
  * @param size of the memory to be allocated for the ostream filter
+ * @param slot where the stream should be inserted
  * @return pointer to the ostream filter
  */
-h2o_ostream_t *h2o_prepend_ostream(h2o_req_t *req, size_t sz);
+h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot);
 
 /**
  * called by the generators to send output
@@ -959,7 +961,7 @@ void h2o_register_file_handler(h2o_context_t *context, const char *virtual_path,
 /**
  * requests the next filter (if any) to setup the ostream if necessary
  */
-static void h2o_start_next_filter(h2o_filter_t *self, h2o_req_t *req);
+static void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot);
 /**
  * registers the chunked encoding output filter (added by default)
  */
@@ -1125,11 +1127,11 @@ inline void h2o_proceed_response(h2o_req_t *req)
     }
 }
 
-inline void h2o_start_next_filter(h2o_filter_t *self, h2o_req_t *req)
+inline void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
 {
     if (self->_link.next != &req->conn->ctx->filters) {
         h2o_filter_t *next_filter = H2O_STRUCT_FROM_MEMBER(h2o_filter_t, _link, self->_link.next);
-        next_filter->on_start_response(next_filter, req);
+        next_filter->on_setup_ostream(next_filter, req, slot);
     }
 }
 

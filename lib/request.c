@@ -129,7 +129,7 @@ h2o_generator_t *h2o_start_response(h2o_req_t *req, size_t sz)
     filters = &req->conn->ctx->filters;
     if (! h2o_linklist_is_empty(filters)) {
         h2o_filter_t *filter = H2O_STRUCT_FROM_MEMBER(h2o_filter_t, _link, filters->next);
-        filter->on_start_response(filter, req);
+        filter->on_setup_ostream(filter, req, &req->_ostr_top);
     }
 
     return req->_generator;
@@ -151,13 +151,13 @@ void h2o_send(h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final)
 }
 
 
-h2o_ostream_t *h2o_prepend_ostream(h2o_req_t *req, size_t sz)
+h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot)
 {
     h2o_ostream_t *ostr = h2o_mempool_alloc(&req->pool, sz);
-    ostr->next = req->_ostr_top;
+    ostr->next = *slot;
     ostr->do_send = NULL;
 
-    req->_ostr_top = ostr;
+    *slot = ostr;
 
     return ostr;
 }

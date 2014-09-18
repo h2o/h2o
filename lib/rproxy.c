@@ -91,18 +91,18 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, 
         host,
         (int)port,
         path);
-    req->res.status = 500;
+    req->res.status = 200;
     req->res.reason = "Internal Server Error";
-    req->res.content_length = body.len;
+    req->res.content_length = SIZE_MAX;
     h2o_set_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"), 1);
 
-    h2o_start_next_filter(self->filter, req);
+    h2o_setup_next_ostream(self->filter, req, &self->super.next);
 
     assert(is_final);
     h2o_ostream_send_next(&self->super, req, &body, 1, is_final);
 }
 
-static void on_start_response(h2o_filter_t *self, h2o_req_t *req)
+static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
 {
     struct rproxy_t *rproxy;
     ssize_t reproxy_header_index;
@@ -117,7 +117,7 @@ static void on_start_response(h2o_filter_t *self, h2o_req_t *req)
     h2o_delete_header(&req->res.headers, reproxy_header_index);
 
     /* setup */
-    rproxy = (void*)h2o_prepend_ostream(req, sizeof(struct rproxy_t));
+    rproxy = (void*)h2o_add_ostream(req, sizeof(struct rproxy_t), slot);
     rproxy->filter = self;
     rproxy->super.do_send = send_chunk;
     rproxy->reproxy_url = h2o_strdup(&req->pool, reproxy_url.base, reproxy_url.len).base;
@@ -126,7 +126,7 @@ static void on_start_response(h2o_filter_t *self, h2o_req_t *req)
     return;
 
 SkipMe:
-    h2o_start_next_filter(self, req);
+    h2o_setup_next_ostream(self, req, slot);
 }
 
 void h2o_register_reproxy_filter(h2o_context_t *context)
@@ -135,7 +135,7 @@ void h2o_register_reproxy_filter(h2o_context_t *context)
 
     memset(self, 0, sizeof(*self));
     self->destroy = (void*)free;
-    self->on_start_response = on_start_response;
+    self->on_setup_ostream = on_setup_ostream;
 
     /* insert at the head! */
     h2o_linklist_insert(context->filters.next, &self->_link);
