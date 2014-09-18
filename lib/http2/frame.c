@@ -81,7 +81,7 @@ static uint8_t *allocate_frame(h2o_buf_t *outbuf, h2o_mempool_t *pool, size_t le
 h2o_buf_t h2o_http2_encode_rst_stream_frame(h2o_mempool_t *pool, uint32_t stream_id, int errnum)
 {
     h2o_buf_t ret;
-    uint8_t *dst = allocate_frame(&ret, pool, 4, H2O_HTTP2_FRAME_TYPE_GOAWAY, 0, stream_id);
+    uint8_t *dst = allocate_frame(&ret, pool, 4, H2O_HTTP2_FRAME_TYPE_RST_STREAM, 0, stream_id);
 
     dst = encode32u(dst, errnum);
 
