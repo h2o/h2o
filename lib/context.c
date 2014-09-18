@@ -19,36 +19,14 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <stdarg.h>
 #include <stddef.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 
-void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop)
-{
-    memset(ctx, 0, sizeof(*ctx));
-    ctx->loop = loop;
-    h2o_timeout_init(ctx->loop, &ctx->zero_timeout, 0);
-    h2o_timeout_init(ctx->loop, &ctx->req_timeout, H2O_DEFAULT_REQ_TIMEOUT);
-    h2o_linklist_init_anchor(&ctx->handlers);
-    h2o_linklist_init_anchor(&ctx->filters);
-    h2o_linklist_init_anchor(&ctx->loggers);
-    h2o_linklist_init_anchor(&ctx->configurators);
-    h2o_register_chunked_filter(ctx);
-    h2o_init_mimemap(&ctx->mimemap, H2O_DEFAULT_MIMETYPE);
-    ctx->server_name = h2o_buf_init(H2O_STRLIT("h2o/0.1"));
-    ctx->max_request_entity_size = H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE;
-    ctx->http1_upgrade_to_http2 = H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2;
-    ctx->http2_max_concurrent_requests_per_connection = H2O_DEFAULT_HTTP2_MAX_CONCURRENT_REQUESTS_PER_CONNECTION;
-}
-
-void h2o_context_dispose(h2o_context_t *ctx)
-{
-#define CLEANUP(type, anchor) do { \
+#define DESTROY_LIST(type, anchor) do { \
     while (! h2o_linklist_is_empty(&anchor)) { \
         type *e = H2O_STRUCT_FROM_MEMBER(type, _link, anchor.next); \
         h2o_linklist_unlink(&e->_link); \
@@ -57,79 +35,72 @@ void h2o_context_dispose(h2o_context_t *ctx)
     } \
 } while (0)
 
-    CLEANUP(h2o_configurator_t, ctx->configurators);
-    CLEANUP(h2o_handler_t, ctx->handlers);
-    CLEANUP(h2o_filter_t, ctx->filters);
-    CLEANUP(h2o_logger_t, ctx->loggers);
-    h2o_dispose_mimemap(&ctx->mimemap);
-
-#undef CLEANUP
+static void init_host_context(h2o_host_context_t *host_ctx)
+{
+    h2o_linklist_init_anchor(&host_ctx->handlers);
+    h2o_linklist_init_anchor(&host_ctx->filters);
+    h2o_linklist_init_anchor(&host_ctx->loggers);
+    h2o_register_chunked_filter(host_ctx);
+    h2o_init_mimemap(&host_ctx->mimemap, H2O_DEFAULT_MIMETYPE);
 }
 
-h2o_configurator_t *h2o_context_get_configurator(h2o_context_t *context, const char *cmd)
+static void dispose_host_context(h2o_host_context_t *host_ctx)
 {
-    h2o_linklist_t *node;
-
-    for (node = context->configurators.next; node != &context->configurators; node = node->next) {
-        h2o_configurator_t *configurator = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, node);
-        if (strcmp(configurator->cmd, cmd) == 0)
-            return configurator;
-    }
-
-    return NULL;
+    free(host_ctx->hostname.base);
+    DESTROY_LIST(h2o_handler_t, host_ctx->handlers);
+    DESTROY_LIST(h2o_filter_t, host_ctx->filters);
+    DESTROY_LIST(h2o_logger_t, host_ctx->loggers);
+    h2o_dispose_mimemap(&host_ctx->mimemap);
 }
 
-int h2o_context_configure(h2o_context_t *context, const char *config_file, yoml_t *config_node)
+static void destroy_host_context(h2o_host_context_t *host_ctx)
 {
+    dispose_host_context(host_ctx);
+    free(host_ctx);
+}
+
+void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop)
+{
+    memset(ctx, 0, sizeof(*ctx));
+    ctx->loop = loop;
+    h2o_timeout_init(ctx->loop, &ctx->zero_timeout, 0);
+    h2o_timeout_init(ctx->loop, &ctx->req_timeout, H2O_DEFAULT_REQ_TIMEOUT);
+    h2o_linklist_init_anchor(&ctx->virtual_host_contexts);
+    init_host_context(&ctx->default_host_context);
+    h2o_linklist_init_anchor(&ctx->global_configurators);
+    h2o_linklist_init_anchor(&ctx->host_configurators);
+    ctx->server_name = h2o_buf_init(H2O_STRLIT("h2o/0.1"));
+    ctx->max_request_entity_size = H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE;
+    ctx->http1_upgrade_to_http2 = H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2;
+    ctx->http2_max_concurrent_requests_per_connection = H2O_DEFAULT_HTTP2_MAX_CONCURRENT_REQUESTS_PER_CONNECTION;
+}
+
+h2o_host_context_t *h2o_context_register_virtual_host(h2o_context_t *ctx, const char *hostname)
+{
+    h2o_host_context_t *host_ctx = h2o_malloc(sizeof(*host_ctx));
     size_t i;
 
-    h2o_context__init_global_configurators(context);
+    memset(host_ctx, 0, sizeof(*host_ctx));
+    init_host_context(host_ctx);
+    host_ctx->hostname = h2o_strdup(NULL, hostname, SIZE_MAX);
+    for (i = 0; i != host_ctx->hostname.len; ++i)
+        host_ctx->hostname.base[i] = h2o_tolower(host_ctx->hostname.base[i]);
 
-    /* apply the configuration */
-    if (config_node->type != YOML_TYPE_MAPPING) {
-        h2o_context_print_config_error(NULL, config_file, config_node, "root node must be a MAPPING");
-        return -1;
-    }
-    for (i = 0; i != config_node->data.mapping.size; ++i) {
-        yoml_t *key = config_node->data.mapping.elements[i].key;
-        yoml_t *value = config_node->data.mapping.elements[i].value;
-        h2o_configurator_t *configurator;
-        if (key->type != YOML_TYPE_SCALAR) {
-            h2o_context_print_config_error(NULL, config_file, key, "command must be a string");
-            return -1;
-        }
-        if ((configurator = h2o_context_get_configurator(context, key->data.scalar)) == NULL) {
-            h2o_context_print_config_error(NULL, config_file, key, "unknown command: %s", key->data.scalar);
-            return -1;
-        }
-        if (configurator->on_cmd(configurator, context, config_file, value) != 0)
-            return -1;
-    }
+    h2o_linklist_insert(&ctx->virtual_host_contexts, &host_ctx->_link);
 
-    { /* call the complete callback */
-        h2o_linklist_t *node;
-        for (node = context->configurators.next; node != &context->configurators; node = node->next) {
-            h2o_configurator_t *configurator = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, node);
-            if (configurator->on_complete != NULL)
-                if (configurator->on_complete(configurator, context) != 0)
-                    return -1;
-        }
-    }
-
-    return 0;
+    return host_ctx;
 }
 
-void h2o_context_print_config_error(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *reason, ...)
+void h2o_context_dispose(h2o_context_t *ctx)
 {
-    va_list args;
-
-    fprintf(stderr, "[%s:%zu] ", config_file, config_node->line + 1);
-    if (configurator != NULL)
-        fprintf(stderr, "in command %s, ", configurator->cmd);
-    va_start(args, reason);
-    vfprintf(stderr, reason, args);
-    va_end(args);
-    fputc('\n', stderr);
+    while (! h2o_linklist_is_empty(&ctx->virtual_host_contexts)) {
+        h2o_host_context_t *host_ctx = H2O_STRUCT_FROM_MEMBER(h2o_host_context_t, _link, ctx->virtual_host_contexts.next);
+        h2o_linklist_unlink(&host_ctx->_link);
+        destroy_host_context(host_ctx);
+    }
+    dispose_host_context(&ctx->default_host_context);
+    DESTROY_LIST(h2o_configurator_t, ctx->global_configurators);
+    DESTROY_LIST(h2o_configurator_t, ctx->host_configurators);
 }
 
 void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts)

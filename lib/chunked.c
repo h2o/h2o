@@ -91,7 +91,7 @@ Next:
     h2o_setup_next_ostream(self, req, slot);
 }
 
-void h2o_register_chunked_filter(h2o_context_t *context)
+void h2o_register_chunked_filter(h2o_host_context_t *host_ctx)
 {
     h2o_filter_t *self = h2o_malloc(sizeof(*self));
 
@@ -99,5 +99,5 @@ void h2o_register_chunked_filter(h2o_context_t *context)
     self->destroy = (void*)free;
     self->on_setup_ostream = on_setup_ostream;
 
-    h2o_linklist_insert(&context->filters, &self->_link);
+    h2o_linklist_insert(&host_ctx->filters, &self->_link);
 }

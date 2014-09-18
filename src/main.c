@@ -39,7 +39,7 @@ struct port_configurator_t {
     unsigned short port;
 };
 
-static int on_config_port(h2o_configurator_t *_conf, h2o_context_t *ctx, const char *config_file, yoml_t *config_node)
+static int on_config_port(h2o_configurator_t *_conf, void *ctx, const char *config_file, yoml_t *config_node)
 {
     struct port_configurator_t *conf = (void*)_conf;
     return h2o_config_scanf(&conf->super, config_file, config_node, "%hu", &conf->port);
@@ -60,9 +60,10 @@ static void on_config_port_accept(h2o_socket_t *listener, int status)
     h2o_http1_accept(ctx, sock);
 }
 
-static int on_config_port_complete(h2o_configurator_t *_conf, h2o_context_t *ctx)
+static int on_config_port_complete(h2o_configurator_t *_conf, void *_ctx)
 {
     struct port_configurator_t *conf = (void*)_conf;
+    h2o_context_t *ctx = _ctx;
     struct sockaddr_in addr;
     int fd, reuseaddr_flag = 1;
     h2o_socket_t *sock;
@@ -164,7 +165,7 @@ int main(int argc, char **argv)
 
     /* setup h2o context */
     h2o_context_init(&ctx, h2o_evloop_create());
-    h2o_linklist_insert(&ctx.configurators, &port_configurator.super._link);
+    h2o_linklist_insert(&ctx.global_configurators, &port_configurator.super._link);
 
     /* apply the configuration */
     if (h2o_context_configure(&ctx, conf_fn, config) != 0)

@@ -241,11 +241,11 @@ typedef struct st_h2o_configurator_t {
     /**
      * mandatory callcack called to handle the command
      */
-    int (*on_cmd)(struct st_h2o_configurator_t* self, h2o_context_t *ctx, const char *config_file, yoml_t *config_node);
+    int (*on_cmd)(struct st_h2o_configurator_t* self, void *ctx, const char *config_file, yoml_t *config_node);
     /**
      * optional callback called just before the server starts, after all the configuration commands are handled
      */
-    int (*on_complete)(struct st_h2o_configurator_t *self, h2o_context_t *ctx);
+    int (*on_complete)(struct st_h2o_configurator_t *self, void *ctx);
 } h2o_configurator_t;
 
 /**
@@ -273,6 +273,30 @@ typedef struct st_h2o_timestamp_t {
     h2o_timestamp_string_t *str;
 } h2o_timestamp_t;
 
+typedef struct st_h2o_host_context_t {
+    h2o_linklist_t _link;
+    /**
+     * hostname in lower-case (base is NUL terminated)
+     */
+    h2o_buf_t hostname;
+    /**
+     * list of handlers (h2o_handler_t)
+     */
+    h2o_linklist_t handlers;
+    /**
+     * list of filters (h2o_filter_t)
+     */
+    h2o_linklist_t filters;
+    /**
+     * list of loggers (h2o_logger_t)
+     */
+    h2o_linklist_t loggers;
+    /**
+     * mime-map
+     */
+    h2o_mimemap_t mimemap;
+} h2o_host_context_t;
+
 /**
  * context of the http server.
  */
@@ -290,25 +314,21 @@ struct st_h2o_context_t {
      */
     h2o_timeout_t req_timeout;
     /**
-     * list of handlers (h2o_handler_t)
+     * list of host contexts (h2o_host_context_t)
      */
-    h2o_linklist_t handlers;
+    h2o_linklist_t virtual_host_contexts;
     /**
-     * list of filters (h2o_filter_t)
+     * default host context
      */
-    h2o_linklist_t filters;
+    h2o_host_context_t default_host_context;
     /**
-     * list of loggers (h2o_logger_t)
+     * list of global configurators (h2o_configurator_t)
      */
-    h2o_linklist_t loggers;
+    h2o_linklist_t global_configurators;
     /**
-     * list of configurators (h2o_configurator_t)
+     * list of global configurators (h2o_configurator_t)
      */
-    h2o_linklist_t configurators;
-    /**
-     * mime-map
-     */
-    h2o_mimemap_t mimemap;
+    h2o_linklist_t host_configurators;
     /**
      * name of the server (not the hostname)
      */
@@ -433,6 +453,10 @@ struct st_h2o_req_t {
      * the underlying connection
      */
     h2o_conn_t *conn;
+    /**
+     * the host context
+     */
+    h2o_host_context_t *host_ctx;
     /**
      * authority (a.k.a. the Host header; the value is { NULL, 0 } in case the header is unavailable)
      */
@@ -898,14 +922,26 @@ static void h2o_proceed_response(h2o_req_t *req);
  */
 void h2o_context_init(h2o_context_t *context, h2o_loop_t *loop);
 /**
+ * registers a virtual host context
+ */
+h2o_host_context_t *h2o_context_register_virtual_host(h2o_context_t *context, const char *hostname);
+/**
  * disposes of the resources allocated for the context
  */
 void h2o_context_dispose(h2o_context_t *context);
 /**
+ * returns current timestamp
+ * @param ctx the context
+ * @param pool memory pool
+ * @param ts buffer to store the timestamp
+ */
+void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts);
+
+/**
  * returns a configurator of given command name
  * @return configurator for given name or NULL if not found
  */
-h2o_configurator_t *h2o_context_get_configurator(h2o_context_t *context, const char *cmd);
+h2o_configurator_t *h2o_context_get_configurator(h2o_linklist_t *configurators, const char *cmd);
 /**
  * applies the configuration to the context
  * @return 0 if successful, -1 if not
@@ -917,18 +953,9 @@ int h2o_context_configure(h2o_context_t *context, const char *config_file, yoml_
 void h2o_context_print_config_error(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *reason, ...) __attribute__((format (printf, 4, 5)));
 
 /**
- * returns current timestamp
- * @param ctx the context
- * @param pool memory pool
- * @param ts buffer to store the timestamp
- */
-void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts);
-/**
  * accepts a SSL connection
  */
 void h2o_accept_ssl(h2o_context_t *ctx, h2o_socket_t *sock, h2o_ssl_context_t *ssl_ctx);
-
-void h2o_context__init_global_configurators(h2o_context_t *context);
 
 /* built-in generators */
 
@@ -950,7 +977,7 @@ int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *pa
 /**
  * registers the file handler to the context
  */
-void h2o_register_file_handler(h2o_context_t *context, const char *virtual_path, const char *real_path, const char *index_file);
+void h2o_register_file_handler(h2o_host_context_t *host_ctx, const char *virtual_path, const char *real_path, const char *index_file);
 
 /* output filters */
 
@@ -961,11 +988,11 @@ static void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostre
 /**
  * registers the chunked encoding output filter (added by default)
  */
-void h2o_register_chunked_filter(h2o_context_t *context);
+void h2o_register_chunked_filter(h2o_host_context_t *host_ctx);
 /**
  * registers the reproxy filter
  */
-void h2o_register_reproxy_filter(h2o_context_t *context);
+void h2o_register_reproxy_filter(h2o_host_context_t *host_ctx);
 
 /* mime mapper */
 
@@ -1125,7 +1152,7 @@ inline void h2o_proceed_response(h2o_req_t *req)
 
 inline void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
 {
-    if (self->_link.next != &req->conn->ctx->filters) {
+    if (self->_link.next != &req->host_ctx->filters) {
         h2o_filter_t *next_filter = H2O_STRUCT_FROM_MEMBER(h2o_filter_t, _link, self->_link.next);
         next_filter->on_setup_ostream(next_filter, req, slot);
     }
