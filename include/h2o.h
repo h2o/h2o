@@ -326,10 +326,6 @@ struct st_h2o_context_t {
      * H2O accepts at most 256 requests over HTTP/2, but internally limits the number of in-flight requests to the value specified by this property in order to limit the resources allocated to a single connection.
      */
     size_t http2_max_concurrent_requests_per_connection;
-    /**
-     * SSL context to be used (if set, the server runs in HTTPS mode)
-     */
-    h2o_ssl_context_t *ssl_ctx;
     struct {
         uint64_t uv_now_at;
         struct timeval tv_at;
@@ -928,9 +924,9 @@ void h2o_context_print_config_error(h2o_configurator_t *configurator, const char
  */
 void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts);
 /**
- * accepts a connection
+ * accepts a SSL connection
  */
-void h2o_accept(h2o_context_t *ctx, h2o_socket_t *sock);
+void h2o_accept_ssl(h2o_context_t *ctx, h2o_socket_t *sock, h2o_ssl_context_t *ssl_ctx);
 
 void h2o_context__init_global_configurators(h2o_context_t *context);
 

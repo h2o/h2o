@@ -29,6 +29,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include "h2o.h"
+#include "h2o/http1.h"
 #include "h2o/http2.h"
 
 static void register_handler(h2o_context_t *ctx, int (*on_req)(h2o_handler_t *, h2o_req_t *))
@@ -88,6 +89,7 @@ static int post_test(h2o_handler_t *self, h2o_req_t *req)
 }
 
 static h2o_context_t ctx;
+static h2o_ssl_context_t *ssl_ctx;
 
 #if H2O_USE_LIBUV
 
@@ -108,7 +110,10 @@ static void on_accept(uv_stream_t *listener, int status)
     }
 
     sock = h2o_uv_socket_create((uv_stream_t*)conn, (uv_close_cb)free);
-    h2o_accept(&ctx, sock);
+    if (ssl_ctx != NULL)
+        h2o_accept_ssl(&ctx, sock, ssl_ctx);
+    else
+        h2o_http1_accept(&ctx, sock);
 }
 
 static int create_listener(void)
@@ -194,7 +199,7 @@ int main(int argc, char **argv)
     h2o_register_file_handler(&ctx, "/", "htdocs", "index.html");
     h2o_define_mimetype(&ctx.mimemap, "html", "text/html");
     h2o_register_reproxy_filter(&ctx);
-    //ctx.ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers);
+    //ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers);
     //h2o_register_access_logger(&ctx, "/dev/stdout");
 
     if (create_listener() != 0) {

@@ -59,6 +59,7 @@ static int on_req(h2o_handler_t *self, h2o_req_t *req)
 }
 
 static h2o_context_t ctx;
+static h2o_ssl_context_t *ssl_ctx;
 
 static void on_connect(uv_stream_t *server, int status)
 {
@@ -76,7 +77,10 @@ static void on_connect(uv_stream_t *server, int status)
     }
 
     sock = h2o_uv_socket_create((uv_stream_t*)conn, (uv_close_cb)free);
-    h2o_accept(&ctx, sock);
+    if (ssl_ctx != NULL)
+        h2o_accept_ssl(&ctx, sock, ssl_ctx);
+    else
+        h2o_http1_accept(&ctx, sock);
 }
 
 int main(int argc, char **argv)
@@ -105,7 +109,7 @@ int main(int argc, char **argv)
     memset(&ws_handler, 0, sizeof(ws_handler));
     ws_handler.on_req = on_req;
     h2o_linklist_insert(&ctx.handlers, &ws_handler._link);
-    //ctx.ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", NULL);
+    //ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", NULL);
 
     return uv_run(loop, UV_RUN_DEFAULT);
 

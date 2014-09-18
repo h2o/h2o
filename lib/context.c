@@ -182,12 +182,8 @@ Is_Http2:
     h2o_http2_accept(ctx, sock);
 }
 
-void h2o_accept(h2o_context_t *ctx, h2o_socket_t *sock)
+void h2o_accept_ssl(h2o_context_t *ctx, h2o_socket_t *sock, h2o_ssl_context_t* ssl_ctx)
 {
-    if (ctx->ssl_ctx != NULL) {
-        sock->data = ctx;
-        h2o_socket_ssl_server_handshake(sock, ctx->ssl_ctx, on_ssl_handshake_complete);
-    } else {
-        h2o_http1_accept(ctx, sock);
-    }
+    sock->data = ctx;
+    h2o_socket_ssl_server_handshake(sock, ssl_ctx, on_ssl_handshake_complete);
 }
