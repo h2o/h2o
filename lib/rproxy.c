@@ -69,7 +69,7 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, 
 
     /* throw away all data */
     if (! is_final) {
-        h2o_schedule_proceed_response(req);
+        h2o_ostream_send_next(&self->super, req, NULL, 0, 0);
         return;
     }
 

@@ -162,7 +162,14 @@ h2o_ostream_t *h2o_prepend_ostream(h2o_req_t *req, size_t sz)
     return ostr;
 }
 
-void h2o_schedule_proceed_response(h2o_req_t *req)
+void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final)
 {
-    h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &req->_timeout_entry);
+    if (is_final) {
+        assert(req->_ostr_top == ostream);
+        req->_ostr_top = ostream->next;
+    } else if (bufcnt == 0) {
+        h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &req->_timeout_entry);
+        return;
+    }
+    ostream->next->do_send(ostream->next, req, bufs, bufcnt, is_final);
 }

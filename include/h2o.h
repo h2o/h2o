@@ -837,15 +837,60 @@ int h2o__lcstris_core(const char *target, const char *test, size_t test_len);
 
 /* request */
 
+/**
+ * initializes the request structure
+ * @param req the request structure
+ * @param conn the underlying connection
+ * @param src if not NULL, the request structure would be a shallow copy of src
+ */
 void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src);
+/**
+ * releases resources allocated for handling a request
+ */
 void h2o_dispose_request(h2o_req_t *req);
+/**
+ * called by the connection layer to start processing a request that is ready
+ */
 void h2o_process_request(h2o_req_t *req);
+/**
+ * called by handlers to open a generator
+ * note: Handlers should call the function _after_ setting the response information (i.e. response headers, etc.) since this function initializes the filters.
+ * @param req the request
+ * @param size of the memory needed to be allocated for the generator
+ * @return pointer to the generator
+ */
 h2o_generator_t *h2o_start_response(h2o_req_t *req, size_t sz);
+/**
+ * called by filters to insert output-stream filters for modifying the response
+ * @param req the request
+ * @param size of the memory to be allocated for the ostream filter
+ * @return pointer to the ostream filter
+ */
 h2o_ostream_t *h2o_prepend_ostream(h2o_req_t *req, size_t sz);
 
+/**
+ * called by the generators to send output
+ * note: generators should free itself after sending the final chunk (i.e. calling the function with is_final set to true)
+ * @param req the request
+ * @param bufs an array of buffers
+ * @param bufcnt length of the buffers array
+ * @param is_final if the output is final
+ */
 void h2o_send(h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final);
-static void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final);
-void h2o_schedule_proceed_response(h2o_req_t *req); /* called by buffering output filters to request next content */
+/**
+ * called by the ostream filters to send output to the next ostream filter
+ * note: ostream filters should free itself after sending the final chunk (i.e. calling the function with is_final set to true)
+ * note: ostream filters must not set is_final flag to TRUE unless is_final flag of the do_send callback was set as such
+ * @param ostr current ostream filter
+ * @param req the request
+ * @param bufs an array of buffers
+ * @param bufcnt length of the buffers array
+ * @param is_final if the output is final
+ */
+void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final);
+/**
+ * called by the connection layer to request additional data to the generator
+ */
 static void h2o_proceed_response(h2o_req_t *req);
 
 /* context */
@@ -1009,15 +1054,6 @@ inline void h2o_linklist_unlink(h2o_linklist_t *node)
     node->next->prev = node->prev;
     node->prev->next = node->next;
     node->next = node->prev = NULL;
-}
-
-inline void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final)
-{
-    if (is_final) {
-        assert(req->_ostr_top == ostr);
-        req->_ostr_top = ostr->next;
-    }
-    ostr->next->do_send(ostr->next, req, bufs, bufcnt, is_final);
 }
 
 inline void h2o_proceed_response(h2o_req_t *req)
