@@ -743,24 +743,97 @@ h2o_buf_t h2o_flatten_headers(h2o_mempool_t *pool, const h2o_headers_t *headers)
 
 /* util */
 
+/**
+ * prints an error message and aborts
+ */
 void h2o_fatal(const char *msg);
+/**
+ * tr/A-Z/a-z/
+ */
 static int h2o_tolower(int ch);
+/**
+ * tests if target chunk (target_len bytes long) is equal to test chunk (test_len bytes long)
+ */
 static int h2o_memis(const void *target, size_t target_len, const void *test, size_t test_len);
+/**
+ * tests if target string (target_len bytes long) is equal to test string (test_len bytes long) after being converted to lower-case
+ */
 static int h2o_lcstris(const char *target, size_t target_len, const char *test, size_t test_len);
-int h2o_lcstris_core(const char *target, const char *test, size_t test_len);
+/**
+ * duplicates given string
+ * @param pool memory pool (or NULL to use malloc)
+ * @param s source string
+ * @param len length of the source string (the result of strlen(s) used in case len is SIZE_MAX)
+ * @return buffer pointing to the duplicated string (buf is NUL-terminated but the length does not include the NUL char)
+ */
 h2o_buf_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t len);
+/**
+ * printf's the string to an allocated buffer
+ * @param pool memory pool (or NULL to use malloc)
+ * @param fmt printf-style format
+ * @return buffer pointing to the formatted string (buf is NUL-terminated but the length does not include the NUL char)
+ */
 h2o_buf_t h2o_sprintf(h2o_mempool_t *pool, const char *fmt, ...) __attribute__((format (printf, 2, 3)));
+/**
+ * calls sprintf (aborts if the given buffer is too small)
+ */
 size_t h2o_snprintf(char *buf, size_t bufsz, const char *fmt, ...) __attribute__((format (printf, 3, 4)));
+/**
+ * base64 url decoder
+ */
 h2o_buf_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len);
+/**
+ * base64 encoder
+ */
 void h2o_base64_encode(char *dst, const uint8_t *src, size_t len, int url_encoded);
+/**
+ * builds a RFC-1123 style date string
+ */
 void h2o_time2str_rfc1123(char *buf, time_t time);
+/**
+ * builds an Apache log-style date string
+ */
 void h2o_time2str_log(char *buf, time_t time);
+/**
+ * returns the extension portion of path
+ */
 const char *h2o_get_filext(const char *path, size_t len);
+/**
+ * 
+ */
 const char *h2o_next_token(const char* elements, size_t elements_len, size_t *element_len, const char *cur);
+/**
+ * tests if string needle exists within a comma-separated string (for handling "#rule" of RFC 2616)
+ */
 int h2o_contains_token(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len);
+/**
+ * removes ".." and "." from a path representation
+ * @param pool memory pool to be used in case the path contained references to directories
+ * @param path source path
+ * @param len source length
+ * @return buffer pointing to source, or buffer pointing to an allocated chunk with normalized representation of the given path
+ */
 h2o_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len);
+/**
+ * interprets the configuration value using sscanf, or prints an error upon failure
+ * @param configurator configurator
+ * @param config_file name of the configuration file
+ * @param config_node configuration value
+ * @param fmt scanf-style format string
+ * @return 0 if successful, -1 if not
+ */
 int h2o_config_scanf(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *fmt, ...) __attribute__((format (scanf, 4, 5)));
+/**
+ * interprets the configuration value and returns the index of the matched string within the candidate strings, or prints an error upon failure
+ * @param configurator configurator
+ * @param config_file name of the configuration file
+ * @param config_node configuration value
+ * @param candidates a comma-separated list of strings (should not contain whitespaces)
+ * @return index of the matched string within the given list, or -1 if none of them matched
+ */
 ssize_t h2o_config_get_one_of(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *candidates);
+
+int h2o__lcstris_core(const char *target, const char *test, size_t test_len);
 
 /* request */
 
@@ -896,7 +969,7 @@ inline int h2o_lcstris(const char *target, size_t target_len, const char *test, 
 {
     if (target_len != test_len)
         return 0;
-    return h2o_lcstris_core(target, test, test_len);
+    return h2o__lcstris_core(target, test, test_len);
 }
 
 inline void h2o_vector_reserve(h2o_mempool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)
