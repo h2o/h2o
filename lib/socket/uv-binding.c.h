@@ -65,7 +65,7 @@ static void on_read_ssl(uv_stream_t *stream, ssize_t nread, const uv_buf_t *_unu
     struct st_h2o_uv_socket_t *sock = stream->data;
     int status = -1;
 
-    if (nread < 0) {
+    if (nread > 0) {
         sock->super.ssl->input.encrypted->size += nread;
         if (sock->super.ssl->handshake.cb == NULL)
             status = decode_ssl_input(&sock->super);
