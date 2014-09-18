@@ -161,7 +161,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     dir_path[dir_path_len] = '\0';
 
     /* obtain mime type */
-    mime_type = h2o_get_mimetype(&req->conn->ctx->mimemap, h2o_get_filext(dir_path, dir_path_len));
+    mime_type = h2o_get_mimetype(&req->host_config->mimemap, h2o_get_filext(dir_path, dir_path_len));
 
     /* return file (on an error response) */
     if (h2o_send_file(req, 200, "OK", dir_path, mime_type) != 0) {
@@ -202,7 +202,7 @@ static h2o_buf_t append_slash_and_dup(const char *path)
     return h2o_buf_init(buf, path_len);
 }
 
-void h2o_register_file_handler(h2o_context_t *context, const char *virtual_path, const char *real_path, const char *index_file)
+void h2o_register_file_handler(h2o_host_configuration_t *host_config, const char *virtual_path, const char *real_path, const char *index_file)
 {
     struct st_h2o_file_handler_t *self = malloc(sizeof(*self));
 
@@ -214,5 +214,5 @@ void h2o_register_file_handler(h2o_context_t *context, const char *virtual_path,
     self->real_path = append_slash_and_dup(real_path);
     self->index_file = h2o_strdup(NULL, index_file, SIZE_MAX);
 
-    h2o_linklist_insert(&context->handlers, &self->super._link);
+    h2o_linklist_insert(&host_config->handlers, &self->super._link);
 }

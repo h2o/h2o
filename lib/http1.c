@@ -126,7 +126,7 @@ static int create_entity_reader(h2o_http1_conn_t *conn, const struct phr_header 
         /* content-length */
         char *endptr;
         intmax_t content_length = strtoimax(h2o_strdup(&conn->req.pool, entity_header->value, entity_header->value_len).base, &endptr, 10);
-        if (*endptr == '\0' && content_length != INTMAX_MAX && 0 <= content_length && content_length <= conn->super.ctx->max_request_entity_size) {
+        if (*endptr == '\0' && content_length != INTMAX_MAX && 0 <= content_length && content_length <= conn->super.ctx->global_config->max_request_entity_size) {
             return create_content_length_entity_reader(conn, (size_t)content_length);
         }
     }
@@ -300,9 +300,10 @@ static void on_upgrade_complete(h2o_socket_t *socket, int status)
 
 static void flatten_headers(h2o_req_t *req, h2o_buf_t *bufs, const char *connection)
 {
+    h2o_context_t *ctx = req->conn->ctx;
     h2o_timestamp_t ts;
 
-    h2o_get_timestamp(req->conn->ctx, &req->pool, &ts);
+    h2o_get_timestamp(ctx, &req->pool, &ts);
 
     if (req->res.content_length != SIZE_MAX) {
         bufs[0] = h2o_sprintf(
@@ -310,7 +311,7 @@ static void flatten_headers(h2o_req_t *req, h2o_buf_t *bufs, const char *connect
             "HTTP/1.1 %d %s\r\ndate: %.*s\r\nserver: %.*s\r\nconnection: %s\r\ncontent-length: %zu\r\n",
             req->res.status, req->res.reason,
             (int)H2O_TIMESTR_RFC1123_LEN, ts.str->rfc1123,
-            (int)req->conn->ctx->server_name.len, req->conn->ctx->server_name.base,
+            (int)ctx->global_config->server_name.len, ctx->global_config->server_name.base,
             connection,
             req->res.content_length);
     } else {
@@ -319,7 +320,7 @@ static void flatten_headers(h2o_req_t *req, h2o_buf_t *bufs, const char *connect
             "HTTP/1.1 %d %s\r\ndate: %.*s\r\nserver: %.*s\r\nconnection: %s\r\n",
             req->res.status, req->res.reason,
             (int)H2O_TIMESTR_RFC1123_LEN, ts.str->rfc1123,
-            (int)req->conn->ctx->server_name.len, req->conn->ctx->server_name.base,
+            (int)ctx->global_config->server_name.len, ctx->global_config->server_name.base,
             connection);
     }
     bufs[1] = h2o_flatten_headers(&req->pool, &req->res.headers);

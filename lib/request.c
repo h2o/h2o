@@ -72,8 +72,6 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
 
 void h2o_dispose_request(h2o_req_t *req)
 {
-    h2o_context_t *ctx = req->conn->ctx;
-
     /* close the generator if it is still open */
     if (req->_generator != NULL) {
         /* close generator */
@@ -88,11 +86,12 @@ void h2o_dispose_request(h2o_req_t *req)
         req->_ostr_top = req->_ostr_top->next;
     }
 
-    h2o_timeout_unlink(&ctx->zero_timeout, &req->_timeout_entry);
+    h2o_timeout_unlink(&req->conn->ctx->zero_timeout, &req->_timeout_entry);
 
     if (req->version != 0) {
+        h2o_host_configuration_t *host_config = req->host_config;
         h2o_linklist_t *node;
-        for (node = ctx->loggers.next; node != &ctx->loggers; node = node->next) {
+        for (node = host_config->loggers.next; node != &host_config->loggers; node = node->next) {
             h2o_logger_t *logger = H2O_STRUCT_FROM_MEMBER(h2o_logger_t, _link, node);
             logger->log(logger, req);
         }
@@ -103,12 +102,26 @@ void h2o_dispose_request(h2o_req_t *req)
 
 void h2o_process_request(h2o_req_t *req)
 {
+    h2o_context_t *ctx = req->conn->ctx;
     h2o_linklist_t *handler_node, *handlers;
 
-    h2o_get_timestamp(req->conn->ctx, &req->pool, &req->processed_at);
+    h2o_get_timestamp(ctx, &req->pool, &req->processed_at);
+
+    /* setup host context */
+    req->host_config = &ctx->global_config->default_host;
+    if (req->authority.base != NULL) {
+        h2o_linklist_t *vhosts = &ctx->global_config->virtual_hosts, *vhost_node;
+        for (vhost_node = vhosts->next; vhost_node != vhosts; vhost_node = vhost_node->next) {
+            h2o_host_configuration_t *host_config = H2O_STRUCT_FROM_MEMBER(h2o_host_configuration_t, _link, vhost_node);
+            if (h2o_memis(req->authority.base, req->authority.len, host_config->hostname.base, host_config->hostname.len)) {
+                req->host_config = host_config;
+                break;
+            }
+        }
+    }
 
     /* call any of the handlers */
-    handlers = &req->conn->ctx->handlers;
+    handlers = &req->host_config->handlers;
     for (handler_node = handlers->next; handler_node != handlers; handler_node = handler_node->next) {
         h2o_handler_t *handler = H2O_STRUCT_FROM_MEMBER(h2o_handler_t, _link, handler_node);
         if (handler->on_req(handler, req) == 0)
@@ -126,7 +139,7 @@ h2o_generator_t *h2o_start_response(h2o_req_t *req, size_t sz)
     req->_generator->proceed = NULL;
 
     /* setup response filters */
-    filters = &req->conn->ctx->filters;
+    filters = &req->host_config->filters;
     if (! h2o_linklist_is_empty(filters)) {
         h2o_filter_t *filter = H2O_STRUCT_FROM_MEMBER(h2o_filter_t, _link, filters->next);
         filter->on_setup_ostream(filter, req, &req->_ostr_top);

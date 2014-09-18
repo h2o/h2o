@@ -37,9 +37,10 @@
 struct port_configurator_t {
     h2o_configurator_t super;
     unsigned short port;
+    int fd;
 };
 
-static int on_config_port(h2o_configurator_t *_conf, h2o_context_t *ctx, const char *config_file, yoml_t *config_node)
+static int on_config_port(h2o_configurator_t *_conf, void *ctx, const char *config_file, yoml_t *config_node)
 {
     struct port_configurator_t *conf = (void*)_conf;
     return h2o_config_scanf(&conf->super, config_file, config_node, "%hu", &conf->port);
@@ -60,27 +61,35 @@ static void on_config_port_accept(h2o_socket_t *listener, int status)
     h2o_http1_accept(ctx, sock);
 }
 
-static int on_config_port_complete(h2o_configurator_t *_conf, h2o_context_t *ctx)
+static int on_config_port_complete(h2o_configurator_t *_conf, void *_global_config)
 {
     struct port_configurator_t *conf = (void*)_conf;
     struct sockaddr_in addr;
-    int fd, reuseaddr_flag = 1;
-    h2o_socket_t *sock;
+    int reuseaddr_flag = 1;
 
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(0);
     addr.sin_port = htons(conf->port);
 
-    if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1
-        || setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
-        || bind(fd, (struct sockaddr*)&addr, sizeof(addr)) != 0
-        || listen(fd, SOMAXCONN) != 0) {
+    if ((conf->fd = socket(AF_INET, SOCK_STREAM, 0)) == -1
+        || setsockopt(conf->fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
+        || bind(conf->fd, (struct sockaddr*)&addr, sizeof(addr)) != 0
+        || listen(conf->fd, SOMAXCONN) != 0) {
         fprintf(stderr, "failed to listen to port %hu:%s\n", conf->port, strerror(errno));
         return -1;
     }
 
-    sock = h2o_evloop_socket_create(ctx->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPT);
+    return 0;
+}
+
+static int on_config_port_context_create(h2o_configurator_t *_conf, h2o_context_t *ctx)
+{
+    struct port_configurator_t *conf = (void*)_conf;
+    h2o_socket_t *sock;
+
+    /* FIXME use dup to support multithread? */
+    sock = h2o_evloop_socket_create(ctx->loop, conf->fd, H2O_SOCKET_FLAG_IS_ACCEPT);
     sock->data = ctx;
     h2o_socket_read_start(sock, on_config_port_accept);
 
@@ -130,21 +139,22 @@ int main(int argc, char **argv)
         { NULL, 0, NULL, 0 }
     };
     static struct port_configurator_t port_configurator = {
-        { {}, "port", NULL, on_config_port, on_config_port_complete },
+        { {}, "port", NULL, on_config_port, on_config_port_complete, on_config_port_context_create },
         0
     };
 
 
-    const char *conf_fn = "h2o.conf";
+    const char *config_file = "h2o.conf";
     int opt_ch;
-    yoml_t *config;
+    yoml_t *config_yoml;
+    h2o_global_configuration_t config;
     h2o_context_t ctx;
 
     /* parse options */
     while ((opt_ch = getopt_long(argc, argv, "c:h", longopts, NULL)) != -1) {
         switch (opt_ch) {
         case 'c':
-            conf_fn = optarg;
+            config_file = optarg;
             break;
         case 'h':
             usage();
@@ -158,17 +168,16 @@ int main(int argc, char **argv)
     argc -= optind;
     argv += optind;
 
-    /* load configuration */
-    if ((config = load_config(conf_fn)) == NULL)
+    /* configure */
+    h2o_config_init(&config);
+    h2o_linklist_insert(&config.global_configurators, &port_configurator.super._link);
+    if ((config_yoml = load_config(config_file)) == NULL)
         exit(EX_CONFIG);
-
-    /* setup h2o context */
-    h2o_context_init(&ctx, h2o_evloop_create());
-    h2o_linklist_insert(&ctx.configurators, &port_configurator.super._link);
-
-    /* apply the configuration */
-    if (h2o_context_configure(&ctx, conf_fn, config) != 0)
+    if (h2o_config_configure(&config, config_file, config_yoml) != 0)
         exit(EX_CONFIG);
+    yoml_free(config_yoml);
+
+    h2o_context_init(&ctx, h2o_evloop_create(), &config);
 
     while (h2o_evloop_run(ctx.loop) == 0)
         ;

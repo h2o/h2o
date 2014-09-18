@@ -241,11 +241,15 @@ typedef struct st_h2o_configurator_t {
     /**
      * mandatory callcack called to handle the command
      */
-    int (*on_cmd)(struct st_h2o_configurator_t* self, h2o_context_t *ctx, const char *config_file, yoml_t *config_node);
+    int (*on_cmd)(struct st_h2o_configurator_t* self, void *config, const char *file, yoml_t *node);
     /**
-     * optional callback called just before the server starts, after all the configuration commands are handled
+     * optional callback called after all the configuration commands are handled
      */
-    int (*on_complete)(struct st_h2o_configurator_t *self, h2o_context_t *ctx);
+    int (*on_complete)(struct st_h2o_configurator_t *self, void *config);
+    /**
+     * optional callback called upon the initialization of context
+     */
+    int (*on_context_create)(struct st_h2o_configurator_t *self, h2o_context_t *ctx);
 } h2o_configurator_t;
 
 /**
@@ -273,6 +277,70 @@ typedef struct st_h2o_timestamp_t {
     h2o_timestamp_string_t *str;
 } h2o_timestamp_t;
 
+typedef struct st_h2o_host_configuration_t {
+    h2o_linklist_t _link;
+    /**
+     * hostname in lower-case (base is NUL terminated)
+     */
+    h2o_buf_t hostname;
+    /**
+     * list of handlers (h2o_handler_t)
+     */
+    h2o_linklist_t handlers;
+    /**
+     * list of filters (h2o_filter_t)
+     */
+    h2o_linklist_t filters;
+    /**
+     * list of loggers (h2o_logger_t)
+     */
+    h2o_linklist_t loggers;
+    /**
+     * mime-map
+     */
+    h2o_mimemap_t mimemap;
+} h2o_host_configuration_t;
+
+typedef struct st_h2o_global_configuration_t {
+    /**
+     * list of host contexts (h2o_host_configuration_t)
+     */
+    h2o_linklist_t virtual_hosts;
+    /**
+     * default host context
+     */
+    h2o_host_configuration_t default_host;
+    /**
+     * list of global configurators (h2o_configurator_t)
+     */
+    h2o_linklist_t global_configurators;
+    /**
+     * list of global configurators (h2o_configurator_t)
+     */
+    h2o_linklist_t host_configurators;
+    /**
+     * name of the server (not the hostname)
+     */
+    h2o_buf_t server_name;
+    /**
+     * request timeout (in milliseconds)
+     */
+    uint64_t req_timeout;
+    /**
+     * maximum size of the accepted request entity (e.g. POST data)
+     */
+    size_t max_request_entity_size;
+    /**
+     * a boolean value indicating whether or not to upgrade to HTTP/2
+     */
+    int http1_upgrade_to_http2;
+    /**
+     * maximum number of HTTP2 requests (per connection) to be handled simultaneously internally.
+     * H2O accepts at most 256 requests over HTTP/2, but internally limits the number of in-flight requests to the value specified by this property in order to limit the resources allocated to a single connection.
+     */
+    size_t http2_max_concurrent_requests_per_connection;
+} h2o_global_configuration_t;
+
 /**
  * context of the http server.
  */
@@ -290,42 +358,9 @@ struct st_h2o_context_t {
      */
     h2o_timeout_t req_timeout;
     /**
-     * list of handlers (h2o_handler_t)
+     * pointer to the global configuration
      */
-    h2o_linklist_t handlers;
-    /**
-     * list of filters (h2o_filter_t)
-     */
-    h2o_linklist_t filters;
-    /**
-     * list of loggers (h2o_logger_t)
-     */
-    h2o_linklist_t loggers;
-    /**
-     * list of configurators (h2o_configurator_t)
-     */
-    h2o_linklist_t configurators;
-    /**
-     * mime-map
-     */
-    h2o_mimemap_t mimemap;
-    /**
-     * name of the server (not the hostname)
-     */
-    h2o_buf_t server_name;
-    /**
-     * maximum size of the accepted request entity (e.g. POST data)
-     */
-    size_t max_request_entity_size;
-    /**
-     * a boolean value indicating whether or not to upgrade to HTTP/2
-     */
-    int http1_upgrade_to_http2;
-    /**
-     * maximum number of HTTP2 requests (per connection) to be handled simultaneously internally.
-     * H2O accepts at most 256 requests over HTTP/2, but internally limits the number of in-flight requests to the value specified by this property in order to limit the resources allocated to a single connection.
-     */
-    size_t http2_max_concurrent_requests_per_connection;
+    h2o_global_configuration_t *global_config;
     struct {
         uint64_t uv_now_at;
         struct timeval tv_at;
@@ -433,6 +468,10 @@ struct st_h2o_req_t {
      * the underlying connection
      */
     h2o_conn_t *conn;
+    /**
+     * the host context
+     */
+    h2o_host_configuration_t *host_config;
     /**
      * authority (a.k.a. the Host header; the value is { NULL, 0 } in case the header is unavailable)
      */
@@ -815,24 +854,6 @@ h2o_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len);
  * accepts a SSL connection
  */
 void h2o_accept_ssl(h2o_context_t *ctx, h2o_socket_t *sock, h2o_ssl_context_t *ssl_ctx);
-/**
- * interprets the configuration value using sscanf, or prints an error upon failure
- * @param configurator configurator
- * @param config_file name of the configuration file
- * @param config_node configuration value
- * @param fmt scanf-style format string
- * @return 0 if successful, -1 if not
- */
-int h2o_config_scanf(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *fmt, ...) __attribute__((format (scanf, 4, 5)));
-/**
- * interprets the configuration value and returns the index of the matched string within the candidate strings, or prints an error upon failure
- * @param configurator configurator
- * @param config_file name of the configuration file
- * @param config_node configuration value
- * @param candidates a comma-separated list of strings (should not contain whitespaces)
- * @return index of the matched string within the given list, or -1 if none of them matched
- */
-ssize_t h2o_config_get_one_of(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *candidates);
 
 int h2o__lcstris_core(const char *target, const char *test, size_t test_len);
 
@@ -895,31 +916,65 @@ void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, h2o_buf_t *bufs,
  */
 static void h2o_proceed_response(h2o_req_t *req);
 
+/* config */
+
+/**
+ * initializes the global configuration
+ */
+void h2o_config_init(h2o_global_configuration_t *config);
+/**
+ * registers a virtual host context
+ */
+h2o_host_configuration_t *h2o_config_register_virtual_host(h2o_global_configuration_t *config, const char *hostname);
+/**
+ * disposes of the resources allocated for the global configuration
+ */
+void h2o_config_dispose(h2o_global_configuration_t *config);
+/**
+ * returns a configurator of given command name
+ * @return configurator for given name or NULL if not found
+ */
+h2o_configurator_t *h2o_config_get_configurator(h2o_linklist_t *configurators, const char *cmd);
+/**
+ * applies the configuration to the context
+ * @return 0 if successful, -1 if not
+ */
+int h2o_config_configure(h2o_global_configuration_t *config, const char *file, yoml_t *node);
+/**
+ * emits configuration error
+ */
+void h2o_config_print_error(h2o_configurator_t *configurator, const char *file, yoml_t *node, const char *reason, ...) __attribute__((format (printf, 4, 5)));
+/**
+ * interprets the configuration value using sscanf, or prints an error upon failure
+ * @param configurator configurator
+ * @param config_file name of the configuration file
+ * @param config_node configuration value
+ * @param fmt scanf-style format string
+ * @return 0 if successful, -1 if not
+ */
+int h2o_config_scanf(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *fmt, ...) __attribute__((format (scanf, 4, 5)));
+/**
+ * interprets the configuration value and returns the index of the matched string within the candidate strings, or prints an error upon failure
+ * @param configurator configurator
+ * @param config_file name of the configuration file
+ * @param config_node configuration value
+ * @param candidates a comma-separated list of strings (should not contain whitespaces)
+ * @return index of the matched string within the given list, or -1 if none of them matched
+ */
+ssize_t h2o_config_get_one_of(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *candidates);
+
+int h2o_config_on_context_create(h2o_global_configuration_t *config, h2o_context_t *ctx);
+
 /* context */
 
 /**
  * initializes the context
  */
-void h2o_context_init(h2o_context_t *context, h2o_loop_t *loop);
+void h2o_context_init(h2o_context_t *context, h2o_loop_t *loop, h2o_global_configuration_t *config);
 /**
  * disposes of the resources allocated for the context
  */
 void h2o_context_dispose(h2o_context_t *context);
-/**
- * returns a configurator of given command name
- * @return configurator for given name or NULL if not found
- */
-h2o_configurator_t *h2o_context_get_configurator(h2o_context_t *context, const char *cmd);
-/**
- * applies the configuration to the context
- * @return 0 if successful, -1 if not
- */
-int h2o_context_configure(h2o_context_t *context, const char *config_file, yoml_t *config_node);
-/**
- * emits configuration error
- */
-void h2o_context_print_config_error(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *reason, ...) __attribute__((format (printf, 4, 5)));
-
 /**
  * returns current timestamp
  * @param ctx the context
@@ -927,8 +982,6 @@ void h2o_context_print_config_error(h2o_configurator_t *configurator, const char
  * @param ts buffer to store the timestamp
  */
 void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts);
-
-void h2o_context__init_global_configurators(h2o_context_t *context);
 
 /* built-in generators */
 
@@ -950,7 +1003,7 @@ int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *pa
 /**
  * registers the file handler to the context
  */
-void h2o_register_file_handler(h2o_context_t *context, const char *virtual_path, const char *real_path, const char *index_file);
+void h2o_register_file_handler(h2o_host_configuration_t *host_config, const char *virtual_path, const char *real_path, const char *index_file);
 
 /* output filters */
 
@@ -961,11 +1014,11 @@ static void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostre
 /**
  * registers the chunked encoding output filter (added by default)
  */
-void h2o_register_chunked_filter(h2o_context_t *context);
+void h2o_register_chunked_filter(h2o_host_configuration_t *host_config);
 /**
  * registers the reproxy filter
  */
-void h2o_register_reproxy_filter(h2o_context_t *context);
+void h2o_register_reproxy_filter(h2o_host_configuration_t *host_config);
 
 /* mime mapper */
 
@@ -1125,7 +1178,7 @@ inline void h2o_proceed_response(h2o_req_t *req)
 
 inline void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
 {
-    if (self->_link.next != &req->conn->ctx->filters) {
+    if (self->_link.next != &req->host_config->filters) {
         h2o_filter_t *next_filter = H2O_STRUCT_FROM_MEMBER(h2o_filter_t, _link, self->_link.next);
         next_filter->on_setup_ostream(next_filter, req, slot);
     }

@@ -108,7 +108,7 @@ int main(int argc, char **argv)
     h2o_context_init(&ctx, loop);
     memset(&ws_handler, 0, sizeof(ws_handler));
     ws_handler.on_req = on_req;
-    h2o_linklist_insert(&ctx.handlers, &ws_handler._link);
+    h2o_linklist_insert(&h2o_context_get_default_host_context(&ctx)->handlers, &ws_handler._link);
     //ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", NULL);
 
     return uv_run(loop, UV_RUN_DEFAULT);
