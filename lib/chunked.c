@@ -85,9 +85,10 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     /* setup filter */
     encoder = (void*)h2o_add_ostream(req, sizeof(chunked_encoder_t), slot);
     encoder->super.do_send = send_chunk;
+    slot = &encoder->super.next;
 
 Next:
-    h2o_setup_next_ostream(self, req, &encoder->super.next);
+    h2o_setup_next_ostream(self, req, slot);
 }
 
 void h2o_register_chunked_filter(h2o_context_t *context)
