@@ -334,11 +334,6 @@ struct st_h2o_context_t {
         struct timeval tv_at;
         h2o_timestamp_string_t *value;
     } _timestamp_cache;
-    struct {
-        h2o_configurator_t files;
-        h2o_configurator_t mime_types;
-        h2o_configurator_t request_timeout;
-    } _global_configurators;
 };
 
 /**
@@ -781,6 +776,7 @@ static void h2o_proceed_response(h2o_req_t *req);
 /* context */
 
 void h2o_context_init(h2o_context_t *context, h2o_loop_t *loop);
+void h2o_context_init_global_configurators(h2o_context_t *context);
 void h2o_context_dispose(h2o_context_t *context);
 int h2o_context_configure(h2o_context_t *context, const char *config_file, yoml_t *config_node);
 

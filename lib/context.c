@@ -28,79 +28,6 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 
-static int on_config_files(h2o_configurator_t *configurator, h2o_context_t *ctx, const char *config_file, yoml_t *config_node)
-{
-    size_t i;
-
-    if (config_node->type != YOML_TYPE_MAPPING) {
-        h2o_context_print_config_error(configurator, config_file, config_node, "argument must be a mapping");
-        return -1;
-    }
-
-    for (i = 0; i != config_node->data.mapping.size; ++i) {
-        yoml_t *key = config_node->data.mapping.elements[i].key;
-        yoml_t *value = config_node->data.mapping.elements[i].value;
-        if (key->type != YOML_TYPE_SCALAR) {
-            h2o_context_print_config_error(configurator, config_file, key, "key (representing the virtual path) must be a string");
-            return -1;
-        }
-        if (value->type != YOML_TYPE_SCALAR) {
-            h2o_context_print_config_error(configurator, config_file, key, "value (representing the local path) must be a string");
-            return -1;
-        }
-        h2o_register_file_handler(ctx, key->data.scalar, value->data.scalar, "index.html" /* FIXME */);
-    }
-
-    return 0;
-}
-
-static int on_config_request_timeout(h2o_configurator_t *configurator, h2o_context_t *ctx, const char *config_file, yoml_t *config_node)
-{
-    unsigned timeout_in_secs;
-
-    if (config_node->type != YOML_TYPE_SCALAR
-        || sscanf(config_node->data.scalar, "%u", &timeout_in_secs) != 1) {
-        h2o_context_print_config_error(configurator, config_file, config_node, "argument must be a non-negative number");
-        return -1;
-    }
-
-    ctx->req_timeout.timeout = timeout_in_secs * 1000;
-    return 0;
-}
-
-static int on_config_mime_types(h2o_configurator_t *configurator, h2o_context_t *ctx, const char *config_file, yoml_t *config_node)
-{
-    size_t i;
-
-    if (config_node->type != YOML_TYPE_MAPPING) {
-        h2o_context_print_config_error(configurator, config_file, config_node, "argument must be a mapping");
-        return -1;
-    }
-
-    for (i = 0; i != config_node->data.mapping.size; ++i) {
-        yoml_t *key = config_node->data.mapping.elements[i].key;
-        yoml_t *value = config_node->data.mapping.elements[i].value;
-        if (key->type != YOML_TYPE_SCALAR) {
-            h2o_context_print_config_error(configurator, config_file, key, "key (representing the extension) must be a string");
-            return -1;
-        }
-        if (value->type != YOML_TYPE_SCALAR) {
-            h2o_context_print_config_error(configurator, config_file, config_node, "value (representing the mime-type) must be a string");
-            return -1;
-        }
-        h2o_define_mimetype(&ctx->mimemap, key->data.scalar, value->data.scalar);
-    }
-
-    return 0;
-}
-
-static void setup_global_configurator(h2o_context_t *ctx, h2o_configurator_t *configurator, const char *cmd, int (*on_cmd)(h2o_configurator_t *, h2o_context_t *, const char *, yoml_t*))
-{
-    configurator->cmd = cmd;
-    configurator->on_cmd = on_cmd;
-    h2o_linklist_insert(&ctx->configurators, &configurator->_link);
-}
-
 void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop)
 {
     memset(ctx, 0, sizeof(*ctx));
@@ -117,9 +44,6 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop)
     ctx->max_request_entity_size = H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE;
     ctx->http1_upgrade_to_http2 = H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2;
     ctx->http2_max_concurrent_requests_per_connection = H2O_DEFAULT_HTTP2_MAX_CONCURRENT_REQUESTS_PER_CONNECTION;
-    setup_global_configurator(ctx, &ctx->_global_configurators.files, "files", on_config_files);
-    setup_global_configurator(ctx, &ctx->_global_configurators.request_timeout, "request-timeout", on_config_request_timeout);
-    setup_global_configurator(ctx, &ctx->_global_configurators.mime_types, "mime-types", on_config_mime_types);
 }
 
 void h2o_context_dispose(h2o_context_t *ctx)

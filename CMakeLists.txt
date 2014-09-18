@@ -38,6 +38,7 @@ SET(LIB_SOURCE_FILES
     lib/access_log.c
     lib/chunked.c
     lib/context.c
+    lib/global-configurators.c
     lib/file.c
     lib/headers.c
     lib/http1.c
