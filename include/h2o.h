@@ -759,6 +759,8 @@ const char *h2o_get_filext(const char *path, size_t len);
 const char *h2o_next_token(const char* elements, size_t elements_len, size_t *element_len, const char *cur);
 int h2o_contains_token(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len);
 h2o_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len);
+int h2o_config_scanf(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *fmt, ...) __attribute__((format (scanf, 4, 5)));
+ssize_t h2o_config_get_one_of(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *candidates);
 
 /* request */
 

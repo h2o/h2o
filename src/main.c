@@ -41,14 +41,7 @@ struct port_configurator_t {
 static int on_config_port(h2o_configurator_t *_conf, h2o_context_t *ctx, const char *config_file, yoml_t *config_node)
 {
     struct port_configurator_t *conf = (void*)_conf;
-
-    if (config_node->type != YOML_TYPE_SCALAR
-        || sscanf(config_node->data.scalar, "%hu", &conf->port) != 1) {
-        h2o_context_print_config_error(&conf->super, config_file, config_node, "argument is not a valid port number");
-        return -1;
-    }
-
-    return 0;
+    return h2o_config_scanf(&conf->super, config_file, config_node, "%hu", &conf->port);
 }
 
 static void on_config_port_accept(h2o_socket_t *listener, int status)

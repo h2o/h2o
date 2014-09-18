@@ -52,11 +52,8 @@ static int on_config_request_timeout(h2o_configurator_t *configurator, h2o_conte
 {
     unsigned timeout_in_secs;
 
-    if (config_node->type != YOML_TYPE_SCALAR
-        || sscanf(config_node->data.scalar, "%u", &timeout_in_secs) != 1) {
-        h2o_context_print_config_error(configurator, config_file, config_node, "argument must be a non-negative number");
+    if (h2o_config_scanf(configurator, config_file, config_node, "%u", &timeout_in_secs) != 0)
         return -1;
-    }
 
     ctx->req_timeout.timeout = timeout_in_secs * 1000;
     return 0;
@@ -88,6 +85,25 @@ static int on_config_mime_types(h2o_configurator_t *configurator, h2o_context_t 
     return 0;
 }
 
+static int on_config_limit_request_body(h2o_configurator_t *configurator, h2o_context_t *ctx, const char *config_file, yoml_t *config_node)
+{
+    return h2o_config_scanf(configurator, config_file, config_node, "%zu", &ctx->max_request_entity_size);
+}
+
+static int on_config_http1_upgrade_to_http2(h2o_configurator_t *configurator, h2o_context_t *ctx, const char *config_file, yoml_t *config_node)
+{
+    ssize_t ret = h2o_config_get_one_of(configurator, config_file, config_node, "OFF,ON");
+    if (ret == -1)
+        return -1;
+    ctx->http1_upgrade_to_http2 = (int)ret;
+    return 0;
+}
+
+static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurator_t *configurator, h2o_context_t *ctx, const char *config_file, yoml_t *config_node)
+{
+    return h2o_config_scanf(configurator, config_file, config_node, "%zu", &ctx->http2_max_concurrent_requests_per_connection);
+}
+
 static void setup_global_configurator(h2o_context_t *context, const char *cmd, int (*on_cmd)(h2o_configurator_t *, h2o_context_t *, const char *, yoml_t*))
 {
     h2o_configurator_t *configurator = h2o_malloc(sizeof(*configurator));
@@ -105,4 +121,7 @@ void h2o_context_init_global_configurators(h2o_context_t *context)
     setup_global_configurator(context, "files", on_config_files);
     setup_global_configurator(context, "request-timeout", on_config_request_timeout);
     setup_global_configurator(context, "mime-types", on_config_mime_types);
+    setup_global_configurator(context, "limit-request-body", on_config_limit_request_body);
+    setup_global_configurator(context, "http1-upgrade-to-http2", on_config_http1_upgrade_to_http2);
+    setup_global_configurator(context, "http2-max-concurrent-requests-per-connection", on_config_http2_max_concurrent_requests_per_connection);
 }
