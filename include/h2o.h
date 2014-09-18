@@ -895,42 +895,102 @@ static void h2o_proceed_response(h2o_req_t *req);
 
 /* context */
 
+/**
+ * initializes the context
+ */
 void h2o_context_init(h2o_context_t *context, h2o_loop_t *loop);
-void h2o_context_init_global_configurators(h2o_context_t *context);
+/**
+ * disposes of the resources allocated for the context
+ */
 void h2o_context_dispose(h2o_context_t *context);
+/**
+ * returns a configurator of given command name
+ * @return configurator for given name or NULL if not found
+ */
+h2o_configurator_t *h2o_context_get_configurator(h2o_context_t *context, const char *cmd);
+/**
+ * applies the configuration to the context
+ * @return 0 if successful, -1 if not
+ */
 int h2o_context_configure(h2o_context_t *context, const char *config_file, yoml_t *config_node);
-
+/**
+ * emits configuration error
+ */
 void h2o_context_print_config_error(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *reason, ...) __attribute__((format (printf, 4, 5)));
 
+/**
+ * returns current timestamp
+ * @param ctx the context
+ * @param pool memory pool
+ * @param ts buffer to store the timestamp
+ */
 void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts);
-
+/**
+ * accepts a connection
+ */
 void h2o_accept(h2o_context_t *ctx, h2o_socket_t *sock);
+
+void h2o_context__init_global_configurators(h2o_context_t *context);
 
 /* built-in generators */
 
+/**
+ * sends the given string as the response
+ */
 void h2o_send_inline(h2o_req_t *req, const char *body, size_t len);
+/**
+ * sends the given information as an error response to the client
+ */
 void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body);
+/**
+ * sends given file as the response to the client
+ */
 int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *path, h2o_buf_t mime_type);
 
 /* handlers */
 
+/**
+ * registers the file handler to the context
+ */
 void h2o_register_file_handler(h2o_context_t *context, const char *virtual_path, const char *real_path, const char *index_file);
 
 /* output filters */
 
-static void h2o_init_next_filter(h2o_filter_t *self, h2o_req_t *req);
-void h2o_register_chunked_filter(h2o_context_t *context); /* added by default */
+/**
+ * requests the next filter (if any) to setup the ostream if necessary
+ */
+static void h2o_start_next_filter(h2o_filter_t *self, h2o_req_t *req);
+/**
+ * registers the chunked encoding output filter (added by default)
+ */
+void h2o_register_chunked_filter(h2o_context_t *context);
+/**
+ * registers the reproxy filter
+ */
 void h2o_register_reproxy_filter(h2o_context_t *context);
 
 /* mime mapper */
 
+/**
+ * initializes the mimemap
+ */
 void h2o_init_mimemap(h2o_mimemap_t *mimemap, const char *default_type);
+/**
+ * releases the resource allocated for the mimemap
+ */
 void h2o_dispose_mimemap(h2o_mimemap_t *mimemap);
+/**
+ * adds a mime-type mapping
+ */
 void h2o_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const char *type);
+/**
+ * returns the mime-type corresponding to given extension
+ */
 h2o_buf_t h2o_get_mimetype(h2o_mimemap_t *mimemap, const char *ext);
 
 /* access log */
-h2o_logger_t *h2o_prepend_access_logger(h2o_context_t *context, const char *path);
+
+h2o_logger_t *h2o_register_access_logger(h2o_context_t *context, const char *path);
 
 /* inline defs */
 
@@ -1065,7 +1125,7 @@ inline void h2o_proceed_response(h2o_req_t *req)
     }
 }
 
-inline void h2o_init_next_filter(h2o_filter_t *self, h2o_req_t *req)
+inline void h2o_start_next_filter(h2o_filter_t *self, h2o_req_t *req)
 {
     if (self->_link.next != &req->conn->ctx->filters) {
         h2o_filter_t *next_filter = H2O_STRUCT_FROM_MEMBER(h2o_filter_t, _link, self->_link.next);

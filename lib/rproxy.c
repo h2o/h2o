@@ -96,7 +96,7 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, 
     req->res.content_length = body.len;
     h2o_set_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"), 1);
 
-    h2o_init_next_filter(self->filter, req);
+    h2o_start_next_filter(self->filter, req);
 
     assert(is_final);
     h2o_ostream_send_next(&self->super, req, &body, 1, is_final);
@@ -126,7 +126,7 @@ static void on_start_response(h2o_filter_t *self, h2o_req_t *req)
     return;
 
 SkipMe:
-    h2o_init_next_filter(self, req);
+    h2o_start_next_filter(self, req);
 }
 
 void h2o_register_reproxy_filter(h2o_context_t *context)

@@ -116,8 +116,13 @@ static void setup_global_configurator(h2o_context_t *context, const char *cmd, i
     h2o_linklist_insert(&context->configurators, &configurator->_link);
 }
 
-void h2o_context_init_global_configurators(h2o_context_t *context)
+
+void h2o_context__init_global_configurators(h2o_context_t *context)
 {
+    /* check if already initialized */
+    if (h2o_context_get_configurator(context, "files") != NULL)
+        return;
+
     setup_global_configurator(context, "files", on_config_files);
     setup_global_configurator(context, "request-timeout", on_config_request_timeout);
     setup_global_configurator(context, "mime-types", on_config_mime_types);

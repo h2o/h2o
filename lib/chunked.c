@@ -85,7 +85,7 @@ static void on_start_response(h2o_filter_t *self, h2o_req_t *req)
     encoder->super.do_send = send_chunk;
 
 Next:
-    h2o_init_next_filter(self, req);
+    h2o_start_next_filter(self, req);
 }
 
 void h2o_register_chunked_filter(h2o_context_t *context)

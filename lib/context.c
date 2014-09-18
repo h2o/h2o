@@ -66,9 +66,24 @@ void h2o_context_dispose(h2o_context_t *ctx)
 #undef CLEANUP
 }
 
+h2o_configurator_t *h2o_context_get_configurator(h2o_context_t *context, const char *cmd)
+{
+    h2o_linklist_t *node;
+
+    for (node = context->configurators.next; node != &context->configurators; node = node->next) {
+        h2o_configurator_t *configurator = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, node);
+        if (strcmp(configurator->cmd, cmd) == 0)
+            return configurator;
+    }
+
+    return NULL;
+}
+
 int h2o_context_configure(h2o_context_t *context, const char *config_file, yoml_t *config_node)
 {
     size_t i;
+
+    h2o_context__init_global_configurators(context);
 
     /* apply the configuration */
     if (config_node->type != YOML_TYPE_MAPPING) {
@@ -78,21 +93,15 @@ int h2o_context_configure(h2o_context_t *context, const char *config_file, yoml_
     for (i = 0; i != config_node->data.mapping.size; ++i) {
         yoml_t *key = config_node->data.mapping.elements[i].key;
         yoml_t *value = config_node->data.mapping.elements[i].value;
-        h2o_linklist_t *node;
         h2o_configurator_t *configurator;
         if (key->type != YOML_TYPE_SCALAR) {
             h2o_context_print_config_error(NULL, config_file, key, "command must be a string");
             return -1;
         }
-        for (node = context->configurators.next; node != &context->configurators; node = node->next) {
-            configurator = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, node);
-            if (strcmp(configurator->cmd, key->data.scalar) == 0)
-                goto Found;
+        if ((configurator = h2o_context_get_configurator(context, key->data.scalar)) == NULL) {
+            h2o_context_print_config_error(NULL, config_file, key, "unknown command: %s", key->data.scalar);
+            return -1;
         }
-        /* not found */
-        h2o_context_print_config_error(NULL, config_file, key, "unknown command: %s", key->data.scalar);
-        return -1;
-    Found:
         if (configurator->on_cmd(configurator, context, config_file, value) != 0)
             return -1;
     }

@@ -163,7 +163,6 @@ int main(int argc, char **argv)
 
     /* setup h2o context */
     h2o_context_init(&ctx, h2o_evloop_create());
-    h2o_context_init_global_configurators(&ctx);
     h2o_linklist_insert(&ctx.configurators, &port_configurator.super._link);
 
     /* apply the configuration */
