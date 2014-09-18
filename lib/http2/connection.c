@@ -96,7 +96,7 @@ static h2o_http2_stream_t *unlink_stream(h2o_http2_stream_t **slot, h2o_http2_st
 
 static void run_pending_requests(h2o_http2_conn_t *conn)
 {
-    while (conn->num_responding_streams < conn->super.ctx->http2_max_concurrent_requests_per_connection) {
+    while (conn->num_responding_streams < conn->super.ctx->global_config->http2_max_concurrent_requests_per_connection) {
         h2o_http2_stream_t *stream;
         if (conn->_pending_reqs == NULL)
             break;

@@ -26,81 +26,19 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 
-#define DESTROY_LIST(type, anchor) do { \
-    while (! h2o_linklist_is_empty(&anchor)) { \
-        type *e = H2O_STRUCT_FROM_MEMBER(type, _link, anchor.next); \
-        h2o_linklist_unlink(&e->_link); \
-        if (e->destroy != NULL) \
-            e->destroy(e); \
-    } \
-} while (0)
-
-static void init_host_context(h2o_host_context_t *host_ctx)
-{
-    h2o_linklist_init_anchor(&host_ctx->handlers);
-    h2o_linklist_init_anchor(&host_ctx->filters);
-    h2o_linklist_init_anchor(&host_ctx->loggers);
-    h2o_register_chunked_filter(host_ctx);
-    h2o_init_mimemap(&host_ctx->mimemap, H2O_DEFAULT_MIMETYPE);
-}
-
-static void dispose_host_context(h2o_host_context_t *host_ctx)
-{
-    free(host_ctx->hostname.base);
-    DESTROY_LIST(h2o_handler_t, host_ctx->handlers);
-    DESTROY_LIST(h2o_filter_t, host_ctx->filters);
-    DESTROY_LIST(h2o_logger_t, host_ctx->loggers);
-    h2o_dispose_mimemap(&host_ctx->mimemap);
-}
-
-static void destroy_host_context(h2o_host_context_t *host_ctx)
-{
-    dispose_host_context(host_ctx);
-    free(host_ctx);
-}
-
-void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop)
+void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_global_configuration_t *config)
 {
     memset(ctx, 0, sizeof(*ctx));
     ctx->loop = loop;
+    ctx->global_config = config;
     h2o_timeout_init(ctx->loop, &ctx->zero_timeout, 0);
-    h2o_timeout_init(ctx->loop, &ctx->req_timeout, H2O_DEFAULT_REQ_TIMEOUT);
-    h2o_linklist_init_anchor(&ctx->virtual_host_contexts);
-    init_host_context(&ctx->default_host_context);
-    h2o_linklist_init_anchor(&ctx->global_configurators);
-    h2o_linklist_init_anchor(&ctx->host_configurators);
-    ctx->server_name = h2o_buf_init(H2O_STRLIT("h2o/0.1"));
-    ctx->max_request_entity_size = H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE;
-    ctx->http1_upgrade_to_http2 = H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2;
-    ctx->http2_max_concurrent_requests_per_connection = H2O_DEFAULT_HTTP2_MAX_CONCURRENT_REQUESTS_PER_CONNECTION;
-}
+    h2o_timeout_init(ctx->loop, &ctx->req_timeout, config->req_timeout);
 
-h2o_host_context_t *h2o_context_register_virtual_host(h2o_context_t *ctx, const char *hostname)
-{
-    h2o_host_context_t *host_ctx = h2o_malloc(sizeof(*host_ctx));
-    size_t i;
-
-    memset(host_ctx, 0, sizeof(*host_ctx));
-    init_host_context(host_ctx);
-    host_ctx->hostname = h2o_strdup(NULL, hostname, SIZE_MAX);
-    for (i = 0; i != host_ctx->hostname.len; ++i)
-        host_ctx->hostname.base[i] = h2o_tolower(host_ctx->hostname.base[i]);
-
-    h2o_linklist_insert(&ctx->virtual_host_contexts, &host_ctx->_link);
-
-    return host_ctx;
+    h2o_config_on_context_create(config, ctx);
 }
 
 void h2o_context_dispose(h2o_context_t *ctx)
 {
-    while (! h2o_linklist_is_empty(&ctx->virtual_host_contexts)) {
-        h2o_host_context_t *host_ctx = H2O_STRUCT_FROM_MEMBER(h2o_host_context_t, _link, ctx->virtual_host_contexts.next);
-        h2o_linklist_unlink(&host_ctx->_link);
-        destroy_host_context(host_ctx);
-    }
-    dispose_host_context(&ctx->default_host_context);
-    DESTROY_LIST(h2o_configurator_t, ctx->global_configurators);
-    DESTROY_LIST(h2o_configurator_t, ctx->host_configurators);
 }
 
 void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts)

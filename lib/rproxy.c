@@ -129,7 +129,7 @@ SkipMe:
     h2o_setup_next_ostream(self, req, slot);
 }
 
-void h2o_register_reproxy_filter(h2o_host_context_t *host_ctx)
+void h2o_register_reproxy_filter(h2o_host_configuration_t *host_config)
 {
     h2o_filter_t *self = h2o_malloc(sizeof(*self));
 
@@ -138,5 +138,5 @@ void h2o_register_reproxy_filter(h2o_host_context_t *host_ctx)
     self->on_setup_ostream = on_setup_ostream;
 
     /* insert at the head! */
-    h2o_linklist_insert(host_ctx->filters.next, &self->_link);
+    h2o_linklist_insert(host_config->filters.next, &self->_link);
 }

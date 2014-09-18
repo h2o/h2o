@@ -454,55 +454,6 @@ void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *
     h2o_send_inline(req, body, SIZE_MAX);
 }
 
-int h2o_config_scanf(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *fmt, ...)
-{
-    va_list args;
-    int sscan_ret;
-
-    if (config_node->type != YOML_TYPE_SCALAR)
-        goto Error;
-    va_start(args, fmt);
-    sscan_ret = vsscanf(config_node->data.scalar, fmt, args);
-    va_end(args);
-    if (sscan_ret != 1)
-        goto Error;
-
-    return 0;
-Error:
-    h2o_context_print_config_error(configurator, config_file, config_node, "argument must match the format: %s", fmt);
-    return -1;
-}
-
-ssize_t h2o_config_get_one_of(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *candidates)
-{
-    const char *config_str, *cand_str;
-    ssize_t config_str_len, cand_index;
-
-    if (config_node->type != YOML_TYPE_SCALAR)
-        goto Error;
-
-    config_str = config_node->data.scalar;
-    config_str_len = strlen(config_str);
-
-    cand_str = candidates;
-    for (cand_index = 0; ; ++cand_index) {
-        if (strncasecmp(cand_str, config_str, config_str_len) == 0
-            && (cand_str[config_str_len] == '\0' || cand_str[config_str_len] == ',')) {
-            /* found */
-            return cand_index;
-        }
-        cand_str = strchr(cand_str, ',');
-        if (cand_str == NULL)
-            goto Error;
-        cand_str += 1; /* skip ',' */
-    }
-    /* not reached */
-
-Error:
-    h2o_context_print_config_error(configurator, config_file, config_node, "argument must be one of: %s", candidates);
-    return -1;
-}
-
 #ifdef PICOTEST_FUNCS
 
 #include "picotest.h"
