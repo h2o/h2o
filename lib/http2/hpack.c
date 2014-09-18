@@ -587,14 +587,14 @@ static void test_request(h2o_buf_t first_req, h2o_buf_t second_req, h2o_buf_t th
     r = h2o_hpack_parse_headers(&req, &header_table, &allow_psuedo, (const uint8_t*)in.base, in.len);
     ok(r == 0);
     ok(allow_psuedo == 1);
-    ok(req.authority_len == 15);
-    ok(memcmp(req.authority, H2O_STRLIT("www.example.com")) == 0);
-    ok(req.method_len == 3);
-    ok(memcmp(req.method, H2O_STRLIT("GET")) == 0);
-    ok(req.path_len == 1);
-    ok(memcmp(req.path, H2O_STRLIT("/")) == 0);
-    ok(req.scheme_len == 4);
-    ok(memcmp(req.scheme, H2O_STRLIT("http")) == 0);
+    ok(req.authority.len == 15);
+    ok(memcmp(req.authority.base, H2O_STRLIT("www.example.com")) == 0);
+    ok(req.method.len == 3);
+    ok(memcmp(req.method.base, H2O_STRLIT("GET")) == 0);
+    ok(req.path.len == 1);
+    ok(memcmp(req.path.base, H2O_STRLIT("/")) == 0);
+    ok(req.scheme.len == 4);
+    ok(memcmp(req.scheme.base, H2O_STRLIT("http")) == 0);
     ok(req.headers.size == 0);
 
     h2o_mempool_clear(&req.pool);
@@ -606,14 +606,14 @@ static void test_request(h2o_buf_t first_req, h2o_buf_t second_req, h2o_buf_t th
     r = h2o_hpack_parse_headers(&req, &header_table, &allow_psuedo, (const uint8_t*)in.base, in.len);
     ok(r == 0);
     ok(allow_psuedo == 0);
-    ok(req.authority_len == 15);
-    ok(memcmp(req.authority, H2O_STRLIT("www.example.com")) == 0);
-    ok(req.method_len == 3);
-    ok(memcmp(req.method, H2O_STRLIT("GET")) == 0);
-    ok(req.path_len == 1);
-    ok(memcmp(req.path, H2O_STRLIT("/")) == 0);
-    ok(req.scheme_len == 4);
-    ok(memcmp(req.scheme, H2O_STRLIT("http")) == 0);
+    ok(req.authority.len == 15);
+    ok(memcmp(req.authority.base, H2O_STRLIT("www.example.com")) == 0);
+    ok(req.method.len == 3);
+    ok(memcmp(req.method.base, H2O_STRLIT("GET")) == 0);
+    ok(req.path.len == 1);
+    ok(memcmp(req.path.base, H2O_STRLIT("/")) == 0);
+    ok(req.scheme.len == 4);
+    ok(memcmp(req.scheme.base, H2O_STRLIT("http")) == 0);
     flattened = h2o_flatten_headers(&req.pool, &req.headers);
     ok(h2o_lcstris(flattened.base, flattened.len, H2O_STRLIT("cache-control: no-cache\r\n\r\n")));
 
@@ -626,14 +626,14 @@ static void test_request(h2o_buf_t first_req, h2o_buf_t second_req, h2o_buf_t th
     r = h2o_hpack_parse_headers(&req, &header_table, &allow_psuedo, (const uint8_t*)in.base, in.len);
     ok(r == 0);
     ok(allow_psuedo == 0);
-    ok(req.authority_len == 15);
-    ok(memcmp(req.authority, H2O_STRLIT("www.example.com")) == 0);
-    ok(req.method_len == 3);
-    ok(memcmp(req.method, H2O_STRLIT("GET")) == 0);
-    ok(req.path_len == 11);
-    ok(memcmp(req.path, H2O_STRLIT("/index.html")) == 0);
-    ok(req.scheme_len == 5);
-    ok(memcmp(req.scheme, H2O_STRLIT("https")) == 0);
+    ok(req.authority.len == 15);
+    ok(memcmp(req.authority.base, H2O_STRLIT("www.example.com")) == 0);
+    ok(req.method.len == 3);
+    ok(memcmp(req.method.base, H2O_STRLIT("GET")) == 0);
+    ok(req.path.len == 11);
+    ok(memcmp(req.path.base, H2O_STRLIT("/index.html")) == 0);
+    ok(req.scheme.len == 5);
+    ok(memcmp(req.scheme.base, H2O_STRLIT("https")) == 0);
     flattened = h2o_flatten_headers(&req.pool, &req.headers);
     ok(h2o_lcstris(flattened.base, flattened.len, H2O_STRLIT("custom-key: custom-value\r\n\r\n")));
 
