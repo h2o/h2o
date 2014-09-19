@@ -247,22 +247,56 @@ void h2o_base64_encode(char *dst, const uint8_t *src, size_t len, int url_encode
     *dst = '\0';
 }
 
+static char *emit_wday(char *dst, int wday)
+{
+    memcpy(dst, ("SunMonTueWedThuFriSat") + wday * 3, 3);
+    return dst + 3;
+}
+
+static char *emit_mon(char *dst, int mon)
+{
+    memcpy(dst, ("JanFebMarAprMayJunJulAugSepOctNovDec") + mon * 3, 3);
+    return dst + 3;
+}
+
+static char *emit_digits(char *dst, int n, size_t cnt)
+{
+    char *p = dst + cnt;
+
+    /* emit digits from back */
+    do {
+        *--p = '0' + n % 10;
+        n /= 10;
+    } while (p != dst);
+
+    return dst + cnt;
+}
+
 void h2o_time2str_rfc1123(char *buf, time_t time)
 {
+    char *p = buf;
     struct tm gmt;
     gmtime_r(&time, &gmt);
 
-    int len = sprintf(
-        buf,
-        "%s, %02d %s %d %02d:%02d:%02d GMT",
-        ("Sun\0Mon\0Tue\0Wed\0Thu\0Fri\0Sat") + gmt.tm_wday * 4,
-        gmt.tm_mday,
-        ("Jan\0Feb\0Mar\0Apr\0May\0Jun\0Jul\0Aug\0Sep\0Oct\0Nov\0Dec\0") + gmt.tm_mon * 4,
-        gmt.tm_year + 1900,
-        gmt.tm_hour,
-        gmt.tm_min,
-        gmt.tm_sec);
-    assert(len == H2O_TIMESTR_RFC1123_LEN);
+    /* format: Fri, 19 Sep 2014 05:24:04 GMT */
+    p = emit_wday(p, gmt.tm_wday);
+    *p++ = ',';
+    *p++ = ' ';
+    p = emit_digits(p, gmt.tm_mday, 2);
+    *p++ = ' ';
+    p = emit_mon(p, gmt.tm_mon);
+    *p++ = ' ';
+    p = emit_digits(p, gmt.tm_year + 1900, 4);
+    *p++ = ' ';
+    p = emit_digits(p, gmt.tm_hour, 2);
+    *p++ = ':';
+    p = emit_digits(p, gmt.tm_min, 2);
+    *p++ = ':';
+    p = emit_digits(p, gmt.tm_sec, 2);
+    memcpy(p, " GMT", 4); p += 4;
+    *p = '\0';
+
+    assert(p - buf == H2O_TIMESTR_RFC1123_LEN);
 }
 
 void h2o_time2str_log(char *buf, time_t time)

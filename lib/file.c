@@ -35,6 +35,7 @@ struct st_h2o_sendfile_generator_t {
     int fd;
     h2o_req_t *req;
     size_t bytesleft;
+    char last_modified_buf[H2O_TIMESTR_RFC1123_LEN + 1];
     char buf[1];
 };
 
@@ -115,6 +116,9 @@ int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *pa
     self->fd = fd;
     self->req = req;
     self->bytesleft = st.st_size;
+
+    h2o_time2str_rfc1123(self->last_modified_buf, st.st_mtime);
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LAST_MODIFIED, self->last_modified_buf, H2O_TIMESTR_RFC1123_LEN);
 
     /* send data */
     do_proceed(&self->super, req);
