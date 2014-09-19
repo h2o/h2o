@@ -470,11 +470,13 @@ Rewrite:
 
 void h2o_send_inline(h2o_req_t *req, const char *body, size_t len)
 {
+    static h2o_generator_t generator = { NULL, NULL };
+
     h2o_buf_t buf = h2o_strdup(&req->pool, body, len);
+    /* the function intentionally does not set the content length, since it may be used for generating 304 response, etc. */
+    /* req->res.content_length = buf.len; */
 
-    req->res.content_length = buf.len;
-    h2o_start_response(req, sizeof(h2o_generator_t));
-
+    h2o_start_response(req, &generator);
     h2o_send(req, &buf, 1, 1);
 }
 

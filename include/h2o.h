@@ -510,7 +510,7 @@ struct st_h2o_req_t {
      */
     h2o_res_t res;
     /**
-     * number of bytes sent by the generator (excluding headers, is SIZE_MAX until h2o_send gets called)
+     * number of bytes sent by the generator (excluding headers)
      */
     size_t bytes_sent;
     /**
@@ -875,13 +875,11 @@ void h2o_dispose_request(h2o_req_t *req);
  */
 void h2o_process_request(h2o_req_t *req);
 /**
- * called by handlers to open a generator
- * note: Handlers should call the function _after_ setting the response information (i.e. response headers, etc.) since this function initializes the filters.
+ * called by handlers to set the generator
  * @param req the request
- * @param size of the memory needed to be allocated for the generator
- * @return pointer to the generator
+ * @param generator the generator
  */
-h2o_generator_t *h2o_start_response(h2o_req_t *req, size_t sz);
+void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator);
 /**
  * called by filters to insert output-stream filters for modifying the response
  * @param req the request

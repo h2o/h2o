@@ -70,6 +70,11 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     /* do nothing if content-length is known */
     if (req->res.content_length != SIZE_MAX)
         goto Next;
+    /* RFC 2616 4.4 states that the following status codes (and response to a HEAD method) should not include message body */
+    if ((100 <= req->res.status && req->res.status <= 199) || req->res.status == 204 || req->res.status == 304)
+        goto Next;
+    else if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD")) == 0)
+        goto Next;
     /* we cannot handle certain responses (like 101 switching protocols) */
     if (req->res.status != 200) {
         req->http1_is_persistent = 0;

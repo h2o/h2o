@@ -36,7 +36,8 @@ struct st_h2o_sendfile_generator_t {
     h2o_req_t *req;
     size_t bytesleft;
     char last_modified_buf[H2O_TIMESTR_RFC1123_LEN + 1];
-    char etag_buf[sizeof("deadbeef-deadbeefdeadbeef")];
+    char etag_buf[sizeof("\"deadbeef-deadbeefdeadbeef\"")];
+    size_t etag_len;
     char buf[1];
 };
 
@@ -85,46 +86,62 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
         do_close(&self->super, req);
 }
 
-int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *path, h2o_buf_t mime_type)
+static struct st_h2o_sendfile_generator_t *create_generator(h2o_mempool_t *pool, const char *path)
 {
     struct st_h2o_sendfile_generator_t *self;
     int fd;
     struct stat st;
     size_t bufsz;
 
-    /* open file and stat */
     if ((fd = open(path, O_RDONLY)) == -1)
-        return -1;
+        return NULL;
     if (fstat(fd, &st) != 0) {
         assert(!"FIMXE");
         close(fd);
-        return -1;
+        return NULL;
     }
 
-    /* build response */
-    req->res.status = status;
-    req->res.reason = reason;
-    req->res.content_length = st.st_size;
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, mime_type.base, mime_type.len);
-
-    /* instantiate the generator */
     bufsz = MAX_BUF_SIZE;
     if (st.st_size < bufsz)
         bufsz = st.st_size;
-    self = (void*)h2o_start_response(req, offsetof(struct st_h2o_sendfile_generator_t, buf) + bufsz);
+    self = h2o_mempool_alloc(pool, offsetof(struct st_h2o_sendfile_generator_t, buf) + bufsz);
     self->super.proceed = do_proceed;
     self->super.stop = do_close;
     self->fd = fd;
-    self->req = req;
+    self->req = NULL;
     self->bytesleft = st.st_size;
 
     h2o_time2str_rfc1123(self->last_modified_buf, st.st_mtime);
+    self->etag_len = sprintf(self->etag_buf, "\"%08x-%zx\"", (unsigned)st.st_mtime, (size_t)st.st_size);
+
+    return self;
+}
+
+static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *req, int status, const char *reason, h2o_buf_t mime_type)
+{
+    /* link the request */
+    self->req = req;
+
+    /* setup response */
+    req->res.status = status;
+    req->res.reason = reason;
+    req->res.content_length = self->bytesleft;
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, mime_type.base, mime_type.len);
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LAST_MODIFIED, self->last_modified_buf, H2O_TIMESTR_RFC1123_LEN);
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ETAG, self->etag_buf, sprintf(self->etag_buf, "%08x-%zx", (unsigned)st.st_mtime, (size_t)st.st_size));
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ETAG, self->etag_buf, self->etag_len);
 
     /* send data */
+    h2o_start_response(req, &self->super);
     do_proceed(&self->super, req);
+}
 
+int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *path, h2o_buf_t mime_type)
+{
+    struct st_h2o_sendfile_generator_t *self;
+
+    if ((self = create_generator(&req->pool, path)) == NULL)
+        return -1;
+    do_send_file(self, req, status, reason, mime_type);
     return 0;
 }
 
@@ -134,6 +151,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     h2o_buf_t vpath, mime_type;
     char *dir_path;
     size_t dir_path_len;
+    struct st_h2o_sendfile_generator_t *generator;
+    size_t if_modified_since_header_index, if_none_match_header_index;
 
     /* only accept GET (TODO accept HEAD as well) */
     if (! h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
@@ -166,17 +185,37 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     }
     dir_path[dir_path_len] = '\0';
 
-    /* obtain mime type */
-    mime_type = h2o_get_mimetype(&req->host_config->mimemap, h2o_get_filext(dir_path, dir_path_len));
-
-    /* return file (on an error response) */
-    if (h2o_send_file(req, 200, "OK", dir_path, mime_type) != 0) {
+    /* build generator (or return an error response) */
+    if ((generator = create_generator(&req->pool, dir_path)) == NULL) {
         if (errno == ENOENT) {
             h2o_send_error(req, 404, "File Not Found", "file not found");
         } else {
             h2o_send_error(req, 403, "Access Forbidden", "access forbidden");
         }
+        return 0;
     }
+
+    if ((if_none_match_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_NONE_MATCH, SIZE_MAX)) != -1) {
+        h2o_buf_t *if_none_match = &req->headers.entries[if_none_match_header_index].value;
+        if (h2o_memis(if_none_match->base, if_none_match->len, generator->etag_buf, generator->etag_len))
+            goto NotModified;
+    } else if ((if_modified_since_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_MODIFIED_SINCE, SIZE_MAX)) != -1) {
+        h2o_buf_t *if_modified_since = &req->headers.entries[if_modified_since_header_index].value;
+        if (h2o_memis(if_modified_since->base, if_modified_since->len, generator->last_modified_buf, H2O_TIMESTR_RFC1123_LEN))
+            goto NotModified;
+    }
+
+    /* obtain mime type */
+    mime_type = h2o_get_mimetype(&req->host_config->mimemap, h2o_get_filext(dir_path, dir_path_len));
+
+    /* return file */
+    do_send_file(generator, req, 200, "OK", mime_type);
+    return 0;
+
+NotModified:
+    req->res.status = 304;
+    req->res.reason = "Not Modified";
+    h2o_send_inline(req, NULL, 0);
     return 0;
 }
 
