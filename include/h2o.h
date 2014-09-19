@@ -510,7 +510,7 @@ struct st_h2o_req_t {
      */
     h2o_res_t res;
     /**
-     * number of bytes sent by the generator (excluding headers)
+     * number of bytes sent by the generator (excluding headers, is SIZE_MAX until h2o_send gets called)
      */
     size_t bytes_sent;
     /**

@@ -43,6 +43,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
     req->conn = conn;
     req->_timeout_entry.cb = deferred_proceed_cb;
     req->res.content_length = SIZE_MAX;
+    req->bytes_sent = SIZE_MAX;
 
     if (src != NULL) {
 #define COPY(buf) do { \
@@ -133,18 +134,8 @@ void h2o_process_request(h2o_req_t *req)
 
 h2o_generator_t *h2o_start_response(h2o_req_t *req, size_t sz)
 {
-    h2o_linklist_t *filters;
-
     req->_generator = h2o_mempool_alloc(&req->pool, sz);
     req->_generator->proceed = NULL;
-
-    /* setup response filters */
-    filters = &req->host_config->filters;
-    if (! h2o_linklist_is_empty(filters)) {
-        h2o_filter_t *filter = H2O_STRUCT_FROM_MEMBER(h2o_filter_t, _link, filters->next);
-        filter->on_setup_ostream(filter, req, &req->_ostr_top);
-    }
-
     return req->_generator;
 }
 
@@ -153,6 +144,17 @@ void h2o_send(h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final)
     size_t i;
 
     assert(req->_generator != NULL);
+
+    /* setup response filters, if not yet been done */
+    if (req->bytes_sent == SIZE_MAX) {
+        h2o_linklist_t *filters;
+        req->bytes_sent = 0;
+        filters = &req->host_config->filters;
+        if (! h2o_linklist_is_empty(filters)) {
+            h2o_filter_t *filter = H2O_STRUCT_FROM_MEMBER(h2o_filter_t, _link, filters->next);
+            filter->on_setup_ostream(filter, req, &req->_ostr_top);
+        }
+    }
 
     if (is_final)
         req->_generator = NULL;
