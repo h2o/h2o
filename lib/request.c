@@ -88,7 +88,7 @@ void h2o_dispose_request(h2o_req_t *req)
 
     h2o_timeout_unlink(&req->conn->ctx->zero_timeout, &req->_timeout_entry);
 
-    if (req->version != 0) {
+    if (req->version != 0 && req->host_config != NULL) {
         h2o_host_configuration_t *host_config = req->host_config;
         h2o_linklist_t *node;
         for (node = host_config->loggers.next; node != &host_config->loggers; node = node->next) {
