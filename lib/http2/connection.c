@@ -57,6 +57,20 @@ static const h2o_buf_t SETTINGS_HOST_BIN = {
 
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len);
 static void emit_writereq(h2o_timeout_entry_t *entry);
+static void parse_input(h2o_http2_conn_t *conn);
+static void on_read(h2o_socket_t *sock, int status);
+
+static void update_read_status(h2o_http2_conn_t *conn)
+{
+    /* if max. requests are being handled now, then stop reading the input */
+    if (conn->num_responding_streams == conn->super.ctx->global_config->http2_max_concurrent_requests_per_connection && h2o_timeout_is_linked(&conn->_write.timeout_entry)) {
+        if (h2o_socket_is_reading(conn->sock))
+            h2o_socket_read_stop(conn->sock);
+    } else {
+        if (! h2o_socket_is_reading(conn->sock))
+            h2o_socket_read_start(conn->sock, on_read);
+    }
+}
 
 static void link_stream(h2o_http2_stream_t **slot, h2o_http2_stream_t *stream)
 {
@@ -111,6 +125,7 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
             conn->max_processed_stream_id = stream->stream_id;
         h2o_process_request(&stream->req);
     }
+    update_read_status(conn);
 }
 
 static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
@@ -530,6 +545,33 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
     return CONNECTION_PREFACE.len;
 }
 
+static void parse_input(h2o_http2_conn_t *conn)
+{
+    assert(h2o_socket_is_reading(conn->sock));
+
+    /* handle the input */
+    while (conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING && conn->sock->input->size != 0 && h2o_socket_is_reading(conn->sock)) {
+        /* process a frame */
+        ssize_t ret = conn->_read_expect(conn, (uint8_t*)conn->sock->input->bytes, conn->sock->input->size);
+        if (ret == H2O_HTTP2_ERROR_INCOMPLETE) {
+            break;
+        } else if (ret < 0) {
+            switch (ret) {
+            default:
+                /* send error */
+                send_error(conn, 0, (int)-ret);
+                /* fallthru */
+            case H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY:
+                close_connection(conn);
+                break;
+            }
+            break;
+        }
+        /* advance to the next frame */
+        h2o_consume_input_buffer(&conn->sock->input, ret);
+    }
+}
+
 static void on_read(h2o_socket_t *sock, int status)
 {
     h2o_http2_conn_t *conn = sock->data;
@@ -540,27 +582,7 @@ static void on_read(h2o_socket_t *sock, int status)
         return;
     }
 
-    while (conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING && sock->input->size != 0) {
-        ssize_t ret = conn->_read_expect(conn, (uint8_t*)sock->input->bytes, sock->input->size);
-        if (ret < 0) {
-            switch (ret) {
-            case H2O_HTTP2_ERROR_INCOMPLETE:
-                goto Exit;
-            default:
-                /* send error */
-                send_error(conn, 0, (int)-ret);
-                /* fallthru */
-            case H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY:
-                close_connection(conn);
-                break;
-            }
-            return;
-        }
-        h2o_consume_input_buffer(&sock->input, ret);
-    }
-
-Exit:
-    ;
+    parse_input(conn);
 }
 
 static void on_upgrade_complete(void *_conn, h2o_socket_t *sock, size_t reqsize)
@@ -638,12 +660,21 @@ static void on_write_complete(h2o_socket_t *sock, int status)
     if (conn->_write.write_once_more) {
         conn->_write.write_once_more = 0;
         emit_writereq(&conn->_write.timeout_entry);
-    } else {
-        assert(conn->_write.bufs.size == 0);
-        if (conn->state == H2O_HTTP2_CONN_STATE_IS_CLOSING) {
-            close_connection_now(conn);
-        }
+        return;
     }
+
+    assert(conn->_write.bufs.size == 0);
+
+    /* close the connection if necessary */
+    if (conn->state == H2O_HTTP2_CONN_STATE_IS_CLOSING) {
+        close_connection_now(conn);
+        return;
+    }
+
+    /* start receiving input if necessary, as well as parse the pending input */
+    update_read_status(conn);
+    if (conn->sock->input != NULL && conn->sock->input->size != 0)
+        parse_input(conn);
 }
 
 void emit_writereq(h2o_timeout_entry_t *entry)
