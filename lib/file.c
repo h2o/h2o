@@ -36,6 +36,7 @@ struct st_h2o_sendfile_generator_t {
     h2o_req_t *req;
     size_t bytesleft;
     char last_modified_buf[H2O_TIMESTR_RFC1123_LEN + 1];
+    char etag_buf[sizeof("deadbeef-deadbeefdeadbeef")];
     char buf[1];
 };
 
@@ -119,6 +120,7 @@ int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *pa
 
     h2o_time2str_rfc1123(self->last_modified_buf, st.st_mtime);
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LAST_MODIFIED, self->last_modified_buf, H2O_TIMESTR_RFC1123_LEN);
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ETAG, self->etag_buf, sprintf(self->etag_buf, "%08x-%zx", (unsigned)st.st_mtime, (size_t)st.st_size));
 
     /* send data */
     do_proceed(&self->super, req);
