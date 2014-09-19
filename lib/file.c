@@ -101,28 +101,28 @@ int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *pa
         return -1;
     }
 
-    /* build response */
-    req->res.status = status;
-    req->res.reason = reason;
-    req->res.content_length = st.st_size;
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, mime_type.base, mime_type.len);
-
     /* instantiate the generator */
     bufsz = MAX_BUF_SIZE;
     if (st.st_size < bufsz)
         bufsz = st.st_size;
-    self = (void*)h2o_start_response(req, offsetof(struct st_h2o_sendfile_generator_t, buf) + bufsz);
+    self = h2o_mempool_alloc(&req->pool, offsetof(struct st_h2o_sendfile_generator_t, buf) + bufsz);
     self->super.proceed = do_proceed;
     self->super.stop = do_close;
     self->fd = fd;
     self->req = req;
     self->bytesleft = st.st_size;
 
+    /* setup the response */
+    req->res.status = status;
+    req->res.reason = reason;
+    req->res.content_length = st.st_size;
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, mime_type.base, mime_type.len);
     h2o_time2str_rfc1123(self->last_modified_buf, st.st_mtime);
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LAST_MODIFIED, self->last_modified_buf, H2O_TIMESTR_RFC1123_LEN);
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ETAG, self->etag_buf, sprintf(self->etag_buf, "%08x-%zx", (unsigned)st.st_mtime, (size_t)st.st_size));
 
     /* send data */
+    h2o_start_response(req, &self->super);
     do_proceed(&self->super, req);
 
     return 0;

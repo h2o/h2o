@@ -131,12 +131,13 @@ void h2o_process_request(h2o_req_t *req)
     h2o_send_error(req, 404, "File Not Found", "not found");
 }
 
-h2o_generator_t *h2o_start_response(h2o_req_t *req, size_t sz)
+void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
 {
     h2o_linklist_t *filters;
 
-    req->_generator = h2o_mempool_alloc(&req->pool, sz);
-    req->_generator->proceed = NULL;
+    /* set generator */
+    assert(req->_generator == NULL);
+    req->_generator = generator;
 
     /* setup response filters */
     filters = &req->host_config->filters;
@@ -144,8 +145,6 @@ h2o_generator_t *h2o_start_response(h2o_req_t *req, size_t sz)
         h2o_filter_t *filter = H2O_STRUCT_FROM_MEMBER(h2o_filter_t, _link, filters->next);
         filter->on_setup_ostream(filter, req, &req->_ostr_top);
     }
-
-    return req->_generator;
 }
 
 void h2o_send(h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final)
