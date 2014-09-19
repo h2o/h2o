@@ -58,6 +58,7 @@ static int on_req(h2o_handler_t *self, h2o_req_t *req)
     return 0;
 }
 
+static h2o_global_configuration_t config;
 static h2o_context_t ctx;
 static h2o_ssl_context_t *ssl_ctx;
 
@@ -105,10 +106,11 @@ int main(int argc, char **argv)
         goto Error;
     }
 
-    h2o_context_init(&ctx, loop);
+    h2o_config_init(&config);
     memset(&ws_handler, 0, sizeof(ws_handler));
     ws_handler.on_req = on_req;
-    h2o_linklist_insert(&h2o_context_get_default_host_context(&ctx)->handlers, &ws_handler._link);
+    h2o_linklist_insert(&config.default_host.handlers, &ws_handler._link);
+    h2o_context_init(&ctx, loop, &config);
     //ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", NULL);
 
     return uv_run(loop, UV_RUN_DEFAULT);
