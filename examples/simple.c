@@ -32,7 +32,7 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 
-static void register_handler(h2o_host_context_t *host_ctx, int (*on_req)(h2o_handler_t *, h2o_req_t *))
+static void register_handler(h2o_host_configuration_t *host_config, int (*on_req)(h2o_handler_t *, h2o_req_t *))
 {
     h2o_handler_t *handler = h2o_malloc(sizeof(*handler));
 
@@ -40,7 +40,7 @@ static void register_handler(h2o_host_context_t *host_ctx, int (*on_req)(h2o_han
     handler->destroy = (void*)free;
     handler->on_req = on_req;
 
-    h2o_linklist_insert(&host_ctx->handlers, &handler->_link);
+    h2o_linklist_insert(&host_config->handlers, &handler->_link);
 }
 
 static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
@@ -88,6 +88,7 @@ static int post_test(h2o_handler_t *self, h2o_req_t *req)
     return -1;
 }
 
+static h2o_global_configuration_t config;
 static h2o_context_t ctx;
 static h2o_ssl_context_t *ssl_ctx;
 
@@ -185,20 +186,22 @@ int main(int argc, char **argv)
 {
     signal(SIGPIPE, SIG_IGN);
 
+    h2o_config_init(&config);
+    register_handler(&config.default_host, post_test);
+    register_handler(&config.default_host, chunked_test);
+    register_handler(&config.default_host, reproxy_test);
+    h2o_register_file_handler(&config.default_host, "/", "htdocs", "index.html");
+    h2o_define_mimetype(&config.default_host.mimemap, "html", "text/html");
+    h2o_register_reproxy_filter(&config.default_host);
+
 #if H2O_USE_LIBUV
     uv_loop_t loop;
     uv_loop_init(&loop);
-    h2o_context_init(&ctx, &loop);
+    h2o_context_init(&ctx, &loop, &config);
 #else
-    h2o_context_init(&ctx, h2o_evloop_create());
+    h2o_context_init(&ctx, h2o_evloop_create(), &config);
 #endif
 
-    register_handler(&ctx.default_host_context, post_test);
-    register_handler(&ctx.default_host_context, chunked_test);
-    register_handler(&ctx.default_host_context, reproxy_test);
-    h2o_register_file_handler(&ctx.default_host_context, "/", "htdocs", "index.html");
-    h2o_define_mimetype(&ctx.default_host_context.mimemap, "html", "text/html");
-    h2o_register_reproxy_filter(&ctx.default_host_context);
     //ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers);
     //h2o_register_access_logger(&ctx, "/dev/stdout");
 
