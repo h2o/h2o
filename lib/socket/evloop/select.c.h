@@ -106,7 +106,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
     /* update readable flags, perform writes */
     if (ret > 0) {
         for (fd = 0; fd <= loop->max_fd; ++fd) {
-            /* set read_ready flag before calling the write cb, since app. code invoked by hte latter may close the socket, clearing the former flag */
+            /* set read_ready flag before calling the write cb, since app. code invoked by the latter may close the socket, clearing the former flag */
             if (FD_ISSET(fd, &rfds)) {
                 struct st_h2o_evloop_socket_t *sock = loop->socks[fd];
                 assert(sock != NULL);
