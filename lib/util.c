@@ -26,6 +26,8 @@
 #include <string.h>
 #include <stdarg.h>
 #include "h2o.h"
+#include "h2o/http1.h"
+#include "h2o/http2.h"
 
 void h2o_fatal(const char *msg)
 {
@@ -33,7 +35,7 @@ void h2o_fatal(const char *msg)
     abort();
 }
 
-int h2o_lcstris_core(const char *target, const char *test, size_t test_len)
+int h2o__lcstris_core(const char *target, const char *test, size_t test_len)
 {
     for (; test_len != 0; --test_len)
         if (h2o_tolower(*target++) != *test++)
@@ -245,22 +247,56 @@ void h2o_base64_encode(char *dst, const uint8_t *src, size_t len, int url_encode
     *dst = '\0';
 }
 
+static char *emit_wday(char *dst, int wday)
+{
+    memcpy(dst, ("SunMonTueWedThuFriSat") + wday * 3, 3);
+    return dst + 3;
+}
+
+static char *emit_mon(char *dst, int mon)
+{
+    memcpy(dst, ("JanFebMarAprMayJunJulAugSepOctNovDec") + mon * 3, 3);
+    return dst + 3;
+}
+
+static char *emit_digits(char *dst, int n, size_t cnt)
+{
+    char *p = dst + cnt;
+
+    /* emit digits from back */
+    do {
+        *--p = '0' + n % 10;
+        n /= 10;
+    } while (p != dst);
+
+    return dst + cnt;
+}
+
 void h2o_time2str_rfc1123(char *buf, time_t time)
 {
+    char *p = buf;
     struct tm gmt;
     gmtime_r(&time, &gmt);
 
-    int len = sprintf(
-        buf,
-        "%s, %02d %s %d %02d:%02d:%02d GMT",
-        ("Sun\0Mon\0Tue\0Wed\0Thu\0Fri\0Sat") + gmt.tm_wday * 4,
-        gmt.tm_mday,
-        ("Jan\0Feb\0Mar\0Apr\0May\0Jun\0Jul\0Aug\0Sep\0Oct\0Nov\0Dec\0") + gmt.tm_mon * 4,
-        gmt.tm_year + 1900,
-        gmt.tm_hour,
-        gmt.tm_min,
-        gmt.tm_sec);
-    assert(len == H2O_TIMESTR_RFC1123_LEN);
+    /* format: Fri, 19 Sep 2014 05:24:04 GMT */
+    p = emit_wday(p, gmt.tm_wday);
+    *p++ = ',';
+    *p++ = ' ';
+    p = emit_digits(p, gmt.tm_mday, 2);
+    *p++ = ' ';
+    p = emit_mon(p, gmt.tm_mon);
+    *p++ = ' ';
+    p = emit_digits(p, gmt.tm_year + 1900, 4);
+    *p++ = ' ';
+    p = emit_digits(p, gmt.tm_hour, 2);
+    *p++ = ':';
+    p = emit_digits(p, gmt.tm_min, 2);
+    *p++ = ':';
+    p = emit_digits(p, gmt.tm_sec, 2);
+    memcpy(p, " GMT", 4); p += 4;
+    *p = '\0';
+
+    assert(p - buf == H2O_TIMESTR_RFC1123_LEN);
 }
 
 void h2o_time2str_log(char *buf, time_t time)
@@ -373,17 +409,29 @@ static h2o_buf_t rewrite_traversal(h2o_mempool_t *pool, const char *path, size_t
     if (len == 0 || path[0] != '/')
         *dst++ = '/';
     while (src != src_end) {
+        if (*src == '?')
+            break;
         if ((src_end - src == 3 && memcmp(src, H2O_STRLIT("/..")) == 0)
             || (src_end - src > 3 && memcmp(src, H2O_STRLIT("/../")) == 0)) {
-            for (--dst; ret.base < dst; --dst)
-                if (*dst == '/')
-                    break;
-            ++dst;
-            src += src + 3 == src_end ? 3 : 4;
+            /* go back the previous "/" */
+            if (ret.base < dst)
+                --dst;
+            for (; ret.base < dst && *dst != '/'; --dst)
+                ;
+            src += 3;
+            if (src == src_end)
+                *dst++ = '/';
+        } else if ((src_end - src == 2 && memcmp(src, H2O_STRLIT("/.")) == 0)
+            || (src_end - src > 2 && memcmp(src, H2O_STRLIT("/./")) == 0)) {
+            src += 2;
+            if (src == src_end)
+                *dst++ = '/';
         } else {
             *dst++ = *src++;
         }
     }
+    if (dst == ret.base)
+        *dst++ = '/';
     ret.len = dst - ret.base;
 
     return ret;
@@ -397,24 +445,23 @@ h2o_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len)
     if (len == 0 || path[0] != '/')
         goto Rewrite;
 
-    while (p + 3 <= end) {
-        if (p[0] == '/')
-            if (p[1] == '.')
-                if (p[2] == '.')
-                    if (p + 3 == end || p[3] == '/')
-                        goto Rewrite;
-                    else
-                        p += 4;
-                else
-                    p += 3;
-            else
-                p += 2;
-        else
-            p += 1;
+    for (; p + 1 < end; ++p) {
+        if (p[0] == '/' && p[1] == '.') {
+            /* detect false positives as well */
+            goto Rewrite;
+        } else if (p[0] == '?') {
+            goto Return;
+        }
+    }
+    for (; p < end; ++p) {
+        if (p[0] == '?') {
+            goto Return;
+        }
     }
 
+Return:
     ret.base = (char*)path;
-    ret.len = len;
+    ret.len = p - path;
     return ret;
 
 Rewrite:
@@ -423,12 +470,13 @@ Rewrite:
 
 void h2o_send_inline(h2o_req_t *req, const char *body, size_t len)
 {
-    h2o_generator_t *self;
+    static h2o_generator_t generator = { NULL, NULL };
+
     h2o_buf_t buf = h2o_strdup(&req->pool, body, len);
+    /* the function intentionally does not set the content length, since it may be used for generating 304 response, etc. */
+    /* req->res.content_length = buf.len; */
 
-    req->res.content_length = buf.len;
-    self = h2o_start_response(req, sizeof(h2o_generator_t));
-
+    h2o_start_response(req, &generator);
     h2o_send(req, &buf, 1, 1);
 }
 
@@ -442,6 +490,39 @@ void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
 
     h2o_send_inline(req, body, SIZE_MAX);
+}
+
+static void on_ssl_handshake_complete(h2o_socket_t *sock, int status)
+{
+    const h2o_buf_t *ident;
+    h2o_context_t *ctx = sock->data;
+    sock->data = NULL;
+
+    h2o_buf_t proto;
+    if (status != 0) {
+        h2o_socket_close(sock);
+        return;
+    }
+
+    proto = h2o_socket_ssl_get_selected_protocol(sock);
+    for (ident = h2o_http2_tls_identifiers; ident->len != 0; ++ident) {
+        if (proto.len == ident->len && memcmp(proto.base, ident->base, proto.len) == 0) {
+            goto Is_Http2;
+        }
+    }
+    /* connect as http1 */
+    h2o_http1_accept(ctx, sock);
+    return;
+
+Is_Http2:
+    /* connect as http2 */
+    h2o_http2_accept(ctx, sock);
+}
+
+void h2o_accept_ssl(h2o_context_t *ctx, h2o_socket_t *sock, h2o_ssl_context_t* ssl_ctx)
+{
+    sock->data = ctx;
+    h2o_socket_ssl_server_handshake(sock, ssl_ctx, on_ssl_handshake_complete);
 }
 
 #ifdef PICOTEST_FUNCS
@@ -463,6 +544,50 @@ void util_test(void)
         decoded = h2o_decode_base64url(&pool, buf, strlen(buf));
         ok(src.len == decoded.len);
         ok(strcmp(decoded.base, src.base) == 0);
+    }
+    h2o_mempool_clear(&pool);
+
+    note("h2o_normalize_path");
+    {
+        h2o_buf_t b = h2o_normalize_path(&pool, H2O_STRLIT("/"));
+        ok(b.len == 1);
+        ok(memcmp(b.base, H2O_STRLIT("/")) == 0);
+
+        b = h2o_normalize_path(&pool, H2O_STRLIT("/abc"));
+        ok(b.len == 4);
+        ok(memcmp(b.base, H2O_STRLIT("/abc")) == 0);
+
+        b = h2o_normalize_path(&pool, H2O_STRLIT("/abc"));
+        ok(b.len == 4);
+        ok(memcmp(b.base, H2O_STRLIT("/abc")) == 0);
+
+        b = h2o_normalize_path(&pool, H2O_STRLIT("/abc/../def"));
+        ok(b.len == 4);
+        ok(memcmp(b.base, H2O_STRLIT("/def")) == 0);
+
+        b = h2o_normalize_path(&pool, H2O_STRLIT("/abc/../../def"));
+        ok(b.len == 4);
+        ok(memcmp(b.base, H2O_STRLIT("/def")) == 0);
+
+        b = h2o_normalize_path(&pool, H2O_STRLIT("/abc/./def"));
+        ok(b.len == 8);
+        ok(memcmp(b.base, H2O_STRLIT("/abc/def")) == 0);
+
+        b = h2o_normalize_path(&pool, H2O_STRLIT("/abc/def/.."));
+        ok(b.len == 5);
+        ok(memcmp(b.base, H2O_STRLIT("/abc/")) == 0);
+
+        b = h2o_normalize_path(&pool, H2O_STRLIT("/abc/def/."));
+        ok(b.len == 9);
+        ok(memcmp(b.base, H2O_STRLIT("/abc/def/")) == 0);
+
+        b = h2o_normalize_path(&pool, H2O_STRLIT("/abc?xx"));
+        ok(b.len == 4);
+        ok(memcmp(b.base, H2O_STRLIT("/abc")) == 0);
+
+        b = h2o_normalize_path(&pool, H2O_STRLIT("/abc/../def?xx"));
+        ok(b.len == 4);
+        ok(memcmp(b.base, H2O_STRLIT("/def")) == 0);
     }
     h2o_mempool_clear(&pool);
 }

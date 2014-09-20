@@ -29,85 +29,94 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include "h2o.h"
+#include "h2o/http1.h"
 #include "h2o/http2.h"
 
-static void on_req(h2o_req_t *req)
+static void register_handler(h2o_host_configuration_t *host_config, int (*on_req)(h2o_handler_t *, h2o_req_t *))
 {
-    if (h2o_memis(req->method, req->method_len, H2O_STRLIT("GET"))
-        && req->path_len <= PATH_MAX) {
+    h2o_handler_t *handler = h2o_malloc(sizeof(*handler));
 
-        if (h2o_memis(req->path, req->path_len, H2O_STRLIT("/chunked-test"))) {
+    memset(handler, 0, sizeof(*handler));
+    handler->destroy = (void*)free;
+    handler->on_req = on_req;
 
-            /* chunked test */
-            h2o_buf_t body = h2o_strdup(&req->pool, "hello world\n", SIZE_MAX);
-            req->res.status = 200;
-            req->res.reason = "OK";
-            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
-            h2o_start_response(req, sizeof(h2o_generator_t));
-            h2o_send(req, &body, 1, 1);
+    h2o_linklist_insert(&host_config->handlers, &handler->_link);
+}
 
-        } else if (h2o_memis(req->path, req->path_len, H2O_STRLIT("/reproxy-test"))) {
+static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
+{
+    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))
+        && h2o_memis(req->path.base, req->path.len, H2O_STRLIT("/chunked-test"))) {
+        static h2o_generator_t generator = { NULL, NULL };
+        h2o_buf_t body = h2o_strdup(&req->pool, "hello world\n", SIZE_MAX);
+        req->res.status = 200;
+        req->res.reason = "OK";
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
+        h2o_start_response(req, &generator);
+        h2o_send(req, &body, 1, 1);
+        return 0;
+    }
 
-            /* reproxy-test */
-            req->res.status = 200;
-            req->res.reason = "OK";
-            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT("http://example.com:81/bar"));
-            h2o_send_inline(req, H2O_STRLIT("you should never see this!\n"));
+    return -1;
+}
 
-        } else {
+static int reproxy_test(h2o_handler_t *self, h2o_req_t *req)
+{
+    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))
+        && h2o_memis(req->path.base, req->path.len, H2O_STRLIT("/reproxy-test"))) {
+        req->res.status = 200;
+        req->res.reason = "OK";
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT("http://example.com:81/bar"));
+        h2o_send_inline(req, H2O_STRLIT("you should never see this!\n"));
+        return 0;
+    }
 
-            /* normalize path */
-            h2o_buf_t path_normalized = h2o_normalize_path(&req->pool, req->path, req->path_len);
-            /* send file (FIXME handle directory traversal) */
-            char *dir_path = alloca(path_normalized.len + sizeof("htdocsindex.html"));
-            size_t dir_path_len;
-            h2o_buf_t mime_type;
-            strcpy(dir_path, "htdocs");
-            memcpy(dir_path + 6, path_normalized.base, path_normalized.len);
-            dir_path_len = path_normalized.len + 6;
-            if (dir_path[dir_path_len - 1] == '/') {
-                strcpy(dir_path + dir_path_len, "index.html");
-                dir_path_len += sizeof("index.html") - 1;
-            } else {
-                dir_path[dir_path_len] = '\0';
-            }
-            mime_type = h2o_get_mimetype(&req->conn->ctx->mimemap, h2o_get_filext(dir_path, dir_path_len));
-            if (h2o_send_file(req, 200, "OK", dir_path, &mime_type) != 0) {
-                h2o_send_error(req, 404, "File Not Found", "not found");
-            }
+    return -1;
+}
 
-        }
-
-    } else if (h2o_memis(req->method, req->method_len, H2O_STRLIT("POST"))
-        && h2o_memis(req->path, req->path_len, H2O_STRLIT("/post-test"))) {
-
-        /* post-test */
+static int post_test(h2o_handler_t *self, h2o_req_t *req)
+{
+    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("POST"))
+        && h2o_memis(req->path.base, req->path.len, H2O_STRLIT("/post-test"))) {
+        static h2o_generator_t generator = { NULL, NULL };
         req->res.status = 200;
         req->res.reason = "OK";
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
-        h2o_start_response(req, sizeof(h2o_generator_t));
+        h2o_start_response(req, &generator);
         h2o_send(req, req->entity.entries, req->entity.size, 1);
-
-    } else {
-        h2o_send_error(req, 403, "Request Forbidden", "only GET is allowed");
+        return 0;
     }
+
+    return -1;
 }
 
-static h2o_loop_context_t loop_ctx;
+static h2o_global_configuration_t config;
+static h2o_context_t ctx;
+static h2o_ssl_context_t *ssl_ctx;
 
 #if H2O_USE_LIBUV
 
 static void on_accept(uv_stream_t *listener, int status)
 {
+    uv_tcp_t *conn;
     h2o_socket_t *sock;
 
     if (status != 0)
         return;
 
-    if ((sock = h2o_uv_socket_accept(listener)) == NULL) {
+    conn = h2o_malloc(sizeof(*conn));
+    uv_tcp_init(listener->loop, conn);
+
+    if (uv_accept(listener, (uv_stream_t*)conn) != 0) {
+        uv_close((uv_handle_t*)conn, (uv_close_cb)free);
         return;
     }
-    h2o_accept(&loop_ctx, sock);
+
+    sock = h2o_uv_socket_create((uv_stream_t*)conn, (uv_close_cb)free);
+    if (ssl_ctx != NULL)
+        h2o_accept_ssl(&ctx, sock, ssl_ctx);
+    else
+        h2o_http1_accept(&ctx, sock);
 }
 
 static int create_listener(void)
@@ -116,7 +125,7 @@ static int create_listener(void)
     struct sockaddr_in addr;
     int r;
 
-    uv_tcp_init(loop_ctx.loop, &listener);
+    uv_tcp_init(ctx.loop, &listener);
     uv_ip4_addr("127.0.0.1", 7890, &addr);
     if ((r = uv_tcp_bind(&listener, (struct sockaddr*)&addr, 0)) != 0) {
         fprintf(stderr, "uv_tcp_bind:%s\n", uv_strerror(r));
@@ -146,7 +155,7 @@ static void on_accept(h2o_socket_t *listener, int status)
     if ((sock = h2o_evloop_socket_accept(listener)) == NULL) {
         return;
     }
-    h2o_accept(&loop_ctx, sock);
+    h2o_accept(&ctx, sock);
 }
 
 static int create_listener(void)
@@ -167,7 +176,7 @@ static int create_listener(void)
         return -1;
     }
 
-    sock = h2o_evloop_socket_create(loop_ctx.loop, fd, H2O_SOCKET_FLAG_IS_ACCEPT);
+    sock = h2o_evloop_socket_create(ctx.loop, fd, H2O_SOCKET_FLAG_IS_ACCEPT);
     h2o_socket_read_start(sock, on_accept);
 
     return 0;
@@ -179,17 +188,24 @@ int main(int argc, char **argv)
 {
     signal(SIGPIPE, SIG_IGN);
 
+    h2o_config_init(&config);
+    register_handler(&config.default_host, post_test);
+    register_handler(&config.default_host, chunked_test);
+    register_handler(&config.default_host, reproxy_test);
+    h2o_register_file_handler(&config.default_host, "/", "htdocs", "index.html");
+    h2o_define_mimetype(&config.default_host.mimemap, "html", "text/html");
+    h2o_register_reproxy_filter(&config.default_host);
+
 #if H2O_USE_LIBUV
     uv_loop_t loop;
     uv_loop_init(&loop);
-    h2o_loop_context_init(&loop_ctx, &loop, on_req);
+    h2o_context_init(&ctx, &loop, &config);
 #else
-    h2o_loop_context_init(&loop_ctx, h2o_evloop_create(), on_req);
+    h2o_context_init(&ctx, h2o_evloop_create(), &config);
 #endif
-    h2o_define_mimetype(&loop_ctx.mimemap, "html", "text/html");
-    h2o_add_reproxy_url(&loop_ctx);
-    //loop_ctx.ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers);
-    //loop_ctx.access_log = h2o_open_access_log(loop, "/dev/stdout");
+
+    //ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers);
+    //h2o_register_access_logger(&ctx, "/dev/stdout");
 
     if (create_listener() != 0) {
         fprintf(stderr, "failed to listen to 127.0.0.1:7890:%s\n", strerror(errno));
@@ -197,9 +213,9 @@ int main(int argc, char **argv)
     }
 
 #if H2O_USE_LIBUV
-    uv_run(loop_ctx.loop, UV_RUN_DEFAULT);
+    uv_run(ctx.loop, UV_RUN_DEFAULT);
 #else
-    while (h2o_evloop_run(loop_ctx.loop) == 0)
+    while (h2o_evloop_run(ctx.loop) == 0)
         ;
 #endif
 

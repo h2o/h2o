@@ -63,16 +63,23 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, 
     h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, is_final);
 }
 
-static void on_start_response(h2o_filter_t *self, h2o_req_t *req)
+static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
 {
     chunked_encoder_t *encoder;
 
     /* do nothing if content-length is known */
     if (req->res.content_length != SIZE_MAX)
         goto Next;
-    /* we cannot handle certain responses (like 101 switching protocols) */
-    if (req->res.status != 200)
+    /* RFC 2616 4.4 states that the following status codes (and response to a HEAD method) should not include message body */
+    if ((100 <= req->res.status && req->res.status <= 199) || req->res.status == 204 || req->res.status == 304)
         goto Next;
+    else if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD")) == 0)
+        goto Next;
+    /* we cannot handle certain responses (like 101 switching protocols) */
+    if (req->res.status != 200) {
+        req->http1_is_persistent = 0;
+        goto Next;
+    }
     /* skip if content-encoding header is being set */
     if (h2o_find_header(&req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, -1) != -1)
         goto Next;
@@ -81,16 +88,21 @@ static void on_start_response(h2o_filter_t *self, h2o_req_t *req)
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, H2O_STRLIT("chunked"));
 
     /* setup filter */
-    encoder = (void*)h2o_prepend_output_filter(req, sizeof(chunked_encoder_t));
+    encoder = (void*)h2o_add_ostream(req, sizeof(chunked_encoder_t), slot);
     encoder->super.do_send = send_chunk;
+    slot = &encoder->super.next;
 
 Next:
-    if (self->next != NULL)
-        self->next->on_start_response(self->next, req);
+    h2o_setup_next_ostream(self, req, slot);
 }
 
-void h2o_add_chunked_encoder(h2o_loop_context_t *context)
+void h2o_register_chunked_filter(h2o_host_configuration_t *host_config)
 {
-    h2o_filter_t *filter = h2o_define_filter(context, sizeof(h2o_filter_t));
-    filter->on_start_response = on_start_response;
+    h2o_filter_t *self = h2o_malloc(sizeof(*self));
+
+    memset(self, 0, sizeof(*self));
+    self->destroy = (void*)free;
+    self->on_setup_ostream = on_setup_ostream;
+
+    h2o_linklist_insert(&host_config->filters, &self->_link);
 }

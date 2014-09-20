@@ -55,6 +55,8 @@ void h2o_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const char *ty
 {
     khiter_t iter;
 
+    ext = h2o_strdup(NULL, ext, SIZE_MAX).base;
+
     iter = kh_get(exttable, mimemap->top->table, ext);
     if (iter != kh_end(mimemap->top->table)) {
         free(kh_val(mimemap->top->table, iter).base);

@@ -23,53 +23,23 @@
 #include <stdlib.h>
 #include <sys/time.h>
 #include "h2o.h"
-#include "h2o/http1.h"
-#include "h2o/http2.h"
 
-static void default_dispose_filter(h2o_filter_t *filter)
-{
-    if (filter->next != NULL)
-        filter->next->dispose(filter->next);
-}
-
-void h2o_loop_context_init(h2o_loop_context_t *ctx, h2o_loop_t *loop, h2o_req_cb req_cb)
+void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_global_configuration_t *config)
 {
     memset(ctx, 0, sizeof(*ctx));
     ctx->loop = loop;
-    ctx->req_cb = req_cb;
+    ctx->global_config = config;
     h2o_timeout_init(ctx->loop, &ctx->zero_timeout, 0);
-    h2o_timeout_init(ctx->loop, &ctx->req_timeout, 10000);
-    h2o_add_chunked_encoder(ctx);
-    h2o_init_mimemap(&ctx->mimemap, "application/octet-stream");
-    ctx->server_name = h2o_buf_init(H2O_STRLIT("h2o/0.1"));
-    ctx->max_request_entity_size = 1024 * 1024 * 1024;
-    ctx->http1_upgrade_to_http2 = 1;
-    ctx->http2_max_concurrent_requests_per_connection = 16;
+    h2o_timeout_init(ctx->loop, &ctx->req_timeout, config->req_timeout);
+
+    h2o_config_on_context_create(config, ctx);
 }
 
-void h2o_loop_context_dispose(h2o_loop_context_t *ctx)
+void h2o_context_dispose(h2o_context_t *ctx)
 {
-    if (ctx->filters != NULL) {
-        ctx->filters->dispose(ctx->filters);
-    }
-    h2o_dispose_mimemap(&ctx->mimemap);
 }
 
-h2o_filter_t *h2o_define_filter(h2o_loop_context_t *context, size_t sz)
-{
-    h2o_filter_t *filter = h2o_malloc(sz);
-
-    memset(filter, 0, sz);
-    filter->next = context->filters;
-    filter->dispose = default_dispose_filter;
-    filter->on_start_response = NULL; /* filters should always set this */
-
-    context->filters = filter;
-
-    return filter;
-}
-
-void h2o_get_timestamp(h2o_loop_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts)
+void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts)
 {
     uint64_t now = h2o_now(ctx->loop);
 
@@ -90,41 +60,4 @@ void h2o_get_timestamp(h2o_loop_context_t *ctx, h2o_mempool_t *pool, h2o_timesta
     ts->at = ctx->_timestamp_cache.tv_at;
     h2o_mempool_link_shared(pool, ctx->_timestamp_cache.value);
     ts->str = ctx->_timestamp_cache.value;
-}
-
-static void on_ssl_handshake_complete(h2o_socket_t *sock, int status)
-{
-    const h2o_buf_t *ident;
-    h2o_loop_context_t *ctx = sock->data;
-    sock->data = NULL;
-
-    h2o_buf_t proto;
-    if (status != 0) {
-        h2o_socket_close(sock);
-        return;
-    }
-
-    proto = h2o_socket_ssl_get_selected_protocol(sock);
-    for (ident = h2o_http2_tls_identifiers; ident->len != 0; ++ident) {
-        if (proto.len == ident->len && memcmp(proto.base, ident->base, proto.len) == 0) {
-            goto Is_Http2;
-        }
-    }
-    /* connect as http1 */
-    h2o_http1_accept(ctx, sock);
-    return;
-
-Is_Http2:
-    /* connect as http2 */
-    h2o_http2_accept(ctx, sock);
-}
-
-void h2o_accept(h2o_loop_context_t *ctx, h2o_socket_t *sock)
-{
-    if (ctx->ssl_ctx != NULL) {
-        sock->data = ctx;
-        h2o_socket_ssl_server_handshake(sock, ctx->ssl_ctx, on_ssl_handshake_complete);
-    } else {
-        h2o_http1_accept(ctx, sock);
-    }
 }

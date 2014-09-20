@@ -85,8 +85,8 @@ EOT
 close $fh;
 
 # generate token_table.h
-open $fh, '>', 'src/token_table.h'
-    or die "failed to open src/token_table.h:$!";
+open $fh, '>', 'lib/token_table.h'
+    or die "failed to open lib/token_table.h:$!";
 print $fh render_mt(<< 'EOT', \@tokens, LICENSE)->as_string;
 ? my ($tokens, $license) = @_;
 <?= $license ?>
@@ -109,7 +109,7 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
         case '<?= $end ?>':
 ?   my @tokens_of_end = grep { substr($_->[0], length($_->[0]) - 1) eq $end } @tokens_of_len;
 ?   for my $token (@tokens_of_end) {
-            if (h2o_lcstris_core(name, "<?= substr($token->[0], 0, length($token->[0]) - 1) ?>", <?= length($token->[0]) - 1 ?>))
+            if (h2o__lcstris_core(name, "<?= substr($token->[0], 0, length($token->[0]) - 1) ?>", <?= length($token->[0]) - 1 ?>))
                 return <?= normalize_name($token->[0]) ?>;
 ?   }
             break;
@@ -125,8 +125,8 @@ EOT
 close $fh;
 
 # generate hpack_static_table.h
-open $fh, '>', 'src/http2/hpack_static_table.h'
-    or die "failed to open src/hpack_static_table.h:$!";
+open $fh, '>', 'lib/http2/hpack_static_table.h'
+    or die "failed to open lib/hpack_static_table.h:$!";
 print $fh render_mt(<< 'EOT', \@hpack, LICENSE)->as_string;
 ? my ($entries, $license) = @_;
 <?= $license ?>

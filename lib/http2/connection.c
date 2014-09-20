@@ -96,7 +96,7 @@ static h2o_http2_stream_t *unlink_stream(h2o_http2_stream_t **slot, h2o_http2_st
 
 static void run_pending_requests(h2o_http2_conn_t *conn)
 {
-    while (conn->num_responding_streams < conn->super.ctx->http2_max_concurrent_requests_per_connection) {
+    while (conn->num_responding_streams < conn->super.ctx->global_config->http2_max_concurrent_requests_per_connection) {
         h2o_http2_stream_t *stream;
         if (conn->_pending_reqs == NULL)
             break;
@@ -192,7 +192,6 @@ static void close_connection_now(h2o_http2_conn_t *conn)
 
 static void close_connection(h2o_http2_conn_t *conn)
 {
-    assert(conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING);
     conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
 
     if (conn->_write.wreq_in_flight) {
@@ -318,7 +317,7 @@ static void handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
         stream = NULL;
     } else {
         /* FIXME should be a single invocation to the allocation call */
-        while (stream->_req_body == NULL || stream->_req_body->capacity - stream->_req_body->size < payload.length) {
+        while (stream->_req_body == NULL || stream->_req_body->_capacity - stream->_req_body->size < payload.length) {
             h2o_allocate_input_buffer(&stream->_req_body, 8192);
         }
         memcpy(stream->_req_body->bytes + stream->_req_body->size, payload.data, payload.length);
@@ -683,7 +682,7 @@ void emit_writereq(h2o_timeout_entry_t *entry)
     }
 }
 
-static h2o_http2_conn_t *create_conn(h2o_loop_context_t *ctx, h2o_socket_t *sock)
+static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock)
 {
     h2o_http2_conn_t *conn = h2o_malloc(sizeof(*conn));
 
@@ -706,7 +705,7 @@ static h2o_http2_conn_t *create_conn(h2o_loop_context_t *ctx, h2o_socket_t *sock
     return conn;
 }
 
-void h2o_http2_accept(h2o_loop_context_t *ctx, h2o_socket_t *sock)
+void h2o_http2_accept(h2o_context_t *ctx, h2o_socket_t *sock)
 {
     h2o_http2_conn_t *conn = create_conn(ctx, sock);
     sock->data = conn;

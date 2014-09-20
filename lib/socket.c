@@ -172,8 +172,6 @@ static void flush_pending_ssl(h2o_socket_t *sock, h2o_socket_cb cb)
 
 static void dispose_socket(h2o_socket_t *sock, int status)
 {
-    do_dispose_socket(sock);
-
     if (sock->ssl != NULL) {
         SSL_free(sock->ssl->ssl);
         free(sock->ssl->input.encrypted);
@@ -181,6 +179,8 @@ static void dispose_socket(h2o_socket_t *sock, int status)
         free(sock->ssl);
     }
     free(sock->input);
+
+    do_dispose_socket(sock);
 }
 
 static void shutdown_ssl(h2o_socket_t *sock, int status)

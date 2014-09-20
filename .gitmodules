@@ -4,3 +4,9 @@
 [submodule "deps/klib"]
 	path = deps/klib
 	url = git@github.com:attractivechaos/klib.git
+[submodule "deps/yoml"]
+	path = deps/yoml
+	url = git@github.com:kazuho/yoml.git
+[submodule "deps/picotest"]
+	path = deps/picotest
+	url = git@github.com:kazuho/picotest.git

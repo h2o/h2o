@@ -87,11 +87,11 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     case 3:
         switch (h2o_tolower(name[2])) {
         case 'a':
-            if (h2o_lcstris_core(name, "vi", 2))
+            if (h2o__lcstris_core(name, "vi", 2))
                 return H2O_TOKEN_VIA;
             break;
         case 'e':
-            if (h2o_lcstris_core(name, "ag", 2))
+            if (h2o__lcstris_core(name, "ag", 2))
                 return H2O_TOKEN_AGE;
             break;
         }
@@ -99,27 +99,27 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     case 4:
         switch (h2o_tolower(name[3])) {
         case 'e':
-            if (h2o_lcstris_core(name, "dat", 3))
+            if (h2o__lcstris_core(name, "dat", 3))
                 return H2O_TOKEN_DATE;
             break;
         case 'g':
-            if (h2o_lcstris_core(name, "eta", 3))
+            if (h2o__lcstris_core(name, "eta", 3))
                 return H2O_TOKEN_ETAG;
             break;
         case 'k':
-            if (h2o_lcstris_core(name, "lin", 3))
+            if (h2o__lcstris_core(name, "lin", 3))
                 return H2O_TOKEN_LINK;
             break;
         case 'm':
-            if (h2o_lcstris_core(name, "fro", 3))
+            if (h2o__lcstris_core(name, "fro", 3))
                 return H2O_TOKEN_FROM;
             break;
         case 't':
-            if (h2o_lcstris_core(name, "hos", 3))
+            if (h2o__lcstris_core(name, "hos", 3))
                 return H2O_TOKEN_HOST;
             break;
         case 'y':
-            if (h2o_lcstris_core(name, "var", 3))
+            if (h2o__lcstris_core(name, "var", 3))
                 return H2O_TOKEN_VARY;
             break;
         }
@@ -127,15 +127,15 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     case 5:
         switch (h2o_tolower(name[4])) {
         case 'e':
-            if (h2o_lcstris_core(name, "rang", 4))
+            if (h2o__lcstris_core(name, "rang", 4))
                 return H2O_TOKEN_RANGE;
             break;
         case 'h':
-            if (h2o_lcstris_core(name, ":pat", 4))
+            if (h2o__lcstris_core(name, ":pat", 4))
                 return H2O_TOKEN_PATH;
             break;
         case 'w':
-            if (h2o_lcstris_core(name, "allo", 4))
+            if (h2o__lcstris_core(name, "allo", 4))
                 return H2O_TOKEN_ALLOW;
             break;
         }
@@ -143,17 +143,17 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     case 6:
         switch (h2o_tolower(name[5])) {
         case 'e':
-            if (h2o_lcstris_core(name, "cooki", 5))
+            if (h2o__lcstris_core(name, "cooki", 5))
                 return H2O_TOKEN_COOKIE;
             break;
         case 'r':
-            if (h2o_lcstris_core(name, "serve", 5))
+            if (h2o__lcstris_core(name, "serve", 5))
                 return H2O_TOKEN_SERVER;
             break;
         case 't':
-            if (h2o_lcstris_core(name, "accep", 5))
+            if (h2o__lcstris_core(name, "accep", 5))
                 return H2O_TOKEN_ACCEPT;
-            if (h2o_lcstris_core(name, "expec", 5))
+            if (h2o__lcstris_core(name, "expec", 5))
                 return H2O_TOKEN_EXPECT;
             break;
         }
@@ -161,27 +161,27 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     case 7:
         switch (h2o_tolower(name[6])) {
         case 'd':
-            if (h2o_lcstris_core(name, ":metho", 6))
+            if (h2o__lcstris_core(name, ":metho", 6))
                 return H2O_TOKEN_METHOD;
             break;
         case 'e':
-            if (h2o_lcstris_core(name, ":schem", 6))
+            if (h2o__lcstris_core(name, ":schem", 6))
                 return H2O_TOKEN_SCHEME;
-            if (h2o_lcstris_core(name, "upgrad", 6))
+            if (h2o__lcstris_core(name, "upgrad", 6))
                 return H2O_TOKEN_UPGRADE;
             break;
         case 'h':
-            if (h2o_lcstris_core(name, "refres", 6))
+            if (h2o__lcstris_core(name, "refres", 6))
                 return H2O_TOKEN_REFRESH;
             break;
         case 'r':
-            if (h2o_lcstris_core(name, "refere", 6))
+            if (h2o__lcstris_core(name, "refere", 6))
                 return H2O_TOKEN_REFERER;
             break;
         case 's':
-            if (h2o_lcstris_core(name, ":statu", 6))
+            if (h2o__lcstris_core(name, ":statu", 6))
                 return H2O_TOKEN_STATUS;
-            if (h2o_lcstris_core(name, "expire", 6))
+            if (h2o__lcstris_core(name, "expire", 6))
                 return H2O_TOKEN_EXPIRES;
             break;
         }
@@ -189,15 +189,15 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     case 8:
         switch (h2o_tolower(name[7])) {
         case 'e':
-            if (h2o_lcstris_core(name, "if-rang", 7))
+            if (h2o__lcstris_core(name, "if-rang", 7))
                 return H2O_TOKEN_IF_RANGE;
             break;
         case 'h':
-            if (h2o_lcstris_core(name, "if-matc", 7))
+            if (h2o__lcstris_core(name, "if-matc", 7))
                 return H2O_TOKEN_IF_MATCH;
             break;
         case 'n':
-            if (h2o_lcstris_core(name, "locatio", 7))
+            if (h2o__lcstris_core(name, "locatio", 7))
                 return H2O_TOKEN_LOCATION;
             break;
         }
@@ -205,19 +205,19 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     case 10:
         switch (h2o_tolower(name[9])) {
         case 'e':
-            if (h2o_lcstris_core(name, "set-cooki", 9))
+            if (h2o__lcstris_core(name, "set-cooki", 9))
                 return H2O_TOKEN_SET_COOKIE;
             break;
         case 'n':
-            if (h2o_lcstris_core(name, "connectio", 9))
+            if (h2o__lcstris_core(name, "connectio", 9))
                 return H2O_TOKEN_CONNECTION;
             break;
         case 't':
-            if (h2o_lcstris_core(name, "user-agen", 9))
+            if (h2o__lcstris_core(name, "user-agen", 9))
                 return H2O_TOKEN_USER_AGENT;
             break;
         case 'y':
-            if (h2o_lcstris_core(name, ":authorit", 9))
+            if (h2o__lcstris_core(name, ":authorit", 9))
                 return H2O_TOKEN_AUTHORITY;
             break;
         }
@@ -225,7 +225,7 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     case 11:
         switch (h2o_tolower(name[10])) {
         case 'r':
-            if (h2o_lcstris_core(name, "retry-afte", 10))
+            if (h2o__lcstris_core(name, "retry-afte", 10))
                 return H2O_TOKEN_RETRY_AFTER;
             break;
         }
@@ -233,11 +233,11 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     case 12:
         switch (h2o_tolower(name[11])) {
         case 'e':
-            if (h2o_lcstris_core(name, "content-typ", 11))
+            if (h2o__lcstris_core(name, "content-typ", 11))
                 return H2O_TOKEN_CONTENT_TYPE;
             break;
         case 's':
-            if (h2o_lcstris_core(name, "max-forward", 11))
+            if (h2o__lcstris_core(name, "max-forward", 11))
                 return H2O_TOKEN_MAX_FORWARDS;
             break;
         }
@@ -245,29 +245,29 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     case 13:
         switch (h2o_tolower(name[12])) {
         case 'd':
-            if (h2o_lcstris_core(name, "last-modifie", 12))
+            if (h2o__lcstris_core(name, "last-modifie", 12))
                 return H2O_TOKEN_LAST_MODIFIED;
             break;
         case 'e':
-            if (h2o_lcstris_core(name, "content-rang", 12))
+            if (h2o__lcstris_core(name, "content-rang", 12))
                 return H2O_TOKEN_CONTENT_RANGE;
             break;
         case 'h':
-            if (h2o_lcstris_core(name, "if-none-matc", 12))
+            if (h2o__lcstris_core(name, "if-none-matc", 12))
                 return H2O_TOKEN_IF_NONE_MATCH;
             break;
         case 'l':
-            if (h2o_lcstris_core(name, "cache-contro", 12))
+            if (h2o__lcstris_core(name, "cache-contro", 12))
                 return H2O_TOKEN_CACHE_CONTROL;
-            if (h2o_lcstris_core(name, "x-reproxy-ur", 12))
+            if (h2o__lcstris_core(name, "x-reproxy-ur", 12))
                 return H2O_TOKEN_X_REPROXY_URL;
             break;
         case 'n':
-            if (h2o_lcstris_core(name, "authorizatio", 12))
+            if (h2o__lcstris_core(name, "authorizatio", 12))
                 return H2O_TOKEN_AUTHORIZATION;
             break;
         case 's':
-            if (h2o_lcstris_core(name, "accept-range", 12))
+            if (h2o__lcstris_core(name, "accept-range", 12))
                 return H2O_TOKEN_ACCEPT_RANGES;
             break;
         }
@@ -275,15 +275,15 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     case 14:
         switch (h2o_tolower(name[13])) {
         case 'h':
-            if (h2o_lcstris_core(name, "content-lengt", 13))
+            if (h2o__lcstris_core(name, "content-lengt", 13))
                 return H2O_TOKEN_CONTENT_LENGTH;
             break;
         case 's':
-            if (h2o_lcstris_core(name, "http2-setting", 13))
+            if (h2o__lcstris_core(name, "http2-setting", 13))
                 return H2O_TOKEN_HTTP2_SETTINGS;
             break;
         case 't':
-            if (h2o_lcstris_core(name, "accept-charse", 13))
+            if (h2o__lcstris_core(name, "accept-charse", 13))
                 return H2O_TOKEN_ACCEPT_CHARSET;
             break;
         }
@@ -291,11 +291,11 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     case 15:
         switch (h2o_tolower(name[14])) {
         case 'e':
-            if (h2o_lcstris_core(name, "accept-languag", 14))
+            if (h2o__lcstris_core(name, "accept-languag", 14))
                 return H2O_TOKEN_ACCEPT_LANGUAGE;
             break;
         case 'g':
-            if (h2o_lcstris_core(name, "accept-encodin", 14))
+            if (h2o__lcstris_core(name, "accept-encodin", 14))
                 return H2O_TOKEN_ACCEPT_ENCODING;
             break;
         }
@@ -303,17 +303,17 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     case 16:
         switch (h2o_tolower(name[15])) {
         case 'e':
-            if (h2o_lcstris_core(name, "content-languag", 15))
+            if (h2o__lcstris_core(name, "content-languag", 15))
                 return H2O_TOKEN_CONTENT_LANGUAGE;
-            if (h2o_lcstris_core(name, "www-authenticat", 15))
+            if (h2o__lcstris_core(name, "www-authenticat", 15))
                 return H2O_TOKEN_WWW_AUTHENTICATE;
             break;
         case 'g':
-            if (h2o_lcstris_core(name, "content-encodin", 15))
+            if (h2o__lcstris_core(name, "content-encodin", 15))
                 return H2O_TOKEN_CONTENT_ENCODING;
             break;
         case 'n':
-            if (h2o_lcstris_core(name, "content-locatio", 15))
+            if (h2o__lcstris_core(name, "content-locatio", 15))
                 return H2O_TOKEN_CONTENT_LOCATION;
             break;
         }
@@ -321,11 +321,11 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     case 17:
         switch (h2o_tolower(name[16])) {
         case 'e':
-            if (h2o_lcstris_core(name, "if-modified-sinc", 16))
+            if (h2o__lcstris_core(name, "if-modified-sinc", 16))
                 return H2O_TOKEN_IF_MODIFIED_SINCE;
             break;
         case 'g':
-            if (h2o_lcstris_core(name, "transfer-encodin", 16))
+            if (h2o__lcstris_core(name, "transfer-encodin", 16))
                 return H2O_TOKEN_TRANSFER_ENCODING;
             break;
         }
@@ -333,7 +333,7 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     case 18:
         switch (h2o_tolower(name[17])) {
         case 'e':
-            if (h2o_lcstris_core(name, "proxy-authenticat", 17))
+            if (h2o__lcstris_core(name, "proxy-authenticat", 17))
                 return H2O_TOKEN_PROXY_AUTHENTICATE;
             break;
         }
@@ -341,13 +341,13 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     case 19:
         switch (h2o_tolower(name[18])) {
         case 'e':
-            if (h2o_lcstris_core(name, "if-unmodified-sinc", 18))
+            if (h2o__lcstris_core(name, "if-unmodified-sinc", 18))
                 return H2O_TOKEN_IF_UNMODIFIED_SINCE;
             break;
         case 'n':
-            if (h2o_lcstris_core(name, "content-dispositio", 18))
+            if (h2o__lcstris_core(name, "content-dispositio", 18))
                 return H2O_TOKEN_CONTENT_DISPOSITION;
-            if (h2o_lcstris_core(name, "proxy-authorizatio", 18))
+            if (h2o__lcstris_core(name, "proxy-authorizatio", 18))
                 return H2O_TOKEN_PROXY_AUTHORIZATION;
             break;
         }
@@ -355,7 +355,7 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     case 25:
         switch (h2o_tolower(name[24])) {
         case 'y':
-            if (h2o_lcstris_core(name, "strict-transport-securit", 24))
+            if (h2o__lcstris_core(name, "strict-transport-securit", 24))
                 return H2O_TOKEN_STRICT_TRANSPORT_SECURITY;
             break;
         }
@@ -363,7 +363,7 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     case 27:
         switch (h2o_tolower(name[26])) {
         case 'n':
-            if (h2o_lcstris_core(name, "access-control-allow-origi", 26))
+            if (h2o__lcstris_core(name, "access-control-allow-origi", 26))
                 return H2O_TOKEN_ACCESS_CONTROL_ALLOW_ORIGIN;
             break;
         }
