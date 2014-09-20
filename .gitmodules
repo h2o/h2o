@@ -1,12 +1,12 @@
 [submodule "deps/picohttpparser"]
 	path = deps/picohttpparser
-	url = git@github.com:kazuho/picohttpparser.git
+	url = https://github.com/kazuho/picohttpparser.git
 [submodule "deps/klib"]
 	path = deps/klib
-	url = git@github.com:attractivechaos/klib.git
+	url = https://github.com/attractivechaos/klib.git
 [submodule "deps/yoml"]
 	path = deps/yoml
-	url = git@github.com:kazuho/yoml.git
+	url = https://github.com/kazuho/yoml.git
 [submodule "deps/picotest"]
 	path = deps/picotest
-	url = git@github.com:kazuho/picotest.git
+	url = https://github.com/kazuho/picotest.git
