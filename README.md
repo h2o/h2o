@@ -19,16 +19,6 @@ Dependencies
 - [libuv 1.0.0](https://github.com/joyent/libuv) (optional; required when using h2o as a library)
 - [wslay](https://github.com/tatsuhiro-t/wslay) (optional; required if you need support for websocket)
 
-Benchmark
----
-
-Written from the ground up, H2O outperforms nginx by more than 2x.  The table below is a comparison of request-per-seconds taken using `ab -c 500 -n 100000 -k` on Ubuntu 14.04 running on VMWare Fusion.
-
-|Server \ size of content|6 bytes|4,096 bytes|
-|------------------------|------:|----------:|
-|nginx/1.7.4 ([conf](https://gist.github.com/kazuho/c9c12021567e3ab83809))            | 35,822|     32,885|
-|H2O @ 6085457           | 76,690|     67,866|
-
 Building and Running the Server
 ---
 
@@ -41,6 +31,12 @@ $ make h2o
 $ ./h2o -c examples/h2o.conf
 ```
 
+Use `--help` to print the list of configuration directives available.
+
+```
+$ ./h2o --help
+```
+
 Building the Library
 ---
 
@@ -51,3 +47,13 @@ $ make libh2o
 ```
 
 The library is designed to work together with the upcoming [libuv version 1.0.0](https://github.com/joyent/libuv).  Examples can be found within the [examples/](https://github.com/kazuho/h2o/blob/master/examples/) directory.
+
+Benchmark
+---
+
+Written from the ground up, H2O outperforms nginx by more than 2x.  The table below is a comparison of request-per-seconds taken using `ab -c 500 -n 100000 -k` on Ubuntu 14.04 running on VMWare Fusion.
+
+|Server \ size of content|6 bytes|4,096 bytes|
+|------------------------|------:|----------:|
+|nginx/1.7.4 ([conf](https://gist.github.com/kazuho/c9c12021567e3ab83809))            | 35,822|     32,885|
+|H2O @ 6085457           | 76,690|     67,866|
