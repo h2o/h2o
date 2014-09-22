@@ -57,6 +57,9 @@ extern "C" {
 # define H2O_MAX_TOKENS 10240
 #endif
 
+#define H2O_TO__STR(n) #n
+#define H2O_TO_STR(n) H2O_TO__STR(n)
+
 #define H2O_STRLIT(s) (s), sizeof(s) - 1
 #define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s*)((char*)(p) - offsetof(s, m)))
 #define H2O_TIMESTR_RFC1123_LEN (sizeof("Sun, 06 Nov 1994 08:49:37 GMT") - 1)
@@ -234,6 +237,10 @@ typedef struct st_h2o_configurator_t {
      * name of the command handled by the configurator
      */
     const char *cmd;
+    /**
+     * lines of strings (NULL-terminated) describing of the command (printed by h2o --help)
+     */
+    const char **description;
     /**
      * optional callback called when the context is being disposed
      */

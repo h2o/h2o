@@ -214,31 +214,59 @@ static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurat
     return h2o_config_scanf(configurator, file, node, "%zu", &config->http2_max_concurrent_requests_per_connection);
 }
 
-static void setup_configurator(h2o_linklist_t *anchor, const char *cmd, int (*on_cmd)(h2o_configurator_t *, void *, const char *, yoml_t*))
+static void setup_configurator(h2o_linklist_t *anchor, const char *cmd, int (*on_cmd)(h2o_configurator_t *, void *, const char *, yoml_t*), ...)
 {
     h2o_configurator_t *configurator = h2o_malloc(sizeof(*configurator));
+    const char **desc = h2o_malloc(sizeof(*desc) * 16);
+    size_t i;
+    va_list args;
+
+    /* setup desc */
+    va_start(args, on_cmd);
+    for (i = 0; ; ++i)
+        if ((desc[i] = va_arg(args, const char*)) == NULL)
+            break;
+    va_end(args);
 
     memset(configurator, 0, sizeof(*configurator));
     configurator->cmd = cmd;
+    configurator->description = desc;
     configurator->destroy = (void*)free;
     configurator->on_cmd = on_cmd;
 
     h2o_linklist_insert(anchor, &configurator->_link);
 }
 
-void init_core_configurators(h2o_global_configuration_t *config)
+static void init_core_configurators(h2o_global_configuration_t *config)
 {
     /* check if already initialized */
     if (h2o_config_get_configurator(&config->host_configurators, "files") != NULL)
         return;
 
-    setup_configurator(&config->host_configurators, "files", on_config_files);
-    setup_configurator(&config->host_configurators, "mime-types", on_config_mime_types);
-    setup_configurator(&config->global_configurators, "virtual-host", on_config_virtual_host);
-    setup_configurator(&config->global_configurators, "request-timeout", on_config_request_timeout);
-    setup_configurator(&config->global_configurators, "limit-request-body", on_config_limit_request_body);
-    setup_configurator(&config->global_configurators, "http1-upgrade-to-http2", on_config_http1_upgrade_to_http2);
-    setup_configurator(&config->global_configurators, "http2-max-concurrent-requests-per-connection", on_config_http2_max_concurrent_requests_per_connection);
+    setup_configurator(&config->host_configurators, "files", on_config_files,
+        "map of URL-path -> local directory",
+        NULL);
+    setup_configurator(&config->host_configurators, "mime-types", on_config_mime_types,
+        "map of extension -> mime-type",
+        NULL);
+    setup_configurator(&config->global_configurators, "virtual-host", on_config_virtual_host,
+        "map of hostname -> map of per-host configs",
+        NULL);
+    setup_configurator(&config->global_configurators, "request-timeout", on_config_request_timeout,
+        "timeout for incoming requests in seconds (default: " H2O_TO_STR(H2O_DEFAULT_REQ_TIMEOUT) ")",
+        NULL);
+    setup_configurator(&config->global_configurators, "limit-request-body", on_config_limit_request_body,
+        "maximum size of request body in bytes (e.g. content of POST)",
+        "(default: unlimited)",
+        NULL);
+    setup_configurator(&config->global_configurators, "http1-upgrade-to-http2", on_config_http1_upgrade_to_http2,
+        "boolean flag (ON/OFF) indicating whether or not to allow upgrade to HTTP/2",
+        "(default: ON)",
+        NULL);
+    setup_configurator(&config->global_configurators, "http2-max-concurrent-requests-per-connection", on_config_http2_max_concurrent_requests_per_connection,
+        "max. number of requests to be handled concurrently within a single HTTP/2",
+        "stream (default: 16)",
+        NULL);
 }
 
 #define DESTROY_LIST(type, anchor) do { \
@@ -280,6 +308,8 @@ void h2o_config_init(h2o_global_configuration_t *config)
     config->max_request_entity_size = H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE;
     config->http1_upgrade_to_http2 = H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2;
     config->http2_max_concurrent_requests_per_connection = H2O_DEFAULT_HTTP2_MAX_CONCURRENT_REQUESTS_PER_CONNECTION;
+
+    init_core_configurators(config);
 }
 
 h2o_host_configuration_t *h2o_config_register_virtual_host(h2o_global_configuration_t *config, const char *hostname)
@@ -327,8 +357,6 @@ h2o_configurator_t *h2o_config_get_configurator(h2o_linklist_t *anchor, const ch
 
 int h2o_config_configure(h2o_global_configuration_t *config, const char *file, yoml_t *node)
 {
-    init_core_configurators(config);
-
     /* apply the configuration */
     if (apply_commands(config, file, node, config) != 0)
         return -1;

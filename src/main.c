@@ -108,15 +108,41 @@ static int on_config_num_threads(h2o_configurator_t *_conf, void *ctx, const cha
     return h2o_config_scanf(&conf->super, config_file, config_node, "%u", &conf->num_threads);
 }
 
-static void usage(void)
+static void usage_print_directives(h2o_linklist_t *configurators)
+{
+    h2o_linklist_t *node;
+
+    for (node = configurators->next; node != configurators; node = node->next) {
+        h2o_configurator_t *c = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, node);
+        const char **desc;
+        printf("    %s:\n", c->cmd);
+        for (desc = c->description; *desc != NULL; ++desc)
+            printf("      %s\n", *desc);
+    }
+}
+
+static void usage(h2o_global_configuration_t *config)
 {
     printf(
-        "Command:\n"
+        "H2O version 0.1\n"
+        "\n"
+        "Usage:\n"
         "  h2o [options]\n"
         "\n"
         "Options:\n"
         "  --conf=file  configuration file (default: h2o.conf)\n"
         "  --help       print this help\n"
+        "\n"
+        "Directives of the Configuration File:\n"
+        "  global:\n");
+    usage_print_directives(&config->global_configurators);
+    printf(
+        "  per-host:\n");
+    usage_print_directives(&config->host_configurators);
+    printf(
+        "\n"
+        "  note: per-host directives can be used at the global level to define the\n"
+        "  behaviour of the default host\n"
         "\n");
 }
 
@@ -165,12 +191,20 @@ int main(int argc, char **argv)
         { "help", no_argument, NULL, 'h' },
         { NULL, 0, NULL, 0 }
     };
+    static const char *post_configurator_desc[] = {
+        "TCP port number to which the server should listen (mandatory)",
+        NULL
+    };
     static struct port_configurator_t port_configurator = {
-        { {}, "port", NULL, on_config_port, on_config_port_complete, on_config_port_context_create },
+        { {}, "port", post_configurator_desc, NULL, on_config_port, on_config_port_complete, on_config_port_context_create },
         0
     };
+    static const char *num_threads_configurator_desc[] = {
+        "number of worker threads (default: 1)",
+        NULL
+    };
     static struct num_threads_configurator_t num_threads_configurator = {
-        { {}, "num-threads", NULL, on_config_num_threads, NULL, NULL },
+        { {}, "num-threads", num_threads_configurator_desc, NULL, on_config_num_threads, NULL, NULL },
         1 /* default number of threads is 1 */
     };
 
@@ -179,6 +213,10 @@ int main(int argc, char **argv)
     yoml_t *config_yoml;
     h2o_global_configuration_t config;
 
+    h2o_config_init(&config);
+    h2o_linklist_insert(&config.global_configurators, &port_configurator.super._link);
+    h2o_linklist_insert(&config.global_configurators, &num_threads_configurator.super._link);
+
     /* parse options */
     while ((opt_ch = getopt_long(argc, argv, "c:h", longopts, NULL)) != -1) {
         switch (opt_ch) {
@@ -186,7 +224,7 @@ int main(int argc, char **argv)
             config_file = optarg;
             break;
         case 'h':
-            usage();
+            usage(&config);
             exit(0);
             break;
         default:
@@ -198,9 +236,6 @@ int main(int argc, char **argv)
     argv += optind;
 
     /* configure */
-    h2o_config_init(&config);
-    h2o_linklist_insert(&config.global_configurators, &port_configurator.super._link);
-    h2o_linklist_insert(&config.global_configurators, &num_threads_configurator.super._link);
     if ((config_yoml = load_config(config_file)) == NULL)
         exit(EX_CONFIG);
     if (h2o_config_configure(&config, config_file, config_yoml) != 0)
