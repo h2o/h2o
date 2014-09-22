@@ -28,7 +28,7 @@
 #include <sys/socket.h>
 #include "yoml-parser.h"
 #include "h2o.h"
-#include "h2o/http1.h"
+#include "h2o/http2.h"
 
 /* taken from sysexits.h */
 #ifndef EX_CONFIG
@@ -59,7 +59,7 @@ static void on_config_port_accept(h2o_socket_t *listener, int status)
     if ((sock = h2o_evloop_socket_accept(listener)) == NULL) {
         return;
     }
-    h2o_http1_accept(ctx, sock);
+    h2o_http2_accept(ctx, sock);
 }
 
 static int on_config_port_complete(h2o_configurator_t *_conf, void *_global_config)
