@@ -51,9 +51,9 @@ The library is designed to work together with the upcoming [libuv version 1.0.0]
 Benchmark
 ---
 
-Written from the ground up, H2O outperforms nginx by more than 2x.  The table below is a comparison of request-per-seconds taken using `ab -c 500 -n 100000 -k` on Ubuntu 14.04 running on VMWare Fusion.
+Written from the ground up, H2O outperforms nginx by a big margin.  The table below is a comparison of request-per-seconds taken using `wrk -c 500 -d 30 -t 1` on Ubuntu 14.04 running on VMWare Fusion.
 
 |Server \ size of content|6 bytes|4,096 bytes|
 |------------------------|------:|----------:|
-|nginx/1.7.4 ([conf](https://gist.github.com/kazuho/c9c12021567e3ab83809))            | 35,822|     32,885|
-|H2O @ 6085457           | 76,690|     67,866|
+|nginx/1.7.4 ([conf](https://gist.github.com/kazuho/c9c12021567e3ab83809))            | 45,866|     47,579|
+|H2O @ eef1612           | 73,800|     63,768|
