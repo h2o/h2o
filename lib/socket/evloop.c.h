@@ -19,9 +19,11 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <unistd.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
+#include <unistd.h>
 
 struct st_h2o_evloop_socket_t {
     h2o_socket_t super;
@@ -294,11 +296,20 @@ h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags)
 h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
 {
     struct st_h2o_evloop_socket_t *listener = (struct st_h2o_evloop_socket_t*)_listener;
-
     h2o_socket_t *sock;
-    int fd = accept(listener->fd, NULL, NULL);
-    if (fd == -1)
+    int fd, on;
+
+#ifdef __linux__
+    if ((fd = accept4(listener->fd, NULL, NULL, O_NONBLOCK)) == -1)
         return NULL;
+#else
+    if ((fd = accept(listener->fd, NULL, NULL)) == -1)
+        return NULL;
+    fcntl(fd, F_SETFL, O_NONBLOCK);
+#endif
+    on = 1;
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
+
     sock = h2o_evloop_socket_create(listener->loop, fd, 0);
     return sock;
 }
