@@ -710,6 +710,8 @@ void h2o_http2_accept(h2o_context_t *ctx, h2o_socket_t *sock)
     h2o_http2_conn_t *conn = create_conn(ctx, sock);
     sock->data = conn;
     h2o_socket_read_start(conn->sock, on_read);
+    if (sock->input != NULL)
+        on_read(sock, 0);
 }
 
 int h2o_http2_handle_upgrade(h2o_req_t *req)

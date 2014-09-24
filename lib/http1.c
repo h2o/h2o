@@ -209,6 +209,21 @@ static int handle_incoming_request(h2o_http1_conn_t *conn)
         }
         return 1;
     case -1: // error
+        /* upgrade to HTTP/2 if the request starts with: PRI * HTTP/2 */
+        if (conn->super.ctx->global_config->http1_upgrade_to_http2) {
+            /* should check up to the first octet that phr_parse_request returns an error */
+            static const h2o_buf_t HTTP2_SIG = { H2O_STRLIT("PRI * HTTP/2") };
+            if (conn->sock->input->size >= HTTP2_SIG.len && memcmp(conn->sock->input->bytes, HTTP2_SIG.base, HTTP2_SIG.len) == 0) {
+                h2o_context_t *ctx = conn->super.ctx;
+                h2o_socket_t *sock = conn->sock;
+                /* destruct the connection after detatching the socket */
+                conn->sock = NULL;
+                close_connection(conn);
+                /* and accept as http2 connection */
+                h2o_http2_accept(ctx, sock);
+                return 0;
+            }
+        }
         close_connection(conn);
         return 0;
     }
