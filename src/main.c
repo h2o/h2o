@@ -170,6 +170,16 @@ yoml_t *load_config(const char *fn)
     return yoml;
 }
 
+static void setup_signal_handlers(void)
+{
+    struct sigaction sa;
+
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = SIG_IGN;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGPIPE, &sa, NULL);
+}
+
 static void *run_loop(void *_config)
 {
     h2o_global_configuration_t *config = _config;
@@ -243,8 +253,7 @@ int main(int argc, char **argv)
         exit(EX_CONFIG);
     yoml_free(config_yoml);
 
-    /* ignore SIGHUP */
-    signal(SIGPIPE, SIG_IGN);
+    setup_signal_handlers();
 
     if (num_threads_configurator.num_threads <= 1) {
         run_loop(&config);
