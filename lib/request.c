@@ -93,7 +93,7 @@ void h2o_dispose_request(h2o_req_t *req)
         h2o_linklist_t *node;
         for (node = host_config->loggers.next; node != &host_config->loggers; node = node->next) {
             h2o_logger_t *logger = H2O_STRUCT_FROM_MEMBER(h2o_logger_t, _link, node);
-            logger->log(logger, req);
+            logger->log_access(logger, req);
         }
     }
 

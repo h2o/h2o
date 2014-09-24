@@ -225,7 +225,7 @@ typedef struct st_h2o_filter_t {
 typedef struct st_h2o_logger_t {
     h2o_linklist_t _link;
     void (*destroy)(struct st_h2o_logger_t *self);
-    void (*log)(struct st_h2o_logger_t *self, h2o_req_t *req);
+    void (*log_access)(struct st_h2o_logger_t *self, h2o_req_t *req);
 } h2o_logger_t;
 
 /**

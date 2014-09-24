@@ -67,7 +67,7 @@ h2o_logger_t *h2o_register_access_logger(h2o_context_t *ctx, const char *path)
 
     memset(self, 0, sizeof(*self));
     self->super.destroy = (void*)free;
-    self->super.log = log_access;
+    self->super.log_access = log_access;
 
     self->fd = open(path, O_CREAT | O_WRONLY | O_APPEND, 0644);
     if (self->fd == -1)
