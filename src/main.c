@@ -24,6 +24,7 @@
 #include <getopt.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
 #include <sys/socket.h>
 #include "yoml-parser.h"
@@ -169,6 +170,16 @@ yoml_t *load_config(const char *fn)
     return yoml;
 }
 
+static void setup_signal_handlers(void)
+{
+    struct sigaction sa;
+
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = SIG_IGN;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGPIPE, &sa, NULL);
+}
+
 static void *run_loop(void *_config)
 {
     h2o_global_configuration_t *config = _config;
@@ -241,6 +252,8 @@ int main(int argc, char **argv)
     if (h2o_config_configure(&config, config_file, config_yoml) != 0)
         exit(EX_CONFIG);
     yoml_free(config_yoml);
+
+    setup_signal_handlers();
 
     if (num_threads_configurator.num_threads <= 1) {
         run_loop(&config);
