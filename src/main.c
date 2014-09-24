@@ -24,6 +24,7 @@
 #include <getopt.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
 #include <sys/socket.h>
 #include "yoml-parser.h"
@@ -241,6 +242,9 @@ int main(int argc, char **argv)
     if (h2o_config_configure(&config, config_file, config_yoml) != 0)
         exit(EX_CONFIG);
     yoml_free(config_yoml);
+
+    /* ignore SIGHUP */
+    signal(SIGPIPE, SIG_IGN);
 
     if (num_threads_configurator.num_threads <= 1) {
         run_loop(&config);
