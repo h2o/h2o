@@ -52,6 +52,8 @@ static void close_connection(h2o_http1_conn_t *conn)
     free(conn->_req_entity_reader);
     if (conn->sock != NULL)
         h2o_socket_close(conn->sock);
+    if (conn->super.ctx->global_config->close_cb != NULL)
+        conn->super.ctx->global_config->close_cb(conn->super.ctx);
     free(conn);
 }
 

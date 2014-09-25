@@ -97,6 +97,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
     struct st_h2o_socket_loop_kqueue_t *loop = (struct st_h2o_socket_loop_kqueue_t*)_loop;
     struct kevent changelist[64], events[128];
     int nchanges, nevents, i;
+    int32_t max_wait;
     struct timespec ts;
 
     /* collect (and update) status */
@@ -104,12 +105,10 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
         return -1;
 
     /* poll */
-    do {
-        int32_t max_wait = get_max_wait(&loop->super);
-        ts.tv_sec = max_wait / 1000;
-        ts.tv_nsec = max_wait % 1000 * 1000 * 1000;
-    } while ((nevents = kevent(loop->kq, changelist, nchanges, events, sizeof(events) / sizeof(events[0]), &ts)) == -1
-        && errno == EINTR);
+    max_wait = get_max_wait(&loop->super);
+    ts.tv_sec = max_wait / 1000;
+    ts.tv_nsec = max_wait % 1000 * 1000 * 1000;
+    nevents = kevent(loop->kq, changelist, nchanges, events, sizeof(events) / sizeof(events[0]), &ts);
     update_now(&loop->super);
     if (nevents == -1)
         return -1;

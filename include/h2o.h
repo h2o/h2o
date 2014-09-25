@@ -346,6 +346,10 @@ typedef struct st_h2o_global_configuration_t {
      * H2O accepts at most 256 requests over HTTP/2, but internally limits the number of in-flight requests to the value specified by this property in order to limit the resources allocated to a single connection.
      */
     size_t http2_max_concurrent_requests_per_connection;
+    /**
+     * an optional callback called when a connection is being closed
+     */
+    void (*close_cb)(h2o_context_t *ctx);
 } h2o_global_configuration_t;
 
 /**

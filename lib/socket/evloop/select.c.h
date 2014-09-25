@@ -80,24 +80,22 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
 {
     struct st_h2o_evloop_select_t *loop = (struct st_h2o_evloop_select_t*)_loop;
     fd_set rfds, wfds;
+    int32_t max_wait;
     struct timeval timeout;
     int fd, ret;
 
     /* update status */
     update_fdset(loop);
 
-    /* call select */
-    do {
-        /* calc timeout */
-        int32_t max_wait = get_max_wait(&loop->super);
-        timeout.tv_sec = max_wait / 1000;
-        timeout.tv_usec = max_wait % 1000 * 1000;
-        /* set fds */
-        memcpy(&rfds, &loop->readfds, sizeof(rfds));
-        memcpy(&wfds, &loop->writefds, sizeof(wfds));
-        /* call */
-        ret = select(loop->max_fd + 1, &rfds, &wfds, NULL, &timeout);
-    } while (ret == -1 && errno == EINTR);
+    /* calc timeout */
+    max_wait = get_max_wait(&loop->super);
+    timeout.tv_sec = max_wait / 1000;
+    timeout.tv_usec = max_wait % 1000 * 1000;
+    /* set fds */
+    memcpy(&rfds, &loop->readfds, sizeof(rfds));
+    memcpy(&wfds, &loop->writefds, sizeof(wfds));
+    /* call */
+    ret = select(loop->max_fd + 1, &rfds, &wfds, NULL, &timeout);
     update_now(&loop->super);
     if (ret == -1)
         return -1;

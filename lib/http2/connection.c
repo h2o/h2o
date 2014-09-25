@@ -188,6 +188,8 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     assert(! h2o_timeout_is_linked(&conn->_write.timeout_entry));
 
     h2o_socket_close(conn->sock);
+    if (conn->super.ctx->global_config->close_cb != NULL)
+        conn->super.ctx->global_config->close_cb(conn->super.ctx);
     free(conn);
 }
 

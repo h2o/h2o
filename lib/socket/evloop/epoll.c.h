@@ -100,10 +100,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
         return -1;
 
     /* poll */
-    while (
-        (nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), get_max_wait(&loop->super))) == -1
-        && errno == EINTR)
-        ;
+    nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), get_max_wait(&loop->super));
     update_now(&loop->super);
     if (nevents == -1)
         return -1;
