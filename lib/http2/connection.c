@@ -180,6 +180,7 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     kh_destroy(h2o_http2_stream_t, conn->open_streams);
     assert(conn->_http1_req_input == NULL);
     h2o_hpack_dispose_header_table(&conn->_input_header_table);
+    h2o_hpack_dispose_header_table(&conn->_output_header_table);
     assert(conn->_pending_reqs == NULL);
     h2o_mempool_clear(&conn->_write._pools[0]);
     h2o_mempool_clear(&conn->_write._pools[1]);
@@ -386,6 +387,7 @@ static void handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fra
         }
     } else {
         uint32_t prev_initial_window_size = conn->peer_settings.initial_window_size;
+        /* FIXME handle SETTINGS_HEADER_TABLE_SIZE */
         if (h2o_http2_update_peer_settings(&conn->peer_settings, frame->payload, frame->length) != 0) {
             send_error(conn, 0, H2O_HTTP2_ERROR_PROTOCOL);
             return;
@@ -729,6 +731,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock)
     conn->_input_header_table.hpack_capacity = H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;
     h2o_http2_window_init(&conn->_input_window, &H2O_HTTP2_SETTINGS_HOST);
     conn->_write.pool = conn->_write._pools;
+    conn->_output_header_table.hpack_capacity = H2O_HTTP2_SETTINGS_HOST.header_table_size;
     conn->_write.timeout_entry.cb = emit_writereq;
     h2o_http2_window_init(&conn->_write.window, &conn->peer_settings);
     h2o_mempool_init(conn->_write._pools);
