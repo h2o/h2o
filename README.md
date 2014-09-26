@@ -48,12 +48,24 @@ $ make libh2o
 
 The library is designed to work together with the upcoming [libuv version 1.0.0](https://github.com/joyent/libuv).  Examples can be found within the [examples/](https://github.com/kazuho/h2o/blob/master/examples/) directory.
 
-Benchmark
+Benchmarks
 ---
 
-Written from the ground up, H2O outperforms nginx by a big margin.  The table below is a comparison of request-per-seconds taken using `wrk -c 500 -d 30 -t 1` on Ubuntu 14.04 running on VMWare Fusion.
+- HTTP/1.1
 
 |Server \ size of content|6 bytes|4,096 bytes|
 |------------------------|------:|----------:|
 |nginx/1.7.4 ([conf](https://gist.github.com/kazuho/c9c12021567e3ab83809))            | 45,866|     47,579|
 |H2O @ eef1612           | 73,800|     63,768|
+
+note: `wrk -c 500 -d 30 -t 1` on Ubuntu 14.04 on VMWare Fusion
+
+- HTTP/2
+
+|Server \ size of content|6 bytes|4,096 bytes|
+|------------------------|------:|----------:|
+|[nghttpd @ a9b7426](https://github.com/tatsuhiro-t/nghttp2/) |65,725|34,121|
+|[trusterd @ 962d031](https://github.com/matsumoto-r/trusterd) |125,482|50,103|
+|H2O @ 7505a82           |201,077|     90,810|
+
+note: `h2load -c 500 -m 100 -n 2000000` on Ubuntu 14.04 on VMWare Fusion
