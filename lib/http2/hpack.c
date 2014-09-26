@@ -28,7 +28,7 @@
 
 #define HEADER_TABLE_OFFSET 62
 #define HEADER_TABLE_ENTRY_SIZE_OFFSET 32
-#define STATUS_HEADER_MAX_SIZE 4
+#define STATUS_HEADER_MAX_SIZE 5
 
 struct st_h2o_hpack_static_table_entry_t {
     const h2o_token_t *name;
@@ -327,7 +327,9 @@ static uint8_t *encode_status(uint8_t *dst, int status)
     COMMON_CODE(14, 500);
 #undef COMMON_CODE
     default:
-        *dst++ = 0x80 | 8;
+        /* use literal header field without indexing - indexed name */
+        *dst++ = 8;
+        *dst++ = 3;
         sprintf((char*)dst, "%d", status);
         dst += 3;
         break;
