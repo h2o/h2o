@@ -36,17 +36,13 @@ struct st_h2o_hpack_static_table_entry_t {
 };
 
 struct st_h2o_hpack_header_table_entry_t {
-    union {
-        const h2o_token_t *token;
-        h2o_buf_t *buf;
-    } name;
+    h2o_buf_t *name;
     h2o_buf_t *value;
-    char name_is_token;
 };
 
 struct st_h2o_decode_header_result_t {
-    const h2o_token_t *name_token;
-    h2o_buf_t *name_not_token, *value;
+    h2o_buf_t *name;
+    h2o_buf_t *value;
 };
 
 #include "hpack_huffman_table.h"
@@ -172,8 +168,8 @@ static void header_table_evict_one(h2o_hpack_header_table_t *table)
     assert(table->num_entries != 0);
 
     entry = header_table_get(table, --table->num_entries);
-    if (! entry->name_is_token)
-        h2o_mempool_release_shared(entry->name.buf);
+    if (! h2o_buf_is_token(entry->name))
+        h2o_mempool_release_shared(entry->name);
     if (! value_is_part_of_static_table(entry->value))
         h2o_mempool_release_shared(entry->value);
 }
@@ -254,21 +250,15 @@ static int decode_header(h2o_mempool_t *pool, struct st_h2o_decode_header_result
     if (index != 0) {
         /* existing name (and value?) */
         if (index < HEADER_TABLE_OFFSET) {
-            result->name_token = h2o_hpack_static_table[index - 1].name;
-            result->name_not_token = NULL;
+            result->name = (h2o_buf_t*)h2o_hpack_static_table[index - 1].name;
             if (value_is_indexed) {
                 result->value = (h2o_buf_t*)&h2o_hpack_static_table[index - 1].value;
             }
         } else if (index - HEADER_TABLE_OFFSET < hpack_header_table->num_entries) {
             struct st_h2o_hpack_header_table_entry_t *entry = header_table_get(hpack_header_table, index - HEADER_TABLE_OFFSET);
-            if (entry->name_is_token) {
-                result->name_token = entry->name.token;
-                result->name_not_token = NULL;
-            } else {
-                result->name_token = NULL;
-                result->name_not_token = entry->name.buf;
-                h2o_mempool_link_shared(pool, result->name_not_token);
-            }
+            result->name = entry->name;
+            if (! h2o_buf_is_token(result->name))
+                h2o_mempool_link_shared(pool, result->name);
             if (value_is_indexed) {
                 result->value = entry->value;
                 h2o_mempool_link_shared(pool, result->value);
@@ -278,9 +268,12 @@ static int decode_header(h2o_mempool_t *pool, struct st_h2o_decode_header_result
         }
     } else {
         /* non-existing name */
-        if ((result->name_not_token = decode_string(pool, src, src_end)) == NULL)
+        const h2o_token_t *name_token;
+        if ((result->name = decode_string(pool, src, src_end)) == NULL)
             return -1;
-        result->name_token = h2o_lookup_token(result->name_not_token->base, result->name_not_token->len);
+        /* predefined header names should be interned */
+        if ((name_token = h2o_lookup_token(result->name->base, result->name->len)) != NULL)
+            result->name = (h2o_buf_t*)&name_token->buf;
     }
 
     /* determine the value (if necessary) */
@@ -291,25 +284,14 @@ static int decode_header(h2o_mempool_t *pool, struct st_h2o_decode_header_result
 
     /* add the decoded header to the header table if necessary */
     if (do_index) {
-        if (result->name_token != NULL) {
-            struct st_h2o_hpack_header_table_entry_t *entry = header_table_add(hpack_header_table, result->name_token->buf.len + result->value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET);
-            if (entry != NULL) {
-                entry->name.token = result->name_token;
-                entry->name_is_token = 1;
-                entry->value = result->value;
-                if (! value_is_part_of_static_table(entry->value))
-                    h2o_mempool_addref_shared(entry->value);
-            }
-        } else {
-            struct st_h2o_hpack_header_table_entry_t *entry = header_table_add(hpack_header_table, result->name_not_token->len + result->value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET);
-            if (entry != NULL) {
-                entry->name.buf = result->name_not_token;
-                entry->name_is_token = 0;
-                entry->value = result->value;
-                h2o_mempool_addref_shared(entry->name.buf);
-                if (! value_is_part_of_static_table(entry->value))
-                    h2o_mempool_addref_shared(entry->value);
-            }
+        struct st_h2o_hpack_header_table_entry_t *entry = header_table_add(hpack_header_table, result->name->len + result->value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET);
+        if (entry != NULL) {
+            entry->name = result->name;
+            if (! h2o_buf_is_token(entry->name))
+                h2o_mempool_addref_shared(entry->name);
+            entry->value = result->value;
+            if (! value_is_part_of_static_table(entry->value))
+                h2o_mempool_addref_shared(entry->value);
         }
     }
 
@@ -350,8 +332,8 @@ void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table)
         size_t index = header_table->entry_start_index;
         do {
             struct st_h2o_hpack_header_table_entry_t *entry = header_table->entries + index;
-            if (! entry->name_is_token)
-                h2o_mempool_release_shared(entry->name.buf);
+            if (! h2o_buf_is_token(entry->name))
+                h2o_mempool_release_shared(entry->name);
             if (! value_is_part_of_static_table(entry->value))
                 h2o_mempool_release_shared(entry->value);
             index = (index + 1) % header_table->entry_capacity;
@@ -368,44 +350,38 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
         struct st_h2o_decode_header_result_t r;
         if (decode_header(&req->pool, &r, header_table, &src, src_end) != 0)
             return -1;
-        if (r.name_token != NULL) {
-            if (r.name_token->buf.base[0] == ':') {
-                if (*allow_psuedo) {
-                    /* FIXME validate the chars in the value (e.g. reject SP in path) */
-                    if (r.name_token == H2O_TOKEN_AUTHORITY) {
-                        /* FIXME should we perform this check? */
-                        if (req->authority.base != NULL)
-                            return -1;
-                        req->authority = *r.value;
-                    } else if (r.name_token == H2O_TOKEN_METHOD) {
-                        if (req->method.base != NULL)
-                            return -1;
-                        req->method = *r.value;
-                    } else if (r.name_token == H2O_TOKEN_PATH) {
-                        if (req->path.base != NULL)
-                            return -1;
-                        req->path = *r.value;
-                    } else if (r.name_token == H2O_TOKEN_SCHEME) {
-                        if (req->scheme.base != NULL)
-                            return -1;
-                        req->scheme = *r.value;
-                    } else {
+        if (r.name->base[0] == ':') {
+            if (*allow_psuedo) {
+                /* FIXME validate the chars in the value (e.g. reject SP in path) */
+                if (r.name == &H2O_TOKEN_AUTHORITY->buf) {
+                    /* FIXME should we perform this check? */
+                    if (req->authority.base != NULL)
                         return -1;
-                    }
+                    req->authority = *r.value;
+                } else if (r.name == &H2O_TOKEN_METHOD->buf) {
+                    if (req->method.base != NULL)
+                        return -1;
+                    req->method = *r.value;
+                } else if (r.name == &H2O_TOKEN_PATH->buf) {
+                    if (req->path.base != NULL)
+                        return -1;
+                    req->path = *r.value;
+                } else if (r.name == &H2O_TOKEN_SCHEME->buf) {
+                    if (req->scheme.base != NULL)
+                        return -1;
+                    req->scheme = *r.value;
                 } else {
                     return -1;
                 }
             } else {
-                *allow_psuedo = 0;
-                h2o_add_header(&req->pool, &req->headers, r.name_token, r.value->base, r.value->len);
-            }
-        } else {
-            if (r.name_not_token->len >= 1 && r.name_not_token->base[0] == ':') {
-                /* unknown psuedo header is never accepted */
                 return -1;
             }
+        } else {
             *allow_psuedo = 0;
-            h2o_add_header_by_str(&req->pool, &req->headers, r.name_not_token->base, r.name_not_token->len, 0, r.value->base, r.value->len);
+            if (h2o_buf_is_token(r.name))
+                h2o_add_header(&req->pool, &req->headers, H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, r.name), r.value->base, r.value->len);
+            else
+                h2o_add_header_by_str(&req->pool, &req->headers, r.name->base, r.name->len, 0, r.value->base, r.value->len);
         }
     }
 
