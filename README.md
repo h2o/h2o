@@ -51,7 +51,7 @@ The library is designed to work together with the upcoming [libuv version 1.0.0]
 Benchmarks
 ---
 
-- HTTP/1.1
+__HTTP/1.1__
 
 |Server \ size of content|6 bytes|4,096 bytes|
 |------------------------|------:|----------:|
@@ -60,7 +60,7 @@ Benchmarks
 
 note: `wrk -c 500 -d 30 -t 1` on Ubuntu 14.04 on VMWare Fusion
 
-- HTTP/2
+__HTTP/2__
 
 |Server \ size of content|6 bytes|4,096 bytes|
 |------------------------|------:|----------:|
