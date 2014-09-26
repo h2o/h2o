@@ -171,12 +171,13 @@ static void header_table_evict_one(h2o_hpack_header_table_t *table)
         h2o_mempool_release_shared(entry->value);
 }
 
-static struct st_h2o_hpack_header_table_entry_t *header_table_add(h2o_hpack_header_table_t *table, size_t size_add)
+static struct st_h2o_hpack_header_table_entry_t *header_table_add(h2o_hpack_header_table_t *table, size_t size_add, size_t max_num_entries)
 {
     /* adjust the size */
-    while (table->num_entries != 0 && table->hpack_size + size_add > table->hpack_capacity) {
+    while (table->num_entries != 0 && table->hpack_size + size_add > table->hpack_capacity)
         header_table_evict_one(table);
-    }
+    while (max_num_entries < table->num_entries)
+        header_table_evict_one(table);
     if (table->num_entries == 0) {
         assert(table->hpack_size == 0);
         if (size_add > table->hpack_capacity)
@@ -286,7 +287,7 @@ static int decode_header(h2o_mempool_t *pool, struct st_h2o_decode_header_result
     /* add the decoded header to the header table if necessary */
     if (do_index) {
         if (result->name_token != NULL) {
-            struct st_h2o_hpack_header_table_entry_t *entry = header_table_add(hpack_header_table, result->name_token->buf.len + result->value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET);
+            struct st_h2o_hpack_header_table_entry_t *entry = header_table_add(hpack_header_table, result->name_token->buf.len + result->value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET, SIZE_MAX);
             if (entry != NULL) {
                 entry->name.token = result->name_token;
                 entry->name_is_token = 1;
@@ -295,7 +296,7 @@ static int decode_header(h2o_mempool_t *pool, struct st_h2o_decode_header_result
                     h2o_mempool_addref_shared(entry->value);
             }
         } else {
-            struct st_h2o_hpack_header_table_entry_t *entry = header_table_add(hpack_header_table, result->name_not_token->len + result->value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET);
+            struct st_h2o_hpack_header_table_entry_t *entry = header_table_add(hpack_header_table, result->name_not_token->len + result->value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET, SIZE_MAX);
             if (entry != NULL) {
                 entry->name.buf = result->name_not_token;
                 entry->name_is_token = 0;
@@ -530,8 +531,8 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
     }
     dst += h2o_hpack_encode_string(dst, value->base, value->len);
 
-    { /* add to header table */
-        struct st_h2o_hpack_header_table_entry_t *entry = header_table_add(header_table, name->len + value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET);
+    { /* add to header table (maximum number of entries in output header table is limited to 32 so that the search (see above) would not take too long) */
+        struct st_h2o_hpack_header_table_entry_t *entry = header_table_add(header_table, name->len + value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET, 32);
         if (static_table_name_index != 0) {
             entry->name_is_token = 1;
             entry->name.token = h2o_hpack_static_table[static_table_name_index - 1].name;
