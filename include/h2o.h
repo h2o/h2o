@@ -280,7 +280,7 @@ typedef struct st_h2o_timestamp_t {
 typedef struct st_h2o_host_configuration_t {
     h2o_linklist_t _link;
     /**
-     * hostname in lower-case (base is NUL terminated)
+     * hostname in lower-case (base is NULL terminated)
      */
     h2o_buf_t hostname;
     /**
