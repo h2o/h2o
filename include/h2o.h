@@ -315,7 +315,7 @@ typedef struct st_h2o_global_configuration_t {
      */
     h2o_linklist_t global_configurators;
     /**
-     * list of global configurators (h2o_configurator_t)
+     * list of global host configurators (h2o_configurator_t)
      */
     h2o_linklist_t host_configurators;
     /**
@@ -436,7 +436,7 @@ typedef struct st_h2o_res_t {
     const char *reason;
     /**
      * length of the content (that is sent as the Content-Length header).
-     * The default value is SIZE_MAX, which means that the length is undeterminate.
+     * The default value is SIZE_MAX, which means that the length is undeterminated.
      * Generators should set this value whenever possible.
      */
     size_t content_length;
