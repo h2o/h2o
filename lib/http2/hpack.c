@@ -179,7 +179,7 @@ static struct st_h2o_hpack_header_table_entry_t *header_table_add(h2o_hpack_head
     /* adjust the size */
     while (table->num_entries != 0 && table->hpack_size + size_add > table->hpack_capacity)
         header_table_evict_one(table);
-    while (max_num_entries < table->num_entries)
+    while (max_num_entries <= table->num_entries)
         header_table_evict_one(table);
     if (table->num_entries == 0) {
         assert(table->hpack_size == 0);
