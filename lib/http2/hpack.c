@@ -484,24 +484,32 @@ Exit:
 
 static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_buf_t *name, const h2o_buf_t *value)
 {
-    int header_table_index, static_table_name_index, name_is_token = h2o_buf_is_token(name);
+    int static_table_name_index, name_is_token = h2o_buf_is_token(name);
 
-    for (header_table_index = 0; header_table_index != header_table->num_entries; ++header_table_index) {
-        struct st_h2o_hpack_header_table_entry_t *entry = header_table_get(header_table, header_table_index);
-        if (name_is_token) {
-            if (name != entry->name.buf)
+    /* try to send as indexed */
+    {
+        size_t header_table_index = header_table->entry_start_index, n;
+        for (n = header_table->num_entries; n != 0; --n) {
+            struct st_h2o_hpack_header_table_entry_t *entry = header_table->entries + header_table_index;
+            if (name_is_token) {
+                if (name != entry->name.buf)
+                    goto Next;
+            } else {
+                if (! h2o_memis(name->base, name->len, entry->name.buf->base, entry->name.buf->len))
+                    goto Next;
+            }
+            /* name matched! */
+            if (! h2o_memis(value->base, value->len, entry->value->base, entry->value->len))
                 continue;
-        } else {
-            if (! h2o_memis(name->base, name->len, entry->name.buf->base, entry->name.buf->len))
-                continue;
+            /* name and value matched! */
+            *dst = 0x80;
+            dst = encode_int(dst, (uint32_t)(header_table->num_entries - n + HEADER_TABLE_OFFSET), 7);
+            return dst;
+        Next:
+            ++header_table_index;
+            if (header_table_index == header_table->entry_capacity)
+                header_table_index = 0;
         }
-        /* name matched! */
-        if (! h2o_memis(value->base, value->len, entry->value->base, entry->value->len))
-            continue;
-        /* name and value matched! */
-        *dst = 0x80;
-        dst = encode_int(dst, header_table_index + HEADER_TABLE_OFFSET, 7);
-        return dst;
     }
 
     if (h2o_buf_is_token(name)) {
