@@ -346,7 +346,8 @@ void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table)
             struct st_h2o_hpack_header_table_entry_t *entry = header_table->entries + index;
             if (! entry->name_is_token)
                 h2o_mempool_release_shared(entry->name.buf);
-            h2o_mempool_release_shared(entry->value);
+            if (! entry->value_is_const)
+                h2o_mempool_release_shared(entry->value);
             index = (index + 1) % header_table->entry_capacity;
         } while (--header_table->num_entries != 0);
     }
