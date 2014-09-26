@@ -533,7 +533,7 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
     return dst;
 }
 
-h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, h2o_hpack_header_table_t *header_table, uint32_t stream_id, size_t max_frame_size, h2o_res_t *res)
+h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, h2o_hpack_header_table_t *header_table, uint32_t stream_id, size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t* ts, const h2o_buf_t *server_name)
 {
     const h2o_header_t *header, *header_end;
     size_t max_capacity = 0;
@@ -541,7 +541,11 @@ h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, h2o_hpack_header_table_
     uint8_t *dst;
 
     { /* calculate maximum required memory */
-        size_t max_cur_frame_size = STATUS_HEADER_MAX_SIZE; /* for :status: */
+        size_t max_cur_frame_size =
+            STATUS_HEADER_MAX_SIZE /* for :status: */
+            + 2 + H2O_TIMESTR_RFC1123_LEN /* for Date: */
+            + 5 + server_name->len /* for Server: */
+            ;
 
         for (header = res->headers.entries, header_end = header + res->headers.size; header != header_end; ++header) {
             size_t max_header_size = header->name->len + header->value.len + 1 + H2O_HTTP2_ENCODE_INT_MAX_LENGTH * 2;
@@ -563,6 +567,7 @@ h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, h2o_hpack_header_table_
 
     { /* encode */
         uint8_t *cur_frame;
+        h2o_buf_t date_value;
         
 #define EMIT_HEADER(end_headers) h2o_http2_encode_frame_header( \
     cur_frame, \
@@ -574,6 +579,10 @@ h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, h2o_hpack_header_table_
         cur_frame = dst;
         dst += H2O_HTTP2_FRAME_HEADER_SIZE;
         dst = encode_status(dst, res->status);
+        /* TODO keep some kind of reference to the indexed headers of Server and Date, and reuse them */
+        dst = encode_header(header_table, dst, &H2O_TOKEN_SERVER->buf, server_name);
+        date_value = h2o_buf_init(ts->str->rfc1123, H2O_TIMESTR_RFC1123_LEN);
+        dst = encode_header(header_table, dst, &H2O_TOKEN_DATE->buf, &date_value);
         for (header = res->headers.entries, header_end = header + res->headers.size; header != header_end; ++header) {
             size_t max_header_size = header->name->len + header->value.len + 1 + H2O_HTTP2_ENCODE_INT_MAX_LENGTH * 2;
             if (dst - cur_frame - H2O_HTTP2_FRAME_HEADER_SIZE + max_header_size > max_frame_size) {
