@@ -482,29 +482,66 @@ Exit:
     return dst - _dst;
 }
 
-static uint8_t *encode_header(uint8_t *dst, const h2o_buf_t *name, const h2o_buf_t *value)
+static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_buf_t *name, const h2o_buf_t *value)
 {
-    int static_table_name_index = 0;
+    int header_table_index, static_table_name_index, name_is_token = h2o_buf_is_token(name);
+
+    for (header_table_index = 0; header_table_index != header_table->num_entries; ++header_table_index) {
+        struct st_h2o_hpack_header_table_entry_t *entry = header_table_get(header_table, header_table_index);
+        if (name_is_token) {
+            if (name != entry->name.buf)
+                continue;
+        } else {
+            if (! h2o_memis(name->base, name->len, entry->name.buf->base, entry->name.buf->len))
+                continue;
+        }
+        /* name matched! */
+        if (! h2o_memis(value->base, value->len, entry->value->base, entry->value->len))
+            continue;
+        /* name and value matched! */
+        *dst = 0x80;
+        dst = encode_int(dst, header_table_index + HEADER_TABLE_OFFSET, 7);
+        return dst;
+    }
 
     if (h2o_buf_is_token(name)) {
         const h2o_token_t *name_token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
         static_table_name_index = name_token->http2_static_table_name_index;
+    } else {
+        static_table_name_index = 0;
     }
 
     if (static_table_name_index != 0) {
-        /* literal header field without indexing (indexed name) */
-        *dst = 0;
-        dst = encode_int(dst, static_table_name_index, 4);
+        /* literal header field with indexing (indexed name) */
+        *dst = 0x40;
+        dst = encode_int(dst, static_table_name_index, 6);
     } else {
-        /* literal header field without indexing (new name) */
-        *dst++ = '\0';
+        /* literal header field with indexing (new name) */
+        *dst++ = 0x40;
         dst += h2o_hpack_encode_string(dst, name->base, name->len);
     }
     dst += h2o_hpack_encode_string(dst, value->base, value->len);
+
+    { /* add to header table */
+        struct st_h2o_hpack_header_table_entry_t *entry = header_table_add(header_table, name->len + value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET);
+        if (static_table_name_index != 0) {
+            entry->name_is_token = 1;
+            entry->name.token = h2o_hpack_static_table[static_table_name_index - 1].name;
+        } else {
+            entry->name_is_token = 0;
+            entry->name.buf = alloc_buf(NULL, name->len);
+            entry->name.buf->base[name->len] = '\0';
+            memcpy(entry->name.buf->base, name, name->len);
+        }
+        entry->value = alloc_buf(NULL, value->len);
+        entry->value->base[value->len] = '\0';
+        memcpy(entry->value->base, value->base, value->len);
+    }
+
     return dst;
 }
 
-h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, uint32_t stream_id, size_t max_frame_size, h2o_res_t *res)
+h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, h2o_hpack_header_table_t *header_table, uint32_t stream_id, size_t max_frame_size, h2o_res_t *res)
 {
     const h2o_header_t *header, *header_end;
     size_t max_capacity = 0;
@@ -552,7 +589,7 @@ h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, uint32_t stream_id, siz
                 cur_frame = dst;
                 dst += H2O_HTTP2_FRAME_HEADER_SIZE;
             }
-            dst = encode_header(dst, header->name, &header->value);
+            dst = encode_header(header_table, dst, header->name, &header->value);
         }
         EMIT_HEADER(1);
 
@@ -641,6 +678,15 @@ static void test_request(h2o_buf_t first_req, h2o_buf_t second_req, h2o_buf_t th
 
     h2o_hpack_dispose_header_table(&header_table);
     h2o_mempool_clear(&req.pool);
+}
+
+static void check_flatten(h2o_mempool_t *pool, h2o_hpack_header_table_t *header_table, h2o_res_t *res, const char *expected, size_t expected_len)
+{
+    h2o_buf_t flattened = h2o_hpack_flatten_headers(pool, header_table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res);
+    h2o_http2_frame_t frame;
+
+    ok(h2o_http2_decode_frame(&frame, (uint8_t*)flattened.base, flattened.len, &H2O_HTTP2_SETTINGS_DEFAULT) > 0);
+    ok(h2o_memis(frame.payload, frame.length, expected, expected_len));
 }
 
 void hpack_test()
@@ -788,6 +834,37 @@ void hpack_test()
         size_t l = encode_huffman((uint8_t*)buf, (uint8_t*)H2O_STRLIT("www.example.com"));
         ok(l == huffcode.len);
         ok(memcmp(buf, huffcode.base, huffcode.len) == 0);
+    }
+
+    note("response examples with huffmann coding");
+    {
+        h2o_hpack_header_table_t header_table;
+        h2o_res_t res;
+
+        memset(&header_table, 0, sizeof(header_table));
+        header_table.hpack_capacity = 256;
+
+        memset(&res, 0, sizeof(res));
+        res.status = 302;
+        res.reason = "Found";
+        h2o_add_header(&pool, &res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("private"));
+        h2o_add_header(&pool, &res.headers, H2O_TOKEN_DATE, H2O_STRLIT("Mon, 21 Oct 2013 20:13:21 GMT"));
+        h2o_add_header(&pool, &res.headers, H2O_TOKEN_LOCATION, H2O_STRLIT("https://www.example.com"));
+        check_flatten(&pool, &header_table, &res,
+            H2O_STRLIT("\x08\x03\x33\x30\x32\x58\x85\xae\xc3\x77\x1a\x4b\x61\x96\xd0\x7a\xbe\x94\x10\x54\xd4\x44\xa8\x20\x05\x95\x04\x0b\x81\x66\xe0\x82\xa6\x2d\x1b\xff\x6e\x91\x9d\x29\xad\x17\x18\x63\xc7\x8f\x0b\x97\xc8\xe9\xae\x82\xae\x43\xd3"));
+
+        memset(&res, 0, sizeof(res));
+        res.status = 307;
+        res.reason = "Temporary Redirect";
+        h2o_add_header(&pool, &res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("private"));
+        h2o_add_header(&pool, &res.headers, H2O_TOKEN_DATE, H2O_STRLIT("Mon, 21 Oct 2013 20:13:21 GMT"));
+        h2o_add_header(&pool, &res.headers, H2O_TOKEN_LOCATION, H2O_STRLIT("https://www.example.com"));
+        check_flatten(&pool, &header_table, &res,
+            H2O_STRLIT("\x08\x03\x33\x30\x37\xc0\xbf\xbe"));
+#if 0
+        h2o_buf_init(H2O_STRLIT("\x48\x03\x33\x30\x37\xc1\xc0\xbf")),
+        h2o_buf_init(H2O_STRLIT("\x88\xc1\x61\x1d\x4d\x6f\x6e\x2c\x20\x32\x31\x20\x4f\x63\x74\x20\x32\x30\x31\x33\x20\x32\x30\x3a\x31\x33\x3a\x32\x32\x20\x47\x4d\x54\xc0\x5a\x04\x67\x7a\x69\x70\x77\x38\x66\x6f\x6f\x3d\x41\x53\x44\x4a\x4b\x48\x51\x4b\x42\x5a\x58\x4f\x51\x57\x45\x4f\x50\x49\x55\x41\x58\x51\x57\x45\x4f\x49\x55\x3b\x20\x6d\x61\x78\x2d\x61\x67\x65\x3d\x33\x36\x30\x30\x3b\x20\x76\x65\x72\x73\x69\x6f\x6e\x3d\x31")));
+#endif
     }
 
     h2o_mempool_clear(&pool);

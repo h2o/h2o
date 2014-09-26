@@ -63,7 +63,7 @@ typedef struct st_h2o_hpack_header_table_t {
 void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table);
 int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, int *allow_psuedo, const uint8_t *src, size_t len);
 size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len);
-h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, uint32_t stream_id, size_t max_frame_size, h2o_res_t *res);
+h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, h2o_hpack_header_table_t *header_table, uint32_t stream_id, size_t max_frame_size, h2o_res_t *res);
 
 /* settings */
 
@@ -200,6 +200,7 @@ struct st_h2o_http2_conn_t {
     h2o_input_buffer_t *_http1_req_input; /* contains data referred to by original request via HTTP/1.1 */
     h2o_hpack_header_table_t _input_header_table;
     h2o_http2_window_t _input_window;
+    h2o_hpack_header_table_t _output_header_table;
     h2o_http2_stream_t *_pending_reqs;
     struct {
         h2o_mempool_t *pool; /* points to either of the _pools */
