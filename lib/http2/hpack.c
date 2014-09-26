@@ -533,18 +533,20 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
 
     { /* add to header table (maximum number of entries in output header table is limited to 32 so that the search (see above) would not take too long) */
         struct st_h2o_hpack_header_table_entry_t *entry = header_table_add(header_table, name->len + value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET, 32);
-        if (static_table_name_index != 0) {
-            entry->name_is_token = 1;
-            entry->name.token = h2o_hpack_static_table[static_table_name_index - 1].name;
-        } else {
-            entry->name_is_token = 0;
-            entry->name.buf = alloc_buf(NULL, name->len);
-            entry->name.buf->base[name->len] = '\0';
-            memcpy(entry->name.buf->base, name, name->len);
+        if (entry != NULL) {
+            if (static_table_name_index != 0) {
+                entry->name_is_token = 1;
+                entry->name.token = h2o_hpack_static_table[static_table_name_index - 1].name;
+            } else {
+                entry->name_is_token = 0;
+                entry->name.buf = alloc_buf(NULL, name->len);
+                entry->name.buf->base[name->len] = '\0';
+                memcpy(entry->name.buf->base, name, name->len);
+            }
+            entry->value = alloc_buf(NULL, value->len);
+            entry->value->base[value->len] = '\0';
+            memcpy(entry->value->base, value->base, value->len);
         }
-        entry->value = alloc_buf(NULL, value->len);
-        entry->value->base[value->len] = '\0';
-        memcpy(entry->value->base, value->base, value->len);
     }
 
     return dst;
