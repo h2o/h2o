@@ -800,14 +800,14 @@ static int h2o_lcstris(const char *target, size_t target_len, const char *test, 
  * @param pool memory pool (or NULL to use malloc)
  * @param s source string
  * @param len length of the source string (the result of strlen(s) used in case len is SIZE_MAX)
- * @return buffer pointing to the duplicated string (buf is NUL-terminated but the length does not include the NUL char)
+ * @return buffer pointing to the duplicated string (buf is NUL-terminated but the length does not include the NULL char)
  */
 h2o_buf_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t len);
 /**
  * printf's the string to an allocated buffer
  * @param pool memory pool (or NULL to use malloc)
  * @param fmt printf-style format
- * @return buffer pointing to the formatted string (buf is NUL-terminated but the length does not include the NUL char)
+ * @return buffer pointing to the formatted string (buf is NUL-terminated but the length does not include the NULL char)
  */
 h2o_buf_t h2o_sprintf(h2o_mempool_t *pool, const char *fmt, ...) __attribute__((format (printf, 2, 3)));
 /**
