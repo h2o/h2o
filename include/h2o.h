@@ -447,7 +447,7 @@ typedef struct st_h2o_res_t {
     const char *reason;
     /**
      * length of the content (that is sent as the Content-Length header).
-     * The default value is SIZE_MAX, which means that the length is undeterminate.
+     * The default value is SIZE_MAX, which means that the length is indeterminate.
      * Generators should set this value whenever possible.
      */
     size_t content_length;
