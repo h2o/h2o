@@ -233,6 +233,9 @@ static void *run_loop(void *_conf)
     /* setup loop and context */
     loop = h2o_evloop_create();
     h2o_context_init(&ctx, loop, &conf->global_config);
+    
+    h2o_logger_t *logger = h2o_register_access_logger(&ctx, "server.log" /*/dev/stdout"*/);
+    h2o_linklist_insert(&conf->global_config.default_host.loggers, &logger->_link);
 
     listener = h2o_evloop_socket_create(ctx.loop, conf->listen_fd, H2O_SOCKET_FLAG_IS_ACCEPT);
     listener->data = &ctx;
