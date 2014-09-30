@@ -60,7 +60,7 @@ static int on_req(h2o_handler_t *self, h2o_req_t *req)
 
 static h2o_global_configuration_t config;
 static h2o_context_t ctx;
-static h2o_ssl_context_t *ssl_ctx;
+static h2o_ssl_context_t *ssl_ctx = NULL;
 
 static void on_connect(uv_stream_t *server, int status)
 {

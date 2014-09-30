@@ -30,6 +30,7 @@
 #include "yoml-parser.h"
 #include "h2o.h"
 #include "h2o/http1.h"
+#include "h2o/http2.h"
 
 /* taken from sysexits.h */
 #ifndef EX_CONFIG
@@ -53,6 +54,8 @@ struct config_t {
     h2o_configurator_t max_connections_configurator;
     h2o_configurator_t num_threads_configurator;
 };
+
+static h2o_ssl_context_t *ssl_ctx = NULL;
 
 static int on_config_port(h2o_configurator_t *_conf, void *ctx, const char *config_file, yoml_t *config_node)
 {
@@ -218,7 +221,12 @@ static void on_accept(h2o_socket_t *listener, int status)
             break;
         }
         __sync_add_and_fetch(&conf->state.num_connections, 1);
-        h2o_http1_accept(ctx, sock);
+        
+        if (ssl_ctx != NULL)
+            h2o_accept_ssl(ctx, sock, ssl_ctx);
+        else
+            h2o_http1_accept(ctx, sock);
+
     } while (--num_accepts != 0);
 }
 
@@ -233,6 +241,10 @@ static void *run_loop(void *_conf)
     /* setup loop and context */
     loop = h2o_evloop_create();
     h2o_context_init(&ctx, loop, &conf->global_config);
+    
+    //ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers);
+    h2o_logger_t *logger = h2o_register_access_logger(&ctx, "server.log" /*/dev/stdout"*/);
+    h2o_linklist_insert(&conf->global_config.default_host.loggers, &logger->_link);
 
     listener = h2o_evloop_socket_create(ctx.loop, conf->listen_fd, H2O_SOCKET_FLAG_IS_ACCEPT);
     listener->data = &ctx;
