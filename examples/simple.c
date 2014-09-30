@@ -92,7 +92,7 @@ static int post_test(h2o_handler_t *self, h2o_req_t *req)
 
 static h2o_global_configuration_t config;
 static h2o_context_t ctx;
-static h2o_ssl_context_t *ssl_ctx;
+static h2o_ssl_context_t *ssl_ctx = NULL;;
 
 #if H2O_USE_LIBUV
 
@@ -155,7 +155,10 @@ static void on_accept(h2o_socket_t *listener, int status)
     if ((sock = h2o_evloop_socket_accept(listener)) == NULL) {
         return;
     }
-    h2o_accept(&ctx, sock);
+    if (ssl_ctx != NULL)
+        h2o_accept_ssl(&ctx, sock, ssl_ctx);
+    else
+        h2o_http1_accept(&ctx, sock);
 }
 
 static int create_listener(void)
@@ -204,8 +207,8 @@ int main(int argc, char **argv)
     h2o_context_init(&ctx, h2o_evloop_create(), &config);
 #endif
 
-    //ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers);
-    //h2o_register_access_logger(&ctx, "/dev/stdout");
+    ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers);
+    h2o_logger_t *logger = h2o_register_access_logger(&ctx, "server.log" /*/dev/stdout"*/);
 
     if (create_listener() != 0) {
         fprintf(stderr, "failed to listen to 127.0.0.1:7890:%s\n", strerror(errno));
