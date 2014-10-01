@@ -1051,6 +1051,7 @@ h2o_buf_t h2o_get_mimetype(h2o_mimemap_t *mimemap, const char *ext);
 /* access log */
 
 h2o_logger_t *h2o_register_access_logger(h2o_host_configuration_t *host_config, const char *path, const char *fmt);
+void h2o_register_access_logger_configurator(h2o_linklist_t *host_configurators);
 
 /* inline defs */
 

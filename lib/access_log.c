@@ -297,3 +297,64 @@ Error:
     destroy(&self->super);
     return NULL;
 }
+
+static int on_config(h2o_configurator_t *configurator, void *_config, const char *file, yoml_t *node)
+{
+    h2o_host_configuration_t *config = _config;
+    const char *path, *fmt = NULL;
+
+    switch (node->type) {
+    case  YOML_TYPE_SCALAR:
+        path = node->data.scalar;
+        break;
+    case YOML_TYPE_MAPPING:
+        {
+            yoml_t *t;
+            /* get path */
+            if ((t = yoml_get(node, "path")) == NULL) {
+                h2o_config_print_error(configurator, file, node, "could not find mandatory key `path`");
+                return -1;
+            }
+            if (t->type != YOML_TYPE_SCALAR) {
+                h2o_config_print_error(configurator, file, t, "`path` must be scalar");
+                return -1;
+            }
+            path = t->data.scalar;
+            /* get format */
+            if ((t = yoml_get(node, "format")) != NULL) {
+                if (t->type != YOML_TYPE_SCALAR) {
+                    h2o_config_print_error(configurator, file, t, "`format` must be a scalar");
+                    return -1;
+                }
+                fmt = t->data.scalar;
+            }
+        }
+        break;
+    default:
+        h2o_config_print_error(configurator, file, node, "node must be a scalar or a mapping");
+        return -1;
+    }
+
+    h2o_register_access_logger(config, path, fmt);
+    return 0;
+}
+
+void h2o_register_access_logger_configurator(h2o_linklist_t *host_configurators)
+{
+    static const char* desc[] = {
+        "path (and optionally the format) of the access log (default: none)",
+        " - if the value is a scalar, it is treated as the path of the log file",
+        " - if the value is a mapping, its `path` property is treated as the path",
+        "   and `format` property is treated as the format",
+        NULL
+    };
+    h2o_configurator_t *configurator = h2o_malloc(sizeof(*configurator));
+
+    memset(configurator, 0, sizeof(*configurator));
+    configurator->cmd = "access-log";
+    configurator->description = desc;
+    configurator->destroy = (void*)free;
+    configurator->on_cmd = on_config;
+
+    h2o_linklist_insert(host_configurators, &configurator->_link);
+}
