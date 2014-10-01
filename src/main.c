@@ -37,14 +37,19 @@
 # define EX_CONFIG 78
 #endif
 
-struct config_t {
-    h2o_global_configuration_t global_config;
-    unsigned short listen_port;
+struct listener_t {
+    unsigned short port;
     union {
         struct sockaddr sa;
         struct sockaddr_in in;
-    } listen_addr;
-    int listen_fd;
+    } addr;
+    int fd;
+};
+
+struct config_t {
+    h2o_global_configuration_t global_config;
+    struct listener_t *listeners;
+    size_t num_listeners;
     unsigned max_connections;
     unsigned num_threads;
     pthread_t *thread_ids;
@@ -64,25 +69,42 @@ static h2o_ssl_context_t *ssl_ctx = NULL;
 static int on_config_port(h2o_configurator_t *_conf, void *ctx, const char *config_file, yoml_t *config_node)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, port_configurator, _conf);
-    return h2o_config_scanf(&conf->port_configurator, config_file, config_node, "%hu", &conf->listen_port);
+    unsigned short port;
+
+    if (h2o_config_scanf(&conf->port_configurator, config_file, config_node, "%hu", &port) != 0)
+        return -1;
+
+    conf->listeners = h2o_realloc(conf->listeners, sizeof(*conf->listeners) * (conf->num_listeners + 1));
+    memset(conf->listeners + conf->num_listeners, 0, sizeof(*conf->listeners));
+    conf->listeners[conf->num_listeners].port = port;
+    ++conf->num_listeners;
+
+    return 0;
 }
 
 static int on_config_port_complete(h2o_configurator_t *_conf, void *_global_config)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, port_configurator, _conf);
     int reuseaddr_flag = 1;
+    size_t i;
 
-    memset(&conf->listen_addr, 0, sizeof(conf->listen_addr));
-    conf->listen_addr.in.sin_family = AF_INET;
-    conf->listen_addr.in.sin_addr.s_addr = htonl(0);
-    conf->listen_addr.in.sin_port = htons(conf->listen_port);
-
-    if ((conf->listen_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1
-        || setsockopt(conf->listen_fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
-        || bind(conf->listen_fd, &conf->listen_addr.sa, sizeof(conf->listen_addr.in)) != 0
-        || listen(conf->listen_fd, SOMAXCONN) != 0) {
-        fprintf(stderr, "failed to listen to port %hu:%s\n", conf->listen_port, strerror(errno));
+    if (conf->num_listeners == 0) {
+        fprintf(stderr, "mandatory configuration directive `port` is missing\n");
         return -1;
+    }
+
+    for (i = 0; i != conf->num_listeners; ++i) {
+        struct listener_t *listener = conf->listeners + i;
+        listener->addr.in.sin_family = AF_INET;
+        listener->addr.in.sin_addr.s_addr = htonl(0);
+        listener->addr.in.sin_port = htons(listener->port);
+        if ((listener->fd = socket(AF_INET, SOCK_STREAM, 0)) == -1
+            || setsockopt(listener->fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
+            || bind(listener->fd, &listener->addr.sa, sizeof(listener->addr.in)) != 0
+            || listen(listener->fd, SOMAXCONN) != 0) {
+            fprintf(stderr, "failed to listen to port %hu:%s\n", listener->port, strerror(errno));
+            return -1;
+        }
     }
 
     return 0;
@@ -239,25 +261,33 @@ static void *run_loop(void *_conf)
     struct config_t *conf = _conf;
     h2o_evloop_t *loop;
     h2o_context_t ctx;
-    h2o_socket_t *listener;
+    h2o_socket_t **listeners = alloca(sizeof(*listeners) * conf->num_listeners);
+    size_t i;
 
     /* setup loop and context */
     loop = h2o_evloop_create();
     h2o_context_init(&ctx, loop, &conf->global_config);
     /* ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers); */
 
-    listener = h2o_evloop_socket_create(ctx.loop, conf->listen_fd, (struct sockaddr*)&conf->listen_addr, H2O_SOCKET_FLAG_IS_ACCEPT);
-    listener->data = &ctx;
+    /* setup listeners */
+    for (i = 0; i != conf->num_listeners; ++i) {
+        listeners[i] = h2o_evloop_socket_create(ctx.loop, conf->listeners[i].fd, (struct sockaddr*)&conf->listeners[i].addr, H2O_SOCKET_FLAG_IS_ACCEPT);
+        listeners[i]->data = &ctx;
+    }
 
     /* the main loop */
     while (1) {
         /* start / stop trying to accept new connections */
         if (conf->state.num_connections < conf->max_connections) {
-            if (! h2o_socket_is_reading(listener))
-                h2o_socket_read_start(listener, on_accept);
+            for (i = 0; i != conf->num_listeners; ++i) {
+                if (! h2o_socket_is_reading(listeners[i]))
+                    h2o_socket_read_start(listeners[i], on_accept);
+            }
         } else {
-            if (h2o_socket_is_reading(listener))
-                h2o_socket_read_stop(listener);
+            for (i = 0; i != conf->num_listeners; ++i) {
+                if (h2o_socket_is_reading(listeners[i]))
+                    h2o_socket_read_stop(listeners[i]);
+            }
         }
         /* run the loop once */
         h2o_evloop_run(loop);
@@ -288,9 +318,8 @@ int main(int argc, char **argv)
     };
     static struct config_t config = {
         {}, /* global_config */
-        0, /* listen_port */
-        {}, /* listen_addr */
-        -1, /* listen_fd */
+        NULL, /* listeners */
+        0, /* num_listeners */
         1024, /* max_connections */
         1, /* num_threads */
         NULL, /* thread_ids */
