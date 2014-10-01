@@ -205,7 +205,7 @@ int main(int argc, char **argv)
 #endif
 
     //ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers);
-    //h2o_register_access_logger(&ctx, "/dev/stdout");
+    //h2o_register_access_logger(&config.default_host, "/dev/stdout");
 
     if (create_listener() != 0) {
         fprintf(stderr, "failed to listen to 127.0.0.1:7890:%s\n", strerror(errno));

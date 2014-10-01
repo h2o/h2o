@@ -61,7 +61,7 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
     write(self->fd, line.base, line.len);
 }
 
-h2o_logger_t *h2o_register_access_logger(h2o_context_t *ctx, const char *path)
+h2o_logger_t *h2o_register_access_logger(h2o_host_configuration_t *host_config, const char *path)
 {
     struct st_h2o_access_logger_t *self = h2o_malloc(sizeof(*self));
 
@@ -72,6 +72,8 @@ h2o_logger_t *h2o_register_access_logger(h2o_context_t *ctx, const char *path)
     self->fd = open(path, O_CREAT | O_WRONLY | O_APPEND, 0644);
     if (self->fd == -1)
         return NULL;
+
+    h2o_linklist_insert(&host_config->loggers, &self->super._link);
 
     return &self->super;
 }
