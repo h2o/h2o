@@ -188,16 +188,14 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             RESERVE(0);
             break;
         case ELEMENT_TYPE_REMOTE_ADDR:
-            {
-                struct sockaddr sa;
-                socklen_t sa_len = sizeof(sa);
+            if (req->conn->peername != NULL && req->conn->peername->sa_family == AF_INET) {
+                uint32_t addr;
                 RESERVE(sizeof("255.255.255.255") - 1);
-                if (req->conn->getpeername(req->conn, &sa, &sa_len) == 0 && sa.sa_family == AF_INET) {
-                    uint32_t addr = htonl(((struct sockaddr_in*)&sa)->sin_addr.s_addr);
-                    pos += sprintf(pos, "%d.%d.%d.%d", addr >> 24, (addr >> 16) & 255, (addr >> 8) & 255, addr & 255);
-                } else {
-                    *pos++ = '-';
-                }
+                addr = htonl(((struct sockaddr_in*)req->conn->peername)->sin_addr.s_addr);
+                pos += sprintf(pos, "%d.%d.%d.%d", addr >> 24, (addr >> 16) & 255, (addr >> 8) & 255, addr & 255);
+            } else {
+                RESERVE(1);
+                *pos++ = '-';
             }
             break;
         case ELEMENT_TYPE_LOGNAME:

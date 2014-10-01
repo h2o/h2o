@@ -267,13 +267,7 @@ void do_read_stop(h2o_socket_t *_sock)
     link_to_statechanged(sock);
 }
 
-int h2o_socket_getpeername(h2o_socket_t *_sock, struct sockaddr *name, socklen_t *namelen)
-{
-    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t*)_sock;
-    return getpeername(sock->fd, name, namelen);
-}
-
-h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags)
+h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, struct sockaddr *peername, int flags)
 {
     struct st_h2o_evloop_socket_t *sock;
 
@@ -281,6 +275,7 @@ h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags)
 
     sock = h2o_malloc(sizeof(*sock));
     memset(sock, 0, sizeof(*sock));
+    sock->super.peername = *peername;
     sock->loop = loop;
     sock->fd = fd;
     sock->_flags = flags;
@@ -297,20 +292,22 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
 {
     struct st_h2o_evloop_socket_t *listener = (struct st_h2o_evloop_socket_t*)_listener;
     h2o_socket_t *sock;
+    struct sockaddr peername;
+    socklen_t peername_len = sizeof(peername);
     int fd, on;
 
 #ifdef __linux__
-    if ((fd = accept4(listener->fd, NULL, NULL, O_NONBLOCK)) == -1)
+    if ((fd = accept4(listener->fd, &peername, &peername_len, O_NONBLOCK)) == -1)
         return NULL;
 #else
-    if ((fd = accept(listener->fd, NULL, NULL)) == -1)
+    if ((fd = accept(listener->fd, &peername, &peername_len)) == -1)
         return NULL;
     fcntl(fd, F_SETFL, O_NONBLOCK);
 #endif
     on = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
 
-    sock = h2o_evloop_socket_create(listener->loop, fd, 0);
+    sock = h2o_evloop_socket_create(listener->loop, fd, &peername, 0);
     return sock;
 }
 

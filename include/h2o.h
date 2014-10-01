@@ -196,6 +196,7 @@ struct st_h2o_socket_t {
         h2o_socket_cb read;
         h2o_socket_cb write;
     } _cb;
+    struct sockaddr peername;
 };
 
 /**
@@ -466,9 +467,9 @@ struct st_h2o_conn_t {
      */
     h2o_context_t *ctx;
     /**
-     * a callback to obtain the address of the peer
+     * peername (or NULL if not available)
      */
-    int (*getpeername)(h2o_conn_t *conn, struct sockaddr *name, socklen_t *namelen);
+    struct sockaddr *peername;
 };
 
 /**
@@ -684,10 +685,6 @@ static int h2o_socket_is_writing(h2o_socket_t *sock);
  * returns a boolean value indicating whether if the socket is being polled for read
  */
 static int h2o_socket_is_reading(h2o_socket_t *sock);
-/**
- * getpeername(2) equivalent
- */
-int h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *name, socklen_t *namelen);
 /**
  * performs SSL handshake on a socket
  * @param sock the socket

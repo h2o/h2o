@@ -716,12 +716,6 @@ void emit_writereq(h2o_timeout_entry_t *entry)
     }
 }
 
-static int get_peername(h2o_conn_t *_conn, struct sockaddr *name, socklen_t *namelen)
-{
-    h2o_http2_conn_t *conn = (h2o_http2_conn_t*)_conn;
-    return h2o_socket_getpeername(conn->sock, name, namelen);
-}
-
 static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock)
 {
     h2o_http2_conn_t *conn = h2o_malloc(sizeof(*conn));
@@ -729,7 +723,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock)
     /* init the connection */
     memset(conn, 0, offsetof(h2o_http2_conn_t, _write._pools[0]));
     conn->super.ctx = ctx;
-    conn->super.getpeername = get_peername;
+    conn->super.peername = &sock->peername;
     conn->sock = sock;
     conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
     conn->open_streams = kh_init(h2o_http2_stream_t);

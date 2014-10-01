@@ -369,12 +369,6 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, 
     }
 }
 
-static int get_peername(h2o_conn_t *_conn, struct sockaddr *name, socklen_t *namelen)
-{
-    h2o_http1_conn_t *conn = (h2o_http1_conn_t*)_conn;
-    return h2o_socket_getpeername(conn->sock, name, namelen);
-}
-
 void h2o_http1_accept(h2o_context_t *ctx, h2o_socket_t *sock)
 {
     h2o_http1_conn_t *conn = h2o_malloc(sizeof(*conn));
@@ -384,7 +378,7 @@ void h2o_http1_accept(h2o_context_t *ctx, h2o_socket_t *sock)
 
     /* init properties that need to be non-zero */
     conn->super.ctx = ctx;
-    conn->super.getpeername = get_peername;
+    conn->super.peername = &sock->peername;
     conn->sock = sock;
     sock->data = conn;
 

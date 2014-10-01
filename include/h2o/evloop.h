@@ -36,7 +36,7 @@ typedef h2o_evloop_t h2o_loop_t;
 struct st_h2o_timeout_backend_properties_t {
 };
 
-h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags);
+h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, struct sockaddr *peername, int flags);
 h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *listener);
 
 h2o_evloop_t *h2o_evloop_create(void);
