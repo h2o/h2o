@@ -207,8 +207,15 @@ int main(int argc, char **argv)
     h2o_context_init(&ctx, h2o_evloop_create(), &config);
 #endif
 
-    //ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers);
-    //h2o_register_access_logger(&config.default_host, "/dev/stdout");
+    /* disabled by default: uncomment the block below to use HTTPS instead of HTTP */
+    /*
+    ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers);
+    if (ssl_ctx == NULL)
+        goto Error;
+    */
+
+    /* disabled by default: uncomment the line below to enable access logging */
+    /* h2o_register_access_logger(&config.default_host, "/dev/stdout"); */
 
     if (create_listener() != 0) {
         fprintf(stderr, "failed to listen to 127.0.0.1:7890:%s\n", strerror(errno));
