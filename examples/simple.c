@@ -155,7 +155,7 @@ static void on_accept(h2o_socket_t *listener, int status)
     if ((sock = h2o_evloop_socket_accept(listener)) == NULL) {
         return;
     }
-    h2o_accept(&ctx, sock);
+    h2o_http1_accept(&ctx, sock);
 }
 
 static int create_listener(void)
