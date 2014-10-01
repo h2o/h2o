@@ -241,7 +241,7 @@ static void *run_loop(void *_conf)
     /* setup loop and context */
     loop = h2o_evloop_create();
     h2o_context_init(&ctx, loop, &conf->global_config);
-    //ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers);
+    /* ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers); */
 
     listener = h2o_evloop_socket_create(ctx.loop, conf->listen_fd, H2O_SOCKET_FLAG_IS_ACCEPT);
     listener->data = &ctx;
