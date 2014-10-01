@@ -19,9 +19,11 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
 #include <getopt.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <signal.h>
@@ -38,7 +40,6 @@
 #endif
 
 struct listener_t {
-    unsigned short port;
     union {
         struct sockaddr sa;
         struct sockaddr_in in;
@@ -76,7 +77,9 @@ static int on_config_port(h2o_configurator_t *_conf, void *ctx, const char *conf
 
     conf->listeners = h2o_realloc(conf->listeners, sizeof(*conf->listeners) * (conf->num_listeners + 1));
     memset(conf->listeners + conf->num_listeners, 0, sizeof(*conf->listeners));
-    conf->listeners[conf->num_listeners].port = port;
+    conf->listeners[conf->num_listeners].addr.in.sin_family = AF_INET;
+    conf->listeners[conf->num_listeners].addr.in.sin_addr.s_addr = htonl(0);
+    conf->listeners[conf->num_listeners].addr.in.sin_port = htons(port);
     ++conf->num_listeners;
 
     return 0;
@@ -95,14 +98,13 @@ static int on_config_port_complete(h2o_configurator_t *_conf, void *_global_conf
 
     for (i = 0; i != conf->num_listeners; ++i) {
         struct listener_t *listener = conf->listeners + i;
-        listener->addr.in.sin_family = AF_INET;
-        listener->addr.in.sin_addr.s_addr = htonl(0);
-        listener->addr.in.sin_port = htons(listener->port);
         if ((listener->fd = socket(AF_INET, SOCK_STREAM, 0)) == -1
             || setsockopt(listener->fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
             || bind(listener->fd, &listener->addr.sa, sizeof(listener->addr.in)) != 0
             || listen(listener->fd, SOMAXCONN) != 0) {
-            fprintf(stderr, "failed to listen to port %hu:%s\n", listener->port, strerror(errno));
+            char host[NI_MAXHOST], serv[NI_MAXSERV];
+            getnameinfo(&listener->addr.sa, sizeof(listener->addr.sa), host, sizeof(host), serv, sizeof(serv), NI_NUMERICHOST | NI_NUMERICSERV);
+            fprintf(stderr, "failed to listen to port %s:%s\n", host, serv);
             return -1;
         }
     }
