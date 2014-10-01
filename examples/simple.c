@@ -215,7 +215,7 @@ int main(int argc, char **argv)
     */
 
     /* disabled by default: uncomment the line below to enable access logging */
-    /* h2o_register_access_logger(&config.default_host, "/dev/stdout"); */
+    /* h2o_register_access_logger(&config.default_host, "/dev/stdout", NULL); */
 
     if (create_listener() != 0) {
         fprintf(stderr, "failed to listen to 127.0.0.1:7890:%s\n", strerror(errno));
