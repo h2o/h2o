@@ -92,7 +92,7 @@ static int post_test(h2o_handler_t *self, h2o_req_t *req)
 
 static h2o_global_configuration_t config;
 static h2o_context_t ctx;
-static h2o_ssl_context_t *ssl_ctx;
+static SSL_CTX *ssl_ctx;
 
 #if H2O_USE_LIBUV
 
@@ -187,6 +187,36 @@ static int create_listener(void)
 
 #endif
 
+static int setup_ssl(const char *cert_file, const char *key_file)
+{
+    SSL_load_error_strings();
+    SSL_library_init();
+    OpenSSL_add_all_algorithms();
+
+    ssl_ctx = SSL_CTX_new(SSLv23_server_method());
+    SSL_CTX_set_options(ssl_ctx, SSL_OP_NO_SSLv2);
+
+    /* load certificate and private key */
+    if (SSL_CTX_use_certificate_file(ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
+        fprintf(stderr, "an error occured while trying to load server certificate file:%s\n", cert_file);
+        return -1;
+    }
+    if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file, SSL_FILETYPE_PEM) != 1) {
+        fprintf(stderr, "an error occured while trying to load private key file:%s\n", key_file);
+        return -1;
+    }
+
+    /* setup protocol negotiation methods */
+#if H2O_USE_NPN
+    h2o_ssl_register_npn_protocols(ssl_ctx, h2o_http2_npn_protocols);
+#endif
+#if H2O_USE_ALPN
+    h2o_ssl_register_alpn_protocols(ssl_ctx, h2o_http2_alpn_protocols);
+#endif
+
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     signal(SIGPIPE, SIG_IGN);
@@ -209,8 +239,7 @@ int main(int argc, char **argv)
 
     /* disabled by default: uncomment the block below to use HTTPS instead of HTTP */
     /*
-    ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers);
-    if (ssl_ctx == NULL)
+    if (setup_ssl("server.crt", "server.key") != 0)
         goto Error;
     */
 
