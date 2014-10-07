@@ -22,6 +22,7 @@
 #include <alloca.h>
 #include <inttypes.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include "h2o.h"
 #include "h2o/http1.h"
@@ -323,22 +324,42 @@ static void flatten_headers(h2o_req_t *req, h2o_buf_t *bufs, const char *connect
 
     h2o_get_timestamp(ctx, &req->pool, &ts);
 
+    assert(req->res.status <= 999);
     if (req->res.content_length != SIZE_MAX) {
-        bufs[0] = h2o_sprintf(
+        bufs[0].base = h2o_mempool_alloc(
             &req->pool,
-            "HTTP/1.1 %d %s\r\ndate: %.*s\r\nserver: %.*s\r\nconnection: %s\r\ncontent-length: %zu\r\n",
-            req->res.status, req->res.reason,
-            (int)H2O_TIMESTR_RFC1123_LEN, ts.str->rfc1123,
-            (int)ctx->global_config->server_name.len, ctx->global_config->server_name.base,
+            sizeof("HTTP/1.1  \r\ndate: \r\nserver: \r\nconnection: \r\ncontent-length: \r\n")
+            + 3
+            + strlen(req->res.reason)
+            + H2O_TIMESTR_RFC1123_LEN
+            + ctx->global_config->server_name.len
+            + strlen(connection))
+            + sizeof("18446744073709551615") - 1;
+        bufs[0].len = sprintf(
+            bufs[0].base,
+            "HTTP/1.1 %d %s\r\ndate: %s\r\nserver: %s\r\nconnection: %s\r\ncontent-length: %zu\r\n",
+            req->res.status,
+            req->res.reason,
+            ts.str->rfc1123,
+            ctx->global_config->server_name.base,
             connection,
             req->res.content_length);
     } else {
-        bufs[0] = h2o_sprintf(
+        bufs[0].base = h2o_mempool_alloc(
             &req->pool,
-            "HTTP/1.1 %d %s\r\ndate: %.*s\r\nserver: %.*s\r\nconnection: %s\r\n",
-            req->res.status, req->res.reason,
-            (int)H2O_TIMESTR_RFC1123_LEN, ts.str->rfc1123,
-            (int)ctx->global_config->server_name.len, ctx->global_config->server_name.base,
+            sizeof("HTTP/1.1  \r\ndate: \r\nserver: \r\nconnection: \r\n")
+            + 3
+            + strlen(req->res.reason)
+            + H2O_TIMESTR_RFC1123_LEN
+            + ctx->global_config->server_name.len
+            + strlen(connection));
+        bufs[0].len = sprintf(
+            bufs[0].base,
+            "HTTP/1.1 %d %s\r\ndate: %s\r\nserver: %s\r\nconnection: %s\r\n",
+            req->res.status,
+            req->res.reason,
+            ts.str->rfc1123,
+            ctx->global_config->server_name.base,
             connection);
     }
     bufs[1] = h2o_flatten_headers(&req->pool, &req->res.headers);
