@@ -333,8 +333,8 @@ static void flatten_headers(h2o_req_t *req, h2o_buf_t *bufs, const char *connect
             + strlen(req->res.reason)
             + H2O_TIMESTR_RFC1123_LEN
             + ctx->global_config->server_name.len
-            + strlen(connection))
-            + sizeof("18446744073709551615") - 1;
+            + strlen(connection)
+            + sizeof("18446744073709551615") - 1);
         bufs[0].len = sprintf(
             bufs[0].base,
             "HTTP/1.1 %d %s\r\ndate: %s\r\nserver: %s\r\nconnection: %s\r\ncontent-length: %zu\r\n",
