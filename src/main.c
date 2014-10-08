@@ -19,9 +19,11 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
 #include <getopt.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <signal.h>
@@ -38,17 +40,17 @@
 #endif
 
 struct listener_t {
-    unsigned short port;
-    union {
-        struct sockaddr sa;
-        struct sockaddr_in in;
-    } addr;
     int fd;
+    int family;
+    int socktype;
+    int protocol;
+    struct sockaddr_storage addr;
+    socklen_t addrlen;
 };
 
 struct config_t {
     h2o_global_configuration_t global_config;
-    struct listener_t *listeners;
+    struct listener_t **listeners;
     size_t num_listeners;
     unsigned max_connections;
     unsigned num_threads;
@@ -66,26 +68,85 @@ struct config_t {
 
 static h2o_ssl_context_t *ssl_ctx = NULL;
 
-static int on_config_port(h2o_configurator_t *_conf, void *ctx, const char *config_file, yoml_t *config_node)
+static int on_config_listen(h2o_configurator_t *configurator, void *ctx, const char *config_file, yoml_t *config_node)
 {
-    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, port_configurator, _conf);
-    unsigned short port;
+    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, port_configurator, configurator);
+    const char *hostname = NULL, *servname = NULL;
+    struct addrinfo hints, *res;
+    int error;
 
-    if (h2o_config_scanf(&conf->port_configurator, config_file, config_node, "%hu", &port) != 0)
+    /* fetch servname (and hostname) */
+    switch (config_node->type) {
+    case YOML_TYPE_SCALAR:
+        servname = config_node->data.scalar;
+        break;
+    case YOML_TYPE_MAPPING:
+        {
+            yoml_t *t;
+            if ((t = yoml_get(config_node, "host")) != NULL) {
+                if (t->type != YOML_TYPE_SCALAR) {
+                    h2o_config_print_error(configurator, config_file, t, "`host` is not a string");
+                    return -1;
+                }
+                hostname = t->data.scalar;
+            }
+            if ((t = yoml_get(config_node, "port")) == NULL) {
+                h2o_config_print_error(configurator, config_file, config_node, "cannot find mandatory property `port`");
+                return -1;
+            }
+            if (t->type != YOML_TYPE_SCALAR) {
+                h2o_config_print_error(configurator, config_file, config_node, "`port` is not a string");
+                return -1;
+            }
+            servname = t->data.scalar;
+        }
+        break;
+    default:
+        h2o_config_print_error(configurator, config_file, config_node, "value must be a string or a mapping (with keys: `port` and optionally `host`)");
         return -1;
+    }
 
-    conf->listeners = h2o_realloc(conf->listeners, sizeof(*conf->listeners) * (conf->num_listeners + 1));
-    memset(conf->listeners + conf->num_listeners, 0, sizeof(*conf->listeners));
-    conf->listeners[conf->num_listeners].port = port;
-    ++conf->num_listeners;
+    /* call getaddrinfo */
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV | AI_PASSIVE;
+    if ((error = getaddrinfo(hostname, servname, &hints, &res)) != 0) {
+        h2o_config_print_error(configurator, config_file, config_node, "failed to resolve the listening address: %s", gai_strerror(error));
+        return -1;
+    } else if (res == NULL) {
+        h2o_config_print_error(configurator, config_file, config_node, "failed to resolve the listening address: getaddrinfo returned an empty list");
+        return -1;
+    }
+
+    { /* save the entries */
+        struct addrinfo *ai;
+        for (ai = res; ai != NULL; ai = ai->ai_next) {
+            struct listener_t *listener = h2o_malloc(sizeof(*listener));
+            listener->fd = -1;
+            listener->family = ai->ai_family;
+            listener->socktype = ai->ai_socktype;
+            listener->protocol = ai->ai_protocol;
+            memcpy(&listener->addr, ai->ai_addr, ai->ai_addrlen);
+            listener->addrlen = ai->ai_addrlen;
+            conf->listeners = h2o_realloc(conf->listeners, sizeof(*conf->listeners) * (conf->num_listeners + 1));
+            conf->listeners[conf->num_listeners++] = listener;
+        }
+    }
+
+    /* release res */
+    freeaddrinfo(res);
 
     return 0;
 }
 
-static int on_config_port_complete(h2o_configurator_t *_conf, void *_global_config)
+static int on_config_listen_complete(h2o_configurator_t *_conf, void *_global_config)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, port_configurator, _conf);
     int reuseaddr_flag = 1;
+#ifdef IPV6_V6ONLY
+    int v6only_flag = 1;
+#endif
     size_t i;
 
     if (conf->num_listeners == 0) {
@@ -94,15 +155,17 @@ static int on_config_port_complete(h2o_configurator_t *_conf, void *_global_conf
     }
 
     for (i = 0; i != conf->num_listeners; ++i) {
-        struct listener_t *listener = conf->listeners + i;
-        listener->addr.in.sin_family = AF_INET;
-        listener->addr.in.sin_addr.s_addr = htonl(0);
-        listener->addr.in.sin_port = htons(listener->port);
-        if ((listener->fd = socket(AF_INET, SOCK_STREAM, 0)) == -1
+        struct listener_t *listener = conf->listeners[i];
+        if ((listener->fd = socket(listener->family, listener->socktype, listener->protocol)) == -1
             || setsockopt(listener->fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
-            || bind(listener->fd, &listener->addr.sa, sizeof(listener->addr.in)) != 0
+#ifdef IPV6_V6ONLY
+            || (listener->family == AF_INET6 && setsockopt(listener->fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only_flag, sizeof(v6only_flag)) != 0)
+#endif
+            || bind(listener->fd, (void*)&listener->addr, listener->addrlen) != 0
             || listen(listener->fd, SOMAXCONN) != 0) {
-            fprintf(stderr, "failed to listen to port %hu:%s\n", listener->port, strerror(errno));
+            char host[NI_MAXHOST], serv[NI_MAXSERV];
+            getnameinfo((void*)&listener->addr, listener->addrlen, host, sizeof(host), serv, sizeof(serv), NI_NUMERICHOST | NI_NUMERICSERV);
+            fprintf(stderr, "failed to listen to port %s:%s: %s\n", host, serv, strerror(errno));
             return -1;
         }
     }
@@ -271,7 +334,10 @@ static void *run_loop(void *_conf)
 
     /* setup listeners */
     for (i = 0; i != conf->num_listeners; ++i) {
-        listeners[i] = h2o_evloop_socket_create(ctx.loop, conf->listeners[i].fd, (struct sockaddr*)&conf->listeners[i].addr, H2O_SOCKET_FLAG_IS_ACCEPT);
+        listeners[i] = h2o_evloop_socket_create(
+            ctx.loop, conf->listeners[i]->fd,
+            (struct sockaddr*)&conf->listeners[i]->addr, conf->listeners[i]->addrlen,
+            H2O_SOCKET_FLAG_IS_ACCEPT);
         listeners[i]->data = &ctx;
     }
 
@@ -304,8 +370,13 @@ int main(int argc, char **argv)
         { NULL, 0, NULL, 0 }
     };
 
-    static const char *port_configurator_desc[] = {
-        "TCP port number to which the server should listen (mandatory)",
+    static const char *listen_configurator_desc[] = {
+        "port at which the server should listen for incoming requests (mandatory)",
+        " - if the value is a scalar, it is treated as the port number (or as the",
+        "   service name)",
+        " - if the value is a mapping, its `port` property is treated as the port",
+        "   number (or as the service name), and optionally its `host` property is",
+        "   treated as the incoming address (or as the hostname)\n",
         NULL
     };
     static const char *num_threads_configurator_desc[] = {
@@ -324,7 +395,7 @@ int main(int argc, char **argv)
         1, /* num_threads */
         NULL, /* thread_ids */
         {}, /* state */
-        { {}, "port", port_configurator_desc, NULL, on_config_port, on_config_port_complete, NULL },
+        { {}, "listen", listen_configurator_desc, NULL, on_config_listen, on_config_listen_complete, NULL },
         { {}, "max-connections", max_connections_configurator_desc, NULL, on_config_max_connections, NULL, NULL },
         { {}, "num-threads", num_threads_configurator_desc, NULL, on_config_num_threads, NULL, NULL }
     };

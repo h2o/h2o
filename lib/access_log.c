@@ -21,10 +21,12 @@
  */
 #include <errno.h>
 #include <fcntl.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include "h2o.h"
 
 #define LOG_ALLOCA_SIZE 4096
@@ -188,14 +190,24 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             RESERVE(0);
             break;
         case ELEMENT_TYPE_REMOTE_ADDR:
-            if (req->conn->peername != NULL && req->conn->peername->sa_family == AF_INET) {
-                uint32_t addr;
-                RESERVE(sizeof("255.255.255.255") - 1);
-                addr = htonl(((struct sockaddr_in*)req->conn->peername)->sin_addr.s_addr);
-                pos += sprintf(pos, "%d.%d.%d.%d", addr >> 24, (addr >> 16) & 255, (addr >> 8) & 255, addr & 255);
-            } else {
-                RESERVE(1);
-                *pos++ = '-';
+            {
+                char hostname[NI_MAXHOST];
+                if (req->conn->peername.addr != NULL && req->conn->peername.addr->sa_family == AF_INET) {
+                    struct sockaddr_in *sin = (void*)req->conn->peername.addr;
+                    uint32_t addr;
+                    RESERVE(sizeof("255.255.255.255") - 1);
+                    addr = htonl(sin->sin_addr.s_addr);
+                    pos += sprintf(pos, "%d.%d.%d.%d", addr >> 24, (addr >> 16) & 255, (addr >> 8) & 255, addr & 255);
+                } else if (req->conn->peername.addr != NULL
+                    && getnameinfo(req->conn->peername.addr, req->conn->peername.len, hostname, sizeof(hostname), NULL, 0, NI_NUMERICHOST)
+                        == 0) {
+                    size_t len = strlen(hostname);
+                    RESERVE(len);
+                    pos = append_safe_string(pos, hostname, len);
+                } else {
+                    RESERVE(1);
+                    *pos++ = '-';
+                }
             }
             break;
         case ELEMENT_TYPE_LOGNAME:

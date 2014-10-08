@@ -117,12 +117,16 @@ void do_write(h2o_socket_t *_sock, h2o_buf_t *bufs, size_t bufcnt, h2o_socket_cb
 h2o_socket_t *h2o_uv_socket_create(uv_stream_t *stream, uv_close_cb close_cb)
 {
     struct st_h2o_uv_socket_t *sock = h2o_malloc(sizeof(*sock));
-    int peername_len;
+    int addrlen;
 
     memset(sock, 0, sizeof(*sock));
-    peername_len = sizeof(sock->super.peername);
-    if (uv_tcp_getpeername((uv_tcp_t*)stream, &sock->super.peername, &peername_len) != 0)
-        memset(&sock->super.peername, 0, sizeof(sock->super.peername));
+    addrlen = sizeof(sock->super.peername.addr);
+    if (uv_tcp_getpeername((uv_tcp_t*)stream, (void*)&sock->super.peername.addr, &addrlen) == 0) {
+        sock->super.peername.len = addrlen;
+    } else {
+        memset(&sock->super.peername.addr, 0, sizeof(sock->super.peername.addr));
+        sock->super.peername.len = 0;
+    }
     sock->uv.stream = stream;
     sock->uv.close_cb = close_cb;
     stream->data = sock;
