@@ -44,8 +44,8 @@ struct listener_t {
     int family;
     int socktype;
     int protocol;
+    struct sockaddr_storage addr;
     socklen_t addrlen;
-    struct sockaddr addr;
 };
 
 struct config_t {
@@ -122,13 +122,13 @@ static int on_config_listen(h2o_configurator_t *configurator, void *ctx, const c
     { /* save the entries */
         struct addrinfo *ai;
         for (ai = res; ai != NULL; ai = ai->ai_next) {
-            struct listener_t *listener = h2o_malloc(offsetof(struct listener_t, addr) + ai->ai_addrlen);
+            struct listener_t *listener = h2o_malloc(sizeof(*listener));
             listener->fd = -1;
             listener->family = ai->ai_family;
             listener->socktype = ai->ai_socktype;
             listener->protocol = ai->ai_protocol;
-            listener->addrlen = ai->ai_addrlen;
             memcpy(&listener->addr, ai->ai_addr, ai->ai_addrlen);
+            listener->addrlen = ai->ai_addrlen;
             conf->listeners = h2o_realloc(conf->listeners, sizeof(*conf->listeners) * (conf->num_listeners + 1));
             conf->listeners[conf->num_listeners++] = listener;
         }
@@ -161,10 +161,10 @@ static int on_config_listen_complete(h2o_configurator_t *_conf, void *_global_co
 #ifdef IPV6_V6ONLY
             || (listener->family == AF_INET6 && setsockopt(listener->fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only_flag, sizeof(v6only_flag)) != 0)
 #endif
-            || bind(listener->fd, &listener->addr, listener->addrlen) != 0
+            || bind(listener->fd, (void*)&listener->addr, listener->addrlen) != 0
             || listen(listener->fd, SOMAXCONN) != 0) {
             char host[NI_MAXHOST], serv[NI_MAXSERV];
-            getnameinfo(&listener->addr, listener->addrlen, host, sizeof(host), serv, sizeof(serv), NI_NUMERICHOST | NI_NUMERICSERV);
+            getnameinfo((void*)&listener->addr, listener->addrlen, host, sizeof(host), serv, sizeof(serv), NI_NUMERICHOST | NI_NUMERICSERV);
             fprintf(stderr, "failed to listen to port %s:%s: %s\n", host, serv, strerror(errno));
             return -1;
         }
@@ -334,7 +334,10 @@ static void *run_loop(void *_conf)
 
     /* setup listeners */
     for (i = 0; i != conf->num_listeners; ++i) {
-        listeners[i] = h2o_evloop_socket_create(ctx.loop, conf->listeners[i]->fd, (struct sockaddr*)&conf->listeners[i]->addr, H2O_SOCKET_FLAG_IS_ACCEPT);
+        listeners[i] = h2o_evloop_socket_create(
+            ctx.loop, conf->listeners[i]->fd,
+            (struct sockaddr*)&conf->listeners[i]->addr, conf->listeners[i]->addrlen,
+            H2O_SOCKET_FLAG_IS_ACCEPT);
         listeners[i]->data = &ctx;
     }
 

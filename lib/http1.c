@@ -378,7 +378,10 @@ void h2o_http1_accept(h2o_context_t *ctx, h2o_socket_t *sock)
 
     /* init properties that need to be non-zero */
     conn->super.ctx = ctx;
-    conn->super.peername = &sock->peername;
+    if (sock->peername.len != 0) {
+        conn->super.peername.addr = (void*)&sock->peername.addr;
+        conn->super.peername.len = sock->peername.len;
+    }
     conn->sock = sock;
     sock->data = conn;
 

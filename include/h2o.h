@@ -196,7 +196,11 @@ struct st_h2o_socket_t {
         h2o_socket_cb read;
         h2o_socket_cb write;
     } _cb;
-    struct sockaddr peername;
+    /* zero-filled in case of invalid address */
+    struct {
+        struct sockaddr_storage addr;
+        socklen_t len;
+    } peername;
 };
 
 /**
@@ -467,9 +471,12 @@ struct st_h2o_conn_t {
      */
     h2o_context_t *ctx;
     /**
-     * peername (or NULL if not available)
+     * peername (peername.addr == NULL if not available)
      */
-    struct sockaddr *peername;
+    struct {
+        struct sockaddr *addr;
+        socklen_t len;
+    } peername;
 };
 
 /**

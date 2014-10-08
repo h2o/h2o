@@ -723,7 +723,10 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock)
     /* init the connection */
     memset(conn, 0, offsetof(h2o_http2_conn_t, _write._pools[0]));
     conn->super.ctx = ctx;
-    conn->super.peername = &sock->peername;
+    if (sock->peername.len != 0) {
+        conn->super.peername.addr = (void*)&sock->peername.addr;
+        conn->super.peername.len = sock->peername.len;
+    }
     conn->sock = sock;
     conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
     conn->open_streams = kh_init(h2o_http2_stream_t);
