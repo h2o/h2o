@@ -44,7 +44,8 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, 
     /* create chunk header */
     if (chunk_size != 0) {
         outbufs[outbufcnt].base = self->buf;
-        outbufs[outbufcnt].len = h2o_snprintf(self->buf, sizeof(self->buf), "%zx\r\n", chunk_size);
+        outbufs[outbufcnt].len = sprintf(self->buf, "%zx\r\n", chunk_size);
+        assert(outbufs[outbufcnt].len < sizeof(self->buf));
         outbufcnt++;
     }
     /* set output data */

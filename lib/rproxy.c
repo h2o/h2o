@@ -81,8 +81,18 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, 
     }
 
     /* NOT IMPLEMENTED!!! */
-    h2o_buf_t body = h2o_sprintf(
-        &req->pool,
+    h2o_buf_t body;
+    body.len = snprintf(NULL, 0,
+        "reproxy request to URL: %s\n"
+        "  host: %s\n"
+        "  port: %u\n"
+        "  path: %s\n",
+        self->reproxy_url,
+        host,
+        (int)port,
+        path);
+    body.base = h2o_mempool_alloc(&req->pool, body.len + 1);
+    sprintf(body.base,
         "reproxy request to URL: %s\n"
         "  host: %s\n"
         "  port: %u\n"

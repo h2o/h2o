@@ -61,60 +61,6 @@ h2o_buf_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t slen)
     return ret;
 }
 
-__attribute__((format (printf, 2, 3)))
-h2o_buf_t h2o_sprintf(h2o_mempool_t *pool, const char *fmt, ...)
-{
-    char smallbuf[1024];
-    va_list arg;
-    int len;
-    h2o_buf_t ret;
-
-    ret.base = NULL;
-    ret.len = 0;
-
-    // determine the length (as well as fill-in the small buf)
-    va_start(arg, fmt);
-    len = vsnprintf(smallbuf, sizeof(smallbuf), fmt, arg);
-    va_end(arg);
-    if (len == -1)
-        h2o_fatal("sprintf usage error");
-
-    // allocate
-    if (pool != NULL) {
-        ret.base = h2o_mempool_alloc(pool, len + 1);
-    } else {
-        ret.base = h2o_malloc(len + 1);
-    }
-    ret.len = len;
-
-    // copy from small buf or reprint
-    if (len < sizeof(smallbuf)) {
-            memcpy(ret.base, smallbuf, len + 1);
-    } else {
-            va_start(arg, fmt);
-            vsnprintf(ret.base, len + 1, fmt, arg);
-            va_end(arg);
-    }
-
-    return ret;
-}
-
-__attribute__((format (printf, 3, 4)))
-size_t h2o_snprintf(char *buf, size_t bufsz, const char *fmt, ...)
-{
-    va_list arg;
-    int len;
-
-    va_start(arg, fmt);
-    len = vsnprintf(buf, bufsz, fmt, arg);
-    va_end(arg);
-    if (len == -1)
-        h2o_fatal("sprintf usage error");
-    else if (len + 1 > bufsz)
-        h2o_fatal("buffer too small");
-    return len;
-}
-
 static uint32_t decode_base64url_quad(const char *src)
 {
     const char *src_end = src + 4;

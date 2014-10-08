@@ -812,17 +812,6 @@ static int h2o_lcstris(const char *target, size_t target_len, const char *test, 
  */
 h2o_buf_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t len);
 /**
- * printf's the string to an allocated buffer
- * @param pool memory pool (or NULL to use malloc)
- * @param fmt printf-style format
- * @return buffer pointing to the formatted string (buf is NUL-terminated but the length does not include the NUL char)
- */
-h2o_buf_t h2o_sprintf(h2o_mempool_t *pool, const char *fmt, ...) __attribute__((format (printf, 2, 3)));
-/**
- * calls sprintf (aborts if the given buffer is too small)
- */
-size_t h2o_snprintf(char *buf, size_t bufsz, const char *fmt, ...) __attribute__((format (printf, 3, 4)));
-/**
  * base64 url decoder
  */
 h2o_buf_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len);
