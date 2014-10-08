@@ -144,6 +144,9 @@ static int on_config_listen_complete(h2o_configurator_t *_conf, void *_global_co
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, port_configurator, _conf);
     int reuseaddr_flag = 1;
+#ifdef IPV6_V6ONLY
+    int v6only_flag = 1;
+#endif
     size_t i;
 
     if (conf->num_listeners == 0) {
@@ -155,6 +158,9 @@ static int on_config_listen_complete(h2o_configurator_t *_conf, void *_global_co
         struct listener_t *listener = conf->listeners[i];
         if ((listener->fd = socket(listener->family, listener->socktype, listener->protocol)) == -1
             || setsockopt(listener->fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
+#ifdef IPV6_V6ONLY
+            || (listener->family == AF_INET6 && setsockopt(listener->fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only_flag, sizeof(v6only_flag)) != 0)
+#endif
             || bind(listener->fd, &listener->addr, listener->addrlen) != 0
             || listen(listener->fd, SOMAXCONN) != 0) {
             char host[NI_MAXHOST], serv[NI_MAXSERV];
