@@ -159,7 +159,7 @@ static int on_config_listen_complete(h2o_configurator_t *_conf, void *_global_co
             || listen(listener->fd, SOMAXCONN) != 0) {
             char host[NI_MAXHOST], serv[NI_MAXSERV];
             getnameinfo(&listener->addr, listener->addrlen, host, sizeof(host), serv, sizeof(serv), NI_NUMERICHOST | NI_NUMERICSERV);
-            fprintf(stderr, "failed to listen to port %s:%s\n", host, serv);
+            fprintf(stderr, "failed to listen to port %s:%s: %s\n", host, serv, strerror(errno));
             return -1;
         }
     }
