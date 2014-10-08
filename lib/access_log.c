@@ -96,9 +96,6 @@ static struct log_element_t *compile_log_format(const char *fmt, size_t *_num_el
         if (elements == NULL)
             NEW_ELEMENT(ELEMENT_TYPE_EMPTY);
         elements[num_elements - 1].suffix.base[elements[num_elements - 1].suffix.len++] = *pt++;
-
-    Next:
-        ;
     }
 
     /* emit end-of-line */
