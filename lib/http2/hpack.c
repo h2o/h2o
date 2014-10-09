@@ -683,7 +683,15 @@ static void test_request(h2o_buf_t first_req, h2o_buf_t second_req, h2o_buf_t th
 
 static void check_flatten(h2o_mempool_t *pool, h2o_hpack_header_table_t *header_table, h2o_res_t *res, const char *expected, size_t expected_len)
 {
-    h2o_buf_t flattened = h2o_hpack_flatten_headers(pool, header_table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res);
+    static const h2o_buf_t server_name = { H2O_STRLIT("h2o/0.1") };
+    h2o_timestamp_string_t ts_str;
+    h2o_timestamp_t ts = { {}, &ts_str };
+
+    gettimeofday(&ts.at, NULL);
+    h2o_time2str_rfc1123(ts_str.rfc1123, ts.at.tv_sec);
+    h2o_time2str_log(ts_str.log, ts.at.tv_sec);
+
+    h2o_buf_t flattened = h2o_hpack_flatten_headers(pool, header_table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res, &ts, &server_name);
     h2o_http2_frame_t frame;
 
     ok(h2o_http2_decode_frame(&frame, (uint8_t*)flattened.base, flattened.len, &H2O_HTTP2_SETTINGS_DEFAULT) > 0);
@@ -745,9 +753,8 @@ void hpack_test()
         const uint8_t *p = (const uint8_t*)in.base;
         r = decode_header(&pool, &result, &header_table, &p, p + in.len);
         ok(r == 0);
-        ok(result.name_token == NULL);
-        ok(result.name_not_token->len == 10);
-        ok(strcmp(result.name_not_token->base, "custom-key") == 0);
+        ok(result.name->len == 10);
+        ok(strcmp(result.name->base, "custom-key") == 0);
         ok(result.value->len == 13);
         ok(strcmp(result.value->base, "custom-header") == 0);
         ok(header_table.hpack_size == 55);
@@ -767,7 +774,7 @@ void hpack_test()
         const uint8_t *p = (const uint8_t*)in.base;
         r = decode_header(&pool, &result, &header_table, &p, p + in.len);
         ok(r == 0);
-        ok(result.name_token == H2O_TOKEN_PATH);
+        ok(result.name == &H2O_TOKEN_PATH->buf);
         ok(result.value->len == 12);
         ok(strcmp(result.value->base, "/sample/path") == 0);
         ok(header_table.hpack_size == 0);
@@ -787,9 +794,8 @@ void hpack_test()
         const uint8_t *p = (const uint8_t*)in.base;
         r = decode_header(&pool, &result, &header_table, &p, p + in.len);
         ok(r == 0);
-        ok(result.name_token == NULL);
-        ok(result.name_not_token->len == 8);
-        ok(strcmp(result.name_not_token->base, "password") == 0);
+        ok(result.name->len == 8);
+        ok(strcmp(result.name->base, "password") == 0);
         ok(result.value->len == 6);
         ok(strcmp(result.value->base, "secret") == 0);
         ok(header_table.hpack_size == 0);
@@ -809,7 +815,7 @@ void hpack_test()
         const uint8_t *p = (const uint8_t*)in.base;
         r = decode_header(&pool, &result, &header_table, &p, p + in.len);
         ok(r == 0);
-        ok(result.name_token == H2O_TOKEN_METHOD);
+        ok(result.name == &H2O_TOKEN_METHOD->buf);
         ok(result.value->len == 3);
         ok(strcmp(result.value->base, "GET") == 0);
         ok(header_table.hpack_size == 0);
