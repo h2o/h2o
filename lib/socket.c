@@ -26,7 +26,6 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <string.h>
-#include <openssl/ssl.h>
 #include "h2o.h"
 
 #if defined(__APPLE__) && defined(__clang__)
@@ -303,7 +302,7 @@ Complete:
     on_handshake_complete(sock, status);
 }
 
-void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, h2o_ssl_context_t *ssl_ctx, h2o_socket_cb handshake_cb)
+void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, h2o_socket_cb handshake_cb)
 {
     static BIO_METHOD bio_methods = {
         BIO_TYPE_FD,
@@ -326,23 +325,12 @@ void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, h2o_ssl_context_t *ssl_
     bio = BIO_new(&bio_methods);
     bio->ptr = sock;
     bio->init = 1;
-    sock->ssl->ssl = SSL_new(ssl_ctx->ctx);
+    sock->ssl->ssl = SSL_new(ssl_ctx);
     SSL_set_bio(sock->ssl->ssl, bio, bio);
 
     sock->ssl->handshake.cb = handshake_cb;
     proceed_handshake(sock, 0);
 }
-
-#if OPENSSL_VERSION_NUMBER >= 0x10002000L
-# define USE_ALPN 1
-# define USE_NPN 1
-#elif OPENSSL_VERSION_NUMBER >= 0x10001000L
-# define USE_ALPN 0
-# define USE_NPN 1
-#else
-# define USE_ALPN 0
-# define USE_NPN 0
-#endif
 
 h2o_buf_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)
 {
@@ -351,11 +339,11 @@ h2o_buf_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)
 
     assert(sock->ssl != NULL);
 
-#if USE_ALPN
+#if H2O_USE_ALPN
     if (len == 0)
         SSL_get0_alpn_selected(sock->ssl->ssl, &data, &len);
 #endif
-#if USE_NPN
+#if H2O_USE_NPN
     if (len == 0)
         SSL_get0_next_proto_negotiated(sock->ssl->ssl, &data, &len);
 #endif
@@ -363,10 +351,11 @@ h2o_buf_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)
     return h2o_buf_init(data, len);
 }
 
-#if USE_ALPN
-static int on_alpn_select(SSL *ssl, const unsigned char **out, unsigned char *outlen, const unsigned char *in, unsigned int inlen, void *_ctx)
+#if H2O_USE_ALPN
+
+static int on_alpn_select(SSL *ssl, const unsigned char **out, unsigned char *outlen, const unsigned char *in, unsigned int inlen, void *_protocols)
 {
-    h2o_ssl_context_t *ctx = _ctx;
+    const h2o_buf_t *protocols = _protocols;
     const unsigned char *in_end = in + inlen;
     size_t i;
 
@@ -376,8 +365,8 @@ static int on_alpn_select(SSL *ssl, const unsigned char **out, unsigned char *ou
             /* broken request */
             break;
         }
-        for (i = 0; ctx->protocols[i].len != 0; ++i) {
-            if (cand_len == ctx->protocols[i].len && memcmp(in, ctx->protocols[i].base, cand_len) == 0) {
+        for (i = 0; protocols[i].len != 0; ++i) {
+            if (cand_len == protocols[i].len && memcmp(in, protocols[i].base, cand_len) == 0) {
                 goto Found;
             }
         }
@@ -387,73 +376,30 @@ static int on_alpn_select(SSL *ssl, const unsigned char **out, unsigned char *ou
     return SSL_TLSEXT_ERR_NOACK;
 
 Found:
-    *out = (const unsigned char*)ctx->protocols[i].base;
-    *outlen = (unsigned char)ctx->protocols[i].len;
+    *out = (const unsigned char*)protocols[i].base;
+    *outlen = (unsigned char)protocols[i].len;
     return SSL_TLSEXT_ERR_OK;
 }
+
+void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_buf_t *protocols)
+{
+    SSL_CTX_set_alpn_select_cb(ctx, on_alpn_select, (void*)protocols);
+}
+
 #endif
 
-#if USE_NPN
-static int on_npn_advertise(SSL *ssl, const unsigned char **out, unsigned *outlen, void *_ctx)
+#if H2O_USE_NPN
+
+static int on_npn_advertise(SSL *ssl, const unsigned char **out, unsigned *outlen, void *protocols)
 {
-    h2o_ssl_context_t *ctx = _ctx;
-
-    *out = (const unsigned char*)ctx->_npn_list_of_protocols.base;
-    *outlen = (unsigned)ctx->_npn_list_of_protocols.len;
-
+    *out = protocols;
+    *outlen = (unsigned)strlen(protocols);
     return SSL_TLSEXT_ERR_OK;
 }
-#endif
 
-h2o_ssl_context_t *h2o_ssl_new_server_context(const char *cert_file, const char *key_file, const h2o_buf_t *protocols)
+void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols)
 {
-    h2o_ssl_context_t *ctx = h2o_malloc(sizeof(*ctx));
-
-    memset(ctx, 0, sizeof(*ctx));
-
-    SSL_load_error_strings();
-    SSL_library_init();
-    OpenSSL_add_all_algorithms();
-
-    ctx->ctx = SSL_CTX_new(SSLv23_server_method());
-    SSL_CTX_set_options(ctx->ctx, SSL_OP_NO_SSLv2);
-
-    /* load certificate and private key */
-    if (SSL_CTX_use_certificate_file(ctx->ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
-        fprintf(stderr, "an error occured while trying to load server certificate file:%s\n", cert_file);
-        goto Error;
-    }
-    if (SSL_CTX_use_PrivateKey_file(ctx->ctx, key_file, SSL_FILETYPE_PEM) != 1) {
-        fprintf(stderr, "an error occured while trying to load private key file:%s\n", key_file);
-        goto Error;
-    }
-
-    /* copy list of protocols, init npm */
-    ctx->protocols = protocols;
-    if (protocols != NULL) {
-        size_t i, off;
-#if USE_ALPN
-        SSL_CTX_set_alpn_select_cb(ctx->ctx, on_alpn_select, ctx);
-#endif
-#if USE_NPN
-        SSL_CTX_set_next_protos_advertised_cb(ctx->ctx, on_npn_advertise, ctx);
-#endif
-        for (i = 0; protocols[i].len != 0; ++i) {
-            assert(protocols[i].len <= 255);
-            ctx->_npn_list_of_protocols.len += 1 + protocols[i].len;
-        }
-        ctx->_npn_list_of_protocols.base = h2o_malloc(ctx->_npn_list_of_protocols.len);
-        for (i = 0, off = 0; protocols[i].len != 0; ++i) {
-            ((unsigned char*)ctx->_npn_list_of_protocols.base)[off++] = protocols[i].len;
-            memcpy(ctx->_npn_list_of_protocols.base + off, protocols[i].base, protocols[i].len);
-            off += protocols[i].len;
-        }
-        assert(off == ctx->_npn_list_of_protocols.len);
-    }
-
-    return ctx;
-Error:
-    SSL_CTX_free(ctx->ctx);
-    free(ctx);
-    return NULL;
+    SSL_CTX_set_next_protos_advertised_cb(ctx, on_npn_advertise, (void*)protocols);
 }
+
+#endif

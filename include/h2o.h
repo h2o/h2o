@@ -43,6 +43,7 @@ extern "C" {
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
+#include <openssl/ssl.h>
 #include "picohttpparser.h"
 #include "yoml.h"
 
@@ -55,6 +56,17 @@ extern "C" {
 
 #ifndef H2O_MAX_TOKENS
 # define H2O_MAX_TOKENS 10240
+#endif
+
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L
+# define H2O_USE_ALPN 1
+# define H2O_USE_NPN 1
+#elif OPENSSL_VERSION_NUMBER >= 0x10001000L
+# define H2O_USE_ALPN 0
+# define H2O_USE_NPN 1
+#else
+# define H2O_USE_ALPN 0
+# define H2O_USE_NPN 0
 #endif
 
 #define H2O_TO__STR(n) #n
@@ -75,7 +87,6 @@ typedef struct st_h2o_conn_t h2o_conn_t;
 typedef struct st_h2o_context_t h2o_context_t;
 typedef struct st_h2o_req_t h2o_req_t;
 typedef struct st_h2o_socket_t h2o_socket_t;
-typedef struct st_h2o_ssl_context_t h2o_ssl_context_t;
 typedef struct st_h2o_timeout_entry_t h2o_timeout_entry_t;
 typedef struct st_h2o_ostream_t h2o_ostream_t;
 
@@ -698,19 +709,20 @@ static int h2o_socket_is_reading(h2o_socket_t *sock);
  * @param ssl_ctx SSL context
  * @param handshake_cb callback to be called when handshake is complete
  */
-void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, h2o_ssl_context_t *ssl_ctx, h2o_socket_cb handshake_cb);
+void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, h2o_socket_cb handshake_cb);
 /**
  * returns the name of the protocol selected using either NPN or ALPN (ALPN has the precedence).
  * @param sock the socket
  */
 h2o_buf_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock);
 /**
- * construct an SSL context
- * @param cert_file the certificate file (in PEM format)
- * @param key_file the private key file (in PEM format)
- * @param protocols a NULL-terminated list of protocols used for negotiation using ALPN/NPN
+ * registers the protocol list to be used for ALPN
  */
-h2o_ssl_context_t *h2o_ssl_new_server_context(const char *cert_file, const char *key_file, const h2o_buf_t *protocols);
+void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_buf_t *protocols);
+/**
+ * registers the protocol list to be used for NPN
+ */
+void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols);
 
 void h2o_socket__write_pending(h2o_socket_t *sock);
 void h2o_socket__write_on_complete(h2o_socket_t *sock, int status);
@@ -857,7 +869,7 @@ h2o_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len);
 /**
  * accepts a SSL connection
  */
-void h2o_accept_ssl(h2o_context_t *ctx, h2o_socket_t *sock, h2o_ssl_context_t *ssl_ctx);
+void h2o_accept_ssl(h2o_context_t *ctx, h2o_socket_t *sock, SSL_CTX *ssl_ctx);
 
 int h2o__lcstris_core(const char *target, const char *test, size_t test_len);
 

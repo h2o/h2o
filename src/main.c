@@ -66,7 +66,7 @@ struct config_t {
     h2o_configurator_t num_threads_configurator;
 };
 
-static h2o_ssl_context_t *ssl_ctx = NULL;
+static SSL_CTX *ssl_ctx = NULL;
 
 static int on_config_listen(h2o_configurator_t *configurator, void *ctx, const char *config_file, yoml_t *config_node)
 {

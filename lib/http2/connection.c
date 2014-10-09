@@ -28,12 +28,13 @@
 
 static const h2o_buf_t CONNECTION_PREFACE = { H2O_STRLIT("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n") };
 
-static const h2o_buf_t tls_identifiers[] = {
-    { H2O_STRLIT("h2-14") },
+#define H2_PROTOCOL_IDENTIFIER "h2-14"
+const char *h2o_http2_npn_protocols = "\x05" H2_PROTOCOL_IDENTIFIER;
+static const h2o_buf_t alpn_protocols[] = {
+    { H2O_STRLIT(H2_PROTOCOL_IDENTIFIER) },
     { NULL, 0 }
 };
-
-const h2o_buf_t *h2o_http2_tls_identifiers = tls_identifiers;
+const h2o_buf_t *h2o_http2_alpn_protocols = alpn_protocols;
 
 const h2o_http2_settings_t H2O_HTTP2_SETTINGS_HOST = {
     /* header_table_size = */ 4096,
