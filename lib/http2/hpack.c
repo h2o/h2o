@@ -168,6 +168,7 @@ static void header_table_evict_one(h2o_hpack_header_table_t *table)
     assert(table->num_entries != 0);
 
     entry = header_table_get(table, --table->num_entries);
+    table->hpack_size -= entry->name->len + entry->value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET;
     if (! h2o_buf_is_token(entry->name))
         h2o_mempool_release_shared(entry->name);
     if (! value_is_part_of_static_table(entry->value))
