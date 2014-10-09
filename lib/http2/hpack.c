@@ -544,8 +544,10 @@ h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, h2o_hpack_header_table_
     { /* calculate maximum required memory */
         size_t max_cur_frame_size =
             STATUS_HEADER_MAX_SIZE /* for :status: */
+#ifndef PICOTEST_FUNCS
             + 2 + H2O_TIMESTR_RFC1123_LEN /* for Date: */
             + 5 + server_name->len /* for Server: */
+#endif
             ;
 
         for (header = res->headers.entries, header_end = header + res->headers.size; header != header_end; ++header) {
@@ -581,9 +583,11 @@ h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, h2o_hpack_header_table_
         dst += H2O_HTTP2_FRAME_HEADER_SIZE;
         dst = encode_status(dst, res->status);
         /* TODO keep some kind of reference to the indexed headers of Server and Date, and reuse them */
+#ifndef PICOTEST_FUNCS
         dst = encode_header(header_table, dst, &H2O_TOKEN_SERVER->buf, server_name);
         date_value = h2o_buf_init(ts->str->rfc1123, H2O_TIMESTR_RFC1123_LEN);
         dst = encode_header(header_table, dst, &H2O_TOKEN_DATE->buf, &date_value);
+#endif
         for (header = res->headers.entries, header_end = header + res->headers.size; header != header_end; ++header) {
             size_t max_header_size = header->name->len + header->value.len + 1 + H2O_HTTP2_ENCODE_INT_MAX_LENGTH * 2;
             if (dst - cur_frame - H2O_HTTP2_FRAME_HEADER_SIZE + max_header_size > max_frame_size) {
@@ -684,15 +688,7 @@ static void test_request(h2o_buf_t first_req, h2o_buf_t second_req, h2o_buf_t th
 
 static void check_flatten(h2o_mempool_t *pool, h2o_hpack_header_table_t *header_table, h2o_res_t *res, const char *expected, size_t expected_len)
 {
-    static const h2o_buf_t server_name = { H2O_STRLIT("h2o/0.1") };
-    h2o_timestamp_string_t ts_str;
-    h2o_timestamp_t ts = { {}, &ts_str };
-
-    gettimeofday(&ts.at, NULL);
-    h2o_time2str_rfc1123(ts_str.rfc1123, ts.at.tv_sec);
-    h2o_time2str_log(ts_str.log, ts.at.tv_sec);
-
-    h2o_buf_t flattened = h2o_hpack_flatten_headers(pool, header_table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res, &ts, &server_name);
+    h2o_buf_t flattened = h2o_hpack_flatten_headers(pool, header_table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res, NULL, NULL);
     h2o_http2_frame_t frame;
 
     ok(h2o_http2_decode_frame(&frame, (uint8_t*)flattened.base, flattened.len, &H2O_HTTP2_SETTINGS_DEFAULT) > 0);
