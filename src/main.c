@@ -39,18 +39,25 @@
 # define EX_CONFIG 78
 #endif
 
-struct listener_t {
+struct listener_config_t {
     int fd;
     int family;
     int socktype;
     int protocol;
     struct sockaddr_storage addr;
     socklen_t addrlen;
+    SSL_CTX *ssl_ctx;
+};
+
+struct listener_ctx_t {
+    h2o_context_t *ctx;
+    SSL_CTX *ssl_ctx;
+    h2o_socket_t *sock;
 };
 
 struct config_t {
     h2o_global_configuration_t global_config;
-    struct listener_t **listeners;
+    struct listener_config_t **listeners;
     size_t num_listeners;
     unsigned max_connections;
     unsigned num_threads;
@@ -66,12 +73,79 @@ struct config_t {
     h2o_configurator_t num_threads_configurator;
 };
 
-static h2o_ssl_context_t *ssl_ctx = NULL;
+static void init_openssl(void)
+{
+    static int ready = 0;
+    if (! ready) {
+        SSL_load_error_strings();
+        SSL_library_init();
+        OpenSSL_add_all_algorithms();
+        /* FIXME setup callbacks as said in https://www.openssl.org/docs/crypto/threads.html */
+        ready = 1;
+    }
+}
+
+static SSL_CTX *on_config_listen_setup_ssl(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node)
+{
+    SSL_CTX *ssl_ctx = NULL;
+    const char *cert_file = NULL, *key_file = NULL;
+    yoml_t *t;
+
+    /* parse */
+    if (config_node->type != YOML_TYPE_MAPPING) {
+        h2o_config_print_error(configurator, config_file, config_node, "`ssl` is not a mapping");
+        goto Error;
+    }
+    if ((t = yoml_get(config_node, "certificate-file")) == NULL) {
+        h2o_config_print_error(configurator, config_file, config_node, "could not find mandatory property `certificate-file`");
+        goto Error;
+    } else if (t->type != YOML_TYPE_SCALAR) {
+        h2o_config_print_error(configurator, config_file, t, "the property must be a string");
+        goto Error;
+    }
+    cert_file = t->data.scalar;
+    if ((t = yoml_get(config_node, "key-file")) == NULL) {
+        h2o_config_print_error(configurator, config_file, config_node, "could not find mandatory property `key-file`");
+        goto Error;
+    } else if (t->type != YOML_TYPE_SCALAR) {
+        h2o_config_print_error(configurator, config_file, t, "the property must be a string");
+        goto Error;
+    }
+    key_file = t->data.scalar;
+
+    /* setup */
+    init_openssl();
+    ssl_ctx = SSL_CTX_new(SSLv23_server_method());
+    SSL_CTX_set_options(ssl_ctx, SSL_OP_NO_SSLv2);
+    if (SSL_CTX_use_certificate_file(ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
+        h2o_config_print_error(configurator, config_file, config_node, "failed to load certificate file:%s\n", cert_file);
+        goto Error;
+    }
+    if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file, SSL_FILETYPE_PEM) != 1) {
+        h2o_config_print_error(configurator, config_file, config_node, "failed to load private key file:%s\n", key_file);
+        goto Error;
+    }
+
+    /* setup protocol negotiation methods */
+#if H2O_USE_NPN
+    h2o_ssl_register_npn_protocols(ssl_ctx, h2o_http2_npn_protocols);
+#endif
+#if H2O_USE_ALPN
+    h2o_ssl_register_alpn_protocols(ssl_ctx, h2o_http2_alpn_protocols);
+#endif
+
+    return ssl_ctx;
+Error:
+    if (ssl_ctx != NULL)
+        SSL_CTX_free(ssl_ctx);
+    return NULL;
+}
 
 static int on_config_listen(h2o_configurator_t *configurator, void *ctx, const char *config_file, yoml_t *config_node)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, port_configurator, configurator);
     const char *hostname = NULL, *servname = NULL;
+    SSL_CTX *ssl_ctx = NULL;
     struct addrinfo hints, *res;
     int error;
 
@@ -99,6 +173,10 @@ static int on_config_listen(h2o_configurator_t *configurator, void *ctx, const c
                 return -1;
             }
             servname = t->data.scalar;
+            if ((t = yoml_get(config_node, "ssl")) != NULL) {
+                if ((ssl_ctx = on_config_listen_setup_ssl(configurator, config_file, t)) == NULL)
+                    return -1;
+            }
         }
         break;
     default:
@@ -122,13 +200,14 @@ static int on_config_listen(h2o_configurator_t *configurator, void *ctx, const c
     { /* save the entries */
         struct addrinfo *ai;
         for (ai = res; ai != NULL; ai = ai->ai_next) {
-            struct listener_t *listener = h2o_malloc(sizeof(*listener));
+            struct listener_config_t *listener = h2o_malloc(sizeof(*listener));
             listener->fd = -1;
             listener->family = ai->ai_family;
             listener->socktype = ai->ai_socktype;
             listener->protocol = ai->ai_protocol;
             memcpy(&listener->addr, ai->ai_addr, ai->ai_addrlen);
             listener->addrlen = ai->ai_addrlen;
+            listener->ssl_ctx = ssl_ctx;
             conf->listeners = h2o_realloc(conf->listeners, sizeof(*conf->listeners) * (conf->num_listeners + 1));
             conf->listeners[conf->num_listeners++] = listener;
         }
@@ -155,7 +234,7 @@ static int on_config_listen_complete(h2o_configurator_t *_conf, void *_global_co
     }
 
     for (i = 0; i != conf->num_listeners; ++i) {
-        struct listener_t *listener = conf->listeners[i];
+        struct listener_config_t *listener = conf->listeners[i];
         if ((listener->fd = socket(listener->family, listener->socktype, listener->protocol)) == -1
             || setsockopt(listener->fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
 #ifdef IPV6_V6ONLY
@@ -293,8 +372,8 @@ static void on_close(h2o_context_t *ctx)
 
 static void on_accept(h2o_socket_t *listener, int status)
 {
-    h2o_context_t *ctx = listener->data;
-    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, ctx->global_config);
+    struct listener_ctx_t *ctx = listener->data;
+    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, ctx->ctx->global_config);
     int num_accepts = 16;
 
     if (status == -1) {
@@ -310,10 +389,10 @@ static void on_accept(h2o_socket_t *listener, int status)
         }
         __sync_add_and_fetch(&conf->state.num_connections, 1);
 
-        if (ssl_ctx != NULL)
-            h2o_accept_ssl(ctx, sock, ssl_ctx);
+        if (ctx->ssl_ctx != NULL)
+            h2o_accept_ssl(ctx->ctx, sock, ctx->ssl_ctx);
         else
-            h2o_http1_accept(ctx, sock);
+            h2o_http1_accept(ctx->ctx, sock);
 
     } while (--num_accepts != 0);
 }
@@ -324,21 +403,22 @@ static void *run_loop(void *_conf)
     struct config_t *conf = _conf;
     h2o_evloop_t *loop;
     h2o_context_t ctx;
-    h2o_socket_t **listeners = alloca(sizeof(*listeners) * conf->num_listeners);
+    struct listener_ctx_t *listeners = alloca(sizeof(*listeners) * conf->num_listeners);
     size_t i;
 
     /* setup loop and context */
     loop = h2o_evloop_create();
     h2o_context_init(&ctx, loop, &conf->global_config);
-    /* ssl_ctx = h2o_ssl_new_server_context("server.crt", "server.key", h2o_http2_tls_identifiers); */
 
     /* setup listeners */
     for (i = 0; i != conf->num_listeners; ++i) {
-        listeners[i] = h2o_evloop_socket_create(
+        listeners[i].ctx = &ctx;
+        listeners[i].ssl_ctx = conf->listeners[i]->ssl_ctx;
+        listeners[i].sock = h2o_evloop_socket_create(
             ctx.loop, conf->listeners[i]->fd,
             (struct sockaddr*)&conf->listeners[i]->addr, conf->listeners[i]->addrlen,
             H2O_SOCKET_FLAG_IS_ACCEPT);
-        listeners[i]->data = &ctx;
+        listeners[i].sock->data = listeners + i;
     }
 
     /* the main loop */
@@ -346,13 +426,13 @@ static void *run_loop(void *_conf)
         /* start / stop trying to accept new connections */
         if (conf->state.num_connections < conf->max_connections) {
             for (i = 0; i != conf->num_listeners; ++i) {
-                if (! h2o_socket_is_reading(listeners[i]))
-                    h2o_socket_read_start(listeners[i], on_accept);
+                if (! h2o_socket_is_reading(listeners[i].sock))
+                    h2o_socket_read_start(listeners[i].sock, on_accept);
             }
         } else {
             for (i = 0; i != conf->num_listeners; ++i) {
-                if (h2o_socket_is_reading(listeners[i]))
-                    h2o_socket_read_stop(listeners[i]);
+                if (h2o_socket_is_reading(listeners[i].sock))
+                    h2o_socket_read_stop(listeners[i].sock);
             }
         }
         /* run the loop once */
@@ -374,9 +454,12 @@ int main(int argc, char **argv)
         "port at which the server should listen for incoming requests (mandatory)",
         " - if the value is a scalar, it is treated as the port number (or as the",
         "   service name)",
-        " - if the value is a mapping, its `port` property is treated as the port",
-        "   number (or as the service name), and optionally its `host` property is",
-        "   treated as the incoming address (or as the hostname)\n",
+        " - if the value is a mapping, following properties are recognized:",
+        "     port: incoming port number or service name (mandatory)",
+        "     host: incoming address (default: any address)",
+        "     ssl:  if using SSL (default: none)",
+        "       certificate-file: path of the certificate file",
+        "       key-file:         path of the key file",
         NULL
     };
     static const char *num_threads_configurator_desc[] = {

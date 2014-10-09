@@ -451,7 +451,7 @@ static void on_ssl_handshake_complete(h2o_socket_t *sock, int status)
     }
 
     proto = h2o_socket_ssl_get_selected_protocol(sock);
-    for (ident = h2o_http2_tls_identifiers; ident->len != 0; ++ident) {
+    for (ident = h2o_http2_alpn_protocols; ident->len != 0; ++ident) {
         if (proto.len == ident->len && memcmp(proto.base, ident->base, proto.len) == 0) {
             goto Is_Http2;
         }
@@ -465,7 +465,7 @@ Is_Http2:
     h2o_http2_accept(ctx, sock);
 }
 
-void h2o_accept_ssl(h2o_context_t *ctx, h2o_socket_t *sock, h2o_ssl_context_t* ssl_ctx)
+void h2o_accept_ssl(h2o_context_t *ctx, h2o_socket_t *sock, SSL_CTX *ssl_ctx)
 {
     sock->data = ctx;
     h2o_socket_ssl_server_handshake(sock, ssl_ctx, on_ssl_handshake_complete);

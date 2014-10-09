@@ -28,7 +28,8 @@
 typedef struct st_h2o_http2_conn_t h2o_http2_conn_t;
 typedef struct st_h2o_http2_stream_t h2o_http2_stream_t;
 
-extern const h2o_buf_t *h2o_http2_tls_identifiers;
+extern const char *h2o_http2_npn_protocols;
+extern const h2o_buf_t *h2o_http2_alpn_protocols;
 
 /* defined as negated form of the error codes defined in HTTP2-spec section 7 */
 #define H2O_HTTP2_ERROR_NONE 0
