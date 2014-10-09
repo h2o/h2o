@@ -41,7 +41,7 @@
 		107923D319A3217300C52AD6 /* util.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923C019A3217300C52AD6 /* util.c */; };
 		1079240119A3241A00C52AD6 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		1079240819A3247A00C52AD6 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
-		1079241619A324B400C52AD6 /* websocket.c in Sources */ = {isa = PBXBuildFile; fileRef = 1079241319A324B400C52AD6 /* websocket.c */; };
+		1079241619A324B400C52AD6 /* websocket.c in Sources */ = {isa = PBXBuildFile; fileRef = 1079241319A324B400C52AD6 /* websocket.c */; settings = {COMPILER_FLAGS = "-Wno-deprecated-declarations"; }; };
 		1079242919A325BE00C52AD6 /* simple.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923FC19A3238500C52AD6 /* simple.c */; settings = {COMPILER_FLAGS = "-Wno-deprecated-declarations"; }; };
 		1079243019A3260E00C52AD6 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		1079244119A3264300C52AD6 /* picohttpparser.c in Sources */ = {isa = PBXBuildFile; fileRef = 1079235A19A3210D00C52AD6 /* picohttpparser.c */; };
