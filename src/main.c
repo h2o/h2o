@@ -101,10 +101,10 @@ static void init_openssl(void)
             pthread_mutex_init(openssl_thread_locks + i, NULL);
         CRYPTO_set_locking_callback(openssl_thread_lock_callback);
         CRYPTO_set_id_callback(openssl_thread_id_callback);
+        /* TODO [OpenSSL] set dynlock callbacks for better performance */
         SSL_load_error_strings();
         SSL_library_init();
         OpenSSL_add_all_algorithms();
-        /* FIXME setup callbacks as said in https://www.openssl.org/docs/crypto/threads.html */
         ready = 1;
     }
 }
