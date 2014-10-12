@@ -73,10 +73,34 @@ struct config_t {
     h2o_configurator_t num_threads_configurator;
 };
 
+static unsigned long openssl_thread_id_callback(void)
+{
+    return (unsigned long)pthread_self();
+}
+
+static pthread_mutex_t *openssl_thread_locks;
+
+static void openssl_thread_lock_callback(int mode, int n, const char *file, int line)
+{
+    if ((mode & CRYPTO_LOCK) != 0) {
+        pthread_mutex_lock(openssl_thread_locks + n);
+    } else if ((mode & CRYPTO_UNLOCK) != 0) {
+        pthread_mutex_unlock(openssl_thread_locks + n);
+    } else {
+        assert(!"unexpected mode");
+    }
+}
+
 static void init_openssl(void)
 {
     static int ready = 0;
     if (! ready) {
+        int nlocks = CRYPTO_num_locks(), i;
+        openssl_thread_locks = malloc(sizeof(*openssl_thread_locks) * nlocks);
+        for (i = 0; i != nlocks; ++i)
+            pthread_mutex_init(openssl_thread_locks + i, NULL);
+        CRYPTO_set_locking_callback(openssl_thread_lock_callback);
+        CRYPTO_set_id_callback(openssl_thread_id_callback);
         SSL_load_error_strings();
         SSL_library_init();
         OpenSSL_add_all_algorithms();
