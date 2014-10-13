@@ -345,7 +345,18 @@ int h2o_contains_token(const char *haysack, size_t haysack_len, const char *need
     return 0;
 }
 
-static h2o_buf_t rewrite_traversal(h2o_mempool_t *pool, const char *path, size_t len)
+static int decode_hex(int ch)
+{
+    if ('0' <= ch && ch <= '9')
+        return ch - '0';
+    if ('A' <= ch && ch <= 'F')
+        return ch - 'A' + 0xa;
+    if ('a' <= ch && ch <= 'f')
+        return ch - 'a' + 0xa;
+    return -1;
+}
+
+static h2o_buf_t rebuild_path(h2o_mempool_t *pool, const char *path, size_t len)
 {
     const char *src = path, *src_end = path + len;
     char *dst;
@@ -367,14 +378,27 @@ static h2o_buf_t rewrite_traversal(h2o_mempool_t *pool, const char *path, size_t
             src += 3;
             if (src == src_end)
                 *dst++ = '/';
-        } else if ((src_end - src == 2 && memcmp(src, H2O_STRLIT("/.")) == 0)
+            goto Next;
+        }
+        if ((src_end - src == 2 && memcmp(src, H2O_STRLIT("/.")) == 0)
             || (src_end - src > 2 && memcmp(src, H2O_STRLIT("/./")) == 0)) {
             src += 2;
             if (src == src_end)
                 *dst++ = '/';
-        } else {
-            *dst++ = *src++;
+            goto Next;
         }
+        if (src_end - src >= 3 && *src == '%') {
+            int hi, lo;
+            if ((hi = decode_hex(src[1])) != -1
+                && (lo = decode_hex(src[2])) != -1) {
+                *dst++ = (hi << 4) | lo;
+                src += 3;
+                goto Next;
+            }
+        }
+        *dst++ = *src++;
+    Next:
+        ;
     }
     if (dst == ret.base)
         *dst++ = '/';
@@ -392,7 +416,8 @@ h2o_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len)
         goto Rewrite;
 
     for (; p + 1 < end; ++p) {
-        if (p[0] == '/' && p[1] == '.') {
+        if ((p[0] == '/' && p[1] == '.')
+            || p[0] == '%') {
             /* detect false positives as well */
             goto Rewrite;
         } else if (p[0] == '?') {
@@ -411,7 +436,7 @@ Return:
     return ret;
 
 Rewrite:
-    return rewrite_traversal(pool, path, len);
+    return rebuild_path(pool, path, len);
 }
 
 void h2o_send_inline(h2o_req_t *req, const char *body, size_t len)
@@ -534,6 +559,18 @@ void util_test(void)
         b = h2o_normalize_path(&pool, H2O_STRLIT("/abc/../def?xx"));
         ok(b.len == 4);
         ok(memcmp(b.base, H2O_STRLIT("/def")) == 0);
+
+        b = h2o_normalize_path(&pool, H2O_STRLIT("/a%62c"));
+        ok(b.len == 4);
+        ok(memcmp(b.base, H2O_STRLIT("/abc")) == 0);
+
+        b = h2o_normalize_path(&pool, H2O_STRLIT("/a%6"));
+        ok(b.len == 4);
+        ok(memcmp(b.base, H2O_STRLIT("/a%6")) == 0);
+
+        b = h2o_normalize_path(&pool, H2O_STRLIT("/a%6?"));
+        ok(b.len == 4);
+        ok(memcmp(b.base, H2O_STRLIT("/a%6")) == 0);
     }
     h2o_mempool_clear(&pool);
 }

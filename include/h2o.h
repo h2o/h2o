@@ -859,7 +859,7 @@ const char *h2o_next_token(const char* elements, size_t elements_len, size_t *el
  */
 int h2o_contains_token(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len);
 /**
- * removes ".." and "." from a path representation
+ * removes "..", ".", decodes %xx from a path representation
  * @param pool memory pool to be used in case the path contained references to directories
  * @param path source path
  * @param len source length
