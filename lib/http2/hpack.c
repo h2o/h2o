@@ -159,7 +159,9 @@ static h2o_buf_t *decode_string(h2o_mempool_t *pool, const uint8_t **src, const 
 static inline struct st_h2o_hpack_header_table_entry_t *header_table_get(h2o_hpack_header_table_t *table, size_t index)
 {
     size_t entry_index = (index + table->entry_start_index) % table->entry_capacity;
-    return table->entries + entry_index;
+    struct st_h2o_hpack_header_table_entry_t *entry = table->entries + entry_index;
+    assert(entry->name != NULL);
+    return entry;
 }
 
 static void header_table_evict_one(h2o_hpack_header_table_t *table)
@@ -173,6 +175,8 @@ static void header_table_evict_one(h2o_hpack_header_table_t *table)
         h2o_mempool_release_shared(entry->name);
     if (! value_is_part_of_static_table(entry->value))
         h2o_mempool_release_shared(entry->value);
+    entry->name = NULL;
+    entry->value = NULL;
 }
 
 static struct st_h2o_hpack_header_table_entry_t *header_table_add(h2o_hpack_header_table_t *table, size_t size_add, size_t max_num_entries)
@@ -203,6 +207,7 @@ static struct st_h2o_hpack_header_table_entry_t *header_table_add(h2o_hpack_head
                 src_index = (src_index + 1) % table->entry_capacity;
             } while (dst_index != table->num_entries);
         }
+        memset(new_entries + table->num_entries, 0, sizeof(*new_entries) * (new_capacity - table->num_entries));
         free(table->entries);
         table->entries = new_entries;
         table->entry_capacity = new_capacity;
