@@ -686,7 +686,7 @@
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = "";
+				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = "libuv-debug";
@@ -816,7 +816,7 @@
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = "";
+				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = "libuv-release";
@@ -974,7 +974,7 @@
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = "";
+				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = "evloop-debug";
@@ -990,7 +990,7 @@
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = "";
+				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = "evloop-release";
@@ -1156,6 +1156,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					"/usr/local/openssl-1.0.2/include",
 					/usr/local/include,
 					include,
 				);
@@ -1183,6 +1184,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					"/usr/local/openssl-1.0.2/include",
 					/usr/local/include,
 					include,
 				);
@@ -1207,6 +1209,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					"/usr/local/openssl-1.0.2/include",
 					/usr/local/include,
 					include,
 				);
@@ -1230,6 +1233,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					"/usr/local/openssl-1.0.2/include",
 					/usr/local/include,
 					include,
 				);
