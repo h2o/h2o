@@ -109,6 +109,13 @@ static void init_openssl(void)
     }
 }
 
+static void setup_ecc_key(SSL_CTX *ssl_ctx)
+{
+    EC_KEY *key = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
+    SSL_CTX_set_tmp_ecdh(ssl_ctx, key);
+    EC_KEY_free(key);
+}
+
 static SSL_CTX *on_config_listen_setup_ssl(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node)
 {
     SSL_CTX *ssl_ctx = NULL;
@@ -141,6 +148,7 @@ static SSL_CTX *on_config_listen_setup_ssl(h2o_configurator_t *configurator, con
     init_openssl();
     ssl_ctx = SSL_CTX_new(SSLv23_server_method());
     SSL_CTX_set_options(ssl_ctx, SSL_OP_NO_SSLv2);
+    setup_ecc_key(ssl_ctx);
     if (SSL_CTX_use_certificate_file(ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
         h2o_config_print_error(configurator, config_file, config_node, "failed to load certificate file:%s\n", cert_file);
         goto Error;
