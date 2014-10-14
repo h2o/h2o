@@ -149,7 +149,7 @@ int decode_ssl_input(h2o_socket_t *sock)
     assert(sock->ssl != NULL);
     assert(sock->ssl->handshake.cb == NULL);
 
-    while (1) {
+    while (sock->ssl->input.encrypted->size != 0) {
         h2o_buf_t buf = h2o_allocate_input_buffer(&sock->input, 8192);
         int rlen = SSL_read(sock->ssl->ssl, buf.base, (int)buf.len);
         if (rlen == -1) {
@@ -164,7 +164,6 @@ int decode_ssl_input(h2o_socket_t *sock)
         }
     }
 
-    assert(sock->ssl->input.encrypted->size == 0);
     return 0;
 }
 
