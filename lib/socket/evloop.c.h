@@ -142,31 +142,33 @@ static int write_core(int fd, h2o_buf_t **bufs, size_t *bufcnt)
     int iovcnt;
     ssize_t wret;
 
-    while (*bufcnt != 0) {
-        /* write */
-        iovcnt = IOV_MAX;
-        if (*bufcnt < iovcnt)
-            iovcnt = (int)*bufcnt;
-        while ((wret = writev(fd, (struct iovec*)*bufs, iovcnt)) == -1 && errno == EINTR)
-            ;
-        if (wret == -1) {
-            if (errno != EAGAIN)
-                return -1;
-            break;
-        }
-        /* adjust the buffer */
-        while ((*bufs)->len < wret) {
-            wret -= (*bufs)->len;
-            ++*bufs;
-            --*bufcnt;
-            assert(*bufcnt != 0);
-        }
-        if (((*bufs)->len -= wret) == 0) {
-            ++*bufs;
-            --*bufcnt;
-        } else {
-            (*bufs)->base += wret;
-        }
+    if (*bufcnt != 0) {
+        do {
+            /* write */
+            iovcnt = IOV_MAX;
+            if (*bufcnt < iovcnt)
+                iovcnt = (int)*bufcnt;
+            while ((wret = writev(fd, (struct iovec*)*bufs, iovcnt)) == -1 && errno == EINTR)
+                ;
+            if (wret == -1) {
+                if (errno != EAGAIN)
+                    return -1;
+                break;
+            }
+            /* adjust the buffer */
+            while ((*bufs)->len < wret) {
+                wret -= (*bufs)->len;
+                ++*bufs;
+                --*bufcnt;
+                assert(*bufcnt != 0);
+            }
+            if (((*bufs)->len -= wret) == 0) {
+                ++*bufs;
+                --*bufcnt;
+            } else {
+                (*bufs)->base += wret;
+            }
+        } while (*bufcnt != 0 && iovcnt == IOV_MAX);
     }
 
     return 0;
