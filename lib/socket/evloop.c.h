@@ -164,6 +164,8 @@ static int write_core(int fd, h2o_buf_t **bufs, size_t *bufcnt)
         if (((*bufs)->len -= wret) == 0) {
             ++*bufs;
             --*bufcnt;
+        } else {
+            (*bufs)->base += wret;
         }
     }
 
