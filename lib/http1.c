@@ -259,6 +259,11 @@ static void reqread_on_timeout(h2o_timeout_entry_t *entry)
 
 static inline void reqread_start(h2o_http1_conn_t *conn)
 {
+    if (conn->sock->input != NULL && conn->sock->input->size != 0) {
+        if (handle_incoming_request(conn) == 0) {
+            return;
+        }
+    }
     set_timeout(conn, &conn->super.ctx->req_timeout, reqread_on_timeout);
     h2o_socket_read_start(conn->sock, reqread_on_read);
 }
@@ -290,11 +295,6 @@ static void on_send_complete(h2o_socket_t *sock, int status)
     h2o_consume_input_buffer(&conn->sock->input, conn->_reqsize);
     conn->_prevreqlen = 0;
     conn->_reqsize = 0;
-    if (conn->sock->input->size != 0) {
-        if (handle_incoming_request(conn) == 0) {
-            return;
-        }
-    }
     reqread_start(conn);
 }
 

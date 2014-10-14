@@ -164,6 +164,7 @@ int decode_ssl_input(h2o_socket_t *sock)
         }
     }
 
+    assert(sock->ssl->input.encrypted->size == 0);
     return 0;
 }
 
@@ -268,6 +269,7 @@ static void on_handshake_complete(h2o_socket_t *sock, int status)
     h2o_socket_cb handshake_cb = sock->ssl->handshake.cb;
     sock->_cb.write = NULL;
     sock->ssl->handshake.cb = NULL;
+    decode_ssl_input(sock);
     handshake_cb(sock, status);
 }
 
@@ -293,6 +295,10 @@ static void proceed_handshake(h2o_socket_t *sock, int status)
         h2o_socket_read_stop(sock);
         flush_pending_ssl(sock, ret == 1 ? on_handshake_complete : proceed_handshake);
     } else {
+        if (ret == 1) {
+            goto Complete;
+        }
+        assert(sock->ssl->input.encrypted == NULL || sock->ssl->input.encrypted->size == 0);
         h2o_socket_read_start(sock, proceed_handshake);
     }
     return;
