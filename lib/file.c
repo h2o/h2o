@@ -216,6 +216,7 @@ NotModified:
     req->res.status = 304;
     req->res.reason = "Not Modified";
     h2o_send_inline(req, NULL, 0);
+    do_close(&generator->super, req);
     return 0;
 }
 
