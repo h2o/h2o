@@ -24,7 +24,7 @@
 #include <sys/time.h>
 #include "h2o.h"
 
-void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_global_configuration_t *config)
+void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *config)
 {
     memset(ctx, 0, sizeof(*ctx));
     ctx->loop = loop;

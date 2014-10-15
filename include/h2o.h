@@ -300,7 +300,7 @@ typedef struct st_h2o_timestamp_t {
     h2o_timestamp_string_t *str;
 } h2o_timestamp_t;
 
-typedef struct st_h2o_host_configuration_t {
+typedef struct st_h2o_hostconf_t {
     h2o_linklist_t _link;
     /**
      * hostname in lower-case (base is NUL terminated)
@@ -322,17 +322,17 @@ typedef struct st_h2o_host_configuration_t {
      * mime-map
      */
     h2o_mimemap_t mimemap;
-} h2o_host_configuration_t;
+} h2o_hostconf_t;
 
-typedef struct st_h2o_global_configuration_t {
+typedef struct st_h2o_globalconf_t {
     /**
-     * list of host contexts (h2o_host_configuration_t)
+     * list of host contexts (h2o_hostconf_t)
      */
     h2o_linklist_t virtual_hosts;
     /**
      * default host context
      */
-    h2o_host_configuration_t default_host;
+    h2o_hostconf_t default_host;
     /**
      * list of global configurators (h2o_configurator_t)
      */
@@ -366,7 +366,7 @@ typedef struct st_h2o_global_configuration_t {
      * an optional callback called when a connection is being closed
      */
     void (*close_cb)(h2o_context_t *ctx);
-} h2o_global_configuration_t;
+} h2o_globalconf_t;
 
 /**
  * context of the http server.
@@ -387,7 +387,7 @@ struct st_h2o_context_t {
     /**
      * pointer to the global configuration
      */
-    h2o_global_configuration_t *global_config;
+    h2o_globalconf_t *global_config;
     struct {
         uint64_t uv_now_at;
         struct timeval tv_at;
@@ -501,7 +501,7 @@ struct st_h2o_req_t {
     /**
      * the host context
      */
-    h2o_host_configuration_t *host_config;
+    h2o_hostconf_t *host_config;
     /**
      * authority (a.k.a. the Host header; the value is { NULL, 0 } in case the header is unavailable)
      */
@@ -935,15 +935,15 @@ static void h2o_proceed_response(h2o_req_t *req);
 /**
  * initializes the global configuration
  */
-void h2o_config_init(h2o_global_configuration_t *config);
+void h2o_config_init(h2o_globalconf_t *config);
 /**
  * registers a virtual host context
  */
-h2o_host_configuration_t *h2o_config_register_virtual_host(h2o_global_configuration_t *config, const char *hostname);
+h2o_hostconf_t *h2o_config_register_virtual_host(h2o_globalconf_t *config, const char *hostname);
 /**
  * disposes of the resources allocated for the global configuration
  */
-void h2o_config_dispose(h2o_global_configuration_t *config);
+void h2o_config_dispose(h2o_globalconf_t *config);
 /**
  * returns a configurator of given command name
  * @return configurator for given name or NULL if not found
@@ -953,7 +953,7 @@ h2o_configurator_t *h2o_config_get_configurator(h2o_linklist_t *configurators, c
  * applies the configuration to the context
  * @return 0 if successful, -1 if not
  */
-int h2o_config_configure(h2o_global_configuration_t *config, const char *file, yoml_t *node);
+int h2o_config_configure(h2o_globalconf_t *config, const char *file, yoml_t *node);
 /**
  * emits configuration error
  */
@@ -977,14 +977,14 @@ int h2o_config_scanf(h2o_configurator_t *configurator, const char *config_file, 
  */
 ssize_t h2o_config_get_one_of(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *candidates);
 
-int h2o_config_on_context_create(h2o_global_configuration_t *config, h2o_context_t *ctx);
+int h2o_config_on_context_create(h2o_globalconf_t *config, h2o_context_t *ctx);
 
 /* context */
 
 /**
  * initializes the context
  */
-void h2o_context_init(h2o_context_t *context, h2o_loop_t *loop, h2o_global_configuration_t *config);
+void h2o_context_init(h2o_context_t *context, h2o_loop_t *loop, h2o_globalconf_t *config);
 /**
  * disposes of the resources allocated for the context
  */
@@ -1017,7 +1017,7 @@ int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *pa
 /**
  * registers the file handler to the context
  */
-void h2o_register_file_handler(h2o_host_configuration_t *host_config, const char *virtual_path, const char *real_path, const char *index_file);
+void h2o_register_file_handler(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char *index_file);
 
 /* output filters */
 
@@ -1028,11 +1028,11 @@ static void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostre
 /**
  * registers the chunked encoding output filter (added by default)
  */
-void h2o_register_chunked_filter(h2o_host_configuration_t *host_config);
+void h2o_register_chunked_filter(h2o_hostconf_t *host_config);
 /**
  * registers the reproxy filter
  */
-void h2o_register_reproxy_filter(h2o_host_configuration_t *host_config);
+void h2o_register_reproxy_filter(h2o_hostconf_t *host_config);
 
 /* mime mapper */
 
@@ -1055,7 +1055,7 @@ h2o_buf_t h2o_get_mimetype(h2o_mimemap_t *mimemap, const char *ext);
 
 /* access log */
 
-h2o_logger_t *h2o_register_access_logger(h2o_host_configuration_t *host_config, const char *path, const char *fmt);
+h2o_logger_t *h2o_register_access_logger(h2o_hostconf_t *host_config, const char *path, const char *fmt);
 void h2o_register_access_logger_configurator(h2o_linklist_t *host_configurators);
 
 /* inline defs */

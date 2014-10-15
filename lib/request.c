@@ -89,7 +89,7 @@ void h2o_dispose_request(h2o_req_t *req)
     h2o_timeout_unlink(&req->conn->ctx->zero_timeout, &req->_timeout_entry);
 
     if (req->version != 0 && req->host_config != NULL) {
-        h2o_host_configuration_t *host_config = req->host_config;
+        h2o_hostconf_t *host_config = req->host_config;
         h2o_linklist_t *node;
         for (node = host_config->loggers.next; node != &host_config->loggers; node = node->next) {
             h2o_logger_t *logger = H2O_STRUCT_FROM_MEMBER(h2o_logger_t, _link, node);
@@ -112,7 +112,7 @@ void h2o_process_request(h2o_req_t *req)
     if (req->authority.base != NULL) {
         h2o_linklist_t *vhosts = &ctx->global_config->virtual_hosts, *vhost_node;
         for (vhost_node = vhosts->next; vhost_node != vhosts; vhost_node = vhost_node->next) {
-            h2o_host_configuration_t *host_config = H2O_STRUCT_FROM_MEMBER(h2o_host_configuration_t, _link, vhost_node);
+            h2o_hostconf_t *host_config = H2O_STRUCT_FROM_MEMBER(h2o_hostconf_t, _link, vhost_node);
             if (h2o_memis(req->authority.base, req->authority.len, host_config->hostname.base, host_config->hostname.len)) {
                 req->host_config = host_config;
                 break;

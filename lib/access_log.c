@@ -274,7 +274,7 @@ static void destroy(h2o_logger_t *_self)
     free(self);
 }
 
-h2o_logger_t *h2o_register_access_logger(h2o_host_configuration_t *host_config, const char *path, const char *fmt)
+h2o_logger_t *h2o_register_access_logger(h2o_hostconf_t *host_config, const char *path, const char *fmt)
 {
     struct st_h2o_access_logger_t *self = h2o_malloc(sizeof(*self));
 
@@ -307,7 +307,7 @@ Error:
 
 static int on_config(h2o_configurator_t *configurator, void *_config, const char *file, yoml_t *node)
 {
-    h2o_host_configuration_t *config = _config;
+    h2o_hostconf_t *config = _config;
     const char *path, *fmt = NULL;
 
     switch (node->type) {

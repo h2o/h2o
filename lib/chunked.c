@@ -97,7 +97,7 @@ Next:
     h2o_setup_next_ostream(self, req, slot);
 }
 
-void h2o_register_chunked_filter(h2o_host_configuration_t *host_config)
+void h2o_register_chunked_filter(h2o_hostconf_t *host_config)
 {
     h2o_filter_t *self = h2o_malloc(sizeof(*self));
 

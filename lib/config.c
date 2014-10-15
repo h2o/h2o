@@ -35,13 +35,13 @@ static int complete_configurators(h2o_linklist_t *configurators, void *config)
     return 0;
 }
 
-static int complete_host_configurators(h2o_host_configuration_t *host_config, void *_host_configurators)
+static int complete_host_configurators(h2o_hostconf_t *host_config, void *_host_configurators)
 {
     h2o_linklist_t *host_configurators = _host_configurators;
     return complete_configurators(host_configurators, host_config);
 }
 
-static int for_each_host_context(h2o_global_configuration_t *config, int (*cb)(h2o_host_configuration_t *host_config, void *cb_arg), void *cb_arg)
+static int for_each_host_context(h2o_globalconf_t *config, int (*cb)(h2o_hostconf_t *host_config, void *cb_arg), void *cb_arg)
 {
     h2o_linklist_t *node;
     int ret;
@@ -49,7 +49,7 @@ static int for_each_host_context(h2o_global_configuration_t *config, int (*cb)(h
     if ((ret = cb(&config->default_host, cb_arg)) != 0)
         return ret;
     for (node = config->virtual_hosts.next; node != &config->virtual_hosts; node = node->next) {
-        h2o_host_configuration_t *host_config = H2O_STRUCT_FROM_MEMBER(h2o_host_configuration_t, _link, node);
+        h2o_hostconf_t *host_config = H2O_STRUCT_FROM_MEMBER(h2o_hostconf_t, _link, node);
         if ((ret = cb(host_config, cb_arg)) != 0)
             return ret;
     }
@@ -57,7 +57,7 @@ static int for_each_host_context(h2o_global_configuration_t *config, int (*cb)(h
     return 0;
 }
 
-static int apply_commands(void *config, const char *file, yoml_t *node, h2o_global_configuration_t *global_config)
+static int apply_commands(void *config, const char *file, yoml_t *node, h2o_globalconf_t *global_config)
 {
     yoml_t *key, *value;
     size_t i;
@@ -102,7 +102,7 @@ UnknownCommand:
 
 static int on_config_files(h2o_configurator_t *configurator, void *_config, const char *file, yoml_t *node)
 {
-    h2o_host_configuration_t *host_config = _config;
+    h2o_hostconf_t *host_config = _config;
     size_t i;
 
     if (node->type != YOML_TYPE_MAPPING) {
@@ -129,7 +129,7 @@ static int on_config_files(h2o_configurator_t *configurator, void *_config, cons
 
 static int on_config_mime_types(h2o_configurator_t *configurator, void *_config, const char *file, yoml_t *node)
 {
-    h2o_host_configuration_t *host_config = _config;
+    h2o_hostconf_t *host_config = _config;
     size_t i;
 
     if (node->type != YOML_TYPE_MAPPING) {
@@ -156,7 +156,7 @@ static int on_config_mime_types(h2o_configurator_t *configurator, void *_config,
 
 static int on_config_virtual_host(h2o_configurator_t *configurator, void *_config, const char *file, yoml_t *node)
 {
-    h2o_global_configuration_t *config = _config;
+    h2o_globalconf_t *config = _config;
     size_t i;
 
     if (node->type != YOML_TYPE_MAPPING) {
@@ -167,7 +167,7 @@ static int on_config_virtual_host(h2o_configurator_t *configurator, void *_confi
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key;
         yoml_t *value = node->data.mapping.elements[i].value;
-        h2o_host_configuration_t *host_config;
+        h2o_hostconf_t *host_config;
         if (key->type != YOML_TYPE_SCALAR) {
             h2o_config_print_error(configurator, file, key, "key (representing the hostname) must be a string");
             return -1;
@@ -182,7 +182,7 @@ static int on_config_virtual_host(h2o_configurator_t *configurator, void *_confi
 
 static int on_config_request_timeout(h2o_configurator_t *configurator, void *_config, const char *file, yoml_t *node)
 {
-    h2o_global_configuration_t *config = _config;
+    h2o_globalconf_t *config = _config;
     unsigned timeout_in_secs;
 
     if (h2o_config_scanf(configurator, file, node, "%u", &timeout_in_secs) != 0)
@@ -194,13 +194,13 @@ static int on_config_request_timeout(h2o_configurator_t *configurator, void *_co
 
 static int on_config_limit_request_body(h2o_configurator_t *configurator, void *_config, const char *file, yoml_t *node)
 {
-    h2o_global_configuration_t *config = _config;
+    h2o_globalconf_t *config = _config;
     return h2o_config_scanf(configurator, file, node, "%zu", &config->max_request_entity_size);
 }
 
 static int on_config_http1_upgrade_to_http2(h2o_configurator_t *configurator, void *_config, const char *file, yoml_t *node)
 {
-    h2o_global_configuration_t *config = _config;
+    h2o_globalconf_t *config = _config;
     ssize_t ret = h2o_config_get_one_of(configurator, file, node, "OFF,ON");
     if (ret == -1)
         return -1;
@@ -210,7 +210,7 @@ static int on_config_http1_upgrade_to_http2(h2o_configurator_t *configurator, vo
 
 static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurator_t *configurator, void *_config, const char *file, yoml_t *node)
 {
-    h2o_global_configuration_t *config = _config;
+    h2o_globalconf_t *config = _config;
     return h2o_config_scanf(configurator, file, node, "%zu", &config->http2_max_concurrent_requests_per_connection);
 }
 
@@ -237,7 +237,7 @@ static void setup_configurator(h2o_linklist_t *anchor, const char *cmd, int (*on
     h2o_linklist_insert(anchor, &configurator->_link);
 }
 
-static void init_core_configurators(h2o_global_configuration_t *config)
+static void init_core_configurators(h2o_globalconf_t *config)
 {
     /* check if already initialized */
     if (h2o_config_get_configurator(&config->host_configurators, "files") != NULL)
@@ -278,7 +278,7 @@ static void init_core_configurators(h2o_global_configuration_t *config)
     } \
 } while (0)
 
-static void init_host_config(h2o_host_configuration_t *host_config)
+static void init_host_config(h2o_hostconf_t *host_config)
 {
     h2o_linklist_init_anchor(&host_config->handlers);
     h2o_linklist_init_anchor(&host_config->filters);
@@ -287,7 +287,7 @@ static void init_host_config(h2o_host_configuration_t *host_config)
     h2o_init_mimemap(&host_config->mimemap, H2O_DEFAULT_MIMETYPE);
 }
 
-static void dispose_host_config(h2o_host_configuration_t *host_config)
+static void dispose_host_config(h2o_hostconf_t *host_config)
 {
     free(host_config->hostname.base);
     DESTROY_LIST(h2o_handler_t, host_config->handlers);
@@ -296,7 +296,7 @@ static void dispose_host_config(h2o_host_configuration_t *host_config)
     h2o_dispose_mimemap(&host_config->mimemap);
 }
 
-void h2o_config_init(h2o_global_configuration_t *config)
+void h2o_config_init(h2o_globalconf_t *config)
 {
     memset(config, 0, sizeof(*config));
     h2o_linklist_init_anchor(&config->virtual_hosts);
@@ -312,9 +312,9 @@ void h2o_config_init(h2o_global_configuration_t *config)
     init_core_configurators(config);
 }
 
-h2o_host_configuration_t *h2o_config_register_virtual_host(h2o_global_configuration_t *config, const char *hostname)
+h2o_hostconf_t *h2o_config_register_virtual_host(h2o_globalconf_t *config, const char *hostname)
 {
-    h2o_host_configuration_t *host_config = h2o_malloc(sizeof(*host_config));
+    h2o_hostconf_t *host_config = h2o_malloc(sizeof(*host_config));
     size_t i;
 
     memset(host_config, 0, sizeof(*host_config));
@@ -328,10 +328,10 @@ h2o_host_configuration_t *h2o_config_register_virtual_host(h2o_global_configurat
     return host_config;
 }
 
-void h2o_config_dispose(h2o_global_configuration_t *config)
+void h2o_config_dispose(h2o_globalconf_t *config)
 {
     while (! h2o_linklist_is_empty(&config->virtual_hosts)) {
-        h2o_host_configuration_t *host_config = H2O_STRUCT_FROM_MEMBER(h2o_host_configuration_t, _link, config->virtual_hosts.next);
+        h2o_hostconf_t *host_config = H2O_STRUCT_FROM_MEMBER(h2o_hostconf_t, _link, config->virtual_hosts.next);
         h2o_linklist_unlink(&host_config->_link);
         dispose_host_config(host_config);
         free(host_config);
@@ -355,7 +355,7 @@ h2o_configurator_t *h2o_config_get_configurator(h2o_linklist_t *anchor, const ch
     return NULL;
 }
 
-int h2o_config_configure(h2o_global_configuration_t *config, const char *file, yoml_t *node)
+int h2o_config_configure(h2o_globalconf_t *config, const char *file, yoml_t *node)
 {
     /* apply the configuration */
     if (apply_commands(config, file, node, config) != 0)
@@ -370,7 +370,7 @@ int h2o_config_configure(h2o_global_configuration_t *config, const char *file, y
     return 0;
 }
 
-int h2o_config_on_context_create(h2o_global_configuration_t *config, h2o_context_t *ctx)
+int h2o_config_on_context_create(h2o_globalconf_t *config, h2o_context_t *ctx)
 {
     h2o_linklist_t *node;
 

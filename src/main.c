@@ -56,7 +56,7 @@ struct listener_ctx_t {
 };
 
 struct config_t {
-    h2o_global_configuration_t global_config;
+    h2o_globalconf_t global_config;
     struct listener_config_t **listeners;
     size_t num_listeners;
     unsigned max_connections;
@@ -310,7 +310,7 @@ static void usage_print_directives(h2o_linklist_t *configurators)
     }
 }
 
-static void usage(h2o_global_configuration_t *config)
+static void usage(h2o_globalconf_t *config)
 {
     printf(
         "H2O version 0.1\n"
