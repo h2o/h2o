@@ -154,7 +154,7 @@ int decode_ssl_input(h2o_socket_t *sock)
         int rlen = SSL_read(sock->ssl->ssl, buf.base, (int)buf.len);
         if (rlen == -1) {
             if (SSL_get_error(sock->ssl->ssl, rlen) != SSL_ERROR_WANT_READ) {
-                return -1;
+                return EIO;
             }
             break;
         } else if (rlen == 0) {

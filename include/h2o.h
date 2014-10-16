@@ -677,6 +677,10 @@ static void h2o_linklist_unlink(h2o_linklist_t *node);
  */
 void h2o_socket_close(h2o_socket_t *sock);
 /**
+ * connects to peer
+ */
+h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb);
+/**
  * writes given data to socket
  * @param sock the socket
  * @param bufs an array of buffers
