@@ -168,35 +168,3 @@ ssize_t h2o_delete_header(h2o_headers_t *headers, ssize_t cursor)
 
     return cursor;
 }
-
-h2o_buf_t h2o_flatten_headers(h2o_mempool_t *pool, const h2o_headers_t *headers)
-{
-    const h2o_header_t *header, * header_end = headers->entries + headers->size;
-    h2o_buf_t ret;
-    char *dst;
-
-    /* determine the length */
-    ret.len = 0;
-    for (header = headers->entries; header != header_end; ++header) {
-        ret.len += header->name->len + header->value.len + 4;
-    }
-    ret.len += 2;
-
-    /* build */
-    dst = ret.base = h2o_mempool_alloc(pool, ret.len);
-    for (header = headers->entries; header != header_end; ++header) {
-        memcpy(dst, header->name->base, header->name->len);
-        dst += header->name->len;
-        *dst++ = ':';
-        *dst++ = ' ';
-        memcpy(dst, header->value.base, header->value.len);
-        dst += header->value.len;
-        *dst++ = '\r';
-        *dst++ = '\n';
-    }
-    *dst++ = '\r';
-    *dst++ = '\n';
-    assert(ret.len == dst - ret.base);
-
-    return ret;
-}

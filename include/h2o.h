@@ -799,10 +799,6 @@ void h2o_set_header_by_str(h2o_mempool_t *pool, h2o_headers_t *headers, const ch
  * deletes a header from list
  */
 ssize_t h2o_delete_header(h2o_headers_t *headers, ssize_t cursor);
-/**
- * serializes the header list into a string
- */
-h2o_buf_t h2o_flatten_headers(h2o_mempool_t *pool, const h2o_headers_t *headers);
 
 /* util */
 

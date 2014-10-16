@@ -624,7 +624,7 @@ static void test_request(h2o_buf_t first_req, h2o_buf_t second_req, h2o_buf_t th
 {
     h2o_hpack_header_table_t header_table;
     h2o_req_t req;
-    h2o_buf_t in, flattened;
+    h2o_buf_t in;
     int r, allow_psuedo;
 
     memset(&header_table, 0, sizeof(header_table));
@@ -664,8 +664,9 @@ static void test_request(h2o_buf_t first_req, h2o_buf_t second_req, h2o_buf_t th
     ok(memcmp(req.path.base, H2O_STRLIT("/")) == 0);
     ok(req.scheme.len == 4);
     ok(memcmp(req.scheme.base, H2O_STRLIT("http")) == 0);
-    flattened = h2o_flatten_headers(&req.pool, &req.headers);
-    ok(h2o_lcstris(flattened.base, flattened.len, H2O_STRLIT("cache-control: no-cache\r\n\r\n")));
+    ok(req.headers.size == 1);
+    ok(h2o_lcstris(req.headers.entries[0].name->base, req.headers.entries[0].name->len, H2O_STRLIT("cache-control")));
+    ok(h2o_lcstris(req.headers.entries[0].value.base, req.headers.entries[0].value.len, H2O_STRLIT("no-cache")));
 
     h2o_mempool_clear(&req.pool);
 
@@ -684,8 +685,9 @@ static void test_request(h2o_buf_t first_req, h2o_buf_t second_req, h2o_buf_t th
     ok(memcmp(req.path.base, H2O_STRLIT("/index.html")) == 0);
     ok(req.scheme.len == 5);
     ok(memcmp(req.scheme.base, H2O_STRLIT("https")) == 0);
-    flattened = h2o_flatten_headers(&req.pool, &req.headers);
-    ok(h2o_lcstris(flattened.base, flattened.len, H2O_STRLIT("custom-key: custom-value\r\n\r\n")));
+    ok(req.headers.size == 1);
+    ok(h2o_lcstris(req.headers.entries[0].name->base, req.headers.entries[0].name->len, H2O_STRLIT("custom-key")));
+    ok(h2o_lcstris(req.headers.entries[0].value.base, req.headers.entries[0].value.len, H2O_STRLIT("custom-value")));
 
     h2o_hpack_dispose_header_table(&header_table);
     h2o_mempool_clear(&req.pool);
