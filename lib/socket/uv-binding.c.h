@@ -26,7 +26,10 @@ struct st_h2o_uv_socket_t {
         uv_stream_t *stream;
         uv_close_cb close_cb;
     } uv;
-    uv_write_t _wreq;
+    union {
+        uv_connect_t _creq;
+        uv_write_t _wreq;
+    };
 };
 
 static void schedule_timer(h2o_timeout_t *timeout);
@@ -114,22 +117,52 @@ void do_write(h2o_socket_t *_sock, h2o_buf_t *bufs, size_t bufcnt, h2o_socket_cb
     uv_write(&sock->_wreq, sock->uv.stream, (uv_buf_t*)bufs, (int)bufcnt, on_do_write_complete);
 }
 
-h2o_socket_t *h2o_uv_socket_create(uv_stream_t *stream, uv_close_cb close_cb)
+h2o_socket_t *h2o_uv_socket_create(uv_stream_t *stream, struct sockaddr *addr, socklen_t addrlen, uv_close_cb close_cb)
 {
     struct st_h2o_uv_socket_t *sock = h2o_malloc(sizeof(*sock));
-    int addrlen;
 
     memset(sock, 0, sizeof(*sock));
-    addrlen = sizeof(sock->super.peername.addr);
-    if (uv_tcp_getpeername((uv_tcp_t*)stream, (void*)&sock->super.peername.addr, &addrlen) == 0) {
+    if (addr != NULL) {
+        memcpy(&sock->super.peername.addr, addr, addrlen);
         sock->super.peername.len = addrlen;
     } else {
-        memset(&sock->super.peername.addr, 0, sizeof(sock->super.peername.addr));
-        sock->super.peername.len = 0;
+        int addrlen = sizeof(sock->super.peername.addr);
+        if (uv_tcp_getpeername((uv_tcp_t*)stream, (void*)&sock->super.peername.addr, &addrlen) == 0) {
+            sock->super.peername.len = addrlen;
+        } else {
+            memset(&sock->super.peername.addr, 0, sizeof(sock->super.peername.addr));
+            sock->super.peername.len = 0;
+        }
     }
     sock->uv.stream = stream;
     sock->uv.close_cb = close_cb;
     stream->data = sock;
+    return &sock->super;
+}
+
+static void on_connect(uv_connect_t *conn, int status)
+{
+    struct st_h2o_uv_socket_t *sock = H2O_STRUCT_FROM_MEMBER(struct st_h2o_uv_socket_t, _creq, conn);
+    h2o_socket_cb cb = sock->super._cb.write;
+    sock->super._cb.write = NULL;
+    cb(&sock->super, status);
+}
+
+h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)
+{
+    struct st_h2o_uv_socket_t *sock;
+    uv_tcp_t *tcp = h2o_malloc(sizeof(*tcp));
+
+    if (uv_tcp_init(loop, tcp) != 0) {
+        free(tcp);
+        return NULL;
+    }
+    sock = (void*)h2o_uv_socket_create((void*)tcp, addr, addrlen, (void*)free);
+    if (uv_tcp_connect(&sock->_creq, tcp, addr, on_connect) != 0) {
+        h2o_socket_close(&sock->super);
+        return NULL;
+    }
+    sock->super._cb.write = cb;
     return &sock->super;
 }
 

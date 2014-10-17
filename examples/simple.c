@@ -112,7 +112,7 @@ static void on_accept(uv_stream_t *listener, int status)
         return;
     }
 
-    sock = h2o_uv_socket_create((uv_stream_t*)conn, (uv_close_cb)free);
+    sock = h2o_uv_socket_create((uv_stream_t*)conn, NULL, 0, (uv_close_cb)free);
     if (ssl_ctx != NULL)
         h2o_accept_ssl(&ctx, sock, ssl_ctx);
     else
