@@ -23,6 +23,7 @@
 #define h2o__linklist_h
 
 #include <assert.h>
+#include <stddef.h>
 
 /**
  * linklist
