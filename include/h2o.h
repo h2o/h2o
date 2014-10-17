@@ -365,7 +365,7 @@ struct st_h2o_req_t {
      */
     h2o_hostconf_t *host_config;
     /**
-     * authority (a.k.a. the Host header; the value is { NULL, 0 } in case the header is unavailable)
+     * authority (a.k.a. the Host header; the value is supplemented if missing before the handlers are being called)
      */
     h2o_buf_t authority;
     /**
@@ -390,9 +390,9 @@ struct st_h2o_req_t {
      */
     h2o_headers_t headers;
     /**
-     * the request entity
+     * the request entity (base == NULL if none)
      */
-    H2O_VECTOR(h2o_buf_t) entity;
+    h2o_buf_t entity;
     /**
      * timestamp when the request was processed
      */

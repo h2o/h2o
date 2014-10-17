@@ -50,6 +50,10 @@ static int h2o_tolower(int ch);
  */
 static int h2o_lcstris(const char *target, size_t target_len, const char *test, size_t test_len);
 /**
+ * parses a positive number of return SIZE_MAX if failed
+ */
+size_t h2o_strtosize(const char *s, size_t len);
+/**
  * base64 url decoder
  */
 h2o_buf_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len);
