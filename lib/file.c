@@ -250,7 +250,7 @@ static h2o_buf_t append_slash_and_dup(const char *path)
 
 void h2o_register_file_handler(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char *index_file)
 {
-    struct st_h2o_file_handler_t *self = malloc(sizeof(*self));
+    struct st_h2o_file_handler_t *self = h2o_malloc(sizeof(*self));
 
     memset(self, 0, sizeof(*self));
     self->super.destroy = on_destroy;
