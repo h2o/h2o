@@ -19,22 +19,31 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__uv_binding_h
-#define h2o__uv_binding_h
+#ifndef h2o__evloop_h
+#define h2o__evloop_h
 
-#include <uv.h>
+#define H2O_SOCKET_FLAG_IS_DISPOSED 0x1
+#define H2O_SOCKET_FLAG_IS_READ_READY 0x2
+#define H2O_SOCKET_FLAG_IS_WRITE_ERROR 0x4
+#define H2O_SOCKET_FLAG_IS_POLLED_FOR_READ 0x8
+#define H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE 0x10
+#define H2O_SOCKET_FLAG_IS_ACCEPT 0x20
+#define H2O_SOCKET_FLAG_IS_CONNECTING 0x40
+#define H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED 0x1000
 
-typedef uv_loop_t h2o_loop_t;
+typedef struct st_h2o_evloop_t h2o_evloop_t;
+typedef h2o_evloop_t h2o_loop_t;
 
 struct st_h2o_timeout_backend_properties_t {
-    uv_timer_t timer;
 };
 
-h2o_socket_t *h2o_uv_socket_create(uv_stream_t *stream, uv_close_cb close_cb);
+h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, struct sockaddr *addr, socklen_t addrlen, int flags);
+h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *listener);
 
-static inline uint64_t h2o_now(uv_loop_t *loop)
-{
-    return uv_now(loop);
-}
+h2o_evloop_t *h2o_evloop_create(void);
+void h2o_evloop_destroy(h2o_evloop_t* loop);
+int h2o_evloop_run(h2o_evloop_t *loop);
+
+uint64_t h2o_now(h2o_evloop_t *loop);
 
 #endif

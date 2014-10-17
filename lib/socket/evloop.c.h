@@ -24,6 +24,7 @@
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <unistd.h>
+#include "h2o/linklist.h"
 
 struct st_h2o_evloop_socket_t {
     h2o_socket_t super;
@@ -177,21 +178,32 @@ static int write_core(int fd, h2o_buf_t **bufs, size_t *bufcnt)
 void write_pending(struct st_h2o_evloop_socket_t *sock)
 {
     assert(sock->super._cb.write != NULL);
+
+    if ((sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0) {
+        /* connection complete */
+        assert(sock->_wreq.cnt == 0);
+        goto Complete;
+    }
+
     assert(sock->_wreq.cnt != 0);
 
     /* write */
-    if (write_core(sock->fd, &sock->_wreq.bufs, &sock->_wreq.cnt) != 0
-        || sock->_wreq.cnt == 0) {
-        /* either completed or failed */
-        wreq_free_buffer_if_allocated(sock);
-        if (sock->_wreq.cnt != 0) {
-            /* pending data exists -> was an error */
-            sock->_wreq.cnt = 0; /* clear it ! */
-            sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_ERROR;
-        }
-        link_to_pending(sock);
-        link_to_statechanged(sock); /* might need to disable the write polling */
+    if (write_core(sock->fd, &sock->_wreq.bufs, &sock->_wreq.cnt) == 0 && sock->_wreq.cnt != 0) {
+        /* partial write */
+        return;
     }
+
+    /* either completed or failed */
+    wreq_free_buffer_if_allocated(sock);
+    if (sock->_wreq.cnt != 0) {
+        /* pending data exists -> was an error */
+        sock->_wreq.cnt = 0; /* clear it ! */
+        sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_ERROR;
+    }
+
+Complete:
+    link_to_pending(sock);
+    link_to_statechanged(sock); /* might need to disable the write polling */
 }
 
 static void read_on_ready(struct st_h2o_evloop_socket_t *sock)
@@ -317,6 +329,24 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     return sock;
 }
 
+h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)
+{
+    int fd;
+    struct st_h2o_evloop_socket_t *sock;
+
+    if ((fd = socket(addr->sa_family, SOCK_STREAM, IPPROTO_TCP)) == -1)
+        return NULL;
+    if (! (connect(fd, addr, addrlen) == 0 || errno == EINPROGRESS)) {
+        close(fd);
+        return NULL;
+    }
+
+    sock = (void*)h2o_evloop_socket_create(loop, fd, addr, addrlen, H2O_SOCKET_FLAG_IS_CONNECTING);
+    sock->super._cb.write = cb;
+    link_to_statechanged(sock);
+    return &sock->super;
+}
+
 h2o_evloop_t *create_evloop(size_t sz)
 {
     h2o_evloop_t *loop = h2o_malloc(sz);
@@ -360,7 +390,15 @@ static void run_socket(struct st_h2o_evloop_socket_t* sock)
     }
 
     if (sock->super._cb.write != NULL && sock->_wreq.cnt == 0) {
-        on_write_complete(&sock->super, (sock->_flags & H2O_SOCKET_FLAG_IS_WRITE_ERROR) != 0 ? -1 : 0);
+        int status;
+        if ((sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0) {
+            socklen_t l = sizeof(status);
+            getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &status, &l);
+            sock->_flags &= ~H2O_SOCKET_FLAG_IS_CONNECTING;
+        } else {
+            status = (sock->_flags & H2O_SOCKET_FLAG_IS_WRITE_ERROR) != 0 ? -1 : 0;
+        }
+        on_write_complete(&sock->super, status);
     }
 
     if ((sock->_flags & H2O_SOCKET_FLAG_IS_READ_READY) != 0) {

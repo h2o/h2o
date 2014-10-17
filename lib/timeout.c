@@ -19,7 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include "h2o.h"
+#include "h2o/timeout.h"
 
 size_t h2o_timeout_run(h2o_timeout_t *timeout, uint64_t now)
 {

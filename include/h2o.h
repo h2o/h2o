@@ -26,14 +26,6 @@
 extern "C" {
 #endif
 
-#ifndef H2O_USE_LIBUV
-# if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_KQUEUE
-#  define H2O_USE_LIBUV 0
-# else
-#  define H2O_USE_LIBUV 1
-# endif
-#endif
-
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -46,6 +38,10 @@ extern "C" {
 #include <openssl/ssl.h>
 #include "picohttpparser.h"
 #include "yoml.h"
+#include "h2o/linklist.h"
+#include "h2o/memory.h"
+#include "h2o/socket.h"
+#include "h2o/timeout.h"
 
 #ifndef H2O_MAX_HEADERS
 # define H2O_MAX_HEADERS 100
@@ -58,22 +54,6 @@ extern "C" {
 # define H2O_MAX_TOKENS 10240
 #endif
 
-#if OPENSSL_VERSION_NUMBER >= 0x10002000L
-# define H2O_USE_ALPN 1
-# define H2O_USE_NPN 1
-#elif OPENSSL_VERSION_NUMBER >= 0x10001000L
-# define H2O_USE_ALPN 0
-# define H2O_USE_NPN 1
-#else
-# define H2O_USE_ALPN 0
-# define H2O_USE_NPN 0
-#endif
-
-#define H2O_TO__STR(n) #n
-#define H2O_TO_STR(n) H2O_TO__STR(n)
-
-#define H2O_STRLIT(s) (s), sizeof(s) - 1
-#define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s*)((char*)(p) - offsetof(s, m)))
 #define H2O_TIMESTR_RFC1123_LEN (sizeof("Sun, 06 Nov 1994 08:49:37 GMT") - 1)
 #define H2O_TIMESTR_LOG_LEN (sizeof("29/Aug/2014:15:34:38 +0900") - 1)
 
@@ -86,25 +66,7 @@ extern "C" {
 typedef struct st_h2o_conn_t h2o_conn_t;
 typedef struct st_h2o_context_t h2o_context_t;
 typedef struct st_h2o_req_t h2o_req_t;
-typedef struct st_h2o_socket_t h2o_socket_t;
-typedef struct st_h2o_timeout_entry_t h2o_timeout_entry_t;
 typedef struct st_h2o_ostream_t h2o_ostream_t;
-
-typedef void (*h2o_socket_cb)(h2o_socket_t *sock, int err);
-
-#if H2O_USE_LIBUV
-# include "h2o/uv-binding.h"
-#else
-# include "h2o/evloop.h"
-#endif
-
-/**
- * buffer structure compatible with iovec
- */
-typedef struct st_h2o_buf_t {
-    char *base;
-    size_t len;
-} h2o_buf_t;
 
 /**
  * a predefined, read-only, fast variant of h2o_buf_t, defined in h2o/token.h
@@ -115,104 +77,6 @@ typedef struct st_h2o_token_t {
 } h2o_token_t;
 
 #include "h2o/token.h"
-
-typedef struct st_h2o_mempool_chunk_t {
-    struct st_h2o_mempool_chunk_t *next;
-    size_t offset;
-    char bytes[4096 - sizeof(void*) * 2];
-} h2o_mempool_chunk_t;
-
-typedef struct st_h2o_mempool_shared_entry_t {
-    size_t refcnt;
-    size_t _dummy; /* align to 2*sizeof(void*) */
-    char bytes[1];
-} h2o_mempool_shared_entry_t;
-
-/**
- * the memory pool
- */
-typedef struct st_h2o_mempool_t {
-    h2o_mempool_chunk_t *chunks;
-    struct st_h2o_mempool_shared_ref_t *shared_refs;
-    struct st_h2o_mempool_direct_t *directs;
-    h2o_mempool_chunk_t _first_chunk;
-} h2o_mempool_t;
-
-/**
- * buffer used to store incoming octets
- */
-typedef struct st_h2o_input_buffer_t {
-    /**
-     * amount of the data available
-     */
-    size_t size;
-    /**
-     * pointer to the start of the data
-     */
-    char *bytes;
-    size_t _capacity;
-    char _buf[1];
-} h2o_input_buffer_t;
-
-#define H2O_VECTOR(type) \
-    struct { \
-        type *entries; \
-        size_t size; \
-        size_t capacity; \
-    }
-
-typedef H2O_VECTOR(void) h2o_vector_t;
-
-typedef void (*h2o_timeout_cb)(h2o_timeout_entry_t *entry);
-
-/**
- * linklist
- * The structure is used to represent both nodes and the head of the list.
- * Nodes should be zero-filled upon initialization.
- * Heads should be initialized by calling h2o_linklist_init_anchor.
- */
-typedef struct st_h2o_linklist_t {
-    struct st_h2o_linklist_t *next;
-    struct st_h2o_linklist_t *prev;
-} h2o_linklist_t;
-
-/**
- * an entry linked to h2o_timeout_t.
- * Modules willing to use timeouts should embed this object as part of itself, and link it to a specific timeout by calling h2o_timeout_link.
- */
-struct st_h2o_timeout_entry_t {
-    uint64_t registered_at;
-    h2o_timeout_cb cb;
-    h2o_linklist_t _link;
-};
-
-/**
- * represents a collection of h2o_timeout_entry_t linked to a single timeout value
- */
-typedef struct st_h2o_timeout_t {
-    uint64_t timeout;
-    h2o_linklist_t _link;
-    h2o_linklist_t _entries; /* link list of h2o_timeout_entry_t */
-    struct st_h2o_timeout_backend_properties_t _backend;
-} h2o_timeout_t;
-
-/**
- * abstraction layer for sockets (SSL vs. TCP)
- */
-struct st_h2o_socket_t {
-    void *data;
-    struct st_h2o_socket_ssl_t *ssl;
-    h2o_input_buffer_t *input;
-    struct {
-        h2o_socket_cb read;
-        h2o_socket_cb write;
-    } _cb;
-    /* zero-filled in case of invalid address */
-    struct {
-        struct sockaddr_storage addr;
-        socklen_t len;
-    } peername;
-};
 
 /**
  * basic structure of a handler (an object that MAY generate a response)
@@ -575,186 +439,6 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len);
  */
 int h2o_buf_is_token(const h2o_buf_t *buf);
 
-/* memory */
-
-/**
- * constructor for h2o_buf_t
- */
-static h2o_buf_t h2o_buf_init(const void *base, size_t len);
-/**
- * wrapper of malloc; allocates given size of memory or dies if impossible
- */
-static void *h2o_malloc(size_t sz);
-/**
- * warpper of realloc; reallocs the given chunk or dies if impossible
- */
-static void *h2o_realloc(void *oldp, size_t sz);
-/**
- * initializes the memory pool.
- */
-void h2o_mempool_init(h2o_mempool_t *pool);
-/**
- * clears the memory pool.
- * Applications may dispose the pool after calling the function or reuse it without calling h2o_mempool_init.
- */
-void h2o_mempool_clear(h2o_mempool_t *pool);
-/**
- * allocates given size of memory from the memory pool, or dies if impossible
- */
-void *h2o_mempool_alloc(h2o_mempool_t *pool, size_t sz);
-/**
- * allocates a ref-counted chunk of given size from the memory pool, or dies if impossible.
- * The ref-count of the returned chunk is 1 regardless of whether or not the chunk is linked to a pool.
- * @param pool pool to which the allocated chunk should be linked (or NULL to allocate an orphan chunk)
- */
-void *h2o_mempool_alloc_shared(h2o_mempool_t *pool, size_t sz);
-/**
- * links a ref-counted chunk to a memory pool.
- * The ref-count of the chunk will be decremented when the pool is cleared.
- * It is permitted to link a chunk more than once to a single pool.
- */
-void h2o_mempool_link_shared(h2o_mempool_t *pool, void *p);
-/**
- * increments the reference count of a ref-counted chunk.
- */
-static void h2o_mempool_addref_shared(void *p);
-/**
- * decrements the reference count of a ref-counted chunk.
- * The chunk gets freed when the ref-count reaches zero.
- */
-static int h2o_mempool_release_shared(void *p);
-/**
- * allocates a input buffer.
- * @param inbuf - pointer to a pointer pointing to the structure (set *inbuf to NULL to allocate a new buffer)
- * @param initial_size an advisory value for the initial size of the input buffer
- * @return buffer to which the next data should be stored
- */
-h2o_buf_t h2o_allocate_input_buffer(h2o_input_buffer_t **inbuf, size_t initial_size);
-/**
- * throws away given size of the data from the buffer.
- * @param delta number of octets to be drained from the buffer
- */
-void h2o_consume_input_buffer(h2o_input_buffer_t **inbuf, size_t delta);
-/**
- * grows the vector so that it could store at least new_capacity elements of given size (or dies if impossible).
- * @param pool memory pool that the vector is using
- * @param vector the vector
- * @param element_size size of the elements stored in the vector
- * @param new_capacity the capacity of the buffer after the function returns
- */
-static void h2o_vector_reserve(h2o_mempool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
-void h2o_vector__expand(h2o_mempool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
-
-/* link list */
-
-/**
- * initializes the anchor (i.e. head) of a linked list
- */
-static void h2o_linklist_init_anchor(h2o_linklist_t *anchor);
-/**
- * tests if the list is empty
- */
-static int h2o_linklist_is_empty(h2o_linklist_t *anchor);
-/**
- * tests if the node is linked to a list
- */
-static int h2o_linklist_is_linked(h2o_linklist_t *node);
-/**
- * inserts a node to the linked list
- * @param pos insert position; the node will be inserted before pos (or NULL in case *head is NULL)
- * @param node the node to be inserted
- */
-static void h2o_linklist_insert(h2o_linklist_t *pos, h2o_linklist_t *node);
-/**
- * unlinks a node from the linked list
- */
-static void h2o_linklist_unlink(h2o_linklist_t *node);
-
-/* socket */
-
-/**
- * closes the socket
- */
-void h2o_socket_close(h2o_socket_t *sock);
-/**
- * writes given data to socket
- * @param sock the socket
- * @param bufs an array of buffers
- * @param bufcnt length of the buffer array
- * @param cb callback to be called when write is complete
- */
-void h2o_socket_write(h2o_socket_t *sock, h2o_buf_t *bufs, size_t bufcnt, h2o_socket_cb cb);
-/**
- * starts polling on the socket (for read) and calls given callback when data arrives
- * @param sock the socket
- * @param cb callback to be called when data arrives
- */
-void h2o_socket_read_start(h2o_socket_t *sock, h2o_socket_cb cb);
-/**
- * stops polling on the socket (for read)
- * @param sock the socket
- */
-void h2o_socket_read_stop(h2o_socket_t *sock);
-/**
- * returns a boolean value indicating whether if there is a write is under operation
- */
-static int h2o_socket_is_writing(h2o_socket_t *sock);
-/**
- * returns a boolean value indicating whether if the socket is being polled for read
- */
-static int h2o_socket_is_reading(h2o_socket_t *sock);
-/**
- * performs SSL handshake on a socket
- * @param sock the socket
- * @param ssl_ctx SSL context
- * @param handshake_cb callback to be called when handshake is complete
- */
-void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, h2o_socket_cb handshake_cb);
-/**
- * returns the name of the protocol selected using either NPN or ALPN (ALPN has the precedence).
- * @param sock the socket
- */
-h2o_buf_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock);
-/**
- * registers the protocol list to be used for ALPN
- */
-void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_buf_t *protocols);
-/**
- * registers the protocol list to be used for NPN
- */
-void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols);
-
-void h2o_socket__write_pending(h2o_socket_t *sock);
-void h2o_socket__write_on_complete(h2o_socket_t *sock, int status);
-
-/* timeout */
-
-/**
- * initializes and registers a timeout
- * @param loop loop to which the timeout should be registered
- * @param timeout the timeout structure to be initialized
- * @param millis timeout in milliseconds
- */
-void h2o_timeout_init(h2o_loop_t *loop, h2o_timeout_t *timeout, uint64_t millis);
-/**
- * activates a timeout entry, by linking it to a timeout
- */
-void h2o_timeout_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry);
-/**
- * disactivates a timeout entry, by unlinking it from a timeout
- */
-void h2o_timeout_unlink(h2o_timeout_t *timeout, h2o_timeout_entry_t *entry);
-/**
- * returns a boolean value indicating if the timeout is linked (i.e. active) or not
- */
-static int h2o_timeout_is_linked(h2o_timeout_entry_t *entry);
-
-size_t h2o_timeout_run(h2o_timeout_t *timeout, uint64_t now);
-size_t h2o_timeout_run_all(h2o_linklist_t *timeouts, uint64_t now);
-uint64_t h2o_timeout_get_wake_at(h2o_linklist_t *timeouts);
-void h2o_timeout__do_init(h2o_loop_t *loop, h2o_timeout_t *timeout);
-void h2o_timeout__do_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry);
-
 /* headers */
 
 /**
@@ -803,29 +487,13 @@ ssize_t h2o_delete_header(h2o_headers_t *headers, ssize_t cursor);
 /* util */
 
 /**
- * prints an error message and aborts
- */
-void h2o_fatal(const char *msg);
-/**
  * tr/A-Z/a-z/
  */
 static int h2o_tolower(int ch);
 /**
- * tests if target chunk (target_len bytes long) is equal to test chunk (test_len bytes long)
- */
-static int h2o_memis(const void *target, size_t target_len, const void *test, size_t test_len);
-/**
  * tests if target string (target_len bytes long) is equal to test string (test_len bytes long) after being converted to lower-case
  */
 static int h2o_lcstris(const char *target, size_t target_len, const char *test, size_t test_len);
-/**
- * duplicates given string
- * @param pool memory pool (or NULL to use malloc)
- * @param s source string
- * @param len length of the source string (the result of strlen(s) used in case len is SIZE_MAX)
- * @return buffer pointing to the duplicated string (buf is NUL-terminated but the length does not include the NUL char)
- */
-h2o_buf_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t len);
 /**
  * base64 url decoder
  */
@@ -1056,80 +724,9 @@ void h2o_register_access_logger_configurator(h2o_linklist_t *host_configurators)
 
 /* inline defs */
 
-inline h2o_buf_t h2o_buf_init(const void *base, size_t len)
-{
-    /* intentionally declared to take a "const void*" since it may contain any type of data and since _some_ buffers are constant */
-    h2o_buf_t buf;
-    buf.base = (char*)base;
-    buf.len = len;
-    return buf;
-}
-
-inline void *h2o_malloc(size_t sz)
-{
-    void *p = malloc(sz);
-    if (p == NULL)
-        h2o_fatal("no memory");
-    return p;
-}
-
-inline void *h2o_realloc(void *oldp, size_t sz)
-{
-    void *newp = realloc(oldp, sz);
-    if (newp == NULL) {
-        h2o_fatal("no memory");
-        return oldp;
-    }
-    return newp;
-}
-
-inline void h2o_mempool_addref_shared(void *p)
-{
-    struct st_h2o_mempool_shared_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct st_h2o_mempool_shared_entry_t, bytes, p);
-    assert(entry->refcnt != 0);
-    ++entry->refcnt;
-}
-
-inline int h2o_mempool_release_shared(void *p)
-{
-    struct st_h2o_mempool_shared_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct st_h2o_mempool_shared_entry_t, bytes, p);
-    if (--entry->refcnt == 0) {
-        free(entry);
-        return 1;
-    }
-    return 0;
-}
-
-inline int h2o_socket_is_writing(h2o_socket_t *sock)
-{
-    return sock->_cb.write != NULL;
-}
-
-inline int h2o_socket_is_reading(h2o_socket_t *sock)
-{
-    return sock->_cb.read != NULL;
-}
-
-inline int h2o_timeout_is_linked(h2o_timeout_entry_t *entry)
-{
-    return h2o_linklist_is_linked(&entry->_link);
-}
-
 inline int h2o_tolower(int ch)
 {
     return 'A' <= ch && ch <= 'Z' ? ch + 0x20 : ch;
-}
-
-inline int h2o_memis(const void *_target, size_t target_len, const void *_test, size_t test_len)
-{
-    const char *target = _target, *test = _test;
-    if (target_len != test_len)
-        return 0;
-    if (target_len == 0)
-        return 1;
-    if (target[0] != test[0])
-        return 0;
-    return memcmp(target + 1, test + 1, test_len - 1) == 0;
 }
 
 inline int h2o_lcstris(const char *target, size_t target_len, const char *test, size_t test_len)
@@ -1137,45 +734,6 @@ inline int h2o_lcstris(const char *target, size_t target_len, const char *test, 
     if (target_len != test_len)
         return 0;
     return h2o__lcstris_core(target, test, test_len);
-}
-
-inline void h2o_vector_reserve(h2o_mempool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)
-{
-    if (vector->capacity < new_capacity) {
-        h2o_vector__expand(pool, vector, element_size, new_capacity);
-    }
-}
-
-inline void h2o_linklist_init_anchor(h2o_linklist_t *anchor)
-{
-    anchor->next = anchor->prev = anchor;
-}
-
-inline int h2o_linklist_is_linked(h2o_linklist_t *node)
-{
-    return node->next != NULL;
-}
-
-inline int h2o_linklist_is_empty(h2o_linklist_t *anchor)
-{
-    return anchor->next == anchor;
-}
-
-inline void h2o_linklist_insert(h2o_linklist_t *pos, h2o_linklist_t *node)
-{
-    assert(! h2o_linklist_is_linked(node));
-
-    node->prev = pos->prev;
-    node->next = pos;
-    node->prev->next = node;
-    node->next->prev = node;
-}
-
-inline void h2o_linklist_unlink(h2o_linklist_t *node)
-{
-    node->next->prev = node->prev;
-    node->prev->next = node->next;
-    node->next = node->prev = NULL;
 }
 
 inline void h2o_proceed_response(h2o_req_t *req)
