@@ -24,6 +24,7 @@
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <unistd.h>
+#include "h2o/linklist.h"
 
 struct st_h2o_evloop_socket_t {
     h2o_socket_t super;

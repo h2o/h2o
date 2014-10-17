@@ -29,36 +29,12 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 
-void h2o_fatal(const char *msg)
-{
-    fprintf(stderr, "fatal:%s\n", msg);
-    abort();
-}
-
 int h2o__lcstris_core(const char *target, const char *test, size_t test_len)
 {
     for (; test_len != 0; --test_len)
         if (h2o_tolower(*target++) != *test++)
             return 0;
     return 1;
-}
-
-h2o_buf_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t slen)
-{
-    h2o_buf_t ret;
-
-    if (slen == SIZE_MAX)
-        slen = strlen(s);
-
-    if (pool != NULL) {
-        ret.base = h2o_mempool_alloc(pool, slen + 1);
-    } else {
-        ret.base = h2o_malloc(slen + 1);
-    }
-    memcpy(ret.base, s, slen);
-    ret.base[slen] = '\0';
-    ret.len = slen;
-    return ret;
 }
 
 static uint32_t decode_base64url_quad(const char *src)

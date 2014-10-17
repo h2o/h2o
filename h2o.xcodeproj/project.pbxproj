@@ -61,6 +61,10 @@
 		1079245219A3266700C52AD6 /* util.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923C019A3217300C52AD6 /* util.c */; };
 		1079245419A32C0800C52AD6 /* token_table.h in Headers */ = {isa = PBXBuildFile; fileRef = 1079245319A32C0800C52AD6 /* token_table.h */; };
 		10BA72AA19AAD6300059392A /* stream.c in Sources */ = {isa = PBXBuildFile; fileRef = 10BA72A919AAD6300059392A /* stream.c */; };
+		10D0903A19F0A51C0043D458 /* memory.h in Headers */ = {isa = PBXBuildFile; fileRef = 10D0903919F0A51C0043D458 /* memory.h */; };
+		10D0903E19F0A8190043D458 /* socket.h in Headers */ = {isa = PBXBuildFile; fileRef = 10D0903D19F0A8190043D458 /* socket.h */; };
+		10D0904119F0B9CD0043D458 /* timeout.h in Headers */ = {isa = PBXBuildFile; fileRef = 10D0904019F0B9CD0043D458 /* timeout.h */; };
+		10D0904319F0BA780043D458 /* linklist.h in Headers */ = {isa = PBXBuildFile; fileRef = 10D0904219F0BA780043D458 /* linklist.h */; };
 		10F417CC19C1907B00B6E31A /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		10F417D619C190F800B6E31A /* main.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F417D519C190F800B6E31A /* main.c */; settings = {COMPILER_FLAGS = "-Wno-deprecated-declarations"; }; };
 		10F417FF19C2D2F800B6E31A /* picotest.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F417FD19C2D2F800B6E31A /* picotest.c */; };
@@ -170,6 +174,10 @@
 		1079243519A3260E00C52AD6 /* picotest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = picotest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1079245319A32C0800C52AD6 /* token_table.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = token_table.h; sourceTree = "<group>"; };
 		10BA72A919AAD6300059392A /* stream.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = stream.c; sourceTree = "<group>"; };
+		10D0903919F0A51C0043D458 /* memory.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = memory.h; sourceTree = "<group>"; };
+		10D0903D19F0A8190043D458 /* socket.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = socket.h; sourceTree = "<group>"; };
+		10D0904019F0B9CD0043D458 /* timeout.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = timeout.h; sourceTree = "<group>"; };
+		10D0904219F0BA780043D458 /* linklist.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = linklist.h; sourceTree = "<group>"; };
 		10F417D319C1907B00B6E31A /* h2o */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = h2o; sourceTree = BUILT_PRODUCTS_DIR; };
 		10F417D519C190F800B6E31A /* main.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = main.c; sourceTree = "<group>"; };
 		10F417FD19C2D2F800B6E31A /* picotest.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picotest.c; sourceTree = "<group>"; };
@@ -307,12 +315,15 @@
 		1079239F19A3215F00C52AD6 /* h2o */ = {
 			isa = PBXGroup;
 			children = (
-				1065E70419BF145700686E72 /* evloop.h */,
 				107923A019A3215F00C52AD6 /* http1.h */,
 				107923A119A3215F00C52AD6 /* http2.h */,
+				10D0904219F0BA780043D458 /* linklist.h */,
+				10D0903919F0A51C0043D458 /* memory.h */,
+				10D0903F19F0B90A0043D458 /* socket */,
+				10D0903D19F0A8190043D458 /* socket.h */,
+				10D0904019F0B9CD0043D458 /* timeout.h */,
 				107923A219A3215F00C52AD6 /* token.h */,
 				107923A319A3215F00C52AD6 /* websocket.h */,
-				1065E70619BF14E500686E72 /* uv-binding.h */,
 			);
 			path = h2o;
 			sourceTree = "<group>";
@@ -374,6 +385,15 @@
 			path = examples;
 			sourceTree = "<group>";
 		};
+		10D0903F19F0B90A0043D458 /* socket */ = {
+			isa = PBXGroup;
+			children = (
+				1065E70419BF145700686E72 /* evloop.h */,
+				1065E70619BF14E500686E72 /* uv-binding.h */,
+			);
+			path = socket;
+			sourceTree = "<group>";
+		};
 		10F417D419C190DD00B6E31A /* src */ = {
 			isa = PBXGroup;
 			children = (
@@ -408,15 +428,19 @@
 			buildActionMask = 2147483647;
 			files = (
 				107923C919A3217300C52AD6 /* hpack_static_table.h in Headers */,
+				10D0904319F0BA780043D458 /* linklist.h in Headers */,
 				1079236A19A3210E00C52AD6 /* khash.h in Headers */,
 				107923A619A3215F00C52AD6 /* http2.h in Headers */,
 				107923A719A3215F00C52AD6 /* token.h in Headers */,
 				107923A919A3215F00C52AD6 /* h2o.h in Headers */,
 				107923A519A3215F00C52AD6 /* http1.h in Headers */,
 				107923CA19A3217300C52AD6 /* internal.h in Headers */,
+				10D0903A19F0A51C0043D458 /* memory.h in Headers */,
+				10D0904119F0B9CD0043D458 /* timeout.h in Headers */,
 				1079239719A3210E00C52AD6 /* picohttpparser.h in Headers */,
 				1065E70C19BF664300686E72 /* evloop.h in Headers */,
 				107923C819A3217300C52AD6 /* hpack_huffman_table.h in Headers */,
+				10D0903E19F0A8190043D458 /* socket.h in Headers */,
 				10F4180119C2D31600B6E31A /* yoml.h in Headers */,
 				1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */,
 				1079245419A32C0800C52AD6 /* token_table.h in Headers */,
