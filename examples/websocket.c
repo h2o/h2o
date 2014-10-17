@@ -58,7 +58,7 @@ static int on_req(h2o_handler_t *self, h2o_req_t *req)
     return 0;
 }
 
-static h2o_global_configuration_t config;
+static h2o_globalconf_t config;
 static h2o_context_t ctx;
 static SSL_CTX *ssl_ctx;
 

@@ -32,7 +32,7 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 
-static void register_handler(h2o_host_configuration_t *host_config, int (*on_req)(h2o_handler_t *, h2o_req_t *))
+static void register_handler(h2o_hostconf_t *host_config, int (*on_req)(h2o_handler_t *, h2o_req_t *))
 {
     h2o_handler_t *handler = h2o_malloc(sizeof(*handler));
 
@@ -90,7 +90,7 @@ static int post_test(h2o_handler_t *self, h2o_req_t *req)
     return -1;
 }
 
-static h2o_global_configuration_t config;
+static h2o_globalconf_t config;
 static h2o_context_t ctx;
 static SSL_CTX *ssl_ctx;
 
