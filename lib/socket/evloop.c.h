@@ -220,6 +220,10 @@ static void read_on_ready(struct st_h2o_evloop_socket_t *sock)
         status = decode_ssl_input(&sock->super);
 
 Notify:
+    /* the application may get notified even if no new data is avaiable.  The
+     * behavior is intentional; it is designed as such so that the applications
+     * can update their timeout counters when a partial SSL record arrives.
+     */
     sock->super._cb.read(&sock->super, status);
 }
 

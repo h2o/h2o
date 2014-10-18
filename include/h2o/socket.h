@@ -94,6 +94,10 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_buf_t *bufs, size_t bufcnt, h2o_so
  * starts polling on the socket (for read) and calls given callback when data arrives
  * @param sock the socket
  * @param cb callback to be called when data arrives
+ * @note callback is called when any data arrives at the TCP level so that the
+ * applications can update their timeout counters.  In other words, there is no
+ * guarantee that _new_ data is available when the callback gets called (e.g.
+ * in cases like receiving a partial SSL record or a corrupt TCP packet).
  */
 void h2o_socket_read_start(h2o_socket_t *sock, h2o_socket_cb cb);
 /**
