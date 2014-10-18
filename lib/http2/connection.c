@@ -203,7 +203,7 @@ static void close_connection(h2o_http2_conn_t *conn)
         /* there is a pending write, let on_write_complete actually close the connection */
     } else {
         if (h2o_timeout_is_linked(&conn->_write.timeout_entry))
-            h2o_timeout_unlink(&conn->super.ctx->zero_timeout, &conn->_write.timeout_entry);
+            h2o_timeout_unlink(&conn->_write.timeout_entry);
         close_connection_now(conn);
     }
 }

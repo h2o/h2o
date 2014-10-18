@@ -48,7 +48,7 @@ static void init_request(h2o_http1_conn_t *conn, int reinit)
 
 static void close_connection(h2o_http1_conn_t *conn)
 {
-    h2o_timeout_unlink(conn->_timeout, &conn->_timeout_entry);
+    h2o_timeout_unlink(&conn->_timeout_entry);
     h2o_dispose_request(&conn->req);
     free(conn->_req_entity_reader);
     if (conn->sock != NULL) {
@@ -62,7 +62,7 @@ static void close_connection(h2o_http1_conn_t *conn)
 static void set_timeout(h2o_http1_conn_t *conn, h2o_timeout_t *timeout, h2o_timeout_cb cb)
 {
     if (conn->_timeout != NULL) {
-        h2o_timeout_unlink(conn->_timeout, &conn->_timeout_entry);
+        h2o_timeout_unlink(&conn->_timeout_entry);
         conn->_timeout_entry.cb = NULL;
     }
     conn->_timeout = timeout;

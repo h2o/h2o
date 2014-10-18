@@ -90,7 +90,7 @@ void h2o_timeout_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entr
     h2o_timeout__do_link(loop, timeout, entry);
 }
 
-void h2o_timeout_unlink(h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)
+void h2o_timeout_unlink(h2o_timeout_entry_t *entry)
 {
     if (h2o_linklist_is_linked(&entry->_link)) {
         h2o_linklist_unlink(&entry->_link);

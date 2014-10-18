@@ -63,7 +63,7 @@ void h2o_timeout_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entr
 /**
  * disactivates a timeout entry, by unlinking it from a timeout
  */
-void h2o_timeout_unlink(h2o_timeout_t *timeout, h2o_timeout_entry_t *entry);
+void h2o_timeout_unlink(h2o_timeout_entry_t *entry);
 /**
  * returns a boolean value indicating if the timeout is linked (i.e. active) or not
  */
