@@ -192,21 +192,3 @@ void h2o_vector__expand(h2o_mempool_t *pool, h2o_vector_t *vector, size_t elemen
     memcpy(new_entries, vector->entries, element_size * vector->size);
     vector->entries = new_entries;
 }
-
-h2o_buf_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t slen)
-{
-    h2o_buf_t ret;
-
-    if (slen == SIZE_MAX)
-        slen = strlen(s);
-
-    if (pool != NULL) {
-        ret.base = h2o_mempool_alloc(pool, slen + 1);
-    } else {
-        ret.base = h2o_malloc(slen + 1);
-    }
-    memcpy(ret.base, s, slen);
-    ret.base[slen] = '\0';
-    ret.len = slen;
-    return ret;
-}

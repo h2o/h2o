@@ -51,6 +51,7 @@ SET(LIB_SOURCE_FILES
     lib/request.c
     lib/rproxy.c
     lib/socket.c
+    lib/string.c
     lib/timeout.c
     lib/token.c
     lib/util.c)

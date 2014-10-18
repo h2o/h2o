@@ -27,10 +27,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define H2O_TO__STR(n) #n
-#define H2O_TO_STR(n) H2O_TO__STR(n)
-
-#define H2O_STRLIT(s) (s), sizeof(s) - 1
 #define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s*)((char*)(p) - offsetof(s, m)))
 
 /**
@@ -167,14 +163,6 @@ void h2o_vector__expand(h2o_mempool_t *pool, h2o_vector_t *vector, size_t elemen
  * tests if target chunk (target_len bytes long) is equal to test chunk (test_len bytes long)
  */
 static int h2o_memis(const void *target, size_t target_len, const void *test, size_t test_len);
-/**
- * duplicates given string
- * @param pool memory pool (or NULL to use malloc)
- * @param s source string
- * @param len length of the source string (the result of strlen(s) used in case len is SIZE_MAX)
- * @return buffer pointing to the duplicated string (buf is NUL-terminated but the length does not include the NUL char)
- */
-h2o_buf_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t len);
 
 /* inline defs */
 

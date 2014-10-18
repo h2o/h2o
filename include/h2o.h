@@ -41,6 +41,7 @@ extern "C" {
 #include "h2o/linklist.h"
 #include "h2o/memory.h"
 #include "h2o/socket.h"
+#include "h2o/string_.h"
 #include "h2o/timeout.h"
 
 #ifndef H2O_MAX_HEADERS
@@ -53,9 +54,6 @@ extern "C" {
 #ifndef H2O_MAX_TOKENS
 # define H2O_MAX_TOKENS 10240
 #endif
-
-#define H2O_TIMESTR_RFC1123_LEN (sizeof("Sun, 06 Nov 1994 08:49:37 GMT") - 1)
-#define H2O_TIMESTR_LOG_LEN (sizeof("29/Aug/2014:15:34:38 +0900") - 1)
 
 #define H2O_DEFAULT_REQ_TIMEOUT (10 * 1000)
 #define H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE (1024 * 1024 * 1024)
@@ -487,55 +485,9 @@ ssize_t h2o_delete_header(h2o_headers_t *headers, ssize_t cursor);
 /* util */
 
 /**
- * tr/A-Z/a-z/
- */
-static int h2o_tolower(int ch);
-/**
- * tests if target string (target_len bytes long) is equal to test string (test_len bytes long) after being converted to lower-case
- */
-static int h2o_lcstris(const char *target, size_t target_len, const char *test, size_t test_len);
-/**
- * base64 url decoder
- */
-h2o_buf_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len);
-/**
- * base64 encoder
- */
-void h2o_base64_encode(char *dst, const uint8_t *src, size_t len, int url_encoded);
-/**
- * builds a RFC-1123 style date string
- */
-void h2o_time2str_rfc1123(char *buf, time_t time);
-/**
- * builds an Apache log-style date string
- */
-void h2o_time2str_log(char *buf, time_t time);
-/**
- * returns the extension portion of path
- */
-const char *h2o_get_filext(const char *path, size_t len);
-/**
- * 
- */
-const char *h2o_next_token(const char* elements, size_t elements_len, size_t *element_len, const char *cur);
-/**
- * tests if string needle exists within a comma-separated string (for handling "#rule" of RFC 2616)
- */
-int h2o_contains_token(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len);
-/**
- * removes "..", ".", decodes %xx from a path representation
- * @param pool memory pool to be used in case the path contained references to directories
- * @param path source path
- * @param len source length
- * @return buffer pointing to source, or buffer pointing to an allocated chunk with normalized representation of the given path
- */
-h2o_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len);
-/**
  * accepts a SSL connection
  */
 void h2o_accept_ssl(h2o_context_t *ctx, h2o_socket_t *sock, SSL_CTX *ssl_ctx);
-
-int h2o__lcstris_core(const char *target, const char *test, size_t test_len);
 
 /* request */
 
@@ -723,18 +675,6 @@ h2o_logger_t *h2o_register_access_logger(h2o_hostconf_t *host_config, const char
 void h2o_register_access_logger_configurator(h2o_linklist_t *host_configurators);
 
 /* inline defs */
-
-inline int h2o_tolower(int ch)
-{
-    return 'A' <= ch && ch <= 'Z' ? ch + 0x20 : ch;
-}
-
-inline int h2o_lcstris(const char *target, size_t target_len, const char *test, size_t test_len)
-{
-    if (target_len != test_len)
-        return 0;
-    return h2o__lcstris_core(target, test, test_len);
-}
 
 inline void h2o_proceed_response(h2o_req_t *req)
 {
