@@ -23,6 +23,9 @@
 #define h2o__memory_h
 
 #include <assert.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define H2O_TO__STR(n) #n
 #define H2O_TO_STR(n) H2O_TO__STR(n)
