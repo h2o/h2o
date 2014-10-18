@@ -22,6 +22,7 @@
 #ifndef h2o__socket_h
 #define h2o__socket_h
 
+#include <stdint.h>
 #include <sys/socket.h>
 #include <openssl/ssl.h>
 #include "h2o/memory.h"

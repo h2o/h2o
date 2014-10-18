@@ -25,6 +25,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include "h2o/socket.h"
+#include "h2o/string_.h"
 
 static h2o_loop_t *loop;
 static int exit_loop;
