@@ -132,12 +132,14 @@ void h2o_mempool_link_shared(h2o_mempool_t *pool, void *p)
     link_shared(pool, H2O_STRUCT_FROM_MEMBER(h2o_mempool_shared_entry_t, bytes, p));
 }
 
-h2o_buf_t h2o_allocate_input_buffer(h2o_input_buffer_t **_inbuf, size_t initial_size)
+const h2o_input_buffer_t h2o__null_input_buffer = {};
+
+h2o_buf_t h2o_reserve_input_buffer(h2o_input_buffer_t **_inbuf, size_t initial_size)
 {
     h2o_input_buffer_t *inbuf = *_inbuf;
     h2o_buf_t ret;
 
-    if (inbuf == NULL) {
+    if (inbuf == &h2o__null_input_buffer) {
         inbuf = h2o_malloc(offsetof(h2o_input_buffer_t, _buf) + initial_size);
         *_inbuf = inbuf;
         inbuf->size = 0;
@@ -169,7 +171,7 @@ void h2o_consume_input_buffer(h2o_input_buffer_t **_inbuf, size_t delta)
     h2o_input_buffer_t *inbuf = *_inbuf;
 
     if (delta != 0) {
-        assert(inbuf != NULL);
+        assert(inbuf != &h2o__null_input_buffer);
         if (inbuf->size == delta) {
             inbuf->size = 0;
             inbuf->bytes = inbuf->_buf;

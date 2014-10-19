@@ -84,7 +84,7 @@ typedef struct st_h2o_input_buffer_t {
 
 typedef H2O_VECTOR(void) h2o_vector_t;
 
-/* memory */
+extern const h2o_input_buffer_t h2o__null_input_buffer;
 
 /**
  * prints an error message and aborts
@@ -138,12 +138,20 @@ static void h2o_mempool_addref_shared(void *p);
  */
 static int h2o_mempool_release_shared(void *p);
 /**
+ * 
+ */
+static void h2o_init_input_buffer(h2o_input_buffer_t **buffer);
+/**
+ * 
+ */
+static void h2o_dispose_input_buffer(h2o_input_buffer_t **buffer);
+/**
  * allocates a input buffer.
  * @param inbuf - pointer to a pointer pointing to the structure (set *inbuf to NULL to allocate a new buffer)
  * @param initial_size an advisory value for the initial size of the input buffer
  * @return buffer to which the next data should be stored
  */
-h2o_buf_t h2o_allocate_input_buffer(h2o_input_buffer_t **inbuf, size_t initial_size);
+h2o_buf_t h2o_reserve_input_buffer(h2o_input_buffer_t **inbuf, size_t initial_size);
 /**
  * throws away given size of the data from the buffer.
  * @param delta number of octets to be drained from the buffer
@@ -208,6 +216,19 @@ inline int h2o_mempool_release_shared(void *p)
         return 1;
     }
     return 0;
+}
+
+inline void h2o_init_input_buffer(h2o_input_buffer_t **buffer)
+{
+    *buffer = (h2o_input_buffer_t*)&h2o__null_input_buffer;
+}
+
+inline void h2o_dispose_input_buffer(h2o_input_buffer_t **buffer)
+{
+    if (*buffer != &h2o__null_input_buffer) {
+        free(*buffer);
+        *buffer = NULL;
+    }
 }
 
 inline void h2o_vector_reserve(h2o_mempool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)

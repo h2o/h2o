@@ -259,7 +259,7 @@ static void reqread_on_timeout(h2o_timeout_entry_t *entry)
 
 static inline void reqread_start(h2o_http1_conn_t *conn)
 {
-    if (conn->sock->input != NULL && conn->sock->input->size != 0) {
+    if (conn->sock->input->size != 0) {
         if (handle_incoming_request(conn) == 0) {
             return;
         }

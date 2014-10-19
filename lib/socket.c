@@ -80,7 +80,7 @@ static int read_bio(BIO *b, char *out, int len)
     if (len == 0)
         return 0;
 
-    if (sock->ssl->input.encrypted == NULL || sock->ssl->input.encrypted->size == 0) {
+    if (sock->ssl->input.encrypted->size == 0) {
         BIO_set_retry_read(b);
         return -1;
     }
@@ -151,7 +151,7 @@ int decode_ssl_input(h2o_socket_t *sock)
     assert(sock->ssl->handshake.cb == NULL);
 
     while (sock->ssl->input.encrypted->size != 0) {
-        h2o_buf_t buf = h2o_allocate_input_buffer(&sock->input, 8192);
+        h2o_buf_t buf = h2o_reserve_input_buffer(&sock->input, 8192);
         int rlen = SSL_read(sock->ssl->ssl, buf.base, (int)buf.len);
         if (rlen == -1) {
             if (SSL_get_error(sock->ssl->ssl, rlen) != SSL_ERROR_WANT_READ) {
@@ -177,11 +177,11 @@ static void dispose_socket(h2o_socket_t *sock, int status)
 {
     if (sock->ssl != NULL) {
         SSL_free(sock->ssl->ssl);
-        free(sock->ssl->input.encrypted);
+        h2o_dispose_input_buffer(&sock->ssl->input.encrypted);
         h2o_mempool_clear(&sock->ssl->output.pool);
         free(sock->ssl);
     }
-    free(sock->input);
+    h2o_dispose_input_buffer(&sock->input);
 
     do_dispose_socket(sock);
 }
@@ -298,7 +298,7 @@ static void proceed_handshake(h2o_socket_t *sock, int status)
         if (ret == 1) {
             goto Complete;
         }
-        assert(sock->ssl->input.encrypted == NULL || sock->ssl->input.encrypted->size == 0);
+        assert(sock->ssl->input.encrypted->size == 0);
         h2o_socket_read_start(sock, proceed_handshake);
     }
     return;
@@ -327,6 +327,7 @@ void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, h2o_s
 
     sock->ssl = h2o_malloc(sizeof(*sock->ssl));
     memset(sock->ssl, 0, offsetof(struct st_h2o_socket_ssl_t, output.pool));
+    h2o_init_input_buffer(&sock->ssl->input.encrypted);
     h2o_mempool_init(&sock->ssl->output.pool);
     bio = BIO_new(&bio_methods);
     bio->ptr = sock;

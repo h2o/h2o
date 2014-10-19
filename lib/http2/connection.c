@@ -322,8 +322,8 @@ static void handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
         stream = NULL;
     } else {
         /* FIXME should be a single invocation to the allocation call */
-        while (stream->_req_body == NULL || stream->_req_body->_capacity - stream->_req_body->size < payload.length) {
-            h2o_allocate_input_buffer(&stream->_req_body, 8192);
+        while (stream->_req_body->_capacity - stream->_req_body->size < payload.length) {
+            h2o_reserve_input_buffer(&stream->_req_body, 8192);
         }
         memcpy(stream->_req_body->bytes + stream->_req_body->size, payload.data, payload.length);
         stream->_req_body->size += payload.length;
@@ -602,7 +602,7 @@ static void on_upgrade_complete(void *_conn, h2o_socket_t *sock, size_t reqsize)
     conn->sock = sock;
     sock->data = conn;
     conn->_http1_req_input = sock->input;
-    sock->input = NULL;
+    h2o_init_input_buffer(&sock->input);
 
     /* setup inbound */
     h2o_socket_read_start(conn->sock, on_read);
@@ -677,7 +677,7 @@ static void on_write_complete(h2o_socket_t *sock, int status)
     }
 
     /* start receiving input if necessary, as well as parse the pending input */
-    if (conn->sock->input != NULL && conn->sock->input->size != 0)
+    if (conn->sock->input->size != 0)
         parse_input(conn);
 }
 
@@ -748,7 +748,7 @@ void h2o_http2_accept(h2o_context_t *ctx, h2o_socket_t *sock)
     h2o_http2_conn_t *conn = create_conn(ctx, sock, (void*)&sock->peername.addr, sock->peername.len);
     sock->data = conn;
     h2o_socket_read_start(conn->sock, on_read);
-    if (sock->input != NULL)
+    if (sock->input->size != 0)
         on_read(sock, 0);
 }
 

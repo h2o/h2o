@@ -108,7 +108,7 @@ static int on_read_core(int fd, h2o_input_buffer_t** input)
     int read_any = 0;
 
     while (1) {
-        h2o_buf_t buf = h2o_allocate_input_buffer(input, 8192);
+        h2o_buf_t buf = h2o_reserve_input_buffer(input, 8192);
         ssize_t rret;
         while ((rret = read(fd, buf.base, buf.len)) == -1 && errno == EINTR)
             ;
@@ -295,6 +295,7 @@ h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, struct sockad
 
     sock = h2o_malloc(sizeof(*sock));
     memset(sock, 0, sizeof(*sock));
+    h2o_init_input_buffer(&sock->super.input);
     assert(addrlen < sizeof(sock->super.peername.addr));
     memcpy(&sock->super.peername.addr, addr, addrlen);
     sock->super.peername.len = addrlen;
