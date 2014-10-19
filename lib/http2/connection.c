@@ -717,17 +717,15 @@ void emit_writereq(h2o_timeout_entry_t *entry)
     }
 }
 
-static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock)
+static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock, struct sockaddr *addr, socklen_t addrlen)
 {
     h2o_http2_conn_t *conn = h2o_malloc(sizeof(*conn));
 
     /* init the connection */
     memset(conn, 0, offsetof(h2o_http2_conn_t, _write._pools[0]));
     conn->super.ctx = ctx;
-    if (sock->peername.len != 0) {
-        conn->super.peername.addr = (void*)&sock->peername.addr;
-        conn->super.peername.len = sock->peername.len;
-    }
+    conn->super.peername.addr = addr;
+    conn->super.peername.len = addrlen;
     conn->sock = sock;
     conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
     conn->open_streams = kh_init(h2o_http2_stream_t);
@@ -747,7 +745,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock)
 
 void h2o_http2_accept(h2o_context_t *ctx, h2o_socket_t *sock)
 {
-    h2o_http2_conn_t *conn = create_conn(ctx, sock);
+    h2o_http2_conn_t *conn = create_conn(ctx, sock, (void*)&sock->peername.addr, sock->peername.len);
     sock->data = conn;
     h2o_socket_read_start(conn->sock, on_read);
     if (sock->input != NULL)
@@ -756,7 +754,7 @@ void h2o_http2_accept(h2o_context_t *ctx, h2o_socket_t *sock)
 
 int h2o_http2_handle_upgrade(h2o_req_t *req)
 {
-    h2o_http2_conn_t *http2conn = create_conn(req->conn->ctx, NULL);
+    h2o_http2_conn_t *http2conn = create_conn(req->conn->ctx, NULL, req->conn->peername.addr, req->conn->peername.len);
     h2o_http1_conn_t *req_conn = (h2o_http1_conn_t*)req->conn;
     ssize_t connection_index, settings_index;
     h2o_buf_t settings_decoded;
