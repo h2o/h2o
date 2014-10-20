@@ -46,7 +46,15 @@ subtest 'ab' => sub {
         unless prog_exists('ab');
     ok(system("ab -c 10 -n 10000 -k http://127.0.0.1:$port/index.txt") == 0);
 };
-    
+
+subtest 'nghttp' => sub {
+    plan skip_all => 'nghttp not found'
+        unless prog_exists('nghttp');
+    my $out = `nghttp -u -m 100 http://127.0.0.1:$port/index.txt 2> /dev/null`;
+    ok $? == 0;
+    is $out, "hello\n" x 100;
+};
+
 done_testing;
 
 sub prog_exists {
