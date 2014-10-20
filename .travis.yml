@@ -5,7 +5,7 @@ compiler:
 
 before_script:
   - cmake .
-  - curl -L http://cpanmin.us | perl - --sudo App::cpanminus
+  - curl -L http://cpanmin.us | perl - --sudo --notest App::cpanminus
   - cpanm --sudo --notest Net::EmptyPort
   - cpanm --sudo --notest Proc::Wait3
   - cpanm --sudo --notest Scope::Guard
