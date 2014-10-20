@@ -36,9 +36,11 @@ my $guard = scope_guard(sub {
     kill 'TERM', $pid;
 });
 
-sleep 1;
-die "server died, abort"
-    if defined wait3(0);
+while (! (check_port($port) && check_port($tls_port)) {
+    sleep 1;
+    die "server died, abort"
+        if defined wait3(0);
+}
 
 subtest 'curl' => sub {
     plan skip_all => 'curl not found'
