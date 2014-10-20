@@ -465,11 +465,11 @@ int h2o_parse_url(h2o_mempool_t *pool, const char *url, char **scheme, char **ho
     const char *hp_start, *hp_end, *colon_at;
 
     /* check and skip scheme */
-    if (strncmp(url, H2O_STRLIT("http://")) == 0) {
+    if (strncmp(url, "http://", 7) == 0) {
         *scheme = "http";
         hp_start = url + 7;
         *port = 80;
-    } else if (strncmp(url, H2O_STRLIT("https://")) == 0) {
+    } else if (strncmp(url, "https://", 8) == 0) {
         *scheme = "https";
         hp_start = url + 8;
         *port = 443;
