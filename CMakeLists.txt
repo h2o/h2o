@@ -68,7 +68,7 @@ ADD_EXECUTABLE(examples-http1client examples/http1client.c)
 SET_TARGET_PROPERTIES(examples-http1client PROPERTIES
     OUTPUT_NAME examples/http1client
     EXCLUDE_FROM_ALL 1)
-TARGET_LINK_LIBRARIES(examples-http1client libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES})
+TARGET_LINK_LIBRARIES(examples-http1client libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${EXTRA_LIBRARIES})
 
 ADD_EXECUTABLE(examples-socket-client examples/socket-client.c)
 SET_TARGET_PROPERTIES(examples-socket-client PROPERTIES

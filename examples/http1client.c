@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#define _GNU_SOURCE
 #include <stdio.h>
 #include "h2o/string_.h"
 #include "h2o/http1client.h"
