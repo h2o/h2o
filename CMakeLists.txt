@@ -15,6 +15,7 @@ INCLUDE_DIRECTORIES(
     include
     deps/klib
     deps/picohttpparser
+    deps/picotest
     deps/yoml
     ${OPENSSL_INCLUDE_DIR})
 IF (LIBUV_FOUND)
@@ -77,6 +78,22 @@ ADD_EXECUTABLE(h2o ${LIB_SOURCE_FILES} src/main.c)
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
 TARGET_LINK_LIBRARIES(h2o ${OPENSSL_LIBRARIES} ${LIBYAML_LIBRARIES} pthread)
 
+# tests
+ADD_EXECUTABLE(unittest_evloop ${LIB_SOURCE_FILES} deps/picotest/picotest.c lib/t/test.c)
+SET_TARGET_PROPERTIES(unittest_evloop PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_UNITTEST=1")
+SET_TARGET_PROPERTIES(unittest_evloop PROPERTIES OUTPUT_NAME t/unittest_evloop.t)
+TARGET_LINK_LIBRARIES(unittest_evloop ${OPENSSL_LIBRARIES} ${LIBYAML_LIBRARIES} pthread)
+ADD_EXECUTABLE(unittest_libuv ${LIB_SOURCE_FILES} deps/picotest/picotest.c lib/t/test.c)
+SET_TARGET_PROPERTIES(unittest_libuv PROPERTIES COMPILE_FLAGS "-DH2O_UNITTEST=1")
+SET_TARGET_PROPERTIES(unittest_libuv PROPERTIES OUTPUT_NAME t/unittest_libuv.t)
+TARGET_LINK_LIBRARIES(unittest_libuv ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${LIBYAML_LIBRARIES} pthread)
+
+ADD_CUSTOM_TARGET(test prove -r DEPENDS unittest_evloop)
+IF (LIBUV_FOUND)
+    ADD_DEPENDENCIES(test unittest_libuv)
+ENDIF (LIBUV_FOUND)
+
+# environment-specific tweaks
 IF (APPLE)
     SET_SOURCE_FILES_PROPERTIES(lib/socket.c src/main.c PROPERTIES COMPILE_FLAGS -Wno-deprecated-declarations)
 ENDIF (APPLE)

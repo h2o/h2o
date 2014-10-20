@@ -69,6 +69,7 @@
 		10D0905319F0CB130043D458 /* socket-client.c in Sources */ = {isa = PBXBuildFile; fileRef = 10D0905219F0CB130043D458 /* socket-client.c */; };
 		10D0905919F22FA10043D458 /* string_.h in Headers */ = {isa = PBXBuildFile; fileRef = 10D0905819F22FA10043D458 /* string_.h */; };
 		10D0905B19F230280043D458 /* string.c in Sources */ = {isa = PBXBuildFile; fileRef = 10D0905A19F230280043D458 /* string.c */; };
+		10D0907019F494CC0043D458 /* test.c in Sources */ = {isa = PBXBuildFile; fileRef = 10D0906E19F494CC0043D458 /* test.c */; };
 		10F417CC19C1907B00B6E31A /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		10F417D619C190F800B6E31A /* main.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F417D519C190F800B6E31A /* main.c */; settings = {COMPILER_FLAGS = "-Wno-deprecated-declarations"; }; };
 		10F417FF19C2D2F800B6E31A /* picotest.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F417FD19C2D2F800B6E31A /* picotest.c */; };
@@ -191,7 +192,7 @@
 		107923FC19A3238500C52AD6 /* simple.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = simple.c; sourceTree = "<group>"; };
 		1079240D19A3247A00C52AD6 /* websocket */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = websocket; sourceTree = BUILT_PRODUCTS_DIR; };
 		1079241319A324B400C52AD6 /* websocket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = websocket.c; sourceTree = "<group>"; };
-		1079243519A3260E00C52AD6 /* picotest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = picotest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1079243519A3260E00C52AD6 /* unittest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = unittest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1079245319A32C0800C52AD6 /* token_table.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = token_table.h; sourceTree = "<group>"; };
 		10BA72A919AAD6300059392A /* stream.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = stream.c; sourceTree = "<group>"; };
 		10D0903919F0A51C0043D458 /* memory.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = memory.h; sourceTree = "<group>"; };
@@ -202,6 +203,8 @@
 		10D0905219F0CB130043D458 /* socket-client.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "socket-client.c"; sourceTree = "<group>"; };
 		10D0905819F22FA10043D458 /* string_.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = string_.h; sourceTree = "<group>"; };
 		10D0905A19F230280043D458 /* string.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = string.c; sourceTree = "<group>"; };
+		10D0906E19F494CC0043D458 /* test.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = test.c; sourceTree = "<group>"; };
+		10D0906F19F494CC0043D458 /* test.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = test.h; sourceTree = "<group>"; };
 		10F417D319C1907B00B6E31A /* h2o */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = h2o; sourceTree = BUILT_PRODUCTS_DIR; };
 		10F417D519C190F800B6E31A /* main.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = main.c; sourceTree = "<group>"; };
 		10F417FD19C2D2F800B6E31A /* picotest.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picotest.c; sourceTree = "<group>"; };
@@ -301,7 +304,7 @@
 				1079231519A320A700C52AD6 /* libh2o.a */,
 				107923D919A321F400C52AD6 /* examples-simple */,
 				1079240D19A3247A00C52AD6 /* websocket */,
-				1079243519A3260E00C52AD6 /* picotest */,
+				1079243519A3260E00C52AD6 /* unittest */,
 				10F417D319C1907B00B6E31A /* h2o */,
 				10D0905119F0CA9C0043D458 /* examples-simple copy */,
 			);
@@ -373,6 +376,7 @@
 		107923AD19A3217300C52AD6 /* lib */ = {
 			isa = PBXGroup;
 			children = (
+				10D0906D19F494990043D458 /* t */,
 				101B670B19ADD3380084A351 /* access_log.c */,
 				107923AE19A3217300C52AD6 /* chunked.c */,
 				10F4180419CA75C500B6E31A /* config.c */,
@@ -428,6 +432,15 @@
 				1065E70619BF14E500686E72 /* uv-binding.h */,
 			);
 			path = socket;
+			sourceTree = "<group>";
+		};
+		10D0906D19F494990043D458 /* t */ = {
+			isa = PBXGroup;
+			children = (
+				10D0906F19F494CC0043D458 /* test.h */,
+				10D0906E19F494CC0043D458 /* test.c */,
+			);
+			path = t;
 			sourceTree = "<group>";
 		};
 		10F417D419C190DD00B6E31A /* src */ = {
@@ -541,9 +554,9 @@
 			productReference = 1079240D19A3247A00C52AD6 /* websocket */;
 			productType = "com.apple.product-type.tool";
 		};
-		1079242A19A3260E00C52AD6 /* picotest */ = {
+		1079242A19A3260E00C52AD6 /* unittest */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 1079243219A3260E00C52AD6 /* Build configuration list for PBXNativeTarget "picotest" */;
+			buildConfigurationList = 1079243219A3260E00C52AD6 /* Build configuration list for PBXNativeTarget "unittest" */;
 			buildPhases = (
 				1079242D19A3260E00C52AD6 /* Sources */,
 				1079242F19A3260E00C52AD6 /* Frameworks */,
@@ -553,9 +566,9 @@
 			);
 			dependencies = (
 			);
-			name = picotest;
+			name = unittest;
 			productName = simple;
-			productReference = 1079243519A3260E00C52AD6 /* picotest */;
+			productReference = 1079243519A3260E00C52AD6 /* unittest */;
 			productType = "com.apple.product-type.tool";
 		};
 		10D0904419F0CA9C0043D458 /* examples-socket-client */ = {
@@ -616,7 +629,7 @@
 			projectRoot = "";
 			targets = (
 				1079231419A320A700C52AD6 /* h2o */,
-				1079242A19A3260E00C52AD6 /* picotest */,
+				1079242A19A3260E00C52AD6 /* unittest */,
 				10F417C619C1907B00B6E31A /* server */,
 				107923D819A321F400C52AD6 /* examples-simple */,
 				1079240219A3247A00C52AD6 /* examples-websocket */,
@@ -680,6 +693,7 @@
 				1079244C19A3266700C52AD6 /* memory.c in Sources */,
 				1079244D19A3266700C52AD6 /* mimemap.c in Sources */,
 				1079244E19A3266700C52AD6 /* request.c in Sources */,
+				10D0907019F494CC0043D458 /* test.c in Sources */,
 				1079244F19A3266700C52AD6 /* rproxy.c in Sources */,
 				10F417FF19C2D2F800B6E31A /* picotest.c in Sources */,
 				1079245119A3266700C52AD6 /* token.c in Sources */,
@@ -790,7 +804,7 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
-					"PICOTEST_FUNCS=hpack_test,util_test",
+					"H2O_UNITTEST=1",
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
@@ -808,7 +822,7 @@
 					"-lssl",
 					"-lcrypto",
 				);
-				PRODUCT_NAME = picotest;
+				PRODUCT_NAME = unittest;
 			};
 			name = "libuv-debug";
 		};
@@ -918,7 +932,7 @@
 		1065E71619BF754100686E72 /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				GCC_PREPROCESSOR_DEFINITIONS = "PICOTEST_FUNCS=hpack_test,util_test";
+				GCC_PREPROCESSOR_DEFINITIONS = "H2O_UNITTEST=1";
 				HEADER_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/include",
 					"$(inherited)",
@@ -934,7 +948,7 @@
 					"-lssl",
 					"-lcrypto",
 				);
-				PRODUCT_NAME = picotest;
+				PRODUCT_NAME = unittest;
 			};
 			name = "libuv-release";
 		};
@@ -1192,7 +1206,7 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
-					"PICOTEST_FUNCS=hpack_test,util_test",
+					"H2O_UNITTEST=1",
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
@@ -1210,7 +1224,7 @@
 					"-lssl",
 					"-lcrypto",
 				);
-				PRODUCT_NAME = picotest;
+				PRODUCT_NAME = unittest;
 			};
 			name = "evloop-debug";
 		};
@@ -1218,7 +1232,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = (
-					"PICOTEST_FUNCS=hpack_test,util_test",
+					"H2O_UNITTEST=1",
 					"H2O_USE_LIBUV=0",
 				);
 				HEADER_SEARCH_PATHS = (
@@ -1236,7 +1250,7 @@
 					"-lssl",
 					"-lcrypto",
 				);
-				PRODUCT_NAME = picotest;
+				PRODUCT_NAME = unittest;
 			};
 			name = "evloop-release";
 		};
@@ -1491,7 +1505,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = "evloop-release";
 		};
-		1079243219A3260E00C52AD6 /* Build configuration list for PBXNativeTarget "picotest" */ = {
+		1079243219A3260E00C52AD6 /* Build configuration list for PBXNativeTarget "unittest" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				1079243319A3260E00C52AD6 /* evloop-debug */,

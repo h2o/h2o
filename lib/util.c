@@ -86,11 +86,11 @@ void h2o_accept_ssl(h2o_context_t *ctx, h2o_socket_t *sock, SSL_CTX *ssl_ctx)
     h2o_socket_ssl_server_handshake(sock, ssl_ctx, on_ssl_handshake_complete);
 }
 
-#ifdef PICOTEST_FUNCS
+#ifdef H2O_UNITTEST
 
-#include "picotest.h"
+#include "t/test.h"
 
-void util_test(void)
+void test_lib__util_c(void)
 {
     h2o_mempool_t pool;
 
