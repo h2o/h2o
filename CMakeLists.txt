@@ -94,7 +94,7 @@ SET_TARGET_PROPERTIES(unittest_libuv PROPERTIES
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(unittest_libuv ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${LIBYAML_LIBRARIES} pthread)
 
-ADD_CUSTOM_TARGET(test prove -r DEPENDS h2o unittest_evloop)
+ADD_CUSTOM_TARGET(test prove -vr DEPENDS h2o unittest_evloop)
 IF (LIBUV_FOUND)
     ADD_DEPENDENCIES(test unittest_libuv examples)
 ENDIF (LIBUV_FOUND)
