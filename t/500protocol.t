@@ -7,6 +7,7 @@ use Scope::Guard qw(scope_guard);
 use Test::More;
 
 my $port = empty_port();
+my $tls_port = empty_port($port + 1);
 
 # spawn the server
 my $pid = fork;
@@ -17,6 +18,11 @@ if ($pid == 0) {
     my ($conffh, $conffn) = tempfile();
     print $conffh <<"EOT";
 listen: $port
+listen:
+  port: $tls_port
+  ssl:
+    key-file: t/protocol/server.key
+    certificate-file: t/protocol/server.crt
 files:
   /: t/protocol/docroot
 mime-types:
@@ -37,7 +43,9 @@ die "server died, abort"
 subtest 'curl' => sub {
     plan skip_all => 'curl not found'
         unless prog_exists('curl');
-    my $content = `curl http://127.0.0.1:$port/index.txt 2> /dev/null`;
+    my $content = `curl --silent --show-error http://127.0.0.1:$port/index.txt`;
+    ok($content eq "hello\n");
+    $content = `curl --silent --show-error --insecure https://127.0.0.1:$tls_port/index.txt`;
     ok($content eq "hello\n");
 };
 
@@ -45,12 +53,16 @@ subtest 'ab' => sub {
     plan skip_all => 'ab not found'
         unless prog_exists('ab');
     ok(system("ab -c 10 -n 10000 -k http://127.0.0.1:$port/index.txt") == 0);
+    ok(system("ab -c 10 -n 10000 -k https://127.0.0.1:$tls_port/index.txt") == 0);
 };
 
 subtest 'nghttp' => sub {
     plan skip_all => 'nghttp not found'
         unless prog_exists('nghttp');
     my $out = `nghttp -u -m 100 http://127.0.0.1:$port/index.txt`;
+    ok $? == 0;
+    is $out, "hello\n" x 100;
+    $out = `nghttp -m 100 https://127.0.0.1:$tls_port/index.txt`;
     ok $? == 0;
     is $out, "hello\n" x 100;
 };
