@@ -73,6 +73,8 @@ ADD_EXECUTABLE(examples-websocket lib/websocket.c examples/websocket.c)
 SET_TARGET_PROPERTIES(examples-websocket PROPERTIES EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-websocket libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${WSLAY_LIBRARIES})
 
+ADD_CUSTOM_TARGET(examples DEPENDS examples-simple examples-socket-client examples-websocket)
+
 # directly links to libh2o using evloop
 ADD_EXECUTABLE(h2o ${LIB_SOURCE_FILES} src/main.c)
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
@@ -94,10 +96,10 @@ TARGET_LINK_LIBRARIES(unittest_libuv ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${L
 
 ADD_CUSTOM_TARGET(test prove -r DEPENDS unittest_evloop)
 IF (LIBUV_FOUND)
-    ADD_DEPENDENCIES(test unittest_libuv)
+    ADD_DEPENDENCIES(test unittest_libuv examples)
 ENDIF (LIBUV_FOUND)
 
 # environment-specific tweaks
 IF (APPLE)
-    SET_SOURCE_FILES_PROPERTIES(lib/socket.c src/main.c PROPERTIES COMPILE_FLAGS -Wno-deprecated-declarations)
+    SET_SOURCE_FILES_PROPERTIES(lib/socket.c lib/websocket.c src/main.c examples/simple.c examples/websocket.c PROPERTIES COMPILE_FLAGS -Wno-deprecated-declarations)
 ENDIF (APPLE)
