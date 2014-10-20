@@ -4,6 +4,8 @@ compiler:
   - gcc
 
 before_script:
+  - curl -L https://github.com/joyent/libuv/archive/v1.0.0-rc1.tar.gz | tar xzf -
+  - (cd libuv-1.0.0-rc1 && ./autogen.sh && ./configure --prefix=/usr && make && sudo make install)
   - cmake .
   - curl -L http://cpanmin.us | perl - --sudo --notest App::cpanminus
   - cpanm --sudo --notest Net::EmptyPort
