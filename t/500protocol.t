@@ -62,9 +62,13 @@ subtest 'nghttp' => sub {
     my $out = `nghttp -u -m 100 http://127.0.0.1:$port/index.txt`;
     ok $? == 0;
     is $out, "hello\n" x 100;
-    $out = `nghttp -m 100 https://127.0.0.1:$tls_port/index.txt`;
-    ok $? == 0;
-    is $out, "hello\n" x 100;
+    subtest 'https' => sub {
+        plan skip_all => 'OpenSSL does not support protocol negotiation; it is too old'
+            unless openssl_can_negotiate();
+        $out = `nghttp -m 100 https://127.0.0.1:$tls_port/index.txt`;
+        ok $? == 0;
+        is $out, "hello\n" x 100;
+    };
 };
 
 done_testing;
@@ -72,4 +76,12 @@ done_testing;
 sub prog_exists {
     my $prog = shift;
     system("which $prog > /dev/null 2>&1") == 0;
+}
+
+sub openssl_can_negotiate {
+    my $openssl_ver = `openssl version`;
+    $openssl_ver =~ /^\S+\s(\d+)\.(\d+)\.(\d+)/
+        or die "cannot parse OpenSSL version: $openssl_ver";
+    $openssl_ver = $1 * 10000 + $2 * 100 + $3;
+    return $openssl_ver >= 10001;
 }
