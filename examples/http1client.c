@@ -75,8 +75,7 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
         return NULL;
     }
 
-    *reqbufs = h2o_mempool_alloc(client->pool, sizeof((*reqbufs)[0]));
-    (*reqbufs)[0] = h2o_buf_init(H2O_STRLIT("GET / HTTP/1.0\r\n\r\n"));
+    *reqbufs = (h2o_buf_t*)client->data;
     *reqbufcnt = 1;
     *method_is_head = 0;
 
@@ -92,11 +91,27 @@ int main(int argc, char **argv)
         &io_timeout
     };
     h2o_mempool_t pool;
+    char *scheme, *host, *path;
+    uint16_t port;
+    h2o_buf_t req;
+    h2o_http1client_t *client;
 
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <url>\n", argv[0]);
         return 1;
     }
+
+    h2o_mempool_init(&pool);
+
+    if (h2o_parse_url(&pool, argv[1], &scheme, &host, &port, &path) != 0) {
+        fprintf(stderr, "unrecognized type of URL: %s\n", argv[1]);
+        return 1;
+    }
+    if (strcmp(scheme, "https") == 0) {
+        fprintf(stderr, "https is not (yet) supported\n");
+        return 1;
+    }
+    req.len = asprintf((char**)&req.base, "GET %s HTTP/1.1\r\nhost: %s:%u\r\nconnection: close\r\n\r\n", path, host, (unsigned)port);
 
     /* setup context */
 #if H2O_USE_LIBUV
@@ -108,8 +123,9 @@ int main(int argc, char **argv)
     h2o_timeout_init(ctx.loop, &io_timeout, 5000); /* 5 seconds */
 
     /* setup client */
-    h2o_mempool_init(&pool);
-    h2o_http1client_connect(&ctx, &pool, "kazuhooku.com", "80", on_connect);
+    client = h2o_http1client_connect(&ctx, &pool, host, port, on_connect);
+    assert(client != NULL);
+    client->data = &req;
 
     while (exit_status == -1) {
 #if H2O_USE_LIBUV

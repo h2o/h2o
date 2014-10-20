@@ -243,10 +243,11 @@ static void on_connect_timeout(h2o_timeout_entry_t *entry)
 
 const char * const h2o_http1client_error_is_eos = "end of stream";
 
-h2o_http1client_t *h2o_http1client_connect(h2o_http1client_ctx_t *ctx, h2o_mempool_t *pool, const char *host, const char *serv, h2o_http1client_connect_cb cb)
+h2o_http1client_t *h2o_http1client_connect(h2o_http1client_ctx_t *ctx, h2o_mempool_t *pool, const char *host, uint16_t port, h2o_http1client_connect_cb cb)
 {
     h2o_http1client_t *client;
     struct addrinfo hints, *res;
+    char serv[sizeof("65535")];
     int err;
 
     client = h2o_malloc(sizeof(*client));
@@ -257,10 +258,11 @@ h2o_http1client_t *h2o_http1client_connect(h2o_http1client_ctx_t *ctx, h2o_mempo
     client->_timeout.cb = on_connect_timeout;
 
     /* resolve destination (FIXME use the function supplied by the loop) */
+    sprintf(serv, "%u", (unsigned)port);
     memset(&hints, 0, sizeof(hints));
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
-    hints.ai_flags = AI_ADDRCONFIG;
+    hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV;
     if ((err = getaddrinfo(host, serv, &hints, &res)) != 0) {
         client->_errstr = "name resulution failure";
         goto Error;
