@@ -122,6 +122,7 @@ h2o_socket_t *h2o_uv_socket_create(uv_stream_t *stream, struct sockaddr *addr, s
     struct st_h2o_uv_socket_t *sock = h2o_malloc(sizeof(*sock));
 
     memset(sock, 0, sizeof(*sock));
+    h2o_init_input_buffer(&sock->super.input);
     if (addr != NULL) {
         memcpy(&sock->super.peername.addr, addr, addrlen);
         sock->super.peername.len = addrlen;
