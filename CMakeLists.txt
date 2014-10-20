@@ -62,15 +62,21 @@ SET_TARGET_PROPERTIES(libh2o PROPERTIES OUTPUT_NAME h2o)
 SET_TARGET_PROPERTIES(libh2o PROPERTIES EXCLUDE_FROM_ALL 1)
 
 ADD_EXECUTABLE(examples-socket-client examples/socket-client.c)
-SET_TARGET_PROPERTIES(examples-socket-client PROPERTIES EXCLUDE_FROM_ALL 1)
+SET_TARGET_PROPERTIES(examples-socket-client PROPERTIES
+    OUTPUT_NAME examples/socket-client
+    EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-socket-client libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES})
 
 ADD_EXECUTABLE(examples-simple examples/simple.c)
-SET_TARGET_PROPERTIES(examples-simple PROPERTIES EXCLUDE_FROM_ALL 1)
+SET_TARGET_PROPERTIES(examples-simple PROPERTIES
+    OUTPUT_NAME examples/simple
+    EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-simple libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES})
 
 ADD_EXECUTABLE(examples-websocket lib/websocket.c examples/websocket.c)
-SET_TARGET_PROPERTIES(examples-websocket PROPERTIES EXCLUDE_FROM_ALL 1)
+SET_TARGET_PROPERTIES(examples-websocket PROPERTIES
+    OUTPUT_NAME examples/websocket
+    EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-websocket libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${WSLAY_LIBRARIES})
 
 # directly links to libh2o using evloop

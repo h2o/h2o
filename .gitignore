@@ -9,6 +9,7 @@ xcuserdata
 h2o
 !include/h2o
 examples/simple
+examples/socket-client
 examples/websocket
 libh2o.a
 */*.dSYM/
