@@ -25,11 +25,11 @@
 
 static int exit_status = -1;
 
-static int on_body(h2o_http1client_t *client, const char *errstr, h2o_buf_t *bufs, size_t bufcnt, int is_final)
+static int on_body(h2o_http1client_t *client, const char *errstr, h2o_buf_t *bufs, size_t bufcnt)
 {
     size_t i;
 
-    if (errstr != NULL) {
+    if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
         fprintf(stderr, "%s\n", errstr);
         exit_status = 1;
         return -1;
@@ -38,7 +38,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr, h2o_buf_t *buf
     for (i = 0; i != bufcnt; ++i)
         fwrite(bufs[i].base, 1, bufs[i].len, stdout);
 
-    if (is_final)
+    if (errstr == h2o_http1client_error_is_eos)
         exit_status = 0;
 
     return 0;
@@ -48,7 +48,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 {
     size_t i;
 
-    if (errstr != NULL) {
+    if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
         fprintf(stderr, "%s\n", errstr);
         exit_status = 1;
         return NULL;
@@ -59,7 +59,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
         printf("%.*s: %.*s\n", (int)headers[i].name_len, headers[i].name, (int)headers[i].value_len, headers[i].value);
     printf("\n");
 
-    if (client->head_only_response) {
+    if (errstr == h2o_http1client_error_is_eos) {
         exit_status = 0;
         return NULL;
     }
@@ -91,7 +91,6 @@ int main(int argc, char **argv)
         &zero_timeout,
         &io_timeout
     };
-    h2o_http1client_t client;
     h2o_mempool_t pool;
 
     if (argc != 2) {
@@ -110,7 +109,7 @@ int main(int argc, char **argv)
 
     /* setup client */
     h2o_mempool_init(&pool);
-    h2o_http1client_connect(&client, &ctx, &pool, "kazuhooku.com", "80", on_connect);
+    h2o_http1client_connect(&ctx, &pool, "kazuhooku.com", "80", on_connect);
 
     while (exit_status == -1) {
 #if H2O_USE_LIBUV

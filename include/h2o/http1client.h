@@ -29,7 +29,7 @@
 
 typedef struct st_h2o_http1client_t h2o_http1client_t;
 
-typedef int (*h2o_http1client_body_cb)(h2o_http1client_t *client, const char *errstr, h2o_buf_t *bufs, size_t bufcnt, int is_final);
+typedef int (*h2o_http1client_body_cb)(h2o_http1client_t *client, const char *errstr, h2o_buf_t *bufs, size_t bufcnt);
 typedef h2o_http1client_body_cb (*h2o_http1client_head_cb)(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_buf_t msg, struct phr_header *headers, size_t num_headers);
 typedef h2o_http1client_head_cb (*h2o_http1client_connect_cb)(h2o_http1client_t *client, const char *errstr, h2o_buf_t **reqbufs, size_t *reqbufcnt, int *method_is_head);
 
@@ -43,7 +43,6 @@ struct st_h2o_http1client_t {
     h2o_http1client_ctx_t *ctx;
     h2o_mempool_t *pool;
     h2o_socket_t *sock;
-    int head_only_response;
     union {
         h2o_http1client_connect_cb on_connect;
         h2o_http1client_head_cb on_head;
@@ -51,9 +50,12 @@ struct st_h2o_http1client_t {
     } _cb;
     const char *_errstr;
     h2o_timeout_entry_t _timeout;
+    int _method_is_head;
     size_t _body_bytesleft;
 };
 
-void h2o_http1client_connect(h2o_http1client_t *client, h2o_http1client_ctx_t *ctx, h2o_mempool_t *pool, const char *host, const char *serv, h2o_http1client_connect_cb cb);
+extern const char * const h2o_http1client_error_is_eos;
+
+h2o_http1client_t *h2o_http1client_connect(h2o_http1client_ctx_t *ctx, h2o_mempool_t *pool, const char *host, const char *serv, h2o_http1client_connect_cb cb);
 
 #endif
