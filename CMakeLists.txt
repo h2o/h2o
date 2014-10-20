@@ -84,13 +84,13 @@ TARGET_LINK_LIBRARIES(h2o ${OPENSSL_LIBRARIES} ${LIBYAML_LIBRARIES} pthread)
 ADD_EXECUTABLE(unittest_evloop ${LIB_SOURCE_FILES} deps/picotest/picotest.c lib/t/test.c)
 SET_TARGET_PROPERTIES(unittest_evloop PROPERTIES
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_UNITTEST=1"
-    OUTPUT_NAME t/unittest_evloop.t
+    OUTPUT_NAME t/000unittest_evloop.t
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(unittest_evloop ${OPENSSL_LIBRARIES} ${LIBYAML_LIBRARIES} pthread)
 ADD_EXECUTABLE(unittest_libuv ${LIB_SOURCE_FILES} deps/picotest/picotest.c lib/t/test.c)
 SET_TARGET_PROPERTIES(unittest_libuv PROPERTIES
     COMPILE_FLAGS "-DH2O_UNITTEST=1"
-    OUTPUT_NAME t/unittest_libuv.t
+    OUTPUT_NAME t/000unittest_libuv.t
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(unittest_libuv ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${LIBYAML_LIBRARIES} pthread)
 
