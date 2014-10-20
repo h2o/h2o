@@ -5,6 +5,10 @@ compiler:
 
 before_script:
   - cmake .
+  - curl -L http://cpanmin.us | perl - --sudo App::cpanminus
+  - cpanm --sudo Net::EmptyPort
+  - cpanm --sudo Proc::Wait3
+  - cpanm --sudo Scope::Guard
 
 script:
   - make all test
