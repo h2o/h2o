@@ -83,7 +83,7 @@ static int post_test(h2o_handler_t *self, h2o_req_t *req)
         req->res.reason = "OK";
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
         h2o_start_response(req, &generator);
-        h2o_send(req, req->entity.entries, req->entity.size, 1);
+        h2o_send(req, &req->entity, 1, 1);
         return 0;
     }
 
