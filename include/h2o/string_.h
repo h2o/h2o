@@ -23,6 +23,7 @@
 #define h2o__string_h
 
 #include <stddef.h>
+#include <time.h>
 #include "h2o/memory.h"
 
 #define H2O_TO__STR(n) #n
