@@ -49,10 +49,10 @@ subtest 'curl' => sub {
     plan skip_all => 'curl not found'
         unless prog_exists('curl');
     for my $file (sort keys %files) {
-        my $md5 = `curl --silent --show-error http://127.0.0.1:$port/$file | openssl md5`;
-        ok $md5 eq $files{$file}, "http://127.0.0.1/$file";
-        $md5 = `curl --silent --show-error --insecure https://127.0.0.1:$tls_port/$file | openssl md5`;
-        ok $md5 eq $files{$file}, "https://127.0.0.1/$file";
+        my $md5 = `curl --silent --show-error http://127.0.0.1:$port/$file | openssl md5 | perl -pe 's/.* //'`;
+        is $md5, $files{$file}, "http://127.0.0.1/$file";
+        $md5 = `curl --silent --show-error --insecure https://127.0.0.1:$tls_port/$file | openssl md5 | perl -pe 's/.* //'`;
+        is $md5, $files{$file}, "https://127.0.0.1/$file";
     }
 };
 
@@ -63,8 +63,8 @@ subtest 'nghttp' => sub {
         my $proto = shift;
         my $opt = $proto eq 'http' ? '-u' : '';
         for my $file (sort keys %files) {
-            my $md5 = `nghttp $opt $proto://127.0.0.1:$port/$file | openssl md5`;
-            ok $md5 eq $files{$file}, "$proto://127.0.0.1/$file";
+            my $md5 = `nghttp $opt $proto://127.0.0.1:$port/$file | openssl md5 | perl -pe 's/.* //'`;
+            is $md5, $files{$file}, "$proto://127.0.0.1/$file";
         }
         my $out = `nghttp -u -m 100 $proto://127.0.0.1:$port/index.txt`;
         is $out, "hello\n" x 100, "$proto://127.0.0.1/index.txt x 100 times";
