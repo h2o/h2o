@@ -60,7 +60,7 @@ subtest 'nghttp' => sub {
     plan skip_all => 'nghttp not found'
         unless prog_exists('nghttp');
     my $doit = sub {
-        my $proto = shift;
+        my ($proto, $port) = @_;
         my $opt = $proto eq 'http' ? '-u' : '';
         for my $file (sort keys %files) {
             my $md5 = `nghttp $opt $proto://127.0.0.1:$port/$file | openssl md5 | perl -pe 's/.* //'`;
@@ -69,11 +69,11 @@ subtest 'nghttp' => sub {
         my $out = `nghttp -u -m 100 $proto://127.0.0.1:$port/index.txt`;
         is $out, "hello\n" x 100, "$proto://127.0.0.1/index.txt x 100 times";
     };
-    $doit->('http');
+    $doit->('http', $port);
     subtest 'https' => sub {
         plan skip_all => 'OpenSSL does not support protocol negotiation; it is too old'
             unless openssl_can_negotiate();
-        $doit->('https');
+        $doit->('https', $tls_port);
     };
 };
 

@@ -103,14 +103,6 @@ static int setup_ssl(const char *cert_file, const char *key_file)
         return -1;
     }
 
-    /* setup protocol negotiation methods */
-#if H2O_USE_NPN
-    h2o_ssl_register_npn_protocols(ssl_ctx, h2o_http2_npn_protocols);
-#endif
-#if H2O_USE_ALPN
-    h2o_ssl_register_alpn_protocols(ssl_ctx, h2o_http2_alpn_protocols);
-#endif
-
     return 0;
 }
 
