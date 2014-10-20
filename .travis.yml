@@ -6,9 +6,10 @@ compiler:
 before_script:
   - cmake .
   - curl -L http://cpanmin.us | perl - --sudo App::cpanminus
-  - cpanm --sudo Net::EmptyPort
-  - cpanm --sudo Proc::Wait3
-  - cpanm --sudo Scope::Guard
+  - cpanm --sudo --notest Net::EmptyPort
+  - cpanm --sudo --notest Proc::Wait3
+  - cpanm --sudo --notest Scope::Guard
+  - sudo apt-get install -qq apache2-utils
 
 script:
   - make all test
