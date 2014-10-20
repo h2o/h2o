@@ -5,6 +5,13 @@ compiler:
 
 before_script:
   - cmake .
+  - curl -L http://cpanmin.us | perl - --sudo --notest App::cpanminus
+  - cpanm --sudo --notest Net::EmptyPort
+  - cpanm --sudo --notest Proc::Wait3
+  - cpanm --sudo --notest Scope::Guard
+  - sudo apt-get install -qq apache2-utils
+  - curl -L http://github.com/tatsuhiro-t/nghttp2/releases/download/v0.6.4/nghttp2-0.6.4.tar.gz | tar xzf -
+  - (cd nghttp2-0.6.4 && ./configure --prefix=/usr --disable-threads --enable-app && make && sudo make install)
 
 script:
   - make all test
