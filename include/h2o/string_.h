@@ -90,6 +90,10 @@ int h2o_contains_token(const char *haysack, size_t haysack_len, const char *need
  * @return buffer pointing to source, or buffer pointing to an allocated chunk with normalized representation of the given path
  */
 h2o_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len);
+/**
+ * parses absolute URL (either http or https)
+ */
+int h2o_parse_url(h2o_mempool_t *pool, const char *url, char **scheme, char **host, uint16_t *port, char **path);
 
 int h2o__lcstris_core(const char *target, const char *test, size_t test_len);
 

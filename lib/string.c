@@ -459,3 +459,105 @@ Return:
 Rewrite:
     return rebuild_path(pool, path, len);
 }
+
+int h2o_parse_url(h2o_mempool_t *pool, const char *url, char **scheme, char **host, uint16_t *port, char **path)
+{
+    const char *hp_start, *hp_end, *colon_at;
+
+    /* check and skip scheme */
+    if (strncmp(url, H2O_STRLIT("http://")) == 0) {
+        *scheme = "http";
+        hp_start = url + 7;
+        *port = 80;
+    } else if (strncmp(url, H2O_STRLIT("https://")) == 0) {
+        *scheme = "https";
+        hp_start = url + 8;
+        *port = 443;
+    } else {
+        return -1;
+    }
+    /* locate the end of hostport */
+    if ((hp_end = strchr(hp_start, '/')) != NULL) {
+        *path = (char*)hp_end;
+    } else {
+        hp_end = hp_start + strlen(hp_start);
+        *path = "/";
+    }
+    /* parse hostport */
+    for (colon_at = hp_start; colon_at != hp_end; ++colon_at)
+        if (*colon_at == ':')
+            break;
+    if (colon_at != hp_end) {
+        size_t t;
+        *host = h2o_strdup(pool, hp_start, colon_at - hp_start).base;
+        if ((t = h2o_strtosize(colon_at + 1, hp_end - colon_at - 1)) >= 65535)
+            return -1;
+        *port = t;
+    } else {
+        *host = h2o_strdup(pool, hp_start, hp_end - hp_start).base;
+    }
+    /* success */
+    return 0;
+}
+
+#ifdef H2O_UNITTEST
+
+#include "t/test.h"
+
+static void test_parse_url(void)
+{
+    h2o_mempool_t pool;
+    char *scheme, *host, *path;
+    uint16_t port;
+    int ret;
+
+    h2o_mempool_init(&pool);
+
+    ret = h2o_parse_url(&pool, "http://example.com/abc", &scheme, &host, &port, &path);
+    ok(ret == 0);
+    ok(strcmp(scheme, "http") == 0);
+    ok(strcmp(host, "example.com") == 0);
+    ok(port == 80);
+    ok(strcmp(path, "/abc") == 0);
+
+    ret = h2o_parse_url(&pool, "http://example.com", &scheme, &host, &port, &path);
+    ok(ret == 0);
+    ok(strcmp(scheme, "http") == 0);
+    ok(strcmp(host, "example.com") == 0);
+    ok(port == 80);
+    ok(strcmp(path, "/") == 0);
+
+    ret = h2o_parse_url(&pool, "http://example.com:81/abc", &scheme, &host, &port, &path);
+    ok(ret == 0);
+    ok(strcmp(scheme, "http") == 0);
+    ok(strcmp(host, "example.com") == 0);
+    ok(port == 81);
+    ok(strcmp(path, "/abc") == 0);
+
+    ret = h2o_parse_url(&pool, "http://example.com:81", &scheme, &host, &port, &path);
+    ok(ret == 0);
+    ok(strcmp(scheme, "http") == 0);
+    ok(strcmp(host, "example.com") == 0);
+    ok(port == 81);
+    ok(strcmp(path, "/") == 0);
+
+    ret = h2o_parse_url(&pool, "https://example.com/abc", &scheme, &host, &port, &path);
+    ok(ret == 0);
+    ok(strcmp(scheme, "https") == 0);
+    ok(strcmp(host, "example.com") == 0);
+    ok(port == 443);
+    ok(strcmp(path, "/abc") == 0);
+
+    ret = h2o_parse_url(&pool, "http:/abc", &scheme, &host, &port, &path);
+    ok(ret != 0);
+
+    ret = h2o_parse_url(&pool, "ftp://example.com/abc", &scheme, &host, &port, &path);
+    ok(ret != 0);
+}
+
+void test_lib__string_c(void)
+{
+    subtest("parse_url", test_parse_url);
+}
+
+#endif
