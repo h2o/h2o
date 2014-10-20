@@ -50,7 +50,7 @@ subtest 'ab' => sub {
 subtest 'nghttp' => sub {
     plan skip_all => 'nghttp not found'
         unless prog_exists('nghttp');
-    my $out = `nghttp -u -m 100 http://127.0.0.1:$port/index.txt 2> /dev/null`;
+    my $out = `nghttp -u -m 100 http://127.0.0.1:$port/index.txt`;
     ok $? == 0;
     is $out, "hello\n" x 100;
 };
