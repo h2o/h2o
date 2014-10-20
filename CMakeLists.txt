@@ -15,6 +15,7 @@ INCLUDE_DIRECTORIES(
     include
     deps/klib
     deps/picohttpparser
+    deps/picotest
     deps/yoml
     ${OPENSSL_INCLUDE_DIR})
 IF (LIBUV_FOUND)
@@ -61,15 +62,21 @@ SET_TARGET_PROPERTIES(libh2o PROPERTIES OUTPUT_NAME h2o)
 SET_TARGET_PROPERTIES(libh2o PROPERTIES EXCLUDE_FROM_ALL 1)
 
 ADD_EXECUTABLE(examples-socket-client examples/socket-client.c)
-SET_TARGET_PROPERTIES(examples-socket-client PROPERTIES EXCLUDE_FROM_ALL 1)
+SET_TARGET_PROPERTIES(examples-socket-client PROPERTIES
+    OUTPUT_NAME examples/socket-client
+    EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-socket-client libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES})
 
 ADD_EXECUTABLE(examples-simple examples/simple.c)
-SET_TARGET_PROPERTIES(examples-simple PROPERTIES EXCLUDE_FROM_ALL 1)
+SET_TARGET_PROPERTIES(examples-simple PROPERTIES
+    OUTPUT_NAME examples/simple
+    EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-simple libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES})
 
 ADD_EXECUTABLE(examples-websocket lib/websocket.c examples/websocket.c)
-SET_TARGET_PROPERTIES(examples-websocket PROPERTIES EXCLUDE_FROM_ALL 1)
+SET_TARGET_PROPERTIES(examples-websocket PROPERTIES
+    OUTPUT_NAME examples/websocket
+    EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-websocket libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${WSLAY_LIBRARIES})
 
 # directly links to libh2o using evloop
@@ -77,6 +84,29 @@ ADD_EXECUTABLE(h2o ${LIB_SOURCE_FILES} src/main.c)
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
 TARGET_LINK_LIBRARIES(h2o ${OPENSSL_LIBRARIES} ${LIBYAML_LIBRARIES} pthread)
 
+# tests
+ADD_EXECUTABLE(unittest_evloop ${LIB_SOURCE_FILES} deps/picotest/picotest.c lib/t/test.c)
+SET_TARGET_PROPERTIES(unittest_evloop PROPERTIES
+    COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_UNITTEST=1"
+    OUTPUT_NAME t/000unittest_evloop.t
+    EXCLUDE_FROM_ALL 1)
+TARGET_LINK_LIBRARIES(unittest_evloop ${OPENSSL_LIBRARIES} ${LIBYAML_LIBRARIES} pthread)
+ADD_EXECUTABLE(unittest_libuv ${LIB_SOURCE_FILES} deps/picotest/picotest.c lib/t/test.c)
+SET_TARGET_PROPERTIES(unittest_libuv PROPERTIES
+    COMPILE_FLAGS "-DH2O_UNITTEST=1"
+    OUTPUT_NAME t/000unittest_libuv.t
+    EXCLUDE_FROM_ALL 1)
+TARGET_LINK_LIBRARIES(unittest_libuv ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${LIBYAML_LIBRARIES} pthread)
+
+ADD_CUSTOM_TARGET(test prove -vr DEPENDS h2o unittest_evloop)
+IF (LIBUV_FOUND)
+    ADD_DEPENDENCIES(test unittest_libuv examples-simple examples-socket-client)
+    IF (WSLAY_FOUND)
+        ADD_DEPENDENCIES(test examples-websocket)
+    ENDIF (WSLAY_FOUND)
+ENDIF (LIBUV_FOUND)
+
+# environment-specific tweaks
 IF (APPLE)
-    SET_SOURCE_FILES_PROPERTIES(lib/socket.c src/main.c PROPERTIES COMPILE_FLAGS -Wno-deprecated-declarations)
+    SET_SOURCE_FILES_PROPERTIES(lib/socket.c lib/websocket.c src/main.c examples/simple.c examples/websocket.c PROPERTIES COMPILE_FLAGS -Wno-deprecated-declarations)
 ENDIF (APPLE)

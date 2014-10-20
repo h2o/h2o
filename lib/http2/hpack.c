@@ -549,7 +549,7 @@ h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, h2o_hpack_header_table_
     { /* calculate maximum required memory */
         size_t max_cur_frame_size =
             STATUS_HEADER_MAX_SIZE /* for :status: */
-#ifndef PICOTEST_FUNCS
+#ifndef H2O_UNITTEST
             + 2 + H2O_TIMESTR_RFC1123_LEN /* for Date: */
             + 5 + server_name->len /* for Server: */
 #endif
@@ -588,7 +588,7 @@ h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, h2o_hpack_header_table_
         dst += H2O_HTTP2_FRAME_HEADER_SIZE;
         dst = encode_status(dst, res->status);
         /* TODO keep some kind of reference to the indexed headers of Server and Date, and reuse them */
-#ifndef PICOTEST_FUNCS
+#ifndef H2O_UNITTEST
         dst = encode_header(header_table, dst, &H2O_TOKEN_SERVER->buf, server_name);
         date_value = h2o_buf_init(ts->str->rfc1123, H2O_TIMESTR_RFC1123_LEN);
         dst = encode_header(header_table, dst, &H2O_TOKEN_DATE->buf, &date_value);
@@ -616,9 +616,9 @@ Error:
     return h2o_buf_init(NULL, 0);
 }
 
-#ifdef PICOTEST_FUNCS
+#ifdef H2O_UNITTEST
 
-#include "picotest.h"
+#include "../t/test.h"
 
 static void test_request(h2o_buf_t first_req, h2o_buf_t second_req, h2o_buf_t third_req)
 {
@@ -702,7 +702,7 @@ static void check_flatten(h2o_mempool_t *pool, h2o_hpack_header_table_t *header_
     ok(h2o_memis(frame.payload, frame.length, expected, expected_len));
 }
 
-void hpack_test()
+void test_lib__http2__hpack(void)
 {
     h2o_mempool_t pool;
     h2o_mempool_init(&pool);

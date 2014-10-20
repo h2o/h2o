@@ -29,6 +29,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <sys/socket.h>
+#include <openssl/err.h>
 #include "yoml-parser.h"
 #include "h2o.h"
 #include "h2o/http1.h"
@@ -151,10 +152,12 @@ static SSL_CTX *on_config_listen_setup_ssl(h2o_configurator_t *configurator, con
     setup_ecc_key(ssl_ctx);
     if (SSL_CTX_use_certificate_file(ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
         h2o_config_print_error(configurator, config_file, config_node, "failed to load certificate file:%s\n", cert_file);
+        ERR_print_errors_fp(stderr);
         goto Error;
     }
     if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file, SSL_FILETYPE_PEM) != 1) {
         h2o_config_print_error(configurator, config_file, config_node, "failed to load private key file:%s\n", key_file);
+        ERR_print_errors_fp(stderr);
         goto Error;
     }
 
