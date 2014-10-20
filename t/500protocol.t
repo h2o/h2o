@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempfile);
-use Net::EmptyPort qw(empty_port);
+use Net::EmptyPort qw(check_port empty_port);
 use Proc::Wait3 qw(wait3);
 use Scope::Guard qw(scope_guard);
 use Test::More;
@@ -36,7 +36,7 @@ my $guard = scope_guard(sub {
     kill 'TERM', $pid;
 });
 
-while (! (check_port($port) && check_port($tls_port)) {
+while (! (check_port($port) && check_port($tls_port))) {
     sleep 1;
     die "server died, abort"
         if defined wait3(0);
