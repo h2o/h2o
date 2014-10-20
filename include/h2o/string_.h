@@ -61,7 +61,7 @@ h2o_buf_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len)
 /**
  * base64 encoder
  */
-void h2o_base64_encode(char *dst, const uint8_t *src, size_t len, int url_encoded);
+void h2o_base64_encode(char *dst, const void *src, size_t len, int url_encoded);
 /**
  * builds a RFC-1123 style date string
  */

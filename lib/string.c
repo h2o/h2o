@@ -169,7 +169,7 @@ Error:
     return h2o_buf_init(NULL, 0);
 }
 
-void h2o_base64_encode(char *dst, const uint8_t *src, size_t len, int url_encoded)
+void h2o_base64_encode(char *dst, const void *_src, size_t len, int url_encoded)
 {
     static const char *MAP =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -180,6 +180,7 @@ void h2o_base64_encode(char *dst, const uint8_t *src, size_t len, int url_encode
         "abcdefghijklmnopqrstuvwxyz"
         "0123456789-_";
 
+    const uint8_t *src = _src;
     const char *map = url_encoded ? MAP_URL_ENCODED : MAP;
     uint32_t quad;
 
