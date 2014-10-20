@@ -1,6 +1,8 @@
 H2O - an optimized HTTP server / library implementation
 ===
 
+[![Build Status](https://travis-ci.org/h2o/h2o.svg?branch=master)](https://travis-ci.org/h2o/h2o)
+
 H2O is an optimized HTTP server implementation that can be used either as a standalone server or a library.
 
 Supported Protocols
