@@ -1,10 +1,13 @@
 use strict;
 use warnings;
+use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempfile);
 use Net::EmptyPort qw(check_port empty_port);
 use Proc::Wait3 qw(wait3);
 use Scope::Guard qw(scope_guard);
 use Test::More;
+
+my %files = map { +($_ => md5_file($_)) } qw(index.txt halfdome.jpg);
 
 my $port = empty_port();
 my $tls_port = empty_port($port + 1);
@@ -45,10 +48,33 @@ while (! (check_port($port) && check_port($tls_port))) {
 subtest 'curl' => sub {
     plan skip_all => 'curl not found'
         unless prog_exists('curl');
-    my $content = `curl --silent --show-error http://127.0.0.1:$port/index.txt`;
-    ok($content eq "hello\n");
-    $content = `curl --silent --show-error --insecure https://127.0.0.1:$tls_port/index.txt`;
-    ok($content eq "hello\n");
+    for my $file (sort keys %files) {
+        my $md5 = `curl --silent --show-error http://127.0.0.1:$port/$file | openssl md5`;
+        ok $md5 eq $files{$file}, "http://127.0.0.1/$file";
+        $md5 = `curl --silent --show-error --insecure https://127.0.0.1:$tls_port/$file | openssl md5`;
+        ok $md5 eq $files{$file}, "https://127.0.0.1/$file";
+    }
+};
+
+subtest 'nghttp' => sub {
+    plan skip_all => 'nghttp not found'
+        unless prog_exists('nghttp');
+    my $doit = sub {
+        my $proto = shift;
+        my $opt = $proto eq 'http' ? '-u' : '';
+        for my $file (sort keys %files) {
+            my $md5 = `nghttp $opt $proto://127.0.0.1:$port/$file | openssl md5`;
+            ok $md5 eq $files{$file}, "$proto://127.0.0.1/$file";
+        }
+        my $out = `nghttp -u -m 100 $proto://127.0.0.1:$port/index.txt`;
+        is $out, "hello\n" x 100, "$proto://127.0.0.1/index.txt x 100 times";
+    };
+    $doit->('http');
+    subtest 'https' => sub {
+        plan skip_all => 'OpenSSL does not support protocol negotiation; it is too old'
+            unless openssl_can_negotiate();
+        $doit->('https');
+    };
 };
 
 subtest 'ab' => sub {
@@ -58,22 +84,16 @@ subtest 'ab' => sub {
     ok(system("ab -c 10 -n 10000 -k https://127.0.0.1:$tls_port/index.txt") == 0);
 };
 
-subtest 'nghttp' => sub {
-    plan skip_all => 'nghttp not found'
-        unless prog_exists('nghttp');
-    my $out = `nghttp -u -m 100 http://127.0.0.1:$port/index.txt`;
-    ok $? == 0;
-    is $out, "hello\n" x 100;
-    subtest 'https' => sub {
-        plan skip_all => 'OpenSSL does not support protocol negotiation; it is too old'
-            unless openssl_can_negotiate();
-        $out = `nghttp -m 100 https://127.0.0.1:$tls_port/index.txt`;
-        ok $? == 0;
-        is $out, "hello\n" x 100;
-    };
-};
-
 done_testing;
+
+sub md5_file {
+    my $fn = shift;
+    $fn = "t/protocol/docroot/$fn";
+    open my $fh, "<", $fn
+        or die "failed to open file:$fn:$!";
+    local $/;
+    return md5_hex(join '', <$fh>) . "\n";
+}
 
 sub prog_exists {
     my $prog = shift;
