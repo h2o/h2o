@@ -259,7 +259,7 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
         free(line);
 }
 
-static void destroy(h2o_logger_t *_self)
+static void dispose(h2o_logger_t *_self)
 {
     struct st_h2o_access_logger_t *self = (void*)_self;
     size_t i;
@@ -270,39 +270,36 @@ static void destroy(h2o_logger_t *_self)
 
     if (self->fd != -1)
         close(self->fd);
-
-    free(self);
 }
 
 h2o_logger_t *h2o_access_log_register(h2o_hostconf_t *host_config, const char *path, const char *fmt)
 {
-    struct st_h2o_access_logger_t *self = h2o_malloc(sizeof(*self));
-
-    memset(self, 0, sizeof(*self));
-    self->super.destroy = destroy;
-    self->super.log_access = log_access;
-    self->fd = -1;
+    struct log_element_t *elements;
+    size_t num_elements;
+    int fd;
+    struct st_h2o_access_logger_t *self;
 
     /* default to common log format */
     if (fmt == NULL)
         fmt = "%h %l %u %t \"%r\" %s %b";
-    if ((self->elements = compile_log_format(fmt, &self->num_elements)) == NULL)
-        goto Error;
+    if ((elements = compile_log_format(fmt, &num_elements)) == NULL)
+        return NULL;
 
     /* open log file */
-    self->fd = open(path, O_CREAT | O_WRONLY | O_APPEND, 0644);
-    if (self->fd == -1) {
+    if ((fd = open(path, O_CREAT | O_WRONLY | O_APPEND, 0644)) == -1) {
         fprintf(stderr, "failed to open log file:%s:%s\n", path, strerror(errno));
-        goto Error;
+        return NULL;
     }
 
-    h2o_linklist_insert(&host_config->loggers, &self->super._link);
+    /* register */
+    self = (void*)h2o_create_logger(host_config, sizeof(*self));
+    self->super.dispose = dispose;
+    self->super.log_access = log_access;
+    self->elements = elements;
+    self->num_elements = num_elements;
+    self->fd = fd;
 
     return &self->super;
-
-Error:
-    destroy(&self->super);
-    return NULL;
 }
 
 static int on_config(h2o_configurator_t *configurator, void *_config, const char *file, yoml_t *node)

@@ -34,13 +34,8 @@
 
 static void register_handler(h2o_hostconf_t *host_config, int (*on_req)(h2o_handler_t *, h2o_req_t *))
 {
-    h2o_handler_t *handler = h2o_malloc(sizeof(*handler));
-
-    memset(handler, 0, sizeof(*handler));
-    handler->destroy = (void*)free;
+    h2o_handler_t *handler = h2o_create_handler(host_config, sizeof(*handler));
     handler->on_req = on_req;
-
-    h2o_linklist_insert(&host_config->handlers, &handler->_link);
 }
 
 static int chunked_test(h2o_handler_t *self, h2o_req_t *req)

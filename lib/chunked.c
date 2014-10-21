@@ -99,11 +99,6 @@ Next:
 
 void h2o_chunked_register(h2o_hostconf_t *host_config)
 {
-    h2o_filter_t *self = h2o_malloc(sizeof(*self));
-
-    memset(self, 0, sizeof(*self));
-    self->destroy = (void*)free;
+    h2o_filter_t *self = h2o_create_filter(host_config, sizeof(*self));
     self->on_setup_ostream = on_setup_ostream;
-
-    h2o_linklist_insert(&host_config->filters, &self->_link);
 }
