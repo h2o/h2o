@@ -281,3 +281,8 @@ Error:
     free(client);
     return NULL;
 }
+
+void h2o_http1client_cancel(h2o_http1client_t *client)
+{
+    close_client(client);
+}

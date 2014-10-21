@@ -58,5 +58,6 @@ struct st_h2o_http1client_t {
 extern const char * const h2o_http1client_error_is_eos;
 
 h2o_http1client_t *h2o_http1client_connect(h2o_http1client_ctx_t *ctx, h2o_mempool_t *pool, const char *host, uint16_t port, h2o_http1client_connect_cb cb);
+void h2o_http1client_cancel(h2o_http1client_t *client);
 
 #endif
