@@ -527,6 +527,7 @@ int main(int argc, char **argv)
     h2o_linklist_insert(&config.global_config.global_configurators, &config.max_connections_configurator._link);
     h2o_linklist_insert(&config.global_config.global_configurators, &config.num_threads_configurator._link);
     h2o_access_log_register_configurator(&config.global_config.host_configurators);
+    h2o_proxy_register_reverse_proxy_configurator(&config.global_config.host_configurators);
 
     /* parse options */
     while ((opt_ch = getopt_long(argc, argv, "c:h", longopts, NULL)) != -1) {

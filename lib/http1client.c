@@ -278,8 +278,7 @@ h2o_http1client_t *h2o_http1client_connect(h2o_http1client_ctx_t *ctx, h2o_mempo
     return client;
 Error:
     h2o_timeout_link(ctx->loop, ctx->zero_timeout, &client->_timeout);
-    free(client);
-    return NULL;
+    return client;
 }
 
 void h2o_http1client_cancel(h2o_http1client_t *client)

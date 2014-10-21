@@ -39,6 +39,7 @@ extern "C" {
 #include "picohttpparser.h"
 #include "yoml.h"
 #include "h2o/linklist.h"
+#include "h2o/http1client.h"
 #include "h2o/memory.h"
 #include "h2o/socket.h"
 #include "h2o/string_.h"
@@ -671,6 +672,23 @@ int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *pa
  * registers the file handler to the context
  */
 void h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char *index_file);
+
+/* lib/proxy.c */
+
+/**
+ * delegates the request to given server, rewriting the path as specified
+ */
+int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_buf_t host, uint16_t port, size_t path_replace_length, h2o_buf_t path_prefix);
+/**
+ * registers the reverse proxy handler to the context
+ */
+void h2o_proxy_register_reverse_proxy(h2o_hostconf_t *host_config, const char *virtual_path, const char *host, uint16_t port, const char *real_path);
+/**
+ * 
+ */
+void h2o_proxy_register_reverse_proxy_configurator(h2o_linklist_t *host_configurators);
+
+/* lib/rproxy.c */
 
 /**
  * registers the reproxy filter
