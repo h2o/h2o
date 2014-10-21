@@ -65,6 +65,7 @@ typedef struct st_h2o_conn_t h2o_conn_t;
 typedef struct st_h2o_context_t h2o_context_t;
 typedef struct st_h2o_req_t h2o_req_t;
 typedef struct st_h2o_ostream_t h2o_ostream_t;
+typedef struct st_h2o_globalconf_t h2o_globalconf_t;
 
 /**
  * a predefined, read-only, fast variant of h2o_buf_t, defined in h2o/token.h
@@ -82,7 +83,10 @@ typedef struct st_h2o_token_t {
  */
 typedef struct st_h2o_handler_t {
     h2o_linklist_t _link;
-    void (*destroy)(struct st_h2o_handler_t *self);
+    size_t _config_slot;
+    void *(*on_context_init)(struct st_h2o_handler_t *self, h2o_context_t *ctx);
+    void (*on_context_dispose)(struct st_h2o_handler_t *self, h2o_context_t *ctx);
+    void (*dispose)(struct st_h2o_handler_t *self);
     int (*on_req)(struct st_h2o_handler_t *self, h2o_req_t *req);
 } h2o_handler_t;
  
@@ -92,7 +96,10 @@ typedef struct st_h2o_handler_t {
  */
 typedef struct st_h2o_filter_t {
     h2o_linklist_t _link;
-    void (*destroy)(struct st_h2o_filter_t *self);
+    size_t _config_slot;
+    void *(*on_context_init)(struct st_h2o_filter_t *self, h2o_context_t *ctx);
+    void (*on_context_dispose)(struct st_h2o_filter_t *self, h2o_context_t *ctx);
+    void (*dispose)(struct st_h2o_filter_t *self);
     void (*on_setup_ostream)(struct st_h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot);
 } h2o_filter_t;
 
@@ -102,7 +109,10 @@ typedef struct st_h2o_filter_t {
  */
 typedef struct st_h2o_logger_t {
     h2o_linklist_t _link;
-    void (*destroy)(struct st_h2o_logger_t *self);
+    size_t _config_slot;
+    void *(*on_context_init)(struct st_h2o_logger_t *self, h2o_context_t *ctx);
+    void (*on_context_dispose)(struct st_h2o_logger_t *self, h2o_context_t *ctx);
+    void (*dispose)(struct st_h2o_logger_t *self);
     void (*log_access)(struct st_h2o_logger_t *self, h2o_req_t *req);
 } h2o_logger_t;
 
@@ -131,10 +141,6 @@ typedef struct st_h2o_configurator_t {
      * optional callback called after all the configuration commands are handled
      */
     int (*on_complete)(struct st_h2o_configurator_t *self, void *config);
-    /**
-     * optional callback called upon the initialization of context
-     */
-    int (*on_context_create)(struct st_h2o_configurator_t *self, h2o_context_t *ctx);
 } h2o_configurator_t;
 
 /**
@@ -165,6 +171,10 @@ typedef struct st_h2o_timestamp_t {
 typedef struct st_h2o_hostconf_t {
     h2o_linklist_t _link;
     /**
+     * reverse reference to the global configuration
+     */
+    h2o_globalconf_t *global;
+    /**
      * hostname in lower-case (base is NUL terminated)
      */
     h2o_buf_t hostname;
@@ -186,7 +196,7 @@ typedef struct st_h2o_hostconf_t {
     h2o_mimemap_t mimemap;
 } h2o_hostconf_t;
 
-typedef struct st_h2o_globalconf_t {
+struct st_h2o_globalconf_t {
     /**
      * list of host contexts (h2o_hostconf_t)
      */
@@ -228,7 +238,9 @@ typedef struct st_h2o_globalconf_t {
      * an optional callback called when a connection is being closed
      */
     void (*close_cb)(h2o_context_t *ctx);
-} h2o_globalconf_t;
+
+    size_t _num_config_slots;
+};
 
 /**
  * context of the http server.
@@ -250,6 +262,11 @@ struct st_h2o_context_t {
      * pointer to the global configuration
      */
     h2o_globalconf_t *global_config;
+    /**
+     * pointer to per-module configs
+     */
+    void **_module_configs;
+
     struct {
         uint64_t uv_now_at;
         struct timeval tv_at;
@@ -597,7 +614,9 @@ int h2o_config_scanf(h2o_configurator_t *configurator, const char *config_file, 
  */
 ssize_t h2o_config_get_one_of(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node, const char *candidates);
 
-int h2o_config_on_context_create(h2o_globalconf_t *config, h2o_context_t *ctx);
+h2o_handler_t *h2o_create_handler(h2o_hostconf_t *conf, size_t sz);
+h2o_filter_t *h2o_create_filter(h2o_hostconf_t *conf, size_t sz);
+h2o_logger_t *h2o_create_logger(h2o_hostconf_t *conf, size_t sz);
 
 /* context */
 
@@ -616,6 +635,18 @@ void h2o_context_dispose(h2o_context_t *context);
  * @param ts buffer to store the timestamp
  */
 void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts);
+/**
+ * returns per-module context set by the on_context_init callback
+ */
+static void *h2o_context_get_handler_context(h2o_context_t *ctx, h2o_handler_t *handler);
+/**
+ * returns per-module context set by the on_context_init callback
+ */
+static void *h2o_context_get_filter_context(h2o_context_t *ctx, h2o_filter_t *filter);
+/**
+ * returns per-module context set by the on_context_init callback
+ */
+static void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *logger);
 
 /* built-in generators */
 
@@ -695,6 +726,22 @@ inline void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostre
         next_filter->on_setup_ostream(next_filter, req, slot);
     }
 }
+
+inline void *h2o_context_get_handler_context(h2o_context_t *ctx, h2o_handler_t *handler)
+{
+    return ctx->_module_configs[handler->_config_slot];
+}
+
+inline void *h2o_context_get_filter_context(h2o_context_t *ctx, h2o_filter_t *filter)
+{
+    return ctx->_module_configs[filter->_config_slot];
+}
+
+inline void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *logger)
+{
+    return ctx->_module_configs[logger->_config_slot];
+}
+
 
 #ifdef __cplusplus
 }

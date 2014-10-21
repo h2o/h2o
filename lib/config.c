@@ -269,30 +269,37 @@ static void init_core_configurators(h2o_globalconf_t *config)
         NULL);
 }
 
-#define DESTROY_LIST(type, anchor) do { \
-    while (! h2o_linklist_is_empty(&anchor)) { \
-        type *e = H2O_STRUCT_FROM_MEMBER(type, _link, anchor.next); \
-        h2o_linklist_unlink(&e->_link); \
-        if (e->destroy != NULL) \
-            e->destroy(e); \
-    } \
-} while (0)
-
-static void init_host_config(h2o_hostconf_t *host_config)
+static void init_host_config(h2o_hostconf_t *hostconf, h2o_globalconf_t *globalconf)
 {
-    h2o_linklist_init_anchor(&host_config->handlers);
-    h2o_linklist_init_anchor(&host_config->filters);
-    h2o_linklist_init_anchor(&host_config->loggers);
-    h2o_chunked_register(host_config);
-    h2o_init_mimemap(&host_config->mimemap, H2O_DEFAULT_MIMETYPE);
+    memset(hostconf, 0, sizeof(*hostconf));
+    hostconf->global = globalconf;
+    h2o_linklist_init_anchor(&hostconf->handlers);
+    h2o_linklist_init_anchor(&hostconf->filters);
+    h2o_linklist_init_anchor(&hostconf->loggers);
+    h2o_chunked_register(hostconf);
+    h2o_init_mimemap(&hostconf->mimemap, H2O_DEFAULT_MIMETYPE);
 }
 
 static void dispose_host_config(h2o_hostconf_t *host_config)
 {
     free(host_config->hostname.base);
+
+#define DESTROY_LIST(type, anchor) do { \
+    while (! h2o_linklist_is_empty(&anchor)) { \
+        type *e = H2O_STRUCT_FROM_MEMBER(type, _link, anchor.next); \
+        h2o_linklist_unlink(&e->_link); \
+        if (e->dispose != NULL) \
+            e->dispose(e); \
+        free(e); \
+    } \
+} while (0)
+
     DESTROY_LIST(h2o_handler_t, host_config->handlers);
     DESTROY_LIST(h2o_filter_t, host_config->filters);
     DESTROY_LIST(h2o_logger_t, host_config->loggers);
+
+#undef DESTROY_LIST
+
     h2o_dispose_mimemap(&host_config->mimemap);
 }
 
@@ -300,7 +307,7 @@ void h2o_config_init(h2o_globalconf_t *config)
 {
     memset(config, 0, sizeof(*config));
     h2o_linklist_init_anchor(&config->virtual_hosts);
-    init_host_config(&config->default_host);
+    init_host_config(&config->default_host, config);
     h2o_linklist_init_anchor(&config->global_configurators);
     h2o_linklist_init_anchor(&config->host_configurators);
     config->server_name = h2o_buf_init(H2O_STRLIT("h2o/0.1"));
@@ -317,8 +324,7 @@ h2o_hostconf_t *h2o_config_register_virtual_host(h2o_globalconf_t *config, const
     h2o_hostconf_t *host_config = h2o_malloc(sizeof(*host_config));
     size_t i;
 
-    memset(host_config, 0, sizeof(*host_config));
-    init_host_config(host_config);
+    init_host_config(host_config, config);
     host_config->hostname = h2o_strdup(NULL, hostname, SIZE_MAX);
     for (i = 0; i != host_config->hostname.len; ++i)
         host_config->hostname.base[i] = h2o_tolower(host_config->hostname.base[i]);
@@ -337,9 +343,20 @@ void h2o_config_dispose(h2o_globalconf_t *config)
         free(host_config);
     }
     dispose_host_config(&config->default_host);
+
+#define DESTROY_LIST(type, anchor) do { \
+    while (! h2o_linklist_is_empty(&anchor)) { \
+        type *e = H2O_STRUCT_FROM_MEMBER(type, _link, anchor.next); \
+        h2o_linklist_unlink(&e->_link); \
+        if (e->destroy != NULL) \
+            e->destroy(e); \
+    } \
+} while (0)
+
     DESTROY_LIST(h2o_configurator_t, config->global_configurators);
     DESTROY_LIST(h2o_configurator_t, config->host_configurators);
 
+#undef DESTROY_LIST
 }
 
 h2o_configurator_t *h2o_config_get_configurator(h2o_linklist_t *anchor, const char *cmd)
@@ -366,20 +383,6 @@ int h2o_config_configure(h2o_globalconf_t *config, const char *file, yoml_t *nod
         return -1;
     if (for_each_host_context(config, complete_host_configurators, &config->host_configurators) != 0)
         return -1;
-
-    return 0;
-}
-
-int h2o_config_on_context_create(h2o_globalconf_t *config, h2o_context_t *ctx)
-{
-    h2o_linklist_t *node;
-
-    for (node = config->global_configurators.next; node != &config->global_configurators; node = node->next) {
-        h2o_configurator_t *configurator = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, node);
-        if (configurator->on_context_create != NULL)
-            if (configurator->on_context_create(configurator, ctx) != 0)
-                return -1;
-    }
 
     return 0;
 }
@@ -444,4 +447,37 @@ ssize_t h2o_config_get_one_of(h2o_configurator_t *configurator, const char *file
 Error:
     h2o_config_print_error(configurator, file, node, "argument must be one of: %s", candidates);
     return -1;
+}
+
+h2o_handler_t *h2o_create_handler(h2o_hostconf_t *conf, size_t sz)
+{
+    h2o_handler_t *handler = h2o_malloc(sz);
+
+    memset(handler, 0, sz);
+    handler->_config_slot = conf->global->_num_config_slots++;
+    h2o_linklist_insert(&conf->handlers, &handler->_link);
+
+    return handler;
+}
+
+h2o_filter_t *h2o_create_filter(h2o_hostconf_t *conf, size_t sz)
+{
+    h2o_filter_t *filter = h2o_malloc(sz);
+
+    memset(filter, 0, sz);
+    filter->_config_slot = conf->global->_num_config_slots++;
+    h2o_linklist_insert(&conf->filters, &filter->_link);
+
+    return filter;
+}
+
+h2o_logger_t *h2o_create_logger(h2o_hostconf_t *conf, size_t sz)
+{
+    h2o_logger_t *logger = h2o_malloc(sz);
+
+    memset(logger, 0, sz);
+    logger->_config_slot = conf->global->_num_config_slots++;
+    h2o_linklist_insert(&conf->loggers, &logger->_link);
+
+    return logger;
 }

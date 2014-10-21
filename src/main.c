@@ -513,9 +513,9 @@ int main(int argc, char **argv)
         1, /* num_threads */
         NULL, /* thread_ids */
         {}, /* state */
-        { {}, "listen", listen_configurator_desc, NULL, on_config_listen, on_config_listen_complete, NULL },
-        { {}, "max-connections", max_connections_configurator_desc, NULL, on_config_max_connections, NULL, NULL },
-        { {}, "num-threads", num_threads_configurator_desc, NULL, on_config_num_threads, NULL, NULL }
+        { {}, "listen", listen_configurator_desc, NULL, on_config_listen, on_config_listen_complete },
+        { {}, "max-connections", max_connections_configurator_desc, NULL, on_config_max_connections },
+        { {}, "num-threads", num_threads_configurator_desc, NULL, on_config_num_threads }
     };
 
     const char *config_file = "h2o.conf";
