@@ -651,31 +651,31 @@ h2o_buf_t h2o_get_mimetype(h2o_mimemap_t *mimemap, const char *ext);
 
 /* lib/access_log.c */
 
-h2o_logger_t *h2o_register_access_logger(h2o_hostconf_t *host_config, const char *path, const char *fmt);
-void h2o_register_access_logger_configurator(h2o_linklist_t *host_configurators);
+h2o_logger_t *h2o_access_log_register(h2o_hostconf_t *host_config, const char *path, const char *fmt);
+void h2o_access_log_register_configurator(h2o_linklist_t *host_configurators);
 
 /* lib/chunked.c */
 
 /**
  * registers the chunked encoding output filter (added by default)
  */
-void h2o_register_chunked_filter(h2o_hostconf_t *host_config);
+void h2o_chunked_register(h2o_hostconf_t *host_config);
 
 /* lib/file.c */
 
 /**
  * sends given file as the response to the client
  */
-int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *path, h2o_buf_t mime_type);
+int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *path, h2o_buf_t mime_type);
 /**
  * registers the file handler to the context
  */
-void h2o_register_file_handler(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char *index_file);
+void h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char *index_file);
 
 /**
  * registers the reproxy filter
  */
-void h2o_register_reproxy_filter(h2o_hostconf_t *host_config);
+void h2o_reproxy_register(h2o_hostconf_t *host_config);
 
 /* inline defs */
 

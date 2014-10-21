@@ -274,7 +274,7 @@ static void destroy(h2o_logger_t *_self)
     free(self);
 }
 
-h2o_logger_t *h2o_register_access_logger(h2o_hostconf_t *host_config, const char *path, const char *fmt)
+h2o_logger_t *h2o_access_log_register(h2o_hostconf_t *host_config, const char *path, const char *fmt)
 {
     struct st_h2o_access_logger_t *self = h2o_malloc(sizeof(*self));
 
@@ -342,11 +342,11 @@ static int on_config(h2o_configurator_t *configurator, void *_config, const char
         return -1;
     }
 
-    h2o_register_access_logger(config, path, fmt);
+    h2o_access_log_register(config, path, fmt);
     return 0;
 }
 
-void h2o_register_access_logger_configurator(h2o_linklist_t *host_configurators)
+void h2o_access_log_register_configurator(h2o_linklist_t *host_configurators)
 {
     static const char* desc[] = {
         "path (and optionally the format) of the access log (default: none)",

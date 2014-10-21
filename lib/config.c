@@ -121,7 +121,7 @@ static int on_config_files(h2o_configurator_t *configurator, void *_config, cons
             h2o_config_print_error(configurator, file, key, "value (representing the local path) must be a string");
             return -1;
         }
-        h2o_register_file_handler(host_config, key->data.scalar, value->data.scalar, "index.html" /* FIXME */);
+        h2o_file_register(host_config, key->data.scalar, value->data.scalar, "index.html" /* FIXME */);
     }
 
     return 0;
@@ -283,7 +283,7 @@ static void init_host_config(h2o_hostconf_t *host_config)
     h2o_linklist_init_anchor(&host_config->handlers);
     h2o_linklist_init_anchor(&host_config->filters);
     h2o_linklist_init_anchor(&host_config->loggers);
-    h2o_register_chunked_filter(host_config);
+    h2o_chunked_register(host_config);
     h2o_init_mimemap(&host_config->mimemap, H2O_DEFAULT_MIMETYPE);
 }
 

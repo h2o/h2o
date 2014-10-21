@@ -225,9 +225,9 @@ int main(int argc, char **argv)
     register_handler(&config.default_host, post_test);
     register_handler(&config.default_host, chunked_test);
     register_handler(&config.default_host, reproxy_test);
-    h2o_register_file_handler(&config.default_host, "/", "htdocs", "index.html");
+    h2o_file_register(&config.default_host, "/", "htdocs", "index.html");
     h2o_define_mimetype(&config.default_host.mimemap, "html", "text/html");
-    h2o_register_reproxy_filter(&config.default_host);
+    h2o_reproxy_register(&config.default_host);
 
 #if H2O_USE_LIBUV
     uv_loop_t loop;
@@ -244,7 +244,7 @@ int main(int argc, char **argv)
     */
 
     /* disabled by default: uncomment the line below to enable access logging */
-    /* h2o_register_access_logger(&config.default_host, "/dev/stdout", NULL); */
+    /* h2o_access_log_register(&config.default_host, "/dev/stdout", NULL); */
 
     if (create_listener() != 0) {
         fprintf(stderr, "failed to listen to 127.0.0.1:7890:%s\n", strerror(errno));
