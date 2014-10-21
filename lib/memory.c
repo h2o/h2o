@@ -134,25 +134,27 @@ void h2o_mempool_link_shared(h2o_mempool_t *pool, void *p)
 
 const h2o_input_buffer_t h2o__null_input_buffer = {};
 
-h2o_buf_t h2o_reserve_input_buffer(h2o_input_buffer_t **_inbuf, size_t initial_size)
+h2o_buf_t h2o_reserve_input_buffer(h2o_input_buffer_t **_inbuf, size_t min_guarantee)
 {
     h2o_input_buffer_t *inbuf = *_inbuf;
     h2o_buf_t ret;
 
     if (inbuf == &h2o__null_input_buffer) {
-        inbuf = h2o_malloc(offsetof(h2o_input_buffer_t, _buf) + initial_size);
+        inbuf = h2o_malloc(offsetof(h2o_input_buffer_t, _buf) + min_guarantee * 2);
         *_inbuf = inbuf;
         inbuf->size = 0;
         inbuf->bytes = inbuf->_buf;
-        inbuf->_capacity = initial_size;
+        inbuf->_capacity = min_guarantee * 2;
     } else {
         if (inbuf->bytes != inbuf->_buf) {
             assert(inbuf->size != 0);
             memmove(inbuf->_buf, inbuf->bytes, inbuf->size);
             inbuf->bytes = inbuf->_buf;
         }
-        if (inbuf->size == inbuf->_capacity) {
-            inbuf->_capacity *= 2;
+        if (inbuf->_capacity - inbuf->size < min_guarantee) {
+            do {
+                inbuf->_capacity *= 2;
+            } while (inbuf->_capacity - inbuf->size < min_guarantee);
             inbuf = h2o_realloc(inbuf, offsetof(h2o_input_buffer_t, _buf) + inbuf->_capacity);
             inbuf->bytes = inbuf->_buf;
             *_inbuf = inbuf;

@@ -135,7 +135,7 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     do_proceed(&self->super, req);
 }
 
-int h2o_send_file(h2o_req_t *req, int status, const char *reason, const char *path, h2o_buf_t mime_type)
+int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *path, h2o_buf_t mime_type)
 {
     struct st_h2o_sendfile_generator_t *self;
 
@@ -248,7 +248,7 @@ static h2o_buf_t append_slash_and_dup(const char *path)
     return h2o_buf_init(buf, path_len);
 }
 
-void h2o_register_file_handler(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char *index_file)
+void h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char *index_file)
 {
     struct st_h2o_file_handler_t *self = h2o_malloc(sizeof(*self));
 

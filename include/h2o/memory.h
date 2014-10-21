@@ -148,10 +148,11 @@ static void h2o_dispose_input_buffer(h2o_input_buffer_t **buffer);
 /**
  * allocates a input buffer.
  * @param inbuf - pointer to a pointer pointing to the structure (set *inbuf to NULL to allocate a new buffer)
- * @param initial_size an advisory value for the initial size of the input buffer
+ * @param min_guarantee minimum number of bytes to reserve
  * @return buffer to which the next data should be stored
+ * @note When called against a new input buffer, the function returns a buffer twice the size of requested guarantee.  The function uses expotential backoff for already-allocated input buffers.
  */
-h2o_buf_t h2o_reserve_input_buffer(h2o_input_buffer_t **inbuf, size_t initial_size);
+h2o_buf_t h2o_reserve_input_buffer(h2o_input_buffer_t **inbuf, size_t min_guarantee);
 /**
  * throws away given size of the data from the buffer.
  * @param delta number of octets to be drained from the buffer

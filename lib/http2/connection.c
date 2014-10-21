@@ -321,11 +321,8 @@ static void handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
         h2o_http2_stream_reset(conn, stream, H2O_HTTP2_ERROR_NONE);
         stream = NULL;
     } else {
-        /* FIXME should be a single invocation to the allocation call */
-        while (stream->_req_body->_capacity - stream->_req_body->size < payload.length) {
-            h2o_reserve_input_buffer(&stream->_req_body, 8192);
-        }
-        memcpy(stream->_req_body->bytes + stream->_req_body->size, payload.data, payload.length);
+        h2o_buf_t buf = h2o_reserve_input_buffer(&stream->_req_body, payload.length);
+        memcpy(buf.base, payload.data, payload.length);
         stream->_req_body->size += payload.length;
         /* handle request if request body is complete */
         if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0) {
