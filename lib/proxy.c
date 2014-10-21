@@ -96,6 +96,12 @@ static void close_generator(struct rp_generator_t *self, int cancel_client)
     h2o_dispose_input_buffer(&self->content_buf);
 }
 
+static void close_and_send_error(struct rp_generator_t *self, int cancel_client, const char *errstr)
+{
+    close_generator(self, cancel_client);
+    h2o_send_error(self->src_req, 502, "Gateway Error", errstr);
+}
+
 static void do_close(h2o_generator_t *generator, h2o_req_t *req)
 {
     struct rp_generator_t *self = (void*)generator;
@@ -111,8 +117,8 @@ static void do_send(struct rp_generator_t *self)
         self->bytes_sending = self->content_buf->size;
         h2o_send(self->src_req, &buf, 1, 0);
     } else if (self->client == NULL) {
-        h2o_send(self->src_req, NULL, 0, 1);
         close_generator(self, 0);
+        h2o_send(self->src_req, NULL, 0, 1);
     }
 }
 
@@ -138,6 +144,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr, h2o_buf_t *buf
         for (i = 0; i != bufcnt; ++i)
             len += bufs[i].len;
         content_buf = h2o_reserve_input_buffer(&self->content_buf, len);
+        self->content_buf->size += len;
         for (i = 0; i != bufcnt; ++i) {
             memcpy(content_buf.base, bufs[i].base, bufs[i].len);
             content_buf.base += bufs[i].len;
@@ -147,6 +154,8 @@ static int on_body(h2o_http1client_t *client, const char *errstr, h2o_buf_t *buf
     if (self->bytes_sending == 0)
         do_send(self);
 
+    if (errstr != NULL)
+        self->client = NULL;
     return 0;
 }
 
@@ -156,8 +165,8 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     size_t i;
 
     if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
-        h2o_send_error(self->src_req, 502, "Gateway Error", errstr);
-        goto ErrExit;
+        close_and_send_error(self, 0, errstr);
+        return NULL;
     }
 
     /* copy the response */
@@ -172,8 +181,8 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
         } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
             if (self->src_req->res.content_length != SIZE_MAX
                 || (self->src_req->res.content_length = h2o_strtosize(headers[i].value, headers[i].value_len)) == SIZE_MAX) {
-                h2o_send_error(self->src_req, 502, "Gateway Error", "invalid response from upstream");
-                goto ErrExit;
+                close_and_send_error(self, 0, "invalid response from upstream");
+                return NULL;
             }
         } else {
             h2o_buf_t value = h2o_strdup(&self->src_req->pool, headers[i].value, headers[i].value_len);
@@ -190,16 +199,12 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     h2o_start_response(self->src_req, &self->super);
 
     if (errstr == h2o_http1client_error_is_eos) {
-        h2o_send(self->src_req, NULL, 0, 1);
         close_generator(self, 0);
+        h2o_send(self->src_req, NULL, 0, 1);
         return NULL;
     }
 
     return on_body;
-
-ErrExit:
-    close_generator(self, 0);
-    return NULL;
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_buf_t **reqbufs, size_t *reqbufcnt, int *method_is_head)
@@ -207,8 +212,8 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     struct rp_generator_t *self = client->data;
 
     if (errstr != NULL) {
-        h2o_send_error(self->src_req, 502, "Gateway Error", errstr);
         close_generator(self, 0);
+        h2o_send_error(self->src_req, 502, "Gateway Error", errstr);
         return NULL;
     }
 
@@ -238,16 +243,38 @@ int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_buf_t 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     struct rp_handler_t *self = (void*)_self;
+    h2o_http1client_ctx_t *client_ctx;
 
     /* prefix match */
     if (! (self->virtual_path.len <= req->path.len && memcmp(self->virtual_path.base, req->path.base, self->virtual_path.len) == 0)) {
         return -1;
     }
 
-    return h2o_proxy_send(req, NULL, self->upstream.host, self->upstream.port, self->virtual_path.len, self->upstream.path);
+    client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
+    return h2o_proxy_send(req, client_ctx, self->upstream.host, self->upstream.port, self->virtual_path.len, self->upstream.path);
 }
 
-static void on_destroy(h2o_handler_t *_self)
+static void *on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
+{
+    h2o_http1client_ctx_t *client_ctx = h2o_malloc(sizeof(*ctx) + sizeof(*client_ctx->io_timeout));
+
+    client_ctx->loop = ctx->loop;
+    client_ctx->zero_timeout = &ctx->zero_timeout;
+    client_ctx->io_timeout = (void*)(client_ctx + 1);
+    h2o_timeout_init(client_ctx->loop, client_ctx->io_timeout, 5000); /* TODO add a way to configure the variable */
+
+    return client_ctx;
+}
+
+static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
+{
+    struct rp_handler_t *self = (void*)_self;
+    h2o_http1client_ctx_t *client_ctx = h2o_context_get_handler_context(ctx, &self->super);
+
+    free(client_ctx);
+}
+
+static void on_dispose(h2o_handler_t *_self)
 {
     struct rp_handler_t *self = (void*)_self;
 
@@ -260,18 +287,15 @@ static void on_destroy(h2o_handler_t *_self)
 
 void h2o_proxy_register_reverse_proxy(h2o_hostconf_t *host_config, const char *virtual_path, const char *host, uint16_t port, const char *real_path)
 {
-    struct rp_handler_t *self = h2o_malloc(sizeof(*self));
-
-    memset(self, 0, sizeof(*self));
-    self->super.destroy = on_destroy;
+    struct rp_handler_t *self = (void*)h2o_create_handler(host_config, sizeof(*self));
+    self->super.on_context_init = on_context_init;
+    self->super.on_context_dispose = on_context_dispose;
+    self->super.dispose = on_dispose;
     self->super.on_req = on_req;
-
     self->virtual_path = h2o_strdup(NULL, virtual_path, SIZE_MAX);
     self->upstream.host = h2o_strdup(NULL, host, SIZE_MAX);
     self->upstream.port = port;
     self->upstream.path = h2o_strdup(NULL, real_path, SIZE_MAX);
-
-    h2o_linklist_insert(&host_config->handlers, &self->super._link);
 }
 
 static int on_config(h2o_configurator_t *configurator, void *_config, const char *file, yoml_t *node)

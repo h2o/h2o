@@ -50,6 +50,7 @@ SET(LIB_SOURCE_FILES
     lib/http2/stream.c
     lib/memory.c
     lib/mimemap.c
+    lib/proxy.c
     lib/request.c
     lib/rproxy.c
     lib/socket.c
