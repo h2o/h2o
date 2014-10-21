@@ -108,7 +108,7 @@ static int on_read_core(int fd, h2o_input_buffer_t** input)
     int read_any = 0;
 
     while (1) {
-        h2o_buf_t buf = h2o_reserve_input_buffer(input, 8192);
+        h2o_buf_t buf = h2o_reserve_input_buffer(input, 4096);
         ssize_t rret;
         while ((rret = read(fd, buf.base, buf.len)) == -1 && errno == EINTR)
             ;

@@ -151,7 +151,7 @@ int decode_ssl_input(h2o_socket_t *sock)
     assert(sock->ssl->handshake.cb == NULL);
 
     while (sock->ssl->input.encrypted->size != 0) {
-        h2o_buf_t buf = h2o_reserve_input_buffer(&sock->input, 8192);
+        h2o_buf_t buf = h2o_reserve_input_buffer(&sock->input, 4096);
         int rlen = SSL_read(sock->ssl->ssl, buf.base, (int)buf.len);
         if (rlen == -1) {
             if (SSL_get_error(sock->ssl->ssl, rlen) != SSL_ERROR_WANT_READ) {
