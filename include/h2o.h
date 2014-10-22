@@ -713,7 +713,7 @@ int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_buf_t 
 /**
  * registers the reverse proxy handler to the context
  */
-void h2o_proxy_register_reverse_proxy(h2o_hostconf_t *host_config, const char *virtual_path, const char *host, uint16_t port, const char *real_path);
+void h2o_proxy_register_reverse_proxy(h2o_hostconf_t *host_config, const char *virtual_path, const char *host, uint16_t port, const char *real_path, uint64_t io_timeout);
 /**
  * 
  */
