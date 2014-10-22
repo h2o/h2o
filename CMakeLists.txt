@@ -43,12 +43,14 @@ SET(LIB_SOURCE_FILES
     lib/file.c
     lib/headers.c
     lib/http1.c
+    lib/http1client.c
     lib/http2/connection.c
     lib/http2/frame.c
     lib/http2/hpack.c
     lib/http2/stream.c
     lib/memory.c
     lib/mimemap.c
+    lib/proxy.c
     lib/request.c
     lib/rproxy.c
     lib/socket.c
@@ -62,6 +64,12 @@ SET(EXTRA_LIBRARIES dl)
 ADD_LIBRARY(libh2o STATIC ${LIB_SOURCE_FILES})
 SET_TARGET_PROPERTIES(libh2o PROPERTIES OUTPUT_NAME h2o)
 SET_TARGET_PROPERTIES(libh2o PROPERTIES EXCLUDE_FROM_ALL 1)
+
+ADD_EXECUTABLE(examples-http1client examples/http1client.c)
+SET_TARGET_PROPERTIES(examples-http1client PROPERTIES
+    OUTPUT_NAME examples/http1client
+    EXCLUDE_FROM_ALL 1)
+TARGET_LINK_LIBRARIES(examples-http1client libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${EXTRA_LIBRARIES})
 
 ADD_EXECUTABLE(examples-socket-client examples/socket-client.c)
 SET_TARGET_PROPERTIES(examples-socket-client PROPERTIES
@@ -90,19 +98,19 @@ TARGET_LINK_LIBRARIES(h2o ${OPENSSL_LIBRARIES} ${LIBYAML_LIBRARIES} pthread ${EX
 ADD_EXECUTABLE(unittest_evloop ${LIB_SOURCE_FILES} deps/picotest/picotest.c lib/t/test.c)
 SET_TARGET_PROPERTIES(unittest_evloop PROPERTIES
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_UNITTEST=1"
-    OUTPUT_NAME t/000unittest_evloop.t
+    OUTPUT_NAME t/00unit/evloop.t
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(unittest_evloop ${OPENSSL_LIBRARIES} ${LIBYAML_LIBRARIES} pthread ${EXTRA_LIBRARIES})
 ADD_EXECUTABLE(unittest_libuv ${LIB_SOURCE_FILES} deps/picotest/picotest.c lib/t/test.c)
 SET_TARGET_PROPERTIES(unittest_libuv PROPERTIES
     COMPILE_FLAGS "-DH2O_UNITTEST=1"
-    OUTPUT_NAME t/000unittest_libuv.t
+    OUTPUT_NAME t/00unit/libuv.t
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(unittest_libuv ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${LIBYAML_LIBRARIES} pthread ${EXTRA_LIBRARIES})
 
-ADD_CUSTOM_TARGET(test prove -vr DEPENDS h2o unittest_evloop)
+ADD_CUSTOM_TARGET(test prove -v t/*/*.t DEPENDS h2o unittest_evloop)
 IF (LIBUV_FOUND)
-    ADD_DEPENDENCIES(test unittest_libuv examples-simple examples-socket-client)
+    ADD_DEPENDENCIES(test unittest_libuv examples-http1client examples-simple examples-socket-client)
     IF (WSLAY_FOUND)
         ADD_DEPENDENCIES(test examples-websocket)
     ENDIF (WSLAY_FOUND)

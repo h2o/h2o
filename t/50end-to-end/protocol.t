@@ -24,10 +24,10 @@ listen: $port
 listen:
   port: $tls_port
   ssl:
-    key-file: t/protocol/server.key
-    certificate-file: t/protocol/server.crt
+    key-file: t/50end-to-end/protocol/server.key
+    certificate-file: t/50end-to-end/protocol/server.crt
 files:
-  /: t/protocol/docroot
+  /: t/50end-to-end/protocol/docroot
 mime-types:
   txt: text/plain
   jpg: image/jpeg
@@ -88,7 +88,7 @@ done_testing;
 
 sub md5_file {
     my $fn = shift;
-    $fn = "t/protocol/docroot/$fn";
+    $fn = "t/50end-to-end/protocol/docroot/$fn";
     open my $fh, "<", $fn
         or die "failed to open file:$fn:$!";
     local $/;

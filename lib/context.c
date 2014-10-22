@@ -24,19 +24,74 @@
 #include <sys/time.h>
 #include "h2o.h"
 
+static void on_context_init(h2o_context_t *ctx, h2o_hostconf_t *hostconf)
+{
+#define DOIT(type, list) \
+    do { \
+        h2o_linklist_t *n; \
+        for (n = hostconf->list.next; n != &hostconf->list; n = n->next) { \
+            type *o = H2O_STRUCT_FROM_MEMBER(type, _link, n); \
+            if (o->on_context_init != NULL) \
+                ctx->_module_configs[o->_config_slot] = o->on_context_init(o, ctx); \
+        } \
+    } while (0)
+
+    DOIT(h2o_handler_t, handlers);
+    DOIT(h2o_filter_t, filters);
+    DOIT(h2o_logger_t, loggers);
+
+#undef DOIT
+}
+
+static void on_context_dispose(h2o_context_t *ctx, h2o_hostconf_t *hostconf)
+{
+#define DOIT(type, list) \
+    do { \
+        h2o_linklist_t *n; \
+        for (n = hostconf->list.next; n != &hostconf->list; n = n->next) { \
+            type *o = H2O_STRUCT_FROM_MEMBER(type, _link, n); \
+            if (o->on_context_dispose != NULL) \
+                o->on_context_dispose(o, ctx); \
+        } \
+    } while (0)
+
+    DOIT(h2o_handler_t, handlers);
+    DOIT(h2o_filter_t, filters);
+    DOIT(h2o_logger_t, loggers);
+
+#undef DOIT
+}
+
 void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *config)
 {
+    h2o_linklist_t *n;
+
     memset(ctx, 0, sizeof(*ctx));
     ctx->loop = loop;
     ctx->global_config = config;
     h2o_timeout_init(ctx->loop, &ctx->zero_timeout, 0);
     h2o_timeout_init(ctx->loop, &ctx->req_timeout, config->req_timeout);
 
-    h2o_config_on_context_create(config, ctx);
+    ctx->_module_configs = h2o_malloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
+    memset(ctx->_module_configs, 0, sizeof(*ctx->_module_configs) * config->_num_config_slots);
+    for (n = config->virtual_hosts.next; n != &config->virtual_hosts; n = n->next) {
+        h2o_hostconf_t *hostconf = H2O_STRUCT_FROM_MEMBER(h2o_hostconf_t, _link, n);
+        on_context_init(ctx, hostconf);
+    }
+    on_context_init(ctx, &config->default_host);
 }
 
 void h2o_context_dispose(h2o_context_t *ctx)
 {
+    h2o_globalconf_t *config = ctx->global_config;
+    h2o_linklist_t *n;
+
+    for (n = config->virtual_hosts.next; n != &config->virtual_hosts; n = n->next) {
+        h2o_hostconf_t *hostconf = H2O_STRUCT_FROM_MEMBER(h2o_hostconf_t, _link, n);
+        on_context_dispose(ctx, hostconf);
+    }
+    on_context_dispose(ctx, &config->default_host);
+    free(ctx->_module_configs);
 }
 
 void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts)

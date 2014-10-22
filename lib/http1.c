@@ -30,7 +30,7 @@
 
 struct st_h2o_http1_req_entity_reader {
     int (*handle_incoming_entity)(h2o_http1_conn_t *conn);
-    size_t entity_offset;
+    size_t content_length;
 };
 
 static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, size_t inbufcnt, int is_final);
@@ -94,10 +94,9 @@ static int handle_content_length_entity_read(h2o_http1_conn_t *conn)
         return -2;
 
     /* all input has arrived */
-    h2o_vector_reserve(&conn->req.pool, (h2o_vector_t*)&conn->req.entity, sizeof(h2o_buf_t), 1);
-    conn->req.entity.entries[0].base = conn->sock->input->bytes + conn->_req_entity_reader->entity_offset;
-    conn->req.entity.entries[0].len = conn->_reqsize - conn->_req_entity_reader->entity_offset;
-    conn->req.entity.size = 1;
+    conn->req.entity = h2o_buf_init(
+        conn->sock->input->bytes + conn->_reqsize - conn->_req_entity_reader->content_length,
+        conn->_req_entity_reader->content_length);
     free(conn->_req_entity_reader);
     conn->_req_entity_reader = NULL;
     set_timeout(conn, NULL, NULL);
@@ -113,7 +112,7 @@ static int create_content_length_entity_reader(h2o_http1_conn_t *conn, size_t co
     conn->_req_entity_reader = reader;
 
     reader->handle_incoming_entity = handle_content_length_entity_read;
-    reader->entity_offset = conn->_reqsize;
+    reader->content_length = content_length;
     conn->_reqsize += content_length;
 
     return 0;
@@ -128,9 +127,8 @@ static int create_entity_reader(h2o_http1_conn_t *conn, const struct phr_header 
         }
     } else {
         /* content-length */
-        char *endptr;
-        intmax_t content_length = strtoimax(h2o_strdup(&conn->req.pool, entity_header->value, entity_header->value_len).base, &endptr, 10);
-        if (*endptr == '\0' && content_length != INTMAX_MAX && 0 <= content_length && content_length <= conn->super.ctx->global_config->max_request_entity_size) {
+        size_t content_length = h2o_strtosize(entity_header->value, entity_header->value_len);
+        if (content_length != SIZE_MAX && content_length <= conn->super.ctx->global_config->max_request_entity_size) {
             return create_content_length_entity_reader(conn, (size_t)content_length);
         }
     }

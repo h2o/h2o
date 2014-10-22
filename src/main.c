@@ -513,9 +513,9 @@ int main(int argc, char **argv)
         1, /* num_threads */
         NULL, /* thread_ids */
         {}, /* state */
-        { {}, "listen", listen_configurator_desc, NULL, on_config_listen, on_config_listen_complete, NULL },
-        { {}, "max-connections", max_connections_configurator_desc, NULL, on_config_max_connections, NULL, NULL },
-        { {}, "num-threads", num_threads_configurator_desc, NULL, on_config_num_threads, NULL, NULL }
+        { {}, "listen", listen_configurator_desc, NULL, on_config_listen, on_config_listen_complete },
+        { {}, "max-connections", max_connections_configurator_desc, NULL, on_config_max_connections },
+        { {}, "num-threads", num_threads_configurator_desc, NULL, on_config_num_threads }
     };
 
     const char *config_file = "h2o.conf";
@@ -527,6 +527,7 @@ int main(int argc, char **argv)
     h2o_linklist_insert(&config.global_config.global_configurators, &config.max_connections_configurator._link);
     h2o_linklist_insert(&config.global_config.global_configurators, &config.num_threads_configurator._link);
     h2o_access_log_register_configurator(&config.global_config.host_configurators);
+    h2o_proxy_register_reverse_proxy_configurator(&config.global_config.host_configurators);
 
     /* parse options */
     while ((opt_ch = getopt_long(argc, argv, "c:h", longopts, NULL)) != -1) {

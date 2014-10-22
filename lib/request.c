@@ -118,6 +118,9 @@ void h2o_process_request(h2o_req_t *req)
                 break;
             }
         }
+    } else {
+        /* set the authority name to the default one */
+        req->authority = req->host_config->hostname;
     }
 
     /* call any of the handlers */

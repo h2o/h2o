@@ -23,6 +23,8 @@
 #define h2o__string_h
 
 #include <stddef.h>
+#include <stdint.h>
+#include <time.h>
 #include "h2o/memory.h"
 
 #define H2O_TO__STR(n) #n
@@ -50,13 +52,17 @@ static int h2o_tolower(int ch);
  */
 static int h2o_lcstris(const char *target, size_t target_len, const char *test, size_t test_len);
 /**
+ * parses a positive number of return SIZE_MAX if failed
+ */
+size_t h2o_strtosize(const char *s, size_t len);
+/**
  * base64 url decoder
  */
 h2o_buf_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len);
 /**
  * base64 encoder
  */
-void h2o_base64_encode(char *dst, const uint8_t *src, size_t len, int url_encoded);
+void h2o_base64_encode(char *dst, const void *src, size_t len, int url_encoded);
 /**
  * builds a RFC-1123 style date string
  */
@@ -85,6 +91,10 @@ int h2o_contains_token(const char *haysack, size_t haysack_len, const char *need
  * @return buffer pointing to source, or buffer pointing to an allocated chunk with normalized representation of the given path
  */
 h2o_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len);
+/**
+ * parses absolute URL (either http or https)
+ */
+int h2o_parse_url(h2o_mempool_t *pool, const char *url, char **scheme, char **host, uint16_t *port, char **path);
 
 int h2o__lcstris_core(const char *target, const char *test, size_t test_len);
 
