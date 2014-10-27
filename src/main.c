@@ -535,7 +535,7 @@ int main(int argc, char **argv)
     }
 
     h2o_access_log_register_configurator(&config.global_config);
-    h2o_proxy_register_reverse_proxy_configurator(&config.global_config);
+    h2o_proxy_register_configurator(&config.global_config);
 
     /* parse options */
     while ((opt_ch = getopt_long(argc, argv, "c:h", longopts, NULL)) != -1) {

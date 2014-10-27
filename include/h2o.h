@@ -759,7 +759,7 @@ void h2o_proxy_register_reverse_proxy(h2o_hostconf_t *host_config, const char *v
 /**
  * 
  */
-void h2o_proxy_register_reverse_proxy_configurator(h2o_globalconf_t *conf);
+void h2o_proxy_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/rproxy.c */
 
