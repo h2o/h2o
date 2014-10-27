@@ -21,6 +21,7 @@
  */
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "h2o.h"
 
 static void destroy_configurator(h2o_configurator_t *configurator)
@@ -99,25 +100,43 @@ static int apply_commands(h2o_configurator_context_t *ctx, const char *file, yom
     return 0;
 }
 
+static int sort_from_longer_paths(const yoml_mapping_element_t *x, const yoml_mapping_element_t *y)
+{
+    size_t xlen = strlen(x->key->data.scalar),
+        ylen = strlen(y->key->data.scalar);
+    if (xlen < ylen)
+        return 1;
+    else if (xlen > ylen)
+        return -1;
+    /* apply strcmp for stable sort */
+    return strcmp(x->key->data.scalar, y->key->data.scalar);
+}
+
 static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
     size_t i;
 
+    /* check types */
     if (node->type != YOML_TYPE_MAPPING) {
         h2o_config_print_error(cmd, file, node, "argument must be a mapping");
         return -1;
     }
+    for (i = 0; i != node->data.mapping.size; ++i) {
+        yoml_t *key = node->data.mapping.elements[i].key;
+        if (key->type != YOML_TYPE_SCALAR) {
+            h2o_config_print_error(cmd, file, key, "key (representing the virtual path) must be a string");
+            return -1;
+        }
+    }
+
+    /* sort by the length of the path (descending) */
+    qsort(node->data.mapping.elements, node->data.mapping.size, sizeof(node->data.mapping.elements[0]), (void*)sort_from_longer_paths);
 
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key;
         yoml_t *value = node->data.mapping.elements[i].value;
         h2o_buf_t path;
         size_t num_handlers_before_config;
-        /* assertions */
-        if (key->type != YOML_TYPE_SCALAR) {
-            h2o_config_print_error(cmd, file, key, "key (representing the virtual path) must be a string");
-            return -1;
-        }
         /* setup */
         num_handlers_before_config = ctx->hostconf->handlers.size;
         /* apply the configuration directives */
