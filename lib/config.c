@@ -72,6 +72,7 @@ static int apply_commands(h2o_configurator_context_t *ctx, int flags_mask, const
         yoml_t *key = node->data.mapping.elements[i].key,
             *value = node->data.mapping.elements[i].value;
         h2o_configurator_command_t *cmd;
+        /* obtain the target command */
         if (key->type != YOML_TYPE_SCALAR) {
             h2o_config_print_error(NULL, file, key, "command must be a string");
             return -1;
@@ -84,6 +85,33 @@ static int apply_commands(h2o_configurator_context_t *ctx, int flags_mask, const
             h2o_config_print_error(cmd, file, key, "the command cannot be used at this level");
             return -1;
         }
+        /* check value type */
+        if ((cmd->flags & (H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING)) != 0) {
+            switch (value->type) {
+            case YOML_TYPE_SCALAR:
+                if ((cmd->flags & H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR) == 0) {
+                    h2o_config_print_error(cmd, file, value, "argument cannot be a scalar");
+                    return -1;
+                }
+                break;
+            case YOML_TYPE_SEQUENCE:
+                if ((cmd->flags & H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE) == 0) {
+                    h2o_config_print_error(cmd, file, value, "argument cannot be a sequence");
+                    return -1;
+                }
+                break;
+            case YOML_TYPE_MAPPING:
+                if ((cmd->flags & H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING) == 0) {
+                    h2o_config_print_error(cmd, file, value, "argument cannot be a mapping");
+                    return -1;
+                }
+                break;
+            default:
+                assert(!"unreachable");
+                break;
+            }
+        }
+        /* handle the command (or keep it for later execution) */
         if ((cmd->flags & H2O_CONFIGURATOR_FLAG_DEFERRED) != 0) {
             deferred[num_deferred].cmd = cmd;
             deferred[num_deferred].value = value;
@@ -121,10 +149,6 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
     size_t i;
 
     /* check types */
-    if (node->type != YOML_TYPE_MAPPING) {
-        h2o_config_print_error(cmd, file, node, "argument must be a mapping");
-        return -1;
-    }
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key;
         if (key->type != YOML_TYPE_SCALAR) {
@@ -161,10 +185,6 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
 
 static int on_config_directory(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
-    if (node->type != YOML_TYPE_SCALAR) {
-        h2o_config_print_error(cmd, file, node, "argument must be a string");
-        return -1;
-    }
     h2o_file_register(ctx->hostconf, ctx->path->base, node->data.scalar, "index.html" /* FIXME */);
     return 0;
 }
@@ -172,11 +192,6 @@ static int on_config_directory(h2o_configurator_command_t *cmd, h2o_configurator
 static int on_config_mime_types(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
     size_t i;
-
-    if (node->type != YOML_TYPE_MAPPING) {
-        h2o_config_print_error(cmd, file, node, "argument must be a mapping");
-        return -1;
-    }
 
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key;
@@ -198,11 +213,6 @@ static int on_config_mime_types(h2o_configurator_command_t *cmd, h2o_configurato
 static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
     size_t i;
-
-    if (node->type != YOML_TYPE_MAPPING) {
-        h2o_config_print_error(cmd, file, node, "argument must be a mapping");
-        return -1;
-    }
 
     if (node->data.mapping.size == 0) {
         h2o_config_print_error(cmd, file, node, "the mapping cannot be empty");
@@ -265,15 +275,17 @@ static void init_core_configurators(h2o_globalconf_t *conf)
         h2o_configurator_t *c = h2o_config_create_configurator(conf, sizeof(*c));
         h2o_config_define_command(
             c, "paths",
-            H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_DEFERRED,
+            H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING | H2O_CONFIGURATOR_FLAG_DEFERRED,
             on_config_paths,
             "map of URL-path -> configuration");
         h2o_config_define_command(
-            c, "directory", H2O_CONFIGURATOR_FLAG_PATH,
+            c, "directory",
+            H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
             on_config_directory,
             "directory under which to serve the target path");
         h2o_config_define_command(
-            c, "mime-types", H2O_CONFIGURATOR_FLAG_HOST,
+            c, "mime-types",
+            H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
             on_config_mime_types,
             "map of extension -> mime-type");
     };
@@ -282,25 +294,29 @@ static void init_core_configurators(h2o_globalconf_t *conf)
         h2o_configurator_t *c = h2o_config_create_configurator(conf, sizeof(*c));
         h2o_config_define_command(
             c, "hosts",
-            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_DEFERRED,
+            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING | H2O_CONFIGURATOR_FLAG_DEFERRED,
             on_config_hosts,
             "map of hostname -> map of per-host configs");
         h2o_config_define_command(
-            c, "request-timeout", H2O_CONFIGURATOR_FLAG_GLOBAL,
+            c, "request-timeout",
+            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
             on_config_request_timeout,
             "timeout for incoming requests in seconds (default: " H2O_TO_STR(H2O_DEFAULT_REQ_TIMEOUT) ")");
         h2o_config_define_command(
-            c, "limit-request-body", H2O_CONFIGURATOR_FLAG_GLOBAL,
+            c, "limit-request-body",
+            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
             on_config_limit_request_body,
             "maximum size of request body in bytes (e.g. content of POST)",
             "(default: unlimited)");
         h2o_config_define_command(
-            c, "http1-upgrade-to-http2", H2O_CONFIGURATOR_FLAG_GLOBAL,
+            c, "http1-upgrade-to-http2",
+            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
             on_config_http1_upgrade_to_http2,
             "boolean flag (ON/OFF) indicating whether or not to allow upgrade to HTTP/2",
             "(default: ON)");
         h2o_config_define_command(
-            c, "http2-max-concurrent-requests-per-connection", H2O_CONFIGURATOR_FLAG_GLOBAL,
+            c, "http2-max-concurrent-requests-per-connection",
+            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
             on_config_http2_max_concurrent_requests_per_connection,
             "max. number of requests to be handled concurrently within a single HTTP/2",
             "stream (default: 16)");

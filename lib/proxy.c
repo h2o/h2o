@@ -327,11 +327,6 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
 
     h2o_mempool_init(&pool);
 
-    if (node->type != YOML_TYPE_SCALAR) {
-        h2o_config_print_error(cmd, file, node, "argument is not a scalar");
-        goto ErrExit;
-    }
-
     if (h2o_parse_url(&pool, node->data.scalar, &scheme, &host, &port, &path) != 0) {
         h2o_config_print_error(cmd, file, node, "failed to parse URL: %s\n", node->data.scalar);
         goto ErrExit;
@@ -380,11 +375,11 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->super.enter = on_config_enter;
     c->super.exit = on_config_exit;
     h2o_config_define_command(&c->super, "proxy.reverse.url",
-        H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED,
+        H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_DEFERRED,
         on_config_reverse_url,
         "map of virtual-path -> http://upstream_host:port/path");
     h2o_config_define_command(&c->super, "proxy.timeout.io",
-        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH,
+        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
         on_config_timeout_io,
         "sets upstreamI/O timeout (in milliseconds, default: 5000)");
 }
