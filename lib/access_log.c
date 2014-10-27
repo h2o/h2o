@@ -344,8 +344,9 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
 
 void h2o_access_log_register_configurator(h2o_globalconf_t *conf)
 {
-    h2o_configurator_t *c = h2o_config_create_configurator(conf, sizeof(*c), H2O_CONFIGURATOR_FLAG_HOST);
-    h2o_config_define_command(c, "access-log", on_config,
+    h2o_configurator_t *c = h2o_config_create_configurator(conf, sizeof(*c));
+    h2o_config_define_command(c, "access-log", H2O_CONFIGURATOR_FLAG_HOST,
+        on_config,
         "path (and optionally the format) of the access log (default: none)",
         " - if the value is a scalar, it is treated as the path of the log file",
         " - if the value is a mapping, its `path` property is treated as the path",

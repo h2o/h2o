@@ -260,6 +260,10 @@ static int on_config_listen_exit(h2o_configurator_t *configurator, h2o_configura
 #endif
     size_t i;
 
+    /* only handle global-level exit */
+    if (ctx->hostconf != NULL)
+        return 0;
+
     if (conf->num_listeners == 0) {
         fprintf(stderr, "mandatory configuration directive `port` is missing\n");
         return -1;
@@ -304,9 +308,9 @@ static void usage_print_directives(h2o_globalconf_t *conf, int flags_mask)
 
     for (node = conf->configurators.next; node != &conf->configurators; node = node->next) {
         h2o_configurator_t *configurator = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, node);
-        if ((configurator->flags & flags_mask) != 0) {
-            for (i = 0; i != configurator->commands.size; ++i) {
-                h2o_configurator_command_t *cmd = configurator->commands.entries + i;
+        for (i = 0; i != configurator->commands.size; ++i) {
+            h2o_configurator_command_t *cmd = configurator->commands.entries + i;
+            if ((cmd->flags & flags_mask) != 0) {
                 const char **desc;
                 printf("    %s:\n", cmd->name);
                 for (desc = cmd->description; *desc != NULL; ++desc)
@@ -506,10 +510,11 @@ int main(int argc, char **argv)
     config.global_config.close_cb = on_close;
 
     {
-        h2o_configurator_t *c = h2o_config_create_configurator(&config.global_config, sizeof(*c), H2O_CONFIGURATOR_FLAG_GLOBAL);
+        h2o_configurator_t *c = h2o_config_create_configurator(&config.global_config, sizeof(*c));
         c->exit = on_config_listen_exit;
         h2o_config_define_command(
-            c, "listen", on_config_listen,
+            c, "listen", H2O_CONFIGURATOR_FLAG_GLOBAL,
+            on_config_listen,
             "port at which the server should listen for incoming requests (mandatory)",
             " - if the value is a scalar, it is treated as the port number (or as the",
             "   service name)",
@@ -520,10 +525,12 @@ int main(int argc, char **argv)
             "       certificate-file: path of the certificate file",
             "       key-file:         path of the key file");
         h2o_config_define_command(
-            c, "max-connections", on_config_max_connections,
+            c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL,
+            on_config_max_connections,
             "max connections (default: 1024)");
         h2o_config_define_command(
-            c, "num-threads", on_config_num_threads,
+            c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
+            on_config_num_threads,
             "number of worker threads (default: 1)");
     }
 

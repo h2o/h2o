@@ -144,12 +144,14 @@ typedef struct st_h2o_timestamp_t {
 
 enum {
     H2O_CONFIGURATOR_FLAG_GLOBAL = 0x1,
-    H2O_CONFIGURATOR_FLAG_HOST = 0x2
+    H2O_CONFIGURATOR_FLAG_HOST = 0x2,
+    H2O_CONFIGURATOR_FLAG_PATH = 0x4
 };
 
 typedef struct h2o_configurator_context_t {
     h2o_globalconf_t *globalconf;
     h2o_hostconf_t *hostconf;
+    h2o_buf_t *path;
 } h2o_configurator_context_t;
 
 typedef int (*h2o_configurator_dispose_cb)(h2o_configurator_t *configurator);
@@ -167,6 +169,10 @@ struct st_h2o_configurator_command_t {
      */
     const char *name;
     /**
+     * flags
+     */
+    int flags;
+    /**
      * mandatory callcack called to handle the command
      */
     h2o_configurator_command_cb cb;
@@ -181,10 +187,6 @@ struct st_h2o_configurator_command_t {
  */
 struct st_h2o_configurator_t {
     h2o_linklist_t _link;
-    /**
-     * flags
-     */
-    int flags;
     /**
      * optional callback called when the global config is being disposed
      */
@@ -611,16 +613,16 @@ void h2o_config_dispose(h2o_globalconf_t *config);
 /**
  * registers a configurator
  */
-h2o_configurator_t *h2o_config_create_configurator(h2o_globalconf_t *conf, size_t sz, int flags);
+h2o_configurator_t *h2o_config_create_configurator(h2o_globalconf_t *conf, size_t sz);
 /**
  *
  */
-#define h2o_config_define_command(configurator, name, cb, ...) \
+#define h2o_config_define_command(configurator, name, flags, cb, ...) \
     do { \
         static const char *desc[] = { __VA_ARGS__, NULL }; \
-        h2o_config__define_command(configurator, name, cb, desc); \
+        h2o_config__define_command(configurator, name, flags, cb, desc); \
     } while (0)
-void h2o_config__define_command(h2o_configurator_t *configurator, const char *name, h2o_configurator_command_cb cb, const char **desc);
+void h2o_config__define_command(h2o_configurator_t *configurator, const char *name, int flags, h2o_configurator_command_cb cb, const char **desc);
 /**
  * returns a configurator of given command name
  * @return configurator for given name or NULL if not found

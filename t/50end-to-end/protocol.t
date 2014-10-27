@@ -28,8 +28,9 @@ listen:
     certificate-file: t/50end-to-end/protocol/server.crt
 hosts:
   "localhost:$port":
-    files:
-      /: t/50end-to-end/protocol/docroot
+    paths:
+      /:
+        directory: t/50end-to-end/protocol/docroot
     mime-types:
       txt: text/plain
       jpg: image/jpeg

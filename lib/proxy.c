@@ -379,7 +379,8 @@ ErrExit:
 
 void h2o_proxy_register_reverse_proxy_configurator(h2o_globalconf_t *conf)
 {
-    h2o_configurator_t *c = h2o_config_create_configurator(conf, sizeof(*c), H2O_CONFIGURATOR_FLAG_HOST);
-    h2o_config_define_command(c, "reverse-proxy", on_config,
+    h2o_configurator_t *c = h2o_config_create_configurator(conf, sizeof(*c));
+    h2o_config_define_command(c, "reverse-proxy", H2O_CONFIGURATOR_FLAG_HOST,
+        on_config,
         "map of virtual-path -> http://upstream_host:port/path");
 }
