@@ -302,7 +302,7 @@ void h2o_proxy_register_reverse_proxy(h2o_hostconf_t *host_config, const char *v
     self->upstream.io_timeout = io_timeout;
 }
 
-static int on_config(h2o_configurator_t *configurator, void *_config, const char *file, yoml_t *node)
+static int on_config(h2o_configurator_command_t *cmd, void *_config, const char *file, yoml_t *node)
 {
     h2o_hostconf_t *config = _config;
     h2o_mempool_t pool;
@@ -311,7 +311,7 @@ static int on_config(h2o_configurator_t *configurator, void *_config, const char
     h2o_mempool_init(&pool);
 
     if (node->type != YOML_TYPE_MAPPING) {
-        h2o_config_print_error(configurator, file, node, "argument is not a mapping");
+        h2o_config_print_error(cmd, file, node, "argument is not a mapping");
         goto ErrExit;
     }
     for (i = 0; i != node->data.mapping.size; ++i) {
@@ -322,11 +322,11 @@ static int on_config(h2o_configurator_t *configurator, void *_config, const char
         uint16_t port;
         uint64_t io_timeout = 5000; /* default: 5 seconds */
         if (key->type != YOML_TYPE_SCALAR) {
-            h2o_config_print_error(configurator, file, key, "key (virtual path) is not a scalar");
+            h2o_config_print_error(cmd, file, key, "key (virtual path) is not a scalar");
             goto ErrExit;
         }
         if (key->data.scalar[0] != '/') {
-            h2o_config_print_error(configurator, file, key, "key (virtual path) should start with a '/'");
+            h2o_config_print_error(cmd, file, key, "key (virtual path) should start with a '/'");
             goto ErrExit;
         }
         switch (value->type) {
@@ -337,17 +337,17 @@ static int on_config(h2o_configurator_t *configurator, void *_config, const char
             {
                 yoml_t *t;
                 if ((t = yoml_get(value, "url")) == NULL) {
-                    h2o_config_print_error(configurator, file, value, "mandatory key `url` is missing");
+                    h2o_config_print_error(cmd, file, value, "mandatory key `url` is missing");
                     goto ErrExit;
                 } else if (t->type != YOML_TYPE_SCALAR) {
-                    h2o_config_print_error(configurator, file, t, "value is not a scalar");
+                    h2o_config_print_error(cmd, file, t, "value is not a scalar");
                     goto ErrExit;
                 }
                 upstream_url = t;
                 if ((t = yoml_get(value, "io-timeout")) != NULL) {
                     if (t->type != YOML_TYPE_SCALAR
                         || sscanf(t->data.scalar, "%" PRIu64, &io_timeout) != 1) {
-                        h2o_config_print_error(configurator, file, t, "value is not a number");
+                        h2o_config_print_error(cmd, file, t, "value is not a number");
                         goto ErrExit;
                     }
                     io_timeout *= 1000; /* convert to milliseconds */
@@ -355,15 +355,15 @@ static int on_config(h2o_configurator_t *configurator, void *_config, const char
             }
             break;
         default:
-            h2o_config_print_error(configurator, file, value, "value should either be a scalar (upstream URL) or a mapping (url and io-timeout)");
+            h2o_config_print_error(cmd, file, value, "value should either be a scalar (upstream URL) or a mapping (url and io-timeout)");
             goto ErrExit;
         }
         if (h2o_parse_url(&pool, upstream_url->data.scalar, &scheme, &host, &port, &path) != 0) {
-            h2o_config_print_error(configurator, file, upstream_url, "failed to parse URL: %s\n", value->data.scalar);
+            h2o_config_print_error(cmd, file, upstream_url, "failed to parse URL: %s\n", value->data.scalar);
             goto ErrExit;
         }
         if (strcmp(scheme, "http") != 0) {
-            h2o_config_print_error(configurator, file, upstream_url, "only HTTP URLs are supported");
+            h2o_config_print_error(cmd, file, upstream_url, "only HTTP URLs are supported");
             goto ErrExit;
         }
         /* register */
@@ -378,19 +378,9 @@ ErrExit:
     return -1;
 }
 
-void h2o_proxy_register_reverse_proxy_configurator(h2o_linklist_t *host_configurators)
+void h2o_proxy_register_reverse_proxy_configurator(h2o_globalconf_t *conf)
 {
-    static const char* desc[] = {
-        "map of virtual-path -> http://upstream_host:port/path",
-        NULL
-    };
-    h2o_configurator_t *configurator = h2o_malloc(sizeof(*configurator));
-
-    memset(configurator, 0, sizeof(*configurator));
-    configurator->cmd = "reverse-proxy";
-    configurator->description = desc;
-    configurator->destroy = (void*)free;
-    configurator->on_cmd = on_config;
-
-    h2o_linklist_insert(host_configurators, &configurator->_link);
+    h2o_configurator_t *c = h2o_config_create_configurator(conf, sizeof(*c), H2O_CONFIGURATOR_FLAG_HOST);
+    h2o_config_define_command(c, "reverse-proxy", on_config,
+        "map of virtual-path -> http://upstream_host:port/path");
 }

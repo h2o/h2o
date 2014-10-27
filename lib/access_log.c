@@ -302,7 +302,7 @@ h2o_logger_t *h2o_access_log_register(h2o_hostconf_t *host_config, const char *p
     return &self->super;
 }
 
-static int on_config(h2o_configurator_t *configurator, void *_config, const char *file, yoml_t *node)
+static int on_config(h2o_configurator_command_t *cmd, void *_config, const char *file, yoml_t *node)
 {
     h2o_hostconf_t *config = _config;
     const char *path, *fmt = NULL;
@@ -316,18 +316,18 @@ static int on_config(h2o_configurator_t *configurator, void *_config, const char
             yoml_t *t;
             /* get path */
             if ((t = yoml_get(node, "path")) == NULL) {
-                h2o_config_print_error(configurator, file, node, "could not find mandatory key `path`");
+                h2o_config_print_error(cmd, file, node, "could not find mandatory key `path`");
                 return -1;
             }
             if (t->type != YOML_TYPE_SCALAR) {
-                h2o_config_print_error(configurator, file, t, "`path` must be scalar");
+                h2o_config_print_error(cmd, file, t, "`path` must be scalar");
                 return -1;
             }
             path = t->data.scalar;
             /* get format */
             if ((t = yoml_get(node, "format")) != NULL) {
                 if (t->type != YOML_TYPE_SCALAR) {
-                    h2o_config_print_error(configurator, file, t, "`format` must be a scalar");
+                    h2o_config_print_error(cmd, file, t, "`format` must be a scalar");
                     return -1;
                 }
                 fmt = t->data.scalar;
@@ -335,7 +335,7 @@ static int on_config(h2o_configurator_t *configurator, void *_config, const char
         }
         break;
     default:
-        h2o_config_print_error(configurator, file, node, "node must be a scalar or a mapping");
+        h2o_config_print_error(cmd, file, node, "node must be a scalar or a mapping");
         return -1;
     }
 
@@ -343,22 +343,13 @@ static int on_config(h2o_configurator_t *configurator, void *_config, const char
     return 0;
 }
 
-void h2o_access_log_register_configurator(h2o_linklist_t *host_configurators)
+void h2o_access_log_register_configurator(h2o_globalconf_t *conf)
 {
-    static const char* desc[] = {
+    h2o_configurator_t *c = h2o_config_create_configurator(conf, sizeof(*c), H2O_CONFIGURATOR_FLAG_HOST);
+    h2o_config_define_command(c, "access-log", on_config,
         "path (and optionally the format) of the access log (default: none)",
         " - if the value is a scalar, it is treated as the path of the log file",
         " - if the value is a mapping, its `path` property is treated as the path",
-        "   and `format` property is treated as the format",
-        NULL
-    };
-    h2o_configurator_t *configurator = h2o_malloc(sizeof(*configurator));
-
-    memset(configurator, 0, sizeof(*configurator));
-    configurator->cmd = "access-log";
-    configurator->description = desc;
-    configurator->destroy = (void*)free;
-    configurator->on_cmd = on_config;
-
-    h2o_linklist_insert(host_configurators, &configurator->_link);
+        "   and `format` property is treated as the format"
+    );
 }
