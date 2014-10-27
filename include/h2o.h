@@ -145,7 +145,8 @@ typedef struct st_h2o_timestamp_t {
 enum {
     H2O_CONFIGURATOR_FLAG_GLOBAL = 0x1,
     H2O_CONFIGURATOR_FLAG_HOST = 0x2,
-    H2O_CONFIGURATOR_FLAG_PATH = 0x4
+    H2O_CONFIGURATOR_FLAG_PATH = 0x4,
+    H2O_CONFIGURATOR_FLAG_NEXT_LEVEL = 0x8
 };
 
 typedef struct h2o_configurator_context_t {
