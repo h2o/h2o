@@ -108,14 +108,16 @@ void h2o_process_request(h2o_req_t *req)
     h2o_get_timestamp(ctx, &req->pool, &req->processed_at);
 
     /* setup host context */
-    req->host_config = H2O_STRUCT_FROM_MEMBER(h2o_hostconf_t, _link, ctx->global_config->hosts.next);
+    req->host_config = ctx->global_config->hosts.entries;
     if (req->authority.base != NULL) {
-        h2o_linklist_t *host, *anchor = &ctx->global_config->hosts;
-        for (host = anchor->next; host != anchor; host = host->next) {
-            h2o_hostconf_t *hostconf = H2O_STRUCT_FROM_MEMBER(h2o_hostconf_t, _link, host);
-            if (h2o_memis(req->authority.base, req->authority.len, hostconf->hostname.base, hostconf->hostname.len)) {
-                req->host_config = hostconf;
-                break;
+        if (ctx->global_config->hosts.size != 1) {
+            size_t i;
+            for (i = 0; i != ctx->global_config->hosts.size; ++i) {
+                h2o_hostconf_t *hostconf = ctx->global_config->hosts.entries + i;
+                if (h2o_memis(req->authority.base, req->authority.len, hostconf->hostname.base, hostconf->hostname.len)) {
+                    req->host_config = hostconf;
+                    break;
+                }
             }
         }
     } else {

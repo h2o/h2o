@@ -202,7 +202,6 @@ struct st_h2o_configurator_t {
 };
 
 struct st_h2o_hostconf_t {
-    h2o_linklist_t _link;
     /**
      * reverse reference to the global configuration
      */
@@ -233,7 +232,7 @@ struct st_h2o_globalconf_t {
     /**
      * list of host contexts (h2o_hostconf_t)
      */
-    h2o_linklist_t hosts;
+    H2O_VECTOR(h2o_hostconf_t) hosts;
     /**
      * list of configurators
      */

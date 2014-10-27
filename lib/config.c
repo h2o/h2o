@@ -295,7 +295,6 @@ static void dispose_host_config(h2o_hostconf_t *host_config)
 void h2o_config_init(h2o_globalconf_t *config)
 {
     memset(config, 0, sizeof(*config));
-    h2o_linklist_init_anchor(&config->hosts);
     h2o_linklist_init_anchor(&config->configurators);
     config->server_name = h2o_buf_init(H2O_STRLIT("h2o/0.1"));
     config->req_timeout = H2O_DEFAULT_REQ_TIMEOUT;
@@ -308,27 +307,29 @@ void h2o_config_init(h2o_globalconf_t *config)
 
 h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, const char *hostname)
 {
-    h2o_hostconf_t *host_config = h2o_malloc(sizeof(*host_config));
+    h2o_hostconf_t *hostconf;
     size_t i;
 
-    init_host_config(host_config, config);
-    host_config->hostname = h2o_strdup(NULL, hostname, SIZE_MAX);
-    for (i = 0; i != host_config->hostname.len; ++i)
-        host_config->hostname.base[i] = h2o_tolower(host_config->hostname.base[i]);
+    h2o_vector_reserve(NULL, (void*)&config->hosts, sizeof(config->hosts.entries[0]), config->hosts.size + 1);
+    hostconf = config->hosts.entries + config->hosts.size++;
 
-    h2o_linklist_insert(&config->hosts, &host_config->_link);
+    init_host_config(hostconf, config);
+    hostconf->hostname = h2o_strdup(NULL, hostname, SIZE_MAX);
+    for (i = 0; i != hostconf->hostname.len; ++i)
+        hostconf->hostname.base[i] = h2o_tolower(hostconf->hostname.base[i]);
 
-    return host_config;
+    return hostconf;
 }
 
 void h2o_config_dispose(h2o_globalconf_t *config)
 {
-    while (! h2o_linklist_is_empty(&config->hosts)) {
-        h2o_hostconf_t *host_config = H2O_STRUCT_FROM_MEMBER(h2o_hostconf_t, _link, config->hosts.next);
-        h2o_linklist_unlink(&host_config->_link);
-        dispose_host_config(host_config);
-        free(host_config);
+    size_t i;
+
+    for (i = 0; i != config->hosts.size; ++i) {
+        h2o_hostconf_t *hostconf = config->hosts.entries + i;
+        dispose_host_config(hostconf);
     }
+    free(config->hosts.entries);
 
     while (! h2o_linklist_is_empty(&config->configurators)) {
         h2o_configurator_t *c = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, config->configurators.next);
@@ -389,7 +390,7 @@ int h2o_config_configure(h2o_globalconf_t *config, const char *file, yoml_t *nod
 {
     if (apply_commands(config, file, node, config) != 0)
         return -1;
-    if (h2o_linklist_is_empty(&config->hosts)) {
+    if (config->hosts.size == 0) {
         h2o_config_print_error(NULL, file, node, "mandatory configuration directive `hosts` is missing");
         return -1;
     }
