@@ -302,9 +302,8 @@ void h2o_proxy_register_reverse_proxy(h2o_hostconf_t *host_config, const char *v
     self->upstream.io_timeout = io_timeout;
 }
 
-static int on_config(h2o_configurator_command_t *cmd, void *_config, const char *file, yoml_t *node)
+static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
-    h2o_hostconf_t *config = _config;
     h2o_mempool_t pool;
     size_t i;
 
@@ -367,7 +366,7 @@ static int on_config(h2o_configurator_command_t *cmd, void *_config, const char 
             goto ErrExit;
         }
         /* register */
-        h2o_proxy_register_reverse_proxy(config, key->data.scalar, host, port, path, io_timeout);
+        h2o_proxy_register_reverse_proxy(ctx->hostconf, key->data.scalar, host, port, path, io_timeout);
     }
 
     h2o_mempool_clear(&pool);

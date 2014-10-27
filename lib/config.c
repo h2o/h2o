@@ -31,18 +31,19 @@ static void destroy_configurator(h2o_configurator_t *configurator)
     free(configurator);
 }
 
-static int setup_configurators(void *config, h2o_linklist_t *list, int flags_mask, int is_enter)
+static int setup_configurators(h2o_configurator_context_t *ctx, int is_enter)
 {
+    int flags_mask = ctx->hostconf == NULL ? H2O_CONFIGURATOR_FLAG_GLOBAL : H2O_CONFIGURATOR_FLAG_HOST;
     h2o_linklist_t *node;
 
-    for (node = list->next; node != list; node = node->next) {
+    for (node = ctx->globalconf->configurators.next; node != &ctx->globalconf->configurators; node = node->next) {
         h2o_configurator_t *c = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, node);
         if ((c->flags & flags_mask) != 0) {
             if (is_enter) {
-                if (c->enter != NULL && c->enter(c, config) != 0)
+                if (c->enter != NULL && c->enter(c, ctx) != 0)
                     return -1;
             } else {
-                if (c->exit != NULL && c->exit(c, config) != 0)
+                if (c->exit != NULL && c->exit(c, ctx) != 0)
                     return -1;
             }
         }
@@ -51,7 +52,7 @@ static int setup_configurators(void *config, h2o_linklist_t *list, int flags_mas
     return 0;
 }
 
-static int apply_commands(void *config, const char *file, yoml_t *node, h2o_globalconf_t *global_config)
+static int apply_commands(h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
     size_t i;
 
@@ -61,12 +62,7 @@ static int apply_commands(void *config, const char *file, yoml_t *node, h2o_glob
     }
 
     /* call on_enter of every configurator */
-    setup_configurators(
-        config,
-        &global_config->configurators,
-        (config == global_config ? H2O_CONFIGURATOR_FLAG_GLOBAL: 0)
-            | H2O_CONFIGURATOR_FLAG_HOST,
-        1);
+    setup_configurators(ctx, 1);
 
     /* handle the configuration commands */
     for (i = 0; i != node->data.mapping.size; ++i) {
@@ -77,32 +73,26 @@ static int apply_commands(void *config, const char *file, yoml_t *node, h2o_glob
             h2o_config_print_error(NULL, file, key, "command must be a string");
             return -1;
         }
-        if ((cmd = h2o_config_get_configurator(global_config, key->data.scalar)) == NULL) {
+        if ((cmd = h2o_config_get_configurator(ctx->globalconf, key->data.scalar)) == NULL) {
             h2o_config_print_error(NULL, file, key, "unknown command: %s", key->data.scalar);
             return -1;
         }
-        if ((cmd->configurator->flags & (config == global_config ? H2O_CONFIGURATOR_FLAG_GLOBAL : H2O_CONFIGURATOR_FLAG_HOST)) == 0) {
+        if ((cmd->configurator->flags & (ctx->hostconf == NULL ? H2O_CONFIGURATOR_FLAG_GLOBAL : H2O_CONFIGURATOR_FLAG_HOST)) == 0) {
             h2o_config_print_error(cmd, file, key, "the command cannot be used at this level");
             return -1;
         }
-        if (cmd->cb(cmd, config, file, value) != 0)
+        if (cmd->cb(cmd, ctx, file, value) != 0)
             return -1;
     }
 
     /* call on_enter of every configurator */
-    setup_configurators(
-        config,
-        &global_config->configurators,
-        (config == global_config ? H2O_CONFIGURATOR_FLAG_GLOBAL: 0)
-            | H2O_CONFIGURATOR_FLAG_HOST,
-        0);
+    setup_configurators(ctx, 0);
 
     return 0;
 }
 
-static int on_config_files(h2o_configurator_command_t *cmd, void *_config, const char *file, yoml_t *node)
+static int on_config_files(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
-    h2o_hostconf_t *host_config = _config;
     size_t i;
 
     if (node->type != YOML_TYPE_MAPPING) {
@@ -121,15 +111,14 @@ static int on_config_files(h2o_configurator_command_t *cmd, void *_config, const
             h2o_config_print_error(cmd, file, key, "value (representing the local path) must be a string");
             return -1;
         }
-        h2o_file_register(host_config, key->data.scalar, value->data.scalar, "index.html" /* FIXME */);
+        h2o_file_register(ctx->hostconf, key->data.scalar, value->data.scalar, "index.html" /* FIXME */);
     }
 
     return 0;
 }
 
-static int on_config_mime_types(h2o_configurator_command_t *cmd, void *_config, const char *file, yoml_t *node)
+static int on_config_mime_types(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
-    h2o_hostconf_t *host_config = _config;
     size_t i;
 
     if (node->type != YOML_TYPE_MAPPING) {
@@ -148,15 +137,14 @@ static int on_config_mime_types(h2o_configurator_command_t *cmd, void *_config, 
             h2o_config_print_error(cmd, file, node, "value (representing the mime-type) must be a string");
             return -1;
         }
-        h2o_define_mimetype(&host_config->mimemap, key->data.scalar, value->data.scalar);
+        h2o_define_mimetype(&ctx->hostconf->mimemap, key->data.scalar, value->data.scalar);
     }
 
     return 0;
 }
 
-static int on_config_hosts(h2o_configurator_command_t *cmd, void *_config, const char *file, yoml_t *node)
+static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
-    h2o_globalconf_t *config = _config;
     size_t i;
 
     if (node->type != YOML_TYPE_MAPPING) {
@@ -172,51 +160,47 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, void *_config, const
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key;
         yoml_t *value = node->data.mapping.elements[i].value;
-        h2o_hostconf_t *host_config;
         if (key->type != YOML_TYPE_SCALAR) {
             h2o_config_print_error(cmd, file, key, "key (representing the hostname) must be a string");
             return -1;
         }
-        host_config = h2o_config_register_host(config, key->data.scalar);
-        if (apply_commands(host_config, file, value, config) != 0)
+        ctx->hostconf = h2o_config_register_host(ctx->globalconf, key->data.scalar);
+        if (apply_commands(ctx, file, value) != 0)
             return -1;
+        ctx->hostconf = NULL;
     }
 
     return 0;
 }
 
-static int on_config_request_timeout(h2o_configurator_command_t *cmd, void *_config, const char *file, yoml_t *node)
+static int on_config_request_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
-    h2o_globalconf_t *config = _config;
     unsigned timeout_in_secs;
 
     if (h2o_config_scanf(cmd, file, node, "%u", &timeout_in_secs) != 0)
         return -1;
 
-    config->req_timeout = timeout_in_secs * 1000;
+    ctx->globalconf->req_timeout = timeout_in_secs * 1000;
     return 0;
 }
 
-static int on_config_limit_request_body(h2o_configurator_command_t *cmd, void *_config, const char *file, yoml_t *node)
+static int on_config_limit_request_body(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
-    h2o_globalconf_t *config = _config;
-    return h2o_config_scanf(cmd, file, node, "%zu", &config->max_request_entity_size);
+    return h2o_config_scanf(cmd, file, node, "%zu", &ctx->globalconf->max_request_entity_size);
 }
 
-static int on_config_http1_upgrade_to_http2(h2o_configurator_command_t *cmd, void *_config, const char *file, yoml_t *node)
+static int on_config_http1_upgrade_to_http2(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
-    h2o_globalconf_t *config = _config;
     ssize_t ret = h2o_config_get_one_of(cmd, file, node, "OFF,ON");
     if (ret == -1)
         return -1;
-    config->http1_upgrade_to_http2 = (int)ret;
+    ctx->globalconf->http1_upgrade_to_http2 = (int)ret;
     return 0;
 }
 
-static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurator_command_t *cmd, void *_config, const char *file, yoml_t *node)
+static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
-    h2o_globalconf_t *config = _config;
-    return h2o_config_scanf(cmd, file, node, "%zu", &config->http2_max_concurrent_requests_per_connection);
+    return h2o_config_scanf(cmd, file, node, "%zu", &ctx->globalconf->http2_max_concurrent_requests_per_connection);
 }
 
 static void init_core_configurators(h2o_globalconf_t *conf)
@@ -386,12 +370,15 @@ h2o_configurator_command_t *h2o_config_get_configurator(h2o_globalconf_t *conf, 
 
 int h2o_config_configure(h2o_globalconf_t *config, const char *file, yoml_t *node)
 {
-    if (apply_commands(config, file, node, config) != 0)
+    h2o_configurator_context_t ctx = { config };
+
+    if (apply_commands(&ctx, file, node) != 0)
         return -1;
     if (config->hosts.size == 0) {
         h2o_config_print_error(NULL, file, node, "mandatory configuration directive `hosts` is missing");
         return -1;
     }
+
     return 0;
 }
 

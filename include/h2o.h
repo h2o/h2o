@@ -147,10 +147,15 @@ enum {
     H2O_CONFIGURATOR_FLAG_HOST = 0x2
 };
 
+typedef struct h2o_configurator_context_t {
+    h2o_globalconf_t *globalconf;
+    h2o_hostconf_t *hostconf;
+} h2o_configurator_context_t;
+
 typedef int (*h2o_configurator_dispose_cb)(h2o_configurator_t *configurator);
-typedef int (*h2o_configurator_enter_cb)(h2o_configurator_t *configurator, void *config);
-typedef int (*h2o_configurator_exit_cb)(h2o_configurator_t *configurator, void *config);
-typedef int (*h2o_configurator_command_cb)(h2o_configurator_command_t *cmd, void *config, const char *file, yoml_t *node);
+typedef int (*h2o_configurator_enter_cb)(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx);
+typedef int (*h2o_configurator_exit_cb)(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx);
+typedef int (*h2o_configurator_command_cb)(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node);
 
 struct st_h2o_configurator_command_t {
     /**
