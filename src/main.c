@@ -301,7 +301,7 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
     return h2o_config_scanf(cmd, config_file, config_node, "%u", &conf->num_threads);
 }
 
-static void usage_print_directives(h2o_globalconf_t *conf, int flags_mask)
+static void usage_print_directives(h2o_globalconf_t *conf)
 {
     h2o_linklist_t *node;
     size_t i;
@@ -310,13 +310,12 @@ static void usage_print_directives(h2o_globalconf_t *conf, int flags_mask)
         h2o_configurator_t *configurator = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, node);
         for (i = 0; i != configurator->commands.size; ++i) {
             h2o_configurator_command_t *cmd = configurator->commands.entries + i;
-            if ((cmd->flags & flags_mask) != 0) {
-                const char **desc;
-                printf("    %s:\n", cmd->name);
-                for (desc = cmd->description; *desc != NULL; ++desc)
-                    printf("      %s\n", *desc);
-            }
+            const char **desc;
+            printf("    %s:\n", cmd->name);
+            for (desc = cmd->description; *desc != NULL; ++desc)
+                printf("      %s\n", *desc);
         }
+        printf("\n");
     }
 }
 
@@ -333,16 +332,8 @@ static void usage(h2o_globalconf_t *config)
         "  --help       print this help\n"
         "\n"
         "Directives of the Configuration File:\n"
-        "  global:\n");
-    usage_print_directives(config, H2O_CONFIGURATOR_FLAG_GLOBAL);
-    printf(
-        "  per-host:\n");
-    usage_print_directives(config, H2O_CONFIGURATOR_FLAG_HOST);
-    printf(
-        "\n"
-        "  note: per-host directives can be used at the global level to define the\n"
-        "  behaviour of the default host\n"
         "\n");
+    usage_print_directives(config);
 }
 
 yoml_t *load_config(const char *fn)
