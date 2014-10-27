@@ -173,9 +173,9 @@ Error:
     return NULL;
 }
 
-static int on_config_listen(h2o_configurator_command_t *cmd, void *_globalconf, const char *config_file, yoml_t *config_node)
+static int on_config_listen(h2o_configurator_command_t *cmd, h2o_globalconf_t *globalconf, h2o_hostconf_t *hostconf, const char *config_file, yoml_t *config_node)
 {
-    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, _globalconf);
+    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, globalconf);
     const char *hostname = NULL, *servname = NULL;
     SSL_CTX *ssl_ctx = NULL;
     struct addrinfo hints, *res;
@@ -251,9 +251,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, void *_globalconf, 
     return 0;
 }
 
-static int on_config_listen_exit(h2o_configurator_t *configurator, void *_globalconf)
+static int on_config_listen_exit(h2o_configurator_t *configurator, h2o_globalconf_t *globalconf, h2o_hostconf_t *hostconf)
 {
-    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, _globalconf);
+    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, globalconf);
     int reuseaddr_flag = 1;
 #ifdef IPV6_V6ONLY
     int v6only_flag = 1;
@@ -284,16 +284,16 @@ static int on_config_listen_exit(h2o_configurator_t *configurator, void *_global
     return 0;
 }
 
-static int on_config_max_connections(h2o_configurator_command_t *cmd, void *_globalconf, const char *config_file, yoml_t *config_node)
+static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_globalconf_t *globalconf, h2o_hostconf_t *hostconf, const char *config_file, yoml_t *config_node)
 {
-    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, _globalconf);
+    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, globalconf);
     return h2o_config_scanf(cmd, config_file, config_node, "%u", &conf->max_connections);
 }
 
 
-static int on_config_num_threads(h2o_configurator_command_t *cmd, void *_globalconf, const char *config_file, yoml_t *config_node)
+static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_globalconf_t *globalconf, h2o_hostconf_t *hostconf, const char *config_file, yoml_t *config_node)
 {
-    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, _globalconf);
+    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, globalconf);
     return h2o_config_scanf(cmd, config_file, config_node, "%u", &conf->num_threads);
 }
 

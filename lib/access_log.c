@@ -302,9 +302,8 @@ h2o_logger_t *h2o_access_log_register(h2o_hostconf_t *host_config, const char *p
     return &self->super;
 }
 
-static int on_config(h2o_configurator_command_t *cmd, void *_config, const char *file, yoml_t *node)
+static int on_config(h2o_configurator_command_t *cmd, h2o_globalconf_t *globalconf, h2o_hostconf_t *hostconf, const char *file, yoml_t *node)
 {
-    h2o_hostconf_t *config = _config;
     const char *path, *fmt = NULL;
 
     switch (node->type) {
@@ -339,7 +338,7 @@ static int on_config(h2o_configurator_command_t *cmd, void *_config, const char 
         return -1;
     }
 
-    h2o_access_log_register(config, path, fmt);
+    h2o_access_log_register(hostconf, path, fmt);
     return 0;
 }
 
