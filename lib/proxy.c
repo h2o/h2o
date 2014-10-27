@@ -52,7 +52,7 @@ struct proxy_config_vars_t {
 struct proxy_configurator_t {
     h2o_configurator_t super;
     struct proxy_config_vars_t *vars;
-    struct proxy_config_vars_t _vars_stack[4];
+    struct proxy_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
 static h2o_buf_t build_request(h2o_req_t *req, h2o_buf_t host, uint16_t port, size_t path_replace_length, h2o_buf_t path_prefix)

@@ -152,6 +152,8 @@ enum {
     H2O_CONFIGURATOR_FLAG_DEFERRED = 0x1000
 };
 
+#define H2O_CONFIGURATOR_NUM_LEVELS 3
+
 typedef struct h2o_configurator_context_t {
     h2o_globalconf_t *globalconf;
     h2o_hostconf_t *hostconf;
