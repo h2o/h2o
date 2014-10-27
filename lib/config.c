@@ -55,13 +55,14 @@ static int apply_commands(h2o_configurator_context_t *ctx, int flags_mask, const
     struct {
         h2o_configurator_command_t *cmd;
         yoml_t *value;
-    } deferred = {};
-    size_t i;
+    } *deferred;
+    size_t num_deferred = 0, i;
 
     if (node->type != YOML_TYPE_MAPPING) {
         h2o_config_print_error(NULL, file, node, "node must be a MAPPING");
         return -1;
     }
+    deferred = alloca(sizeof(*deferred) * node->data.mapping.size);
 
     /* call on_enter of every configurator */
     setup_configurators(ctx, 1);
@@ -83,17 +84,17 @@ static int apply_commands(h2o_configurator_context_t *ctx, int flags_mask, const
             h2o_config_print_error(cmd, file, key, "the command cannot be used at this level");
             return -1;
         }
-        if ((cmd->flags & H2O_CONFIGURATOR_FLAG_NEXT_LEVEL) != 0) {
-            assert(deferred.cmd == NULL);
-            deferred.cmd = cmd;
-            deferred.value = value;
+        if ((cmd->flags & H2O_CONFIGURATOR_FLAG_DEFERRED) != 0) {
+            deferred[num_deferred].cmd = cmd;
+            deferred[num_deferred].value = value;
+            ++num_deferred;
         } else {
             if (cmd->cb(cmd, ctx, file, value) != 0)
                 return -1;
         }
     }
-    if (deferred.cmd != NULL) {
-        if (deferred.cmd->cb(deferred.cmd, ctx, file, deferred.value) != 0)
+    for (i = 0; i != num_deferred; ++i) {
+        if (deferred[i].cmd->cb(deferred[i].cmd, ctx, file, deferred[i].value) != 0)
             return -1;
     }
 
@@ -264,7 +265,7 @@ static void init_core_configurators(h2o_globalconf_t *conf)
         h2o_configurator_t *c = h2o_config_create_configurator(conf, sizeof(*c));
         h2o_config_define_command(
             c, "paths",
-            H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_NEXT_LEVEL,
+            H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_DEFERRED,
             on_config_paths,
             "map of URL-path -> configuration");
         h2o_config_define_command(
@@ -281,7 +282,7 @@ static void init_core_configurators(h2o_globalconf_t *conf)
         h2o_configurator_t *c = h2o_config_create_configurator(conf, sizeof(*c));
         h2o_config_define_command(
             c, "hosts",
-            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_NEXT_LEVEL,
+            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_DEFERRED,
             on_config_hosts,
             "map of hostname -> map of per-host configs");
         h2o_config_define_command(
