@@ -66,6 +66,8 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
 {
     h2o_linklist_t *n;
 
+    assert(! h2o_linklist_is_empty(&config->hosts));
+
     memset(ctx, 0, sizeof(*ctx));
     ctx->loop = loop;
     ctx->global_config = config;
@@ -74,11 +76,10 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
 
     ctx->_module_configs = h2o_malloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
     memset(ctx->_module_configs, 0, sizeof(*ctx->_module_configs) * config->_num_config_slots);
-    for (n = config->virtual_hosts.next; n != &config->virtual_hosts; n = n->next) {
+    for (n = config->hosts.next; n != &config->hosts; n = n->next) {
         h2o_hostconf_t *hostconf = H2O_STRUCT_FROM_MEMBER(h2o_hostconf_t, _link, n);
         on_context_init(ctx, hostconf);
     }
-    on_context_init(ctx, &config->default_host);
 }
 
 void h2o_context_dispose(h2o_context_t *ctx)
@@ -86,11 +87,10 @@ void h2o_context_dispose(h2o_context_t *ctx)
     h2o_globalconf_t *config = ctx->global_config;
     h2o_linklist_t *n;
 
-    for (n = config->virtual_hosts.next; n != &config->virtual_hosts; n = n->next) {
+    for (n = config->hosts.next; n != &config->hosts; n = n->next) {
         h2o_hostconf_t *hostconf = H2O_STRUCT_FROM_MEMBER(h2o_hostconf_t, _link, n);
         on_context_dispose(ctx, hostconf);
     }
-    on_context_dispose(ctx, &config->default_host);
     free(ctx->_module_configs);
 }
 

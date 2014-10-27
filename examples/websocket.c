@@ -111,7 +111,7 @@ int main(int argc, char **argv)
     uv_loop_t *loop = uv_default_loop();
     uv_tcp_t listener;
     struct sockaddr_in sockaddr;
-    h2o_handler_t ws_handler;
+    h2o_hostconf_t *hostconf;
     int r;
 
     if ((r = uv_tcp_init(loop, &listener)) != 0) {
@@ -129,9 +129,9 @@ int main(int argc, char **argv)
     }
 
     h2o_config_init(&config);
-    memset(&ws_handler, 0, sizeof(ws_handler));
-    ws_handler.on_req = on_req;
-    h2o_linklist_insert(&config.default_host.handlers, &ws_handler._link);
+    hostconf = h2o_config_register_host(&config, "default");
+    h2o_create_handler(hostconf, sizeof(h2o_handler_t))->on_req = on_req;
+
     h2o_context_init(&ctx, loop, &config);
 
     /* disabled by default: uncomment the block below to use HTTPS instead of HTTP */

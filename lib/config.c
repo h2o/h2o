@@ -53,7 +53,6 @@ static int setup_configurators(void *config, h2o_linklist_t *list, int flags_mas
 
 static int apply_commands(void *config, const char *file, yoml_t *node, h2o_globalconf_t *global_config)
 {
-    yoml_t *key, *value;
     size_t i;
 
     if (node->type != YOML_TYPE_MAPPING) {
@@ -71,31 +70,23 @@ static int apply_commands(void *config, const char *file, yoml_t *node, h2o_glob
 
     /* handle the configuration commands */
     for (i = 0; i != node->data.mapping.size; ++i) {
+        yoml_t *key = node->data.mapping.elements[i].key,
+            *value = node->data.mapping.elements[i].value;
         h2o_configurator_command_t *cmd;
-        key = node->data.mapping.elements[i].key;
-        value = node->data.mapping.elements[i].value;
         if (key->type != YOML_TYPE_SCALAR) {
             h2o_config_print_error(NULL, file, key, "command must be a string");
             return -1;
         }
-        if (config == global_config) {
-            if ((cmd = h2o_config_get_configurator(global_config, key->data.scalar)) != NULL) {
-                void *target_config = (cmd->configurator->flags & H2O_CONFIGURATOR_FLAG_GLOBAL) != 0 ? config : (void*)&global_config->default_host;
-                if (cmd->cb(cmd, target_config, file, value) != 0)
-                    return -1;
-            } else {
-                goto UnknownCommand;
-            }
-        } else {
-            if ((cmd = h2o_config_get_configurator(global_config, key->data.scalar)) == NULL)
-                goto UnknownCommand;
-            if ((cmd->configurator->flags & H2O_CONFIGURATOR_FLAG_HOST) == 0) {
-                h2o_config_print_error(cmd, file, key, "the command cannot be used at this level");
-                return -1;
-            }
-            if (cmd->cb(cmd, config, file, value) != 0)
-                return -1;
+        if ((cmd = h2o_config_get_configurator(global_config, key->data.scalar)) == NULL) {
+            h2o_config_print_error(NULL, file, key, "unknown command: %s", key->data.scalar);
+            return -1;
         }
+        if ((cmd->configurator->flags & (config == global_config ? H2O_CONFIGURATOR_FLAG_GLOBAL : H2O_CONFIGURATOR_FLAG_HOST)) == 0) {
+            h2o_config_print_error(cmd, file, key, "the command cannot be used at this level");
+            return -1;
+        }
+        if (cmd->cb(cmd, config, file, value) != 0)
+            return -1;
     }
 
     /* call on_enter of every configurator */
@@ -107,10 +98,6 @@ static int apply_commands(void *config, const char *file, yoml_t *node, h2o_glob
         0);
 
     return 0;
-
-UnknownCommand:
-    h2o_config_print_error(NULL, file, key, "unknown command: %s", key->data.scalar);
-    return -1;
 }
 
 static int on_config_files(h2o_configurator_command_t *cmd, void *_config, const char *file, yoml_t *node)
@@ -167,13 +154,18 @@ static int on_config_mime_types(h2o_configurator_command_t *cmd, void *_config, 
     return 0;
 }
 
-static int on_config_virtual_host(h2o_configurator_command_t *cmd, void *_config, const char *file, yoml_t *node)
+static int on_config_hosts(h2o_configurator_command_t *cmd, void *_config, const char *file, yoml_t *node)
 {
     h2o_globalconf_t *config = _config;
     size_t i;
 
     if (node->type != YOML_TYPE_MAPPING) {
         h2o_config_print_error(cmd, file, node, "argument must be a mapping");
+        return -1;
+    }
+
+    if (node->data.mapping.size == 0) {
+        h2o_config_print_error(cmd, file, node, "the mapping cannot be empty");
         return -1;
     }
 
@@ -185,7 +177,7 @@ static int on_config_virtual_host(h2o_configurator_command_t *cmd, void *_config
             h2o_config_print_error(cmd, file, key, "key (representing the hostname) must be a string");
             return -1;
         }
-        host_config = h2o_config_register_virtual_host(config, key->data.scalar);
+        host_config = h2o_config_register_host(config, key->data.scalar);
         if (apply_commands(host_config, file, value, config) != 0)
             return -1;
     }
@@ -246,7 +238,7 @@ static void init_core_configurators(h2o_globalconf_t *conf)
     { /* setup global configurators */
         h2o_configurator_t *c = h2o_config_create_configurator(conf, sizeof(*c), H2O_CONFIGURATOR_FLAG_GLOBAL);
         h2o_config_define_command(
-            c, "virtual-host", on_config_virtual_host,
+            c, "hosts", on_config_hosts,
             "map of hostname -> map of per-host configs");
         h2o_config_define_command(
             c, "request-timeout", on_config_request_timeout,
@@ -303,8 +295,7 @@ static void dispose_host_config(h2o_hostconf_t *host_config)
 void h2o_config_init(h2o_globalconf_t *config)
 {
     memset(config, 0, sizeof(*config));
-    h2o_linklist_init_anchor(&config->virtual_hosts);
-    init_host_config(&config->default_host, config);
+    h2o_linklist_init_anchor(&config->hosts);
     h2o_linklist_init_anchor(&config->configurators);
     config->server_name = h2o_buf_init(H2O_STRLIT("h2o/0.1"));
     config->req_timeout = H2O_DEFAULT_REQ_TIMEOUT;
@@ -315,7 +306,7 @@ void h2o_config_init(h2o_globalconf_t *config)
     init_core_configurators(config);
 }
 
-h2o_hostconf_t *h2o_config_register_virtual_host(h2o_globalconf_t *config, const char *hostname)
+h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, const char *hostname)
 {
     h2o_hostconf_t *host_config = h2o_malloc(sizeof(*host_config));
     size_t i;
@@ -325,20 +316,19 @@ h2o_hostconf_t *h2o_config_register_virtual_host(h2o_globalconf_t *config, const
     for (i = 0; i != host_config->hostname.len; ++i)
         host_config->hostname.base[i] = h2o_tolower(host_config->hostname.base[i]);
 
-    h2o_linklist_insert(&config->virtual_hosts, &host_config->_link);
+    h2o_linklist_insert(&config->hosts, &host_config->_link);
 
     return host_config;
 }
 
 void h2o_config_dispose(h2o_globalconf_t *config)
 {
-    while (! h2o_linklist_is_empty(&config->virtual_hosts)) {
-        h2o_hostconf_t *host_config = H2O_STRUCT_FROM_MEMBER(h2o_hostconf_t, _link, config->virtual_hosts.next);
+    while (! h2o_linklist_is_empty(&config->hosts)) {
+        h2o_hostconf_t *host_config = H2O_STRUCT_FROM_MEMBER(h2o_hostconf_t, _link, config->hosts.next);
         h2o_linklist_unlink(&host_config->_link);
         dispose_host_config(host_config);
         free(host_config);
     }
-    dispose_host_config(&config->default_host);
 
     while (! h2o_linklist_is_empty(&config->configurators)) {
         h2o_configurator_t *c = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, config->configurators.next);
@@ -397,7 +387,13 @@ h2o_configurator_command_t *h2o_config_get_configurator(h2o_globalconf_t *conf, 
 
 int h2o_config_configure(h2o_globalconf_t *config, const char *file, yoml_t *node)
 {
-    return apply_commands(config, file, node, config);
+    if (apply_commands(config, file, node, config) != 0)
+        return -1;
+    if (h2o_linklist_is_empty(&config->hosts)) {
+        h2o_config_print_error(NULL, file, node, "mandatory configuration directive `hosts` is missing");
+        return -1;
+    }
+    return 0;
 }
 
 void h2o_config_print_error(h2o_configurator_command_t *cmd, const char *file, yoml_t *node, const char *reason, ...)

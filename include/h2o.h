@@ -233,11 +233,7 @@ struct st_h2o_globalconf_t {
     /**
      * list of host contexts (h2o_hostconf_t)
      */
-    h2o_linklist_t virtual_hosts;
-    /**
-     * default host context
-     */
-    h2o_hostconf_t default_host;
+    h2o_linklist_t hosts;
     /**
      * list of configurators
      */
@@ -603,9 +599,9 @@ static void h2o_proceed_response(h2o_req_t *req);
  */
 void h2o_config_init(h2o_globalconf_t *config);
 /**
- * registers a virtual host context
+ * registers a host context
  */
-h2o_hostconf_t *h2o_config_register_virtual_host(h2o_globalconf_t *config, const char *hostname);
+h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, const char *hostname);
 /**
  * disposes of the resources allocated for the global configuration
  */
