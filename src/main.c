@@ -69,9 +69,6 @@ struct config_t {
         unsigned num_connections; /* should use atomic functions to update the value */
         char _unused2[32];
     } state;
-    h2o_configurator_t port_configurator;
-    h2o_configurator_t max_connections_configurator;
-    h2o_configurator_t num_threads_configurator;
 };
 
 static unsigned long openssl_thread_id_callback(void)
@@ -117,7 +114,7 @@ static void setup_ecc_key(SSL_CTX *ssl_ctx)
     EC_KEY_free(key);
 }
 
-static SSL_CTX *on_config_listen_setup_ssl(h2o_configurator_t *configurator, const char *config_file, yoml_t *config_node)
+static SSL_CTX *on_config_listen_setup_ssl(h2o_configurator_command_t *cmd, const char *config_file, yoml_t *config_node)
 {
     SSL_CTX *ssl_ctx = NULL;
     const char *cert_file = NULL, *key_file = NULL;
@@ -125,22 +122,22 @@ static SSL_CTX *on_config_listen_setup_ssl(h2o_configurator_t *configurator, con
 
     /* parse */
     if (config_node->type != YOML_TYPE_MAPPING) {
-        h2o_config_print_error(configurator, config_file, config_node, "`ssl` is not a mapping");
+        h2o_config_print_error(cmd, config_file, config_node, "`ssl` is not a mapping");
         goto Error;
     }
     if ((t = yoml_get(config_node, "certificate-file")) == NULL) {
-        h2o_config_print_error(configurator, config_file, config_node, "could not find mandatory property `certificate-file`");
+        h2o_config_print_error(cmd, config_file, config_node, "could not find mandatory property `certificate-file`");
         goto Error;
     } else if (t->type != YOML_TYPE_SCALAR) {
-        h2o_config_print_error(configurator, config_file, t, "the property must be a string");
+        h2o_config_print_error(cmd, config_file, t, "the property must be a string");
         goto Error;
     }
     cert_file = t->data.scalar;
     if ((t = yoml_get(config_node, "key-file")) == NULL) {
-        h2o_config_print_error(configurator, config_file, config_node, "could not find mandatory property `key-file`");
+        h2o_config_print_error(cmd, config_file, config_node, "could not find mandatory property `key-file`");
         goto Error;
     } else if (t->type != YOML_TYPE_SCALAR) {
-        h2o_config_print_error(configurator, config_file, t, "the property must be a string");
+        h2o_config_print_error(cmd, config_file, t, "the property must be a string");
         goto Error;
     }
     key_file = t->data.scalar;
@@ -151,12 +148,12 @@ static SSL_CTX *on_config_listen_setup_ssl(h2o_configurator_t *configurator, con
     SSL_CTX_set_options(ssl_ctx, SSL_OP_NO_SSLv2);
     setup_ecc_key(ssl_ctx);
     if (SSL_CTX_use_certificate_file(ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
-        h2o_config_print_error(configurator, config_file, config_node, "failed to load certificate file:%s\n", cert_file);
+        h2o_config_print_error(cmd, config_file, config_node, "failed to load certificate file:%s\n", cert_file);
         ERR_print_errors_fp(stderr);
         goto Error;
     }
     if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file, SSL_FILETYPE_PEM) != 1) {
-        h2o_config_print_error(configurator, config_file, config_node, "failed to load private key file:%s\n", key_file);
+        h2o_config_print_error(cmd, config_file, config_node, "failed to load private key file:%s\n", key_file);
         ERR_print_errors_fp(stderr);
         goto Error;
     }
@@ -176,9 +173,9 @@ Error:
     return NULL;
 }
 
-static int on_config_listen(h2o_configurator_t *configurator, void *ctx, const char *config_file, yoml_t *config_node)
+static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
 {
-    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, port_configurator, configurator);
+    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, ctx->globalconf);
     const char *hostname = NULL, *servname = NULL;
     SSL_CTX *ssl_ctx = NULL;
     struct addrinfo hints, *res;
@@ -194,28 +191,28 @@ static int on_config_listen(h2o_configurator_t *configurator, void *ctx, const c
             yoml_t *t;
             if ((t = yoml_get(config_node, "host")) != NULL) {
                 if (t->type != YOML_TYPE_SCALAR) {
-                    h2o_config_print_error(configurator, config_file, t, "`host` is not a string");
+                    h2o_config_print_error(cmd, config_file, t, "`host` is not a string");
                     return -1;
                 }
                 hostname = t->data.scalar;
             }
             if ((t = yoml_get(config_node, "port")) == NULL) {
-                h2o_config_print_error(configurator, config_file, config_node, "cannot find mandatory property `port`");
+                h2o_config_print_error(cmd, config_file, config_node, "cannot find mandatory property `port`");
                 return -1;
             }
             if (t->type != YOML_TYPE_SCALAR) {
-                h2o_config_print_error(configurator, config_file, config_node, "`port` is not a string");
+                h2o_config_print_error(cmd, config_file, config_node, "`port` is not a string");
                 return -1;
             }
             servname = t->data.scalar;
             if ((t = yoml_get(config_node, "ssl")) != NULL) {
-                if ((ssl_ctx = on_config_listen_setup_ssl(configurator, config_file, t)) == NULL)
+                if ((ssl_ctx = on_config_listen_setup_ssl(cmd, config_file, t)) == NULL)
                     return -1;
             }
         }
         break;
     default:
-        h2o_config_print_error(configurator, config_file, config_node, "value must be a string or a mapping (with keys: `port` and optionally `host`)");
+        h2o_config_print_error(cmd, config_file, config_node, "value must be a string or a mapping (with keys: `port` and optionally `host`)");
         return -1;
     }
 
@@ -225,10 +222,10 @@ static int on_config_listen(h2o_configurator_t *configurator, void *ctx, const c
     hints.ai_protocol = IPPROTO_TCP;
     hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV | AI_PASSIVE;
     if ((error = getaddrinfo(hostname, servname, &hints, &res)) != 0) {
-        h2o_config_print_error(configurator, config_file, config_node, "failed to resolve the listening address: %s", gai_strerror(error));
+        h2o_config_print_error(cmd, config_file, config_node, "failed to resolve the listening address: %s", gai_strerror(error));
         return -1;
     } else if (res == NULL) {
-        h2o_config_print_error(configurator, config_file, config_node, "failed to resolve the listening address: getaddrinfo returned an empty list");
+        h2o_config_print_error(cmd, config_file, config_node, "failed to resolve the listening address: getaddrinfo returned an empty list");
         return -1;
     }
 
@@ -254,14 +251,18 @@ static int on_config_listen(h2o_configurator_t *configurator, void *ctx, const c
     return 0;
 }
 
-static int on_config_listen_complete(h2o_configurator_t *_conf, void *_global_config)
+static int on_config_listen_exit(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx)
 {
-    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, port_configurator, _conf);
+    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, ctx->globalconf);
     int reuseaddr_flag = 1;
 #ifdef IPV6_V6ONLY
     int v6only_flag = 1;
 #endif
     size_t i;
+
+    /* only handle global-level exit */
+    if (ctx->hostconf != NULL)
+        return 0;
 
     if (conf->num_listeners == 0) {
         fprintf(stderr, "mandatory configuration directive `port` is missing\n");
@@ -287,29 +288,34 @@ static int on_config_listen_complete(h2o_configurator_t *_conf, void *_global_co
     return 0;
 }
 
-static int on_config_max_connections(h2o_configurator_t *_conf, void *ctx, const char *config_file, yoml_t *config_node)
+static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
 {
-    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, max_connections_configurator, _conf);
-    return h2o_config_scanf(&conf->max_connections_configurator, config_file, config_node, "%u", &conf->max_connections);
+    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, ctx->globalconf);
+    return h2o_config_scanf(cmd, config_file, config_node, "%u", &conf->max_connections);
 }
 
 
-static int on_config_num_threads(h2o_configurator_t *_conf, void *ctx, const char *config_file, yoml_t *config_node)
+static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
 {
-    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, num_threads_configurator, _conf);
-    return h2o_config_scanf(&conf->num_threads_configurator, config_file, config_node, "%u", &conf->num_threads);
+    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, ctx->globalconf);
+    return h2o_config_scanf(cmd, config_file, config_node, "%u", &conf->num_threads);
 }
 
-static void usage_print_directives(h2o_linklist_t *configurators)
+static void usage_print_directives(h2o_globalconf_t *conf)
 {
     h2o_linklist_t *node;
+    size_t i;
 
-    for (node = configurators->next; node != configurators; node = node->next) {
-        h2o_configurator_t *c = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, node);
-        const char **desc;
-        printf("    %s:\n", c->cmd);
-        for (desc = c->description; *desc != NULL; ++desc)
-            printf("      %s\n", *desc);
+    for (node = conf->configurators.next; node != &conf->configurators; node = node->next) {
+        h2o_configurator_t *configurator = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, node);
+        for (i = 0; i != configurator->commands.size; ++i) {
+            h2o_configurator_command_t *cmd = configurator->commands.entries + i;
+            const char **desc;
+            printf("    %s:\n", cmd->name);
+            for (desc = cmd->description; *desc != NULL; ++desc)
+                printf("      %s\n", *desc);
+        }
+        printf("\n");
     }
 }
 
@@ -326,16 +332,8 @@ static void usage(h2o_globalconf_t *config)
         "  --help       print this help\n"
         "\n"
         "Directives of the Configuration File:\n"
-        "  global:\n");
-    usage_print_directives(&config->global_configurators);
-    printf(
-        "  per-host:\n");
-    usage_print_directives(&config->host_configurators);
-    printf(
-        "\n"
-        "  note: per-host directives can be used at the global level to define the\n"
-        "  behaviour of the default host\n"
         "\n");
+    usage_print_directives(config);
 }
 
 yoml_t *load_config(const char *fn)
@@ -485,26 +483,6 @@ int main(int argc, char **argv)
         { NULL, 0, NULL, 0 }
     };
 
-    static const char *listen_configurator_desc[] = {
-        "port at which the server should listen for incoming requests (mandatory)",
-        " - if the value is a scalar, it is treated as the port number (or as the",
-        "   service name)",
-        " - if the value is a mapping, following properties are recognized:",
-        "     port: incoming port number or service name (mandatory)",
-        "     host: incoming address (default: any address)",
-        "     ssl:  if using SSL (default: none)",
-        "       certificate-file: path of the certificate file",
-        "       key-file:         path of the key file",
-        NULL
-    };
-    static const char *num_threads_configurator_desc[] = {
-        "number of worker threads (default: 1)",
-        NULL
-    };
-    static const char *max_connections_configurator_desc[] = {
-        "max connections (default: 1024)",
-        NULL
-    };
     static struct config_t config = {
         {}, /* global_config */
         NULL, /* listeners */
@@ -513,21 +491,42 @@ int main(int argc, char **argv)
         1, /* num_threads */
         NULL, /* thread_ids */
         {}, /* state */
-        { {}, "listen", listen_configurator_desc, NULL, on_config_listen, on_config_listen_complete },
-        { {}, "max-connections", max_connections_configurator_desc, NULL, on_config_max_connections },
-        { {}, "num-threads", num_threads_configurator_desc, NULL, on_config_num_threads }
     };
 
     const char *config_file = "h2o.conf";
     int opt_ch;
     yoml_t *config_yoml;
+
     h2o_config_init(&config.global_config);
     config.global_config.close_cb = on_close;
-    h2o_linklist_insert(&config.global_config.global_configurators, &config.port_configurator._link);
-    h2o_linklist_insert(&config.global_config.global_configurators, &config.max_connections_configurator._link);
-    h2o_linklist_insert(&config.global_config.global_configurators, &config.num_threads_configurator._link);
-    h2o_access_log_register_configurator(&config.global_config.host_configurators);
-    h2o_proxy_register_reverse_proxy_configurator(&config.global_config.host_configurators);
+
+    {
+        h2o_configurator_t *c = h2o_config_create_configurator(&config.global_config, sizeof(*c));
+        c->exit = on_config_listen_exit;
+        h2o_config_define_command(
+            c, "listen", H2O_CONFIGURATOR_FLAG_GLOBAL,
+            on_config_listen,
+            "port at which the server should listen for incoming requests (mandatory)",
+            " - if the value is a scalar, it is treated as the port number (or as the",
+            "   service name)",
+            " - if the value is a mapping, following properties are recognized:",
+            "     port: incoming port number or service name (mandatory)",
+            "     host: incoming address (default: any address)",
+            "     ssl:  if using SSL (default: none)",
+            "       certificate-file: path of the certificate file",
+            "       key-file:         path of the key file");
+        h2o_config_define_command(
+            c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL,
+            on_config_max_connections,
+            "max connections (default: 1024)");
+        h2o_config_define_command(
+            c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
+            on_config_num_threads,
+            "number of worker threads (default: 1)");
+    }
+
+    h2o_access_log_register_configurator(&config.global_config);
+    h2o_proxy_register_configurator(&config.global_config);
 
     /* parse options */
     while ((opt_ch = getopt_long(argc, argv, "c:h", longopts, NULL)) != -1) {

@@ -26,11 +26,14 @@ listen:
   ssl:
     key-file: t/50end-to-end/protocol/server.key
     certificate-file: t/50end-to-end/protocol/server.crt
-files:
-  /: t/50end-to-end/protocol/docroot
-mime-types:
-  txt: text/plain
-  jpg: image/jpeg
+hosts:
+  "localhost:$port":
+    paths:
+      /:
+        directory: t/50end-to-end/protocol/docroot
+    mime-types:
+      txt: text/plain
+      jpg: image/jpeg
 EOT
     exec "./h2o", "-c", $conffn;
     die "failed to spawn h2o:$!";

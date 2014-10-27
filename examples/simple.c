@@ -214,15 +214,18 @@ static int setup_ssl(const char *cert_file, const char *key_file)
 
 int main(int argc, char **argv)
 {
+    h2o_hostconf_t *hostconf;
+
     signal(SIGPIPE, SIG_IGN);
 
     h2o_config_init(&config);
-    register_handler(&config.default_host, post_test);
-    register_handler(&config.default_host, chunked_test);
-    register_handler(&config.default_host, reproxy_test);
-    h2o_file_register(&config.default_host, "/", "htdocs", "index.html");
-    h2o_define_mimetype(&config.default_host.mimemap, "html", "text/html");
-    h2o_reproxy_register(&config.default_host);
+    hostconf = h2o_config_register_host(&config, "default");
+    register_handler(hostconf, post_test);
+    register_handler(hostconf, chunked_test);
+    register_handler(hostconf, reproxy_test);
+    h2o_file_register(hostconf, "/", "htdocs", "index.html");
+    h2o_define_mimetype(&hostconf->mimemap, "html", "text/html");
+    h2o_reproxy_register(hostconf);
 
 #if H2O_USE_LIBUV
     uv_loop_t loop;
