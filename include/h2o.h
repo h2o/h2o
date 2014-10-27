@@ -750,6 +750,10 @@ int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *pa
  * registers the file handler to the context
  */
 void h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char *index_file);
+/**
+ * registers the configurator
+ */
+void h2o_file_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/proxy.c */
 
@@ -762,7 +766,7 @@ int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_buf_t 
  */
 void h2o_proxy_register_reverse_proxy(h2o_hostconf_t *host_config, const char *virtual_path, const char *host, uint16_t port, const char *real_path, uint64_t io_timeout);
 /**
- * 
+ * registers the configurator
  */
 void h2o_proxy_register_configurator(h2o_globalconf_t *conf);
 

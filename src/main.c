@@ -526,6 +526,7 @@ int main(int argc, char **argv)
     }
 
     h2o_access_log_register_configurator(&config.global_config);
+    h2o_file_register_configurator(&config.global_config);
     h2o_proxy_register_configurator(&config.global_config);
 
     /* parse options */

@@ -183,12 +183,6 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
     return 0;
 }
 
-static int on_config_directory(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
-{
-    h2o_file_register(ctx->hostconf, ctx->path->base, node->data.scalar, "index.html" /* FIXME */);
-    return 0;
-}
-
 static int on_config_mime_types(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
     size_t i;
@@ -278,11 +272,6 @@ static void init_core_configurators(h2o_globalconf_t *conf)
             H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING | H2O_CONFIGURATOR_FLAG_DEFERRED,
             on_config_paths,
             "map of URL-path -> configuration");
-        h2o_config_define_command(
-            c, "directory",
-            H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-            on_config_directory,
-            "directory under which to serve the target path");
         h2o_config_define_command(
             c, "mime-types",
             H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,

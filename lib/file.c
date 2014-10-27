@@ -257,3 +257,19 @@ void h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, co
     self->real_path = append_slash_and_dup(real_path);
     self->index_file = h2o_strdup(NULL, index_file, SIZE_MAX);
 }
+
+static int on_config_dir(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+{
+    h2o_file_register(ctx->hostconf, ctx->path->base, node->data.scalar, "index.html" /* FIXME */);
+    return 0;
+}
+
+void h2o_file_register_configurator(h2o_globalconf_t *conf)
+{
+    h2o_configurator_t *c = h2o_config_create_configurator(conf, sizeof(*c));
+    h2o_config_define_command(
+        c, "file.dir",
+        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        on_config_dir,
+        "directory under which to serve the target path");
+}
