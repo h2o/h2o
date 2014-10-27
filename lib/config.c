@@ -112,15 +112,25 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
         yoml_t *key = node->data.mapping.elements[i].key;
         yoml_t *value = node->data.mapping.elements[i].value;
         h2o_buf_t path;
+        size_t num_handlers_before_config;
+        /* assertions */
         if (key->type != YOML_TYPE_SCALAR) {
             h2o_config_print_error(cmd, file, key, "key (representing the virtual path) must be a string");
             return -1;
         }
+        /* setup */
+        num_handlers_before_config = ctx->hostconf->handlers.size;
+        /* apply the configuration directives */
         path = h2o_buf_init(key->data.scalar, strlen(key->data.scalar));
         ctx->path = &path;
         if (apply_commands(ctx, file, value) != 0)
             return -1;
         ctx->path = NULL;
+        /* post-condition check */
+        if (num_handlers_before_config == ctx->hostconf->handlers.size) {
+            h2o_config_print_error(cmd, file, value, "no handler was defined for the path");
+            return -1;
+        }
     }
 
     return 0;
