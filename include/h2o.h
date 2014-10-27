@@ -86,7 +86,6 @@ typedef struct st_h2o_token_t {
  * The handlers should register themselves to h2o_context_t::handlers.
  */
 typedef struct st_h2o_handler_t {
-    h2o_linklist_t _link;
     size_t _config_slot;
     void *(*on_context_init)(struct st_h2o_handler_t *self, h2o_context_t *ctx);
     void (*on_context_dispose)(struct st_h2o_handler_t *self, h2o_context_t *ctx);
@@ -99,7 +98,6 @@ typedef struct st_h2o_handler_t {
  * The filters should register themselves to h2o_context_t::filters.
  */
 typedef struct st_h2o_filter_t {
-    h2o_linklist_t _link;
     size_t _config_slot;
     void *(*on_context_init)(struct st_h2o_filter_t *self, h2o_context_t *ctx);
     void (*on_context_dispose)(struct st_h2o_filter_t *self, h2o_context_t *ctx);
@@ -112,7 +110,6 @@ typedef struct st_h2o_filter_t {
  * The loggers should register themselves to h2o_context_t::loggers.
  */
 typedef struct st_h2o_logger_t {
-    h2o_linklist_t _link;
     size_t _config_slot;
     void *(*on_context_init)(struct st_h2o_logger_t *self, h2o_context_t *ctx);
     void (*on_context_dispose)(struct st_h2o_logger_t *self, h2o_context_t *ctx);
@@ -211,17 +208,17 @@ struct st_h2o_hostconf_t {
      */
     h2o_buf_t hostname;
     /**
-     * list of handlers (h2o_handler_t)
+     * list of handlers
      */
-    h2o_linklist_t handlers;
+    H2O_VECTOR(h2o_handler_t*) handlers;
     /**
-     * list of filters (h2o_filter_t)
+     * list of filters
      */
-    h2o_linklist_t filters;
+    H2O_VECTOR(h2o_filter_t*) filters;
     /**
      * list of loggers (h2o_logger_t)
      */
-    h2o_linklist_t loggers;
+    H2O_VECTOR(h2o_logger_t*) loggers;
     /**
      * mime-map
      */
@@ -459,6 +456,7 @@ struct st_h2o_req_t {
     /* internal structure */
     h2o_generator_t *_generator;
     h2o_ostream_t *_ostr_top;
+    size_t _ostr_init_index;
     h2o_timeout_entry_t _timeout_entry;
     /* per-request memory pool (placed at the last since the structure is large) */
     h2o_mempool_t pool;
@@ -775,9 +773,12 @@ inline void h2o_proceed_response(h2o_req_t *req)
 
 inline void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
 {
-    if (self->_link.next != &req->host_config->filters) {
-        h2o_filter_t *next_filter = H2O_STRUCT_FROM_MEMBER(h2o_filter_t, _link, self->_link.next);
-        next_filter->on_setup_ostream(next_filter, req, slot);
+    h2o_filter_t *next;
+
+    assert(self == req->host_config->filters.entries[req->_ostr_init_index]);
+    if (req->_ostr_init_index + 1 < req->host_config->filters.size) {
+        next = req->host_config->filters.entries[++req->_ostr_init_index];
+        next->on_setup_ostream(next, req, slot);
     }
 }
 

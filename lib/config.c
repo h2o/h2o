@@ -262,9 +262,6 @@ static void init_host_config(h2o_hostconf_t *hostconf, h2o_globalconf_t *globalc
 {
     memset(hostconf, 0, sizeof(*hostconf));
     hostconf->global = globalconf;
-    h2o_linklist_init_anchor(&hostconf->handlers);
-    h2o_linklist_init_anchor(&hostconf->filters);
-    h2o_linklist_init_anchor(&hostconf->loggers);
     h2o_chunked_register(hostconf);
     h2o_init_mimemap(&hostconf->mimemap, H2O_DEFAULT_MIMETYPE);
 }
@@ -273,14 +270,15 @@ static void dispose_host_config(h2o_hostconf_t *host_config)
 {
     free(host_config->hostname.base);
 
-#define DESTROY_LIST(type, anchor) do { \
-    while (! h2o_linklist_is_empty(&anchor)) { \
-        type *e = H2O_STRUCT_FROM_MEMBER(type, _link, anchor.next); \
-        h2o_linklist_unlink(&e->_link); \
+#define DESTROY_LIST(type, list) do { \
+    size_t i; \
+    for (i = 0; i != list.size; ++i) { \
+        type *e = list.entries[i]; \
         if (e->dispose != NULL) \
             e->dispose(e); \
         free(e); \
     } \
+    free(list.entries); \
 } while (0)
 
     DESTROY_LIST(h2o_handler_t, host_config->handlers);
@@ -465,7 +463,9 @@ h2o_handler_t *h2o_create_handler(h2o_hostconf_t *conf, size_t sz)
 
     memset(handler, 0, sz);
     handler->_config_slot = conf->global->_num_config_slots++;
-    h2o_linklist_insert(&conf->handlers, &handler->_link);
+
+    h2o_vector_reserve(NULL, (void*)&conf->handlers, sizeof(conf->handlers.entries[0]), conf->handlers.size + 1);
+    conf->handlers.entries[conf->handlers.size++] = handler;
 
     return handler;
 }
@@ -476,7 +476,9 @@ h2o_filter_t *h2o_create_filter(h2o_hostconf_t *conf, size_t sz)
 
     memset(filter, 0, sz);
     filter->_config_slot = conf->global->_num_config_slots++;
-    h2o_linklist_insert(&conf->filters, &filter->_link);
+
+    h2o_vector_reserve(NULL, (void*)&conf->filters, sizeof(conf->filters.entries[0]), conf->filters.size + 1);
+    conf->filters.entries[conf->filters.size++] = filter;
 
     return filter;
 }
@@ -487,7 +489,9 @@ h2o_logger_t *h2o_create_logger(h2o_hostconf_t *conf, size_t sz)
 
     memset(logger, 0, sz);
     logger->_config_slot = conf->global->_num_config_slots++;
-    h2o_linklist_insert(&conf->loggers, &logger->_link);
+
+    h2o_vector_reserve(NULL, (void*)&conf->loggers, sizeof(conf->loggers.entries[0]), conf->loggers.size + 1);
+    conf->loggers.entries[conf->loggers.size++] = logger;
 
     return logger;
 }

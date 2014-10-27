@@ -28,9 +28,9 @@ static void on_context_init(h2o_context_t *ctx, h2o_hostconf_t *hostconf)
 {
 #define DOIT(type, list) \
     do { \
-        h2o_linklist_t *n; \
-        for (n = hostconf->list.next; n != &hostconf->list; n = n->next) { \
-            type *o = H2O_STRUCT_FROM_MEMBER(type, _link, n); \
+        size_t i; \
+        for (i = 0; i != hostconf->list.size; ++i) { \
+            type *o = hostconf->list.entries[i]; \
             if (o->on_context_init != NULL) \
                 ctx->_module_configs[o->_config_slot] = o->on_context_init(o, ctx); \
         } \
@@ -47,9 +47,9 @@ static void on_context_dispose(h2o_context_t *ctx, h2o_hostconf_t *hostconf)
 {
 #define DOIT(type, list) \
     do { \
-        h2o_linklist_t *n; \
-        for (n = hostconf->list.next; n != &hostconf->list; n = n->next) { \
-            type *o = H2O_STRUCT_FROM_MEMBER(type, _link, n); \
+        size_t i; \
+        for (i = 0; i != hostconf->list.size; ++i) { \
+            type *o = hostconf->list.entries[i]; \
             if (o->on_context_dispose != NULL) \
                 o->on_context_dispose(o, ctx); \
         } \

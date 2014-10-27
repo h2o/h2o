@@ -89,11 +89,9 @@ void h2o_dispose_request(h2o_req_t *req)
     h2o_timeout_unlink(&req->_timeout_entry);
 
     if (req->version != 0 && req->host_config != NULL) {
-        h2o_hostconf_t *host_config = req->host_config;
-        h2o_linklist_t *node;
-        for (node = host_config->loggers.next; node != &host_config->loggers; node = node->next) {
-            h2o_logger_t *logger = H2O_STRUCT_FROM_MEMBER(h2o_logger_t, _link, node);
-            logger->log_access(logger, req);
+        h2o_logger_t **logger = req->host_config->loggers.entries, **end = logger + req->host_config->loggers.size;
+        for (; logger != end; ++logger) {
+            (*logger)->log_access((*logger), req);
         }
     }
 
@@ -103,7 +101,6 @@ void h2o_dispose_request(h2o_req_t *req)
 void h2o_process_request(h2o_req_t *req)
 {
     h2o_context_t *ctx = req->conn->ctx;
-    h2o_linklist_t *handler_node, *handlers;
 
     h2o_get_timestamp(ctx, &req->pool, &req->processed_at);
 
@@ -111,9 +108,8 @@ void h2o_process_request(h2o_req_t *req)
     req->host_config = ctx->global_config->hosts.entries;
     if (req->authority.base != NULL) {
         if (ctx->global_config->hosts.size != 1) {
-            size_t i;
-            for (i = 0; i != ctx->global_config->hosts.size; ++i) {
-                h2o_hostconf_t *hostconf = ctx->global_config->hosts.entries + i;
+            h2o_hostconf_t *hostconf = ctx->global_config->hosts.entries, *end = hostconf + ctx->global_config->hosts.size;
+            for (; hostconf != end; ++hostconf) {
                 if (h2o_memis(req->authority.base, req->authority.len, hostconf->hostname.base, hostconf->hostname.len)) {
                     req->host_config = hostconf;
                     break;
@@ -125,12 +121,12 @@ void h2o_process_request(h2o_req_t *req)
         req->authority = req->host_config->hostname;
     }
 
-    /* call any of the handlers */
-    handlers = &req->host_config->handlers;
-    for (handler_node = handlers->next; handler_node != handlers; handler_node = handler_node->next) {
-        h2o_handler_t *handler = H2O_STRUCT_FROM_MEMBER(h2o_handler_t, _link, handler_node);
-        if (handler->on_req(handler, req) == 0)
-            return;
+    { /* call any of the handlers */
+        h2o_handler_t **handler = req->host_config->handlers.entries, **end = handler + req->host_config->handlers.size;
+        for (; handler != end; ++handler) {
+            if ((*handler)->on_req(*handler, req) == 0)
+                return;
+        }
     }
 
     h2o_send_error(req, 404, "File Not Found", "not found");
@@ -138,16 +134,13 @@ void h2o_process_request(h2o_req_t *req)
 
 void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
 {
-    h2o_linklist_t *filters;
-
     /* set generator */
     assert(req->_generator == NULL);
     req->_generator = generator;
 
     /* setup response filters */
-    filters = &req->host_config->filters;
-    if (! h2o_linklist_is_empty(filters)) {
-        h2o_filter_t *filter = H2O_STRUCT_FROM_MEMBER(h2o_filter_t, _link, filters->next);
+    if (req->host_config->filters.size != 0) {
+        h2o_filter_t *filter = req->host_config->filters.entries[0];
         filter->on_setup_ostream(filter, req, &req->_ostr_top);
     }
 }
