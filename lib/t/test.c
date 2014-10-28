@@ -51,6 +51,26 @@ void h2o_loopback_run_loop(h2o_loopback_conn_t *conn)
     }
 }
 
+char *sha1sum(const void *src, size_t len)
+{
+    SHA_CTX ctx;
+    unsigned char bin[SHA_DIGEST_LENGTH];
+    static char hexbuf[SHA_DIGEST_LENGTH * 2 + 1];
+    size_t i;
+
+    SHA1_Init(&ctx);
+    SHA1_Update(&ctx, src, len);
+    SHA1_Final(bin, &ctx);
+
+    for (i = 0; i != SHA_DIGEST_LENGTH; ++i) {
+        hexbuf[i * 2] = ("0123456789abcdef")[bin[i] >> 4];
+        hexbuf[i * 2 + 1] = ("0123456789abcdef")[bin[i] & 0xf];
+    }
+    hexbuf[i * 2] = '\0';
+
+    return hexbuf;
+}
+
 h2o_loop_t *test_loop;
 
 static void test_loopback(void)

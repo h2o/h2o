@@ -80,6 +80,12 @@ void h2o_timeout_init(h2o_loop_t *loop, h2o_timeout_t *timeout, uint64_t millis)
     h2o_timeout__do_init(loop, timeout);
 }
 
+void h2o_timeout_dispose(h2o_loop_t *loop, h2o_timeout_t *timeout)
+{
+    assert(h2o_linklist_is_empty(&timeout->_entries));
+    h2o_timeout__do_dispose(loop, timeout);
+}
+
 void h2o_timeout_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)
 {
     /* insert at tail, so that the entries are sorted in ascending order */

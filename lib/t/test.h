@@ -25,6 +25,8 @@ void h2o_loopback_run_loop(h2o_loopback_conn_t *conn);
 
 extern h2o_loop_t *test_loop;
 
+char *sha1sum(const void *src, size_t len);
+
 void test_lib__string_c(void);
 void test_lib__util_c(void);
 void test_lib__http2__hpack(void);

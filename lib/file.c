@@ -425,6 +425,28 @@ void test_lib__file_c()
     {
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
         conn->req.method = h2o_buf_init(H2O_STRLIT("GET"));
+        conn->req.path = h2o_buf_init(H2O_STRLIT("/1000.txt"));
+        conn->req.version = 0x100;
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        ok(conn->body->size == 1000);
+        ok(strcmp(sha1sum(conn->body->bytes, conn->body->size), "dfd3ae1f5c475555fad62efe42e07309fa45f2ed") == 0);
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        conn->req.method = h2o_buf_init(H2O_STRLIT("GET"));
+        conn->req.path = h2o_buf_init(H2O_STRLIT("/1000000.txt"));
+        conn->req.version = 0x100;
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        ok(conn->body->size == 1000000);
+        ok(strcmp(sha1sum(conn->body->bytes, conn->body->size), "00c8ab71d0914dce6a1ec2eaa0fda0df7044b2a2") == 0);
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        conn->req.method = h2o_buf_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_buf_init(H2O_STRLIT("/index_txt/"));
         conn->req.version = 0x100;
         h2o_loopback_run_loop(conn);

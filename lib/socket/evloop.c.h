@@ -452,6 +452,11 @@ void h2o_timeout__do_init(h2o_evloop_t *loop, h2o_timeout_t *timeout)
     h2o_linklist_insert(&loop->_timeouts, &timeout->_link);
 }
 
+void h2o_timeout__do_dispose(h2o_evloop_t *loop, h2o_timeout_t *timeout)
+{
+    h2o_linklist_unlink(&timeout->_link);
+}
+
 void h2o_timeout__do_link(h2o_evloop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)
 {
     /* nothing to do */
