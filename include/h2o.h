@@ -749,7 +749,7 @@ int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *pa
 /**
  * registers the file handler to the context
  */
-void h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char *index_file);
+void h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char **index_files);
 /**
  * registers the configurator
  */

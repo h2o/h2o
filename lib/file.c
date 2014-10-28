@@ -45,7 +45,18 @@ struct st_h2o_file_handler_t {
     h2o_handler_t super;
     h2o_buf_t virtual_path; /* has "/" appended at last */
     h2o_buf_t real_path; /* has "/" appended at last */
-    h2o_buf_t index_file;
+    size_t max_index_file_len;
+    h2o_buf_t index_files[1];
+};
+
+struct st_h2o_file_config_vars_t {
+    const char **index_files;
+};
+
+struct st_h2o_file_configurator_t {
+    h2o_configurator_t super;
+    struct st_h2o_file_config_vars_t *vars;
+    struct st_h2o_file_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
 static void do_close(h2o_generator_t *_self, h2o_req_t *req)
@@ -149,9 +160,9 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     struct st_h2o_file_handler_t *self = (void*)_self;
     h2o_buf_t vpath, mime_type;
-    char *dir_path;
-    size_t dir_path_len;
-    struct st_h2o_sendfile_generator_t *generator;
+    char *rpath;
+    size_t rpath_len;
+    struct st_h2o_sendfile_generator_t *generator = NULL;
     size_t if_modified_since_header_index, if_none_match_header_index;
 
     /* only accept GET (TODO accept HEAD as well) */
@@ -168,25 +179,37 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     if (vpath.len > PATH_MAX)
         return -1;
 
-    /* build path */
-    dir_path = alloca(
+    /* build path (still unterminated at the end of the block) */
+    rpath = alloca(
         self->real_path.len
         + (vpath.len - 1) /* exclude "/" at the head */
-        + self->index_file.len
+        + self->max_index_file_len
         + 1);
-    dir_path_len = 0;
-    memcpy(dir_path + dir_path_len, self->real_path.base, self->real_path.len);
-    dir_path_len += self->real_path.len;
-    memcpy(dir_path + dir_path_len, vpath.base + 1, vpath.len - 1);
-    dir_path_len += vpath.len - 1;
-    if (dir_path[dir_path_len - 1] == '/') {
-        memcpy(dir_path + dir_path_len, self->index_file.base, self->index_file.len);
-        dir_path_len += self->index_file.len;
-    }
-    dir_path[dir_path_len] = '\0';
+    rpath_len = 0;
+    memcpy(rpath + rpath_len, self->real_path.base, self->real_path.len);
+    rpath_len += self->real_path.len;
+    memcpy(rpath + rpath_len, vpath.base + 1, vpath.len - 1);
+    rpath_len += vpath.len - 1;
 
-    /* build generator (or return an error response) */
-    if ((generator = create_generator(&req->pool, dir_path)) == NULL) {
+    /* build generator (as well as terminating the rpath and its length upon success) */
+    if (rpath[rpath_len - 1] == '/') {
+        h2o_buf_t *index_file;
+        for (index_file = self->index_files; index_file->base != NULL; ++index_file) {
+            memcpy(rpath + rpath_len, index_file->base, index_file->len);
+            rpath[rpath_len + index_file->len] = '\0';
+            if ((generator = create_generator(&req->pool, rpath)) != NULL) {
+                rpath_len += index_file->len;
+                break;
+            }
+            if (errno != ENOENT)
+                break;
+        }
+    } else {
+        rpath[rpath_len] = '\0';
+        generator = create_generator(&req->pool, rpath);
+    }
+    /* return error if failed */
+    if (generator == NULL) {
         if (errno == ENOENT) {
             h2o_send_error(req, 404, "File Not Found", "file not found");
         } else {
@@ -206,7 +229,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     }
 
     /* obtain mime type */
-    mime_type = h2o_get_mimetype(&req->host_config->mimemap, h2o_get_filext(dir_path, dir_path_len));
+    mime_type = h2o_get_mimetype(&req->host_config->mimemap, h2o_get_filext(rpath, rpath_len));
 
     /* return file */
     do_send_file(generator, req, 200, "OK", mime_type);
@@ -223,10 +246,12 @@ NotModified:
 static void on_dispose(h2o_handler_t *_self)
 {
     struct st_h2o_file_handler_t *self = (void*)_self;
+    size_t i;
 
     free(self->virtual_path.base);
     free(self->real_path.base);
-    free(self->index_file.base);
+    for (i = 0; self->index_files[i].base != NULL; ++i)
+        free(self->index_files[i].base);
 }
 
 static h2o_buf_t append_slash_and_dup(const char *path)
@@ -246,30 +271,110 @@ static h2o_buf_t append_slash_and_dup(const char *path)
     return h2o_buf_init(buf, path_len);
 }
 
-void h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char *index_file)
+void h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char **index_files)
 {
-    struct st_h2o_file_handler_t *self = (void*)h2o_create_handler(host_config, sizeof(*self));
+    struct st_h2o_file_handler_t *self;
+    size_t i;
 
+    /* allocate memory */
+    for (i = 0; index_files[i] != NULL; ++i)
+        ;
+    self = (void*)h2o_create_handler(host_config, offsetof(struct st_h2o_file_handler_t, index_files[0]) + sizeof(self->index_files[0]) * (i + 1));
+
+    /* setup callbacks */
     self->super.dispose = on_dispose;
     self->super.on_req = on_req;
 
+    /* setup attributes */
     self->virtual_path = append_slash_and_dup(virtual_path);
     self->real_path = append_slash_and_dup(real_path);
-    self->index_file = h2o_strdup(NULL, index_file, SIZE_MAX);
+    for (i = 0; index_files[i] != NULL; ++i)
+        self->index_files[i] = h2o_strdup(NULL, index_files[i], SIZE_MAX);
 }
 
 static int on_config_dir(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
-    h2o_file_register(ctx->hostconf, ctx->path->base, node->data.scalar, "index.html" /* FIXME */);
+    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+
+    h2o_file_register(ctx->hostconf, ctx->path->base, node->data.scalar, self->vars->index_files);
     return 0;
 }
 
-void h2o_file_register_configurator(h2o_globalconf_t *conf)
+static int on_config_index(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
-    h2o_configurator_t *c = h2o_config_create_configurator(conf, sizeof(*c));
+    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+    size_t i;
+
+    free(self->vars->index_files);
+    self->vars->index_files = h2o_malloc(sizeof(self->vars->index_files[0]) * (node->data.sequence.size + 1));
+    for (i = 0; i != node->data.sequence.size; ++i) {
+        yoml_t *element = node->data.sequence.elements[i];
+        if (element->type != YOML_TYPE_SCALAR) {
+            h2o_config_print_error(cmd, file, element, "argument must be a sequence of scalars");
+            return -1;
+        }
+        self->vars->index_files[i] = element->data.scalar;
+    }
+    self->vars->index_files[i] = NULL;
+
+    return 0;
+}
+
+static const char **dup_strlist(const char **s)
+{
+    size_t i;
+    const char **ret;
+
+    for (i = 0; s[i] != NULL; ++i)
+        ;
+    ret = h2o_malloc(sizeof(*ret) * (i + 1));
+    for (i = 0; s[i] != NULL; ++i)
+        ret[i] = s[i];
+    ret[i] = NULL;
+
+    return ret;
+}
+
+static int on_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx)
+{
+    struct st_h2o_file_configurator_t *self = (void*)_self;
+    ++self->vars;
+    self->vars[0].index_files = dup_strlist(self->vars[-1].index_files);
+    return 0;
+}
+
+static int on_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx)
+{
+    struct st_h2o_file_configurator_t *self = (void*)_self;
+    free(self->vars->index_files);
+    --self->vars;
+    return 0;
+}
+
+void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
+{
+    static const char *default_index_files[] = {
+        "index.html",
+        "index.htm",
+        "index.txt",
+        NULL
+    };
+
+    struct st_h2o_file_configurator_t *self = (void*)h2o_config_create_configurator(globalconf, sizeof(*self));
+
+    self->super.enter = on_enter;
+    self->super.exit = on_exit;
+    self->vars = self->_vars_stack;
+    self->vars->index_files = default_index_files;
+
     h2o_config_define_command(
-        c, "file.dir",
-        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        &self->super, "file.dir",
+        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_DEFERRED,
         on_config_dir,
         "directory under which to serve the target path");
+    h2o_config_define_command(
+        &self->super, "file.index",
+        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
+        on_config_index,
+        "sequence of index file names (default: index.html index.htm index.txt)");
 }
