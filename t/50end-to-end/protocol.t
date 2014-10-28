@@ -30,7 +30,7 @@ hosts:
   "localhost:$port":
     paths:
       /:
-        directory: t/50end-to-end/protocol/docroot
+        file.dir: t/50end-to-end/protocol/docroot
     mime-types:
       txt: text/plain
       jpg: image/jpeg
