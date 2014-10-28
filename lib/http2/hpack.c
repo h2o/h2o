@@ -57,7 +57,7 @@ static inline int value_is_part_of_static_table(const h2o_buf_t *value)
 
 static h2o_buf_t *alloc_buf(h2o_mempool_t *pool, size_t len)
 {
-    h2o_buf_t *buf = h2o_mempool_alloc_shared(pool, sizeof(h2o_buf_t) + len + 1);
+    h2o_buf_t *buf = h2o_mempool_alloc_shared(pool, sizeof(h2o_buf_t) + len + 1, NULL);
     buf->base = (char*)buf + sizeof(h2o_buf_t);
     buf->len = len;
     return buf;
