@@ -185,7 +185,11 @@ void schedule_timer(h2o_timeout_t *timeout)
 void h2o_timeout__do_init(h2o_loop_t *loop, h2o_timeout_t *timeout)
 {
     uv_timer_init(loop, &timeout->_backend.timer);
-    uv_unref((uv_handle_t*)&timeout->_backend.timer);
+}
+
+void h2o_timeout__do_dispose(h2o_loop_t *loop, h2o_timeout_t *timeout)
+{
+    uv_close((uv_handle_t*)&timeout->_backend.timer, NULL);
 }
 
 void h2o_timeout__do_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)

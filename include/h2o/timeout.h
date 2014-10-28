@@ -57,6 +57,10 @@ typedef struct st_h2o_timeout_t {
  */
 void h2o_timeout_init(h2o_loop_t *loop, h2o_timeout_t *timeout, uint64_t millis);
 /**
+ * 
+ */
+void h2o_timeout_dispose(h2o_loop_t *loop, h2o_timeout_t *timeout);
+/**
  * activates a timeout entry, by linking it to a timeout
  */
 void h2o_timeout_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry);
@@ -73,6 +77,7 @@ size_t h2o_timeout_run(h2o_timeout_t *timeout, uint64_t now);
 size_t h2o_timeout_run_all(h2o_linklist_t *timeouts, uint64_t now);
 uint64_t h2o_timeout_get_wake_at(h2o_linklist_t *timeouts);
 void h2o_timeout__do_init(h2o_loop_t *loop, h2o_timeout_t *timeout);
+void h2o_timeout__do_dispose(h2o_loop_t *loop, h2o_timeout_t *timeout);
 void h2o_timeout__do_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry);
 
 /* inline defs */

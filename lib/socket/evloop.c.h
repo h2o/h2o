@@ -360,6 +360,8 @@ h2o_evloop_t *create_evloop(size_t sz)
     loop->_statechanged.tail_ref = &loop->_statechanged.head;
     h2o_linklist_init_anchor(&loop->_timeouts);
 
+    update_now(loop);
+
     return loop;
 }
 
@@ -448,6 +450,11 @@ uint64_t h2o_now(h2o_evloop_t *loop)
 void h2o_timeout__do_init(h2o_evloop_t *loop, h2o_timeout_t *timeout)
 {
     h2o_linklist_insert(&loop->_timeouts, &timeout->_link);
+}
+
+void h2o_timeout__do_dispose(h2o_evloop_t *loop, h2o_timeout_t *timeout)
+{
+    h2o_linklist_unlink(&timeout->_link);
 }
 
 void h2o_timeout__do_link(h2o_evloop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)

@@ -92,6 +92,8 @@ void h2o_context_dispose(h2o_context_t *ctx)
         on_context_dispose(ctx, hostconf);
     }
     free(ctx->_module_configs);
+    h2o_timeout_dispose(ctx->loop, &ctx->zero_timeout);
+    h2o_timeout_dispose(ctx->loop, &ctx->req_timeout);
 }
 
 void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts)
