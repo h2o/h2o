@@ -378,3 +378,63 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
         on_config_index,
         "sequence of index file names (default: index.html index.htm index.txt)");
 }
+
+#ifdef H2O_UNITTEST
+
+#include "t/test.h"
+
+void test_lib__file_c()
+{
+    h2o_globalconf_t globalconf;
+    h2o_hostconf_t *hostconf;
+    h2o_context_t ctx;
+
+    static const char *index_files[] = {
+        "index.html",
+        "index.htm",
+        "index.txt",
+        NULL
+    };
+
+    h2o_config_init(&globalconf);
+    hostconf = h2o_config_register_host(&globalconf, "default");
+    h2o_file_register(hostconf, "/", "t/00unit/file", index_files);
+
+    h2o_context_init(&ctx, test_loop, &globalconf);
+
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        conn->req.method = h2o_buf_init(H2O_STRLIT("GET"));
+        conn->req.path = h2o_buf_init(H2O_STRLIT("/"));
+        conn->req.version = 0x100;
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("hello html\n")));
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        conn->req.method = h2o_buf_init(H2O_STRLIT("GET"));
+        conn->req.path = h2o_buf_init(H2O_STRLIT("/index.html"));
+        conn->req.version = 0x100;
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("hello html\n")));
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        conn->req.method = h2o_buf_init(H2O_STRLIT("GET"));
+        conn->req.path = h2o_buf_init(H2O_STRLIT("/index_txt/"));
+        conn->req.version = 0x100;
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("hello text\n")));
+        h2o_loopback_destroy(conn);
+    }
+
+    h2o_context_dispose(&ctx);
+    h2o_config_dispose(&globalconf);
+}
+
+#endif

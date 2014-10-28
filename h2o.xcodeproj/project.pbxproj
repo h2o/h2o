@@ -897,6 +897,7 @@
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
+					"-luv",
 				);
 				PRODUCT_NAME = unittest;
 			};
@@ -1023,6 +1024,7 @@
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
+					"-luv",
 				);
 				PRODUCT_NAME = unittest;
 			};
