@@ -335,7 +335,7 @@ static const char **dup_strlist(const char **s)
     return ret;
 }
 
-static int on_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx)
+static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx)
 {
     struct st_h2o_file_configurator_t *self = (void*)_self;
     ++self->vars;
@@ -343,7 +343,7 @@ static int on_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx)
     return 0;
 }
 
-static int on_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx)
+static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx)
 {
     struct st_h2o_file_configurator_t *self = (void*)_self;
     free(self->vars->index_files);
@@ -362,8 +362,8 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
 
     struct st_h2o_file_configurator_t *self = (void*)h2o_config_create_configurator(globalconf, sizeof(*self));
 
-    self->super.enter = on_enter;
-    self->super.exit = on_exit;
+    self->super.enter = on_config_enter;
+    self->super.exit = on_config_exit;
     self->vars = self->_vars_stack;
     self->vars->index_files = default_index_files;
 
