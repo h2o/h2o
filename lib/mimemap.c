@@ -90,9 +90,7 @@ void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, const char *type)
 
 void h2o_mimemap_set_type(h2o_mimemap_t *mimemap, const char *ext, const char *type)
 {
-    khiter_t iter;
-
-    iter = kh_get(exttable, mimemap->table, ext);
+    khiter_t iter = kh_get(exttable, mimemap->table, ext);
     if (iter != kh_end(mimemap->table)) {
         h2o_mempool_release_shared(kh_val(mimemap->table, iter).base);
     } else {
@@ -101,6 +99,17 @@ void h2o_mimemap_set_type(h2o_mimemap_t *mimemap, const char *ext, const char *t
         assert(iter != kh_end(mimemap->table));
     }
     kh_val(mimemap->table, iter) = dupref(type);
+}
+
+void h2o_mimemap_remove_type(h2o_mimemap_t *mimemap, const char *ext)
+{
+    khiter_t iter = kh_get(exttable, mimemap->table, ext);
+    if (iter != kh_end(mimemap->table)) {
+        const char *key = kh_key(mimemap->table, iter);
+        h2o_mempool_release_shared(kh_val(mimemap->table, iter).base);
+        kh_del(exttable, mimemap->table, iter);
+        h2o_mempool_release_shared((char*)key);
+    }
 }
 
 h2o_buf_t h2o_mimemap_get_default_type(h2o_mimemap_t *mimemap)
@@ -151,6 +160,12 @@ void test_lib__mimemap_c()
     /* check original */
     ok(strcmp(h2o_mimemap_get_default_type(mimemap).base, "text/plain") == 0);
     ok(strcmp(h2o_mimemap_get_type(mimemap, "png").base, "image/overwritten") == 0);
+
+    /* remove */
+    h2o_mimemap_remove_type(mimemap, "png");
+    ok(strcmp(h2o_mimemap_get_type(mimemap, "png").base, "text/plain") == 0);
+    h2o_mimemap_remove_type(mimemap, "png");
+    ok(strcmp(h2o_mimemap_get_type(mimemap, "png").base, "text/plain") == 0);
 
     h2o_mempool_release_shared(mimemap);
 }

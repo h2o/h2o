@@ -715,6 +715,10 @@ void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, const char *type);
  */
 void h2o_mimemap_set_type(h2o_mimemap_t *mimemap, const char *ext, const char *type);
 /**
+ * removes a mime-type mapping
+ */
+void h2o_mimemap_remove_type(h2o_mimemap_t *mimemap, const char *ext);
+/**
  * sets the default mime-type
  */
 h2o_buf_t h2o_mimemap_get_default_type(h2o_mimemap_t *mimemap);
