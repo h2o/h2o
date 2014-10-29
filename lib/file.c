@@ -517,6 +517,14 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
 
 #include "t/test.h"
 
+static int check_content_type(h2o_res_t *res, const char *expected)
+{
+    size_t index = h2o_find_header(&res->headers, H2O_TOKEN_CONTENT_TYPE, SIZE_MAX);
+    if (index == SIZE_MAX)
+        return 0;
+    return h2o_lcstris(res->headers.entries[index].value.base, res->headers.entries[index].value.len, expected, strlen(expected));
+}
+
 void test_lib__file_c()
 {
     h2o_globalconf_t globalconf;
@@ -545,6 +553,7 @@ void test_lib__file_c()
         conn->req.version = 0x100;
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
+        ok(check_content_type(&conn->req.res, "text/html"));
         ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("hello html\n")));
         h2o_loopback_destroy(conn);
     }
@@ -555,6 +564,7 @@ void test_lib__file_c()
         conn->req.version = 0x100;
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
+        ok(check_content_type(&conn->req.res, "text/html"));
         ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("hello html\n")));
         h2o_loopback_destroy(conn);
     }
@@ -565,6 +575,7 @@ void test_lib__file_c()
         conn->req.version = 0x100;
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
+        ok(check_content_type(&conn->req.res, "text/plain"));
         ok(conn->body->size == 1000);
         ok(strcmp(sha1sum(conn->body->bytes, conn->body->size), "dfd3ae1f5c475555fad62efe42e07309fa45f2ed") == 0);
         h2o_loopback_destroy(conn);
@@ -576,6 +587,7 @@ void test_lib__file_c()
         conn->req.version = 0x100;
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
+        ok(check_content_type(&conn->req.res, "text/plain"));
         ok(conn->body->size == 1000000);
         ok(strcmp(sha1sum(conn->body->bytes, conn->body->size), "00c8ab71d0914dce6a1ec2eaa0fda0df7044b2a2") == 0);
         h2o_loopback_destroy(conn);
@@ -587,6 +599,7 @@ void test_lib__file_c()
         conn->req.version = 0x100;
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
+        ok(check_content_type(&conn->req.res, "text/plain"));
         ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("hello text\n")));
         h2o_loopback_destroy(conn);
     }
