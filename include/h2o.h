@@ -70,6 +70,7 @@ typedef struct st_h2o_configurator_command_t h2o_configurator_command_t;
 typedef struct st_h2o_configurator_t h2o_configurator_t;
 typedef struct st_h2o_hostconf_t h2o_hostconf_t;
 typedef struct st_h2o_globalconf_t h2o_globalconf_t;
+typedef struct st_h2o_mimemap_t h2o_mimemap_t;
 
 /**
  * a predefined, read-only, fast variant of h2o_buf_t, defined in h2o/token.h
@@ -116,14 +117,6 @@ typedef struct st_h2o_logger_t {
     void (*dispose)(struct st_h2o_logger_t *self);
     void (*log_access)(struct st_h2o_logger_t *self, h2o_req_t *req);
 } h2o_logger_t;
-
-/**
- * mime-map
- */
-typedef struct st_h2o_mimemap_t {
-    struct st_h2o_mimemap_entry_t *top;
-    h2o_buf_t default_type;
-} h2o_mimemap_t;
 
 /**
  * contains stringified representations of a timestamp
@@ -232,10 +225,6 @@ struct st_h2o_hostconf_t {
      * list of loggers (h2o_logger_t)
      */
     H2O_VECTOR(h2o_logger_t*) loggers;
-    /**
-     * mime-map
-     */
-    h2o_mimemap_t mimemap;
 };
 
 struct st_h2o_globalconf_t {
@@ -710,21 +699,29 @@ void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *
 /* mime mapper */
 
 /**
- * initializes the mimemap
+ * initializes the mimemap (the returned chunk is refcounted)
  */
-void h2o_init_mimemap(h2o_mimemap_t *mimemap, const char *default_type);
+h2o_mimemap_t *h2o_mimemap_create(void);
 /**
- * releases the resource allocated for the mimemap
+ * clones a mimemap
  */
-void h2o_dispose_mimemap(h2o_mimemap_t *mimemap);
+h2o_mimemap_t *h2o_mimemap_clone(h2o_mimemap_t *src);
+/**
+ * sets the default mime-type
+ */
+void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, const char *type);
 /**
  * adds a mime-type mapping
  */
-void h2o_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const char *type);
+void h2o_mimemap_set_type(h2o_mimemap_t *mimemap, const char *ext, const char *type);
+/**
+ * sets the default mime-type
+ */
+h2o_buf_t h2o_mimemap_get_default_type(h2o_mimemap_t *mimemap);
 /**
  * returns the mime-type corresponding to given extension
  */
-h2o_buf_t h2o_get_mimetype(h2o_mimemap_t *mimemap, const char *ext);
+h2o_buf_t h2o_mimemap_get_type(h2o_mimemap_t *mimemap, const char *ext);
 
 /* various handlers */
 
@@ -749,7 +746,7 @@ int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *pa
 /**
  * registers the file handler to the context
  */
-void h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char **index_files);
+void h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char **index_files, h2o_mimemap_t *mimemap);
 /**
  * registers the configurator
  */
