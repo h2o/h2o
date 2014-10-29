@@ -325,34 +325,114 @@ static int on_config_index(h2o_configurator_command_t *cmd, h2o_configurator_con
     return 0;
 }
 
-static int on_config_mimetypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int assert_is_mimetype(h2o_configurator_command_t *cmd, const char *file, yoml_t *node)
 {
-    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
-    h2o_mimemap_t *newmap = h2o_mimemap_create();
-    size_t i;
+    if (node->type != YOML_TYPE_SCALAR) {
+        h2o_config_print_error(cmd, file, node, "expected a scalar (mime-type)");
+        return -1;
+    }
+    if (strchr(node->data.scalar, '/') == NULL) {
+        h2o_config_print_error(cmd, file, node, "the string \"%s\" does not look like a mime-type", node->data.scalar);
+        return -1;
+    }
+    return 0;
+}
 
-    h2o_mimemap_set_default_type(newmap, h2o_mimemap_get_default_type(self->vars->mimemap).base);
+static int assert_is_extension(h2o_configurator_command_t *cmd, const char *file, yoml_t *node)
+{
+    if (node->type != YOML_TYPE_SCALAR) {
+        h2o_config_print_error(cmd, file, node, "expected a scalar (extension)");
+        return -1;
+    }
+    if (node->data.scalar[0] != '.') {
+        h2o_config_print_error(cmd, file, node, "given extension \"%s\" does not start with a \".\"", node->data.scalar);
+        return -1;
+    }
+    return 0;
+}
+
+static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap, const char *file, yoml_t *node)
+{
+    size_t i, j;
+
+    assert(node->type == YOML_TYPE_MAPPING);
+
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key;
         yoml_t *value = node->data.mapping.elements[i].value;
-        if (key->type != YOML_TYPE_SCALAR) {
-            h2o_config_print_error(cmd, file, key, "key (representing the extension) must be a string");
-            goto ErrExit;
+        if (assert_is_mimetype(cmd, file, key) != 0)
+            return -1;
+        switch (value->type) {
+        case YOML_TYPE_SCALAR:
+            if (assert_is_extension(cmd, file, value) != 0)
+                return -1;
+            h2o_mimemap_set_type(mimemap, value->data.scalar + 1, key->data.scalar);
+            break;
+        case YOML_TYPE_SEQUENCE:
+            for (j = 0; j != value->data.sequence.size; ++j) {
+                yoml_t *ext_node = value->data.sequence.elements[j];
+                if (assert_is_extension(cmd, file, ext_node) != 0)
+                    return -1;
+                h2o_mimemap_set_type(mimemap, ext_node->data.scalar + 1, key->data.scalar);
+            }
+            break;
+        default:
+            h2o_config_print_error(cmd, file, value, "only scalar or sequence of scalar is permitted at the value part of the argument");
+            return -1;
         }
-        if (value->type != YOML_TYPE_SCALAR) {
-            h2o_config_print_error(cmd, file, node, "value (representing the mime-type) must be a string");
-            goto ErrExit;
-        }
-        h2o_mimemap_set_type(newmap, key->data.scalar, value->data.scalar);
+    }
+
+    return 0;
+}
+
+static int on_config_mime_settypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+{
+    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+    h2o_mimemap_t *newmap = h2o_mimemap_create();
+
+    h2o_mimemap_set_default_type(newmap, h2o_mimemap_get_default_type(self->vars->mimemap).base);
+    if (set_mimetypes(cmd, newmap, file, node) != 0) {
+        h2o_mempool_release_shared(newmap);
+        return -1;
     }
 
     h2o_mempool_release_shared(self->vars->mimemap);
     self->vars->mimemap = newmap;
     return 0;
+}
 
-ErrExit:
-    h2o_mempool_release_shared(newmap);
-    return -1;
+static void clone_mimemap_if_clean(struct st_h2o_file_configurator_t *self)
+{
+    if (self->vars->mimemap != self->vars[-1].mimemap)
+        return;
+    h2o_mempool_release_shared(self->vars->mimemap);
+    self->vars->mimemap = h2o_mimemap_clone(self->vars->mimemap);
+}
+
+static int on_config_mime_addtypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+{
+    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+
+    clone_mimemap_if_clean(self);
+
+    return set_mimetypes(cmd, self->vars->mimemap, file, node);
+}
+
+static int on_config_mime_removetypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+{
+    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+    size_t i;
+
+    clone_mimemap_if_clean(self);
+
+    for (i = 0; i != node->data.sequence.size; ++i) {
+        yoml_t *ext_node = node->data.sequence.elements[i];
+        if (assert_is_extension(cmd, file, ext_node) != 0)
+            return -1;
+        h2o_mimemap_remove_type(self->vars->mimemap, ext_node->data.scalar + 1);
+    }
+
+    return 0;
 }
 
 static const char **dup_strlist(const char **s)
@@ -417,10 +497,20 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
         on_config_index,
         "sequence of index file names (default: index.html index.htm index.txt)");
     h2o_config_define_command(
-        &self->super, "file.mimetypes",
+        &self->super, "file.mime.settypes",
         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
-        on_config_mimetypes,
-        "map of extension -> mime-type");
+        on_config_mime_settypes,
+        "map of mime-type -> (extension | sequence-of-extensions)");
+    h2o_config_define_command(
+        &self->super, "file.mime.addtypes",
+        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
+        on_config_mime_addtypes,
+        "map of mime-type -> (extension | sequence-of-extensions)");
+    h2o_config_define_command(
+        &self->super, "file.mime.removetypes",
+        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
+        on_config_mime_removetypes,
+        "sequence of extensions");
 }
 
 #ifdef H2O_UNITTEST
