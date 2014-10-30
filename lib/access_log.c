@@ -286,9 +286,23 @@ h2o_logger_t *h2o_access_log_register(h2o_hostconf_t *host_config, const char *p
         return NULL;
 
     /* open log file */
-    if ((fd = open(path, O_CREAT | O_WRONLY | O_APPEND, 0644)) == -1) {
-        fprintf(stderr, "failed to open log file:%s:%s\n", path, strerror(errno));
-        return NULL;
+    if (path[0] == '|') {
+        FILE *fp;
+        if ((fp = popen(path + 1, "w")) == NULL) {
+            fprintf(stderr, "failed to open log pipe to command:%s\n", path + 1);
+            return NULL;
+        }
+        fd = dup(fileno(fp));
+        fclose(fp);
+        if (fd == -1) {
+            fprintf(stderr, "failed to dup pipe fd:%s\n", strerror(errno));
+            return NULL;
+        }
+    } else {
+        if ((fd = open(path, O_CREAT | O_WRONLY | O_APPEND, 0644)) == -1) {
+            fprintf(stderr, "failed to open log file:%s:%s\n", path, strerror(errno));
+            return NULL;
+        }
     }
 
     /* register */
@@ -350,6 +364,8 @@ void h2o_access_log_register_configurator(h2o_globalconf_t *conf)
         "path (and optionally the format) of the access log (default: none)",
         " - if the value is a scalar, it is treated as the path of the log file",
         " - if the value is a mapping, its `path` property is treated as the path",
-        "   and `format` property is treated as the format"
+        "   and `format` property is treated as the format",
+        " - if the path starts with `|`, the rest of the path is considered as a ",
+        "   command pipe to which the logs should be emitted"
     );
 }
