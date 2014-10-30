@@ -24,10 +24,15 @@ hosts:
         file.dir: t/50end-to-end/mimemap/docroot
         file.mime.settypes:
           text/xml: .xhtml
+    file.mime.addtypes:
+      application/xml: .xhtml
+  default-type-test:
+    paths:
+      /:
+        file.dir: t/50end-to-end/mimemap/docroot
+    file.mime.setdefaulttype: application/xhtml+xml
 file.index:
   - index.xhtml
-file.mime.addtypes:
-  application/xml: .xhtml
 EOT
 
 plan skip_all => 'curl not found'
@@ -44,9 +49,12 @@ my %expected = (
 
 for my $path (sort keys %expected) {
     my $ct = `$CURL_CMD http://127.0.0.1:$port$path`;
-    is $ct, $expected{$path};
+    is $ct, $expected{$path}, "$path";
     $ct = `$CURL_CMD http://127.0.0.1:$port${path}index.xhtml`;
-    is $ct, $expected{$path};
+    is $ct, $expected{$path}, "${path}index.xhtml";
 }
+
+my $ct = `$CURL_CMD --header 'host: default-type-test' http://127.0.0.1:$port/`;
+is $ct, 'application/xhtml+xml', 'setdefaulttype';
 
 done_testing;
