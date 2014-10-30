@@ -61,6 +61,13 @@ struct st_h2o_file_configurator_t {
     struct st_h2o_file_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
+static const char *default_index_files[] = {
+    "index.html",
+    "index.htm",
+    "index.txt",
+    NULL
+};
+
 static void do_close(h2o_generator_t *_self, h2o_req_t *req)
 {
     struct st_h2o_sendfile_generator_t *self = (void*)_self;
@@ -160,7 +167,7 @@ int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *pa
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
-    struct st_h2o_file_handler_t *self = (void*)_self;
+    h2o_file_handler_t *self = (void*)_self;
     h2o_buf_t vpath, mime_type;
     char *rpath;
     size_t rpath_len;
@@ -247,7 +254,7 @@ NotModified:
 
 static void on_dispose(h2o_handler_t *_self)
 {
-    struct st_h2o_file_handler_t *self = (void*)_self;
+    h2o_file_handler_t *self = (void*)_self;
     size_t i;
 
     free(self->virtual_path.base);
@@ -274,15 +281,18 @@ static h2o_buf_t append_slash_and_dup(const char *path)
     return h2o_buf_init(buf, path_len);
 }
 
-void h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char **index_files, h2o_mimemap_t *mimemap)
+h2o_file_handler_t *h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char **index_files, h2o_mimemap_t *mimemap)
 {
-    struct st_h2o_file_handler_t *self;
+    h2o_file_handler_t *self;
     size_t i;
+
+    if (index_files == NULL)
+        index_files = default_index_files;
 
     /* allocate memory */
     for (i = 0; index_files[i] != NULL; ++i)
         ;
-    self = (void*)h2o_create_handler(host_config, offsetof(struct st_h2o_file_handler_t, index_files[0]) + sizeof(self->index_files[0]) * (i + 1));
+    self = (void*)h2o_create_handler(host_config, offsetof(h2o_file_handler_t, index_files[0]) + sizeof(self->index_files[0]) * (i + 1));
 
     /* setup callbacks */
     self->super.dispose = on_dispose;
@@ -291,10 +301,21 @@ void h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, co
     /* setup attributes */
     self->virtual_path = append_slash_and_dup(virtual_path);
     self->real_path = append_slash_and_dup(real_path);
-    self->mimemap = mimemap;
-    h2o_mempool_addref_shared(mimemap);
+    if (mimemap != NULL) {
+        h2o_mempool_addref_shared(mimemap);
+        self->mimemap = mimemap;
+    } else {
+        self->mimemap = h2o_mimemap_create();
+    }
     for (i = 0; index_files[i] != NULL; ++i)
         self->index_files[i] = h2o_strdup(NULL, index_files[i], SIZE_MAX);
+
+    return self;
+}
+
+h2o_mimemap_t *h2o_file_get_mimemap(h2o_file_handler_t *handler)
+{
+    return handler->mimemap;
 }
 
 static int on_config_dir(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
@@ -484,13 +505,6 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 
 void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
 {
-    static const char *default_index_files[] = {
-        "index.html",
-        "index.htm",
-        "index.txt",
-        NULL
-    };
-
     struct st_h2o_file_configurator_t *self = (void*)h2o_config_create_configurator(globalconf, sizeof(*self));
 
     self->super.enter = on_config_enter;
@@ -547,20 +561,11 @@ void test_lib__file_c()
 {
     h2o_globalconf_t globalconf;
     h2o_hostconf_t *hostconf;
-    h2o_mimemap_t *mimemap;
     h2o_context_t ctx;
-
-    static const char *index_files[] = {
-        "index.html",
-        "index.htm",
-        "index.txt",
-        NULL
-    };
 
     h2o_config_init(&globalconf);
     hostconf = h2o_config_register_host(&globalconf, "default");
-    mimemap = h2o_mimemap_create();
-    h2o_file_register(hostconf, "/", "t/00unit/file", index_files, mimemap);
+    h2o_file_register(hostconf, "/", "t/00unit/file", NULL, NULL);
 
     h2o_context_init(&ctx, test_loop, &globalconf);
 
@@ -623,7 +628,6 @@ void test_lib__file_c()
     }
 
     h2o_context_dispose(&ctx);
-    h2o_mempool_release_shared(mimemap);
     h2o_config_dispose(&globalconf);
 }
 

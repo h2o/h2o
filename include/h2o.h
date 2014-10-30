@@ -742,14 +742,24 @@ void h2o_chunked_register(h2o_hostconf_t *host_config);
 
 /* lib/file.c */
 
+typedef struct st_h2o_file_handler_t h2o_file_handler_t;
 /**
  * sends given file as the response to the client
  */
 int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *path, h2o_buf_t mime_type);
 /**
  * registers the file handler to the context
+ * @param host_config
+ * @param virtual_path
+ * @param real_path
+ * @param index_files optional NULL-terminated list of of filenames to be considered as the "directory-index"
+ * @param mimemap the mimemap (h2o_mimemap_create is called internally if the argument is NULL)
  */
-void h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char **index_files, h2o_mimemap_t *mimemap);
+h2o_file_handler_t *h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char **index_files, h2o_mimemap_t *mimemap);
+/**
+ * returns the associated mimemap
+ */
+h2o_mimemap_t *h2o_file_get_mimemap(h2o_file_handler_t *handler);
 /**
  * registers the configurator
  */
