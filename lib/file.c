@@ -175,7 +175,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         return -1;
 
     /* normalize path */
-    vpath = h2o_normalize_path(&req->pool, req->path.base, req->path.len);
+    vpath = h2o_normalize_path(&req->pool, req->path.base + self->virtual_path.len - 1, req->path.len - self->virtual_path.len + 1);
     if (vpath.len > PATH_MAX)
         return -1;
 
