@@ -223,8 +223,7 @@ int main(int argc, char **argv)
     register_handler(hostconf, post_test);
     register_handler(hostconf, chunked_test);
     register_handler(hostconf, reproxy_test);
-    h2o_file_register(hostconf, "/", "htdocs", "index.html");
-    h2o_define_mimetype(&hostconf->mimemap, "html", "text/html");
+    h2o_file_register(hostconf, "/", "htdocs", NULL, NULL);
     h2o_reproxy_register(hostconf);
 
 #if H2O_USE_LIBUV

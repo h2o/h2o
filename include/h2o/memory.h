@@ -45,7 +45,7 @@ typedef struct st_h2o_mempool_chunk_t {
 
 typedef struct st_h2o_mempool_shared_entry_t {
     size_t refcnt;
-    size_t _dummy; /* align to 2*sizeof(void*) */
+    void (*dispose)(void *);
     char bytes[1];
 } h2o_mempool_shared_entry_t;
 
@@ -121,7 +121,7 @@ void *h2o_mempool_alloc(h2o_mempool_t *pool, size_t sz);
  * The ref-count of the returned chunk is 1 regardless of whether or not the chunk is linked to a pool.
  * @param pool pool to which the allocated chunk should be linked (or NULL to allocate an orphan chunk)
  */
-void *h2o_mempool_alloc_shared(h2o_mempool_t *pool, size_t sz);
+void *h2o_mempool_alloc_shared(h2o_mempool_t *pool, size_t sz, void (*dispose)(void *));
 /**
  * links a ref-counted chunk to a memory pool.
  * The ref-count of the chunk will be decremented when the pool is cleared.
@@ -213,6 +213,8 @@ inline int h2o_mempool_release_shared(void *p)
 {
     struct st_h2o_mempool_shared_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct st_h2o_mempool_shared_entry_t, bytes, p);
     if (--entry->refcnt == 0) {
+        if (entry->dispose != NULL)
+            entry->dispose(entry->bytes);
         free(entry);
         return 1;
     }

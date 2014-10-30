@@ -45,18 +45,27 @@ struct st_h2o_file_handler_t {
     h2o_handler_t super;
     h2o_buf_t virtual_path; /* has "/" appended at last */
     h2o_buf_t real_path; /* has "/" appended at last */
+    h2o_mimemap_t *mimemap;
     size_t max_index_file_len;
     h2o_buf_t index_files[1];
 };
 
 struct st_h2o_file_config_vars_t {
     const char **index_files;
+    h2o_mimemap_t *mimemap;
 };
 
 struct st_h2o_file_configurator_t {
     h2o_configurator_t super;
     struct st_h2o_file_config_vars_t *vars;
     struct st_h2o_file_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+};
+
+static const char *default_index_files[] = {
+    "index.html",
+    "index.htm",
+    "index.txt",
+    NULL
 };
 
 static void do_close(h2o_generator_t *_self, h2o_req_t *req)
@@ -158,7 +167,7 @@ int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *pa
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
-    struct st_h2o_file_handler_t *self = (void*)_self;
+    h2o_file_handler_t *self = (void*)_self;
     h2o_buf_t vpath, mime_type;
     char *rpath;
     size_t rpath_len;
@@ -229,7 +238,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     }
 
     /* obtain mime type */
-    mime_type = h2o_get_mimetype(&req->host_config->mimemap, h2o_get_filext(rpath, rpath_len));
+    mime_type = h2o_mimemap_get_type(self->mimemap, h2o_get_filext(rpath, rpath_len));
 
     /* return file */
     do_send_file(generator, req, 200, "OK", mime_type);
@@ -245,11 +254,12 @@ NotModified:
 
 static void on_dispose(h2o_handler_t *_self)
 {
-    struct st_h2o_file_handler_t *self = (void*)_self;
+    h2o_file_handler_t *self = (void*)_self;
     size_t i;
 
     free(self->virtual_path.base);
     free(self->real_path.base);
+    h2o_mempool_release_shared(self->mimemap);
     for (i = 0; self->index_files[i].base != NULL; ++i)
         free(self->index_files[i].base);
 }
@@ -271,15 +281,18 @@ static h2o_buf_t append_slash_and_dup(const char *path)
     return h2o_buf_init(buf, path_len);
 }
 
-void h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char **index_files)
+h2o_file_handler_t *h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char **index_files, h2o_mimemap_t *mimemap)
 {
-    struct st_h2o_file_handler_t *self;
+    h2o_file_handler_t *self;
     size_t i;
+
+    if (index_files == NULL)
+        index_files = default_index_files;
 
     /* allocate memory */
     for (i = 0; index_files[i] != NULL; ++i)
         ;
-    self = (void*)h2o_create_handler(host_config, offsetof(struct st_h2o_file_handler_t, index_files[0]) + sizeof(self->index_files[0]) * (i + 1));
+    self = (void*)h2o_create_handler(host_config, offsetof(h2o_file_handler_t, index_files[0]) + sizeof(self->index_files[0]) * (i + 1));
 
     /* setup callbacks */
     self->super.dispose = on_dispose;
@@ -288,15 +301,28 @@ void h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, co
     /* setup attributes */
     self->virtual_path = append_slash_and_dup(virtual_path);
     self->real_path = append_slash_and_dup(real_path);
+    if (mimemap != NULL) {
+        h2o_mempool_addref_shared(mimemap);
+        self->mimemap = mimemap;
+    } else {
+        self->mimemap = h2o_mimemap_create();
+    }
     for (i = 0; index_files[i] != NULL; ++i)
         self->index_files[i] = h2o_strdup(NULL, index_files[i], SIZE_MAX);
+
+    return self;
+}
+
+h2o_mimemap_t *h2o_file_get_mimemap(h2o_file_handler_t *handler)
+{
+    return handler->mimemap;
 }
 
 static int on_config_dir(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
     struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
 
-    h2o_file_register(ctx->hostconf, ctx->path->base, node->data.scalar, self->vars->index_files);
+    h2o_file_register(ctx->hostconf, ctx->path->base, node->data.scalar, self->vars->index_files, self->vars->mimemap);
     return 0;
 }
 
@@ -316,6 +342,129 @@ static int on_config_index(h2o_configurator_command_t *cmd, h2o_configurator_con
         self->vars->index_files[i] = element->data.scalar;
     }
     self->vars->index_files[i] = NULL;
+
+    return 0;
+}
+
+static int assert_is_mimetype(h2o_configurator_command_t *cmd, const char *file, yoml_t *node)
+{
+    if (node->type != YOML_TYPE_SCALAR) {
+        h2o_config_print_error(cmd, file, node, "expected a scalar (mime-type)");
+        return -1;
+    }
+    if (strchr(node->data.scalar, '/') == NULL) {
+        h2o_config_print_error(cmd, file, node, "the string \"%s\" does not look like a mime-type", node->data.scalar);
+        return -1;
+    }
+    return 0;
+}
+
+static int assert_is_extension(h2o_configurator_command_t *cmd, const char *file, yoml_t *node)
+{
+    if (node->type != YOML_TYPE_SCALAR) {
+        h2o_config_print_error(cmd, file, node, "expected a scalar (extension)");
+        return -1;
+    }
+    if (node->data.scalar[0] != '.') {
+        h2o_config_print_error(cmd, file, node, "given extension \"%s\" does not start with a \".\"", node->data.scalar);
+        return -1;
+    }
+    return 0;
+}
+
+static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap, const char *file, yoml_t *node)
+{
+    size_t i, j;
+
+    assert(node->type == YOML_TYPE_MAPPING);
+
+    for (i = 0; i != node->data.mapping.size; ++i) {
+        yoml_t *key = node->data.mapping.elements[i].key;
+        yoml_t *value = node->data.mapping.elements[i].value;
+        if (assert_is_mimetype(cmd, file, key) != 0)
+            return -1;
+        switch (value->type) {
+        case YOML_TYPE_SCALAR:
+            if (assert_is_extension(cmd, file, value) != 0)
+                return -1;
+            h2o_mimemap_set_type(mimemap, value->data.scalar + 1, key->data.scalar);
+            break;
+        case YOML_TYPE_SEQUENCE:
+            for (j = 0; j != value->data.sequence.size; ++j) {
+                yoml_t *ext_node = value->data.sequence.elements[j];
+                if (assert_is_extension(cmd, file, ext_node) != 0)
+                    return -1;
+                h2o_mimemap_set_type(mimemap, ext_node->data.scalar + 1, key->data.scalar);
+            }
+            break;
+        default:
+            h2o_config_print_error(cmd, file, value, "only scalar or sequence of scalar is permitted at the value part of the argument");
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+static int on_config_mime_settypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+{
+    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+    h2o_mimemap_t *newmap = h2o_mimemap_create();
+
+    h2o_mimemap_set_default_type(newmap, h2o_mimemap_get_default_type(self->vars->mimemap).base);
+    if (set_mimetypes(cmd, newmap, file, node) != 0) {
+        h2o_mempool_release_shared(newmap);
+        return -1;
+    }
+
+    h2o_mempool_release_shared(self->vars->mimemap);
+    self->vars->mimemap = newmap;
+    return 0;
+}
+
+static void clone_mimemap_if_clean(struct st_h2o_file_configurator_t *self)
+{
+    if (self->vars->mimemap != self->vars[-1].mimemap)
+        return;
+    h2o_mempool_release_shared(self->vars->mimemap);
+    self->vars->mimemap = h2o_mimemap_clone(self->vars->mimemap);
+}
+
+static int on_config_mime_addtypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+{
+    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+
+    clone_mimemap_if_clean(self);
+
+    return set_mimetypes(cmd, self->vars->mimemap, file, node);
+}
+
+static int on_config_mime_removetypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+{
+    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+    size_t i;
+
+    clone_mimemap_if_clean(self);
+
+    for (i = 0; i != node->data.sequence.size; ++i) {
+        yoml_t *ext_node = node->data.sequence.elements[i];
+        if (assert_is_extension(cmd, file, ext_node) != 0)
+            return -1;
+        h2o_mimemap_remove_type(self->vars->mimemap, ext_node->data.scalar + 1);
+    }
+
+    return 0;
+}
+
+static int on_config_mime_setdefaulttype(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+{
+    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+
+    if (assert_is_mimetype(cmd, file, node) != 0)
+        return -1;
+
+    clone_mimemap_if_clean(self);
+    h2o_mimemap_set_default_type(self->vars->mimemap, node->data.scalar);
 
     return 0;
 }
@@ -340,6 +489,8 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
     struct st_h2o_file_configurator_t *self = (void*)_self;
     ++self->vars;
     self->vars[0].index_files = dup_strlist(self->vars[-1].index_files);
+    self->vars[0].mimemap = self->vars[-1].mimemap;
+    h2o_mempool_addref_shared(self->vars[0].mimemap);
     return 0;
 }
 
@@ -347,24 +498,19 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 {
     struct st_h2o_file_configurator_t *self = (void*)_self;
     free(self->vars->index_files);
+    h2o_mempool_release_shared(self->vars->mimemap);
     --self->vars;
     return 0;
 }
 
 void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
 {
-    static const char *default_index_files[] = {
-        "index.html",
-        "index.htm",
-        "index.txt",
-        NULL
-    };
-
     struct st_h2o_file_configurator_t *self = (void*)h2o_config_create_configurator(globalconf, sizeof(*self));
 
     self->super.enter = on_config_enter;
     self->super.exit = on_config_exit;
     self->vars = self->_vars_stack;
+    self->vars->mimemap = h2o_mimemap_create();
     self->vars->index_files = default_index_files;
 
     h2o_config_define_command(
@@ -377,11 +523,39 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
         on_config_index,
         "sequence of index file names (default: index.html index.htm index.txt)");
+    h2o_config_define_command(
+        &self->super, "file.mime.settypes",
+        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
+        on_config_mime_settypes,
+        "map of mime-type -> (extension | sequence-of-extensions)");
+    h2o_config_define_command(
+        &self->super, "file.mime.addtypes",
+        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
+        on_config_mime_addtypes,
+        "map of mime-type -> (extension | sequence-of-extensions)");
+    h2o_config_define_command(
+        &self->super, "file.mime.removetypes",
+        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
+        on_config_mime_removetypes,
+        "sequence of extensions");
+    h2o_config_define_command(
+        &self->super, "file.mime.setdefaulttype",
+        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        on_config_mime_setdefaulttype,
+        "default mime-type");
 }
 
 #ifdef H2O_UNITTEST
 
 #include "t/test.h"
+
+static int check_content_type(h2o_res_t *res, const char *expected)
+{
+    size_t index = h2o_find_header(&res->headers, H2O_TOKEN_CONTENT_TYPE, SIZE_MAX);
+    if (index == SIZE_MAX)
+        return 0;
+    return h2o_lcstris(res->headers.entries[index].value.base, res->headers.entries[index].value.len, expected, strlen(expected));
+}
 
 void test_lib__file_c()
 {
@@ -389,16 +563,9 @@ void test_lib__file_c()
     h2o_hostconf_t *hostconf;
     h2o_context_t ctx;
 
-    static const char *index_files[] = {
-        "index.html",
-        "index.htm",
-        "index.txt",
-        NULL
-    };
-
     h2o_config_init(&globalconf);
     hostconf = h2o_config_register_host(&globalconf, "default");
-    h2o_file_register(hostconf, "/", "t/00unit/file", index_files);
+    h2o_file_register(hostconf, "/", "t/00unit/file", NULL, NULL);
 
     h2o_context_init(&ctx, test_loop, &globalconf);
 
@@ -409,6 +576,7 @@ void test_lib__file_c()
         conn->req.version = 0x100;
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
+        ok(check_content_type(&conn->req.res, "text/html"));
         ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("hello html\n")));
         h2o_loopback_destroy(conn);
     }
@@ -419,6 +587,7 @@ void test_lib__file_c()
         conn->req.version = 0x100;
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
+        ok(check_content_type(&conn->req.res, "text/html"));
         ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("hello html\n")));
         h2o_loopback_destroy(conn);
     }
@@ -429,6 +598,7 @@ void test_lib__file_c()
         conn->req.version = 0x100;
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
+        ok(check_content_type(&conn->req.res, "text/plain"));
         ok(conn->body->size == 1000);
         ok(strcmp(sha1sum(conn->body->bytes, conn->body->size), "dfd3ae1f5c475555fad62efe42e07309fa45f2ed") == 0);
         h2o_loopback_destroy(conn);
@@ -440,6 +610,7 @@ void test_lib__file_c()
         conn->req.version = 0x100;
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
+        ok(check_content_type(&conn->req.res, "text/plain"));
         ok(conn->body->size == 1000000);
         ok(strcmp(sha1sum(conn->body->bytes, conn->body->size), "00c8ab71d0914dce6a1ec2eaa0fda0df7044b2a2") == 0);
         h2o_loopback_destroy(conn);
@@ -451,6 +622,7 @@ void test_lib__file_c()
         conn->req.version = 0x100;
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
+        ok(check_content_type(&conn->req.res, "text/plain"));
         ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("hello text\n")));
         h2o_loopback_destroy(conn);
     }

@@ -117,10 +117,11 @@ static void link_shared(h2o_mempool_t *pool, struct st_h2o_mempool_shared_entry_
     pool->shared_refs = ref;
 }
 
-void *h2o_mempool_alloc_shared(h2o_mempool_t *pool, size_t sz)
+void *h2o_mempool_alloc_shared(h2o_mempool_t *pool, size_t sz, void (*dispose)(void *))
 {
     struct st_h2o_mempool_shared_entry_t *entry = h2o_malloc(offsetof(struct st_h2o_mempool_shared_entry_t, bytes) + sz);
     entry->refcnt = 1;
+    entry->dispose = dispose;
     if (pool != NULL)
         link_shared(pool, entry);
     return entry->bytes;

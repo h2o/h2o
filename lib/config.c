@@ -183,27 +183,6 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
     return 0;
 }
 
-static int on_config_mime_types(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
-{
-    size_t i;
-
-    for (i = 0; i != node->data.mapping.size; ++i) {
-        yoml_t *key = node->data.mapping.elements[i].key;
-        yoml_t *value = node->data.mapping.elements[i].value;
-        if (key->type != YOML_TYPE_SCALAR) {
-            h2o_config_print_error(cmd, file, key, "key (representing the extension) must be a string");
-            return -1;
-        }
-        if (value->type != YOML_TYPE_SCALAR) {
-            h2o_config_print_error(cmd, file, node, "value (representing the mime-type) must be a string");
-            return -1;
-        }
-        h2o_define_mimetype(&ctx->hostconf->mimemap, key->data.scalar, value->data.scalar);
-    }
-
-    return 0;
-}
-
 static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
     size_t i;
@@ -223,6 +202,10 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
         ctx->hostconf = h2o_config_register_host(ctx->globalconf, key->data.scalar);
         if (apply_commands(ctx, H2O_CONFIGURATOR_FLAG_HOST, file, value) != 0)
             return -1;
+        if (yoml_get(value, "paths") == NULL) {
+            h2o_config_print_error(NULL, file, value, "mandatory configuration directive `paths` is missing");
+            return -1;
+        }
         ctx->hostconf = NULL;
     }
 
@@ -272,11 +255,6 @@ static void init_core_configurators(h2o_globalconf_t *conf)
             H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING | H2O_CONFIGURATOR_FLAG_DEFERRED,
             on_config_paths,
             "map of URL-path -> configuration");
-        h2o_config_define_command(
-            c, "mime-types",
-            H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
-            on_config_mime_types,
-            "map of extension -> mime-type");
     };
 
     { /* setup global configurators */
@@ -317,7 +295,6 @@ static void init_host_config(h2o_hostconf_t *hostconf, h2o_globalconf_t *globalc
     memset(hostconf, 0, sizeof(*hostconf));
     hostconf->global = globalconf;
     h2o_chunked_register(hostconf);
-    h2o_init_mimemap(&hostconf->mimemap, H2O_DEFAULT_MIMETYPE);
 }
 
 static void dispose_host_config(h2o_hostconf_t *host_config)
@@ -340,8 +317,6 @@ static void dispose_host_config(h2o_hostconf_t *host_config)
     DESTROY_LIST(h2o_logger_t, host_config->loggers);
 
 #undef DESTROY_LIST
-
-    h2o_dispose_mimemap(&host_config->mimemap);
 }
 
 void h2o_config_init(h2o_globalconf_t *config)
