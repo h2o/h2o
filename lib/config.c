@@ -202,6 +202,10 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
         ctx->hostconf = h2o_config_register_host(ctx->globalconf, key->data.scalar);
         if (apply_commands(ctx, H2O_CONFIGURATOR_FLAG_HOST, file, value) != 0)
             return -1;
+        if (yoml_get(value, "paths") == NULL) {
+            h2o_config_print_error(NULL, file, value, "mandatory configuration directive `paths` is missing");
+            return -1;
+        }
         ctx->hostconf = NULL;
     }
 

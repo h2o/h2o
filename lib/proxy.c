@@ -375,7 +375,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->super.enter = on_config_enter;
     c->super.exit = on_config_exit;
     h2o_config_define_command(&c->super, "proxy.reverse.url",
-        H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_DEFERRED,
+        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_DEFERRED,
         on_config_reverse_url,
         "map of virtual-path -> http://upstream_host:port/path");
     h2o_config_define_command(&c->super, "proxy.timeout.io",
