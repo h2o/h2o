@@ -106,18 +106,25 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
         do_close(&self->super, req);
 }
 
-static struct st_h2o_sendfile_generator_t *create_generator(h2o_mempool_t *pool, const char *path)
+static struct st_h2o_sendfile_generator_t *create_generator(h2o_mempool_t *pool, const char *path, int *is_dir)
 {
     struct st_h2o_sendfile_generator_t *self;
     int fd;
     struct stat st;
     size_t bufsz;
 
+    *is_dir = 0;
+
     if ((fd = open(path, O_RDONLY)) == -1)
         return NULL;
     if (fstat(fd, &st) != 0) {
-        assert(!"FIMXE");
+        perror("fstat");
         close(fd);
+        return NULL;
+    }
+    if (S_ISDIR(st.st_mode)) {
+        close(fd);
+        *is_dir = 1;
         return NULL;
     }
 
@@ -158,10 +165,53 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
 int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *path, h2o_buf_t mime_type)
 {
     struct st_h2o_sendfile_generator_t *self;
+    int is_dir;
 
-    if ((self = create_generator(&req->pool, path)) == NULL)
+    if ((self = create_generator(&req->pool, path, &is_dir)) == NULL)
         return -1;
+    /* note: is_dir is not handled */
     do_send_file(self, req, status, reason, mime_type);
+    return 0;
+}
+
+static int redirect_to_dir(h2o_req_t *req, const char *path, size_t path_len)
+{
+    static h2o_generator_t generator = { NULL, NULL };
+    static const h2o_buf_t body_prefix = {
+        H2O_STRLIT("<!DOCTYPE html><TITLE>301 Moved Permanently</TITLE><P>The document has moved <A HREF=\"")
+    };
+    static const h2o_buf_t body_suffix = {
+        H2O_STRLIT("\">here</A>")
+    };
+
+    h2o_buf_t url;
+    size_t alloc_size;
+    h2o_buf_t bufs[3];
+
+    /* determine the size of the memory needed */
+    alloc_size = sizeof(":///") + req->scheme.len + req->authority.len + path_len;
+
+    /* allocate and build url */
+    url.base = h2o_mempool_alloc(&req->pool, alloc_size);
+    url.len = sprintf(url.base, "%.*s://%.*s%.*s/", (int)req->scheme.len, req->scheme.base, (int)req->authority.len, req->authority.base, (int)path_len, path);
+    assert(url.len + 1 == alloc_size);
+
+    /* build response header */
+    req->res.status = 301;
+    req->res.reason = "Moved Permanently";
+    memset(&req->res.headers, 0, sizeof(req->res.headers));
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LOCATION, url.base, url.len);
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/html; charset=utf-8"));
+
+    /* build response */
+    bufs[0] = body_prefix;
+    bufs[1] = h2o_htmlescape(&req->pool, url.base, url.len);
+    bufs[2] = body_suffix;
+
+    /* send */
+    h2o_start_response(req, &generator);
+    h2o_send(req, bufs, 3, 1);
+
     return 0;
 }
 
@@ -173,6 +223,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     size_t rpath_len;
     struct st_h2o_sendfile_generator_t *generator = NULL;
     size_t if_modified_since_header_index, if_none_match_header_index;
+    int is_dir;
 
     /* only accept GET (TODO accept HEAD as well) */
     if (! h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
@@ -206,16 +257,24 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         for (index_file = self->index_files; index_file->base != NULL; ++index_file) {
             memcpy(rpath + rpath_len, index_file->base, index_file->len);
             rpath[rpath_len + index_file->len] = '\0';
-            if ((generator = create_generator(&req->pool, rpath)) != NULL) {
+            if ((generator = create_generator(&req->pool, rpath, &is_dir)) != NULL) {
                 rpath_len += index_file->len;
                 break;
+            }
+            if (is_dir) {
+                /* note: apache redirects "path/" to "path/index.txt/" if index.txt is a dir */
+                char *path = alloca(req->path.len + index_file->len + 1);
+                size_t path_len = sprintf(path, "%.*s%.*s", (int)req->path.len, req->path.base, (int)index_file->len, index_file->base);
+                return redirect_to_dir(req, path, path_len);
             }
             if (errno != ENOENT)
                 break;
         }
     } else {
         rpath[rpath_len] = '\0';
-        generator = create_generator(&req->pool, rpath);
+        generator = create_generator(&req->pool, rpath, &is_dir);
+        if (generator == NULL && is_dir)
+            return redirect_to_dir(req, req->path.base, req->path.len);
     }
     /* return error if failed */
     if (generator == NULL) {
@@ -307,8 +366,11 @@ h2o_file_handler_t *h2o_file_register(h2o_hostconf_t *host_config, const char *v
     } else {
         self->mimemap = h2o_mimemap_create();
     }
-    for (i = 0; index_files[i] != NULL; ++i)
+    for (i = 0; index_files[i] != NULL; ++i) {
         self->index_files[i] = h2o_strdup(NULL, index_files[i], SIZE_MAX);
+        if (self->max_index_file_len < self->index_files[i].len)
+            self->max_index_file_len = self->index_files[i].len;
+    }
 
     return self;
 }
@@ -549,9 +611,9 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
 
 #include "t/test.h"
 
-static int check_content_type(h2o_res_t *res, const char *expected)
+static int check_header(h2o_res_t *res, const h2o_token_t *header_name, const char *expected)
 {
-    size_t index = h2o_find_header(&res->headers, H2O_TOKEN_CONTENT_TYPE, SIZE_MAX);
+    size_t index = h2o_find_header(&res->headers, header_name, SIZE_MAX);
     if (index == SIZE_MAX)
         return 0;
     return h2o_lcstris(res->headers.entries[index].value.base, res->headers.entries[index].value.len, expected, strlen(expected));
@@ -573,10 +635,9 @@ void test_lib__file_c()
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
         conn->req.method = h2o_buf_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_buf_init(H2O_STRLIT("/"));
-        conn->req.version = 0x100;
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
-        ok(check_content_type(&conn->req.res, "text/html"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/html"));
         ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("hello html\n")));
         h2o_loopback_destroy(conn);
     }
@@ -584,10 +645,9 @@ void test_lib__file_c()
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
         conn->req.method = h2o_buf_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_buf_init(H2O_STRLIT("/index.html"));
-        conn->req.version = 0x100;
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
-        ok(check_content_type(&conn->req.res, "text/html"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/html"));
         ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("hello html\n")));
         h2o_loopback_destroy(conn);
     }
@@ -595,10 +655,9 @@ void test_lib__file_c()
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
         conn->req.method = h2o_buf_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_buf_init(H2O_STRLIT("/1000.txt"));
-        conn->req.version = 0x100;
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
-        ok(check_content_type(&conn->req.res, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
         ok(conn->body->size == 1000);
         ok(strcmp(sha1sum(conn->body->bytes, conn->body->size), "dfd3ae1f5c475555fad62efe42e07309fa45f2ed") == 0);
         h2o_loopback_destroy(conn);
@@ -607,10 +666,9 @@ void test_lib__file_c()
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
         conn->req.method = h2o_buf_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_buf_init(H2O_STRLIT("/1000000.txt"));
-        conn->req.version = 0x100;
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
-        ok(check_content_type(&conn->req.res, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
         ok(conn->body->size == 1000000);
         ok(strcmp(sha1sum(conn->body->bytes, conn->body->size), "00c8ab71d0914dce6a1ec2eaa0fda0df7044b2a2") == 0);
         h2o_loopback_destroy(conn);
@@ -619,11 +677,28 @@ void test_lib__file_c()
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
         conn->req.method = h2o_buf_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_buf_init(H2O_STRLIT("/index_txt/"));
-        conn->req.version = 0x100;
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
-        ok(check_content_type(&conn->req.res, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
         ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("hello text\n")));
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        conn->req.method = h2o_buf_init(H2O_STRLIT("GET"));
+        conn->req.path = h2o_buf_init(H2O_STRLIT("/index_txt"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 301);
+        ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "http://default/index_txt/"));
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        conn->req.method = h2o_buf_init(H2O_STRLIT("GET"));
+        conn->req.path = h2o_buf_init(H2O_STRLIT("/index_txt_as_dir/"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 301);
+        ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "http://default/index_txt_as_dir/index.txt/"));
         h2o_loopback_destroy(conn);
     }
 

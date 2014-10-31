@@ -500,6 +500,53 @@ int h2o_parse_url(h2o_mempool_t *pool, const char *url, char **scheme, char **ho
     return 0;
 }
 
+h2o_buf_t h2o_htmlescape(h2o_mempool_t *pool, const char *src, size_t len)
+{
+    const char *s, *end = src + len;
+    size_t add_size = 0;
+
+#define ENTITY_MAP() \
+    ENTITY('"', "&quot;"); \
+    ENTITY('&', "&amp;"); \
+    ENTITY('\'', "&#39;"); \
+    ENTITY('<', "&lt;"); \
+    ENTITY('>', "&gt;");
+
+    for (s = src; s != end; ++s) {
+        if ((unsigned)(unsigned char)*s - '"' <= '>' - '"') {
+            switch (*s) {
+#define ENTITY(code, quoted) case code: add_size += sizeof(quoted) - 2; break
+            ENTITY_MAP()
+#undef ENTITY
+            }
+        }
+    }
+
+    /* escape and return the result if necessary */
+    if (add_size != 0) {
+        /* allocate buffer and fill in the chars that are known not to require escaping */
+        h2o_buf_t escaped = { h2o_mempool_alloc(pool, len + add_size + 1), 0 };
+        /* fill-in the rest */
+        for (s = src; s != end; ++s) {
+            switch (*s) {
+#define ENTITY(code, quoted) case code: memcpy(escaped.base + escaped.len, quoted, sizeof(quoted) - 1); escaped.len += sizeof(quoted) - 1; break
+            ENTITY_MAP()
+#undef ENTITY
+            default:
+                escaped.base[escaped.len++] = *s;
+                break;
+            }
+        }
+        assert(escaped.len == len + add_size);
+        escaped.base[escaped.len] = '\0';
+
+        return escaped;
+    }
+
+    /* no need not escape; return the original */
+    return h2o_buf_init(src, len);
+}
+
 #ifdef H2O_UNITTEST
 
 #include "t/test.h"
@@ -555,9 +602,30 @@ static void test_parse_url(void)
     ok(ret != 0);
 }
 
+static void test_htmlescape(void)
+{
+    h2o_mempool_t pool;
+    h2o_mempool_init(&pool);
+
+#define TEST(src, expected) \
+    do { \
+        h2o_buf_t escaped = h2o_htmlescape(&pool, H2O_STRLIT(src)); \
+        ok(h2o_memis(escaped.base, escaped.len, H2O_STRLIT(expected))); \
+    } while (0)
+
+    TEST("hello world", "hello world");
+    TEST("x < y", "x &lt; y");
+    TEST("\0\"&'<>", "\0&quot;&amp;&#39;&lt;&gt;");
+
+#undef TEST
+
+    h2o_mempool_clear(&pool);
+}
+
 void test_lib__string_c(void)
 {
     subtest("parse_url", test_parse_url);
+    subtest("htmlescape", test_htmlescape);
 }
 
 #endif

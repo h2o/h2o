@@ -95,6 +95,14 @@ h2o_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len);
  * parses absolute URL (either http or https)
  */
 int h2o_parse_url(h2o_mempool_t *pool, const char *url, char **scheme, char **host, uint16_t *port, char **path);
+/**
+ * HTML-escapes a string
+ * @param pool memory pool
+ * @param src source string
+ * @param len source length
+ * @return the escaped string, or the source itself if escape was not necessary
+ */
+h2o_buf_t h2o_htmlescape(h2o_mempool_t *pool, const char *src, size_t len);
 
 int h2o__lcstris_core(const char *target, const char *test, size_t test_len);
 

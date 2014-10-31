@@ -61,6 +61,11 @@ void h2o_loopback_destroy(h2o_loopback_conn_t *conn)
 
 void h2o_loopback_run_loop(h2o_loopback_conn_t *conn)
 {
+    if (conn->req.scheme.base == NULL)
+        conn->req.scheme = h2o_buf_init(H2O_STRLIT("http"));
+    if (conn->req.version == 0)
+        conn->req.version = 0x100; /* HTTP/1.0 */
+
     h2o_process_request(&conn->req);
 
     while (! conn->_is_complete) {
@@ -107,7 +112,6 @@ static void test_loopback(void)
     conn = h2o_loopback_create(&ctx);
     conn->req.method = h2o_buf_init(H2O_STRLIT("GET"));
     conn->req.path = h2o_buf_init(H2O_STRLIT("/"));
-    conn->req.version = 0x100;
     h2o_loopback_run_loop(conn);
 
     ok(conn->req.res.status == 404);
