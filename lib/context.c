@@ -94,6 +94,11 @@ void h2o_context_dispose(h2o_context_t *ctx)
     free(ctx->_module_configs);
     h2o_timeout_dispose(ctx->loop, &ctx->zero_timeout);
     h2o_timeout_dispose(ctx->loop, &ctx->req_timeout);
+
+#if H2O_USE_LIBUV
+    /* make sure the handles released by h2o_timeout_dispose get freed */
+    uv_run(ctx->loop, UV_RUN_NOWAIT);
+#endif
 }
 
 void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts)
