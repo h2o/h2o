@@ -543,6 +543,8 @@ h2o_buf_t h2o_htmlescape(h2o_mempool_t *pool, const char *src, size_t len)
         return escaped;
     }
 
+#undef ENTITY_MAP
+
     /* no need not escape; return the original */
     return h2o_buf_init(src, len);
 }
