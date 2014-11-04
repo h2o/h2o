@@ -94,7 +94,7 @@ static void init_openssl(void)
     static int ready = 0;
     if (! ready) {
         int nlocks = CRYPTO_num_locks(), i;
-        openssl_thread_locks = malloc(sizeof(*openssl_thread_locks) * nlocks);
+        openssl_thread_locks = h2o_malloc(sizeof(*openssl_thread_locks) * nlocks);
         for (i = 0; i != nlocks; ++i)
             pthread_mutex_init(openssl_thread_locks + i, NULL);
         CRYPTO_set_locking_callback(openssl_thread_lock_callback);
