@@ -78,7 +78,7 @@ void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, 
         /* change the state to EOS, clear all the queued bufs, and close the connection in the callback */
         stream->state = H2O_HTTP2_STREAM_STATE_END_STREAM;
         stream->_data.size = 0;
-        if (h2o_http2_conn_stream_is_linked(stream)) {
+        if (h2o_linklist_is_linked(&stream->_link)) {
             /* will be closed in the callaback */
         } else {
             h2o_http2_stream_close(conn, stream);
