@@ -24,13 +24,13 @@ Dependencies
 Building and Running the Server
 ---
 
-Run the commands below to build and run the H2O server.  The last command will read the configuration from [examples/h2o.conf](https://github.com/kazuho/h2o/blob/master/examples/h2o.conf) and start listening on port 8080.  Try accessing [http://127.0.0.1:8080/](http://127.0.0.1:8080/).
+Run the commands below to build and run the H2O server.  The last command will read the configuration from [examples/h2o/h2o.conf](https://github.com/kazuho/h2o/blob/master/examples/h2o/h2o.conf) and start listening on port 8080.  Try accessing [http://127.0.0.1:8080/](http://127.0.0.1:8080/).
 
 ```
 $ git submodule update --init --recursive
 $ cmake .
 $ make h2o
-$ ./h2o -c examples/h2o.conf
+$ ./h2o -c examples/h2o/h2o.conf
 ```
 
 Use `--help` to print the list of configuration directives available.

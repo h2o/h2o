@@ -457,12 +457,20 @@
 		107923FE19A3239200C52AD6 /* examples */ = {
 			isa = PBXGroup;
 			children = (
+				10BF213E1A087CDF008F7129 /* libh2o */,
+			);
+			path = examples;
+			sourceTree = "<group>";
+		};
+		10BF213E1A087CDF008F7129 /* libh2o */ = {
+			isa = PBXGroup;
+			children = (
 				10D0906A19F38B850043D458 /* http1client.c */,
 				10D0905219F0CB130043D458 /* socket-client.c */,
 				107923FC19A3238500C52AD6 /* simple.c */,
 				1079241319A324B400C52AD6 /* websocket.c */,
 			);
-			path = examples;
+			path = libh2o;
 			sourceTree = "<group>";
 		};
 		10D0903F19F0B90A0043D458 /* socket */ = {

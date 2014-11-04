@@ -65,27 +65,32 @@ ADD_LIBRARY(libh2o STATIC ${LIB_SOURCE_FILES})
 SET_TARGET_PROPERTIES(libh2o PROPERTIES OUTPUT_NAME h2o)
 SET_TARGET_PROPERTIES(libh2o PROPERTIES EXCLUDE_FROM_ALL 1)
 
-ADD_EXECUTABLE(examples-http1client examples/http1client.c)
+ADD_CUSTOM_TARGET(lib-examples DEPENDS examples-http1client examples-simple examples-socket-client)
+IF (WSLAY_FOUND)
+    ADD_DEPENDENCIES(lib-examples examples-websocket)
+ENDIF (WSLAY_FOUND)
+
+ADD_EXECUTABLE(examples-http1client examples/libh2o/http1client.c)
 SET_TARGET_PROPERTIES(examples-http1client PROPERTIES
-    OUTPUT_NAME examples/http1client
+    OUTPUT_NAME examples/libh2o/http1client
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-http1client libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${EXTRA_LIBRARIES})
 
-ADD_EXECUTABLE(examples-socket-client examples/socket-client.c)
+ADD_EXECUTABLE(examples-socket-client examples/libh2o/socket-client.c)
 SET_TARGET_PROPERTIES(examples-socket-client PROPERTIES
-    OUTPUT_NAME examples/socket-client
+    OUTPUT_NAME examples/libh2o/socket-client
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-socket-client libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${EXTRA_LIBRARIES})
 
-ADD_EXECUTABLE(examples-simple examples/simple.c)
+ADD_EXECUTABLE(examples-simple examples/libh2o/simple.c)
 SET_TARGET_PROPERTIES(examples-simple PROPERTIES
-    OUTPUT_NAME examples/simple
+    OUTPUT_NAME examples/libh2o/simple
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-simple libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${EXTRA_LIBRARIES})
 
-ADD_EXECUTABLE(examples-websocket lib/websocket.c examples/websocket.c)
+ADD_EXECUTABLE(examples-websocket lib/websocket.c examples/libh2o/websocket.c)
 SET_TARGET_PROPERTIES(examples-websocket PROPERTIES
-    OUTPUT_NAME examples/websocket
+    OUTPUT_NAME examples/libh2o/websocket
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-websocket libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${WSLAY_LIBRARIES} ${EXTRA_LIBRARIES})
 
@@ -110,10 +115,7 @@ TARGET_LINK_LIBRARIES(unittest_libuv ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${L
 
 ADD_CUSTOM_TARGET(test prove -v t/*/*.t DEPENDS h2o unittest_evloop)
 IF (LIBUV_FOUND)
-    ADD_DEPENDENCIES(test unittest_libuv examples-http1client examples-simple examples-socket-client)
-    IF (WSLAY_FOUND)
-        ADD_DEPENDENCIES(test examples-websocket)
-    ENDIF (WSLAY_FOUND)
+    ADD_DEPENDENCIES(test unittest_libuv lib-examples)
 ENDIF (LIBUV_FOUND)
 
 # environment-specific tweaks
