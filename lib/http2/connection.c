@@ -352,7 +352,7 @@ static void handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
 
     conn->_read_expect = expect_continuation_of_headers;
 
-    stream = h2o_http2_stream_open(conn, frame->stream_id, NULL);
+    stream = h2o_http2_stream_open(conn, frame->stream_id, &payload.priority, NULL);
     stream->is_half_closed = (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0;
     handle_incoming_request(
         conn,
@@ -751,6 +751,8 @@ void h2o_http2_accept(h2o_context_t *ctx, h2o_socket_t *sock)
 
 int h2o_http2_handle_upgrade(h2o_req_t *req)
 {
+    static const h2o_http2_priority_t priority = { 0, 0, 0 };
+
     h2o_http2_conn_t *http2conn = create_conn(req->conn->ctx, NULL, req->conn->peername.addr, req->conn->peername.len);
     h2o_http1_conn_t *req_conn = (h2o_http1_conn_t*)req->conn;
     ssize_t connection_index, settings_index;
@@ -777,7 +779,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req)
     }
 
     /* open the stream, now that the function is guaranteed to succeed */
-    h2o_http2_stream_open(http2conn, 1, req);
+    h2o_http2_stream_open(http2conn, 1, &priority, req);
 
     /* send response */
     req->res.status = 101;
