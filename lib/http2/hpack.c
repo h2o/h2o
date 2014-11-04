@@ -200,7 +200,7 @@ static struct st_h2o_hpack_header_table_entry_t *header_table_add(h2o_hpack_head
             new_capacity = 16;
         struct st_h2o_hpack_header_table_entry_t *new_entries = h2o_malloc(new_capacity * sizeof(struct st_h2o_hpack_header_table_entry_t));
         if (table->num_entries != 0) {
-            size_t src_index = 0, dst_index = table->entry_start_index;
+            size_t src_index = table->entry_start_index, dst_index = 0;
             do {
                 new_entries[dst_index] = table->entries[src_index];
                 ++dst_index;
