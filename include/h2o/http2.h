@@ -154,6 +154,17 @@ typedef struct st_h2o_http2_window_t {
     ssize_t _avail;
 } h2o_http2_window_t;
 
+typedef struct h2o_http2_stream_priolist_slot_t {
+    uint16_t weight;
+    h2o_linklist_t streams;
+    size_t refcnt;
+} h2o_http2_stream_priolist_slot_t;
+
+typedef struct st_h2o_http2_stream_priolist_t {
+    size_t refcnt;
+    H2O_VECTOR(h2o_http2_stream_priolist_slot_t*) list;
+} h2o_http2_stream_priolist_t;
+
 typedef enum enum_h2o_http2_stream_state_t {
     H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS,
     H2O_HTTP2_STREAM_STATE_RECV_HEADERS,
@@ -175,7 +186,10 @@ struct st_h2o_http2_stream_t {
     h2o_input_buffer_t *_req_body;
     H2O_VECTOR(h2o_buf_t) _data;
     /* link list governed by connection.c for handling various things */
-    h2o_linklist_t _link;
+    struct {
+        h2o_linklist_t link;
+        h2o_http2_stream_priolist_slot_t *slot;
+    } _link;
     /* placed at last since it is large and has it's own ctor */
     h2o_req_t req;
 };
@@ -204,12 +218,12 @@ struct st_h2o_http2_conn_t {
     h2o_hpack_header_table_t _input_header_table;
     h2o_http2_window_t _input_window;
     h2o_hpack_header_table_t _output_header_table;
-    h2o_linklist_t _pending_reqs; /* list of h2o_http2_stream_t that contain pending requests */
+    h2o_http2_stream_priolist_t _pending_reqs; /* list of h2o_http2_stream_t that contain pending requests */
     struct {
         h2o_mempool_t *pool; /* points to either of the _pools */
         int wreq_in_flight, write_once_more;
         H2O_VECTOR(h2o_buf_t) bufs;
-        h2o_linklist_t streams_with_pending_data;
+        h2o_http2_stream_priolist_t streams_with_pending_data;
         h2o_linklist_t streams_without_pending_data;
         h2o_timeout_entry_t timeout_entry;
         h2o_http2_window_t window;
