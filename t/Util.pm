@@ -48,8 +48,8 @@ listen: $port
 listen:
   port: $tls_port
   ssl:
-    key-file: t/50end-to-end/protocol/server.key
-    certificate-file: t/50end-to-end/protocol/server.crt
+    key-file: examples/h2o/server.key
+    certificate-file: examples/h2o/server.crt
 EOT
     exec "./h2o", "-c", $conffn;
     die "failed to spawn h2o:$!";
