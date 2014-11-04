@@ -28,7 +28,11 @@
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <sys/stat.h>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/un.h>
 #include <openssl/err.h>
 #include "yoml-parser.h"
 #include "h2o.h"
@@ -46,6 +50,7 @@ struct listener_config_t {
     int socktype;
     int protocol;
     struct sockaddr_storage addr;
+    struct sockaddr_un addr_unix;
     socklen_t addrlen;
     SSL_CTX *ssl_ctx;
 };
@@ -216,6 +221,44 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         return -1;
     }
 
+    /* unix socket */
+    if (strncmp(servname, "unix:", sizeof("unix:") - 1) == 0) {
+        struct listener_config_t *listener = h2o_malloc(sizeof(*listener));
+        listener->fd = -1;
+        listener->family = AF_UNIX;
+        listener->socktype = SOCK_STREAM;
+        listener->protocol = 0;
+
+        /* remove socket file if it already exists */
+        struct stat sstat;
+        if (lstat(servname + sizeof("unix:") - 1, &sstat) == 0) {
+            if (S_ISSOCK(sstat.st_mode)) {
+                unlink(servname + sizeof("unix:") - 1);
+            } else {
+                h2o_config_print_error(cmd, config_file, config_node, "path:%s already exists and is not an unix socket.", servname + sizeof("unix:") - 1);
+                return -1;
+            }
+        }
+
+        /* overflow check */
+        size_t servlen = strlen(servname);
+        if (servlen >= sizeof(listener->addr_unix.sun_path)) {
+            assert(!"unix socket path is too long.");
+        }
+
+        memset(&listener->addr_unix, 0, sizeof(struct sockaddr_un));
+        listener->addr_unix.sun_family = AF_UNIX;
+        memcpy(listener->addr_unix.sun_path, 
+               servname + sizeof("unix:") - 1, 
+               servlen - (sizeof("unix:") - 1));
+
+        listener->addrlen = sizeof(struct sockaddr_un);
+        listener->ssl_ctx = ssl_ctx;
+        conf->listeners = h2o_realloc(conf->listeners, sizeof(*conf->listeners) * (conf->num_listeners + 1));
+        conf->listeners[conf->num_listeners++] = listener;
+        return 0;
+    }
+
     /* call getaddrinfo */
     memset(&hints, 0, sizeof(hints));
     hints.ai_socktype = SOCK_STREAM;
@@ -271,6 +314,16 @@ static int on_config_listen_exit(h2o_configurator_t *configurator, h2o_configura
 
     for (i = 0; i != conf->num_listeners; ++i) {
         struct listener_config_t *listener = conf->listeners[i];
+        if (listener->family == AF_UNIX) {
+            if ((listener->fd = socket(listener->family, listener->socktype, listener->protocol)) == -1
+                || bind(listener->fd, (void *)&listener->addr_unix, sizeof(struct sockaddr_un)) != 0
+                || listen(listener->fd, SOMAXCONN) != 0) {
+                fprintf(stderr, "failed to listen to socket:%s: %s\n", listener->addr_unix.sun_path, strerror(errno));
+                return -1;
+            }
+            continue;
+        }
+
         if ((listener->fd = socket(listener->family, listener->socktype, listener->protocol)) == -1
             || setsockopt(listener->fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
 #ifdef IPV6_V6ONLY
