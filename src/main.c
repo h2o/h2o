@@ -50,7 +50,6 @@ struct listener_config_t {
     int socktype;
     int protocol;
     struct sockaddr_storage addr;
-    struct sockaddr_un addr_unix;
     socklen_t addrlen;
     SSL_CTX *ssl_ctx;
 };
@@ -181,7 +180,7 @@ Error:
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, ctx->globalconf);
-    const char *hostname = NULL, *servname = NULL;
+    const char *hostname = NULL, *servname = NULL, *type = NULL;
     SSL_CTX *ssl_ctx = NULL;
     struct addrinfo hints, *res;
     int error;
@@ -210,6 +209,13 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 return -1;
             }
             servname = t->data.scalar;
+            if ((t = yoml_get(config_node, "type")) != NULL) {
+                if (t->type != YOML_TYPE_SCALAR) {
+                    h2o_config_print_error(cmd, config_file, t, "`type` is not a string");
+                    return -1;
+                }
+                type = t->data.scalar;
+            }
             if ((t = yoml_get(config_node, "ssl")) != NULL) {
                 if ((ssl_ctx = on_config_listen_setup_ssl(cmd, config_file, t)) == NULL)
                     return -1;
@@ -222,7 +228,8 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     }
 
     /* unix socket */
-    if (strncmp(servname, "unix:", sizeof("unix:") - 1) == 0) {
+
+    if (type != NULL && strcmp(type, "unix") == 0) {
         struct listener_config_t *listener = h2o_malloc(sizeof(*listener));
         listener->fd = -1;
         listener->family = AF_UNIX;
@@ -231,26 +238,24 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 
         /* remove socket file if it already exists */
         struct stat sstat;
-        if (lstat(servname + sizeof("unix:") - 1, &sstat) == 0) {
+        if (lstat(servname, &sstat) == 0) {
             if (S_ISSOCK(sstat.st_mode)) {
-                unlink(servname + sizeof("unix:") - 1);
+                unlink(servname);
             } else {
-                h2o_config_print_error(cmd, config_file, config_node, "path:%s already exists and is not an unix socket.", servname + sizeof("unix:") - 1);
+                h2o_config_print_error(cmd, config_file, config_node, "path:%s already exists and is not an unix socket.", servname);
                 return -1;
             }
         }
 
         /* overflow check */
         size_t servlen = strlen(servname);
-        if (servlen >= sizeof(listener->addr_unix.sun_path)) {
+        struct sockaddr_un *addr_un = (struct sockaddr_un *)&listener->addr;
+        if (servlen >= sizeof(addr_un->sun_path)) {
             assert(!"unix socket path is too long.");
         }
-
-        memset(&listener->addr_unix, 0, sizeof(struct sockaddr_un));
-        listener->addr_unix.sun_family = AF_UNIX;
-        memcpy(listener->addr_unix.sun_path, 
-               servname + sizeof("unix:") - 1, 
-               servlen - (sizeof("unix:") - 1));
+        memset(addr_un, 0, sizeof(struct sockaddr_un));
+        addr_un->sun_family = AF_UNIX;
+        memcpy(addr_un->sun_path, servname, servlen);
 
         listener->addrlen = sizeof(struct sockaddr_un);
         listener->ssl_ctx = ssl_ctx;
@@ -314,27 +319,30 @@ static int on_config_listen_exit(h2o_configurator_t *configurator, h2o_configura
 
     for (i = 0; i != conf->num_listeners; ++i) {
         struct listener_config_t *listener = conf->listeners[i];
-        if (listener->family == AF_UNIX) {
+        switch (listener->family) {
+        case AF_UNIX:
             if ((listener->fd = socket(listener->family, listener->socktype, listener->protocol)) == -1
-                || bind(listener->fd, (void *)&listener->addr_unix, sizeof(struct sockaddr_un)) != 0
+                || bind(listener->fd, (void *)&listener->addr, sizeof(struct sockaddr_un)) != 0
                 || listen(listener->fd, SOMAXCONN) != 0) {
-                fprintf(stderr, "failed to listen to socket:%s: %s\n", listener->addr_unix.sun_path, strerror(errno));
+                struct sockaddr_un *addr_un = (struct sockaddr_un *)&listener->addr;
+                fprintf(stderr, "failed to listen to socket:%s: %s\n", addr_un->sun_path, strerror(errno));
                 return -1;
             }
-            continue;
-        }
-
-        if ((listener->fd = socket(listener->family, listener->socktype, listener->protocol)) == -1
-            || setsockopt(listener->fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
+            break;
+        default:
+            if ((listener->fd = socket(listener->family, listener->socktype, listener->protocol)) == -1
+                || setsockopt(listener->fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
 #ifdef IPV6_V6ONLY
-            || (listener->family == AF_INET6 && setsockopt(listener->fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only_flag, sizeof(v6only_flag)) != 0)
+                || (listener->family == AF_INET6 && setsockopt(listener->fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only_flag, sizeof(v6only_flag)) != 0)
 #endif
-            || bind(listener->fd, (void*)&listener->addr, listener->addrlen) != 0
-            || listen(listener->fd, SOMAXCONN) != 0) {
-            char host[NI_MAXHOST], serv[NI_MAXSERV];
-            getnameinfo((void*)&listener->addr, listener->addrlen, host, sizeof(host), serv, sizeof(serv), NI_NUMERICHOST | NI_NUMERICSERV);
-            fprintf(stderr, "failed to listen to port %s:%s: %s\n", host, serv, strerror(errno));
-            return -1;
+                || bind(listener->fd, (void*)&listener->addr, listener->addrlen) != 0
+                || listen(listener->fd, SOMAXCONN) != 0) {
+                char host[NI_MAXHOST], serv[NI_MAXSERV];
+                getnameinfo((void*)&listener->addr, listener->addrlen, host, sizeof(host), serv, sizeof(serv), NI_NUMERICHOST | NI_NUMERICSERV);
+                fprintf(stderr, "failed to listen to port %s:%s: %s\n", host, serv, strerror(errno));
+                return -1;
+            }
+            break;
         }
     }
 
