@@ -21,6 +21,8 @@ Dependencies
 - [libuv 1.0.0](https://github.com/joyent/libuv) (optional; required when using h2o as a library)
 - [wslay](https://github.com/tatsuhiro-t/wslay) (optional; required if you need support for websocket)
 
+note: Older versions of libuv cannot be used due to massive API changes in libuv 1.0.  Please use the latest RC of libuv 1.0.
+
 Building and Running the Server
 ---
 
