@@ -19,7 +19,6 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <alloca.h>
 #include <errno.h>
 #include <limits.h>
 #include <netinet/in.h>
@@ -223,7 +222,7 @@ int main(int argc, char **argv)
     register_handler(hostconf, post_test);
     register_handler(hostconf, chunked_test);
     register_handler(hostconf, reproxy_test);
-    h2o_file_register(hostconf, "/", "htdocs", NULL, NULL);
+    h2o_file_register(hostconf, "/", "examples/doc_root", NULL, NULL);
     h2o_reproxy_register(hostconf);
 
 #if H2O_USE_LIBUV

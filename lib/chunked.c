@@ -19,7 +19,9 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <alloca.h>
+#ifdef NO_ALLOCA_H
+# include <alloca.h>
+#endif
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
