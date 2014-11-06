@@ -180,10 +180,8 @@ Error:
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, ctx->globalconf);
-    const char *hostname = NULL, *servname = NULL, *type = NULL;
+    const char *hostname = NULL, *servname = NULL, *type = "tcp";
     SSL_CTX *ssl_ctx = NULL;
-    struct addrinfo hints, *res;
-    int error;
 
     /* fetch servname (and hostname) */
     switch (config_node->type) {
@@ -227,9 +225,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         return -1;
     }
 
-    /* unix socket */
+    if (strcmp(type, "unix") == 0) {
 
-    if (type != NULL && strcmp(type, "unix") == 0) {
+        /* unix socket */
         struct listener_config_t *listener = h2o_malloc(sizeof(*listener));
         listener->fd = -1;
         listener->family = AF_UNIX;
@@ -261,24 +259,27 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         listener->ssl_ctx = ssl_ctx;
         conf->listeners = h2o_realloc(conf->listeners, sizeof(*conf->listeners) * (conf->num_listeners + 1));
         conf->listeners[conf->num_listeners++] = listener;
+
         return 0;
-    }
 
-    /* call getaddrinfo */
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-    hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV | AI_PASSIVE;
-    if ((error = getaddrinfo(hostname, servname, &hints, &res)) != 0) {
-        h2o_config_print_error(cmd, config_file, config_node, "failed to resolve the listening address: %s", gai_strerror(error));
-        return -1;
-    } else if (res == NULL) {
-        h2o_config_print_error(cmd, config_file, config_node, "failed to resolve the listening address: getaddrinfo returned an empty list");
-        return -1;
-    }
+    } else if (strcmp(type, "tcp") == 0) {
 
-    { /* save the entries */
-        struct addrinfo *ai;
+        /* TCP socket */
+        struct addrinfo hints, *res, *ai;
+        int error;
+        /* call getaddrinfo */
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_protocol = IPPROTO_TCP;
+        hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV | AI_PASSIVE;
+        if ((error = getaddrinfo(hostname, servname, &hints, &res)) != 0) {
+            h2o_config_print_error(cmd, config_file, config_node, "failed to resolve the listening address: %s", gai_strerror(error));
+            return -1;
+        } else if (res == NULL) {
+            h2o_config_print_error(cmd, config_file, config_node, "failed to resolve the listening address: getaddrinfo returned an empty list");
+            return -1;
+        }
+        /* save the entries */
         for (ai = res; ai != NULL; ai = ai->ai_next) {
             struct listener_config_t *listener = h2o_malloc(sizeof(*listener));
             listener->fd = -1;
@@ -291,10 +292,16 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             conf->listeners = h2o_realloc(conf->listeners, sizeof(*conf->listeners) * (conf->num_listeners + 1));
             conf->listeners[conf->num_listeners++] = listener;
         }
-    }
+        /* release res */
+        freeaddrinfo(res);
+        return 0;
 
-    /* release res */
-    freeaddrinfo(res);
+    } else {
+
+        h2o_config_print_error(cmd, config_file, config_node, "unknown listen type: %s", type);
+        return -1;
+
+    }
 
     return 0;
 }
