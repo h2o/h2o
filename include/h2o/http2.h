@@ -86,6 +86,12 @@ typedef struct st_h2o_http2_settings_t {
 const h2o_http2_settings_t H2O_HTTP2_SETTINGS_DEFAULT;
 const h2o_http2_settings_t H2O_HTTP2_SETTINGS_HOST;
 
+typedef struct st_h2o_http2_priority_t {
+    int exclusive;
+    uint32_t dependency; /* 0 if not set */
+    uint16_t weight; /* 0 if not set */
+} h2o_http2_priority_t;
+
 /* frames */
 
 #define H2O_HTTP2_FRAME_HEADER_SIZE 9
@@ -121,9 +127,7 @@ typedef struct st_h2o_http2_data_payload_t {
 } h2o_http2_data_payload_t;
 
 typedef struct st_h2o_http2_headers_payload_t {
-    int exclusive;
-    uint32_t stream_dependency; /* 0 if not set */
-    uint16_t weight; /* 0 if not set */
+    h2o_http2_priority_t priority;
     const uint8_t *headers;
     size_t headers_len;
 } h2o_http2_headers_payload_t;
@@ -150,6 +154,17 @@ typedef struct st_h2o_http2_window_t {
     ssize_t _avail;
 } h2o_http2_window_t;
 
+typedef struct h2o_http2_stream_priolist_slot_t {
+    uint16_t weight;
+    h2o_linklist_t streams;
+    size_t refcnt;
+} h2o_http2_stream_priolist_slot_t;
+
+typedef struct st_h2o_http2_stream_priolist_t {
+    size_t refcnt;
+    H2O_VECTOR(h2o_http2_stream_priolist_slot_t*) list;
+} h2o_http2_stream_priolist_t;
+
 typedef enum enum_h2o_http2_stream_state_t {
     H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS,
     H2O_HTTP2_STREAM_STATE_RECV_HEADERS,
@@ -167,12 +182,13 @@ struct st_h2o_http2_stream_t {
     h2o_http2_stream_state_t state;
     h2o_http2_window_t output_window;
     h2o_http2_window_t input_window;
+    h2o_http2_priority_t priority;
     h2o_input_buffer_t *_req_body;
     H2O_VECTOR(h2o_buf_t) _data;
     /* link list governed by connection.c for handling various things */
     struct {
-        h2o_http2_stream_t *prev;
-        h2o_http2_stream_t *next;
+        h2o_linklist_t link;
+        h2o_http2_stream_priolist_slot_t *slot;
     } _link;
     /* placed at last since it is large and has it's own ctor */
     h2o_req_t req;
@@ -202,13 +218,13 @@ struct st_h2o_http2_conn_t {
     h2o_hpack_header_table_t _input_header_table;
     h2o_http2_window_t _input_window;
     h2o_hpack_header_table_t _output_header_table;
-    h2o_http2_stream_t *_pending_reqs;
+    h2o_http2_stream_priolist_t _pending_reqs; /* list of h2o_http2_stream_t that contain pending requests */
     struct {
         h2o_mempool_t *pool; /* points to either of the _pools */
         int wreq_in_flight, write_once_more;
         H2O_VECTOR(h2o_buf_t) bufs;
-        h2o_http2_stream_t *streams_with_pending_data;
-        h2o_http2_stream_t *streams_without_pending_data;
+        h2o_http2_stream_priolist_t streams_with_pending_data;
+        h2o_linklist_t streams_without_pending_data;
         h2o_timeout_entry_t timeout_entry;
         h2o_http2_window_t window;
         h2o_mempool_t _pools[2]; /* placed at the last of h2o_http2_conn_t, since it is large */
@@ -238,11 +254,10 @@ static h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uin
 void h2o_http2_accept(h2o_context_t *ctx, h2o_socket_t *sock);
 int h2o_http2_handle_upgrade(h2o_req_t *req);
 void h2o_http2_conn_enqueue_write(h2o_http2_conn_t *conn, h2o_buf_t buf);
-static int h2o_http2_conn_stream_is_linked(h2o_http2_stream_t *stream);
 void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 
 /* stream */
-h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req);
+h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, const h2o_http2_priority_t *priority, h2o_req_t *src_req);
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int errnum);
 void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
@@ -263,11 +278,6 @@ inline h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uin
     if (iter != kh_end(conn->open_streams))
         return kh_val(conn->open_streams, iter);
     return NULL;
-}
-
-inline int h2o_http2_conn_stream_is_linked(h2o_http2_stream_t *stream)
-{
-    return stream->_link.prev != NULL;
 }
 
 inline int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream)

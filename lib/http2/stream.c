@@ -25,7 +25,7 @@
 
 static void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final);
 
-h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req)
+h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, const h2o_http2_priority_t *priority, h2o_req_t *src_req)
 {
     h2o_http2_stream_t *stream = h2o_malloc(sizeof(*stream));
 
@@ -38,6 +38,7 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     stream->state = H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS;
     h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
     h2o_http2_window_init(&stream->input_window, &H2O_HTTP2_SETTINGS_HOST);
+    memcpy(&stream->priority, priority, sizeof(stream->priority));
     h2o_init_input_buffer(&stream->_req_body);
 
     /* init request */
@@ -77,8 +78,8 @@ void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, 
         /* change the state to EOS, clear all the queued bufs, and close the connection in the callback */
         stream->state = H2O_HTTP2_STREAM_STATE_END_STREAM;
         stream->_data.size = 0;
-        if (h2o_http2_conn_stream_is_linked(stream)) {
-            /* will be closed in the callaback */
+        if (h2o_linklist_is_linked(&stream->_link.link)) {
+            /* will be closed in the callback */
         } else {
             h2o_http2_stream_close(conn, stream);
         }

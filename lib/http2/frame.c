@@ -183,13 +183,13 @@ int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const
             return -1;
         u4 = decode32u(src);
         src += 4;
-        payload->exclusive = u4 >> 31;
-        payload->stream_dependency = u4 & 0x7fffffff;
-        payload->weight = (uint16_t)*src++ + 1;
+        payload->priority.exclusive = u4 >> 31;
+        payload->priority.dependency = u4 & 0x7fffffff;
+        payload->priority.weight = (uint16_t)*src++ + 1;
     } else {
-        payload->exclusive = 0;
-        payload->stream_dependency = 0;
-        payload->weight = 0;
+        payload->priority.exclusive = 0;
+        payload->priority.dependency = 0;
+        payload->priority.weight = 0;
     }
 
     payload->headers = src;
