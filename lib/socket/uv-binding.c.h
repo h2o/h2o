@@ -149,6 +149,12 @@ static void on_connect(uv_connect_t *conn, int status)
     cb(&sock->super, status);
 }
 
+h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *_sock)
+{
+    struct st_h2o_uv_socket_t *sock = (void*)_sock;
+    return sock->uv.stream->loop;
+}
+
 h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)
 {
     struct st_h2o_uv_socket_t *sock;

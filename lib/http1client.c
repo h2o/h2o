@@ -90,6 +90,8 @@ static void on_body_content_length(h2o_socket_t *sock, int status)
         int is_eos;
         client->_body_bytesleft -= client->sock->input->size;
         is_eos = client->_body_bytesleft == 0;
+        if (is_eos)
+            client->_bytes_to_consume_on_detach = buf.len;
         if (client->_cb.on_body(client, is_eos ? h2o_http1client_error_is_eos : NULL, &buf, 1) != 0 || is_eos) {
             close_client(client);
             return;
@@ -139,21 +141,17 @@ static void on_head(h2o_socket_t *sock, int status)
         return;
     }
 
-    /* RFC 2616 4.4 */
-    is_head_only = client->_method_is_head
-        || ((100 <= status && status <= 199) || status == 204 || status == 304);
-
-    /* call the callback */
-    if ((client->_cb.on_body = client->_cb.on_head(client, is_head_only ? h2o_http1client_error_is_eos : NULL, minor_version, http_status, h2o_buf_init(msg, msg_len), headers, num_headers)) == NULL) {
-        close_client(client);
-        return;
-    }
-    assert(! is_head_only);
-
-    /* setup and start reading the body */
+    /* parse the headers */
     reader = on_body_until_close;
+    client->_can_keepalive = minor_version >= 1;
     for (i = 0; i != num_headers; ++i) {
-        if (h2o_lcstris(headers[i].name, headers[i].name_len, H2O_STRLIT("content-encoding"))) {
+        if (h2o_lcstris(headers[i].name, headers[i].name_len, H2O_STRLIT("connection"))) {
+            if (h2o_contains_token(headers[i].value, headers[i].value_len, H2O_STRLIT("keep-alive"))) {
+                client->_can_keepalive = 1;
+            } else {
+                client->_can_keepalive = 0;
+            }
+        } else if (h2o_lcstris(headers[i].name, headers[i].name_len, H2O_STRLIT("content-encoding"))) {
             if (h2o_memis(headers[i].value, headers[i].value_len, H2O_STRLIT("chunked"))) {
                 reader = on_body_chunked;
                 break;
@@ -171,6 +169,19 @@ static void on_head(h2o_socket_t *sock, int status)
             reader = on_body_content_length;
         }
     }
+
+    /* RFC 2616 4.4 */
+    is_head_only = client->_method_is_head
+        || ((100 <= status && status <= 199) || status == 204 || status == 304);
+
+    /* call the callback */
+    if (is_head_only)
+        client->_bytes_to_consume_on_detach = rlen;
+    if ((client->_cb.on_body = client->_cb.on_head(client, is_head_only ? h2o_http1client_error_is_eos : NULL, minor_version, http_status, h2o_buf_init(msg, msg_len), headers, num_headers)) == NULL) {
+        close_client(client);
+        return;
+    }
+    assert(! is_head_only);
 
     h2o_consume_input_buffer(&client->sock->input, rlen);
 
@@ -205,6 +216,15 @@ static void on_send_timeout(h2o_timeout_entry_t *entry)
 {
     h2o_http1client_t *client = H2O_STRUCT_FROM_MEMBER(h2o_http1client_t, _timeout, entry);
     on_error_before_head(client, "I/O timeout");
+}
+
+static void send_request(h2o_http1client_t *client, h2o_buf_t *reqbufs, size_t reqbufcnt)
+{
+    /* TODO should we copy reqbufs or not (it needs to be in the heap since socket_write is async, also updates the values */
+    h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_send_request);
+    /* TODO no need to set the timeout if all data has been written into TCP sendbuf */
+    client->_timeout.cb = on_send_timeout;
+    h2o_timeout_link(client->ctx->loop, client->ctx->io_timeout, &client->_timeout);
 }
 
 static void on_connect_error(h2o_http1client_t *client, const char *errstr)
@@ -242,6 +262,19 @@ static void on_connect_timeout(h2o_timeout_entry_t *entry)
     on_connect_error(client, client->_errstr);
 }
 
+static h2o_http1client_t *create_client(h2o_http1client_ctx_t *ctx, h2o_mempool_t *pool)
+{
+    h2o_http1client_t *client = h2o_malloc(sizeof(*client));
+
+    memset(client, 0, sizeof(*client));
+    client->ctx = ctx;
+    client->pool = pool;
+    client->_bytes_to_consume_on_detach = SIZE_MAX;
+    /* caller needs to setup _cb, timeout.cb, sock, and sock->data */
+
+    return client;
+}
+
 const char * const h2o_http1client_error_is_eos = "end of stream";
 
 h2o_http1client_t *h2o_http1client_connect(h2o_http1client_ctx_t *ctx, h2o_mempool_t *pool, const char *host, uint16_t port, h2o_http1client_connect_cb cb)
@@ -251,13 +284,10 @@ h2o_http1client_t *h2o_http1client_connect(h2o_http1client_ctx_t *ctx, h2o_mempo
     char serv[sizeof("65535")];
     int err;
 
-    client = h2o_malloc(sizeof(*client));
-    memset(client, 0, sizeof(*client));
-    client->ctx = ctx;
-    client->pool = pool;
+    /* setup */
+    client = create_client(ctx, pool);
     client->_cb.on_connect = cb;
     client->_timeout.cb = on_connect_timeout;
-
     /* resolve destination (FIXME use the function supplied by the loop) */
     sprintf(serv, "%u", (unsigned)port);
     memset(&hints, 0, sizeof(hints));
@@ -282,7 +312,35 @@ Error:
     return client;
 }
 
+void h2o_http1client_start(h2o_http1client_ctx_t *ctx, h2o_mempool_t *pool, h2o_socket_t *sock, h2o_buf_t *reqbufs, size_t reqbufcnt, int method_is_head, h2o_http1client_head_cb cb)
+{
+    h2o_http1client_t *client = create_client(ctx, pool);
+    client->sock = sock;
+    sock->data = client;
+
+    client->_method_is_head = method_is_head;
+    client->_cb.on_head = cb;
+    send_request(client, reqbufs, reqbufcnt);
+
+    /* intentionally does not return any value, since the client might already have got closed within send_request */
+}
+
 void h2o_http1client_cancel(h2o_http1client_t *client)
 {
     close_client(client);
+}
+
+
+h2o_socket_t *h2o_http1client_detach_socket(h2o_http1client_t *client)
+{
+    h2o_socket_t *sock;
+
+    if (client->_bytes_to_consume_on_detach == SIZE_MAX)
+        return NULL;
+
+    sock = client->sock;
+    h2o_consume_input_buffer(&sock->input, client->_bytes_to_consume_on_detach);
+    client->sock = NULL;
+    client->_bytes_to_consume_on_detach = SIZE_MAX;
+    return sock;
 }

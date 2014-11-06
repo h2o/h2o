@@ -52,12 +52,16 @@ struct st_h2o_http1client_t {
     const char *_errstr;
     h2o_timeout_entry_t _timeout;
     int _method_is_head;
+    int _can_keepalive;
     size_t _body_bytesleft;
+    size_t _bytes_to_consume_on_detach; /* SIZE_MAX when not allowed to detach */
 };
 
 extern const char * const h2o_http1client_error_is_eos;
 
 h2o_http1client_t *h2o_http1client_connect(h2o_http1client_ctx_t *ctx, h2o_mempool_t *pool, const char *host, uint16_t port, h2o_http1client_connect_cb cb);
+void h2o_http1client_start(h2o_http1client_ctx_t *ctx, h2o_mempool_t *pool, h2o_socket_t *sock, h2o_buf_t *reqbufs, size_t reqbufcnt, int method_is_head, h2o_http1client_head_cb cb);
 void h2o_http1client_cancel(h2o_http1client_t *client);
+h2o_socket_t *h2o_http1client_detach_socket(h2o_http1client_t *client);
 
 #endif

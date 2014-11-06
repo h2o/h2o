@@ -287,6 +287,12 @@ void do_read_stop(h2o_socket_t *_sock)
     link_to_statechanged(sock);
 }
 
+h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *_sock)
+{
+    struct st_h2o_evloop_socket_t *sock = (void*)_sock;
+    return sock->loop;
+}
+
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, struct sockaddr *addr, socklen_t addrlen, int flags)
 {
     struct st_h2o_evloop_socket_t *sock;

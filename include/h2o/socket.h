@@ -75,6 +75,10 @@ struct st_h2o_socket_t {
 };
 
 /**
+ * returns the loop
+ */
+h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *sock);
+/**
  * closes the socket
  */
 void h2o_socket_close(h2o_socket_t *sock);
