@@ -28,7 +28,11 @@
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <sys/stat.h>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/un.h>
 #include <openssl/err.h>
 #include "yoml-parser.h"
 #include "h2o.h"
@@ -176,10 +180,8 @@ Error:
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, ctx->globalconf);
-    const char *hostname = NULL, *servname = NULL;
+    const char *hostname = NULL, *servname = NULL, *type = "tcp";
     SSL_CTX *ssl_ctx = NULL;
-    struct addrinfo hints, *res;
-    int error;
 
     /* fetch servname (and hostname) */
     switch (config_node->type) {
@@ -205,6 +207,13 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 return -1;
             }
             servname = t->data.scalar;
+            if ((t = yoml_get(config_node, "type")) != NULL) {
+                if (t->type != YOML_TYPE_SCALAR) {
+                    h2o_config_print_error(cmd, config_file, t, "`type` is not a string");
+                    return -1;
+                }
+                type = t->data.scalar;
+            }
             if ((t = yoml_get(config_node, "ssl")) != NULL) {
                 if ((ssl_ctx = on_config_listen_setup_ssl(cmd, config_file, t)) == NULL)
                     return -1;
@@ -216,21 +225,61 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         return -1;
     }
 
-    /* call getaddrinfo */
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-    hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV | AI_PASSIVE;
-    if ((error = getaddrinfo(hostname, servname, &hints, &res)) != 0) {
-        h2o_config_print_error(cmd, config_file, config_node, "failed to resolve the listening address: %s", gai_strerror(error));
-        return -1;
-    } else if (res == NULL) {
-        h2o_config_print_error(cmd, config_file, config_node, "failed to resolve the listening address: getaddrinfo returned an empty list");
-        return -1;
-    }
+    if (strcmp(type, "unix") == 0) {
 
-    { /* save the entries */
-        struct addrinfo *ai;
+        /* unix socket */
+        struct listener_config_t *listener = h2o_malloc(sizeof(*listener));
+        listener->fd = -1;
+        listener->family = AF_UNIX;
+        listener->socktype = SOCK_STREAM;
+        listener->protocol = 0;
+
+        /* remove socket file if it already exists */
+        struct stat sstat;
+        if (lstat(servname, &sstat) == 0) {
+            if (S_ISSOCK(sstat.st_mode)) {
+                unlink(servname);
+            } else {
+                h2o_config_print_error(cmd, config_file, config_node, "path:%s already exists and is not an unix socket.", servname);
+                return -1;
+            }
+        }
+
+        /* overflow check */
+        size_t servlen = strlen(servname);
+        struct sockaddr_un *addr_un = (struct sockaddr_un *)&listener->addr;
+        if (servlen >= sizeof(addr_un->sun_path)) {
+            assert(!"unix socket path is too long.");
+        }
+        memset(addr_un, 0, sizeof(struct sockaddr_un));
+        addr_un->sun_family = AF_UNIX;
+        memcpy(addr_un->sun_path, servname, servlen);
+
+        listener->addrlen = sizeof(struct sockaddr_un);
+        listener->ssl_ctx = ssl_ctx;
+        conf->listeners = h2o_realloc(conf->listeners, sizeof(*conf->listeners) * (conf->num_listeners + 1));
+        conf->listeners[conf->num_listeners++] = listener;
+
+        return 0;
+
+    } else if (strcmp(type, "tcp") == 0) {
+
+        /* TCP socket */
+        struct addrinfo hints, *res, *ai;
+        int error;
+        /* call getaddrinfo */
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_protocol = IPPROTO_TCP;
+        hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV | AI_PASSIVE;
+        if ((error = getaddrinfo(hostname, servname, &hints, &res)) != 0) {
+            h2o_config_print_error(cmd, config_file, config_node, "failed to resolve the listening address: %s", gai_strerror(error));
+            return -1;
+        } else if (res == NULL) {
+            h2o_config_print_error(cmd, config_file, config_node, "failed to resolve the listening address: getaddrinfo returned an empty list");
+            return -1;
+        }
+        /* save the entries */
         for (ai = res; ai != NULL; ai = ai->ai_next) {
             struct listener_config_t *listener = h2o_malloc(sizeof(*listener));
             listener->fd = -1;
@@ -243,10 +292,16 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             conf->listeners = h2o_realloc(conf->listeners, sizeof(*conf->listeners) * (conf->num_listeners + 1));
             conf->listeners[conf->num_listeners++] = listener;
         }
-    }
+        /* release res */
+        freeaddrinfo(res);
+        return 0;
 
-    /* release res */
-    freeaddrinfo(res);
+    } else {
+
+        h2o_config_print_error(cmd, config_file, config_node, "unknown listen type: %s", type);
+        return -1;
+
+    }
 
     return 0;
 }
@@ -271,17 +326,30 @@ static int on_config_listen_exit(h2o_configurator_t *configurator, h2o_configura
 
     for (i = 0; i != conf->num_listeners; ++i) {
         struct listener_config_t *listener = conf->listeners[i];
-        if ((listener->fd = socket(listener->family, listener->socktype, listener->protocol)) == -1
-            || setsockopt(listener->fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
+        switch (listener->family) {
+        case AF_UNIX:
+            if ((listener->fd = socket(listener->family, listener->socktype, listener->protocol)) == -1
+                || bind(listener->fd, (void *)&listener->addr, sizeof(struct sockaddr_un)) != 0
+                || listen(listener->fd, SOMAXCONN) != 0) {
+                struct sockaddr_un *addr_un = (struct sockaddr_un *)&listener->addr;
+                fprintf(stderr, "failed to listen to socket:%s: %s\n", addr_un->sun_path, strerror(errno));
+                return -1;
+            }
+            break;
+        default:
+            if ((listener->fd = socket(listener->family, listener->socktype, listener->protocol)) == -1
+                || setsockopt(listener->fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
 #ifdef IPV6_V6ONLY
-            || (listener->family == AF_INET6 && setsockopt(listener->fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only_flag, sizeof(v6only_flag)) != 0)
+                || (listener->family == AF_INET6 && setsockopt(listener->fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only_flag, sizeof(v6only_flag)) != 0)
 #endif
-            || bind(listener->fd, (void*)&listener->addr, listener->addrlen) != 0
-            || listen(listener->fd, SOMAXCONN) != 0) {
-            char host[NI_MAXHOST], serv[NI_MAXSERV];
-            getnameinfo((void*)&listener->addr, listener->addrlen, host, sizeof(host), serv, sizeof(serv), NI_NUMERICHOST | NI_NUMERICSERV);
-            fprintf(stderr, "failed to listen to port %s:%s: %s\n", host, serv, strerror(errno));
-            return -1;
+                || bind(listener->fd, (void*)&listener->addr, listener->addrlen) != 0
+                || listen(listener->fd, SOMAXCONN) != 0) {
+                char host[NI_MAXHOST], serv[NI_MAXSERV];
+                getnameinfo((void*)&listener->addr, listener->addrlen, host, sizeof(host), serv, sizeof(serv), NI_NUMERICHOST | NI_NUMERICSERV);
+                fprintf(stderr, "failed to listen to port %s:%s: %s\n", host, serv, strerror(errno));
+                return -1;
+            }
+            break;
         }
     }
 
