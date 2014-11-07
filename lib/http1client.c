@@ -94,10 +94,9 @@ static void on_body_content_length(h2o_socket_t *sock, int status)
             client->sock->input->size < client->_body_bytesleft ? client->sock->input->size : client->_body_bytesleft
         };
         size_t eos_bytes_to_consume;
-        int is_eos;
         client->_body_bytesleft -= client->sock->input->size;
         eos_bytes_to_consume = client->_body_bytesleft == 0 ? buf.len : 0;
-        if (client->_cb.on_body(client, eos_bytes_to_consume != 0 ? h2o_http1client_error_is_eos : NULL, &buf, 1) != 0 || is_eos) {
+        if (client->_cb.on_body(client, eos_bytes_to_consume != 0 ? h2o_http1client_error_is_eos : NULL, &buf, 1) != 0 || eos_bytes_to_consume != 0) {
             close_client(client, eos_bytes_to_consume);
             return;
         }
