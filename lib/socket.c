@@ -228,7 +228,8 @@ Close:
 void h2o_socket_dispose_export(h2o_socket_export_t *info)
 {
     assert(info->fd != -1);
-    destroy_ssl(info->ssl);
+    if (info->ssl != NULL)
+        destroy_ssl(info->ssl);
     h2o_dispose_input_buffer(&info->input);
     close(info->fd);
     info->fd = -1;
