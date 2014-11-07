@@ -172,6 +172,9 @@ static void flush_pending_ssl(h2o_socket_t *sock, h2o_socket_cb cb)
 
 static void dispose_socket(h2o_socket_t *sock, int status)
 {
+    void (*close_cb)(void *data);
+    void *close_cb_data;
+
     if (sock->ssl != NULL) {
         SSL_free(sock->ssl->ssl);
         h2o_dispose_input_buffer(&sock->ssl->input.encrypted);
@@ -180,7 +183,13 @@ static void dispose_socket(h2o_socket_t *sock, int status)
     }
     h2o_dispose_input_buffer(&sock->input);
 
+    close_cb = sock->on_close.cb;
+    close_cb_data = sock->on_close.data;
+
     do_dispose_socket(sock);
+
+    if (close_cb != NULL)
+        close_cb(close_cb_data);
 }
 
 static void shutdown_ssl(h2o_socket_t *sock, int status)

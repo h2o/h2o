@@ -64,6 +64,10 @@ struct st_h2o_socket_t {
     struct st_h2o_socket_ssl_t *ssl;
     h2o_input_buffer_t *input;
     struct {
+        void (*cb)(void *data);
+        void *data;
+    } on_close;
+    struct {
         h2o_socket_cb read;
         h2o_socket_cb write;
     } _cb;
