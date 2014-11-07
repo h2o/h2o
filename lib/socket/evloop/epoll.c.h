@@ -132,6 +132,17 @@ static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
 {
 }
 
+static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
+{
+    int ret;
+    if ((sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED) == 0)
+        return;
+    while ((ret = epoll_ctl(loop->ep, EPOLL_CTL_DEL, sock->fd, NULL)) != 0 && errno == EINTR)
+        ;
+    if (ret != 0)
+        fprintf(stderr, "epoll(DEL) returned error %d (fd=%d)\n", errno, sock->fd);
+}
+
 h2o_evloop_t *h2o_evloop_create(void)
 {
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t*)create_evloop(sizeof(*loop));
