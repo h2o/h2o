@@ -117,6 +117,44 @@ void do_write(h2o_socket_t *_sock, h2o_buf_t *bufs, size_t bufcnt, h2o_socket_cb
     uv_write(&sock->_wreq, sock->uv.stream, (uv_buf_t*)bufs, (int)bufcnt, on_do_write_complete);
 }
 
+static struct st_h2o_uv_socket_t *create_socket(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen)
+{
+    uv_tcp_t *tcp = h2o_malloc(sizeof(*tcp));
+
+    if (uv_tcp_init(loop, tcp) != 0) {
+        free(tcp);
+        return NULL;
+    }
+    return (void*)h2o_uv_socket_create((void*)tcp, addr, addrlen, (void*)free);
+}
+
+int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info)
+{
+    struct st_h2o_uv_socket_t *sock = (void*)_sock;
+    uv_os_fd_t fd;
+
+    if (uv_fileno((uv_handle_t*)sock->uv.stream, &fd) != 0)
+        return -1;
+    if ((info->fd = dup(fd)) == -1)
+        return -1;
+    info->peername = sock->super.peername;
+    return 0;
+}
+
+h2o_socket_t *do_import(h2o_loop_t *loop, h2o_socket_export_t *info)
+{
+    struct st_h2o_uv_socket_t *sock = create_socket(loop, (void*)&info->peername.addr, info->peername.len);
+
+    if (sock == NULL)
+        return NULL;
+    if (uv_tcp_open((uv_tcp_t*)sock->uv.stream, info->fd) != 0) {
+        h2o_socket_close(&sock->super);
+        return NULL;
+    }
+
+    return &sock->super;
+}
+
 h2o_socket_t *h2o_uv_socket_create(uv_stream_t *stream, struct sockaddr *addr, socklen_t addrlen, uv_close_cb close_cb)
 {
     struct st_h2o_uv_socket_t *sock = h2o_malloc(sizeof(*sock));
@@ -157,15 +195,11 @@ h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *_sock)
 
 h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)
 {
-    struct st_h2o_uv_socket_t *sock;
-    uv_tcp_t *tcp = h2o_malloc(sizeof(*tcp));
+    struct st_h2o_uv_socket_t *sock = create_socket(loop, addr, addrlen);
 
-    if (uv_tcp_init(loop, tcp) != 0) {
-        free(tcp);
+    if (sock == NULL)
         return NULL;
-    }
-    sock = (void*)h2o_uv_socket_create((void*)tcp, addr, addrlen, (void*)free);
-    if (uv_tcp_connect(&sock->_creq, tcp, addr, on_connect) != 0) {
+    if (uv_tcp_connect(&sock->_creq, (void*)sock->uv.stream, addr, on_connect) != 0) {
         h2o_socket_close(&sock->super);
         return NULL;
     }

@@ -88,8 +88,10 @@ static int on_body(h2o_http1client_t *client, const char *errstr, h2o_buf_t *buf
         if (--cnt_left != 0) {
             /* next attempt */
             h2o_socket_t *sock;
-            if ((sock = h2o_http1client_detach_socket(client)) != NULL)
-                h2o_socketpool_register(&sockpool, sock, &io_timeout);
+            if ((sock = h2o_http1client_detach_socket(client)) != NULL) {
+                if (h2o_socketpool_register(&sockpool, sock) != 0)
+                    h2o_socket_close(sock);
+            }
             h2o_mempool_clear(&pool);
             start_request(client->ctx);
         }
@@ -161,7 +163,7 @@ int main(int argc, char **argv)
 #endif
     h2o_timeout_init(ctx.loop, &zero_timeout, 0);
     h2o_timeout_init(ctx.loop, &io_timeout, 5000); /* 5 seconds */
-    h2o_socketpool_init(&sockpool, 0);
+    h2o_socketpool_init(&sockpool, ctx.loop, 10, 5000 /* 2 seconds */);
 
     /* setup the first request */
     start_request(&ctx);

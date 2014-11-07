@@ -25,86 +25,100 @@
 #include "h2o/socketpool.h"
 
 struct pool_entry_t {
-    h2o_socket_t *sock;
+    h2o_socket_export_t sockinfo;
     h2o_linklist_t link;
-    h2o_timeout_entry_t timeout;
+    uint64_t added_at;
 };
 
-static void detach(struct pool_entry_t *entry)
+static void destroy_attached(struct pool_entry_t *entry)
 {
-    entry->sock->data = NULL;
     h2o_linklist_unlink(&entry->link);
-    h2o_timeout_unlink(&entry->timeout);
+    h2o_socket_dispose_export(&entry->sockinfo);
     free(entry);
-}
-
-static void detach_and_close(struct pool_entry_t *entry)
-{
-    h2o_socket_t *sock = entry->sock;
-    detach(entry);
-    h2o_socket_close(sock);
-}
-
-static void on_read(h2o_socket_t *sock, int status)
-{
-    detach_and_close(sock->data);
 }
 
 static void on_timeout(h2o_timeout_entry_t *timeout_entry)
 {
-    struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, timeout, timeout_entry);
-    detach_and_close(entry);
+    h2o_socketpool_t *pool = H2O_STRUCT_FROM_MEMBER(h2o_socketpool_t, _timeout_entry, timeout_entry);
+    uint64_t expire_before;
+
+    pthread_mutex_lock(&pool->_mutex);
+
+    expire_before = h2o_now(pool->loop) - pool->_timeout.timeout;
+    while (! h2o_linklist_is_empty(&pool->_shared.sockets)) {
+        struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_shared.sockets.next);
+        if (entry->added_at > expire_before)
+            break;
+        destroy_attached(entry);
+        --pool->_shared.count;
+    }
+
+    pthread_mutex_unlock(&pool->_mutex);
 }
 
-static void setup(h2o_socketpool_t *pool, h2o_socket_t *sock, h2o_timeout_t *timeout)
+void h2o_socketpool_init(h2o_socketpool_t *pool, h2o_loop_t *loop, size_t capacity, uint64_t timeout)
 {
-    struct pool_entry_t *entry = h2o_malloc(sizeof(*entry));
-
-    memset(entry, 0, sizeof(*entry));
-    entry->sock = sock;
-    entry->timeout.cb = on_timeout;
-    h2o_linklist_insert(&pool->_sockets, &entry->link);
-    h2o_timeout_link(h2o_socket_get_loop(sock), timeout, &entry->timeout);
-    h2o_socket_read_start(sock, on_read);
-
-    sock->data = entry;
-}
-
-void h2o_socketpool_init(h2o_socketpool_t *pool, int multiloop)
-{
-    assert(! multiloop);
     memset(pool, 0, sizeof(*pool));
-    h2o_linklist_init_anchor(&pool->_sockets);
+
+    pool->loop = loop;
+    pool->capacity = capacity;
+    h2o_timeout_init(loop, &pool->_timeout, timeout);
+    pool->_timeout_entry.cb = on_timeout;
+
+    pthread_mutex_init(&pool->_mutex, NULL);
+    h2o_linklist_init_anchor(&pool->_shared.sockets);
 }
 
 void h2o_socketpool_dispose(h2o_socketpool_t *pool)
 {
-    while (! h2o_linklist_is_empty(&pool->_sockets)) {
-        struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_sockets.next);
-        detach_and_close(entry);
+    pthread_mutex_lock(&pool->_mutex);
+    while (! h2o_linklist_is_empty(&pool->_shared.sockets)) {
+        struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_shared.sockets.next);
+        destroy_attached(entry);
+        --pool->_shared.count;
     }
+    pthread_mutex_unlock(&pool->_mutex);
+    pthread_mutex_destroy(&pool->_mutex);
+
+    h2o_timeout_unlink(&pool->_timeout_entry);
+    h2o_timeout_dispose(pool->loop, &pool->_timeout);
 }
 
-void h2o_socketpool_register(h2o_socketpool_t *pool, h2o_socket_t *sock, h2o_timeout_t *timeout)
+int h2o_socketpool_register(h2o_socketpool_t *pool, h2o_socket_t *sock)
 {
-    assert(sock->_cb.write == NULL);
-    setup(pool, sock, timeout);
+    struct pool_entry_t *entry = h2o_malloc(sizeof(*entry));
+
+    if (h2o_socket_export(sock, &entry->sockinfo) != 0) {
+        free(entry);
+        return -1;
+    }
+    memset(&entry->link, 0, sizeof(entry->link));
+
+    pthread_mutex_lock(&pool->_mutex);
+    h2o_linklist_insert(&pool->_shared.sockets, &entry->link);
+    ++pool->_shared.count;
+    pthread_mutex_unlock(&pool->_mutex);
+
+    return 0;
 }
 
 h2o_socket_t *h2o_socketpool_acquire(h2o_socketpool_t *pool, h2o_loop_t *loop)
 {
-    struct pool_entry_t *entry;
-    h2o_socket_t *sock;
+    struct pool_entry_t *entry = NULL;
 
-    /* early exit if no sockets in the pool */
-    if (h2o_linklist_is_empty(&pool->_sockets))
+    /* fetch an entry */
+    pthread_mutex_lock(&pool->_mutex);
+    if (! h2o_linklist_is_empty(&pool->_shared.sockets)) {
+        entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_shared.sockets.next);
+        h2o_linklist_unlink(&entry->link);
+    }
+    pthread_mutex_unlock(&pool->_mutex);
+
+    if (entry != NULL) {
+        h2o_socket_t *sock = h2o_socket_import(loop, &entry->sockinfo);
+        free(entry);
+        return sock;
+    } else {
         return NULL;
-
-    /* first, try to return a socket that belongs to the same loop */
-    entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_sockets.next);
-    sock = entry->sock;
-    assert(h2o_socket_get_loop(sock) == loop);
-    detach(entry);
-
-    return sock;
+    }
 }

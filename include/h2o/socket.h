@@ -56,6 +56,11 @@ typedef void (*h2o_socket_cb)(h2o_socket_t *sock, int err);
 # include "socket/evloop.h"
 #endif
 
+typedef struct st_h2o_socket_peername_t {
+    struct sockaddr_storage addr;
+    socklen_t len;
+} h2o_socket_peername_t;
+
 /**
  * abstraction layer for sockets (SSL vs. TCP)
  */
@@ -68,16 +73,32 @@ struct st_h2o_socket_t {
         h2o_socket_cb write;
     } _cb;
     /* zero-filled in case of invalid address */
-    struct {
-        struct sockaddr_storage addr;
-        socklen_t len;
-    } peername;
+    h2o_socket_peername_t peername;
 };
+
+typedef struct st_h2o_socket_export_t {
+    int fd;
+    h2o_socket_peername_t peername;
+    struct st_h2o_socket_ssl_t *ssl;
+    h2o_input_buffer_t *input;
+} h2o_socket_export_t;
 
 /**
  * returns the loop
  */
 h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *sock);
+/**
+ * detaches a socket from loop.
+ */
+int h2o_socket_export(h2o_socket_t *sock, h2o_socket_export_t *info);
+/**
+ * attaches a socket onto a loop.
+ */
+h2o_socket_t *h2o_socket_import(h2o_loop_t *loop, h2o_socket_export_t *info);
+/**
+ * destroys an exported socket info.
+ */
+void h2o_socket_dispose_export(h2o_socket_export_t *info);
 /**
  * closes the socket
  */

@@ -26,6 +26,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <string.h>
+#include <unistd.h>
 #include "h2o/socket.h"
 #include "h2o/timeout.h"
 
@@ -62,6 +63,8 @@ static void do_dispose_socket(h2o_socket_t *sock);
 static void do_write(h2o_socket_t *sock, h2o_buf_t *bufs, size_t bufcnt, h2o_socket_cb cb);
 static void do_read_start(h2o_socket_t *sock);
 static void do_read_stop(h2o_socket_t *sock);
+static int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info);
+static h2o_socket_t *do_import(h2o_loop_t *loop, h2o_socket_export_t *info);
 
 /* internal functions called from the backend */
 static int decode_ssl_input(h2o_socket_t *sock);
@@ -173,14 +176,18 @@ static void flush_pending_ssl(h2o_socket_t *sock, h2o_socket_cb cb)
     do_write(sock, sock->ssl->output.bufs.entries, (int)sock->ssl->output.bufs.size, cb);
 }
 
+static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
+{
+    SSL_free(ssl->ssl);
+    h2o_dispose_input_buffer(&ssl->input.encrypted);
+    h2o_mempool_clear(&ssl->output.pool);
+    free(ssl);
+}
+
 static void dispose_socket(h2o_socket_t *sock, int status)
 {
-    if (sock->ssl != NULL) {
-        SSL_free(sock->ssl->ssl);
-        h2o_dispose_input_buffer(&sock->ssl->input.encrypted);
-        h2o_mempool_clear(&sock->ssl->output.pool);
-        free(sock->ssl);
-    }
+    if (sock->ssl != NULL)
+        destroy_ssl(sock->ssl);
     h2o_dispose_input_buffer(&sock->input);
 
     do_dispose_socket(sock);
@@ -210,6 +217,45 @@ static void shutdown_ssl(h2o_socket_t *sock, int status)
     return;
 Close:
     dispose_socket(sock, status);
+}
+
+void h2o_socket_dispose_export(h2o_socket_export_t *info)
+{
+    assert(info->fd != -1);
+    destroy_ssl(info->ssl);
+    h2o_dispose_input_buffer(&info->input);
+    close(info->fd);
+    info->fd = -1;
+}
+
+int h2o_socket_export(h2o_socket_t *sock, h2o_socket_export_t *info)
+{
+    assert(! h2o_socket_is_writing(sock));
+
+    if (do_export(sock, info) == -1)
+        return -1;
+
+    info->ssl = sock->ssl;
+    sock->ssl = NULL;
+    info->input = sock->input;
+    h2o_init_input_buffer(&sock->input);
+
+    h2o_socket_close(sock);
+
+    return 0;
+}
+
+h2o_socket_t *h2o_socket_import(h2o_loop_t *loop, h2o_socket_export_t *info)
+{
+    h2o_socket_t *sock;
+
+    assert(info->fd != -1);
+
+    sock = do_import(loop, info);
+    info->fd = -1; /* just in case */
+    sock->ssl = info->ssl;
+    sock->input = info->input;
+    return sock;
 }
 
 void h2o_socket_close(h2o_socket_t *sock)

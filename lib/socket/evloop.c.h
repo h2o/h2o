@@ -287,6 +287,21 @@ void do_read_stop(h2o_socket_t *_sock)
     link_to_statechanged(sock);
 }
 
+int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info)
+{
+    struct st_h2o_evloop_socket_t *sock = (void*)_sock;
+    assert((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) == 0);
+    if ((info->fd = dup(sock->fd)) == -1)
+        return -1;
+    info->peername = sock->super.peername;
+    return 0;
+}
+
+h2o_socket_t *do_import(h2o_loop_t *loop, h2o_socket_export_t *info)
+{
+    return h2o_evloop_socket_create(loop, info->fd, (void*)&info->peername.addr, info->peername.len, 0);
+}
+
 h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *_sock)
 {
     struct st_h2o_evloop_socket_t *sock = (void*)_sock;

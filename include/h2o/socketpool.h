@@ -22,20 +22,30 @@
 #ifndef h2o__socket_pool_h
 #define h2o__socket_pool_h
 
+#include <pthread.h>
 #include "h2o/linklist.h"
 #include "h2o/socket.h"
 #include "h2o/timeout.h"
 
 typedef struct st_h2o_socketpool_t {
+    /* read-only vars */
+    h2o_loop_t *loop;
     size_t capacity;
-    size_t count;
-    h2o_linklist_t _sockets; /* list of struct pool_entry_t defined in socket/pool.c */
+    h2o_timeout_t _timeout;
+    h2o_timeout_entry_t _timeout_entry;
+    /* mutex */
+    pthread_mutex_t _mutex;
+    /* vars that are modified by multiple threads */
+    struct {
+        size_t count;
+        h2o_linklist_t sockets; /* list of struct pool_entry_t defined in socket/pool.c */
+    } _shared;
 } h2o_socketpool_t;
 
 /**
  * initializes a socket loop
  */
-void h2o_socketpool_init(h2o_socketpool_t *pool, int multiloop);
+void h2o_socketpool_init(h2o_socketpool_t *pool, h2o_loop_t *loop, size_t capacity, uint64_t timeout);
 /**
  * disposes of a socket loop
  */
@@ -43,7 +53,7 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool);
 /**
  * registers an idling socket to the socket pool
  */
-void h2o_socketpool_register(h2o_socketpool_t *pool, h2o_socket_t *sock, h2o_timeout_t *timeout);
+int h2o_socketpool_register(h2o_socketpool_t *pool, h2o_socket_t *sock);
 /**
  * fetches an idling socket from the socket pool to the given loop
  */
