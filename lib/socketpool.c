@@ -20,14 +20,27 @@
  * IN THE SOFTWARE.
  */
 #include <assert.h>
+#include <netdb.h>
 #include <stdlib.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 #include "h2o/linklist.h"
 #include "h2o/socketpool.h"
+#include "h2o/string_.h"
+#include "h2o/timeout.h"
 
 struct pool_entry_t {
     h2o_socket_export_t sockinfo;
     h2o_linklist_t link;
     uint64_t added_at;
+};
+
+struct connect_callback_t {
+    h2o_socketpool_connect_cb cb;
+    h2o_socket_t *sock;
+    const char *errstr;
+    void *data;
+    h2o_timeout_entry_t timeout;
 };
 
 static void destroy_attached(struct pool_entry_t *entry)
@@ -44,7 +57,7 @@ static void on_timeout(h2o_timeout_entry_t *timeout_entry)
 
     pthread_mutex_lock(&pool->_mutex);
 
-    expire_before = h2o_now(pool->loop) - pool->_timeout.timeout;
+    expire_before = h2o_now(pool->timeout_loop) - pool->timeout.timeout;
     while (! h2o_linklist_is_empty(&pool->_shared.sockets)) {
         struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_shared.sockets.next);
         if (entry->added_at > expire_before)
@@ -56,13 +69,15 @@ static void on_timeout(h2o_timeout_entry_t *timeout_entry)
     pthread_mutex_unlock(&pool->_mutex);
 }
 
-void h2o_socketpool_init(h2o_socketpool_t *pool, h2o_loop_t *loop, size_t capacity, uint64_t timeout)
+void h2o_socketpool_init(h2o_socketpool_t *pool, const char *host, uint16_t port, size_t capacity, h2o_loop_t *timeout_loop, uint64_t timeout_msec)
 {
     memset(pool, 0, sizeof(*pool));
 
-    pool->loop = loop;
+    pool->host = h2o_strdup(NULL, host, SIZE_MAX).base;
+    sprintf(pool->serv, "%u", (unsigned)port);
     pool->capacity = capacity;
-    h2o_timeout_init(loop, &pool->_timeout, timeout);
+    pool->timeout_loop = timeout_loop;
+    h2o_timeout_init(timeout_loop, &pool->timeout, timeout_msec);
     pool->_timeout_entry.cb = on_timeout;
 
     pthread_mutex_init(&pool->_mutex, NULL);
@@ -81,28 +96,53 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
     pthread_mutex_destroy(&pool->_mutex);
 
     h2o_timeout_unlink(&pool->_timeout_entry);
-    h2o_timeout_dispose(pool->loop, &pool->_timeout);
+    h2o_timeout_dispose(pool->timeout_loop, &pool->timeout);
+    free(pool->host);
 }
 
-int h2o_socketpool_register(h2o_socketpool_t *pool, h2o_socket_t *sock)
+static void on_deferred_connect_cb(h2o_timeout_entry_t *timeout)
 {
-    struct pool_entry_t *entry = h2o_malloc(sizeof(*entry));
+    struct connect_callback_t *cbinfo = H2O_STRUCT_FROM_MEMBER(struct connect_callback_t, timeout, timeout);
+    (cbinfo->cb)(cbinfo->sock, cbinfo->errstr, cbinfo->data);
+    free(cbinfo);
+}
 
-    if (h2o_socket_export(sock, &entry->sockinfo) != 0) {
-        free(entry);
-        return -1;
+static struct connect_callback_t *setup_connect_callback(h2o_socketpool_connect_cb cb, h2o_socket_t *sock, const char *errstr, void *data)
+{
+    struct connect_callback_t *cbinfo = h2o_malloc(sizeof(*cbinfo));
+
+    cbinfo->cb = cb;
+    cbinfo->sock = sock;
+    cbinfo->errstr = errstr;
+    cbinfo->data = data;
+    memset(&cbinfo->timeout, 0, sizeof(cbinfo->timeout));
+    cbinfo->timeout.cb = on_deferred_connect_cb;
+
+    return cbinfo;
+}
+
+static void on_connect(h2o_socket_t *sock, int status)
+{
+    struct connect_callback_t *cbinfo = sock->data;
+
+    if (status != 0) {
+        h2o_socket_close(sock);
+        cbinfo->sock = NULL;
+        cbinfo->errstr = "connection failed";
     }
-    memset(&entry->link, 0, sizeof(entry->link));
+    on_deferred_connect_cb(&cbinfo->timeout);
+}
+
+static void on_close(void *data)
+{
+    h2o_socketpool_t *pool = data;
 
     pthread_mutex_lock(&pool->_mutex);
-    h2o_linklist_insert(&pool->_shared.sockets, &entry->link);
-    ++pool->_shared.count;
+    --pool->_shared.count;
     pthread_mutex_unlock(&pool->_mutex);
-
-    return 0;
 }
 
-h2o_socket_t *h2o_socketpool_acquire(h2o_socketpool_t *pool, h2o_loop_t *loop)
+void h2o_socketpool_connect(h2o_socketpool_t *pool, h2o_loop_t *loop, h2o_timeout_t *zero_timeout, h2o_socketpool_connect_cb cb, void *data)
 {
     struct pool_entry_t *entry = NULL;
 
@@ -114,11 +154,75 @@ h2o_socket_t *h2o_socketpool_acquire(h2o_socketpool_t *pool, h2o_loop_t *loop)
     }
     pthread_mutex_unlock(&pool->_mutex);
 
+    /* return the socket deferred, if any */
     if (entry != NULL) {
         h2o_socket_t *sock = h2o_socket_import(loop, &entry->sockinfo);
+        struct connect_callback_t *cbinfo = setup_connect_callback(cb, sock, NULL, data);
+        h2o_timeout_link(loop, zero_timeout, &cbinfo->timeout);
+        sock->on_close.cb = on_close;
+        sock->on_close.data = pool;
         free(entry);
-        return sock;
-    } else {
-        return NULL;
+        return;
     }
+
+    { /* connect and return (FIXME repsect the `capacity`, timeout) */
+        struct addrinfo hints, *res;
+        int err;
+        h2o_socket_t *sock;
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_protocol = IPPROTO_TCP;
+        hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV;
+        if ((err = getaddrinfo(pool->host, pool->serv, &hints, &res)) != 0) {
+            struct connect_callback_t *cbinfo = setup_connect_callback(cb, NULL, "failed to resolve host", data);
+            h2o_timeout_link(loop, zero_timeout, &cbinfo->timeout);
+            goto ExitConnect;
+        }
+        /* start connecting */
+        if ((sock = h2o_socket_connect(loop, res->ai_addr, res->ai_addrlen, on_connect)) == NULL) {
+            struct connect_callback_t *cbinfo = setup_connect_callback(cb, NULL, "failed to resolve host", data);
+            h2o_timeout_link(loop, zero_timeout, &cbinfo->timeout);
+            h2o_socket_close(sock);
+            goto ExitConnect;
+        }
+        { /* socket is ready, setup callbacks and update pool counter */
+            struct connect_callback_t *cbinfo = setup_connect_callback(cb, sock, NULL, data);
+            sock->data = cbinfo;
+            sock->on_close.cb = on_close;
+            sock->on_close.data = pool;
+            pthread_mutex_lock(&pool->_mutex);
+            ++pool->_shared.count;
+            pthread_mutex_unlock(&pool->_mutex);
+        }
+        freeaddrinfo(res);
+        return;
+    ExitConnect:
+        freeaddrinfo(res);
+    }
+}
+
+int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
+{
+    struct pool_entry_t *entry;
+
+    /* reset the on_close callback */
+    assert(sock->on_close.data == pool);
+    sock->on_close.cb = NULL;
+    sock->on_close.data = NULL;
+
+    entry = h2o_malloc(sizeof(*entry));
+    if (h2o_socket_export(sock, &entry->sockinfo) != 0) {
+        free(entry);
+        pthread_mutex_lock(&pool->_mutex);
+        --pool->_shared.count;
+        pthread_mutex_unlock(&pool->_mutex);
+        return -1;
+    }
+    memset(&entry->link, 0, sizeof(entry->link));
+
+    pthread_mutex_lock(&pool->_mutex);
+    h2o_linklist_insert(&pool->_shared.sockets, &entry->link);
+    pthread_mutex_unlock(&pool->_mutex);
+
+    return 0;
 }

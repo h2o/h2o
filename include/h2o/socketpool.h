@@ -29,9 +29,11 @@
 
 typedef struct st_h2o_socketpool_t {
     /* read-only vars */
-    h2o_loop_t *loop;
+    char *host;
+    char serv[sizeof("65535")];
     size_t capacity;
-    h2o_timeout_t _timeout;
+    h2o_loop_t *timeout_loop;
+    h2o_timeout_t timeout;
     h2o_timeout_entry_t _timeout_entry;
     /* mutex */
     pthread_mutex_t _mutex;
@@ -42,21 +44,33 @@ typedef struct st_h2o_socketpool_t {
     } _shared;
 } h2o_socketpool_t;
 
+typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr, void *data);
 /**
  * initializes a socket loop
  */
-void h2o_socketpool_init(h2o_socketpool_t *pool, h2o_loop_t *loop, size_t capacity, uint64_t timeout);
+void h2o_socketpool_init(h2o_socketpool_t *pool, const char *host, uint16_t port, size_t capacity, h2o_loop_t *timeout_loop, uint64_t timeout_msec);
 /**
  * disposes of a socket loop
  */
 void h2o_socketpool_dispose(h2o_socketpool_t *pool);
 /**
- * registers an idling socket to the socket pool
+ * connects to the peer (or returns a pooled connection)
  */
-int h2o_socketpool_register(h2o_socketpool_t *pool, h2o_socket_t *sock);
+void h2o_socketpool_connect(h2o_socketpool_t *pool, h2o_loop_t *loop, h2o_timeout_t *zero_timeout, h2o_socketpool_connect_cb cb, void *data);
 /**
- * fetches an idling socket from the socket pool to the given loop
+ * returns an idling socket to the socket pool
  */
-h2o_socket_t *h2o_socketpool_acquire(h2o_socketpool_t *pool, h2o_loop_t *loop);
+int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock);
+/**
+ * determines if a socket belongs to the socket pool
+ */
+static int h2o_socketpool_is_owned_socket(h2o_socketpool_t *pool, h2o_socket_t *sock);
+
+/* inline defs */
+
+inline int h2o_socketpool_is_owned_socket(h2o_socketpool_t *pool, h2o_socket_t *sock)
+{
+    return sock->on_close.data == pool;
+}
 
 #endif

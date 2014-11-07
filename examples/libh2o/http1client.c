@@ -26,10 +26,10 @@
 #include "h2o/http1client.h"
 
 static h2o_timeout_t zero_timeout, io_timeout;
-static h2o_socketpool_t sockpool;
+static h2o_socketpool_t *sockpool;
 static h2o_mempool_t pool;
 static const char *url;
-static int cnt_left = 2;
+static int cnt_left = 3;
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_buf_t **reqbufs, size_t *reqbufcnt, int *method_is_head);
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_buf_t msg, struct phr_header *headers, size_t num_headers);
@@ -38,8 +38,8 @@ static void start_request(h2o_http1client_ctx_t *ctx)
 {
     char *scheme, *host, *path;
     uint16_t port;
-    h2o_socket_t *sock;
     h2o_buf_t *req;
+    h2o_http1client_t *client;
 
     /* clear memory pool */
     h2o_mempool_clear(&pool);
@@ -60,14 +60,17 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     assert(req->len < 1024);
 
     /* initiate the request */
-    if ((sock = h2o_socketpool_acquire(&sockpool, ctx->loop)) != NULL) {
-        /* use the pool socket */
-        h2o_http1client_start(ctx, &pool, sock, req, 1, 0, on_head);
+    if (1) {
+        if (sockpool == NULL) {
+            sockpool = h2o_malloc(sizeof(*sockpool));
+            h2o_socketpool_init(sockpool, host, port, 10, ctx->loop, 5000 /* 2 seconds */);
+        }
+        client = h2o_http1client_connect_with_pool(ctx, &pool, sockpool, on_connect);
     } else {
-        h2o_http1client_t *client = h2o_http1client_connect(ctx, &pool, host, port, on_connect);
-        assert(client != NULL);
-        client->data = req;
+        client = h2o_http1client_connect(ctx, &pool, host, port, on_connect);
     }
+    assert(client != NULL);
+    client->data = req;
 }
 
 static int on_body(h2o_http1client_t *client, const char *errstr, h2o_buf_t *bufs, size_t bufcnt)
@@ -86,11 +89,6 @@ static int on_body(h2o_http1client_t *client, const char *errstr, h2o_buf_t *buf
     if (errstr == h2o_http1client_error_is_eos) {
         if (--cnt_left != 0) {
             /* next attempt */
-            h2o_socket_t *sock;
-            if ((sock = h2o_http1client_detach_socket(client)) != NULL) {
-                if (h2o_socketpool_register(&sockpool, sock) != 0)
-                    h2o_socket_close(sock);
-            }
             h2o_mempool_clear(&pool);
             start_request(client->ctx);
         }
@@ -162,7 +160,6 @@ int main(int argc, char **argv)
 #endif
     h2o_timeout_init(ctx.loop, &zero_timeout, 0);
     h2o_timeout_init(ctx.loop, &io_timeout, 5000); /* 5 seconds */
-    h2o_socketpool_init(&sockpool, ctx.loop, 10, 5000 /* 2 seconds */);
 
     /* setup the first request */
     start_request(&ctx);
