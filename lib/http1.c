@@ -19,7 +19,6 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <alloca.h>
 #include <inttypes.h>
 #include <stddef.h>
 #include <stdio.h>
