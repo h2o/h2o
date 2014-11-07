@@ -127,4 +127,6 @@ ENDIF (LIBUV_FOUND)
 # environment-specific tweaks
 IF (APPLE)
     SET_SOURCE_FILES_PROPERTIES(lib/socket.c lib/websocket.c src/main.c examples/simple.c examples/websocket.c PROPERTIES COMPILE_FLAGS -Wno-deprecated-declarations)
+ELSEIF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE")
 ENDIF (APPLE)
