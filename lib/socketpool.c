@@ -52,12 +52,12 @@ static void destroy_attached(struct pool_entry_t *entry)
 
 static void on_timeout(h2o_timeout_entry_t *timeout_entry)
 {
-    h2o_socketpool_t *pool = H2O_STRUCT_FROM_MEMBER(h2o_socketpool_t, _timeout_entry, timeout_entry);
+    h2o_socketpool_t *pool = H2O_STRUCT_FROM_MEMBER(h2o_socketpool_t, _timeout.entry, timeout_entry);
     uint64_t expire_before;
 
     pthread_mutex_lock(&pool->_mutex);
 
-    expire_before = h2o_now(pool->timeout_loop) - pool->timeout.timeout;
+    expire_before = h2o_now(pool->_timeout.loop) - pool->_timeout.timeout.timeout;
     while (! h2o_linklist_is_empty(&pool->_shared.sockets)) {
         struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_shared.sockets.next);
         if (entry->added_at > expire_before)
@@ -69,16 +69,13 @@ static void on_timeout(h2o_timeout_entry_t *timeout_entry)
     pthread_mutex_unlock(&pool->_mutex);
 }
 
-void h2o_socketpool_init(h2o_socketpool_t *pool, const char *host, uint16_t port, size_t capacity, h2o_loop_t *timeout_loop, uint64_t timeout_msec)
+void h2o_socketpool_init(h2o_socketpool_t *pool, const char *host, uint16_t port, size_t capacity)
 {
     memset(pool, 0, sizeof(*pool));
 
     pool->host = h2o_strdup(NULL, host, SIZE_MAX).base;
     sprintf(pool->serv, "%u", (unsigned)port);
     pool->capacity = capacity;
-    pool->timeout_loop = timeout_loop;
-    h2o_timeout_init(timeout_loop, &pool->timeout, timeout_msec);
-    pool->_timeout_entry.cb = on_timeout;
 
     pthread_mutex_init(&pool->_mutex, NULL);
     h2o_linklist_init_anchor(&pool->_shared.sockets);
@@ -95,9 +92,18 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
     pthread_mutex_unlock(&pool->_mutex);
     pthread_mutex_destroy(&pool->_mutex);
 
-    h2o_timeout_unlink(&pool->_timeout_entry);
-    h2o_timeout_dispose(pool->timeout_loop, &pool->timeout);
+    if (pool->_timeout.loop != NULL) {
+        h2o_timeout_unlink(&pool->_timeout.entry);
+        h2o_timeout_dispose(pool->_timeout.loop, &pool->_timeout.timeout);
+    }
     free(pool->host);
+}
+
+void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64_t msec)
+{
+    pool->_timeout.loop = loop;
+    h2o_timeout_init(loop, &pool->_timeout.timeout, msec);
+    pool->_timeout.entry.cb = on_timeout;
 }
 
 static void on_deferred_connect_cb(h2o_timeout_entry_t *timeout)

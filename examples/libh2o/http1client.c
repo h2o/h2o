@@ -63,7 +63,8 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     if (1) {
         if (sockpool == NULL) {
             sockpool = h2o_malloc(sizeof(*sockpool));
-            h2o_socketpool_init(sockpool, host, port, 10, ctx->loop, 5000 /* 2 seconds */);
+            h2o_socketpool_init(sockpool, host, port, 10);
+            h2o_socketpool_set_timeout(sockpool, ctx->loop, 5000 /* in msec */);
         }
         client = h2o_http1client_connect_with_pool(ctx, &pool, sockpool, on_connect);
     } else {
