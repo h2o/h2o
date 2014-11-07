@@ -135,6 +135,11 @@ int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info)
 
     if (uv_fileno((uv_handle_t*)sock->uv.stream, &fd) != 0)
         return -1;
+    /* FIXME: consider how to overcome the epoll(2) problem; man says,
+     * "even after a file descriptor that is part of an epoll set has been closed,
+     * events may be reported for that file descriptor if other file descriptors
+     * referring to the same underlying file description remain open"
+     */
     if ((info->fd = dup(fd)) == -1)
         return -1;
     info->peername = sock->super.peername;
