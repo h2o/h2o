@@ -19,9 +19,6 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifdef __linux__
-# define _GNU_SOURCE
-#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -186,11 +183,20 @@ static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
 
 static void dispose_socket(h2o_socket_t *sock, int status)
 {
+    void (*close_cb)(void *data);
+    void *close_cb_data;
+
     if (sock->ssl != NULL)
         destroy_ssl(sock->ssl);
     h2o_dispose_input_buffer(&sock->input);
 
+    close_cb = sock->on_close.cb;
+    close_cb_data = sock->on_close.data;
+
     do_dispose_socket(sock);
+
+    if (close_cb != NULL)
+        close_cb(close_cb_data);
 }
 
 static void shutdown_ssl(h2o_socket_t *sock, int status)

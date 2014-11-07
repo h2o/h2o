@@ -21,6 +21,7 @@
  */
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <unistd.h>
@@ -238,13 +239,17 @@ void do_dispose_socket(h2o_socket_t *_sock)
     link_to_statechanged(sock);
 }
 
-void do_write(h2o_socket_t *_sock, h2o_buf_t *bufs, size_t bufcnt, h2o_socket_cb cb)
+void do_write(h2o_socket_t *_sock, h2o_buf_t *_bufs, size_t bufcnt, h2o_socket_cb cb)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t*)_sock;
+    h2o_buf_t *bufs;
 
     assert(sock->super._cb.write == NULL);
     assert(sock->_wreq.cnt == 0);
     sock->super._cb.write = cb;
+
+    bufs = alloca(sizeof(*bufs) * bufcnt);
+    memcpy(bufs, _bufs, sizeof(*bufs) * bufcnt);
 
     /* try to write now */
     if (write_core(sock->fd, &bufs, &bufcnt) != 0) {

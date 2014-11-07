@@ -453,8 +453,9 @@ static void setup_signal_handlers(void)
     pthread_sigmask(SIG_SETMASK, &mask, NULL);
 }
 
-static void on_close(h2o_context_t *ctx)
+static void on_socketclose(void *data)
 {
+    h2o_context_t *ctx = data;
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, ctx->global_config);
     unsigned prev_num_connections = __sync_fetch_and_sub(&conf->state.num_connections, 1);
 
@@ -489,6 +490,9 @@ static void on_accept(h2o_socket_t *listener, int status)
             break;
         }
         __sync_add_and_fetch(&conf->state.num_connections, 1);
+
+        sock->on_close.cb = on_socketclose;
+        sock->on_close.data = ctx->ctx;
 
         if (ctx->ssl_ctx != NULL)
             h2o_accept_ssl(ctx->ctx, sock, ctx->ssl_ctx);
@@ -566,7 +570,6 @@ int main(int argc, char **argv)
     yoml_t *config_yoml;
 
     h2o_config_init(&config.global_config);
-    config.global_config.close_cb = on_close;
 
     {
         h2o_configurator_t *c = h2o_config_create_configurator(&config.global_config, sizeof(*c));

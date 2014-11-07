@@ -19,9 +19,6 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifdef NO_ALLOCA_H
-# include <alloca.h>
-#endif
 #include <inttypes.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -53,11 +50,8 @@ static void close_connection(h2o_http1_conn_t *conn)
     h2o_timeout_unlink(&conn->_timeout_entry);
     h2o_dispose_request(&conn->req);
     free(conn->_req_entity_reader);
-    if (conn->sock != NULL) {
+    if (conn->sock != NULL)
         h2o_socket_close(conn->sock);
-        if (conn->super.ctx->global_config->close_cb != NULL)
-            conn->super.ctx->global_config->close_cb(conn->super.ctx);
-    }
     free(conn);
 }
 
