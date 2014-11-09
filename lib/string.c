@@ -500,6 +500,35 @@ int h2o_parse_url(h2o_mempool_t *pool, const char *url, char **scheme, char **ho
     return 0;
 }
 
+int h2o_parse_unix(h2o_mempool_t *pool, const char *unix_path, char **socket_path, char **path)
+{
+    const char *ux_start, *ux_end;
+
+    /* check scheme */
+    if (strncmp(unix_path, "unix:", sizeof("unix:") - 1) != 0) {
+        return -1;
+    }
+
+    /* skip scheme */
+    ux_start = unix_path + sizeof("unix:") - 1;
+
+    /* locate the end of unix socket path */
+    if ((ux_end = strchr(ux_start, ':')) != NULL) {
+        *path = (char*)++ux_end;
+        if (**path != '/') {
+            return -1;
+        }
+    } else {
+        return -1;
+    }
+
+    /* parse socket path */
+    *socket_path = h2o_strdup(pool, ux_start, ux_end - 1 - ux_start).base;
+
+    /* success */
+    return 0;
+}
+
 h2o_buf_t h2o_htmlescape(h2o_mempool_t *pool, const char *src, size_t len)
 {
     const char *s, *end = src + len;

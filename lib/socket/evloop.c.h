@@ -339,12 +339,12 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     return sock;
 }
 
-h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)
+h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, int proto, h2o_socket_cb cb)
 {
     int fd;
     struct st_h2o_evloop_socket_t *sock;
 
-    if ((fd = socket(addr->sa_family, SOCK_STREAM, IPPROTO_TCP)) == -1)
+    if ((fd = socket(addr->sa_family, SOCK_STREAM, proto)) == -1)
         return NULL;
     if (! (connect(fd, addr, addrlen) == 0 || errno == EINPROGRESS)) {
         close(fd);

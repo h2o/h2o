@@ -149,10 +149,15 @@ static void on_connect(uv_connect_t *conn, int status)
     cb(&sock->super, status);
 }
 
-h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)
+h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, int proto, h2o_socket_cb cb)
 {
     struct st_h2o_uv_socket_t *sock;
     uv_tcp_t *tcp = h2o_malloc(sizeof(*tcp));
+
+    // TODO: support unix domain socket with libuv
+    if (addr->sa_family == AF_UNIX) {
+        assert(!"unix domain socket is not supported when libuv is used");
+    }
 
     if (uv_tcp_init(loop, tcp) != 0) {
         free(tcp);

@@ -99,7 +99,7 @@ int main(int argc, char **argv)
         goto Exit;
     }
 
-    if ((sock = h2o_socket_connect(loop, res->ai_addr, res->ai_addrlen, on_connect)) == NULL) {
+    if ((sock = h2o_socket_connect(loop, res->ai_addr, res->ai_addrlen, IPPROTO_TCP, on_connect)) == NULL) {
         fprintf(stderr, "failed to create socket:%s\n", strerror(errno));
         goto Exit;
     }
