@@ -5,13 +5,39 @@ use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempfile);
 use Net::EmptyPort qw(check_port empty_port);
-use Proc::Wait3 qw(wait3);
+use POSIX ":sys_wait_h";
 use Scope::Guard qw(scope_guard);
 
 use base qw(Exporter);
-our @EXPORT = qw(spawn_h2o md5_file prog_exists openssl_can_negotiate);
+our @EXPORT = qw(spawn_server spawn_h2o md5_file prog_exists openssl_can_negotiate);
 
-# returns a hash containing `pid`, `port`, `tls_port`, `guard`
+# spawns a child process and returns a guard object that kills the process when destroyed
+sub spawn_server {
+    my %args = @_;
+    my $pid = fork;
+    die "fork failed:$!"
+        unless defined $pid;
+    if ($pid != 0) {
+        if ($args{is_ready}) {
+            while (! $args{is_ready}->()) {
+                sleep 1;
+                die "server died"
+                    if waitpid($pid, WNOHANG) == $pid;
+            }
+        }
+        return scope_guard(sub {
+            if (kill 'TERM', $pid) {
+                while (waitpid($pid, 0) != $pid) {
+                }
+            }
+        });
+    }
+    # child process
+    exec @{$args{argv}};
+    die "failed to exec $args{argv}->[0]:$!";
+}
+
+# returns a hash containing `port`, `tls_port`, `guard`
 sub spawn_h2o {
     my ($conf) = @_;
 
@@ -19,28 +45,7 @@ sub spawn_h2o {
     my $port = empty_port();
     my $tls_port = empty_port($port + 1);
 
-    # fork
-    my $pid = fork;
-    die "fork failed:$!"
-    unless defined $pid;
-    if ($pid != 0) {
-        # wait until the server becomes ready
-        while (! (check_port($port) && check_port($tls_port))) {
-            sleep 1;
-            die "server died, abort"
-                if defined wait3(0);
-        }
-        return +{
-            pid      => $pid,
-            port     => $port,
-            tls_port => $tls_port,
-            guard    => scope_guard(sub {
-                kill 'TERM', $pid;
-            }),
-        };
-    }
-
-    # in child proces, setup the configuration file and exec the server
+    # setup the configuration file
     my ($conffh, $conffn) = tempfile();
     print $conffh <<"EOT";
 $conf
@@ -51,8 +56,19 @@ listen:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
 EOT
-    exec "./h2o", "-c", $conffn;
-    die "failed to spawn h2o:$!";
+
+    # spawn the server
+    my $guard = spawn_server(
+        argv     => [ qw(./h2o -c), $conffn ],
+        is_ready => sub {
+            check_port($port) && check_port($tls_port);
+        },
+    );
+    return +{
+        port     => $port,
+        tls_port => $tls_port,
+        guard    => $guard,
+    };
 }
 
 sub md5_file {
