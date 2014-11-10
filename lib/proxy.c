@@ -332,8 +332,10 @@ void h2o_proxy_register_reverse_proxy(h2o_hostconf_t *host_config, const char *v
     self->virtual_path = h2o_strdup(NULL, virtual_path, SIZE_MAX);
     self->upstream.host = h2o_strdup(NULL, host, SIZE_MAX);
     self->upstream.port = port;
-    if (config->use_keepalive)
+    if (config->use_keepalive) {
+        self->upstream.sockpool = h2o_malloc(sizeof(*self->upstream.sockpool));
         h2o_socketpool_init(self->upstream.sockpool, host, port, SIZE_MAX /* FIXME */);
+    }
     self->upstream.path = h2o_strdup(NULL, real_path, SIZE_MAX);
     self->upstream.config = *config;
 }
