@@ -80,7 +80,8 @@ static h2o_http2_stream_priolist_slot_t *priolist_link(h2o_http2_stream_priolist
     /* not found, create new slot */
     slot = h2o_malloc(sizeof(*slot));
     slot->weight = weight;
-    h2o_linklist_init_anchor(&slot->streams);
+    h2o_linklist_init_anchor(&slot->active_streams);
+    h2o_linklist_init_anchor(&slot->blocked_streams);
     slot->refcnt = 1;
     h2o_vector_reserve(NULL, (h2o_vector_t*)&priolist->list, sizeof(priolist->list.entries[0]), priolist->list.size + 1);
     memmove(priolist->list.entries + i + 1, priolist->list.entries + i, sizeof(priolist->list.entries[0]) * (priolist->list.size - i));
@@ -105,7 +106,8 @@ static void priolist_destroy(h2o_http2_stream_priolist_t *priolist)
         for (i = 0; i != priolist->list.size; ++i) {
             h2o_http2_stream_priolist_slot_t *slot = priolist->list.entries[i];
             assert(slot->refcnt == 0);
-            assert(h2o_linklist_is_empty(&slot->streams));
+            assert(h2o_linklist_is_empty(&slot->active_streams));
+            assert(h2o_linklist_is_empty(&slot->blocked_streams));
             free(slot);
         }
         free(priolist->list.entries);
@@ -258,6 +260,18 @@ static void request_gathered_write(h2o_http2_conn_t *conn)
     } else {
         if (! h2o_timeout_is_linked(&conn->_write.timeout_entry))
             h2o_timeout_link(conn->super.ctx->loop, &conn->super.ctx->zero_timeout, &conn->_write.timeout_entry);
+    }
+}
+
+static void update_stream_output_window(h2o_http2_stream_t *stream, ssize_t delta)
+{
+    ssize_t cur = h2o_http2_window_get_window(&stream->output_window);
+    h2o_http2_window_update(&stream->output_window, delta);
+    if (cur <= 0 && h2o_http2_window_get_window(&stream->output_window) > 0 && h2o_http2_stream_has_pending_data(stream)) {
+        /* move from blocked_streams to active_streams */
+        assert(h2o_linklist_is_linked(&stream->_link.link));
+        h2o_linklist_unlink(&stream->_link.link);
+        h2o_linklist_insert(&stream->_link.slot->active_streams, &stream->_link.link);
     }
 }
 
@@ -425,7 +439,7 @@ static void handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fra
             ssize_t delta = conn->peer_settings.initial_window_size - prev_initial_window_size;
             h2o_http2_stream_t *stream;
             kh_foreach_value(conn->open_streams, stream, {
-                h2o_http2_window_update(&stream->output_window, delta);
+                update_stream_output_window(stream, delta);
             });
             h2o_http2_window_update(&conn->_write.window, delta);
             resume_send(conn);
@@ -447,7 +461,7 @@ static void handle_window_update_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t
     } else if (frame->stream_id <= conn->max_open_stream_id) {
         h2o_http2_stream_t *stream = h2o_http2_conn_get_stream(conn, frame->stream_id);
         if (stream != NULL) {
-            h2o_http2_window_update(&stream->output_window, payload.window_size_increment);
+            update_stream_output_window(stream, payload.window_size_increment);
         }
     } else {
         send_error(conn, 0, H2O_HTTP2_ERROR_FLOW_CONTROL);
@@ -649,10 +663,20 @@ void h2o_http2_conn_enqueue_write(h2o_http2_conn_t *conn, h2o_buf_t buf)
 
 void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
+    h2o_linklist_t *slot;
+
     request_gathered_write(conn);
-    h2o_linklist_insert(
-        h2o_http2_stream_has_pending_data(stream) ? &stream->_link.slot->streams : &conn->_write.streams_without_pending_data,
-        &stream->_link.link);
+
+    if (h2o_http2_stream_has_pending_data(stream)) {
+        if (h2o_http2_window_get_window(&stream->output_window) > 0) {
+            slot = &stream->_link.slot->active_streams;
+        } else {
+            slot = &stream->_link.slot->blocked_streams;
+        }
+    } else {
+        slot = &conn->_write.streams_without_pending_data;
+    }
+    h2o_linklist_insert(slot, &stream->_link.link);
 }
 
 static void on_write_complete(h2o_socket_t *sock, int status)
@@ -710,20 +734,27 @@ void emit_writereq(h2o_timeout_entry_t *entry)
     conn->_write.wreq_in_flight = 1;
 
     /* push DATA frames */
-    if (conn->state == H2O_HTTP2_CONN_STATE_OPEN) {
+    if (conn->state == H2O_HTTP2_CONN_STATE_OPEN && h2o_http2_window_get_window(&conn->_write.window) > 0) {
         size_t slot_index;
         for (slot_index = 0; slot_index != conn->_write.streams_with_pending_data.list.size; ++slot_index) {
             h2o_http2_stream_priolist_slot_t *slot = conn->_write.streams_with_pending_data.list.entries[slot_index];
-            while (! h2o_linklist_is_empty(&slot->streams)) {
-                h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link, slot->streams.next);
-                if (h2o_http2_window_get_window(&conn->_write.window) <= 0)
-                    goto DonePush;
+            while (! h2o_linklist_is_empty(&slot->active_streams)) {
+                h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link, slot->active_streams.next);
                 assert(h2o_http2_stream_has_pending_data(stream));
                 h2o_http2_stream_send_pending_data(conn, stream);
-                if (! h2o_http2_stream_has_pending_data(stream)) {
+                if (h2o_http2_stream_has_pending_data(stream)) {
+                    if (h2o_http2_window_get_window(&stream->output_window) <= 0) {
+                        h2o_linklist_unlink(&stream->_link.link);
+                        h2o_linklist_insert(&slot->blocked_streams, &stream->_link.link);
+                    } else {
+                        assert(h2o_http2_window_get_window(&conn->_write.window) <= 0);
+                    }
+                } else {
                     h2o_linklist_unlink(&stream->_link.link);
                     h2o_linklist_insert(&conn->_write.streams_without_pending_data, &stream->_link.link);
                 }
+                if (h2o_http2_window_get_window(&conn->_write.window) <= 0)
+                    goto DonePush;
             }
         }
     DonePush:
