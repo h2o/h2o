@@ -76,7 +76,7 @@ sub md5_file {
     open my $fh, "<", $fn
         or die "failed to open file:$fn:$!";
     local $/;
-    return md5_hex(join '', <$fh>) . "\n";
+    return md5_hex(join '', <$fh>);
 }
 
 sub prog_exists {

@@ -23,7 +23,10 @@ my $upstream_guard = spawn_server(
     },
 );
 
-my %files = map { +($_ => md5_file("t/50end-to-end/reverse-proxy/docroot/$_")) } qw(index.txt halfdome.jpg);
+my %files = map { do {
+    my $fn = "t/50end-to-end/reverse-proxy/docroot/$_";
+    +($_ => { size => (stat $fn)[7], md5 => md5_file($fn) });
+} } qw(index.txt halfdome.jpg);
 
 my $server = spawn_h2o(<< "EOT");
 hosts:
@@ -39,14 +42,14 @@ my $tls_port = $server->{tls_port};
 subtest 'curl' => sub {
     plan skip_all => 'curl not found'
         unless prog_exists('curl');
-    for (1..4) {
     for my $file (sort keys %files) {
-        my $md5 = `curl --silent --show-error http://127.0.0.1:$port/$file | openssl md5 | perl -pe 's/.* //'`;
-        is $md5, $files{$file}, "http://127.0.0.1/$file";
-        $md5 = `curl --silent --show-error --insecure https://127.0.0.1:$tls_port/$file | openssl md5 | perl -pe 's/.* //'`;
-        is $md5, $files{$file}, "https://127.0.0.1/$file";
+        my $content = `curl --silent --show-error http://127.0.0.1:$port/$file`;
+        is length($content), $files{$file}->{size}, "http://127.0.0.1/$file (size)";
+        is md5_hex($content), $files{$file}->{md5}, "http://127.0.0.1/$file (md5)";
+        $content = `curl --silent --show-error --insecure https://127.0.0.1:$tls_port/$file`;
+        is length($content), $files{$file}->{size}, "https://127.0.0.1/$file (size)";
+        is md5_hex($content), $files{$file}->{md5}, "https://127.0.0.1/$file (md5)";
     }
-}
 };
 
 subtest 'nghttp' => sub {
@@ -56,10 +59,11 @@ subtest 'nghttp' => sub {
         my ($proto, $port) = @_;
         my $opt = $proto eq 'http' ? '-u' : '';
         for my $file (sort keys %files) {
-            my $md5 = `nghttp $opt $proto://127.0.0.1:$port/$file | openssl md5 | perl -pe 's/.* //'`;
-            is $md5, $files{$file}, "$proto://127.0.0.1/$file";
+            my $content = `nghttp $opt $proto://127.0.0.1:$port/$file`;
+            is length($content), $files{$file}->{size}, "$proto://127.0.0.1/$file (size)";
+            is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/$file (md5)";
         }
-        my $out = `nghttp -u -m 10 $proto://127.0.0.1:$port/index.txt`;
+        my $out = `nghttp $opt -m 10 $proto://127.0.0.1:$port/index.txt`;
         is $out, "hello\n" x 10, "$proto://127.0.0.1/index.txt x 10 times";
     };
     subtest 'http' => sub {
