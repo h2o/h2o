@@ -292,7 +292,7 @@ static void *on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 
     /* use the loop of first context for handling socketpool timeouts */
     if (self->upstream.sockpool != NULL && self->upstream.sockpool->timeout == UINT64_MAX)
-        h2o_socketpool_set_timeout(self->upstream.sockpool, ctx->loop, 1000 /* FIXME should be configurable */);
+        h2o_socketpool_set_timeout(self->upstream.sockpool, ctx->loop, self->upstream.config.keepalive_timeout);
 
     client_ctx->loop = ctx->loop;
     client_ctx->zero_timeout = &ctx->zero_timeout;
