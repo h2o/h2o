@@ -197,9 +197,8 @@ void h2o_socketpool_connect(h2o_socketpool_t *pool, h2o_loop_t *loop, h2o_timeou
         }
         /* start connecting */
         if ((sock = h2o_socket_connect(loop, res->ai_addr, res->ai_addrlen, on_connect)) == NULL) {
-            struct connect_callback_t *cbinfo = setup_connect_callback(cb, NULL, "failed to resolve host", data);
+            struct connect_callback_t *cbinfo = setup_connect_callback(cb, NULL, "failed to connect to host", data);
             h2o_timeout_link(loop, zero_timeout, &cbinfo->timeout);
-            h2o_socket_close(sock);
             goto ExitConnect;
         }
         { /* socket is ready, setup callbacks and update pool counter */
