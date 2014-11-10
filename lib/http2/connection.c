@@ -80,7 +80,8 @@ static h2o_http2_stream_priolist_slot_t *priolist_link(h2o_http2_stream_priolist
     /* not found, create new slot */
     slot = h2o_malloc(sizeof(*slot));
     slot->weight = weight;
-    h2o_linklist_init_anchor(&slot->streams);
+    h2o_linklist_init_anchor(&slot->active_streams);
+    h2o_linklist_init_anchor(&slot->blocked_streams);
     slot->refcnt = 1;
     h2o_vector_reserve(NULL, (h2o_vector_t*)&priolist->list, sizeof(priolist->list.entries[0]), priolist->list.size + 1);
     memmove(priolist->list.entries + i + 1, priolist->list.entries + i, sizeof(priolist->list.entries[0]) * (priolist->list.size - i));
@@ -105,7 +106,8 @@ static void priolist_destroy(h2o_http2_stream_priolist_t *priolist)
         for (i = 0; i != priolist->list.size; ++i) {
             h2o_http2_stream_priolist_slot_t *slot = priolist->list.entries[i];
             assert(slot->refcnt == 0);
-            assert(h2o_linklist_is_empty(&slot->streams));
+            assert(h2o_linklist_is_empty(&slot->active_streams));
+            assert(h2o_linklist_is_empty(&slot->blocked_streams));
             free(slot);
         }
         free(priolist->list.entries);
@@ -114,27 +116,18 @@ static void priolist_destroy(h2o_http2_stream_priolist_t *priolist)
 
 static void run_pending_requests(h2o_http2_conn_t *conn)
 {
-    while (conn->_pending_reqs.refcnt != 0 && conn->num_responding_streams < conn->super.ctx->global_config->http2_max_concurrent_requests_per_connection) {
-        size_t slot_index;
-        for (slot_index = 0; slot_index != conn->_pending_reqs.list.size; ++slot_index) {
-            h2o_http2_stream_priolist_slot_t *slot = conn->_pending_reqs.list.entries[slot_index];
-            h2o_http2_stream_t *stream;
-            if (slot->refcnt == 0)
-                continue;
-            /* fetch and detach a pending stream */
-            stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link, slot->streams.next);
-            assert(slot == stream->_link.slot);
-            h2o_linklist_unlink(&stream->_link.link);
-            priolist_unlink(&conn->_pending_reqs, stream->_link.slot); /* the link is set afterwards in this function */
-            /* handle it */
-            assert(stream->state == H2O_HTTP2_STREAM_STATE_REQ_PENDING);
-            ++conn->num_responding_streams;
-            stream->state = H2O_HTTP2_STREAM_STATE_SEND_HEADERS;
-            if (conn->max_processed_stream_id < stream->stream_id)
-                conn->max_processed_stream_id = stream->stream_id;
-            stream->_link.slot = priolist_link(&conn->_write.streams_with_pending_data, stream->priority.weight);
-            h2o_process_request(&stream->req);
-        }
+    while (! h2o_linklist_is_empty(&conn->_pending_reqs) && conn->num_responding_streams < conn->super.ctx->global_config->http2_max_concurrent_requests_per_connection) {
+        /* fetch and detach a pending stream */
+        h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link.link, conn->_pending_reqs.next);
+        h2o_linklist_unlink(&stream->_link.link);
+        /* handle it */
+        assert(stream->state == H2O_HTTP2_STREAM_STATE_REQ_PENDING);
+        ++conn->num_responding_streams;
+        stream->state = H2O_HTTP2_STREAM_STATE_SEND_HEADERS;
+        if (conn->max_processed_stream_id < stream->stream_id)
+            conn->max_processed_stream_id = stream->stream_id;
+        stream->_link.slot = priolist_link(&conn->_write.streams_with_pending_data, stream->priority.weight);
+        h2o_process_request(&stream->req);
     }
 }
 
@@ -142,8 +135,17 @@ static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_
 {
     assert(stream->state < H2O_HTTP2_STREAM_STATE_REQ_PENDING);
     stream->state = H2O_HTTP2_STREAM_STATE_REQ_PENDING;
-    stream->_link.slot = priolist_link(&conn->_pending_reqs, stream->priority.weight);
-    h2o_linklist_insert(&stream->_link.slot->streams, &stream->_link.link);
+
+    { /* insert the pending request at the appropirate slot (FIXME this is O(N)) */
+        h2o_linklist_t *n;
+        for (n = conn->_pending_reqs.prev; n != &conn->_pending_reqs; n = n->prev) {
+            h2o_http2_stream_t *t = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link.link, n);
+            if (t->priority.dependency >= stream->priority.dependency)
+                break;
+        }
+        h2o_linklist_insert(n, &stream->_link.link);
+    }
+
     run_pending_requests(conn);
 }
 
@@ -176,7 +178,6 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
         assert(h2o_linklist_is_linked(&stream->_link.link));
         assert(&stream->_link.slot != NULL);
         h2o_linklist_unlink(&stream->_link.link);
-        priolist_unlink(&conn->_pending_reqs, stream->_link.slot);
         stream->_link.slot = NULL;
         break;
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
@@ -208,7 +209,7 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     assert(conn->_http1_req_input == NULL);
     h2o_hpack_dispose_header_table(&conn->_input_header_table);
     h2o_hpack_dispose_header_table(&conn->_output_header_table);
-    priolist_destroy(&conn->_pending_reqs);
+    assert(h2o_linklist_is_empty(&conn->_pending_reqs));
     h2o_mempool_clear(&conn->_write._pools[0]);
     h2o_mempool_clear(&conn->_write._pools[1]);
     priolist_destroy(&conn->_write.streams_with_pending_data);
@@ -259,6 +260,18 @@ static void request_gathered_write(h2o_http2_conn_t *conn)
     } else {
         if (! h2o_timeout_is_linked(&conn->_write.timeout_entry))
             h2o_timeout_link(conn->super.ctx->loop, &conn->super.ctx->zero_timeout, &conn->_write.timeout_entry);
+    }
+}
+
+static void update_stream_output_window(h2o_http2_stream_t *stream, ssize_t delta)
+{
+    ssize_t cur = h2o_http2_window_get_window(&stream->output_window);
+    h2o_http2_window_update(&stream->output_window, delta);
+    if (cur <= 0 && h2o_http2_window_get_window(&stream->output_window) > 0 && h2o_http2_stream_has_pending_data(stream)) {
+        /* move from blocked_streams to active_streams */
+        assert(h2o_linklist_is_linked(&stream->_link.link));
+        h2o_linklist_unlink(&stream->_link.link);
+        h2o_linklist_insert(&stream->_link.slot->active_streams, &stream->_link.link);
     }
 }
 
@@ -426,7 +439,7 @@ static void handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fra
             ssize_t delta = conn->peer_settings.initial_window_size - prev_initial_window_size;
             h2o_http2_stream_t *stream;
             kh_foreach_value(conn->open_streams, stream, {
-                h2o_http2_window_update(&stream->output_window, delta);
+                update_stream_output_window(stream, delta);
             });
             h2o_http2_window_update(&conn->_write.window, delta);
             resume_send(conn);
@@ -448,7 +461,7 @@ static void handle_window_update_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t
     } else if (frame->stream_id <= conn->max_open_stream_id) {
         h2o_http2_stream_t *stream = h2o_http2_conn_get_stream(conn, frame->stream_id);
         if (stream != NULL) {
-            h2o_http2_window_update(&stream->output_window, payload.window_size_increment);
+            update_stream_output_window(stream, payload.window_size_increment);
         }
     } else {
         send_error(conn, 0, H2O_HTTP2_ERROR_FLOW_CONTROL);
@@ -650,10 +663,20 @@ void h2o_http2_conn_enqueue_write(h2o_http2_conn_t *conn, h2o_buf_t buf)
 
 void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
+    h2o_linklist_t *slot;
+
     request_gathered_write(conn);
-    h2o_linklist_insert(
-        h2o_http2_stream_has_pending_data(stream) ? &stream->_link.slot->streams : &conn->_write.streams_without_pending_data,
-        &stream->_link.link);
+
+    if (h2o_http2_stream_has_pending_data(stream)) {
+        if (h2o_http2_window_get_window(&stream->output_window) > 0) {
+            slot = &stream->_link.slot->active_streams;
+        } else {
+            slot = &stream->_link.slot->blocked_streams;
+        }
+    } else {
+        slot = &conn->_write.streams_without_pending_data;
+    }
+    h2o_linklist_insert(slot, &stream->_link.link);
 }
 
 static void on_write_complete(h2o_socket_t *sock, int status)
@@ -711,20 +734,27 @@ void emit_writereq(h2o_timeout_entry_t *entry)
     conn->_write.wreq_in_flight = 1;
 
     /* push DATA frames */
-    if (conn->state == H2O_HTTP2_CONN_STATE_OPEN) {
+    if (conn->state == H2O_HTTP2_CONN_STATE_OPEN && h2o_http2_window_get_window(&conn->_write.window) > 0) {
         size_t slot_index;
         for (slot_index = 0; slot_index != conn->_write.streams_with_pending_data.list.size; ++slot_index) {
             h2o_http2_stream_priolist_slot_t *slot = conn->_write.streams_with_pending_data.list.entries[slot_index];
-            while (! h2o_linklist_is_empty(&slot->streams)) {
-                h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link, slot->streams.next);
-                if (h2o_http2_window_get_window(&conn->_write.window) <= 0)
-                    goto DonePush;
+            while (! h2o_linklist_is_empty(&slot->active_streams)) {
+                h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link, slot->active_streams.next);
                 assert(h2o_http2_stream_has_pending_data(stream));
                 h2o_http2_stream_send_pending_data(conn, stream);
-                if (! h2o_http2_stream_has_pending_data(stream)) {
+                if (h2o_http2_stream_has_pending_data(stream)) {
+                    if (h2o_http2_window_get_window(&stream->output_window) <= 0) {
+                        h2o_linklist_unlink(&stream->_link.link);
+                        h2o_linklist_insert(&slot->blocked_streams, &stream->_link.link);
+                    } else {
+                        assert(h2o_http2_window_get_window(&conn->_write.window) <= 0);
+                    }
+                } else {
                     h2o_linklist_unlink(&stream->_link.link);
                     h2o_linklist_insert(&conn->_write.streams_without_pending_data, &stream->_link.link);
                 }
+                if (h2o_http2_window_get_window(&conn->_write.window) <= 0)
+                    goto DonePush;
             }
         }
     DonePush:
@@ -759,6 +789,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock, str
     conn->_input_header_table.hpack_capacity = H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;
     h2o_http2_window_init(&conn->_input_window, &H2O_HTTP2_SETTINGS_HOST);
     conn->_output_header_table.hpack_capacity = H2O_HTTP2_SETTINGS_HOST.header_table_size;
+    h2o_linklist_init_anchor(&conn->_pending_reqs);
     conn->_write.pool = conn->_write._pools;
     h2o_linklist_init_anchor(&conn->_write.streams_without_pending_data);
     conn->_write.timeout_entry.cb = emit_writereq;
