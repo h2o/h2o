@@ -70,9 +70,10 @@ static void on_timeout(h2o_timeout_entry_t *timeout_entry)
      */
     h2o_socketpool_t *pool = H2O_STRUCT_FROM_MEMBER(h2o_socketpool_t, _interval_cb.entry, timeout_entry);
 
-    pthread_mutex_lock(&pool->_mutex);
-    destroy_expired(pool);
-    pthread_mutex_unlock(&pool->_mutex);
+    if (pthread_mutex_trylock(&pool->_mutex) == 0) {
+        destroy_expired(pool);
+        pthread_mutex_unlock(&pool->_mutex);
+    }
 
     h2o_timeout_link(pool->_interval_cb.loop, &pool->_interval_cb.timeout, &pool->_interval_cb.entry);
 }
