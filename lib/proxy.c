@@ -39,23 +39,21 @@ struct rp_handler_t {
     h2o_handler_t super;
     h2o_buf_t virtual_path;
     struct {
-        h2o_socketpool_t sockpool;
+        h2o_buf_t host;
+        uint16_t port;
+        h2o_socketpool_t *sockpool; /* non-NULL if config.use_keepalive == 1 */
         h2o_buf_t path;
-        uint64_t io_timeout;
+        h2o_proxy_config_vars_t config;
     } upstream;
-};
-
-struct proxy_config_vars_t {
-    uint64_t io_timeout;
 };
 
 struct proxy_configurator_t {
     h2o_configurator_t super;
-    struct proxy_config_vars_t *vars;
-    struct proxy_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+    h2o_proxy_config_vars_t *vars;
+    h2o_proxy_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
-static h2o_buf_t build_request(h2o_req_t *req, h2o_buf_t host, uint16_t port, size_t path_replace_length, h2o_buf_t path_prefix)
+static h2o_buf_t build_request(h2o_req_t *req, h2o_buf_t host, uint16_t port, size_t path_replace_length, h2o_buf_t path_prefix, int keepalive)
 {
     h2o_buf_t buf;
     size_t bufsz;
@@ -75,10 +73,11 @@ static h2o_buf_t build_request(h2o_req_t *req, h2o_buf_t host, uint16_t port, si
 
     /* build response */
     p = buf.base;
-    p += sprintf(p, "%.*s %.*s%.*s HTTP/1.1\r\nconnection: keep-alive\r\n",
+    p += sprintf(p, "%.*s %.*s%.*s HTTP/1.1\r\nconnection: %s\r\n",
         (int)req->method.len, req->method.base,
         (int)path_prefix.len, path_prefix.base,
-        (int)(req->path.len - path_replace_length), req->path.base + path_replace_length);
+        (int)(req->path.len - path_replace_length), req->path.base + path_replace_length,
+        keepalive ? "keep-alive" : "close");
     if (port == 80)
         p += sprintf(p, "host: %.*s\r\n", (int)host.len, host.base);
     else
@@ -235,14 +234,14 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     return on_head;
 }
 
-static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_buf_t host, uint16_t port, size_t path_replace_length, h2o_buf_t path_prefix)
+static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_buf_t host, uint16_t port, size_t path_replace_length, h2o_buf_t path_prefix, int keepalive)
 {
     struct rp_generator_t *self = h2o_mempool_alloc(&req->pool, sizeof(*self));
 
     self->super.proceed = do_proceed;
     self->super.stop = do_close;
     self->src_req = req;
-    self->sent_req = build_request(req, host, port, path_replace_length, path_prefix);
+    self->sent_req = build_request(req, host, port, path_replace_length, path_prefix, keepalive);
     h2o_init_input_buffer(&self->content_buf);
     self->bytes_sending = 0;
 
@@ -251,7 +250,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_buf_t host,
 
 int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_buf_t host, uint16_t port, size_t path_replace_length, h2o_buf_t path_prefix)
 {
-    struct rp_generator_t *self = proxy_send_prepare(req, host, port, path_replace_length, path_prefix);
+    struct rp_generator_t *self = proxy_send_prepare(req, host, port, path_replace_length, path_prefix, 0);
 
     self->client = h2o_http1client_connect(client_ctx, &req->pool, host.base, port, on_connect);
     self->client->data = self;
@@ -261,7 +260,7 @@ int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_buf_t 
 
 int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_socketpool_t *sockpool, size_t path_replace_length, h2o_buf_t path_prefix)
 {
-    struct rp_generator_t *self = proxy_send_prepare(req, sockpool->host, sockpool->port.n, path_replace_length, path_prefix);
+    struct rp_generator_t *self = proxy_send_prepare(req, sockpool->host, sockpool->port.n, path_replace_length, path_prefix, 1);
 
     self->client = h2o_http1client_connect_with_pool(client_ctx, &req->pool, sockpool, on_connect);
     self->client->data = self;
@@ -280,7 +279,10 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     }
 
     client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
-    return h2o_proxy_send_with_pool(req, client_ctx, &self->upstream.sockpool, self->virtual_path.len, self->upstream.path);
+    if (self->upstream.sockpool != NULL)
+        return h2o_proxy_send_with_pool(req, client_ctx, self->upstream.sockpool, self->virtual_path.len, self->upstream.path);
+    else
+        return h2o_proxy_send(req, client_ctx, self->upstream.host, self->upstream.port, self->virtual_path.len, self->upstream.path);
 }
 
 static void *on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
@@ -289,13 +291,13 @@ static void *on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     h2o_http1client_ctx_t *client_ctx = h2o_malloc(sizeof(*ctx) + sizeof(*client_ctx->io_timeout));
 
     /* use the loop of first context for handling socketpool timeouts */
-    if (self->upstream.sockpool.timeout == UINT64_MAX)
-        h2o_socketpool_set_timeout(&self->upstream.sockpool, ctx->loop, 1000 /* FIXME should be configurable */);
+    if (self->upstream.sockpool != NULL && self->upstream.sockpool->timeout == UINT64_MAX)
+        h2o_socketpool_set_timeout(self->upstream.sockpool, ctx->loop, 1000 /* FIXME should be configurable */);
 
     client_ctx->loop = ctx->loop;
     client_ctx->zero_timeout = &ctx->zero_timeout;
     client_ctx->io_timeout = (void*)(client_ctx + 1);
-    h2o_timeout_init(client_ctx->loop, client_ctx->io_timeout, self->upstream.io_timeout); /* TODO add a way to configure the variable */
+    h2o_timeout_init(client_ctx->loop, client_ctx->io_timeout, self->upstream.config.io_timeout); /* TODO add a way to configure the variable */
 
     return client_ctx;
 }
@@ -313,12 +315,14 @@ static void on_dispose(h2o_handler_t *_self)
     struct rp_handler_t *self = (void*)_self;
 
     free(self->virtual_path.base);
-    h2o_socketpool_dispose(&self->upstream.sockpool);
+    free(self->upstream.host.base);
+    h2o_socketpool_dispose(self->upstream.sockpool);
+    free(self->upstream.sockpool);
 
     free(self);
 }
 
-void h2o_proxy_register_reverse_proxy(h2o_hostconf_t *host_config, const char *virtual_path, const char *host, uint16_t port, const char *real_path, uint64_t io_timeout)
+void h2o_proxy_register_reverse_proxy(h2o_hostconf_t *host_config, const char *virtual_path, const char *host, uint16_t port, const char *real_path, h2o_proxy_config_vars_t *config)
 {
     struct rp_handler_t *self = (void*)h2o_create_handler(host_config, sizeof(*self));
     self->super.on_context_init = on_context_init;
@@ -326,15 +330,34 @@ void h2o_proxy_register_reverse_proxy(h2o_hostconf_t *host_config, const char *v
     self->super.dispose = on_dispose;
     self->super.on_req = on_req;
     self->virtual_path = h2o_strdup(NULL, virtual_path, SIZE_MAX);
-    h2o_socketpool_init(&self->upstream.sockpool, host, port, SIZE_MAX /* FIXME */);
+    self->upstream.host = h2o_strdup(NULL, host, SIZE_MAX);
+    self->upstream.port = port;
+    if (config->use_keepalive)
+        h2o_socketpool_init(self->upstream.sockpool, host, port, SIZE_MAX /* FIXME */);
     self->upstream.path = h2o_strdup(NULL, real_path, SIZE_MAX);
-    self->upstream.io_timeout = io_timeout;
+    self->upstream.config = *config;
 }
 
 static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void*)cmd->configurator;
     return h2o_config_scanf(cmd, file, node, "%" PRIu64, &self->vars->io_timeout);
+}
+
+static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void*)cmd->configurator;
+    return h2o_config_scanf(cmd, file, node, "%" PRIu64, &self->vars->keepalive_timeout);
+}
+
+static int on_config_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void*)cmd->configurator;
+    ssize_t ret = h2o_config_get_one_of(cmd, file, node, "OFF,ON");
+    if (ret == -1)
+        return -1;
+    self->vars->use_keepalive = (int)ret;
+    return 0;
 }
 
 static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
@@ -355,7 +378,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         goto ErrExit;
     }
     /* register */
-    h2o_proxy_register_reverse_proxy(ctx->hostconf, ctx->path != NULL ? ctx->path->base : "", host, port, path, self->vars->io_timeout);
+    h2o_proxy_register_reverse_proxy(ctx->hostconf, ctx->path != NULL ? ctx->path->base : "", host, port, path, self->vars);
 
     h2o_mempool_clear(&pool);
     return 0;
@@ -396,9 +419,18 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_config_define_command(&c->super, "proxy.reverse.url",
         H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_DEFERRED,
         on_config_reverse_url,
-        "map of virtual-path -> http://upstream_host:port/path");
+        "upstream URL (only HTTP is suppported)");
+    h2o_config_define_command(&c->super, "proxy.keepalive",
+        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        on_config_keepalive,
+        "boolean flag (ON/OFF) indicating whether or not to use persistent connections",
+        "to upstream (default: OFF)");
     h2o_config_define_command(&c->super, "proxy.timeout.io",
         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
         on_config_timeout_io,
-        "sets upstreamI/O timeout (in milliseconds, default: 5000)");
+        "sets upstream I/O timeout (in milliseconds, default: 5000)");
+    h2o_config_define_command(&c->super, "proxy.timeout.keepalive",
+        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        on_config_timeout_keepalive,
+        "timeout for idle conncections (default: 2)");
 }
