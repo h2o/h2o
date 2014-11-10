@@ -56,7 +56,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
         COPY(scheme);
         req->version = src->version;
         h2o_vector_reserve(&req->pool, (h2o_vector_t*)&req->headers, sizeof(h2o_header_t), src->headers.size);
-        memcpy(req->headers.entries, src->headers.entries, src->headers.size);
+        memcpy(req->headers.entries, src->headers.entries, sizeof(req->headers.entries[0]) * src->headers.size);
         req->headers.size = src->headers.size;
         req->entity = src->entity;
         req->http1_is_persistent = src->http1_is_persistent;
