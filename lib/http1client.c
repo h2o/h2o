@@ -173,6 +173,9 @@ static void on_head(h2o_socket_t *sock, int status)
             reader = on_body_content_length;
         }
     }
+    /* close the connection if impossible to determine the end of the response (RFC 7230 3.3.3) */
+    if (reader == on_body_until_close)
+        client->_can_keepalive = 0;
 
     /* RFC 2616 4.4 */
     if (client->_method_is_head
