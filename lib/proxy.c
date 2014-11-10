@@ -126,7 +126,7 @@ static void do_send(struct rp_generator_t *self)
     if (self->content_buf->size != 0) {
         h2o_buf_t buf = h2o_buf_init(self->content_buf->bytes, self->content_buf->size);
         self->bytes_sending = self->content_buf->size;
-        h2o_send(self->src_req, &buf, 1, 0);
+        h2o_send(self->src_req, &buf, 1, self->client == NULL);
     } else if (self->client == NULL) {
         close_generator(self, 0);
         h2o_send(self->src_req, NULL, 0, 1);
@@ -162,11 +162,11 @@ static int on_body(h2o_http1client_t *client, const char *errstr, h2o_buf_t *buf
         }
     }
 
+    if (errstr != NULL)
+        self->client = NULL;
     if (self->bytes_sending == 0)
         do_send(self);
 
-    if (errstr != NULL)
-        self->client = NULL;
     return 0;
 }
 
