@@ -23,6 +23,7 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/un.h>
 #include "h2o/string_.h"
 #include "h2o/http1client.h"
 
@@ -258,21 +259,38 @@ h2o_http1client_t *h2o_http1client_connect(h2o_http1client_ctx_t *ctx, h2o_mempo
     client->_cb.on_connect = cb;
     client->_timeout.cb = on_connect_timeout;
 
-    /* resolve destination (FIXME use the function supplied by the loop) */
-    sprintf(serv, "%u", (unsigned)port);
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-    hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV;
-    if ((err = getaddrinfo(host, serv, &hints, &res)) != 0) {
-        client->_errstr = "name resulution failure";
-        goto Error;
+    if (port == 0) { /* unix socket */
+        /* TODO: copy sun_path on ahead */
+        struct sockaddr_un addr_un;
+        socklen_t addrlen;
+        memset(&addr_un, 0, sizeof(struct sockaddr_un));
+        addr_un.sun_family = AF_UNIX;
+        memcpy(addr_un.sun_path, host, strlen(host));
+        addrlen = sizeof(struct sockaddr_un);
+
+        /* start connecting */
+        if ((client->sock = h2o_socket_connect(ctx->loop, (struct sockaddr *)&addr_un, addrlen, IPPROTO_IP, on_connect)) == NULL) {
+            client->_errstr = "socket create error";
+            goto Error;
+        }
+    } else {
+        /* resolve destination (FIXME use the function supplied by the loop) */
+        sprintf(serv, "%u", (unsigned)port);
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_protocol = IPPROTO_TCP;
+        hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV;
+        if ((err = getaddrinfo(host, serv, &hints, &res)) != 0) {
+            client->_errstr = "name resulution failure";
+            goto Error;
+        }
+        /* start connecting */
+        if ((client->sock = h2o_socket_connect(ctx->loop, res->ai_addr, res->ai_addrlen, IPPROTO_TCP, on_connect)) == NULL) {
+            client->_errstr = "socket create error";
+            goto Error;
+        }
     }
-    /* start connecting */
-    if ((client->sock = h2o_socket_connect(ctx->loop, res->ai_addr, res->ai_addrlen, on_connect)) == NULL) {
-        client->_errstr = "socket create error";
-        goto Error;
-    }
+
     client->sock->data = client;
     h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);
 

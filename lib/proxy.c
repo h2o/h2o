@@ -22,6 +22,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/un.h>
 #include "h2o.h"
 #include "h2o/http1client.h"
 
@@ -81,6 +82,8 @@ static h2o_buf_t build_request(h2o_req_t *req, h2o_buf_t host, uint16_t port, si
         (int)(req->path.len - path_replace_length), req->path.base + path_replace_length);
     if (port == 80)
         p += sprintf(p, "host: %.*s\r\n", (int)host.len, host.base);
+    else if (port == 0)
+        p += sprintf(p, "host: %.*s\r\n", (int)sizeof("localhost") - 1, "localhost");
     else
         p += sprintf(p, "host: %.*s:%u\r\n", (int)host.len, host.base, (unsigned)port);
     if (req->entity.base != NULL) {
@@ -266,6 +269,20 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     return h2o_proxy_send(req, client_ctx, self->upstream.host, self->upstream.port, self->virtual_path.len, self->upstream.path);
 }
 
+static int on_req_unix(h2o_handler_t *_self, h2o_req_t *req)
+{
+    struct rp_handler_t *self = (void*)_self;
+    h2o_http1client_ctx_t *client_ctx;
+
+    /* prefix match */
+    if (! (self->virtual_path.len <= req->path.len && memcmp(self->virtual_path.base, req->path.base, self->virtual_path.len) == 0)) {
+        return -1;
+    }
+
+    client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
+    return h2o_proxy_send(req, client_ctx, self->upstream.host, self->upstream.port, self->virtual_path.len, self->upstream.path);
+}
+
 static void *on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 {
     struct rp_handler_t *self = (void*)_self;
@@ -312,6 +329,20 @@ void h2o_proxy_register_reverse_proxy(h2o_hostconf_t *host_config, const char *v
     self->upstream.io_timeout = io_timeout;
 }
 
+void h2o_proxy_register_reverse_proxy_unix(h2o_hostconf_t *host_config, const char *virtual_path, const char *socket_path, const char *real_path, uint64_t io_timeout)
+{
+    struct rp_handler_t *self = (void*)h2o_create_handler(host_config, sizeof(*self));
+    self->super.on_context_init = on_context_init;
+    self->super.on_context_dispose = on_context_dispose;
+    self->super.dispose = on_dispose;
+    self->super.on_req = on_req_unix;
+    self->virtual_path = h2o_strdup(NULL, virtual_path, SIZE_MAX);
+    self->upstream.host = h2o_strdup(NULL, socket_path, SIZE_MAX);
+    self->upstream.port = 0;
+    self->upstream.path = h2o_strdup(NULL, real_path, SIZE_MAX);
+    self->upstream.io_timeout = io_timeout;
+}
+
 static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void*)cmd->configurator;
@@ -337,6 +368,35 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
     }
     /* register */
     h2o_proxy_register_reverse_proxy(ctx->hostconf, ctx->path != NULL ? ctx->path->base : "", host, port, path, self->vars->io_timeout);
+
+    h2o_mempool_clear(&pool);
+    return 0;
+
+ErrExit:
+    h2o_mempool_clear(&pool);
+    return -1;
+}
+
+static int on_config_reverse_path(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void*)cmd->configurator;
+    h2o_mempool_t pool;
+    char *socket_path, *path;
+
+    h2o_mempool_init(&pool);
+
+    if (h2o_parse_unix(&pool, node->data.scalar, &socket_path, &path) != 0) {
+        h2o_config_print_error(cmd, file, node, "failed to parse URL: %s\n", node->data.scalar);
+        goto ErrExit;
+    }
+
+    /* overflow check */
+    if (strlen(socket_path) >= sizeof(struct sockaddr_un)) {
+        assert(!"unix socket path is too long.");
+    }
+
+    /* register */
+    h2o_proxy_register_reverse_proxy_unix(ctx->hostconf, ctx->path != NULL ? ctx->path->base : "", socket_path, path, self->vars->io_timeout);
 
     h2o_mempool_clear(&pool);
     return 0;
@@ -378,6 +438,10 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
         H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_DEFERRED,
         on_config_reverse_url,
         "map of virtual-path -> http://upstream_host:port/path");
+    h2o_config_define_command(&c->super, "proxy.reverse.path",
+        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_DEFERRED,
+        on_config_reverse_path,
+        "map of virtual-path -> unix:/path.sock:/uri");
     h2o_config_define_command(&c->super, "proxy.timeout.io",
         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
         on_config_timeout_io,

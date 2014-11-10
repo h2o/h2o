@@ -96,6 +96,10 @@ h2o_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len);
  */
 int h2o_parse_url(h2o_mempool_t *pool, const char *url, char **scheme, char **host, uint16_t *port, char **path);
 /**
+ * parses unix socket path
+ */
+int h2o_parse_unix(h2o_mempool_t *pool, const char *unix_path, char **socket_path, char **path);
+/**
  * HTML-escapes a string
  * @param pool memory pool
  * @param src source string
