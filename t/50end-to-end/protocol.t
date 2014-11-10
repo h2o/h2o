@@ -4,7 +4,7 @@ use Digest::MD5 qw(md5_hex);
 use Test::More;
 use t::Util;
 
-my %files = map { +($_ => md5_file($_)) } qw(index.txt halfdome.jpg);
+my %files = map { +($_ => md5_file("t/50end-to-end/protocol/docroot/$_")) } qw(index.txt halfdome.jpg);
 
 my $server = spawn_h2o(<< 'EOT');
 hosts:

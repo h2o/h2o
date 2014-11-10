@@ -57,7 +57,6 @@ EOT
 
 sub md5_file {
     my $fn = shift;
-    $fn = "t/50end-to-end/protocol/docroot/$fn";
     open my $fh, "<", $fn
         or die "failed to open file:$fn:$!";
     local $/;
