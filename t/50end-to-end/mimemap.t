@@ -1,6 +1,5 @@
 use strict;
 use warnings;
-use Digest::MD5 qw(md5_hex);
 use Test::More;
 use t::Util;
 

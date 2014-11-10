@@ -763,14 +763,24 @@ void h2o_file_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/proxy.c */
 
+typedef struct st_h2o_proxy_config_vars_t {
+    uint64_t io_timeout;
+    int use_keepalive;
+    uint64_t keepalive_timeout;
+} h2o_proxy_config_vars_t;
+
 /**
  * delegates the request to given server, rewriting the path as specified
  */
 int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_buf_t host, uint16_t port, size_t path_replace_length, h2o_buf_t path_prefix);
 /**
+ * delegates the request to given server, rewriting the path as specified
+ */
+int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_socketpool_t *sockpool, size_t path_replace_length, h2o_buf_t path_prefix);
+/**
  * registers the reverse proxy handler to the context
  */
-void h2o_proxy_register_reverse_proxy(h2o_hostconf_t *host_config, const char *virtual_path, const char *host, uint16_t port, const char *real_path, uint64_t io_timeout);
+void h2o_proxy_register_reverse_proxy(h2o_hostconf_t *host_config, const char *virtual_path, const char *host, uint16_t port, const char *real_path, h2o_proxy_config_vars_t *config);
 /**
  * registers the configurator
  */

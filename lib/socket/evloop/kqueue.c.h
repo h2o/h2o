@@ -145,6 +145,24 @@ static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
 {
 }
 
+static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
+{
+    struct st_h2o_socket_loop_kqueue_t *loop = (void*)sock->loop;
+    struct kevent changelist[2];
+    int change_index = 0, ret;
+
+    if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_READ) != 0)
+        EV_SET(changelist + change_index++, sock->fd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
+    if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE) != 0)
+        EV_SET(changelist + change_index++, sock->fd, EVFILT_WRITE, EV_DELETE, 0, 0, NULL);
+    if (change_index == 0)
+        return;
+    while ((ret = kevent(loop->kq, changelist, change_index, NULL, 0, NULL)) != 0 && errno == EINTR)
+        ;
+    if (ret == -1)
+        fprintf(stderr, "kevent returned error %d (fd=%d)", errno, sock->fd);
+}
+
 h2o_evloop_t *h2o_evloop_create(void)
 {
     struct st_h2o_socket_loop_kqueue_t *loop = (struct st_h2o_socket_loop_kqueue_t*)create_evloop(sizeof(*loop));

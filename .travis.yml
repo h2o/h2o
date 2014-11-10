@@ -7,10 +7,7 @@ before_script:
   - curl -L https://github.com/joyent/libuv/archive/v1.0.0-rc1.tar.gz | tar xzf -
   - (cd libuv-1.0.0-rc1 && ./autogen.sh && ./configure --prefix=/usr && make && sudo make install)
   - cmake .
-  - curl -L http://cpanmin.us | perl - --sudo --notest App::cpanminus
-  - cpanm --sudo --notest Net::EmptyPort
-  - cpanm --sudo --notest Proc::Wait3
-  - cpanm --sudo --notest Scope::Guard
+  - misc/install-perl-modules.pl
   - sudo apt-get install -qq apache2-utils
   - curl -L http://github.com/tatsuhiro-t/nghttp2/releases/download/v0.6.4/nghttp2-0.6.4.tar.gz | tar xzf -
   - (cd nghttp2-0.6.4 && ./configure --prefix=/usr --disable-threads --enable-app && make && sudo make install)

@@ -64,7 +64,9 @@ static int32_t get_max_wait(h2o_evloop_t *loop);
 static int evloop_do_proceed(h2o_evloop_t *loop);
 static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock);
 static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock);
+static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
 
+#define H2O_USE_SELECT 1
 #if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_KQUEUE
 /* explicitly specified */
 #else
@@ -234,7 +236,8 @@ void do_dispose_socket(h2o_socket_t *_sock)
 
     evloop_do_on_socket_close(sock);
     wreq_free_buffer_if_allocated(sock);
-    close(sock->fd);
+    if (sock->fd != -1)
+        close(sock->fd);
     sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED;
     link_to_statechanged(sock);
 }
@@ -290,6 +293,33 @@ void do_read_stop(h2o_socket_t *_sock)
 
     sock->_flags &= ~H2O_SOCKET_FLAG_IS_READ_READY;
     link_to_statechanged(sock);
+}
+
+int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info)
+{
+    struct st_h2o_evloop_socket_t *sock = (void*)_sock;
+
+    assert((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) == 0);
+    evloop_do_on_socket_export(sock);
+    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED;
+
+    info->fd = sock->fd;
+    info->peername = sock->super.peername;
+
+    sock->fd = -1;
+
+    return 0;
+}
+
+h2o_socket_t *do_import(h2o_loop_t *loop, h2o_socket_export_t *info)
+{
+    return h2o_evloop_socket_create(loop, info->fd, (void*)&info->peername.addr, info->peername.len, 0);
+}
+
+h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *_sock)
+{
+    struct st_h2o_evloop_socket_t *sock = (void*)_sock;
+    return sock->loop;
 }
 
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, struct sockaddr *addr, socklen_t addrlen, int flags)

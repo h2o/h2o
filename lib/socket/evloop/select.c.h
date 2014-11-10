@@ -44,8 +44,10 @@ static void update_fdset(struct st_h2o_evloop_select_t *loop)
         sock->_next_statechanged = sock;
         /* update the state */
         if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
-            assert(loop->socks[sock->fd] == sock);
-            loop->socks[sock->fd] = NULL;
+            if (sock->fd != -1) {
+                assert(loop->socks[sock->fd] == sock);
+                loop->socks[sock->fd] = NULL;
+            }
             free(sock);
         } else {
             if (loop->socks[sock->fd] == NULL) {
@@ -145,10 +147,19 @@ static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock)
 static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
 {
     struct st_h2o_evloop_select_t *loop = (struct st_h2o_evloop_select_t*)sock->loop;
+    if (sock->fd == -1)
+        return;
     assert(loop->socks[sock->fd] != NULL);
     DEBUG_LOG("clearing READ/WRITE for fd: %d\n", sock->fd);
     FD_CLR(sock->fd, &loop->readfds);
     FD_CLR(sock->fd, &loop->writefds);
+}
+
+static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
+{
+    struct st_h2o_evloop_select_t *loop = (struct st_h2o_evloop_select_t*)sock->loop;
+    evloop_do_on_socket_close(sock);
+    loop->socks[sock->fd] = NULL;
 }
 
 h2o_evloop_t *h2o_evloop_create(void)
