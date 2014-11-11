@@ -89,6 +89,8 @@ static h2o_buf_t build_request(h2o_req_t *req, h2o_buf_t host, uint16_t port, si
         p += sprintf(p, "content-length: %zu\r\n", req->entity.len);
     }
     for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h) {
+        if (h2o_buf_is_token(h->name) && ((h2o_token_t*)h->name)->is_connection_specific)
+            continue;
         p += sprintf(p, "%.*s: %.*s\r\n",
             (int)h->name->len, h->name->base,
             (int)h->value.len, h->value.base);
@@ -193,9 +195,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     self->src_req->res.reason = h2o_strdup(&self->src_req->pool, msg.base, msg.len).base;
     for (i = 0; i != num_headers; ++i) {
         const h2o_token_t *token = h2o_lookup_token(headers[i].name, headers[i].name_len);
-        if (token == H2O_TOKEN_CONNECTION
-            || token == H2O_TOKEN_SERVER
-            || token == H2O_TOKEN_DATE) {
+        if (token->is_connection_specific) {
             /* skip */
         } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
             if (self->src_req->res.content_length != SIZE_MAX
