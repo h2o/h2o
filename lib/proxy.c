@@ -424,6 +424,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     /* set default vars */
     c->vars = c->_vars_stack;
     c->vars->io_timeout = 5000;
+    c->vars->keepalive_timeout = 2000;
 
     /* setup handlers */
     c->super.enter = on_config_enter;
@@ -444,5 +445,5 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_config_define_command(&c->super, "proxy.timeout.keepalive",
         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
         on_config_timeout_keepalive,
-        "timeout for idle conncections (default: 2)");
+        "timeout for idle conncections (in milliseconds, default: 2000)");
 }
