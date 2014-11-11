@@ -43,6 +43,7 @@ void h2o_send_inline(h2o_req_t *req, const char *body, size_t len)
 
 void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body)
 {
+    /* FIXME setup host_config, since this function may get called before h2o_process_request is invoked */
     req->http1_is_persistent = 0;
 
     req->res.status = status;

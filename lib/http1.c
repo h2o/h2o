@@ -29,7 +29,17 @@
 
 struct st_h2o_http1_req_entity_reader {
     int (*handle_incoming_entity)(h2o_http1_conn_t *conn);
+};
+
+struct st_h2o_http1_content_length_entity_reader {
+    struct st_h2o_http1_req_entity_reader super;
     size_t content_length;
+};
+
+struct st_h2o_http1_chunked_entity_reader {
+    struct st_h2o_http1_req_entity_reader super;
+    struct phr_chunked_decoder decoder;
+    size_t prev_input_size;
 };
 
 static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, size_t inbufcnt, int is_final);
@@ -49,7 +59,6 @@ static void close_connection(h2o_http1_conn_t *conn)
 {
     h2o_timeout_unlink(&conn->_timeout_entry);
     h2o_dispose_request(&conn->req);
-    free(conn->_req_entity_reader);
     if (conn->sock != NULL)
         h2o_socket_close(conn->sock);
     free(conn);
@@ -78,36 +87,73 @@ static void process_request(h2o_http1_conn_t *conn)
     h2o_process_request(&conn->req);
 }
 
+static int on_entity_read_complete(h2o_http1_conn_t *conn)
+{
+    conn->_req_entity_reader = NULL;
+    set_timeout(conn, NULL, NULL);
+    h2o_socket_read_stop(conn->sock);
+    process_request(conn);
+    return 0;
+}
+
+static int handle_chunked_entity_read(h2o_http1_conn_t *conn)
+{
+    struct st_h2o_http1_chunked_entity_reader *reader = (void*)conn->_req_entity_reader;
+    h2o_input_buffer_t *inbuf = conn->sock->input;
+    size_t bufsz;
+    ssize_t ret;
+
+    /* decode the incoming data */
+    if ((bufsz = inbuf->size - reader->prev_input_size) == 0)
+        return -2;
+    ret = phr_decode_chunked(&reader->decoder, inbuf->bytes + reader->prev_input_size, &bufsz);
+    inbuf->size = reader->prev_input_size + bufsz;
+    reader->prev_input_size = inbuf->size;
+    if (ret < 0)
+        return (int)ret;
+    /* complete */
+    conn->req.entity = h2o_buf_init(inbuf->bytes + conn->_reqsize, inbuf->size - conn->_reqsize);
+    conn->_reqsize = inbuf->size;
+    inbuf->size += ret; /* restore the number of extra bytes */
+
+    return on_entity_read_complete(conn);
+}
+
 static int create_chunked_entity_reader(h2o_http1_conn_t *conn)
 {
-    return -1;
+    struct st_h2o_http1_chunked_entity_reader *reader = h2o_mempool_alloc(&conn->req.pool, sizeof(*reader));
+    conn->_req_entity_reader = &reader->super;
+
+    reader->super.handle_incoming_entity = handle_chunked_entity_read;
+    memset(&reader->decoder, 0, sizeof(reader->decoder));
+    reader->decoder.consume_trailer = 1;
+    reader->prev_input_size = conn->_reqsize;
+
+    return 0;
 }
 
 static int handle_content_length_entity_read(h2o_http1_conn_t *conn)
 {
+    struct st_h2o_http1_content_length_entity_reader *reader = (void*)conn->_req_entity_reader;
+
     /* wait until: reqsize == conn->_input.size */
     if (conn->sock->input->size < conn->_reqsize)
         return -2;
 
     /* all input has arrived */
     conn->req.entity = h2o_buf_init(
-        conn->sock->input->bytes + conn->_reqsize - conn->_req_entity_reader->content_length,
-        conn->_req_entity_reader->content_length);
-    free(conn->_req_entity_reader);
-    conn->_req_entity_reader = NULL;
-    set_timeout(conn, NULL, NULL);
-    h2o_socket_read_stop(conn->sock);
-    process_request(conn);
+        conn->sock->input->bytes + conn->_reqsize - reader->content_length,
+        reader->content_length);
 
-    return 0;
+    return on_entity_read_complete(conn);
 }
 
 static int create_content_length_entity_reader(h2o_http1_conn_t *conn, size_t content_length)
 {
-    struct st_h2o_http1_req_entity_reader *reader = h2o_malloc(sizeof(*reader));
-    conn->_req_entity_reader = reader;
+    struct st_h2o_http1_content_length_entity_reader *reader = h2o_mempool_alloc(&conn->req.pool, sizeof(*reader));
+    conn->_req_entity_reader = &reader->super;
 
-    reader->handle_incoming_entity = handle_content_length_entity_read;
+    reader->super.handle_incoming_entity = handle_content_length_entity_read;
     reader->content_length = content_length;
     conn->_reqsize += content_length;
 
@@ -116,7 +162,8 @@ static int create_content_length_entity_reader(h2o_http1_conn_t *conn, size_t co
 
 static int create_entity_reader(h2o_http1_conn_t *conn, const struct phr_header *entity_header)
 {
-    if (entity_header->name_len == sizeof("content-encoding") - 1) {
+    /* strlen("content-length") is unequal to sizeof("transfer-encoding"), and thus checking the length only is sufficient */
+    if (entity_header->name_len == sizeof("transfer-encoding") - 1) {
         /* content-encoding */
         if (h2o_lcstris(entity_header->value, entity_header->value_len, H2O_STRLIT("chunked"))) {
             return create_chunked_entity_reader(conn);
