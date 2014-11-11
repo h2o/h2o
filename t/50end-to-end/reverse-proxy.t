@@ -43,6 +43,24 @@ hosts:
 EOT
 }
 
+ok ! check_port($upstream_port), "upstream should be down now";
+
+# should return 502 in case of upstream error
+subtest 'upstream-down' => sub {
+    plan skip_all => 'curl not found'
+        unless prog_exists('curl');
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
+EOT
+    my $port = $server->{port};
+    my $res = `curl --silent --dump-header /dev/stderr http://127.0.0.1:$port/ 2>&1 > /dev/null`;
+    like $res, qr{^HTTP/1\.1 502 }, "502 response on upstream error";
+};
+
 sub spawn_upstream {
     my @extra = @_;
     spawn_server(
@@ -101,6 +119,5 @@ sub run_tests_with_conf {
         };
     };
 }
-
 
 done_testing;
