@@ -25,6 +25,7 @@
 #include <getopt.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
@@ -309,10 +310,6 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 static int on_config_listen_exit(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, ctx->globalconf);
-    int reuseaddr_flag = 1;
-#ifdef IPV6_V6ONLY
-    int v6only_flag = 1;
-#endif
     size_t i;
 
     /* only handle global-level exit */
@@ -337,17 +334,23 @@ static int on_config_listen_exit(h2o_configurator_t *configurator, h2o_configura
             }
             break;
         default:
-            if ((listener->fd = socket(listener->family, listener->socktype, listener->protocol)) == -1
-                || setsockopt(listener->fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
-#ifdef IPV6_V6ONLY
-                || (listener->family == AF_INET6 && setsockopt(listener->fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only_flag, sizeof(v6only_flag)) != 0)
+            {
+                int reuseaddr_flag = 1, defer_accept_flag = 1, v6only_flag = 1;
+                if ((listener->fd = socket(listener->family, listener->socktype, listener->protocol)) == -1
+                    || setsockopt(listener->fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
+#ifdef TCP_DEFER_ACCEPT
+                    || setsockopt(listener->fd, IPPROTO_TCP, TCP_DEFER_ACCEPT, &defer_accept_flag, sizeof(defer_accept_flag)) != 0
 #endif
-                || bind(listener->fd, (void*)&listener->addr, listener->addrlen) != 0
-                || listen(listener->fd, SOMAXCONN) != 0) {
-                char host[NI_MAXHOST], serv[NI_MAXSERV];
-                getnameinfo((void*)&listener->addr, listener->addrlen, host, sizeof(host), serv, sizeof(serv), NI_NUMERICHOST | NI_NUMERICSERV);
-                fprintf(stderr, "failed to listen to port %s:%s: %s\n", host, serv, strerror(errno));
-                return -1;
+#ifdef IPV6_V6ONLY
+                    || (listener->family == AF_INET6 && setsockopt(listener->fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only_flag, sizeof(v6only_flag)) != 0)
+#endif
+                    || bind(listener->fd, (void*)&listener->addr, listener->addrlen) != 0
+                    || listen(listener->fd, SOMAXCONN) != 0) {
+                    char host[NI_MAXHOST], serv[NI_MAXSERV];
+                    getnameinfo((void*)&listener->addr, listener->addrlen, host, sizeof(host), serv, sizeof(serv), NI_NUMERICHOST | NI_NUMERICSERV);
+                    fprintf(stderr, "failed to listen to port %s:%s: %s\n", host, serv, strerror(errno));
+                    return -1;
+                }
             }
             break;
         }
