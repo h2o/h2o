@@ -155,7 +155,7 @@ static void on_head(h2o_socket_t *sock, int status)
             } else {
                 client->_can_keepalive = 0;
             }
-        } else if (h2o_lcstris(headers[i].name, headers[i].name_len, H2O_STRLIT("content-encoding"))) {
+        } else if (h2o_lcstris(headers[i].name, headers[i].name_len, H2O_STRLIT("transfer-encoding"))) {
             if (h2o_memis(headers[i].value, headers[i].value_len, H2O_STRLIT("chunked"))) {
                 reader = on_body_chunked;
                 break;
