@@ -335,7 +335,13 @@ static int on_config_listen_exit(h2o_configurator_t *configurator, h2o_configura
             break;
         default:
             {
-                int reuseaddr_flag = 1, defer_accept_flag = 1, v6only_flag = 1;
+                int reuseaddr_flag = 1;
+#ifdef TCP_DEFER_ACCEPT
+                int defer_accept_flag = 1;
+#endif
+#ifdef IPV6_V6ONLY
+                int v6only_flag = 1;
+#endif
                 if ((listener->fd = socket(listener->family, listener->socktype, listener->protocol)) == -1
                     || setsockopt(listener->fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
 #ifdef TCP_DEFER_ACCEPT
