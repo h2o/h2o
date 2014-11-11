@@ -30,7 +30,10 @@ struct rp_generator_t {
     h2o_generator_t super;
     h2o_req_t *src_req;
     h2o_http1client_t *client;
-    h2o_buf_t sent_req;
+    struct {
+        h2o_buf_t bufs[2]; /* first buf is the request line and headers, the second is the POST content */
+        int is_head;
+    } up_req;
     h2o_input_buffer_t *buf_before_send;
     h2o_input_buffer_t *buf_sending;
 };
@@ -233,9 +236,9 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
         return NULL;
     }
 
-    *reqbufs = &self->sent_req;
-    *reqbufcnt = 1;
-    *method_is_head = self->sent_req.len >= 5 && memcmp(self->sent_req.base, "HEAD ", 5) == 0;
+    *reqbufs = self->up_req.bufs;
+    *reqbufcnt = self->up_req.bufs[1].base != NULL ? 2 : 1;
+    *method_is_head = self->up_req.is_head;
     return on_head;
 }
 
@@ -246,7 +249,9 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_buf_t host,
     self->super.proceed = do_proceed;
     self->super.stop = do_close;
     self->src_req = req;
-    self->sent_req = build_request(req, host, port, path_replace_length, path_prefix, keepalive);
+    self->up_req.bufs[0] = build_request(req, host, port, path_replace_length, path_prefix, keepalive);
+    self->up_req.bufs[1] = req->entity;
+    self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     h2o_init_input_buffer(&self->buf_before_send);
     h2o_init_input_buffer(&self->buf_sending);
 
