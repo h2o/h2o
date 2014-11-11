@@ -553,6 +553,84 @@ h2o_buf_t h2o_htmlescape(h2o_mempool_t *pool, const char *src, size_t len)
 
 #include "t/test.h"
 
+static void test_decode_base64(void)
+{
+    h2o_mempool_t pool;
+        char buf[256];
+
+    h2o_mempool_init(&pool);
+
+    h2o_buf_t src = { H2O_STRLIT("The quick brown fox jumps over the lazy dog.") }, decoded;
+    h2o_base64_encode(buf, (const uint8_t*)src.base, src.len, 1);
+    ok(strcmp(buf, "VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4") == 0);
+    decoded = h2o_decode_base64url(&pool, buf, strlen(buf));
+    ok(src.len == decoded.len);
+    ok(strcmp(decoded.base, src.base) == 0);
+
+    h2o_mempool_clear(&pool);
+}
+
+static void test_normalize_path(void)
+{
+    h2o_mempool_t pool;
+
+    h2o_mempool_init(&pool);
+
+    h2o_buf_t b = h2o_normalize_path(&pool, H2O_STRLIT("/"));
+    ok(b.len == 1);
+    ok(memcmp(b.base, H2O_STRLIT("/")) == 0);
+
+    b = h2o_normalize_path(&pool, H2O_STRLIT("/abc"));
+    ok(b.len == 4);
+    ok(memcmp(b.base, H2O_STRLIT("/abc")) == 0);
+
+    b = h2o_normalize_path(&pool, H2O_STRLIT("/abc"));
+    ok(b.len == 4);
+    ok(memcmp(b.base, H2O_STRLIT("/abc")) == 0);
+
+    b = h2o_normalize_path(&pool, H2O_STRLIT("/abc/../def"));
+    ok(b.len == 4);
+    ok(memcmp(b.base, H2O_STRLIT("/def")) == 0);
+
+    b = h2o_normalize_path(&pool, H2O_STRLIT("/abc/../../def"));
+    ok(b.len == 4);
+    ok(memcmp(b.base, H2O_STRLIT("/def")) == 0);
+
+    b = h2o_normalize_path(&pool, H2O_STRLIT("/abc/./def"));
+    ok(b.len == 8);
+    ok(memcmp(b.base, H2O_STRLIT("/abc/def")) == 0);
+
+    b = h2o_normalize_path(&pool, H2O_STRLIT("/abc/def/.."));
+    ok(b.len == 5);
+    ok(memcmp(b.base, H2O_STRLIT("/abc/")) == 0);
+
+    b = h2o_normalize_path(&pool, H2O_STRLIT("/abc/def/."));
+    ok(b.len == 9);
+    ok(memcmp(b.base, H2O_STRLIT("/abc/def/")) == 0);
+
+    b = h2o_normalize_path(&pool, H2O_STRLIT("/abc?xx"));
+    ok(b.len == 4);
+    ok(memcmp(b.base, H2O_STRLIT("/abc")) == 0);
+
+    b = h2o_normalize_path(&pool, H2O_STRLIT("/abc/../def?xx"));
+    ok(b.len == 4);
+    ok(memcmp(b.base, H2O_STRLIT("/def")) == 0);
+
+    b = h2o_normalize_path(&pool, H2O_STRLIT("/a%62c"));
+    ok(b.len == 4);
+    ok(memcmp(b.base, H2O_STRLIT("/abc")) == 0);
+
+    b = h2o_normalize_path(&pool, H2O_STRLIT("/a%6"));
+    ok(b.len == 4);
+    ok(memcmp(b.base, H2O_STRLIT("/a%6")) == 0);
+
+    b = h2o_normalize_path(&pool, H2O_STRLIT("/a%6?"));
+    ok(b.len == 4);
+    ok(memcmp(b.base, H2O_STRLIT("/a%6")) == 0);
+
+    h2o_mempool_clear(&pool);
+}
+
 static void test_parse_url(void)
 {
     h2o_mempool_t pool;
@@ -626,6 +704,8 @@ static void test_htmlescape(void)
 
 void test_lib__string_c(void)
 {
+    subtest("decode_base64", test_decode_base64);
+    subtest("normalize_path", test_normalize_path);
     subtest("parse_url", test_parse_url);
     subtest("htmlescape", test_htmlescape);
 }
