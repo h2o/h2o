@@ -83,5 +83,5 @@ static const struct st_h2o_hpack_static_table_entry_t h2o_hpack_static_table[61]
     { H2O_TOKEN_USER_AGENT, { H2O_STRLIT("") } },
     { H2O_TOKEN_VARY, { H2O_STRLIT("") } },
     { H2O_TOKEN_VIA, { H2O_STRLIT("") } },
-    { H2O_TOKEN_HTTP2_SETTINGS, { H2O_STRLIT("") } }
+    { H2O_TOKEN_WWW_AUTHENTICATE, { H2O_STRLIT("") } }
 };

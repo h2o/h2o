@@ -59,7 +59,7 @@ while (my $line = <DATA>) {
     next unless $name ne '';
     $tokens{$name} = $hpack_index
         unless defined $tokens{$name};
-    if ($hpack_index != -1) {
+    if ($hpack_index != 0) {
         $hpack[$hpack_index - 1] = [ $name, $value ];
     }
 }
