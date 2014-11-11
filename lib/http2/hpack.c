@@ -250,7 +250,17 @@ static int decode_header(h2o_mempool_t *pool, struct st_h2o_decode_header_result
         }
     } else {
         /* size update */
-        assert(!"FIXME");
+        if ((index = decode_int(src, src_end, 5)) < 0) {
+            return -1;
+        }
+        if (index > hpack_header_table->hpack_max_capacity) {
+            return -1;
+        }
+        hpack_header_table->hpack_capacity = index;
+        while (hpack_header_table->num_entries != 0 && hpack_header_table->hpack_size > hpack_header_table->hpack_capacity) {
+            header_table_evict_one(hpack_header_table);
+        }
+        return -2;
     }
 
     /* determine the header */
@@ -355,8 +365,13 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
 
     while (src != src_end) {
         struct st_h2o_decode_header_result_t r;
-        if (decode_header(&req->pool, &r, header_table, &src, src_end) != 0)
-            return -1;
+        int ret = decode_header(&req->pool, &r, header_table, &src, src_end);
+        if (ret != 0) {
+            if (ret == -2)
+                continue; /* size update */
+            else
+                return -1;
+        }
         if (r.name->base[0] == ':') {
             if (*allow_psuedo) {
                 /* FIXME validate the chars in the value (e.g. reject SP in path) */

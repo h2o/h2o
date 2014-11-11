@@ -56,9 +56,10 @@ typedef struct st_h2o_hpack_header_table_t {
     /* ring buffer */
     struct st_h2o_hpack_header_table_entry_t *entries;
     size_t num_entries, entry_capacity, entry_start_index;
-    /* size and capacity are 32+name_len+value_len (as defined by hpack spec.) */
+    /* size and capacities are 32+name_len+value_len (as defined by hpack spec.) */
     size_t hpack_size;
-    size_t hpack_capacity;
+    size_t hpack_capacity; /* the value set by SETTINGS_HEADER_TABLE_SIZE _and_ dynamic table size update */
+    size_t hpack_max_capacity; /* the value set by SETTINGS_HEADER_TABLE_SIZE */
 } h2o_hpack_header_table_t;
 
 void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table);
