@@ -322,7 +322,7 @@ h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *_sock)
     return sock->loop;
 }
 
-h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, struct sockaddr *addr, socklen_t addrlen, int flags)
+struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, struct sockaddr *addr, socklen_t addrlen, int flags)
 {
     struct st_h2o_evloop_socket_t *sock;
 
@@ -343,16 +343,28 @@ h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, struct sockad
 
     evloop_do_on_socket_create(sock);
 
-    return &sock->super;
+    return sock;
+}
+
+static struct st_h2o_evloop_socket_t *create_socket_set_nodelay(h2o_evloop_t *loop, int fd, struct sockaddr *addr, socklen_t addrlen, int flags)
+{
+    int on = 1;
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
+    return create_socket(loop, fd, addr, addrlen, flags);
+}
+
+h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, struct sockaddr *addr, socklen_t addrlen, int flags)
+{
+    fcntl(fd, F_SETFL, O_NONBLOCK);
+    return &create_socket(loop, fd, addr, addrlen, flags)->super;
 }
 
 h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
 {
     struct st_h2o_evloop_socket_t *listener = (struct st_h2o_evloop_socket_t*)_listener;
-    h2o_socket_t *sock;
     struct sockaddr_storage addr;
     socklen_t addrlen = sizeof(addr);
-    int fd, on;
+    int fd;
 
 #ifdef __linux__
     if ((fd = accept4(listener->fd, (void*)&addr, &addrlen, O_NONBLOCK)) == -1)
@@ -362,11 +374,8 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
         return NULL;
     fcntl(fd, F_SETFL, O_NONBLOCK);
 #endif
-    on = 1;
-    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
 
-    sock = h2o_evloop_socket_create(listener->loop, fd, (void*)&addr, addrlen, 0);
-    return sock;
+    return &create_socket_set_nodelay(listener->loop, fd, (void*)&addr, addrlen, 0)->super;
 }
 
 h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)
@@ -376,12 +385,13 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
 
     if ((fd = socket(addr->sa_family, SOCK_STREAM, IPPROTO_TCP)) == -1)
         return NULL;
+    fcntl(fd, F_SETFL, O_NONBLOCK);
     if (! (connect(fd, addr, addrlen) == 0 || errno == EINPROGRESS)) {
         close(fd);
         return NULL;
     }
 
-    sock = (void*)h2o_evloop_socket_create(loop, fd, addr, addrlen, H2O_SOCKET_FLAG_IS_CONNECTING);
+    sock = create_socket_set_nodelay(loop, fd, addr, addrlen, H2O_SOCKET_FLAG_IS_CONNECTING);
     sock->super._cb.write = cb;
     link_to_statechanged(sock);
     return &sock->super;
