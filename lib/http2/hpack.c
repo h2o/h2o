@@ -385,10 +385,18 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
             }
         } else {
             *allow_psuedo = 0;
-            if (h2o_buf_is_token(r.name))
-                h2o_add_header(&req->pool, &req->headers, H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, r.name), r.value->base, r.value->len);
-            else
+            if (h2o_buf_is_token(r.name)) {
+                if (r.name == &H2O_TOKEN_CONTENT_LENGTH->buf) {
+                    /* ignore (draft 15 8.1.2.6 says: a server MAY send an HTTP response prior to closing or resetting the stream if content-length and the actual length differs) */
+                } else if (r.name == &H2O_TOKEN_TRANSFER_ENCODING->buf) {
+                    fprintf(stderr, "Transfer-Encoding is not supported in HTTP/2");
+                    return -1;
+                } else {
+                    h2o_add_header(&req->pool, &req->headers, H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, r.name), r.value->base, r.value->len);
+                }
+            } else {
                 h2o_add_header_by_str(&req->pool, &req->headers, r.name->base, r.name->len, 0, r.value->base, r.value->len);
+            }
         }
     }
 
