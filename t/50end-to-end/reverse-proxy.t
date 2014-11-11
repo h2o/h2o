@@ -65,8 +65,9 @@ sub spawn_upstream {
     my @extra = @_;
     spawn_server(
         argv     => [
-            qw(plackup -MPlack::App::File -s Starlet --access-log /dev/null -p), $upstream_port, @extra, '-e',
-            'Plack::App::File->new(root => q(t/50end-to-end/reverse-proxy/docroot))->to_app',
+            qw(plackup -MPlack::App::File -s Starlet --access-log /dev/null -p), $upstream_port,
+            @extra,
+            't/50end-to-end/reverse-proxy/app.psgi',
         ],
         is_ready =>  sub {
             check_port($upstream_port);
@@ -84,14 +85,18 @@ sub run_tests_with_conf {
         subtest 'curl' => sub {
             plan skip_all => 'curl not found'
                 unless prog_exists('curl');
-            for my $file (sort keys %files) {
-                my $content = `curl --silent --show-error http://127.0.0.1:$port/$file`;
-                is length($content), $files{$file}->{size}, "http://127.0.0.1/$file (size)";
-                is md5_hex($content), $files{$file}->{md5}, "http://127.0.0.1/$file (md5)";
-                $content = `curl --silent --show-error --insecure https://127.0.0.1:$tls_port/$file`;
-                is length($content), $files{$file}->{size}, "https://127.0.0.1/$file (size)";
-                is md5_hex($content), $files{$file}->{md5}, "https://127.0.0.1/$file (md5)";
-            }
+            my $doit = sub {
+                my ($proto, $port) = @_;
+                for my $file (sort keys %files) {
+                    my $content = `curl --silent --show-error --insecure $proto://127.0.0.1:$port/$file`;
+                    is length($content), $files{$file}->{size}, "$proto://127.0.0.1/$file (size)";
+                    is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/$file (md5)";
+                }
+                my $content = `curl --silent --show-error --insecure -d 'hello world' $proto://127.0.0.1:$port/echo`;
+                is $content, 'hello world', "$proto://127.0.0.1/echo (POST)";
+            };
+            $doit->('http', $port);
+            $doit->('https', $tls_port);
         };
 
         subtest 'nghttp' => sub {
@@ -105,7 +110,9 @@ sub run_tests_with_conf {
                     is length($content), $files{$file}->{size}, "$proto://127.0.0.1/$file (size)";
                     is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/$file (md5)";
                 }
-                my $out = `nghttp $opt -m 10 $proto://127.0.0.1:$port/index.txt`;
+                my $out = `nghttp $opt -H':method: POST' -d t/50end-to-end/reverse-proxy/hello.txt $proto://127.0.0.1:$port/echo`;
+                is $out, "hello\n", "$proto://127.0.0.1/echo (POST)";
+                $out = `nghttp $opt -m 10 $proto://127.0.0.1:$port/index.txt`;
                 is $out, "hello\n" x 10, "$proto://127.0.0.1/index.txt x 10 times";
             };
             subtest 'http' => sub {
