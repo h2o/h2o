@@ -134,7 +134,9 @@ static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
 
 static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
 {
+    struct st_h2o_evloop_epoll_t *loop = (void*)sock->loop;
     int ret;
+
     if ((sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED) == 0)
         return;
     while ((ret = epoll_ctl(loop->ep, EPOLL_CTL_DEL, sock->fd, NULL)) != 0 && errno == EINTR)
