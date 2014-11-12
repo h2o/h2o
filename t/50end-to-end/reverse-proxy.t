@@ -45,7 +45,7 @@ EOT
 subtest 'upstream-down' => sub {
     plan skip_all => 'curl not found'
         unless prog_exists('curl');
-    my $server = spawn_h2o(<< "EOT");
+    my $server = spawn_h2o(<< "EOT", 1);
 hosts:
   default:
     paths:

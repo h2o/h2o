@@ -60,7 +60,7 @@ sleep 1;
 
 # returns a hash containing `port`, `tls_port`, `guard`
 sub spawn_h2o {
-    my ($conf) = @_;
+    my ($conf, $use_valgrind) = @_;
 
     # decide the port numbers
     my $port = empty_port();
@@ -80,7 +80,7 @@ EOT
 
     # spawn the server
     my $guard = spawn_server(
-        argv     => [ qw(./h2o -c), $conffn ],
+        argv     => [ ($use_valgrind ? qw(valgrind --tool=memcheck) : +()), qw(./h2o -c), $conffn ],
         is_ready => sub {
             check_port($port) && check_port($tls_port);
         },
