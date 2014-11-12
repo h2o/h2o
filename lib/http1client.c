@@ -340,6 +340,7 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data)
 static void on_connect_timeout(h2o_timeout_entry_t *entry)
 {
     h2o_http1client_t *client = H2O_STRUCT_FROM_MEMBER(h2o_http1client_t, _timeout, entry);
+fprintf(stderr, "%s, timeout is %zu\n", client->_errstr, client->ctx->io_timeout->timeout);
     on_connect_error(client, client->_errstr != NULL ? client->_errstr : "connection timeout");
 }
 

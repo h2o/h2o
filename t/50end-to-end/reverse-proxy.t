@@ -45,7 +45,7 @@ EOT
 subtest 'upstream-down' => sub {
     plan skip_all => 'curl not found'
         unless prog_exists('curl');
-    my $server = spawn_h2o(<< "EOT", 1);
+    my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
     paths:
@@ -54,7 +54,7 @@ hosts:
 EOT
     my $port = $server->{port};
     ok check_port($port), "port is up (pre)";
-    my $res = `curl --verbose --dump-header /dev/stderr http://127.0.0.1:$port/ 2>&1 > /dev/null`;
+    my $res = `curl --silent --dump-header /dev/stderr http://127.0.0.1:$port/ 2>&1 > /dev/null`;
     like $res, qr{^HTTP/1\.1 502 }, "502 response on upstream error";
     ok check_port($port), "port is up (post)";
 };
