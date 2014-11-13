@@ -94,6 +94,8 @@ sub run_tests_with_conf {
                 }
                 my $content = `curl --silent --show-error --insecure -d 'hello world' $proto://127.0.0.1:$port/echo`;
                 is $content, 'hello world', "$proto://127.0.0.1/echo (POST)";
+                $content = `curl --silent --show-error --insecure --header 'Transfer-Encoding: chunked' -d 'hello world' $proto://127.0.0.1:$port/echo`;
+                is $content, 'hello world', "$proto://127.0.0.1/echo (POST, chunked)";
             };
             $doit->('http', $port);
             $doit->('https', $tls_port);
