@@ -59,7 +59,7 @@ ssize_t h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const stru
                 } else if (name_token == H2O_TOKEN_CONTENT_LENGTH) {
                     if (entity_header_index == -1)
                         entity_header_index = i;
-                } else if (name_token == H2O_TOKEN_CONTENT_ENCODING) {
+                } else if (name_token == H2O_TOKEN_TRANSFER_ENCODING) {
                     entity_header_index = i;
                 } else {
                     h2o_header_t *added = add_header(pool, headers, (h2o_buf_t*)name_token, src[i].value, src[i].value_len);
