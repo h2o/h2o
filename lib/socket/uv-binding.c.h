@@ -55,17 +55,20 @@ static void on_read_tcp(uv_stream_t *stream, ssize_t nread, const uv_buf_t* _unu
     struct st_h2o_uv_socket_t *sock = stream->data;
 
     if (nread < 0) {
+        sock->super.bytes_read = 0;
         sock->super._cb.read(&sock->super, -1);
         return;
     }
 
     sock->super.input->size += nread;
+    sock->super.bytes_read = nread;
     sock->super._cb.read(&sock->super, 0);
 }
 
 static void on_read_ssl(uv_stream_t *stream, ssize_t nread, const uv_buf_t *_unused)
 {
     struct st_h2o_uv_socket_t *sock = stream->data;
+    size_t prev_bytes_read = sock->super.input->size;
     int status = -1;
 
     if (nread > 0) {
@@ -75,6 +78,7 @@ static void on_read_ssl(uv_stream_t *stream, ssize_t nread, const uv_buf_t *_unu
         else
             status = 0;
     }
+    sock->super.bytes_read = sock->super.input->size - prev_bytes_read;
     sock->super._cb.read(&sock->super, status);
 }
 

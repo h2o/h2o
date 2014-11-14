@@ -68,6 +68,7 @@ struct st_h2o_socket_t {
     void *data;
     struct st_h2o_socket_ssl_t *ssl;
     h2o_input_buffer_t *input;
+    size_t bytes_read;
     struct {
         void (*cb)(void *data);
         void *data;
