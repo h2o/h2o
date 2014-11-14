@@ -26,11 +26,12 @@
 #include "h2o/string_.h"
 #include "h2o/http1client.h"
 
-static void close_client(h2o_http1client_t *client, size_t detach_len_on_keepalive)
+static void close_client(h2o_http1client_t *client)
 {
     if (client->sock != NULL) {
-        if (detach_len_on_keepalive != 0 && client->sockpool != NULL && client->_can_keepalive) {
-            h2o_consume_input_buffer(&client->sock->input, detach_len_on_keepalive);
+        if (client->sockpool != NULL && client->_can_keepalive) {
+            /* we do not send pipelined requests, and thus can trash all the received input at the end of the request */
+            h2o_consume_input_buffer(&client->sock->input, client->sock->input->size);
             h2o_socketpool_return(client->sockpool, client->sock);
         } else {
             h2o_socket_close(client->sock);
@@ -43,8 +44,9 @@ static void close_client(h2o_http1client_t *client, size_t detach_len_on_keepali
 
 static void on_body_error(h2o_http1client_t *client, const char *errstr)
 {
+    client->_can_keepalive = 0;
     client->_cb.on_body(client, errstr, NULL, 0);
-    close_client(client, 0);
+    close_client(client);
 }
 
 static void on_body_timeout(h2o_timeout_entry_t *entry)
@@ -61,14 +63,14 @@ static void on_body_until_close(h2o_socket_t *sock, int status)
 
     if (status != 0) {
         client->_cb.on_body(client, h2o_http1client_error_is_eos, NULL, 0);
-        close_client(client, 0);
+        close_client(client);
         return;
     }
 
     if (client->sock->input->size != 0) {
         h2o_buf_t buf = { client->sock->input->bytes, client->sock->input->size };
         if (client->_cb.on_body(client, NULL, &buf, 1) != 0) {
-            close_client(client, 0);
+            close_client(client);
             return;
         }
         h2o_consume_input_buffer(&client->sock->input, client->sock->input->size);
@@ -93,11 +95,17 @@ static void on_body_content_length(h2o_socket_t *sock, int status)
             client->sock->input->bytes,
             client->sock->input->size < client->_body_bytesleft ? client->sock->input->size : client->_body_bytesleft
         };
-        size_t eos_bytes_to_consume;
+        const char *errstr;
+        int ret;
         client->_body_bytesleft -= client->sock->input->size;
-        eos_bytes_to_consume = client->_body_bytesleft == 0 ? buf.len : 0;
-        if (client->_cb.on_body(client, eos_bytes_to_consume != 0 ? h2o_http1client_error_is_eos : NULL, &buf, 1) != 0 || eos_bytes_to_consume != 0) {
-            close_client(client, eos_bytes_to_consume);
+        errstr = client->_body_bytesleft == 0 ? h2o_http1client_error_is_eos : NULL;
+        ret = client->_cb.on_body(client, errstr, &buf, 1);
+        if (errstr == h2o_http1client_error_is_eos) {
+            close_client(client);
+            return;
+        } else if (ret != 0) {
+            client->_can_keepalive = 0;
+            close_client(client);
             return;
         }
         h2o_consume_input_buffer(&client->sock->input, buf.len);
@@ -114,16 +122,16 @@ static void on_body_chunked(h2o_socket_t *sock, int status)
 static void on_error_before_head(h2o_http1client_t *client, const char *errstr)
 {
     client->_cb.on_head(client, errstr, 0, 0, h2o_buf_init(NULL, 0), NULL, 0);
-    close_client(client, 0);
+    close_client(client);
 }
 
 static void on_head(h2o_socket_t *sock, int status)
 {
     h2o_http1client_t *client = sock->data;
-    int minor_version, http_status, rlen;
+    int minor_version, http_status, rlen, is_eos;
     const char *msg;
     struct phr_header headers[100];
-    size_t msg_len, num_headers, eos_bytes_to_consume, i;
+    size_t msg_len, num_headers, i;
     h2o_socket_cb reader;
 
     h2o_timeout_unlink(&client->_timeout);
@@ -180,17 +188,21 @@ static void on_head(h2o_socket_t *sock, int status)
     /* RFC 2616 4.4 */
     if (client->_method_is_head
         || ((100 <= status && status <= 199) || status == 204 || status == 304)) {
-        eos_bytes_to_consume = rlen;
+        is_eos = 1;
     } else {
-        eos_bytes_to_consume = 0;
+        is_eos = 0;
     }
 
     /* call the callback */
-    if ((client->_cb.on_body = client->_cb.on_head(client, eos_bytes_to_consume != 0 ? h2o_http1client_error_is_eos : NULL, minor_version, http_status, h2o_buf_init(msg, msg_len), headers, num_headers)) == NULL) {
-        close_client(client, eos_bytes_to_consume);
+    client->_cb.on_body = client->_cb.on_head(client, is_eos ? h2o_http1client_error_is_eos : NULL, minor_version, http_status, h2o_buf_init(msg, msg_len), headers, num_headers);
+    if (is_eos) {
+        close_client(client);
+        return;
+    } else if (client->_cb.on_body == NULL) {
+        client->_can_keepalive = 0;
+        close_client(client);
         return;
     }
-    assert(eos_bytes_to_consume == 0);
 
     h2o_consume_input_buffer(&client->sock->input, rlen);
 
@@ -230,7 +242,7 @@ static void on_send_timeout(h2o_timeout_entry_t *entry)
 static void on_connect_error(h2o_http1client_t *client, const char *errstr)
 {
     client->_cb.on_connect(client, errstr, NULL, NULL, NULL);
-    close_client(client, 0);
+    close_client(client);
 }
 
 static void on_connect(h2o_socket_t *sock, int status)
@@ -247,7 +259,7 @@ static void on_connect(h2o_socket_t *sock, int status)
     }
 
     if ((client->_cb.on_head = client->_cb.on_connect(client, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head)) == NULL) {
-        close_client(client, 0);
+        close_client(client);
         return;
     }
     h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_send_request);
@@ -336,5 +348,5 @@ h2o_http1client_t *h2o_http1client_connect_with_pool(h2o_http1client_ctx_t *ctx,
 
 void h2o_http1client_cancel(h2o_http1client_t *client)
 {
-    close_client(client, 0);
+    close_client(client);
 }
