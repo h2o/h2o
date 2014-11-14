@@ -55,7 +55,15 @@ struct st_h2o_http1client_t {
     h2o_timeout_entry_t _timeout;
     int _method_is_head;
     int _can_keepalive;
-    size_t _body_bytesleft;
+    union {
+        struct {
+            size_t bytesleft;
+        } content_length;
+        struct {
+            struct phr_chunked_decoder decoder;
+            size_t bytes_decoded_in_buf;
+        } chunked;
+    } _body_decoder;
 };
 
 extern const char * const h2o_http1client_error_is_eos;

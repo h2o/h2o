@@ -92,16 +92,16 @@ static void on_body_content_length(h2o_socket_t *sock, int status)
     if (sock->bytes_read != 0) {
         const char *errstr;
         int ret;
-        if (client->_body_bytesleft <= sock->bytes_read) {
-            if (client->_body_bytesleft < sock->bytes_read) {
+        if (client->_body_decoder.content_length.bytesleft <= sock->bytes_read) {
+            if (client->_body_decoder.content_length.bytesleft < sock->bytes_read) {
                 /* remove the trailing garbage from buf, and disable keepalive */
-                client->sock->input->size -= sock->bytes_read - client->_body_bytesleft;
+                client->sock->input->size -= sock->bytes_read - client->_body_decoder.content_length.bytesleft;
                 client->_can_keepalive = 0;
             }
-            client->_body_bytesleft = 0;
+            client->_body_decoder.content_length.bytesleft = 0;
             errstr = h2o_http1client_error_is_eos;
         } else {
-            client->_body_bytesleft -= sock->bytes_read;
+            client->_body_decoder.content_length.bytesleft -= sock->bytes_read;
             errstr = NULL;
         }
         ret = client->_cb.on_body(client, errstr);
@@ -120,7 +120,53 @@ static void on_body_content_length(h2o_socket_t *sock, int status)
 
 static void on_body_chunked(h2o_socket_t *sock, int status)
 {
-    assert(!"FIXME");
+    h2o_http1client_t *client = sock->data;
+    h2o_input_buffer_t *inbuf;
+
+    h2o_timeout_unlink(&client->_timeout);
+
+    if (status != 0) {
+        on_body_error(client, "I/O error");
+        return;
+    }
+
+    inbuf = client->sock->input;
+    if (sock->bytes_read != 0) {
+        const char *errstr;
+        int cb_ret;
+        size_t newsz = sock->bytes_read;
+        switch (phr_decode_chunked(
+            &client->_body_decoder.chunked.decoder,
+            inbuf->bytes + inbuf->size - newsz,
+            &newsz)) {
+        case -1: /* error */
+            newsz = sock->bytes_read;
+            client->_can_keepalive = 0;
+            errstr = "failed to parse the response (chunked)";
+            break;
+        case -2: /* incomplete */
+            errstr = NULL;
+            break;
+        default: /* complete, with garbage on tail; should disable keepalive */
+            client->_can_keepalive = 0;
+            /* fallthru */
+        case 0: /* complete */
+            errstr = h2o_http1client_error_is_eos;
+            break;
+        }
+        inbuf->size -= sock->bytes_read - newsz;
+        cb_ret = client->_cb.on_body(client, errstr);
+        if (errstr != NULL) {
+            close_client(client);
+            return;
+        } else if (cb_ret != 0) {
+            client->_can_keepalive = 0;
+            close_client(client);
+            return;
+        }
+    }
+
+    h2o_timeout_link(client->ctx->loop, client->ctx->io_timeout, &client->_timeout);
 }
 
 static void on_error_before_head(h2o_http1client_t *client, const char *errstr)
@@ -169,6 +215,8 @@ static void on_head(h2o_socket_t *sock, int status)
             }
         } else if (h2o_lcstris(headers[i].name, headers[i].name_len, H2O_STRLIT("transfer-encoding"))) {
             if (h2o_memis(headers[i].value, headers[i].value_len, H2O_STRLIT("chunked"))) {
+                /* precond: _body_decoder.chunked is zero-filled */
+                client->_body_decoder.chunked.decoder.consume_trailer = 1;
                 reader = on_body_chunked;
                 break;
             } else if (h2o_memis(headers[i].value, headers[i].value_len, H2O_STRLIT("identity"))) {
@@ -178,7 +226,7 @@ static void on_head(h2o_socket_t *sock, int status)
                 return;
             }
         } else if (h2o_lcstris(headers[i].name, headers[i].name_len, H2O_STRLIT("content-length"))) {
-            if ((client->_body_bytesleft = h2o_strtosize(headers[i].value, headers[i].value_len)) == SIZE_MAX) {
+            if ((client->_body_decoder.content_length.bytesleft = h2o_strtosize(headers[i].value, headers[i].value_len)) == SIZE_MAX) {
                 on_error_before_head(client, "invalid content-length");
                 return;
             }
