@@ -196,7 +196,7 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
 {
     h2o_buf_t *nextbuf;
 
-    if (stream->_data.size == 0 || h2o_http2_window_get_window(&stream->output_window) <= 0)
+    if (h2o_http2_window_get_window(&stream->output_window) <= 0)
         return;
 
     nextbuf = send_data(conn, stream, stream->_data.entries, stream->_data.size, stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM);
