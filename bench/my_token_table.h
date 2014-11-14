@@ -97,28 +97,19 @@ int match_case_small_str(const char *text, const char *key, size_t keyLen)
 
 inline uint32_t hash(const char *p, size_t n)
 {
-#if 1
 	uint64_t buf[4] = {};
 	char *q = (char *)buf;
 	for (size_t i = 0; i < n; i++) {
-		q[i] = h2o_tolower(p[i]);
+		q[i] = p[i];
 	}
+	*((__m128i*)&buf[0]) = toLowerSSE((const char*)&buf[0]);
+	*((__m128i*)&buf[2]) = toLowerSSE((const char*)&buf[2]);
 	uint64_t v = 0;
 	for (size_t i = 0; i < 4; i++) {
 		v += buf[i];
 	}
 	v ^= v >> 33;
 	return v % 211;
-#else
-	uint64_t v = 14695981039346656037ULL;
-	for (size_t i = 0; i < n; i++) {
-		v ^= uint8_t(h2o_tolower(p[i]));
-//		v ^= uint8_t(p[i]);
-		v *= 1099511628211ULL;
-	}
-	v ^= v >> 26;
-	return uint32_t(v % 181);
-#endif
 }
 
 const h2o_token_t *my_h2o_lookup_token(const char *name, size_t len)
