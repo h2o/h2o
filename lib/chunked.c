@@ -54,11 +54,11 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, 
     if (is_final) {
         outbufs[outbufcnt].base = "\r\n0\r\n\r\n";
         outbufs[outbufcnt].len = 7;
-        outbufcnt++;
     } else {
         outbufs[outbufcnt].base = "\r\n";
         outbufs[outbufcnt].len = 2;
     }
+    outbufcnt++;
 
     h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, is_final);
 }
@@ -67,8 +67,8 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
 {
     chunked_encoder_t *encoder;
 
-    /* do nothing if content-length is known */
-    if (req->res.content_length != SIZE_MAX)
+    /* do nothing if HTTP/1.0 or content-length is known */
+    if (req->res.content_length != SIZE_MAX || req->version == 0x100)
         goto Next;
     /* RFC 2616 4.4 states that the following status codes (and response to a HEAD method) should not include message body */
     if ((100 <= req->res.status && req->res.status <= 199) || req->res.status == 204 || req->res.status == 304)
