@@ -106,9 +106,10 @@ void test(const StrVec& sv)
 		const h2o_token_t *p = h2o_lookup_token(s.c_str(), s.size());
 		const h2o_token_t *q = my_h2o_lookup_token(s.c_str(), s.size());
 		if (p != q) {
-			printf("ERR s=%s, p=%p, q=%p\n", s.c_str(), p, q);
-			if (p) printf("p=%s\n", p->buf.base);
-			if (q) printf("q=%s\n", q->buf.base);
+			printf("ERR s=%s, org=%p, my=%p\n", s.c_str(), p, q);
+			printf("hash=%d\n", hash(s.c_str(), s.size()));
+			if (p) printf("org=%s\n", p->buf.base);
+			if (q) printf("my =%s\n", q->buf.base);
 			exit(1);
 		}
 	}
