@@ -40,25 +40,22 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, 
     for (i = 0; i != inbufcnt; ++i)
         chunk_size += inbufs[i].len;
 
-    /* create chunk header */
+    /* create chunk header and output data */
     if (chunk_size != 0) {
         outbufs[outbufcnt].base = self->buf;
         outbufs[outbufcnt].len = sprintf(self->buf, "%zx\r\n", chunk_size);
         assert(outbufs[outbufcnt].len < sizeof(self->buf));
         outbufcnt++;
-    }
-    /* set output data */
-    memcpy(outbufs + outbufcnt, inbufs, sizeof(h2o_buf_t) * inbufcnt);
-    outbufcnt += inbufcnt;
-    /* set EOF chunk header if is_final */
-    if (is_final) {
+        memcpy(outbufs + outbufcnt, inbufs, sizeof(h2o_buf_t) * inbufcnt);
+        outbufcnt += inbufcnt;
         outbufs[outbufcnt].base = "\r\n0\r\n\r\n";
-        outbufs[outbufcnt].len = 7;
-    } else {
-        outbufs[outbufcnt].base = "\r\n";
-        outbufs[outbufcnt].len = 2;
+        outbufs[outbufcnt].len = is_final ? 7 : 2;
+        outbufcnt++;
+    } else if (is_final) {
+        outbufs[outbufcnt].base = "0\r\n\r\n";
+        outbufs[outbufcnt].len = 5;
+        outbufcnt++;
     }
-    outbufcnt++;
 
     h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, is_final);
 }
