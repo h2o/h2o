@@ -328,7 +328,9 @@ h2o_http1client_t *h2o_http1client_connect(h2o_http1client_ctx_t *ctx, h2o_mempo
         goto Error;
     }
     /* start connecting */
-    if ((client->sock = h2o_socket_connect(ctx->loop, res->ai_addr, res->ai_addrlen, on_connect)) == NULL) {
+    client->sock = h2o_socket_connect(ctx->loop, res->ai_addr, res->ai_addrlen, on_connect);
+    freeaddrinfo(res);
+    if (client->sock == NULL) {
         client->_errstr = "socket create error";
         goto Error;
     }

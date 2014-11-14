@@ -105,18 +105,12 @@ static h2o_buf_t build_request(h2o_req_t *req, h2o_buf_t host, uint16_t port, si
     return buf;
 }
 
-static void close_generator(struct rp_generator_t *self, int cancel_client)
-{
-    if (cancel_client && self->client != NULL)
-        h2o_http1client_cancel(self->client);
-    h2o_dispose_input_buffer(&self->last_content_before_send);
-    h2o_dispose_input_buffer(&self->buf_sending);
-}
-
 static void do_close(h2o_generator_t *generator, h2o_req_t *req)
 {
     struct rp_generator_t *self = (void*)generator;
-    close_generator(self, 0);
+
+    if (self->client != NULL)
+        h2o_http1client_cancel(self->client);
 }
 
 static void swap_input_buffer(h2o_input_buffer_t **x, h2o_input_buffer_t **y)
@@ -138,7 +132,6 @@ static void do_send(struct rp_generator_t *self)
         h2o_buf_t buf = h2o_buf_init(self->buf_sending->bytes, self->buf_sending->size);
         h2o_send(self->src_req, &buf, 1, self->client == NULL);
     } else if (self->client == NULL) {
-        close_generator(self, 0);
         h2o_send(self->src_req, NULL, 0, 1);
     }
 }
@@ -170,20 +163,14 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     return 0;
 }
 
-/* the function may not be called once h2o_start_response is being called */
-static void close_and_send_error(struct rp_generator_t *self, int cancel_client, const char *errstr)
-{
-    close_generator(self, cancel_client);
-    h2o_send_error(self->src_req, 502, "Gateway Error", errstr);
-}
-
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_buf_t msg, struct phr_header *headers, size_t num_headers)
 {
     struct rp_generator_t *self = client->data;
     size_t i;
 
     if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
-        close_and_send_error(self, 0, errstr);
+        self->client = NULL;
+        h2o_send_error(self->src_req, 502, "Gateway Error", errstr);
         return NULL;
     }
 
@@ -197,7 +184,8 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
         } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
             if (self->src_req->res.content_length != SIZE_MAX
                 || (self->src_req->res.content_length = h2o_strtosize(headers[i].value, headers[i].value_len)) == SIZE_MAX) {
-                close_and_send_error(self, 0, "invalid response from upstream");
+                self->client = NULL;
+                h2o_send_error(self->src_req, 502, "Gateway Error", "invalid response from upstream");
                 return NULL;
             }
         } else {
@@ -215,7 +203,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     h2o_start_response(self->src_req, &self->super);
 
     if (errstr == h2o_http1client_error_is_eos) {
-        close_generator(self, 0);
+        self->client = NULL;
         h2o_send(self->src_req, NULL, 0, 1);
         return NULL;
     }
@@ -228,7 +216,7 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     struct rp_generator_t *self = client->data;
 
     if (errstr != NULL) {
-        close_generator(self, 0);
+        self->client = NULL;
         h2o_send_error(self->src_req, 502, "Gateway Error", errstr);
         return NULL;
     }
@@ -239,9 +227,18 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     return on_head;
 }
 
+static void on_generator_dispose(void *_self)
+{
+    struct rp_generator_t *self = _self;
+
+    assert(self->client == NULL);
+    h2o_dispose_input_buffer(&self->last_content_before_send);
+    h2o_dispose_input_buffer(&self->buf_sending);
+}
+
 static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_buf_t host, uint16_t port, size_t path_replace_length, h2o_buf_t path_prefix, int keepalive)
 {
-    struct rp_generator_t *self = h2o_mempool_alloc(&req->pool, sizeof(*self));
+    struct rp_generator_t *self = h2o_mempool_alloc_shared(&req->pool, sizeof(*self), on_generator_dispose);
 
     self->super.proceed = do_proceed;
     self->super.stop = do_close;
@@ -317,7 +314,7 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
     free(client_ctx);
 }
 
-static void on_dispose(h2o_handler_t *_self)
+static void on_handler_dispose(h2o_handler_t *_self)
 {
     struct rp_handler_t *self = (void*)_self;
 
@@ -334,7 +331,7 @@ void h2o_proxy_register_reverse_proxy(h2o_hostconf_t *host_config, const char *v
     struct rp_handler_t *self = (void*)h2o_create_handler(host_config, sizeof(*self));
     self->super.on_context_init = on_context_init;
     self->super.on_context_dispose = on_context_dispose;
-    self->super.dispose = on_dispose;
+    self->super.dispose = on_handler_dispose;
     self->super.on_req = on_req;
     self->virtual_path = h2o_strdup(NULL, virtual_path, SIZE_MAX);
     self->upstream.host = h2o_strdup(NULL, host, SIZE_MAX);
