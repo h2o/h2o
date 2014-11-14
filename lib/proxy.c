@@ -113,12 +113,6 @@ static void close_generator(struct rp_generator_t *self, int cancel_client)
     h2o_dispose_input_buffer(&self->buf_sending);
 }
 
-static void close_and_send_error(struct rp_generator_t *self, int cancel_client, const char *errstr)
-{
-    close_generator(self, cancel_client);
-    h2o_send_error(self->src_req, 502, "Gateway Error", errstr);
-}
-
 static void do_close(h2o_generator_t *generator, h2o_req_t *req)
 {
     struct rp_generator_t *self = (void*)generator;
@@ -178,6 +172,13 @@ static int on_body(h2o_http1client_t *client, const char *errstr, h2o_buf_t *buf
         do_send(self);
 
     return 0;
+}
+
+/* the function may not be called once h2o_start_response is being called */
+static void close_and_send_error(struct rp_generator_t *self, int cancel_client, const char *errstr)
+{
+    close_generator(self, cancel_client);
+    h2o_send_error(self->src_req, 502, "Gateway Error", errstr);
 }
 
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_buf_t msg, struct phr_header *headers, size_t num_headers)
