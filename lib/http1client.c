@@ -45,7 +45,7 @@ static void close_client(h2o_http1client_t *client)
 static void on_body_error(h2o_http1client_t *client, const char *errstr)
 {
     client->_can_keepalive = 0;
-    client->_cb.on_body(client, errstr, NULL, 0);
+    client->_cb.on_body(client, errstr);
     close_client(client);
 }
 
@@ -62,14 +62,13 @@ static void on_body_until_close(h2o_socket_t *sock, int status)
     h2o_timeout_unlink(&client->_timeout);
 
     if (status != 0) {
-        client->_cb.on_body(client, h2o_http1client_error_is_eos, NULL, 0);
+        client->_cb.on_body(client, h2o_http1client_error_is_eos);
         close_client(client);
         return;
     }
 
     if (client->sock->input->size != 0) {
-        h2o_buf_t buf = { client->sock->input->bytes, client->sock->input->size };
-        if (client->_cb.on_body(client, NULL, &buf, 1) != 0) {
+        if (client->_cb.on_body(client, NULL) != 0) {
             close_client(client);
             return;
         }
@@ -91,15 +90,11 @@ static void on_body_content_length(h2o_socket_t *sock, int status)
     }
 
     if (client->sock->input->size != 0) {
-        h2o_buf_t buf = {
-            client->sock->input->bytes,
-            client->sock->input->size < client->_body_bytesleft ? client->sock->input->size : client->_body_bytesleft
-        };
         const char *errstr;
         int ret;
         client->_body_bytesleft -= client->sock->input->size;
         errstr = client->_body_bytesleft == 0 ? h2o_http1client_error_is_eos : NULL;
-        ret = client->_cb.on_body(client, errstr, &buf, 1);
+        ret = client->_cb.on_body(client, errstr);
         if (errstr == h2o_http1client_error_is_eos) {
             close_client(client);
             return;
@@ -108,7 +103,6 @@ static void on_body_content_length(h2o_socket_t *sock, int status)
             close_client(client);
             return;
         }
-        h2o_consume_input_buffer(&client->sock->input, buf.len);
     }
 
     h2o_timeout_link(client->ctx->loop, client->ctx->io_timeout, &client->_timeout);

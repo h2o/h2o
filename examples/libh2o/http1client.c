@@ -74,18 +74,16 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     client->data = req;
 }
 
-static int on_body(h2o_http1client_t *client, const char *errstr, h2o_buf_t *bufs, size_t bufcnt)
+static int on_body(h2o_http1client_t *client, const char *errstr)
 {
-    size_t i;
-
     if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
         fprintf(stderr, "%s\n", errstr);
         exit(1);
         return -1;
     }
 
-    for (i = 0; i != bufcnt; ++i)
-        fwrite(bufs[i].base, 1, bufs[i].len, stdout);
+    fwrite(client->sock->input->bytes, 1, client->sock->input->size, stdout);
+    h2o_consume_input_buffer(&client->sock->input, client->sock->input->size);
 
     if (errstr == h2o_http1client_error_is_eos) {
         if (--cnt_left != 0) {
