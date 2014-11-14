@@ -18,12 +18,15 @@ my %files = map { do {
     +($_ => { size => (stat $fn)[7], md5 => md5_file($fn) });
 } } qw(index.txt halfdome.jpg);
 
-for my $i (0..3) {
+for my $i (0..7) {
     my $h2o_keepalive = $i & 1 ? 1 : 0;
     my $starlet_keepalive = $i & 2 ? 1 : 0;
+    my $starlet_force_chunked = $i & 4 ? 1 : 0;
 
-    subtest "e2e (h2o:$h2o_keepalive, starlet: $starlet_keepalive)" => sub {
+    subtest "e2e (h2o:$h2o_keepalive, starlet: $starlet_keepalive, starlet-chunked: $starlet_force_chunked)" => sub {
         ok ! check_port($upstream_port), "upstream should be down now";
+
+        local $ENV{FORCE_CHUNKED} = $starlet_force_chunked;
         my $guard = spawn_upstream($starlet_keepalive ? +("--max-keepalie-reqs=100") : ());
 
         run_tests_with_conf(<< "EOT");
