@@ -30,7 +30,7 @@
 
 typedef struct st_h2o_http1client_t h2o_http1client_t;
 
-typedef int (*h2o_http1client_body_cb)(h2o_http1client_t *client, const char *errstr, h2o_buf_t *bufs, size_t bufcnt);
+typedef int (*h2o_http1client_body_cb)(h2o_http1client_t *client, const char *errstr);
 typedef h2o_http1client_body_cb (*h2o_http1client_head_cb)(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_buf_t msg, struct phr_header *headers, size_t num_headers);
 typedef h2o_http1client_head_cb (*h2o_http1client_connect_cb)(h2o_http1client_t *client, const char *errstr, h2o_buf_t **reqbufs, size_t *reqbufcnt, int *method_is_head);
 
