@@ -668,7 +668,7 @@ void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_ht
 
     request_gathered_write(conn);
 
-    if (h2o_http2_stream_has_pending_data(stream)) {
+    if (h2o_http2_stream_has_pending_data(stream) || stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
         if (h2o_http2_window_get_window(&stream->output_window) > 0) {
             slot = &stream->_link.slot->active_streams;
         } else {
@@ -741,7 +741,7 @@ void emit_writereq(h2o_timeout_entry_t *entry)
             h2o_http2_stream_priolist_slot_t *slot = conn->_write.streams_with_pending_data.list.entries[slot_index];
             while (! h2o_linklist_is_empty(&slot->active_streams)) {
                 h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link, slot->active_streams.next);
-                assert(h2o_http2_stream_has_pending_data(stream));
+                assert(h2o_http2_stream_has_pending_data(stream) || stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM);
                 h2o_http2_stream_send_pending_data(conn, stream);
                 if (h2o_http2_stream_has_pending_data(stream)) {
                     if (h2o_http2_window_get_window(&stream->output_window) <= 0) {
