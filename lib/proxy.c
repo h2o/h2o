@@ -34,7 +34,7 @@ struct rp_generator_t {
         h2o_buf_t bufs[2]; /* first buf is the request line and headers, the second is the POST content */
         int is_head;
     } up_req;
-    h2o_input_buffer_t *buf_before_send;
+    h2o_input_buffer_t *last_content_before_send;
     h2o_input_buffer_t *buf_sending;
 };
 
@@ -109,7 +109,7 @@ static void close_generator(struct rp_generator_t *self, int cancel_client)
 {
     if (cancel_client && self->client != NULL)
         h2o_http1client_cancel(self->client);
-    h2o_dispose_input_buffer(&self->buf_before_send);
+    h2o_dispose_input_buffer(&self->last_content_before_send);
     h2o_dispose_input_buffer(&self->buf_sending);
 }
 
@@ -119,18 +119,23 @@ static void do_close(h2o_generator_t *generator, h2o_req_t *req)
     close_generator(self, 0);
 }
 
+static void swap_input_buffer(h2o_input_buffer_t **x, h2o_input_buffer_t **y)
+{
+    h2o_input_buffer_t *t = *x;
+    *x = *y;
+    *y = t;
+}
+
 static void do_send(struct rp_generator_t *self)
 {
     assert(self->buf_sending->size == 0);
 
-    if (self->buf_before_send->size != 0) {
-        h2o_buf_t buf;
-        /* swap buf_before_send and buf_sending */
-        h2o_input_buffer_t *tmp = self->buf_before_send;
-        self->buf_before_send = self->buf_sending;
-        self->buf_sending = tmp;
-        /* call h2o_send */
-        buf = h2o_buf_init(self->buf_sending->bytes, self->buf_sending->size);
+    swap_input_buffer(
+        &self->buf_sending,
+        self->client != NULL ? &self->client->sock->input : &self->last_content_before_send);
+
+    if (self->buf_sending->size != 0) {
+        h2o_buf_t buf = h2o_buf_init(self->buf_sending->bytes, self->buf_sending->size);
         h2o_send(self->src_req, &buf, 1, self->client == NULL);
     } else if (self->client == NULL) {
         close_generator(self, 0);
@@ -147,27 +152,18 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
     do_send(self);
 }
 
-static int on_body(h2o_http1client_t *client, const char *errstr, h2o_buf_t *bufs, size_t bufcnt)
+static int on_body(h2o_http1client_t *client, const char *errstr)
 {
     struct rp_generator_t *self = client->data;
 
     /* FIXME should there be a way to notify error downstream? */
 
-    { /* copy data into content_buf (FIXME optimize, this could be a zero-copy, direct access to sock->input) */
-        h2o_buf_t content_buf;
-        size_t i, len = 0;
-        for (i = 0; i != bufcnt; ++i)
-            len += bufs[i].len;
-        content_buf = h2o_reserve_input_buffer(&self->buf_before_send, len);
-        self->buf_before_send->size += len;
-        for (i = 0; i != bufcnt; ++i) {
-            memcpy(content_buf.base, bufs[i].base, bufs[i].len);
-            content_buf.base += bufs[i].len;
-        }
-    }
-
-    if (errstr != NULL)
+    if (errstr != NULL) {
+        /* detach the content */
+        self->last_content_before_send = self->client->sock->input;
+        h2o_init_input_buffer(&self->client->sock->input);
         self->client = NULL;
+    }
     if (self->buf_sending->size == 0)
         do_send(self);
 
@@ -253,7 +249,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_buf_t host,
     self->up_req.bufs[0] = build_request(req, host, port, path_replace_length, path_prefix, keepalive);
     self->up_req.bufs[1] = req->entity;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
-    h2o_init_input_buffer(&self->buf_before_send);
+    h2o_init_input_buffer(&self->last_content_before_send);
     h2o_init_input_buffer(&self->buf_sending);
 
     return self;
