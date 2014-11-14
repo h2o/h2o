@@ -76,11 +76,23 @@ int match_case_small_str(const char *text, const char *key, size_t keyLen)
 	if (keyLen <= 16) {
 		__m128i t = toLowerSSE(text);
 		__m128i k = _mm_loadu_si128((const __m128i*)key);
+#if 1
+		return !_mm_cmpestrc(t, keyLen, k, keyLen, 8 + 16);
+#else
 		t = _mm_cmpeq_epi8(t, k);
 		uint32_t m = _mm_movemask_epi8(t);
 		uint32_t mask = (1 << keyLen) - 1;
 		return (m & mask) == mask;
+#endif
 	}
+#if 1
+	__m128i t1 = toLowerSSE(text);
+	__m128i k1 = _mm_loadu_si128((const __m128i*)key);
+	if (!_mm_testc_si128(t1, k1)) return 0;
+	__m128i t2 = toLowerSSE(text + 16);
+	__m128i k2 = _mm_loadu_si128((const __m128i*)(key + 16));
+	return !_mm_cmpestrc(t2, keyLen - 16, k2, keyLen - 16, 8 + 16);
+#else
 	__m128i t1 = toLowerSSE(text);
 	__m128i t2 = toLowerSSE(text + 16);
 	__m128i k1 = _mm_loadu_si128((const __m128i*)key);
@@ -92,6 +104,7 @@ int match_case_small_str(const char *text, const char *key, size_t keyLen)
 	m1 |= m2 << 16;
 	uint64_t mask =((uint64_t)1 << keyLen) - 1;
 	return (m1 & mask) == mask;
+#endif
 #endif
 }
 
