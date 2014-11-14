@@ -18,9 +18,9 @@ my %files = map { do {
     +($_ => { size => (stat $fn)[7], md5 => md5_file($fn) });
 } } qw(index.txt halfdome.jpg);
 
-for my $i (0..4) {
-    my $h2o_keepalive = $i % 1 + 0;
-    my $starlet_keepalive = $i % 2 + 0;
+for my $i (0..3) {
+    my $h2o_keepalive = $i & 1 ? 1 : 0;
+    my $starlet_keepalive = $i & 2 ? 1 : 0;
 
     subtest "e2e (h2o:$h2o_keepalive, starlet: $starlet_keepalive)" => sub {
         ok ! check_port($upstream_port), "upstream should be down now";
