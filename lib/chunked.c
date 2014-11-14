@@ -64,8 +64,8 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
 {
     chunked_encoder_t *encoder;
 
-    /* do nothing if HTTP/1.0 or content-length is known */
-    if (req->res.content_length != SIZE_MAX || req->version == 0x100)
+    /* do nothing if not HTTP/1.1 or content-length is known */
+    if (req->res.content_length != SIZE_MAX || req->version != 0x101)
         goto Next;
     /* RFC 2616 4.4 states that the following status codes (and response to a HEAD method) should not include message body */
     if ((100 <= req->res.status && req->res.status <= 199) || req->res.status == 204 || req->res.status == 304)
