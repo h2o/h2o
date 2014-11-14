@@ -212,6 +212,7 @@ Complete:
 static void read_on_ready(struct st_h2o_evloop_socket_t *sock)
 {
     int status = 0;
+    size_t prev_bytes_read = sock->super.input->size;
 
     if ((sock->_flags & H2O_SOCKET_FLAG_IS_ACCEPT) != 0)
         goto Notify;
@@ -227,6 +228,7 @@ Notify:
      * behavior is intentional; it is designed as such so that the applications
      * can update their timeout counters when a partial SSL record arrives.
      */
+    sock->super.bytes_read = sock->super.input->size - prev_bytes_read;
     sock->super._cb.read(&sock->super, status);
 }
 
