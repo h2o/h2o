@@ -218,7 +218,6 @@ static void on_head(h2o_socket_t *sock, int status)
                 /* precond: _body_decoder.chunked is zero-filled */
                 client->_body_decoder.chunked.decoder.consume_trailer = 1;
                 reader = on_body_chunked;
-                break;
             } else if (h2o_memis(headers[i].value, headers[i].value_len, H2O_STRLIT("identity"))) {
                 /* continue */
             } else {
@@ -230,7 +229,8 @@ static void on_head(h2o_socket_t *sock, int status)
                 on_error_before_head(client, "invalid content-length");
                 return;
             }
-            reader = on_body_content_length;
+            if (reader != on_body_chunked)
+                reader = on_body_content_length;
         }
     }
     /* close the connection if impossible to determine the end of the response (RFC 7230 3.3.3) */
