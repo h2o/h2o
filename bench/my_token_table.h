@@ -97,7 +97,7 @@ int match_case_small_str(const char *text, const char *key, size_t keyLen)
 
 inline uint32_t hash(const char *name, size_t len)
 {
-#if 1
+#if 0
 	uint32_t buf[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	char *p = (char *)buf;
 	int i;
