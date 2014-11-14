@@ -102,6 +102,7 @@ static void on_body_content_length(h2o_socket_t *sock, int status)
             errstr = h2o_http1client_error_is_eos;
         } else {
             client->_body_bytesleft -= client->sock->input->size;
+            errstr = NULL;
         }
         ret = client->_cb.on_body(client, errstr);
         if (errstr == h2o_http1client_error_is_eos) {

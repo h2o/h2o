@@ -179,23 +179,24 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     self->src_req->res.reason = h2o_strdup(&self->src_req->pool, msg.base, msg.len).base;
     for (i = 0; i != num_headers; ++i) {
         const h2o_token_t *token = h2o_lookup_token(headers[i].name, headers[i].name_len);
-        if (token->is_connection_specific) {
-            /* skip */
-        } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
-            if (self->src_req->res.content_length != SIZE_MAX
-                || (self->src_req->res.content_length = h2o_strtosize(headers[i].value, headers[i].value_len)) == SIZE_MAX) {
-                self->client = NULL;
-                h2o_send_error(self->src_req, 502, "Gateway Error", "invalid response from upstream");
-                return NULL;
+        if (token != NULL) {
+            if (token->is_connection_specific) {
+                /* skip */
+            } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
+                if (self->src_req->res.content_length != SIZE_MAX
+                    || (self->src_req->res.content_length = h2o_strtosize(headers[i].value, headers[i].value_len)) == SIZE_MAX) {
+                    self->client = NULL;
+                    h2o_send_error(self->src_req, 502, "Gateway Error", "invalid response from upstream");
+                    return NULL;
+                }
+            } else {
+                h2o_buf_t value = h2o_strdup(&self->src_req->pool, headers[i].value, headers[i].value_len);
+                h2o_add_header(&self->src_req->pool, &self->src_req->res.headers, token, value.base, value.len);
             }
         } else {
+            h2o_buf_t name = h2o_strdup(&self->src_req->pool, headers[i].name, headers[i].name_len);
             h2o_buf_t value = h2o_strdup(&self->src_req->pool, headers[i].value, headers[i].value_len);
-            if (token != NULL) {
-                h2o_add_header(&self->src_req->pool, &self->src_req->res.headers, token, value.base, value.len);
-            } else {
-                h2o_buf_t name = h2o_strdup(&self->src_req->pool, headers[i].name, headers[i].name_len);
-                h2o_add_header_by_str(&self->src_req->pool, &self->src_req->res.headers, name.base, name.len, 0, value.base, value.len);
-            }
+            h2o_add_header_by_str(&self->src_req->pool, &self->src_req->res.headers, name.base, name.len, 0, value.base, value.len);
         }
     }
 
