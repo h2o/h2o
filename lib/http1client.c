@@ -92,8 +92,17 @@ static void on_body_content_length(h2o_socket_t *sock, int status)
     if (client->sock->input->size != 0) {
         const char *errstr;
         int ret;
-        client->_body_bytesleft -= client->sock->input->size;
-        errstr = client->_body_bytesleft == 0 ? h2o_http1client_error_is_eos : NULL;
+        if (client->_body_bytesleft <= client->sock->input->size) {
+            if (client->_body_bytesleft < client->sock->input->size) {
+                /* remove the trailing garbage from buf, and disable keepalive */
+                client->sock->input->size = client->_body_bytesleft;
+                client->_can_keepalive = 0;
+            }
+            client->_body_bytesleft = 0;
+            errstr = h2o_http1client_error_is_eos;
+        } else {
+            client->_body_bytesleft -= client->sock->input->size;
+        }
         ret = client->_cb.on_body(client, errstr);
         if (errstr == h2o_http1client_error_is_eos) {
             close_client(client);
