@@ -18,32 +18,25 @@ my %files = map { do {
     +($_ => { size => (stat $fn)[7], md5 => md5_file($fn) });
 } } qw(index.txt halfdome.jpg);
 
-{ # h2o: no-keepalive, starlet: no-keepalive
-    my $guard = spawn_upstream();
-    run_tests_with_conf('without keepalive', << "EOT");
+for my $i (0..4) {
+    my $h2o_keepalive = $i % 1 + 0;
+    my $starlet_keepalive = $i % 2 + 0;
+
+    subtest "e2e (h2o:$h2o_keepalive, starlet: $starlet_keepalive)" => sub {
+        ok ! check_port($upstream_port), "upstream should be down now";
+        my $guard = spawn_upstream($starlet_keepalive ? +("--max-keepalie-reqs=100") : ());
+
+        run_tests_with_conf(<< "EOT");
 hosts:
   default:
     paths:
       /:
         proxy.reverse.url: http://127.0.0.1:$upstream_port
+        proxy.keepalive: @{[ $h2o_keepalive ? "ON" : "OFF" ]}
 EOT
+    };
+    ok ! check_port($upstream_port), "upstream should be down now";
 }
-
-ok ! check_port($upstream_port), "upstream should be down now";
-
-{ #h2o: keepalive, starlet: keepalive
-    my $guard = spawn_upstream("--max-keepalive-reqs=100");
-    run_tests_with_conf('with keepalive', << "EOT");
-hosts:
-  default:
-    paths:
-      /:
-        proxy.reverse.url: http://127.0.0.1:$upstream_port
-        proxy.keepalive: ON
-EOT
-}
-
-ok ! check_port($upstream_port), "upstream should be down now";
 
 # should return 502 in case of upstream error
 subtest 'upstream-down' => sub {
@@ -76,55 +69,53 @@ sub spawn_upstream {
 }
 
 sub run_tests_with_conf {
-    my ($name, $h2o_conf, @upstream_opts) = @_;
-    subtest $name => sub {
-        my $server = spawn_h2o($h2o_conf);
-        my $port = $server->{port};
-        my $tls_port = $server->{tls_port};
+    my $h2o_conf = shift;
+    my $server = spawn_h2o($h2o_conf);
+    my $port = $server->{port};
+    my $tls_port = $server->{tls_port};
 
-        subtest 'curl' => sub {
-            plan skip_all => 'curl not found'
-                unless prog_exists('curl');
-            my $doit = sub {
-                my ($proto, $port) = @_;
-                for my $file (sort keys %files) {
-                    my $content = `curl --silent --show-error --insecure $proto://127.0.0.1:$port/$file`;
-                    is length($content), $files{$file}->{size}, "$proto://127.0.0.1/$file (size)";
-                    is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/$file (md5)";
-                }
-                my $content = `curl --silent --show-error --insecure -d 'hello world' $proto://127.0.0.1:$port/echo`;
-                is $content, 'hello world', "$proto://127.0.0.1/echo (POST)";
-                $content = `curl --silent --show-error --insecure --header 'Transfer-Encoding: chunked' -d 'hello world' $proto://127.0.0.1:$port/echo`;
-                is $content, 'hello world', "$proto://127.0.0.1/echo (POST, chunked)";
-            };
-            $doit->('http', $port);
-            $doit->('https', $tls_port);
+    subtest 'curl' => sub {
+        plan skip_all => 'curl not found'
+            unless prog_exists('curl');
+        my $doit = sub {
+            my ($proto, $port) = @_;
+            for my $file (sort keys %files) {
+                my $content = `curl --silent --show-error --insecure $proto://127.0.0.1:$port/$file`;
+                is length($content), $files{$file}->{size}, "$proto://127.0.0.1/$file (size)";
+                is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/$file (md5)";
+            }
+            my $content = `curl --silent --show-error --insecure -d 'hello world' $proto://127.0.0.1:$port/echo`;
+            is $content, 'hello world', "$proto://127.0.0.1/echo (POST)";
+            $content = `curl --silent --show-error --insecure --header 'Transfer-Encoding: chunked' -d 'hello world' $proto://127.0.0.1:$port/echo`;
+            is $content, 'hello world', "$proto://127.0.0.1/echo (POST, chunked)";
         };
+        $doit->('http', $port);
+        $doit->('https', $tls_port);
+    };
 
-        subtest 'nghttp' => sub {
-            plan skip_all => 'nghttp not found'
-                unless prog_exists('nghttp');
-            my $doit = sub {
-                my ($proto, $port) = @_;
-                my $opt = $proto eq 'http' ? '-u' : '';
-                for my $file (sort keys %files) {
-                    my $content = `nghttp $opt $proto://127.0.0.1:$port/$file`;
-                    is length($content), $files{$file}->{size}, "$proto://127.0.0.1/$file (size)";
-                    is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/$file (md5)";
-                }
-                my $out = `nghttp $opt -H':method: POST' -d t/50end-to-end/reverse-proxy/hello.txt $proto://127.0.0.1:$port/echo`;
-                is $out, "hello\n", "$proto://127.0.0.1/echo (POST)";
-                $out = `nghttp $opt -m 10 $proto://127.0.0.1:$port/index.txt`;
-                is $out, "hello\n" x 10, "$proto://127.0.0.1/index.txt x 10 times";
-            };
-            subtest 'http' => sub {
-                $doit->('http', $port);
-            };
-            subtest 'https' => sub {
-                plan skip_all => 'OpenSSL does not support protocol negotiation; it is too old'
-                    unless openssl_can_negotiate();
-                $doit->('https', $tls_port);
-            };
+    subtest 'nghttp' => sub {
+        plan skip_all => 'nghttp not found'
+            unless prog_exists('nghttp');
+        my $doit = sub {
+            my ($proto, $port) = @_;
+            my $opt = $proto eq 'http' ? '-u' : '';
+            for my $file (sort keys %files) {
+                my $content = `nghttp $opt $proto://127.0.0.1:$port/$file`;
+                is length($content), $files{$file}->{size}, "$proto://127.0.0.1/$file (size)";
+                is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/$file (md5)";
+            }
+            my $out = `nghttp $opt -H':method: POST' -d t/50end-to-end/reverse-proxy/hello.txt $proto://127.0.0.1:$port/echo`;
+            is $out, "hello\n", "$proto://127.0.0.1/echo (POST)";
+            $out = `nghttp $opt -m 10 $proto://127.0.0.1:$port/index.txt`;
+            is $out, "hello\n" x 10, "$proto://127.0.0.1/index.txt x 10 times";
+        };
+        subtest 'http' => sub {
+            $doit->('http', $port);
+        };
+        subtest 'https' => sub {
+            plan skip_all => 'OpenSSL does not support protocol negotiation; it is too old'
+                unless openssl_can_negotiate();
+            $doit->('https', $tls_port);
         };
     };
 }
