@@ -54,11 +54,11 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, 
     if (is_final) {
         outbufs[outbufcnt].base = "\r\n0\r\n\r\n";
         outbufs[outbufcnt].len = 7;
-        outbufcnt++;
     } else {
         outbufs[outbufcnt].base = "\r\n";
         outbufs[outbufcnt].len = 2;
     }
+    outbufcnt++;
 
     h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, is_final);
 }
