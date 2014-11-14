@@ -95,50 +95,92 @@ int match_case_small_str(const char *text, const char *key, size_t keyLen)
 #endif
 }
 
-inline uint32_t hash(const char *p, size_t n)
+inline uint32_t hash(const char *name, size_t len)
 {
-	uint64_t buf[4] = {};
-	char *q = (char *)buf;
-	for (size_t i = 0; i < n; i++) {
-		q[i] = p[i];
-	}
-	*((__m128i*)&buf[0]) = toLowerSSE((const char*)&buf[0]);
-	*((__m128i*)&buf[2]) = toLowerSSE((const char*)&buf[2]);
-	uint64_t v = 0;
-	for (size_t i = 0; i < 4; i++) {
+#if 1
+	uint32_t buf[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	char *p = (char *)buf;
+	int i;
+	for (i = 0; i < len; i++) p[i] = h2o_tolower(name[i]);
+	uint32_t v = 0;
+	for (i = 0; i < 8; i++) {
 		v += buf[i];
 	}
-	v ^= v >> 33;
-	return v % 211;
+#else
+	uint64_t mask[8] = { uint64_t(-1), uint64_t(-1), uint64_t(-1), uint64_t(-1) };
+	__m128i maskL, maskH;
+	maskL = _mm_loadu_si128((const __m128i*)((const char*)mask + 32 - len));
+	maskH = _mm_loadu_si128((const __m128i*)((const char*)mask + 48 - len));
+	__m128i L = toLowerSSE(name);
+	__m128i H = toLowerSSE(name + 16);
+	L = _mm_and_si128(L, maskL);
+	H = _mm_and_si128(H, maskH);
+
+	__m128i t = _mm_add_epi32(L, H);
+	t = _mm_hadd_epi32(t, t);
+	t = _mm_hadd_epi32(t, t);
+	uint32_t v = _mm_cvtsi128_si32(t);
+#endif
+
+	v ^= v >> 23;
+	return v % 255;
 }
 
 const h2o_token_t *my_h2o_lookup_token(const char *name, size_t len)
 {
 	if (len > 27) return NULL;
 	const int8_t hashTbl[] = {
-17, -1, 36, 47, 48, 9, -1, 13, -1, -1,
--1, -1, -1, -1, 26, -1, -1, -1, -1, -1,
--1, -1, -1, 10, -1, -1, -1, -1, 28, -1,
--1, -1, 21, 31, -1, -1, 2, -1, -1, -1,
--1, -1, 40, -1, -1, -1, -1, 49, -1, 14,
--1, -1, -1, -1, -1, -1, -1, 46, -1, -1,
--1, -1, -1, 43, -1, -1, -1, -1, 35, 41,
--1, -1, -1, -1, -1, 33, -1, 51, 19, 5,
-23, -1, 0, -1, -1, -1, -1, -1, -1, -1,
--1, -1, -1, -1, -1, -1, -1, -1, 8, 44,
--1, -1, -1, -1, 6, -1, -1, 24, 12, -1,
+-1, -1, -1, -1, -1, -1, -1, -1, -1, 45,
+-1, -1, 28, -1, -1, -1, -1, -1, -1, -1,
+-1, -1, -1, -1, -1, -1, -1, -1, -1, 30,
+-1, -1, -1, -1, -1, -1, -1, -1, -1, 21,
+-1, 20, -1, -1, -1, -1, 11, 27, -1, 13,
+-1, -1, -1, -1, -1, 7, 43, -1, 32, -1,
+18, -1, -1, -1, 10, 53, -1, 17, -1, -1,
+-1, 50, -1, -1, -1, -1, 44, -1, 12, -1,
+42, -1, -1, -1, -1, -1, -1, -1, 9, -1,
+-1, -1, -1, -1, 41, 54, 3, -1, -1, -1,
+-1, -1, 1, -1, -1, -1, -1, -1, 40, -1,
+-1, 8, -1, -1, -1, -1, -1, 48, -1, -1,
 -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
--1, -1, -1, -1, -1, -1, 30, -1, -1, 38,
--1, 15, -1, -1, -1, -1, -1, -1, 3, -1,
--1, -1, -1, -1, -1, -1, 32, 45, 54, -1,
-27, -1, -1, -1, -1, -1, 11, -1, -1, -1,
--1, -1, -1, -1, 34, -1, -1, -1, -1, -1,
-55, -1, -1, 7, 20, -1, 22, 52, -1, -1,
--1, -1, -1, -1, -1, 53, -1, -1, -1, -1,
-37, -1, 42, -1, -1, 18, -1, 1, 39, 16,
-50, -1, -1, 25, -1, -1, -1, -1, 4, -1,
-29
+-1, -1, 49, -1, -1, -1, -1, -1, -1, -1,
+-1, -1, -1, -1, 2, 33, -1, -1, 15, 35,
+-1, -1, -1, -1, -1, -1, -1, -1, -1, 4,
+-1, -1, -1, 31, -1, -1, -1, 34, -1, -1,
+-1, -1, -1, 51, 39, 14, -1, -1, -1, -1,
+-1, -1, -1, -1, -1, -1, -1, 5, -1, -1,
+-1, 0, 19, -1, -1, -1, 26, -1, 47, -1,
+-1, 23, -1, -1, -1, -1, -1, -1, -1, 52,
+-1, 6, -1, -1, -1, 29, -1, 36, -1, -1,
+-1, -1, -1, -1, -1, 55, -1, 22, -1, -1,
+-1, -1, 25, 24, 16, -1, -1, -1, -1, -1,
+-1, -1, -1, -1, 46, -1, -1, -1, -1, -1,
+-1, 38, -1, 37, -1,
 };
+#ifdef __AVX2__
+	uint64_t maskTbl[8] = { uint64_t(-1), uint64_t(-1), uint64_t(-1), uint64_t(-1) };
+
+	__m256i mask = _mm256_loadu_si256((const __m256i*)((const char*)maskTbl + 32 - len));
+	__m256i x = toLowerAVX(name);
+	x = _mm256_and_si256(x, mask);
+	__m128i t = _mm_add_epi32(_mm256_castsi256_si128(x), _mm256_extracti128_si256(x, 1));
+	t = _mm_hadd_epi32(t, t);
+	t = _mm_hadd_epi32(t, t);
+	uint32_t h = _mm_cvtsi128_si32(t);
+
+	h ^= h >> 23;
+	h %= 255;
+	int8_t pos = hashTbl[h];
+	if (pos < 0) return NULL;
+	const st_h2o_buf_t *p = &h2o__tokens[pos].buf;
+	if (len != p->len) return NULL;
+
+	__m256i k = _mm256_loadu_si256((const __m256i*)p->base);
+	k = _mm256_and_si256(k, mask);
+	if (!_mm256_testc_si256(x, k)) return NULL;
+
+	return h2o__tokens + pos;
+#else
 	uint32_t h = hash(name, len);
 	int8_t pos = hashTbl[h];
 	if (pos < 0) return NULL;
@@ -146,5 +188,6 @@ const h2o_token_t *my_h2o_lookup_token(const char *name, size_t len)
 	if (len != p->len) return NULL;
 	if (!match_case_small_str(name, p->base, len)) return NULL;
 	return h2o__tokens + pos;
+#endif
 }
 
