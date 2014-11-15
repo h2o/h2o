@@ -294,6 +294,7 @@ static void on_send_timeout(h2o_timeout_entry_t *entry)
 
 static void on_connect_error(h2o_http1client_t *client, const char *errstr)
 {
+    assert(errstr != NULL);
     client->_cb.on_connect(client, errstr, NULL, NULL, NULL);
     close_client(client);
 }
@@ -339,7 +340,7 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data)
 static void on_connect_timeout(h2o_timeout_entry_t *entry)
 {
     h2o_http1client_t *client = H2O_STRUCT_FROM_MEMBER(h2o_http1client_t, _timeout, entry);
-    on_connect_error(client, client->_errstr);
+    on_connect_error(client, client->_errstr != NULL ? client->_errstr : "connection timeout");
 }
 
 static h2o_http1client_t *create_client(h2o_http1client_ctx_t *ctx, h2o_mempool_t *pool, h2o_http1client_connect_cb cb)
