@@ -27,7 +27,7 @@ for my $i (0..7) {
         ok ! check_port($upstream_port), "upstream should be down now";
 
         local $ENV{FORCE_CHUNKED} = $starlet_force_chunked;
-        my $guard = spawn_upstream($starlet_keepalive ? +("--max-keepalie-reqs=100") : ());
+        my $guard = spawn_upstream($starlet_keepalive ? +("--max-keepalive-reqs=100") : ());
 
         run_tests_with_conf(<< "EOT");
 hosts:
