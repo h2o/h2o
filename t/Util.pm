@@ -18,17 +18,36 @@ sub spawn_server {
     die "fork failed:$!"
         unless defined $pid;
     if ($pid != 0) {
+        print STDERR "spawning $args{argv}->[0]... ";
         if ($args{is_ready}) {
-            while (! $args{is_ready}->()) {
+            while (1) {
+                if ($args{is_ready}->()) {
+                    print STDERR "done\n";
+                    last;
+                }
+                if (waitpid($pid, WNOHANG) == $pid) {
+                    die "server failed to start (got $?)\n";
+                }
                 sleep 1;
-                die "server died"
-                    if waitpid($pid, WNOHANG) == $pid;
             }
         }
         return scope_guard(sub {
+            print STDERR "killing $args{argv}->[0]... ";
             if (kill 'TERM', $pid) {
-                while (waitpid($pid, 0) != $pid) {
+                my $i = 0;
+                while (1) {
+                    if (waitpid($pid, WNOHANG) == $pid) {
+                        print STDERR "killed\n";
+                        last;
+                    }
+                    if ($i++ == 10) {
+                        print STDERR "failed to kill the process, continuing anyways\n";
+                        last;
+                    }
+                    sleep 1;
                 }
+            } else {
+                print STDERR "no proc? ($!)\n";
             }
         });
     }
