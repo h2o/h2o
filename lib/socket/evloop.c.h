@@ -66,7 +66,6 @@ static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock);
 static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock);
 static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
 
-#define H2O_USE_SELECT 1
 #if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_KQUEUE
 /* explicitly specified */
 #else
