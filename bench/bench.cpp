@@ -88,7 +88,7 @@ private:
 
 void bench(const char *msg, const StrVec& sv, const h2o_token_t* f(const char*, size_t))
 {
-	const int N = 1000000;
+	const int N = 10000000;
 	Clock clk;
 	uint64_t sum = 0;
 	for (int i = 0; i < N; i++) {
@@ -107,7 +107,6 @@ void test(const StrVec& sv)
 		const h2o_token_t *q = my_h2o_lookup_token(s.c_str(), s.size());
 		if (p != q) {
 			printf("ERR s=%s, org=%p, my=%p\n", s.c_str(), p, q);
-			printf("hash=%d\n", hash(s.c_str(), s.size()));
 			if (p) printf("org=%s\n", p->buf.base);
 			if (q) printf("my =%s\n", q->buf.base);
 			exit(1);
