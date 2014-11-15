@@ -32,6 +32,8 @@ int h2o__lcstris_core(const char *target, const char *test, size_t test_len)
 }
 
 #include "../lib/token_table.h"
+
+#define BENCHMARK_MODE
 #include "my_token_table.h"
 
 typedef std::unordered_set<std::string> StrSet;

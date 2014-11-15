@@ -10,7 +10,7 @@ FIND_PACKAGE(LibUV)
 FIND_PACKAGE(LibYAML)
 FIND_PACKAGE(Wslay)
 
-SET(CMAKE_C_FLAGS "-O2 -g -Wall -Wno-unused-function ${CMAKE_C_FLAGS}")
+SET(CMAKE_C_FLAGS "-O2 -g -Wall -Wno-unused-function -march=native ${CMAKE_C_FLAGS}")
 
 INCLUDE_DIRECTORIES(
     include
