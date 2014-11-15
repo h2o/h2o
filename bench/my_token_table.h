@@ -20,13 +20,15 @@
 
 inline __m128i toLowerSSE(const char *p)
 {
-	uint64_t factor = 0x0101010101010101ull;
-	uint64_t Am1 = ('A' - 1) * factor;
-	uint64_t Zp1 = ('Z' + 1) * factor;
-	uint64_t amA = ('a' - 'A') * factor;
-	MIE_ALIGN(16) uint64_t Am1Tbl[2] = { Am1, Am1 };
-	MIE_ALIGN(16) uint64_t Zp1Tbl[2] = { Zp1, Zp1 };
-	MIE_ALIGN(16) uint64_t amATbl[2] = { amA, amA };
+	enum {
+		factor = 0x0101010101010101ull,
+		Am1 = ('A' - 1) * factor,
+		Zp1 = ('Z' + 1) * factor,
+		amA = ('a' - 'A') * factor
+	};
+	static const MIE_ALIGN(16) uint64_t Am1Tbl[2] = { Am1, Am1 };
+	static const MIE_ALIGN(16) uint64_t Zp1Tbl[2] = { Zp1, Zp1 };
+	static const MIE_ALIGN(16) uint64_t amATbl[2] = { amA, amA };
 	__m128i x, t0, t1;
 	x = _mm_loadu_si128((const __m128i*)p);
 	t0 = _mm_cmpgt_epi8(x, *(const __m128i*)Am1Tbl);
@@ -39,13 +41,15 @@ inline __m128i toLowerSSE(const char *p)
 #ifdef __AVX2__
 inline __m256i toLowerAVX(const char *p)
 {
-	uint64_t factor = 0x0101010101010101ull;
-	uint64_t Am1 = ('A' - 1) * factor;
-	uint64_t Zp1 = ('Z' + 1) * factor;
-	uint64_t amA = ('a' - 'A') * factor;
-	MIE_ALIGN(16) uint64_t Am1Tbl[4] = { Am1, Am1, Am1, Am1 };
-	MIE_ALIGN(16) uint64_t Zp1Tbl[4] = { Zp1, Zp1, Zp1, Zp1 };
-	MIE_ALIGN(16) uint64_t amATbl[4] = { amA, amA, amA, amA };
+	enum {
+		factor = 0x0101010101010101ull,
+		Am1 = ('A' - 1) * factor,
+		Zp1 = ('Z' + 1) * factor,
+		amA = ('a' - 'A') * factor
+	};
+	static const MIE_ALIGN(16) uint64_t Am1Tbl[4] = { Am1, Am1, Am1, Am1 };
+	static const MIE_ALIGN(16) uint64_t Zp1Tbl[4] = { Zp1, Zp1, Zp1, Zp1 };
+	static const MIE_ALIGN(16) uint64_t amATbl[4] = { amA, amA, amA, amA };
 	__m256i x, t0, t1;
 	x = _mm256_loadu_si256((const __m256i*)p);
 	t0 = _mm256_cmpgt_epi8(x, *(const __m256i*)Am1Tbl);
