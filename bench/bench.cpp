@@ -88,7 +88,7 @@ private:
 
 void bench(const char *msg, const StrVec& sv, const h2o_token_t* f(const char*, size_t))
 {
-	const int N = 10000000;
+	const int N = 100000000;
 	Clock clk;
 	uint64_t sum = 0;
 	for (int i = 0; i < N; i++) {

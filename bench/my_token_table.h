@@ -117,188 +117,236 @@ const h2o_token_t *my_h2o_lookup_token(const char *name, size_t len)
         case 3:
             switch (c0) {
             case 'v':
-                if (is_same_short_str(v, "via", 3)) return H2O_TOKEN_VIA;
+                if (is_same_short_str(v, "via", 3))
+                    return H2O_TOKEN_VIA;
                 break;
             case 'a':
-                if (is_same_short_str(v, "age", 3)) return H2O_TOKEN_AGE;
+                if (is_same_short_str(v, "age", 3))
+                    return H2O_TOKEN_AGE;
                 break;
             }
             break;
         case 4:
             switch (c0) {
             case 'd':
-                if (is_same_short_str(v, "date", 4)) return H2O_TOKEN_DATE;
+                if (is_same_short_str(v, "date", 4))
+                    return H2O_TOKEN_DATE;
                 break;
             case 'e':
-                if (is_same_short_str(v, "etag", 4)) return H2O_TOKEN_ETAG;
+                if (is_same_short_str(v, "etag", 4))
+                    return H2O_TOKEN_ETAG;
                 break;
             case 'l':
-                if (is_same_short_str(v, "link", 4)) return H2O_TOKEN_LINK;
+                if (is_same_short_str(v, "link", 4))
+                    return H2O_TOKEN_LINK;
                 break;
             case 'f':
-                if (is_same_short_str(v, "from", 4)) return H2O_TOKEN_FROM;
+                if (is_same_short_str(v, "from", 4))
+                    return H2O_TOKEN_FROM;
                 break;
             case 'h':
-                if (is_same_short_str(v, "host", 4)) return H2O_TOKEN_HOST;
+                if (is_same_short_str(v, "host", 4))
+                    return H2O_TOKEN_HOST;
                 break;
             case 'v':
-                if (is_same_short_str(v, "vary", 4)) return H2O_TOKEN_VARY;
+                if (is_same_short_str(v, "vary", 4))
+                    return H2O_TOKEN_VARY;
                 break;
             }
             break;
         case 5:
             switch (c0) {
             case 'r':
-                if (is_same_short_str(v, "range", 5)) return H2O_TOKEN_RANGE;
+                if (is_same_short_str(v, "range", 5))
+                    return H2O_TOKEN_RANGE;
                 break;
             case ':':
-                if (is_same_short_str(v, ":path", 5)) return H2O_TOKEN_PATH;
+                if (is_same_short_str(v, ":path", 5))
+                    return H2O_TOKEN_PATH;
                 break;
             case 'a':
-                if (is_same_short_str(v, "allow", 5)) return H2O_TOKEN_ALLOW;
+                if (is_same_short_str(v, "allow", 5))
+                    return H2O_TOKEN_ALLOW;
                 break;
             }
             break;
         case 6:
             switch (c0) {
             case 'c':
-                if (is_same_short_str(v, "cookie", 6)) return H2O_TOKEN_COOKIE;
+                if (is_same_short_str(v, "cookie", 6))
+                    return H2O_TOKEN_COOKIE;
                 break;
             case 's':
-                if (is_same_short_str(v, "server", 6)) return H2O_TOKEN_SERVER;
+                if (is_same_short_str(v, "server", 6))
+                    return H2O_TOKEN_SERVER;
                 break;
             case 'a':
-                if (is_same_short_str(v, "accept", 6)) return H2O_TOKEN_ACCEPT;
+                if (is_same_short_str(v, "accept", 6))
+                    return H2O_TOKEN_ACCEPT;
                 break;
             case 'e':
-                if (is_same_short_str(v, "expect", 6)) return H2O_TOKEN_EXPECT;
+                if (is_same_short_str(v, "expect", 6))
+                    return H2O_TOKEN_EXPECT;
                 break;
             }
             break;
         case 7:
             switch (h2o_tolower(name[3])) {
             case 't':
-                if (is_same_short_str(v, ":method", 7)) return H2O_TOKEN_METHOD;
+                if (is_same_short_str(v, ":method", 7))
+                    return H2O_TOKEN_METHOD;
                 break;
             case 'h':
-                if (is_same_short_str(v, ":scheme", 7)) return H2O_TOKEN_SCHEME;
+                if (is_same_short_str(v, ":scheme", 7))
+                    return H2O_TOKEN_SCHEME;
                 break;
             case 'r':
-                if (is_same_short_str(v, "upgrade", 7)) return H2O_TOKEN_UPGRADE;
-                if (is_same_short_str(v, "refresh", 7)) return H2O_TOKEN_REFRESH;
+                if (is_same_short_str(v, "upgrade", 7))
+                    return H2O_TOKEN_UPGRADE;
+                if (is_same_short_str(v, "refresh", 7))
+                    return H2O_TOKEN_REFRESH;
                 break;
             case 'e':
-                if (is_same_short_str(v, "referer", 7)) return H2O_TOKEN_REFERER;
+                if (is_same_short_str(v, "referer", 7))
+                    return H2O_TOKEN_REFERER;
                 break;
             case 'a':
-                if (is_same_short_str(v, ":status", 6)) return H2O_TOKEN_STATUS;
+                if (is_same_short_str(v, ":status", 6))
+                    return H2O_TOKEN_STATUS;
                 break;
             case 'i':
-                if (is_same_short_str(v, "expires", 6)) return H2O_TOKEN_EXPIRES;
+                if (is_same_short_str(v, "expires", 6))
+                    return H2O_TOKEN_EXPIRES;
                 break;
             }
             break;
         case 8:
             switch (h2o_tolower(name[7])) {
             case 'e':
-                if (is_same_short_str(v, "if-range", 8)) return H2O_TOKEN_IF_RANGE;
+                if (is_same_short_str(v, "if-range", 8))
+                    return H2O_TOKEN_IF_RANGE;
                 break;
             case 'h':
-                if (is_same_short_str(v, "if-match", 8)) return H2O_TOKEN_IF_MATCH;
+                if (is_same_short_str(v, "if-match", 8))
+                    return H2O_TOKEN_IF_MATCH;
                 break;
             case 'n':
-                if (is_same_short_str(v, "location", 8)) return H2O_TOKEN_LOCATION;
+                if (is_same_short_str(v, "location", 8))
+                    return H2O_TOKEN_LOCATION;
                 break;
             }
             break;
         case 10:
             switch (c0) {
             case 's':
-                if (is_same_short_str(v, "set-cookie", 10)) return H2O_TOKEN_SET_COOKIE;
+                if (is_same_short_str(v, "set-cookie", 10))
+                    return H2O_TOKEN_SET_COOKIE;
                 break;
             case 'c':
-                if (is_same_short_str(v, "connection", 10)) return H2O_TOKEN_CONNECTION;
+                if (is_same_short_str(v, "connection", 10))
+                    return H2O_TOKEN_CONNECTION;
                 break;
             case 'u':
-                if (is_same_short_str(v, "user-agent", 10)) return H2O_TOKEN_USER_AGENT;
+                if (is_same_short_str(v, "user-agent", 10))
+                    return H2O_TOKEN_USER_AGENT;
                 break;
             case ':':
-                if (is_same_short_str(v, ":authority", 10)) return H2O_TOKEN_AUTHORITY;
+                if (is_same_short_str(v, ":authority", 10))
+                    return H2O_TOKEN_AUTHORITY;
                 break;
             }
             break;
         case 11:
-            if (is_same_short_str(v, "retry-after", 11)) return H2O_TOKEN_RETRY_AFTER;
+            if (is_same_short_str(v, "retry-after", 11))
+                return H2O_TOKEN_RETRY_AFTER;
             break;
         case 12:
             switch (c0) {
             case 'c':
-                if (is_same_short_str(v, "content-type", 12)) return H2O_TOKEN_CONTENT_TYPE;
+                if (is_same_short_str(v, "content-type", 12))
+                    return H2O_TOKEN_CONTENT_TYPE;
                 break;
             case 'm':
-                if (is_same_short_str(v, "max-forwards", 12)) return H2O_TOKEN_MAX_FORWARDS;
+                if (is_same_short_str(v, "max-forwards", 12))
+                    return H2O_TOKEN_MAX_FORWARDS;
                 break;
             }
             break;
         case 13:
             switch (h2o_tolower(name[12])) {
             case 'd':
-                if (is_same_short_str(v, "last-modified", 13)) return H2O_TOKEN_LAST_MODIFIED;
+                if (is_same_short_str(v, "last-modified", 13))
+                    return H2O_TOKEN_LAST_MODIFIED;
                 break;
             case 'e':
-                if (is_same_short_str(v, "content-range", 13)) return H2O_TOKEN_CONTENT_RANGE;
+                if (is_same_short_str(v, "content-range", 13))
+                    return H2O_TOKEN_CONTENT_RANGE;
                 break;
             case 'h':
-                if (is_same_short_str(v, "if-none-match", 13)) return H2O_TOKEN_IF_NONE_MATCH;
+                if (is_same_short_str(v, "if-none-match", 13))
+                    return H2O_TOKEN_IF_NONE_MATCH;
                 break;
             case 'l':
-                if (is_same_short_str(v, "cache-control", 13)) return H2O_TOKEN_CACHE_CONTROL;
-                if (is_same_short_str(v, "x-reproxy-url", 13)) return H2O_TOKEN_X_REPROXY_URL;
+                if (is_same_short_str(v, "cache-control", 13))
+                    return H2O_TOKEN_CACHE_CONTROL;
+                if (is_same_short_str(v, "x-reproxy-url", 13))
+                    return H2O_TOKEN_X_REPROXY_URL;
                 break;
             case 'n':
-                if (is_same_short_str(v, "authorization", 13)) return H2O_TOKEN_AUTHORIZATION;
+                if (is_same_short_str(v, "authorization", 13))
+                    return H2O_TOKEN_AUTHORIZATION;
                 break;
             case 's':
-                if (is_same_short_str(v, "accept-ranges", 13)) return H2O_TOKEN_ACCEPT_RANGES;
+                if (is_same_short_str(v, "accept-ranges", 13))
+                    return H2O_TOKEN_ACCEPT_RANGES;
                 break;
             }
             break;
         case 14:
             switch (c0) {
             case 'c':
-                if (is_same_short_str(v, "content-length", 14)) return H2O_TOKEN_CONTENT_LENGTH;
+                if (is_same_short_str(v, "content-length", 14))
+                    return H2O_TOKEN_CONTENT_LENGTH;
                 break;
             case 'h':
-                if (is_same_short_str(v, "http2-settings", 14)) return H2O_TOKEN_HTTP2_SETTINGS;
+                if (is_same_short_str(v, "http2-settings", 14))
+                    return H2O_TOKEN_HTTP2_SETTINGS;
                 break;
             case 'a':
-                if (is_same_short_str(v, "accept-charset", 13)) return H2O_TOKEN_ACCEPT_CHARSET;
+                if (is_same_short_str(v, "accept-charset", 13))
+                    return H2O_TOKEN_ACCEPT_CHARSET;
                 break;
             }
             break;
         case 15:
             switch (h2o_tolower(name[11])) {
             case 'u':
-                if (is_same_short_str(v, "accept-language", 15)) return H2O_TOKEN_ACCEPT_LANGUAGE;
+                if (is_same_short_str(v, "accept-language", 15))
+                    return H2O_TOKEN_ACCEPT_LANGUAGE;
                 break;
             case 'd':
-                if (is_same_short_str(v, "accept-encoding", 15)) return H2O_TOKEN_ACCEPT_ENCODING;
+                if (is_same_short_str(v, "accept-encoding", 15))
+                    return H2O_TOKEN_ACCEPT_ENCODING;
                 break;
             }
             break;
         case 16:
             switch (h2o_tolower(name[11])) {
             case 'g':
-                if (is_same_short_str(v, "content-language", 16)) return H2O_TOKEN_CONTENT_LANGUAGE;
+                if (is_same_short_str(v, "content-language", 16))
+                    return H2O_TOKEN_CONTENT_LANGUAGE;
                 break;
             case 'i':
-                if (is_same_short_str(v, "www-authenticate", 16)) return H2O_TOKEN_WWW_AUTHENTICATE;
+                if (is_same_short_str(v, "www-authenticate", 16))
+                    return H2O_TOKEN_WWW_AUTHENTICATE;
                 break;
             case 'o':
-                if (is_same_short_str(v, "content-encoding", 16)) return H2O_TOKEN_CONTENT_ENCODING;
+                if (is_same_short_str(v, "content-encoding", 16))
+                    return H2O_TOKEN_CONTENT_ENCODING;
                 break;
             case 'a':
-                if (is_same_short_str(v, "content-location", 16)) return H2O_TOKEN_CONTENT_LOCATION;
+                if (is_same_short_str(v, "content-location", 16))
+                    return H2O_TOKEN_CONTENT_LOCATION;
                 break;
             }
             break;
@@ -310,34 +358,42 @@ const h2o_token_t *my_h2o_lookup_token(const char *name, size_t len)
     case 17:
         switch (c0) {
         case 'i':
-            if (is_same_long_str(name, "if-modified-since", 17)) return H2O_TOKEN_IF_MODIFIED_SINCE;
+            if (is_same_long_str(name, "if-modified-since", 17))
+                return H2O_TOKEN_IF_MODIFIED_SINCE;
             break;
         case 't':
-            if (is_same_long_str(name, "transfer-encoding", 17)) return H2O_TOKEN_TRANSFER_ENCODING;
+            if (is_same_long_str(name, "transfer-encoding", 17))
+                return H2O_TOKEN_TRANSFER_ENCODING;
             break;
         }
         break;
     case 18:
-        if (is_same_long_str(name, "proxy-authenticate", 18)) return H2O_TOKEN_PROXY_AUTHENTICATE;
+        if (is_same_long_str(name, "proxy-authenticate", 18))
+            return H2O_TOKEN_PROXY_AUTHENTICATE;
         break;
     case 19:
         switch (c0) {
         case 'i':
-            if (is_same_long_str(name, "if-unmodified-since", 19)) return H2O_TOKEN_IF_UNMODIFIED_SINCE;
+            if (is_same_long_str(name, "if-unmodified-since", 19))
+                return H2O_TOKEN_IF_UNMODIFIED_SINCE;
             break;
         case 'c':
-            if (is_same_long_str(name, "content-disposition", 19)) return H2O_TOKEN_CONTENT_DISPOSITION;
+            if (is_same_long_str(name, "content-disposition", 19))
+                return H2O_TOKEN_CONTENT_DISPOSITION;
             break;
         case 'p':
-            if (is_same_long_str(name, "proxy-authorization", 19)) return H2O_TOKEN_PROXY_AUTHORIZATION;
+            if (is_same_long_str(name, "proxy-authorization", 19))
+                return H2O_TOKEN_PROXY_AUTHORIZATION;
             break;
         }
         break;
     case 25:
-        if (is_same_long_str(name, "strict-transport-security", 25)) return H2O_TOKEN_STRICT_TRANSPORT_SECURITY;
+        if (is_same_long_str(name, "strict-transport-security", 25))
+            return H2O_TOKEN_STRICT_TRANSPORT_SECURITY;
         break;
     case 27:
-        if (is_same_long_str(name, "access-control-allow-origin", 27)) return H2O_TOKEN_ACCESS_CONTROL_ALLOW_ORIGIN;
+        if (is_same_long_str(name, "access-control-allow-origin", 27))
+            return H2O_TOKEN_ACCESS_CONTROL_ALLOW_ORIGIN;
         break;
     }
     return NULL;
