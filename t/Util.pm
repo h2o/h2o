@@ -7,6 +7,7 @@ use File::Temp qw(tempfile);
 use Net::EmptyPort qw(check_port empty_port);
 use POSIX ":sys_wait_h";
 use Scope::Guard qw(scope_guard);
+use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
 our @EXPORT = qw(spawn_server spawn_h2o md5_file prog_exists openssl_can_negotiate);
@@ -28,7 +29,7 @@ sub spawn_server {
                 if (waitpid($pid, WNOHANG) == $pid) {
                     die "server failed to start (got $?)\n";
                 }
-                sleep 1;
+                sleep 0.1;
             }
         }
         return scope_guard(sub {
@@ -40,11 +41,11 @@ sub spawn_server {
                         print STDERR "killed\n";
                         last;
                     }
-                    if ($i++ == 10) {
+                    if ($i++ == 100) {
                         print STDERR "failed to kill the process, continuing anyways\n";
                         last;
                     }
-                    sleep 1;
+                    sleep 0.1;
                 }
             } else {
                 print STDERR "no proc? ($!)\n";
