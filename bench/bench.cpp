@@ -118,17 +118,18 @@ void test(const StrVec& sv)
 int main(int argc, char *argv[])
 {
 	if (argc == 1) {
-		printf("bench fileName\n");
+		printf("bench fileName (my|org)\n");
 		return 1;
 	}
 	const std::string fileName = argv[1];
+	const std::string mode = argc == 3 ? argv[2] : "";
 	StrVec sv = getWord(fileName);
 	if (sv.empty()) {
 		printf("can't open %s, so use the fileName as word\n", fileName.c_str());
 		sv.push_back(fileName);
 	}
 	test(sv);
-	bench("my ", sv, my_h2o_lookup_token);
-	bench("org", sv, h2o_lookup_token);
+	if (mode != "org") bench("my ", sv, my_h2o_lookup_token);
+	if (mode != "my") bench("org", sv, h2o_lookup_token);
 }
 
