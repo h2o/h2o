@@ -20,6 +20,7 @@ sub spawn_server {
         unless defined $pid;
     if ($pid != 0) {
         print STDERR "spawning $args{argv}->[0]... ";
+sleep 1;
         if ($args{is_ready}) {
             while (1) {
                 if ($args{is_ready}->()) {
@@ -29,7 +30,7 @@ sub spawn_server {
                 if (waitpid($pid, WNOHANG) == $pid) {
                     die "server failed to start (got $?)\n";
                 }
-                sleep 0.1;
+                sleep 1;
             }
         }
         return scope_guard(sub {
@@ -38,7 +39,7 @@ sub spawn_server {
                 my $i = 0;
                 while (1) {
                     if (waitpid($pid, WNOHANG) == $pid) {
-                        print STDERR "killed\n";
+                        print STDERR "killed (got $?)\n";
                         last;
                     }
                     if ($i++ == 100) {

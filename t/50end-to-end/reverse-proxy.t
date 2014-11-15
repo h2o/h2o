@@ -18,7 +18,7 @@ my %files = map { do {
     +($_ => { size => (stat $fn)[7], md5 => md5_file($fn) });
 } } qw(index.txt halfdome.jpg);
 
-for my $i (0..7) {
+for my $i (0..-1) {
     my $h2o_keepalive = $i & 1 ? 1 : 0;
     my $starlet_keepalive = $i & 2 ? 1 : 0;
     my $starlet_force_chunked = $i & 4 ? 1 : 0;
@@ -53,8 +53,10 @@ hosts:
         proxy.reverse.url: http://127.0.0.1:$upstream_port
 EOT
     my $port = $server->{port};
-    my $res = `curl --silent --dump-header /dev/stderr http://127.0.0.1:$port/ 2>&1 > /dev/null`;
+    ok check_port($port), "port is up (pre)";
+    my $res = `curl --verbose --dump-header /dev/stderr http://127.0.0.1:$port/ 2>&1 > /dev/null`;
     like $res, qr{^HTTP/1\.1 502 }, "502 response on upstream error";
+    ok check_port($port), "port is up (post)";
 };
 
 sub spawn_upstream {
