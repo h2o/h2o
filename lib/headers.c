@@ -50,20 +50,24 @@ ssize_t h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const stru
         for (i = 0; i != len; ++i) {
             const h2o_token_t *name_token = h2o_lookup_token(src[i].name, src[i].name_len);
             if (name_token != NULL) {
-                if (name_token == H2O_TOKEN_HOST) {
-                    host->base = (char*)src[i].value;
-                    host->len = src[i].value_len;
-                } else if (name_token == H2O_TOKEN_UPGRADE) {
-                    upgrade->base = (char*)src[i].value;
-                    upgrade->len = src[i].value_len;
-                } else if (name_token == H2O_TOKEN_EXPECT) {
-                    expect->base = (char*)src[i].value;
-                    expect->len = src[i].value_len;
-                } else if (name_token == H2O_TOKEN_CONTENT_LENGTH) {
-                    if (entity_header_index == -1)
+                if (name_token->is_init_header_special) {
+                    if (name_token == H2O_TOKEN_HOST) {
+                        host->base = (char*)src[i].value;
+                        host->len = src[i].value_len;
+                    } else if (name_token == H2O_TOKEN_UPGRADE) {
+                        upgrade->base = (char*)src[i].value;
+                        upgrade->len = src[i].value_len;
+                    } else if (name_token == H2O_TOKEN_EXPECT) {
+                        expect->base = (char*)src[i].value;
+                        expect->len = src[i].value_len;
+                    } else if (name_token == H2O_TOKEN_CONTENT_LENGTH) {
+                        if (entity_header_index == -1)
+                            entity_header_index = i;
+                    } else if (name_token == H2O_TOKEN_TRANSFER_ENCODING) {
                         entity_header_index = i;
-                } else if (name_token == H2O_TOKEN_TRANSFER_ENCODING) {
-                    entity_header_index = i;
+                    } else {
+                        assert(!"logic flaw");
+                    }
                 } else {
                     h2o_header_t *added = add_header(pool, headers, (h2o_buf_t*)name_token, src[i].value, src[i].value_len);
                     if (name_token == H2O_TOKEN_CONNECTION)

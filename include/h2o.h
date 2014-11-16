@@ -76,8 +76,9 @@ typedef struct st_h2o_mimemap_t h2o_mimemap_t;
  */
 typedef struct st_h2o_token_t {
     h2o_buf_t buf;
-    int http2_static_table_name_index; /* non-zero if any */
-    int is_connection_specific;
+    char http2_static_table_name_index; /* non-zero if any */
+    char is_connection_specific;
+    char is_init_header_special;
 } h2o_token_t;
 
 #include "h2o/token.h"
