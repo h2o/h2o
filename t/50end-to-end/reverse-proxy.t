@@ -87,10 +87,17 @@ sub run_tests_with_conf {
                 is length($content), $files{$file}->{size}, "$proto://127.0.0.1/$file (size)";
                 is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/$file (md5)";
             }
-            my $content = `curl --silent --show-error --insecure -d 'hello world' $proto://127.0.0.1:$port/echo`;
-            is $content, 'hello world', "$proto://127.0.0.1/echo (POST)";
-            $content = `curl --silent --show-error --insecure --header 'Transfer-Encoding: chunked' -d 'hello world' $proto://127.0.0.1:$port/echo`;
-            is $content, 'hello world', "$proto://127.0.0.1/echo (POST, chunked)";
+            for my $file (sort keys %files) {
+                my $content = `curl --silent --show-error --insecure --data-binary \@t/50end-to-end/reverse-proxy/docroot/$file $proto://127.0.0.1:$port/echo`;
+                is length($content), $files{$file}->{size}, "$proto://127.0.0.1/echo (POST, $file, size)";
+                is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/echo (POST, $file, md5)";
+            }
+            for my $file (sort keys %files) {
+                my $content = `curl --silent --show-error --insecure --header 'Transfer-Encoding: chunked' --data-binary \@t/50end-to-end/reverse-proxy/docroot/$file $proto://127.0.0.1:$port/echo`;
+                is length($content), $files{$file}->{size}, "$proto://127.0.0.1/echo (POST, chunked, $file, size)";
+                is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/echo (POST, chunked, $file, md5)";
+            }
+
         };
         $doit->('http', $port);
         $doit->('https', $tls_port);
