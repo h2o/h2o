@@ -480,7 +480,7 @@ int h2o_buf_is_token(const h2o_buf_t *buf);
  * fills in the headers list while returning references to special headers
  * @return index of content-length or content-encoding header within src (or -1 if not found)
  */
-ssize_t h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len, h2o_buf_t *connection, h2o_buf_t *host, h2o_buf_t *upgrade);
+ssize_t h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len, h2o_buf_t *connection, h2o_buf_t *host, h2o_buf_t *upgrade, h2o_buf_t *expect);
 /**
  * searches for a header of given name (fast, by comparing tokens)
  * @param headers header list
