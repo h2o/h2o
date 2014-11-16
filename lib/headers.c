@@ -54,17 +54,17 @@ ssize_t h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const stru
                     if (name_token == H2O_TOKEN_HOST) {
                         host->base = (char*)src[i].value;
                         host->len = src[i].value_len;
-                    } else if (name_token == H2O_TOKEN_UPGRADE) {
-                        upgrade->base = (char*)src[i].value;
-                        upgrade->len = src[i].value_len;
-                    } else if (name_token == H2O_TOKEN_EXPECT) {
-                        expect->base = (char*)src[i].value;
-                        expect->len = src[i].value_len;
                     } else if (name_token == H2O_TOKEN_CONTENT_LENGTH) {
                         if (entity_header_index == -1)
                             entity_header_index = i;
                     } else if (name_token == H2O_TOKEN_TRANSFER_ENCODING) {
                         entity_header_index = i;
+                    } else if (name_token == H2O_TOKEN_EXPECT) {
+                        expect->base = (char*)src[i].value;
+                        expect->len = src[i].value_len;
+                    } else if (name_token == H2O_TOKEN_UPGRADE) {
+                        upgrade->base = (char*)src[i].value;
+                        upgrade->len = src[i].value_len;
                     } else {
                         assert(!"logic flaw");
                     }
