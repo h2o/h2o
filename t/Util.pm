@@ -34,7 +34,9 @@ sub spawn_server {
         }
         return scope_guard(sub {
             print STDERR "killing $args{argv}->[0]... ";
-            if (kill 'TERM', $pid) {
+            my $sig = 'TERM';
+          Retry:
+            if (kill $sig, $pid) {
                 my $i = 0;
                 while (1) {
                     if (waitpid($pid, WNOHANG) == $pid) {
@@ -42,7 +44,12 @@ sub spawn_server {
                         last;
                     }
                     if ($i++ == 100) {
-                        print STDERR "failed to kill the process, continuing anyways\n";
+                        if ($sig eq 'TERM') {
+                            print STDERR "failed, sending SIGKILL... ";
+                            $sig = 'KILL';
+                            goto Retry;
+                        }
+                        print STDERR "failed, continuing anyways\n";
                         last;
                     }
                     sleep 0.1;
