@@ -125,6 +125,8 @@ static int on_read_core(int fd, h2o_input_buffer_t** input)
             break;
         }
         (*input)->size += rret;
+        if (buf.len != rret)
+            break;
         read_any = 1;
     }
     return 0;
