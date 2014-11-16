@@ -190,6 +190,24 @@ static ssize_t fixup_request(h2o_http1_conn_t *conn, struct phr_header *headers,
     /* init headers */
     entity_header_index = h2o_init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade);
 
+    /* copy the values to pool, since the input buffer pointed by the headers may get realloced */
+    if (entity_header_index != -1) {
+        size_t i;
+        conn->req.method = h2o_strdup(&conn->req.pool, conn->req.method.base, conn->req.method.len);
+        conn->req.path = h2o_strdup(&conn->req.pool, conn->req.path.base, conn->req.path.len);
+        for (i = 0; i != conn->req.headers.size; ++i) {
+            h2o_header_t *header = conn->req.headers.entries + i;
+            if (! h2o_buf_is_token(header->name)) {
+                *header->name = h2o_strdup(&conn->req.pool, header->name->base, header->name->len);
+            }
+            header->value = h2o_strdup(&conn->req.pool, header->value.base, header->value.len);
+        }
+        if (host.base != NULL)
+            host = h2o_strdup(&conn->req.pool, host.base, host.len);
+        if (upgrade.base != NULL)
+            upgrade = h2o_strdup(&conn->req.pool, upgrade.base, upgrade.len);
+    }
+
     /* move host header to req->authority */
     if (host.base != NULL)
         conn->req.authority = host;
