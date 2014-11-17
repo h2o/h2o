@@ -40,12 +40,20 @@ enum {
     ELEMENT_TYPE_REQUEST_LINE, /* %r */
     ELEMENT_TYPE_STATUS, /* %s */
     ELEMENT_TYPE_BYTES_SENT, /* %b */
+    ELEMENT_TYPE_IN_HEADER_TOKEN, /* %{data.header_token}i */
+    ELEMENT_TYPE_IN_HEADER_STRING, /* %{data.header_string}i */
+    ELEMENT_TYPE_OUT_HEADER_TOKEN, /* %{data.header_token}o */
+    ELEMENT_TYPE_OUT_HEADER_STRING, /* %{data.header_string}i */
     NUM_ELEMENT_TYPES
 };
 
 struct log_element_t {
     unsigned type;
     h2o_buf_t suffix;
+    union {
+        const h2o_token_t *header_token;
+        h2o_buf_t header_string;
+    } data;
 };
 
 struct st_h2o_access_logger_t {
@@ -73,7 +81,41 @@ static struct log_element_t *compile_log_format(const char *fmt, size_t *_num_el
     while (*pt != '\0') {
         if (*pt == '%') {
             ++pt;
-            if (*pt != '%') {
+            if (*pt == '%') {
+                /* skip */
+            } else if (*pt == '{') {
+                const h2o_token_t *token;
+                const char *quote_end = strchr(++pt, '}');
+                if (quote_end == NULL) {
+                    fprintf(stderr, "failed to compile log format: unterminated header name starting at: \"%16s\"\n", pt);
+                    goto Error;
+                }
+                token = h2o_lookup_token(pt, quote_end - pt);
+                switch (quote_end[1]) {
+                case 'i':
+                    if (token != NULL) {
+                        NEW_ELEMENT(ELEMENT_TYPE_IN_HEADER_TOKEN);
+                        elements[num_elements - 1].data.header_token = token;
+                    } else {
+                        NEW_ELEMENT(ELEMENT_TYPE_IN_HEADER_STRING);
+                        elements[num_elements - 1].data.header_string = h2o_strdup(NULL, pt, quote_end - pt);
+                    }
+                    break;
+                case 'o':
+                    if (token != NULL) {
+                        NEW_ELEMENT(ELEMENT_TYPE_OUT_HEADER_TOKEN);
+                        elements[num_elements - 1].data.header_token = token;
+                    } else {
+                        NEW_ELEMENT(ELEMENT_TYPE_OUT_HEADER_STRING);
+                        elements[num_elements - 1].data.header_string = h2o_strdup(NULL, pt, quote_end - pt);
+                    }
+                    break;
+                default:
+                    fprintf(stderr, "failed to compile log format: header name is not followed by either `i` or `o`\n");
+                    goto Error;
+                }
+                pt = quote_end + 2;
+            } else {
                 unsigned type = NUM_ELEMENT_TYPES;
                 switch (*pt++) {
 #define TYPE_MAP(ch, ty) case ch: type = ty; break
@@ -86,7 +128,8 @@ static struct log_element_t *compile_log_format(const char *fmt, size_t *_num_el
                 TYPE_MAP('b', ELEMENT_TYPE_BYTES_SENT);
 #undef TYPE_MAP
                 default:
-                    goto SyntaxError;
+                    fprintf(stderr, "failed to compile log format: unknown escape sequence: %%%c\n", pt[-1]);
+                    goto Error;
                 }
                 NEW_ELEMENT(type);
                 continue;
@@ -108,8 +151,7 @@ static struct log_element_t *compile_log_format(const char *fmt, size_t *_num_el
     *_num_elements = num_elements;
     return elements;
 
-SyntaxError:
-    fprintf(stderr, "failed to compile log format: unknown escape sequence: %%%c\n", pt[-1]);
+Error:
     free(elements);
     return NULL;
 }
@@ -243,6 +285,32 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             RESERVE(sizeof("18446744073709551615") - 1);
             pos += sprintf(pos, "%llu", (unsigned long long)req->bytes_sent);
             break;
+
+#define EMIT_HEADER(headers, _index) do { \
+    ssize_t index = (_index); \
+    if (index != -1) { \
+        const h2o_header_t *header = (headers)->entries + index; \
+        RESERVE(header->value.len * 4); \
+        pos = append_unsafe_string(pos, header->value.base, header->value.len); \
+    } else { \
+        RESERVE(1); \
+        *pos++ = '-'; \
+    } \
+} while (0)
+        case ELEMENT_TYPE_IN_HEADER_TOKEN:
+            EMIT_HEADER(&req->headers, h2o_find_header(&req->headers, element->data.header_token, SIZE_MAX));
+            break;
+        case ELEMENT_TYPE_IN_HEADER_STRING:
+            EMIT_HEADER(&req->headers, h2o_find_header_by_str(&req->headers, element->data.header_string.base, element->data.header_string.len, SIZE_MAX));
+            break;
+        case ELEMENT_TYPE_OUT_HEADER_TOKEN:
+            EMIT_HEADER(&req->res.headers, h2o_find_header(&req->res.headers, element->data.header_token, SIZE_MAX));
+            break;
+        case ELEMENT_TYPE_OUT_HEADER_STRING:
+            EMIT_HEADER(&req->res.headers, h2o_find_header_by_str(&req->res.headers, element->data.header_string.base, element->data.header_string.len, SIZE_MAX));
+            break;
+#undef EMIT_HEADER
+
         default:
             assert(!"unknown type");
             break;
