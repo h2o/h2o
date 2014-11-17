@@ -347,9 +347,9 @@ h2o_logger_t *h2o_access_log_register(h2o_hostconf_t *host_config, const char *p
     int fd;
     struct st_h2o_access_logger_t *self;
 
-    /* default to common log format */
+    /* default to combined log format */
     if (fmt == NULL)
-        fmt = "%h %l %u %t \"%r\" %s %b";
+        fmt = "%h %l %u %t \"%r\" %s %b \"%{Referer}i\" \"%{User-agent}i\"";
     if ((elements = compile_log_format(fmt, &num_elements)) == NULL)
         return NULL;
 
