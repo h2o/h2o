@@ -346,6 +346,10 @@ struct st_h2o_ostream_t {
      * called by the core when there is a need to terminate the response abruptly
      */
     void (*stop)(struct st_h2o_ostream_t *self, h2o_req_t *req);
+    /**
+     * whether if the ostream supports "pull" interface
+     */
+    void (*start_pull)(struct st_h2o_ostream_t *self, void (*cb)(h2o_generator_t *generator, h2o_req_t *req, h2o_buf_t *buf, int *is_final));
 };
 
 /**
