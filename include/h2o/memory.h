@@ -228,10 +228,9 @@ inline void h2o_init_input_buffer(h2o_input_buffer_t **buffer)
 
 inline void h2o_dispose_input_buffer(h2o_input_buffer_t **buffer)
 {
-    if (*buffer != &h2o__null_input_buffer) {
+    if (*buffer != &h2o__null_input_buffer)
         free(*buffer);
-        *buffer = NULL;
-    }
+    *buffer = NULL;
 }
 
 inline void h2o_vector_reserve(h2o_mempool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)
