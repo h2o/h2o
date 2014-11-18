@@ -133,19 +133,19 @@ void h2o_mempool_link_shared(h2o_mempool_t *pool, void *p)
     link_shared(pool, H2O_STRUCT_FROM_MEMBER(h2o_mempool_shared_entry_t, bytes, p));
 }
 
-const h2o_input_buffer_t h2o__null_input_buffer = {};
-
 h2o_buf_t h2o_reserve_input_buffer(h2o_input_buffer_t **_inbuf, size_t min_guarantee)
 {
     h2o_input_buffer_t *inbuf = *_inbuf;
     h2o_buf_t ret;
 
-    if (inbuf == &h2o__null_input_buffer) {
-        inbuf = h2o_malloc(offsetof(h2o_input_buffer_t, _buf) + min_guarantee * 2);
+    if (inbuf->_capacity == 0) {
+        if (min_guarantee < inbuf->min_capacity)
+            min_guarantee = inbuf->min_capacity;
+        inbuf = h2o_malloc(offsetof(h2o_input_buffer_t, _buf) + min_guarantee);
         *_inbuf = inbuf;
         inbuf->size = 0;
         inbuf->bytes = inbuf->_buf;
-        inbuf->_capacity = min_guarantee * 2;
+        inbuf->_capacity = min_guarantee;
     } else {
         if (inbuf->bytes != inbuf->_buf) {
             assert(inbuf->size != 0);
@@ -174,7 +174,7 @@ void h2o_consume_input_buffer(h2o_input_buffer_t **_inbuf, size_t delta)
     h2o_input_buffer_t *inbuf = *_inbuf;
 
     if (delta != 0) {
-        assert(inbuf != &h2o__null_input_buffer);
+        assert(inbuf->_capacity != 0);
         if (inbuf->size == delta) {
             inbuf->size = 0;
             inbuf->bytes = inbuf->_buf;

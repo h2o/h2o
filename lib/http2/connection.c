@@ -639,7 +639,7 @@ static void on_upgrade_complete(void *_conn, h2o_socket_t *sock, size_t reqsize)
     conn->sock = sock;
     sock->data = conn;
     conn->_http1_req_input = sock->input;
-    h2o_init_input_buffer(&sock->input);
+    h2o_init_input_buffer(&sock->input, &h2o_socket_initial_input_buffer);
 
     /* setup inbound */
     h2o_socket_read_start(conn->sock, on_read);

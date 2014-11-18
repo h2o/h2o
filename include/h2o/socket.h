@@ -46,6 +46,8 @@
 # define H2O_USE_NPN 0
 #endif
 
+#define H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE 4096
+
 typedef struct st_h2o_socket_t h2o_socket_t;
 
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, int err);
@@ -87,6 +89,8 @@ typedef struct st_h2o_socket_export_t {
     struct st_h2o_socket_ssl_t *ssl;
     h2o_input_buffer_t *input;
 } h2o_socket_export_t;
+
+extern const h2o_input_buffer_t h2o_socket_initial_input_buffer;
 
 /**
  * returns the loop
