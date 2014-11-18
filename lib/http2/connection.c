@@ -210,8 +210,9 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     h2o_hpack_dispose_header_table(&conn->_input_header_table);
     h2o_hpack_dispose_header_table(&conn->_output_header_table);
     assert(h2o_linklist_is_empty(&conn->_pending_reqs));
-    h2o_mempool_clear(&conn->_write._pools[0]);
-    h2o_mempool_clear(&conn->_write._pools[1]);
+    h2o_dispose_input_buffer(&conn->_write.buf);
+    if (conn->_write.buf_in_flight != NULL)
+        h2o_dispose_input_buffer(&conn->_write.buf_in_flight);
     priolist_destroy(&conn->_write.streams_with_pending_data);
     assert(h2o_linklist_is_empty(&conn->_write.streams_without_pending_data));
     assert(! h2o_timeout_is_linked(&conn->_write.timeout_entry));
@@ -224,7 +225,7 @@ static void close_connection(h2o_http2_conn_t *conn)
 {
     conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
 
-    if (conn->_write.wreq_in_flight) {
+    if (conn->_write.buf_in_flight != NULL) {
         /* there is a pending write, let on_write_complete actually close the connection */
     } else {
         if (h2o_timeout_is_linked(&conn->_write.timeout_entry))
@@ -235,8 +236,8 @@ static void close_connection(h2o_http2_conn_t *conn)
 
 static void enqueue_goaway_and_initiate_close(h2o_http2_conn_t *conn, int errnum)
 {
-    h2o_buf_t goaway = h2o_http2_encode_goaway_frame(conn->_write.pool, conn->max_processed_stream_id, -errnum);
-    h2o_http2_conn_enqueue_write(conn, goaway);
+    h2o_http2_encode_goaway_frame(&conn->_write.buf, conn->max_processed_stream_id, -errnum);
+    h2o_http2_conn_request_write(conn);
     conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
 }
 
@@ -245,8 +246,8 @@ static void send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum)
     assert(conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING);
 
     if (stream_id != 0) {
-        h2o_buf_t rst_frame = h2o_http2_encode_rst_stream_frame(conn->_write.pool, stream_id, -errnum);
-        h2o_http2_conn_enqueue_write(conn, rst_frame);
+        h2o_http2_encode_rst_stream_frame(&conn->_write.buf, stream_id, -errnum);
+        h2o_http2_conn_request_write(conn);
     } else {
         enqueue_goaway_and_initiate_close(conn, errnum);
     }
@@ -255,9 +256,7 @@ static void send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum)
 static void request_gathered_write(h2o_http2_conn_t *conn)
 {
     assert(conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING);
-    if (conn->_write.wreq_in_flight) {
-        conn->_write.write_once_more = 1;
-    } else {
+    if (conn->_write.buf_in_flight == NULL) {
         if (! h2o_timeout_is_linked(&conn->_write.timeout_entry))
             h2o_timeout_link(conn->super.ctx->loop, &conn->super.ctx->zero_timeout, &conn->_write.timeout_entry);
     }
@@ -332,7 +331,8 @@ static void update_input_window(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_
 {
     h2o_http2_window_consume_window(window, consumed);
     if (h2o_http2_window_get_window(window) * 2 < H2O_HTTP2_SETTINGS_HOST.initial_window_size) {
-        h2o_http2_conn_enqueue_write(conn, h2o_http2_encode_window_update_frame(conn->_write.pool, stream_id, H2O_HTTP2_SETTINGS_HOST.initial_window_size));
+        h2o_http2_encode_window_update_frame(&conn->_write.buf, stream_id, H2O_HTTP2_SETTINGS_HOST.initial_window_size);
+        h2o_http2_conn_request_write(conn);
         h2o_http2_window_update(window, H2O_HTTP2_SETTINGS_HOST.initial_window_size);
     }
 }
@@ -431,9 +431,10 @@ static void handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fra
             return;
         }
         { /* schedule ack */
-            uint8_t *header_buf = h2o_mempool_alloc(conn->_write.pool, H2O_HTTP2_FRAME_HEADER_SIZE);
-            h2o_http2_encode_frame_header(header_buf, 0, H2O_HTTP2_FRAME_TYPE_SETTINGS, H2O_HTTP2_FRAME_FLAG_ACK, 0);
-            h2o_http2_conn_enqueue_write(conn, h2o_buf_init(header_buf, H2O_HTTP2_FRAME_HEADER_SIZE));
+            h2o_buf_t header_buf = h2o_reserve_input_buffer(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE);
+            h2o_http2_encode_frame_header((void*)header_buf.base, 0, H2O_HTTP2_FRAME_TYPE_SETTINGS, H2O_HTTP2_FRAME_FLAG_ACK, 0);
+            conn->_write.buf->size += H2O_HTTP2_FRAME_HEADER_SIZE;
+            h2o_http2_conn_request_write(conn);
         }
         /* apply the change to window size */
         if (prev_initial_window_size != conn->peer_settings.initial_window_size) {
@@ -489,15 +490,14 @@ static void handle_goaway_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
 static void handle_ping_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
 {
     h2o_http2_ping_payload_t payload;
-    h2o_buf_t pong;
 
     if (frame->stream_id != 0 || h2o_http2_decode_ping_payload(&payload, frame) != 0) {
         send_error(conn, 0, H2O_HTTP2_ERROR_PROTOCOL);
         return;
     }
 
-    pong = h2o_http2_encode_ping_frame(conn->_write.pool, 1, payload.data);
-    h2o_http2_conn_enqueue_write(conn, pong);
+    h2o_http2_encode_ping_frame(&conn->_write.buf, 1, payload.data);
+    h2o_http2_conn_request_write(conn);
 }
 
 static void handle_rst_stream_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
@@ -653,13 +653,11 @@ static void on_upgrade_complete(void *_conn, h2o_socket_t *sock, size_t reqsize)
     }
 }
 
-void h2o_http2_conn_enqueue_write(h2o_http2_conn_t *conn, h2o_buf_t buf)
+void h2o_http2_conn_request_write(h2o_http2_conn_t *conn)
 {
     if (conn->state == H2O_HTTP2_CONN_STATE_IS_CLOSING)
         return;
     request_gathered_write(conn);
-    h2o_vector_reserve(conn->_write.pool, (h2o_vector_t*)&conn->_write.bufs, sizeof(h2o_buf_t), conn->_write.bufs.size + 1);
-    conn->_write.bufs.entries[conn->_write.bufs.size++] = buf;
 }
 
 void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
@@ -684,7 +682,7 @@ static void on_write_complete(h2o_socket_t *sock, int status)
 {
     h2o_http2_conn_t *conn = sock->data;
 
-    assert(conn->_write.wreq_in_flight);
+    assert(conn->_write.buf_in_flight != NULL);
 
     /* close by error if necessary */
     if (status != 0) {
@@ -693,7 +691,8 @@ static void on_write_complete(h2o_socket_t *sock, int status)
     }
 
     /* reset the other memory pool */
-    h2o_mempool_clear(conn->_write._pools + (conn->_write.pool == conn->_write._pools));
+    h2o_dispose_input_buffer(&conn->_write.buf_in_flight);
+    assert(conn->_write.buf_in_flight == NULL);
 
     /* call the proceed callback of the streams that have been flushed (while unlinking them from the list) */
     if (status == 0 && conn->state == H2O_HTTP2_CONN_STATE_OPEN) {
@@ -706,14 +705,10 @@ static void on_write_complete(h2o_socket_t *sock, int status)
     }
 
     /* trigger write once more immediately (if necesssary) */
-    conn->_write.wreq_in_flight = 0;
-    if (conn->_write.write_once_more) {
-        conn->_write.write_once_more = 0;
+    if (conn->_write.buf->size != 0) {
         emit_writereq(&conn->_write.timeout_entry);
         return;
     }
-
-    assert(conn->_write.bufs.size == 0);
 
     /* close the connection if necessary */
     if (conn->state == H2O_HTTP2_CONN_STATE_IS_CLOSING) {
@@ -730,9 +725,7 @@ void emit_writereq(h2o_timeout_entry_t *entry)
 {
     h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _write.timeout_entry, entry);
 
-    assert(! conn->_write.wreq_in_flight);
-    assert(! conn->_write.write_once_more);
-    conn->_write.wreq_in_flight = 1;
+    assert(conn->_write.buf_in_flight == NULL);
 
     /* push DATA frames */
     if (conn->state == H2O_HTTP2_CONN_STATE_OPEN && h2o_http2_window_get_window(&conn->_write.window) > 0) {
@@ -762,14 +755,11 @@ void emit_writereq(h2o_timeout_entry_t *entry)
         ;
     }
 
-    if (conn->_write.bufs.size != 0) {
-        h2o_socket_write(conn->sock, conn->_write.bufs.entries, (int)conn->_write.bufs.size, on_write_complete);
-        conn->_write.pool = conn->_write._pools + (conn->_write.pool == conn->_write._pools); /* flip the memory pool */
-        memset(&conn->_write.bufs, 0, sizeof(conn->_write.bufs));
-        conn->_write.write_once_more = 0;
-    } else {
-        conn->_write.wreq_in_flight = 0;
-        /* assert that memory pool is empty */
+    if (conn->_write.buf->size != 0) {
+        h2o_buf_t buf = { conn->_write.buf->bytes, conn->_write.buf->size };
+        h2o_socket_write(conn->sock, &buf, 1, on_write_complete);
+        conn->_write.buf_in_flight = conn->_write.buf;
+        h2o_init_input_buffer(&conn->_write.buf);
     }
 }
 
@@ -778,7 +768,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock, str
     h2o_http2_conn_t *conn = h2o_malloc(sizeof(*conn));
 
     /* init the connection */
-    memset(conn, 0, offsetof(h2o_http2_conn_t, _write._pools[0]));
+    memset(conn, 0, sizeof(*conn));
     conn->super.ctx = ctx;
     conn->super.peername.addr = addr;
     conn->super.peername.len = addrlen;
@@ -791,12 +781,10 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock, str
     h2o_http2_window_init(&conn->_input_window, &H2O_HTTP2_SETTINGS_HOST);
     conn->_output_header_table.hpack_capacity = H2O_HTTP2_SETTINGS_HOST.header_table_size;
     h2o_linklist_init_anchor(&conn->_pending_reqs);
-    conn->_write.pool = conn->_write._pools;
+    h2o_init_input_buffer(&conn->_write.buf);
     h2o_linklist_init_anchor(&conn->_write.streams_without_pending_data);
     conn->_write.timeout_entry.cb = emit_writereq;
     h2o_http2_window_init(&conn->_write.window, &conn->peer_settings);
-    h2o_mempool_init(conn->_write._pools);
-    h2o_mempool_init(conn->_write._pools + 1);
 
     return conn;
 }
