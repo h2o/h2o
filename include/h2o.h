@@ -328,6 +328,8 @@ typedef struct st_h2o_generator_t {
     void (*stop)(struct st_h2o_generator_t *self, h2o_req_t *req);
 } h2o_generator_t;
 
+typedef int (*h2o_ostream_pull_cb)(h2o_generator_t *generator, h2o_req_t *req, h2o_buf_t *buf);
+
 /**
  * an output stream that may alter the output.
  * The object is typically constructed by filters calling the h2o_prepend_ostream function.
@@ -349,7 +351,7 @@ struct st_h2o_ostream_t {
     /**
      * whether if the ostream supports "pull" interface
      */
-    void (*start_pull)(struct st_h2o_ostream_t *self, void (*cb)(h2o_generator_t *generator, h2o_req_t *req, h2o_buf_t *buf, int *is_final));
+    void (*start_pull)(struct st_h2o_ostream_t *self, h2o_ostream_pull_cb cb);
 };
 
 /**

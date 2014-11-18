@@ -27,6 +27,8 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 
+#define MAX_PULL_BUF_SZ 65536
+
 struct st_h2o_http1_req_entity_reader {
     void (*handle_incoming_entity)(h2o_http1_conn_t *conn);
 };
@@ -42,6 +44,8 @@ struct st_h2o_http1_chunked_entity_reader {
     size_t prev_input_size;
 };
 
+static void proceed_pull(h2o_http1_conn_t *conn, size_t nfilled);
+static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb);
 static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, size_t inbufcnt, int is_final);
 static void reqread_on_read(h2o_socket_t *sock, int status);
 
@@ -53,6 +57,7 @@ static void init_request(h2o_http1_conn_t *conn, int reinit)
 
     conn->req._ostr_top = &conn->_ostr_final.super;
     conn->_ostr_final.super.do_send = finalostream_send;
+    conn->_ostr_final.super.start_pull = finalostream_start_pull;
     conn->_ostr_final.sent_headers = 0;
 }
 
@@ -362,7 +367,7 @@ static inline void reqread_start(h2o_http1_conn_t *conn)
         handle_incoming_request(conn);
 }
 
-static void on_send_next(h2o_socket_t *sock, int status)
+static void on_send_next_push(h2o_socket_t *sock, int status)
 {
     h2o_http1_conn_t *conn = sock->data;
 
@@ -370,6 +375,16 @@ static void on_send_next(h2o_socket_t *sock, int status)
         close_connection(conn);
     else
         h2o_proceed_response(&conn->req);
+}
+
+static void on_send_next_pull(h2o_socket_t *sock, int status)
+{
+    h2o_http1_conn_t *conn = sock->data;
+
+    if (status != 0)
+        close_connection(conn);
+    else
+        proceed_pull(conn, 0);
 }
 
 static void on_send_complete(h2o_socket_t *sock, int status)
@@ -480,6 +495,53 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
     return dst - buf;
 }
 
+static void proceed_pull(h2o_http1_conn_t *conn, size_t nfilled)
+{
+    h2o_buf_t buf = { conn->_ostr_final.pull.buf, nfilled };
+    int is_final;
+
+    if (buf.len < MAX_PULL_BUF_SZ) {
+        h2o_buf_t cbuf = { buf.base + buf.len, MAX_PULL_BUF_SZ - buf.len };
+        is_final = conn->_ostr_final.pull.cb(conn->req._generator, &conn->req, &cbuf);
+        buf.len += cbuf.len;
+    } else {
+        is_final = 0;
+    }
+
+    /* write */
+    h2o_socket_write(conn->sock, &buf, 1, is_final ? on_send_complete : on_send_next_pull);
+}
+
+static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb)
+{
+    h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http1_conn_t, _ostr_final.super, _self);
+    const char *connection = conn->req.http1_is_persistent ? "keep-alive" : "close";
+    size_t bufsz, headers_len;
+
+    assert(conn->req._ostr_top == &conn->_ostr_final.super);
+    assert(! conn->_ostr_final.sent_headers);
+
+    /* register the pull callback */
+    conn->_ostr_final.pull.cb = cb;
+
+    /* setup the buffer */
+    bufsz = flatten_headers_estimate_size(&conn->req, conn->super.ctx->global_config->server_name.len + strlen(connection));
+    if (bufsz < MAX_PULL_BUF_SZ) {
+        if (MAX_PULL_BUF_SZ - bufsz < conn->req.res.content_length) {
+            bufsz = MAX_PULL_BUF_SZ;
+        } else {
+            bufsz += conn->req.res.content_length;
+        }
+    }
+    conn->_ostr_final.pull.buf = h2o_mempool_alloc(&conn->req.pool, bufsz);
+
+    /* fill-in the header */
+    headers_len = flatten_headers(conn->_ostr_final.pull.buf, &conn->req, connection);
+    conn->_ostr_final.sent_headers = 1;
+
+    proceed_pull(conn, headers_len);
+}
+
 void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, size_t inbufcnt, int is_final)
 {
     h2o_http1_finalostream_t *self = (void*)_self;
@@ -503,7 +565,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, 
     bufcnt += inbufcnt;
 
     if (bufcnt != 0) {
-        h2o_socket_write(conn->sock, bufs, bufcnt, is_final ? on_send_complete : on_send_next);
+        h2o_socket_write(conn->sock, bufs, bufcnt, is_final ? on_send_complete : on_send_next_push);
     } else {
         on_send_complete(conn->sock, 0);
     }

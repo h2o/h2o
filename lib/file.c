@@ -106,7 +106,7 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
         do_close(&self->super, req);
 }
 
-static void do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_buf_t *buf, int *is_final)
+static int do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_buf_t *buf)
 {
     struct st_h2o_sendfile_generator_t *self = (void*)_self;
     ssize_t rret;
@@ -116,7 +116,6 @@ static void do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_buf_t *buf, int 
     while ((rret = read(self->fd, buf->base, buf->len)) == -1 && errno == EINTR)
         ;
     if (rret == -1) {
-        *is_final = 1;
         req->http1_is_persistent = 0; /* FIXME need a better interface to dispose an errored response w. content-length */
         buf->len = 0;
         self->bytesleft = 0;
@@ -124,10 +123,11 @@ static void do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_buf_t *buf, int 
         buf->len = rret;
         self->bytesleft -= rret;
     }
-    if (self->bytesleft == 0) {
-        *is_final = 1;
-        do_close(&self->super, req);
-    }
+
+    if (self->bytesleft != 0)
+        return 0;
+    do_close(&self->super, req);
+    return 1;
 }
 
 static struct st_h2o_sendfile_generator_t *create_generator(h2o_mempool_t *pool, const char *path, int *is_dir)
@@ -185,7 +185,7 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     h2o_start_response(req, &self->super);
 
     if (req->_ostr_top->start_pull != NULL) {
-        (*req->_ostr_top->start_pull)(req->_ostr_top, do_pull);
+        req->_ostr_top->start_pull(req->_ostr_top, do_pull);
     } else {
         size_t bufsz = MAX_BUF_SIZE;
         if (self->bytesleft < bufsz)
