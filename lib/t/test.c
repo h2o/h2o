@@ -45,7 +45,7 @@ h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx)
     memset(conn, 0, offsetof(struct st_h2o_loopback_conn_t, req));
     conn->super.ctx = ctx;
     h2o_init_request(&conn->req, &conn->super, NULL);
-    h2o_init_input_buffer(&conn->body);
+    h2o_init_input_buffer(&conn->body, &h2o_socket_initial_input_buffer);
     conn->req._ostr_top = &conn->_ostr_final;
     conn->_ostr_final.do_send = loopback_on_send;
 

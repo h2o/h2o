@@ -73,6 +73,9 @@ static void on_write_complete(h2o_socket_t *sock, int status);
 # include "socket/evloop.c.h"
 #endif
 
+/* declared const, so that it would become read-only */
+const h2o_input_buffer_t h2o_socket_initial_input_buffer = { 0, 0, NULL, { H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2 } };
+
 static int read_bio(BIO *b, char *out, int len)
 {
     h2o_socket_t *sock = b->ptr;
@@ -245,7 +248,7 @@ int h2o_socket_export(h2o_socket_t *sock, h2o_socket_export_t *info)
     info->ssl = sock->ssl;
     sock->ssl = NULL;
     info->input = sock->input;
-    h2o_init_input_buffer(&sock->input);
+    h2o_init_input_buffer(&sock->input, &h2o_socket_initial_input_buffer);
 
     h2o_socket_close(sock);
 
@@ -380,7 +383,7 @@ void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, h2o_s
 
     sock->ssl = h2o_malloc(sizeof(*sock->ssl));
     memset(sock->ssl, 0, offsetof(struct st_h2o_socket_ssl_t, output.pool));
-    h2o_init_input_buffer(&sock->ssl->input.encrypted);
+    h2o_init_input_buffer(&sock->ssl->input.encrypted, &h2o_socket_initial_input_buffer);
     h2o_mempool_init(&sock->ssl->output.pool);
     bio = BIO_new(&bio_methods);
     bio->ptr = sock;

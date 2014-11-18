@@ -333,7 +333,7 @@ struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, struct 
 
     sock = h2o_malloc(sizeof(*sock));
     memset(sock, 0, sizeof(*sock));
-    h2o_init_input_buffer(&sock->super.input);
+    h2o_init_input_buffer(&sock->super.input, &h2o_socket_initial_input_buffer);
     assert(addrlen < sizeof(sock->super.peername.addr));
     memcpy(&sock->super.peername.addr, addr, addrlen);
     sock->super.peername.len = addrlen;
