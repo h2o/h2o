@@ -56,6 +56,8 @@ static const h2o_buf_t SETTINGS_HOST_BIN = {
     )
 };
 
+static const h2o_input_buffer_t wbuf_initial_input_buffer = { 0, 0, NULL, { H2O_HTTP2_DEFAULT_OUTBUF_SIZE } };
+
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len);
 static void emit_writereq(h2o_timeout_entry_t *entry);
 static void on_read(h2o_socket_t *sock, int status);
@@ -759,7 +761,7 @@ void emit_writereq(h2o_timeout_entry_t *entry)
         h2o_buf_t buf = { conn->_write.buf->bytes, conn->_write.buf->size };
         h2o_socket_write(conn->sock, &buf, 1, on_write_complete);
         conn->_write.buf_in_flight = conn->_write.buf;
-        h2o_init_input_buffer(&conn->_write.buf);
+        h2o_init_input_buffer(&conn->_write.buf, &wbuf_initial_input_buffer);
     }
 }
 
@@ -781,7 +783,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock, str
     h2o_http2_window_init(&conn->_input_window, &H2O_HTTP2_SETTINGS_HOST);
     conn->_output_header_table.hpack_capacity = H2O_HTTP2_SETTINGS_HOST.header_table_size;
     h2o_linklist_init_anchor(&conn->_pending_reqs);
-    h2o_init_input_buffer(&conn->_write.buf);
+    h2o_init_input_buffer(&conn->_write.buf, &wbuf_initial_input_buffer);
     h2o_linklist_init_anchor(&conn->_write.streams_without_pending_data);
     conn->_write.timeout_entry.cb = emit_writereq;
     h2o_http2_window_init(&conn->_write.window, &conn->peer_settings);

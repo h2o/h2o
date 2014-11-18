@@ -31,6 +31,9 @@ typedef struct st_h2o_http2_stream_t h2o_http2_stream_t;
 extern const char *h2o_http2_npn_protocols;
 extern const h2o_buf_t *h2o_http2_alpn_protocols;
 
+/* connection flow control window + alpha */
+#define H2O_HTTP2_DEFAULT_OUTBUF_SIZE 81920
+
 /* defined as negated form of the error codes defined in HTTP2-spec section 7 */
 #define H2O_HTTP2_ERROR_NONE 0
 #define H2O_HTTP2_ERROR_PROTOCOL -1
