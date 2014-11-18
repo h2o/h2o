@@ -711,13 +711,18 @@ static void test_request(h2o_buf_t first_req, h2o_buf_t second_req, h2o_buf_t th
     h2o_mempool_clear(&req.pool);
 }
 
-static void check_flatten(h2o_mempool_t *pool, h2o_hpack_header_table_t *header_table, h2o_res_t *res, const char *expected, size_t expected_len)
+static void check_flatten(h2o_hpack_header_table_t *header_table, h2o_res_t *res, const char *expected, size_t expected_len)
 {
-    h2o_buf_t flattened = h2o_hpack_flatten_headers(pool, header_table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res, NULL, NULL);
+    h2o_input_buffer_t *buf;
     h2o_http2_frame_t frame;
 
-    ok(h2o_http2_decode_frame(&frame, (uint8_t*)flattened.base, flattened.len, &H2O_HTTP2_SETTINGS_DEFAULT) > 0);
+    h2o_init_input_buffer(&buf, &h2o_socket_initial_input_buffer);
+    h2o_hpack_flatten_headers(&buf, header_table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res, NULL, NULL);
+
+    ok(h2o_http2_decode_frame(&frame, (uint8_t*)buf->bytes, buf->size, &H2O_HTTP2_SETTINGS_DEFAULT) > 0);
     ok(h2o_memis(frame.payload, frame.length, expected, expected_len));
+
+    h2o_dispose_input_buffer(&buf);
 }
 
 void test_lib__http2__hpack(void)
@@ -879,7 +884,7 @@ void test_lib__http2__hpack(void)
         h2o_add_header(&pool, &res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("private"));
         h2o_add_header(&pool, &res.headers, H2O_TOKEN_DATE, H2O_STRLIT("Mon, 21 Oct 2013 20:13:21 GMT"));
         h2o_add_header(&pool, &res.headers, H2O_TOKEN_LOCATION, H2O_STRLIT("https://www.example.com"));
-        check_flatten(&pool, &header_table, &res,
+        check_flatten(&header_table, &res,
             H2O_STRLIT("\x08\x03\x33\x30\x32\x58\x85\xae\xc3\x77\x1a\x4b\x61\x96\xd0\x7a\xbe\x94\x10\x54\xd4\x44\xa8\x20\x05\x95\x04\x0b\x81\x66\xe0\x82\xa6\x2d\x1b\xff\x6e\x91\x9d\x29\xad\x17\x18\x63\xc7\x8f\x0b\x97\xc8\xe9\xae\x82\xae\x43\xd3"));
 
         memset(&res, 0, sizeof(res));
@@ -888,7 +893,7 @@ void test_lib__http2__hpack(void)
         h2o_add_header(&pool, &res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("private"));
         h2o_add_header(&pool, &res.headers, H2O_TOKEN_DATE, H2O_STRLIT("Mon, 21 Oct 2013 20:13:21 GMT"));
         h2o_add_header(&pool, &res.headers, H2O_TOKEN_LOCATION, H2O_STRLIT("https://www.example.com"));
-        check_flatten(&pool, &header_table, &res,
+        check_flatten(&header_table, &res,
             H2O_STRLIT("\x08\x03\x33\x30\x37\xc0\xbf\xbe"));
 #if 0
         h2o_buf_init(H2O_STRLIT("\x48\x03\x33\x30\x37\xc1\xc0\xbf")),
