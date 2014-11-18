@@ -411,37 +411,36 @@ static void on_upgrade_complete(h2o_socket_t *socket, int status)
     cb(data, sock, reqsize);
 }
 
-static h2o_buf_t flatten_headers(h2o_req_t *req, const char *connection)
+static size_t flatten_headers_estimate_size(h2o_req_t *req, size_t server_name_and_connection_len)
+{
+    size_t len =
+        sizeof("HTTP/1.1  \r\ndate: \r\nserver: \r\nconnection: \r\ncontent-length: \r\n\r\n")
+        + 3
+        + strlen(req->res.reason)
+        + H2O_TIMESTR_RFC1123_LEN
+        + server_name_and_connection_len
+        + sizeof("18446744073709551615") - 1;
+    const h2o_header_t *header, *end;
+
+    for (header = req->res.headers.entries, end = header + req->res.headers.size;
+        header != end;
+        ++header)
+        len += header->name->len + header->value.len + 4;
+
+    return len;
+}
+
+static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
 {
     h2o_context_t *ctx = req->conn->ctx;
-    h2o_buf_t flattened;
     h2o_timestamp_t ts;
-    size_t headers_len;
-    char *dst;
+    char *dst = buf;
 
     h2o_get_timestamp(ctx, &req->pool, &ts);
 
     assert(req->res.status <= 999);
 
-    { /* calculate the length of the normal headers */
-        const h2o_header_t *header = req->res.headers.entries, * end = header + req->res.headers.size;
-        headers_len = 2;
-        for (; header != end; ++header)
-            headers_len += header->name->len + header->value.len + 4;
-    }
-
-    /* allocate memory and build the specially crafted headers */
     if (req->res.content_length != SIZE_MAX) {
-        dst = flattened.base = h2o_mempool_alloc(
-            &req->pool,
-            sizeof("HTTP/1.1  \r\ndate: \r\nserver: \r\nconnection: \r\ncontent-length: \r\n")
-            + 3
-            + strlen(req->res.reason)
-            + H2O_TIMESTR_RFC1123_LEN
-            + ctx->global_config->server_name.len
-            + strlen(connection)
-            + sizeof("18446744073709551615") - 1
-            + headers_len);
         dst += sprintf(
             dst,
             "HTTP/1.1 %d %s\r\ndate: %s\r\nserver: %s\r\nconnection: %s\r\ncontent-length: %zu\r\n",
@@ -452,15 +451,6 @@ static h2o_buf_t flatten_headers(h2o_req_t *req, const char *connection)
             connection,
             req->res.content_length);
     } else {
-        dst = flattened.base = h2o_mempool_alloc(
-            &req->pool,
-            sizeof("HTTP/1.1  \r\ndate: \r\nserver: \r\nconnection: \r\n")
-            + 3
-            + strlen(req->res.reason)
-            + H2O_TIMESTR_RFC1123_LEN
-            + ctx->global_config->server_name.len
-            + strlen(connection)
-            + headers_len);
         dst += sprintf(
             dst,
             "HTTP/1.1 %d %s\r\ndate: %s\r\nserver: %s\r\nconnection: %s\r\n",
@@ -487,8 +477,7 @@ static h2o_buf_t flatten_headers(h2o_req_t *req, const char *connection)
         *dst++ = '\n';
     }
 
-    flattened.len = dst - flattened.base;
-    return flattened;
+    return dst - buf;
 }
 
 void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, size_t inbufcnt, int is_final)
@@ -502,8 +491,13 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, 
 
     if (! self->sent_headers) {
         /* build headers and send */
+        const char *connection = req->http1_is_persistent ? "keep-alive" : "close";
+        bufs[bufcnt].base = h2o_mempool_alloc(
+            &req->pool,
+            flatten_headers_estimate_size(req, conn->super.ctx->global_config->server_name.len + strlen(connection)));
+        bufs[bufcnt].len = flatten_headers(bufs[bufcnt].base, req, connection);
+        ++bufcnt;
         self->sent_headers = 1;
-        bufs[bufcnt++] = flatten_headers(req, req->http1_is_persistent ? "keep-alive" : "close");
     }
     memcpy(bufs + bufcnt, inbufs, sizeof(h2o_buf_t) * inbufcnt);
     bufcnt += inbufcnt;
@@ -542,7 +536,10 @@ void h2o_http1_upgrade(h2o_http1_conn_t *conn, h2o_buf_t *inbufs, size_t inbufcn
     conn->upgrade.data = user_data;
     conn->upgrade.cb = on_complete;
 
-    bufs[0] = flatten_headers(&conn->req, "upgrade");
+    bufs[0].base = h2o_mempool_alloc(
+        &conn->req.pool,
+        flatten_headers_estimate_size(&conn->req, conn->super.ctx->global_config->server_name.len + sizeof("upgrade") - 1));
+    bufs[0].len = flatten_headers(bufs[0].base, &conn->req, "upgrade");
     memcpy(bufs + 1, inbufs, sizeof(h2o_buf_t) * inbufcnt);
 
     h2o_socket_write(conn->sock, bufs, (int)(inbufcnt + 1), on_upgrade_complete);
