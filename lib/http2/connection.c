@@ -435,14 +435,13 @@ static void handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fra
             h2o_http2_encode_frame_header(header_buf, 0, H2O_HTTP2_FRAME_TYPE_SETTINGS, H2O_HTTP2_FRAME_FLAG_ACK, 0);
             h2o_http2_conn_enqueue_write(conn, h2o_buf_init(header_buf, H2O_HTTP2_FRAME_HEADER_SIZE));
         }
-        /* apply the change to window size */
+        /* apply the change to window size (to all the streams but not the connection, see 6.9.2 of draft-15) */
         if (prev_initial_window_size != conn->peer_settings.initial_window_size) {
             ssize_t delta = conn->peer_settings.initial_window_size - prev_initial_window_size;
             h2o_http2_stream_t *stream;
             kh_foreach_value(conn->open_streams, stream, {
                 update_stream_output_window(stream, delta);
             });
-            h2o_http2_window_update(&conn->_write.window, delta);
             resume_send(conn);
         }
     }
