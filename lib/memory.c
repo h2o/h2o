@@ -138,25 +138,25 @@ h2o_buf_t h2o_reserve_input_buffer(h2o_input_buffer_t **_inbuf, size_t min_guara
     h2o_input_buffer_t *inbuf = *_inbuf;
     h2o_buf_t ret;
 
-    if (inbuf->_capacity == 0) {
-        if (min_guarantee < inbuf->min_capacity)
-            min_guarantee = inbuf->min_capacity;
+    if (inbuf->bytes == NULL) {
+        if (min_guarantee < inbuf->capacity)
+            min_guarantee = inbuf->capacity;
         inbuf = h2o_malloc(offsetof(h2o_input_buffer_t, _buf) + min_guarantee);
         *_inbuf = inbuf;
         inbuf->size = 0;
         inbuf->bytes = inbuf->_buf;
-        inbuf->_capacity = min_guarantee;
+        inbuf->capacity = min_guarantee;
     } else {
         if (inbuf->bytes != inbuf->_buf) {
             assert(inbuf->size != 0);
             memmove(inbuf->_buf, inbuf->bytes, inbuf->size);
             inbuf->bytes = inbuf->_buf;
         }
-        if (inbuf->_capacity - inbuf->size < min_guarantee) {
+        if (inbuf->capacity - inbuf->size < min_guarantee) {
             do {
-                inbuf->_capacity *= 2;
-            } while (inbuf->_capacity - inbuf->size < min_guarantee);
-            inbuf = h2o_realloc(inbuf, offsetof(h2o_input_buffer_t, _buf) + inbuf->_capacity);
+                inbuf->capacity *= 2;
+            } while (inbuf->capacity - inbuf->size < min_guarantee);
+            inbuf = h2o_realloc(inbuf, offsetof(h2o_input_buffer_t, _buf) + inbuf->capacity);
             inbuf->bytes = inbuf->_buf;
             *_inbuf = inbuf;
         }
@@ -164,7 +164,7 @@ h2o_buf_t h2o_reserve_input_buffer(h2o_input_buffer_t **_inbuf, size_t min_guara
     }
 
     ret.base = inbuf->bytes + inbuf->size;
-    ret.len = inbuf->_capacity - inbuf->size;
+    ret.len = inbuf->capacity - inbuf->size;
 
     return ret;
 }
@@ -174,7 +174,7 @@ void h2o_consume_input_buffer(h2o_input_buffer_t **_inbuf, size_t delta)
     h2o_input_buffer_t *inbuf = *_inbuf;
 
     if (delta != 0) {
-        assert(inbuf->_capacity != 0);
+        assert(inbuf->bytes != NULL);
         if (inbuf->size == delta) {
             inbuf->size = 0;
             inbuf->bytes = inbuf->_buf;
