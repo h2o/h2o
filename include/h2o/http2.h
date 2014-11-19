@@ -190,6 +190,7 @@ struct st_h2o_http2_stream_t {
     h2o_http2_priority_t priority;
     h2o_input_buffer_t *_req_body;
     H2O_VECTOR(h2o_buf_t) _data;
+    h2o_ostream_pull_cb _pull_cb;
     /* link list governed by connection.c for handling various things */
     struct {
         h2o_linklist_t link;
@@ -289,6 +290,9 @@ inline ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn)
     ssize_t ret, winsz;
 
     ret = conn->_write.buf->capacity - conn->_write.buf->size;
+    if (ret < H2O_HTTP2_FRAME_HEADER_SIZE)
+        return 0;
+    ret -= H2O_HTTP2_FRAME_HEADER_SIZE;
     winsz = h2o_http2_window_get_window(&conn->_write.window);
     if (winsz < ret)
         ret = winsz;
