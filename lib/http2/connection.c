@@ -56,7 +56,7 @@ static const h2o_buf_t SETTINGS_HOST_BIN = {
     )
 };
 
-static const h2o_input_buffer_t wbuf_initial_input_buffer = { 0, 0, NULL, { H2O_HTTP2_DEFAULT_OUTBUF_SIZE } };
+static const h2o_input_buffer_t wbuf_initial_input_buffer = { 0, H2O_HTTP2_DEFAULT_OUTBUF_SIZE, NULL };
 
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len);
 static void emit_writereq(h2o_timeout_entry_t *entry);

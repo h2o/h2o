@@ -68,20 +68,14 @@ typedef struct st_h2o_input_buffer_t {
      */
     size_t size;
     /**
-     * capacity of the buffer
+     * capacity of the buffer (if bytes == NULL, indicates the size of the minimal initial capacity)
      */
-    size_t _capacity;
+    size_t capacity;
     /**
-     * pointer to the start of the data
+     * pointer to the start of the data (or NULL if is pointing to a prototype)
      */
     char *bytes;
-    union {
-        /**
-         * minimum initial capacity
-         */
-        size_t min_capacity;
-        char _buf[1];
-    };
+    char _buf[1];
 } h2o_input_buffer_t;
 
 #define H2O_VECTOR(type) \
@@ -235,7 +229,7 @@ inline void h2o_init_input_buffer(h2o_input_buffer_t **buffer, const h2o_input_b
 
 inline void h2o_dispose_input_buffer(h2o_input_buffer_t **buffer)
 {
-    if ((*buffer)->_capacity != 0)
+    if ((*buffer)->bytes != NULL)
         free(*buffer);
     *buffer = NULL;
 }

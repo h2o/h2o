@@ -74,7 +74,7 @@ static void on_write_complete(h2o_socket_t *sock, int status);
 #endif
 
 /* declared const, so that it would become read-only */
-const h2o_input_buffer_t h2o_socket_initial_input_buffer = { 0, 0, NULL, { H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2 } };
+const h2o_input_buffer_t h2o_socket_initial_input_buffer = { 0, H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2, NULL };
 
 static int read_bio(BIO *b, char *out, int len)
 {
