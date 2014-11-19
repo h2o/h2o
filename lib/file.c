@@ -28,7 +28,7 @@
 #include <unistd.h>
 #include "h2o.h"
 
-#define MAX_BUF_SIZE 65536
+#define MAX_BUF_SIZE 65000
 
 struct st_h2o_sendfile_generator_t {
     h2o_generator_t super;

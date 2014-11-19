@@ -404,7 +404,7 @@ static void handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
 
 static void resume_send(h2o_http2_conn_t *conn)
 {
-    if (h2o_http2_window_get_window(&conn->_write.window) <= 0)
+    if (h2o_http2_conn_get_buffer_window(conn) <= 0)
         return;
 #if 0 /* TODO reenable this check for performance? */
     if (conn->_write.streams_with_pending_data.list.size == 0)
@@ -729,7 +729,7 @@ void emit_writereq(h2o_timeout_entry_t *entry)
     assert(conn->_write.buf_in_flight == NULL);
 
     /* push DATA frames */
-    if (conn->state == H2O_HTTP2_CONN_STATE_OPEN && h2o_http2_window_get_window(&conn->_write.window) > 0) {
+    if (conn->state == H2O_HTTP2_CONN_STATE_OPEN && h2o_http2_conn_get_buffer_window(conn) > 0) {
         size_t slot_index;
         for (slot_index = 0; slot_index != conn->_write.streams_with_pending_data.list.size; ++slot_index) {
             h2o_http2_stream_priolist_slot_t *slot = conn->_write.streams_with_pending_data.list.entries[slot_index];
@@ -742,13 +742,13 @@ void emit_writereq(h2o_timeout_entry_t *entry)
                         h2o_linklist_unlink(&stream->_link.link);
                         h2o_linklist_insert(&slot->blocked_streams, &stream->_link.link);
                     } else {
-                        assert(h2o_http2_window_get_window(&conn->_write.window) <= 0);
+                        assert(h2o_http2_conn_get_buffer_window(conn) <= 0);
                     }
                 } else {
                     h2o_linklist_unlink(&stream->_link.link);
                     h2o_linklist_insert(&conn->_write.streams_without_pending_data, &stream->_link.link);
                 }
-                if (h2o_http2_window_get_window(&conn->_write.window) <= 0)
+                if (h2o_http2_conn_get_buffer_window(conn) <= 0)
                     goto DonePush;
             }
         }

@@ -91,7 +91,7 @@ static size_t calc_max_payload_size(h2o_http2_conn_t *conn, h2o_http2_stream_t *
 {
     ssize_t conn_max, stream_max;
 
-    if ((conn_max = h2o_http2_window_get_window(&conn->_write.window)) <= 0)
+    if ((conn_max = h2o_http2_conn_get_buffer_window(conn)) <= 0)
         return 0;
     if ((stream_max = h2o_http2_window_get_window(&stream->output_window)) <= 0)
         return 0;

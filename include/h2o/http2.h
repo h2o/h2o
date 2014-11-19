@@ -258,6 +258,7 @@ void h2o_http2_accept(h2o_context_t *ctx, h2o_socket_t *sock);
 int h2o_http2_handle_upgrade(h2o_req_t *req);
 void h2o_http2_conn_request_write(h2o_http2_conn_t *conn);
 void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
+static ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn);
 
 /* stream */
 h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, const h2o_http2_priority_t *priority, h2o_req_t *src_req);
@@ -281,6 +282,17 @@ inline h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uin
     if (iter != kh_end(conn->open_streams))
         return kh_val(conn->open_streams, iter);
     return NULL;
+}
+
+inline ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn)
+{
+    ssize_t ret, winsz;
+
+    ret = conn->_write.buf->capacity - conn->_write.buf->size;
+    winsz = h2o_http2_window_get_window(&conn->_write.window);
+    if (winsz < ret)
+        ret = winsz;
+    return ret;
 }
 
 inline int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream)
