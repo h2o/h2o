@@ -429,7 +429,7 @@ yoml_t *load_config(const char *fn)
     yoml = yoml_parse_document(&parser, NULL);
 
     if (yoml == NULL)
-        fprintf(stderr, "failed to parse configuration file:%s:%s\n", fn, parser.problem);
+        fprintf(stderr, "failed to parse configuration file:%s:line %d:%s\n", fn, (int)parser.problem_mark.line, parser.problem);
 
     yaml_parser_delete(&parser);
 
