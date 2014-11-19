@@ -59,7 +59,7 @@ static const h2o_buf_t SETTINGS_HOST_BIN = {
 static const h2o_input_buffer_t wbuf_initial_input_buffer = { 0, H2O_HTTP2_DEFAULT_OUTBUF_SIZE, NULL };
 
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len);
-static void emit_writereq(h2o_timeout_entry_t *entry);
+static int do_emit_writereq(h2o_http2_conn_t *conn);
 static void on_read(h2o_socket_t *sock, int status);
 
 static h2o_http2_stream_priolist_slot_t *priolist_link(h2o_http2_stream_priolist_t *priolist, uint16_t weight)
@@ -705,11 +705,9 @@ static void on_write_complete(h2o_socket_t *sock, int status)
         }
     }
 
-    /* trigger write once more immediately (if necesssary) */
-    if (conn->_write.buf->size != 0) {
-        emit_writereq(&conn->_write.timeout_entry);
+    /* write more, if possible */
+    if (do_emit_writereq(conn))
         return;
-    }
 
     /* close the connection if necessary */
     if (conn->state == H2O_HTTP2_CONN_STATE_IS_CLOSING) {
@@ -722,10 +720,8 @@ static void on_write_complete(h2o_socket_t *sock, int status)
         parse_input(conn);
 }
 
-void emit_writereq(h2o_timeout_entry_t *entry)
+int do_emit_writereq(h2o_http2_conn_t *conn)
 {
-    h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _write.timeout_entry, entry);
-
     assert(conn->_write.buf_in_flight == NULL);
 
     /* push DATA frames */
@@ -756,12 +752,23 @@ void emit_writereq(h2o_timeout_entry_t *entry)
         ;
     }
 
-    if (conn->_write.buf->size != 0) {
+    if (conn->_write.buf->size == 0)
+        return 0;
+
+    { /* write */
         h2o_buf_t buf = { conn->_write.buf->bytes, conn->_write.buf->size };
         h2o_socket_write(conn->sock, &buf, 1, on_write_complete);
         conn->_write.buf_in_flight = conn->_write.buf;
         h2o_init_input_buffer(&conn->_write.buf, &wbuf_initial_input_buffer);
     }
+    return 1;
+}
+
+static void emit_writereq(h2o_timeout_entry_t *entry)
+{
+    h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _write.timeout_entry, entry);
+
+    do_emit_writereq(conn);
 }
 
 static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock, struct sockaddr *addr, socklen_t addrlen)
