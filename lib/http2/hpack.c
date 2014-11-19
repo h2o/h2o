@@ -562,7 +562,7 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
     return dst;
 }
 
-int h2o_hpack_flatten_headers(h2o_input_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id, size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t* ts, const h2o_buf_t *server_name)
+int h2o_hpack_flatten_headers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id, size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t* ts, const h2o_buf_t *server_name)
 {
     const h2o_header_t *header, *header_end;
     size_t max_capacity = 0;
@@ -592,7 +592,7 @@ int h2o_hpack_flatten_headers(h2o_input_buffer_t **buf, h2o_hpack_header_table_t
     }
 
     /* allocate */
-    base = dst = (void*)h2o_reserve_input_buffer(buf, max_capacity).base;
+    base = dst = (void*)h2o_buffer_reserve(buf, max_capacity).base;
 
     { /* encode */
         uint8_t *cur_frame;
@@ -713,16 +713,16 @@ static void test_request(h2o_buf_t first_req, h2o_buf_t second_req, h2o_buf_t th
 
 static void check_flatten(h2o_hpack_header_table_t *header_table, h2o_res_t *res, const char *expected, size_t expected_len)
 {
-    h2o_input_buffer_t *buf;
+    h2o_buffer_t *buf;
     h2o_http2_frame_t frame;
 
-    h2o_init_input_buffer(&buf, &h2o_socket_initial_input_buffer);
+    h2o_buffer_init(&buf, &h2o_socket_buffer_prototype);
     h2o_hpack_flatten_headers(&buf, header_table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res, NULL, NULL);
 
     ok(h2o_http2_decode_frame(&frame, (uint8_t*)buf->bytes, buf->size, &H2O_HTTP2_SETTINGS_DEFAULT) > 0);
     ok(h2o_memis(frame.payload, frame.length, expected, expected_len));
 
-    h2o_dispose_input_buffer(&buf);
+    h2o_buffer_dispose(&buf);
 }
 
 void test_lib__http2__hpack(void)

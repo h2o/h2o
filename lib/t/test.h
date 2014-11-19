@@ -30,7 +30,7 @@ typedef struct st_h2o_loopback_conn_t {
     /**
      * the response
      */
-    h2o_input_buffer_t *body;
+    h2o_buffer_t *body;
     /* internal structure */
     h2o_ostream_t _ostr_final;
     int _is_complete;

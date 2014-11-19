@@ -41,7 +41,7 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
     h2o_http2_window_init(&stream->input_window, &H2O_HTTP2_SETTINGS_HOST);
     memcpy(&stream->priority, priority, sizeof(stream->priority));
-    h2o_init_input_buffer(&stream->_req_body, &h2o_socket_initial_input_buffer);
+    h2o_buffer_init(&stream->_req_body, &h2o_socket_buffer_prototype);
 
     /* init request */
     h2o_init_request(&stream->req, &conn->super, src_req);
@@ -58,10 +58,10 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     h2o_http2_conn_unregister_stream(conn, stream);
-    h2o_dispose_input_buffer(&stream->_req_body);
+    h2o_buffer_dispose(&stream->_req_body);
     h2o_dispose_request(&stream->req);
     if (stream->stream_id == 1 && conn->_http1_req_input != NULL)
-        h2o_dispose_input_buffer(&conn->_http1_req_input);
+        h2o_buffer_dispose(&conn->_http1_req_input);
     free(stream);
 }
 
@@ -118,7 +118,7 @@ static int send_data_pull(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         if ((max_payload_size = calc_max_payload_size(conn, stream)) == 0)
             break;
         /* reserve buffer */
-        h2o_reserve_input_buffer(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE + max_payload_size);
+        h2o_buffer_reserve(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE + max_payload_size);
         /* obtain content */
         cbuf.base = conn->_write.buf->bytes + conn->_write.buf->size + H2O_HTTP2_FRAME_HEADER_SIZE;
         cbuf.len = max_payload_size;
@@ -146,14 +146,14 @@ static h2o_buf_t *send_data_push(h2o_http2_conn_t *conn, h2o_http2_stream_t *str
                     encode_data_header_and_consume_window(conn, stream, (uint8_t*)conn->_write.buf->bytes + data_header_offset, payload_size, 0);
                 if ((max_payload_size = calc_max_payload_size(conn, stream)) == 0)
                     goto Exit;
-                h2o_reserve_input_buffer(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE);
+                h2o_buffer_reserve(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE);
                 data_header_offset = conn->_write.buf->size;
                 conn->_write.buf->size += H2O_HTTP2_FRAME_HEADER_SIZE;
                 payload_size = 0;
             }
             /* emit payload */
             fill_size = sz_min(max_payload_size, bufs->len);
-            memcpy(h2o_reserve_input_buffer(&conn->_write.buf, fill_size).base, bufs->base, fill_size);
+            memcpy(h2o_buffer_reserve(&conn->_write.buf, fill_size).base, bufs->base, fill_size);
             conn->_write.buf->size += fill_size;
             bufs->base += fill_size;
             bufs->len -= fill_size;
@@ -166,7 +166,7 @@ static h2o_buf_t *send_data_push(h2o_http2_conn_t *conn, h2o_http2_stream_t *str
     } else if (is_final) {
         encode_data_header_and_consume_window(
             conn, stream,
-            (void*)h2o_reserve_input_buffer(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE).base,
+            (void*)h2o_buffer_reserve(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE).base,
             0, 1);
         conn->_write.buf->size += H2O_HTTP2_FRAME_HEADER_SIZE;
     }

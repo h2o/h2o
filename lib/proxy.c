@@ -34,8 +34,8 @@ struct rp_generator_t {
         h2o_buf_t bufs[2]; /* first buf is the request line and headers, the second is the POST content */
         int is_head;
     } up_req;
-    h2o_input_buffer_t *last_content_before_send;
-    h2o_input_buffer_t *buf_sending;
+    h2o_buffer_t *last_content_before_send;
+    h2o_buffer_t *buf_sending;
 };
 
 struct rp_handler_t {
@@ -113,9 +113,9 @@ static void do_close(h2o_generator_t *generator, h2o_req_t *req)
         h2o_http1client_cancel(self->client);
 }
 
-static void swap_input_buffer(h2o_input_buffer_t **x, h2o_input_buffer_t **y)
+static void swap_buffer(h2o_buffer_t **x, h2o_buffer_t **y)
 {
-    h2o_input_buffer_t *t = *x;
+    h2o_buffer_t *t = *x;
     *x = *y;
     *y = t;
 }
@@ -124,7 +124,7 @@ static void do_send(struct rp_generator_t *self)
 {
     assert(self->buf_sending->size == 0);
 
-    swap_input_buffer(
+    swap_buffer(
         &self->buf_sending,
         self->client != NULL ? &self->client->sock->input : &self->last_content_before_send);
 
@@ -140,7 +140,7 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
 {
     struct rp_generator_t *self = (void*)generator;
 
-    h2o_consume_input_buffer(&self->buf_sending, self->buf_sending->size);
+    h2o_buffer_consume(&self->buf_sending, self->buf_sending->size);
 
     do_send(self);
 }
@@ -154,7 +154,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     if (errstr != NULL) {
         /* detach the content */
         self->last_content_before_send = self->client->sock->input;
-        h2o_init_input_buffer(&self->client->sock->input, &h2o_socket_initial_input_buffer);
+        h2o_buffer_init(&self->client->sock->input, &h2o_socket_buffer_prototype);
         self->client = NULL;
     }
     if (self->buf_sending->size == 0)
@@ -233,8 +233,8 @@ static void on_generator_dispose(void *_self)
     struct rp_generator_t *self = _self;
 
     assert(self->client == NULL);
-    h2o_dispose_input_buffer(&self->last_content_before_send);
-    h2o_dispose_input_buffer(&self->buf_sending);
+    h2o_buffer_dispose(&self->last_content_before_send);
+    h2o_buffer_dispose(&self->buf_sending);
 }
 
 static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_buf_t host, uint16_t port, size_t path_replace_length, h2o_buf_t path_prefix, int keepalive)
@@ -247,8 +247,8 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_buf_t host,
     self->up_req.bufs[0] = build_request(req, host, port, path_replace_length, path_prefix, keepalive);
     self->up_req.bufs[1] = req->entity;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
-    h2o_init_input_buffer(&self->last_content_before_send, &h2o_socket_initial_input_buffer);
-    h2o_init_input_buffer(&self->buf_sending, &h2o_socket_initial_input_buffer);
+    h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&self->buf_sending, &h2o_socket_buffer_prototype);
 
     return self;
 }

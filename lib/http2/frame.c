@@ -72,34 +72,34 @@ uint8_t *h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type
     return dst;
 }
 
-static uint8_t *allocate_frame(h2o_input_buffer_t **buf, size_t length, uint8_t type, uint8_t flags, int32_t stream_id)
+static uint8_t *allocate_frame(h2o_buffer_t **buf, size_t length, uint8_t type, uint8_t flags, int32_t stream_id)
 {
-    h2o_buf_t alloced = h2o_reserve_input_buffer(buf, H2O_HTTP2_FRAME_HEADER_SIZE + length);
+    h2o_buf_t alloced = h2o_buffer_reserve(buf, H2O_HTTP2_FRAME_HEADER_SIZE + length);
     (*buf)->size += H2O_HTTP2_FRAME_HEADER_SIZE + length;
     return h2o_http2_encode_frame_header((uint8_t*)alloced.base, length, type, flags, stream_id);
 }
 
-void h2o_http2_encode_rst_stream_frame(h2o_input_buffer_t **buf, uint32_t stream_id, int errnum)
+void h2o_http2_encode_rst_stream_frame(h2o_buffer_t **buf, uint32_t stream_id, int errnum)
 {
     uint8_t *dst = allocate_frame(buf, 4, H2O_HTTP2_FRAME_TYPE_RST_STREAM, 0, stream_id);
     dst = encode32u(dst, errnum);
 }
 
-void h2o_http2_encode_ping_frame(h2o_input_buffer_t **buf, int is_ack, const uint8_t *data)
+void h2o_http2_encode_ping_frame(h2o_buffer_t **buf, int is_ack, const uint8_t *data)
 {
     uint8_t *dst = allocate_frame(buf, 8, H2O_HTTP2_FRAME_TYPE_PING, is_ack ? H2O_HTTP2_FRAME_FLAG_ACK : 0, 0);
     memcpy(dst, data, 8);
     dst += 8;
 }
 
-void h2o_http2_encode_goaway_frame(h2o_input_buffer_t **buf, uint32_t last_stream_id, int errnum)
+void h2o_http2_encode_goaway_frame(h2o_buffer_t **buf, uint32_t last_stream_id, int errnum)
 {
     uint8_t *dst = allocate_frame(buf, 8, H2O_HTTP2_FRAME_TYPE_GOAWAY, 0, 0);
     dst = encode32u(dst, last_stream_id);
     dst = encode32u(dst, errnum);
 }
 
-void h2o_http2_encode_window_update_frame(h2o_input_buffer_t **buf, uint32_t stream_id, int32_t window_size_increment)
+void h2o_http2_encode_window_update_frame(h2o_buffer_t **buf, uint32_t stream_id, int32_t window_size_increment)
 {
     uint8_t *dst = allocate_frame(buf, 4, H2O_HTTP2_FRAME_TYPE_WINDOW_UPDATE, 0, stream_id);
     dst = encode32u(dst, window_size_increment);

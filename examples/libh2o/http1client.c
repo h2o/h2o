@@ -83,7 +83,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     }
 
     fwrite(client->sock->input->bytes, 1, client->sock->input->size, stdout);
-    h2o_consume_input_buffer(&client->sock->input, client->sock->input->size);
+    h2o_buffer_consume(&client->sock->input, client->sock->input->size);
 
     if (errstr == h2o_http1client_error_is_eos) {
         if (--cnt_left != 0) {

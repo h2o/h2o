@@ -31,7 +31,7 @@ static void close_client(h2o_http1client_t *client)
     if (client->sock != NULL) {
         if (client->sockpool != NULL && client->_can_keepalive) {
             /* we do not send pipelined requests, and thus can trash all the received input at the end of the request */
-            h2o_consume_input_buffer(&client->sock->input, client->sock->input->size);
+            h2o_buffer_consume(&client->sock->input, client->sock->input->size);
             h2o_socketpool_return(client->sockpool, client->sock);
         } else {
             h2o_socket_close(client->sock);
@@ -72,7 +72,7 @@ static void on_body_until_close(h2o_socket_t *sock, int status)
             close_client(client);
             return;
         }
-        h2o_consume_input_buffer(&sock->input, sock->input->size);
+        h2o_buffer_consume(&sock->input, sock->input->size);
     }
 
     h2o_timeout_link(client->ctx->loop, client->ctx->io_timeout, &client->_timeout);
@@ -121,7 +121,7 @@ static void on_body_content_length(h2o_socket_t *sock, int status)
 static void on_body_chunked(h2o_socket_t *sock, int status)
 {
     h2o_http1client_t *client = sock->data;
-    h2o_input_buffer_t *inbuf;
+    h2o_buffer_t *inbuf;
 
     h2o_timeout_unlink(&client->_timeout);
 
@@ -256,7 +256,7 @@ static void on_head(h2o_socket_t *sock, int status)
         return;
     }
 
-    h2o_consume_input_buffer(&client->sock->input, rlen);
+    h2o_buffer_consume(&client->sock->input, rlen);
     client->sock->bytes_read -= rlen;
 
     client->_timeout.cb = on_body_timeout;

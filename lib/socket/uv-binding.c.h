@@ -38,7 +38,7 @@ static void alloc_inbuf_tcp(uv_handle_t *handle, size_t suggested_size, uv_buf_t
 {
     struct st_h2o_uv_socket_t *sock = handle->data;
 
-    h2o_buf_t buf = h2o_reserve_input_buffer(&sock->super.input, 4096);
+    h2o_buf_t buf = h2o_buffer_reserve(&sock->super.input, 4096);
     memcpy(_buf, &buf, sizeof(buf));
 }
 
@@ -46,7 +46,7 @@ static void alloc_inbuf_ssl(uv_handle_t *handle, size_t suggested_size, uv_buf_t
 {
     struct st_h2o_uv_socket_t *sock = handle->data;
 
-    h2o_buf_t buf = h2o_reserve_input_buffer(&sock->super.ssl->input.encrypted, 4096);
+    h2o_buf_t buf = h2o_buffer_reserve(&sock->super.ssl->input.encrypted, 4096);
     memcpy(_buf, &buf, sizeof(buf));
 }
 
@@ -169,7 +169,7 @@ h2o_socket_t *h2o_uv_socket_create(uv_stream_t *stream, struct sockaddr *addr, s
     struct st_h2o_uv_socket_t *sock = h2o_malloc(sizeof(*sock));
 
     memset(sock, 0, sizeof(*sock));
-    h2o_init_input_buffer(&sock->super.input, &h2o_socket_initial_input_buffer);
+    h2o_buffer_init(&sock->super.input, &h2o_socket_buffer_prototype);
     if (addr != NULL) {
         memcpy(&sock->super.peername.addr, addr, addrlen);
         sock->super.peername.len = addrlen;

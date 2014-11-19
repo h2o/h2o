@@ -78,7 +78,7 @@ static ssize_t recv_callback(wslay_event_context_ptr ctx, uint8_t *buf, size_t l
     if (conn->sock->input->size < len)
         len = conn->sock->input->size;
     memcpy(buf, conn->sock->input->bytes, len);
-    h2o_consume_input_buffer(&conn->sock->input, len);
+    h2o_buffer_consume(&conn->sock->input, len);
     return len;
 }
 
@@ -123,7 +123,7 @@ static void on_complete(void *user_data, h2o_socket_t *sock, size_t reqsize)
 
     conn->sock = sock;
     sock->data = conn;
-    h2o_consume_input_buffer(&sock->input, reqsize);
+    h2o_buffer_consume(&sock->input, reqsize);
     h2o_websocket_proceed(conn);
 }
 

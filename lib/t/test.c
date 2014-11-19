@@ -27,7 +27,7 @@ static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_buf_t *inb
     size_t i;
 
     for (i = 0; i != inbufcnt; ++i) {
-        h2o_reserve_input_buffer(&conn->body, inbufs->len);
+        h2o_buffer_reserve(&conn->body, inbufs->len);
         memcpy(conn->body->bytes + conn->body->size, inbufs->base, inbufs->len);
         conn->body->size += inbufs->len;
     }
@@ -45,7 +45,7 @@ h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx)
     memset(conn, 0, offsetof(struct st_h2o_loopback_conn_t, req));
     conn->super.ctx = ctx;
     h2o_init_request(&conn->req, &conn->super, NULL);
-    h2o_init_input_buffer(&conn->body, &h2o_socket_initial_input_buffer);
+    h2o_buffer_init(&conn->body, &h2o_socket_buffer_prototype);
     conn->req._ostr_top = &conn->_ostr_final;
     conn->_ostr_final.do_send = loopback_on_send;
 
@@ -54,7 +54,7 @@ h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx)
 
 void h2o_loopback_destroy(h2o_loopback_conn_t *conn)
 {
-    h2o_dispose_input_buffer(&conn->body);
+    h2o_buffer_dispose(&conn->body);
     h2o_dispose_request(&conn->req);
     free(conn);
 }

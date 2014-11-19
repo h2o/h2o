@@ -105,12 +105,12 @@ static void link_to_statechanged(struct st_h2o_evloop_socket_t *sock)
     }
 }
 
-static int on_read_core(int fd, h2o_input_buffer_t** input)
+static int on_read_core(int fd, h2o_buffer_t** input)
 {
     int read_any = 0;
 
     while (1) {
-        h2o_buf_t buf = h2o_reserve_input_buffer(input, 4096);
+        h2o_buf_t buf = h2o_buffer_reserve(input, 4096);
         ssize_t rret;
         while ((rret = read(fd, buf.base, buf.len)) == -1 && errno == EINTR)
             ;
@@ -333,7 +333,7 @@ struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, struct 
 
     sock = h2o_malloc(sizeof(*sock));
     memset(sock, 0, sizeof(*sock));
-    h2o_init_input_buffer(&sock->super.input, &h2o_socket_initial_input_buffer);
+    h2o_buffer_init(&sock->super.input, &h2o_socket_buffer_prototype);
     assert(addrlen < sizeof(sock->super.peername.addr));
     memcpy(&sock->super.peername.addr, addr, addrlen);
     sock->super.peername.len = addrlen;

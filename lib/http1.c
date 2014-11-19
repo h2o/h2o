@@ -104,7 +104,7 @@ static void on_entity_read_complete(h2o_http1_conn_t *conn)
 static void handle_chunked_entity_read(h2o_http1_conn_t *conn)
 {
     struct st_h2o_http1_chunked_entity_reader *reader = (void*)conn->_req_entity_reader;
-    h2o_input_buffer_t *inbuf = conn->sock->input;
+    h2o_buffer_t *inbuf = conn->sock->input;
     size_t bufsz;
     ssize_t ret;
 
@@ -204,7 +204,7 @@ static ssize_t fixup_request(h2o_http1_conn_t *conn, struct phr_header *headers,
     /* init headers */
     entity_header_index = h2o_init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade, expect);
 
-    /* copy the values to pool, since the input buffer pointed by the headers may get realloced */
+    /* copy the values to pool, since the buffer pointed by the headers may get realloced */
     if (entity_header_index != -1) {
         size_t i;
         conn->req.method = h2o_strdup(&conn->req.pool, conn->req.method.base, conn->req.method.len);
@@ -401,7 +401,7 @@ static void on_send_complete(h2o_socket_t *sock, int status)
 
     /* handle next request */
     init_request(conn, 1);
-    h2o_consume_input_buffer(&conn->sock->input, conn->_reqsize);
+    h2o_buffer_consume(&conn->sock->input, conn->_reqsize);
     conn->_prevreqlen = 0;
     conn->_reqsize = 0;
     reqread_start(conn);

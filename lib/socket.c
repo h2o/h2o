@@ -41,7 +41,7 @@ struct st_h2o_socket_ssl_t {
         h2o_socket_cb cb;
     } handshake;
     struct {
-        h2o_input_buffer_t *encrypted;
+        h2o_buffer_t *encrypted;
     } input;
     struct {
         H2O_VECTOR(h2o_buf_t) bufs;
@@ -74,7 +74,7 @@ static void on_write_complete(h2o_socket_t *sock, int status);
 #endif
 
 /* declared const, so that it would become read-only */
-const h2o_input_buffer_t h2o_socket_initial_input_buffer = { 0, H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2, NULL };
+const h2o_buffer_t h2o_socket_buffer_prototype = { 0, H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2, NULL };
 
 static int read_bio(BIO *b, char *out, int len)
 {
@@ -92,7 +92,7 @@ static int read_bio(BIO *b, char *out, int len)
         len = (int)sock->ssl->input.encrypted->size;
     }
     memcpy(out, sock->ssl->input.encrypted->bytes, len);
-    h2o_consume_input_buffer(&sock->ssl->input.encrypted, len);
+    h2o_buffer_consume(&sock->ssl->input.encrypted, len);
 
     return len;
 }
@@ -154,7 +154,7 @@ int decode_ssl_input(h2o_socket_t *sock)
     assert(sock->ssl->handshake.cb == NULL);
 
     while (sock->ssl->input.encrypted->size != 0) {
-        h2o_buf_t buf = h2o_reserve_input_buffer(&sock->input, 4096);
+        h2o_buf_t buf = h2o_buffer_reserve(&sock->input, 4096);
         int rlen = SSL_read(sock->ssl->ssl, buf.base, (int)buf.len);
         if (rlen == -1) {
             if (SSL_get_error(sock->ssl->ssl, rlen) != SSL_ERROR_WANT_READ) {
@@ -179,7 +179,7 @@ static void flush_pending_ssl(h2o_socket_t *sock, h2o_socket_cb cb)
 static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
 {
     SSL_free(ssl->ssl);
-    h2o_dispose_input_buffer(&ssl->input.encrypted);
+    h2o_buffer_dispose(&ssl->input.encrypted);
     h2o_mempool_clear(&ssl->output.pool);
     free(ssl);
 }
@@ -191,7 +191,7 @@ static void dispose_socket(h2o_socket_t *sock, int status)
 
     if (sock->ssl != NULL)
         destroy_ssl(sock->ssl);
-    h2o_dispose_input_buffer(&sock->input);
+    h2o_buffer_dispose(&sock->input);
 
     close_cb = sock->on_close.cb;
     close_cb_data = sock->on_close.data;
@@ -233,7 +233,7 @@ void h2o_socket_dispose_export(h2o_socket_export_t *info)
     assert(info->fd != -1);
     if (info->ssl != NULL)
         destroy_ssl(info->ssl);
-    h2o_dispose_input_buffer(&info->input);
+    h2o_buffer_dispose(&info->input);
     close(info->fd);
     info->fd = -1;
 }
@@ -248,7 +248,7 @@ int h2o_socket_export(h2o_socket_t *sock, h2o_socket_export_t *info)
     info->ssl = sock->ssl;
     sock->ssl = NULL;
     info->input = sock->input;
-    h2o_init_input_buffer(&sock->input, &h2o_socket_initial_input_buffer);
+    h2o_buffer_init(&sock->input, &h2o_socket_buffer_prototype);
 
     h2o_socket_close(sock);
 
@@ -383,7 +383,7 @@ void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, h2o_s
 
     sock->ssl = h2o_malloc(sizeof(*sock->ssl));
     memset(sock->ssl, 0, offsetof(struct st_h2o_socket_ssl_t, output.pool));
-    h2o_init_input_buffer(&sock->ssl->input.encrypted, &h2o_socket_initial_input_buffer);
+    h2o_buffer_init(&sock->ssl->input.encrypted, &h2o_socket_buffer_prototype);
     h2o_mempool_init(&sock->ssl->output.pool);
     bio = BIO_new(&bio_methods);
     bio->ptr = sock;

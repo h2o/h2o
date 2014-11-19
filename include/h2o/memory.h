@@ -62,7 +62,7 @@ typedef struct st_h2o_mempool_t {
 /**
  * buffer used to store incoming octets
  */
-typedef struct st_h2o_input_buffer_t {
+typedef struct st_h2o_buffer_t {
     /**
      * amount of the data available
      */
@@ -76,7 +76,7 @@ typedef struct st_h2o_input_buffer_t {
      */
     char *bytes;
     char _buf[1];
-} h2o_input_buffer_t;
+} h2o_buffer_t;
 
 #define H2O_VECTOR(type) \
     struct { \
@@ -139,26 +139,26 @@ static void h2o_mempool_addref_shared(void *p);
  */
 static int h2o_mempool_release_shared(void *p);
 /**
- * initialize the input buffer using given prototype.
+ * initialize the buffer using given prototype.
  */
-static void h2o_init_input_buffer(h2o_input_buffer_t **buffer, const h2o_input_buffer_t *prototype);
+static void h2o_buffer_init(h2o_buffer_t **buffer, const h2o_buffer_t *prototype);
 /**
- * disposes of the input buffer
+ * disposes of the buffer
  */
-static void h2o_dispose_input_buffer(h2o_input_buffer_t **buffer);
+static void h2o_buffer_dispose(h2o_buffer_t **buffer);
 /**
- * allocates a input buffer.
+ * allocates a buffer.
  * @param inbuf - pointer to a pointer pointing to the structure (set *inbuf to NULL to allocate a new buffer)
  * @param min_guarantee minimum number of bytes to reserve
  * @return buffer to which the next data should be stored
- * @note When called against a new input buffer, the function returns a buffer twice the size of requested guarantee.  The function uses expotential backoff for already-allocated input buffers.
+ * @note When called against a new buffer, the function returns a buffer twice the size of requested guarantee.  The function uses expotential backoff for already-allocated buffers.
  */
-h2o_buf_t h2o_reserve_input_buffer(h2o_input_buffer_t **inbuf, size_t min_guarantee);
+h2o_buf_t h2o_buffer_reserve(h2o_buffer_t **inbuf, size_t min_guarantee);
 /**
  * throws away given size of the data from the buffer.
  * @param delta number of octets to be drained from the buffer
  */
-void h2o_consume_input_buffer(h2o_input_buffer_t **inbuf, size_t delta);
+void h2o_buffer_consume(h2o_buffer_t **inbuf, size_t delta);
 /**
  * grows the vector so that it could store at least new_capacity elements of given size (or dies if impossible).
  * @param pool memory pool that the vector is using
@@ -222,12 +222,12 @@ inline int h2o_mempool_release_shared(void *p)
     return 0;
 }
 
-inline void h2o_init_input_buffer(h2o_input_buffer_t **buffer, const h2o_input_buffer_t *prototype)
+inline void h2o_buffer_init(h2o_buffer_t **buffer, const h2o_buffer_t *prototype)
 {
     *buffer = (void*)prototype;
 }
 
-inline void h2o_dispose_input_buffer(h2o_input_buffer_t **buffer)
+inline void h2o_buffer_dispose(h2o_buffer_t **buffer)
 {
     if ((*buffer)->bytes != NULL)
         free(*buffer);

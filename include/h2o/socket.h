@@ -69,7 +69,7 @@ typedef struct st_h2o_socket_peername_t {
 struct st_h2o_socket_t {
     void *data;
     struct st_h2o_socket_ssl_t *ssl;
-    h2o_input_buffer_t *input;
+    h2o_buffer_t *input;
     size_t bytes_read;
     struct {
         void (*cb)(void *data);
@@ -87,10 +87,10 @@ typedef struct st_h2o_socket_export_t {
     int fd;
     h2o_socket_peername_t peername;
     struct st_h2o_socket_ssl_t *ssl;
-    h2o_input_buffer_t *input;
+    h2o_buffer_t *input;
 } h2o_socket_export_t;
 
-extern const h2o_input_buffer_t h2o_socket_initial_input_buffer;
+extern const h2o_buffer_t h2o_socket_buffer_prototype;
 
 /**
  * returns the loop
