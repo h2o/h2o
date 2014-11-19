@@ -115,7 +115,7 @@ static int do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_buf_t *buf)
         buf->len = self->bytesleft;
     while ((rret = read(self->fd, buf->base, buf->len)) == -1 && errno == EINTR)
         ;
-    if (rret == -1) {
+    if (rret <= 0) {
         req->http1_is_persistent = 0; /* FIXME need a better interface to dispose an errored response w. content-length */
         buf->len = 0;
         self->bytesleft = 0;
