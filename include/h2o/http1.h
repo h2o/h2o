@@ -28,6 +28,10 @@ typedef void (*h2o_http1_upgrade_cb)(void *user_data, h2o_socket_t *sock, size_t
 typedef struct st_h2o_http1_finalostream_t {
     h2o_ostream_t super;
     int sent_headers;
+    struct {
+        void *buf;
+        h2o_ostream_pull_cb cb;
+    } pull;
 } h2o_http1_finalostream_t;
 
 struct st_h2o_http1_conn_t {

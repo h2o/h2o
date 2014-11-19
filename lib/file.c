@@ -28,7 +28,7 @@
 #include <unistd.h>
 #include "h2o.h"
 
-#define MAX_BUF_SIZE 65536
+#define MAX_BUF_SIZE 65000
 
 struct st_h2o_sendfile_generator_t {
     h2o_generator_t super;
@@ -38,7 +38,7 @@ struct st_h2o_sendfile_generator_t {
     char last_modified_buf[H2O_TIMESTR_RFC1123_LEN + 1];
     char etag_buf[sizeof("\"deadbeef-deadbeefdeadbeef\"")];
     size_t etag_len;
-    char buf[1];
+    char *buf;
 };
 
 struct st_h2o_file_handler_t {
@@ -106,6 +106,30 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
         do_close(&self->super, req);
 }
 
+static int do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_buf_t *buf)
+{
+    struct st_h2o_sendfile_generator_t *self = (void*)_self;
+    ssize_t rret;
+
+    if (self->bytesleft < buf->len)
+        buf->len = self->bytesleft;
+    while ((rret = read(self->fd, buf->base, buf->len)) == -1 && errno == EINTR)
+        ;
+    if (rret <= 0) {
+        req->http1_is_persistent = 0; /* FIXME need a better interface to dispose an errored response w. content-length */
+        buf->len = 0;
+        self->bytesleft = 0;
+    } else {
+        buf->len = rret;
+        self->bytesleft -= rret;
+    }
+
+    if (self->bytesleft != 0)
+        return 0;
+    do_close(&self->super, req);
+    return 1;
+}
+
 static struct st_h2o_sendfile_generator_t *create_generator(h2o_mempool_t *pool, const char *path, int *is_dir)
 {
     struct st_h2o_sendfile_generator_t *self;
@@ -131,7 +155,7 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_mempool_t *pool,
     bufsz = MAX_BUF_SIZE;
     if (st.st_size < bufsz)
         bufsz = st.st_size;
-    self = h2o_mempool_alloc(pool, offsetof(struct st_h2o_sendfile_generator_t, buf) + bufsz);
+    self = h2o_mempool_alloc(pool, sizeof(*self));
     self->super.proceed = do_proceed;
     self->super.stop = do_close;
     self->fd = fd;
@@ -159,7 +183,16 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
 
     /* send data */
     h2o_start_response(req, &self->super);
-    do_proceed(&self->super, req);
+
+    if (req->_ostr_top->start_pull != NULL) {
+        req->_ostr_top->start_pull(req->_ostr_top, do_pull);
+    } else {
+        size_t bufsz = MAX_BUF_SIZE;
+        if (self->bytesleft < bufsz)
+            bufsz = self->bytesleft;
+        self->buf = h2o_mempool_alloc(&req->pool, bufsz);
+        do_proceed(&self->super, req);
+    }
 }
 
 int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *path, h2o_buf_t mime_type)

@@ -562,12 +562,11 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
     return dst;
 }
 
-h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, h2o_hpack_header_table_t *header_table, uint32_t stream_id, size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t* ts, const h2o_buf_t *server_name)
+int h2o_hpack_flatten_headers(h2o_input_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id, size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t* ts, const h2o_buf_t *server_name)
 {
     const h2o_header_t *header, *header_end;
     size_t max_capacity = 0;
-    h2o_buf_t ret;
-    uint8_t *dst;
+    uint8_t *base, *dst;
 
     { /* calculate maximum required memory */
         size_t max_cur_frame_size =
@@ -581,7 +580,7 @@ h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, h2o_hpack_header_table_
         for (header = res->headers.entries, header_end = header + res->headers.size; header != header_end; ++header) {
             size_t max_header_size = header->name->len + header->value.len + 1 + H2O_HTTP2_ENCODE_INT_MAX_LENGTH * 2;
             if (max_header_size > 16383)
-                goto Error;
+                return -1;
             if (max_cur_frame_size + max_header_size > max_frame_size) {
                 max_capacity += H2O_HTTP2_FRAME_HEADER_SIZE + max_cur_frame_size;
                 max_cur_frame_size = max_header_size;
@@ -593,8 +592,7 @@ h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, h2o_hpack_header_table_
     }
 
     /* allocate */
-    ret.base = h2o_mempool_alloc(pool, max_capacity);
-    dst = (uint8_t*)ret.base;
+    base = dst = (void*)h2o_reserve_input_buffer(buf, max_capacity).base;
 
     { /* encode */
         uint8_t *cur_frame;
@@ -603,7 +601,7 @@ h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, h2o_hpack_header_table_
 #define EMIT_HEADER(end_headers) h2o_http2_encode_frame_header( \
     cur_frame, \
     dst - cur_frame - H2O_HTTP2_FRAME_HEADER_SIZE, \
-    cur_frame == (uint8_t*)ret.base ? H2O_HTTP2_FRAME_TYPE_HEADERS : H2O_HTTP2_FRAME_TYPE_CONTINUATION, \
+    cur_frame == (uint8_t*)base ? H2O_HTTP2_FRAME_TYPE_HEADERS : H2O_HTTP2_FRAME_TYPE_CONTINUATION, \
     end_headers ? H2O_HTTP2_FRAME_FLAG_END_HEADERS : 0, \
     stream_id)
 
@@ -630,13 +628,10 @@ h2o_buf_t h2o_hpack_flatten_headers(h2o_mempool_t *pool, h2o_hpack_header_table_
 #undef EMIT_HEADER
     }
 
-    ret.len = (char*)dst - ret.base;
-    assert(ret.len < max_capacity);
+    assert(dst - base < max_capacity);
+    (*buf)->size += dst - base;
 
-    return ret;
-
-Error:
-    return h2o_buf_init(NULL, 0);
+    return 0;
 }
 
 #ifdef H2O_UNITTEST
@@ -716,13 +711,18 @@ static void test_request(h2o_buf_t first_req, h2o_buf_t second_req, h2o_buf_t th
     h2o_mempool_clear(&req.pool);
 }
 
-static void check_flatten(h2o_mempool_t *pool, h2o_hpack_header_table_t *header_table, h2o_res_t *res, const char *expected, size_t expected_len)
+static void check_flatten(h2o_hpack_header_table_t *header_table, h2o_res_t *res, const char *expected, size_t expected_len)
 {
-    h2o_buf_t flattened = h2o_hpack_flatten_headers(pool, header_table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res, NULL, NULL);
+    h2o_input_buffer_t *buf;
     h2o_http2_frame_t frame;
 
-    ok(h2o_http2_decode_frame(&frame, (uint8_t*)flattened.base, flattened.len, &H2O_HTTP2_SETTINGS_DEFAULT) > 0);
+    h2o_init_input_buffer(&buf, &h2o_socket_initial_input_buffer);
+    h2o_hpack_flatten_headers(&buf, header_table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res, NULL, NULL);
+
+    ok(h2o_http2_decode_frame(&frame, (uint8_t*)buf->bytes, buf->size, &H2O_HTTP2_SETTINGS_DEFAULT) > 0);
     ok(h2o_memis(frame.payload, frame.length, expected, expected_len));
+
+    h2o_dispose_input_buffer(&buf);
 }
 
 void test_lib__http2__hpack(void)
@@ -884,7 +884,7 @@ void test_lib__http2__hpack(void)
         h2o_add_header(&pool, &res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("private"));
         h2o_add_header(&pool, &res.headers, H2O_TOKEN_DATE, H2O_STRLIT("Mon, 21 Oct 2013 20:13:21 GMT"));
         h2o_add_header(&pool, &res.headers, H2O_TOKEN_LOCATION, H2O_STRLIT("https://www.example.com"));
-        check_flatten(&pool, &header_table, &res,
+        check_flatten(&header_table, &res,
             H2O_STRLIT("\x08\x03\x33\x30\x32\x58\x85\xae\xc3\x77\x1a\x4b\x61\x96\xd0\x7a\xbe\x94\x10\x54\xd4\x44\xa8\x20\x05\x95\x04\x0b\x81\x66\xe0\x82\xa6\x2d\x1b\xff\x6e\x91\x9d\x29\xad\x17\x18\x63\xc7\x8f\x0b\x97\xc8\xe9\xae\x82\xae\x43\xd3"));
 
         memset(&res, 0, sizeof(res));
@@ -893,7 +893,7 @@ void test_lib__http2__hpack(void)
         h2o_add_header(&pool, &res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("private"));
         h2o_add_header(&pool, &res.headers, H2O_TOKEN_DATE, H2O_STRLIT("Mon, 21 Oct 2013 20:13:21 GMT"));
         h2o_add_header(&pool, &res.headers, H2O_TOKEN_LOCATION, H2O_STRLIT("https://www.example.com"));
-        check_flatten(&pool, &header_table, &res,
+        check_flatten(&header_table, &res,
             H2O_STRLIT("\x08\x03\x33\x30\x37\xc0\xbf\xbe"));
 #if 0
         h2o_buf_init(H2O_STRLIT("\x48\x03\x33\x30\x37\xc1\xc0\xbf")),

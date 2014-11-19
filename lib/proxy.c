@@ -154,7 +154,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     if (errstr != NULL) {
         /* detach the content */
         self->last_content_before_send = self->client->sock->input;
-        h2o_init_input_buffer(&self->client->sock->input);
+        h2o_init_input_buffer(&self->client->sock->input, &h2o_socket_initial_input_buffer);
         self->client = NULL;
     }
     if (self->buf_sending->size == 0)
@@ -247,8 +247,8 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_buf_t host,
     self->up_req.bufs[0] = build_request(req, host, port, path_replace_length, path_prefix, keepalive);
     self->up_req.bufs[1] = req->entity;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
-    h2o_init_input_buffer(&self->last_content_before_send);
-    h2o_init_input_buffer(&self->buf_sending);
+    h2o_init_input_buffer(&self->last_content_before_send, &h2o_socket_initial_input_buffer);
+    h2o_init_input_buffer(&self->buf_sending, &h2o_socket_initial_input_buffer);
 
     return self;
 }

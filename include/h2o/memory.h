@@ -68,10 +68,13 @@ typedef struct st_h2o_input_buffer_t {
      */
     size_t size;
     /**
-     * pointer to the start of the data
+     * capacity of the buffer (if bytes == NULL, indicates the size of the minimal initial capacity)
+     */
+    size_t capacity;
+    /**
+     * pointer to the start of the data (or NULL if is pointing to a prototype)
      */
     char *bytes;
-    size_t _capacity;
     char _buf[1];
 } h2o_input_buffer_t;
 
@@ -83,8 +86,6 @@ typedef struct st_h2o_input_buffer_t {
     }
 
 typedef H2O_VECTOR(void) h2o_vector_t;
-
-extern const h2o_input_buffer_t h2o__null_input_buffer;
 
 /**
  * prints an error message and aborts
@@ -138,11 +139,11 @@ static void h2o_mempool_addref_shared(void *p);
  */
 static int h2o_mempool_release_shared(void *p);
 /**
- * 
+ * initialize the input buffer using given prototype.
  */
-static void h2o_init_input_buffer(h2o_input_buffer_t **buffer);
+static void h2o_init_input_buffer(h2o_input_buffer_t **buffer, const h2o_input_buffer_t *prototype);
 /**
- * 
+ * disposes of the input buffer
  */
 static void h2o_dispose_input_buffer(h2o_input_buffer_t **buffer);
 /**
@@ -221,14 +222,14 @@ inline int h2o_mempool_release_shared(void *p)
     return 0;
 }
 
-inline void h2o_init_input_buffer(h2o_input_buffer_t **buffer)
+inline void h2o_init_input_buffer(h2o_input_buffer_t **buffer, const h2o_input_buffer_t *prototype)
 {
-    *buffer = (h2o_input_buffer_t*)&h2o__null_input_buffer;
+    *buffer = (void*)prototype;
 }
 
 inline void h2o_dispose_input_buffer(h2o_input_buffer_t **buffer)
 {
-    if (*buffer != &h2o__null_input_buffer)
+    if ((*buffer)->bytes != NULL)
         free(*buffer);
     *buffer = NULL;
 }
