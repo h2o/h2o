@@ -147,20 +147,26 @@ h2o_buf_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
         inbuf->bytes = inbuf->_buf;
         inbuf->capacity = min_guarantee;
     } else {
-        if (inbuf->bytes != inbuf->_buf) {
-            assert(inbuf->size != 0);
+        if (min_guarantee <= inbuf->capacity - inbuf->size - (inbuf->bytes - inbuf->_buf)) {
+            /* ok */
+        } else if ((inbuf->size + min_guarantee) * 2 <= inbuf->capacity) {
+            /* the capacity should less or equal to 2 times of: size + guarantee */
             memmove(inbuf->_buf, inbuf->bytes, inbuf->size);
             inbuf->bytes = inbuf->_buf;
-        }
-        if (inbuf->capacity - inbuf->size < min_guarantee) {
+        } else {
+            h2o_buffer_t *newp;
+            size_t new_capacity = inbuf->capacity;
             do {
-                inbuf->capacity *= 2;
-            } while (inbuf->capacity - inbuf->size < min_guarantee);
-            inbuf = h2o_realloc(inbuf, offsetof(h2o_buffer_t, _buf) + inbuf->capacity);
-            inbuf->bytes = inbuf->_buf;
-            *_inbuf = inbuf;
+                new_capacity *= 2;
+            } while (new_capacity - inbuf->size < min_guarantee);
+            newp = h2o_malloc(offsetof(h2o_buffer_t, _buf) + new_capacity);
+            newp->size = inbuf->size;
+            newp->bytes = newp->_buf;
+            newp->capacity = new_capacity;
+            memcpy(newp->_buf, inbuf->bytes, inbuf->size);
+            free(inbuf);
+            *_inbuf = inbuf = newp;
         }
-        /* TODO shrink the size if possible */
     }
 
     ret.base = inbuf->bytes + inbuf->size;
