@@ -575,6 +575,10 @@ h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot);
  */
 void h2o_send(h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final);
 /**
+ * called by the connection layer to pull the content from generator (if pull mode is being used)
+ */
+static int h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_buf_t *buf);
+/**
  * requests the next filter (if any) to setup the ostream if necessary
  */
 static void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot);
@@ -810,6 +814,17 @@ inline void h2o_proceed_response(h2o_req_t *req)
     } else {
         req->_ostr_top->do_send(req->_ostr_top, req, NULL, 0, 1);
     }
+}
+
+inline int h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_buf_t *buf)
+{
+    int is_final;
+    assert(req->_generator != NULL);
+    is_final = cb(req->_generator, req, buf);
+    req->bytes_sent += buf->len;
+    if (is_final)
+        req->_generator = NULL;
+    return is_final;
 }
 
 inline void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)

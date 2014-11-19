@@ -502,7 +502,7 @@ static void proceed_pull(h2o_http1_conn_t *conn, size_t nfilled)
 
     if (buf.len < MAX_PULL_BUF_SZ) {
         h2o_buf_t cbuf = { buf.base + buf.len, MAX_PULL_BUF_SZ - buf.len };
-        is_final = conn->_ostr_final.pull.cb(conn->req._generator, &conn->req, &cbuf);
+        is_final = h2o_pull(&conn->req, conn->_ostr_final.pull.cb, &cbuf);
         buf.len += cbuf.len;
     } else {
         is_final = 0;

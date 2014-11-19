@@ -122,7 +122,7 @@ static int send_data_pull(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         /* obtain content */
         cbuf.base = conn->_write.buf->bytes + conn->_write.buf->size + H2O_HTTP2_FRAME_HEADER_SIZE;
         cbuf.len = max_payload_size;
-        is_final = stream->_pull_cb(stream->req._generator, &stream->req, &cbuf);
+        is_final = h2o_pull(&stream->req, stream->_pull_cb, &cbuf);
         /* write the header */
         encode_data_header_and_consume_window(conn, stream, (void*)(conn->_write.buf->bytes + conn->_write.buf->size), cbuf.len, is_final);
         /* adjust the write buf size */
