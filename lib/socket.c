@@ -282,13 +282,19 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_buf_t *bufs, size_t bufcnt, h2o_so
     if (sock->ssl == NULL) {
         do_write(sock, bufs, bufcnt, cb);
     } else {
-        size_t i;
         assert(sock->ssl->output.bufs.size == 0);
         /* fill in the data */
-        for (i = 0; i != bufcnt; ++i) {
-            int ret = SSL_write(sock->ssl->ssl, bufs[i].base, (int)bufs[i].len);
-            /* FIXME handle error (by deferred-calling cb(sock, -1)) */
-            assert(ret == bufs[i].len);
+        for (; bufcnt != 0; ++bufs, --bufcnt) {
+            size_t off = 0;
+            while (off != bufs[0].len) {
+                int ret;
+                size_t sz = bufs[0].len - off;
+                if (sz > 1400)
+                    sz = 1400;
+                ret = SSL_write(sock->ssl->ssl, bufs[0].base + off, (int)sz);
+                assert(ret == sz);
+                off += sz;
+            }
         }
         flush_pending_ssl(sock, cb);
     }
