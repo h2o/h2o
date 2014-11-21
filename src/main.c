@@ -150,7 +150,10 @@ static SSL_CTX *on_config_listen_setup_ssl(h2o_configurator_command_t *cmd, cons
     /* setup */
     init_openssl();
     ssl_ctx = SSL_CTX_new(SSLv23_server_method());
-    SSL_CTX_set_options(ssl_ctx, SSL_OP_NO_SSLv2);
+    SSL_CTX_set_options(ssl_ctx,
+        SSL_OP_NO_SSLv2
+        | SSL_OP_ALL
+        );
     setup_ecc_key(ssl_ctx);
     if (SSL_CTX_use_certificate_file(ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
         h2o_config_print_error(cmd, config_file, config_node, "failed to load certificate file:%s\n", cert_file);
