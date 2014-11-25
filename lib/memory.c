@@ -27,6 +27,10 @@
 #include <string.h>
 #include "h2o/memory.h"
 
+struct st_h2o__reusealloc_chunk_t {
+    struct st_h2o__reusealloc_chunk_t *next;
+};
+
 struct st_h2o_mempool_direct_t {
     struct st_h2o_mempool_direct_t *next;
     size_t _dummy; /* align to 2*sizeof(void*) */
@@ -42,6 +46,33 @@ void h2o_fatal(const char *msg)
 {
     fprintf(stderr, "fatal:%s\n", msg);
     abort();
+}
+
+void *h2o_reusealloc_alloc(h2o_reusealloc_t *allocator, size_t sz)
+{
+    struct st_h2o__reusealloc_chunk_t *chunk;
+    if (allocator->cnt == 0)
+        return h2o_malloc(sz);
+    /* detach and return the pooled pointer */
+    chunk = allocator->_link;
+    assert(chunk != NULL);
+    allocator->_link = chunk->next;
+    --allocator->cnt;
+    return chunk;
+}
+
+void h2o_reusealloc_free(h2o_reusealloc_t *allocator, void *p)
+{
+    struct st_h2o__reusealloc_chunk_t *chunk;
+    if (allocator->cnt == allocator->max) {
+        free(p);
+        return;
+    }
+    /* register the pointer to the pool */
+    chunk = p;
+    chunk->next = allocator->_link;
+    allocator->_link = chunk;
+    ++allocator->cnt;
 }
 
 void h2o_mempool_init(h2o_mempool_t *pool)
@@ -139,13 +170,18 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
     h2o_iovec_t ret;
 
     if (inbuf->bytes == NULL) {
-        if (min_guarantee < inbuf->capacity)
-            min_guarantee = inbuf->capacity;
-        inbuf = h2o_malloc(offsetof(h2o_buffer_t, _buf) + min_guarantee);
+        h2o_buffer_prototype_t *prototype = H2O_STRUCT_FROM_MEMBER(h2o_buffer_prototype_t, _initial_buf, inbuf);
+        if (min_guarantee <= prototype->_initial_buf.capacity) {
+            min_guarantee = prototype->_initial_buf.capacity;
+            inbuf = h2o_reusealloc_alloc(&prototype->allocator, offsetof(h2o_buffer_t, _buf) + min_guarantee);
+        } else {
+            inbuf = h2o_malloc(offsetof(h2o_buffer_t, _buf) + min_guarantee);
+        }
         *_inbuf = inbuf;
         inbuf->size = 0;
         inbuf->bytes = inbuf->_buf;
         inbuf->capacity = min_guarantee;
+        inbuf->_prototype = prototype;
     } else {
         if (min_guarantee <= inbuf->capacity - inbuf->size - (inbuf->bytes - inbuf->_buf)) {
             /* ok */
@@ -163,8 +199,9 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
             newp->size = inbuf->size;
             newp->bytes = newp->_buf;
             newp->capacity = new_capacity;
+            newp->_prototype = inbuf->_prototype;
             memcpy(newp->_buf, inbuf->bytes, inbuf->size);
-            free(inbuf);
+            h2o_buffer__do_free(inbuf);
             *_inbuf = inbuf = newp;
         }
     }
@@ -182,8 +219,8 @@ void h2o_buffer_consume(h2o_buffer_t **_inbuf, size_t delta)
     if (delta != 0) {
         assert(inbuf->bytes != NULL);
         if (inbuf->size == delta) {
-            inbuf->size = 0;
-            inbuf->bytes = inbuf->_buf;
+            *_inbuf = &inbuf->_prototype->_initial_buf;
+            h2o_buffer__do_free(inbuf);
         } else {
             inbuf->size -= delta;
             inbuf->bytes += delta;

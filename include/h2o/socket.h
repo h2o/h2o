@@ -90,7 +90,7 @@ typedef struct st_h2o_socket_export_t {
     h2o_buffer_t *input;
 } h2o_socket_export_t;
 
-extern const h2o_buffer_t h2o_socket_buffer_prototype;
+extern __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype;
 
 /**
  * returns the loop

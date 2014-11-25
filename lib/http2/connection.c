@@ -56,7 +56,7 @@ static const h2o_iovec_t SETTINGS_HOST_BIN = {
     )
 };
 
-static const h2o_buffer_t wbuf_buffer_prototype = { 0, H2O_HTTP2_DEFAULT_OUTBUF_SIZE, NULL };
+static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = { { 16 }, { H2O_HTTP2_DEFAULT_OUTBUF_SIZE } };
 
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len);
 static int do_emit_writereq(h2o_http2_conn_t *conn);
