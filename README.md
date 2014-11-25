@@ -50,6 +50,12 @@ $ cmake .
 $ make libh2o
 ```
 
+Run `make install` to optionally install the library system-wide.
+
+```
+$ make install
+```
+
 The library is designed to work together with the upcoming [libuv version 1.0.0](https://github.com/joyent/libuv).  Examples can be found within the [examples/](https://github.com/kazuho/h2o/blob/master/examples/) directory.
 
 Benchmarks
