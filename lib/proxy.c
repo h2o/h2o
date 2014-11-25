@@ -31,7 +31,7 @@ struct rp_generator_t {
     h2o_req_t *src_req;
     h2o_http1client_t *client;
     struct {
-        h2o_buf_t bufs[2]; /* first buf is the request line and headers, the second is the POST content */
+        h2o_iovec_t bufs[2]; /* first buf is the request line and headers, the second is the POST content */
         int is_head;
     } up_req;
     h2o_buffer_t *last_content_before_send;
@@ -40,12 +40,12 @@ struct rp_generator_t {
 
 struct rp_handler_t {
     h2o_handler_t super;
-    h2o_buf_t virtual_path;
+    h2o_iovec_t virtual_path;
     struct {
-        h2o_buf_t host;
+        h2o_iovec_t host;
         uint16_t port;
         h2o_socketpool_t *sockpool; /* non-NULL if config.use_keepalive == 1 */
-        h2o_buf_t path;
+        h2o_iovec_t path;
         h2o_proxy_config_vars_t config;
     } upstream;
 };
@@ -56,9 +56,9 @@ struct proxy_configurator_t {
     h2o_proxy_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
-static h2o_buf_t build_request(h2o_req_t *req, h2o_buf_t host, uint16_t port, size_t path_replace_length, h2o_buf_t path_prefix, int keepalive)
+static h2o_iovec_t build_request(h2o_req_t *req, h2o_iovec_t host, uint16_t port, size_t path_replace_length, h2o_iovec_t path_prefix, int keepalive)
 {
-    h2o_buf_t buf;
+    h2o_iovec_t buf;
     size_t bufsz;
     const h2o_header_t *h, * h_end;
     char *p;
@@ -89,7 +89,7 @@ static h2o_buf_t build_request(h2o_req_t *req, h2o_buf_t host, uint16_t port, si
         p += sprintf(p, "content-length: %zu\r\n", req->entity.len);
     }
     for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h) {
-        if (h2o_buf_is_token(h->name) && ((h2o_token_t*)h->name)->is_connection_specific)
+        if (h2o_iovec_is_token(h->name) && ((h2o_token_t*)h->name)->is_connection_specific)
             continue;
         p += sprintf(p, "%.*s: %.*s\r\n",
             (int)h->name->len, h->name->base,
@@ -129,7 +129,7 @@ static void do_send(struct rp_generator_t *self)
         self->client != NULL ? &self->client->sock->input : &self->last_content_before_send);
 
     if (self->buf_sending->size != 0) {
-        h2o_buf_t buf = h2o_buf_init(self->buf_sending->bytes, self->buf_sending->size);
+        h2o_iovec_t buf = h2o_iovec_init(self->buf_sending->bytes, self->buf_sending->size);
         h2o_send(self->src_req, &buf, 1, self->client == NULL);
     } else if (self->client == NULL) {
         h2o_send(self->src_req, NULL, 0, 1);
@@ -163,7 +163,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     return 0;
 }
 
-static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_buf_t msg, struct phr_header *headers, size_t num_headers)
+static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg, struct phr_header *headers, size_t num_headers)
 {
     struct rp_generator_t *self = client->data;
     size_t i;
@@ -190,12 +190,12 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                     return NULL;
                 }
             } else {
-                h2o_buf_t value = h2o_strdup(&self->src_req->pool, headers[i].value, headers[i].value_len);
+                h2o_iovec_t value = h2o_strdup(&self->src_req->pool, headers[i].value, headers[i].value_len);
                 h2o_add_header(&self->src_req->pool, &self->src_req->res.headers, token, value.base, value.len);
             }
         } else {
-            h2o_buf_t name = h2o_strdup(&self->src_req->pool, headers[i].name, headers[i].name_len);
-            h2o_buf_t value = h2o_strdup(&self->src_req->pool, headers[i].value, headers[i].value_len);
+            h2o_iovec_t name = h2o_strdup(&self->src_req->pool, headers[i].name, headers[i].name_len);
+            h2o_iovec_t value = h2o_strdup(&self->src_req->pool, headers[i].value, headers[i].value_len);
             h2o_add_header_by_str(&self->src_req->pool, &self->src_req->res.headers, name.base, name.len, 0, value.base, value.len);
         }
     }
@@ -212,7 +212,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     return on_body;
 }
 
-static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_buf_t **reqbufs, size_t *reqbufcnt, int *method_is_head)
+static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt, int *method_is_head)
 {
     struct rp_generator_t *self = client->data;
 
@@ -237,7 +237,7 @@ static void on_generator_dispose(void *_self)
     h2o_buffer_dispose(&self->buf_sending);
 }
 
-static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_buf_t host, uint16_t port, size_t path_replace_length, h2o_buf_t path_prefix, int keepalive)
+static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_iovec_t host, uint16_t port, size_t path_replace_length, h2o_iovec_t path_prefix, int keepalive)
 {
     struct rp_generator_t *self = h2o_mempool_alloc_shared(&req->pool, sizeof(*self), on_generator_dispose);
 
@@ -253,7 +253,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_buf_t host,
     return self;
 }
 
-int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_buf_t host, uint16_t port, size_t path_replace_length, h2o_buf_t path_prefix)
+int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_iovec_t host, uint16_t port, size_t path_replace_length, h2o_iovec_t path_prefix)
 {
     struct rp_generator_t *self = proxy_send_prepare(req, host, port, path_replace_length, path_prefix, 0);
 
@@ -263,7 +263,7 @@ int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_buf_t 
     return 0;
 }
 
-int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_socketpool_t *sockpool, size_t path_replace_length, h2o_buf_t path_prefix)
+int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_socketpool_t *sockpool, size_t path_replace_length, h2o_iovec_t path_prefix)
 {
     struct rp_generator_t *self = proxy_send_prepare(req, sockpool->host, sockpool->port.n, path_replace_length, path_prefix, 1);
 

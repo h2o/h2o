@@ -90,7 +90,7 @@ typedef struct st_h2o_socket_export_t {
     h2o_buffer_t *input;
 } h2o_socket_export_t;
 
-extern const h2o_buffer_t h2o_socket_buffer_prototype;
+extern __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype;
 
 /**
  * returns the loop
@@ -123,7 +123,7 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
  * @param bufcnt length of the buffer array
  * @param cb callback to be called when write is complete
  */
-void h2o_socket_write(h2o_socket_t *sock, h2o_buf_t *bufs, size_t bufcnt, h2o_socket_cb cb);
+void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
 /**
  * starts polling on the socket (for read) and calls given callback when data arrives
  * @param sock the socket
@@ -158,11 +158,11 @@ void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, h2o_s
  * returns the name of the protocol selected using either NPN or ALPN (ALPN has the precedence).
  * @param sock the socket
  */
-h2o_buf_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock);
+h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock);
 /**
  * registers the protocol list to be used for ALPN
  */
-void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_buf_t *protocols);
+void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_iovec_t *protocols);
 /**
  * registers the protocol list to be used for NPN
  */

@@ -74,7 +74,7 @@ uint8_t *h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type
 
 static uint8_t *allocate_frame(h2o_buffer_t **buf, size_t length, uint8_t type, uint8_t flags, int32_t stream_id)
 {
-    h2o_buf_t alloced = h2o_buffer_reserve(buf, H2O_HTTP2_FRAME_HEADER_SIZE + length);
+    h2o_iovec_t alloced = h2o_buffer_reserve(buf, H2O_HTTP2_FRAME_HEADER_SIZE + length);
     (*buf)->size += H2O_HTTP2_FRAME_HEADER_SIZE + length;
     return h2o_http2_encode_frame_header((uint8_t*)alloced.base, length, type, flags, stream_id);
 }

@@ -31,14 +31,14 @@ static h2o_mempool_t pool;
 static const char *url;
 static int cnt_left = 3;
 
-static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_buf_t **reqbufs, size_t *reqbufcnt, int *method_is_head);
-static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_buf_t msg, struct phr_header *headers, size_t num_headers);
+static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt, int *method_is_head);
+static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg, struct phr_header *headers, size_t num_headers);
 
 static void start_request(h2o_http1client_ctx_t *ctx)
 {
     char *scheme, *host, *path;
     uint16_t port;
-    h2o_buf_t *req;
+    h2o_iovec_t *req;
     h2o_http1client_t *client;
 
     /* clear memory pool */
@@ -96,7 +96,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     return 0;
 }
 
-h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_buf_t msg, struct phr_header *headers, size_t num_headers)
+h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg, struct phr_header *headers, size_t num_headers)
 {
     size_t i;
 
@@ -120,7 +120,7 @@ h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, i
     return on_body;
 }
 
-h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_buf_t **reqbufs, size_t *reqbufcnt, int *method_is_head)
+h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt, int *method_is_head)
 {
     if (errstr != NULL) {
         fprintf(stderr, "%s\n", errstr);
@@ -128,7 +128,7 @@ h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr
         return NULL;
     }
 
-    *reqbufs = (h2o_buf_t*)client->data;
+    *reqbufs = (h2o_iovec_t*)client->data;
     *reqbufcnt = 1;
     *method_is_head = 0;
 

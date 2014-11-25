@@ -29,7 +29,7 @@ typedef struct st_h2o_http2_conn_t h2o_http2_conn_t;
 typedef struct st_h2o_http2_stream_t h2o_http2_stream_t;
 
 extern const char *h2o_http2_npn_protocols;
-extern const h2o_buf_t *h2o_http2_alpn_protocols;
+extern const h2o_iovec_t *h2o_http2_alpn_protocols;
 
 /* connection flow control window + alpha */
 #define H2O_HTTP2_DEFAULT_OUTBUF_SIZE 81920
@@ -68,7 +68,7 @@ typedef struct st_h2o_hpack_header_table_t {
 void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table);
 int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, int *allow_psuedo, const uint8_t *src, size_t len);
 size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len);
-int h2o_hpack_flatten_headers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id, size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t* ts, const h2o_buf_t *server_name);
+int h2o_hpack_flatten_headers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id, size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t* ts, const h2o_iovec_t *server_name);
 
 /* settings */
 
@@ -147,7 +147,7 @@ typedef struct st_h2o_http2_ping_payload_t {
 typedef struct st_h2o_http2_goaway_payload_t {
     uint32_t last_stream_id;
     uint32_t error_code;
-    h2o_buf_t debug_data;
+    h2o_iovec_t debug_data;
 } h2o_http2_goaway_payload_t;
 
 typedef struct st_h2o_http2_window_update_payload_t {
@@ -189,7 +189,7 @@ struct st_h2o_http2_stream_t {
     h2o_http2_window_t input_window;
     h2o_http2_priority_t priority;
     h2o_buffer_t *_req_body;
-    H2O_VECTOR(h2o_buf_t) _data;
+    H2O_VECTOR(h2o_iovec_t) _data;
     h2o_ostream_pull_cb _pull_cb;
     /* link list governed by connection.c for handling various things */
     struct {

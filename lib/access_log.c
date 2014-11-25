@@ -49,10 +49,10 @@ enum {
 
 struct log_element_t {
     unsigned type;
-    h2o_buf_t suffix;
+    h2o_iovec_t suffix;
     union {
         const h2o_token_t *header_token;
-        h2o_buf_t header_string;
+        h2o_iovec_t header_string;
     } data;
 };
 
@@ -74,7 +74,7 @@ static struct log_element_t *compile_log_format(const char *fmt, size_t *_num_el
     do { \
         elements = h2o_realloc(elements, sizeof(*elements) * (num_elements + 1)); \
         elements[num_elements].type = ty; \
-        elements[num_elements].suffix = h2o_buf_init(h2o_malloc(fmt_len + 1), 0); \
+        elements[num_elements].suffix = h2o_iovec_init(h2o_malloc(fmt_len + 1), 0); \
         ++num_elements; \
     } while (0)
 

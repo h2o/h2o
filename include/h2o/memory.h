@@ -29,54 +29,65 @@
 
 #define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s*)((char*)(p) - offsetof(s, m)))
 
+typedef struct st_h2o_buffer_prototype_t h2o_buffer_prototype_t;
+
 /**
  * buffer structure compatible with iovec
  */
-typedef struct st_h2o_buf_t {
+typedef struct st_h2o_iovec_t {
     char *base;
     size_t len;
-} h2o_buf_t;
+} h2o_iovec_t;
 
-typedef struct st_h2o_mempool_chunk_t {
-    struct st_h2o_mempool_chunk_t *next;
-    size_t offset;
-    char bytes[4096 - sizeof(void*) * 2];
-} h2o_mempool_chunk_t;
+typedef struct st_h2o_reusealloc_t {
+    size_t max;
+    size_t cnt;
+    struct st_h2o__reusealloc_chunk_t *_link;
+} h2o_reusealloc_t;
 
-typedef struct st_h2o_mempool_shared_entry_t {
+struct st_h2o_mempool_shared_entry_t {
     size_t refcnt;
     void (*dispose)(void *);
     char bytes[1];
-} h2o_mempool_shared_entry_t;
+};
 
 /**
  * the memory pool
  */
 typedef struct st_h2o_mempool_t {
-    h2o_mempool_chunk_t *chunks;
+    struct st_h2o_mempool_chunk_t *chunks;
+    size_t chunk_offset;
     struct st_h2o_mempool_shared_ref_t *shared_refs;
     struct st_h2o_mempool_direct_t *directs;
-    h2o_mempool_chunk_t _first_chunk;
 } h2o_mempool_t;
 
 /**
- * buffer used to store incoming octets
+ * buffer used to store incoming / outgoing octets
  */
 typedef struct st_h2o_buffer_t {
+    /**
+     * capacity of the buffer (or minimum initial capacity in case of a prototype (i.e. bytes == NULL))
+     */
+    size_t capacity;
     /**
      * amount of the data available
      */
     size_t size;
     /**
-     * capacity of the buffer (if bytes == NULL, indicates the size of the minimal initial capacity)
-     */
-    size_t capacity;
-    /**
      * pointer to the start of the data (or NULL if is pointing to a prototype)
      */
     char *bytes;
+    /**
+     * prototype (or NULL if the instance is part of the prototype (i.e. bytes == NULL))
+     */
+    h2o_buffer_prototype_t *_prototype;
     char _buf[1];
 } h2o_buffer_t;
+
+struct st_h2o_buffer_prototype_t {
+    h2o_reusealloc_t allocator;
+    h2o_buffer_t _initial_buf;
+};
 
 #define H2O_VECTOR(type) \
     struct { \
@@ -93,9 +104,9 @@ typedef H2O_VECTOR(void) h2o_vector_t;
 void h2o_fatal(const char *msg);
 
 /**
- * constructor for h2o_buf_t
+ * constructor for h2o_iovec_t
  */
-static h2o_buf_t h2o_buf_init(const void *base, size_t len);
+static h2o_iovec_t h2o_iovec_init(const void *base, size_t len);
 /**
  * wrapper of malloc; allocates given size of memory or dies if impossible
  */
@@ -104,6 +115,16 @@ static void *h2o_malloc(size_t sz);
  * warpper of realloc; reallocs the given chunk or dies if impossible
  */
 static void *h2o_realloc(void *oldp, size_t sz);
+
+/**
+ * allocates memory using the reusing allocator
+ */
+void *h2o_reusealloc_alloc(h2o_reusealloc_t *allocator, size_t sz);
+/**
+ * returns the memory to the reusing allocator
+ */
+void h2o_reusealloc_free(h2o_reusealloc_t *allocator, void *p);
+
 /**
  * initializes the memory pool.
  */
@@ -141,7 +162,11 @@ static int h2o_mempool_release_shared(void *p);
 /**
  * initialize the buffer using given prototype.
  */
-static void h2o_buffer_init(h2o_buffer_t **buffer, const h2o_buffer_t *prototype);
+static void h2o_buffer_init(h2o_buffer_t **buffer, h2o_buffer_prototype_t *prototype);
+/**
+ * 
+ */
+static void h2o_buffer__do_free(h2o_buffer_t *buffer);
 /**
  * disposes of the buffer
  */
@@ -153,7 +178,7 @@ static void h2o_buffer_dispose(h2o_buffer_t **buffer);
  * @return buffer to which the next data should be stored
  * @note When called against a new buffer, the function returns a buffer twice the size of requested guarantee.  The function uses expotential backoff for already-allocated buffers.
  */
-h2o_buf_t h2o_buffer_reserve(h2o_buffer_t **inbuf, size_t min_guarantee);
+h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **inbuf, size_t min_guarantee);
 /**
  * throws away given size of the data from the buffer.
  * @param delta number of octets to be drained from the buffer
@@ -176,10 +201,10 @@ static int h2o_memis(const void *target, size_t target_len, const void *test, si
 
 /* inline defs */
 
-inline h2o_buf_t h2o_buf_init(const void *base, size_t len)
+inline h2o_iovec_t h2o_iovec_init(const void *base, size_t len)
 {
     /* intentionally declared to take a "const void*" since it may contain any type of data and since _some_ buffers are constant */
-    h2o_buf_t buf;
+    h2o_iovec_t buf;
     buf.base = (char*)base;
     buf.len = len;
     return buf;
@@ -222,16 +247,26 @@ inline int h2o_mempool_release_shared(void *p)
     return 0;
 }
 
-inline void h2o_buffer_init(h2o_buffer_t **buffer, const h2o_buffer_t *prototype)
+inline void h2o_buffer_init(h2o_buffer_t **buffer, h2o_buffer_prototype_t *prototype)
 {
-    *buffer = (void*)prototype;
+    *buffer = &prototype->_initial_buf;
 }
 
-inline void h2o_buffer_dispose(h2o_buffer_t **buffer)
+inline void h2o_buffer__do_free(h2o_buffer_t *buffer)
 {
-    if ((*buffer)->bytes != NULL)
-        free(*buffer);
-    *buffer = NULL;
+    /* caller should assert that the buffer is not part of the prototype */
+    if (buffer->capacity == buffer->_prototype->_initial_buf.capacity)
+        h2o_reusealloc_free(&buffer->_prototype->allocator, buffer);
+    else
+        free(buffer);
+}
+
+inline void h2o_buffer_dispose(h2o_buffer_t **_buffer)
+{
+    h2o_buffer_t *buffer = *_buffer;
+    *_buffer = NULL;
+    if (buffer->bytes != NULL)
+        h2o_buffer__do_free(buffer);
 }
 
 inline void h2o_vector_reserve(h2o_mempool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)

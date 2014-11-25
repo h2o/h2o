@@ -44,20 +44,20 @@ struct st_h2o_socket_ssl_t {
         h2o_buffer_t *encrypted;
     } input;
     struct {
-        H2O_VECTOR(h2o_buf_t) bufs;
+        H2O_VECTOR(h2o_iovec_t) bufs;
         h2o_mempool_t pool; /* placed at the last */
     } output;
 };
 
 struct st_h2o_ssl_context_t {
     SSL_CTX *ctx;
-    const h2o_buf_t *protocols;
-    h2o_buf_t _npn_list_of_protocols;
+    const h2o_iovec_t *protocols;
+    h2o_iovec_t _npn_list_of_protocols;
 };
 
 /* backend functions */
 static void do_dispose_socket(h2o_socket_t *sock);
-static void do_write(h2o_socket_t *sock, h2o_buf_t *bufs, size_t bufcnt, h2o_socket_cb cb);
+static void do_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
 static void do_read_start(h2o_socket_t *sock);
 static void do_read_stop(h2o_socket_t *sock);
 static int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info);
@@ -74,7 +74,7 @@ static void on_write_complete(h2o_socket_t *sock, int status);
 #endif
 
 /* declared const, so that it would become read-only */
-const h2o_buffer_t h2o_socket_buffer_prototype = { 0, H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2, NULL };
+__thread h2o_buffer_prototype_t h2o_socket_buffer_prototype = { { 16 }, { H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2 } };
 
 static int read_bio(BIO *b, char *out, int len)
 {
@@ -108,8 +108,8 @@ static int write_bio(BIO *b, const char *in, int len)
     bytes_alloced = h2o_mempool_alloc(&sock->ssl->output.pool, len);
     memcpy(bytes_alloced, in, len);
 
-    h2o_vector_reserve(&sock->ssl->output.pool, (h2o_vector_t*)&sock->ssl->output.bufs, sizeof(h2o_buf_t), sock->ssl->output.bufs.size + 1);
-    sock->ssl->output.bufs.entries[sock->ssl->output.bufs.size++] = h2o_buf_init(bytes_alloced, len);
+    h2o_vector_reserve(&sock->ssl->output.pool, (h2o_vector_t*)&sock->ssl->output.bufs, sizeof(h2o_iovec_t), sock->ssl->output.bufs.size + 1);
+    sock->ssl->output.bufs.entries[sock->ssl->output.bufs.size++] = h2o_iovec_init(bytes_alloced, len);
 
     return len;
 }
@@ -154,7 +154,7 @@ int decode_ssl_input(h2o_socket_t *sock)
     assert(sock->ssl->handshake.cb == NULL);
 
     while (sock->ssl->input.encrypted->size != 0) {
-        h2o_buf_t buf = h2o_buffer_reserve(&sock->input, 4096);
+        h2o_iovec_t buf = h2o_buffer_reserve(&sock->input, 4096);
         int rlen = SSL_read(sock->ssl->ssl, buf.base, (int)buf.len);
         if (rlen == -1) {
             if (SSL_get_error(sock->ssl->ssl, rlen) != SSL_ERROR_WANT_READ) {
@@ -277,7 +277,7 @@ void h2o_socket_close(h2o_socket_t *sock)
     }
 }
 
-void h2o_socket_write(h2o_socket_t *sock, h2o_buf_t *bufs, size_t bufcnt, h2o_socket_cb cb)
+void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
     if (sock->ssl == NULL) {
         do_write(sock, bufs, bufcnt, cb);
@@ -401,7 +401,7 @@ void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, h2o_s
     proceed_handshake(sock, 0);
 }
 
-h2o_buf_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)
+h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)
 {
     const unsigned char *data = NULL;
     unsigned len = 0;
@@ -417,14 +417,14 @@ h2o_buf_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)
         SSL_get0_next_proto_negotiated(sock->ssl->ssl, &data, &len);
 #endif
 
-    return h2o_buf_init(data, len);
+    return h2o_iovec_init(data, len);
 }
 
 #if H2O_USE_ALPN
 
 static int on_alpn_select(SSL *ssl, const unsigned char **out, unsigned char *outlen, const unsigned char *in, unsigned int inlen, void *_protocols)
 {
-    const h2o_buf_t *protocols = _protocols;
+    const h2o_iovec_t *protocols = _protocols;
     const unsigned char *in_end = in + inlen;
     size_t i;
 
@@ -450,7 +450,7 @@ Found:
     return SSL_TLSEXT_ERR_OK;
 }
 
-void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_buf_t *protocols)
+void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_iovec_t *protocols)
 {
     SSL_CTX_set_alpn_select_cb(ctx, on_alpn_select, (void*)protocols);
 }

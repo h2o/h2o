@@ -29,7 +29,7 @@
 
 typedef struct st_h2o_socketpool_t {
     /* read-only vars */
-    h2o_buf_t host;
+    h2o_iovec_t host;
     struct {
         uint16_t n;
         char s[sizeof("65535")];

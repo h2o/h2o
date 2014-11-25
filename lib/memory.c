@@ -27,6 +27,16 @@
 #include <string.h>
 #include "h2o/memory.h"
 
+struct st_h2o__reusealloc_chunk_t {
+    struct st_h2o__reusealloc_chunk_t *next;
+};
+
+struct st_h2o_mempool_chunk_t {
+    struct st_h2o_mempool_chunk_t *next;
+    size_t _dummy; /* align to 2*sizeof(void*) */
+    char bytes[4096 - sizeof(void*) * 2];
+};
+
 struct st_h2o_mempool_direct_t {
     struct st_h2o_mempool_direct_t *next;
     size_t _dummy; /* align to 2*sizeof(void*) */
@@ -38,19 +48,47 @@ struct st_h2o_mempool_shared_ref_t {
     struct st_h2o_mempool_shared_entry_t *entry;
 };
 
+static __thread h2o_reusealloc_t mempool_allocator = { 16 };
+
 void h2o_fatal(const char *msg)
 {
     fprintf(stderr, "fatal:%s\n", msg);
     abort();
 }
 
+void *h2o_reusealloc_alloc(h2o_reusealloc_t *allocator, size_t sz)
+{
+    struct st_h2o__reusealloc_chunk_t *chunk;
+    if (allocator->cnt == 0)
+        return h2o_malloc(sz);
+    /* detach and return the pooled pointer */
+    chunk = allocator->_link;
+    assert(chunk != NULL);
+    allocator->_link = chunk->next;
+    --allocator->cnt;
+    return chunk;
+}
+
+void h2o_reusealloc_free(h2o_reusealloc_t *allocator, void *p)
+{
+    struct st_h2o__reusealloc_chunk_t *chunk;
+    if (allocator->cnt == allocator->max) {
+        free(p);
+        return;
+    }
+    /* register the pointer to the pool */
+    chunk = p;
+    chunk->next = allocator->_link;
+    allocator->_link = chunk;
+    ++allocator->cnt;
+}
+
 void h2o_mempool_init(h2o_mempool_t *pool)
 {
-    pool->chunks = &pool->_first_chunk;
+    pool->chunks = NULL;
+    pool->chunk_offset = sizeof(pool->chunks->bytes);
     pool->directs = NULL;
     pool->shared_refs = NULL;
-    pool->_first_chunk.next = NULL;
-    pool->_first_chunk.offset = 0;
 }
 
 void h2o_mempool_clear(h2o_mempool_t *pool)
@@ -73,13 +111,12 @@ void h2o_mempool_clear(h2o_mempool_t *pool)
         pool->directs = NULL;
     }
     /* free chunks, and reset the first chunk */
-    while (pool->chunks != &pool->_first_chunk) {
-        h2o_mempool_chunk_t *next = pool->chunks->next;
-        free(pool->chunks);
+    while (pool->chunks != NULL) {
+        struct st_h2o_mempool_chunk_t *next = pool->chunks->next;
+        h2o_reusealloc_free(&mempool_allocator, pool->chunks);
         pool->chunks = next;
     }
-    pool->_first_chunk.next = NULL;
-    pool->_first_chunk.offset = 0;
+    pool->chunk_offset = sizeof(pool->chunks->bytes);
 }
 
 void *h2o_mempool_alloc(h2o_mempool_t *pool, size_t sz)
@@ -96,16 +133,16 @@ void *h2o_mempool_alloc(h2o_mempool_t *pool, size_t sz)
 
     /* 16-bytes rounding */
     sz = (sz + 15) & ~15;
-    if (sizeof(pool->chunks->bytes) < pool->chunks->offset + sz) {
+    if (sizeof(pool->chunks->bytes) - pool->chunk_offset < sz) {
         /* allocate new chunk */
-        h2o_mempool_chunk_t *newp = h2o_malloc(sizeof(*newp));
+        struct st_h2o_mempool_chunk_t *newp = h2o_reusealloc_alloc(&mempool_allocator, sizeof(*newp));
         newp->next = pool->chunks;
-        newp->offset = 0;
         pool->chunks = newp;
+        pool->chunk_offset = 0;
     }
 
-    ret = pool->chunks->bytes + pool->chunks->offset;
-    pool->chunks->offset += sz;
+    ret = pool->chunks->bytes + pool->chunk_offset;
+    pool->chunk_offset += sz;
     return ret;
 }
 
@@ -130,37 +167,49 @@ void *h2o_mempool_alloc_shared(h2o_mempool_t *pool, size_t sz, void (*dispose)(v
 void h2o_mempool_link_shared(h2o_mempool_t *pool, void *p)
 {
     h2o_mempool_addref_shared(p);
-    link_shared(pool, H2O_STRUCT_FROM_MEMBER(h2o_mempool_shared_entry_t, bytes, p));
+    link_shared(pool, H2O_STRUCT_FROM_MEMBER(struct st_h2o_mempool_shared_entry_t, bytes, p));
 }
 
-h2o_buf_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
+h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
 {
     h2o_buffer_t *inbuf = *_inbuf;
-    h2o_buf_t ret;
+    h2o_iovec_t ret;
 
     if (inbuf->bytes == NULL) {
-        if (min_guarantee < inbuf->capacity)
-            min_guarantee = inbuf->capacity;
-        inbuf = h2o_malloc(offsetof(h2o_buffer_t, _buf) + min_guarantee);
+        h2o_buffer_prototype_t *prototype = H2O_STRUCT_FROM_MEMBER(h2o_buffer_prototype_t, _initial_buf, inbuf);
+        if (min_guarantee <= prototype->_initial_buf.capacity) {
+            min_guarantee = prototype->_initial_buf.capacity;
+            inbuf = h2o_reusealloc_alloc(&prototype->allocator, offsetof(h2o_buffer_t, _buf) + min_guarantee);
+        } else {
+            inbuf = h2o_malloc(offsetof(h2o_buffer_t, _buf) + min_guarantee);
+        }
         *_inbuf = inbuf;
         inbuf->size = 0;
         inbuf->bytes = inbuf->_buf;
         inbuf->capacity = min_guarantee;
+        inbuf->_prototype = prototype;
     } else {
-        if (inbuf->bytes != inbuf->_buf) {
-            assert(inbuf->size != 0);
+        if (min_guarantee <= inbuf->capacity - inbuf->size - (inbuf->bytes - inbuf->_buf)) {
+            /* ok */
+        } else if ((inbuf->size + min_guarantee) * 2 <= inbuf->capacity) {
+            /* the capacity should less or equal to 2 times of: size + guarantee */
             memmove(inbuf->_buf, inbuf->bytes, inbuf->size);
             inbuf->bytes = inbuf->_buf;
-        }
-        if (inbuf->capacity - inbuf->size < min_guarantee) {
+        } else {
+            h2o_buffer_t *newp;
+            size_t new_capacity = inbuf->capacity;
             do {
-                inbuf->capacity *= 2;
-            } while (inbuf->capacity - inbuf->size < min_guarantee);
-            inbuf = h2o_realloc(inbuf, offsetof(h2o_buffer_t, _buf) + inbuf->capacity);
-            inbuf->bytes = inbuf->_buf;
-            *_inbuf = inbuf;
+                new_capacity *= 2;
+            } while (new_capacity - inbuf->size < min_guarantee);
+            newp = h2o_malloc(offsetof(h2o_buffer_t, _buf) + new_capacity);
+            newp->size = inbuf->size;
+            newp->bytes = newp->_buf;
+            newp->capacity = new_capacity;
+            newp->_prototype = inbuf->_prototype;
+            memcpy(newp->_buf, inbuf->bytes, inbuf->size);
+            h2o_buffer__do_free(inbuf);
+            *_inbuf = inbuf = newp;
         }
-        /* TODO shrink the size if possible */
     }
 
     ret.base = inbuf->bytes + inbuf->size;
@@ -176,8 +225,8 @@ void h2o_buffer_consume(h2o_buffer_t **_inbuf, size_t delta)
     if (delta != 0) {
         assert(inbuf->bytes != NULL);
         if (inbuf->size == delta) {
-            inbuf->size = 0;
-            inbuf->bytes = inbuf->_buf;
+            *_inbuf = &inbuf->_prototype->_initial_buf;
+            h2o_buffer__do_free(inbuf);
         } else {
             inbuf->size -= delta;
             inbuf->bytes += delta;
