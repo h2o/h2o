@@ -13,4 +13,4 @@ before_script:
   - (cd nghttp2-0.6.4 && ./configure --prefix=/usr --disable-threads --enable-app && make && sudo make install)
 
 script:
-  - make all test
+  - make all h2o-test
