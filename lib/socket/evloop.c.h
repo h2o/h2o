@@ -34,10 +34,10 @@ struct st_h2o_evloop_socket_t {
     h2o_evloop_t *loop;
     struct {
         size_t cnt;
-        h2o_buf_t *bufs;
+        h2o_iovec_t *bufs;
         union {
-            h2o_buf_t *alloced_ptr;
-            h2o_buf_t smallbufs[4];
+            h2o_iovec_t *alloced_ptr;
+            h2o_iovec_t smallbufs[4];
         };
     } _wreq;
     struct st_h2o_evloop_socket_t *_next_pending;
@@ -110,7 +110,7 @@ static int on_read_core(int fd, h2o_buffer_t** input)
     int read_any = 0;
 
     while (1) {
-        h2o_buf_t buf = h2o_buffer_reserve(input, 4096);
+        h2o_iovec_t buf = h2o_buffer_reserve(input, 4096);
         ssize_t rret;
         while ((rret = read(fd, buf.base, buf.len)) == -1 && errno == EINTR)
             ;
@@ -142,7 +142,7 @@ static void wreq_free_buffer_if_allocated(struct st_h2o_evloop_socket_t *sock)
     }
 }
 
-static int write_core(int fd, h2o_buf_t **bufs, size_t *bufcnt)
+static int write_core(int fd, h2o_iovec_t **bufs, size_t *bufcnt)
 {
     int iovcnt;
     ssize_t wret;
@@ -245,10 +245,10 @@ void do_dispose_socket(h2o_socket_t *_sock)
     link_to_statechanged(sock);
 }
 
-void do_write(h2o_socket_t *_sock, h2o_buf_t *_bufs, size_t bufcnt, h2o_socket_cb cb)
+void do_write(h2o_socket_t *_sock, h2o_iovec_t *_bufs, size_t bufcnt, h2o_socket_cb cb)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t*)_sock;
-    h2o_buf_t *bufs;
+    h2o_iovec_t *bufs;
 
     assert(sock->super._cb.write == NULL);
     assert(sock->_wreq.cnt == 0);
@@ -273,10 +273,10 @@ void do_write(h2o_socket_t *_sock, h2o_buf_t *_bufs, size_t bufcnt, h2o_socket_c
     if (bufcnt <= sizeof(sock->_wreq.smallbufs) / sizeof(sock->_wreq.smallbufs[0])) {
         sock->_wreq.bufs = sock->_wreq.smallbufs;
     } else {
-        sock->_wreq.bufs = h2o_malloc(sizeof(h2o_buf_t) * bufcnt);
+        sock->_wreq.bufs = h2o_malloc(sizeof(h2o_iovec_t) * bufcnt);
         sock->_wreq.alloced_ptr = sock->_wreq.bufs = sock->_wreq.bufs;
     }
-    memcpy(sock->_wreq.bufs, bufs, sizeof(h2o_buf_t) * bufcnt);
+    memcpy(sock->_wreq.bufs, bufs, sizeof(h2o_iovec_t) * bufcnt);
     sock->_wreq.cnt = bufcnt;
 
     /* schedule the write */

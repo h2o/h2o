@@ -72,10 +72,10 @@ typedef struct st_h2o_globalconf_t h2o_globalconf_t;
 typedef struct st_h2o_mimemap_t h2o_mimemap_t;
 
 /**
- * a predefined, read-only, fast variant of h2o_buf_t, defined in h2o/token.h
+ * a predefined, read-only, fast variant of h2o_iovec_t, defined in h2o/token.h
  */
 typedef struct st_h2o_token_t {
-    h2o_buf_t buf;
+    h2o_iovec_t buf;
     char http2_static_table_name_index; /* non-zero if any */
     char is_connection_specific;
     char is_init_header_special;
@@ -151,7 +151,7 @@ enum {
 typedef struct h2o_configurator_context_t {
     h2o_globalconf_t *globalconf;
     h2o_hostconf_t *hostconf;
-    h2o_buf_t *path;
+    h2o_iovec_t *path;
 } h2o_configurator_context_t;
 
 typedef int (*h2o_configurator_dispose_cb)(h2o_configurator_t *configurator);
@@ -213,7 +213,7 @@ struct st_h2o_hostconf_t {
     /**
      * hostname in lower-case (base is NUL terminated)
      */
-    h2o_buf_t hostname;
+    h2o_iovec_t hostname;
     /**
      * list of handlers
      */
@@ -240,7 +240,7 @@ struct st_h2o_globalconf_t {
     /**
      * name of the server (not the hostname)
      */
-    h2o_buf_t server_name;
+    h2o_iovec_t server_name;
     /**
      * request timeout (in milliseconds)
      */
@@ -299,13 +299,13 @@ struct st_h2o_context_t {
  */
 typedef struct st_h2o_header_t {
     /**
-     * name of the header (may point to h2o_token_t which is an optimized subclass of h2o_buf_t)
+     * name of the header (may point to h2o_token_t which is an optimized subclass of h2o_iovec_t)
      */
-    h2o_buf_t *name;
+    h2o_iovec_t *name;
     /**
      * value of the header
      */
-    h2o_buf_t value;
+    h2o_iovec_t value;
 } h2o_header_t;
 
 /**
@@ -328,7 +328,7 @@ typedef struct st_h2o_generator_t {
     void (*stop)(struct st_h2o_generator_t *self, h2o_req_t *req);
 } h2o_generator_t;
 
-typedef int (*h2o_ostream_pull_cb)(h2o_generator_t *generator, h2o_req_t *req, h2o_buf_t *buf);
+typedef int (*h2o_ostream_pull_cb)(h2o_generator_t *generator, h2o_req_t *req, h2o_iovec_t *buf);
 
 /**
  * an output stream that may alter the output.
@@ -343,7 +343,7 @@ struct st_h2o_ostream_t {
      * called by the core to send output.
      * Intermediary output streams should process the given output and call the h2o_ostream_send_next function if any data can be sent.
      */
-    void (*do_send)(struct st_h2o_ostream_t *self, h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final);
+    void (*do_send)(struct st_h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final);
     /**
      * called by the core when there is a need to terminate the response abruptly
      */
@@ -410,20 +410,20 @@ struct st_h2o_req_t {
     /**
      * authority (a.k.a. the Host header; the value is supplemented if missing before the handlers are being called)
      */
-    h2o_buf_t authority;
+    h2o_iovec_t authority;
     /**
      * HTTP method
      * This is a non-terminated string of method_len bytes long.
      */
-    h2o_buf_t method;
+    h2o_iovec_t method;
     /**
      * abs-path of the request
      */
-    h2o_buf_t path;
+    h2o_iovec_t path;
     /**
      * scheme (http, https, etc.)
      */
-    h2o_buf_t scheme;
+    h2o_iovec_t scheme;
     /**
      * the HTTP version (represented as 0xMMmm (M=major, m=minor))
      */
@@ -435,7 +435,7 @@ struct st_h2o_req_t {
     /**
      * the request entity (base == NULL if none)
      */
-    h2o_buf_t entity;
+    h2o_iovec_t entity;
     /**
      * timestamp when the request was processed
      */
@@ -456,7 +456,7 @@ struct st_h2o_req_t {
     /**
      * the Upgrade request header (or { NULL, 0 } if not available)
      */
-    h2o_buf_t upgrade;
+    h2o_iovec_t upgrade;
 
     /* internal structure */
     h2o_generator_t *_generator;
@@ -473,13 +473,13 @@ extern h2o_token_t h2o__tokens[H2O_MAX_TOKENS];
 extern size_t h2o__num_tokens;
 
 /**
- * returns a token (an optimized subclass of h2o_buf_t) containing given string, or NULL if no such thing is available
+ * returns a token (an optimized subclass of h2o_iovec_t) containing given string, or NULL if no such thing is available
  */
 const h2o_token_t *h2o_lookup_token(const char *name, size_t len);
 /**
  * returns an boolean value if given buffer is a h2o_token_t.
  */
-int h2o_buf_is_token(const h2o_buf_t *buf);
+int h2o_iovec_is_token(const h2o_iovec_t *buf);
 
 /* headers */
 
@@ -487,7 +487,7 @@ int h2o_buf_is_token(const h2o_buf_t *buf);
  * fills in the headers list while returning references to special headers
  * @return index of content-length or content-encoding header within src (or -1 if not found)
  */
-ssize_t h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len, h2o_buf_t *connection, h2o_buf_t *host, h2o_buf_t *upgrade, h2o_buf_t *expect);
+ssize_t h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len, h2o_iovec_t *connection, h2o_iovec_t *host, h2o_iovec_t *upgrade, h2o_iovec_t *expect);
 /**
  * searches for a header of given name (fast, by comparing tokens)
  * @param headers header list
@@ -573,11 +573,11 @@ h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot);
  * @param bufcnt length of the buffers array
  * @param is_final if the output is final
  */
-void h2o_send(h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final);
+void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final);
 /**
  * called by the connection layer to pull the content from generator (if pull mode is being used)
  */
-static int h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_buf_t *buf);
+static int h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf);
 /**
  * requests the next filter (if any) to setup the ostream if necessary
  */
@@ -592,7 +592,7 @@ static void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostre
  * @param bufcnt length of the buffers array
  * @param is_final if the output is final
  */
-void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, h2o_buf_t *bufs, size_t bufcnt, int is_final);
+void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final);
 /**
  * called by the connection layer to request additional data to the generator
  */
@@ -728,11 +728,11 @@ void h2o_mimemap_remove_type(h2o_mimemap_t *mimemap, const char *ext);
 /**
  * sets the default mime-type
  */
-h2o_buf_t h2o_mimemap_get_default_type(h2o_mimemap_t *mimemap);
+h2o_iovec_t h2o_mimemap_get_default_type(h2o_mimemap_t *mimemap);
 /**
  * returns the mime-type corresponding to given extension
  */
-h2o_buf_t h2o_mimemap_get_type(h2o_mimemap_t *mimemap, const char *ext);
+h2o_iovec_t h2o_mimemap_get_type(h2o_mimemap_t *mimemap, const char *ext);
 
 /* various handlers */
 
@@ -754,7 +754,7 @@ typedef struct st_h2o_file_handler_t h2o_file_handler_t;
 /**
  * sends given file as the response to the client
  */
-int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *path, h2o_buf_t mime_type);
+int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *path, h2o_iovec_t mime_type);
 /**
  * registers the file handler to the context
  * @param host_config
@@ -784,11 +784,11 @@ typedef struct st_h2o_proxy_config_vars_t {
 /**
  * delegates the request to given server, rewriting the path as specified
  */
-int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_buf_t host, uint16_t port, size_t path_replace_length, h2o_buf_t path_prefix);
+int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_iovec_t host, uint16_t port, size_t path_replace_length, h2o_iovec_t path_prefix);
 /**
  * delegates the request to given server, rewriting the path as specified
  */
-int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_socketpool_t *sockpool, size_t path_replace_length, h2o_buf_t path_prefix);
+int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_socketpool_t *sockpool, size_t path_replace_length, h2o_iovec_t path_prefix);
 /**
  * registers the reverse proxy handler to the context
  */
@@ -816,7 +816,7 @@ inline void h2o_proceed_response(h2o_req_t *req)
     }
 }
 
-inline int h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_buf_t *buf)
+inline int h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf)
 {
     int is_final;
     assert(req->_generator != NULL);

@@ -163,12 +163,12 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key;
         yoml_t *value = node->data.mapping.elements[i].value;
-        h2o_buf_t path;
+        h2o_iovec_t path;
         size_t num_handlers_before_config;
         /* setup */
         num_handlers_before_config = ctx->hostconf->handlers.size;
         /* apply the configuration directives */
-        path = h2o_buf_init(key->data.scalar, strlen(key->data.scalar));
+        path = h2o_iovec_init(key->data.scalar, strlen(key->data.scalar));
         ctx->path = &path;
         if (apply_commands(ctx, H2O_CONFIGURATOR_FLAG_PATH, file, value) != 0)
             return -1;
@@ -323,7 +323,7 @@ void h2o_config_init(h2o_globalconf_t *config)
 {
     memset(config, 0, sizeof(*config));
     h2o_linklist_init_anchor(&config->configurators);
-    config->server_name = h2o_buf_init(H2O_STRLIT("h2o/0.1"));
+    config->server_name = h2o_iovec_init(H2O_STRLIT("h2o/0.1"));
     config->req_timeout = H2O_DEFAULT_REQ_TIMEOUT;
     config->max_request_entity_size = H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE;
     config->http1_upgrade_to_http2 = H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2;

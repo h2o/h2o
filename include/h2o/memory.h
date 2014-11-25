@@ -32,10 +32,10 @@
 /**
  * buffer structure compatible with iovec
  */
-typedef struct st_h2o_buf_t {
+typedef struct st_h2o_iovec_t {
     char *base;
     size_t len;
-} h2o_buf_t;
+} h2o_iovec_t;
 
 typedef struct st_h2o_mempool_chunk_t {
     struct st_h2o_mempool_chunk_t *next;
@@ -93,9 +93,9 @@ typedef H2O_VECTOR(void) h2o_vector_t;
 void h2o_fatal(const char *msg);
 
 /**
- * constructor for h2o_buf_t
+ * constructor for h2o_iovec_t
  */
-static h2o_buf_t h2o_buf_init(const void *base, size_t len);
+static h2o_iovec_t h2o_iovec_init(const void *base, size_t len);
 /**
  * wrapper of malloc; allocates given size of memory or dies if impossible
  */
@@ -153,7 +153,7 @@ static void h2o_buffer_dispose(h2o_buffer_t **buffer);
  * @return buffer to which the next data should be stored
  * @note When called against a new buffer, the function returns a buffer twice the size of requested guarantee.  The function uses expotential backoff for already-allocated buffers.
  */
-h2o_buf_t h2o_buffer_reserve(h2o_buffer_t **inbuf, size_t min_guarantee);
+h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **inbuf, size_t min_guarantee);
 /**
  * throws away given size of the data from the buffer.
  * @param delta number of octets to be drained from the buffer
@@ -176,10 +176,10 @@ static int h2o_memis(const void *target, size_t target_len, const void *test, si
 
 /* inline defs */
 
-inline h2o_buf_t h2o_buf_init(const void *base, size_t len)
+inline h2o_iovec_t h2o_iovec_init(const void *base, size_t len)
 {
     /* intentionally declared to take a "const void*" since it may contain any type of data and since _some_ buffers are constant */
-    h2o_buf_t buf;
+    h2o_iovec_t buf;
     buf.base = (char*)base;
     buf.len = len;
     return buf;

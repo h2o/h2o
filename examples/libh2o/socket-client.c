@@ -58,7 +58,7 @@ static void on_write(h2o_socket_t *sock, int status)
 
 static void on_connect(h2o_socket_t *sock, int status)
 {
-    h2o_buf_t *send_data = sock->data;
+    h2o_iovec_t *send_data = sock->data;
 
     if (status != 0) {
         /* connection failed */
@@ -76,7 +76,7 @@ int main(int argc, char **argv)
     struct addrinfo hints, *res = NULL;
     int err, ret = 1;
     h2o_socket_t *sock;
-    h2o_buf_t send_data = { H2O_STRLIT("GET / HTTP/1.0\r\n\r\n") };
+    h2o_iovec_t send_data = { H2O_STRLIT("GET / HTTP/1.0\r\n\r\n") };
 
     if (argc != 3) {
         fprintf(stderr, "Usage: %s <host> <port>\n", argv[0]);

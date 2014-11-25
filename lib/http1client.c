@@ -171,7 +171,7 @@ static void on_body_chunked(h2o_socket_t *sock, int status)
 
 static void on_error_before_head(h2o_http1client_t *client, const char *errstr)
 {
-    client->_cb.on_head(client, errstr, 0, 0, h2o_buf_init(NULL, 0), NULL, 0);
+    client->_cb.on_head(client, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0);
     close_client(client);
 }
 
@@ -246,7 +246,7 @@ static void on_head(h2o_socket_t *sock, int status)
     }
 
     /* call the callback */
-    client->_cb.on_body = client->_cb.on_head(client, is_eos ? h2o_http1client_error_is_eos : NULL, minor_version, http_status, h2o_buf_init(msg, msg_len), headers, num_headers);
+    client->_cb.on_body = client->_cb.on_head(client, is_eos ? h2o_http1client_error_is_eos : NULL, minor_version, http_status, h2o_iovec_init(msg, msg_len), headers, num_headers);
     if (is_eos) {
         close_client(client);
         return;
@@ -302,7 +302,7 @@ static void on_connect_error(h2o_http1client_t *client, const char *errstr)
 static void on_connect(h2o_socket_t *sock, int status)
 {
     h2o_http1client_t *client = sock->data;
-    h2o_buf_t *reqbufs;
+    h2o_iovec_t *reqbufs;
     size_t reqbufcnt;
 
     h2o_timeout_unlink(&client->_timeout);
