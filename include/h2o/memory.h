@@ -45,26 +45,20 @@ typedef struct st_h2o_reusealloc_t {
     struct st_h2o__reusealloc_chunk_t *_link;
 } h2o_reusealloc_t;
 
-typedef struct st_h2o_mempool_chunk_t {
-    struct st_h2o_mempool_chunk_t *next;
-    size_t offset;
-    char bytes[4096 - sizeof(void*) * 2];
-} h2o_mempool_chunk_t;
-
-typedef struct st_h2o_mempool_shared_entry_t {
+struct st_h2o_mempool_shared_entry_t {
     size_t refcnt;
     void (*dispose)(void *);
     char bytes[1];
-} h2o_mempool_shared_entry_t;
+};
 
 /**
  * the memory pool
  */
 typedef struct st_h2o_mempool_t {
-    h2o_mempool_chunk_t *chunks;
+    struct st_h2o_mempool_chunk_t *chunks;
+    size_t chunk_offset;
     struct st_h2o_mempool_shared_ref_t *shared_refs;
     struct st_h2o_mempool_direct_t *directs;
-    h2o_mempool_chunk_t _first_chunk;
 } h2o_mempool_t;
 
 /**

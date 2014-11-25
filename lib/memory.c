@@ -31,6 +31,12 @@ struct st_h2o__reusealloc_chunk_t {
     struct st_h2o__reusealloc_chunk_t *next;
 };
 
+struct st_h2o_mempool_chunk_t {
+    struct st_h2o_mempool_chunk_t *next;
+    size_t _dummy; /* align to 2*sizeof(void*) */
+    char bytes[4096 - sizeof(void*) * 2];
+};
+
 struct st_h2o_mempool_direct_t {
     struct st_h2o_mempool_direct_t *next;
     size_t _dummy; /* align to 2*sizeof(void*) */
@@ -77,11 +83,10 @@ void h2o_reusealloc_free(h2o_reusealloc_t *allocator, void *p)
 
 void h2o_mempool_init(h2o_mempool_t *pool)
 {
-    pool->chunks = &pool->_first_chunk;
+    pool->chunks = NULL;
+    pool->chunk_offset = sizeof(pool->chunks->bytes);
     pool->directs = NULL;
     pool->shared_refs = NULL;
-    pool->_first_chunk.next = NULL;
-    pool->_first_chunk.offset = 0;
 }
 
 void h2o_mempool_clear(h2o_mempool_t *pool)
@@ -104,13 +109,12 @@ void h2o_mempool_clear(h2o_mempool_t *pool)
         pool->directs = NULL;
     }
     /* free chunks, and reset the first chunk */
-    while (pool->chunks != &pool->_first_chunk) {
-        h2o_mempool_chunk_t *next = pool->chunks->next;
+    while (pool->chunks != NULL) {
+        struct st_h2o_mempool_chunk_t *next = pool->chunks->next;
         free(pool->chunks);
         pool->chunks = next;
     }
-    pool->_first_chunk.next = NULL;
-    pool->_first_chunk.offset = 0;
+    pool->chunk_offset = sizeof(pool->chunks->bytes);
 }
 
 void *h2o_mempool_alloc(h2o_mempool_t *pool, size_t sz)
@@ -127,16 +131,16 @@ void *h2o_mempool_alloc(h2o_mempool_t *pool, size_t sz)
 
     /* 16-bytes rounding */
     sz = (sz + 15) & ~15;
-    if (sizeof(pool->chunks->bytes) < pool->chunks->offset + sz) {
+    if (sizeof(pool->chunks->bytes) - pool->chunk_offset < sz) {
         /* allocate new chunk */
-        h2o_mempool_chunk_t *newp = h2o_malloc(sizeof(*newp));
+        struct st_h2o_mempool_chunk_t *newp = h2o_malloc(sizeof(*newp));
         newp->next = pool->chunks;
-        newp->offset = 0;
         pool->chunks = newp;
+        pool->chunk_offset = 0;
     }
 
-    ret = pool->chunks->bytes + pool->chunks->offset;
-    pool->chunks->offset += sz;
+    ret = pool->chunks->bytes + pool->chunk_offset;
+    pool->chunk_offset += sz;
     return ret;
 }
 
@@ -161,7 +165,7 @@ void *h2o_mempool_alloc_shared(h2o_mempool_t *pool, size_t sz, void (*dispose)(v
 void h2o_mempool_link_shared(h2o_mempool_t *pool, void *p)
 {
     h2o_mempool_addref_shared(p);
-    link_shared(pool, H2O_STRUCT_FROM_MEMBER(h2o_mempool_shared_entry_t, bytes, p));
+    link_shared(pool, H2O_STRUCT_FROM_MEMBER(struct st_h2o_mempool_shared_entry_t, bytes, p));
 }
 
 h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
