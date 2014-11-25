@@ -7,10 +7,24 @@ use File::Temp qw(tempfile);
 use Net::EmptyPort qw(check_port empty_port);
 use POSIX ":sys_wait_h";
 use Scope::Guard qw(scope_guard);
+use Test::More;
 use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
-our @EXPORT = qw(spawn_server spawn_h2o md5_file prog_exists openssl_can_negotiate);
+our @EXPORT = qw(bindir exec_unittest spawn_server spawn_h2o md5_file prog_exists openssl_can_negotiate);
+
+sub bindir {
+    $ENV{BINARY_DIR} || '.';
+}
+
+sub exec_unittest {
+    my $base = shift;
+    my $fn = bindir() . "/t-00unit-$base.t";
+    plan skip_all => "unit test:$base does not exist"
+        if ! -e $fn;
+    exec $fn;
+    die "failed to exec $fn:$!";
+}
 
 # spawns a child process and returns a guard object that kills the process when destroyed
 sub spawn_server {
@@ -86,7 +100,7 @@ EOT
 
     # spawn the server
     my $guard = spawn_server(
-        argv     => [ qw(./h2o -c), $conffn ],
+        argv     => [ bindir() . "/h2o", "-c", $conffn ],
         is_ready => sub {
             check_port($port) && check_port($tls_port);
         },

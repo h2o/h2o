@@ -74,25 +74,21 @@ ENDIF (WSLAY_FOUND)
 
 ADD_EXECUTABLE(examples-http1client examples/libh2o/http1client.c)
 SET_TARGET_PROPERTIES(examples-http1client PROPERTIES
-    OUTPUT_NAME examples/libh2o/http1client
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-http1client libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} ${EXTRA_LIBRARIES})
 
 ADD_EXECUTABLE(examples-socket-client examples/libh2o/socket-client.c)
 SET_TARGET_PROPERTIES(examples-socket-client PROPERTIES
-    OUTPUT_NAME examples/libh2o/socket-client
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-socket-client libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${EXTRA_LIBRARIES})
 
 ADD_EXECUTABLE(examples-simple examples/libh2o/simple.c)
 SET_TARGET_PROPERTIES(examples-simple PROPERTIES
-    OUTPUT_NAME examples/libh2o/simple
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-simple libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${EXTRA_LIBRARIES})
 
 ADD_EXECUTABLE(examples-websocket lib/websocket.c examples/libh2o/websocket.c)
 SET_TARGET_PROPERTIES(examples-websocket PROPERTIES
-    OUTPUT_NAME examples/libh2o/websocket
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-websocket libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${WSLAY_LIBRARIES} ${EXTRA_LIBRARIES})
 
@@ -102,22 +98,22 @@ SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
 TARGET_LINK_LIBRARIES(h2o ${OPENSSL_LIBRARIES} ${LIBYAML_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} ${EXTRA_LIBRARIES})
 
 # tests
-ADD_EXECUTABLE(unittest_evloop ${LIB_SOURCE_FILES} deps/picotest/picotest.c lib/t/test.c)
-SET_TARGET_PROPERTIES(unittest_evloop PROPERTIES
+ADD_EXECUTABLE(t-00unit-evloop.t ${LIB_SOURCE_FILES} deps/picotest/picotest.c lib/t/test.c)
+SET_TARGET_PROPERTIES(t-00unit-evloop.t PROPERTIES
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_UNITTEST=1"
-    OUTPUT_NAME t/00unit/evloop.t
     EXCLUDE_FROM_ALL 1)
-TARGET_LINK_LIBRARIES(unittest_evloop ${OPENSSL_LIBRARIES} ${LIBYAML_LIBRARIES} pthread ${EXTRA_LIBRARIES})
-ADD_EXECUTABLE(unittest_libuv ${LIB_SOURCE_FILES} deps/picotest/picotest.c lib/t/test.c)
-SET_TARGET_PROPERTIES(unittest_libuv PROPERTIES
+TARGET_LINK_LIBRARIES(t-00unit-evloop.t ${OPENSSL_LIBRARIES} ${LIBYAML_LIBRARIES} pthread ${EXTRA_LIBRARIES})
+ADD_EXECUTABLE(t-00unit-libuv.t ${LIB_SOURCE_FILES} deps/picotest/picotest.c lib/t/test.c)
+SET_TARGET_PROPERTIES(t-00unit-libuv.t PROPERTIES
     COMPILE_FLAGS "-DH2O_UNITTEST=1"
-    OUTPUT_NAME t/00unit/libuv.t
     EXCLUDE_FROM_ALL 1)
-TARGET_LINK_LIBRARIES(unittest_libuv ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${LIBYAML_LIBRARIES} pthread ${EXTRA_LIBRARIES})
+TARGET_LINK_LIBRARIES(t-00unit-libuv.t ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${LIBYAML_LIBRARIES} pthread ${EXTRA_LIBRARIES})
 
-ADD_CUSTOM_TARGET(test prove -v t/*/*.t DEPENDS h2o unittest_evloop)
+ADD_CUSTOM_TARGET(test env BINARY_DIR=${CMAKE_BINARY_DIR} prove -v t/*/*.t
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    DEPENDS h2o t-00unit-evloop.t)
 IF (LIBUV_FOUND)
-    ADD_DEPENDENCIES(test unittest_libuv lib-examples)
+    ADD_DEPENDENCIES(test t-00unit-libuv.t lib-examples)
 ENDIF (LIBUV_FOUND)
 
 # environment-specific tweaks
