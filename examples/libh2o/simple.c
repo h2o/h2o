@@ -42,7 +42,7 @@ static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
     if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))
         && h2o_memis(req->path.base, req->path.len, H2O_STRLIT("/chunked-test"))) {
         static h2o_generator_t generator = { NULL, NULL };
-        h2o_buf_t body = h2o_strdup(&req->pool, "hello world\n", SIZE_MAX);
+        h2o_iovec_t body = h2o_strdup(&req->pool, "hello world\n", SIZE_MAX);
         req->res.status = 200;
         req->res.reason = "OK";
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));

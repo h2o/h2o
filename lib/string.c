@@ -26,9 +26,9 @@
 #include <time.h>
 #include "h2o/string_.h"
 
-h2o_buf_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t slen)
+h2o_iovec_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t slen)
 {
-    h2o_buf_t ret;
+    h2o_iovec_t ret;
 
     if (slen == SIZE_MAX)
         slen = strlen(s);
@@ -114,9 +114,9 @@ static uint32_t decode_base64url_quad(const char *src)
     return decoded;
 }
 
-h2o_buf_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len)
+h2o_iovec_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len)
 {
-    h2o_buf_t decoded;
+    h2o_iovec_t decoded;
     uint32_t t;
     uint8_t* dst;
     char remaining_input[4];
@@ -166,7 +166,7 @@ h2o_buf_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len)
     return decoded;
 
 Error:
-    return h2o_buf_init(NULL, 0);
+    return h2o_iovec_init(NULL, 0);
 }
 
 void h2o_base64_encode(char *dst, const void *_src, size_t len, int url_encoded)
@@ -377,11 +377,11 @@ static int decode_hex(int ch)
     return -1;
 }
 
-static h2o_buf_t rebuild_path(h2o_mempool_t *pool, const char *path, size_t len)
+static h2o_iovec_t rebuild_path(h2o_mempool_t *pool, const char *path, size_t len)
 {
     const char *src = path, *src_end = path + len;
     char *dst;
-    h2o_buf_t ret;
+    h2o_iovec_t ret;
 
     dst = ret.base = h2o_mempool_alloc(pool, len + 1);
     if (len == 0 || path[0] != '/')
@@ -428,10 +428,10 @@ static h2o_buf_t rebuild_path(h2o_mempool_t *pool, const char *path, size_t len)
     return ret;
 }
 
-h2o_buf_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len)
+h2o_iovec_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len)
 {
     const char *p = path, *end = path + len;
-    h2o_buf_t ret;
+    h2o_iovec_t ret;
 
     if (len == 0 || path[0] != '/')
         goto Rewrite;
@@ -500,7 +500,7 @@ int h2o_parse_url(h2o_mempool_t *pool, const char *url, char **scheme, char **ho
     return 0;
 }
 
-h2o_buf_t h2o_htmlescape(h2o_mempool_t *pool, const char *src, size_t len)
+h2o_iovec_t h2o_htmlescape(h2o_mempool_t *pool, const char *src, size_t len)
 {
     const char *s, *end = src + len;
     size_t add_size = 0;
@@ -525,7 +525,7 @@ h2o_buf_t h2o_htmlescape(h2o_mempool_t *pool, const char *src, size_t len)
     /* escape and return the result if necessary */
     if (add_size != 0) {
         /* allocate buffer and fill in the chars that are known not to require escaping */
-        h2o_buf_t escaped = { h2o_mempool_alloc(pool, len + add_size + 1), 0 };
+        h2o_iovec_t escaped = { h2o_mempool_alloc(pool, len + add_size + 1), 0 };
         /* fill-in the rest */
         for (s = src; s != end; ++s) {
             switch (*s) {
@@ -546,7 +546,7 @@ h2o_buf_t h2o_htmlescape(h2o_mempool_t *pool, const char *src, size_t len)
 #undef ENTITY_MAP
 
     /* no need not escape; return the original */
-    return h2o_buf_init(src, len);
+    return h2o_iovec_init(src, len);
 }
 
 #ifdef H2O_UNITTEST
@@ -560,7 +560,7 @@ static void test_decode_base64(void)
 
     h2o_mempool_init(&pool);
 
-    h2o_buf_t src = { H2O_STRLIT("The quick brown fox jumps over the lazy dog.") }, decoded;
+    h2o_iovec_t src = { H2O_STRLIT("The quick brown fox jumps over the lazy dog.") }, decoded;
     h2o_base64_encode(buf, (const uint8_t*)src.base, src.len, 1);
     ok(strcmp(buf, "VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4") == 0);
     decoded = h2o_decode_base64url(&pool, buf, strlen(buf));
@@ -576,7 +576,7 @@ static void test_normalize_path(void)
 
     h2o_mempool_init(&pool);
 
-    h2o_buf_t b = h2o_normalize_path(&pool, H2O_STRLIT("/"));
+    h2o_iovec_t b = h2o_normalize_path(&pool, H2O_STRLIT("/"));
     ok(b.len == 1);
     ok(memcmp(b.base, H2O_STRLIT("/")) == 0);
 
@@ -689,7 +689,7 @@ static void test_htmlescape(void)
 
 #define TEST(src, expected) \
     do { \
-        h2o_buf_t escaped = h2o_htmlescape(&pool, H2O_STRLIT(src)); \
+        h2o_iovec_t escaped = h2o_htmlescape(&pool, H2O_STRLIT(src)); \
         ok(h2o_memis(escaped.base, escaped.len, H2O_STRLIT(expected))); \
     } while (0)
 

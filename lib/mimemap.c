@@ -23,16 +23,16 @@
 #include "khash.h"
 #include "h2o.h"
 
-KHASH_MAP_INIT_STR(exttable, h2o_buf_t)
+KHASH_MAP_INIT_STR(exttable, h2o_iovec_t)
 
 struct st_h2o_mimemap_t {
     khash_t(exttable) *table;
-    h2o_buf_t default_type;
+    h2o_iovec_t default_type;
 };
 
-static h2o_buf_t dupref(const char *s)
+static h2o_iovec_t dupref(const char *s)
 {
-    h2o_buf_t ret;
+    h2o_iovec_t ret;
     ret.len = strlen(s);
     ret.base = h2o_mempool_alloc_shared(NULL, ret.len + 1, NULL);
     memcpy(ret.base, s, ret.len + 1);
@@ -43,7 +43,7 @@ static void on_dispose(void *_mimemap)
 {
     h2o_mimemap_t *mimemap = _mimemap;
     const char *ext;
-    h2o_buf_t type;
+    h2o_iovec_t type;
 
     kh_foreach(mimemap->table, ext, type, {
         h2o_mempool_release_shared((char*)ext);
@@ -84,7 +84,7 @@ h2o_mimemap_t *h2o_mimemap_clone(h2o_mimemap_t *src)
 {
     h2o_mimemap_t *dst = h2o_mempool_alloc_shared(NULL, sizeof(*dst), on_dispose);
     const char *ext;
-    h2o_buf_t type;
+    h2o_iovec_t type;
 
     dst->table = kh_init(exttable);
     kh_foreach(src->table, ext, type, {
@@ -130,12 +130,12 @@ void h2o_mimemap_remove_type(h2o_mimemap_t *mimemap, const char *ext)
     }
 }
 
-h2o_buf_t h2o_mimemap_get_default_type(h2o_mimemap_t *mimemap)
+h2o_iovec_t h2o_mimemap_get_default_type(h2o_mimemap_t *mimemap)
 {
     return mimemap->default_type;
 }
 
-h2o_buf_t h2o_mimemap_get_type(h2o_mimemap_t *mimemap, const char *ext)
+h2o_iovec_t h2o_mimemap_get_type(h2o_mimemap_t *mimemap, const char *ext)
 {
     if (ext != NULL) {
         khiter_t iter = kh_get(exttable, mimemap->table, ext);

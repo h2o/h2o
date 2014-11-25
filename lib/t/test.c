@@ -21,7 +21,7 @@
  */
 #include "./test.h"
 
-static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_buf_t *inbufs, size_t inbufcnt, int is_final)
+static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
 {
     h2o_loopback_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_loopback_conn_t, _ostr_final, self);
     size_t i;
@@ -62,7 +62,7 @@ void h2o_loopback_destroy(h2o_loopback_conn_t *conn)
 void h2o_loopback_run_loop(h2o_loopback_conn_t *conn)
 {
     if (conn->req.scheme.base == NULL)
-        conn->req.scheme = h2o_buf_init(H2O_STRLIT("http"));
+        conn->req.scheme = h2o_iovec_init(H2O_STRLIT("http"));
     if (conn->req.version == 0)
         conn->req.version = 0x100; /* HTTP/1.0 */
 
@@ -110,8 +110,8 @@ static void test_loopback(void)
     h2o_context_init(&ctx, test_loop, &conf);
 
     conn = h2o_loopback_create(&ctx);
-    conn->req.method = h2o_buf_init(H2O_STRLIT("GET"));
-    conn->req.path = h2o_buf_init(H2O_STRLIT("/"));
+    conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
+    conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
     h2o_loopback_run_loop(conn);
 
     ok(conn->req.res.status == 404);

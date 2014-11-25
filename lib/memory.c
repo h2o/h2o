@@ -133,10 +133,10 @@ void h2o_mempool_link_shared(h2o_mempool_t *pool, void *p)
     link_shared(pool, H2O_STRUCT_FROM_MEMBER(h2o_mempool_shared_entry_t, bytes, p));
 }
 
-h2o_buf_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
+h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
 {
     h2o_buffer_t *inbuf = *_inbuf;
-    h2o_buf_t ret;
+    h2o_iovec_t ret;
 
     if (inbuf->bytes == NULL) {
         if (min_guarantee < inbuf->capacity)

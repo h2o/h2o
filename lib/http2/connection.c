@@ -26,15 +26,15 @@
 #include "h2o/http2.h"
 #include "internal.h"
 
-static const h2o_buf_t CONNECTION_PREFACE = { H2O_STRLIT("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n") };
+static const h2o_iovec_t CONNECTION_PREFACE = { H2O_STRLIT("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n") };
 
 #define H2_PROTOCOL_IDENTIFIER "h2-14"
 const char *h2o_http2_npn_protocols = "\x05" H2_PROTOCOL_IDENTIFIER;
-static const h2o_buf_t alpn_protocols[] = {
+static const h2o_iovec_t alpn_protocols[] = {
     { H2O_STRLIT(H2_PROTOCOL_IDENTIFIER) },
     { NULL, 0 }
 };
-const h2o_buf_t *h2o_http2_alpn_protocols = alpn_protocols;
+const h2o_iovec_t *h2o_http2_alpn_protocols = alpn_protocols;
 
 const h2o_http2_settings_t H2O_HTTP2_SETTINGS_HOST = {
     /* header_table_size = */ 4096,
@@ -44,7 +44,7 @@ const h2o_http2_settings_t H2O_HTTP2_SETTINGS_HOST = {
     /* max_frame_size = */ 16384
 };
 
-static const h2o_buf_t SETTINGS_HOST_BIN = {
+static const h2o_iovec_t SETTINGS_HOST_BIN = {
     H2O_STRLIT(
         "\x00\x00\x12" /* frame size */
         "\x04" /* settings frame */
@@ -360,12 +360,12 @@ static void handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
         h2o_http2_stream_reset(conn, stream, H2O_HTTP2_ERROR_NONE);
         stream = NULL;
     } else {
-        h2o_buf_t buf = h2o_buffer_reserve(&stream->_req_body, payload.length);
+        h2o_iovec_t buf = h2o_buffer_reserve(&stream->_req_body, payload.length);
         memcpy(buf.base, payload.data, payload.length);
         stream->_req_body->size += payload.length;
         /* handle request if request body is complete */
         if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0) {
-            stream->req.entity = h2o_buf_init(stream->_req_body->bytes, stream->_req_body->size);
+            stream->req.entity = h2o_iovec_init(stream->_req_body->bytes, stream->_req_body->size);
             stream->is_half_closed = 1;
             execute_or_enqueue_request(conn, stream);
             stream = NULL; /* no need to send window update for this stream */
@@ -433,7 +433,7 @@ static void handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fra
             return;
         }
         { /* schedule ack */
-            h2o_buf_t header_buf = h2o_buffer_reserve(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE);
+            h2o_iovec_t header_buf = h2o_buffer_reserve(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE);
             h2o_http2_encode_frame_header((void*)header_buf.base, 0, H2O_HTTP2_FRAME_TYPE_SETTINGS, H2O_HTTP2_FRAME_FLAG_ACK, 0);
             conn->_write.buf->size += H2O_HTTP2_FRAME_HEADER_SIZE;
             h2o_http2_conn_request_write(conn);
@@ -756,7 +756,7 @@ int do_emit_writereq(h2o_http2_conn_t *conn)
         return 0;
 
     { /* write */
-        h2o_buf_t buf = { conn->_write.buf->bytes, conn->_write.buf->size };
+        h2o_iovec_t buf = { conn->_write.buf->bytes, conn->_write.buf->size };
         h2o_socket_write(conn->sock, &buf, 1, on_write_complete);
         conn->_write.buf_in_flight = conn->_write.buf;
         h2o_buffer_init(&conn->_write.buf, &wbuf_buffer_prototype);
@@ -813,7 +813,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req)
     h2o_http2_conn_t *http2conn = create_conn(req->conn->ctx, NULL, req->conn->peername.addr, req->conn->peername.len);
     h2o_http1_conn_t *req_conn = (h2o_http1_conn_t*)req->conn;
     ssize_t connection_index, settings_index;
-    h2o_buf_t settings_decoded;
+    h2o_iovec_t settings_decoded;
 
     assert(req->version < 0x200); /* from HTTP/1.x */
 
@@ -842,7 +842,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req)
     req->res.status = 101;
     req->res.reason = "Switching Protocols";
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, H2O_STRLIT("h2c"));
-    h2o_http1_upgrade(req_conn, (h2o_buf_t*)&SETTINGS_HOST_BIN, 1, on_upgrade_complete, http2conn);
+    h2o_http1_upgrade(req_conn, (h2o_iovec_t*)&SETTINGS_HOST_BIN, 1, on_upgrade_complete, http2conn);
 
     return 0;
 Error:

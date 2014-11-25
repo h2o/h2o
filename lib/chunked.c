@@ -29,10 +29,10 @@ typedef struct st_chunked_encoder_t {
     char buf[64];
 } chunked_encoder_t;
 
-static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, size_t inbufcnt, int is_final)
+static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
 {
     chunked_encoder_t *self = (void*)_self;
-    h2o_buf_t *outbufs = alloca(sizeof(h2o_buf_t) * (inbufcnt + 2));
+    h2o_iovec_t *outbufs = alloca(sizeof(h2o_iovec_t) * (inbufcnt + 2));
     size_t chunk_size, outbufcnt = 0, i;
 
     /* calc chunk size */
@@ -46,7 +46,7 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_buf_t *inbufs, 
         outbufs[outbufcnt].len = sprintf(self->buf, "%zx\r\n", chunk_size);
         assert(outbufs[outbufcnt].len < sizeof(self->buf));
         outbufcnt++;
-        memcpy(outbufs + outbufcnt, inbufs, sizeof(h2o_buf_t) * inbufcnt);
+        memcpy(outbufs + outbufcnt, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
         outbufcnt += inbufcnt;
         outbufs[outbufcnt].base = "\r\n0\r\n\r\n";
         outbufs[outbufcnt].len = is_final ? 7 : 2;
