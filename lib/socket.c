@@ -240,14 +240,19 @@ void h2o_socket_dispose_export(h2o_socket_export_t *info)
 
 int h2o_socket_export(h2o_socket_t *sock, h2o_socket_export_t *info)
 {
+    static h2o_buffer_prototype_t nonpooling_prototype = {};
+
     assert(! h2o_socket_is_writing(sock));
 
     if (do_export(sock, info) == -1)
         return -1;
 
-    info->ssl = sock->ssl;
-    sock->ssl = NULL;
+    if ((info->ssl = sock->ssl) != NULL) {
+        sock->ssl = NULL;
+        h2o_buffer_set_prototype(&info->ssl->input.encrypted, &nonpooling_prototype);
+    }
     info->input = sock->input;
+    h2o_buffer_set_prototype(&info->input, &nonpooling_prototype);
     h2o_buffer_init(&sock->input, &h2o_socket_buffer_prototype);
 
     h2o_socket_close(sock);
@@ -263,8 +268,10 @@ h2o_socket_t *h2o_socket_import(h2o_loop_t *loop, h2o_socket_export_t *info)
 
     sock = do_import(loop, info);
     info->fd = -1; /* just in case */
-    sock->ssl = info->ssl;
+    if ((sock->ssl = info->ssl) != NULL)
+        h2o_buffer_set_prototype(&sock->ssl->input.encrypted, &h2o_socket_buffer_prototype);
     sock->input = info->input;
+    h2o_buffer_set_prototype(&sock->input, &h2o_socket_buffer_prototype);
     return sock;
 }
 

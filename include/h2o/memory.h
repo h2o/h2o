@@ -185,6 +185,10 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **inbuf, size_t min_guarantee);
  */
 void h2o_buffer_consume(h2o_buffer_t **inbuf, size_t delta);
 /**
+ * resets the buffer prototype
+ */
+static void h2o_buffer_set_prototype(h2o_buffer_t **buffer, h2o_buffer_prototype_t *prototype);
+/**
  * grows the vector so that it could store at least new_capacity elements of given size (or dies if impossible).
  * @param pool memory pool that the vector is using
  * @param vector the vector
@@ -267,6 +271,14 @@ inline void h2o_buffer_dispose(h2o_buffer_t **_buffer)
     *_buffer = NULL;
     if (buffer->bytes != NULL)
         h2o_buffer__do_free(buffer);
+}
+
+inline void h2o_buffer_set_prototype(h2o_buffer_t **buffer, h2o_buffer_prototype_t *prototype)
+{
+    if ((*buffer)->_prototype != NULL)
+        (*buffer)->_prototype = prototype;
+    else
+        *buffer = &prototype->_initial_buf;
 }
 
 inline void h2o_vector_reserve(h2o_mempool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)
