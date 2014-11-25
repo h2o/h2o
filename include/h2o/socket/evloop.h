@@ -22,6 +22,8 @@
 #ifndef h2o__evloop_h
 #define h2o__evloop_h
 
+#include "h2o/linklist.h"
+
 #define H2O_SOCKET_FLAG_IS_DISPOSED 0x1
 #define H2O_SOCKET_FLAG_IS_READ_READY 0x2
 #define H2O_SOCKET_FLAG_IS_WRITE_ERROR 0x4
@@ -31,7 +33,16 @@
 #define H2O_SOCKET_FLAG_IS_CONNECTING 0x40
 #define H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED 0x1000
 
-typedef struct st_h2o_evloop_t h2o_evloop_t;
+typedef struct st_h2o_evloop_t {
+    struct st_h2o_evloop_socket_t *_pending;
+    struct {
+        struct st_h2o_evloop_socket_t *head;
+        struct st_h2o_evloop_socket_t **tail_ref;
+    } _statechanged;
+    uint64_t _now;
+    h2o_linklist_t _timeouts; /* list of h2o_timeout_t */
+} h2o_evloop_t;
+
 typedef h2o_evloop_t h2o_loop_t;
 
 struct st_h2o_timeout_backend_properties_t {
@@ -44,6 +55,9 @@ h2o_evloop_t *h2o_evloop_create(void);
 void h2o_evloop_destroy(h2o_evloop_t* loop);
 int h2o_evloop_run(h2o_evloop_t *loop);
 
-uint64_t h2o_now(h2o_evloop_t *loop);
+static inline uint64_t h2o_now(h2o_evloop_t *loop)
+{
+    return loop->_now;
+}
 
 #endif

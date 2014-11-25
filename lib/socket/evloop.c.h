@@ -44,16 +44,6 @@ struct st_h2o_evloop_socket_t {
     struct st_h2o_evloop_socket_t *_next_statechanged;
 };
 
-struct st_h2o_evloop_t {
-    struct st_h2o_evloop_socket_t *_pending;
-    struct {
-        struct st_h2o_evloop_socket_t *head;
-        struct st_h2o_evloop_socket_t **tail_ref;
-    } _statechanged;
-    uint64_t _now;
-    h2o_linklist_t _timeouts; /* list of h2o_timeout_t */
-};
-
 static void link_to_pending(struct st_h2o_evloop_socket_t *sock);
 static void write_pending(struct st_h2o_evloop_socket_t *sock);
 static h2o_evloop_t *create_evloop(size_t sz);
@@ -488,11 +478,6 @@ int h2o_evloop_run(h2o_evloop_t *loop)
         ;
 
     return 0;
-}
-
-uint64_t h2o_now(h2o_evloop_t *loop)
-{
-    return loop->_now;
 }
 
 void h2o_timeout__do_init(h2o_evloop_t *loop, h2o_timeout_t *timeout)
