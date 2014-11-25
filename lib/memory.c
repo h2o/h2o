@@ -20,11 +20,15 @@
  * IN THE SOFTWARE.
  */
 #include <assert.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <unistd.h>
 #include "h2o/memory.h"
 
 struct st_h2o__reusealloc_chunk_t {
@@ -170,6 +174,25 @@ void h2o_mempool_link_shared(h2o_mempool_t *pool, void *p)
     link_shared(pool, H2O_STRUCT_FROM_MEMBER(struct st_h2o_mempool_shared_entry_t, bytes, p));
 }
 
+static size_t topagesize(size_t capacity)
+{
+    size_t pagesize = getpagesize();
+    return (offsetof(h2o_buffer_t, _buf) + capacity + pagesize - 1) / pagesize * pagesize;
+}
+
+void h2o_buffer__do_free(h2o_buffer_t *buffer)
+{
+    /* caller should assert that the buffer is not part of the prototype */
+    if (buffer->capacity == buffer->_prototype->_initial_buf.capacity) {
+        h2o_reusealloc_free(&buffer->_prototype->allocator, buffer);
+    } else if (buffer->_fd != -1) {
+        close(buffer->_fd);
+        munmap(buffer, topagesize(buffer->capacity));
+    } else {
+        free(buffer);
+    }
+}
+
 h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
 {
     h2o_buffer_t *inbuf = *_inbuf;
@@ -188,33 +211,76 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
         inbuf->bytes = inbuf->_buf;
         inbuf->capacity = min_guarantee;
         inbuf->_prototype = prototype;
+        inbuf->_fd = -1;
     } else {
         if (min_guarantee <= inbuf->capacity - inbuf->size - (inbuf->bytes - inbuf->_buf)) {
             /* ok */
         } else if ((inbuf->size + min_guarantee) * 2 <= inbuf->capacity) {
-            /* the capacity should less or equal to 2 times of: size + guarantee */
+            /* the capacity should be less than or equal to 2 times of: size + guarantee */
             memmove(inbuf->_buf, inbuf->bytes, inbuf->size);
             inbuf->bytes = inbuf->_buf;
         } else {
-            h2o_buffer_t *newp;
             size_t new_capacity = inbuf->capacity;
             do {
                 new_capacity *= 2;
             } while (new_capacity - inbuf->size < min_guarantee);
-            newp = h2o_malloc(offsetof(h2o_buffer_t, _buf) + new_capacity);
-            newp->size = inbuf->size;
-            newp->bytes = newp->_buf;
-            newp->capacity = new_capacity;
-            newp->_prototype = inbuf->_prototype;
-            memcpy(newp->_buf, inbuf->bytes, inbuf->size);
-            h2o_buffer__do_free(inbuf);
-            *_inbuf = inbuf = newp;
+            if (inbuf->_prototype->mmap_settings != NULL && inbuf->_prototype->mmap_settings->threshold <= new_capacity) {
+                size_t new_allocsize = topagesize(new_capacity);
+                int fd;
+                h2o_buffer_t *newp;
+                if (inbuf->_fd == -1) {
+                    char *tmpfn = alloca(strlen(inbuf->_prototype->mmap_settings->fn_template) + 1);
+                    strcpy(tmpfn, inbuf->_prototype->mmap_settings->fn_template);
+                    if ((fd = mkstemp(tmpfn)) == -1)
+                        goto MapError;
+                    unlink(tmpfn);
+                } else {
+                    fd = inbuf->_fd;
+                }
+                if (ftruncate(fd, new_allocsize) != 0)
+                    goto MapError;
+                if ((newp = mmap(NULL, new_allocsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)) == MAP_FAILED)
+                    goto MapError;
+                if (inbuf->_fd == -1) {
+                    /* copy data (moving from malloc to mmap) */
+                    newp->size = inbuf->size;
+                    newp->bytes = newp->_buf;
+                    newp->capacity = new_capacity;
+                    newp->_prototype = inbuf->_prototype;
+                    newp->_fd = fd;
+                    memcpy(newp->_buf, inbuf->bytes, inbuf->size);
+                    h2o_buffer__do_free(inbuf);
+                    *_inbuf = inbuf = newp;
+                } else {
+                    /* munmap */
+                    size_t offset = inbuf->bytes - inbuf->_buf;
+                    munmap(inbuf, topagesize(inbuf->capacity));
+                    *_inbuf = inbuf = newp;
+                    inbuf->capacity = new_capacity;
+                    inbuf->bytes = newp->_buf + offset;
+                }
+            } else {
+                h2o_buffer_t *newp = h2o_malloc(offsetof(h2o_buffer_t, _buf) + new_capacity);
+                newp->size = inbuf->size;
+                newp->bytes = newp->_buf;
+                newp->capacity = new_capacity;
+                newp->_prototype = inbuf->_prototype;
+                newp->_fd = -1;
+                memcpy(newp->_buf, inbuf->bytes, inbuf->size);
+                h2o_buffer__do_free(inbuf);
+                *_inbuf = inbuf = newp;
+            }
         }
     }
 
     ret.base = inbuf->bytes + inbuf->size;
     ret.len = inbuf->capacity - inbuf->size;
 
+    return ret;
+
+MapError:
+    ret.base = NULL;
+    ret.len = 0;
     return ret;
 }
 
