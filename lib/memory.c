@@ -48,6 +48,8 @@ struct st_h2o_mempool_shared_ref_t {
     struct st_h2o_mempool_shared_entry_t *entry;
 };
 
+static __thread h2o_reusealloc_t mempool_allocator = { 16 };
+
 void h2o_fatal(const char *msg)
 {
     fprintf(stderr, "fatal:%s\n", msg);
@@ -111,7 +113,7 @@ void h2o_mempool_clear(h2o_mempool_t *pool)
     /* free chunks, and reset the first chunk */
     while (pool->chunks != NULL) {
         struct st_h2o_mempool_chunk_t *next = pool->chunks->next;
-        free(pool->chunks);
+        h2o_reusealloc_free(&mempool_allocator, pool->chunks);
         pool->chunks = next;
     }
     pool->chunk_offset = sizeof(pool->chunks->bytes);
@@ -133,7 +135,7 @@ void *h2o_mempool_alloc(h2o_mempool_t *pool, size_t sz)
     sz = (sz + 15) & ~15;
     if (sizeof(pool->chunks->bytes) - pool->chunk_offset < sz) {
         /* allocate new chunk */
-        struct st_h2o_mempool_chunk_t *newp = h2o_malloc(sizeof(*newp));
+        struct st_h2o_mempool_chunk_t *newp = h2o_reusealloc_alloc(&mempool_allocator, sizeof(*newp));
         newp->next = pool->chunks;
         pool->chunks = newp;
         pool->chunk_offset = 0;
