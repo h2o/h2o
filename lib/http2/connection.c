@@ -333,9 +333,10 @@ static void update_input_window(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_
 {
     h2o_http2_window_consume_window(window, consumed);
     if (h2o_http2_window_get_window(window) * 2 < H2O_HTTP2_SETTINGS_HOST.initial_window_size) {
-        h2o_http2_encode_window_update_frame(&conn->_write.buf, stream_id, H2O_HTTP2_SETTINGS_HOST.initial_window_size);
+        int32_t delta = (int32_t)(H2O_HTTP2_SETTINGS_HOST.initial_window_size - h2o_http2_window_get_window(window));
+        h2o_http2_encode_window_update_frame(&conn->_write.buf, stream_id, delta);
         h2o_http2_conn_request_write(conn);
-        h2o_http2_window_update(window, H2O_HTTP2_SETTINGS_HOST.initial_window_size);
+        h2o_http2_window_update(window, delta);
     }
 }
 
@@ -570,6 +571,13 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
         return H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY;
     }
 
+    { /* send SETTINGS */
+        h2o_iovec_t vec = h2o_buffer_reserve(&conn->_write.buf, SETTINGS_HOST_BIN.len);
+        memcpy(vec.base, SETTINGS_HOST_BIN.base, SETTINGS_HOST_BIN.len);
+        conn->_write.buf->size += SETTINGS_HOST_BIN.len;
+        h2o_http2_conn_request_write(conn);
+    }
+
     conn->_read_expect = expect_default;
     return CONNECTION_PREFACE.len;
 }
@@ -786,7 +794,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock, str
     conn->state = H2O_HTTP2_CONN_STATE_OPEN;
     conn->_read_expect = expect_preface;
     conn->_input_header_table.hpack_capacity = conn->_input_header_table.hpack_max_capacity = H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;
-    h2o_http2_window_init(&conn->_input_window, &H2O_HTTP2_SETTINGS_HOST);
+    h2o_http2_window_init(&conn->_input_window, &H2O_HTTP2_SETTINGS_DEFAULT);
     conn->_output_header_table.hpack_capacity = H2O_HTTP2_SETTINGS_HOST.header_table_size;
     h2o_linklist_init_anchor(&conn->_pending_reqs);
     h2o_buffer_init(&conn->_write.buf, &wbuf_buffer_prototype);
