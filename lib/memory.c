@@ -213,7 +213,7 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
     }
 
     ret.base = inbuf->bytes + inbuf->size;
-    ret.len = inbuf->capacity - inbuf->size;
+    ret.len = inbuf->_buf + inbuf->capacity - ret.base;
 
     return ret;
 }
