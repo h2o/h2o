@@ -24,6 +24,7 @@
 
 #include <assert.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -81,12 +82,22 @@ typedef struct st_h2o_buffer_t {
      * prototype (or NULL if the instance is part of the prototype (i.e. bytes == NULL))
      */
     h2o_buffer_prototype_t *_prototype;
+    /**
+     * file descriptor (if not -1, used to store the buffer)
+     */
+    int _fd;
     char _buf[1];
 } h2o_buffer_t;
+
+typedef struct st_h2o_buffer_mmap_settings_t {
+    size_t threshold;
+    char fn_template[FILENAME_MAX];
+} h2o_buffer_mmap_settings_t;
 
 struct st_h2o_buffer_prototype_t {
     h2o_reusealloc_t allocator;
     h2o_buffer_t _initial_buf;
+    h2o_buffer_mmap_settings_t *mmap_settings;
 };
 
 #define H2O_VECTOR(type) \
@@ -166,7 +177,7 @@ static void h2o_buffer_init(h2o_buffer_t **buffer, h2o_buffer_prototype_t *proto
 /**
  * 
  */
-static void h2o_buffer__do_free(h2o_buffer_t *buffer);
+void h2o_buffer__do_free(h2o_buffer_t *buffer);
 /**
  * disposes of the buffer
  */
@@ -254,15 +265,6 @@ inline int h2o_mempool_release_shared(void *p)
 inline void h2o_buffer_init(h2o_buffer_t **buffer, h2o_buffer_prototype_t *prototype)
 {
     *buffer = &prototype->_initial_buf;
-}
-
-inline void h2o_buffer__do_free(h2o_buffer_t *buffer)
-{
-    /* caller should assert that the buffer is not part of the prototype */
-    if (buffer->capacity == buffer->_prototype->_initial_buf.capacity)
-        h2o_reusealloc_free(&buffer->_prototype->allocator, buffer);
-    else
-        free(buffer);
 }
 
 inline void h2o_buffer_dispose(h2o_buffer_t **_buffer)

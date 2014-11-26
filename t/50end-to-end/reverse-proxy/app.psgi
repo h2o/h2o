@@ -27,7 +27,7 @@ builder {
         my $env = shift;
         my $content = '';
         if ($env->{'psgi.input'}) {
-            $env->{'psgi.input'}->read($content, 1048576);
+            $env->{'psgi.input'}->read($content, 104857600);
         }
         return [
             200,

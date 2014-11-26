@@ -90,6 +90,7 @@ typedef struct st_h2o_socket_export_t {
     h2o_buffer_t *input;
 } h2o_socket_export_t;
 
+extern h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings;
 extern __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype;
 
 /**

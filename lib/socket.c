@@ -73,8 +73,16 @@ static void on_write_complete(h2o_socket_t *sock, int status);
 # include "socket/evloop.c.h"
 #endif
 
-/* declared const, so that it would become read-only */
-__thread h2o_buffer_prototype_t h2o_socket_buffer_prototype = { { 16 }, { H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2 } };
+h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings = {
+    32 * 1024 * 1024, /* 32MB, should better be greater than max frame size of HTTP2 for performance reasons */
+    "/tmp/h2o.b.XXXXXX"
+};
+
+__thread h2o_buffer_prototype_t h2o_socket_buffer_prototype = {
+    { 16 }, /* keep 16 recently used chunks */
+    { H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2 }, /* minimum initial capacity */
+    &h2o_socket_buffer_mmap_settings
+};
 
 static int read_bio(BIO *b, char *out, int len)
 {
@@ -154,9 +162,11 @@ int decode_ssl_input(h2o_socket_t *sock)
     assert(sock->ssl->handshake.cb == NULL);
 
     while (sock->ssl->input.encrypted->size != 0) {
+        int rlen;
         h2o_iovec_t buf = h2o_buffer_reserve(&sock->input, 4096);
-        int rlen = SSL_read(sock->ssl->ssl, buf.base, (int)buf.len);
-        if (rlen == -1) {
+        if (buf.base == NULL)
+            return errno;
+        if ((rlen = SSL_read(sock->ssl->ssl, buf.base, (int)buf.len)) == -1) {
             if (SSL_get_error(sock->ssl->ssl, rlen) != SSL_ERROR_WANT_READ) {
                 return EIO;
             }

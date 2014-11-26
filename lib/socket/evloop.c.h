@@ -100,8 +100,12 @@ static int on_read_core(int fd, h2o_buffer_t** input)
     int read_any = 0;
 
     while (1) {
-        h2o_iovec_t buf = h2o_buffer_reserve(input, 4096);
         ssize_t rret;
+        h2o_iovec_t buf = h2o_buffer_reserve(input, 4096);
+        if (buf.base == NULL) {
+            /* memory allocation failed */
+            return -1;
+        }
         while ((rret = read(fd, buf.base, buf.len)) == -1 && errno == EINTR)
             ;
         if (rret == -1) {

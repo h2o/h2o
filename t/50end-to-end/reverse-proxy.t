@@ -18,6 +18,10 @@ my %files = map { do {
     +($_ => { size => (stat $fn)[7], md5 => md5_file($fn) });
 } } qw(index.txt halfdome.jpg);
 
+my $huge_file_size = 50 * 1024 * 1024; # should be larger than the mmap_backend threshold of h2o
+my $huge_file = create_data_file($huge_file_size);
+my $huge_file_md5 = md5_file($huge_file);
+
 for my $i (0..7) {
     my $h2o_keepalive = $i & 1 ? 1 : 0;
     my $starlet_keepalive = $i & 2 ? 1 : 0;
@@ -97,7 +101,12 @@ sub run_tests_with_conf {
                 is length($content), $files{$file}->{size}, "$proto://127.0.0.1/echo (POST, chunked, $file, size)";
                 is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/echo (POST, chunked, $file, md5)";
             }
-
+            my $content = `curl --silent --show-error --insecure --data-binary \@$huge_file $proto://127.0.0.1:$port/echo`;
+            is length($content), $huge_file_size, "$proto://127.0.0.1/echo (POST, mmap-backed, size)";
+            is md5_hex($content), $huge_file_md5, "$proto://127.0.0.1/echo (POST, mmap-backed, md5)";
+            $content = `curl --silent --show-error --insecure --header 'Transfer-Encoding: chunked' --data-binary \@$huge_file $proto://127.0.0.1:$port/echo`;
+            is length($content), $huge_file_size, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, size)";
+            is md5_hex($content), $huge_file_md5, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, md5)";
         };
         $doit->('http', $port);
         $doit->('https', $tls_port);
@@ -118,6 +127,9 @@ sub run_tests_with_conf {
             is $out, "hello\n", "$proto://127.0.0.1/echo (POST)";
             $out = `nghttp $opt -m 10 $proto://127.0.0.1:$port/index.txt`;
             is $out, "hello\n" x 10, "$proto://127.0.0.1/index.txt x 10 times";
+            $out = `nghttp $opt -H':method: POST' -d $huge_file $proto://127.0.0.1:$port/echo`;
+            is length($out), $huge_file_size, "$proto://127.0.0.1/echo (mmap-backed, size)";
+            is md5_hex($out), $huge_file_md5, "$proto://127.0.0.1/echo (mmap-backed, md5)";
         };
         subtest 'http' => sub {
             $doit->('http', $port);
