@@ -11,7 +11,7 @@ use Test::More;
 use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
-our @EXPORT = qw(bindir exec_unittest spawn_server spawn_h2o md5_file prog_exists openssl_can_negotiate);
+our @EXPORT = qw(bindir exec_unittest spawn_server spawn_h2o create_data_file md5_file prog_exists openssl_can_negotiate);
 
 sub bindir {
     $ENV{BINARY_DIR} || '.';
@@ -110,6 +110,14 @@ EOT
         tls_port => $tls_port,
         guard    => $guard,
     };
+}
+
+sub create_data_file {
+    my $sz = shift;
+    my ($fh, $fn) = tempfile();
+    print $fh '0' x $sz;
+    close $fh;
+    return $fn;
 }
 
 sub md5_file {
