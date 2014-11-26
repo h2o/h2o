@@ -362,14 +362,21 @@ static void handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
         stream = NULL;
     } else {
         h2o_iovec_t buf = h2o_buffer_reserve(&stream->_req_body, payload.length);
-        memcpy(buf.base, payload.data, payload.length);
-        stream->_req_body->size += payload.length;
-        /* handle request if request body is complete */
-        if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0) {
-            stream->req.entity = h2o_iovec_init(stream->_req_body->bytes, stream->_req_body->size);
-            stream->is_half_closed = 1;
-            execute_or_enqueue_request(conn, stream);
-            stream = NULL; /* no need to send window update for this stream */
+        if (buf.base != NULL) {
+            memcpy(buf.base, payload.data, payload.length);
+            stream->_req_body->size += payload.length;
+            /* handle request if request body is complete */
+            if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0) {
+                stream->req.entity = h2o_iovec_init(stream->_req_body->bytes, stream->_req_body->size);
+                stream->is_half_closed = 1;
+                execute_or_enqueue_request(conn, stream);
+                stream = NULL; /* no need to send window update for this stream */
+            }
+        } else {
+            /* memory allocation failed */
+            send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
+            h2o_http2_stream_reset(conn, stream, H2O_HTTP2_ERROR_INTERNAL);
+            stream = NULL;
         }
     }
 
