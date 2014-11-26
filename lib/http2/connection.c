@@ -786,7 +786,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock, str
     conn->state = H2O_HTTP2_CONN_STATE_OPEN;
     conn->_read_expect = expect_preface;
     conn->_input_header_table.hpack_capacity = conn->_input_header_table.hpack_max_capacity = H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;
-    h2o_http2_window_init(&conn->_input_window, &H2O_HTTP2_SETTINGS_HOST);
+    h2o_http2_window_init(&conn->_input_window, &H2O_HTTP2_SETTINGS_DEFAULT);
     conn->_output_header_table.hpack_capacity = H2O_HTTP2_SETTINGS_HOST.header_table_size;
     h2o_linklist_init_anchor(&conn->_pending_reqs);
     h2o_buffer_init(&conn->_write.buf, &wbuf_buffer_prototype);
