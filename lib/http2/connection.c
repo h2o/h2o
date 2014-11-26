@@ -571,6 +571,13 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
         return H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY;
     }
 
+    { /* send SETTINGS */
+        h2o_iovec_t vec = h2o_buffer_reserve(&conn->_write.buf, SETTINGS_HOST_BIN.len);
+        memcpy(vec.base, SETTINGS_HOST_BIN.base, SETTINGS_HOST_BIN.len);
+        conn->_write.buf->size += SETTINGS_HOST_BIN.len;
+        h2o_http2_conn_request_write(conn);
+    }
+
     conn->_read_expect = expect_default;
     return CONNECTION_PREFACE.len;
 }
