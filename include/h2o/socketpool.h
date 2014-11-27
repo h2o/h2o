@@ -22,6 +22,10 @@
 #ifndef h2o__socket_pool_h
 #define h2o__socket_pool_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <pthread.h>
 #include "h2o/linklist.h"
 #include "h2o/socket.h"
@@ -82,5 +86,9 @@ inline int h2o_socketpool_is_owned_socket(h2o_socketpool_t *pool, h2o_socket_t *
 {
     return sock->on_close.data == pool;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

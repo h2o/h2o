@@ -22,6 +22,10 @@
 #ifndef h2o__socket_h
 #define h2o__socket_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include <sys/socket.h>
 #include <openssl/ssl.h>
@@ -183,5 +187,9 @@ inline int h2o_socket_is_reading(h2o_socket_t *sock)
 {
     return sock->_cb.read != NULL;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

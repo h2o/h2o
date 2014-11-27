@@ -28,6 +28,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s*)((char*)(p) - offsetof(s, m)))
 
 typedef struct st_h2o_buffer_prototype_t h2o_buffer_prototype_t;
@@ -292,7 +296,7 @@ inline void h2o_vector_reserve(h2o_mempool_t *pool, h2o_vector_t *vector, size_t
 
 inline int h2o_memis(const void *_target, size_t target_len, const void *_test, size_t test_len)
 {
-    const char *target = _target, *test = _test;
+    const char *target = (const char *)_target, *test = (const char *)_test;
     if (target_len != test_len)
         return 0;
     if (target_len == 0)
@@ -301,5 +305,9 @@ inline int h2o_memis(const void *_target, size_t target_len, const void *_test, 
         return 0;
     return memcmp(target + 1, test + 1, test_len - 1) == 0;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
