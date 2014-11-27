@@ -37,6 +37,7 @@
 
 struct st_h2o_socket_ssl_t {
     SSL *ssl;
+    int *did_write_in_read; /* used for detecting and closing the connection upon renegotiation (FIXME implement renegotiation) */
     struct {
         h2o_socket_cb cb;
     } handshake;
@@ -110,6 +111,12 @@ static int write_bio(BIO *b, const char *in, int len)
     h2o_socket_t *sock = b->ptr;
     void *bytes_alloced;
 
+    /* FIXME no support for SSL renegotiation (yet) */
+    if (sock->ssl->did_write_in_read != NULL) {
+        *sock->ssl->did_write_in_read = 1;
+        return -1;
+    }
+
     if (len == 0)
         return 0;
 
@@ -166,7 +173,15 @@ int decode_ssl_input(h2o_socket_t *sock)
         h2o_iovec_t buf = h2o_buffer_reserve(&sock->input, 4096);
         if (buf.base == NULL)
             return errno;
-        if ((rlen = SSL_read(sock->ssl->ssl, buf.base, (int)buf.len)) == -1) {
+        { /* call SSL_read (while detecting SSL renegotiation and reporting it as error) */
+            int did_write_in_read = 0;
+            sock->ssl->did_write_in_read = &did_write_in_read;
+            rlen = SSL_read(sock->ssl->ssl, buf.base, (int)buf.len);
+            sock->ssl->did_write_in_read = NULL;
+            if (did_write_in_read)
+                return EIO;
+        }
+        if (rlen == -1) {
             if (SSL_get_error(sock->ssl->ssl, rlen) != SSL_ERROR_WANT_READ) {
                 return EIO;
             }
