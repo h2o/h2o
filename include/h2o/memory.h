@@ -292,7 +292,7 @@ inline void h2o_vector_reserve(h2o_mempool_t *pool, h2o_vector_t *vector, size_t
 
 inline int h2o_memis(const void *_target, size_t target_len, const void *_test, size_t test_len)
 {
-    const char *target = _target, *test = _test;
+    const char *target = (char *)_target, *test = (char *)_test;
     if (target_len != test_len)
         return 0;
     if (target_len == 0)
