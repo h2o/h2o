@@ -231,16 +231,22 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                 if (inbuf->_fd == -1) {
                     char *tmpfn = alloca(strlen(inbuf->_prototype->mmap_settings->fn_template) + 1);
                     strcpy(tmpfn, inbuf->_prototype->mmap_settings->fn_template);
-                    if ((fd = mkstemp(tmpfn)) == -1)
+                    if ((fd = mkstemp(tmpfn)) == -1) {
+                        fprintf(stderr, "failed to create temporary file:%s:%s\n", tmpfn, strerror(errno));
                         goto MapError;
+                    }
                     unlink(tmpfn);
                 } else {
                     fd = inbuf->_fd;
                 }
-                if (ftruncate(fd, new_allocsize) != 0)
+                if (ftruncate(fd, new_allocsize) != 0) {
+                    perror("failed to resize temporary file");
                     goto MapError;
-                if ((newp = mmap(NULL, new_allocsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)) == MAP_FAILED)
+                }
+                if ((newp = mmap(NULL, new_allocsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)) == MAP_FAILED) {
+                    perror("mmap failed");
                     goto MapError;
+                }
                 if (inbuf->_fd == -1) {
                     /* copy data (moving from malloc to mmap) */
                     newp->size = inbuf->size;
