@@ -22,6 +22,10 @@
 #ifndef h2o__http2_h
 #define h2o__http2_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <assert.h>
 #include "khash.h"
 
@@ -323,5 +327,9 @@ inline void h2o_http2_window_consume_window(h2o_http2_window_t *window, size_t b
 {
     window->_avail -= bytes;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

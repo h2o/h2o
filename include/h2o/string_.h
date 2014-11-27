@@ -22,6 +22,10 @@
 #ifndef h2o__string_h
 #define h2o__string_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
 #include <time.h>
@@ -119,5 +123,9 @@ inline int h2o_lcstris(const char *target, size_t target_len, const char *test, 
         return 0;
     return h2o__lcstris_core(target, test, test_len);
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

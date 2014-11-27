@@ -22,6 +22,10 @@
 #ifndef h2o__timeout_h
 #define h2o__timeout_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include "h2o/linklist.h"
 #include "h2o/socket.h"
@@ -86,5 +90,9 @@ inline int h2o_timeout_is_linked(h2o_timeout_entry_t *entry)
 {
     return h2o_linklist_is_linked(&entry->_link);
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

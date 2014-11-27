@@ -22,6 +22,10 @@
 #ifndef h2o__linklist_h
 #define h2o__linklist_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <assert.h>
 #include <stddef.h>
 
@@ -92,5 +96,9 @@ inline void h2o_linklist_unlink(h2o_linklist_t *node)
     node->prev->next = node->next;
     node->next = node->prev = NULL;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
