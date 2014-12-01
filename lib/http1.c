@@ -85,7 +85,9 @@ static void set_timeout(h2o_http1_conn_t *conn, h2o_timeout_t *timeout, h2o_time
 
 static void process_request(h2o_http1_conn_t *conn)
 {
-    if (conn->sock->ssl == NULL && conn->req.upgrade.base != NULL && h2o_lcstris(conn->req.upgrade.base, conn->req.upgrade.len, H2O_STRLIT("h2c-14"))) {
+    if (conn->sock->ssl == NULL && conn->req.upgrade.base != NULL
+        && conn->super.ctx->global_config->http1_upgrade_to_http2
+        && h2o_lcstris(conn->req.upgrade.base, conn->req.upgrade.len, H2O_STRLIT("h2c-14"))) {
         if (h2o_http2_handle_upgrade(&conn->req) == 0) {
             return;
         }
