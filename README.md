@@ -18,7 +18,7 @@ Dependencies
 
 - [OpenSSL](https://www.openssl.org/) (mandatory)
 - [libyaml](http://pyyaml.org/wiki/LibYAML) (optional; required when building the server)
-- [libuv 1.0.0](https://github.com/joyent/libuv) (optional; required when using h2o as a library)
+- [libuv 1.0.x](https://github.com/joyent/libuv) (optional; required when using h2o as a library)
 - [wslay](https://github.com/tatsuhiro-t/wslay) (optional; required if you need support for websocket)
 
 note: Older versions of libuv cannot be used due to massive API changes in libuv 1.0.  Please use the latest RC of libuv 1.0.
@@ -50,7 +50,7 @@ $ cmake .
 $ make libh2o
 ```
 
-The library is designed to work together with the upcoming [libuv version 1.0.0](https://github.com/joyent/libuv).  Examples can be found within the [examples/](https://github.com/kazuho/h2o/blob/master/examples/) directory.
+The library is designed to work together with the new [libuv version 1.0.x](https://github.com/joyent/libuv).  Examples can be found within the [examples/](https://github.com/kazuho/h2o/blob/master/examples/) directory.
 
 Benchmarks
 ---
