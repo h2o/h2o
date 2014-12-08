@@ -181,6 +181,20 @@ Error:
     return NULL;
 }
 
+static void add_listener(struct config_t *conf, int family, int socktype, int protocol, struct sockaddr *addr, socklen_t addrlen, SSL_CTX *ssl_ctx)
+{
+    struct listener_config_t *listener = h2o_malloc(sizeof(*listener));
+
+    listener->family = family;
+    listener->socktype = socktype;
+    listener->protocol = protocol;
+    memcpy(&listener->addr, addr, addrlen);
+    listener->addrlen = addrlen;
+    listener->ssl_ctx = ssl_ctx;
+    conf->listeners = h2o_realloc(conf->listeners, sizeof(*conf->listeners) * (conf->num_listeners + 1));
+    conf->listeners[conf->num_listeners++] = listener;
+}
+
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, ctx->globalconf);
@@ -232,14 +246,13 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     if (strcmp(type, "unix") == 0) {
 
         /* unix socket */
-        struct listener_config_t *listener = h2o_malloc(sizeof(*listener));
-        listener->fd = -1;
-        listener->family = AF_UNIX;
-        listener->socktype = SOCK_STREAM;
-        listener->protocol = 0;
-
-        /* remove socket file if it already exists */
+        struct sockaddr_un sun;
         struct stat sstat;
+        /* perform necessary checks (as well as removing the socket file if already exists #45) */
+        if (strlen(servname) >= sizeof(sun.sun_path)) {
+            h2o_config_print_error(cmd, config_file, config_node, "path:%s is too long as a unix socket name", servname);
+            return -1;
+        }
         if (lstat(servname, &sstat) == 0) {
             if (S_ISSOCK(sstat.st_mode)) {
                 unlink(servname);
@@ -248,23 +261,11 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 return -1;
             }
         }
-
-        /* overflow check */
-        size_t servlen = strlen(servname);
-        struct sockaddr_un *addr_un = (struct sockaddr_un *)&listener->addr;
-        if (servlen >= sizeof(addr_un->sun_path)) {
-            assert(!"unix socket path is too long.");
-        }
-        memset(addr_un, 0, sizeof(struct sockaddr_un));
-        addr_un->sun_family = AF_UNIX;
-        memcpy(addr_un->sun_path, servname, servlen);
-
-        listener->addrlen = sizeof(struct sockaddr_un);
-        listener->ssl_ctx = ssl_ctx;
-        conf->listeners = h2o_realloc(conf->listeners, sizeof(*conf->listeners) * (conf->num_listeners + 1));
-        conf->listeners[conf->num_listeners++] = listener;
-
-        return 0;
+        /* setup */
+        memset(&sun, 0, sizeof(sun));
+        sun.sun_family = AF_UNIX;
+        strcpy(sun.sun_path, servname);
+        add_listener(conf, AF_UNIX, SOCK_STREAM, 0, (struct sockaddr*)&sun, sizeof(sun), ssl_ctx);
 
     } else if (strcmp(type, "tcp") == 0) {
 
@@ -285,20 +286,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         }
         /* save the entries */
         for (ai = res; ai != NULL; ai = ai->ai_next) {
-            struct listener_config_t *listener = h2o_malloc(sizeof(*listener));
-            listener->fd = -1;
-            listener->family = ai->ai_family;
-            listener->socktype = ai->ai_socktype;
-            listener->protocol = ai->ai_protocol;
-            memcpy(&listener->addr, ai->ai_addr, ai->ai_addrlen);
-            listener->addrlen = ai->ai_addrlen;
-            listener->ssl_ctx = ssl_ctx;
-            conf->listeners = h2o_realloc(conf->listeners, sizeof(*conf->listeners) * (conf->num_listeners + 1));
-            conf->listeners[conf->num_listeners++] = listener;
+            add_listener(conf, ai->ai_family, ai->ai_socktype, ai->ai_protocol, ai->ai_addr, ai->ai_addrlen, ssl_ctx);
         }
         /* release res */
         freeaddrinfo(res);
-        return 0;
 
     } else {
 
