@@ -47,9 +47,6 @@
 
 struct listener_config_t {
     int fd;
-    int family;
-    int socktype;
-    int protocol;
     struct sockaddr_storage addr;
     socklen_t addrlen;
     SSL_CTX *ssl_ctx;
@@ -181,14 +178,12 @@ Error:
     return NULL;
 }
 
-static void add_listener(struct config_t *conf, int family, int socktype, int protocol, struct sockaddr *addr, socklen_t addrlen, SSL_CTX *ssl_ctx)
+static void add_listener(struct config_t *conf, int fd, struct sockaddr *addr, socklen_t addrlen, SSL_CTX *ssl_ctx)
 {
     struct listener_config_t *listener = h2o_malloc(sizeof(*listener));
 
-    listener->family = family;
-    listener->socktype = socktype;
-    listener->protocol = protocol;
     memcpy(&listener->addr, addr, addrlen);
+    listener->fd = fd;
     listener->addrlen = addrlen;
     listener->ssl_ctx = ssl_ctx;
     conf->listeners = h2o_realloc(conf->listeners, sizeof(*conf->listeners) * (conf->num_listeners + 1));
@@ -248,6 +243,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         /* unix socket */
         struct sockaddr_un sun;
         struct stat sstat;
+        int fd;
         /* perform necessary checks (as well as removing the socket file if already exists #45) */
         if (strlen(servname) >= sizeof(sun.sun_path)) {
             h2o_config_print_error(cmd, config_file, config_node, "path:%s is too long as a unix socket name", servname);
@@ -261,11 +257,17 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 return -1;
             }
         }
-        /* setup */
+        /* listen */
         memset(&sun, 0, sizeof(sun));
         sun.sun_family = AF_UNIX;
         strcpy(sun.sun_path, servname);
-        add_listener(conf, AF_UNIX, SOCK_STREAM, 0, (struct sockaddr*)&sun, sizeof(sun), ssl_ctx);
+        if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1
+            || bind(fd, (void *)&sun, sizeof(sun)) != 0
+            || listen(fd, SOMAXCONN) != 0) {
+            h2o_config_print_error(NULL, config_file, config_node, "failed to listen to socket:%s: %s", sun.sun_path, strerror(errno));
+            return -1;
+        }
+        add_listener(conf, fd, (struct sockaddr*)&sun, sizeof(sun), ssl_ctx);
 
     } else if (strcmp(type, "tcp") == 0) {
 
@@ -284,9 +286,29 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             h2o_config_print_error(cmd, config_file, config_node, "failed to resolve the listening address: getaddrinfo returned an empty list");
             return -1;
         }
-        /* save the entries */
+        /* listen to the returned addresses */
         for (ai = res; ai != NULL; ai = ai->ai_next) {
-            add_listener(conf, ai->ai_family, ai->ai_socktype, ai->ai_protocol, ai->ai_addr, ai->ai_addrlen, ssl_ctx);
+            int fd, reuseaddr_flag = 1;
+#ifdef TCP_DEFER_ACCEPT
+            int defer_accept_flag = 1;
+#endif
+#ifdef IPV6_V6ONLY
+            int v6only_flag = 1;
+#endif
+            if ((fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol)) == -1
+                || setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
+#ifdef TCP_DEFER_ACCEPT
+                || setsockopt(fd, IPPROTO_TCP, TCP_DEFER_ACCEPT, &defer_accept_flag, sizeof(defer_accept_flag)) != 0
+#endif
+#ifdef IPV6_V6ONLY
+                || (ai->ai_family == AF_INET6 && setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only_flag, sizeof(v6only_flag)) != 0)
+#endif
+                || bind(fd, ai->ai_addr, ai->ai_addrlen) != 0
+                || listen(fd, SOMAXCONN) != 0) {
+                h2o_config_print_error(NULL, config_file, config_node, "failed to listen to port %s:%s: %s", hostname != NULL ? hostname : "ANY", servname, strerror(errno));
+                return -1;
+            }
+            add_listener(conf, fd, ai->ai_addr, ai->ai_addrlen, ssl_ctx);
         }
         /* release res */
         freeaddrinfo(res);
@@ -304,7 +326,6 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 static int on_config_listen_exit(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, ctx->globalconf);
-    size_t i;
 
     /* only handle global-level exit */
     if (ctx->hostconf != NULL)
@@ -313,47 +334,6 @@ static int on_config_listen_exit(h2o_configurator_t *configurator, h2o_configura
     if (conf->num_listeners == 0) {
         h2o_config_print_error(NULL, file, node, "mandatory configuration directive `listen` is missing");
         return -1;
-    }
-
-    for (i = 0; i != conf->num_listeners; ++i) {
-        struct listener_config_t *listener = conf->listeners[i];
-        switch (listener->family) {
-        case AF_UNIX:
-            if ((listener->fd = socket(listener->family, listener->socktype, listener->protocol)) == -1
-                || bind(listener->fd, (void *)&listener->addr, sizeof(struct sockaddr_un)) != 0
-                || listen(listener->fd, SOMAXCONN) != 0) {
-                struct sockaddr_un *addr_un = (struct sockaddr_un *)&listener->addr;
-                h2o_config_print_error(NULL, file, node, "failed to listen to socket:%s: %s", addr_un->sun_path, strerror(errno));
-                return -1;
-            }
-            break;
-        default:
-            {
-                int reuseaddr_flag = 1;
-#ifdef TCP_DEFER_ACCEPT
-                int defer_accept_flag = 1;
-#endif
-#ifdef IPV6_V6ONLY
-                int v6only_flag = 1;
-#endif
-                if ((listener->fd = socket(listener->family, listener->socktype, listener->protocol)) == -1
-                    || setsockopt(listener->fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
-#ifdef TCP_DEFER_ACCEPT
-                    || setsockopt(listener->fd, IPPROTO_TCP, TCP_DEFER_ACCEPT, &defer_accept_flag, sizeof(defer_accept_flag)) != 0
-#endif
-#ifdef IPV6_V6ONLY
-                    || (listener->family == AF_INET6 && setsockopt(listener->fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only_flag, sizeof(v6only_flag)) != 0)
-#endif
-                    || bind(listener->fd, (void*)&listener->addr, listener->addrlen) != 0
-                    || listen(listener->fd, SOMAXCONN) != 0) {
-                    char host[NI_MAXHOST], serv[NI_MAXSERV];
-                    getnameinfo((void*)&listener->addr, listener->addrlen, host, sizeof(host), serv, sizeof(serv), NI_NUMERICHOST | NI_NUMERICSERV);
-                    h2o_config_print_error(NULL, file, node, "failed to listen to port %s:%s: %s", host, serv, strerror(errno));
-                    return -1;
-                }
-            }
-            break;
-        }
     }
 
     return 0;
