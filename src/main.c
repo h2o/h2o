@@ -301,7 +301,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     return 0;
 }
 
-static int on_config_listen_exit(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx)
+static int on_config_listen_exit(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, ctx->globalconf);
     size_t i;
@@ -311,7 +311,7 @@ static int on_config_listen_exit(h2o_configurator_t *configurator, h2o_configura
         return 0;
 
     if (conf->num_listeners == 0) {
-        fprintf(stderr, "mandatory configuration directive `port` is missing\n");
+        h2o_config_print_error(NULL, file, node, "mandatory configuration directive `listen` is missing");
         return -1;
     }
 
@@ -323,7 +323,7 @@ static int on_config_listen_exit(h2o_configurator_t *configurator, h2o_configura
                 || bind(listener->fd, (void *)&listener->addr, sizeof(struct sockaddr_un)) != 0
                 || listen(listener->fd, SOMAXCONN) != 0) {
                 struct sockaddr_un *addr_un = (struct sockaddr_un *)&listener->addr;
-                fprintf(stderr, "failed to listen to socket:%s: %s\n", addr_un->sun_path, strerror(errno));
+                h2o_config_print_error(NULL, file, node, "failed to listen to socket:%s: %s", addr_un->sun_path, strerror(errno));
                 return -1;
             }
             break;
@@ -348,7 +348,7 @@ static int on_config_listen_exit(h2o_configurator_t *configurator, h2o_configura
                     || listen(listener->fd, SOMAXCONN) != 0) {
                     char host[NI_MAXHOST], serv[NI_MAXSERV];
                     getnameinfo((void*)&listener->addr, listener->addrlen, host, sizeof(host), serv, sizeof(serv), NI_NUMERICHOST | NI_NUMERICSERV);
-                    fprintf(stderr, "failed to listen to port %s:%s: %s\n", host, serv, strerror(errno));
+                    h2o_config_print_error(NULL, file, node, "failed to listen to port %s:%s: %s", host, serv, strerror(errno));
                     return -1;
                 }
             }

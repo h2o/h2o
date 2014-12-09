@@ -395,7 +395,7 @@ ErrExit:
     return -1;
 }
 
-static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx)
+static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void*)_self;
 
@@ -404,7 +404,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
     return 0;
 }
 
-static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx)
+static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void*)_self;
 
