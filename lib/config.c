@@ -65,7 +65,8 @@ static int apply_commands(h2o_configurator_context_t *ctx, int flags_mask, const
     deferred = alloca(sizeof(*deferred) * node->data.mapping.size);
 
     /* call on_enter of every configurator */
-    setup_configurators(ctx, 1, file, node);
+    if (setup_configurators(ctx, 1, file, node) != 0)
+        return -1;
 
     /* handle the configuration commands */
     for (i = 0; i != node->data.mapping.size; ++i) {
@@ -127,7 +128,8 @@ static int apply_commands(h2o_configurator_context_t *ctx, int flags_mask, const
     }
 
     /* call on_enter of every configurator */
-    setup_configurators(ctx, 0, file, node);
+    if (setup_configurators(ctx, 0, file, node) != 0)
+        return -1;
 
     return 0;
 }
