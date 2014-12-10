@@ -51,11 +51,17 @@ struct listener_configurator_t {
     size_t num_host_listeners;
 };
 
+struct listener_ssl_config_t {
+    H2O_VECTOR(h2o_iovec_t) hostnames;
+    char *certificate_file;
+    SSL_CTX *ctx;
+};
+
 struct listener_config_t {
     int fd;
     struct sockaddr_storage addr;
     socklen_t addrlen;
-    SSL_CTX *ssl_ctx;
+    H2O_VECTOR(struct listener_ssl_config_t) ssl;
 };
 
 struct listener_ctx_t {
@@ -122,18 +128,44 @@ static void setup_ecc_key(SSL_CTX *ssl_ctx)
     EC_KEY_free(key);
 }
 
-static int listener_setup_ssl_ctx(h2o_configurator_command_t *cmd, const char *config_file, yoml_t *listen_config_node, yoml_t *ssl_config_node, struct listener_config_t *listener, int listener_is_new)
+static int on_sni_callback(SSL *ssl, int *ad, void *arg)
+{
+    struct listener_config_t *listener = arg;
+    const char *name = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
+    size_t ctx_index = 0;
+
+    if (name != NULL) {
+        size_t i, j, name_len = strlen(name);
+        for (i = 0; i != listener->ssl.size; ++i) {
+            struct listener_ssl_config_t *ssl_config = listener->ssl.entries + i;
+            for (j = 0; j != ssl_config->hostnames.size; ++j) {
+                if (h2o_lcstris(name, name_len, ssl_config->hostnames.entries[j].base, ssl_config->hostnames.entries[j].len)) {
+                    ctx_index = i;
+                    goto Found;
+                }
+            }
+        }
+        ctx_index = i;
+    Found:
+        ;
+    }
+
+    SSL_set_SSL_CTX(ssl, listener->ssl.entries[ctx_index].ctx);
+    return SSL_TLSEXT_ERR_OK;
+}
+
+static int listener_setup_ssl_ctx(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *listen_config_node, yoml_t *ssl_config_node, struct listener_config_t *listener, int listener_is_new)
 {
     SSL_CTX *ssl_ctx = NULL;
-    const char *cert_file = NULL, *key_file = NULL;
+    const char *certificate_file = NULL, *key_file = NULL;
     yoml_t *t;
 
     if (! listener_is_new) {
-        if (listener->ssl_ctx != NULL && ssl_config_node == NULL) {
+        if (listener->ssl.size != 0 && ssl_config_node == NULL) {
             h2o_config_print_error(cmd, config_file, listen_config_node, "cannot accept HTTP; already defined to accept HTTPS");
             return -1;
         }
-        if (listener->ssl_ctx == NULL && ssl_config_node != NULL) {
+        if (listener->ssl.size == 0 && ssl_config_node != NULL) {
             h2o_config_print_error(cmd, config_file, ssl_config_node, "cannot accept HTTPS; already defined to accept HTTP");
             return -1;
         }
@@ -154,7 +186,7 @@ static int listener_setup_ssl_ctx(h2o_configurator_command_t *cmd, const char *c
         h2o_config_print_error(cmd, config_file, t, "the property must be a string");
         goto Error;
     }
-    cert_file = t->data.scalar;
+    certificate_file = h2o_strdup(NULL, t->data.scalar, SIZE_MAX).base;
     if ((t = yoml_get(ssl_config_node, "key-file")) == NULL) {
         h2o_config_print_error(cmd, config_file, ssl_config_node, "could not find mandatory property `key-file`");
         goto Error;
@@ -164,6 +196,19 @@ static int listener_setup_ssl_ctx(h2o_configurator_command_t *cmd, const char *c
     }
     key_file = t->data.scalar;
 
+    /* add the host to the existing SSL config, if the certificate file is already registered */
+    if (ctx->hostconf != NULL) {
+        size_t i;
+        for (i = 0; i != listener->ssl.size; ++i) {
+            struct listener_ssl_config_t *ssl_config = listener->ssl.entries + i;
+            if (strcmp(ssl_config->certificate_file, certificate_file) == 0) {
+                h2o_vector_reserve(NULL, (void*)&ssl_config->hostnames, sizeof(ssl_config->hostnames.entries[0]), ssl_config->hostnames.size + 1);
+                ssl_config->hostnames.entries[ssl_config->hostnames.size++] = ctx->hostconf->hostname;
+                return 0;
+            }
+        }
+    }
+
     /* setup */
     init_openssl();
     ssl_ctx = SSL_CTX_new(SSLv23_server_method());
@@ -172,8 +217,8 @@ static int listener_setup_ssl_ctx(h2o_configurator_command_t *cmd, const char *c
         | SSL_OP_ALL
         );
     setup_ecc_key(ssl_ctx);
-    if (SSL_CTX_use_certificate_file(ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
-        h2o_config_print_error(cmd, config_file, ssl_config_node, "failed to load certificate file:%s\n", cert_file);
+    if (SSL_CTX_use_certificate_file(ssl_ctx, certificate_file, SSL_FILETYPE_PEM) != 1) {
+        h2o_config_print_error(cmd, config_file, ssl_config_node, "failed to load certificate file:%s\n", certificate_file);
         ERR_print_errors_fp(stderr);
         goto Error;
     }
@@ -191,8 +236,25 @@ static int listener_setup_ssl_ctx(h2o_configurator_command_t *cmd, const char *c
     h2o_ssl_register_alpn_protocols(ssl_ctx, h2o_http2_alpn_protocols);
 #endif
 
-    assert(listener->ssl_ctx == NULL && "FIXME! add support for SNI");
-    listener->ssl_ctx = ssl_ctx;
+    /* set SNI callback to the first SSL context, when and only when it should be used */
+    if (listener->ssl.size == 1) {
+        SSL_CTX_set_tlsext_servername_callback(listener->ssl.entries[0].ctx, on_sni_callback);
+        SSL_CTX_set_tlsext_servername_arg(listener->ssl.entries[0].ctx, listener);
+    }
+
+    { /* create a new entry in the SSL context list */
+        struct listener_ssl_config_t *ssl_config;
+        h2o_vector_reserve(NULL, (void*)&listener->ssl, sizeof(listener->ssl.entries[0]), listener->ssl.size + 1);
+        ssl_config = listener->ssl.entries + listener->ssl.size++;
+        memset(ssl_config, 0, sizeof(*ssl_config));
+        if (ctx->hostconf != NULL) {
+            h2o_vector_reserve(NULL, (void*)&ssl_config->hostnames, sizeof(ssl_config->hostnames.entries[0]), 1);
+            ssl_config->hostnames.entries[ssl_config->hostnames.size++] = ctx->hostconf->hostname;
+        }
+        ssl_config->ctx = ssl_ctx;
+        ssl_config->certificate_file = h2o_strdup(NULL, certificate_file, SIZE_MAX).base;
+    }
+
     return 0;
 
 Error:
@@ -222,7 +284,7 @@ static struct listener_config_t *add_listener(struct config_t *conf, int fd, str
     memcpy(&listener->addr, addr, addrlen);
     listener->fd = fd;
     listener->addrlen = addrlen;
-    listener->ssl_ctx = NULL;
+    memset(&listener->ssl, 0, sizeof(listener->ssl));
     conf->listeners = h2o_realloc(conf->listeners, sizeof(*conf->listeners) * (conf->num_listeners + 1));
     conf->listeners[conf->num_listeners++] = listener;
 
@@ -317,7 +379,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             listener = add_listener(conf, fd, (struct sockaddr*)&sun, sizeof(sun));
             listener_is_new = 1;
         }
-        if (listener_setup_ssl_ctx(cmd, config_file, config_node, ssl_config_node, listener, listener_is_new) != 0)
+        if (listener_setup_ssl_ctx(cmd, ctx, config_file, config_node, ssl_config_node, listener, listener_is_new) != 0)
             return -1;
 
     } else if (strcmp(type, "tcp") == 0) {
@@ -366,7 +428,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 listener = add_listener(conf, fd, ai->ai_addr, ai->ai_addrlen);
                 listener_is_new = 1;
             }
-            if (listener_setup_ssl_ctx(cmd, config_file, config_node, ssl_config_node, listener, listener_is_new) != 0)
+            if (listener_setup_ssl_ctx(cmd, ctx, config_file, config_node, ssl_config_node, listener, listener_is_new) != 0)
                 return -1;
         }
         /* release res */
@@ -570,11 +632,12 @@ static void *run_loop(void *_conf)
 
     /* setup listeners */
     for (i = 0; i != conf->num_listeners; ++i) {
+        struct listener_config_t *listener_config = conf->listeners[i];
         listeners[i].ctx = &ctx;
-        listeners[i].ssl_ctx = conf->listeners[i]->ssl_ctx;
+        listeners[i].ssl_ctx = listener_config->ssl.size != 0 ? listener_config->ssl.entries[0].ctx : NULL;
         listeners[i].sock = h2o_evloop_socket_create(
-            ctx.loop, conf->listeners[i]->fd,
-            (struct sockaddr*)&conf->listeners[i]->addr, conf->listeners[i]->addrlen,
+            ctx.loop, listener_config->fd,
+            (struct sockaddr*)&listener_config->addr, listener_config->addrlen,
             H2O_SOCKET_FLAG_IS_ACCEPT);
         listeners[i].sock->data = listeners + i;
     }
