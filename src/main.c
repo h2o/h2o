@@ -154,7 +154,17 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
     return SSL_TLSEXT_ERR_OK;
 }
 
-static int listener_setup_ssl_ctx(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *listen_config_node, yoml_t *ssl_config_node, struct listener_config_t *listener, int listener_is_new)
+static void listener_setup_ssl_add_host(struct listener_ssl_config_t *ssl_config, h2o_iovec_t host)
+{
+    const char *host_end = memchr(host.base, ':', host.len);
+    if (host_end == NULL)
+        host_end = host.base + host.len;
+
+    h2o_vector_reserve(NULL, (void*)&ssl_config->hostnames, sizeof(ssl_config->hostnames.entries[0]), ssl_config->hostnames.size + 1);
+    ssl_config->hostnames.entries[ssl_config->hostnames.size++] = h2o_iovec_init(host.base, host_end - host.base);
+}
+
+static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *listen_config_node, yoml_t *ssl_config_node, struct listener_config_t *listener, int listener_is_new)
 {
     SSL_CTX *ssl_ctx = NULL;
     const char *certificate_file = NULL, *key_file = NULL;
@@ -202,8 +212,7 @@ static int listener_setup_ssl_ctx(h2o_configurator_command_t *cmd, h2o_configura
         for (i = 0; i != listener->ssl.size; ++i) {
             struct listener_ssl_config_t *ssl_config = listener->ssl.entries + i;
             if (strcmp(ssl_config->certificate_file, certificate_file) == 0) {
-                h2o_vector_reserve(NULL, (void*)&ssl_config->hostnames, sizeof(ssl_config->hostnames.entries[0]), ssl_config->hostnames.size + 1);
-                ssl_config->hostnames.entries[ssl_config->hostnames.size++] = ctx->hostconf->hostname;
+                listener_setup_ssl_add_host(ssl_config, ctx->hostconf->hostname);
                 return 0;
             }
         }
@@ -248,8 +257,7 @@ static int listener_setup_ssl_ctx(h2o_configurator_command_t *cmd, h2o_configura
         ssl_config = listener->ssl.entries + listener->ssl.size++;
         memset(ssl_config, 0, sizeof(*ssl_config));
         if (ctx->hostconf != NULL) {
-            h2o_vector_reserve(NULL, (void*)&ssl_config->hostnames, sizeof(ssl_config->hostnames.entries[0]), 1);
-            ssl_config->hostnames.entries[ssl_config->hostnames.size++] = ctx->hostconf->hostname;
+            listener_setup_ssl_add_host(ssl_config, ctx->hostconf->hostname);
         }
         ssl_config->ctx = ssl_ctx;
         ssl_config->certificate_file = h2o_strdup(NULL, certificate_file, SIZE_MAX).base;
@@ -379,7 +387,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             listener = add_listener(conf, fd, (struct sockaddr*)&sun, sizeof(sun));
             listener_is_new = 1;
         }
-        if (listener_setup_ssl_ctx(cmd, ctx, config_file, config_node, ssl_config_node, listener, listener_is_new) != 0)
+        if (listener_setup_ssl(cmd, ctx, config_file, config_node, ssl_config_node, listener, listener_is_new) != 0)
             return -1;
 
     } else if (strcmp(type, "tcp") == 0) {
@@ -428,7 +436,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 listener = add_listener(conf, fd, ai->ai_addr, ai->ai_addrlen);
                 listener_is_new = 1;
             }
-            if (listener_setup_ssl_ctx(cmd, ctx, config_file, config_node, ssl_config_node, listener, listener_is_new) != 0)
+            if (listener_setup_ssl(cmd, ctx, config_file, config_node, ssl_config_node, listener, listener_is_new) != 0)
                 return -1;
         }
         /* release res */
