@@ -153,6 +153,10 @@ static int h2o_socket_is_writing(h2o_socket_t *sock);
  */
 static int h2o_socket_is_reading(h2o_socket_t *sock);
 /**
+ * compares socket addresses
+ */
+int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y);
+/**
  * performs SSL handshake on a socket
  * @param sock the socket
  * @param ssl_ctx SSL context
