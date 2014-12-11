@@ -34,6 +34,7 @@ builder {
             [
                 'content-type' => 'text/plain',
                 'content-length' => length $content,
+                map { my $n = lc substr $_, 5; $n =~ s/_/-/; "x-req-$n" => $env->{$_} } sort grep { /^HTTP_/ } keys %$env,
             ],
             [ $content ],
         ];

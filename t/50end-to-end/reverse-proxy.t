@@ -110,6 +110,10 @@ sub run_tests_with_conf {
         };
         $doit->('http', $port);
         $doit->('https', $tls_port);
+        subtest 'host-header-not-preserved' => sub {
+            my $resp = `curl --silent --dump-header /dev/stderr http://127.0.0.1:$port/echo 2>&1 > /dev/null`;
+            like $resp, qr/^x-req-host: 127.0.0.1:$upstream_port\r$/m;
+        };
     };
 
     subtest 'nghttp' => sub {
