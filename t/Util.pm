@@ -88,6 +88,8 @@ sub spawn_h2o {
 
     # setup the configuration file
     my ($conffh, $conffn) = tempfile();
+    $conf = $conf->($port, $tls_port)
+        if ref $conf eq 'CODE';
     print $conffh <<"EOT";
 $conf
 listen: $port
