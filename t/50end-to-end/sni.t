@@ -10,6 +10,9 @@ our $CA_CERT = "misc/test-ca/ca.crt";
 plan skip_all => 'wget not found'
     unless prog_exists('wget');
 
+plan skip_all => 'only wget >= 1.14 supports SNI'
+    unless `wget --version` =~ /^GNU Wget 1\.([0-9]+)/ && $1 >= 14;
+
 my $server = spawn_h2o(sub {
     my ($port, $tls_port) = @_;
     return << "EOT";
