@@ -226,7 +226,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         | SSL_OP_ALL
         );
     setup_ecc_key(ssl_ctx);
-    if (SSL_CTX_use_certificate_file(ssl_ctx, certificate_file, SSL_FILETYPE_PEM) != 1) {
+    if (SSL_CTX_use_certificate_chain_file(ssl_ctx, certificate_file) != 1) {
         h2o_config_print_error(cmd, config_file, ssl_config_node, "failed to load certificate file:%s\n", certificate_file);
         ERR_print_errors_fp(stderr);
         goto Error;
