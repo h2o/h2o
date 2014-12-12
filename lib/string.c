@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -550,6 +551,40 @@ h2o_iovec_t h2o_htmlescape(h2o_mempool_t *pool, const char *src, size_t len)
 
     /* no need not escape; return the original */
     return h2o_iovec_init(src, len);
+}
+
+h2o_iovec_t h2o_concat(h2o_mempool_t *pool, size_t n, ...)
+{
+    h2o_iovec_t ret = { NULL, 0 };
+    va_list args;
+    size_t i;
+
+    /* calc the length */
+    va_start(args, n);
+    for (i = 0; i != n; ++i) {
+        h2o_iovec_t v = va_arg(args, h2o_iovec_t);
+        ret.len += v.len;
+    }
+    va_end(args);
+
+    /* allocate memory */
+    if (pool != NULL)
+        ret.base = h2o_mempool_alloc(pool, ret.len + 1);
+    else
+        ret.base = h2o_malloc(ret.len + 1);
+
+    /* concatenate */
+    ret.len = 0;
+    va_start(args, n);
+    for (i = 0; i != n; ++i) {
+        h2o_iovec_t v = va_arg(args, h2o_iovec_t);
+        memcpy(ret.base + ret.len, v.base, v.len);
+        ret.len += v.len;
+    }
+    va_end(args);
+    ret.base[ret.len] = '\0';
+
+    return ret;
 }
 
 #ifdef H2O_UNITTEST
