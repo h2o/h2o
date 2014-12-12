@@ -168,7 +168,6 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 {
     SSL_CTX *ssl_ctx = NULL;
     const char *certificate_file = NULL, *key_file = NULL;
-    yoml_t *t;
 
     if (! listener_is_new) {
         if (listener->ssl.size != 0 && ssl_config_node == NULL) {
@@ -183,28 +182,48 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
     if (ssl_config_node == NULL)
         return 0;
-
-    /* parse */
     if (ssl_config_node->type != YOML_TYPE_MAPPING) {
         h2o_config_print_error(cmd, config_file, ssl_config_node, "`ssl` is not a mapping");
-        goto Error;
+        return -1;
     }
-    if ((t = yoml_get(ssl_config_node, "certificate-file")) == NULL) {
+
+    { /* parse */
+        size_t i;
+        for (i = 0; i != ssl_config_node->data.sequence.size; ++i) {
+            yoml_t *key = ssl_config_node->data.mapping.elements[i].key,
+                *value = ssl_config_node->data.mapping.elements[i].value;
+            h2o_configurator_command_t *cmd;
+            /* obtain the target command */
+            if (key->type != YOML_TYPE_SCALAR) {
+                h2o_config_print_error(NULL, config_file, key, "command must be a string");
+                return -1;
+            }
+            if (strcmp(key->data.scalar, "certificate-file") == 0) {
+                if (value->type != YOML_TYPE_SCALAR) {
+                    h2o_config_print_error(cmd, config_file, value, "property of `certificate-file` must be a string");
+                    return -1;
+                }
+                certificate_file = value->data.scalar;
+            } else if (strcmp(key->data.scalar, "key-file") == 0) {
+                if (value->type != YOML_TYPE_SCALAR) {
+                    h2o_config_print_error(cmd, config_file, value, "property of `certificate-file` must be a string");
+                    return -1;
+                }
+                key_file = value->data.scalar;
+            } else {
+                h2o_config_print_error(cmd, config_file, key, "unknown property: %s", key->data.scalar);
+                return -1;
+            }
+        }
+    }
+    if (certificate_file == NULL) {
         h2o_config_print_error(cmd, config_file, ssl_config_node, "could not find mandatory property `certificate-file`");
-        goto Error;
-    } else if (t->type != YOML_TYPE_SCALAR) {
-        h2o_config_print_error(cmd, config_file, t, "the property must be a string");
-        goto Error;
+        return -1;
     }
-    certificate_file = h2o_strdup(NULL, t->data.scalar, SIZE_MAX).base;
-    if ((t = yoml_get(ssl_config_node, "key-file")) == NULL) {
+    if (key_file == NULL) {
         h2o_config_print_error(cmd, config_file, ssl_config_node, "could not find mandatory property `key-file`");
-        goto Error;
-    } else if (t->type != YOML_TYPE_SCALAR) {
-        h2o_config_print_error(cmd, config_file, t, "the property must be a string");
-        goto Error;
+        return -1;
     }
-    key_file = t->data.scalar;
 
     /* add the host to the existing SSL config, if the certificate file is already registered */
     if (ctx->hostconf != NULL) {
