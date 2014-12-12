@@ -107,6 +107,10 @@ sub run_tests_with_conf {
             $content = `curl --silent --show-error --insecure --header 'Transfer-Encoding: chunked' --data-binary \@$huge_file $proto://127.0.0.1:$port/echo`;
             is length($content), $huge_file_size, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, size)";
             is md5_hex($content), $huge_file_md5, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, md5)";
+            subtest 'rewrite-redirect' => sub {
+                $content = `curl --silent --insecure --dump-header /dev/stdout --max-redirs 0 $proto://127.0.0.1:$port/redirect/http://127.0.0.1:$upstream_port/abc`;
+                like $content, qr{^location: $proto://127.0.0.1:$port/abc\r$}m;
+            };
         };
         $doit->('http', $port);
         $doit->('https', $tls_port);

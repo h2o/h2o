@@ -39,4 +39,14 @@ builder {
             [ $content ],
         ];
     };
+    mount "/redirect" => sub {
+        my $env = shift;
+        return [
+            302,
+            [
+                location => substr($env->{PATH_INFO}, 1),
+            ],
+            [],
+        ];
+    };
 };
