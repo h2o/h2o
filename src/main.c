@@ -168,6 +168,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 {
     SSL_CTX *ssl_ctx = NULL;
     const char *certificate_file = NULL, *key_file = NULL;
+    long ssl_options = SSL_OP_ALL;
 
     if (! listener_is_new) {
         if (listener->ssl.size != 0 && ssl_config_node == NULL) {
@@ -189,10 +190,10 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
     { /* parse */
         size_t i;
+        yoml_t *minimum_version = NULL;
         for (i = 0; i != ssl_config_node->data.sequence.size; ++i) {
             yoml_t *key = ssl_config_node->data.mapping.elements[i].key,
                 *value = ssl_config_node->data.mapping.elements[i].value;
-            h2o_configurator_command_t *cmd;
             /* obtain the target command */
             if (key->type != YOML_TYPE_SCALAR) {
                 h2o_config_print_error(NULL, config_file, key, "command must be a string");
@@ -210,19 +211,42 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                     return -1;
                 }
                 key_file = value->data.scalar;
+            } else if (strcmp(key->data.scalar, "minimum-version") == 0) {
+                if (value->type != YOML_TYPE_SCALAR) {
+                    h2o_config_print_error(cmd, config_file, value, "property of `minimum-version` must be a string");
+                    return -1;
+                }
+                minimum_version = value;
             } else {
                 h2o_config_print_error(cmd, config_file, key, "unknown property: %s", key->data.scalar);
                 return -1;
             }
         }
-    }
-    if (certificate_file == NULL) {
-        h2o_config_print_error(cmd, config_file, ssl_config_node, "could not find mandatory property `certificate-file`");
-        return -1;
-    }
-    if (key_file == NULL) {
-        h2o_config_print_error(cmd, config_file, ssl_config_node, "could not find mandatory property `key-file`");
-        return -1;
+        if (certificate_file == NULL) {
+            h2o_config_print_error(cmd, config_file, ssl_config_node, "could not find mandatory property `certificate-file`");
+            return -1;
+        }
+        if (key_file == NULL) {
+            h2o_config_print_error(cmd, config_file, ssl_config_node, "could not find mandatory property `key-file`");
+            return -1;
+        }
+        if (minimum_version != NULL) {
+#define MAP(tok, op) if (strcasecmp(minimum_version->data.scalar, tok) == 0) { ssl_options |= (op); goto VersionFound; }
+            MAP("sslv2", 0);
+            MAP("sslv3", SSL_OP_NO_SSLv2);
+            MAP("tlsv1", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
+            MAP("tlsv1.1", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1);
+            MAP("tlsv1.2", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1);
+#ifdef SSL_OP_NO_TLSv1_2
+            MAP("tlsv1.3", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1 | SSL_OP_NO_TLSv1_2);
+#endif
+            h2o_config_print_error(cmd, config_file, minimum_version, "unknown protocol version: %s", minimum_version->data.scalar);
+        VersionFound:
+            ;
+        } else {
+            /* default is >= TLSv1 */
+            ssl_options |= SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
+        }
     }
 
     /* add the host to the existing SSL config, if the certificate file is already registered */
@@ -240,10 +264,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     /* setup */
     init_openssl();
     ssl_ctx = SSL_CTX_new(SSLv23_server_method());
-    SSL_CTX_set_options(ssl_ctx,
-        SSL_OP_NO_SSLv2
-        | SSL_OP_ALL
-        );
+    SSL_CTX_set_options(ssl_ctx, ssl_options);
     setup_ecc_key(ssl_ctx);
     if (SSL_CTX_use_certificate_chain_file(ssl_ctx, certificate_file) != 1) {
         h2o_config_print_error(cmd, config_file, ssl_config_node, "failed to load certificate file:%s\n", certificate_file);
@@ -728,8 +749,12 @@ int main(int argc, char **argv)
             " - if the value is a mapping, following properties are recognized:",
             "     port: incoming port number or service name (mandatory)",
             "     host: incoming address (default: any address)",
-            "     ssl-certificate-file: path of the SSL certificate file (default: none)",
-            "     ssl-key-file: path of the SSL private key file (default: none)",
+            "     ssl: mapping of SSL configuration using the keys below",
+            "          (default: none)",
+            "       certificate-file: path of the SSL certificate file (mandatory)",
+            "       key-file: path of the SSL private key file (mandatory)",
+            "       minimum-version: minimum protocol version, should be one of: SSLv2,",
+            "                        SSLv3, TLSv1, TLSv1.1, TLSv1.2 (default: TLSv1)",
             " - if the value is a sequence, each element should be either a scalar or",
             "   a mapping that conform to the requirements above");
     }
