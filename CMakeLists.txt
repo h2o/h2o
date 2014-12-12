@@ -61,6 +61,22 @@ SET(LIB_SOURCE_FILES
     lib/token.c
     lib/util.c)
 
+SET(UNIT_TEST_SOURCE_FILES
+    ${LIB_SOURCE_FILES}
+    deps/picotest/picotest.c
+    t/00unit/test.c
+    t/00unit/lib/http2/hpack.c
+    t/00unit/lib/file.c
+    t/00unit/lib/mimemap.c
+    t/00unit/lib/proxy.c
+    t/00unit/lib/string.c)
+LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
+    lib/http2/hpack.c
+    lib/file.c
+    lib/mimemap.c
+    lib/proxy.c
+    lib/string.c)
+
 SET(EXTRA_LIBRARIES ${CMAKE_DL_LIBS})
 
 ADD_LIBRARY(libh2o STATIC ${LIB_SOURCE_FILES})
@@ -98,12 +114,12 @@ SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
 TARGET_LINK_LIBRARIES(h2o ${OPENSSL_LIBRARIES} ${LIBYAML_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} ${EXTRA_LIBRARIES})
 
 # tests
-ADD_EXECUTABLE(t-00unit-evloop.t ${LIB_SOURCE_FILES} deps/picotest/picotest.c lib/t/test.c)
+ADD_EXECUTABLE(t-00unit-evloop.t ${UNIT_TEST_SOURCE_FILES})
 SET_TARGET_PROPERTIES(t-00unit-evloop.t PROPERTIES
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_UNITTEST=1"
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(t-00unit-evloop.t ${OPENSSL_LIBRARIES} ${LIBYAML_LIBRARIES} pthread ${EXTRA_LIBRARIES})
-ADD_EXECUTABLE(t-00unit-libuv.t ${LIB_SOURCE_FILES} deps/picotest/picotest.c lib/t/test.c)
+ADD_EXECUTABLE(t-00unit-libuv.t ${UNIT_TEST_SOURCE_FILES})
 SET_TARGET_PROPERTIES(t-00unit-libuv.t PROPERTIES
     COMPILE_FLAGS "-DH2O_UNITTEST=1"
     EXCLUDE_FROM_ALL 1)

@@ -86,13 +86,3 @@ void h2o_accept_ssl(h2o_context_t *ctx, h2o_socket_t *sock, SSL_CTX *ssl_ctx)
     sock->data = ctx;
     h2o_socket_ssl_server_handshake(sock, ssl_ctx, on_ssl_handshake_complete);
 }
-
-#ifdef H2O_UNITTEST
-
-#include "t/test.h"
-
-void test_lib__util_c(void)
-{
-}
-
-#endif

@@ -19,40 +19,30 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__t__test_h
-#define h2o__t__test_h
+#include "../test.h"
+#include "../../../lib/proxy.c"
 
-#include "picotest.h"
-#include "h2o.h"
+void test_lib__proxy_c()
+{
+    h2o_proxy_location_t conf = {
+        H2O_STRLIT("/virtual/"),
+        {
+            H2O_STRLIT("realhost"),
+            81,
+            H2O_STRLIT("/real/")
+        }
+    };
+    h2o_mempool_t pool;
+    h2o_iovec_t ret;
 
-typedef struct st_h2o_loopback_conn_t {
-    h2o_conn_t super;
-    /**
-     * the response
-     */
-    h2o_buffer_t *body;
-    /* internal structure */
-    h2o_ostream_t _ostr_final;
-    int _is_complete;
-    /**
-     * the HTTP request / response (intentionally placed at the last, since it is a large structure and has it's own ctor)
-     */
-    h2o_req_t req;
-} h2o_loopback_conn_t;
+    h2o_mempool_init(&pool);
 
-h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx);
-void h2o_loopback_destroy(h2o_loopback_conn_t *conn);
-void h2o_loopback_run_loop(h2o_loopback_conn_t *conn);
+    ret = rewrite_location(&pool, H2O_STRLIT("http://realhost:81/real/abc"), &conf,
+        h2o_iovec_init(H2O_STRLIT("https")), h2o_iovec_init(H2O_STRLIT("vhost:8443")));
+    ok(h2o_memis(ret.base, ret.len, H2O_STRLIT("https://vhost:8443/virtual/abc")));
+    ret = rewrite_location(&pool, H2O_STRLIT("http://realhost:81/other/abc"), &conf,
+        h2o_iovec_init(H2O_STRLIT("https")), h2o_iovec_init(H2O_STRLIT("vhost:8443")));
+    ok(h2o_memis(ret.base, ret.len, H2O_STRLIT("http://realhost:81/other/abc")));
 
-extern h2o_loop_t *test_loop;
-
-char *sha1sum(const void *src, size_t len);
-
-void test_lib__string_c(void);
-void test_lib__util_c(void);
-void test_lib__http2__hpack(void);
-void test_lib__file_c(void);
-void test_lib__mimemap_c(void);
-void test_lib__proxy_c(void);
-
-#endif
+    h2o_mempool_clear(&pool);
+}
