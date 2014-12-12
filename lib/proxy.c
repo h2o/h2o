@@ -371,21 +371,27 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
 {
     struct proxy_configurator_t *self = (void*)cmd->configurator;
     h2o_mempool_t pool;
-    char *scheme, *host, *path;
+    h2o_iovec_t scheme, host, path;
     uint16_t port;
 
     h2o_mempool_init(&pool);
 
-    if (h2o_parse_url(&pool, node->data.scalar, &scheme, &host, &port, &path) != 0) {
+    if (h2o_parse_url(node->data.scalar, SIZE_MAX, &scheme, &host, &port, &path) != 0) {
         h2o_config_print_error(cmd, file, node, "failed to parse URL: %s\n", node->data.scalar);
         goto ErrExit;
     }
-    if (strcmp(scheme, "http") != 0) {
+    if (! h2o_memis(scheme.base, scheme.len, H2O_STRLIT("http"))) {
         h2o_config_print_error(cmd, file, node, "only HTTP URLs are supported");
         goto ErrExit;
     }
     /* register */
-    h2o_proxy_register_reverse_proxy(ctx->hostconf, ctx->path != NULL ? ctx->path->base : "", host, port, path, self->vars);
+    h2o_proxy_register_reverse_proxy(
+        ctx->hostconf,
+        ctx->path != NULL ? ctx->path->base : "",
+        h2o_strdup(&pool, host.base, host.len).base,
+        port,
+        h2o_strdup(&pool, path.base, path.len).base,
+        self->vars);
 
     h2o_mempool_clear(&pool);
     return 0;
