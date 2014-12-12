@@ -36,7 +36,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 
 static void start_request(h2o_http1client_ctx_t *ctx)
 {
-    char *scheme, *host, *path;
+    h2o_iovec_t scheme, host, path;
     uint16_t port;
     h2o_iovec_t *req;
     h2o_http1client_t *client;
@@ -45,30 +45,33 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     h2o_mempool_clear(&pool);
 
     /* parse URL */
-    if (h2o_parse_url(&pool, url, &scheme, &host, &port, &path) != 0) {
+    if (h2o_parse_url(url, SIZE_MAX, &scheme, &host, &port, &path) != 0) {
         fprintf(stderr, "unrecognized type of URL: %s\n", url);
         exit(1);
     }
-    if (strcmp(scheme, "https") == 0) {
+    if (h2o_memis(scheme.base, scheme.len, H2O_STRLIT("https"))) {
         fprintf(stderr, "https is not (yet) supported\n");
         exit(1);
     }
+    /* NUL-terminate the host */
+    host = h2o_strdup(&pool, host.base, host.len);
+
     /* build request */
     req = h2o_mempool_alloc(&pool, sizeof(*req));
     req->base = h2o_mempool_alloc(&pool, 1024);
-    req->len = snprintf(req->base, 1024, "GET %s HTTP/1.1\r\nhost: %s:%u\r\n\r\n", path, host, (unsigned)port);
+    req->len = snprintf(req->base, 1024, "GET %.*s HTTP/1.1\r\nhost: %s:%u\r\n\r\n", (int)path.len, path.base, host.base, (unsigned)port);
     assert(req->len < 1024);
 
     /* initiate the request */
     if (1) {
         if (sockpool == NULL) {
             sockpool = h2o_malloc(sizeof(*sockpool));
-            h2o_socketpool_init(sockpool, host, port, 10);
+            h2o_socketpool_init(sockpool, host.base, port, 10);
             h2o_socketpool_set_timeout(sockpool, ctx->loop, 5000 /* in msec */);
         }
         client = h2o_http1client_connect_with_pool(ctx, &pool, sockpool, on_connect);
     } else {
-        client = h2o_http1client_connect(ctx, &pool, host, port, on_connect);
+        client = h2o_http1client_connect(ctx, &pool, host.base, port, on_connect);
     }
     assert(client != NULL);
     client->data = req;

@@ -781,14 +781,23 @@ typedef struct st_h2o_proxy_config_vars_t {
     uint64_t keepalive_timeout;
 } h2o_proxy_config_vars_t;
 
+typedef struct st_h2o_proxy_location_t {
+    h2o_iovec_t virtual_path;
+    struct {
+        h2o_iovec_t host;
+        uint16_t port;
+        h2o_iovec_t path;
+    } upstream;
+} h2o_proxy_location_t;
+
 /**
  * delegates the request to given server, rewriting the path as specified
  */
-int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_iovec_t host, uint16_t port, size_t path_replace_length, h2o_iovec_t path_prefix);
+int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *location);
 /**
  * delegates the request to given server, rewriting the path as specified
  */
-int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_socketpool_t *sockpool, size_t path_replace_length, h2o_iovec_t path_prefix);
+int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *location, h2o_socketpool_t *sockpool);
 /**
  * registers the reverse proxy handler to the context
  */

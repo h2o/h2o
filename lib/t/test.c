@@ -139,6 +139,7 @@ int main(int argc, char **argv)
 
         subtest("lib/t/test.c/loopback", test_loopback);
         subtest("lib/file.c", test_lib__file_c);
+        subtest("lib/proxy.c", test_lib__proxy_c);
 
 #if H2O_USE_LIBUV
         uv_loop_close(test_loop);

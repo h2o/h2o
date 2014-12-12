@@ -98,7 +98,7 @@ h2o_iovec_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len
 /**
  * parses absolute URL (either http or https)
  */
-int h2o_parse_url(h2o_mempool_t *pool, const char *url, char **scheme, char **host, uint16_t *port, char **path);
+int h2o_parse_url(const char *url, size_t url_len, h2o_iovec_t *scheme, h2o_iovec_t *host, uint16_t *port, h2o_iovec_t *path);
 /**
  * HTML-escapes a string
  * @param pool memory pool
@@ -107,6 +107,10 @@ int h2o_parse_url(h2o_mempool_t *pool, const char *url, char **scheme, char **ho
  * @return the escaped string, or the source itself if escape was not necessary
  */
 h2o_iovec_t h2o_htmlescape(h2o_mempool_t *pool, const char *src, size_t len);
+/**
+ * concatenates a list of iovecs (with NUL termination)
+ */
+h2o_iovec_t h2o_concat(h2o_mempool_t *pool, size_t n, ...);
 
 int h2o__lcstris_core(const char *target, const char *test, size_t test_len);
 

@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -460,28 +461,31 @@ Rewrite:
     return rebuild_path(pool, path, len);
 }
 
-int h2o_parse_url(h2o_mempool_t *pool, const char *url, char **scheme, char **host, uint16_t *port, char **path)
+int h2o_parse_url(const char *url, size_t url_len, h2o_iovec_t *scheme, h2o_iovec_t *host, uint16_t *port, h2o_iovec_t *path)
 {
     const char *hp_start, *hp_end, *colon_at;
 
+    if (url_len == SIZE_MAX)
+        url_len = strlen(url);
+
     /* check and skip scheme */
-    if (strncmp(url, "http://", 7) == 0) {
-        *scheme = "http";
+    if (url_len >= 7 && memcmp(url, "http://", 7) == 0) {
+        *scheme = h2o_iovec_init(H2O_STRLIT("http"));
         hp_start = url + 7;
         *port = 80;
-    } else if (strncmp(url, "https://", 8) == 0) {
-        *scheme = "https";
+    } else if (url_len >= 8 && memcmp(url, "https://", 8) == 0) {
+        *scheme = h2o_iovec_init(H2O_STRLIT("https"));
         hp_start = url + 8;
         *port = 443;
     } else {
         return -1;
     }
     /* locate the end of hostport */
-    if ((hp_end = strchr(hp_start, '/')) != NULL) {
-        *path = (char*)hp_end;
+    if ((hp_end = memchr(hp_start, '/', url + url_len - hp_start)) != NULL) {
+        *path = h2o_iovec_init(hp_end, url + url_len - hp_end);
     } else {
-        hp_end = hp_start + strlen(hp_start);
-        *path = "/";
+        *path = h2o_iovec_init(H2O_STRLIT("/"));
+        hp_end = url + url_len;
     }
     /* parse hostport */
     for (colon_at = hp_start; colon_at != hp_end; ++colon_at)
@@ -489,12 +493,12 @@ int h2o_parse_url(h2o_mempool_t *pool, const char *url, char **scheme, char **ho
             break;
     if (colon_at != hp_end) {
         size_t t;
-        *host = h2o_strdup(pool, hp_start, colon_at - hp_start).base;
+        *host = h2o_iovec_init(hp_start, colon_at - hp_start);
         if ((t = h2o_strtosize(colon_at + 1, hp_end - colon_at - 1)) >= 65535)
             return -1;
         *port = t;
     } else {
-        *host = h2o_strdup(pool, hp_start, hp_end - hp_start).base;
+        *host = h2o_iovec_init(hp_start, hp_end - hp_start);
     }
     /* success */
     return 0;
@@ -547,6 +551,40 @@ h2o_iovec_t h2o_htmlescape(h2o_mempool_t *pool, const char *src, size_t len)
 
     /* no need not escape; return the original */
     return h2o_iovec_init(src, len);
+}
+
+h2o_iovec_t h2o_concat(h2o_mempool_t *pool, size_t n, ...)
+{
+    h2o_iovec_t ret = { NULL, 0 };
+    va_list args;
+    size_t i;
+
+    /* calc the length */
+    va_start(args, n);
+    for (i = 0; i != n; ++i) {
+        h2o_iovec_t v = va_arg(args, h2o_iovec_t);
+        ret.len += v.len;
+    }
+    va_end(args);
+
+    /* allocate memory */
+    if (pool != NULL)
+        ret.base = h2o_mempool_alloc(pool, ret.len + 1);
+    else
+        ret.base = h2o_malloc(ret.len + 1);
+
+    /* concatenate */
+    ret.len = 0;
+    va_start(args, n);
+    for (i = 0; i != n; ++i) {
+        h2o_iovec_t v = va_arg(args, h2o_iovec_t);
+        memcpy(ret.base + ret.len, v.base, v.len);
+        ret.len += v.len;
+    }
+    va_end(args);
+    ret.base[ret.len] = '\0';
+
+    return ret;
 }
 
 #ifdef H2O_UNITTEST
@@ -633,52 +671,49 @@ static void test_normalize_path(void)
 
 static void test_parse_url(void)
 {
-    h2o_mempool_t pool;
-    char *scheme, *host, *path;
+    h2o_iovec_t scheme, host, path;
     uint16_t port;
     int ret;
 
-    h2o_mempool_init(&pool);
-
-    ret = h2o_parse_url(&pool, "http://example.com/abc", &scheme, &host, &port, &path);
+    ret = h2o_parse_url("http://example.com/abc", SIZE_MAX, &scheme, &host, &port, &path);
     ok(ret == 0);
-    ok(strcmp(scheme, "http") == 0);
-    ok(strcmp(host, "example.com") == 0);
+    ok(h2o_memis(scheme.base, scheme.len, H2O_STRLIT("http")));
+    ok(h2o_memis(host.base, host.len, H2O_STRLIT("example.com")));
     ok(port == 80);
-    ok(strcmp(path, "/abc") == 0);
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/abc")));
 
-    ret = h2o_parse_url(&pool, "http://example.com", &scheme, &host, &port, &path);
+    ret = h2o_parse_url("http://example.com", SIZE_MAX, &scheme, &host, &port, &path);
     ok(ret == 0);
-    ok(strcmp(scheme, "http") == 0);
-    ok(strcmp(host, "example.com") == 0);
+    ok(h2o_memis(scheme.base, scheme.len, H2O_STRLIT("http")));
+    ok(h2o_memis(host.base, host.len, H2O_STRLIT("example.com")));
     ok(port == 80);
-    ok(strcmp(path, "/") == 0);
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/")));
 
-    ret = h2o_parse_url(&pool, "http://example.com:81/abc", &scheme, &host, &port, &path);
+    ret = h2o_parse_url("http://example.com:81/abc", SIZE_MAX, &scheme, &host, &port, &path);
     ok(ret == 0);
-    ok(strcmp(scheme, "http") == 0);
-    ok(strcmp(host, "example.com") == 0);
+    ok(h2o_memis(scheme.base, scheme.len, H2O_STRLIT("http")));
+    ok(h2o_memis(host.base, host.len, H2O_STRLIT("example.com")));
     ok(port == 81);
-    ok(strcmp(path, "/abc") == 0);
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/abc")));
 
-    ret = h2o_parse_url(&pool, "http://example.com:81", &scheme, &host, &port, &path);
+    ret = h2o_parse_url("http://example.com:81", SIZE_MAX, &scheme, &host, &port, &path);
     ok(ret == 0);
-    ok(strcmp(scheme, "http") == 0);
-    ok(strcmp(host, "example.com") == 0);
+    ok(h2o_memis(scheme.base, scheme.len, H2O_STRLIT("http")));
+    ok(h2o_memis(host.base, host.len, H2O_STRLIT("example.com")));
     ok(port == 81);
-    ok(strcmp(path, "/") == 0);
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/")));
 
-    ret = h2o_parse_url(&pool, "https://example.com/abc", &scheme, &host, &port, &path);
+    ret = h2o_parse_url("https://example.com/abc", SIZE_MAX, &scheme, &host, &port, &path);
     ok(ret == 0);
-    ok(strcmp(scheme, "https") == 0);
-    ok(strcmp(host, "example.com") == 0);
+    ok(h2o_memis(scheme.base, scheme.len, H2O_STRLIT("https")));
+    ok(h2o_memis(host.base, host.len, H2O_STRLIT("example.com")));
     ok(port == 443);
-    ok(strcmp(path, "/abc") == 0);
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/abc")));
 
-    ret = h2o_parse_url(&pool, "http:/abc", &scheme, &host, &port, &path);
+    ret = h2o_parse_url("http:/abc", SIZE_MAX, &scheme, &host, &port, &path);
     ok(ret != 0);
 
-    ret = h2o_parse_url(&pool, "ftp://example.com/abc", &scheme, &host, &port, &path);
+    ret = h2o_parse_url("ftp://example.com/abc", SIZE_MAX, &scheme, &host, &port, &path);
     ok(ret != 0);
 }
 
