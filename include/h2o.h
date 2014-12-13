@@ -640,6 +640,9 @@ enum {
 };
 
 typedef struct st_h2o_file_handler_t h2o_file_handler_t;
+
+const char **h2o_file_default_index_files;
+
 /**
  * sends given file as the response to the client
  */
