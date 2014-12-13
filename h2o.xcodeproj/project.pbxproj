@@ -189,6 +189,7 @@
 		105534D11A3BB6DF00627ECB /* protocol.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = protocol.t; sourceTree = "<group>"; };
 		105534D21A3BB6DF00627ECB /* mimemap.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = mimemap.t; sourceTree = "<group>"; };
 		105534D31A3BB6DF00627ECB /* sni.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = sni.t; sourceTree = "<group>"; };
+		105534D41A3C179700627ECB /* file-config.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "file-config.t"; sourceTree = "<group>"; };
 		1065E6EF19B8C64200686E72 /* evloop.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = evloop.c.h; sourceTree = "<group>"; };
 		1065E6F419B996B400686E72 /* select.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = select.c.h; sourceTree = "<group>"; };
 		1065E6F619B99E6D00686E72 /* kqueue.c.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = kqueue.c.h; sourceTree = "<group>"; };
@@ -360,6 +361,7 @@
 		105534CC1A3BB68C00627ECB /* 50end-to-end */ = {
 			isa = PBXGroup;
 			children = (
+				105534D41A3C179700627ECB /* file-config.t */,
 				105534D21A3BB6DF00627ECB /* mimemap.t */,
 				105534D11A3BB6DF00627ECB /* protocol.t */,
 				105534D01A3BB6DF00627ECB /* reverse-proxy.t */,

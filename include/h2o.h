@@ -750,11 +750,15 @@ void h2o_chunked_register(h2o_hostconf_t *host_config);
 
 /* lib/file.c */
 
+enum {
+    H2O_FILE_FLAG_NO_ETAG = 0x1
+};
+
 typedef struct st_h2o_file_handler_t h2o_file_handler_t;
 /**
  * sends given file as the response to the client
  */
-int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *path, h2o_iovec_t mime_type);
+int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *path, h2o_iovec_t mime_type, int flags);
 /**
  * registers the file handler to the context
  * @param host_config
@@ -763,7 +767,7 @@ int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *pa
  * @param index_files optional NULL-terminated list of of filenames to be considered as the "directory-index"
  * @param mimemap the mimemap (h2o_mimemap_create is called internally if the argument is NULL)
  */
-h2o_file_handler_t *h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char **index_files, h2o_mimemap_t *mimemap);
+h2o_file_handler_t *h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char **index_files, h2o_mimemap_t *mimemap, int flags);
 /**
  * returns the associated mimemap
  */

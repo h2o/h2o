@@ -46,6 +46,7 @@ struct st_h2o_file_handler_t {
     h2o_iovec_t virtual_path; /* has "/" appended at last */
     h2o_iovec_t real_path; /* has "/" appended at last */
     h2o_mimemap_t *mimemap;
+    int flags;
     size_t max_index_file_len;
     h2o_iovec_t index_files[1];
 };
@@ -53,6 +54,7 @@ struct st_h2o_file_handler_t {
 struct st_h2o_file_config_vars_t {
     const char **index_files;
     h2o_mimemap_t *mimemap;
+    int flags;
 };
 
 struct st_h2o_file_configurator_t {
@@ -130,7 +132,7 @@ static int do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_t *buf)
     return 1;
 }
 
-static struct st_h2o_sendfile_generator_t *create_generator(h2o_mempool_t *pool, const char *path, int *is_dir)
+static struct st_h2o_sendfile_generator_t *create_generator(h2o_mempool_t *pool, const char *path, int *is_dir, int flags)
 {
     struct st_h2o_sendfile_generator_t *self;
     int fd;
@@ -163,7 +165,11 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_mempool_t *pool,
     self->bytesleft = st.st_size;
 
     h2o_time2str_rfc1123(self->last_modified_buf, st.st_mtime);
-    self->etag_len = sprintf(self->etag_buf, "\"%08x-%zx\"", (unsigned)st.st_mtime, (size_t)st.st_size);
+    if ((flags & H2O_FILE_FLAG_NO_ETAG) != 0) {
+        self->etag_len = 0;
+    } else {
+        self->etag_len = sprintf(self->etag_buf, "\"%08x-%zx\"", (unsigned)st.st_mtime, (size_t)st.st_size);
+    }
 
     return self;
 }
@@ -179,7 +185,8 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     req->res.content_length = self->bytesleft;
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, mime_type.base, mime_type.len);
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LAST_MODIFIED, self->last_modified_buf, H2O_TIMESTR_RFC1123_LEN);
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ETAG, self->etag_buf, self->etag_len);
+    if (self->etag_len != 0)
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ETAG, self->etag_buf, self->etag_len);
 
     /* send data */
     h2o_start_response(req, &self->super);
@@ -195,12 +202,12 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     }
 }
 
-int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *path, h2o_iovec_t mime_type)
+int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *path, h2o_iovec_t mime_type, int flags)
 {
     struct st_h2o_sendfile_generator_t *self;
     int is_dir;
 
-    if ((self = create_generator(&req->pool, path, &is_dir)) == NULL)
+    if ((self = create_generator(&req->pool, path, &is_dir, flags)) == NULL)
         return -1;
     /* note: is_dir is not handled */
     do_send_file(self, req, status, reason, mime_type);
@@ -290,7 +297,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         for (index_file = self->index_files; index_file->base != NULL; ++index_file) {
             memcpy(rpath + rpath_len, index_file->base, index_file->len);
             rpath[rpath_len + index_file->len] = '\0';
-            if ((generator = create_generator(&req->pool, rpath, &is_dir)) != NULL) {
+            if ((generator = create_generator(&req->pool, rpath, &is_dir, self->flags)) != NULL) {
                 rpath_len += index_file->len;
                 break;
             }
@@ -305,7 +312,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         }
     } else {
         rpath[rpath_len] = '\0';
-        generator = create_generator(&req->pool, rpath, &is_dir);
+        generator = create_generator(&req->pool, rpath, &is_dir, self->flags);
         if (generator == NULL && is_dir)
             return redirect_to_dir(req, req->path.base, req->path.len);
     }
@@ -373,7 +380,7 @@ static h2o_iovec_t append_slash_and_dup(const char *path)
     return h2o_iovec_init(buf, path_len);
 }
 
-h2o_file_handler_t *h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char **index_files, h2o_mimemap_t *mimemap)
+h2o_file_handler_t *h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char **index_files, h2o_mimemap_t *mimemap, int flags)
 {
     h2o_file_handler_t *self;
     size_t i;
@@ -399,6 +406,7 @@ h2o_file_handler_t *h2o_file_register(h2o_hostconf_t *host_config, const char *v
     } else {
         self->mimemap = h2o_mimemap_create();
     }
+    self->flags = flags;
     for (i = 0; index_files[i] != NULL; ++i) {
         self->index_files[i] = h2o_strdup(NULL, index_files[i], SIZE_MAX);
         if (self->max_index_file_len < self->index_files[i].len)
@@ -417,7 +425,7 @@ static int on_config_dir(h2o_configurator_command_t *cmd, h2o_configurator_conte
 {
     struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
 
-    h2o_file_register(ctx->hostconf, ctx->path->base, node->data.scalar, self->vars->index_files, self->vars->mimemap);
+    h2o_file_register(ctx->hostconf, ctx->path->base, node->data.scalar, self->vars->index_files, self->vars->mimemap, self->vars->flags);
     return 0;
 }
 
@@ -564,6 +572,24 @@ static int on_config_mime_setdefaulttype(h2o_configurator_command_t *cmd, h2o_co
     return 0;
 }
 
+static int on_config_etag(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+{
+    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+
+    switch (h2o_config_get_one_of(cmd, file, node, "OFF,ON")) {
+    case 0: /* off */
+        self->vars->flags |= H2O_FILE_FLAG_NO_ETAG;
+        break;
+    case 1: /* on */
+        self->vars->flags &= ~H2O_FILE_FLAG_NO_ETAG;
+        break;
+    default: /* error */
+        return -1;
+    }
+
+    return 0;
+}
+
 static const char **dup_strlist(const char **s)
 {
     size_t i;
@@ -585,6 +611,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
     ++self->vars;
     self->vars[0].index_files = dup_strlist(self->vars[-1].index_files);
     self->vars[0].mimemap = self->vars[-1].mimemap;
+    self->vars[0].flags = self->vars[-1].flags;
     h2o_mempool_addref_shared(self->vars[0].mimemap);
     return 0;
 }
@@ -638,4 +665,9 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
         on_config_mime_setdefaulttype,
         "default mime-type");
+    h2o_config_define_command(
+        &self->super, "file.etag",
+        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        on_config_etag,
+        "whether or not to send etag (ON or OFF, default: ON)");
 }
