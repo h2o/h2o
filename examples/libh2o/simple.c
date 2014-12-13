@@ -31,9 +31,9 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 
-static void register_handler(h2o_hostconf_t *host_config, int (*on_req)(h2o_handler_t *, h2o_req_t *))
+static void register_handler(h2o_hostconf_t *hostconf, int (*on_req)(h2o_handler_t *, h2o_req_t *))
 {
-    h2o_handler_t *handler = h2o_create_handler(host_config, sizeof(*handler));
+    h2o_handler_t *handler = h2o_create_handler(hostconf, sizeof(*handler));
     handler->on_req = on_req;
 }
 

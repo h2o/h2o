@@ -88,8 +88,8 @@ void h2o_dispose_request(h2o_req_t *req)
 
     h2o_timeout_unlink(&req->_timeout_entry);
 
-    if (req->version != 0 && req->host_config != NULL) {
-        h2o_logger_t **logger = req->host_config->loggers.entries, **end = logger + req->host_config->loggers.size;
+    if (req->version != 0 && req->hostconf != NULL) {
+        h2o_logger_t **logger = req->hostconf->loggers.entries, **end = logger + req->hostconf->loggers.size;
         for (; logger != end; ++logger) {
             (*logger)->log_access((*logger), req);
         }
@@ -105,24 +105,24 @@ void h2o_process_request(h2o_req_t *req)
     h2o_get_timestamp(ctx, &req->pool, &req->processed_at);
 
     /* setup host context */
-    req->host_config = ctx->globalconf->hosts.entries;
+    req->hostconf = ctx->globalconf->hosts.entries;
     if (req->authority.base != NULL) {
         if (ctx->globalconf->hosts.size != 1) {
             h2o_hostconf_t *hostconf = ctx->globalconf->hosts.entries, *end = hostconf + ctx->globalconf->hosts.size;
             for (; hostconf != end; ++hostconf) {
                 if (h2o_memis(req->authority.base, req->authority.len, hostconf->hostname.base, hostconf->hostname.len)) {
-                    req->host_config = hostconf;
+                    req->hostconf = hostconf;
                     break;
                 }
             }
         }
     } else {
         /* set the authority name to the default one */
-        req->authority = req->host_config->hostname;
+        req->authority = req->hostconf->hostname;
     }
 
     { /* call any of the handlers */
-        h2o_handler_t **handler = req->host_config->handlers.entries, **end = handler + req->host_config->handlers.size;
+        h2o_handler_t **handler = req->hostconf->handlers.entries, **end = handler + req->hostconf->handlers.size;
         for (; handler != end; ++handler) {
             if ((*handler)->on_req(*handler, req) == 0)
                 return;
@@ -139,8 +139,8 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
     req->_generator = generator;
 
     /* setup response filters */
-    if (req->host_config->filters.size != 0) {
-        h2o_filter_t *filter = req->host_config->filters.entries[0];
+    if (req->hostconf->filters.size != 0) {
+        h2o_filter_t *filter = req->hostconf->filters.entries[0];
         filter->on_setup_ostream(filter, req, &req->_ostr_top);
     }
 }

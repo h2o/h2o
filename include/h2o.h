@@ -336,7 +336,7 @@ struct st_h2o_req_t {
     /**
      * the host context
      */
-    h2o_hostconf_t *host_config;
+    h2o_hostconf_t *hostconf;
     /**
      * authority (a.k.a. the Host header; the value is supplemented if missing before the handlers are being called)
      */
@@ -623,7 +623,7 @@ h2o_iovec_t h2o_mimemap_get_type(h2o_mimemap_t *mimemap, const char *ext);
 
 /* lib/access_log.c */
 
-h2o_logger_t *h2o_access_log_register(h2o_hostconf_t *host_config, const char *path, const char *fmt);
+h2o_logger_t *h2o_access_log_register(h2o_hostconf_t *hostconf, const char *path, const char *fmt);
 void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/chunked.c */
@@ -631,7 +631,7 @@ void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
 /**
  * registers the chunked encoding output filter (added by default)
  */
-void h2o_chunked_register(h2o_hostconf_t *host_config);
+void h2o_chunked_register(h2o_hostconf_t *hostconf);
 
 /* lib/file.c */
 
@@ -649,13 +649,13 @@ const char **h2o_file_default_index_files;
 int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *path, h2o_iovec_t mime_type, int flags);
 /**
  * registers the file handler to the context
- * @param host_config
+ * @param hostconf
  * @param virtual_path
  * @param real_path
  * @param index_files optional NULL-terminated list of of filenames to be considered as the "directory-index"
  * @param mimemap the mimemap (h2o_mimemap_create is called internally if the argument is NULL)
  */
-h2o_file_handler_t *h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char **index_files, h2o_mimemap_t *mimemap, int flags);
+h2o_file_handler_t *h2o_file_register(h2o_hostconf_t *hostconf, const char *virtual_path, const char *real_path, const char **index_files, h2o_mimemap_t *mimemap, int flags);
 /**
  * returns the associated mimemap
  */
@@ -693,7 +693,7 @@ int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, 
 /**
  * registers the reverse proxy handler to the context
  */
-void h2o_proxy_register_reverse_proxy(h2o_hostconf_t *host_config, const char *virtual_path, const char *host, uint16_t port, const char *real_path, h2o_proxy_config_vars_t *config);
+void h2o_proxy_register_reverse_proxy(h2o_hostconf_t *hostconf, const char *virtual_path, const char *host, uint16_t port, const char *real_path, h2o_proxy_config_vars_t *config);
 /**
  * registers the configurator
  */
@@ -704,7 +704,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf);
 /**
  * registers the reproxy filter
  */
-void h2o_reproxy_register(h2o_hostconf_t *host_config);
+void h2o_reproxy_register(h2o_hostconf_t *hostconf);
 
 /* inline defs */
 
@@ -732,9 +732,9 @@ inline void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostre
 {
     h2o_filter_t *next;
 
-    assert(self == req->host_config->filters.entries[req->_ostr_init_index]);
-    if (req->_ostr_init_index + 1 < req->host_config->filters.size) {
-        next = req->host_config->filters.entries[++req->_ostr_init_index];
+    assert(self == req->hostconf->filters.entries[req->_ostr_init_index]);
+    if (req->_ostr_init_index + 1 < req->hostconf->filters.size) {
+        next = req->hostconf->filters.entries[++req->_ostr_init_index];
         next->on_setup_ostream(next, req, slot);
     }
 }

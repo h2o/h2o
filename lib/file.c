@@ -370,7 +370,7 @@ static h2o_iovec_t append_slash_and_dup(const char *path)
     return h2o_iovec_init(buf, path_len);
 }
 
-h2o_file_handler_t *h2o_file_register(h2o_hostconf_t *host_config, const char *virtual_path, const char *real_path, const char **index_files, h2o_mimemap_t *mimemap, int flags)
+h2o_file_handler_t *h2o_file_register(h2o_hostconf_t *hostconf, const char *virtual_path, const char *real_path, const char **index_files, h2o_mimemap_t *mimemap, int flags)
 {
     h2o_file_handler_t *self;
     size_t i;
@@ -381,7 +381,7 @@ h2o_file_handler_t *h2o_file_register(h2o_hostconf_t *host_config, const char *v
     /* allocate memory */
     for (i = 0; index_files[i] != NULL; ++i)
         ;
-    self = (void*)h2o_create_handler(host_config, offsetof(h2o_file_handler_t, index_files[0]) + sizeof(self->index_files[0]) * (i + 1));
+    self = (void*)h2o_create_handler(hostconf, offsetof(h2o_file_handler_t, index_files[0]) + sizeof(self->index_files[0]) * (i + 1));
 
     /* setup callbacks */
     self->super.dispose = on_dispose;

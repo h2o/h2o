@@ -340,7 +340,7 @@ static void dispose(h2o_logger_t *_self)
         close(self->fd);
 }
 
-h2o_logger_t *h2o_access_log_register(h2o_hostconf_t *host_config, const char *path, const char *fmt)
+h2o_logger_t *h2o_access_log_register(h2o_hostconf_t *hostconf, const char *path, const char *fmt)
 {
     struct log_element_t *elements;
     size_t num_elements;
@@ -374,7 +374,7 @@ h2o_logger_t *h2o_access_log_register(h2o_hostconf_t *host_config, const char *p
     }
 
     /* register */
-    self = (void*)h2o_create_logger(host_config, sizeof(*self));
+    self = (void*)h2o_create_logger(hostconf, sizeof(*self));
     self->super.dispose = dispose;
     self->super.log_access = log_access;
     self->elements = elements;

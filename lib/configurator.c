@@ -293,16 +293,16 @@ static void init_core_configurators(h2o_globalconf_t *conf)
     }
 }
 
-static void init_host_config(h2o_hostconf_t *hostconf, h2o_globalconf_t *globalconf)
+static void init_hostconf(h2o_hostconf_t *hostconf, h2o_globalconf_t *globalconf)
 {
     memset(hostconf, 0, sizeof(*hostconf));
     hostconf->global = globalconf;
     h2o_chunked_register(hostconf);
 }
 
-static void dispose_host_config(h2o_hostconf_t *host_config)
+static void dispose_hostconf(h2o_hostconf_t *hostconf)
 {
-    free(host_config->hostname.base);
+    free(hostconf->hostname.base);
 
 #define DESTROY_LIST(type, list) do { \
     size_t i; \
@@ -315,9 +315,9 @@ static void dispose_host_config(h2o_hostconf_t *host_config)
     free(list.entries); \
 } while (0)
 
-    DESTROY_LIST(h2o_handler_t, host_config->handlers);
-    DESTROY_LIST(h2o_filter_t, host_config->filters);
-    DESTROY_LIST(h2o_logger_t, host_config->loggers);
+    DESTROY_LIST(h2o_handler_t, hostconf->handlers);
+    DESTROY_LIST(h2o_filter_t, hostconf->filters);
+    DESTROY_LIST(h2o_logger_t, hostconf->loggers);
 
 #undef DESTROY_LIST
 }
@@ -343,7 +343,7 @@ h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, const char *h
     h2o_vector_reserve(NULL, (void*)&config->hosts, sizeof(config->hosts.entries[0]), config->hosts.size + 1);
     hostconf = config->hosts.entries + config->hosts.size++;
 
-    init_host_config(hostconf, config);
+    init_hostconf(hostconf, config);
     hostconf->hostname = h2o_strdup(NULL, hostname, SIZE_MAX);
     for (i = 0; i != hostconf->hostname.len; ++i)
         hostconf->hostname.base[i] = h2o_tolower(hostconf->hostname.base[i]);
@@ -357,7 +357,7 @@ void h2o_config_dispose(h2o_globalconf_t *config)
 
     for (i = 0; i != config->hosts.size; ++i) {
         h2o_hostconf_t *hostconf = config->hosts.entries + i;
-        dispose_host_config(hostconf);
+        dispose_hostconf(hostconf);
     }
     free(config->hosts.entries);
 

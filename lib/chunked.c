@@ -93,8 +93,8 @@ Next:
     h2o_setup_next_ostream(self, req, slot);
 }
 
-void h2o_chunked_register(h2o_hostconf_t *host_config)
+void h2o_chunked_register(h2o_hostconf_t *hostconf)
 {
-    h2o_filter_t *self = h2o_create_filter(host_config, sizeof(*self));
+    h2o_filter_t *self = h2o_create_filter(hostconf, sizeof(*self));
     self->on_setup_ostream = on_setup_ostream;
 }
