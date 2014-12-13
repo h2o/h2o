@@ -25,11 +25,11 @@
 void test_lib__proxy_c()
 {
     h2o_proxy_location_t conf = {
-        H2O_STRLIT("/virtual/"),
+        { H2O_STRLIT("/virtual/") },
         {
-            H2O_STRLIT("realhost"),
+            { H2O_STRLIT("realhost") },
             81,
-            H2O_STRLIT("/real/")
+            { H2O_STRLIT("/real/") }
         }
     };
     h2o_mempool_t pool;
