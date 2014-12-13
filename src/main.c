@@ -145,12 +145,14 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
                 }
             }
         }
-        ctx_index = i;
+        ctx_index = 0;
     Found:
         ;
     }
 
-    SSL_set_SSL_CTX(ssl, listener->ssl.entries[ctx_index].ctx);
+    if (SSL_get_SSL_CTX(ssl) != listener->ssl.entries[ctx_index].ctx)
+        SSL_set_SSL_CTX(ssl, listener->ssl.entries[ctx_index].ctx);
+
     return SSL_TLSEXT_ERR_OK;
 }
 
