@@ -33,19 +33,19 @@ struct proxy_configurator_t {
 static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void*)cmd->configurator;
-    return h2o_config_scanf(cmd, file, node, "%" PRIu64, &self->vars->io_timeout);
+    return h2o_configurator_scanf(cmd, file, node, "%" PRIu64, &self->vars->io_timeout);
 }
 
 static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void*)cmd->configurator;
-    return h2o_config_scanf(cmd, file, node, "%" PRIu64, &self->vars->keepalive_timeout);
+    return h2o_configurator_scanf(cmd, file, node, "%" PRIu64, &self->vars->keepalive_timeout);
 }
 
 static int on_config_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void*)cmd->configurator;
-    ssize_t ret = h2o_config_get_one_of(cmd, file, node, "OFF,ON");
+    ssize_t ret = h2o_configurator_get_one_of(cmd, file, node, "OFF,ON");
     if (ret == -1)
         return -1;
     self->vars->use_keepalive = (int)ret;
@@ -62,11 +62,11 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
     h2o_mempool_init(&pool);
 
     if (h2o_parse_url(node->data.scalar, SIZE_MAX, &scheme, &host, &port, &path) != 0) {
-        h2o_config_print_error(cmd, file, node, "failed to parse URL: %s\n", node->data.scalar);
+        h2o_configurator_errprintf(cmd, file, node, "failed to parse URL: %s\n", node->data.scalar);
         goto ErrExit;
     }
     if (! h2o_memis(scheme.base, scheme.len, H2O_STRLIT("http"))) {
-        h2o_config_print_error(cmd, file, node, "only HTTP URLs are supported");
+        h2o_configurator_errprintf(cmd, file, node, "only HTTP URLs are supported");
         goto ErrExit;
     }
     /* register */
@@ -105,7 +105,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 
 void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
 {
-    struct proxy_configurator_t *c = (void*)h2o_config_create_configurator(conf, sizeof(*c));
+    struct proxy_configurator_t *c = (void*)h2o_configurator_create(conf, sizeof(*c));
 
     /* set default vars */
     c->vars = c->_vars_stack;
@@ -115,20 +115,20 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     /* setup handlers */
     c->super.enter = on_config_enter;
     c->super.exit = on_config_exit;
-    h2o_config_define_command(&c->super, "proxy.reverse.url",
+    h2o_configurator_define_command(&c->super, "proxy.reverse.url",
         H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_DEFERRED,
         on_config_reverse_url,
         "upstream URL (only HTTP is suppported)");
-    h2o_config_define_command(&c->super, "proxy.keepalive",
+    h2o_configurator_define_command(&c->super, "proxy.keepalive",
         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
         on_config_keepalive,
         "boolean flag (ON/OFF) indicating whether or not to use persistent connections",
         "to upstream (default: OFF)");
-    h2o_config_define_command(&c->super, "proxy.timeout.io",
+    h2o_configurator_define_command(&c->super, "proxy.timeout.io",
         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
         on_config_timeout_io,
         "sets upstream I/O timeout (in milliseconds, default: 5000)");
-    h2o_config_define_command(&c->super, "proxy.timeout.keepalive",
+    h2o_configurator_define_command(&c->super, "proxy.timeout.keepalive",
         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
         on_config_timeout_keepalive,
         "timeout for idle conncections (in milliseconds, default: 2000)");

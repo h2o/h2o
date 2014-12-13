@@ -96,30 +96,30 @@ struct st_h2o_configurator_t {
 /**
  * registers a configurator
  */
-h2o_configurator_t *h2o_config_create_configurator(h2o_globalconf_t *conf, size_t sz);
+h2o_configurator_t *h2o_configurator_create(h2o_globalconf_t *conf, size_t sz);
 /**
  *
  */
-#define h2o_config_define_command(configurator, name, flags, cb, ...) \
+#define h2o_configurator_define_command(configurator, name, flags, cb, ...) \
     do { \
         static const char *desc[] = { __VA_ARGS__, NULL }; \
-        h2o_config__define_command(configurator, name, flags, cb, desc); \
+        h2o_configurator__define_command(configurator, name, flags, cb, desc); \
     } while (0)
-void h2o_config__define_command(h2o_configurator_t *configurator, const char *name, int flags, h2o_configurator_command_cb cb, const char **desc);
+void h2o_configurator__define_command(h2o_configurator_t *configurator, const char *name, int flags, h2o_configurator_command_cb cb, const char **desc);
 /**
  * returns a configurator of given command name
  * @return configurator for given name or NULL if not found
  */
-h2o_configurator_command_t *h2o_config_get_configurator(h2o_globalconf_t *conf, const char *name);
+h2o_configurator_command_t *h2o_configurator_get_command(h2o_globalconf_t *conf, const char *name);
 /**
  * applies the configuration to the context
  * @return 0 if successful, -1 if not
  */
-int h2o_config_configure(h2o_globalconf_t *config, const char *file, yoml_t *node);
+int h2o_configurator_apply(h2o_globalconf_t *config, const char *file, yoml_t *node);
 /**
  * emits configuration error
  */
-void h2o_config_print_error(h2o_configurator_command_t *cmd, const char *file, yoml_t *node, const char *reason, ...) __attribute__((format (printf, 4, 5)));
+void h2o_configurator_errprintf(h2o_configurator_command_t *cmd, const char *file, yoml_t *node, const char *reason, ...) __attribute__((format (printf, 4, 5)));
 /**
  * interprets the configuration value using sscanf, or prints an error upon failure
  * @param configurator configurator
@@ -128,7 +128,7 @@ void h2o_config_print_error(h2o_configurator_command_t *cmd, const char *file, y
  * @param fmt scanf-style format string
  * @return 0 if successful, -1 if not
  */
-int h2o_config_scanf(h2o_configurator_command_t *cmd, const char *config_file, yoml_t *config_node, const char *fmt, ...) __attribute__((format (scanf, 4, 5)));
+int h2o_configurator_scanf(h2o_configurator_command_t *cmd, const char *config_file, yoml_t *config_node, const char *fmt, ...) __attribute__((format (scanf, 4, 5)));
 /**
  * interprets the configuration value and returns the index of the matched string within the candidate strings, or prints an error upon failure
  * @param configurator configurator
@@ -137,6 +137,6 @@ int h2o_config_scanf(h2o_configurator_command_t *cmd, const char *config_file, y
  * @param candidates a comma-separated list of strings (should not contain whitespaces)
  * @return index of the matched string within the given list, or -1 if none of them matched
  */
-ssize_t h2o_config_get_one_of(h2o_configurator_command_t *cmd, const char *config_file, yoml_t *config_node, const char *candidates);
+ssize_t h2o_configurator_get_one_of(h2o_configurator_command_t *cmd, const char *config_file, yoml_t *config_node, const char *candidates);
 
 #endif

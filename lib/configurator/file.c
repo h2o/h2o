@@ -53,7 +53,7 @@ static int on_config_index(h2o_configurator_command_t *cmd, h2o_configurator_con
     for (i = 0; i != node->data.sequence.size; ++i) {
         yoml_t *element = node->data.sequence.elements[i];
         if (element->type != YOML_TYPE_SCALAR) {
-            h2o_config_print_error(cmd, file, element, "argument must be a sequence of scalars");
+            h2o_configurator_errprintf(cmd, file, element, "argument must be a sequence of scalars");
             return -1;
         }
         self->vars->index_files[i] = element->data.scalar;
@@ -66,11 +66,11 @@ static int on_config_index(h2o_configurator_command_t *cmd, h2o_configurator_con
 static int assert_is_mimetype(h2o_configurator_command_t *cmd, const char *file, yoml_t *node)
 {
     if (node->type != YOML_TYPE_SCALAR) {
-        h2o_config_print_error(cmd, file, node, "expected a scalar (mime-type)");
+        h2o_configurator_errprintf(cmd, file, node, "expected a scalar (mime-type)");
         return -1;
     }
     if (strchr(node->data.scalar, '/') == NULL) {
-        h2o_config_print_error(cmd, file, node, "the string \"%s\" does not look like a mime-type", node->data.scalar);
+        h2o_configurator_errprintf(cmd, file, node, "the string \"%s\" does not look like a mime-type", node->data.scalar);
         return -1;
     }
     return 0;
@@ -79,11 +79,11 @@ static int assert_is_mimetype(h2o_configurator_command_t *cmd, const char *file,
 static int assert_is_extension(h2o_configurator_command_t *cmd, const char *file, yoml_t *node)
 {
     if (node->type != YOML_TYPE_SCALAR) {
-        h2o_config_print_error(cmd, file, node, "expected a scalar (extension)");
+        h2o_configurator_errprintf(cmd, file, node, "expected a scalar (extension)");
         return -1;
     }
     if (node->data.scalar[0] != '.') {
-        h2o_config_print_error(cmd, file, node, "given extension \"%s\" does not start with a \".\"", node->data.scalar);
+        h2o_configurator_errprintf(cmd, file, node, "given extension \"%s\" does not start with a \".\"", node->data.scalar);
         return -1;
     }
     return 0;
@@ -115,7 +115,7 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
             }
             break;
         default:
-            h2o_config_print_error(cmd, file, value, "only scalar or sequence of scalar is permitted at the value part of the argument");
+            h2o_configurator_errprintf(cmd, file, value, "only scalar or sequence of scalar is permitted at the value part of the argument");
             return -1;
         }
     }
@@ -190,7 +190,7 @@ static int on_config_etag(h2o_configurator_command_t *cmd, h2o_configurator_cont
 {
     struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
 
-    switch (h2o_config_get_one_of(cmd, file, node, "OFF,ON")) {
+    switch (h2o_configurator_get_one_of(cmd, file, node, "OFF,ON")) {
     case 0: /* off */
         self->vars->flags |= H2O_FILE_FLAG_NO_ETAG;
         break;
@@ -241,7 +241,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 
 void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
 {
-    struct st_h2o_file_configurator_t *self = (void*)h2o_config_create_configurator(globalconf, sizeof(*self));
+    struct st_h2o_file_configurator_t *self = (void*)h2o_configurator_create(globalconf, sizeof(*self));
 
     self->super.enter = on_config_enter;
     self->super.exit = on_config_exit;
@@ -249,37 +249,37 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
     self->vars->mimemap = h2o_mimemap_create();
     self->vars->index_files = h2o_file_default_index_files;
 
-    h2o_config_define_command(
+    h2o_configurator_define_command(
         &self->super, "file.dir",
         H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_DEFERRED,
         on_config_dir,
         "directory under which to serve the target path");
-    h2o_config_define_command(
+    h2o_configurator_define_command(
         &self->super, "file.index",
         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
         on_config_index,
         "sequence of index file names (default: index.html index.htm index.txt)");
-    h2o_config_define_command(
+    h2o_configurator_define_command(
         &self->super, "file.mime.settypes",
         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
         on_config_mime_settypes,
         "map of mime-type -> (extension | sequence-of-extensions)");
-    h2o_config_define_command(
+    h2o_configurator_define_command(
         &self->super, "file.mime.addtypes",
         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
         on_config_mime_addtypes,
         "map of mime-type -> (extension | sequence-of-extensions)");
-    h2o_config_define_command(
+    h2o_configurator_define_command(
         &self->super, "file.mime.removetypes",
         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
         on_config_mime_removetypes,
         "sequence of extensions");
-    h2o_config_define_command(
+    h2o_configurator_define_command(
         &self->super, "file.mime.setdefaulttype",
         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
         on_config_mime_setdefaulttype,
         "default mime-type");
-    h2o_config_define_command(
+    h2o_configurator_define_command(
         &self->super, "file.etag",
         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
         on_config_etag,

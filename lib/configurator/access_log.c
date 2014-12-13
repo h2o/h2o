@@ -35,18 +35,18 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
             yoml_t *t;
             /* get path */
             if ((t = yoml_get(node, "path")) == NULL) {
-                h2o_config_print_error(cmd, file, node, "could not find mandatory key `path`");
+                h2o_configurator_errprintf(cmd, file, node, "could not find mandatory key `path`");
                 return -1;
             }
             if (t->type != YOML_TYPE_SCALAR) {
-                h2o_config_print_error(cmd, file, t, "`path` must be scalar");
+                h2o_configurator_errprintf(cmd, file, t, "`path` must be scalar");
                 return -1;
             }
             path = t->data.scalar;
             /* get format */
             if ((t = yoml_get(node, "format")) != NULL) {
                 if (t->type != YOML_TYPE_SCALAR) {
-                    h2o_config_print_error(cmd, file, t, "`format` must be a scalar");
+                    h2o_configurator_errprintf(cmd, file, t, "`format` must be a scalar");
                     return -1;
                 }
                 fmt = t->data.scalar;
@@ -54,7 +54,7 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
         }
         break;
     default:
-        h2o_config_print_error(cmd, file, node, "node must be a scalar or a mapping");
+        h2o_configurator_errprintf(cmd, file, node, "node must be a scalar or a mapping");
         return -1;
     }
 
@@ -64,8 +64,8 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
 
 void h2o_access_log_register_configurator(h2o_globalconf_t *conf)
 {
-    h2o_configurator_t *c = h2o_config_create_configurator(conf, sizeof(*c));
-    h2o_config_define_command(c, "access-log", H2O_CONFIGURATOR_FLAG_HOST,
+    h2o_configurator_t *c = h2o_configurator_create(conf, sizeof(*c));
+    h2o_configurator_define_command(c, "access-log", H2O_CONFIGURATOR_FLAG_HOST,
         on_config,
         "path (and optionally the format) of the access log (default: none)",
         " - if the value is a scalar, it is treated as the path of the log file",
