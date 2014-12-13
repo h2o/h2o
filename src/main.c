@@ -72,7 +72,7 @@ struct listener_ctx_t {
 };
 
 struct config_t {
-    h2o_globalconf_t global_config;
+    h2o_globalconf_t globalconf;
     struct listener_config_t **listeners;
     size_t num_listeners;
     unsigned max_connections;
@@ -345,7 +345,7 @@ static struct listener_config_t *add_listener(struct config_t *conf, int fd, str
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
 {
     struct listener_configurator_t *configurator = (void*)cmd->configurator;
-    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, ctx->globalconf);
+    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
     const char *hostname = NULL, *servname = NULL, *type = "tcp";
     yoml_t *ssl_config_node = NULL;
 
@@ -524,14 +524,14 @@ static int on_config_listen_exit(h2o_configurator_t *_configurator, h2o_configur
 
 static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
 {
-    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, ctx->globalconf);
+    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
     return h2o_configurator_scanf(cmd, config_file, config_node, "%u", &conf->max_connections);
 }
 
 
 static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
 {
-    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, ctx->globalconf);
+    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
     return h2o_configurator_scanf(cmd, config_file, config_node, "%u", &conf->num_threads);
 }
 
@@ -622,7 +622,7 @@ static void setup_signal_handlers(void)
 static void on_socketclose(void *data)
 {
     h2o_context_t *ctx = data;
-    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, ctx->global_config);
+    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
     unsigned prev_num_connections = __sync_fetch_and_sub(&conf->state.num_connections, 1);
 
     if (conf->num_threads != 1) {
@@ -641,7 +641,7 @@ static void on_socketclose(void *data)
 static void on_accept(h2o_socket_t *listener, int status)
 {
     struct listener_ctx_t *ctx = listener->data;
-    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, global_config, ctx->ctx->global_config);
+    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->ctx->globalconf);
     int num_accepts = 16;
 
     if (status == -1) {
@@ -679,7 +679,7 @@ static void *run_loop(void *_conf)
 
     /* setup loop and context */
     loop = h2o_evloop_create();
-    h2o_context_init(&ctx, loop, &conf->global_config);
+    h2o_context_init(&ctx, loop, &conf->globalconf);
 
     /* setup listeners */
     for (i = 0; i != conf->num_listeners; ++i) {
@@ -723,7 +723,7 @@ int main(int argc, char **argv)
     };
 
     static struct config_t config = {
-        {}, /* global_config */
+        {}, /* globalconf */
         NULL, /* listeners */
         0, /* num_listeners */
         1024, /* max_connections */
@@ -736,10 +736,10 @@ int main(int argc, char **argv)
     int opt_ch;
     yoml_t *config_yoml;
 
-    h2o_config_init(&config.global_config);
+    h2o_config_init(&config.globalconf);
 
     {
-        struct listener_configurator_t *c = (void*)h2o_configurator_create(&config.global_config, sizeof(*c));
+        struct listener_configurator_t *c = (void*)h2o_configurator_create(&config.globalconf, sizeof(*c));
         c->super.enter = on_config_listen_enter;
         c->super.exit = on_config_listen_exit;
         h2o_configurator_define_command(
@@ -762,7 +762,7 @@ int main(int argc, char **argv)
             "   a mapping that conform to the requirements above");
     }
     {
-        h2o_configurator_t *c = h2o_configurator_create(&config.global_config, sizeof(*c));
+        h2o_configurator_t *c = h2o_configurator_create(&config.globalconf, sizeof(*c));
         h2o_configurator_define_command(
             c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL,
             on_config_max_connections,
@@ -773,9 +773,9 @@ int main(int argc, char **argv)
             "number of worker threads (default: 1)");
     }
 
-    h2o_access_log_register_configurator(&config.global_config);
-    h2o_file_register_configurator(&config.global_config);
-    h2o_proxy_register_configurator(&config.global_config);
+    h2o_access_log_register_configurator(&config.globalconf);
+    h2o_file_register_configurator(&config.globalconf);
+    h2o_proxy_register_configurator(&config.globalconf);
 
     /* parse options */
     while ((opt_ch = getopt_long(argc, argv, "c:h", longopts, NULL)) != -1) {
@@ -784,7 +784,7 @@ int main(int argc, char **argv)
             config_file = optarg;
             break;
         case 'h':
-            usage(&config.global_config);
+            usage(&config.globalconf);
             exit(0);
             break;
         default:
@@ -798,7 +798,7 @@ int main(int argc, char **argv)
     /* configure */
     if ((config_yoml = load_config(config_file)) == NULL)
         exit(EX_CONFIG);
-    if (h2o_configurator_apply(&config.global_config, config_file, config_yoml) != 0)
+    if (h2o_configurator_apply(&config.globalconf, config_file, config_yoml) != 0)
         exit(EX_CONFIG);
     yoml_free(config_yoml);
 

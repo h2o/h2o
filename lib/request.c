@@ -105,10 +105,10 @@ void h2o_process_request(h2o_req_t *req)
     h2o_get_timestamp(ctx, &req->pool, &req->processed_at);
 
     /* setup host context */
-    req->host_config = ctx->global_config->hosts.entries;
+    req->host_config = ctx->globalconf->hosts.entries;
     if (req->authority.base != NULL) {
-        if (ctx->global_config->hosts.size != 1) {
-            h2o_hostconf_t *hostconf = ctx->global_config->hosts.entries, *end = hostconf + ctx->global_config->hosts.size;
+        if (ctx->globalconf->hosts.size != 1) {
+            h2o_hostconf_t *hostconf = ctx->globalconf->hosts.entries, *end = hostconf + ctx->globalconf->hosts.size;
             for (; hostconf != end; ++hostconf) {
                 if (h2o_memis(req->authority.base, req->authority.len, hostconf->hostname.base, hostconf->hostname.len)) {
                     req->host_config = hostconf;

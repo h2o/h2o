@@ -70,7 +70,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
 
     memset(ctx, 0, sizeof(*ctx));
     ctx->loop = loop;
-    ctx->global_config = config;
+    ctx->globalconf = config;
     h2o_timeout_init(ctx->loop, &ctx->zero_timeout, 0);
     h2o_timeout_init(ctx->loop, &ctx->req_timeout, config->req_timeout);
 
@@ -84,7 +84,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
 
 void h2o_context_dispose(h2o_context_t *ctx)
 {
-    h2o_globalconf_t *config = ctx->global_config;
+    h2o_globalconf_t *config = ctx->globalconf;
     size_t i;
 
     for (i = 0; i != config->hosts.size; ++i) {

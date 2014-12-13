@@ -211,7 +211,7 @@ struct st_h2o_context_t {
     /**
      * pointer to the global configuration
      */
-    h2o_globalconf_t *global_config;
+    h2o_globalconf_t *globalconf;
     /**
      * pointer to per-module configs
      */

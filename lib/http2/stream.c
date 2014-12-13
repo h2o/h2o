@@ -188,7 +188,7 @@ static void send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         conn->peer_settings.max_frame_size,
         &stream->req.res,
         &ts,
-        &conn->super.ctx->global_config->server_name);
+        &conn->super.ctx->globalconf->server_name);
     h2o_http2_conn_request_write(conn);
     stream->state = H2O_HTTP2_STREAM_STATE_SEND_BODY;
 }

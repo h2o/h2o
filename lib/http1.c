@@ -86,7 +86,7 @@ static void set_timeout(h2o_http1_conn_t *conn, h2o_timeout_t *timeout, h2o_time
 static void process_request(h2o_http1_conn_t *conn)
 {
     if (conn->sock->ssl == NULL && conn->req.upgrade.base != NULL
-        && conn->super.ctx->global_config->http1_upgrade_to_http2
+        && conn->super.ctx->globalconf->http1_upgrade_to_http2
         && h2o_lcstris(conn->req.upgrade.base, conn->req.upgrade.len, H2O_STRLIT("h2c-14"))) {
         if (h2o_http2_handle_upgrade(&conn->req) == 0) {
             return;
@@ -184,7 +184,7 @@ static int create_entity_reader(h2o_http1_conn_t *conn, const struct phr_header 
     } else {
         /* content-length */
         size_t content_length = h2o_strtosize(entity_header->value, entity_header->value_len);
-        if (content_length != SIZE_MAX && content_length <= conn->super.ctx->global_config->max_request_entity_size) {
+        if (content_length != SIZE_MAX && content_length <= conn->super.ctx->globalconf->max_request_entity_size) {
             return create_content_length_entity_reader(conn, (size_t)content_length);
         }
     }
@@ -318,7 +318,7 @@ static void handle_incoming_request(h2o_http1_conn_t *conn)
         return;
     case -1: // error
         /* upgrade to HTTP/2 if the request starts with: PRI * HTTP/2 */
-        if (conn->super.ctx->global_config->http1_upgrade_to_http2) {
+        if (conn->super.ctx->globalconf->http1_upgrade_to_http2) {
             /* should check up to the first octet that phr_parse_request returns an error */
             static const h2o_iovec_t HTTP2_SIG = { H2O_STRLIT("PRI * HTTP/2") };
             if (conn->sock->input->size >= HTTP2_SIG.len && memcmp(conn->sock->input->bytes, HTTP2_SIG.base, HTTP2_SIG.len) == 0) {
@@ -464,7 +464,7 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
             req->res.status,
             req->res.reason,
             ts.str->rfc1123,
-            ctx->global_config->server_name.base,
+            ctx->globalconf->server_name.base,
             connection,
             req->res.content_length);
     } else {
@@ -474,7 +474,7 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
             req->res.status,
             req->res.reason,
             ts.str->rfc1123,
-            ctx->global_config->server_name.base,
+            ctx->globalconf->server_name.base,
             connection);
     }
 
@@ -527,7 +527,7 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
     conn->_ostr_final.pull.cb = cb;
 
     /* setup the buffer */
-    bufsz = flatten_headers_estimate_size(&conn->req, conn->super.ctx->global_config->server_name.len + strlen(connection));
+    bufsz = flatten_headers_estimate_size(&conn->req, conn->super.ctx->globalconf->server_name.len + strlen(connection));
     if (bufsz < MAX_PULL_BUF_SZ) {
         if (MAX_PULL_BUF_SZ - bufsz < conn->req.res.content_length) {
             bufsz = MAX_PULL_BUF_SZ;
@@ -558,7 +558,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
         const char *connection = req->http1_is_persistent ? "keep-alive" : "close";
         bufs[bufcnt].base = h2o_mempool_alloc(
             &req->pool,
-            flatten_headers_estimate_size(req, conn->super.ctx->global_config->server_name.len + strlen(connection)));
+            flatten_headers_estimate_size(req, conn->super.ctx->globalconf->server_name.len + strlen(connection)));
         bufs[bufcnt].len = flatten_headers(bufs[bufcnt].base, req, connection);
         ++bufcnt;
         self->sent_headers = 1;
@@ -602,7 +602,7 @@ void h2o_http1_upgrade(h2o_http1_conn_t *conn, h2o_iovec_t *inbufs, size_t inbuf
 
     bufs[0].base = h2o_mempool_alloc(
         &conn->req.pool,
-        flatten_headers_estimate_size(&conn->req, conn->super.ctx->global_config->server_name.len + sizeof("upgrade") - 1));
+        flatten_headers_estimate_size(&conn->req, conn->super.ctx->globalconf->server_name.len + sizeof("upgrade") - 1));
     bufs[0].len = flatten_headers(bufs[0].base, &conn->req, "upgrade");
     memcpy(bufs + 1, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
 
