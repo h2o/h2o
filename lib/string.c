@@ -553,7 +553,7 @@ h2o_iovec_t h2o_htmlescape(h2o_mempool_t *pool, const char *src, size_t len)
     return h2o_iovec_init(src, len);
 }
 
-h2o_iovec_t h2o_concat(h2o_mempool_t *pool, size_t n, ...)
+h2o_iovec_t h2o__concat(h2o_mempool_t *pool, size_t n, ...)
 {
     h2o_iovec_t ret = { NULL, 0 };
     va_list args;

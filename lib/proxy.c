@@ -76,7 +76,7 @@ static h2o_iovec_t rewrite_location(h2o_mempool_t *pool, const char *location, s
         || ! test_location_match(conf, loc_scheme, loc_host, loc_port, loc_path))
         return h2o_iovec_init(location, location_len);
 
-    return h2o_concat(pool, 5,
+    return h2o_concat(pool,
         req_scheme,
         h2o_iovec_init(H2O_STRLIT("://")),
         req_authority,

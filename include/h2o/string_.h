@@ -114,7 +114,8 @@ h2o_iovec_t h2o_htmlescape(h2o_mempool_t *pool, const char *src, size_t len);
 /**
  * concatenates a list of iovecs (with NUL termination)
  */
-h2o_iovec_t h2o_concat(h2o_mempool_t *pool, size_t n, ...);
+#define h2o_concat(pool, ...) h2o__concat(pool, H2O_NARG(__VA_ARGS__), __VA_ARGS__)
+h2o_iovec_t h2o__concat(h2o_mempool_t *pool, size_t n, ...);
 
 int h2o__lcstris_core(const char *target, const char *test, size_t test_len);
 
