@@ -15,6 +15,7 @@
 		105534C71A3BB29100627ECB /* string.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534C61A3BB29100627ECB /* string.c */; };
 		105534C91A3BB41C00627ECB /* proxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534C81A3BB41C00627ECB /* proxy.c */; };
 		105534CA1A3BB46900627ECB /* string.c in Sources */ = {isa = PBXBuildFile; fileRef = 10D0905A19F230280043D458 /* string.c */; };
+		105534D81A3C791B00627ECB /* configurator.h in Headers */ = {isa = PBXBuildFile; fileRef = 105534D71A3C785000627ECB /* configurator.h */; };
 		1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923C119A3217300C52AD6 /* websocket.c */; };
 		1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923A319A3215F00C52AD6 /* websocket.h */; };
 		1065E6F919BEBAC600686E72 /* timeout.c in Sources */ = {isa = PBXBuildFile; fileRef = 1065E6F819BEBAC600686E72 /* timeout.c */; };
@@ -83,7 +84,7 @@
 		10F417D619C190F800B6E31A /* main.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F417D519C190F800B6E31A /* main.c */; settings = {COMPILER_FLAGS = "-Wno-deprecated-declarations"; }; };
 		10F417FF19C2D2F800B6E31A /* picotest.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F417FD19C2D2F800B6E31A /* picotest.c */; };
 		10F4180119C2D31600B6E31A /* yoml.h in Headers */ = {isa = PBXBuildFile; fileRef = 10F4180019C2D31600B6E31A /* yoml.h */; };
-		10F4180519CA75C500B6E31A /* config.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F4180419CA75C500B6E31A /* config.c */; };
+		10F4180519CA75C500B6E31A /* configurator.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F4180419CA75C500B6E31A /* configurator.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -190,6 +191,7 @@
 		105534D21A3BB6DF00627ECB /* mimemap.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = mimemap.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534D31A3BB6DF00627ECB /* sni.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = sni.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534D41A3C179700627ECB /* file-config.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "file-config.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		105534D71A3C785000627ECB /* configurator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = configurator.h; sourceTree = "<group>"; };
 		1065E6EF19B8C64200686E72 /* evloop.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = evloop.c.h; sourceTree = "<group>"; };
 		1065E6F419B996B400686E72 /* select.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = select.c.h; sourceTree = "<group>"; };
 		1065E6F619B99E6D00686E72 /* kqueue.c.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = kqueue.c.h; sourceTree = "<group>"; };
@@ -256,7 +258,7 @@
 		10F417FE19C2D2F800B6E31A /* picotest.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = picotest.h; sourceTree = "<group>"; };
 		10F4180019C2D31600B6E31A /* yoml.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = yoml.h; path = yoml/yoml.h; sourceTree = "<group>"; };
 		10F4180219C2D32100B6E31A /* yoml-parser.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "yoml-parser.h"; path = "yoml/yoml-parser.h"; sourceTree = "<group>"; };
-		10F4180419CA75C500B6E31A /* config.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = config.c; sourceTree = "<group>"; };
+		10F4180419CA75C500B6E31A /* configurator.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = configurator.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -458,6 +460,7 @@
 		1079239F19A3215F00C52AD6 /* h2o */ = {
 			isa = PBXGroup;
 			children = (
+				105534D71A3C785000627ECB /* configurator.h */,
 				107923A019A3215F00C52AD6 /* http1.h */,
 				10D0905619F102DA0043D458 /* http1client.h */,
 				107923A119A3215F00C52AD6 /* http2.h */,
@@ -487,7 +490,7 @@
 			children = (
 				101B670B19ADD3380084A351 /* access_log.c */,
 				107923AE19A3217300C52AD6 /* chunked.c */,
-				10F4180419CA75C500B6E31A /* config.c */,
+				10F4180419CA75C500B6E31A /* configurator.c */,
 				107923B919A3217300C52AD6 /* context.c */,
 				107923AF19A3217300C52AD6 /* file.c */,
 				107923B019A3217300C52AD6 /* headers.c */,
@@ -601,6 +604,7 @@
 				10D0904319F0BA780043D458 /* linklist.h in Headers */,
 				10EC2A361A0B4D370083514F /* socketpool.h in Headers */,
 				1079236A19A3210E00C52AD6 /* khash.h in Headers */,
+				105534D81A3C791B00627ECB /* configurator.h in Headers */,
 				107923A619A3215F00C52AD6 /* http2.h in Headers */,
 				107923A719A3215F00C52AD6 /* token.h in Headers */,
 				107923A919A3215F00C52AD6 /* h2o.h in Headers */,
@@ -798,7 +802,7 @@
 				10EC2A381A0B4DC70083514F /* socketpool.c in Sources */,
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
 				1065E6F919BEBAC600686E72 /* timeout.c in Sources */,
-				10F4180519CA75C500B6E31A /* config.c in Sources */,
+				10F4180519CA75C500B6E31A /* configurator.c in Sources */,
 				1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */,
 				101B670C19ADD3380084A351 /* access_log.c in Sources */,
 				107923C419A3217300C52AD6 /* headers.c in Sources */,

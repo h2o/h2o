@@ -37,6 +37,7 @@
 #include <openssl/err.h>
 #include "yoml-parser.h"
 #include "h2o.h"
+#include "h2o/configurator.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 

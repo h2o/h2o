@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "h2o.h"
+#include "h2o/configurator.h"
 #include "h2o/http1client.h"
 #include "h2o/socketpool.h"
 

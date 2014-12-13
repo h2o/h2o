@@ -27,6 +27,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "h2o.h"
+#include "h2o/configurator.h"
 
 #define MAX_BUF_SIZE 65000
 

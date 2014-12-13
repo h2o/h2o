@@ -28,6 +28,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include "h2o.h"
+#include "h2o/configurator.h"
 
 #define LOG_ALLOCA_SIZE 4096
 
