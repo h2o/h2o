@@ -36,10 +36,6 @@ extern "C" {
 
 #define H2O_STRLIT(s) (s), sizeof(s) - 1
 
-/* based on http://groups.google.com/group/comp.std.c/browse_thread/thread/77ee8c8f92e4a3fb/346fc464319b1ee5 */
-#define H2O_NARG(...) H2O__NARG(__VA_ARGS__, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1)
-#define H2O__NARG(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, N, ...) N
-
 #define H2O_TIMESTR_RFC1123_LEN (sizeof("Sun, 06 Nov 1994 08:49:37 GMT") - 1)
 #define H2O_TIMESTR_LOG_LEN (sizeof("29/Aug/2014:15:34:38 +0900") - 1)
 
@@ -114,8 +110,8 @@ h2o_iovec_t h2o_htmlescape(h2o_mempool_t *pool, const char *src, size_t len);
 /**
  * concatenates a list of iovecs (with NUL termination)
  */
-#define h2o_concat(pool, ...) h2o__concat(pool, H2O_NARG(__VA_ARGS__), __VA_ARGS__)
-h2o_iovec_t h2o__concat(h2o_mempool_t *pool, size_t n, ...);
+#define h2o_concat(pool, ...) h2o_concat_list(pool, (h2o_iovec_t[]){ __VA_ARGS__ }, sizeof((h2o_iovec_t[]){ __VA_ARGS__ }) / sizeof(h2o_iovec_t))
+h2o_iovec_t h2o_concat_list(h2o_mempool_t *pool, h2o_iovec_t *list, size_t count);
 
 int h2o__lcstris_core(const char *target, const char *test, size_t test_len);
 

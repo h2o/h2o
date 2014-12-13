@@ -19,7 +19,6 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -553,19 +552,15 @@ h2o_iovec_t h2o_htmlescape(h2o_mempool_t *pool, const char *src, size_t len)
     return h2o_iovec_init(src, len);
 }
 
-h2o_iovec_t h2o__concat(h2o_mempool_t *pool, size_t n, ...)
+h2o_iovec_t h2o_concat_list(h2o_mempool_t *pool, h2o_iovec_t *list, size_t count)
 {
     h2o_iovec_t ret = { NULL, 0 };
-    va_list args;
     size_t i;
 
     /* calc the length */
-    va_start(args, n);
-    for (i = 0; i != n; ++i) {
-        h2o_iovec_t v = va_arg(args, h2o_iovec_t);
-        ret.len += v.len;
+    for (i = 0; i != count; ++i) {
+        ret.len += list[i].len;
     }
-    va_end(args);
 
     /* allocate memory */
     if (pool != NULL)
@@ -575,13 +570,10 @@ h2o_iovec_t h2o__concat(h2o_mempool_t *pool, size_t n, ...)
 
     /* concatenate */
     ret.len = 0;
-    va_start(args, n);
-    for (i = 0; i != n; ++i) {
-        h2o_iovec_t v = va_arg(args, h2o_iovec_t);
-        memcpy(ret.base + ret.len, v.base, v.len);
-        ret.len += v.len;
+    for (i = 0; i != count; ++i) {
+        memcpy(ret.base + ret.len, list[i].base, list[i].len);
+        ret.len += list[i].len;
     }
-    va_end(args);
     ret.base[ret.len] = '\0';
 
     return ret;
