@@ -168,10 +168,18 @@ static void test_htmlescape(void)
     h2o_mempool_clear(&pool);
 }
 
+static void test_narg(void)
+{
+    ok(H2O_NARG(a) == 1);
+    ok(H2O_NARG(a, b, c, d, e) == 5);
+    ok(H2O_NARG(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t) == 20);
+}
+
 void test_lib__string_c(void)
 {
     subtest("decode_base64", test_decode_base64);
     subtest("normalize_path", test_normalize_path);
     subtest("parse_url", test_parse_url);
     subtest("htmlescape", test_htmlescape);
+    subtest("narg", test_narg);
 }
