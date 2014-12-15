@@ -58,7 +58,7 @@ void h2o_regexp_destroy(h2o_regexp_t *re)
     free(re);
 }
 
-ssize_t h2o_regexp_exec(h2o_regexp_t *re, h2o_iovec_t str, h2o_regexp_match_t *matches, size_t match_size)
+ssize_t h2o_regexp_exec(h2o_regexp_t *re, h2o_iovec_t str, h2o_iovec_t *matches, size_t match_size)
 {
     int *ovector = alloca(sizeof(int) * 3 * match_size), rc;
     size_t i, nmatch;
@@ -80,8 +80,8 @@ ssize_t h2o_regexp_exec(h2o_regexp_t *re, h2o_iovec_t str, h2o_regexp_match_t *m
     /* save the results */
     nmatch = rc != 0 ? (size_t)rc : match_size;
     for (i = 0; i != nmatch; ++i) {
-        matches[i].first = ovector[i * 2];
-        matches[i].last = ovector[i * 2 + 1];
+        matches[i].base = str.base + ovector[i * 2];
+        matches[i].len = ovector[i * 2 + 1] - ovector[i * 2];
     }
     return (ssize_t)nmatch;
 }

@@ -32,13 +32,8 @@ enum {
 
 typedef struct st_h2o_regexp_t h2o_regexp_t;
 
-typedef struct st_h2o_regexp_match_t {
-    size_t first;
-    size_t last;
-} h2o_regexp_match_t;
-
 h2o_regexp_t *h2o_regexp_compile(h2o_iovec_t pattern, int flags, const char **err, size_t *err_offset);
 void h2o_regexp_destroy(h2o_regexp_t *re);
-ssize_t h2o_regexp_exec(h2o_regexp_t *re, h2o_iovec_t str, h2o_regexp_match_t *matches, size_t match_size);
+ssize_t h2o_regexp_exec(h2o_regexp_t *re, h2o_iovec_t str, h2o_iovec_t *matches, size_t match_size);
 
 #endif

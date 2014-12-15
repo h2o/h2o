@@ -27,7 +27,7 @@ void test_lib__regexp_c()
     h2o_regexp_t *re;
     const char *errstr;
     size_t erroffset;
-    h2o_regexp_match_t matches[2];
+    h2o_iovec_t matches[2];
     ssize_t nmatches;
 
     re = h2o_regexp_compile(h2o_iovec_init(H2O_STRLIT("bcd")), 0, &errstr, &erroffset);
@@ -35,8 +35,7 @@ void test_lib__regexp_c()
 
     nmatches = h2o_regexp_exec(re, h2o_iovec_init(H2O_STRLIT("abcde")), matches, sizeof(matches) / sizeof(matches[0]));
     ok(nmatches == 1);
-    ok(matches[0].first == 1);
-    ok(matches[0].last == 4);
+    ok(h2o_memis(matches[0].base, matches[0].len, H2O_STRLIT("bcd")));
 
     nmatches = h2o_regexp_exec(re, h2o_iovec_init(H2O_STRLIT("bce")), matches, sizeof(matches) / sizeof(matches[0]));
     ok(nmatches == -1);
