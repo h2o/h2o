@@ -19,40 +19,26 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__t__test_h
-#define h2o__t__test_h
+#ifndef h2o__regexp_h
+#define h2o__regexp_h
 
-#include "picotest.h"
-#include "h2o.h"
+#include "h2o/memory.h"
 
-typedef struct st_h2o_loopback_conn_t {
-    h2o_conn_t super;
-    /**
-     * the response
-     */
-    h2o_buffer_t *body;
-    /* internal structure */
-    h2o_ostream_t _ostr_final;
-    int _is_complete;
-    /**
-     * the HTTP request / response (intentionally placed at the last, since it is a large structure and has it's own ctor)
-     */
-    h2o_req_t req;
-} h2o_loopback_conn_t;
+enum {
+    H2O_REGEXP_FLAG_CASELESS = 0x1,
+    H2O_REGEXP_FLAG_MULTILINE = 0x2,
+    H2O_REGEXP_FLAG_DOTALL = 0x4
+};
 
-h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx);
-void h2o_loopback_destroy(h2o_loopback_conn_t *conn);
-void h2o_loopback_run_loop(h2o_loopback_conn_t *conn);
+typedef struct st_h2o_regexp_t h2o_regexp_t;
 
-extern h2o_loop_t *test_loop;
+typedef struct st_h2o_regexp_match_t {
+    size_t first;
+    size_t last;
+} h2o_regexp_match_t;
 
-char *sha1sum(const void *src, size_t len);
-
-void test_lib__string_c(void);
-void test_lib__regexp_c(void);
-void test_lib__http2__hpack(void);
-void test_lib__file_c(void);
-void test_lib__mimemap_c(void);
-void test_lib__proxy_c(void);
+h2o_regexp_t *h2o_regexp_compile(h2o_iovec_t pattern, int flags, const char **err, size_t *err_offset);
+void h2o_regexp_destroy(h2o_regexp_t *re);
+ssize_t h2o_regexp_exec(h2o_regexp_t *re, h2o_iovec_t str, h2o_regexp_match_t *matches, size_t match_size);
 
 #endif

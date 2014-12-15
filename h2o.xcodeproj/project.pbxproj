@@ -19,6 +19,9 @@
 		105534DB1A3C7A5400627ECB /* access_log.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534DA1A3C7A5400627ECB /* access_log.c */; };
 		105534DD1A3C7AA900627ECB /* file.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534DC1A3C7AA900627ECB /* file.c */; };
 		105534DF1A3C7B9800627ECB /* proxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534DE1A3C7B9800627ECB /* proxy.c */; };
+		105534E51A3F349E00627ECB /* regexp.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534E41A3F349E00627ECB /* regexp.c */; };
+		105534E61A3F39C600627ECB /* regexp.h in Headers */ = {isa = PBXBuildFile; fileRef = 105534E31A3F348300627ECB /* regexp.h */; };
+		105534E81A3F3F4A00627ECB /* regexp.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534E71A3F3F4A00627ECB /* regexp.c */; };
 		1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923C119A3217300C52AD6 /* websocket.c */; };
 		1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923A319A3215F00C52AD6 /* websocket.h */; };
 		1065E6F919BEBAC600686E72 /* timeout.c in Sources */ = {isa = PBXBuildFile; fileRef = 1065E6F819BEBAC600686E72 /* timeout.c */; };
@@ -198,6 +201,9 @@
 		105534DA1A3C7A5400627ECB /* access_log.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = access_log.c; sourceTree = "<group>"; };
 		105534DC1A3C7AA900627ECB /* file.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = file.c; sourceTree = "<group>"; };
 		105534DE1A3C7B9800627ECB /* proxy.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = proxy.c; sourceTree = "<group>"; };
+		105534E31A3F348300627ECB /* regexp.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = regexp.h; sourceTree = "<group>"; };
+		105534E41A3F349E00627ECB /* regexp.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = regexp.c; sourceTree = "<group>"; };
+		105534E71A3F3F4A00627ECB /* regexp.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = regexp.c; sourceTree = "<group>"; };
 		1065E6EF19B8C64200686E72 /* evloop.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = evloop.c.h; sourceTree = "<group>"; };
 		1065E6F419B996B400686E72 /* select.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = select.c.h; sourceTree = "<group>"; };
 		1065E6F619B99E6D00686E72 /* kqueue.c.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = kqueue.c.h; sourceTree = "<group>"; };
@@ -245,13 +251,13 @@
 		10D0903D19F0A8190043D458 /* socket.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = socket.h; sourceTree = "<group>"; };
 		10D0904019F0B9CD0043D458 /* timeout.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = timeout.h; sourceTree = "<group>"; };
 		10D0904219F0BA780043D458 /* linklist.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = linklist.h; sourceTree = "<group>"; };
-		10D0905119F0CA9C0043D458 /* examples-simple copy */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; name = "examples-simple copy"; path = "examples-socket-server"; sourceTree = BUILT_PRODUCTS_DIR; };
+		10D0905119F0CA9C0043D458 /* examples-socket-server */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "examples-socket-server"; sourceTree = BUILT_PRODUCTS_DIR; };
 		10D0905219F0CB130043D458 /* socket-client.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "socket-client.c"; sourceTree = "<group>"; };
 		10D0905419F102C70043D458 /* http1client.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http1client.c; sourceTree = "<group>"; };
 		10D0905619F102DA0043D458 /* http1client.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = http1client.h; sourceTree = "<group>"; };
 		10D0905819F22FA10043D458 /* string_.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = string_.h; sourceTree = "<group>"; };
 		10D0905A19F230280043D458 /* string.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = string.c; sourceTree = "<group>"; };
-		10D0906919F38B2E0043D458 /* examples-socket-client copy */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; name = "examples-socket-client copy"; path = "examples-http1client"; sourceTree = BUILT_PRODUCTS_DIR; };
+		10D0906919F38B2E0043D458 /* examples-http1client */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "examples-http1client"; sourceTree = BUILT_PRODUCTS_DIR; };
 		10D0906A19F38B850043D458 /* http1client.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http1client.c; sourceTree = "<group>"; };
 		10D0906E19F494CC0043D458 /* test.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = test.c; sourceTree = "<group>"; };
 		10D0906F19F494CC0043D458 /* test.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = test.h; sourceTree = "<group>"; };
@@ -354,6 +360,7 @@
 				105534C21A3B917000627ECB /* mimemap.c */,
 				105534C81A3BB41C00627ECB /* proxy.c */,
 				105534C61A3BB29100627ECB /* string.c */,
+				105534E71A3F3F4A00627ECB /* regexp.c */,
 			);
 			path = lib;
 			sourceTree = "<group>";
@@ -430,8 +437,8 @@
 				1079240D19A3247A00C52AD6 /* websocket */,
 				1079243519A3260E00C52AD6 /* unittest */,
 				10F417D319C1907B00B6E31A /* h2o */,
-				10D0905119F0CA9C0043D458 /* examples-simple copy */,
-				10D0906919F38B2E0043D458 /* examples-socket-client copy */,
+				10D0905119F0CA9C0043D458 /* examples-socket-server */,
+				10D0906919F38B2E0043D458 /* examples-http1client */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -482,6 +489,7 @@
 				107923A119A3215F00C52AD6 /* http2.h */,
 				10D0904219F0BA780043D458 /* linklist.h */,
 				10D0903919F0A51C0043D458 /* memory.h */,
+				105534E31A3F348300627ECB /* regexp.h */,
 				10D0903F19F0B90A0043D458 /* socket */,
 				10D0903D19F0A8190043D458 /* socket.h */,
 				10EC2A351A0B4D370083514F /* socketpool.h */,
@@ -517,6 +525,7 @@
 				107923BA19A3217300C52AD6 /* memory.c */,
 				107923BB19A3217300C52AD6 /* mimemap.c */,
 				10D0907219F633B00043D458 /* proxy.c */,
+				105534E41A3F349E00627ECB /* regexp.c */,
 				107923BC19A3217300C52AD6 /* request.c */,
 				107923BD19A3217300C52AD6 /* rproxy.c */,
 				101788B119B561AA0084C6D8 /* socket.c */,
@@ -634,6 +643,7 @@
 				1079239719A3210E00C52AD6 /* picohttpparser.h in Headers */,
 				1065E70C19BF664300686E72 /* evloop.h in Headers */,
 				107923C819A3217300C52AD6 /* hpack_huffman_table.h in Headers */,
+				105534E61A3F39C600627ECB /* regexp.h in Headers */,
 				10D0903E19F0A8190043D458 /* socket.h in Headers */,
 				10F4180119C2D31600B6E31A /* yoml.h in Headers */,
 				1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */,
@@ -730,7 +740,7 @@
 			);
 			name = "examples-socket-client";
 			productName = simple;
-			productReference = 10D0905119F0CA9C0043D458 /* examples-simple copy */;
+			productReference = 10D0905119F0CA9C0043D458 /* examples-socket-server */;
 			productType = "com.apple.product-type.tool";
 		};
 		10D0905C19F38B2E0043D458 /* examples-http1client */ = {
@@ -748,7 +758,7 @@
 			);
 			name = "examples-http1client";
 			productName = simple;
-			productReference = 10D0906919F38B2E0043D458 /* examples-socket-client copy */;
+			productReference = 10D0906919F38B2E0043D458 /* examples-http1client */;
 			productType = "com.apple.product-type.tool";
 		};
 		10F417C619C1907B00B6E31A /* server */ = {
@@ -816,6 +826,7 @@
 				107923C319A3217300C52AD6 /* file.c in Sources */,
 				107923CD19A3217300C52AD6 /* memory.c in Sources */,
 				107923CC19A3217300C52AD6 /* context.c in Sources */,
+				105534E51A3F349E00627ECB /* regexp.c in Sources */,
 				107923C519A3217300C52AD6 /* http1.c in Sources */,
 				10EC2A381A0B4DC70083514F /* socketpool.c in Sources */,
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
@@ -873,6 +884,7 @@
 				1079244419A3265C00C52AD6 /* chunked.c in Sources */,
 				1079244619A3265C00C52AD6 /* headers.c in Sources */,
 				105534BE1A3B8F7700627ECB /* file.c in Sources */,
+				105534E81A3F3F4A00627ECB /* regexp.c in Sources */,
 				1079244719A3265C00C52AD6 /* http1.c in Sources */,
 				1079244819A3265C00C52AD6 /* connection.c in Sources */,
 				1079244119A3264300C52AD6 /* picohttpparser.c in Sources */,
@@ -1006,6 +1018,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lpcre",
 				);
 				PRODUCT_NAME = unittest;
 			};
@@ -1061,6 +1074,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lpcre",
 				);
 				PRODUCT_NAME = websocket;
 			};
@@ -1133,6 +1147,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lpcre",
 				);
 				PRODUCT_NAME = unittest;
 			};
@@ -1156,6 +1171,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lpcre",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -1180,6 +1196,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lpcre",
 				);
 				PRODUCT_NAME = websocket;
 			};
@@ -1310,6 +1327,7 @@
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
+					"-lpcre",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -1332,6 +1350,7 @@
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
+					"-lpcre",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -1359,6 +1378,7 @@
 					"-lnettle",
 					"-lssl",
 					"-lcrypto",
+					"-lpcre",
 				);
 				PRODUCT_NAME = websocket;
 			};
@@ -1382,6 +1402,7 @@
 					"-lnettle",
 					"-lssl",
 					"-lcrypto",
+					"-lpcre",
 				);
 				PRODUCT_NAME = websocket;
 			};
@@ -1409,6 +1430,7 @@
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
+					"-lpcre",
 				);
 				PRODUCT_NAME = unittest;
 			};
@@ -1435,6 +1457,7 @@
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
+					"-lpcre",
 				);
 				PRODUCT_NAME = unittest;
 			};
@@ -1461,6 +1484,7 @@
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
+					"-lpcre",
 				);
 				PRODUCT_NAME = "examples-socket-server";
 			};
@@ -1488,6 +1512,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lpcre",
 				);
 				PRODUCT_NAME = "examples-socket-server";
 			};
@@ -1510,6 +1535,7 @@
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
+					"-lpcre",
 				);
 				PRODUCT_NAME = "examples-socket-server";
 			};
@@ -1533,6 +1559,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lpcre",
 				);
 				PRODUCT_NAME = "examples-socket-server";
 			};
@@ -1559,6 +1586,7 @@
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
+					"-lpcre",
 				);
 				PRODUCT_NAME = "examples-http1client";
 			};
@@ -1586,6 +1614,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lpcre",
 				);
 				PRODUCT_NAME = "examples-http1client";
 			};
@@ -1608,6 +1637,7 @@
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
+					"-lpcre",
 				);
 				PRODUCT_NAME = "examples-http1client";
 			};
@@ -1631,6 +1661,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lpcre",
 				);
 				PRODUCT_NAME = "examples-http1client";
 			};
@@ -1659,6 +1690,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-lyaml",
+					"-lpcre",
 				);
 				PRODUCT_NAME = h2o;
 			};
@@ -1688,6 +1720,7 @@
 					"-lcrypto",
 					"-luv",
 					"-lyaml",
+					"-lpcre",
 				);
 				PRODUCT_NAME = h2o;
 			};
@@ -1712,6 +1745,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-lyaml",
+					"-lpcre",
 				);
 				PRODUCT_NAME = h2o;
 			};
@@ -1737,6 +1771,7 @@
 					"-lcrypto",
 					"-luv",
 					"-lyaml",
+					"-lpcre",
 				);
 				PRODUCT_NAME = h2o;
 			};

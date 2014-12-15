@@ -124,6 +124,7 @@ int main(int argc, char **argv)
 {
     { /* library tests */
         subtest("lib/string.c", test_lib__string_c);
+        subtest("lib/regexp.c", test_lib__regexp_c);
         subtest("lib/http2/hpack.c", test_lib__http2__hpack);
         subtest("lib/mimemap.c", test_lib__mimemap_c);
     }
