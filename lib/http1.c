@@ -23,6 +23,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "picohttpparser.h"
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
@@ -192,6 +193,51 @@ static int create_entity_reader(h2o_http1_conn_t *conn, const struct phr_header 
     return -1;
 }
 
+static ssize_t init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len, h2o_iovec_t *connection, h2o_iovec_t *host, h2o_iovec_t *upgrade, h2o_iovec_t *expect)
+{
+    ssize_t entity_header_index = -1;
+
+    assert(headers->size == 0);
+
+    /* setup */
+    if (len != 0) {
+        size_t i;
+        h2o_vector_reserve(pool, (h2o_vector_t*)headers, sizeof(h2o_header_t), len);
+        for (i = 0; i != len; ++i) {
+            const h2o_token_t *name_token = h2o_lookup_token(src[i].name, src[i].name_len);
+            if (name_token != NULL) {
+                if (name_token->is_init_header_special) {
+                    if (name_token == H2O_TOKEN_HOST) {
+                        host->base = (char*)src[i].value;
+                        host->len = src[i].value_len;
+                    } else if (name_token == H2O_TOKEN_CONTENT_LENGTH) {
+                        if (entity_header_index == -1)
+                            entity_header_index = i;
+                    } else if (name_token == H2O_TOKEN_TRANSFER_ENCODING) {
+                        entity_header_index = i;
+                    } else if (name_token == H2O_TOKEN_EXPECT) {
+                        expect->base = (char*)src[i].value;
+                        expect->len = src[i].value_len;
+                    } else if (name_token == H2O_TOKEN_UPGRADE) {
+                        upgrade->base = (char*)src[i].value;
+                        upgrade->len = src[i].value_len;
+                    } else {
+                        assert(!"logic flaw");
+                    }
+                } else {
+                    h2o_add_header(pool, headers, name_token, src[i].value, src[i].value_len);
+                    if (name_token == H2O_TOKEN_CONNECTION)
+                        *connection = headers->entries[headers->size - 1].value;
+                }
+            } else {
+                h2o_add_header_by_str(pool, headers, src[i].name, src[i].name_len, 0, src[i].value, src[i].value_len);
+            }
+        }
+    }
+
+    return entity_header_index;
+}
+
 static ssize_t fixup_request(h2o_http1_conn_t *conn, struct phr_header *headers, size_t num_headers, int minor_version, h2o_iovec_t *expect)
 {
     ssize_t entity_header_index;
@@ -204,7 +250,7 @@ static ssize_t fixup_request(h2o_http1_conn_t *conn, struct phr_header *headers,
     conn->req.version = 0x100 | minor_version;
 
     /* init headers */
-    entity_header_index = h2o_init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade, expect);
+    entity_header_index = init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade, expect);
 
     /* copy the values to pool, since the buffer pointed by the headers may get realloced */
     if (entity_header_index != -1) {

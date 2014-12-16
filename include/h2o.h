@@ -36,7 +36,6 @@ extern "C" {
 #include <time.h>
 #include <unistd.h>
 #include <openssl/ssl.h>
-#include "picohttpparser.h"
 #include "h2o/linklist.h"
 #include "h2o/http1client.h"
 #include "h2o/memory.h"
@@ -413,11 +412,6 @@ int h2o_iovec_is_token(const h2o_iovec_t *buf);
 
 /* headers */
 
-/**
- * fills in the headers list while returning references to special headers
- * @return index of content-length or content-encoding header within src (or -1 if not found)
- */
-ssize_t h2o_init_headers(h2o_mempool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len, h2o_iovec_t *connection, h2o_iovec_t *host, h2o_iovec_t *upgrade, h2o_iovec_t *expect);
 /**
  * searches for a header of given name (fast, by comparing tokens)
  * @param headers header list
