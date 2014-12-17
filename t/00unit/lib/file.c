@@ -34,11 +34,13 @@ void test_lib__file_c()
 {
     h2o_globalconf_t globalconf;
     h2o_hostconf_t *hostconf;
+    h2o_pathconf_t *pathconf;
     h2o_context_t ctx;
 
     h2o_config_init(&globalconf);
     hostconf = h2o_config_register_host(&globalconf, "default");
-    h2o_file_register(hostconf, "/", "t/00unit/assets", NULL, NULL, 0);
+    pathconf = h2o_config_register_path(hostconf, "/");
+    h2o_file_register(pathconf, "t/00unit/assets", NULL, NULL, 0);
 
     h2o_context_init(&ctx, test_loop, &globalconf);
 

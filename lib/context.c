@@ -24,13 +24,13 @@
 #include <sys/time.h>
 #include "h2o.h"
 
-static void on_context_init(h2o_context_t *ctx, h2o_hostconf_t *hostconf)
+static void on_context_init(h2o_context_t *ctx, h2o_pathconf_t *pathconf)
 {
 #define DOIT(type, list) \
     do { \
         size_t i; \
-        for (i = 0; i != hostconf->list.size; ++i) { \
-            type *o = hostconf->list.entries[i]; \
+        for (i = 0; i != pathconf->list.size; ++i) { \
+            type *o = pathconf->list.entries[i]; \
             if (o->on_context_init != NULL) \
                 ctx->_module_configs[o->_config_slot] = o->on_context_init(o, ctx); \
         } \
@@ -43,13 +43,13 @@ static void on_context_init(h2o_context_t *ctx, h2o_hostconf_t *hostconf)
 #undef DOIT
 }
 
-static void on_context_dispose(h2o_context_t *ctx, h2o_hostconf_t *hostconf)
+static void on_context_dispose(h2o_context_t *ctx, h2o_pathconf_t *pathconf)
 {
 #define DOIT(type, list) \
     do { \
         size_t i; \
-        for (i = 0; i != hostconf->list.size; ++i) { \
-            type *o = hostconf->list.entries[i]; \
+        for (i = 0; i != pathconf->list.size; ++i) { \
+            type *o = pathconf->list.entries[i]; \
             if (o->on_context_dispose != NULL) \
                 o->on_context_dispose(o, ctx); \
         } \
@@ -64,7 +64,7 @@ static void on_context_dispose(h2o_context_t *ctx, h2o_hostconf_t *hostconf)
 
 void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *config)
 {
-    size_t i;
+    size_t i, j;
 
     assert(config->hosts.size != 0);
 
@@ -78,18 +78,25 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     memset(ctx->_module_configs, 0, sizeof(*ctx->_module_configs) * config->_num_config_slots);
     for (i = 0; i != config->hosts.size; ++i) {
         h2o_hostconf_t *hostconf = config->hosts.entries + i;
-        on_context_init(ctx, hostconf);
+        for (j = 0; j != hostconf->paths.size; ++j) {
+            h2o_pathconf_t *pathconf = hostconf->paths.entries + j;
+            on_context_init(ctx, pathconf);
+        }
+        on_context_init(ctx, &hostconf->fallback_path);
     }
 }
 
 void h2o_context_dispose(h2o_context_t *ctx)
 {
     h2o_globalconf_t *config = ctx->globalconf;
-    size_t i;
+    size_t i, j;
 
     for (i = 0; i != config->hosts.size; ++i) {
         h2o_hostconf_t *hostconf = config->hosts.entries + i;
-        on_context_dispose(ctx, hostconf);
+        for (j = 0; j != hostconf->paths.size; ++j) {
+            h2o_pathconf_t *pathconf = hostconf->paths.entries + i;
+            on_context_dispose(ctx, pathconf);
+        }
     }
     free(ctx->_module_configs);
     h2o_timeout_dispose(ctx->loop, &ctx->zero_timeout);
@@ -101,12 +108,12 @@ void h2o_context_dispose(h2o_context_t *ctx)
 #endif
 }
 
-h2o_handler_t *h2o_create_handler(h2o_hostconf_t *conf, size_t sz)
+h2o_handler_t *h2o_create_handler(h2o_pathconf_t *conf, size_t sz)
 {
     h2o_handler_t *handler = h2o_malloc(sz);
 
     memset(handler, 0, sz);
-    handler->_config_slot = conf->global->_num_config_slots++;
+    handler->_config_slot = conf->host->global->_num_config_slots++;
 
     h2o_vector_reserve(NULL, (void*)&conf->handlers, sizeof(conf->handlers.entries[0]), conf->handlers.size + 1);
     conf->handlers.entries[conf->handlers.size++] = handler;
@@ -114,12 +121,12 @@ h2o_handler_t *h2o_create_handler(h2o_hostconf_t *conf, size_t sz)
     return handler;
 }
 
-h2o_filter_t *h2o_create_filter(h2o_hostconf_t *conf, size_t sz)
+h2o_filter_t *h2o_create_filter(h2o_pathconf_t *conf, size_t sz)
 {
     h2o_filter_t *filter = h2o_malloc(sz);
 
     memset(filter, 0, sz);
-    filter->_config_slot = conf->global->_num_config_slots++;
+    filter->_config_slot = conf->host->global->_num_config_slots++;
 
     h2o_vector_reserve(NULL, (void*)&conf->filters, sizeof(conf->filters.entries[0]), conf->filters.size + 1);
     conf->filters.entries[conf->filters.size++] = filter;
@@ -127,12 +134,12 @@ h2o_filter_t *h2o_create_filter(h2o_hostconf_t *conf, size_t sz)
     return filter;
 }
 
-h2o_logger_t *h2o_create_logger(h2o_hostconf_t *conf, size_t sz)
+h2o_logger_t *h2o_create_logger(h2o_pathconf_t *conf, size_t sz)
 {
     h2o_logger_t *logger = h2o_malloc(sz);
 
     memset(logger, 0, sz);
-    logger->_config_slot = conf->global->_num_config_slots++;
+    logger->_config_slot = conf->host->global->_num_config_slots++;
 
     h2o_vector_reserve(NULL, (void*)&conf->loggers, sizeof(conf->loggers.entries[0]), conf->loggers.size + 1);
     conf->loggers.entries[conf->loggers.size++] = logger;

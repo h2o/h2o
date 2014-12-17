@@ -500,7 +500,7 @@ static int on_config_listen_enter(h2o_configurator_t *_configurator, h2o_configu
     struct listener_configurator_t *configurator = (void*)_configurator;
 
     /* bail-out unless at host-level */
-    if (ctx->hostconf == NULL || ctx->path != NULL)
+    if (ctx->hostconf == NULL || ctx->pathconf != NULL)
         return 0;
 
     configurator->num_host_listeners = 0;
@@ -512,7 +512,7 @@ static int on_config_listen_exit(h2o_configurator_t *_configurator, h2o_configur
     struct listener_configurator_t *configurator = (void*)_configurator;
 
     /* bail-out unless at host-level */
-    if (ctx->hostconf == NULL || ctx->path != NULL)
+    if (ctx->hostconf == NULL || ctx->pathconf != NULL)
         return 0;
 
     if (configurator->num_host_listeners == 0 && configurator->num_global_listeners == 0) {

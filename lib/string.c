@@ -44,6 +44,21 @@ h2o_iovec_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t slen)
     return ret;
 }
 
+
+h2o_iovec_t h2o_strdup_slashed(h2o_mempool_t *pool, const char *src, size_t len)
+{
+    h2o_iovec_t ret;
+
+    ret.len = len != SIZE_MAX ? len : strlen(src);
+    ret.base = pool != NULL ? h2o_mempool_alloc(pool, ret.len + 2) : h2o_malloc(ret.len + 2);
+    memcpy(ret.base, src, ret.len);
+    if (ret.len != 0 && ret.base[ret.len - 1] != '/')
+        ret.base[ret.len++] = '/';
+    ret.base[ret.len] = '\0';
+
+    return ret;
+}
+
 int h2o__lcstris_core(const char *target, const char *test, size_t test_len)
 {
     for (; test_len != 0; --test_len)

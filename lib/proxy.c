@@ -27,7 +27,7 @@
 
 struct rp_generator_t {
     h2o_generator_t super;
-    h2o_proxy_location_t *location;
+    h2o_proxy_location_t *upstream;
     h2o_req_t *src_req;
     h2o_http1client_t *client;
     struct {
@@ -40,7 +40,7 @@ struct rp_generator_t {
 
 struct rp_handler_t {
     h2o_handler_t super;
-    h2o_proxy_location_t location;
+    h2o_proxy_location_t upstream;
     h2o_socketpool_t *sockpool; /* non-NULL if config.use_keepalive == 1 */
     h2o_proxy_config_vars_t config;
 };
@@ -49,35 +49,35 @@ static int test_location_match(h2o_proxy_location_t *location, h2o_iovec_t schem
 {
     if (! h2o_memis(scheme.base, scheme.len, H2O_STRLIT("http")))
         return 0;
-    if (! h2o_lcstris(host.base, host.len, location->upstream.host.base, location->upstream.host.len))
+    if (! h2o_lcstris(host.base, host.len, location->host.base, location->host.len))
         return 0;
-    if (port != location->upstream.port)
+    if (port != location->port)
         return 0;
-    if (path.len < location->upstream.path.len)
+    if (path.len < location->path.len)
         return 0;
-    if (memcmp(path.base, location->upstream.path.base, location->upstream.path.len) != 0)
+    if (memcmp(path.base, location->path.base, location->path.len) != 0)
         return 0;
     return 1;
 }
 
-static h2o_iovec_t rewrite_location(h2o_mempool_t *pool, const char *location, size_t location_len, h2o_proxy_location_t *conf, h2o_iovec_t req_scheme, h2o_iovec_t req_authority)
+static h2o_iovec_t rewrite_location(h2o_mempool_t *pool, const char *location, size_t location_len, h2o_proxy_location_t *upstream, h2o_iovec_t req_scheme, h2o_iovec_t req_authority, h2o_iovec_t req_basepath)
 {
     h2o_iovec_t loc_scheme, loc_host, loc_path;
     uint16_t loc_port;
 
     if (h2o_parse_url(location, location_len, &loc_scheme, &loc_host, &loc_port, &loc_path) != 0
-        || ! test_location_match(conf, loc_scheme, loc_host, loc_port, loc_path))
+        || ! test_location_match(upstream, loc_scheme, loc_host, loc_port, loc_path))
         return h2o_iovec_init(location, location_len);
 
     return h2o_concat(pool,
         req_scheme,
         h2o_iovec_init(H2O_STRLIT("://")),
         req_authority,
-        conf->virtual_path,
-        h2o_iovec_init(loc_path.base + conf->upstream.path.len, loc_path.len - conf->upstream.path.len));
+        req_basepath,
+        h2o_iovec_init(loc_path.base + upstream->path.len, loc_path.len - upstream->path.len));
 }
 
-static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *location, int keepalive)
+static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream, int keepalive)
 {
     h2o_iovec_t buf;
     size_t bufsz;
@@ -87,8 +87,8 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *location,
     /* calc buffer length */
     bufsz = sizeof("  HTTP/1.1\r\nhost: :65535\r\nconnection: keep-alive\r\ncontent-length: 18446744073709551615\r\n\r\n")
         + req->method.len
-        + req->path.len - location->virtual_path.len + location->upstream.path.len
-        + location->upstream.host.len;
+        + req->path.len - req->pathconf->path.len + upstream->path.len
+        + upstream->host.len;
     for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h)
         bufsz += h->name->len + h->value.len + 4;
 
@@ -99,13 +99,13 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *location,
     p = buf.base;
     p += sprintf(p, "%.*s %.*s%.*s HTTP/1.1\r\nconnection: %s\r\n",
         (int)req->method.len, req->method.base,
-        (int)location->upstream.path.len, location->upstream.path.base,
-        (int)(req->path.len - location->virtual_path.len), req->path.base + location->virtual_path.len,
+        (int)upstream->path.len, upstream->path.base,
+        (int)(req->path.len - req->pathconf->path.len), req->path.base + req->pathconf->path.len,
         keepalive ? "keep-alive" : "close");
-    if (location->upstream.port == 80)
-        p += sprintf(p, "host: %.*s\r\n", (int)location->upstream.host.len, location->upstream.host.base);
+    if (upstream->port == 80)
+        p += sprintf(p, "host: %.*s\r\n", (int)upstream->host.len, upstream->host.base);
     else
-        p += sprintf(p, "host: %.*s:%u\r\n", (int)location->upstream.host.len, location->upstream.host.base, (unsigned)location->upstream.port);
+        p += sprintf(p, "host: %.*s:%u\r\n", (int)upstream->host.len, upstream->host.base, (unsigned)upstream->port);
     if (req->entity.base != NULL) {
         p += sprintf(p, "content-length: %zu\r\n", req->entity.len);
     }
@@ -214,7 +214,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 }
                 goto Skip;
             } else if (token == H2O_TOKEN_LOCATION) {
-                value = rewrite_location(&self->src_req->pool, headers[i].value, headers[i].value_len, self->location, self->src_req->scheme, self->src_req->authority);
+                value = rewrite_location(&self->src_req->pool, headers[i].value, headers[i].value_len, self->upstream, self->src_req->scheme, self->src_req->authority, self->src_req->pathconf->path);
                 goto AddHeader;
             }
             /* default behaviour, transfer the header downstream */
@@ -267,15 +267,15 @@ static void on_generator_dispose(void *_self)
     h2o_buffer_dispose(&self->buf_sending);
 }
 
-static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_proxy_location_t *location, int keepalive)
+static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_proxy_location_t *upstream, int keepalive)
 {
     struct rp_generator_t *self = h2o_mempool_alloc_shared(&req->pool, sizeof(*self), on_generator_dispose);
 
     self->super.proceed = do_proceed;
     self->super.stop = do_close;
-    self->location = location;
+    self->upstream = upstream;
     self->src_req = req;
-    self->up_req.bufs[0] = build_request(req, location, keepalive);
+    self->up_req.bufs[0] = build_request(req, upstream, keepalive);
     self->up_req.bufs[1] = req->entity;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
@@ -284,23 +284,23 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_proxy_locat
     return self;
 }
 
-int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *location)
+int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *upstream)
 {
-    struct rp_generator_t *self = proxy_send_prepare(req, location, 0);
+    struct rp_generator_t *self = proxy_send_prepare(req, upstream, 0);
 
     self->client = h2o_http1client_connect(
         client_ctx, &req->pool,
-        h2o_strdup(&req->pool, location->upstream.host.base, location->upstream.host.len).base,
-        location->upstream.port,
+        h2o_strdup(&req->pool, upstream->host.base, upstream->host.len).base,
+        upstream->port,
         on_connect);
     self->client->data = self;
 
     return 0;
 }
 
-int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *location, h2o_socketpool_t *sockpool)
+int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *upstream, h2o_socketpool_t *sockpool)
 {
-    struct rp_generator_t *self = proxy_send_prepare(req, location, 1);
+    struct rp_generator_t *self = proxy_send_prepare(req, upstream, 1);
 
     self->client = h2o_http1client_connect_with_pool(client_ctx, &req->pool, sockpool, on_connect);
     self->client->data = self;
@@ -311,21 +311,12 @@ int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     struct rp_handler_t *self = (void*)_self;
-    h2o_http1client_ctx_t *client_ctx;
+    h2o_http1client_ctx_t *client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
 
-    /* prefix match */
-    if (self->location.virtual_path.len <= req->path.len
-        && memcmp(self->location.virtual_path.base, req->path.base, self->location.virtual_path.len) == 0) {
-        /* ok */
-    } else {
-        return -1;
-    }
-
-    client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
     if (self->sockpool != NULL)
-        return h2o_proxy_send_with_pool(req, client_ctx, &self->location, self->sockpool);
+        return h2o_proxy_send_with_pool(req, client_ctx, &self->upstream, self->sockpool);
     else
-        return h2o_proxy_send(req, client_ctx, &self->location);
+        return h2o_proxy_send(req, client_ctx, &self->upstream);
 }
 
 static void *on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
@@ -357,9 +348,8 @@ static void on_handler_dispose(h2o_handler_t *_self)
 {
     struct rp_handler_t *self = (void*)_self;
 
-    free(self->location.virtual_path.base);
-    free(self->location.upstream.host.base);
-    free(self->location.upstream.path.base);
+    free(self->upstream.host.base);
+    free(self->upstream.path.base);
     if (self->sockpool != NULL) {
         h2o_socketpool_dispose(self->sockpool);
         free(self->sockpool);
@@ -368,17 +358,16 @@ static void on_handler_dispose(h2o_handler_t *_self)
     free(self);
 }
 
-void h2o_proxy_register_reverse_proxy(h2o_hostconf_t *hostconf, const char *virtual_path, const char *host, uint16_t port, const char *real_path, h2o_proxy_config_vars_t *config)
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, const char *host, uint16_t port, const char *real_path, h2o_proxy_config_vars_t *config)
 {
-    struct rp_handler_t *self = (void*)h2o_create_handler(hostconf, sizeof(*self));
+    struct rp_handler_t *self = (void*)h2o_create_handler(pathconf, sizeof(*self));
     self->super.on_context_init = on_context_init;
     self->super.on_context_dispose = on_context_dispose;
     self->super.dispose = on_handler_dispose;
     self->super.on_req = on_req;
-    self->location.virtual_path = h2o_strdup(NULL, virtual_path, SIZE_MAX);
-    self->location.upstream.host = h2o_strdup(NULL, host, SIZE_MAX);
-    self->location.upstream.port = port;
-    self->location.upstream.path = h2o_strdup(NULL, real_path, SIZE_MAX);
+    self->upstream.host = h2o_strdup(NULL, host, SIZE_MAX);
+    self->upstream.port = port;
+    self->upstream.path = h2o_strdup(NULL, real_path, SIZE_MAX);
     if (config->use_keepalive) {
         self->sockpool = h2o_malloc(sizeof(*self->sockpool));
         h2o_socketpool_init(self->sockpool, host, port, SIZE_MAX /* FIXME */);

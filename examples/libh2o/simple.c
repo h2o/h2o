@@ -31,41 +31,41 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 
-static void register_handler(h2o_hostconf_t *hostconf, int (*on_req)(h2o_handler_t *, h2o_req_t *))
+static void register_handler(h2o_hostconf_t *hostconf, const char *path, int (*on_req)(h2o_handler_t *, h2o_req_t *))
 {
-    h2o_handler_t *handler = h2o_create_handler(hostconf, sizeof(*handler));
+    h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, path);
+    h2o_handler_t *handler = h2o_create_handler(pathconf, sizeof(*handler));
     handler->on_req = on_req;
 }
 
 static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
 {
-    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))
-        && h2o_memis(req->path.base, req->path.len, H2O_STRLIT("/chunked-test"))) {
-        static h2o_generator_t generator = { NULL, NULL };
-        h2o_iovec_t body = h2o_strdup(&req->pool, "hello world\n", SIZE_MAX);
-        req->res.status = 200;
-        req->res.reason = "OK";
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
-        h2o_start_response(req, &generator);
-        h2o_send(req, &body, 1, 1);
-        return 0;
-    }
+    static h2o_generator_t generator = { NULL, NULL };
 
-    return -1;
+    if (! h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
+        return -1;
+
+    h2o_iovec_t body = h2o_strdup(&req->pool, "hello world\n", SIZE_MAX);
+    req->res.status = 200;
+    req->res.reason = "OK";
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
+    h2o_start_response(req, &generator);
+    h2o_send(req, &body, 1, 1);
+
+    return 0;
 }
 
 static int reproxy_test(h2o_handler_t *self, h2o_req_t *req)
 {
-    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))
-        && h2o_memis(req->path.base, req->path.len, H2O_STRLIT("/reproxy-test"))) {
-        req->res.status = 200;
-        req->res.reason = "OK";
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT("http://example.com:81/bar"));
-        h2o_send_inline(req, H2O_STRLIT("you should never see this!\n"));
-        return 0;
-    }
+    if (! h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
+        return -1;
 
-    return -1;
+    req->res.status = 200;
+    req->res.reason = "OK";
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT("http://example.com:81/bar"));
+    h2o_send_inline(req, H2O_STRLIT("you should never see this!\n"));
+
+    return 0;
 }
 
 static int post_test(h2o_handler_t *self, h2o_req_t *req)
@@ -219,11 +219,14 @@ int main(int argc, char **argv)
 
     h2o_config_init(&config);
     hostconf = h2o_config_register_host(&config, "default");
-    register_handler(hostconf, post_test);
-    register_handler(hostconf, chunked_test);
-    register_handler(hostconf, reproxy_test);
-    h2o_file_register(hostconf, "/", "examples/doc_root", NULL, NULL, 0);
+    register_handler(hostconf, "/post-test", post_test);
+    register_handler(hostconf, "/chunked-test", chunked_test);
+    h2o_file_register(h2o_config_register_path(hostconf, "/"), "examples/doc_root", NULL, NULL, 0);
+
+#if 0 /* reproxy is not yet implemeneted */
+    register_handler(hostconf, "/reproxy-test", reproxy_test);
     h2o_reproxy_register(hostconf);
+#endif
 
 #if H2O_USE_LIBUV
     uv_loop_t loop;

@@ -39,7 +39,7 @@ enum {
 typedef struct h2o_configurator_context_t {
     h2o_globalconf_t *globalconf;
     h2o_hostconf_t *hostconf;
-    h2o_iovec_t *path;
+    h2o_pathconf_t *pathconf;
 } h2o_configurator_context_t;
 
 typedef int (*h2o_configurator_dispose_cb)(h2o_configurator_t *configurator);

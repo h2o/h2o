@@ -43,7 +43,6 @@ struct st_h2o_sendfile_generator_t {
 
 struct st_h2o_file_handler_t {
     h2o_handler_t super;
-    h2o_iovec_t virtual_path; /* has "/" appended at last */
     h2o_iovec_t real_path; /* has "/" appended at last */
     h2o_mimemap_t *mimemap;
     int flags;
@@ -248,9 +247,9 @@ static int redirect_to_dir(h2o_req_t *req, const char *path, size_t path_len)
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     h2o_file_handler_t *self = (void*)_self;
-    h2o_iovec_t vpath, mime_type;
+    h2o_iovec_t mime_type;
     char *rpath;
-    size_t rpath_len;
+    size_t rpath_len, req_path_prefix;
     struct st_h2o_sendfile_generator_t *generator = NULL;
     size_t if_modified_since_header_index, if_none_match_header_index;
     int is_dir;
@@ -258,28 +257,22 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     /* only accept GET (TODO accept HEAD as well) */
     if (! h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
         return -1;
-
-    /* prefix match */
-    if (req->path.len < self->virtual_path.len
-        || memcmp(req->path.base, self->virtual_path.base, self->virtual_path.len) != 0)
-        return -1;
-
-    /* normalize path */
-    vpath = h2o_normalize_path(&req->pool, req->path.base + self->virtual_path.len - 1, req->path.len - self->virtual_path.len + 1);
-    if (vpath.len > PATH_MAX)
+    /* do not handle non-normalized paths */
+    if (req->path_normalized.base == NULL)
         return -1;
 
     /* build path (still unterminated at the end of the block) */
+    req_path_prefix = req->pathconf->path.len;
     rpath = alloca(
         self->real_path.len
-        + (vpath.len - 1) /* exclude "/" at the head */
+        + (req->path_normalized.len - req_path_prefix)
         + self->max_index_file_len
         + 1);
     rpath_len = 0;
     memcpy(rpath + rpath_len, self->real_path.base, self->real_path.len);
     rpath_len += self->real_path.len;
-    memcpy(rpath + rpath_len, vpath.base + 1, vpath.len - 1);
-    rpath_len += vpath.len - 1;
+    memcpy(rpath + rpath_len, req->path_normalized.base + req_path_prefix, req->path_normalized.len - req_path_prefix);
+    rpath_len += req->path_normalized.len - req_path_prefix;
 
     /* build generator (as well as terminating the rpath and its length upon success) */
     if (rpath[rpath_len - 1] == '/') {
@@ -346,31 +339,13 @@ static void on_dispose(h2o_handler_t *_self)
     h2o_file_handler_t *self = (void*)_self;
     size_t i;
 
-    free(self->virtual_path.base);
     free(self->real_path.base);
     h2o_mempool_release_shared(self->mimemap);
     for (i = 0; self->index_files[i].base != NULL; ++i)
         free(self->index_files[i].base);
 }
 
-static h2o_iovec_t append_slash_and_dup(const char *path)
-{
-    char *buf;
-    size_t path_len = strlen(path);
-    int needs_slash = 0;
-
-    if (path_len == 0 || path[path_len - 1] != '/')
-        needs_slash = 1;
-    buf = h2o_malloc(path_len + 1 + needs_slash);
-    memcpy(buf, path, path_len);
-    if (needs_slash)
-        buf[path_len++] = '/';
-    buf[path_len] = '\0';
-
-    return h2o_iovec_init(buf, path_len);
-}
-
-h2o_file_handler_t *h2o_file_register(h2o_hostconf_t *hostconf, const char *virtual_path, const char *real_path, const char **index_files, h2o_mimemap_t *mimemap, int flags)
+h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real_path, const char **index_files, h2o_mimemap_t *mimemap, int flags)
 {
     h2o_file_handler_t *self;
     size_t i;
@@ -381,15 +356,14 @@ h2o_file_handler_t *h2o_file_register(h2o_hostconf_t *hostconf, const char *virt
     /* allocate memory */
     for (i = 0; index_files[i] != NULL; ++i)
         ;
-    self = (void*)h2o_create_handler(hostconf, offsetof(h2o_file_handler_t, index_files[0]) + sizeof(self->index_files[0]) * (i + 1));
+    self = (void*)h2o_create_handler(pathconf, offsetof(h2o_file_handler_t, index_files[0]) + sizeof(self->index_files[0]) * (i + 1));
 
     /* setup callbacks */
     self->super.dispose = on_dispose;
     self->super.on_req = on_req;
 
     /* setup attributes */
-    self->virtual_path = append_slash_and_dup(virtual_path);
-    self->real_path = append_slash_and_dup(real_path);
+    self->real_path = h2o_strdup_slashed(NULL, real_path, SIZE_MAX);
     if (mimemap != NULL) {
         h2o_mempool_addref_shared(mimemap);
         self->mimemap = mimemap;

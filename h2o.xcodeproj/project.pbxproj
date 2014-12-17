@@ -46,7 +46,6 @@
 		107923CD19A3217300C52AD6 /* memory.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BA19A3217300C52AD6 /* memory.c */; };
 		107923CE19A3217300C52AD6 /* mimemap.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BB19A3217300C52AD6 /* mimemap.c */; };
 		107923CF19A3217300C52AD6 /* request.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BC19A3217300C52AD6 /* request.c */; };
-		107923D019A3217300C52AD6 /* rproxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BD19A3217300C52AD6 /* rproxy.c */; };
 		107923D219A3217300C52AD6 /* token.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BF19A3217300C52AD6 /* token.c */; };
 		107923D319A3217300C52AD6 /* util.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923C019A3217300C52AD6 /* util.c */; };
 		1079240119A3241A00C52AD6 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
@@ -63,7 +62,6 @@
 		1079244B19A3266700C52AD6 /* context.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B919A3217300C52AD6 /* context.c */; };
 		1079244C19A3266700C52AD6 /* memory.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BA19A3217300C52AD6 /* memory.c */; };
 		1079244E19A3266700C52AD6 /* request.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BC19A3217300C52AD6 /* request.c */; };
-		1079244F19A3266700C52AD6 /* rproxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BD19A3217300C52AD6 /* rproxy.c */; };
 		1079245119A3266700C52AD6 /* token.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BF19A3217300C52AD6 /* token.c */; };
 		1079245219A3266700C52AD6 /* util.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923C019A3217300C52AD6 /* util.c */; };
 		1079245419A32C0800C52AD6 /* token_table.h in Headers */ = {isa = PBXBuildFile; fileRef = 1079245319A32C0800C52AD6 /* token_table.h */; };
@@ -828,7 +826,6 @@
 				10D0907319F633B00043D458 /* proxy.c in Sources */,
 				107923CF19A3217300C52AD6 /* request.c in Sources */,
 				107923CB19A3217300C52AD6 /* frame.c in Sources */,
-				107923D019A3217300C52AD6 /* rproxy.c in Sources */,
 				107923C219A3217300C52AD6 /* chunked.c in Sources */,
 				107923D319A3217300C52AD6 /* util.c in Sources */,
 				105534CA1A3BB46900627ECB /* string.c in Sources */,
@@ -865,7 +862,6 @@
 				10D0907019F494CC0043D458 /* test.c in Sources */,
 				105534C11A3B911300627ECB /* hpack.c in Sources */,
 				105534C31A3B917000627ECB /* mimemap.c in Sources */,
-				1079244F19A3266700C52AD6 /* rproxy.c in Sources */,
 				10F417FF19C2D2F800B6E31A /* picotest.c in Sources */,
 				105534C91A3BB41C00627ECB /* proxy.c in Sources */,
 				1079245119A3266700C52AD6 /* token.c in Sources */,

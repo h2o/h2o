@@ -111,6 +111,7 @@ int main(int argc, char **argv)
     uv_tcp_t listener;
     struct sockaddr_in sockaddr;
     h2o_hostconf_t *hostconf;
+    h2o_pathconf_t *pathconf;
     int r;
 
     if ((r = uv_tcp_init(loop, &listener)) != 0) {
@@ -129,7 +130,8 @@ int main(int argc, char **argv)
 
     h2o_config_init(&config);
     hostconf = h2o_config_register_host(&config, "default");
-    h2o_create_handler(hostconf, sizeof(h2o_handler_t))->on_req = on_req;
+    pathconf = h2o_config_register_path(hostconf, "/");
+    h2o_create_handler(pathconf, sizeof(h2o_handler_t))->on_req = on_req;
 
     h2o_context_init(&ctx, loop, &config);
 
