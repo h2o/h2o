@@ -1,0 +1,3 @@
+[submodule "picotest"]
+	path = picotest
+	url = https://github.com/h2o/picotest.git
