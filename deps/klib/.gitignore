@@ -1,0 +1,40 @@
+# General
+*.a
+*.dSYM/
+*.la
+*.lo
+*.o
+*.opensdf
+*.orig
+*.sdf
+*.suo
+*.swp
+*.tests
+*.vcxproj.filters
+*.vcxproj.user
+*~
+.git
+TAGS
+
+# Mac/Xcode-specfic
+xcuserdata
+contents.xcworkspacedata
+.DS_Store
+._*
+
+# Test byproducts
+test/kbtree_test
+test/khash_keith
+test/khash_keith2
+test/khash_test
+test/klist_test
+test/kmin_test
+test/kseq_bench
+test/kseq_bench2
+test/kseq_test
+test/ksort_test
+test/ksort_test-stl
+test/kstring_bench
+test/kstring_bench2
+test/kstring_test
+test/kvec_test
