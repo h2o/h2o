@@ -151,7 +151,7 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
 {
     size_t i;
 
-    /* check types */
+    /* sort by the length of the path (descending) */
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key;
         if (key->type != YOML_TYPE_SCALAR) {
@@ -159,28 +159,15 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
             return -1;
         }
     }
-
-    /* sort by the length of the path (descending) */
     qsort(node->data.mapping.elements, node->data.mapping.size, sizeof(node->data.mapping.elements[0]), (void*)sort_from_longer_paths);
 
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key;
         yoml_t *value = node->data.mapping.elements[i].value;
-        h2o_iovec_t path;
-        size_t num_handlers_before_config;
-        /* setup */
-        num_handlers_before_config = ctx->hostconf->handlers.size;
-        /* apply the configuration directives */
-        path = h2o_iovec_init(key->data.scalar, strlen(key->data.scalar));
-        ctx->path = &path;
+        ctx->pathconf = h2o_config_register_path(ctx->hostconf, key->data.scalar);
         if (apply_commands(ctx, H2O_CONFIGURATOR_FLAG_PATH, file, value) != 0)
             return -1;
-        ctx->path = NULL;
-        /* post-condition check */
-        if (num_handlers_before_config == ctx->hostconf->handlers.size) {
-            h2o_configurator_errprintf(cmd, file, value, "no handler was defined for the path");
-            return -1;
-        }
+        ctx->pathconf = NULL;
     }
 
     return 0;
@@ -293,17 +280,15 @@ static void init_core_configurators(h2o_globalconf_t *conf)
     }
 }
 
-static void init_hostconf(h2o_hostconf_t *hostconf, h2o_globalconf_t *globalconf)
+static void init_pathconf(h2o_pathconf_t *pathconf, h2o_hostconf_t *hostconf)
 {
-    memset(hostconf, 0, sizeof(*hostconf));
-    hostconf->global = globalconf;
-    h2o_chunked_register(hostconf);
+    memset(pathconf, 0, sizeof(*pathconf));
+    pathconf->host = hostconf;
+    h2o_chunked_register(pathconf);
 }
 
-static void dispose_hostconf(h2o_hostconf_t *hostconf)
+static void dispose_pathconf(h2o_pathconf_t *pathconf)
 {
-    free(hostconf->hostname.base);
-
 #define DESTROY_LIST(type, list) do { \
     size_t i; \
     for (i = 0; i != list.size; ++i) { \
@@ -315,11 +300,30 @@ static void dispose_hostconf(h2o_hostconf_t *hostconf)
     free(list.entries); \
 } while (0)
 
-    DESTROY_LIST(h2o_handler_t, hostconf->handlers);
-    DESTROY_LIST(h2o_filter_t, hostconf->filters);
-    DESTROY_LIST(h2o_logger_t, hostconf->loggers);
+    DESTROY_LIST(h2o_handler_t, pathconf->handlers);
+    DESTROY_LIST(h2o_filter_t, pathconf->filters);
+    DESTROY_LIST(h2o_logger_t, pathconf->loggers);
 
 #undef DESTROY_LIST
+}
+
+static void init_hostconf(h2o_hostconf_t *hostconf, h2o_globalconf_t *globalconf)
+{
+    memset(hostconf, 0, sizeof(*hostconf));
+    hostconf->global = globalconf;
+    init_pathconf(&hostconf->fallback_path, hostconf);
+}
+
+static void dispose_hostconf(h2o_hostconf_t *hostconf)
+{
+    size_t i;
+
+    free(hostconf->hostname.base);
+    for (i = 0; i != hostconf->paths.size; ++i) {
+        h2o_pathconf_t *pathconf = hostconf->paths.entries + i;
+        dispose_pathconf(pathconf);
+    }
+    dispose_pathconf(&hostconf->fallback_path);
 }
 
 void h2o_config_init(h2o_globalconf_t *config)
@@ -333,6 +337,19 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->http2_max_concurrent_requests_per_connection = H2O_DEFAULT_HTTP2_MAX_CONCURRENT_REQUESTS_PER_CONNECTION;
 
     init_core_configurators(config);
+}
+
+h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *pathname)
+{
+    h2o_pathconf_t *pathconf;
+
+    h2o_vector_reserve(NULL, (void*)&hostconf->paths, sizeof(hostconf->paths.entries[0]), hostconf->paths.size + 1);
+    pathconf = hostconf->paths.entries + hostconf->paths.size++;
+
+    init_pathconf(pathconf, hostconf);
+    pathconf->path = h2o_strdup_slashed(NULL, pathname, SIZE_MAX);
+
+    return pathconf;
 }
 
 h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, const char *hostname)

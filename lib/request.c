@@ -88,8 +88,8 @@ void h2o_dispose_request(h2o_req_t *req)
 
     h2o_timeout_unlink(&req->_timeout_entry);
 
-    if (req->version != 0 && req->hostconf != NULL) {
-        h2o_logger_t **logger = req->hostconf->loggers.entries, **end = logger + req->hostconf->loggers.size;
+    if (req->version != 0 && req->pathconf != NULL) {
+        h2o_logger_t **logger = req->pathconf->loggers.entries, **end = logger + req->pathconf->loggers.size;
         for (; logger != end; ++logger) {
             (*logger)->log_access((*logger), req);
         }
@@ -101,28 +101,48 @@ void h2o_dispose_request(h2o_req_t *req)
 void h2o_process_request(h2o_req_t *req)
 {
     h2o_context_t *ctx = req->conn->ctx;
+    h2o_hostconf_t *hostconf;
+    h2o_pathconf_t *pathconf;
 
     h2o_get_timestamp(ctx, &req->pool, &req->processed_at);
 
-    /* setup host context */
-    req->hostconf = ctx->globalconf->hosts.entries;
+    /* find the host context */
     if (req->authority.base != NULL) {
-        if (ctx->globalconf->hosts.size != 1) {
-            h2o_hostconf_t *hostconf = ctx->globalconf->hosts.entries, *end = hostconf + ctx->globalconf->hosts.size;
-            for (; hostconf != end; ++hostconf) {
-                if (h2o_memis(req->authority.base, req->authority.len, hostconf->hostname.base, hostconf->hostname.len)) {
-                    req->hostconf = hostconf;
-                    break;
-                }
-            }
+        h2o_hostconf_t *end = ctx->globalconf->hosts.entries + ctx->globalconf->hosts.size;
+        for (hostconf = ctx->globalconf->hosts.entries; hostconf != end; ++hostconf) {
+            if (h2o_memis(req->authority.base, req->authority.len, hostconf->hostname.base, hostconf->hostname.len))
+                goto HostFound;
         }
+        hostconf = ctx->globalconf->hosts.entries;
+    HostFound:
+        ;
     } else {
         /* set the authority name to the default one */
-        req->authority = req->hostconf->hostname;
+        hostconf = ctx->globalconf->hosts.entries;
+        req->authority = hostconf->hostname;
     }
 
+    /* find the path context (as well as building path_normalized) */
+    if (hostconf->paths.size != 0) {
+        size_t i = 0;
+        req->path_normalized = h2o_normalize_path(&req->pool, req->path.base, req->path.len);
+        do {
+            pathconf = hostconf->paths.entries + i;
+            if (req->path.len >= pathconf->path.len
+                && memcmp(req->path.base, pathconf->path.base, pathconf->path.len) == 0)
+                goto PathFound;
+        } while (++i != hostconf->paths.size);
+        pathconf = &hostconf->fallback_path;
+    PathFound:
+        ;
+    } else {
+        pathconf = &hostconf->fallback_path;
+    }
+
+    req->pathconf = pathconf;
+
     { /* call any of the handlers */
-        h2o_handler_t **handler = req->hostconf->handlers.entries, **end = handler + req->hostconf->handlers.size;
+        h2o_handler_t **handler = pathconf->handlers.entries, **end = handler + pathconf->handlers.size;
         for (; handler != end; ++handler) {
             if ((*handler)->on_req(*handler, req) == 0)
                 return;
@@ -139,8 +159,8 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
     req->_generator = generator;
 
     /* setup response filters */
-    if (req->hostconf->filters.size != 0) {
-        h2o_filter_t *filter = req->hostconf->filters.entries[0];
+    if (req->pathconf->filters.size != 0) {
+        h2o_filter_t *filter = req->pathconf->filters.entries[0];
         filter->on_setup_ostream(filter, req, &req->_ostr_top);
     }
 }

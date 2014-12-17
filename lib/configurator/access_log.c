@@ -58,14 +58,14 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
         return -1;
     }
 
-    h2o_access_log_register(ctx->hostconf, path, fmt);
+    h2o_access_log_register(ctx->pathconf, path, fmt);
     return 0;
 }
 
 void h2o_access_log_register_configurator(h2o_globalconf_t *conf)
 {
     h2o_configurator_t *c = h2o_configurator_create(conf, sizeof(*c));
-    h2o_configurator_define_command(c, "access-log", H2O_CONFIGURATOR_FLAG_HOST,
+    h2o_configurator_define_command(c, "access-log", H2O_CONFIGURATOR_FLAG_PATH,
         on_config,
         "path (and optionally the format) of the access log (default: none)",
         " - if the value is a scalar, it is treated as the path of the log file",

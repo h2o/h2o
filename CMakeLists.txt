@@ -56,7 +56,6 @@ SET(LIB_SOURCE_FILES
     lib/mimemap.c
     lib/proxy.c
     lib/request.c
-    lib/rproxy.c
     lib/socket.c
     lib/socketpool.c
     lib/string.c

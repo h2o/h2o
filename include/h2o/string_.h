@@ -48,6 +48,10 @@ extern "C" {
  */
 h2o_iovec_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t len);
 /**
+ * duplicates given string appending '/' to the tail if not found
+ */
+h2o_iovec_t h2o_strdup_slashed(h2o_mempool_t *pool, const char *s, size_t len);
+/**
  * tr/A-Z/a-z/
  */
 static int h2o_tolower(int ch);

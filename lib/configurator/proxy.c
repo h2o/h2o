@@ -71,8 +71,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
     }
     /* register */
     h2o_proxy_register_reverse_proxy(
-        ctx->hostconf,
-        ctx->path != NULL ? ctx->path->base : "",
+        ctx->pathconf,
         h2o_strdup(&pool, host.base, host.len).base,
         port,
         h2o_strdup(&pool, path.base, path.len).base,
