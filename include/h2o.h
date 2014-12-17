@@ -647,7 +647,10 @@ h2o_iovec_t h2o_mimemap_get_type(h2o_mimemap_t *mimemap, const char *ext);
 
 /* lib/access_log.c */
 
-h2o_logger_t *h2o_access_log_register(h2o_pathconf_t *pathconf, const char *path, const char *fmt);
+typedef struct st_h2o_access_log_filehandle_t h2o_access_log_filehandle_t;
+
+h2o_access_log_filehandle_t *h2o_access_log_open_handle(const char *path, const char *fmt);
+h2o_logger_t *h2o_access_log_register(h2o_pathconf_t *pathconf, h2o_access_log_filehandle_t *handle);
 void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/chunked.c */

@@ -56,11 +56,15 @@ struct log_element_t {
     } data;
 };
 
-struct st_h2o_access_logger_t {
-    h2o_logger_t super;
+struct st_h2o_access_log_filehandle_t {
     struct log_element_t *elements;
     size_t num_elements;
     int fd;
+};
+
+struct st_h2o_access_logger_t {
+    h2o_logger_t super;
+    h2o_access_log_filehandle_t *fh;
 };
 
 static struct log_element_t *compile_log_format(const char *fmt, size_t *_num_elements)
@@ -204,6 +208,7 @@ static char *expand_line_buf(char *line, size_t cur_size, size_t required)
 static void log_access(h2o_logger_t *_self, h2o_req_t *req)
 {
     struct st_h2o_access_logger_t *self = (struct st_h2o_access_logger_t*)_self;
+    h2o_access_log_filehandle_t *fh = self->fh;
     char *line, *pos, *line_end;
     size_t element_index;
 
@@ -211,8 +216,8 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
     pos = line;
     line_end = line + LOG_ALLOCA_SIZE;
 
-    for (element_index = 0; element_index != self->num_elements; ++element_index) {
-        struct log_element_t *element = self->elements + element_index;
+    for (element_index = 0; element_index != fh->num_elements; ++element_index) {
+        struct log_element_t *element = fh->elements + element_index;
 
     /* reserve capacity + suffix.len */
 #define RESERVE(capacity) \
@@ -321,31 +326,29 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
         pos = append_safe_string(pos, element->suffix.base, element->suffix.len);
     }
 
-    write(self->fd, line, pos - line);
+    write(fh->fd, line, pos - line);
 
     if (line_end - line != LOG_ALLOCA_SIZE)
         free(line);
 }
 
-static void dispose(h2o_logger_t *_self)
+void on_dispose_handle(void *_fh)
 {
-    struct st_h2o_access_logger_t *self = (void*)_self;
+    h2o_access_log_filehandle_t *fh = _fh;
     size_t i;
 
-    for (i = 0; i != self->num_elements; ++i)
-        free(self->elements[i].suffix.base);
-    free(self->elements);
-
-    if (self->fd != -1)
-        close(self->fd);
+    for (i = 0; i != fh->num_elements; ++i)
+        free(fh->elements[i].suffix.base);
+    free(fh->elements);
+    close(fh->fd);
 }
 
-h2o_logger_t *h2o_access_log_register(h2o_pathconf_t *pathconf, const char *path, const char *fmt)
+h2o_access_log_filehandle_t *h2o_access_log_open_handle(const char *path, const char *fmt)
 {
     struct log_element_t *elements;
     size_t num_elements;
     int fd;
-    struct st_h2o_access_logger_t *self;
+    h2o_access_log_filehandle_t *fh;
 
     /* default to combined log format */
     if (fmt == NULL)
@@ -373,13 +376,29 @@ h2o_logger_t *h2o_access_log_register(h2o_pathconf_t *pathconf, const char *path
         }
     }
 
-    /* register */
-    self = (void*)h2o_create_logger(pathconf, sizeof(*self));
+    fh = h2o_mempool_alloc_shared(NULL, sizeof(*fh), on_dispose_handle);
+    fh->elements = elements;
+    fh->num_elements = num_elements;
+    fh->fd = fd;
+
+    return fh;
+}
+
+static void dispose(h2o_logger_t *_self)
+{
+    struct st_h2o_access_logger_t *self = (void*)_self;
+
+    h2o_mempool_release_shared(self->fh);
+}
+
+h2o_logger_t *h2o_access_log_register(h2o_pathconf_t *pathconf, h2o_access_log_filehandle_t *fh)
+{
+    struct st_h2o_access_logger_t *self = (void*)h2o_create_logger(pathconf, sizeof(*self));
+
     self->super.dispose = dispose;
     self->super.log_access = log_access;
-    self->elements = elements;
-    self->num_elements = num_elements;
-    self->fd = fd;
+    self->fh = fh;
+    h2o_mempool_addref_shared(fh);
 
     return &self->super;
 }
