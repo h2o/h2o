@@ -204,6 +204,10 @@ void h2o_buffer_consume(h2o_buffer_t **inbuf, size_t delta);
  */
 static void h2o_buffer_set_prototype(h2o_buffer_t **buffer, h2o_buffer_prototype_t *prototype);
 /**
+ * registers a buffer to memory pool, so that it would be freed when the pool is flushed.  Note that the buffer cannot be resized after it is linked.
+ */
+static void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool);
+/**
  * grows the vector so that it could store at least new_capacity elements of given size (or dies if impossible).
  * @param pool memory pool that the vector is using
  * @param vector the vector
@@ -285,6 +289,12 @@ inline void h2o_buffer_set_prototype(h2o_buffer_t **buffer, h2o_buffer_prototype
         (*buffer)->_prototype = prototype;
     else
         *buffer = &prototype->_initial_buf;
+}
+
+inline void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool)
+{
+    h2o_buffer_t **slot = h2o_mem_alloc_shared(pool, sizeof(*slot), (void*)h2o_buffer_dispose);
+    *slot = buffer;
 }
 
 inline void h2o_vector_reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)

@@ -261,7 +261,7 @@ static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len)
     closedir(dp);
 
     bodyvec = h2o_iovec_init(body->bytes, body->size);
-    *(h2o_buffer_t**)h2o_mem_alloc_shared(&req->pool, sizeof(body), (void*)h2o_buffer_dispose) = body;
+    h2o_buffer_link_to_pool(body, &req->pool);
 
     /* send response */
     req->res.status = 200;
