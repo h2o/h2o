@@ -204,6 +204,24 @@ static int on_config_etag(h2o_configurator_command_t *cmd, h2o_configurator_cont
     return 0;
 }
 
+static int on_config_dir_listing(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+{
+    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+
+    switch (h2o_configurator_get_one_of(cmd, file, node, "OFF,ON")) {
+    case 0: /* off */
+        self->vars->flags &= ~H2O_FILE_FLAG_DIR_LISTING;
+        break;
+    case 1: /* on */
+        self->vars->flags |= H2O_FILE_FLAG_DIR_LISTING;
+        break;
+    default: /* error */
+        return -1;
+    }
+
+    return 0;
+}
+
 static const char **dup_strlist(const char **s)
 {
     size_t i;
@@ -284,4 +302,9 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
         on_config_etag,
         "whether or not to send etag (ON or OFF, default: ON)");
+    h2o_configurator_define_command(
+        &self->super, "file.dirlisting",
+        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        on_config_dir_listing,
+        "whether or not to send directory indexes (ON or OFF, default: OFF)");
 }

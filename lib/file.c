@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -58,6 +59,8 @@ static const char *default_index_files[] = {
 };
 
 const char **h2o_file_default_index_files = default_index_files;
+
+#include "file/templates.c.h"
 
 static void do_close(h2o_generator_t *_self, h2o_req_t *req)
 {
@@ -244,6 +247,32 @@ static int redirect_to_dir(h2o_req_t *req, const char *path, size_t path_len)
     return 0;
 }
 
+static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len)
+{
+    static h2o_generator_t generator = { NULL, NULL };
+    DIR *dp;
+    h2o_buffer_t *body;
+    h2o_iovec_t bodyvec;
+
+    /* build html */
+    if ((dp = opendir(path)) == NULL)
+        return -1;
+    body = build_dir_listing_html(&req->pool, h2o_iovec_init(path, path_len), dp);
+    closedir(dp);
+
+    bodyvec = h2o_iovec_init(body->bytes, body->size);
+    h2o_buffer_link_to_pool(body, &req->pool);
+
+    /* send response */
+    req->res.status = 200;
+    req->res.reason = "OK";
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/html; charset=utf-8"));
+    h2o_start_response(req, &generator);
+    h2o_send(req, &bodyvec, 1, 1);
+
+    return 0;
+}
+
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     h2o_file_handler_t *self = (void*)_self;
@@ -282,7 +311,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
             rpath[rpath_len + index_file->len] = '\0';
             if ((generator = create_generator(&req->pool, rpath, &is_dir, self->flags)) != NULL) {
                 rpath_len += index_file->len;
-                break;
+                goto Opened;
             }
             if (is_dir) {
                 /* note: apache redirects "path/" to "path/index.txt/" if index.txt is a dir */
@@ -293,22 +322,27 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
             if (errno != ENOENT)
                 break;
         }
+        if (index_file->base == NULL && (self->flags & H2O_FILE_FLAG_DIR_LISTING) != 0) {
+            rpath[rpath_len] = '\0';
+            if (send_dir_listing(req, rpath, rpath_len) == 0)
+                return 0;
+        }
     } else {
         rpath[rpath_len] = '\0';
-        generator = create_generator(&req->pool, rpath, &is_dir, self->flags);
-        if (generator == NULL && is_dir)
+        if ((generator = create_generator(&req->pool, rpath, &is_dir, self->flags)) != NULL)
+            goto Opened;
+        if (is_dir)
             return redirect_to_dir(req, req->path.base, req->path.len);
     }
-    /* return error if failed */
-    if (generator == NULL) {
-        if (errno == ENOENT) {
-            h2o_send_error(req, 404, "File Not Found", "file not found");
-        } else {
-            h2o_send_error(req, 403, "Access Forbidden", "access forbidden");
-        }
-        return 0;
+    /* failed to open */
+    if (errno == ENOENT) {
+        h2o_send_error(req, 404, "File Not Found", "file not found");
+    } else {
+        h2o_send_error(req, 403, "Access Forbidden", "access forbidden");
     }
+    return 0;
 
+Opened:
     if ((if_none_match_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_NONE_MATCH, SIZE_MAX)) != -1) {
         h2o_iovec_t *if_none_match = &req->headers.entries[if_none_match_header_index].value;
         if (h2o_memis(if_none_match->base, if_none_match->len, generator->etag_buf, generator->etag_len))
