@@ -19,6 +19,8 @@
 		105534DB1A3C7A5400627ECB /* access_log.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534DA1A3C7A5400627ECB /* access_log.c */; };
 		105534DD1A3C7AA900627ECB /* file.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534DC1A3C7AA900627ECB /* file.c */; };
 		105534DF1A3C7B9800627ECB /* proxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534DE1A3C7B9800627ECB /* proxy.c */; };
+		105534EB1A42A87E00627ECB /* _templates.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 105534EA1A42A87E00627ECB /* _templates.c.h */; };
+		105534ED1A42AD5E00627ECB /* templates.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 105534EC1A42AD5E00627ECB /* templates.c.h */; };
 		1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923C119A3217300C52AD6 /* websocket.c */; };
 		1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923A319A3215F00C52AD6 /* websocket.h */; };
 		1065E6F919BEBAC600686E72 /* timeout.c in Sources */ = {isa = PBXBuildFile; fileRef = 1065E6F819BEBAC600686E72 /* timeout.c */; };
@@ -196,6 +198,8 @@
 		105534DA1A3C7A5400627ECB /* access_log.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = access_log.c; sourceTree = "<group>"; };
 		105534DC1A3C7AA900627ECB /* file.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = file.c; sourceTree = "<group>"; };
 		105534DE1A3C7B9800627ECB /* proxy.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = proxy.c; sourceTree = "<group>"; };
+		105534EA1A42A87E00627ECB /* _templates.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = _templates.c.h; sourceTree = "<group>"; };
+		105534EC1A42AD5E00627ECB /* templates.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = templates.c.h; sourceTree = "<group>"; };
 		1065E6EF19B8C64200686E72 /* evloop.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = evloop.c.h; sourceTree = "<group>"; };
 		1065E6F419B996B400686E72 /* select.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = select.c.h; sourceTree = "<group>"; };
 		1065E6F619B99E6D00686E72 /* kqueue.c.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = kqueue.c.h; sourceTree = "<group>"; };
@@ -386,6 +390,15 @@
 			path = configurator;
 			sourceTree = "<group>";
 		};
+		105534E91A42A83700627ECB /* file */ = {
+			isa = PBXGroup;
+			children = (
+				105534EC1A42AD5E00627ECB /* templates.c.h */,
+				105534EA1A42A87E00627ECB /* _templates.c.h */,
+			);
+			path = file;
+			sourceTree = "<group>";
+		};
 		1065E6F319B9969000686E72 /* evloop */ = {
 			isa = PBXGroup;
 			children = (
@@ -508,6 +521,7 @@
 				105534D91A3C7A2000627ECB /* configurator */,
 				107923B919A3217300C52AD6 /* context.c */,
 				107923AF19A3217300C52AD6 /* file.c */,
+				105534E91A42A83700627ECB /* file */,
 				107923B019A3217300C52AD6 /* headers.c */,
 				107923B119A3217300C52AD6 /* http1.c */,
 				10D0905419F102C70043D458 /* http1client.c */,
@@ -618,6 +632,7 @@
 				107923C919A3217300C52AD6 /* hpack_static_table.h in Headers */,
 				10D0904319F0BA780043D458 /* linklist.h in Headers */,
 				10EC2A361A0B4D370083514F /* socketpool.h in Headers */,
+				105534EB1A42A87E00627ECB /* _templates.c.h in Headers */,
 				1079236A19A3210E00C52AD6 /* khash.h in Headers */,
 				105534D81A3C791B00627ECB /* configurator.h in Headers */,
 				107923A619A3215F00C52AD6 /* http2.h in Headers */,
@@ -632,6 +647,7 @@
 				1079239719A3210E00C52AD6 /* picohttpparser.h in Headers */,
 				1065E70C19BF664300686E72 /* evloop.h in Headers */,
 				107923C819A3217300C52AD6 /* hpack_huffman_table.h in Headers */,
+				105534ED1A42AD5E00627ECB /* templates.c.h in Headers */,
 				10D0903E19F0A8190043D458 /* socket.h in Headers */,
 				10F4180119C2D31600B6E31A /* yoml.h in Headers */,
 				1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */,

@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -58,6 +59,8 @@ static const char *default_index_files[] = {
 };
 
 const char **h2o_file_default_index_files = default_index_files;
+
+#include "file/templates.c.h"
 
 static void do_close(h2o_generator_t *_self, h2o_req_t *req)
 {
@@ -244,27 +247,28 @@ static int redirect_to_dir(h2o_req_t *req, const char *path, size_t path_len)
     return 0;
 }
 
-static int send_dir_listing(h2o_req_t *req, const char *path)
+static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len)
 {
     static h2o_generator_t generator = { NULL, NULL };
-    h2o_iovec_t body;
+    DIR *dp;
+    h2o_buffer_t *body;
+    h2o_iovec_t bodyvec;
 
+    /* build html */
+    if ((dp = opendir(path)) == NULL)
+        return -1;
+    body = build_dir_listing_html(&req->pool, h2o_iovec_init(path, path_len), dp);
+    closedir(dp);
+
+    bodyvec = h2o_iovec_init(body->bytes, body->size);
+    *(h2o_buffer_t**)h2o_mem_alloc_shared(&req->pool, sizeof(body), (void*)h2o_buffer_dispose) = body;
+
+    /* send response */
     req->res.status = 200;
     req->res.reason = "OK";
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/html; charset=utf-8"));
-
     h2o_start_response(req, &generator);
-    body = h2o_concat(&req->pool,
-        h2o_iovec_init(H2O_STRLIT(
-            "<!DOCTYPE html>\n"
-            "<TITLE>Index of "
-        )),
-        h2o_htmlescape(&req->pool, req->path_normalized.base, req->path_normalized.len),
-        h2o_iovec_init(H2O_STRLIT(
-            "</TITLE>\n"
-            "Hmm"))
-    );
-    h2o_send(req, &body, 1, 1);
+    h2o_send(req, &bodyvec, 1, 1);
 
     return 0;
 }
@@ -320,7 +324,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         }
         if (index_file->base == NULL && (self->flags & H2O_FILE_FLAG_DIR_LISTING) != 0) {
             rpath[rpath_len] = '\0';
-            return send_dir_listing(req, rpath);
+            if (send_dir_listing(req, rpath, rpath_len) == 0)
+                return 0;
         }
     } else {
         rpath[rpath_len] = '\0';
