@@ -43,7 +43,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
         h2o_iovec_t fn_escaped;
         if (dent.d_name[0] == '.')
             continue;
-        fn_escaped = h2o_htmlescape(pool, dent.d_name, dent.d_namlen);
+        fn_escaped = h2o_htmlescape(pool, dent.d_name, strlen(dent.d_name));
 ?<LI><A HREF="<?= fn_escaped ?>"><?= fn_escaped ?></A>
     }
 
