@@ -98,7 +98,7 @@ static void on_accept(uv_stream_t *listener, int status)
     if (status != 0)
         return;
 
-    conn = h2o_malloc(sizeof(*conn));
+    conn = h2o_mem_alloc(sizeof(*conn));
     uv_tcp_init(listener->loop, conn);
 
     if (uv_accept(listener, (uv_stream_t*)conn) != 0) {

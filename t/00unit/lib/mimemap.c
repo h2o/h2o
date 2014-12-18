@@ -46,7 +46,7 @@ void test_lib__mimemap_c()
     mimemap2 = h2o_mimemap_clone(mimemap);
     ok(strcmp(h2o_mimemap_get_default_type(mimemap2).base, "text/plain") == 0);
     ok(strcmp(h2o_mimemap_get_type(mimemap2, "foo").base, "example/overwritten") == 0);
-    h2o_mempool_release_shared(mimemap2);
+    h2o_mem_release_shared(mimemap2);
 
     /* check original */
     ok(strcmp(h2o_mimemap_get_default_type(mimemap).base, "text/plain") == 0);
@@ -58,5 +58,5 @@ void test_lib__mimemap_c()
     h2o_mimemap_remove_type(mimemap, "foo");
     ok(strcmp(h2o_mimemap_get_type(mimemap, "foo").base, "text/plain") == 0);
 
-    h2o_mempool_release_shared(mimemap);
+    h2o_mem_release_shared(mimemap);
 }

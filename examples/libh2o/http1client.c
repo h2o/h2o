@@ -27,7 +27,7 @@
 
 static h2o_timeout_t zero_timeout, io_timeout;
 static h2o_socketpool_t *sockpool;
-static h2o_mempool_t pool;
+static h2o_mem_pool_t pool;
 static const char *url;
 static int cnt_left = 3;
 
@@ -42,7 +42,7 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     h2o_http1client_t *client;
 
     /* clear memory pool */
-    h2o_mempool_clear(&pool);
+    h2o_mem_clear_pool(&pool);
 
     /* parse URL */
     if (h2o_parse_url(url, SIZE_MAX, &scheme, &host, &port, &path) != 0) {
@@ -57,15 +57,15 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     host = h2o_strdup(&pool, host.base, host.len);
 
     /* build request */
-    req = h2o_mempool_alloc(&pool, sizeof(*req));
-    req->base = h2o_mempool_alloc(&pool, 1024);
+    req = h2o_mem_alloc_pool(&pool, sizeof(*req));
+    req->base = h2o_mem_alloc_pool(&pool, 1024);
     req->len = snprintf(req->base, 1024, "GET %.*s HTTP/1.1\r\nhost: %s:%u\r\n\r\n", (int)path.len, path.base, host.base, (unsigned)port);
     assert(req->len < 1024);
 
     /* initiate the request */
     if (1) {
         if (sockpool == NULL) {
-            sockpool = h2o_malloc(sizeof(*sockpool));
+            sockpool = h2o_mem_alloc(sizeof(*sockpool));
             h2o_socketpool_init(sockpool, host.base, port, 10);
             h2o_socketpool_set_timeout(sockpool, ctx->loop, 5000 /* in msec */);
         }
@@ -91,7 +91,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     if (errstr == h2o_http1client_error_is_eos) {
         if (--cnt_left != 0) {
             /* next attempt */
-            h2o_mempool_clear(&pool);
+            h2o_mem_clear_pool(&pool);
             start_request(client->ctx);
         }
     }
@@ -152,7 +152,7 @@ int main(int argc, char **argv)
     }
     url = argv[1];
 
-    h2o_mempool_init(&pool);
+    h2o_mem_init_pool(&pool);
 
     /* setup context */
 #if H2O_USE_LIBUV

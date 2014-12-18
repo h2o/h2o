@@ -121,7 +121,7 @@ static int do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_t *buf)
     return 1;
 }
 
-static struct st_h2o_sendfile_generator_t *create_generator(h2o_mempool_t *pool, const char *path, int *is_dir, int flags)
+static struct st_h2o_sendfile_generator_t *create_generator(h2o_mem_pool_t *pool, const char *path, int *is_dir, int flags)
 {
     struct st_h2o_sendfile_generator_t *self;
     int fd;
@@ -146,7 +146,7 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_mempool_t *pool,
     bufsz = MAX_BUF_SIZE;
     if (st.st_size < bufsz)
         bufsz = st.st_size;
-    self = h2o_mempool_alloc(pool, sizeof(*self));
+    self = h2o_mem_alloc_pool(pool, sizeof(*self));
     self->super.proceed = do_proceed;
     self->super.stop = do_close;
     self->fd = fd;
@@ -186,7 +186,7 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
         size_t bufsz = MAX_BUF_SIZE;
         if (self->bytesleft < bufsz)
             bufsz = self->bytesleft;
-        self->buf = h2o_mempool_alloc(&req->pool, bufsz);
+        self->buf = h2o_mem_alloc_pool(&req->pool, bufsz);
         do_proceed(&self->super, req);
     }
 }
@@ -221,7 +221,7 @@ static int redirect_to_dir(h2o_req_t *req, const char *path, size_t path_len)
     alloc_size = sizeof(":///") + req->scheme.len + req->authority.len + path_len;
 
     /* allocate and build url */
-    url.base = h2o_mempool_alloc(&req->pool, alloc_size);
+    url.base = h2o_mem_alloc_pool(&req->pool, alloc_size);
     url.len = sprintf(url.base, "%.*s://%.*s%.*s/", (int)req->scheme.len, req->scheme.base, (int)req->authority.len, req->authority.base, (int)path_len, path);
     assert(url.len + 1 == alloc_size);
 
@@ -340,7 +340,7 @@ static void on_dispose(h2o_handler_t *_self)
     size_t i;
 
     free(self->real_path.base);
-    h2o_mempool_release_shared(self->mimemap);
+    h2o_mem_release_shared(self->mimemap);
     for (i = 0; self->index_files[i].base != NULL; ++i)
         free(self->index_files[i].base);
 }
@@ -365,7 +365,7 @@ h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real
     /* setup attributes */
     self->real_path = h2o_strdup_slashed(NULL, real_path, SIZE_MAX);
     if (mimemap != NULL) {
-        h2o_mempool_addref_shared(mimemap);
+        h2o_mem_addref_shared(mimemap);
         self->mimemap = mimemap;
     } else {
         self->mimemap = h2o_mimemap_create();

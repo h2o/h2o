@@ -419,7 +419,7 @@ struct st_h2o_req_t {
     size_t _ostr_init_index;
     h2o_timeout_entry_t _timeout_entry;
     /* per-request memory pool (placed at the last since the structure is large) */
-    h2o_mempool_t pool;
+    h2o_mem_pool_t pool;
 };
 
 /* token */
@@ -458,19 +458,19 @@ ssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, s
 /**
  * adds a header to list
  */
-void h2o_add_header(h2o_mempool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len);
+void h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len);
 /**
  * adds a header to list
  */
-void h2o_add_header_by_str(h2o_mempool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token, const char *value, size_t value_len);
+void h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token, const char *value, size_t value_len);
 /**
  * adds or replaces a header into the list
  */
-void h2o_set_header(h2o_mempool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len, int overwrite_if_exists);
+void h2o_set_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len, int overwrite_if_exists);
 /**
  * adds or replaces a header into the list
  */
-void h2o_set_header_by_str(h2o_mempool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token, const char *value, size_t value_len, int overwrite_if_exists);
+void h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token, const char *value, size_t value_len, int overwrite_if_exists);
 /**
  * deletes a header from list
  */
@@ -587,7 +587,7 @@ void h2o_context_dispose(h2o_context_t *context);
  * @param pool memory pool
  * @param ts buffer to store the timestamp
  */
-void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts);
+void h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts);
 /**
  * returns per-module context set by the on_context_init callback
  */

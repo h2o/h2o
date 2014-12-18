@@ -46,11 +46,11 @@ extern "C" {
  * @param len length of the source string (the result of strlen(s) used in case len is SIZE_MAX)
  * @return buffer pointing to the duplicated string (buf is NUL-terminated but the length does not include the NUL char)
  */
-h2o_iovec_t h2o_strdup(h2o_mempool_t *pool, const char *s, size_t len);
+h2o_iovec_t h2o_strdup(h2o_mem_pool_t *pool, const char *s, size_t len);
 /**
  * duplicates given string appending '/' to the tail if not found
  */
-h2o_iovec_t h2o_strdup_slashed(h2o_mempool_t *pool, const char *s, size_t len);
+h2o_iovec_t h2o_strdup_slashed(h2o_mem_pool_t *pool, const char *s, size_t len);
 /**
  * tr/A-Z/a-z/
  */
@@ -66,7 +66,7 @@ size_t h2o_strtosize(const char *s, size_t len);
 /**
  * base64 url decoder
  */
-h2o_iovec_t h2o_decode_base64url(h2o_mempool_t *pool, const char *src, size_t len);
+h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t len);
 /**
  * base64 encoder
  */
@@ -98,7 +98,7 @@ int h2o_contains_token(const char *haysack, size_t haysack_len, const char *need
  * @param len source length
  * @return buffer pointing to source, or buffer pointing to an allocated chunk with normalized representation of the given path
  */
-h2o_iovec_t h2o_normalize_path(h2o_mempool_t *pool, const char *path, size_t len);
+h2o_iovec_t h2o_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t len);
 /**
  * parses absolute URL (either http or https)
  */
@@ -110,12 +110,12 @@ int h2o_parse_url(const char *url, size_t url_len, h2o_iovec_t *scheme, h2o_iove
  * @param len source length
  * @return the escaped string, or the source itself if escape was not necessary
  */
-h2o_iovec_t h2o_htmlescape(h2o_mempool_t *pool, const char *src, size_t len);
+h2o_iovec_t h2o_htmlescape(h2o_mem_pool_t *pool, const char *src, size_t len);
 /**
  * concatenates a list of iovecs (with NUL termination)
  */
 #define h2o_concat(pool, ...) h2o_concat_list(pool, (h2o_iovec_t[]){ __VA_ARGS__ }, sizeof((h2o_iovec_t[]){ __VA_ARGS__ }) / sizeof(h2o_iovec_t))
-h2o_iovec_t h2o_concat_list(h2o_mempool_t *pool, h2o_iovec_t *list, size_t count);
+h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t count);
 
 int h2o__lcstris_core(const char *target, const char *test, size_t test_len);
 

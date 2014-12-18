@@ -37,7 +37,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
     memset(req, 0, offsetof(h2o_req_t, pool));
 
     /* init memory pool (before others, since it may be used) */
-    h2o_mempool_init(&req->pool);
+    h2o_mem_init_pool(&req->pool);
 
     /* init properties that should be initialized to non-zero */
     req->conn = conn;
@@ -46,7 +46,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
 
     if (src != NULL) {
 #define COPY(buf) do { \
-    req->buf.base = h2o_mempool_alloc(&req->pool, src->buf.len); \
+    req->buf.base = h2o_mem_alloc_pool(&req->pool, src->buf.len); \
     memcpy(req->buf.base, src->buf.base, src->buf.len); \
     req->buf.len = src->buf.len; \
 } while (0)
@@ -95,7 +95,7 @@ void h2o_dispose_request(h2o_req_t *req)
         }
     }
 
-    h2o_mempool_clear(&req->pool);
+    h2o_mem_clear_pool(&req->pool);
 }
 
 void h2o_process_request(h2o_req_t *req)
@@ -183,7 +183,7 @@ void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
 
 h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot)
 {
-    h2o_ostream_t *ostr = h2o_mempool_alloc(&req->pool, sz);
+    h2o_ostream_t *ostr = h2o_mem_alloc_pool(&req->pool, sz);
     ostr->next = *slot;
     ostr->do_send = NULL;
     ostr->stop = NULL;

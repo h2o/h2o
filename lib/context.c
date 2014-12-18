@@ -74,7 +74,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     h2o_timeout_init(ctx->loop, &ctx->zero_timeout, 0);
     h2o_timeout_init(ctx->loop, &ctx->req_timeout, config->req_timeout);
 
-    ctx->_module_configs = h2o_malloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
+    ctx->_module_configs = h2o_mem_alloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
     memset(ctx->_module_configs, 0, sizeof(*ctx->_module_configs) * config->_num_config_slots);
     for (i = 0; i != config->hosts.size; ++i) {
         h2o_hostconf_t *hostconf = config->hosts.entries + i;
@@ -110,7 +110,7 @@ void h2o_context_dispose(h2o_context_t *ctx)
 
 h2o_handler_t *h2o_create_handler(h2o_pathconf_t *conf, size_t sz)
 {
-    h2o_handler_t *handler = h2o_malloc(sz);
+    h2o_handler_t *handler = h2o_mem_alloc(sz);
 
     memset(handler, 0, sz);
     handler->_config_slot = conf->host->global->_num_config_slots++;
@@ -123,7 +123,7 @@ h2o_handler_t *h2o_create_handler(h2o_pathconf_t *conf, size_t sz)
 
 h2o_filter_t *h2o_create_filter(h2o_pathconf_t *conf, size_t sz)
 {
-    h2o_filter_t *filter = h2o_malloc(sz);
+    h2o_filter_t *filter = h2o_mem_alloc(sz);
 
     memset(filter, 0, sz);
     filter->_config_slot = conf->host->global->_num_config_slots++;
@@ -136,7 +136,7 @@ h2o_filter_t *h2o_create_filter(h2o_pathconf_t *conf, size_t sz)
 
 h2o_logger_t *h2o_create_logger(h2o_pathconf_t *conf, size_t sz)
 {
-    h2o_logger_t *logger = h2o_malloc(sz);
+    h2o_logger_t *logger = h2o_mem_alloc(sz);
 
     memset(logger, 0, sz);
     logger->_config_slot = conf->host->global->_num_config_slots++;
@@ -147,7 +147,7 @@ h2o_logger_t *h2o_create_logger(h2o_pathconf_t *conf, size_t sz)
     return logger;
 }
 
-void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t *ts)
+void h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts)
 {
     uint64_t now = h2o_now(ctx->loop);
 
@@ -158,14 +158,14 @@ void h2o_get_timestamp(h2o_context_t *ctx, h2o_mempool_t *pool, h2o_timestamp_t 
         if (ctx->_timestamp_cache.tv_at.tv_sec != prev_sec) {
             /* update the string cache */
             if (ctx->_timestamp_cache.value != NULL)
-                h2o_mempool_release_shared(ctx->_timestamp_cache.value);
-            ctx->_timestamp_cache.value = h2o_mempool_alloc_shared(NULL, sizeof(h2o_timestamp_string_t), NULL);
+                h2o_mem_release_shared(ctx->_timestamp_cache.value);
+            ctx->_timestamp_cache.value = h2o_mem_alloc_shared(NULL, sizeof(h2o_timestamp_string_t), NULL);
             h2o_time2str_rfc1123(ctx->_timestamp_cache.value->rfc1123, ctx->_timestamp_cache.tv_at.tv_sec);
             h2o_time2str_log(ctx->_timestamp_cache.value->log, ctx->_timestamp_cache.tv_at.tv_sec);
         }
     }
 
     ts->at = ctx->_timestamp_cache.tv_at;
-    h2o_mempool_link_shared(pool, ctx->_timestamp_cache.value);
+    h2o_mem_link_shared(pool, ctx->_timestamp_cache.value);
     ts->str = ctx->_timestamp_cache.value;
 }

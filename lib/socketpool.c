@@ -130,7 +130,7 @@ static void on_deferred_connect_cb(h2o_timeout_entry_t *timeout)
 
 static struct connect_callback_t *setup_connect_callback(h2o_socketpool_connect_cb cb, h2o_socket_t *sock, const char *errstr, void *data)
 {
-    struct connect_callback_t *cbinfo = h2o_malloc(sizeof(*cbinfo));
+    struct connect_callback_t *cbinfo = h2o_mem_alloc(sizeof(*cbinfo));
 
     cbinfo->cb = cb;
     cbinfo->sock = sock;
@@ -231,7 +231,7 @@ int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
     sock->on_close.cb = NULL;
     sock->on_close.data = NULL;
 
-    entry = h2o_malloc(sizeof(*entry));
+    entry = h2o_mem_alloc(sizeof(*entry));
     if (h2o_socket_export(sock, &entry->sockinfo) != 0) {
         free(entry);
         pthread_mutex_lock(&pool->_mutex);

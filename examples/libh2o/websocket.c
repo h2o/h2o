@@ -69,7 +69,7 @@ static void on_connect(uv_stream_t *server, int status)
     if (status != 0)
         return;
 
-    conn = h2o_malloc(sizeof(*conn));
+    conn = h2o_mem_alloc(sizeof(*conn));
     uv_tcp_init(server->loop, conn);
     if (uv_accept(server, (uv_stream_t*)conn) != 0) {
         uv_close((uv_handle_t*)conn, (uv_close_cb)free);

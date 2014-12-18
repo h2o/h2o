@@ -40,7 +40,7 @@ static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *i
 
 h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx)
 {
-    h2o_loopback_conn_t *conn = h2o_malloc(sizeof(*conn));
+    h2o_loopback_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
     memset(conn, 0, offsetof(struct st_h2o_loopback_conn_t, req));
     conn->super.ctx = ctx;
@@ -130,7 +130,7 @@ int main(int argc, char **argv)
 
     { /* tests that use the run loop */
 #if H2O_USE_LIBUV
-        test_loop = h2o_malloc(sizeof(*test_loop));
+        test_loop = h2o_mem_alloc(sizeof(*test_loop));
         uv_loop_init(test_loop);
 #else
         test_loop = h2o_evloop_create();

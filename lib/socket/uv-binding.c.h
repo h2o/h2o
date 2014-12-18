@@ -123,7 +123,7 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_
 
 static struct st_h2o_uv_socket_t *create_socket(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen)
 {
-    uv_tcp_t *tcp = h2o_malloc(sizeof(*tcp));
+    uv_tcp_t *tcp = h2o_mem_alloc(sizeof(*tcp));
 
     if (uv_tcp_init(loop, tcp) != 0) {
         free(tcp);
@@ -166,7 +166,7 @@ h2o_socket_t *do_import(h2o_loop_t *loop, h2o_socket_export_t *info)
 
 h2o_socket_t *h2o_uv_socket_create(uv_stream_t *stream, struct sockaddr *addr, socklen_t addrlen, uv_close_cb close_cb)
 {
-    struct st_h2o_uv_socket_t *sock = h2o_malloc(sizeof(*sock));
+    struct st_h2o_uv_socket_t *sock = h2o_mem_alloc(sizeof(*sock));
 
     memset(sock, 0, sizeof(*sock));
     h2o_buffer_init(&sock->super.input, &h2o_socket_buffer_prototype);

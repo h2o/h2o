@@ -267,7 +267,7 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *_bufs, size_t bufcnt, h2o_socket
     if (bufcnt <= sizeof(sock->_wreq.smallbufs) / sizeof(sock->_wreq.smallbufs[0])) {
         sock->_wreq.bufs = sock->_wreq.smallbufs;
     } else {
-        sock->_wreq.bufs = h2o_malloc(sizeof(h2o_iovec_t) * bufcnt);
+        sock->_wreq.bufs = h2o_mem_alloc(sizeof(h2o_iovec_t) * bufcnt);
         sock->_wreq.alloced_ptr = sock->_wreq.bufs = sock->_wreq.bufs;
     }
     memcpy(sock->_wreq.bufs, bufs, sizeof(h2o_iovec_t) * bufcnt);
@@ -325,7 +325,7 @@ struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, struct 
 
     fcntl(fd, F_SETFL, O_NONBLOCK);
 
-    sock = h2o_malloc(sizeof(*sock));
+    sock = h2o_mem_alloc(sizeof(*sock));
     memset(sock, 0, sizeof(*sock));
     h2o_buffer_init(&sock->super.input, &h2o_socket_buffer_prototype);
     assert(addrlen < sizeof(sock->super.peername.addr));
@@ -396,7 +396,7 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
 
 h2o_evloop_t *create_evloop(size_t sz)
 {
-    h2o_evloop_t *loop = h2o_malloc(sz);
+    h2o_evloop_t *loop = h2o_mem_alloc(sz);
 
     memset(loop, 0, sz);
     loop->_statechanged.tail_ref = &loop->_statechanged.head;

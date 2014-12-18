@@ -109,7 +109,7 @@ static void init_openssl(void)
     static int ready = 0;
     if (! ready) {
         int nlocks = CRYPTO_num_locks(), i;
-        openssl_thread_locks = h2o_malloc(sizeof(*openssl_thread_locks) * nlocks);
+        openssl_thread_locks = h2o_mem_alloc(sizeof(*openssl_thread_locks) * nlocks);
         for (i = 0; i != nlocks; ++i)
             pthread_mutex_init(openssl_thread_locks + i, NULL);
         CRYPTO_set_locking_callback(openssl_thread_lock_callback);
@@ -330,13 +330,13 @@ static struct listener_config_t *find_listener(struct config_t *conf, struct soc
 
 static struct listener_config_t *add_listener(struct config_t *conf, int fd, struct sockaddr *addr, socklen_t addrlen)
 {
-    struct listener_config_t *listener = h2o_malloc(sizeof(*listener));
+    struct listener_config_t *listener = h2o_mem_alloc(sizeof(*listener));
 
     memcpy(&listener->addr, addr, addrlen);
     listener->fd = fd;
     listener->addrlen = addrlen;
     memset(&listener->ssl, 0, sizeof(listener->ssl));
-    conf->listeners = h2o_realloc(conf->listeners, sizeof(*conf->listeners) * (conf->num_listeners + 1));
+    conf->listeners = h2o_mem_realloc(conf->listeners, sizeof(*conf->listeners) * (conf->num_listeners + 1));
     conf->listeners[conf->num_listeners++] = listener;
 
     return listener;

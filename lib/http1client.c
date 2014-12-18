@@ -343,9 +343,9 @@ static void on_connect_timeout(h2o_timeout_entry_t *entry)
     on_connect_error(client, client->_errstr != NULL ? client->_errstr : "connection timeout");
 }
 
-static h2o_http1client_t *create_client(h2o_http1client_ctx_t *ctx, h2o_mempool_t *pool, h2o_http1client_connect_cb cb)
+static h2o_http1client_t *create_client(h2o_http1client_ctx_t *ctx, h2o_mem_pool_t *pool, h2o_http1client_connect_cb cb)
 {
-    h2o_http1client_t *client = h2o_malloc(sizeof(*client));
+    h2o_http1client_t *client = h2o_mem_alloc(sizeof(*client));
 
     memset(client, 0, sizeof(*client));
     client->ctx = ctx;
@@ -358,7 +358,7 @@ static h2o_http1client_t *create_client(h2o_http1client_ctx_t *ctx, h2o_mempool_
 
 const char * const h2o_http1client_error_is_eos = "end of stream";
 
-h2o_http1client_t *h2o_http1client_connect(h2o_http1client_ctx_t *ctx, h2o_mempool_t *pool, const char *host, uint16_t port, h2o_http1client_connect_cb cb)
+h2o_http1client_t *h2o_http1client_connect(h2o_http1client_ctx_t *ctx, h2o_mem_pool_t *pool, const char *host, uint16_t port, h2o_http1client_connect_cb cb)
 {
     h2o_http1client_t *client;
     struct addrinfo hints, *res;
@@ -394,7 +394,7 @@ Error:
     return client;
 }
 
-h2o_http1client_t *h2o_http1client_connect_with_pool(h2o_http1client_ctx_t *ctx, h2o_mempool_t *pool, h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb)
+h2o_http1client_t *h2o_http1client_connect_with_pool(h2o_http1client_ctx_t *ctx, h2o_mem_pool_t *pool, h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb)
 {
     h2o_http1client_t *client = create_client(ctx, pool, cb);
     client->sockpool = sockpool;

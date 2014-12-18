@@ -49,7 +49,7 @@ static int on_config_index(h2o_configurator_command_t *cmd, h2o_configurator_con
     size_t i;
 
     free(self->vars->index_files);
-    self->vars->index_files = h2o_malloc(sizeof(self->vars->index_files[0]) * (node->data.sequence.size + 1));
+    self->vars->index_files = h2o_mem_alloc(sizeof(self->vars->index_files[0]) * (node->data.sequence.size + 1));
     for (i = 0; i != node->data.sequence.size; ++i) {
         yoml_t *element = node->data.sequence.elements[i];
         if (element->type != YOML_TYPE_SCALAR) {
@@ -130,11 +130,11 @@ static int on_config_mime_settypes(h2o_configurator_command_t *cmd, h2o_configur
 
     h2o_mimemap_set_default_type(newmap, h2o_mimemap_get_default_type(self->vars->mimemap).base);
     if (set_mimetypes(cmd, newmap, file, node) != 0) {
-        h2o_mempool_release_shared(newmap);
+        h2o_mem_release_shared(newmap);
         return -1;
     }
 
-    h2o_mempool_release_shared(self->vars->mimemap);
+    h2o_mem_release_shared(self->vars->mimemap);
     self->vars->mimemap = newmap;
     return 0;
 }
@@ -143,7 +143,7 @@ static void clone_mimemap_if_clean(struct st_h2o_file_configurator_t *self)
 {
     if (self->vars->mimemap != self->vars[-1].mimemap)
         return;
-    h2o_mempool_release_shared(self->vars->mimemap);
+    h2o_mem_release_shared(self->vars->mimemap);
     self->vars->mimemap = h2o_mimemap_clone(self->vars->mimemap);
 }
 
@@ -211,7 +211,7 @@ static const char **dup_strlist(const char **s)
 
     for (i = 0; s[i] != NULL; ++i)
         ;
-    ret = h2o_malloc(sizeof(*ret) * (i + 1));
+    ret = h2o_mem_alloc(sizeof(*ret) * (i + 1));
     for (i = 0; s[i] != NULL; ++i)
         ret[i] = s[i];
     ret[i] = NULL;
@@ -226,7 +226,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
     self->vars[0].index_files = dup_strlist(self->vars[-1].index_files);
     self->vars[0].mimemap = self->vars[-1].mimemap;
     self->vars[0].flags = self->vars[-1].flags;
-    h2o_mempool_addref_shared(self->vars[0].mimemap);
+    h2o_mem_addref_shared(self->vars[0].mimemap);
     return 0;
 }
 
@@ -234,7 +234,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 {
     struct st_h2o_file_configurator_t *self = (void*)_self;
     free(self->vars->index_files);
-    h2o_mempool_release_shared(self->vars->mimemap);
+    h2o_mem_release_shared(self->vars->mimemap);
     --self->vars;
     return 0;
 }

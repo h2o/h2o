@@ -29,7 +29,7 @@ struct rproxy_t {
     const char *reproxy_url;
 };
 
-static int parse_url(h2o_mempool_t *pool, const char *url, char const **host, uint16_t *port, char const **path)
+static int parse_url(h2o_mem_pool_t *pool, const char *url, char const **host, uint16_t *port, char const **path)
 {
     const char *hp_start, *hp_end, *colon_at;
 
@@ -91,7 +91,7 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
         host,
         (int)port,
         path);
-    body.base = h2o_mempool_alloc(&req->pool, body.len + 1);
+    body.base = h2o_mem_alloc_pool(&req->pool, body.len + 1);
     sprintf(body.base,
         "reproxy request to URL: %s\n"
         "  host: %s\n"

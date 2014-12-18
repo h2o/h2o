@@ -91,7 +91,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
     for (i = 0; i != self->handles[-1].size; ++i) {
         h2o_access_log_filehandle_t *fh = self->handles[-1].entries[i];
         self->handles[0].entries[self->handles[0].size++] = fh;
-        h2o_mempool_addref_shared(fh);
+        h2o_mem_addref_shared(fh);
     }
 
     return 0;
@@ -107,7 +107,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
         h2o_access_log_filehandle_t *fh = self->handles->entries[i];
         if (ctx->pathconf != NULL)
             h2o_access_log_register(ctx->pathconf, fh);
-        h2o_mempool_release_shared(fh);
+        h2o_mem_release_shared(fh);
     }
     /* free the vector */
     free(self->handles->entries);

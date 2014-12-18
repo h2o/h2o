@@ -60,7 +60,7 @@ static int test_location_match(h2o_proxy_location_t *location, h2o_iovec_t schem
     return 1;
 }
 
-static h2o_iovec_t rewrite_location(h2o_mempool_t *pool, const char *location, size_t location_len, h2o_proxy_location_t *upstream, h2o_iovec_t req_scheme, h2o_iovec_t req_authority, h2o_iovec_t req_basepath)
+static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, size_t location_len, h2o_proxy_location_t *upstream, h2o_iovec_t req_scheme, h2o_iovec_t req_authority, h2o_iovec_t req_basepath)
 {
     h2o_iovec_t loc_scheme, loc_host, loc_path;
     uint16_t loc_port;
@@ -93,7 +93,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
         bufsz += h->name->len + h->value.len + 4;
 
     /* allocate */
-    buf.base = h2o_mempool_alloc(&req->pool, bufsz);
+    buf.base = h2o_mem_alloc_pool(&req->pool, bufsz);
 
     /* build response */
     p = buf.base;
@@ -269,7 +269,7 @@ static void on_generator_dispose(void *_self)
 
 static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_proxy_location_t *upstream, int keepalive)
 {
-    struct rp_generator_t *self = h2o_mempool_alloc_shared(&req->pool, sizeof(*self), on_generator_dispose);
+    struct rp_generator_t *self = h2o_mem_alloc_shared(&req->pool, sizeof(*self), on_generator_dispose);
 
     self->super.proceed = do_proceed;
     self->super.stop = do_close;
@@ -322,7 +322,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 static void *on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 {
     struct rp_handler_t *self = (void*)_self;
-    h2o_http1client_ctx_t *client_ctx = h2o_malloc(sizeof(*ctx) + sizeof(*client_ctx->io_timeout));
+    h2o_http1client_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*ctx) + sizeof(*client_ctx->io_timeout));
 
     /* use the loop of first context for handling socketpool timeouts */
     if (self->sockpool != NULL && self->sockpool->timeout == UINT64_MAX)
@@ -369,7 +369,7 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, const char *host
     self->upstream.port = port;
     self->upstream.path = h2o_strdup(NULL, real_path, SIZE_MAX);
     if (config->use_keepalive) {
-        self->sockpool = h2o_malloc(sizeof(*self->sockpool));
+        self->sockpool = h2o_mem_alloc(sizeof(*self->sockpool));
         h2o_socketpool_init(self->sockpool, host, port, SIZE_MAX /* FIXME */);
     }
     self->config = *config;

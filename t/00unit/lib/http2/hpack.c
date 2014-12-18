@@ -33,7 +33,7 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     header_table.hpack_capacity = 4096;
 
     memset(&req, 0, sizeof(req));
-    h2o_mempool_init(&req.pool);
+    h2o_mem_init_pool(&req.pool);
     allow_psuedo = 1;
     in = first_req;
     r = h2o_hpack_parse_headers(&req, &header_table, &allow_psuedo, (const uint8_t*)in.base, in.len);
@@ -49,10 +49,10 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     ok(memcmp(req.scheme.base, H2O_STRLIT("http")) == 0);
     ok(req.headers.size == 0);
 
-    h2o_mempool_clear(&req.pool);
+    h2o_mem_clear_pool(&req.pool);
 
     memset(&req, 0, sizeof(req));
-    h2o_mempool_init(&req.pool);
+    h2o_mem_init_pool(&req.pool);
     allow_psuedo = 1;
     in = second_req;
     r = h2o_hpack_parse_headers(&req, &header_table, &allow_psuedo, (const uint8_t*)in.base, in.len);
@@ -70,10 +70,10 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     ok(h2o_lcstris(req.headers.entries[0].name->base, req.headers.entries[0].name->len, H2O_STRLIT("cache-control")));
     ok(h2o_lcstris(req.headers.entries[0].value.base, req.headers.entries[0].value.len, H2O_STRLIT("no-cache")));
 
-    h2o_mempool_clear(&req.pool);
+    h2o_mem_clear_pool(&req.pool);
 
     memset(&req, 0, sizeof(req));
-    h2o_mempool_init(&req.pool);
+    h2o_mem_init_pool(&req.pool);
     allow_psuedo = 1;
     in = third_req;
     r = h2o_hpack_parse_headers(&req, &header_table, &allow_psuedo, (const uint8_t*)in.base, in.len);
@@ -92,7 +92,7 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     ok(h2o_lcstris(req.headers.entries[0].value.base, req.headers.entries[0].value.len, H2O_STRLIT("custom-value")));
 
     h2o_hpack_dispose_header_table(&header_table);
-    h2o_mempool_clear(&req.pool);
+    h2o_mem_clear_pool(&req.pool);
 }
 
 static void check_flatten(h2o_hpack_header_table_t *header_table, h2o_res_t *res, const char *expected, size_t expected_len)
@@ -111,8 +111,8 @@ static void check_flatten(h2o_hpack_header_table_t *header_table, h2o_res_t *res
 
 void test_lib__http2__hpack(void)
 {
-    h2o_mempool_t pool;
-    h2o_mempool_init(&pool);
+    h2o_mem_pool_t pool;
+    h2o_mem_init_pool(&pool);
 
     note("decode_int");
     {
@@ -149,7 +149,7 @@ void test_lib__http2__hpack(void)
         ok(decoded->len == sizeof("www.example.com") -1);
         ok(strcmp(decoded->base, "www.example.com") == 0);
     }
-    h2o_mempool_clear(&pool);
+    h2o_mem_clear_pool(&pool);
 
     note("decode_header (literal header field with indexing)");
     {
@@ -170,7 +170,7 @@ void test_lib__http2__hpack(void)
         ok(strcmp(result.value->base, "custom-header") == 0);
         ok(header_table.hpack_size == 55);
     }
-    h2o_mempool_clear(&pool);
+    h2o_mem_clear_pool(&pool);
 
     note("decode_header (literal header field without indexing)");
     {
@@ -190,7 +190,7 @@ void test_lib__http2__hpack(void)
         ok(strcmp(result.value->base, "/sample/path") == 0);
         ok(header_table.hpack_size == 0);
     }
-    h2o_mempool_clear(&pool);
+    h2o_mem_clear_pool(&pool);
 
     note("decode_header (literal header field never indexed)");
     {
@@ -211,7 +211,7 @@ void test_lib__http2__hpack(void)
         ok(strcmp(result.value->base, "secret") == 0);
         ok(header_table.hpack_size == 0);
     }
-    h2o_mempool_clear(&pool);
+    h2o_mem_clear_pool(&pool);
 
     note("decode_header (indexed header field)");
     {
@@ -231,7 +231,7 @@ void test_lib__http2__hpack(void)
         ok(strcmp(result.value->base, "GET") == 0);
         ok(header_table.hpack_size == 0);
     }
-    h2o_mempool_clear(&pool);
+    h2o_mem_clear_pool(&pool);
 
     note("request examples without huffman coding");
     test_request(
@@ -285,5 +285,5 @@ void test_lib__http2__hpack(void)
 #endif
     }
 
-    h2o_mempool_clear(&pool);
+    h2o_mem_clear_pool(&pool);
 }

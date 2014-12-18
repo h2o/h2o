@@ -94,7 +94,7 @@ static ssize_t send_callback(wslay_event_context_ptr ctx, const uint8_t *data, s
     }
 
     /* copy data */
-    conn->_write_buf = h2o_realloc(conn->_write_buf, len);
+    conn->_write_buf = h2o_mem_realloc(conn->_write_buf, len);
     memcpy(conn->_write_buf, data, len);
 
     /* write */
@@ -129,7 +129,7 @@ static void on_complete(void *user_data, h2o_socket_t *sock, size_t reqsize)
 
 h2o_websocket_conn_t *h2o_upgrade_to_websocket(h2o_http1_conn_t *src_conn, const char *client_key, void *data, h2o_websocket_msg_callback cb)
 {
-    h2o_websocket_conn_t *conn = h2o_malloc(sizeof(*conn));
+    h2o_websocket_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
     char accept_key[29];
 
     /* setup the context */

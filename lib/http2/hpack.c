@@ -55,9 +55,9 @@ static inline int value_is_part_of_static_table(const h2o_iovec_t *value)
         && value < &h2o_hpack_static_table[sizeof(h2o_hpack_static_table) / sizeof(h2o_hpack_static_table[0])].value;
 }
 
-static h2o_iovec_t *alloc_buf(h2o_mempool_t *pool, size_t len)
+static h2o_iovec_t *alloc_buf(h2o_mem_pool_t *pool, size_t len)
 {
-    h2o_iovec_t *buf = h2o_mempool_alloc_shared(pool, sizeof(h2o_iovec_t) + len + 1, NULL);
+    h2o_iovec_t *buf = h2o_mem_alloc_shared(pool, sizeof(h2o_iovec_t) + len + 1, NULL);
     buf->base = (char*)buf + sizeof(h2o_iovec_t);
     buf->len = len;
     return buf;
@@ -104,7 +104,7 @@ static char *huffdecode4(char *dst, uint8_t in, uint8_t *state, int *maybe_eos)
     return dst;
 }
 
-static h2o_iovec_t *decode_huffman(h2o_mempool_t *pool, const uint8_t *src, size_t len)
+static h2o_iovec_t *decode_huffman(h2o_mem_pool_t *pool, const uint8_t *src, size_t len)
 {
     const uint8_t *src_end = src + len;
     char *dst;
@@ -128,7 +128,7 @@ static h2o_iovec_t *decode_huffman(h2o_mempool_t *pool, const uint8_t *src, size
     return dst_buf;
 }
 
-static h2o_iovec_t *decode_string(h2o_mempool_t *pool, const uint8_t **src, const uint8_t *src_end)
+static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, const uint8_t *src_end)
 {
     h2o_iovec_t *ret;
     int is_huffman;
@@ -172,9 +172,9 @@ static void header_table_evict_one(h2o_hpack_header_table_t *table)
     entry = header_table_get(table, --table->num_entries);
     table->hpack_size -= entry->name->len + entry->value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET;
     if (! h2o_iovec_is_token(entry->name))
-        h2o_mempool_release_shared(entry->name);
+        h2o_mem_release_shared(entry->name);
     if (! value_is_part_of_static_table(entry->value))
-        h2o_mempool_release_shared(entry->value);
+        h2o_mem_release_shared(entry->value);
     entry->name = NULL;
     entry->value = NULL;
 }
@@ -198,7 +198,7 @@ static struct st_h2o_hpack_header_table_entry_t *header_table_add(h2o_hpack_head
         size_t new_capacity = table->num_entries * 2;
         if (new_capacity < 16)
             new_capacity = 16;
-        struct st_h2o_hpack_header_table_entry_t *new_entries = h2o_malloc(new_capacity * sizeof(struct st_h2o_hpack_header_table_entry_t));
+        struct st_h2o_hpack_header_table_entry_t *new_entries = h2o_mem_alloc(new_capacity * sizeof(struct st_h2o_hpack_header_table_entry_t));
         if (table->num_entries != 0) {
             size_t src_index = table->entry_start_index, dst_index = 0;
             do {
@@ -219,7 +219,7 @@ static struct st_h2o_hpack_header_table_entry_t *header_table_add(h2o_hpack_head
     return table->entries + table->entry_start_index;
 }
 
-static int decode_header(h2o_mempool_t *pool, struct st_h2o_decode_header_result_t *result, h2o_hpack_header_table_t *hpack_header_table, const uint8_t ** const src, const uint8_t *src_end)
+static int decode_header(h2o_mem_pool_t *pool, struct st_h2o_decode_header_result_t *result, h2o_hpack_header_table_t *hpack_header_table, const uint8_t ** const src, const uint8_t *src_end)
 {
     int32_t index = 0;
     int value_is_indexed = 0, do_index = 0;
@@ -275,10 +275,10 @@ static int decode_header(h2o_mempool_t *pool, struct st_h2o_decode_header_result
             struct st_h2o_hpack_header_table_entry_t *entry = header_table_get(hpack_header_table, index - HEADER_TABLE_OFFSET);
             result->name = entry->name;
             if (! h2o_iovec_is_token(result->name))
-                h2o_mempool_link_shared(pool, result->name);
+                h2o_mem_link_shared(pool, result->name);
             if (value_is_indexed) {
                 result->value = entry->value;
-                h2o_mempool_link_shared(pool, result->value);
+                h2o_mem_link_shared(pool, result->value);
             }
         } else {
             return -1;
@@ -305,10 +305,10 @@ static int decode_header(h2o_mempool_t *pool, struct st_h2o_decode_header_result
         if (entry != NULL) {
             entry->name = result->name;
             if (! h2o_iovec_is_token(entry->name))
-                h2o_mempool_addref_shared(entry->name);
+                h2o_mem_addref_shared(entry->name);
             entry->value = result->value;
             if (! value_is_part_of_static_table(entry->value))
-                h2o_mempool_addref_shared(entry->value);
+                h2o_mem_addref_shared(entry->value);
         }
     }
 
@@ -350,9 +350,9 @@ void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table)
         do {
             struct st_h2o_hpack_header_table_entry_t *entry = header_table->entries + index;
             if (! h2o_iovec_is_token(entry->name))
-                h2o_mempool_release_shared(entry->name);
+                h2o_mem_release_shared(entry->name);
             if (! value_is_part_of_static_table(entry->value))
-                h2o_mempool_release_shared(entry->value);
+                h2o_mem_release_shared(entry->value);
             index = (index + 1) % header_table->entry_capacity;
         } while (--header_table->num_entries != 0);
     }

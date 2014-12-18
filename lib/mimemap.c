@@ -34,7 +34,7 @@ static h2o_iovec_t dupref(const char *s)
 {
     h2o_iovec_t ret;
     ret.len = strlen(s);
-    ret.base = h2o_mempool_alloc_shared(NULL, ret.len + 1, NULL);
+    ret.base = h2o_mem_alloc_shared(NULL, ret.len + 1, NULL);
     memcpy(ret.base, s, ret.len + 1);
     return ret;
 }
@@ -46,16 +46,16 @@ static void on_dispose(void *_mimemap)
     h2o_iovec_t type;
 
     kh_foreach(mimemap->table, ext, type, {
-        h2o_mempool_release_shared((char*)ext);
-        h2o_mempool_release_shared(type.base);
+        h2o_mem_release_shared((char*)ext);
+        h2o_mem_release_shared(type.base);
     });
     kh_destroy(exttable, mimemap->table);
-    h2o_mempool_release_shared(mimemap->default_type.base);
+    h2o_mem_release_shared(mimemap->default_type.base);
 }
 
 h2o_mimemap_t *h2o_mimemap_create()
 {
-    h2o_mimemap_t *mimemap = h2o_mempool_alloc_shared(NULL, sizeof(*mimemap), on_dispose);
+    h2o_mimemap_t *mimemap = h2o_mem_alloc_shared(NULL, sizeof(*mimemap), on_dispose);
 
     mimemap->table = kh_init(exttable);
     mimemap->default_type = dupref("application/octet-stream");
@@ -82,7 +82,7 @@ h2o_mimemap_t *h2o_mimemap_create()
 
 h2o_mimemap_t *h2o_mimemap_clone(h2o_mimemap_t *src)
 {
-    h2o_mimemap_t *dst = h2o_mempool_alloc_shared(NULL, sizeof(*dst), on_dispose);
+    h2o_mimemap_t *dst = h2o_mem_alloc_shared(NULL, sizeof(*dst), on_dispose);
     const char *ext;
     h2o_iovec_t type;
 
@@ -91,18 +91,18 @@ h2o_mimemap_t *h2o_mimemap_clone(h2o_mimemap_t *src)
         int r;
         khiter_t iter = kh_put(exttable, dst->table, ext, &r);
         kh_val(dst->table, iter) = type;
-        h2o_mempool_addref_shared((char*)ext);
-        h2o_mempool_addref_shared(type.base);
+        h2o_mem_addref_shared((char*)ext);
+        h2o_mem_addref_shared(type.base);
     });
     dst->default_type = src->default_type;
-    h2o_mempool_addref_shared(dst->default_type.base);
+    h2o_mem_addref_shared(dst->default_type.base);
 
     return dst;
 }
 
 void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, const char *type)
 {
-    h2o_mempool_release_shared(mimemap->default_type.base);
+    h2o_mem_release_shared(mimemap->default_type.base);
     mimemap->default_type = dupref(type);
 }
 
@@ -110,7 +110,7 @@ void h2o_mimemap_set_type(h2o_mimemap_t *mimemap, const char *ext, const char *t
 {
     khiter_t iter = kh_get(exttable, mimemap->table, ext);
     if (iter != kh_end(mimemap->table)) {
-        h2o_mempool_release_shared(kh_val(mimemap->table, iter).base);
+        h2o_mem_release_shared(kh_val(mimemap->table, iter).base);
     } else {
         int ret;
         iter = kh_put(exttable, mimemap->table, dupref(ext).base, &ret);
@@ -124,9 +124,9 @@ void h2o_mimemap_remove_type(h2o_mimemap_t *mimemap, const char *ext)
     khiter_t iter = kh_get(exttable, mimemap->table, ext);
     if (iter != kh_end(mimemap->table)) {
         const char *key = kh_key(mimemap->table, iter);
-        h2o_mempool_release_shared(kh_val(mimemap->table, iter).base);
+        h2o_mem_release_shared(kh_val(mimemap->table, iter).base);
         kh_del(exttable, mimemap->table, iter);
-        h2o_mempool_release_shared((char*)key);
+        h2o_mem_release_shared((char*)key);
     }
 }
 

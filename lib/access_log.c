@@ -76,9 +76,9 @@ static struct log_element_t *compile_log_format(const char *fmt, size_t *_num_el
     /* suffix buffer is always guaranteed to be larger than the fmt + (sizeof('\n') - 1) (so that they would be no buffer overruns) */
 #define NEW_ELEMENT(ty) \
     do { \
-        elements = h2o_realloc(elements, sizeof(*elements) * (num_elements + 1)); \
+        elements = h2o_mem_realloc(elements, sizeof(*elements) * (num_elements + 1)); \
         elements[num_elements].type = ty; \
-        elements[num_elements].suffix = h2o_iovec_init(h2o_malloc(fmt_len + 1), 0); \
+        elements[num_elements].suffix = h2o_iovec_init(h2o_mem_alloc(fmt_len + 1), 0); \
         ++num_elements; \
     } while (0)
 
@@ -195,11 +195,11 @@ static char *expand_line_buf(char *line, size_t cur_size, size_t required)
 
     /* reallocate */
     if (cur_size == LOG_ALLOCA_SIZE) {
-        char *newpt = h2o_malloc(new_size);
+        char *newpt = h2o_mem_alloc(new_size);
         memcpy(newpt, line, cur_size);
         line = newpt;
     } else {
-        line = h2o_realloc(line, new_size);
+        line = h2o_mem_realloc(line, new_size);
     }
 
     return line;
@@ -376,7 +376,7 @@ h2o_access_log_filehandle_t *h2o_access_log_open_handle(const char *path, const 
         }
     }
 
-    fh = h2o_mempool_alloc_shared(NULL, sizeof(*fh), on_dispose_handle);
+    fh = h2o_mem_alloc_shared(NULL, sizeof(*fh), on_dispose_handle);
     fh->elements = elements;
     fh->num_elements = num_elements;
     fh->fd = fd;
@@ -388,7 +388,7 @@ static void dispose(h2o_logger_t *_self)
 {
     struct st_h2o_access_logger_t *self = (void*)_self;
 
-    h2o_mempool_release_shared(self->fh);
+    h2o_mem_release_shared(self->fh);
 }
 
 h2o_logger_t *h2o_access_log_register(h2o_pathconf_t *pathconf, h2o_access_log_filehandle_t *fh)
@@ -398,7 +398,7 @@ h2o_logger_t *h2o_access_log_register(h2o_pathconf_t *pathconf, h2o_access_log_f
     self->super.dispose = dispose;
     self->super.log_access = log_access;
     self->fh = fh;
-    h2o_mempool_addref_shared(fh);
+    h2o_mem_addref_shared(fh);
 
     return &self->super;
 }

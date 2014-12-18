@@ -80,7 +80,7 @@ static h2o_http2_stream_priolist_slot_t *priolist_link(h2o_http2_stream_priolist
         }
     }
     /* not found, create new slot */
-    slot = h2o_malloc(sizeof(*slot));
+    slot = h2o_mem_alloc(sizeof(*slot));
     slot->weight = weight;
     h2o_linklist_init_anchor(&slot->active_streams);
     h2o_linklist_init_anchor(&slot->blocked_streams);
@@ -788,7 +788,7 @@ static void emit_writereq(h2o_timeout_entry_t *entry)
 
 static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock, struct sockaddr *addr, socklen_t addrlen)
 {
-    h2o_http2_conn_t *conn = h2o_malloc(sizeof(*conn));
+    h2o_http2_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
     /* init the connection */
     memset(conn, 0, sizeof(*conn));

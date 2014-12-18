@@ -47,7 +47,7 @@ struct st_h2o_socket_ssl_t {
     } input;
     struct {
         H2O_VECTOR(h2o_iovec_t) bufs;
-        h2o_mempool_t pool; /* placed at the last */
+        h2o_mem_pool_t pool; /* placed at the last */
     } output;
 };
 
@@ -121,7 +121,7 @@ static int write_bio(BIO *b, const char *in, int len)
     if (len == 0)
         return 0;
 
-    bytes_alloced = h2o_mempool_alloc(&sock->ssl->output.pool, len);
+    bytes_alloced = h2o_mem_alloc_pool(&sock->ssl->output.pool, len);
     memcpy(bytes_alloced, in, len);
 
     h2o_vector_reserve(&sock->ssl->output.pool, (h2o_vector_t*)&sock->ssl->output.bufs, sizeof(h2o_iovec_t), sock->ssl->output.bufs.size + 1);
@@ -206,7 +206,7 @@ static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
 {
     SSL_free(ssl->ssl);
     h2o_buffer_dispose(&ssl->input.encrypted);
-    h2o_mempool_clear(&ssl->output.pool);
+    h2o_mem_clear_pool(&ssl->output.pool);
     free(ssl);
 }
 
@@ -339,7 +339,7 @@ void on_write_complete(h2o_socket_t *sock, int status)
 
     if (sock->ssl != NULL) {
         memset(&sock->ssl->output.bufs, 0, sizeof(sock->ssl->output.bufs));
-        h2o_mempool_clear(&sock->ssl->output.pool);
+        h2o_mem_clear_pool(&sock->ssl->output.pool);
     }
 
     cb = sock->_cb.write;
@@ -451,10 +451,10 @@ void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, h2o_s
 
     BIO *bio;
 
-    sock->ssl = h2o_malloc(sizeof(*sock->ssl));
+    sock->ssl = h2o_mem_alloc(sizeof(*sock->ssl));
     memset(sock->ssl, 0, offsetof(struct st_h2o_socket_ssl_t, output.pool));
     h2o_buffer_init(&sock->ssl->input.encrypted, &h2o_socket_buffer_prototype);
-    h2o_mempool_init(&sock->ssl->output.pool);
+    h2o_mem_init_pool(&sock->ssl->output.pool);
     bio = BIO_new(&bio_methods);
     bio->ptr = sock;
     bio->init = 1;
