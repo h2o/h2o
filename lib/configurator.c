@@ -232,7 +232,7 @@ static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurat
     return h2o_configurator_scanf(cmd, file, node, "%zu", &ctx->globalconf->http2_max_concurrent_requests_per_connection);
 }
 
-static void init_core_configurators(h2o_globalconf_t *conf)
+void h2o_configurator__init_core(h2o_globalconf_t *conf)
 {
     /* check if already initialized */
     if (h2o_configurator_get_command(conf, "files") != NULL)
@@ -280,106 +280,10 @@ static void init_core_configurators(h2o_globalconf_t *conf)
     }
 }
 
-static void init_pathconf(h2o_pathconf_t *pathconf, h2o_hostconf_t *hostconf)
+void h2o_configurator__dispose_configurators(h2o_globalconf_t *conf)
 {
-    memset(pathconf, 0, sizeof(*pathconf));
-    pathconf->host = hostconf;
-    h2o_chunked_register(pathconf);
-}
-
-static void dispose_pathconf(h2o_pathconf_t *pathconf)
-{
-#define DESTROY_LIST(type, list) do { \
-    size_t i; \
-    for (i = 0; i != list.size; ++i) { \
-        type *e = list.entries[i]; \
-        if (e->dispose != NULL) \
-            e->dispose(e); \
-        free(e); \
-    } \
-    free(list.entries); \
-} while (0)
-
-    DESTROY_LIST(h2o_handler_t, pathconf->handlers);
-    DESTROY_LIST(h2o_filter_t, pathconf->filters);
-    DESTROY_LIST(h2o_logger_t, pathconf->loggers);
-
-#undef DESTROY_LIST
-}
-
-static void init_hostconf(h2o_hostconf_t *hostconf, h2o_globalconf_t *globalconf)
-{
-    memset(hostconf, 0, sizeof(*hostconf));
-    hostconf->global = globalconf;
-    init_pathconf(&hostconf->fallback_path, hostconf);
-}
-
-static void dispose_hostconf(h2o_hostconf_t *hostconf)
-{
-    size_t i;
-
-    free(hostconf->hostname.base);
-    for (i = 0; i != hostconf->paths.size; ++i) {
-        h2o_pathconf_t *pathconf = hostconf->paths.entries + i;
-        dispose_pathconf(pathconf);
-    }
-    dispose_pathconf(&hostconf->fallback_path);
-}
-
-void h2o_config_init(h2o_globalconf_t *config)
-{
-    memset(config, 0, sizeof(*config));
-    h2o_linklist_init_anchor(&config->configurators);
-    config->server_name = h2o_iovec_init(H2O_STRLIT("h2o/0.1"));
-    config->req_timeout = H2O_DEFAULT_REQ_TIMEOUT;
-    config->max_request_entity_size = H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE;
-    config->http1_upgrade_to_http2 = H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2;
-    config->http2_max_concurrent_requests_per_connection = H2O_DEFAULT_HTTP2_MAX_CONCURRENT_REQUESTS_PER_CONNECTION;
-
-    init_core_configurators(config);
-}
-
-h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *pathname)
-{
-    h2o_pathconf_t *pathconf;
-
-    h2o_vector_reserve(NULL, (void*)&hostconf->paths, sizeof(hostconf->paths.entries[0]), hostconf->paths.size + 1);
-    pathconf = hostconf->paths.entries + hostconf->paths.size++;
-
-    init_pathconf(pathconf, hostconf);
-    pathconf->path = h2o_strdup_slashed(NULL, pathname, SIZE_MAX);
-
-    return pathconf;
-}
-
-h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, const char *hostname)
-{
-    h2o_hostconf_t *hostconf;
-    size_t i;
-
-    h2o_vector_reserve(NULL, (void*)&config->hosts, sizeof(config->hosts.entries[0]), config->hosts.size + 1);
-    hostconf = config->hosts.entries + config->hosts.size++;
-
-    init_hostconf(hostconf, config);
-    hostconf->hostname = h2o_strdup(NULL, hostname, SIZE_MAX);
-    for (i = 0; i != hostconf->hostname.len; ++i)
-        hostconf->hostname.base[i] = h2o_tolower(hostconf->hostname.base[i]);
-
-    return hostconf;
-}
-
-void h2o_config_dispose(h2o_globalconf_t *config)
-{
-    size_t i;
-
-    for (i = 0; i != config->hosts.size; ++i) {
-        h2o_hostconf_t *hostconf = config->hosts.entries + i;
-        dispose_hostconf(hostconf);
-    }
-    free(config->hosts.entries);
-
-    while (! h2o_linklist_is_empty(&config->configurators)) {
-        h2o_configurator_t *c = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, config->configurators.next);
+    while (! h2o_linklist_is_empty(&conf->configurators)) {
+        h2o_configurator_t *c = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, conf->configurators.next);
         h2o_linklist_unlink(&c->_link);
         if (c->dispose != NULL)
             c->dispose(c);

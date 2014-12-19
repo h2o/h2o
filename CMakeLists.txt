@@ -40,6 +40,7 @@ SET(LIB_SOURCE_FILES
     lib/access_log.c
     lib/chunked.c
     lib/context.c
+    lib/config.c
     lib/configurator.c
     lib/configurator/access_log.c
     lib/configurator/file.c

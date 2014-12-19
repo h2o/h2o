@@ -21,6 +21,7 @@
 		105534DF1A3C7B9800627ECB /* proxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534DE1A3C7B9800627ECB /* proxy.c */; };
 		105534EB1A42A87E00627ECB /* _templates.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 105534EA1A42A87E00627ECB /* _templates.c.h */; };
 		105534ED1A42AD5E00627ECB /* templates.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 105534EC1A42AD5E00627ECB /* templates.c.h */; };
+		105534EF1A440FC800627ECB /* config.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534EE1A440FC800627ECB /* config.c */; };
 		1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923C119A3217300C52AD6 /* websocket.c */; };
 		1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923A319A3215F00C52AD6 /* websocket.h */; };
 		1065E6F919BEBAC600686E72 /* timeout.c in Sources */ = {isa = PBXBuildFile; fileRef = 1065E6F819BEBAC600686E72 /* timeout.c */; };
@@ -200,6 +201,7 @@
 		105534DE1A3C7B9800627ECB /* proxy.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = proxy.c; sourceTree = "<group>"; };
 		105534EA1A42A87E00627ECB /* _templates.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = _templates.c.h; sourceTree = "<group>"; };
 		105534EC1A42AD5E00627ECB /* templates.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = templates.c.h; sourceTree = "<group>"; };
+		105534EE1A440FC800627ECB /* config.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = config.c; sourceTree = "<group>"; };
 		1065E6EF19B8C64200686E72 /* evloop.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = evloop.c.h; sourceTree = "<group>"; };
 		1065E6F419B996B400686E72 /* select.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = select.c.h; sourceTree = "<group>"; };
 		1065E6F619B99E6D00686E72 /* kqueue.c.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = kqueue.c.h; sourceTree = "<group>"; };
@@ -516,6 +518,7 @@
 			children = (
 				101B670B19ADD3380084A351 /* access_log.c */,
 				107923AE19A3217300C52AD6 /* chunked.c */,
+				105534EE1A440FC800627ECB /* config.c */,
 				10F4180419CA75C500B6E31A /* configurator.c */,
 				105534D91A3C7A2000627ECB /* configurator */,
 				107923B919A3217300C52AD6 /* context.c */,
@@ -841,6 +844,7 @@
 				107923CF19A3217300C52AD6 /* request.c in Sources */,
 				107923CB19A3217300C52AD6 /* frame.c in Sources */,
 				107923C219A3217300C52AD6 /* chunked.c in Sources */,
+				105534EF1A440FC800627ECB /* config.c in Sources */,
 				107923D319A3217300C52AD6 /* util.c in Sources */,
 				105534CA1A3BB46900627ECB /* string.c in Sources */,
 				105534DF1A3C7B9800627ECB /* proxy.c in Sources */,

@@ -566,9 +566,17 @@ h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *p
  * disposes of the resources allocated for the global configuration
  */
 void h2o_config_dispose(h2o_globalconf_t *config);
-
+/**
+ * creates a handler associated to a given pathconf
+ */
 h2o_handler_t *h2o_create_handler(h2o_pathconf_t *conf, size_t sz);
+/**
+ * creates a filter associated to a given pathconf
+ */
 h2o_filter_t *h2o_create_filter(h2o_pathconf_t *conf, size_t sz);
+/**
+ * creates a logger associated to a given pathconf
+ */
 h2o_logger_t *h2o_create_logger(h2o_pathconf_t *conf, size_t sz);
 
 /* context */

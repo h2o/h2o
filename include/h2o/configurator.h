@@ -139,4 +139,7 @@ int h2o_configurator_scanf(h2o_configurator_command_t *cmd, const char *config_f
  */
 ssize_t h2o_configurator_get_one_of(h2o_configurator_command_t *cmd, const char *config_file, yoml_t *config_node, const char *candidates);
 
+void h2o_configurator__init_core(h2o_globalconf_t *conf);
+void h2o_configurator__dispose_configurators(h2o_globalconf_t *conf);
+
 #endif
