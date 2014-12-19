@@ -724,13 +724,6 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, const char *host
  */
 void h2o_proxy_register_configurator(h2o_globalconf_t *conf);
 
-/* lib/rproxy.c */
-
-/**
- * registers the reproxy filter
- */
-void h2o_reproxy_register(h2o_hostconf_t *hostconf);
-
 /* inline defs */
 
 inline void h2o_proceed_response(h2o_req_t *req)
