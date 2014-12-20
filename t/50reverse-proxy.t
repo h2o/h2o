@@ -14,7 +14,7 @@ plan skip_all => 'Starlet not found'
 my $upstream_port = empty_port();
 
 my %files = map { do {
-    my $fn = "t/doc_root/$_";
+    my $fn = DOC_ROOT . "/$_";
     +($_ => { size => (stat $fn)[7], md5 => md5_file($fn) });
 } } qw(index.txt halfdome.jpg);
 
@@ -67,7 +67,7 @@ sub spawn_upstream {
         argv     => [
             qw(plackup -MPlack::App::File -s Starlet --access-log /dev/null -p), $upstream_port,
             @extra,
-            't/50reverse-proxy/app.psgi',
+            ASSETS_DIR . "/upstream.psgi",
         ],
         is_ready =>  sub {
             check_port($upstream_port);
@@ -92,12 +92,12 @@ sub run_tests_with_conf {
                 is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/$file (md5)";
             }
             for my $file (sort keys %files) {
-                my $content = `curl --silent --show-error --insecure --data-binary \@t/doc_root/$file $proto://127.0.0.1:$port/echo`;
+                my $content = `curl --silent --show-error --insecure --data-binary \@@{[ DOC_ROOT ]}/$file $proto://127.0.0.1:$port/echo`;
                 is length($content), $files{$file}->{size}, "$proto://127.0.0.1/echo (POST, $file, size)";
                 is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/echo (POST, $file, md5)";
             }
             for my $file (sort keys %files) {
-                my $content = `curl --silent --show-error --insecure --header 'Transfer-Encoding: chunked' --data-binary \@t/doc_root/$file $proto://127.0.0.1:$port/echo`;
+                my $content = `curl --silent --show-error --insecure --header 'Transfer-Encoding: chunked' --data-binary \@@{[ DOC_ROOT ]}/$file $proto://127.0.0.1:$port/echo`;
                 is length($content), $files{$file}->{size}, "$proto://127.0.0.1/echo (POST, chunked, $file, size)";
                 is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/echo (POST, chunked, $file, md5)";
             }

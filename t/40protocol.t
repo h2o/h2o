@@ -5,16 +5,16 @@ use Test::More;
 use t::Util;
 
 my %files = map { do {
-    my $fn = "t/doc_root/$_";
+    my $fn = DOC_ROOT . "/$_";
     +($_ => { size => +(stat $fn)[7], md5 => md5_file($fn) });
 } } qw(index.txt halfdome.jpg);
 
-my $server = spawn_h2o(<< 'EOT');
+my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
     paths:
       /:
-        file.dir: t/doc_root
+        file.dir: @{[ DOC_ROOT ]}
 EOT
 
 my $port = $server->{port};

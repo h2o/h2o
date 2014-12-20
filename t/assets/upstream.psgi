@@ -2,6 +2,7 @@ use strict;
 use warnings;
 use Plack::App::File;
 use Plack::Builder;
+use t::Util;
 
 my $force_chunked = $ENV{FORCE_CHUNKED} || 0;
 
@@ -22,7 +23,7 @@ builder {
             }
         };
     }
-    mount "/" => Plack::App::File->new(root => "t/doc_root")->to_app;
+    mount "/" => Plack::App::File->new(root => DOC_ROOT)->to_app;
     mount "/echo" => sub {
         my $env = shift;
         my $content = '';
