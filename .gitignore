@@ -16,5 +16,4 @@ examples/socket-client
 examples/websocket
 libh2o.a
 misc/test-ca/demoCA/newcerts/*.pem
-t/000unittest_*.t
 tmp/

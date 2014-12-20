@@ -8,17 +8,17 @@ hosts:
   default:
     paths:
       /:
-        file.dir: t/50end-to-end/mimemap/docroot
+        file.dir: t/50mimemap/doc_root
       /addtypes:
-        file.dir: t/50end-to-end/mimemap/docroot
+        file.dir: t/50mimemap/doc_root
         file.mime.addtypes:
           application/xhtml+xml: .xhtml
       /removetypes:
-        file.dir: t/50end-to-end/mimemap/docroot
+        file.dir: t/50mimemap/doc_root
         file.mime.removetypes:
           - .xhtml
       /settypes:
-        file.dir: t/50end-to-end/mimemap/docroot
+        file.dir: t/50mimemap/doc_root
         file.mime.settypes:
           text/xml: .xhtml
     file.mime.addtypes:
@@ -26,7 +26,7 @@ hosts:
   default-type-test:
     paths:
       /:
-        file.dir: t/50end-to-end/mimemap/docroot
+        file.dir: t/50mimemap/doc_root
     file.mime.setdefaulttype: application/xhtml+xml
 file.index:
   - index.xhtml

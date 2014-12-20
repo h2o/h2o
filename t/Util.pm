@@ -11,7 +11,10 @@ use Test::More;
 use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
-our @EXPORT = qw(bindir exec_unittest spawn_server spawn_h2o create_data_file md5_file prog_exists openssl_can_negotiate);
+our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir exec_unittest spawn_server spawn_h2o create_data_file md5_file prog_exists openssl_can_negotiate);
+
+use constant ASSETS_DIR => 't/assets';
+use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
 
 sub bindir {
     $ENV{BINARY_DIR} || '.';
