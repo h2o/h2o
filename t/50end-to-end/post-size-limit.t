@@ -60,8 +60,8 @@ subtest 'http2' => sub {
                 my ($tempfh, $tempfn) = tempfile;
                 print $tempfh 'helloworld';
                 close $tempfh;
-                my $resp = `nghttp -d $tempfn -s $url 2>&1`;
-                like $resp, qr/^\s*status:\s*413\s*$/im, 'shorter than the limit';
+                my $resp = `nghttp -v -d $tempfn -s $url 2>&1`;
+                like $resp, qr/recv RST_STREAM[^\n]*\n[^\n]*error_code=REFUSED_STREAM/is, 'shorter than the limit';
             }
         };
     };
