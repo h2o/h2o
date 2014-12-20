@@ -5,7 +5,7 @@ use Test::More;
 use t::Util;
 
 my %files = map { do {
-    my $fn = "t/50end-to-end/protocol/docroot/$_";
+    my $fn = "t/doc_root/$_";
     +($_ => { size => +(stat $fn)[7], md5 => md5_file($fn) });
 } } qw(index.txt halfdome.jpg);
 
@@ -14,7 +14,7 @@ hosts:
   default:
     paths:
       /:
-        file.dir: t/50end-to-end/protocol/docroot
+        file.dir: t/doc_root
 EOT
 
 my $port = $server->{port};

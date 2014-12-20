@@ -22,7 +22,7 @@ builder {
             }
         };
     }
-    mount "/" => Plack::App::File->new(root => "t/50end-to-end/reverse-proxy/docroot")->to_app;
+    mount "/" => Plack::App::File->new(root => "t/doc_root")->to_app;
     mount "/echo" => sub {
         my $env = shift;
         my $content = '';

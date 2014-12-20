@@ -14,7 +14,7 @@ plan skip_all => 'Starlet not found'
 my $upstream_port = empty_port();
 
 my %files = map { do {
-    my $fn = "t/50end-to-end/reverse-proxy/docroot/$_";
+    my $fn = "t/doc_root/$_";
     +($_ => { size => (stat $fn)[7], md5 => md5_file($fn) });
 } } qw(index.txt halfdome.jpg);
 
@@ -67,7 +67,7 @@ sub spawn_upstream {
         argv     => [
             qw(plackup -MPlack::App::File -s Starlet --access-log /dev/null -p), $upstream_port,
             @extra,
-            't/50end-to-end/reverse-proxy/app.psgi',
+            't/50reverse-proxy/app.psgi',
         ],
         is_ready =>  sub {
             check_port($upstream_port);
@@ -92,12 +92,12 @@ sub run_tests_with_conf {
                 is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/$file (md5)";
             }
             for my $file (sort keys %files) {
-                my $content = `curl --silent --show-error --insecure --data-binary \@t/50end-to-end/reverse-proxy/docroot/$file $proto://127.0.0.1:$port/echo`;
+                my $content = `curl --silent --show-error --insecure --data-binary \@t/doc_root/$file $proto://127.0.0.1:$port/echo`;
                 is length($content), $files{$file}->{size}, "$proto://127.0.0.1/echo (POST, $file, size)";
                 is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/echo (POST, $file, md5)";
             }
             for my $file (sort keys %files) {
-                my $content = `curl --silent --show-error --insecure --header 'Transfer-Encoding: chunked' --data-binary \@t/50end-to-end/reverse-proxy/docroot/$file $proto://127.0.0.1:$port/echo`;
+                my $content = `curl --silent --show-error --insecure --header 'Transfer-Encoding: chunked' --data-binary \@t/doc_root/$file $proto://127.0.0.1:$port/echo`;
                 is length($content), $files{$file}->{size}, "$proto://127.0.0.1/echo (POST, chunked, $file, size)";
                 is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/echo (POST, chunked, $file, md5)";
             }
@@ -131,7 +131,7 @@ sub run_tests_with_conf {
                 is length($content), $files{$file}->{size}, "$proto://127.0.0.1/$file (size)";
                 is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/$file (md5)";
             }
-            my $out = `nghttp $opt -H':method: POST' -d t/50end-to-end/reverse-proxy/hello.txt $proto://127.0.0.1:$port/echo`;
+            my $out = `nghttp $opt -H':method: POST' -d t/50reverse-proxy/hello.txt $proto://127.0.0.1:$port/echo`;
             is $out, "hello\n", "$proto://127.0.0.1/echo (POST)";
             $out = `nghttp $opt -m 10 $proto://127.0.0.1:$port/index.txt`;
             is $out, "hello\n" x 10, "$proto://127.0.0.1/index.txt x 10 times";
