@@ -2,6 +2,7 @@ use strict;
 use warnings;
 use Plack::App::File;
 use Plack::Builder;
+use Time::HiRes qw(sleep);
 use t::Util;
 
 my $force_chunked = $ENV{FORCE_CHUNKED} || 0;
@@ -55,8 +56,8 @@ builder {
         return sub {
             my $responder = shift;
             my $writer = $responder->([ 200, [ 'content-type' => 'text/plain' ] ]);
-            for my $i (1..10) {
-                sleep 1;
+            for my $i (1..30) {
+                sleep 0.1;
                 $writer->write($i);
             }
             $writer->close;
