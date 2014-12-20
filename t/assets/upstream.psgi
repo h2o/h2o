@@ -50,4 +50,16 @@ builder {
             [],
         ];
     };
+    mount "/sleep" => sub {
+        my $env = shift;
+        return sub {
+            my $responder = shift;
+            my $writer = $responder->([ 200, [ 'content-type' => 'text/plain' ] ]);
+            for my $i (1..10) {
+                sleep 1;
+                $writer->write($i);
+            }
+            $writer->close;
+        };
+    };
 };
