@@ -202,6 +202,7 @@
 		105534EA1A42A87E00627ECB /* _templates.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = _templates.c.h; sourceTree = "<group>"; };
 		105534EC1A42AD5E00627ECB /* templates.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = templates.c.h; sourceTree = "<group>"; };
 		105534EE1A440FC800627ECB /* config.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = config.c; sourceTree = "<group>"; };
+		105534F01A451FFA00627ECB /* post-size-limit.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "post-size-limit.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		1065E6EF19B8C64200686E72 /* evloop.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = evloop.c.h; sourceTree = "<group>"; };
 		1065E6F419B996B400686E72 /* select.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = select.c.h; sourceTree = "<group>"; };
 		1065E6F619B99E6D00686E72 /* kqueue.c.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = kqueue.c.h; sourceTree = "<group>"; };
@@ -377,6 +378,7 @@
 				105534D11A3BB6DF00627ECB /* protocol.t */,
 				105534D01A3BB6DF00627ECB /* reverse-proxy.t */,
 				105534D31A3BB6DF00627ECB /* sni.t */,
+				105534F01A451FFA00627ECB /* post-size-limit.t */,
 			);
 			path = "50end-to-end";
 			sourceTree = "<group>";

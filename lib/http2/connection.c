@@ -360,6 +360,10 @@ static void handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
         send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
         h2o_http2_stream_reset(conn, stream, H2O_HTTP2_ERROR_NONE);
         stream = NULL;
+    } else if (stream->_req_body->size + payload.length > conn->super.ctx->globalconf->max_request_entity_size) {
+        send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_REFUSED_STREAM);
+        h2o_http2_stream_reset(conn, stream, H2O_HTTP2_ERROR_NONE);
+        stream = NULL;
     } else {
         h2o_iovec_t buf = h2o_buffer_reserve(&stream->_req_body, payload.length);
         if (buf.base != NULL) {
