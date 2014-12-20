@@ -130,8 +130,10 @@ static void do_close(h2o_generator_t *generator, h2o_req_t *req)
 {
     struct rp_generator_t *self = (void*)generator;
 
-    if (self->client != NULL)
+    if (self->client != NULL) {
         h2o_http1client_cancel(self->client);
+        self->client = NULL;
+    }
 }
 
 static void swap_buffer(h2o_buffer_t **x, h2o_buffer_t **y)
