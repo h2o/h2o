@@ -96,6 +96,15 @@ static void process_request(h2o_http1_conn_t *conn)
     h2o_process_request(&conn->req);
 }
 
+static void entity_read_send_error(h2o_http1_conn_t *conn, int status, const char *reason, const char *body)
+{
+    conn->_req_entity_reader = NULL;
+    set_timeout(conn, NULL, NULL);
+    h2o_socket_read_stop(conn->sock);
+    conn->req.http1_is_persistent = 0;
+    h2o_send_error(&conn->req, status, reason, body);
+}
+
 static void on_entity_read_complete(h2o_http1_conn_t *conn)
 {
     conn->_req_entity_reader = NULL;
@@ -117,13 +126,17 @@ static void handle_chunked_entity_read(h2o_http1_conn_t *conn)
     ret = phr_decode_chunked(&reader->decoder, inbuf->bytes + reader->prev_input_size, &bufsz);
     inbuf->size = reader->prev_input_size + bufsz;
     reader->prev_input_size = inbuf->size;
+    if (ret != -1 && inbuf->size - conn->_reqsize >= conn->super.ctx->globalconf->max_request_entity_size) {
+        entity_read_send_error(conn, 413, "Request Entity Too Large", "request entity is too large");
+        return;
+    }
     if (ret < 0) {
         if (ret == -2) {
             /* incomplete */
             return;
         }
         /* error */
-        assert(!"FIXME return error and close");
+        entity_read_send_error(conn, 400, "Invalid Request", "broken chunked-encoding");
         return;
     }
     /* complete */
@@ -178,16 +191,24 @@ static int create_entity_reader(h2o_http1_conn_t *conn, const struct phr_header 
 {
     /* strlen("content-length") is unequal to sizeof("transfer-encoding"), and thus checking the length only is sufficient */
     if (entity_header->name_len == sizeof("transfer-encoding") - 1) {
-        /* content-encoding */
-        if (h2o_lcstris(entity_header->value, entity_header->value_len, H2O_STRLIT("chunked"))) {
-            return create_chunked_entity_reader(conn);
+        /* transfer-encoding */
+        if (! h2o_lcstris(entity_header->value, entity_header->value_len, H2O_STRLIT("chunked"))) {
+            entity_read_send_error(conn, 400, "Invalid Request", "unknown transfer-encoding");
+            return -1;
         }
+        return create_chunked_entity_reader(conn);
     } else {
         /* content-length */
         size_t content_length = h2o_strtosize(entity_header->value, entity_header->value_len);
-        if (content_length != SIZE_MAX && content_length <= conn->super.ctx->globalconf->max_request_entity_size) {
-            return create_content_length_entity_reader(conn, (size_t)content_length);
+        if (content_length == SIZE_MAX) {
+            entity_read_send_error(conn, 400, "Invalid Request", "broken content-length header");
+            return -1;
         }
+        if (content_length > conn->super.ctx->globalconf->max_request_entity_size) {
+            entity_read_send_error(conn, 413, "Request Entity Too Large", "request entity is too large");
+            return -1;
+        }
+        return create_content_length_entity_reader(conn, (size_t)content_length);
     }
     /* failed */
     return -1;
@@ -338,10 +359,6 @@ static void handle_incoming_request(h2o_http1_conn_t *conn)
                 h2o_socket_write(conn->sock, (void*)&res, 1, on_continue_sent);
             }
             if (create_entity_reader(conn, headers + entity_body_header_index) != 0) {
-                set_timeout(conn, NULL, NULL);
-                h2o_socket_read_stop(conn->sock);
-                conn->req.http1_is_persistent = 0;
-                h2o_send_error(&conn->req, 400, "Invalid Request", "unknown entity encoding");
                 return;
             }
             if (expect.base != NULL) {
