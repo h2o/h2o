@@ -204,6 +204,7 @@
 		105534F91A460F4200627ECB /* 50reverse-proxy.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534FA1A460F4200627ECB /* 50sni.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 50sni.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534FB1A460F4200627ECB /* Util.pm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = Util.pm; sourceTree = "<group>"; };
+		105534FE1A46134A00627ECB /* 80issues61.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 80issues61.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		1065E6EF19B8C64200686E72 /* evloop.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = evloop.c.h; sourceTree = "<group>"; };
 		1065E6F419B996B400686E72 /* select.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = select.c.h; sourceTree = "<group>"; };
 		1065E6F619B99E6D00686E72 /* kqueue.c.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = kqueue.c.h; sourceTree = "<group>"; };
@@ -580,6 +581,7 @@
 				105534F81A460F2E00627ECB /* 50post-size-limit.t */,
 				105534F91A460F4200627ECB /* 50reverse-proxy.t */,
 				105534FA1A460F4200627ECB /* 50sni.t */,
+				105534FE1A46134A00627ECB /* 80issues61.t */,
 				105534FB1A460F4200627ECB /* Util.pm */,
 			);
 			path = t;
