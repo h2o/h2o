@@ -29,31 +29,6 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 
-void h2o_send_inline(h2o_req_t *req, const char *body, size_t len)
-{
-    static h2o_generator_t generator = { NULL, NULL };
-
-    h2o_iovec_t buf = h2o_strdup(&req->pool, body, len);
-    /* the function intentionally does not set the content length, since it may be used for generating 304 response, etc. */
-    /* req->res.content_length = buf.len; */
-
-    h2o_start_response(req, &generator);
-    h2o_send(req, &buf, 1, 1);
-}
-
-void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body)
-{
-    /* FIXME setup hostconf, since this function may get called before h2o_process_request is invoked */
-    req->http1_is_persistent = 0;
-
-    req->res.status = status;
-    req->res.reason = reason;
-    memset(&req->res.headers, 0, sizeof(req->res.headers));
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
-
-    h2o_send_inline(req, body, SIZE_MAX);
-}
-
 static void on_ssl_handshake_complete(h2o_socket_t *sock, int status)
 {
     const h2o_iovec_t *ident;

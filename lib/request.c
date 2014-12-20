@@ -25,6 +25,56 @@
 
 #define INITIAL_INBUFSZ 8192
 
+static void bind_conf(h2o_req_t *req)
+{
+    h2o_context_t *ctx;
+    h2o_hostconf_t *hostconf;
+    h2o_pathconf_t *pathconf;
+
+    if (req->pathconf != NULL) {
+        /* already bound */
+        return;
+    }
+
+    ctx = req->conn->ctx;
+    h2o_get_timestamp(ctx, &req->pool, &req->processed_at);
+
+    /* find the host context */
+    if (req->authority.base != NULL) {
+        h2o_hostconf_t *end = ctx->globalconf->hosts.entries + ctx->globalconf->hosts.size;
+        for (hostconf = ctx->globalconf->hosts.entries; hostconf != end; ++hostconf) {
+            if (h2o_memis(req->authority.base, req->authority.len, hostconf->hostname.base, hostconf->hostname.len))
+                goto HostFound;
+        }
+        hostconf = ctx->globalconf->hosts.entries;
+    HostFound:
+        ;
+    } else {
+        /* set the authority name to the default one */
+        hostconf = ctx->globalconf->hosts.entries;
+        req->authority = hostconf->hostname;
+    }
+
+    /* find the path context (as well as building path_normalized) */
+    if (hostconf->paths.size != 0) {
+        size_t i = 0;
+        req->path_normalized = h2o_normalize_path(&req->pool, req->path.base, req->path.len);
+        do {
+            pathconf = hostconf->paths.entries + i;
+            if (req->path.len >= pathconf->path.len
+                && memcmp(req->path.base, pathconf->path.base, pathconf->path.len) == 0)
+                goto PathFound;
+        } while (++i != hostconf->paths.size);
+        pathconf = &hostconf->fallback_path;
+    PathFound:
+        ;
+    } else {
+        pathconf = &hostconf->fallback_path;
+    }
+
+    req->pathconf = pathconf;
+}
+
 static void deferred_proceed_cb(h2o_timeout_entry_t *entry)
 {
     h2o_req_t *req = H2O_STRUCT_FROM_MEMBER(h2o_req_t, _timeout_entry, entry);
@@ -100,53 +150,15 @@ void h2o_dispose_request(h2o_req_t *req)
 
 void h2o_process_request(h2o_req_t *req)
 {
-    h2o_context_t *ctx = req->conn->ctx;
-    h2o_hostconf_t *hostconf;
-    h2o_pathconf_t *pathconf;
+    h2o_handler_t **handler, **end;
 
-    h2o_get_timestamp(ctx, &req->pool, &req->processed_at);
+    bind_conf(req);
 
-    /* find the host context */
-    if (req->authority.base != NULL) {
-        h2o_hostconf_t *end = ctx->globalconf->hosts.entries + ctx->globalconf->hosts.size;
-        for (hostconf = ctx->globalconf->hosts.entries; hostconf != end; ++hostconf) {
-            if (h2o_memis(req->authority.base, req->authority.len, hostconf->hostname.base, hostconf->hostname.len))
-                goto HostFound;
-        }
-        hostconf = ctx->globalconf->hosts.entries;
-    HostFound:
-        ;
-    } else {
-        /* set the authority name to the default one */
-        hostconf = ctx->globalconf->hosts.entries;
-        req->authority = hostconf->hostname;
-    }
-
-    /* find the path context (as well as building path_normalized) */
-    if (hostconf->paths.size != 0) {
-        size_t i = 0;
-        req->path_normalized = h2o_normalize_path(&req->pool, req->path.base, req->path.len);
-        do {
-            pathconf = hostconf->paths.entries + i;
-            if (req->path.len >= pathconf->path.len
-                && memcmp(req->path.base, pathconf->path.base, pathconf->path.len) == 0)
-                goto PathFound;
-        } while (++i != hostconf->paths.size);
-        pathconf = &hostconf->fallback_path;
-    PathFound:
-        ;
-    } else {
-        pathconf = &hostconf->fallback_path;
-    }
-
-    req->pathconf = pathconf;
-
-    { /* call any of the handlers */
-        h2o_handler_t **handler = pathconf->handlers.entries, **end = handler + pathconf->handlers.size;
-        for (; handler != end; ++handler) {
-            if ((*handler)->on_req(*handler, req) == 0)
-                return;
-        }
+    for (handler = req->pathconf->handlers.entries, end = handler + req->pathconf->handlers.size;
+        handler != end;
+        ++handler) {
+        if ((*handler)->on_req(*handler, req) == 0)
+            return;
     }
 
     h2o_send_error(req, 404, "File Not Found", "not found");
@@ -180,7 +192,6 @@ void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
     req->_ostr_top->do_send(req->_ostr_top, req, bufs, bufcnt, is_final);
 }
 
-
 h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot)
 {
     h2o_ostream_t *ostr = h2o_mem_alloc_pool(&req->pool, sz);
@@ -204,4 +215,30 @@ void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *
         return;
     }
     ostream->next->do_send(ostream->next, req, bufs, bufcnt, is_final);
+}
+
+void h2o_send_inline(h2o_req_t *req, const char *body, size_t len)
+{
+    static h2o_generator_t generator = { NULL, NULL };
+
+    h2o_iovec_t buf = h2o_strdup(&req->pool, body, len);
+    /* the function intentionally does not set the content length, since it may be used for generating 304 response, etc. */
+    /* req->res.content_length = buf.len; */
+
+    h2o_start_response(req, &generator);
+    h2o_send(req, &buf, 1, 1);
+}
+
+void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body)
+{
+    bind_conf(req);
+
+    req->http1_is_persistent = 0;
+
+    req->res.status = status;
+    req->res.reason = reason;
+    memset(&req->res.headers, 0, sizeof(req->res.headers));
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
+
+    h2o_send_inline(req, body, SIZE_MAX);
 }
