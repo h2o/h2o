@@ -54,9 +54,12 @@ extern "C" {
 # define H2O_MAX_TOKENS 10240
 #endif
 
-#define H2O_DEFAULT_REQ_TIMEOUT (10 * 1000)
 #define H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE (1024 * 1024 * 1024)
+#define H2O_DEFAULT_HTTP1_REQ_TIMEOUT_IN_SECS 10
+#define H2O_DEFAULT_HTTP1_REQ_TIMEOUT (H2O_DEFAULT_HTTP1_REQ_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2 1
+#define H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS 10
+#define H2O_DEFAULT_HTTP2_IDLE_TIMEOUT (H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_HTTP2_MAX_CONCURRENT_REQUESTS_PER_CONNECTION 16
 
 typedef struct st_h2o_conn_t h2o_conn_t;
@@ -193,22 +196,32 @@ struct st_h2o_globalconf_t {
      */
     h2o_iovec_t server_name;
     /**
-     * request timeout (in milliseconds)
-     */
-    uint64_t req_timeout;
-    /**
      * maximum size of the accepted request entity (e.g. POST data)
      */
     size_t max_request_entity_size;
-    /**
-     * a boolean value indicating whether or not to upgrade to HTTP/2
-     */
-    int http1_upgrade_to_http2;
-    /**
-     * maximum number of HTTP2 requests (per connection) to be handled simultaneously internally.
-     * H2O accepts at most 256 requests over HTTP/2, but internally limits the number of in-flight requests to the value specified by this property in order to limit the resources allocated to a single connection.
-     */
-    size_t http2_max_concurrent_requests_per_connection;
+
+    struct {
+        /**
+         * request timeout (in milliseconds)
+         */
+        uint64_t req_timeout;
+        /**
+         * a boolean value indicating whether or not to upgrade to HTTP/2
+         */
+        int upgrade_to_http2;
+    } http1;
+
+    struct {
+        /**
+         * idle timeout (in milliseconds)
+         */
+        uint64_t idle_timeout;
+        /**
+         * maximum number of HTTP2 requests (per connection) to be handled simultaneously internally.
+         * H2O accepts at most 256 requests over HTTP/2, but internally limits the number of in-flight requests to the value specified by this property in order to limit the resources allocated to a single connection.
+         */
+        size_t max_concurrent_requests_per_connection;
+    } http2;
 
     size_t _num_config_slots;
 };
@@ -226,13 +239,24 @@ struct st_h2o_context_t {
      */
     h2o_timeout_t zero_timeout;
     /**
-     * request timeout
-     */
-    h2o_timeout_t req_timeout;
-    /**
      * pointer to the global configuration
      */
     h2o_globalconf_t *globalconf;
+
+    struct {
+        /**
+         * request timeout
+         */
+        h2o_timeout_t req_timeout;
+    } http1;
+
+    struct {
+        /**
+         * idle timeout
+         */
+        h2o_timeout_t idle_timeout;
+    } http2;
+
     /**
      * pointer to per-module configs
      */

@@ -58,6 +58,7 @@ static const h2o_iovec_t SETTINGS_HOST_BIN = {
 
 static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = { { 16 }, { H2O_HTTP2_DEFAULT_OUTBUF_SIZE } };
 
+static void enqueue_goaway_and_initiate_close(h2o_http2_conn_t *conn, int errnum);
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len);
 static int do_emit_writereq(h2o_http2_conn_t *conn);
 static void on_read(h2o_socket_t *sock, int status);
@@ -116,9 +117,27 @@ static void priolist_destroy(h2o_http2_stream_priolist_t *priolist)
     }
 }
 
+static void on_idle_timeout(h2o_timeout_entry_t *entry)
+{
+    h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _timeout_entry, entry);
+
+    enqueue_goaway_and_initiate_close(conn, H2O_HTTP2_ERROR_INTERNAL);
+}
+
+static void update_idle_timeout(h2o_http2_conn_t *conn)
+{
+    h2o_timeout_unlink(&conn->_timeout_entry);
+
+    if (conn->num_responding_streams == 0) {
+        assert(h2o_linklist_is_empty(&conn->_pending_reqs));
+        conn->_timeout_entry.cb = on_idle_timeout;
+        h2o_timeout_link(conn->super.ctx->loop, &conn->super.ctx->http2.idle_timeout, &conn->_timeout_entry);
+    }
+}
+
 static void run_pending_requests(h2o_http2_conn_t *conn)
 {
-    while (! h2o_linklist_is_empty(&conn->_pending_reqs) && conn->num_responding_streams < conn->super.ctx->globalconf->http2_max_concurrent_requests_per_connection) {
+    while (! h2o_linklist_is_empty(&conn->_pending_reqs) && conn->num_responding_streams < conn->super.ctx->globalconf->http2.max_concurrent_requests_per_connection) {
         /* fetch and detach a pending stream */
         h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link.link, conn->_pending_reqs.next);
         h2o_linklist_unlink(&stream->_link.link);
@@ -149,6 +168,7 @@ static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_
     }
 
     run_pending_requests(conn);
+    update_idle_timeout(conn);
 }
 
 void h2o_http2_conn_register_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
@@ -194,8 +214,10 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
         break;
     }
 
-    if (conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING)
+    if (conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING) {
         run_pending_requests(conn);
+        update_idle_timeout(conn);
+    }
 }
 
 static void close_connection_now(h2o_http2_conn_t *conn)
@@ -212,6 +234,7 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     h2o_hpack_dispose_header_table(&conn->_input_header_table);
     h2o_hpack_dispose_header_table(&conn->_output_header_table);
     assert(h2o_linklist_is_empty(&conn->_pending_reqs));
+    h2o_timeout_unlink(&conn->_timeout_entry);
     h2o_buffer_dispose(&conn->_write.buf);
     if (conn->_write.buf_in_flight != NULL)
         h2o_buffer_dispose(&conn->_write.buf_in_flight);
@@ -236,7 +259,7 @@ static void close_connection(h2o_http2_conn_t *conn)
     }
 }
 
-static void enqueue_goaway_and_initiate_close(h2o_http2_conn_t *conn, int errnum)
+void enqueue_goaway_and_initiate_close(h2o_http2_conn_t *conn, int errnum)
 {
     h2o_http2_encode_goaway_frame(&conn->_write.buf, conn->max_processed_stream_id, -errnum);
     h2o_http2_conn_request_write(conn);
@@ -595,7 +618,7 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
 
 static void parse_input(h2o_http2_conn_t *conn)
 {
-    size_t http2_max_concurrent_requests_per_connection = conn->super.ctx->globalconf->http2_max_concurrent_requests_per_connection;
+    size_t http2_max_concurrent_requests_per_connection = conn->super.ctx->globalconf->http2.max_concurrent_requests_per_connection;
     int perform_early_exit = 0;
 
     if (conn->num_responding_streams != http2_max_concurrent_requests_per_connection)
@@ -644,6 +667,7 @@ static void on_read(h2o_socket_t *sock, int status)
         return;
     }
 
+    update_idle_timeout(conn);
     parse_input(conn);
 }
 
@@ -821,6 +845,7 @@ void h2o_http2_accept(h2o_context_t *ctx, h2o_socket_t *sock)
     h2o_http2_conn_t *conn = create_conn(ctx, sock, (void*)&sock->peername.addr, sock->peername.len);
     sock->data = conn;
     h2o_socket_read_start(conn->sock, on_read);
+    update_idle_timeout(conn);
     if (sock->input->size != 0)
         on_read(sock, 0);
 }
