@@ -202,6 +202,11 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
     return 0;
 }
 
+static int on_config_limit_request_body(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, file, node, "%zu", &ctx->globalconf->max_request_entity_size);
+}
+
 static int on_config_http1_request_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
     unsigned timeout_in_secs;
@@ -213,17 +218,23 @@ static int on_config_http1_request_timeout(h2o_configurator_command_t *cmd, h2o_
     return 0;
 }
 
-static int on_config_limit_request_body(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
-{
-    return h2o_configurator_scanf(cmd, file, node, "%zu", &ctx->globalconf->max_request_entity_size);
-}
-
 static int on_config_http1_upgrade_to_http2(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
     ssize_t ret = h2o_configurator_get_one_of(cmd, file, node, "OFF,ON");
     if (ret == -1)
         return -1;
     ctx->globalconf->http1.upgrade_to_http2 = (int)ret;
+    return 0;
+}
+
+static int on_config_http2_idle_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+{
+    unsigned timeout_in_secs;
+
+    if (h2o_configurator_scanf(cmd, file, node, "%u", &timeout_in_secs) != 0)
+        return -1;
+
+    ctx->globalconf->http2.idle_timeout = timeout_in_secs * 1000;
     return 0;
 }
 
@@ -255,22 +266,27 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
             on_config_hosts,
             "map of hostname -> map of per-host configs");
         h2o_configurator_define_command(
-            c, "http1-request-timeout",
-            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-            on_config_http1_request_timeout,
-            "timeout for incoming requests in seconds (default: " H2O_TO_STR(H2O_DEFAULT_REQ_TIMEOUT) ")");
-        h2o_configurator_define_command(
             c, "limit-request-body",
             H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
             on_config_limit_request_body,
             "maximum size of request body in bytes (e.g. content of POST)",
             "(default: unlimited)");
         h2o_configurator_define_command(
+            c, "http1-request-timeout",
+            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+            on_config_http1_request_timeout,
+            "timeout for incoming requests in seconds (default: " H2O_TO_STR(H2O_DEFAULT_HTTP1_REQ_TIMEOUT_IN_SECS) ")");
+        h2o_configurator_define_command(
             c, "http1-upgrade-to-http2",
             H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
             on_config_http1_upgrade_to_http2,
             "boolean flag (ON/OFF) indicating whether or not to allow upgrade to HTTP/2",
             "(default: ON)");
+        h2o_configurator_define_command(
+            c, "http2-idle-timeout",
+            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+            on_config_http2_idle_timeout,
+            "timeout for idle connections in seconds (default: " H2O_TO_STR(H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS) ")");
         h2o_configurator_define_command(
             c, "http2-max-concurrent-requests-per-connection",
             H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,

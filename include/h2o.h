@@ -55,8 +55,11 @@ extern "C" {
 #endif
 
 #define H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE (1024 * 1024 * 1024)
-#define H2O_DEFAULT_HTTP1_REQ_TIMEOUT (10 * 1000)
+#define H2O_DEFAULT_HTTP1_REQ_TIMEOUT_IN_SECS 10
+#define H2O_DEFAULT_HTTP1_REQ_TIMEOUT (H2O_DEFAULT_HTTP1_REQ_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2 1
+#define H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS 10
+#define H2O_DEFAULT_HTTP2_IDLE_TIMEOUT (H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_HTTP2_MAX_CONCURRENT_REQUESTS_PER_CONNECTION 16
 
 typedef struct st_h2o_conn_t h2o_conn_t;
@@ -210,6 +213,10 @@ struct st_h2o_globalconf_t {
 
     struct {
         /**
+         * idle timeout (in milliseconds)
+         */
+        uint64_t idle_timeout;
+        /**
          * maximum number of HTTP2 requests (per connection) to be handled simultaneously internally.
          * H2O accepts at most 256 requests over HTTP/2, but internally limits the number of in-flight requests to the value specified by this property in order to limit the resources allocated to a single connection.
          */
@@ -244,6 +251,10 @@ struct st_h2o_context_t {
     } http1;
 
     struct {
+        /**
+         * idle timeout
+         */
+        h2o_timeout_t idle_timeout;
     } http2;
 
     /**
