@@ -79,6 +79,7 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->max_request_entity_size = H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE;
     config->http1.req_timeout = H2O_DEFAULT_HTTP1_REQ_TIMEOUT;
     config->http1.upgrade_to_http2 = H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2;
+    config->http2.idle_timeout = H2O_DEFAULT_HTTP2_IDLE_TIMEOUT;
     config->http2.max_concurrent_requests_per_connection = H2O_DEFAULT_HTTP2_MAX_CONCURRENT_REQUESTS_PER_CONNECTION;
 
     h2o_configurator__init_core(config);
