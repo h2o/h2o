@@ -780,7 +780,7 @@
 		1079230D19A320A700C52AD6 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 0600;
+				LastUpgradeCheck = 0610;
 				ORGANIZATIONNAME = "Kazuho Oku";
 			};
 			buildConfigurationList = 1079231019A320A700C52AD6 /* Build configuration list for PBXProject "h2o" */;
