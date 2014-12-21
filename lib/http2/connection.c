@@ -118,7 +118,7 @@ static void priolist_destroy(h2o_http2_stream_priolist_t *priolist)
 
 static void run_pending_requests(h2o_http2_conn_t *conn)
 {
-    while (! h2o_linklist_is_empty(&conn->_pending_reqs) && conn->num_responding_streams < conn->super.ctx->globalconf->http2_max_concurrent_requests_per_connection) {
+    while (! h2o_linklist_is_empty(&conn->_pending_reqs) && conn->num_responding_streams < conn->super.ctx->globalconf->http2.max_concurrent_requests_per_connection) {
         /* fetch and detach a pending stream */
         h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link.link, conn->_pending_reqs.next);
         h2o_linklist_unlink(&stream->_link.link);
@@ -595,7 +595,7 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
 
 static void parse_input(h2o_http2_conn_t *conn)
 {
-    size_t http2_max_concurrent_requests_per_connection = conn->super.ctx->globalconf->http2_max_concurrent_requests_per_connection;
+    size_t http2_max_concurrent_requests_per_connection = conn->super.ctx->globalconf->http2.max_concurrent_requests_per_connection;
     int perform_early_exit = 0;
 
     if (conn->num_responding_streams != http2_max_concurrent_requests_per_connection)

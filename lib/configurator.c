@@ -202,14 +202,14 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
     return 0;
 }
 
-static int on_config_request_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_http1_request_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
     unsigned timeout_in_secs;
 
     if (h2o_configurator_scanf(cmd, file, node, "%u", &timeout_in_secs) != 0)
         return -1;
 
-    ctx->globalconf->req_timeout = timeout_in_secs * 1000;
+    ctx->globalconf->http1.req_timeout = timeout_in_secs * 1000;
     return 0;
 }
 
@@ -223,13 +223,13 @@ static int on_config_http1_upgrade_to_http2(h2o_configurator_command_t *cmd, h2o
     ssize_t ret = h2o_configurator_get_one_of(cmd, file, node, "OFF,ON");
     if (ret == -1)
         return -1;
-    ctx->globalconf->http1_upgrade_to_http2 = (int)ret;
+    ctx->globalconf->http1.upgrade_to_http2 = (int)ret;
     return 0;
 }
 
 static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
 {
-    return h2o_configurator_scanf(cmd, file, node, "%zu", &ctx->globalconf->http2_max_concurrent_requests_per_connection);
+    return h2o_configurator_scanf(cmd, file, node, "%zu", &ctx->globalconf->http2.max_concurrent_requests_per_connection);
 }
 
 void h2o_configurator__init_core(h2o_globalconf_t *conf)
@@ -255,9 +255,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
             on_config_hosts,
             "map of hostname -> map of per-host configs");
         h2o_configurator_define_command(
-            c, "request-timeout",
+            c, "http1-request-timeout",
             H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-            on_config_request_timeout,
+            on_config_http1_request_timeout,
             "timeout for incoming requests in seconds (default: " H2O_TO_STR(H2O_DEFAULT_REQ_TIMEOUT) ")");
         h2o_configurator_define_command(
             c, "limit-request-body",

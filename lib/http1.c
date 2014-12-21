@@ -87,7 +87,7 @@ static void set_timeout(h2o_http1_conn_t *conn, h2o_timeout_t *timeout, h2o_time
 static void process_request(h2o_http1_conn_t *conn)
 {
     if (conn->sock->ssl == NULL && conn->req.upgrade.base != NULL
-        && conn->super.ctx->globalconf->http1_upgrade_to_http2
+        && conn->super.ctx->globalconf->http1.upgrade_to_http2
         && h2o_lcstris(conn->req.upgrade.base, conn->req.upgrade.len, H2O_STRLIT("h2c-14"))) {
         if (h2o_http2_handle_upgrade(&conn->req) == 0) {
             return;
@@ -381,7 +381,7 @@ static void handle_incoming_request(h2o_http1_conn_t *conn)
         return;
     case -1: // error
         /* upgrade to HTTP/2 if the request starts with: PRI * HTTP/2 */
-        if (conn->super.ctx->globalconf->http1_upgrade_to_http2) {
+        if (conn->super.ctx->globalconf->http1.upgrade_to_http2) {
             /* should check up to the first octet that phr_parse_request returns an error */
             static const h2o_iovec_t HTTP2_SIG = { H2O_STRLIT("PRI * HTTP/2") };
             if (conn->sock->input->size >= HTTP2_SIG.len && memcmp(conn->sock->input->bytes, HTTP2_SIG.base, HTTP2_SIG.len) == 0) {
@@ -426,7 +426,7 @@ static void reqread_on_timeout(h2o_timeout_entry_t *entry)
 
 static inline void reqread_start(h2o_http1_conn_t *conn)
 {
-    set_timeout(conn, &conn->super.ctx->req_timeout, reqread_on_timeout);
+    set_timeout(conn, &conn->super.ctx->http1.req_timeout, reqread_on_timeout);
     h2o_socket_read_start(conn->sock, reqread_on_read);
     if (conn->sock->input->size != 0)
         handle_incoming_request(conn);
