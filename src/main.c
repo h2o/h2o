@@ -73,6 +73,7 @@ struct listener_ctx_t {
 
 struct config_t {
     h2o_globalconf_t globalconf;
+    int dry_run;
     struct listener_config_t **listeners;
     size_t num_listeners;
     unsigned max_connections;
@@ -478,9 +479,13 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         /* find existing listener or create a new one */
         listener_is_new = 0;
         if ((listener = find_listener(conf, (void*)&sun, sizeof(sun))) == NULL) {
-            int fd = open_unix_listener(cmd, config_file, config_node, &sun);
-            if (fd == -1)
-                return -1;
+            int fd;
+            if (conf->dry_run) {
+                fd = -1;
+            } else {
+                if ((fd = open_unix_listener(cmd, config_file, config_node, &sun)) == -1)
+                    return -1;
+            }
             listener = add_listener(conf, fd, (struct sockaddr*)&sun, sizeof(sun));
             listener_is_new = 1;
         }
@@ -509,9 +514,13 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             struct listener_config_t *listener = find_listener(conf, ai->ai_addr, ai->ai_addrlen);
             int listener_is_new = 0;
             if (listener == NULL) {
-                int fd = open_tcp_listener(cmd, config_file, config_node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol, ai->ai_addr, ai->ai_addrlen);
-                if (fd == -1)
-                    return -1;
+                int fd;
+                if (conf->dry_run) {
+                    fd = -1;
+                } else {
+                    if ((fd = open_tcp_listener(cmd, config_file, config_node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol, ai->ai_addr, ai->ai_addrlen)) == -1)
+                        return -1;
+                }
                 listener = add_listener(conf, fd, ai->ai_addr, ai->ai_addrlen);
                 listener_is_new = 1;
             }
@@ -799,6 +808,7 @@ int main(int argc, char **argv)
 {
     static struct config_t config = {
         {}, /* globalconf */
+        0, /* dry-run */
         NULL, /* listeners */
         0, /* num_listeners */
         1024, /* max_connections */
@@ -815,13 +825,17 @@ int main(int argc, char **argv)
         int ch;
         static struct option longopts[] = {
             { "conf", required_argument, NULL, 'c' },
+            { "test", no_argument, NULL, 't' },
             { "help", no_argument, NULL, 'h' },
             { NULL, 0, NULL, 0 }
         };
-        while ((ch = getopt_long(argc, argv, "c:h", longopts, NULL)) != -1) {
+        while ((ch = getopt_long(argc, argv, "c:th", longopts, NULL)) != -1) {
             switch (ch) {
             case 'c':
                 opt_config_file = optarg;
+                break;
+            case 't':
+                config.dry_run = 1;
                 break;
             case 'h':
                 usage(&config.globalconf);
@@ -843,6 +857,11 @@ int main(int argc, char **argv)
         if (h2o_configurator_apply(&config.globalconf, opt_config_file, yoml) != 0)
             exit(EX_CONFIG);
         yoml_free(yoml);
+    }
+
+    if (config.dry_run) {
+        printf("configuration OK\n");
+        return 0;
     }
 
     setup_signal_handlers();
