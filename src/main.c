@@ -343,6 +343,73 @@ static struct listener_config_t *add_listener(struct config_t *conf, int fd, str
     return listener;
 }
 
+static int open_unix_listener(h2o_configurator_command_t *cmd, const char *config_file, yoml_t *config_node, struct sockaddr_un *sun)
+{
+    struct stat st;
+    int fd;
+
+    /* remove existing socket file as suggested in #45 */
+    if (lstat(sun->sun_path, &st) == 0) {
+        if (S_ISSOCK(st.st_mode)) {
+            unlink(sun->sun_path);
+        } else {
+            h2o_configurator_errprintf(cmd, config_file, config_node, "path:%s already exists and is not an unix socket.", sun->sun_path);
+            return -1;
+        }
+    }
+    /* add new listener */
+    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1
+        || bind(fd, (void *)sun, sizeof(*sun)) != 0
+        || listen(fd, SOMAXCONN) != 0) {
+        if (fd != -1)
+            close(fd);
+        h2o_configurator_errprintf(NULL, config_file, config_node, "failed to listen to socket:%s: %s", sun->sun_path, strerror(errno));
+        return -1;
+    }
+
+    return fd;
+}
+
+static int open_tcp_listener(h2o_configurator_command_t *cmd, const char *config_file, yoml_t *config_node, const char *hostname, const char *servname, int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
+{
+    int fd;
+
+    if ((fd = socket(domain, type, protocol)) == -1)
+        goto Error;
+    { /* set reuseaddr */
+        int flag = 1;
+        if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag)) != 0)
+            goto Error;
+    }
+#ifdef TCP_DEFER_ACCEPT
+    { /* set TCP_DEFER_ACCEPT */
+        int flag = 1;
+        if (setsockopt(fd, IPPROTO_TCP, TCP_DEFER_ACCEPT, &flag, sizeof(flag)) != 0)
+            goto Error;
+    }
+#endif
+#ifdef IPV6_V6ONLY
+    /* set IPv6only */
+    if (domain == AF_INET6) {
+        int flag = 1;
+        if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &flag, sizeof(flag)) != 0)
+            goto Error;
+    }
+#endif
+    if (bind(fd, addr, addrlen) != 0)
+        goto Error;
+    if (listen(fd, SOMAXCONN) != 0)
+        goto Error;
+
+    return fd;
+
+Error:
+    if (fd != -1)
+        close(fd);
+    h2o_configurator_errprintf(NULL, config_file, config_node, "failed to listen to port %s:%s: %s", hostname != NULL ? hostname : "ANY", servname, strerror(errno));
+    return -1;
+}
+
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
 {
     struct listener_configurator_t *configurator = (void*)cmd->configurator;
@@ -399,8 +466,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 
         /* unix socket */
         struct sockaddr_un sun;
-        struct stat sstat;
-        int fd, listener_is_new;
+        int listener_is_new;
         struct listener_config_t *listener;
         /* build sockaddr */
         if (strlen(servname) >= sizeof(sun.sun_path)) {
@@ -412,22 +478,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         /* find existing listener or create a new one */
         listener_is_new = 0;
         if ((listener = find_listener(conf, (void*)&sun, sizeof(sun))) == NULL) {
-            /* remove existing socket file as suggested in #45 */
-            if (lstat(servname, &sstat) == 0) {
-                if (S_ISSOCK(sstat.st_mode)) {
-                    unlink(servname);
-                } else {
-                    h2o_configurator_errprintf(cmd, config_file, config_node, "path:%s already exists and is not an unix socket.", servname);
-                    return -1;
-                }
-            }
-            /* add new listener */
-            if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1
-                || bind(fd, (void *)&sun, sizeof(sun)) != 0
-                || listen(fd, SOMAXCONN) != 0) {
-                h2o_configurator_errprintf(NULL, config_file, config_node, "failed to listen to socket:%s: %s", sun.sun_path, strerror(errno));
+            int fd = open_unix_listener(cmd, config_file, config_node, &sun);
+            if (fd == -1)
                 return -1;
-            }
             listener = add_listener(conf, fd, (struct sockaddr*)&sun, sizeof(sun));
             listener_is_new = 1;
         }
@@ -456,27 +509,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             struct listener_config_t *listener = find_listener(conf, ai->ai_addr, ai->ai_addrlen);
             int listener_is_new = 0;
             if (listener == NULL) {
-
-                int fd, reuseaddr_flag = 1;
-#ifdef TCP_DEFER_ACCEPT
-                int defer_accept_flag = 1;
-#endif
-#ifdef IPV6_V6ONLY
-                int v6only_flag = 1;
-#endif
-                if ((fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol)) == -1
-                    || setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
-#ifdef TCP_DEFER_ACCEPT
-                    || setsockopt(fd, IPPROTO_TCP, TCP_DEFER_ACCEPT, &defer_accept_flag, sizeof(defer_accept_flag)) != 0
-#endif
-#ifdef IPV6_V6ONLY
-                    || (ai->ai_family == AF_INET6 && setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only_flag, sizeof(v6only_flag)) != 0)
-#endif
-                    || bind(fd, ai->ai_addr, ai->ai_addrlen) != 0
-                    || listen(fd, SOMAXCONN) != 0) {
-                    h2o_configurator_errprintf(NULL, config_file, config_node, "failed to listen to port %s:%s: %s", hostname != NULL ? hostname : "ANY", servname, strerror(errno));
+                int fd = open_tcp_listener(cmd, config_file, config_node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol, ai->ai_addr, ai->ai_addrlen);
+                if (fd == -1)
                     return -1;
-                }
                 listener = add_listener(conf, fd, ai->ai_addr, ai->ai_addrlen);
                 listener_is_new = 1;
             }
