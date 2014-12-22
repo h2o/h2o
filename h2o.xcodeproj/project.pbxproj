@@ -182,6 +182,7 @@
 /* Begin PBXFileReference section */
 		101788B119B561AA0084C6D8 /* socket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = socket.c; sourceTree = "<group>"; };
 		101B670B19ADD3380084A351 /* access_log.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = access_log.c; sourceTree = "<group>"; };
+		104B9A221A47BBA1009EEE64 /* 40unix-socket.t */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "40unix-socket.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534BD1A3B8F7700627ECB /* file.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = file.c; sourceTree = "<group>"; };
 		105534C01A3B911300627ECB /* hpack.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpack.c; sourceTree = "<group>"; };
 		105534C21A3B917000627ECB /* mimemap.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = mimemap.c; sourceTree = "<group>"; };
@@ -576,6 +577,7 @@
 				105534F31A460EF600627ECB /* 00unit.libuv.t */,
 				105534F41A460EF600627ECB /* 10http1client.t */,
 				105534F51A460EF600627ECB /* 40protocol.t */,
+				104B9A221A47BBA1009EEE64 /* 40unix-socket.t */,
 				105534F61A460EF600627ECB /* 50file-config.t */,
 				105534F71A460F2E00627ECB /* 50mimemap.t */,
 				105534F81A460F2E00627ECB /* 50post-size-limit.t */,
