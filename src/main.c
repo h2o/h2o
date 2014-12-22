@@ -243,6 +243,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 #ifdef SSL_OP_NO_TLSv1_2
             MAP("tlsv1.3", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1 | SSL_OP_NO_TLSv1_2);
 #endif
+#undef MAP
             h2o_configurator_errprintf(cmd, config_file, minimum_version, "unknown protocol version: %s", minimum_version->data.scalar);
         VersionFound:
             ;
