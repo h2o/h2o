@@ -477,44 +477,66 @@ Rewrite:
 
 int h2o_parse_url(const char *url, size_t url_len, h2o_iovec_t *scheme, h2o_iovec_t *host, uint16_t *port, h2o_iovec_t *path)
 {
-    const char *hp_start, *hp_end, *colon_at;
+    const char *url_end, *token_start, *token_end;
 
     if (url_len == SIZE_MAX)
         url_len = strlen(url);
+    url_end = url + url_len;
 
     /* check and skip scheme */
     if (url_len >= 7 && memcmp(url, "http://", 7) == 0) {
         *scheme = h2o_iovec_init(H2O_STRLIT("http"));
-        hp_start = url + 7;
+        token_start = url + 7;
         *port = 80;
     } else if (url_len >= 8 && memcmp(url, "https://", 8) == 0) {
         *scheme = h2o_iovec_init(H2O_STRLIT("https"));
-        hp_start = url + 8;
+        token_start = url + 8;
         *port = 443;
     } else {
         return -1;
     }
-    /* locate the end of hostport */
-    if ((hp_end = memchr(hp_start, '/', url + url_len - hp_start)) != NULL) {
-        *path = h2o_iovec_init(hp_end, url + url_len - hp_end);
-    } else {
-        *path = h2o_iovec_init(H2O_STRLIT("/"));
-        hp_end = url + url_len;
-    }
-    /* parse hostport */
-    for (colon_at = hp_start; colon_at != hp_end; ++colon_at)
-        if (*colon_at == ':')
-            break;
-    if (colon_at != hp_end) {
-        size_t t;
-        *host = h2o_iovec_init(hp_start, colon_at - hp_start);
-        if ((t = h2o_strtosize(colon_at + 1, hp_end - colon_at - 1)) >= 65535)
+
+    /* parse host */
+    if (token_start == url_end)
+        return -1;
+    if (*token_start == '[') {
+        /* is IPv6 address */
+        ++token_start;
+        if ((token_end = memchr(token_start, ']', url_end - token_start)) == NULL)
             return -1;
-        *port = t;
+        *host = h2o_iovec_init(token_start, token_end - token_start);
+        token_start = token_end + 1;
     } else {
-        *host = h2o_iovec_init(hp_start, hp_end - hp_start);
+        for (token_end = token_start;
+            ! (token_end == url_end || *token_end == '/' || *token_end == ':');
+            ++token_end)
+            ;
+        *host = h2o_iovec_init(token_start, token_end - token_start);
+        token_start = token_end;
     }
-    /* success */
+    if (token_start == url_end)
+        goto PathOmitted;
+
+    /* parse port */
+    if (*token_start == ':') {
+        size_t p;
+        ++token_start;
+        if ((token_end = memchr(token_start, '/', url_end - token_start)) == NULL)
+            token_end = url_end;
+        if ((p = h2o_strtosize(token_start, token_end - token_start)) >= 65535)
+            return -1;
+        *port = p;
+        token_start = token_end;
+        if (token_start == url_end)
+            goto PathOmitted;
+    }
+
+    /* a non-empty path */
+    *path = h2o_iovec_init(token_start, url_end - token_start);
+
+    return 0;
+PathOmitted:
+    *path = h2o_iovec_init(H2O_STRLIT("/"));
     return 0;
 }
 
