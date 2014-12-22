@@ -715,32 +715,12 @@ static void *run_loop(void *_conf)
     return NULL;
 }
 
-int main(int argc, char **argv)
+static void setup_configurators(struct config_t *conf)
 {
-    static struct option longopts[] = {
-        { "conf", required_argument, NULL, 'c' },
-        { "help", no_argument, NULL, 'h' },
-        { NULL, 0, NULL, 0 }
-    };
-
-    static struct config_t config = {
-        {}, /* globalconf */
-        NULL, /* listeners */
-        0, /* num_listeners */
-        1024, /* max_connections */
-        1, /* num_threads */
-        NULL, /* thread_ids */
-        {}, /* state */
-    };
-
-    const char *config_file = "h2o.conf";
-    int opt_ch;
-    yoml_t *config_yoml;
-
-    h2o_config_init(&config.globalconf);
+    h2o_config_init(&conf->globalconf);
 
     {
-        struct listener_configurator_t *c = (void*)h2o_configurator_create(&config.globalconf, sizeof(*c));
+        struct listener_configurator_t *c = (void*)h2o_configurator_create(&conf->globalconf, sizeof(*c));
         c->super.enter = on_config_listen_enter;
         c->super.exit = on_config_listen_exit;
         h2o_configurator_define_command(
@@ -762,8 +742,9 @@ int main(int argc, char **argv)
             " - if the value is a sequence, each element should be either a scalar or",
             "   a mapping that conform to the requirements above");
     }
+
     {
-        h2o_configurator_t *c = h2o_configurator_create(&config.globalconf, sizeof(*c));
+        h2o_configurator_t *c = h2o_configurator_create(&conf->globalconf, sizeof(*c));
         h2o_configurator_define_command(
             c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL,
             on_config_max_connections,
@@ -774,34 +755,60 @@ int main(int argc, char **argv)
             "number of worker threads (default: 1)");
     }
 
-    h2o_access_log_register_configurator(&config.globalconf);
-    h2o_file_register_configurator(&config.globalconf);
-    h2o_proxy_register_configurator(&config.globalconf);
+    h2o_access_log_register_configurator(&conf->globalconf);
+    h2o_file_register_configurator(&conf->globalconf);
+    h2o_proxy_register_configurator(&conf->globalconf);
+}
 
-    /* parse options */
-    while ((opt_ch = getopt_long(argc, argv, "c:h", longopts, NULL)) != -1) {
-        switch (opt_ch) {
-        case 'c':
-            config_file = optarg;
-            break;
-        case 'h':
-            usage(&config.globalconf);
-            exit(0);
-            break;
-        default:
-            assert(0);
-            break;
+int main(int argc, char **argv)
+{
+    static struct config_t config = {
+        {}, /* globalconf */
+        NULL, /* listeners */
+        0, /* num_listeners */
+        1024, /* max_connections */
+        1, /* num_threads */
+        NULL, /* thread_ids */
+        {}, /* state */
+    };
+
+    const char *opt_config_file = "h2o.conf";
+
+    setup_configurators(&config);
+
+    { /* parse options */
+        int ch;
+        static struct option longopts[] = {
+            { "conf", required_argument, NULL, 'c' },
+            { "help", no_argument, NULL, 'h' },
+            { NULL, 0, NULL, 0 }
+        };
+        while ((ch = getopt_long(argc, argv, "c:h", longopts, NULL)) != -1) {
+            switch (ch) {
+            case 'c':
+                opt_config_file = optarg;
+                break;
+            case 'h':
+                usage(&config.globalconf);
+                exit(0);
+                break;
+            default:
+                assert(0);
+                break;
+            }
         }
+        argc -= optind;
+        argv += optind;
     }
-    argc -= optind;
-    argv += optind;
 
-    /* configure */
-    if ((config_yoml = load_config(config_file)) == NULL)
-        exit(EX_CONFIG);
-    if (h2o_configurator_apply(&config.globalconf, config_file, config_yoml) != 0)
-        exit(EX_CONFIG);
-    yoml_free(config_yoml);
+    { /* configure */
+        yoml_t *yoml;
+        if ((yoml = load_config(opt_config_file)) == NULL)
+            exit(EX_CONFIG);
+        if (h2o_configurator_apply(&config.globalconf, opt_config_file, yoml) != 0)
+            exit(EX_CONFIG);
+        yoml_free(yoml);
+    }
 
     setup_signal_handlers();
 
