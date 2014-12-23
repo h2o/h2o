@@ -9,11 +9,6 @@ Makefile
 build/
 cmake_install.cmake
 xcuserdata
-h2o
 !include/h2o
-examples/simple
-examples/socket-client
-examples/websocket
-libh2o.a
 misc/test-ca/demoCA/newcerts/*.pem
 tmp/
