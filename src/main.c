@@ -638,26 +638,29 @@ yoml_t *load_config(const char *fn)
     return yoml;
 }
 
+static void set_signal_handler(int signo, void (*cb)(int signo))
+{
+    struct sigaction action;
+
+    memset(&action, 0, sizeof(action));
+    sigemptyset(&action.sa_mask);
+    action.sa_handler = cb != NULL ? cb : SIG_IGN;
+    sigaction(signo, &action, NULL);
+}
+
 static void signal_ignore_cb(int signo)
 {
 }
 
 static void setup_signal_handlers(void)
 {
-    struct sigaction action;
     sigset_t mask;
 
     /* ignore SIGPIPE */
-    memset(&action, 0, sizeof(action));
-    sigemptyset(&action.sa_mask);
-    action.sa_handler = SIG_IGN;
-    sigaction(SIGPIPE, &action, NULL);
+    set_signal_handler(SIGPIPE, NULL);
 
     /* accept SIGCONT (so that we could use the signal to interrupt blocking syscalls like epoll) */
-    memset(&action, 0, sizeof(action));
-    sigemptyset(&action.sa_mask);
-    action.sa_handler = signal_ignore_cb;
-    sigaction(SIGCONT, &action, NULL);
+    set_signal_handler(SIGCONT, signal_ignore_cb);
     /* and make sure SIGCONT is delivered */
     pthread_sigmask(SIG_BLOCK, NULL, &mask);
     sigdelset(&mask, SIGCONT);
