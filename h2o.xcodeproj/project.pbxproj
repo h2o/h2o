@@ -9,9 +9,9 @@
 /* Begin PBXBuildFile section */
 		101788B219B561AA0084C6D8 /* socket.c in Sources */ = {isa = PBXBuildFile; fileRef = 101788B119B561AA0084C6D8 /* socket.c */; };
 		101B670C19ADD3380084A351 /* access_log.c in Sources */ = {isa = PBXBuildFile; fileRef = 101B670B19ADD3380084A351 /* access_log.c */; };
-		104B9A251A4A4FEE009EEE64 /* serverutil.c in Sources */ = {isa = PBXBuildFile; fileRef = 104B9A241A4A4FEE009EEE64 /* serverutil.c */; };
 		104B9A261A4A5041009EEE64 /* serverutil.h in Headers */ = {isa = PBXBuildFile; fileRef = 104B9A231A4A4FAF009EEE64 /* serverutil.h */; };
 		104B9A281A4A5139009EEE64 /* serverutil.c in Sources */ = {isa = PBXBuildFile; fileRef = 104B9A271A4A5139009EEE64 /* serverutil.c */; };
+		104B9A2A1A4AA9BF009EEE64 /* serverutil.c in Sources */ = {isa = PBXBuildFile; fileRef = 104B9A241A4A4FEE009EEE64 /* serverutil.c */; };
 		105534BE1A3B8F7700627ECB /* file.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534BD1A3B8F7700627ECB /* file.c */; };
 		105534C11A3B911300627ECB /* hpack.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534C01A3B911300627ECB /* hpack.c */; };
 		105534C31A3B917000627ECB /* mimemap.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534C21A3B917000627ECB /* mimemap.c */; };
@@ -842,7 +842,6 @@
 				10F4180519CA75C500B6E31A /* configurator.c in Sources */,
 				1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */,
 				101B670C19ADD3380084A351 /* access_log.c in Sources */,
-				104B9A251A4A4FEE009EEE64 /* serverutil.c in Sources */,
 				107923C419A3217300C52AD6 /* headers.c in Sources */,
 				10BA72AA19AAD6300059392A /* stream.c in Sources */,
 				10D0907319F633B00043D458 /* proxy.c in Sources */,
@@ -919,6 +918,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				104B9A2A1A4AA9BF009EEE64 /* serverutil.c in Sources */,
 				10F417D619C190F800B6E31A /* main.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
