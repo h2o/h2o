@@ -63,6 +63,8 @@ void h2o_run_master_process(void (*restart_cb)(void*), void *restart_arg)
     int signo, should_exit = 0;
     pid_t worker_pid = -1, oldgen_worker_pid = get_oldgen_worker_pid();
 
+    fprintf(stderr, "master process running at:%d\n", (int)getpid());
+
     /* setup the signal mask */
     sigemptyset(&sigset);
     h2o_set_signal_handler(SIGHUP, h2o_noop_signal_handler);
