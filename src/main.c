@@ -40,11 +40,7 @@
 #include "h2o/configurator.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
-
-/* taken from sysexits.h */
-#ifndef EX_CONFIG
-# define EX_CONFIG 78
-#endif
+#include "h2o/serverutil.h"
 
 struct listener_configurator_t {
     h2o_configurator_t super;
@@ -638,29 +634,15 @@ yoml_t *load_config(const char *fn)
     return yoml;
 }
 
-static void set_signal_handler(int signo, void (*cb)(int signo))
-{
-    struct sigaction action;
-
-    memset(&action, 0, sizeof(action));
-    sigemptyset(&action.sa_mask);
-    action.sa_handler = cb != NULL ? cb : SIG_IGN;
-    sigaction(signo, &action, NULL);
-}
-
-static void signal_ignore_cb(int signo)
-{
-}
-
 static void setup_signal_handlers(void)
 {
     sigset_t mask;
 
     /* ignore SIGPIPE */
-    set_signal_handler(SIGPIPE, NULL);
+    h2o_set_signal_handler(SIGPIPE, SIG_IGN);
 
     /* accept SIGCONT (so that we could use the signal to interrupt blocking syscalls like epoll) */
-    set_signal_handler(SIGCONT, signal_ignore_cb);
+    h2o_set_signal_handler(SIGCONT, h2o_noop_signal_handler);
     /* and make sure SIGCONT is delivered */
     pthread_sigmask(SIG_BLOCK, NULL, &mask);
     sigdelset(&mask, SIGCONT);
