@@ -123,6 +123,7 @@ static void test_loopback(void)
 int main(int argc, char **argv)
 {
     { /* library tests */
+        subtest("lib/server_starter.c", test_lib__server_starter_c);
         subtest("lib/string.c", test_lib__string_c);
         subtest("lib/http2/hpack.c", test_lib__http2__hpack);
         subtest("lib/mimemap.c", test_lib__mimemap_c);

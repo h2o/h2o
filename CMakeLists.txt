@@ -57,6 +57,7 @@ SET(LIB_SOURCE_FILES
     lib/mimemap.c
     lib/proxy.c
     lib/request.c
+    lib/server_starter.c
     lib/socket.c
     lib/socketpool.c
     lib/string.c
@@ -72,12 +73,14 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/file.c
     t/00unit/lib/mimemap.c
     t/00unit/lib/proxy.c
+    t/00unit/lib/server_starter.c
     t/00unit/lib/string.c)
 LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/http2/hpack.c
     lib/file.c
     lib/mimemap.c
     lib/proxy.c
+    lib/server_starter.c
     lib/string.c)
 
 SET(EXTRA_LIBRARIES ${CMAKE_DL_LIBS})
