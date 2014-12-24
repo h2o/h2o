@@ -57,7 +57,7 @@ SET(LIB_SOURCE_FILES
     lib/mimemap.c
     lib/proxy.c
     lib/request.c
-    lib/server_starter.c
+    lib/serverutil.c
     lib/socket.c
     lib/socketpool.c
     lib/string.c
@@ -73,14 +73,14 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/file.c
     t/00unit/lib/mimemap.c
     t/00unit/lib/proxy.c
-    t/00unit/lib/server_starter.c
+    t/00unit/lib/serverutil.c
     t/00unit/lib/string.c)
 LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/http2/hpack.c
     lib/file.c
     lib/mimemap.c
     lib/proxy.c
-    lib/server_starter.c
+    lib/serverutil.c
     lib/string.c)
 
 SET(EXTRA_LIBRARIES ${CMAKE_DL_LIBS})
@@ -113,6 +113,11 @@ ADD_EXECUTABLE(examples-websocket lib/websocket.c examples/libh2o/websocket.c)
 SET_TARGET_PROPERTIES(examples-websocket PROPERTIES
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-websocket libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${WSLAY_LIBRARIES} ${EXTRA_LIBRARIES})
+
+ADD_EXECUTABLE(examples-master-worker-server examples/libh2o/master-worker-server.c lib/serverutil.c)
+SET_TARGET_PROPERTIES(examples-master-worker-server PROPERTIES
+    EXCLUDE_FROM_ALL 1)
+TARGET_LINK_LIBRARIES(examples-master-worker-server libh2o)
 
 # directly links to libh2o using evloop
 ADD_EXECUTABLE(h2o ${LIB_SOURCE_FILES} src/main.c)

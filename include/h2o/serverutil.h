@@ -24,6 +24,31 @@
 
 #include <stddef.h>
 
+/* taken from sysexits.h */
+#ifndef EX_SOFTWARE
+# define EX_SOFTWARE 70
+#endif
+#ifndef EX_OSERR
+# define EX_OSERR 71
+#endif
+#ifndef EX_CONFIG
+# define EX_CONFIG 78
+#endif
+
+/**
+ * equivalent of signal(3)
+ */
+void h2o_set_signal_handler(int signo, void (*cb)(int signo));
+/**
+ * a signal handler that does nothing
+ */
+void h2o_noop_signal_handler(int signo);
+
+/**
+ * a utility function for running a deamon with master-worker configuration
+ */
+void h2o_run_master_process(void (*restart_cb)(void*), void *restart_arg);
+
 /**
  * return a list of fds passed in from Server::Starter, or 0 if Server::Starter was not used.  -1 on error
  */
