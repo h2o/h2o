@@ -21,16 +21,16 @@
  */
 #include <stdlib.h>
 #include "../test.h"
-#include "../../../lib/server_starter.c"
+#include "../../../lib/serverutil.c"
 
-void test_lib__server_starter_c(void)
+void test_lib__serverutil_c(void)
 {
     int *fds;
     size_t num_fds;
 
     unsetenv("SERVER_STARTER_PORT");
     num_fds = h2o_server_starter_get_fds(&fds);
-    ok(num_fds == -1);
+    ok(num_fds == 0);
 
     setenv("SERVER_STARTER_PORT", "0.0.0.0:80=3", 1);
     num_fds = h2o_server_starter_get_fds(&fds);
@@ -42,4 +42,8 @@ void test_lib__server_starter_c(void)
     ok(num_fds == 2);
     ok(fds[0] == 3);
     ok(fds[1] == 4);
+
+    setenv("SERVER_STARTER_PORT", "0.0.0.0:80=foo", 1);
+    num_fds = h2o_server_starter_get_fds(&fds);
+    ok(num_fds == -1);
 }
