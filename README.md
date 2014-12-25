@@ -118,3 +118,9 @@ __HTTP/2__
 |[trusterd @ cff8e15](https://github.com/matsumoto-r/trusterd) |147,400|46,627|
 
 note: `h2load -c 500 -m 100 -n 2000000`
+
+Further Reading
+---
+
+- [Presentation slides at HTTP2 Conference](http://www.slideshare.net/kazuho/h2o-20141103pptx) - discusses the design of H2O and the motives behind
+- [Kazuho's Weblog](http://blog.kazuhooku.com/) - the developers weblog (with [H2O+in English](http://blog.kazuhooku.com/search/label/H2O+in%20English) tag, [H2O+日本語](http://blog.kazuhooku.com/search/label/H2O+日本語) tag)
