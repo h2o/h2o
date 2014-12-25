@@ -27,6 +27,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <pthread.h>
+#include <pwd.h>
 #include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -34,6 +35,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
+#include <uuid/uuid.h>
 #include <openssl/err.h>
 #include "yoml-parser.h"
 #include "h2o.h"
@@ -77,6 +79,7 @@ struct config_t {
     } server_starter;
     struct listener_config_t **listeners;
     size_t num_listeners;
+    struct passwd *running_user; /* NULL if not set */
     unsigned max_connections;
     unsigned num_threads;
     pthread_t *thread_ids;
@@ -603,6 +606,34 @@ static int on_config_listen_exit(h2o_configurator_t *_configurator, h2o_configur
     return 0;
 }
 
+static int on_config_user(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
+{
+    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
+    static struct passwd passwdbuf;
+    static h2o_iovec_t buf;
+
+    if (buf.base == NULL) {
+        long l = sysconf(_SC_GETPW_R_SIZE_MAX);
+        if (l == -1) {
+            perror("failed to obtain sysconf(_SC_GETPW_R_SIZE_MAX)");
+            return -1;
+        }
+        buf.len = (size_t)l;
+        buf.base = h2o_mem_alloc(buf.len);
+    }
+
+    if (getpwnam_r(config_node->data.scalar, &passwdbuf, buf.base, buf.len, &conf->running_user) != 0) {
+        perror("getpwnam_r");
+        return -1;
+    }
+    if (conf->running_user == NULL) {
+        h2o_configurator_errprintf(cmd, config_file, config_node, "user:%s does not exist", config_node->data.scalar);
+        return -1;
+    }
+
+    return 0;
+}
+
 static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
@@ -798,6 +829,11 @@ static void setup_configurators(struct config_t *conf)
     {
         h2o_configurator_t *c = h2o_configurator_create(&conf->globalconf, sizeof(*c));
         h2o_configurator_define_command(
+            c, "user",
+            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+            on_config_user,
+            "user under with the server should handle incoming requests (default: none)");
+        h2o_configurator_define_command(
             c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL,
             on_config_max_connections,
             "max connections (default: 1024)");
@@ -820,6 +856,7 @@ int main(int argc, char **argv)
         {}, /* server_starter */
         NULL, /* listeners */
         0, /* num_listeners */
+        NULL, /* running_user */
         1024, /* max_connections */
         1, /* num_threads */
         NULL, /* thread_ids */
@@ -916,6 +953,18 @@ int main(int argc, char **argv)
     if (config.dry_run) {
         printf("configuration OK\n");
         return 0;
+    }
+
+    if (config.running_user != NULL) {
+        if (h2o_setuidgid(config.running_user) != 0) {
+            fprintf(stderr, "failed to change the running user (are you sure you are running as root?)\n");
+            return EX_OSERR;
+        }
+    } else {
+        if (getuid() == 0) {
+            fprintf(stderr, "cowardly refusing to run as root; you can use the `user` directive to set the running user\n");
+            return EX_CONFIG;
+        }
     }
 
     setup_signal_handlers();

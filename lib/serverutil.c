@@ -20,9 +20,11 @@
  * IN THE SOFTWARE.
  */
 #include <errno.h>
+#include <grp.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include "h2o/memory.h"
 #include "h2o/serverutil.h"
@@ -40,6 +42,24 @@ void h2o_set_signal_handler(int signo, void (*cb)(int signo))
 
 void h2o_noop_signal_handler(int signo)
 {
+}
+
+int h2o_setuidgid(struct passwd *passwd)
+{
+    if (setgid(passwd->pw_gid) != 0) {
+        fprintf(stderr, "setgid(%d) failed:%s\n", (int)passwd->pw_gid, strerror(errno));
+        return -1;
+    }
+    if (initgroups(passwd->pw_name, passwd->pw_gid) != 0) {
+        fprintf(stderr, "initgroups(%s, %d) failed:%s\n", passwd->pw_name, (int)passwd->pw_gid, strerror(errno));
+        return -1;
+    }
+    if (setuid(passwd->pw_uid) != 0) {
+        fprintf(stderr, "setuid(%d) failed:%s\n", (int)passwd->pw_uid, strerror(errno));
+        return -1;
+    }
+
+    return 0;
 }
 
 ssize_t h2o_server_starter_get_fds(int **_fds)
