@@ -64,7 +64,7 @@ First, let's try running the server using a configuration file included in the `
 $ h2o -c examples/h2o/h2o.conf
 ```
 
-Use `--help` to print a list of command line options and configuration directives that can be used.
+Use [`--help` to print a list of command line options and configuration directives that can be used](https://gist.github.com/kazuho/f15b79211ea76f1bf6e5).
 
 ```
 $ ./h2o --help
