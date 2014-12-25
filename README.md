@@ -13,7 +13,7 @@ Supported Protocols
 - HTTP/1.0 (http and https)
 - HTTP/1.1 (http and https)
 - Websocket (RFC6455, both ws and wss)
-- HTTP/2.0 (draft 14, via Upgrade, NPN, ALPN)
+- HTTP/2.0 (draft 14, via direct, Upgrade, NPN, ALPN)
 
 Building and Running the Server
 ---
