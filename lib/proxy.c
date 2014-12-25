@@ -193,7 +193,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 
     if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
         self->client = NULL;
-        h2o_send_error(self->src_req, 502, "Gateway Error", errstr);
+        h2o_send_error(self->src_req, 502, "Gateway Error", errstr, 0);
         return NULL;
     }
 
@@ -211,7 +211,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 if (self->src_req->res.content_length != SIZE_MAX
                     || (self->src_req->res.content_length = h2o_strtosize(headers[i].value, headers[i].value_len)) == SIZE_MAX) {
                     self->client = NULL;
-                    h2o_send_error(self->src_req, 502, "Gateway Error", "invalid response from upstream");
+                    h2o_send_error(self->src_req, 502, "Gateway Error", "invalid response from upstream", 0);
                     return NULL;
                 }
                 goto Skip;
@@ -250,7 +250,7 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
 
     if (errstr != NULL) {
         self->client = NULL;
-        h2o_send_error(self->src_req, 502, "Gateway Error", errstr);
+        h2o_send_error(self->src_req, 502, "Gateway Error", errstr, 0);
         return NULL;
     }
 

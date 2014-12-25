@@ -161,7 +161,7 @@ void h2o_process_request(h2o_req_t *req)
             return;
     }
 
-    h2o_send_error(req, 404, "File Not Found", "not found");
+    h2o_send_error(req, 404, "File Not Found", "not found", 0);
 }
 
 void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
@@ -229,14 +229,16 @@ void h2o_send_inline(h2o_req_t *req, const char *body, size_t len)
     h2o_send(req, &buf, 1, 1);
 }
 
-void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body)
+void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body, int flags)
 {
     bind_conf(req);
 
-    req->http1_is_persistent = 0;
+    if ((flags & H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION) != 0)
+        req->http1_is_persistent = 0;
 
     req->res.status = status;
     req->res.reason = reason;
+    req->res.content_length = strlen(body);
     memset(&req->res.headers, 0, sizeof(req->res.headers));
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
 

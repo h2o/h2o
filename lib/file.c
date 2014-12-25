@@ -336,9 +336,9 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     }
     /* failed to open */
     if (errno == ENOENT) {
-        h2o_send_error(req, 404, "File Not Found", "file not found");
+        h2o_send_error(req, 404, "File Not Found", "file not found", 0);
     } else {
-        h2o_send_error(req, 403, "Access Forbidden", "access forbidden");
+        h2o_send_error(req, 403, "Access Forbidden", "access forbidden", 0);
     }
     return 0;
 

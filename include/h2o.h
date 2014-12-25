@@ -636,6 +636,10 @@ static void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *lo
 
 /* built-in generators */
 
+enum {
+    H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION = 0x1
+};
+
 /**
  * sends the given string as the response
  */
@@ -643,7 +647,7 @@ void h2o_send_inline(h2o_req_t *req, const char *body, size_t len);
 /**
  * sends the given information as an error response to the client
  */
-void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body);
+void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body, int flags);
 
 /* mime mapper */
 
