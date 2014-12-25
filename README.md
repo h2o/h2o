@@ -88,21 +88,25 @@ $ make libh2o
 Benchmarks
 ---
 
+### Local Benchmark
+
+The scores below were recorded on Ubuntu 14.04 (x86-64) / VMware Fusion 7.1.0 / OS X 10.9.5 / MacBook Pro 15" Early 2013
+
 __HTTP/1.1__
 
 |Server \ size of content|6 bytes|4,096 bytes|
 |------------------------|------:|----------:|
-|nginx/1.7.4 ([conf](https://gist.github.com/kazuho/c9c12021567e3ab83809))            | 45,866|     47,579|
-|H2O @ eef1612           | 73,800|     63,768|
+|H2O/0.9.0               | 75,483|     59,673|
+|nginx/1.7.9 ([conf](https://gist.github.com/kazuho/c9c12021567e3ab83809))            | 37,289|     43,988|
 
-note: `wrk -c 500 -d 30 -t 1` on Ubuntu 14.04 on VMWare Fusion
+note: `wrk -c 500 -d 30 -t 1`
 
 __HTTP/2__
 
 |Server \ size of content|6 bytes|4,096 bytes|
 |------------------------|------:|----------:|
-|tiny-nghttpd ([nghttpd @ 9c0760e](https://github.com/tatsuhiro-t/nghttp2/)) |146,506|77,352|
-|[trusterd @ 962d031](https://github.com/matsumoto-r/trusterd) |125,482|50,103|
-|H2O @ 7505a82           |201,077|     90,810|
+|H2O/0.9.0               |272,300|    106,915|
+|tiny-nghttpd ([nghttpd @ ab1dd11](https://github.com/tatsuhiro-t/nghttp2/)) |198,018|93,868|
+|[trusterd @ cff8e15](https://github.com/matsumoto-r/trusterd) |147,400|46,627|
 
-note: `h2load -c 500 -m 100 -n 2000000` on Ubuntu 14.04 on VMWare Fusion
+note: `h2load -c 500 -m 100 -n 2000000`
