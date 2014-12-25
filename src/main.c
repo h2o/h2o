@@ -626,9 +626,12 @@ static void usage_print_directives(h2o_globalconf_t *conf)
         for (i = 0; i != configurator->commands.size; ++i) {
             h2o_configurator_command_t *cmd = configurator->commands.entries + i;
             const char **desc;
-            printf("    %s:\n", cmd->name);
+            printf("  %s: [%s%s%s]\n", cmd->name,
+                "g" + ((cmd->flags & H2O_CONFIGURATOR_FLAG_GLOBAL) == 0),
+                "h" + ((cmd->flags & H2O_CONFIGURATOR_FLAG_HOST) == 0),
+                "p" + ((cmd->flags & H2O_CONFIGURATOR_FLAG_PATH) == 0));
             for (desc = cmd->description; *desc != NULL; ++desc)
-                printf("      %s\n", *desc);
+                printf("    %s\n", *desc);
         }
         printf("\n");
     }
@@ -861,7 +864,11 @@ int main(int argc, char **argv)
                     "  -v, --version    prints the version number\n"
                     "  -h, --help       print this help\n"
                     "\n"
-                    "Directives of the Configuration File:\n"
+                    "Configuration:\n"
+                    "\n"
+                    "The configuration file should be written in YAML format.  Below is the list of\n"
+                    "configuration directives; the flags indicate at which level the directives can\n"
+                    "be used; g=global, h=host, p=path.\n"
                     "\n");
                 usage_print_directives(&config.globalconf);
                 exit(0);
