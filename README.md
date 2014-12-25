@@ -94,6 +94,8 @@ The scores were recorded on Amazon EC2 running two c3.8xlarge instances (server 
 
 ![benchmark results](http://kazuhooku.com/~kazuho/h2o.github.io/h2o-bench-0.9.0.png)
 
+note: for reverse-proxy tests, another H2O process running on the same host was used as the upstream server
+
 ### Local Benchmark
 
 The scores (requests/second.core) were recorded on Ubuntu 14.04 (x86-64) / VMware Fusion 7.1.0 / OS X 10.9.5 / MacBook Pro 15" Early 2013
