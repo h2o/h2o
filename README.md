@@ -13,8 +13,10 @@ The server supports following protocols.
 
 At library level, support for Websocket (RFC6455, both ws and wss) is provided as well.
 
-Building and Running the Server
+Using the Standalone Server
 ---
+
+*** Installation
 
 Following softwares are required to build the standalone server.  It is likely that you would be possible to find and install them as part of your operation system (by running yum, apt-get, brew, etc. depending on the OS).
 
@@ -22,15 +24,23 @@ Following softwares are required to build the standalone server.  It is likely t
 - [libyaml](http://pyyaml.org/wiki/LibYAML)
 - [OpenSSL](https://www.openssl.org/) (1.0.2 or above is recommended)
 
-Run the commands below to build and run the H2O server.  The last command will read the configuration from [examples/h2o/h2o.conf](https://github.com/kazuho/h2o/blob/master/examples/h2o/h2o.conf) and start listening on port 8080.  Try accessing [http://127.0.0.1:8080/](http://127.0.0.1:8080/).
+Run the commands below.  Last command installs `h2o` (the standalone server) to `usr/local`.
 
 ```
-$ cmake .
-$ make h2o
-$ ./h2o -c examples/h2o/h2o.conf
+$ cmake -DCMAKE_INSTALL_PREFIX=/usr/local .
+$ make
+$ sudo make install
 ```
 
-Use `--help` to print the list of configuration directives available.
+*** Running the Server
+
+First, let's try running the server using a configuration file included in the `examples/` directory.  The command below invokes the standalone server using [examples/h2o/h2o.conf](https://github.com/kazuho/h2o/blob/master/examples/h2o/h2o.conf), which directs the server to listen on port 8080.  Try accessing [http://127.0.0.1:8080/](http://127.0.0.1:8080/).
+
+```
+$ h2o -c examples/h2o/h2o.conf
+```
+
+Use `--help` to print a list of command line options and configuration directives that can be used.
 
 ```
 $ ./h2o --help
