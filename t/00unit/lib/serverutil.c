@@ -19,40 +19,37 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__t__test_h
-#define h2o__t__test_h
+#include <stdlib.h>
+#include "../test.h"
+#include "../../../lib/serverutil.c"
 
-#include "picotest.h"
-#include "h2o.h"
+void test_lib__serverutil_c(void)
+{
+    int *fds;
+    size_t num_fds;
 
-typedef struct st_h2o_loopback_conn_t {
-    h2o_conn_t super;
-    /**
-     * the response
-     */
-    h2o_buffer_t *body;
-    /* internal structure */
-    h2o_ostream_t _ostr_final;
-    int _is_complete;
-    /**
-     * the HTTP request / response (intentionally placed at the last, since it is a large structure and has it's own ctor)
-     */
-    h2o_req_t req;
-} h2o_loopback_conn_t;
+    unsetenv("SERVER_STARTER_PORT");
+    num_fds = h2o_server_starter_get_fds(&fds);
+    ok(num_fds == 0);
 
-h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx);
-void h2o_loopback_destroy(h2o_loopback_conn_t *conn);
-void h2o_loopback_run_loop(h2o_loopback_conn_t *conn);
+    setenv("SERVER_STARTER_PORT", "0.0.0.0:80=3", 1);
+    num_fds = h2o_server_starter_get_fds(&fds);
+    ok(num_fds == 1);
+    ok(fds[0] == 3);
 
-extern h2o_loop_t *test_loop;
+    setenv("SERVER_STARTER_PORT", "0.0.0.0:80=3;/tmp/foo.sock=4", 1);
+    num_fds = h2o_server_starter_get_fds(&fds);
+    ok(num_fds == 2);
+    ok(fds[0] == 3);
+    ok(fds[1] == 4);
 
-char *sha1sum(const void *src, size_t len);
+    setenv("SERVER_STARTER_PORT", "0.0.0.0:80=foo", 1);
+    num_fds = h2o_server_starter_get_fds(&fds);
+    ok(num_fds == -1);
 
-void test_lib__serverutil_c(void);
-void test_lib__string_c(void);
-void test_lib__http2__hpack(void);
-void test_lib__file_c(void);
-void test_lib__mimemap_c(void);
-void test_lib__proxy_c(void);
-
-#endif
+    /* without bind address */
+    setenv("SERVER_STARTER_PORT", "50908=4", 1);
+    num_fds = h2o_server_starter_get_fds(&fds);
+    ok(num_fds == 1);
+    ok(fds[0] == 4);
+}

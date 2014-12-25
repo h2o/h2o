@@ -40,11 +40,7 @@
 #include "h2o/configurator.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
-
-/* taken from sysexits.h */
-#ifndef EX_CONFIG
-# define EX_CONFIG 78
-#endif
+#include "h2o/serverutil.h"
 
 struct listener_configurator_t {
     h2o_configurator_t super;
@@ -73,6 +69,12 @@ struct listener_ctx_t {
 
 struct config_t {
     h2o_globalconf_t globalconf;
+    int dry_run;
+    struct {
+        int *fds;
+        char *bound_fd_map; /* has `num_fds` elements, set to 1 if fd[index] was bound to one of the listeners */
+        size_t num_fds;
+    } server_starter;
     struct listener_config_t **listeners;
     size_t num_listeners;
     unsigned max_connections;
@@ -343,6 +345,98 @@ static struct listener_config_t *add_listener(struct config_t *conf, int fd, str
     return listener;
 }
 
+static int find_listener_from_server_starter(struct config_t *conf, struct sockaddr *addr)
+{
+    size_t i;
+
+    assert(conf->server_starter.fds != NULL);
+    assert(conf->server_starter.num_fds != 0);
+
+    for (i = 0; i != conf->server_starter.num_fds; ++i) {
+        struct sockaddr_storage sa;
+        socklen_t salen = sizeof(sa);
+        if (getsockname(conf->server_starter.fds[i], (void*)&sa, &salen) != 0) {
+            fprintf(stderr, "could not get the socket address of fd %d given as $SERVER_STARTER_PORT\n", conf->server_starter.fds[i]);
+            exit(EX_CONFIG);
+        }
+        if (h2o_socket_compare_address((void*)&sa, addr) == 0)
+            goto Found;
+    }
+    /* not found */
+    return -1;
+
+Found:
+    conf->server_starter.bound_fd_map[i] = 1;
+    return conf->server_starter.fds[i];
+}
+
+static int open_unix_listener(h2o_configurator_command_t *cmd, const char *config_file, yoml_t *config_node, struct sockaddr_un *sun)
+{
+    struct stat st;
+    int fd;
+
+    /* remove existing socket file as suggested in #45 */
+    if (lstat(sun->sun_path, &st) == 0) {
+        if (S_ISSOCK(st.st_mode)) {
+            unlink(sun->sun_path);
+        } else {
+            h2o_configurator_errprintf(cmd, config_file, config_node, "path:%s already exists and is not an unix socket.", sun->sun_path);
+            return -1;
+        }
+    }
+    /* add new listener */
+    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1
+        || bind(fd, (void *)sun, sizeof(*sun)) != 0
+        || listen(fd, SOMAXCONN) != 0) {
+        if (fd != -1)
+            close(fd);
+        h2o_configurator_errprintf(NULL, config_file, config_node, "failed to listen to socket:%s: %s", sun->sun_path, strerror(errno));
+        return -1;
+    }
+
+    return fd;
+}
+
+static int open_tcp_listener(h2o_configurator_command_t *cmd, const char *config_file, yoml_t *config_node, const char *hostname, const char *servname, int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
+{
+    int fd;
+
+    if ((fd = socket(domain, type, protocol)) == -1)
+        goto Error;
+    { /* set reuseaddr */
+        int flag = 1;
+        if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag)) != 0)
+            goto Error;
+    }
+#ifdef TCP_DEFER_ACCEPT
+    { /* set TCP_DEFER_ACCEPT */
+        int flag = 1;
+        if (setsockopt(fd, IPPROTO_TCP, TCP_DEFER_ACCEPT, &flag, sizeof(flag)) != 0)
+            goto Error;
+    }
+#endif
+#ifdef IPV6_V6ONLY
+    /* set IPv6only */
+    if (domain == AF_INET6) {
+        int flag = 1;
+        if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &flag, sizeof(flag)) != 0)
+            goto Error;
+    }
+#endif
+    if (bind(fd, addr, addrlen) != 0)
+        goto Error;
+    if (listen(fd, SOMAXCONN) != 0)
+        goto Error;
+
+    return fd;
+
+Error:
+    if (fd != -1)
+        close(fd);
+    h2o_configurator_errprintf(NULL, config_file, config_node, "failed to listen to port %s:%s: %s", hostname != NULL ? hostname : "ANY", servname, strerror(errno));
+    return -1;
+}
+
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
 {
     struct listener_configurator_t *configurator = (void*)cmd->configurator;
@@ -399,8 +493,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 
         /* unix socket */
         struct sockaddr_un sun;
-        struct stat sstat;
-        int fd, listener_is_new;
+        int listener_is_new;
         struct listener_config_t *listener;
         /* build sockaddr */
         if (strlen(servname) >= sizeof(sun.sun_path)) {
@@ -412,21 +505,17 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         /* find existing listener or create a new one */
         listener_is_new = 0;
         if ((listener = find_listener(conf, (void*)&sun, sizeof(sun))) == NULL) {
-            /* remove existing socket file as suggested in #45 */
-            if (lstat(servname, &sstat) == 0) {
-                if (S_ISSOCK(sstat.st_mode)) {
-                    unlink(servname);
-                } else {
-                    h2o_configurator_errprintf(cmd, config_file, config_node, "path:%s already exists and is not an unix socket.", servname);
+            int fd;
+            if (conf->server_starter.fds != NULL) {
+                if ((fd = find_listener_from_server_starter(conf, (void*)&sun)) == -1) {
+                    h2o_configurator_errprintf(cmd, config_file, config_node, "unix socket:%s is not being bound to the server\n", sun.sun_path);
                     return -1;
                 }
-            }
-            /* add new listener */
-            if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1
-                || bind(fd, (void *)&sun, sizeof(sun)) != 0
-                || listen(fd, SOMAXCONN) != 0) {
-                h2o_configurator_errprintf(NULL, config_file, config_node, "failed to listen to socket:%s: %s", sun.sun_path, strerror(errno));
-                return -1;
+            } else if (conf->dry_run) {
+                fd = -1;
+            } else {
+                if ((fd = open_unix_listener(cmd, config_file, config_node, &sun)) == -1)
+                    return -1;
             }
             listener = add_listener(conf, fd, (struct sockaddr*)&sun, sizeof(sun));
             listener_is_new = 1;
@@ -456,26 +545,17 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             struct listener_config_t *listener = find_listener(conf, ai->ai_addr, ai->ai_addrlen);
             int listener_is_new = 0;
             if (listener == NULL) {
-
-                int fd, reuseaddr_flag = 1;
-#ifdef TCP_DEFER_ACCEPT
-                int defer_accept_flag = 1;
-#endif
-#ifdef IPV6_V6ONLY
-                int v6only_flag = 1;
-#endif
-                if ((fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol)) == -1
-                    || setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
-#ifdef TCP_DEFER_ACCEPT
-                    || setsockopt(fd, IPPROTO_TCP, TCP_DEFER_ACCEPT, &defer_accept_flag, sizeof(defer_accept_flag)) != 0
-#endif
-#ifdef IPV6_V6ONLY
-                    || (ai->ai_family == AF_INET6 && setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only_flag, sizeof(v6only_flag)) != 0)
-#endif
-                    || bind(fd, ai->ai_addr, ai->ai_addrlen) != 0
-                    || listen(fd, SOMAXCONN) != 0) {
-                    h2o_configurator_errprintf(NULL, config_file, config_node, "failed to listen to port %s:%s: %s", hostname != NULL ? hostname : "ANY", servname, strerror(errno));
-                    return -1;
+                int fd;
+                if (conf->server_starter.fds != NULL) {
+                    if ((fd = find_listener_from_server_starter(conf, ai->ai_addr)) == -1) {
+                        h2o_configurator_errprintf(cmd, config_file, config_node, "tcp socket:%s:%s is not being bound to the server\n", hostname, servname);
+                        return -1;
+                    }
+                } else if (conf->dry_run) {
+                    fd = -1;
+                } else {
+                    if ((fd = open_tcp_listener(cmd, config_file, config_node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol, ai->ai_addr, ai->ai_addrlen)) == -1)
+                        return -1;
                 }
                 listener = add_listener(conf, fd, ai->ai_addr, ai->ai_addrlen);
                 listener_is_new = 1;
@@ -554,23 +634,6 @@ static void usage_print_directives(h2o_globalconf_t *conf)
     }
 }
 
-static void usage(h2o_globalconf_t *config)
-{
-    printf(
-        "H2O version 0.1\n"
-        "\n"
-        "Usage:\n"
-        "  h2o [options]\n"
-        "\n"
-        "Options:\n"
-        "  --conf=file  configuration file (default: h2o.conf)\n"
-        "  --help       print this help\n"
-        "\n"
-        "Directives of the Configuration File:\n"
-        "\n");
-    usage_print_directives(config);
-}
-
 yoml_t *load_config(const char *fn)
 {
     FILE *fp;
@@ -594,27 +657,15 @@ yoml_t *load_config(const char *fn)
     return yoml;
 }
 
-static void signal_ignore_cb(int signo)
-{
-}
-
 static void setup_signal_handlers(void)
 {
-    struct sigaction action;
     sigset_t mask;
 
     /* ignore SIGPIPE */
-    memset(&action, 0, sizeof(action));
-    sigemptyset(&action.sa_mask);
-    action.sa_handler = SIG_IGN;
-    sigaction(SIGPIPE, &action, NULL);
+    h2o_set_signal_handler(SIGPIPE, SIG_IGN);
 
-    /* accept SIGCONT (so that we could use the signal to interrupt blocking syscalls like epoll) */
-    memset(&action, 0, sizeof(action));
-    sigemptyset(&action.sa_mask);
-    action.sa_handler = signal_ignore_cb;
-    sigaction(SIGCONT, &action, NULL);
-    /* and make sure SIGCONT is delivered */
+    /* use SIGCONT for exitting from poll */
+    h2o_set_signal_handler(SIGCONT, h2o_noop_signal_handler);
     pthread_sigmask(SIG_BLOCK, NULL, &mask);
     sigdelset(&mask, SIGCONT);
     pthread_sigmask(SIG_SETMASK, &mask, NULL);
@@ -669,7 +720,6 @@ static void on_accept(h2o_socket_t *listener, int status)
     } while (--num_accepts != 0);
 }
 
-
 static void *run_loop(void *_conf)
 {
     struct config_t *conf = _conf;
@@ -715,32 +765,12 @@ static void *run_loop(void *_conf)
     return NULL;
 }
 
-int main(int argc, char **argv)
+static void setup_configurators(struct config_t *conf)
 {
-    static struct option longopts[] = {
-        { "conf", required_argument, NULL, 'c' },
-        { "help", no_argument, NULL, 'h' },
-        { NULL, 0, NULL, 0 }
-    };
-
-    static struct config_t config = {
-        {}, /* globalconf */
-        NULL, /* listeners */
-        0, /* num_listeners */
-        1024, /* max_connections */
-        1, /* num_threads */
-        NULL, /* thread_ids */
-        {}, /* state */
-    };
-
-    const char *config_file = "h2o.conf";
-    int opt_ch;
-    yoml_t *config_yoml;
-
-    h2o_config_init(&config.globalconf);
+    h2o_config_init(&conf->globalconf);
 
     {
-        struct listener_configurator_t *c = (void*)h2o_configurator_create(&config.globalconf, sizeof(*c));
+        struct listener_configurator_t *c = (void*)h2o_configurator_create(&conf->globalconf, sizeof(*c));
         c->super.enter = on_config_listen_enter;
         c->super.exit = on_config_listen_exit;
         h2o_configurator_define_command(
@@ -762,8 +792,9 @@ int main(int argc, char **argv)
             " - if the value is a sequence, each element should be either a scalar or",
             "   a mapping that conform to the requirements above");
     }
+
     {
-        h2o_configurator_t *c = h2o_configurator_create(&config.globalconf, sizeof(*c));
+        h2o_configurator_t *c = h2o_configurator_create(&conf->globalconf, sizeof(*c));
         h2o_configurator_define_command(
             c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL,
             on_config_max_connections,
@@ -774,34 +805,108 @@ int main(int argc, char **argv)
             "number of worker threads (default: 1)");
     }
 
-    h2o_access_log_register_configurator(&config.globalconf);
-    h2o_file_register_configurator(&config.globalconf);
-    h2o_proxy_register_configurator(&config.globalconf);
+    h2o_access_log_register_configurator(&conf->globalconf);
+    h2o_file_register_configurator(&conf->globalconf);
+    h2o_proxy_register_configurator(&conf->globalconf);
+}
 
-    /* parse options */
-    while ((opt_ch = getopt_long(argc, argv, "c:h", longopts, NULL)) != -1) {
-        switch (opt_ch) {
-        case 'c':
-            config_file = optarg;
-            break;
-        case 'h':
-            usage(&config.globalconf);
-            exit(0);
-            break;
-        default:
-            assert(0);
-            break;
+int main(int argc, char **argv)
+{
+    static struct config_t config = {
+        {}, /* globalconf */
+        0, /* dry-run */
+        {}, /* server_starter */
+        NULL, /* listeners */
+        0, /* num_listeners */
+        1024, /* max_connections */
+        1, /* num_threads */
+        NULL, /* thread_ids */
+        {}, /* state */
+    };
+
+    const char *opt_config_file = "h2o.conf";
+
+    setup_configurators(&config);
+
+    { /* parse options */
+        int ch;
+        static struct option longopts[] = {
+            { "conf", required_argument, NULL, 'c' },
+            { "test", no_argument, NULL, 't' },
+            { "help", no_argument, NULL, 'h' },
+            { NULL, 0, NULL, 0 }
+        };
+        while ((ch = getopt_long(argc, argv, "c:th", longopts, NULL)) != -1) {
+            switch (ch) {
+            case 'c':
+                opt_config_file = optarg;
+                break;
+            case 't':
+                config.dry_run = 1;
+                break;
+            case 'h':
+                printf(
+                    "H2O version 0.1\n"
+                    "\n"
+                    "Usage:\n"
+                    "  h2o [options]\n"
+                    "\n"
+                    "Options:\n"
+                    "  -c, --conf FILE  configuration file (default: h2o.conf)\n"
+                    "  -t, --test       tests the configuration\n"
+                    "  -h, --help       print this help\n"
+                    "\n"
+                    "Directives of the Configuration File:\n"
+                    "\n");
+                usage_print_directives(&config.globalconf);
+                exit(0);
+                break;
+            default:
+                assert(0);
+                break;
+            }
+        }
+        argc -= optind;
+        argv += optind;
+    }
+
+    /* setup config.server_starter */
+    if ((config.server_starter.num_fds = h2o_server_starter_get_fds(&config.server_starter.fds)) == -1)
+        exit(EX_CONFIG);
+    if (config.server_starter.fds != 0)
+        config.server_starter.bound_fd_map = alloca(config.server_starter.num_fds);
+
+    { /* configure */
+        yoml_t *yoml;
+        if ((yoml = load_config(opt_config_file)) == NULL)
+            exit(EX_CONFIG);
+        if (h2o_configurator_apply(&config.globalconf, opt_config_file, yoml) != 0)
+            exit(EX_CONFIG);
+        yoml_free(yoml);
+    }
+
+    /* check if all the fds passed in by server::starter were bound */
+    if (config.server_starter.fds != NULL) {
+        size_t i;
+        int all_were_bound = 1;
+        for (i = 0; i != config.server_starter.num_fds; ++i) {
+            if (! config.server_starter.bound_fd_map[i]) {
+                fprintf(stderr, "no configuration found for fd:%d passed in by $SERVER_STARTER_PORT\n", config.server_starter.fds[i]);
+                all_were_bound = 0;
+            }
+        }
+        if (! all_were_bound) {
+            fprintf(stderr, "note: $SERVER_STARTER_PORT was \"%s\"\n", getenv("SERVER_STARTER_PORT"));
+            return EX_CONFIG;
         }
     }
-    argc -= optind;
-    argv += optind;
 
-    /* configure */
-    if ((config_yoml = load_config(config_file)) == NULL)
-        exit(EX_CONFIG);
-    if (h2o_configurator_apply(&config.globalconf, config_file, config_yoml) != 0)
-        exit(EX_CONFIG);
-    yoml_free(config_yoml);
+    unsetenv("SERVER_STARTER_PORT");
+
+    if (config.dry_run) {
+        printf("configuration OK\n");
+        return 0;
+    }
 
     setup_signal_handlers();
 

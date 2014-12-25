@@ -49,7 +49,7 @@ sub spawn_server {
                 sleep 0.1;
             }
         }
-        return scope_guard(sub {
+        my $guard = scope_guard(sub {
             print STDERR "killing $args{argv}->[0]... ";
             my $sig = 'TERM';
           Retry:
@@ -75,6 +75,7 @@ sub spawn_server {
                 print STDERR "no proc? ($!)\n";
             }
         });
+        return wantarray ? ($guard, $pid) : $guard;
     }
     # child process
     exec @{$args{argv}};
@@ -84,6 +85,7 @@ sub spawn_server {
 # returns a hash containing `port`, `tls_port`, `guard`
 sub spawn_h2o {
     my ($conf) = @_;
+    my @prefix;
 
     # decide the port numbers
     my $port = empty_port();
@@ -93,10 +95,18 @@ sub spawn_h2o {
     my ($conffh, $conffn) = tempfile();
     $conf = $conf->($port, $tls_port)
         if ref $conf eq 'CODE';
+    if (ref $conf eq 'HASH') {
+        @prefix = @{$conf->{prefix}}
+            if $conf->{prefix};
+        $conf = $conf->{conf};
+    }
     print $conffh <<"EOT";
 $conf
-listen: $port
 listen:
+  host: 0.0.0.0
+  port: $port
+listen:
+  host: 0.0.0.0
   port: $tls_port
   ssl:
     key-file: examples/h2o/server.key
@@ -104,8 +114,8 @@ listen:
 EOT
 
     # spawn the server
-    my $guard = spawn_server(
-        argv     => [ bindir() . "/h2o", "-c", $conffn ],
+    my ($guard, $pid) = spawn_server(
+        argv     => [ @prefix, bindir() . "/h2o", "-c", $conffn ],
         is_ready => sub {
             check_port($port) && check_port($tls_port);
         },
@@ -114,6 +124,7 @@ EOT
         port     => $port,
         tls_port => $tls_port,
         guard    => $guard,
+        pid      => $pid,
     };
 }
 
