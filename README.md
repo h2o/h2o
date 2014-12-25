@@ -1,9 +1,10 @@
-H2O - an optimized HTTP server / library implementation
+H2O - an optimized HTTP server with support for HTTP/1.x and HTTP/2
 ===
 
 [![Build Status](https://travis-ci.org/h2o/h2o.svg?branch=master)](https://travis-ci.org/h2o/h2o)
 
-H2O is an optimized HTTP server implementation that can be used either as a standalone server or a library.
+H2O is a very fast HTTP server with support for HTTP/1.x and HTTP/2.
+It can also be used as a library.
 
 Supported Protocols
 ---
@@ -13,23 +14,18 @@ Supported Protocols
 - Websocket (RFC6455, both ws and wss)
 - HTTP/2.0 (draft 14, via Upgrade, NPN, ALPN)
 
-Dependencies
----
-
-- [OpenSSL](https://www.openssl.org/) (mandatory)
-- [libyaml](http://pyyaml.org/wiki/LibYAML) (optional; required when building the server)
-- [libuv 1.0.0](https://github.com/joyent/libuv) (optional; required when using h2o as a library)
-- [wslay](https://github.com/tatsuhiro-t/wslay) (optional; required if you need support for websocket)
-
-note: Older versions of libuv cannot be used due to massive API changes in libuv 1.0.  Please use the latest RC of libuv 1.0.
-
 Building and Running the Server
 ---
+
+Following softwares are required to build the standalone server.  It is likely that you would be possible to find and install them as part of your operation system (by running yum, apt-get, brew, etc. depending on the OS).
+
+- [cmake](http://www.cmake.org/)
+- [libyaml](http://pyyaml.org/wiki/LibYAML)
+- [OpenSSL](https://www.openssl.org/) (1.0.2 or above is recommended)
 
 Run the commands below to build and run the H2O server.  The last command will read the configuration from [examples/h2o/h2o.conf](https://github.com/kazuho/h2o/blob/master/examples/h2o/h2o.conf) and start listening on port 8080.  Try accessing [http://127.0.0.1:8080/](http://127.0.0.1:8080/).
 
 ```
-$ git submodule update --init --recursive
 $ cmake .
 $ make h2o
 $ ./h2o -c examples/h2o/h2o.conf
@@ -44,13 +40,17 @@ $ ./h2o --help
 Building the Library
 ---
 
+H2O can also be used as a software library with [libuv version 1.0.0](https://github.com/joyent/libuv).
+Note that prior versions of libuv cannot be used due to massive changes to the APIs in 1.0.0.
+
+Examples can be found within the [examples/](https://github.com/kazuho/h2o/blob/master/examples/) directory.
+
+For the time being, using libh2o as a submodule is the recommend way.
+
 ```
-$ git submodule update --init --recursive
 $ cmake .
 $ make libh2o
 ```
-
-The library is designed to work together with the upcoming [libuv version 1.0.0](https://github.com/joyent/libuv).  Examples can be found within the [examples/](https://github.com/kazuho/h2o/blob/master/examples/) directory.
 
 Benchmarks
 ---
