@@ -42,6 +42,7 @@ extern "C" {
 #include "h2o/socket.h"
 #include "h2o/string_.h"
 #include "h2o/timeout.h"
+#include "h2o/version.h"
 
 #ifndef H2O_MAX_HEADERS
 # define H2O_MAX_HEADERS 100

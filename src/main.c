@@ -833,10 +833,11 @@ int main(int argc, char **argv)
         static struct option longopts[] = {
             { "conf", required_argument, NULL, 'c' },
             { "test", no_argument, NULL, 't' },
+            { "version", no_argument, NULL, 'v' },
             { "help", no_argument, NULL, 'h' },
             { NULL, 0, NULL, 0 }
         };
-        while ((ch = getopt_long(argc, argv, "c:th", longopts, NULL)) != -1) {
+        while ((ch = getopt_long(argc, argv, "c:tvh", longopts, NULL)) != -1) {
             switch (ch) {
             case 'c':
                 opt_config_file = optarg;
@@ -844,9 +845,12 @@ int main(int argc, char **argv)
             case 't':
                 config.dry_run = 1;
                 break;
+            case 'v':
+                printf("h2o version " H2O_VERSION "\n");
+                exit(0);
             case 'h':
                 printf(
-                    "H2O version 0.1\n"
+                    "h2o version " H2O_VERSION "\n"
                     "\n"
                     "Usage:\n"
                     "  h2o [options]\n"
@@ -854,6 +858,7 @@ int main(int argc, char **argv)
                     "Options:\n"
                     "  -c, --conf FILE  configuration file (default: h2o.conf)\n"
                     "  -t, --test       tests the configuration\n"
+                    "  -v, --version    prints the version number\n"
                     "  -h, --help       print this help\n"
                     "\n"
                     "Directives of the Configuration File:\n"

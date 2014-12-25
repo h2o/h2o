@@ -12,6 +12,7 @@
 		104B9A261A4A5041009EEE64 /* serverutil.h in Headers */ = {isa = PBXBuildFile; fileRef = 104B9A231A4A4FAF009EEE64 /* serverutil.h */; };
 		104B9A281A4A5139009EEE64 /* serverutil.c in Sources */ = {isa = PBXBuildFile; fileRef = 104B9A271A4A5139009EEE64 /* serverutil.c */; };
 		104B9A2A1A4AA9BF009EEE64 /* serverutil.c in Sources */ = {isa = PBXBuildFile; fileRef = 104B9A241A4A4FEE009EEE64 /* serverutil.c */; };
+		104B9A2D1A4BE029009EEE64 /* version.h in Headers */ = {isa = PBXBuildFile; fileRef = 104B9A2C1A4BE029009EEE64 /* version.h */; };
 		105534BE1A3B8F7700627ECB /* file.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534BD1A3B8F7700627ECB /* file.c */; };
 		105534C11A3B911300627ECB /* hpack.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534C01A3B911300627ECB /* hpack.c */; };
 		105534C31A3B917000627ECB /* mimemap.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534C21A3B917000627ECB /* mimemap.c */; };
@@ -190,6 +191,7 @@
 		104B9A241A4A4FEE009EEE64 /* serverutil.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = serverutil.c; sourceTree = "<group>"; };
 		104B9A271A4A5139009EEE64 /* serverutil.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = serverutil.c; sourceTree = "<group>"; };
 		104B9A2B1A4BBDA4009EEE64 /* 50server-starter.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50server-starter.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		104B9A2C1A4BE029009EEE64 /* version.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = version.h; sourceTree = "<group>"; };
 		105534BD1A3B8F7700627ECB /* file.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = file.c; sourceTree = "<group>"; };
 		105534C01A3B911300627ECB /* hpack.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpack.c; sourceTree = "<group>"; };
 		105534C21A3B917000627ECB /* mimemap.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = mimemap.c; sourceTree = "<group>"; };
@@ -492,6 +494,7 @@
 				10D0904019F0B9CD0043D458 /* timeout.h */,
 				107923A219A3215F00C52AD6 /* token.h */,
 				107923A319A3215F00C52AD6 /* websocket.h */,
+				104B9A2C1A4BE029009EEE64 /* version.h */,
 			);
 			path = h2o;
 			sourceTree = "<group>";
@@ -646,6 +649,7 @@
 				10D0905719F102DA0043D458 /* http1client.h in Headers */,
 				107923CA19A3217300C52AD6 /* internal.h in Headers */,
 				10D0903A19F0A51C0043D458 /* memory.h in Headers */,
+				104B9A2D1A4BE029009EEE64 /* version.h in Headers */,
 				10D0905919F22FA10043D458 /* string_.h in Headers */,
 				10D0904119F0B9CD0043D458 /* timeout.h in Headers */,
 				104B9A261A4A5041009EEE64 /* serverutil.h in Headers */,
