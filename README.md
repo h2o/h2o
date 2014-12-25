@@ -3,17 +3,15 @@ H2O - an optimized HTTP server with support for HTTP/1.x and HTTP/2
 
 [![Build Status](https://travis-ci.org/h2o/h2o.svg?branch=master)](https://travis-ci.org/h2o/h2o)
 
-H2O is a very fast HTTP server with support for HTTP/1.x and HTTP/2 written in C.
+H2O is a very fast HTTP server written in C.  It can also be used as a library.
 
-It can also be used as a library.
-
-Supported Protocols
----
+The server supports following protocols.
 
 - HTTP/1.0 (http and https)
 - HTTP/1.1 (http and https)
-- Websocket (RFC6455, both ws and wss)
 - HTTP/2.0 (draft 14, via direct, Upgrade, NPN, ALPN)
+
+At library level, support for Websocket (RFC6455, both ws and wss) is provided as well.
 
 Building and Running the Server
 ---
