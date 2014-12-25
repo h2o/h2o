@@ -15,8 +15,9 @@ H2O is a very fast HTTP server written in C.  It can also be used as a library.
  - draft 14
  - negotiation methods: NPN, ALPN, Upgrade, direct
  - weight-based prioritization
-- WebSocket ([RFC 6455](http://www.ietf.org/rfc/rfc6455.txt); at library level only)
+- [WebSocket](http://www.ietf.org/rfc/rfc6455.txt)
  - uses [wslay](https://github.com/tatsuhiro-t/wslay/)
+ - only usable at library level
 - TLS
  - uses [OpenSSL](https://www.openssl.org/)
  - forward secrecy
