@@ -598,23 +598,6 @@ static void usage_print_directives(h2o_globalconf_t *conf)
     }
 }
 
-static void usage(h2o_globalconf_t *config)
-{
-    printf(
-        "H2O version 0.1\n"
-        "\n"
-        "Usage:\n"
-        "  h2o [options]\n"
-        "\n"
-        "Options:\n"
-        "  --conf=file  configuration file (default: h2o.conf)\n"
-        "  --help       print this help\n"
-        "\n"
-        "Directives of the Configuration File:\n"
-        "\n");
-    usage_print_directives(config);
-}
-
 yoml_t *load_config(const char *fn)
 {
     FILE *fp;
@@ -838,7 +821,20 @@ int main(int argc, char **argv)
                 config.dry_run = 1;
                 break;
             case 'h':
-                usage(&config.globalconf);
+                printf(
+                    "H2O version 0.1\n"
+                    "\n"
+                    "Usage:\n"
+                    "  h2o [options]\n"
+                    "\n"
+                    "Options:\n"
+                    "  -c, --conf FILE  configuration file (default: h2o.conf)\n"
+                    "  -t, --test       test the configuration\n"
+                    "  -h, --help       print this help\n"
+                    "\n"
+                    "Directives of the Configuration File:\n"
+                    "\n");
+                usage_print_directives(&config.globalconf);
                 exit(0);
                 break;
             default:
