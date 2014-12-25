@@ -75,7 +75,7 @@ void h2o_config_init(h2o_globalconf_t *config)
 {
     memset(config, 0, sizeof(*config));
     h2o_linklist_init_anchor(&config->configurators);
-    config->server_name = h2o_iovec_init(H2O_STRLIT("h2o/0.1"));
+    config->server_name = h2o_iovec_init(H2O_STRLIT("h2o/" H2O_VERSION));
     config->max_request_entity_size = H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE;
     config->http1.req_timeout = H2O_DEFAULT_HTTP1_REQ_TIMEOUT;
     config->http1.upgrade_to_http2 = H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2;
