@@ -969,6 +969,8 @@ int main(int argc, char **argv)
 
     setup_signal_handlers();
 
+    fprintf(stderr, "h2o server (pid:%d) is ready to serve requests\n", (int)getpid());
+
     if (config.num_threads <= 1) {
         run_loop(&config);
     } else {
