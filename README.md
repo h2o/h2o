@@ -113,7 +113,7 @@ __HTTP/2__
 
 |Server \ size of content|6 bytes|4,096 bytes|
 |------------------------|------:|----------:|
-|h2o/0.9.0               |272,300|    106,915|
+|h2o/0.9.0 ([conf](https://gist.github.com/kazuho/5966cafb40e4473a62f8))              |272,300|    116,022|
 |tiny-nghttpd ([nghttpd @ ab1dd11](https://github.com/tatsuhiro-t/nghttp2/)) |198,018|93,868|
 |[trusterd @ cff8e15](https://github.com/matsumoto-r/trusterd) |147,400|46,627|
 
