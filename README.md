@@ -46,7 +46,9 @@ Following softwares are required to build the standalone server.  It is likely t
 - [libyaml](http://pyyaml.org/wiki/LibYAML)
 - [OpenSSL](https://www.openssl.org/) (1.0.2 or above is recommended)
 
-Run the commands below.  Last command installs `h2o` (the standalone server) to `usr/local`.
+Download and extract a source release from [here](https://github.com/h2o/h2o/releases), or clone the Git repository.
+
+Run the commands below.  The last command installs `h2o` (the standalone server) to `usr/local`.
 
 ```
 $ cmake -DCMAKE_INSTALL_PREFIX=/usr/local .
