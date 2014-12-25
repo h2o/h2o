@@ -121,8 +121,8 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.keepalive",
         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
         on_config_keepalive,
-        "boolean flag (ON/OFF) indicating whether or not to use persistent connections",
-        "to upstream (default: OFF)");
+        "boolean flag (ON/OFF) indicating whether or not to use persistent",
+        "connections to upstream (default: OFF)");
     h2o_configurator_define_command(&c->super, "proxy.timeout.io",
         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
         on_config_timeout_io,

@@ -786,14 +786,13 @@ static void setup_configurators(struct config_t *conf)
             " - if the value is a mapping, following properties are recognized:",
             "     port: incoming port number or service name (mandatory)",
             "     host: incoming address (default: any address)",
-            "     ssl: mapping of SSL configuration using the keys below",
-            "          (default: none)",
+            "     ssl: mapping of SSL configuration using the keys below (default: none)",
             "       certificate-file: path of the SSL certificate file (mandatory)",
-            "       key-file: path of the SSL private key file (mandatory)",
-            "       minimum-version: minimum protocol version, should be one of: SSLv2,",
-            "                        SSLv3, TLSv1, TLSv1.1, TLSv1.2 (default: TLSv1)",
-            " - if the value is a sequence, each element should be either a scalar or",
-            "   a mapping that conform to the requirements above");
+            "       key-file:         path of the SSL private key file (mandatory)",
+            "       minimum-version:  minimum protocol version, should be one of: SSLv2,",
+            "                         SSLv3, TLSv1, TLSv1.1, TLSv1.2 (default: TLSv1)",
+            " - if the value is a sequence, each element should be either a scalar or a",
+            "   mapping that conform to the requirements above");
     }
 
     {
@@ -864,11 +863,10 @@ int main(int argc, char **argv)
                     "  -v, --version    prints the version number\n"
                     "  -h, --help       print this help\n"
                     "\n"
-                    "Configuration:\n"
-                    "\n"
-                    "The configuration file should be written in YAML format.  Below is the list of\n"
-                    "configuration directives; the flags indicate at which level the directives can\n"
-                    "be used; g=global, h=host, p=path.\n"
+                    "Configuration File:\n"
+                    "  The configuration file should be written in YAML format.  Below is the list\n"
+                    "  of configuration directives; the flags indicate at which level the directives\n"
+                    "  can be used; g=global, h=host, p=path.\n"
                     "\n");
                 usage_print_directives(&config.globalconf);
                 exit(0);
