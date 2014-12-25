@@ -249,8 +249,13 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
     if (h2o_configurator_get_command(conf, "files") != NULL)
         return;
 
-    { /* setup host configurators */
+    { /* `hosts` and `paths` */
         h2o_configurator_t *c = h2o_configurator_create(conf, sizeof(*c));
+        h2o_configurator_define_command(
+            c, "hosts",
+            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING | H2O_CONFIGURATOR_FLAG_DEFERRED,
+            on_config_hosts,
+            "map of hostname -> map of per-host configs");
         h2o_configurator_define_command(
             c, "paths",
             H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING | H2O_CONFIGURATOR_FLAG_DEFERRED,
@@ -260,11 +265,6 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
 
     { /* setup global configurators */
         h2o_configurator_t *c = h2o_configurator_create(conf, sizeof(*c));
-        h2o_configurator_define_command(
-            c, "hosts",
-            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING | H2O_CONFIGURATOR_FLAG_DEFERRED,
-            on_config_hosts,
-            "map of hostname -> map of per-host configs");
         h2o_configurator_define_command(
             c, "limit-request-body",
             H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
