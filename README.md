@@ -5,13 +5,34 @@ H2O - an optimized HTTP server with support for HTTP/1.x and HTTP/2
 
 H2O is a very fast HTTP server written in C.  It can also be used as a library.
 
-The server supports following protocols.
+### Features
 
-- HTTP/1.0 (http and https)
-- HTTP/1.1 (http and https)
-- HTTP/2.0 (draft 14, via direct, Upgrade, NPN, ALPN)
-
-At library level, support for Websocket (RFC6455, both ws and wss) is provided as well.
+- HTTP/1.0, HTTP/1.1
+ - uses [PicoHTTPParser](https://github.com/h2o/picohttpparser)
+ - persistent connections
+ - chunked encoding
+- [HTTP/2](http://http2.github.io/)
+ - draft 14
+ - negotiation methods: NPN, ALPN, Upgrade, direct
+ - weight-based prioritization
+- WebSocket ([RFC 6455](http://www.ietf.org/rfc/rfc6455.txt); at library level only)
+ - uses [wslay](https://github.com/tatsuhiro-t/wslay/)
+- TLS
+ - uses [OpenSSL](https://www.openssl.org/)
+ - forward secrecy
+ - AEAD ciphers
+ - session resumption (internal memory)
+- static file serving
+ - conditional GET using last-modified / etag
+ - directory listing
+ - mime-type configuration
+- reverse proxy
+ - HTTP/1 only (no HTTPS)
+ - persistent upstream connection
+- access-logging
+ - apache-like format strings
+- graceful restart and self-upgrade
+ - via [Server::Starter](http://search.cpan.org/~kazuho/Server-Starter-0.17/start_server)
 
 Using the Standalone Server
 ---
