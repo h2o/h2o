@@ -88,9 +88,15 @@ $ make libh2o
 Benchmarks
 ---
 
+### Remote Benchmark
+
+The scores were recorded on Amazon EC2 running two c3.8xlarge instances (server and client) on a single network placement.
+
+![benchmark results](http://kazuhooku.com/~kazuho/h2o.github.io/h2o-bench-0.9.0.png)
+
 ### Local Benchmark
 
-The scores below were recorded on Ubuntu 14.04 (x86-64) / VMware Fusion 7.1.0 / OS X 10.9.5 / MacBook Pro 15" Early 2013
+The scores (requests/second.core) were recorded on Ubuntu 14.04 (x86-64) / VMware Fusion 7.1.0 / OS X 10.9.5 / MacBook Pro 15" Early 2013
 
 __HTTP/1.1__
 
