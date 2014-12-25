@@ -35,7 +35,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
-#include <uuid/uuid.h>
 #include <openssl/err.h>
 #include "yoml-parser.h"
 #include "h2o.h"
