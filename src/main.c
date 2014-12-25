@@ -354,7 +354,7 @@ static int find_listener_from_server_starter(struct config_t *conf, struct socka
 
     for (i = 0; i != conf->server_starter.num_fds; ++i) {
         struct sockaddr_storage sa;
-        socklen_t salen;
+        socklen_t salen = sizeof(sa);
         if (getsockname(conf->server_starter.fds[i], (void*)&sa, &salen) != 0) {
             fprintf(stderr, "could not get the socket address of fd %d given as $SERVER_STARTER_PORT\n", conf->server_starter.fds[i]);
             exit(EX_CONFIG);
