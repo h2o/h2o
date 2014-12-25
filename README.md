@@ -16,7 +16,7 @@ At library level, support for Websocket (RFC6455, both ws and wss) is provided a
 Using the Standalone Server
 ---
 
-*** Installation
+### Installation
 
 Following softwares are required to build the standalone server.  It is likely that you would be possible to find and install them as part of your operation system (by running yum, apt-get, brew, etc. depending on the OS).
 
@@ -32,7 +32,7 @@ $ make
 $ sudo make install
 ```
 
-*** Running the Server
+### Running the Server
 
 First, let's try running the server using a configuration file included in the `examples/` directory.  The command below invokes the standalone server using [examples/h2o/h2o.conf](https://github.com/kazuho/h2o/blob/master/examples/h2o/h2o.conf), which directs the server to listen on port 8080.  Try accessing [http://127.0.0.1:8080/](http://127.0.0.1:8080/).
 
