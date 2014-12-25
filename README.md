@@ -104,7 +104,7 @@ __HTTP/1.1__
 
 |Server \ size of content|6 bytes|4,096 bytes|
 |------------------------|------:|----------:|
-|H2O/0.9.0               | 75,483|     59,673|
+|h2o/0.9.0               | 75,483|     59,673|
 |nginx/1.7.9 ([conf](https://gist.github.com/kazuho/c9c12021567e3ab83809))            | 37,289|     43,988|
 
 note: `wrk -c 500 -d 30 -t 1`
@@ -113,7 +113,7 @@ __HTTP/2__
 
 |Server \ size of content|6 bytes|4,096 bytes|
 |------------------------|------:|----------:|
-|H2O/0.9.0               |272,300|    106,915|
+|h2o/0.9.0               |272,300|    106,915|
 |tiny-nghttpd ([nghttpd @ ab1dd11](https://github.com/tatsuhiro-t/nghttp2/)) |198,018|93,868|
 |[trusterd @ cff8e15](https://github.com/matsumoto-r/trusterd) |147,400|46,627|
 
