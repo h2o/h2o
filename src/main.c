@@ -627,9 +627,9 @@ static void usage_print_directives(h2o_globalconf_t *conf)
             h2o_configurator_command_t *cmd = configurator->commands.entries + i;
             const char **desc;
             printf("  %s: [%s%s%s]\n", cmd->name,
-                "g" + ((cmd->flags & H2O_CONFIGURATOR_FLAG_GLOBAL) == 0),
-                "h" + ((cmd->flags & H2O_CONFIGURATOR_FLAG_HOST) == 0),
-                "p" + ((cmd->flags & H2O_CONFIGURATOR_FLAG_PATH) == 0));
+                ("g") + ((cmd->flags & H2O_CONFIGURATOR_FLAG_GLOBAL) == 0),
+                ("h") + ((cmd->flags & H2O_CONFIGURATOR_FLAG_HOST) == 0),
+                ("p") + ((cmd->flags & H2O_CONFIGURATOR_FLAG_PATH) == 0));
             for (desc = cmd->description; *desc != NULL; ++desc)
                 printf("    %s\n", *desc);
         }
