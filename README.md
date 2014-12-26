@@ -115,7 +115,7 @@ __HTTP/2__
 |------------------------|------:|----------:|
 |h2o/0.9.0 ([conf](https://gist.github.com/kazuho/5966cafb40e4473a62f8))              |272,300|    116,022|
 |tiny-nghttpd ([nghttpd @ ab1dd11](https://github.com/tatsuhiro-t/nghttp2/)) |198,018|93,868|
-|[trusterd @ cff8e15](https://github.com/matsumoto-r/trusterd) |147,400|46,627|
+|[trusterd @ cff8e15](https://github.com/matsumoto-r/trusterd) |167,306|67,600|
 
 note: `h2load -c 500 -m 100 -n 2000000`
 
