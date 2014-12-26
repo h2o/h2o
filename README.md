@@ -64,7 +64,7 @@ First, let's try running the server using a configuration file included in the `
 $ h2o -c examples/h2o/h2o.conf
 ```
 
-Use `--help` to print a list of command line options and configuration directives that can be used.
+Use [`--help` to print a list of command line options and configuration directives that can be used](https://gist.github.com/kazuho/f15b79211ea76f1bf6e5).
 
 ```
 $ ./h2o --help
@@ -113,9 +113,9 @@ __HTTP/2__
 
 |Server \ size of content|6 bytes|4,096 bytes|
 |------------------------|------:|----------:|
-|h2o/0.9.0               |272,300|    106,915|
+|h2o/0.9.0 ([conf](https://gist.github.com/kazuho/5966cafb40e4473a62f8))              |272,300|    116,022|
 |tiny-nghttpd ([nghttpd @ ab1dd11](https://github.com/tatsuhiro-t/nghttp2/)) |198,018|93,868|
-|[trusterd @ cff8e15](https://github.com/matsumoto-r/trusterd) |147,400|46,627|
+|[trusterd @ cff8e15](https://github.com/matsumoto-r/trusterd) |167,306|67,600|
 
 note: `h2load -c 500 -m 100 -n 2000000`
 
