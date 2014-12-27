@@ -192,11 +192,11 @@ static int setup_ssl(const char *cert_file, const char *key_file)
 
     /* load certificate and private key */
     if (SSL_CTX_use_certificate_file(ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
-        fprintf(stderr, "an error occured while trying to load server certificate file:%s\n", cert_file);
+        fprintf(stderr, "an error occurred while trying to load server certificate file:%s\n", cert_file);
         return -1;
     }
     if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file, SSL_FILETYPE_PEM) != 1) {
-        fprintf(stderr, "an error occured while trying to load private key file:%s\n", key_file);
+        fprintf(stderr, "an error occurred while trying to load private key file:%s\n", key_file);
         return -1;
     }
 
@@ -223,7 +223,7 @@ int main(int argc, char **argv)
     register_handler(hostconf, "/chunked-test", chunked_test);
     h2o_file_register(h2o_config_register_path(hostconf, "/"), "examples/doc_root", NULL, NULL, 0);
 
-#if 0 /* reproxy is not yet implemeneted */
+#if 0 /* reproxy is not yet implemented */
     register_handler(hostconf, "/reproxy-test", reproxy_test);
     h2o_reproxy_register(hostconf);
 #endif

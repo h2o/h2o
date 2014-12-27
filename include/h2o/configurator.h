@@ -61,7 +61,7 @@ struct st_h2o_configurator_command_t {
      */
     int flags;
     /**
-     * mandatory callcack called to handle the command
+     * mandatory callback called to handle the command
      */
     h2o_configurator_command_cb cb;
     /**

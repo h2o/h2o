@@ -94,11 +94,11 @@ static int setup_ssl(const char *cert_file, const char *key_file)
 
     /* load certificate and private key */
     if (SSL_CTX_use_certificate_file(ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
-        fprintf(stderr, "an error occured while trying to load server certificate file:%s\n", cert_file);
+        fprintf(stderr, "an error occurred while trying to load server certificate file:%s\n", cert_file);
         return -1;
     }
     if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file, SSL_FILETYPE_PEM) != 1) {
-        fprintf(stderr, "an error occured while trying to load private key file:%s\n", key_file);
+        fprintf(stderr, "an error occurred while trying to load private key file:%s\n", key_file);
         return -1;
     }
 
