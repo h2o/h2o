@@ -163,7 +163,7 @@ static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_
     assert(stream->state < H2O_HTTP2_STREAM_STATE_REQ_PENDING);
     stream->state = H2O_HTTP2_STREAM_STATE_REQ_PENDING;
 
-    { /* insert the pending request at the appropirate slot (FIXME this is O(N)) */
+    { /* insert the pending request at the appropriate slot (FIXME this is O(N)) */
         h2o_linklist_t *n;
         for (n = conn->_pending_reqs.prev; n != &conn->_pending_reqs; n = n->prev) {
             h2o_http2_stream_t *t = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link.link, n);

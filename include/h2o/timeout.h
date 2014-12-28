@@ -69,7 +69,7 @@ void h2o_timeout_dispose(h2o_loop_t *loop, h2o_timeout_t *timeout);
  */
 void h2o_timeout_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry);
 /**
- * disactivates a timeout entry, by unlinking it from a timeout
+ * deactivates a timeout entry, by unlinking it from a timeout
  */
 void h2o_timeout_unlink(h2o_timeout_entry_t *entry);
 /**
