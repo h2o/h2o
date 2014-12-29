@@ -243,7 +243,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             MAP("sslv3", SSL_OP_NO_SSLv2);
             MAP("tlsv1", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
             MAP("tlsv1.1", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1);
+#ifdef SSL_OP_NO_TLSv1_1
             MAP("tlsv1.2", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1);
+#endif
 #ifdef SSL_OP_NO_TLSv1_2
             MAP("tlsv1.3", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1 | SSL_OP_NO_TLSv1_2);
 #endif
