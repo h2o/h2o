@@ -85,7 +85,7 @@ struct config_t {
     struct {
         /* unused buffers exist to avoid false sharing of the cache line */
         char _unused1[32];
-        unsigned num_connections; /* should use atomic functions to update the value */
+        unsigned _num_connections; /* should use atomic functions to update the value */
         char _unused2[32];
     } state;
 };
@@ -694,33 +694,31 @@ yoml_t *load_config(const char *fn)
 
 static void setup_signal_handlers(void)
 {
-    sigset_t mask;
-
     /* ignore SIGPIPE */
     h2o_set_signal_handler(SIGPIPE, SIG_IGN);
+    /* use SIGCONT for notifying the worker threads */
+    h2o_thread_initialize_signal_for_notification(SIGCONT);
+}
 
-    /* use SIGCONT for exitting from poll */
-    h2o_set_signal_handler(SIGCONT, h2o_noop_signal_handler);
-    pthread_sigmask(SIG_BLOCK, NULL, &mask);
-    sigdelset(&mask, SIGCONT);
-    pthread_sigmask(SIG_SETMASK, &mask, NULL);
+static unsigned num_connections(struct config_t *conf, int delta)
+{
+    if (delta < 0)
+        return __sync_fetch_and_sub(&conf->state._num_connections, delta);
+    return __sync_fetch_and_add(&conf->state._num_connections, delta);
 }
 
 static void on_socketclose(void *data)
 {
     h2o_context_t *ctx = data;
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
-    unsigned prev_num_connections = __sync_fetch_and_sub(&conf->state.num_connections, 1);
+    unsigned prev_num_connections = num_connections(conf, -1);
 
     if (conf->num_threads != 1) {
         if (prev_num_connections == conf->max_connections) {
-            /* ready to accept new connections.  wake up the threads! */
-            pthread_t self_tid = pthread_self();
+            /* ready to accept new connections.  wake up all the threads! */
             unsigned i;
-            for (i = 0; i != conf->num_threads; ++i) {
-                if (conf->thread_ids[i] != self_tid)
-                    pthread_kill(conf->thread_ids[i], SIGCONT);
-            }
+            for (i = 0; i != conf->num_threads; ++i)
+                h2o_thread_notify(conf->thread_ids[i]);
         }
     }
 }
@@ -737,12 +735,15 @@ static void on_accept(h2o_socket_t *listener, int status)
 
     do {
         h2o_socket_t *sock;
-        if (conf->state.num_connections >= conf->max_connections)
+        if (num_connections(conf, 0) >= conf->max_connections) {
+            /* active threads notifies only itself so that it could update the state at the beginning of next loop */
+            h2o_thread_notify(pthread_self());
             break;
+        }
         if ((sock = h2o_evloop_socket_accept(listener)) == NULL) {
             break;
         }
-        __sync_add_and_fetch(&conf->state.num_connections, 1);
+        num_connections(conf, 1);
 
         sock->on_close.cb = on_socketclose;
         sock->on_close.data = ctx->ctx;
@@ -753,6 +754,23 @@ static void on_accept(h2o_socket_t *listener, int status)
             h2o_http1_accept(ctx->ctx, sock);
 
     } while (--num_accepts != 0);
+}
+
+static void update_listener_state(struct config_t *conf, struct listener_ctx_t *listeners)
+{
+    size_t i;
+
+    if (num_connections(conf, 0) < conf->max_connections) {
+        for (i = 0; i != conf->num_listeners; ++i) {
+            if (! h2o_socket_is_reading(listeners[i].sock))
+                h2o_socket_read_start(listeners[i].sock, on_accept);
+        }
+    } else {
+        for (i = 0; i != conf->num_listeners; ++i) {
+            if (h2o_socket_is_reading(listeners[i].sock))
+                h2o_socket_read_stop(listeners[i].sock);
+        }
+    }
 }
 
 static void *run_loop(void *_conf)
@@ -778,21 +796,13 @@ static void *run_loop(void *_conf)
             H2O_SOCKET_FLAG_IS_ACCEPT);
         listeners[i].sock->data = listeners + i;
     }
+    /* and start listening */
+    update_listener_state(conf, listeners);
 
     /* the main loop */
     while (1) {
-        /* start / stop trying to accept new connections */
-        if (conf->state.num_connections < conf->max_connections) {
-            for (i = 0; i != conf->num_listeners; ++i) {
-                if (! h2o_socket_is_reading(listeners[i].sock))
-                    h2o_socket_read_start(listeners[i].sock, on_accept);
-            }
-        } else {
-            for (i = 0; i != conf->num_listeners; ++i) {
-                if (h2o_socket_is_reading(listeners[i].sock))
-                    h2o_socket_read_stop(listeners[i].sock);
-            }
-        }
+        if (h2o_thread_is_notified())
+            update_listener_state(conf, listeners);
         /* run the loop once */
         h2o_evloop_run(loop);
     }
