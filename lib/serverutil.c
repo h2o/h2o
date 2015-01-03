@@ -21,6 +21,7 @@
  */
 #include <errno.h>
 #include <grp.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,6 +43,37 @@ void h2o_set_signal_handler(int signo, void (*cb)(int signo))
 
 void h2o_noop_signal_handler(int signo)
 {
+}
+
+static int thread_notify_signo;
+static __thread volatile sig_atomic_t thread_notified = 0;
+
+static void on_thread_notify_sig(int signo)
+{
+    thread_notified = 1;
+}
+
+void h2o_thread_initialize_signal_for_notification(int signo)
+{
+    sigset_t mask;
+
+    h2o_set_signal_handler(SIGCONT, on_thread_notify_sig);
+    pthread_sigmask(SIG_BLOCK, NULL, &mask);
+    sigdelset(&mask, SIGCONT);
+    pthread_sigmask(SIG_SETMASK, &mask, NULL);
+}
+
+void h2o_thread_notify(pthread_t tid)
+{
+    assert(thread_notify_signo != 0);
+    pthread_kill(tid, thread_notify_signo);
+}
+
+int h2o_thread_is_notified(void)
+{
+    int ret = thread_notified != 0;
+    thread_notified = 0;
+    return ret;
 }
 
 int h2o_setuidgid(struct passwd *passwd)
