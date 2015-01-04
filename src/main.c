@@ -79,13 +79,13 @@ struct config_t {
     struct listener_config_t **listeners;
     size_t num_listeners;
     struct passwd *running_user; /* NULL if not set */
-    unsigned max_connections;
+    int max_connections;
     unsigned num_threads;
     pthread_t *thread_ids;
     struct {
         /* unused buffers exist to avoid false sharing of the cache line */
         char _unused1[32];
-        unsigned _num_connections; /* should use atomic functions to update the value */
+        int _num_connections; /* should use atomic functions to update the value */
         char _unused2[32];
     } state;
 };
@@ -638,7 +638,7 @@ static int on_config_user(h2o_configurator_command_t *cmd, h2o_configurator_cont
 static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
-    return h2o_configurator_scanf(cmd, config_file, config_node, "%u", &conf->max_connections);
+    return h2o_configurator_scanf(cmd, config_file, config_node, "%d", &conf->max_connections);
 }
 
 
@@ -700,10 +700,8 @@ static void setup_signal_handlers(void)
     h2o_thread_initialize_signal_for_notification(SIGCONT);
 }
 
-static unsigned num_connections(struct config_t *conf, int delta)
+static int num_connections(struct config_t *conf, int delta)
 {
-    if (delta < 0)
-        return __sync_fetch_and_sub(&conf->state._num_connections, delta);
     return __sync_fetch_and_add(&conf->state._num_connections, delta);
 }
 
@@ -711,14 +709,16 @@ static void on_socketclose(void *data)
 {
     h2o_context_t *ctx = data;
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
-    unsigned prev_num_connections = num_connections(conf, -1);
+    int prev_num_connections = num_connections(conf, -1);
 
-    if (conf->num_threads != 1) {
-        if (prev_num_connections == conf->max_connections) {
-            /* ready to accept new connections.  wake up all the threads! */
+    if (prev_num_connections == conf->max_connections) {
+        /* ready to accept new connections. wake up all the threads! */
+        if (conf->thread_ids != NULL) {
             unsigned i;
             for (i = 0; i != conf->num_threads; ++i)
                 h2o_thread_notify(conf->thread_ids[i]);
+        } else {
+            h2o_thread_notify(pthread_self());
         }
     }
 }
