@@ -174,7 +174,7 @@ static void listener_setup_ssl_add_host(struct listener_ssl_config_t *ssl_config
 static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *listen_config_node, yoml_t *ssl_config_node, struct listener_config_t *listener, int listener_is_new)
 {
     SSL_CTX *ssl_ctx = NULL;
-    const char *certificate_file = NULL, *key_file = NULL;
+    yoml_t *certificate_file = NULL, *key_file = NULL, *minimum_version = NULL, *cipher_suite = NULL;
     long ssl_options = SSL_OP_ALL;
 
     if (! listener_is_new) {
@@ -197,7 +197,6 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
     { /* parse */
         size_t i;
-        yoml_t *minimum_version = NULL;
         for (i = 0; i != ssl_config_node->data.sequence.size; ++i) {
             yoml_t *key = ssl_config_node->data.mapping.elements[i].key,
                 *value = ssl_config_node->data.mapping.elements[i].value;
@@ -206,28 +205,22 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 h2o_configurator_errprintf(NULL, config_file, key, "command must be a string");
                 return -1;
             }
-            if (strcmp(key->data.scalar, "certificate-file") == 0) {
-                if (value->type != YOML_TYPE_SCALAR) {
-                    h2o_configurator_errprintf(cmd, config_file, value, "property of `certificate-file` must be a string");
-                    return -1;
-                }
-                certificate_file = value->data.scalar;
-            } else if (strcmp(key->data.scalar, "key-file") == 0) {
-                if (value->type != YOML_TYPE_SCALAR) {
-                    h2o_configurator_errprintf(cmd, config_file, value, "property of `certificate-file` must be a string");
-                    return -1;
-                }
-                key_file = value->data.scalar;
-            } else if (strcmp(key->data.scalar, "minimum-version") == 0) {
-                if (value->type != YOML_TYPE_SCALAR) {
-                    h2o_configurator_errprintf(cmd, config_file, value, "property of `minimum-version` must be a string");
-                    return -1;
-                }
-                minimum_version = value;
-            } else {
-                h2o_configurator_errprintf(cmd, config_file, key, "unknown property: %s", key->data.scalar);
-                return -1;
-            }
+#define FETCH_PROPERTY(n, p) \
+    if (strcmp(key->data.scalar, n) == 0) { \
+        if (value->type != YOML_TYPE_SCALAR) { \
+            h2o_configurator_errprintf(cmd, config_file, value, "property of `" n "` must be a string"); \
+            return -1; \
+        } \
+        p = value; \
+        continue; \
+    } else
+            FETCH_PROPERTY("certificate-file", certificate_file);
+            FETCH_PROPERTY("key-file", key_file);
+            FETCH_PROPERTY("minimum-version", minimum_version);
+            FETCH_PROPERTY("cipher-suite", cipher_suite);
+            h2o_configurator_errprintf(cmd, config_file, key, "unknown property: %s", key->data.scalar);
+            return -1;
+#undef FETCH_PROPERTY
         }
         if (certificate_file == NULL) {
             h2o_configurator_errprintf(cmd, config_file, ssl_config_node, "could not find mandatory property `certificate-file`");
@@ -264,7 +257,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         size_t i;
         for (i = 0; i != listener->ssl.size; ++i) {
             struct listener_ssl_config_t *ssl_config = listener->ssl.entries + i;
-            if (strcmp(ssl_config->certificate_file, certificate_file) == 0) {
+            if (strcmp(ssl_config->certificate_file, certificate_file->data.scalar) == 0) {
                 listener_setup_ssl_add_host(ssl_config, ctx->hostconf->hostname);
                 return 0;
             }
@@ -276,13 +269,18 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     ssl_ctx = SSL_CTX_new(SSLv23_server_method());
     SSL_CTX_set_options(ssl_ctx, ssl_options);
     setup_ecc_key(ssl_ctx);
-    if (SSL_CTX_use_certificate_chain_file(ssl_ctx, certificate_file) != 1) {
-        h2o_configurator_errprintf(cmd, config_file, ssl_config_node, "failed to load certificate file:%s\n", certificate_file);
+    if (SSL_CTX_use_certificate_chain_file(ssl_ctx, certificate_file->data.scalar) != 1) {
+        h2o_configurator_errprintf(cmd, config_file, certificate_file, "failed to load certificate file:%s\n", certificate_file->data.scalar);
         ERR_print_errors_fp(stderr);
         goto Error;
     }
-    if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file, SSL_FILETYPE_PEM) != 1) {
-        h2o_configurator_errprintf(cmd, config_file, ssl_config_node, "failed to load private key file:%s\n", key_file);
+    if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file->data.scalar, SSL_FILETYPE_PEM) != 1) {
+        h2o_configurator_errprintf(cmd, config_file, key_file, "failed to load private key file:%s\n", key_file->data.scalar);
+        ERR_print_errors_fp(stderr);
+        goto Error;
+    }
+    if (cipher_suite != NULL && SSL_CTX_set_cipher_list(ssl_ctx, cipher_suite->data.scalar) != 1) {
+        h2o_configurator_errprintf(cmd, config_file, cipher_suite, "failed to setup SSL cipher suite\n");
         ERR_print_errors_fp(stderr);
         goto Error;
     }
@@ -310,7 +308,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             listener_setup_ssl_add_host(ssl_config, ctx->hostconf->hostname);
         }
         ssl_config->ctx = ssl_ctx;
-        ssl_config->certificate_file = h2o_strdup(NULL, certificate_file, SIZE_MAX).base;
+        ssl_config->certificate_file = h2o_strdup(NULL, certificate_file->data.scalar, SIZE_MAX).base;
     }
 
     return 0;
@@ -842,6 +840,8 @@ static void setup_configurators(struct config_t *conf)
             "       key-file:         path of the SSL private key file (mandatory)",
             "       minimum-version:  minimum protocol version, should be one of: SSLv2,",
             "                         SSLv3, TLSv1, TLSv1.1, TLSv1.2 (default: TLSv1)",
+            "       cipher-suite:     list of cipher suites to be passed to OpenSSL via",
+            "                         SSL_CTX_set_cipher_list (optional)",
             " - if the value is a sequence, each element should be either a scalar or a",
             "   mapping that conform to the requirements above");
     }
