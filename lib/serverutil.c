@@ -57,10 +57,12 @@ void h2o_thread_initialize_signal_for_notification(int signo)
 {
     sigset_t mask;
 
-    h2o_set_signal_handler(SIGCONT, on_thread_notify_sig);
+    h2o_set_signal_handler(signo, on_thread_notify_sig);
     pthread_sigmask(SIG_BLOCK, NULL, &mask);
-    sigdelset(&mask, SIGCONT);
+    sigdelset(&mask, signo);
     pthread_sigmask(SIG_SETMASK, &mask, NULL);
+
+    thread_notify_signo = signo;
 }
 
 void h2o_thread_notify(pthread_t tid)
