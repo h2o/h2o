@@ -174,7 +174,7 @@ static void listener_setup_ssl_add_host(struct listener_ssl_config_t *ssl_config
 static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *listen_config_node, yoml_t *ssl_config_node, struct listener_config_t *listener, int listener_is_new)
 {
     SSL_CTX *ssl_ctx = NULL;
-    yoml_t *certificate_file = NULL, *key_file = NULL, *minimum_version = NULL;
+    yoml_t *certificate_file = NULL, *key_file = NULL, *minimum_version = NULL, *cipher_suite = NULL;
     long ssl_options = SSL_OP_ALL;
 
     if (! listener_is_new) {
@@ -217,6 +217,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             FETCH_PROPERTY("certificate-file", certificate_file);
             FETCH_PROPERTY("key-file", key_file);
             FETCH_PROPERTY("minimum-version", minimum_version);
+            FETCH_PROPERTY("cipher-suite", cipher_suite);
             h2o_configurator_errprintf(cmd, config_file, key, "unknown property: %s", key->data.scalar);
             return -1;
 #undef FETCH_PROPERTY
@@ -275,6 +276,11 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     }
     if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file->data.scalar, SSL_FILETYPE_PEM) != 1) {
         h2o_configurator_errprintf(cmd, config_file, key_file, "failed to load private key file:%s\n", key_file->data.scalar);
+        ERR_print_errors_fp(stderr);
+        goto Error;
+    }
+    if (cipher_suite != NULL && SSL_CTX_set_cipher_list(ssl_ctx, cipher_suite->data.scalar) != 1) {
+        h2o_configurator_errprintf(cmd, config_file, cipher_suite, "failed to setup SSL cipher suite\n");
         ERR_print_errors_fp(stderr);
         goto Error;
     }
@@ -834,6 +840,8 @@ static void setup_configurators(struct config_t *conf)
             "       key-file:         path of the SSL private key file (mandatory)",
             "       minimum-version:  minimum protocol version, should be one of: SSLv2,",
             "                         SSLv3, TLSv1, TLSv1.1, TLSv1.2 (default: TLSv1)",
+            "       cipher-suite:     list of cipher suites to be passed to OpenSSL via",
+            "                         SSL_CTX_set_cipher_list (optional)",
             " - if the value is a sequence, each element should be either a scalar or a",
             "   mapping that conform to the requirements above");
     }
