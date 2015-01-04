@@ -193,6 +193,7 @@
 		104B9A2B1A4BBDA4009EEE64 /* 50server-starter.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50server-starter.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		104B9A2C1A4BE029009EEE64 /* version.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = version.h; sourceTree = "<group>"; };
 		104B9A301A58F55E009EEE64 /* 40max-connections.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40max-connections.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		104B9A311A59D7A2009EEE64 /* 40running-user.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40running-user.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534BD1A3B8F7700627ECB /* file.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = file.c; sourceTree = "<group>"; };
 		105534C01A3B911300627ECB /* hpack.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpack.c; sourceTree = "<group>"; };
 		105534C21A3B917000627ECB /* mimemap.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = mimemap.c; sourceTree = "<group>"; };
@@ -592,6 +593,7 @@
 				105534F41A460EF600627ECB /* 10http1client.t */,
 				104B9A301A58F55E009EEE64 /* 40max-connections.t */,
 				105534F51A460EF600627ECB /* 40protocol.t */,
+				104B9A311A59D7A2009EEE64 /* 40running-user.t */,
 				104B9A221A47BBA1009EEE64 /* 40unix-socket.t */,
 				105534F61A460EF600627ECB /* 50file-config.t */,
 				105534F71A460F2E00627ECB /* 50mimemap.t */,
