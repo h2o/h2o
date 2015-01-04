@@ -607,9 +607,8 @@ static int on_config_listen_exit(h2o_configurator_t *_configurator, h2o_configur
     return 0;
 }
 
-static int on_config_user(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
+static int setup_running_user(struct config_t *conf, const char *login)
 {
-    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
     static struct passwd passwdbuf;
     static h2o_iovec_t buf;
 
@@ -623,11 +622,21 @@ static int on_config_user(h2o_configurator_command_t *cmd, h2o_configurator_cont
         buf.base = h2o_mem_alloc(buf.len);
     }
 
-    if (getpwnam_r(config_node->data.scalar, &passwdbuf, buf.base, buf.len, &conf->running_user) != 0) {
+    if (getpwnam_r(login, &passwdbuf, buf.base, buf.len, &conf->running_user) != 0) {
         perror("getpwnam_r");
         return -1;
     }
-    if (conf->running_user == NULL) {
+    if (conf->running_user == NULL)
+        return -1;
+
+    return 0;
+}
+
+static int on_config_user(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
+{
+    struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
+
+    if (setup_running_user(conf, config_node->data.scalar) != 0) {
         h2o_configurator_errprintf(cmd, config_file, config_node, "user:%s does not exist", config_node->data.scalar);
         return -1;
     }
@@ -973,8 +982,12 @@ int main(int argc, char **argv)
         }
     } else {
         if (getuid() == 0) {
-            fprintf(stderr, "cowardly refusing to run as root; you can use the `user` directive to set the running user\n");
-            return EX_CONFIG;
+            if (setup_running_user(&config, "nobody") == 0) {
+                fprintf(stderr, "cowardly switching to nobody; please use the `user` directive to set the running user\n");
+            } else {
+                fprintf(stderr, "refusing to run as root (and failed to switch to `nobody`); you can use the `user` directive to set the running user\n");
+                return EX_CONFIG;
+            }
         }
     }
 
