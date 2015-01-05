@@ -19,41 +19,37 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__t__test_h
-#define h2o__t__test_h
+#ifndef h2o__cache_h
+#define h2o__cache_h
 
-#include "picotest.h"
-#include "h2o.h"
+#include <stdint.h>
+#include "h2o/linklist.h"
+#include "h2o/memory.h"
 
-typedef struct st_h2o_loopback_conn_t {
-    h2o_conn_t super;
-    /**
-     * the response
-     */
-    h2o_buffer_t *body;
-    /* internal structure */
-    h2o_ostream_t _ostr_final;
-    int _is_complete;
-    /**
-     * the HTTP request / response (intentionally placed at the last, since it is a large structure and has it's own ctor)
-     */
-    h2o_req_t req;
-} h2o_loopback_conn_t;
+typedef struct st_h2o_cache_t h2o_cache_t;
 
-h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx);
-void h2o_loopback_destroy(h2o_loopback_conn_t *conn);
-void h2o_loopback_run_loop(h2o_loopback_conn_t *conn);
+typedef uint32_t /* eq. khint_t */ h2o_cache_hashcode_t;
 
-extern h2o_loop_t *test_loop;
+typedef struct st_h2o_cache_key_t {
+    h2o_iovec_t vec;
+    h2o_cache_hashcode_t hash;
+} h2o_cache_key_t;
 
-char *sha1sum(const void *src, size_t len);
+typedef struct st_h2o_cache_ref_t {
+    h2o_cache_key_t key;
+    h2o_iovec_t data;
+    uint64_t at;
+    h2o_linklist_t _link;
+    size_t _refcnt;
+} h2o_cache_ref_t;
 
-void test_lib__cache_c(void);
-void test_lib__serverutil_c(void);
-void test_lib__string_c(void);
-void test_lib__http2__hpack(void);
-void test_lib__file_c(void);
-void test_lib__mimemap_c(void);
-void test_lib__proxy_c(void);
+h2o_cache_t *h2o_cache_create(size_t capacity, uint64_t duration, void (*destroy_cb)(h2o_iovec_t value));
+void h2o_cache_destroy(h2o_cache_t *cache);
+
+void h2o_cache_clear(h2o_cache_t *cache, uint64_t now);
+
+h2o_cache_ref_t *h2o_cache_fetch(h2o_cache_t *cache, h2o_iovec_t key, uint64_t now);
+void h2o_cache_release(h2o_cache_t *cache, h2o_cache_ref_t *ref);
+void h2o_cache_update(h2o_cache_t *cache, h2o_cache_ref_t *ref, uint64_t now);
 
 #endif

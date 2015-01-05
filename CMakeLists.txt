@@ -38,6 +38,7 @@ ENDIF (WSLAY_FOUND)
 SET(LIB_SOURCE_FILES
     deps/picohttpparser/picohttpparser.c
     lib/access_log.c
+    lib/cache.c
     lib/chunked.c
     lib/context.c
     lib/config.c
@@ -70,6 +71,7 @@ SET(UNIT_TEST_SOURCE_FILES
     deps/picotest/picotest.c
     t/00unit/test.c
     t/00unit/lib/http2/hpack.c
+    t/00unit/lib/cache.c
     t/00unit/lib/file.c
     t/00unit/lib/mimemap.c
     t/00unit/lib/proxy.c
@@ -77,6 +79,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/string.c)
 LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/http2/hpack.c
+    lib/cache.c
     lib/file.c
     lib/mimemap.c
     lib/proxy.c
