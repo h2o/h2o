@@ -35,8 +35,9 @@ struct st_h2o_cache_t {
     pthread_mutex_t lock;
     khash_t(cache) *table;
     size_t size;
-    h2o_linklist_t lru;
     size_t capacity;
+    h2o_linklist_t lru;
+    h2o_linklist_t age;
     uint64_t duration;
     void (*destroy_cb)(h2o_iovec_t value);
 };
@@ -59,15 +60,25 @@ static int is_equal(h2o_cache_ref_t *x, h2o_cache_ref_t *y)
     return x->key.vec.len == y->key.vec.len && memcmp(x->key.vec.base, y->key.vec.base, x->key.vec.len) == 0;
 }
 
-static void erase_ref(h2o_cache_t *cache, khiter_t iter)
+static void erase_ref(h2o_cache_t *cache, khiter_t iter, h2o_cache_ref_t *new_ref)
 {
     h2o_cache_ref_t *ref = kh_key(cache->table, iter);
 
-    kh_del(cache, cache->table, iter);
-    h2o_linklist_unlink(&ref->_link);
+    if (new_ref != NULL) {
+        kh_key(cache->table, iter) = new_ref;
+    } else {
+        kh_del(cache, cache->table, iter);
+    }
+    h2o_linklist_unlink(&ref->_lru_link);
+    h2o_linklist_unlink(&ref->_age_link);
     cache->size -= ref->data.len;
 
     h2o_cache_release(cache, ref);
+}
+
+static int64_t get_timeleft(h2o_cache_t *cache, h2o_cache_ref_t *ref, uint64_t now)
+{
+    return (int64_t)(ref->at + cache->duration) - now;
 }
 
 h2o_cache_t *h2o_cache_create(size_t capacity, uint64_t duration, void (*destroy_cb)(h2o_iovec_t value))
@@ -77,8 +88,9 @@ h2o_cache_t *h2o_cache_create(size_t capacity, uint64_t duration, void (*destroy
     pthread_mutex_init(&cache->lock, NULL);
     cache->table = kh_init(cache);
     cache->size = 0;
-    h2o_linklist_init_anchor(&cache->lru);
     cache->capacity = capacity;
+    h2o_linklist_init_anchor(&cache->lru);
+    h2o_linklist_init_anchor(&cache->age);
     cache->duration = duration;
     cache->destroy_cb = destroy_cb;
 
@@ -98,16 +110,13 @@ void h2o_cache_destroy(h2o_cache_t *cache)
 
 void h2o_cache_clear(h2o_cache_t *cache, uint64_t now)
 {
-    khiter_t iter;
-
     pthread_mutex_lock(&cache->lock);
 
-	for (iter = kh_begin(cache->table); iter != kh_end(cache->table); ++iter) {
-        if (kh_exist(cache->table, iter)) {
-            h2o_cache_ref_t *ref = kh_key(cache->table, iter);
-            if (now == 0 || ref->at + cache->duration < now)
-                erase_ref(cache, iter);
-        }
+    while (! h2o_linklist_is_empty(&cache->age)) {
+        h2o_cache_ref_t *ref = H2O_STRUCT_FROM_MEMBER(h2o_cache_ref_t, _age_link, cache->age.next);
+        if (! (now == 0 || get_timeleft(cache, ref, now) < 0))
+            break;
+        erase_ref(cache, kh_get(cache, cache->table, ref), NULL);
     }
 
     pthread_mutex_unlock(&cache->lock);
@@ -117,8 +126,8 @@ h2o_cache_ref_t *h2o_cache_fetch(h2o_cache_t *cache, h2o_iovec_t key, uint64_t n
 {
     h2o_cache_key_t search_key = { key, calchash(key.base, key.len) };
     khiter_t iter;
-    uint64_t expires;
     h2o_cache_ref_t *ref;
+    int64_t timeleft;
 
     pthread_mutex_lock(&cache->lock);
 
@@ -127,16 +136,16 @@ h2o_cache_ref_t *h2o_cache_fetch(h2o_cache_t *cache, h2o_iovec_t key, uint64_t n
 
     /* found */
     ref = kh_key(cache->table, iter);
-    expires = ref->at + cache->duration;
-    if (expires < now) {
-        /* request update (add some delta to `at` so that not all clients would need to update the entry) */
-        if (now - expires <= 10)
-            ref->at += 20;
+    timeleft = get_timeleft(cache, ref, now);
+    if (timeleft < 0)
+        goto NotFound;
+    if (timeleft < 10 && ! ref->_requested_early_update) {
+        ref->_requested_early_update = 1;
         goto NotFound;
     }
     /* move the entry to the top of LRU, and return */
-    h2o_linklist_unlink(&ref->_link);
-    h2o_linklist_insert(&cache->lru, &ref->_link);
+    h2o_linklist_unlink(&ref->_lru_link);
+    h2o_linklist_insert(&cache->lru, &ref->_lru_link);
     __sync_fetch_and_add(&ref->_refcnt, 1);
 
     /* unlock and return the found entry */
@@ -153,7 +162,9 @@ NotFound:
     ref->key.hash = search_key.hash;
     ref->data = (h2o_iovec_t){};
     ref->at = 0;
-    ref->_link = (h2o_linklist_t){};
+    ref->_requested_early_update = 0;
+    ref->_lru_link = (h2o_linklist_t){};
+    ref->_age_link = (h2o_linklist_t){};
     ref->_refcnt = 1;
     memcpy(ref->key.vec.base, key.base, key.len);
 
@@ -173,7 +184,7 @@ void h2o_cache_update(h2o_cache_t *cache, h2o_cache_ref_t *ref, uint64_t now)
     khiter_t iter;
 
     assert(ref->_refcnt == 1);
-    assert(! h2o_linklist_is_linked(&ref->_link));
+    assert(! h2o_linklist_is_linked(&ref->_lru_link));
 
     pthread_mutex_lock(&cache->lock);
 
@@ -183,7 +194,7 @@ void h2o_cache_update(h2o_cache_t *cache, h2o_cache_ref_t *ref, uint64_t now)
     /* if delete is requested, doit, and return */
     if (ref->data.base == NULL) {
         if (iter != kh_end(cache->table)) {
-            erase_ref(cache, iter);
+            erase_ref(cache, iter, NULL);
         }
         pthread_mutex_unlock(&cache->lock);
         h2o_cache_release(cache, ref);
@@ -192,28 +203,32 @@ void h2o_cache_update(h2o_cache_t *cache, h2o_cache_ref_t *ref, uint64_t now)
 
     /* update */
     if (iter == kh_end(cache->table)) {
-        int unused;
         /* attach the entry to cache */
-        ref->at = now;
+        int unused;
         kh_put(cache, cache->table, ref, &unused);
-        h2o_linklist_insert(&cache->lru, &ref->_link);
     } else {
         /* swap with the existing entry */
-        h2o_cache_ref_t *old = kh_key(cache->table, iter);
-        kh_key(cache->table, iter) = ref;
-        h2o_linklist_insert(&old->_link, &ref->_link);
-        h2o_linklist_unlink(&old->_link);
-        cache->size = cache->size - old->data.len + ref->data.len;
-        ref->at = now;
-        h2o_cache_release(cache, old);
+        erase_ref(cache, iter, ref);
     }
+    ref->at = now;
+    h2o_linklist_insert(&cache->lru, &ref->_lru_link);
+    h2o_linklist_insert(&cache->age, &ref->_age_link);
+    cache->size += ref->data.len;
 
     /* purge if the cache has become too large */
     while (cache->capacity < cache->size) {
-        h2o_cache_ref_t *old;
+        h2o_cache_ref_t *oldest;
+        assert(! h2o_linklist_is_empty(&cache->age));
+        oldest = H2O_STRUCT_FROM_MEMBER(h2o_cache_ref_t, _age_link, cache->age.next);
+        if (get_timeleft(cache, oldest, now) >= 0)
+            break;
+        erase_ref(cache, kh_get(cache, cache->table, oldest), NULL);
+    }
+    while (cache->capacity < cache->size) {
+        h2o_cache_ref_t *last;
         assert(! h2o_linklist_is_empty(&cache->lru));
-        old = H2O_STRUCT_FROM_MEMBER(h2o_cache_ref_t, _link, cache->lru.next);
-        erase_ref(cache, kh_get(cache, cache->table, old));
+        last = H2O_STRUCT_FROM_MEMBER(h2o_cache_ref_t, _lru_link, cache->lru.next);
+        erase_ref(cache, kh_get(cache, cache->table, last), NULL);
     }
 
     pthread_mutex_unlock(&cache->lock);

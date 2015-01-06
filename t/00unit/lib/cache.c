@@ -48,7 +48,7 @@ void test_lib__cache_c(void)
     h2o_cache_release(cache, ref);
 
     /* proceed 1001ms */
-    now += 1001;
+    now += 999;
 
     /* should fail to fetch "key" */
     ref = h2o_cache_fetch(cache, key, now);
