@@ -158,12 +158,13 @@ h2o_cache_ref_t *h2o_cache_fetch(h2o_cache_t *cache, h2o_iovec_t key, uint64_t n
         ref->_requested_early_update = 1;
         goto NotFound;
     }
-    /* move the entry to the top of LRU, and return */
+    /* move the entry to the top of LRU */
     pthread_mutex_lock(&cache->link.mutex);
     h2o_linklist_unlink(&ref->_lru_link);
     h2o_linklist_insert(&cache->link.lru, &ref->_lru_link);
-    __sync_fetch_and_add(&ref->_refcnt, 1);
     pthread_mutex_unlock(&cache->link.mutex);
+
+    __sync_fetch_and_add(&ref->_refcnt, 1);
 
     /* unlock and return the found entry */
     pthread_rwlock_unlock(&cache->rwlock);
