@@ -32,12 +32,15 @@ static int is_equal(h2o_cache_ref_t *x, h2o_cache_ref_t *y);
 KHASH_INIT(cache, h2o_cache_ref_t *, char, 0, get_keyhash, is_equal)
 
 struct st_h2o_cache_t {
-    pthread_mutex_t lock;
+    pthread_rwlock_t rwlock;
     khash_t(cache) *table;
     size_t size;
     size_t capacity;
-    h2o_linklist_t lru;
-    h2o_linklist_t age;
+    struct {
+        pthread_mutex_t mutex;
+        h2o_linklist_t lru;
+        h2o_linklist_t age;
+    } link;
     uint64_t duration;
     void (*destroy_cb)(h2o_iovec_t value);
 };
@@ -85,12 +88,21 @@ h2o_cache_t *h2o_cache_create(size_t capacity, uint64_t duration, void (*destroy
 {
     h2o_cache_t *cache = h2o_mem_alloc(sizeof(*cache));
 
-    pthread_mutex_init(&cache->lock, NULL);
+    {
+        pthread_rwlockattr_t attr;
+        pthread_rwlockattr_init(&attr);
+        // switch to writer-preferred lock on linux
+#ifdef PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP
+        pthread_rwlockattr_setkind_np(&attr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
+#endif
+        pthread_rwlock_init(&cache->rwlock, &attr);
+    }
     cache->table = kh_init(cache);
     cache->size = 0;
     cache->capacity = capacity;
-    h2o_linklist_init_anchor(&cache->lru);
-    h2o_linklist_init_anchor(&cache->age);
+    pthread_mutex_init(&cache->link.mutex, NULL);
+    h2o_linklist_init_anchor(&cache->link.lru);
+    h2o_linklist_init_anchor(&cache->link.age);
     cache->duration = duration;
     cache->destroy_cb = destroy_cb;
 
@@ -104,22 +116,25 @@ void h2o_cache_destroy(h2o_cache_t *cache)
     assert(kh_size(cache->table) == 0);
 
     kh_destroy(cache, cache->table);
-    pthread_mutex_destroy(&cache->lock);
+    pthread_mutex_destroy(&cache->link.mutex);
+    pthread_rwlock_destroy(&cache->rwlock);
     free(cache);
 }
 
 void h2o_cache_clear(h2o_cache_t *cache, uint64_t now)
 {
-    pthread_mutex_lock(&cache->lock);
+    pthread_rwlock_wrlock(&cache->rwlock);
+    pthread_mutex_lock(&cache->link.mutex);
 
-    while (! h2o_linklist_is_empty(&cache->age)) {
-        h2o_cache_ref_t *ref = H2O_STRUCT_FROM_MEMBER(h2o_cache_ref_t, _age_link, cache->age.next);
+    while (! h2o_linklist_is_empty(&cache->link.age)) {
+        h2o_cache_ref_t *ref = H2O_STRUCT_FROM_MEMBER(h2o_cache_ref_t, _age_link, cache->link.age.next);
         if (! (now == 0 || get_timeleft(cache, ref, now) < 0))
             break;
         erase_ref(cache, kh_get(cache, cache->table, ref), NULL);
     }
 
-    pthread_mutex_unlock(&cache->lock);
+    pthread_mutex_unlock(&cache->link.mutex);
+    pthread_rwlock_unlock(&cache->rwlock);
 }
 
 h2o_cache_ref_t *h2o_cache_fetch(h2o_cache_t *cache, h2o_iovec_t key, uint64_t now)
@@ -129,7 +144,7 @@ h2o_cache_ref_t *h2o_cache_fetch(h2o_cache_t *cache, h2o_iovec_t key, uint64_t n
     h2o_cache_ref_t *ref;
     int64_t timeleft;
 
-    pthread_mutex_lock(&cache->lock);
+    pthread_rwlock_rdlock(&cache->rwlock);
 
     if ((iter = kh_get(cache, cache->table, (void*)&search_key)) == kh_end(cache->table))
         goto NotFound;
@@ -144,16 +159,18 @@ h2o_cache_ref_t *h2o_cache_fetch(h2o_cache_t *cache, h2o_iovec_t key, uint64_t n
         goto NotFound;
     }
     /* move the entry to the top of LRU, and return */
+    pthread_mutex_lock(&cache->link.mutex);
     h2o_linklist_unlink(&ref->_lru_link);
-    h2o_linklist_insert(&cache->lru, &ref->_lru_link);
+    h2o_linklist_insert(&cache->link.lru, &ref->_lru_link);
     __sync_fetch_and_add(&ref->_refcnt, 1);
+    pthread_mutex_unlock(&cache->link.mutex);
 
     /* unlock and return the found entry */
-    pthread_mutex_unlock(&cache->lock);
+    pthread_rwlock_unlock(&cache->rwlock);
     return ref;
 
 NotFound:
-    pthread_mutex_unlock(&cache->lock);
+    pthread_rwlock_unlock(&cache->rwlock);
 
     /* prepare new ref and return */
     ref = h2o_mem_alloc(sizeof(*ref) + key.len);
@@ -186,17 +203,20 @@ void h2o_cache_update(h2o_cache_t *cache, h2o_cache_ref_t *ref, uint64_t now)
     assert(ref->_refcnt == 1);
     assert(! h2o_linklist_is_linked(&ref->_lru_link));
 
-    pthread_mutex_lock(&cache->lock);
+    pthread_rwlock_wrlock(&cache->rwlock);
 
     /* look for existing entry */
     iter = kh_get(cache, cache->table, ref);
+
+    pthread_mutex_lock(&cache->link.mutex);
 
     /* if delete is requested, doit, and return */
     if (ref->data.base == NULL) {
         if (iter != kh_end(cache->table)) {
             erase_ref(cache, iter, NULL);
         }
-        pthread_mutex_unlock(&cache->lock);
+        pthread_mutex_unlock(&cache->link.mutex);
+        pthread_rwlock_unlock(&cache->rwlock);
         h2o_cache_release(cache, ref);
         return;
     }
@@ -211,25 +231,26 @@ void h2o_cache_update(h2o_cache_t *cache, h2o_cache_ref_t *ref, uint64_t now)
         erase_ref(cache, iter, ref);
     }
     ref->at = now;
-    h2o_linklist_insert(&cache->lru, &ref->_lru_link);
-    h2o_linklist_insert(&cache->age, &ref->_age_link);
+    h2o_linklist_insert(&cache->link.lru, &ref->_lru_link);
+    h2o_linklist_insert(&cache->link.age, &ref->_age_link);
     cache->size += ref->data.len;
 
     /* purge if the cache has become too large */
     while (cache->capacity < cache->size) {
         h2o_cache_ref_t *oldest;
-        assert(! h2o_linklist_is_empty(&cache->age));
-        oldest = H2O_STRUCT_FROM_MEMBER(h2o_cache_ref_t, _age_link, cache->age.next);
+        assert(! h2o_linklist_is_empty(&cache->link.age));
+        oldest = H2O_STRUCT_FROM_MEMBER(h2o_cache_ref_t, _age_link, cache->link.age.next);
         if (get_timeleft(cache, oldest, now) >= 0)
             break;
         erase_ref(cache, kh_get(cache, cache->table, oldest), NULL);
     }
     while (cache->capacity < cache->size) {
         h2o_cache_ref_t *last;
-        assert(! h2o_linklist_is_empty(&cache->lru));
-        last = H2O_STRUCT_FROM_MEMBER(h2o_cache_ref_t, _lru_link, cache->lru.next);
+        assert(! h2o_linklist_is_empty(&cache->link.lru));
+        last = H2O_STRUCT_FROM_MEMBER(h2o_cache_ref_t, _lru_link, cache->link.lru.next);
         erase_ref(cache, kh_get(cache, cache->table, last), NULL);
     }
 
-    pthread_mutex_unlock(&cache->lock);
+    pthread_mutex_unlock(&cache->link.mutex);
+    pthread_rwlock_unlock(&cache->rwlock);
 }
