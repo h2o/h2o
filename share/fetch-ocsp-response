@@ -1,0 +1,134 @@
+#! /usr/bin/perl
+
+# Copyright (c) 2015 DeNA Co., Ltd.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to
+# deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
+
+use strict;
+use warnings;
+use File::Temp qw(tempdir);
+use Getopt::Long;
+
+my ($cert_fn, $issuer_fn, $opt_help);
+my $openssl_cmd = 'openssl';
+
+GetOptions(
+    "cert=s"     => \$cert_fn,
+    "issuer=s"   => \$issuer_fn,
+    "openssl=s", => \$openssl_cmd,
+    help         => \$opt_help,
+) or exit(1);
+if ($opt_help) {
+    print << "EOT";
+Usage: $0 [<options>]
+
+Options:
+  --cert <file>    server certificate (mandatory)
+  --issuer <file>  issuer certificate (if omitted, is extracted from the
+                   certificate chain)
+  --openssl <cmd>  openssl command to use (default: "openssl")
+  --help           prints this help
+
+The command issues an OCSP request for given server certificate, verifies the
+response and prints the resulting DER.
+
+EOT
+    exit(0);
+}
+
+die "mandatory option --cert is missing\n"
+    unless $cert_fn;
+
+my $tempdir = tempdir(CLEANUP => 1);
+
+my $openssl_version = run_openssl("version");
+chomp $openssl_version;
+print STDERR "fetch-ocsp-response (using $openssl_version)\n";
+
+# obtain ocsp uri
+my $ocsp_uri = run_openssl("x509 -in $cert_fn -noout -ocsp_uri");
+chomp $ocsp_uri;
+die "failed to extract ocsp URI from $cert_fn\n"
+    if $ocsp_uri !~ m{^https?://};
+
+# save issuer certificate
+if (! defined $issuer_fn) {
+    my $chain = read_file($cert_fn);
+    $chain =~ m{-----END CERTIFICATE-----.*?(-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----)}s
+        or die "--issuer option was not used, and failed to extract issuer certificate from the certificate\n";
+    $issuer_fn = "$tempdir/issuer.crt";
+    write_file($issuer_fn, "$1\n");
+}
+
+# obtain response (without verification)
+print STDERR "sending OCSP request to $ocsp_uri\n";
+my $resp = run_openssl(
+    "ocsp -issuer $issuer_fn -cert $cert_fn -url $ocsp_uri -noverify -respout $tempdir/resp.der " . join(' ', @ARGV)
+);
+print STDERR $resp;
+
+# verify the response
+print STDERR "verifying the response signature\n";
+my $success;
+for my $args (
+    # try from exotic options
+    "-VAfile $issuer_fn",
+    "-partial_chain -CAfile $issuer_fn",
+    "-CAfile $issuer_fn",
+) {
+    if (system("$openssl_cmd ocsp -respin $tempdir/resp.der $args > $tempdir/verify.out 2>&1") == 0) {
+        print STDERR "verify OK (used: $args)\n";
+        $success = 1;
+        last;
+    }
+}
+if (! $success) {
+    print STDERR read_file("$tempdir/verify.out");
+    die "failed to verify the response\n";
+}
+
+# success
+print read_file("$tempdir/resp.der");
+exit 0;
+
+sub run_openssl {
+    my $args = shift;
+    open my $fh, "-|", "$openssl_cmd $args"
+        or die "failed to invoke $openssl_cmd:$!";
+    my $resp = do { local $/; <$fh> };
+    close $fh
+        or die "OpenSSL exitted abnormally: $openssl_cmd $args:$!";
+    $resp;
+}
+
+sub read_file {
+    my $fn = shift;
+    open my $fh, "<", $fn
+        or die "failed to open file:$fn:$!";
+    local $/;
+    <$fh>;
+}
+
+sub write_file {
+    my ($fn, $data) = @_;
+    open my $fh, ">", $fn
+        or die "failed to open file:$fn:$!";
+    print $fh $data;
+    close $fh;
+}
