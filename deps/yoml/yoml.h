@@ -55,6 +55,7 @@ typedef struct st_yoml_mapping_t {
 
 struct st_yoml_t {
     yoml_type_t type;
+    char *filename;
     size_t line;
     size_t column;
     char *anchor;
@@ -75,6 +76,7 @@ static inline void yoml_free(yoml_t *node)
         return;
 
     if (--node->_refcnt == 0) {
+        free(node->filename);
         free(node->anchor);
         switch (node->type) {
         case YOML_TYPE_SCALAR:
