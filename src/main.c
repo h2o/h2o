@@ -172,44 +172,44 @@ static void listener_setup_ssl_add_host(struct listener_ssl_config_t *ssl_config
     ssl_config->hostnames.entries[ssl_config->hostnames.size++] = h2o_iovec_init(host.base, host_end - host.base);
 }
 
-static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *listen_config_node, yoml_t *ssl_config_node, struct listener_config_t *listener, int listener_is_new)
+static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *listen_node, yoml_t *ssl_node, struct listener_config_t *listener, int listener_is_new)
 {
     SSL_CTX *ssl_ctx = NULL;
     yoml_t *certificate_file = NULL, *key_file = NULL, *minimum_version = NULL, *cipher_suite = NULL;
     long ssl_options = SSL_OP_ALL;
 
     if (! listener_is_new) {
-        if (listener->ssl.size != 0 && ssl_config_node == NULL) {
-            h2o_configurator_errprintf(cmd, config_file, listen_config_node, "cannot accept HTTP; already defined to accept HTTPS");
+        if (listener->ssl.size != 0 && ssl_node == NULL) {
+            h2o_configurator_errprintf(cmd, listen_node, "cannot accept HTTP; already defined to accept HTTPS");
             return -1;
         }
-        if (listener->ssl.size == 0 && ssl_config_node != NULL) {
-            h2o_configurator_errprintf(cmd, config_file, ssl_config_node, "cannot accept HTTPS; already defined to accept HTTP");
+        if (listener->ssl.size == 0 && ssl_node != NULL) {
+            h2o_configurator_errprintf(cmd, ssl_node, "cannot accept HTTPS; already defined to accept HTTP");
             return -1;
         }
     }
 
-    if (ssl_config_node == NULL)
+    if (ssl_node == NULL)
         return 0;
-    if (ssl_config_node->type != YOML_TYPE_MAPPING) {
-        h2o_configurator_errprintf(cmd, config_file, ssl_config_node, "`ssl` is not a mapping");
+    if (ssl_node->type != YOML_TYPE_MAPPING) {
+        h2o_configurator_errprintf(cmd, ssl_node, "`ssl` is not a mapping");
         return -1;
     }
 
     { /* parse */
         size_t i;
-        for (i = 0; i != ssl_config_node->data.sequence.size; ++i) {
-            yoml_t *key = ssl_config_node->data.mapping.elements[i].key,
-                *value = ssl_config_node->data.mapping.elements[i].value;
+        for (i = 0; i != ssl_node->data.sequence.size; ++i) {
+            yoml_t *key = ssl_node->data.mapping.elements[i].key,
+                *value = ssl_node->data.mapping.elements[i].value;
             /* obtain the target command */
             if (key->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(NULL, config_file, key, "command must be a string");
+                h2o_configurator_errprintf(NULL, key, "command must be a string");
                 return -1;
             }
 #define FETCH_PROPERTY(n, p) \
     if (strcmp(key->data.scalar, n) == 0) { \
         if (value->type != YOML_TYPE_SCALAR) { \
-            h2o_configurator_errprintf(cmd, config_file, value, "property of `" n "` must be a string"); \
+            h2o_configurator_errprintf(cmd, value, "property of `" n "` must be a string"); \
             return -1; \
         } \
         p = value; \
@@ -219,16 +219,16 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             FETCH_PROPERTY("key-file", key_file);
             FETCH_PROPERTY("minimum-version", minimum_version);
             FETCH_PROPERTY("cipher-suite", cipher_suite);
-            h2o_configurator_errprintf(cmd, config_file, key, "unknown property: %s", key->data.scalar);
+            h2o_configurator_errprintf(cmd, key, "unknown property: %s", key->data.scalar);
             return -1;
 #undef FETCH_PROPERTY
         }
         if (certificate_file == NULL) {
-            h2o_configurator_errprintf(cmd, config_file, ssl_config_node, "could not find mandatory property `certificate-file`");
+            h2o_configurator_errprintf(cmd, ssl_node, "could not find mandatory property `certificate-file`");
             return -1;
         }
         if (key_file == NULL) {
-            h2o_configurator_errprintf(cmd, config_file, ssl_config_node, "could not find mandatory property `key-file`");
+            h2o_configurator_errprintf(cmd, ssl_node, "could not find mandatory property `key-file`");
             return -1;
         }
         if (minimum_version != NULL) {
@@ -244,7 +244,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             MAP("tlsv1.3", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1 | SSL_OP_NO_TLSv1_2);
 #endif
 #undef MAP
-            h2o_configurator_errprintf(cmd, config_file, minimum_version, "unknown protocol version: %s", minimum_version->data.scalar);
+            h2o_configurator_errprintf(cmd, minimum_version, "unknown protocol version: %s", minimum_version->data.scalar);
         VersionFound:
             ;
         } else {
@@ -271,17 +271,17 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     SSL_CTX_set_options(ssl_ctx, ssl_options);
     setup_ecc_key(ssl_ctx);
     if (SSL_CTX_use_certificate_chain_file(ssl_ctx, certificate_file->data.scalar) != 1) {
-        h2o_configurator_errprintf(cmd, config_file, certificate_file, "failed to load certificate file:%s\n", certificate_file->data.scalar);
+        h2o_configurator_errprintf(cmd, certificate_file, "failed to load certificate file:%s\n", certificate_file->data.scalar);
         ERR_print_errors_fp(stderr);
         goto Error;
     }
     if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file->data.scalar, SSL_FILETYPE_PEM) != 1) {
-        h2o_configurator_errprintf(cmd, config_file, key_file, "failed to load private key file:%s\n", key_file->data.scalar);
+        h2o_configurator_errprintf(cmd, key_file, "failed to load private key file:%s\n", key_file->data.scalar);
         ERR_print_errors_fp(stderr);
         goto Error;
     }
     if (cipher_suite != NULL && SSL_CTX_set_cipher_list(ssl_ctx, cipher_suite->data.scalar) != 1) {
-        h2o_configurator_errprintf(cmd, config_file, cipher_suite, "failed to setup SSL cipher suite\n");
+        h2o_configurator_errprintf(cmd, cipher_suite, "failed to setup SSL cipher suite\n");
         ERR_print_errors_fp(stderr);
         goto Error;
     }
@@ -373,7 +373,7 @@ Found:
     return conf->server_starter.fds[i];
 }
 
-static int open_unix_listener(h2o_configurator_command_t *cmd, const char *config_file, yoml_t *config_node, struct sockaddr_un *sun)
+static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, struct sockaddr_un *sun)
 {
     struct stat st;
     int fd;
@@ -383,7 +383,7 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, const char *confi
         if (S_ISSOCK(st.st_mode)) {
             unlink(sun->sun_path);
         } else {
-            h2o_configurator_errprintf(cmd, config_file, config_node, "path:%s already exists and is not an unix socket.", sun->sun_path);
+            h2o_configurator_errprintf(cmd, node, "path:%s already exists and is not an unix socket.", sun->sun_path);
             return -1;
         }
     }
@@ -394,14 +394,14 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, const char *confi
         || listen(fd, SOMAXCONN) != 0) {
         if (fd != -1)
             close(fd);
-        h2o_configurator_errprintf(NULL, config_file, config_node, "failed to listen to socket:%s: %s", sun->sun_path, strerror(errno));
+        h2o_configurator_errprintf(NULL, node, "failed to listen to socket:%s: %s", sun->sun_path, strerror(errno));
         return -1;
     }
 
     return fd;
 }
 
-static int open_tcp_listener(h2o_configurator_command_t *cmd, const char *config_file, yoml_t *config_node, const char *hostname, const char *servname, int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
+static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
 {
     int fd;
 
@@ -438,16 +438,16 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, const char *config
 Error:
     if (fd != -1)
         close(fd);
-    h2o_configurator_errprintf(NULL, config_file, config_node, "failed to listen to port %s:%s: %s", hostname != NULL ? hostname : "ANY", servname, strerror(errno));
+    h2o_configurator_errprintf(NULL, node, "failed to listen to port %s:%s: %s", hostname != NULL ? hostname : "ANY", servname, strerror(errno));
     return -1;
 }
 
-static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
+static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct listener_configurator_t *configurator = (void*)cmd->configurator;
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
     const char *hostname = NULL, *servname = NULL, *type = "tcp";
-    yoml_t *ssl_config_node = NULL;
+    yoml_t *ssl_node = NULL;
 
     if (ctx->hostconf == NULL)
         ++configurator->num_global_listeners;
@@ -455,42 +455,42 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         ++configurator->num_host_listeners;
 
     /* fetch servname (and hostname) */
-    switch (config_node->type) {
+    switch (node->type) {
     case YOML_TYPE_SCALAR:
-        servname = config_node->data.scalar;
+        servname = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING:
         {
             yoml_t *t;
-            if ((t = yoml_get(config_node, "host")) != NULL) {
+            if ((t = yoml_get(node, "host")) != NULL) {
                 if (t->type != YOML_TYPE_SCALAR) {
-                    h2o_configurator_errprintf(cmd, config_file, t, "`host` is not a string");
+                    h2o_configurator_errprintf(cmd, t, "`host` is not a string");
                     return -1;
                 }
                 hostname = t->data.scalar;
             }
-            if ((t = yoml_get(config_node, "port")) == NULL) {
-                h2o_configurator_errprintf(cmd, config_file, config_node, "cannot find mandatory property `port`");
+            if ((t = yoml_get(node, "port")) == NULL) {
+                h2o_configurator_errprintf(cmd, node, "cannot find mandatory property `port`");
                 return -1;
             }
             if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, config_file, config_node, "`port` is not a string");
+                h2o_configurator_errprintf(cmd, node, "`port` is not a string");
                 return -1;
             }
             servname = t->data.scalar;
-            if ((t = yoml_get(config_node, "type")) != NULL) {
+            if ((t = yoml_get(node, "type")) != NULL) {
                 if (t->type != YOML_TYPE_SCALAR) {
-                    h2o_configurator_errprintf(cmd, config_file, t, "`type` is not a string");
+                    h2o_configurator_errprintf(cmd, t, "`type` is not a string");
                     return -1;
                 }
                 type = t->data.scalar;
             }
-            if ((t = yoml_get(config_node, "ssl")) != NULL)
-                ssl_config_node = t;
+            if ((t = yoml_get(node, "ssl")) != NULL)
+                ssl_node = t;
         }
         break;
     default:
-        h2o_configurator_errprintf(cmd, config_file, config_node, "value must be a string or a mapping (with keys: `port` and optionally `host`)");
+        h2o_configurator_errprintf(cmd, node, "value must be a string or a mapping (with keys: `port` and optionally `host`)");
         return -1;
     }
 
@@ -502,7 +502,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         struct listener_config_t *listener;
         /* build sockaddr */
         if (strlen(servname) >= sizeof(sun.sun_path)) {
-            h2o_configurator_errprintf(cmd, config_file, config_node, "path:%s is too long as a unix socket name", servname);
+            h2o_configurator_errprintf(cmd, node, "path:%s is too long as a unix socket name", servname);
             return -1;
         }
         sun.sun_family = AF_UNIX;
@@ -513,19 +513,19 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             int fd;
             if (conf->server_starter.fds != NULL) {
                 if ((fd = find_listener_from_server_starter(conf, (void*)&sun)) == -1) {
-                    h2o_configurator_errprintf(cmd, config_file, config_node, "unix socket:%s is not being bound to the server\n", sun.sun_path);
+                    h2o_configurator_errprintf(cmd, node, "unix socket:%s is not being bound to the server\n", sun.sun_path);
                     return -1;
                 }
             } else if (conf->dry_run) {
                 fd = -1;
             } else {
-                if ((fd = open_unix_listener(cmd, config_file, config_node, &sun)) == -1)
+                if ((fd = open_unix_listener(cmd, node, &sun)) == -1)
                     return -1;
             }
             listener = add_listener(conf, fd, (struct sockaddr*)&sun, sizeof(sun));
             listener_is_new = 1;
         }
-        if (listener_setup_ssl(cmd, ctx, config_file, config_node, ssl_config_node, listener, listener_is_new) != 0)
+        if (listener_setup_ssl(cmd, ctx, node, ssl_node, listener, listener_is_new) != 0)
             return -1;
 
     } else if (strcmp(type, "tcp") == 0) {
@@ -539,10 +539,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         hints.ai_protocol = IPPROTO_TCP;
         hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV | AI_PASSIVE;
         if ((error = getaddrinfo(hostname, servname, &hints, &res)) != 0) {
-            h2o_configurator_errprintf(cmd, config_file, config_node, "failed to resolve the listening address: %s", gai_strerror(error));
+            h2o_configurator_errprintf(cmd, node, "failed to resolve the listening address: %s", gai_strerror(error));
             return -1;
         } else if (res == NULL) {
-            h2o_configurator_errprintf(cmd, config_file, config_node, "failed to resolve the listening address: getaddrinfo returned an empty list");
+            h2o_configurator_errprintf(cmd, node, "failed to resolve the listening address: getaddrinfo returned an empty list");
             return -1;
         }
         /* listen to the returned addresses */
@@ -553,19 +553,19 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 int fd;
                 if (conf->server_starter.fds != NULL) {
                     if ((fd = find_listener_from_server_starter(conf, ai->ai_addr)) == -1) {
-                        h2o_configurator_errprintf(cmd, config_file, config_node, "tcp socket:%s:%s is not being bound to the server\n", hostname, servname);
+                        h2o_configurator_errprintf(cmd, node, "tcp socket:%s:%s is not being bound to the server\n", hostname, servname);
                         return -1;
                     }
                 } else if (conf->dry_run) {
                     fd = -1;
                 } else {
-                    if ((fd = open_tcp_listener(cmd, config_file, config_node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol, ai->ai_addr, ai->ai_addrlen)) == -1)
+                    if ((fd = open_tcp_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol, ai->ai_addr, ai->ai_addrlen)) == -1)
                         return -1;
                 }
                 listener = add_listener(conf, fd, ai->ai_addr, ai->ai_addrlen);
                 listener_is_new = 1;
             }
-            if (listener_setup_ssl(cmd, ctx, config_file, config_node, ssl_config_node, listener, listener_is_new) != 0)
+            if (listener_setup_ssl(cmd, ctx, node, ssl_node, listener, listener_is_new) != 0)
                 return -1;
         }
         /* release res */
@@ -573,7 +573,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 
     } else {
 
-        h2o_configurator_errprintf(cmd, config_file, config_node, "unknown listen type: %s", type);
+        h2o_configurator_errprintf(cmd, node, "unknown listen type: %s", type);
         return -1;
 
     }
@@ -581,7 +581,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     return 0;
 }
 
-static int on_config_listen_enter(h2o_configurator_t *_configurator, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_listen_enter(h2o_configurator_t *_configurator, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct listener_configurator_t *configurator = (void*)_configurator;
 
@@ -593,7 +593,7 @@ static int on_config_listen_enter(h2o_configurator_t *_configurator, h2o_configu
     return 0;
 }
 
-static int on_config_listen_exit(h2o_configurator_t *_configurator, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_listen_exit(h2o_configurator_t *_configurator, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct listener_configurator_t *configurator = (void*)_configurator;
 
@@ -602,7 +602,7 @@ static int on_config_listen_exit(h2o_configurator_t *_configurator, h2o_configur
         return 0;
 
     if (configurator->num_host_listeners == 0 && configurator->num_global_listeners == 0) {
-        h2o_configurator_errprintf(NULL, file, node, "mandatory configuration directive `listen` is missing");
+        h2o_configurator_errprintf(NULL, node, "mandatory configuration directive `listen` is missing");
         return -1;
     }
     return 0;
@@ -633,29 +633,29 @@ static int setup_running_user(struct config_t *conf, const char *login)
     return 0;
 }
 
-static int on_config_user(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
+static int on_config_user(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
 
-    if (setup_running_user(conf, config_node->data.scalar) != 0) {
-        h2o_configurator_errprintf(cmd, config_file, config_node, "user:%s does not exist", config_node->data.scalar);
+    if (setup_running_user(conf, node->data.scalar) != 0) {
+        h2o_configurator_errprintf(cmd, node, "user:%s does not exist", node->data.scalar);
         return -1;
     }
 
     return 0;
 }
 
-static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
+static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
-    return h2o_configurator_scanf(cmd, config_file, config_node, "%d", &conf->max_connections);
+    return h2o_configurator_scanf(cmd, node, "%d", &conf->max_connections);
 }
 
 
-static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *config_file, yoml_t *config_node)
+static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
-    return h2o_configurator_scanf(cmd, config_file, config_node, "%u", &conf->num_threads);
+    return h2o_configurator_scanf(cmd, node, "%u", &conf->num_threads);
 }
 
 static void usage_print_directives(h2o_globalconf_t *conf)
@@ -692,7 +692,7 @@ yoml_t *load_config(const char *fn)
     yaml_parser_initialize(&parser);
     yaml_parser_set_input_file(&parser, fp);
 
-    yoml = yoml_parse_document(&parser, NULL);
+    yoml = yoml_parse_document(&parser, NULL, fn);
 
     if (yoml == NULL)
         fprintf(stderr, "failed to parse configuration file:%s:line %d:%s\n", fn, (int)parser.problem_mark.line, parser.problem);
@@ -950,7 +950,7 @@ int main(int argc, char **argv)
         yoml_t *yoml;
         if ((yoml = load_config(opt_config_file)) == NULL)
             exit(EX_CONFIG);
-        if (h2o_configurator_apply(&config.globalconf, opt_config_file, yoml) != 0)
+        if (h2o_configurator_apply(&config.globalconf, yoml) != 0)
             exit(EX_CONFIG);
         yoml_free(yoml);
     }

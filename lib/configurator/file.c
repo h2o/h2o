@@ -35,7 +35,7 @@ struct st_h2o_file_configurator_t {
 };
 
 
-static int on_config_dir(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_dir(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
 
@@ -43,7 +43,7 @@ static int on_config_dir(h2o_configurator_command_t *cmd, h2o_configurator_conte
     return 0;
 }
 
-static int on_config_index(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_index(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
     size_t i;
@@ -53,7 +53,7 @@ static int on_config_index(h2o_configurator_command_t *cmd, h2o_configurator_con
     for (i = 0; i != node->data.sequence.size; ++i) {
         yoml_t *element = node->data.sequence.elements[i];
         if (element->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, file, element, "argument must be a sequence of scalars");
+            h2o_configurator_errprintf(cmd, element, "argument must be a sequence of scalars");
             return -1;
         }
         self->vars->index_files[i] = element->data.scalar;
@@ -63,33 +63,33 @@ static int on_config_index(h2o_configurator_command_t *cmd, h2o_configurator_con
     return 0;
 }
 
-static int assert_is_mimetype(h2o_configurator_command_t *cmd, const char *file, yoml_t *node)
+static int assert_is_mimetype(h2o_configurator_command_t *cmd, yoml_t *node)
 {
     if (node->type != YOML_TYPE_SCALAR) {
-        h2o_configurator_errprintf(cmd, file, node, "expected a scalar (mime-type)");
+        h2o_configurator_errprintf(cmd, node, "expected a scalar (mime-type)");
         return -1;
     }
     if (strchr(node->data.scalar, '/') == NULL) {
-        h2o_configurator_errprintf(cmd, file, node, "the string \"%s\" does not look like a mime-type", node->data.scalar);
+        h2o_configurator_errprintf(cmd, node, "the string \"%s\" does not look like a mime-type", node->data.scalar);
         return -1;
     }
     return 0;
 }
 
-static int assert_is_extension(h2o_configurator_command_t *cmd, const char *file, yoml_t *node)
+static int assert_is_extension(h2o_configurator_command_t *cmd, yoml_t *node)
 {
     if (node->type != YOML_TYPE_SCALAR) {
-        h2o_configurator_errprintf(cmd, file, node, "expected a scalar (extension)");
+        h2o_configurator_errprintf(cmd, node, "expected a scalar (extension)");
         return -1;
     }
     if (node->data.scalar[0] != '.') {
-        h2o_configurator_errprintf(cmd, file, node, "given extension \"%s\" does not start with a \".\"", node->data.scalar);
+        h2o_configurator_errprintf(cmd, node, "given extension \"%s\" does not start with a \".\"", node->data.scalar);
         return -1;
     }
     return 0;
 }
 
-static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap, const char *file, yoml_t *node)
+static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap, yoml_t *node)
 {
     size_t i, j;
 
@@ -98,24 +98,24 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key;
         yoml_t *value = node->data.mapping.elements[i].value;
-        if (assert_is_mimetype(cmd, file, key) != 0)
+        if (assert_is_mimetype(cmd, key) != 0)
             return -1;
         switch (value->type) {
         case YOML_TYPE_SCALAR:
-            if (assert_is_extension(cmd, file, value) != 0)
+            if (assert_is_extension(cmd, value) != 0)
                 return -1;
             h2o_mimemap_set_type(mimemap, value->data.scalar + 1, key->data.scalar);
             break;
         case YOML_TYPE_SEQUENCE:
             for (j = 0; j != value->data.sequence.size; ++j) {
                 yoml_t *ext_node = value->data.sequence.elements[j];
-                if (assert_is_extension(cmd, file, ext_node) != 0)
+                if (assert_is_extension(cmd, ext_node) != 0)
                     return -1;
                 h2o_mimemap_set_type(mimemap, ext_node->data.scalar + 1, key->data.scalar);
             }
             break;
         default:
-            h2o_configurator_errprintf(cmd, file, value, "only scalar or sequence of scalar is permitted at the value part of the argument");
+            h2o_configurator_errprintf(cmd, value, "only scalar or sequence of scalar is permitted at the value part of the argument");
             return -1;
         }
     }
@@ -123,13 +123,13 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
     return 0;
 }
 
-static int on_config_mime_settypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_mime_settypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
     h2o_mimemap_t *newmap = h2o_mimemap_create();
 
     h2o_mimemap_set_default_type(newmap, h2o_mimemap_get_default_type(self->vars->mimemap).base);
-    if (set_mimetypes(cmd, newmap, file, node) != 0) {
+    if (set_mimetypes(cmd, newmap, node) != 0) {
         h2o_mem_release_shared(newmap);
         return -1;
     }
@@ -147,16 +147,16 @@ static void clone_mimemap_if_clean(struct st_h2o_file_configurator_t *self)
     self->vars->mimemap = h2o_mimemap_clone(self->vars->mimemap);
 }
 
-static int on_config_mime_addtypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_mime_addtypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
 
     clone_mimemap_if_clean(self);
 
-    return set_mimetypes(cmd, self->vars->mimemap, file, node);
+    return set_mimetypes(cmd, self->vars->mimemap, node);
 }
 
-static int on_config_mime_removetypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_mime_removetypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
     size_t i;
@@ -165,7 +165,7 @@ static int on_config_mime_removetypes(h2o_configurator_command_t *cmd, h2o_confi
 
     for (i = 0; i != node->data.sequence.size; ++i) {
         yoml_t *ext_node = node->data.sequence.elements[i];
-        if (assert_is_extension(cmd, file, ext_node) != 0)
+        if (assert_is_extension(cmd, ext_node) != 0)
             return -1;
         h2o_mimemap_remove_type(self->vars->mimemap, ext_node->data.scalar + 1);
     }
@@ -173,11 +173,11 @@ static int on_config_mime_removetypes(h2o_configurator_command_t *cmd, h2o_confi
     return 0;
 }
 
-static int on_config_mime_setdefaulttype(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_mime_setdefaulttype(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
 
-    if (assert_is_mimetype(cmd, file, node) != 0)
+    if (assert_is_mimetype(cmd, node) != 0)
         return -1;
 
     clone_mimemap_if_clean(self);
@@ -186,11 +186,11 @@ static int on_config_mime_setdefaulttype(h2o_configurator_command_t *cmd, h2o_co
     return 0;
 }
 
-static int on_config_etag(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_etag(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
 
-    switch (h2o_configurator_get_one_of(cmd, file, node, "OFF,ON")) {
+    switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
     case 0: /* off */
         self->vars->flags |= H2O_FILE_FLAG_NO_ETAG;
         break;
@@ -204,11 +204,11 @@ static int on_config_etag(h2o_configurator_command_t *cmd, h2o_configurator_cont
     return 0;
 }
 
-static int on_config_dir_listing(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_dir_listing(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
 
-    switch (h2o_configurator_get_one_of(cmd, file, node, "OFF,ON")) {
+    switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
     case 0: /* off */
         self->vars->flags &= ~H2O_FILE_FLAG_DIR_LISTING;
         break;
@@ -237,7 +237,7 @@ static const char **dup_strlist(const char **s)
     return ret;
 }
 
-static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_h2o_file_configurator_t *self = (void*)_self;
     ++self->vars;
@@ -248,7 +248,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
     return 0;
 }
 
-static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_h2o_file_configurator_t *self = (void*)_self;
     free(self->vars->index_files);
