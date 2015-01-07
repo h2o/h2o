@@ -370,7 +370,7 @@ h2o_access_log_filehandle_t *h2o_access_log_open_handle(const char *path, const 
             return NULL;
         }
     } else {
-        if ((fd = open(path, O_CREAT | O_WRONLY | O_APPEND, 0644)) == -1) {
+        if ((fd = open(path, O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC, 0644)) == -1) {
             fprintf(stderr, "failed to open log file:%s:%s\n", path, strerror(errno));
             return NULL;
         }

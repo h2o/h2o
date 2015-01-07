@@ -22,6 +22,7 @@
 #include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <getopt.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -388,6 +389,7 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, const char *confi
     }
     /* add new listener */
     if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1
+        || fcntl(fd, F_SETFD, FD_CLOEXEC) != 0
         || bind(fd, (void *)sun, sizeof(*sun)) != 0
         || listen(fd, SOMAXCONN) != 0) {
         if (fd != -1)
@@ -405,6 +407,7 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, const char *config
 
     if ((fd = socket(domain, type, protocol)) == -1)
         goto Error;
+    fcntl(fd, F_SETFD, FD_CLOEXEC);
     { /* set reuseaddr */
         int flag = 1;
         if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag)) != 0)
