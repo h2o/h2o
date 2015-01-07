@@ -1,0 +1,10 @@
+#! /usr/bin/perl
+
+use strict;
+use warnings;
+
+die "expected one arg"
+    unless @ARGV == 1;
+
+print $ARGV[0];
+exit($ENV{FAKE_OCSP_RESPONSE_EXIT_STATUS} || 0);

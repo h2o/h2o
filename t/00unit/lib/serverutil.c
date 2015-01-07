@@ -23,7 +23,7 @@
 #include "../test.h"
 #include "../../../lib/serverutil.c"
 
-void test_lib__serverutil_c(void)
+static void test_server_starter(void)
 {
     int *fds;
     size_t num_fds;
@@ -52,4 +52,29 @@ void test_lib__serverutil_c(void)
     num_fds = h2o_server_starter_get_fds(&fds);
     ok(num_fds == 1);
     ok(fds[0] == 4);
+}
+
+static void test_fetch_ocsp_response(void)
+{
+    h2o_buffer_t *resp;
+    int ret;
+
+    ret = h2o_get_ocsp_response("dummy.crt", "t/00unit/assets/fake_ocsp_response", &resp);
+    ok(ret == 0);
+    if (ret == 0) {
+        ok(h2o_memis(resp->bytes, resp->size, H2O_STRLIT("dummy.crt")));
+        h2o_buffer_dispose(&resp);
+    }
+
+    setenv("FAKE_OCSP_RESPONSE_EXIT_STATUS", "75", 1);
+    ret = h2o_get_ocsp_response("dummy.crt", "t/00unit/assets/fake_ocsp_response", &resp);
+    ok(ret == 75);
+
+    unsetenv("FAKE_OCSP_RESPONSE_EXIT_STATUS");
+}
+
+void test_lib__serverutil_c(void)
+{
+    subtest("server-starter", test_server_starter);
+    subtest("fetch-ocsp-response", test_fetch_ocsp_response);
 }

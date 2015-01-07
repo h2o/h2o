@@ -32,6 +32,9 @@
 #ifndef EX_OSERR
 # define EX_OSERR 71
 #endif
+#ifndef EX_TEMPFAIL
+# define EX_TEMPFAIL 75
+#endif
 #ifndef EX_CONFIG
 # define EX_CONFIG 78
 #endif
@@ -67,5 +70,10 @@ int h2o_setuidgid(struct passwd *passwd);
  * return a list of fds passed in from Server::Starter, or 0 if Server::Starter was not used.  -1 on error
  */
 ssize_t h2o_server_starter_get_fds(int **_fds);
+
+/**
+ * obtains OCSP response for given certificate using the command (should point to "share/fetch_ocsp_response")
+ */
+int h2o_get_ocsp_response(const char *certfn, const char *cmd, h2o_buffer_t **resp);
 
 #endif
