@@ -30,7 +30,7 @@ struct st_h2o_access_log_configurator_t {
     st_h2o_access_log_filehandle_vector_t _handles_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
-static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_h2o_access_log_configurator_t *self = (void*)cmd->configurator;
     const char *path, *fmt = NULL;
@@ -45,18 +45,18 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
             yoml_t *t;
             /* get path */
             if ((t = yoml_get(node, "path")) == NULL) {
-                h2o_configurator_errprintf(cmd, file, node, "could not find mandatory key `path`");
+                h2o_configurator_errprintf(cmd, node, "could not find mandatory key `path`");
                 return -1;
             }
             if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, file, t, "`path` must be scalar");
+                h2o_configurator_errprintf(cmd, t, "`path` must be scalar");
                 return -1;
             }
             path = t->data.scalar;
             /* get format */
             if ((t = yoml_get(node, "format")) != NULL) {
                 if (t->type != YOML_TYPE_SCALAR) {
-                    h2o_configurator_errprintf(cmd, file, t, "`format` must be a scalar");
+                    h2o_configurator_errprintf(cmd, t, "`format` must be a scalar");
                     return -1;
                 }
                 fmt = t->data.scalar;
@@ -64,7 +64,7 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
         }
         break;
     default:
-        h2o_configurator_errprintf(cmd, file, node, "node must be a scalar or a mapping");
+        h2o_configurator_errprintf(cmd, node, "node must be a scalar or a mapping");
         return -1;
     }
 
@@ -77,7 +77,7 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
     return 0;
 }
 
-static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_h2o_access_log_configurator_t *self = (void*)_self;
     size_t i;
@@ -97,7 +97,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
     return 0;
 }
 
-static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_h2o_access_log_configurator_t *self = (void*)_self;
     size_t i;
