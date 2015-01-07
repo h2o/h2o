@@ -95,7 +95,7 @@ my $success;
 for my $args (
     # try from exotic options
     "-VAfile $issuer_fn",
-    "-partial_chain -CAfile $issuer_fn",
+    "-partial_chain -trusted_first -CAfile $issuer_fn",
     "-CAfile $issuer_fn",
 ) {
     if (system("$openssl_cmd ocsp -respin $tempdir/resp.der $args > $tempdir/verify.out 2>&1") == 0) {
