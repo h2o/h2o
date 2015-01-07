@@ -94,9 +94,9 @@ print STDERR "verifying the response signature\n";
 my $success;
 for my $args (
     # try from exotic options
-    "-VAfile $issuer_fn",
-    "-partial_chain -trusted_first -CAfile $issuer_fn",
-    "-CAfile $issuer_fn",
+    "-VAfile $issuer_fn",                               # for comodo
+    "-partial_chain -trusted_first -CAfile $issuer_fn", # these options are only available in OpenSSL >= 1.0.2
+    "-CAfile $issuer_fn",                               # for OpenSSL <= 1.0.1
 ) {
     if (system("$openssl_cmd ocsp -respin $tempdir/resp.der $args > $tempdir/verify.out 2>&1") == 0) {
         print STDERR "verify OK (used: $args)\n";
