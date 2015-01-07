@@ -28,21 +28,19 @@ use Getopt::Long;
 # from sysexits.h
 use constant EX_TEMPFAIL => 75;
 
-my ($cert_fn, $issuer_fn, $opt_help);
+my ($issuer_fn, $opt_help);
 my $openssl_cmd = 'openssl';
 
 GetOptions(
-    "cert=s"     => \$cert_fn,
     "issuer=s"   => \$issuer_fn,
     "openssl=s", => \$openssl_cmd,
     help         => \$opt_help,
 ) or exit(1);
 if ($opt_help) {
     print << "EOT";
-Usage: $0 [<options>]
+Usage: $0 [<options>] <certificate-file>
 
 Options:
-  --cert <file>    server certificate (mandatory)
   --issuer <file>  issuer certificate (if omitted, is extracted from the
                    certificate chain)
   --openssl <cmd>  openssl command to use (default: "openssl")
@@ -58,8 +56,9 @@ EOT
     exit(0);
 }
 
-die "mandatory option --cert is missing\n"
-    unless $cert_fn;
+die "no certificate file\n"
+    if @ARGV == 0;
+my $cert_fn = shift @ARGV;
 
 my $tempdir = tempdir(CLEANUP => 1);
 
