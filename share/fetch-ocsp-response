@@ -25,6 +25,9 @@ use warnings;
 use File::Temp qw(tempdir);
 use Getopt::Long;
 
+# from sysexits.h
+use constant EX_TEMPFAIL => 75;
+
 my ($cert_fn, $issuer_fn, $opt_help);
 my $openssl_cmd = 'openssl';
 
@@ -47,6 +50,9 @@ Options:
 
 The command issues an OCSP request for given server certificate, verifies the
 response and prints the resulting DER.
+
+The command exits 0 if successful, or 75 (EX_TEMPFAIL) on temporary error.
+Other exit codes may be returned in case of hard errors.
 
 EOT
     exit(0);
@@ -79,7 +85,8 @@ if (! defined $issuer_fn) {
 # obtain response (without verification)
 print STDERR "sending OCSP request to $ocsp_uri\n";
 my $resp = run_openssl(
-    "ocsp -issuer $issuer_fn -cert $cert_fn -url $ocsp_uri -noverify -respout $tempdir/resp.der " . join(' ', @ARGV)
+    "ocsp -issuer $issuer_fn -cert $cert_fn -url $ocsp_uri -noverify -respout $tempdir/resp.der " . join(' ', @ARGV),
+    1,
 );
 print STDERR $resp;
 
@@ -100,7 +107,7 @@ for my $args (
 }
 if (! $success) {
     print STDERR read_file("$tempdir/verify.out");
-    die "failed to verify the response\n";
+    tempfail("failed to verify the response\n");
 }
 
 # success
@@ -108,12 +115,12 @@ print read_file("$tempdir/resp.der");
 exit 0;
 
 sub run_openssl {
-    my $args = shift;
+    my ($args, $tempfail) = @_;
     open my $fh, "-|", "$openssl_cmd $args"
         or die "failed to invoke $openssl_cmd:$!";
     my $resp = do { local $/; <$fh> };
     close $fh
-        or die "OpenSSL exitted abnormally: $openssl_cmd $args:$!";
+        or ($tempfail ? \&tempfail : \&die)->("OpenSSL exitted abnormally: $openssl_cmd $args:$!");
     $resp;
 }
 
@@ -131,4 +138,9 @@ sub write_file {
         or die "failed to open file:$fn:$!";
     print $fh $data;
     close $fh;
+}
+
+sub tempfail {
+    print STDERR @_;
+    exit EX_TEMPFAIL;
 }
