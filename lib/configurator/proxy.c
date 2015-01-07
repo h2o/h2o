@@ -30,29 +30,29 @@ struct proxy_configurator_t {
 };
 
 
-static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void*)cmd->configurator;
-    return h2o_configurator_scanf(cmd, file, node, "%" PRIu64, &self->vars->io_timeout);
+    return h2o_configurator_scanf(cmd, node, "%" PRIu64, &self->vars->io_timeout);
 }
 
-static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void*)cmd->configurator;
-    return h2o_configurator_scanf(cmd, file, node, "%" PRIu64, &self->vars->keepalive_timeout);
+    return h2o_configurator_scanf(cmd, node, "%" PRIu64, &self->vars->keepalive_timeout);
 }
 
-static int on_config_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void*)cmd->configurator;
-    ssize_t ret = h2o_configurator_get_one_of(cmd, file, node, "OFF,ON");
+    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
     if (ret == -1)
         return -1;
     self->vars->use_keepalive = (int)ret;
     return 0;
 }
 
-static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void*)cmd->configurator;
     h2o_mem_pool_t pool;
@@ -62,11 +62,11 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
     h2o_mem_init_pool(&pool);
 
     if (h2o_parse_url(node->data.scalar, SIZE_MAX, &scheme, &host, &port, &path) != 0) {
-        h2o_configurator_errprintf(cmd, file, node, "failed to parse URL: %s\n", node->data.scalar);
+        h2o_configurator_errprintf(cmd, node, "failed to parse URL: %s\n", node->data.scalar);
         goto ErrExit;
     }
     if (! h2o_memis(scheme.base, scheme.len, H2O_STRLIT("http"))) {
-        h2o_configurator_errprintf(cmd, file, node, "only HTTP URLs are supported");
+        h2o_configurator_errprintf(cmd, node, "only HTTP URLs are supported");
         goto ErrExit;
     }
     /* register */
@@ -85,7 +85,7 @@ ErrExit:
     return -1;
 }
 
-static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void*)_self;
 
@@ -94,7 +94,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
     return 0;
 }
 
-static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, const char *file, yoml_t *node)
+static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void*)_self;
 
