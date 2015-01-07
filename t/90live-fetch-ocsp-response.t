@@ -11,6 +11,7 @@ my @HOSTS = qw(
     www.thawte.com
     www.cybertrust.ne.jp
     www.comodo.com
+    www.godaddy.com
 );
 
 for my $host (@HOSTS) {
