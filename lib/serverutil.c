@@ -132,34 +132,25 @@ ssize_t h2o_server_starter_get_fds(int **_fds)
     return fds.size;
 }
 
-int h2o_get_ocsp_response(const char *certfn, const char *cmd, h2o_buffer_t **resp)
+int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *child_status)
 {
-    char *argv[] = {
-        (char*)cmd,
-        (char*)certfn,
-        NULL
-    };
     int respfds[2] = { -1, -1 };
     posix_spawn_file_actions_t file_actions;
     pid_t pid = -1;
-    int exit_status;
+    int ret = -1;
     extern char **environ;
 
     h2o_buffer_init(resp, &h2o_socket_buffer_prototype);
 
     /* create pipe for reading the result */
-    if (pipe(respfds) != 0) {
-        perror("pipe");
+    if (pipe(respfds) != 0)
         goto Exit;
-    }
 
     /* spawn */
     posix_spawn_file_actions_init(&file_actions);
     posix_spawn_file_actions_adddup2(&file_actions, respfds[1], 1);
-    if ((errno = posix_spawnp(&pid, cmd, &file_actions, NULL, argv, environ)) != 0) {
-        perror("posix_spawnp failed to spawn the command");
+    if ((errno = posix_spawnp(&pid, cmd, &file_actions, NULL, argv, environ)) != 0)
         goto Exit;
-    }
     close(respfds[1]);
     respfds[1] = -1;
 
@@ -178,26 +169,19 @@ Exit:
     if (pid != -1) {
         /* wait for the child to complete */
         pid_t r;
-        while ((r = waitpid(pid, &exit_status, 0)) == -1 && errno == EINTR)
+        while ((r = waitpid(pid, child_status, 0)) == -1 && errno == EINTR)
             ;
         if (r == pid) {
-            if (exit_status != 0) {
-                fprintf(stderr, "%s exitted abnormally with code: %d\n", cmd, exit_status);
-                exit_status = WIFEXITED(exit_status) ? WEXITSTATUS(exit_status) : 255;
-            }
-        } else {
-            perror("waitpid");
-            exit_status = EX_TEMPFAIL;
+            /* success */
+            ret = 0;
         }
-    } else {
-        exit_status = EX_TEMPFAIL;
     }
     if (respfds[0] != -1)
         close(respfds[0]);
     if (respfds[1] != -1)
         close(respfds[1]);
-    if (exit_status != 0)
+    if (ret != 0)
         h2o_buffer_dispose(resp);
 
-    return exit_status;
+    return ret;
 }

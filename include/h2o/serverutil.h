@@ -72,8 +72,12 @@ int h2o_setuidgid(struct passwd *passwd);
 ssize_t h2o_server_starter_get_fds(int **_fds);
 
 /**
- * obtains OCSP response for given certificate using the command (should point to "share/fetch_ocsp_response")
+ * executes a command and returns its output
+ * @param cmd
+ * @param argv
+ * @param resp the output, only available if the function returns zero
+ * @param child_status result of waitpid(child_pid), only available if the function returns zero
  */
-int h2o_get_ocsp_response(const char *certfn, const char *cmd, h2o_buffer_t **resp);
+int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *child_status);
 
 #endif

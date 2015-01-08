@@ -184,6 +184,37 @@ static void update_ocsp_stapling(struct listener_ssl_config_t *ssl_conf, h2o_buf
     pthread_mutex_unlock(&ssl_conf->ocsp_stapling.response.mutex);
 }
 
+static int get_ocsp_response(const char *cert_fn, const char *cmd, h2o_buffer_t **resp)
+{
+    char *argv[] = {
+        (char*)cmd,
+        (char*)cert_fn,
+        NULL
+    };
+    int child_status;
+
+    if (h2o_read_command(cmd, argv, resp, &child_status) != 0) {
+        fprintf(stderr, "[OCSP Stapling] failed to execute %s:%s\n", cmd, strerror(errno));
+        switch (errno) {
+        case EACCES:
+        case ENOENT:
+        case ENOEXEC:
+            /* permanent errors */
+            return EX_CONFIG;
+        default:
+            return EX_TEMPFAIL;
+        }
+    }
+
+    if (! (WIFEXITED(child_status) && WEXITSTATUS(child_status) == 0))
+        h2o_buffer_dispose(resp);
+    if (! WIFEXITED(child_status)) {
+        fprintf(stderr, "[OCSP Stapling] command %s was killed by signal %d\n", cmd, WTERMSIG(child_status));
+        return EX_TEMPFAIL;
+    }
+    return WEXITSTATUS(child_status);
+}
+
 static void *ocsp_updater_thread(void *_ssl_conf)
 {
     struct listener_ssl_config_t *ssl_conf = _ssl_conf;
@@ -202,7 +233,7 @@ static void *ocsp_updater_thread(void *_ssl_conf)
             continue;
         }
         /* fetch the response */
-        status = h2o_get_ocsp_response(ssl_conf->certificate_file, ssl_conf->ocsp_stapling.cmd, &resp);
+        status = get_ocsp_response(ssl_conf->certificate_file, ssl_conf->ocsp_stapling.cmd, &resp);
         switch (status) {
         case 0: /* success */
             fail_cnt = 0;
@@ -424,14 +455,17 @@ static int listener_setup_ssl(struct config_t *conf, h2o_configurator_command_t 
             if (conf->dry_run) {
                 h2o_buffer_t *respbuf;
                 fprintf(stderr, "[OCSP Stapling] testing for certificate file:%s\n", certificate_file->data.scalar);
-                int ret = h2o_get_ocsp_response(certificate_file->data.scalar, "share/h2o/fetch-ocsp-response", &respbuf);
-                if (ret == 0) {
-                    update_ocsp_stapling(ssl_config, respbuf);
+                switch (get_ocsp_response(certificate_file->data.scalar, "share/h2o/fetch-ocsp-response", &respbuf)) {
+                case 0:
+                    h2o_buffer_dispose(&respbuf);
                     fprintf(stderr, "[OCSP Stapling] stapling works for file:%s\n", certificate_file->data.scalar);
-                } else if (ret == EX_TEMPFAIL) {
+                    break;
+                case EX_TEMPFAIL:
                     h2o_configurator_errprintf(cmd, certificate_file, "[OCSP Stapling] temporary failed for file:%s\n", certificate_file->data.scalar);
-                } else {
+                    break;
+                default:
                     h2o_configurator_errprintf(cmd, certificate_file, "[OCSP Stapling] does not work, will be disabled for file:%s\n", certificate_file->data.scalar);
+                    break;
                 }
             } else {
                 ssl_config->ocsp_stapling.interval = ocsp_update_interval; /* is also used as a flag for indicating if the updater thread was spawned */
