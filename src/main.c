@@ -193,6 +193,21 @@ static int get_ocsp_response(const char *cert_fn, const char *cmd, h2o_buffer_t 
     };
     int child_status;
 
+    if (cmd[0] != '/' && strchr(cmd, '/') != NULL) {
+        /* is relative path */
+        char *h2o_root = getenv("H2O_ROOT");
+#ifdef H2O_ROOT
+        if (h2o_root == NULL)
+            h2o_root = H2O_ROOT;
+#endif
+        if (h2o_root != NULL) {
+            char *cmd_fullpath = alloca(strlen(h2o_root) + strlen(cmd) + 2);
+            sprintf(cmd_fullpath, "%s/%s", h2o_root, cmd);
+            cmd = cmd_fullpath;
+            argv[0] = cmd_fullpath;
+        }
+    }
+
     if (h2o_read_command(cmd, argv, resp, &child_status) != 0) {
         fprintf(stderr, "[OCSP Stapling] failed to execute %s:%s\n", cmd, strerror(errno));
         switch (errno) {
@@ -455,7 +470,7 @@ static int listener_setup_ssl(struct config_t *conf, h2o_configurator_command_t 
             if (conf->dry_run) {
                 h2o_buffer_t *respbuf;
                 fprintf(stderr, "[OCSP Stapling] testing for certificate file:%s\n", certificate_file->data.scalar);
-                switch (get_ocsp_response(certificate_file->data.scalar, "share/h2o/fetch-ocsp-response", &respbuf)) {
+                switch (get_ocsp_response(certificate_file->data.scalar, ssl_config->ocsp_stapling.cmd, &respbuf)) {
                 case 0:
                     h2o_buffer_dispose(&respbuf);
                     fprintf(stderr, "[OCSP Stapling] stapling works for file:%s\n", certificate_file->data.scalar);
