@@ -301,8 +301,8 @@ static int listener_setup_ssl(struct config_t *conf, h2o_configurator_command_t 
     SSL_CTX *ssl_ctx = NULL;
     yoml_t *certificate_file = NULL, *key_file = NULL, *minimum_version = NULL, *cipher_suite = NULL, *ocsp_update_cmd = NULL, *ocsp_update_interval_node = NULL, *ocsp_max_failures_node = NULL;
     long ssl_options = SSL_OP_ALL;
-    uint64_t ocsp_update_interval = 30; /* defaults to 4 hours */
-    unsigned ocsp_max_failures = 3; /* permit 3 failures before temporary disabling OCSP stapling */
+    uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
+    unsigned ocsp_max_failures = 3; /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
 
     if (! listener_is_new) {
         if (listener->ssl.size != 0 && ssl_node == NULL) {
@@ -1008,6 +1008,14 @@ static void setup_configurators(struct config_t *conf)
             "                         SSLv3, TLSv1, TLSv1.1, TLSv1.2 (default: TLSv1)",
             "       cipher-suite:     list of cipher suites to be passed to OpenSSL via",
             "                         SSL_CTX_set_cipher_list (optional)",
+            "       ocsp-update-interval:",
+            "                         interval for updating the OCSP stapling data (in",
+            "                         seconds), or set to zero to disable OCSP stapling",
+            "                         (default: 14400 = 4 hours)",
+            "       ocsp-max-failures:",
+            "                         number of consecutive OCSP queriy failures before",
+            "                         stopping to send OCSP stapling data to the client",
+            "                         (default: 3)",
             " - if the value is a sequence, each element should be either a scalar or a",
             "   mapping that conform to the requirements above");
     }
