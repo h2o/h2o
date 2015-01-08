@@ -149,8 +149,10 @@ int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *chi
     /* spawn */
     posix_spawn_file_actions_init(&file_actions);
     posix_spawn_file_actions_adddup2(&file_actions, respfds[1], 1);
-    if ((errno = posix_spawnp(&pid, cmd, &file_actions, NULL, argv, environ)) != 0)
+    if ((errno = posix_spawnp(&pid, cmd, &file_actions, NULL, argv, environ)) != 0) {
+        pid = -1;
         goto Exit;
+    }
     close(respfds[1]);
     respfds[1] = -1;
 

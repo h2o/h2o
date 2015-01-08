@@ -89,7 +89,7 @@ static void test_read_command(void)
     /* command not an executable */
     argv[0] = "t/00unit/assets";
     ret = h2o_read_command(argv[0], argv, &resp, &status);
-    ok(ret != 0);
+    ok(ret != 0 || (ret == 0 && WIFEXITED(status) && WEXITSTATUS(status) == 127));
 }
 
 void test_lib__serverutil_c(void)
