@@ -24,6 +24,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <inttypes.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -36,7 +37,9 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
+#include <openssl/crypto.h>
 #include <openssl/err.h>
+#include <openssl/ssl.h>
 #include "yoml-parser.h"
 #include "h2o.h"
 #include "h2o/configurator.h"
@@ -54,6 +57,10 @@ struct listener_ssl_config_t {
     H2O_VECTOR(h2o_iovec_t) hostnames;
     char *certificate_file;
     SSL_CTX *ctx;
+    struct {
+        pthread_mutex_t mutex;
+        h2o_buffer_t *data;
+    } ocsp_response;
 };
 
 struct listener_config_t {
@@ -162,6 +169,40 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
     return SSL_TLSEXT_ERR_OK;
 }
 
+static void update_ocsp_stapling(struct listener_ssl_config_t *ssl_conf, h2o_buffer_t *resp)
+{
+    pthread_mutex_lock(&ssl_conf->ocsp_response.mutex);
+    if (ssl_conf->ocsp_response.data != NULL)
+        h2o_buffer_dispose(&ssl_conf->ocsp_response.data);
+    ssl_conf->ocsp_response.data = resp;
+    pthread_mutex_unlock(&ssl_conf->ocsp_response.mutex);
+}
+
+static int on_ocsp_stapling_callback(SSL *ssl, void *_ssl_conf)
+{
+    struct listener_ssl_config_t *ssl_conf = _ssl_conf;
+    void *resp = NULL;
+    size_t len = 0;
+
+    /* fetch ocsp response */
+    pthread_mutex_lock(&ssl_conf->ocsp_response.mutex);
+    if (ssl_conf->ocsp_response.data != NULL) {
+        resp = CRYPTO_malloc((int)ssl_conf->ocsp_response.data->size, __FILE__, __LINE__);
+        if (resp != NULL) {
+            len = ssl_conf->ocsp_response.data->size;
+            memcpy(resp, ssl_conf->ocsp_response.data->bytes, len);
+        }
+    }
+    pthread_mutex_unlock(&ssl_conf->ocsp_response.mutex);
+
+    if (resp != NULL) {
+        SSL_set_tlsext_status_ocsp_resp(ssl, resp, len);
+        return SSL_TLSEXT_ERR_OK;
+    } else {
+        return SSL_TLSEXT_ERR_NOACK;
+    }
+}
+
 static void listener_setup_ssl_add_host(struct listener_ssl_config_t *ssl_config, h2o_iovec_t host)
 {
     const char *host_end = memchr(host.base, ':', host.len);
@@ -175,8 +216,9 @@ static void listener_setup_ssl_add_host(struct listener_ssl_config_t *ssl_config
 static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *listen_node, yoml_t *ssl_node, struct listener_config_t *listener, int listener_is_new)
 {
     SSL_CTX *ssl_ctx = NULL;
-    yoml_t *certificate_file = NULL, *key_file = NULL, *minimum_version = NULL, *cipher_suite = NULL;
+    yoml_t *certificate_file = NULL, *key_file = NULL, *minimum_version = NULL, *cipher_suite = NULL, *ocsp_update_interval_node = NULL;
     long ssl_options = SSL_OP_ALL;
+    uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
 
     if (! listener_is_new) {
         if (listener->ssl.size != 0 && ssl_node == NULL) {
@@ -219,6 +261,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             FETCH_PROPERTY("key-file", key_file);
             FETCH_PROPERTY("minimum-version", minimum_version);
             FETCH_PROPERTY("cipher-suite", cipher_suite);
+            FETCH_PROPERTY("ocsp-update-interval", ocsp_update_interval_node);
             h2o_configurator_errprintf(cmd, key, "unknown property: %s", key->data.scalar);
             return -1;
 #undef FETCH_PROPERTY
@@ -250,6 +293,10 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         } else {
             /* default is >= TLSv1 */
             ssl_options |= SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
+        }
+        if (ocsp_update_interval_node != NULL) {
+            if (h2o_configurator_scanf(cmd, ocsp_update_interval_node, "%" PRIu64, &ocsp_update_interval) != 0)
+                goto Error;
         }
     }
 
@@ -310,6 +357,22 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         }
         ssl_config->ctx = ssl_ctx;
         ssl_config->certificate_file = h2o_strdup(NULL, certificate_file->data.scalar, SIZE_MAX).base;
+        SSL_CTX_set_tlsext_status_cb(ssl_ctx, on_ocsp_stapling_callback);
+        SSL_CTX_set_tlsext_status_arg(ssl_ctx, ssl_config);
+        pthread_mutex_init(&ssl_config->ocsp_response.mutex, NULL);
+        if (ocsp_update_interval != 0) {
+            h2o_buffer_t *respbuf;
+            fprintf(stderr, "testing OCSP stapling for certificate file:%s\n", certificate_file->data.scalar);
+            int ret = h2o_get_ocsp_response(certificate_file->data.scalar, "share/h2o/fetch-ocsp-response", &respbuf);
+            if (ret == 0) {
+                update_ocsp_stapling(ssl_config, respbuf);
+                fprintf(stderr, "OCSP stapling OK for file:%s\n", certificate_file->data.scalar);
+            } else if (ret == EX_TEMPFAIL) {
+                h2o_configurator_errprintf(cmd, certificate_file, "Temporary failure in OCSP stapling for file:%s\n", certificate_file->data.scalar);
+            } else {
+                h2o_configurator_errprintf(cmd, certificate_file, "Disabilng OCSP stapling for file:%s\n", certificate_file->data.scalar);
+            }
+        }
     }
 
     return 0;
