@@ -423,15 +423,15 @@ static int listener_setup_ssl(struct config_t *conf, h2o_configurator_command_t 
         if (ocsp_update_interval != 0) {
             if (conf->dry_run) {
                 h2o_buffer_t *respbuf;
-                fprintf(stderr, "testing OCSP stapling for certificate file:%s\n", certificate_file->data.scalar);
+                fprintf(stderr, "[OCSP Stapling] testing for certificate file:%s\n", certificate_file->data.scalar);
                 int ret = h2o_get_ocsp_response(certificate_file->data.scalar, "share/h2o/fetch-ocsp-response", &respbuf);
                 if (ret == 0) {
                     update_ocsp_stapling(ssl_config, respbuf);
-                    fprintf(stderr, "OCSP stapling OK for file:%s\n", certificate_file->data.scalar);
+                    fprintf(stderr, "[OCSP Stapling] stapling works for file:%s\n", certificate_file->data.scalar);
                 } else if (ret == EX_TEMPFAIL) {
-                    h2o_configurator_errprintf(cmd, certificate_file, "Temporary failure in OCSP stapling for file:%s\n", certificate_file->data.scalar);
+                    h2o_configurator_errprintf(cmd, certificate_file, "[OCSP Stapling] temporary failed for file:%s\n", certificate_file->data.scalar);
                 } else {
-                    h2o_configurator_errprintf(cmd, certificate_file, "Disabilng OCSP stapling for file:%s\n", certificate_file->data.scalar);
+                    h2o_configurator_errprintf(cmd, certificate_file, "[OCSP Stapling] does not work, will be disabled for file:%s\n", certificate_file->data.scalar);
                 }
             } else {
                 ssl_config->ocsp_stapling.interval = ocsp_update_interval; /* is also used as a flag for indicating if the updater thread was spawned */
