@@ -23,7 +23,7 @@
 #include "../test.h"
 #include "../../../lib/serverutil.c"
 
-void test_lib__serverutil_c(void)
+static void test_server_starter(void)
 {
     int *fds;
     size_t num_fds;
@@ -52,4 +52,48 @@ void test_lib__serverutil_c(void)
     num_fds = h2o_server_starter_get_fds(&fds);
     ok(num_fds == 1);
     ok(fds[0] == 4);
+}
+
+static void test_read_command(void)
+{
+    char *argv[] = {
+        "t/00unit/assets/read_command.pl",
+        "hello",
+        NULL
+    };
+    h2o_buffer_t *resp;
+    int ret, status;
+
+    /* success */
+    ret = h2o_read_command(argv[0], argv, &resp, &status);
+    ok(ret == 0);
+    if (ret == 0) {
+        ok(WIFEXITED(status));
+        ok(WEXITSTATUS(status) == 0);
+        ok(h2o_memis(resp->bytes, resp->size, H2O_STRLIT("hello")));
+        h2o_buffer_dispose(&resp);
+    }
+
+    /* exit status */
+    setenv("READ_COMMAND_EXIT_STATUS", "75", 1);
+    ret = h2o_read_command(argv[0], argv, &resp, &status);
+    ok(ret == 0);
+    if (ret == 0) {
+        ok(WIFEXITED(status));
+        ok(WEXITSTATUS(status) == 75);
+        ok(h2o_memis(resp->bytes, resp->size, H2O_STRLIT("hello")));
+        h2o_buffer_dispose(&resp);
+    }
+    unsetenv("READ_COMMAND_EXIT_STATUS");
+
+    /* command not an executable */
+    argv[0] = "t/00unit/assets";
+    ret = h2o_read_command(argv[0], argv, &resp, &status);
+    ok(ret != 0 || (ret == 0 && WIFEXITED(status) && WEXITSTATUS(status) == 127));
+}
+
+void test_lib__serverutil_c(void)
+{
+    subtest("server-starter", test_server_starter);
+    subtest("read-command", test_read_command);
 }

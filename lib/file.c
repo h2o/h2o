@@ -133,7 +133,7 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_mem_pool_t *pool
 
     *is_dir = 0;
 
-    if ((fd = open(path, O_RDONLY)) == -1)
+    if ((fd = open(path, O_RDONLY | O_CLOEXEC)) == -1)
         return NULL;
     if (fstat(fd, &st) != 0) {
         perror("fstat");

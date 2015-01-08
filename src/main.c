@@ -22,7 +22,9 @@
 #include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <getopt.h>
+#include <inttypes.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -35,7 +37,9 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
+#include <openssl/crypto.h>
 #include <openssl/err.h>
+#include <openssl/ssl.h>
 #include "yoml-parser.h"
 #include "h2o.h"
 #include "h2o/configurator.h"
@@ -53,6 +57,16 @@ struct listener_ssl_config_t {
     H2O_VECTOR(h2o_iovec_t) hostnames;
     char *certificate_file;
     SSL_CTX *ctx;
+    struct {
+        uint64_t interval;
+        unsigned max_failures;
+        char *cmd;
+        pthread_t updater_tid; /* should be valid when and only when interval != 0 */
+        struct {
+            pthread_mutex_t mutex;
+            h2o_buffer_t *data;
+        } response;
+    } ocsp_stapling;
 };
 
 struct listener_config_t {
@@ -161,6 +175,132 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
     return SSL_TLSEXT_ERR_OK;
 }
 
+static void update_ocsp_stapling(struct listener_ssl_config_t *ssl_conf, h2o_buffer_t *resp)
+{
+    pthread_mutex_lock(&ssl_conf->ocsp_stapling.response.mutex);
+    if (ssl_conf->ocsp_stapling.response.data != NULL)
+        h2o_buffer_dispose(&ssl_conf->ocsp_stapling.response.data);
+    ssl_conf->ocsp_stapling.response.data = resp;
+    pthread_mutex_unlock(&ssl_conf->ocsp_stapling.response.mutex);
+}
+
+static int get_ocsp_response(const char *cert_fn, const char *cmd, h2o_buffer_t **resp)
+{
+    char *argv[] = {
+        (char*)cmd,
+        (char*)cert_fn,
+        NULL
+    };
+    int child_status;
+
+    if (cmd[0] != '/' && strchr(cmd, '/') != NULL) {
+        /* is relative path */
+        char *h2o_root = getenv("H2O_ROOT");
+#ifdef H2O_ROOT
+        if (h2o_root == NULL)
+            h2o_root = H2O_ROOT;
+#endif
+        if (h2o_root != NULL) {
+            char *cmd_fullpath = alloca(strlen(h2o_root) + strlen(cmd) + 2);
+            sprintf(cmd_fullpath, "%s/%s", h2o_root, cmd);
+            cmd = cmd_fullpath;
+            argv[0] = cmd_fullpath;
+        }
+    }
+
+    if (h2o_read_command(cmd, argv, resp, &child_status) != 0) {
+        fprintf(stderr, "[OCSP Stapling] failed to execute %s:%s\n", cmd, strerror(errno));
+        switch (errno) {
+        case EACCES:
+        case ENOENT:
+        case ENOEXEC:
+            /* permanent errors */
+            return EX_CONFIG;
+        default:
+            return EX_TEMPFAIL;
+        }
+    }
+
+    if (! (WIFEXITED(child_status) && WEXITSTATUS(child_status) == 0))
+        h2o_buffer_dispose(resp);
+    if (! WIFEXITED(child_status)) {
+        fprintf(stderr, "[OCSP Stapling] command %s was killed by signal %d\n", cmd, WTERMSIG(child_status));
+        return EX_TEMPFAIL;
+    }
+    return WEXITSTATUS(child_status);
+}
+
+static void *ocsp_updater_thread(void *_ssl_conf)
+{
+    struct listener_ssl_config_t *ssl_conf = _ssl_conf;
+    time_t next_at = 0, now;
+    unsigned fail_cnt = 0;
+    int status;
+    h2o_buffer_t *resp;
+
+    assert(ssl_conf->ocsp_stapling.interval != 0);
+
+    while (! h2o_thread_is_notified()) {
+        /* sleep until next_at */
+        if ((now = time(NULL)) < next_at) {
+            time_t sleep_secs = next_at - now;
+            sleep(sleep_secs < UINT_MAX ? (unsigned)sleep_secs : UINT_MAX);
+            continue;
+        }
+        /* fetch the response */
+        status = get_ocsp_response(ssl_conf->certificate_file, ssl_conf->ocsp_stapling.cmd, &resp);
+        switch (status) {
+        case 0: /* success */
+            fail_cnt = 0;
+            update_ocsp_stapling(ssl_conf, resp);
+            fprintf(stderr, "[OCSP Stapling] successfully updated the response for certificate file:%s\n", ssl_conf->certificate_file);
+            break;
+        case EX_TEMPFAIL: /* temporary failure */
+            if (fail_cnt == ssl_conf->ocsp_stapling.max_failures) {
+                fprintf(stderr, "[OCSP Stapling] OCSP stapling is temporary disabled due to repeated errors for certificate file:%s\n", ssl_conf->certificate_file);
+                update_ocsp_stapling(ssl_conf, NULL);
+            } else {
+                fprintf(stderr, "[OCSP Stapling] reusing old response due to a temporary error occurred while fetching OCSP response for certificate file:%s\n", ssl_conf->certificate_file);
+                ++fail_cnt;
+            }
+            break;
+        default: /* permanent failure */
+            fprintf(stderr, "[OCSP Stapling] disabled for certificate file:%s\n",  ssl_conf->certificate_file);
+            goto Exit;
+        }
+        /* update next_at */
+        next_at = time(NULL) + ssl_conf->ocsp_stapling.interval;
+    }
+
+Exit:
+    return NULL;
+}
+
+static int on_ocsp_stapling_callback(SSL *ssl, void *_ssl_conf)
+{
+    struct listener_ssl_config_t *ssl_conf = _ssl_conf;
+    void *resp = NULL;
+    size_t len = 0;
+
+    /* fetch ocsp response */
+    pthread_mutex_lock(&ssl_conf->ocsp_stapling.response.mutex);
+    if (ssl_conf->ocsp_stapling.response.data != NULL) {
+        resp = CRYPTO_malloc((int)ssl_conf->ocsp_stapling.response.data->size, __FILE__, __LINE__);
+        if (resp != NULL) {
+            len = ssl_conf->ocsp_stapling.response.data->size;
+            memcpy(resp, ssl_conf->ocsp_stapling.response.data->bytes, len);
+        }
+    }
+    pthread_mutex_unlock(&ssl_conf->ocsp_stapling.response.mutex);
+
+    if (resp != NULL) {
+        SSL_set_tlsext_status_ocsp_resp(ssl, resp, len);
+        return SSL_TLSEXT_ERR_OK;
+    } else {
+        return SSL_TLSEXT_ERR_NOACK;
+    }
+}
+
 static void listener_setup_ssl_add_host(struct listener_ssl_config_t *ssl_config, h2o_iovec_t host)
 {
     const char *host_end = memchr(host.base, ':', host.len);
@@ -171,11 +311,13 @@ static void listener_setup_ssl_add_host(struct listener_ssl_config_t *ssl_config
     ssl_config->hostnames.entries[ssl_config->hostnames.size++] = h2o_iovec_init(host.base, host_end - host.base);
 }
 
-static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *listen_node, yoml_t *ssl_node, struct listener_config_t *listener, int listener_is_new)
+static int listener_setup_ssl(struct config_t *conf, h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *listen_node, yoml_t *ssl_node, struct listener_config_t *listener, int listener_is_new)
 {
     SSL_CTX *ssl_ctx = NULL;
-    yoml_t *certificate_file = NULL, *key_file = NULL, *minimum_version = NULL, *cipher_suite = NULL;
+    yoml_t *certificate_file = NULL, *key_file = NULL, *minimum_version = NULL, *cipher_suite = NULL, *ocsp_update_cmd = NULL, *ocsp_update_interval_node = NULL, *ocsp_max_failures_node = NULL;
     long ssl_options = SSL_OP_ALL;
+    uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
+    unsigned ocsp_max_failures = 3; /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
 
     if (! listener_is_new) {
         if (listener->ssl.size != 0 && ssl_node == NULL) {
@@ -218,6 +360,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             FETCH_PROPERTY("key-file", key_file);
             FETCH_PROPERTY("minimum-version", minimum_version);
             FETCH_PROPERTY("cipher-suite", cipher_suite);
+            FETCH_PROPERTY("ocsp-update-cmd", ocsp_update_cmd);
+            FETCH_PROPERTY("ocsp-update-interval", ocsp_update_interval_node);
+            FETCH_PROPERTY("ocsp-max-failures", ocsp_max_failures_node);
             h2o_configurator_errprintf(cmd, key, "unknown property: %s", key->data.scalar);
             return -1;
 #undef FETCH_PROPERTY
@@ -249,6 +394,14 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         } else {
             /* default is >= TLSv1 */
             ssl_options |= SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
+        }
+        if (ocsp_update_interval_node != NULL) {
+            if (h2o_configurator_scanf(cmd, ocsp_update_interval_node, "%" PRIu64, &ocsp_update_interval) != 0)
+                goto Error;
+        }
+        if (ocsp_max_failures_node != NULL) {
+            if (h2o_configurator_scanf(cmd, ocsp_max_failures_node, "%u", &ocsp_max_failures) != 0)
+                goto Error;
         }
     }
 
@@ -309,6 +462,32 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         }
         ssl_config->ctx = ssl_ctx;
         ssl_config->certificate_file = h2o_strdup(NULL, certificate_file->data.scalar, SIZE_MAX).base;
+        SSL_CTX_set_tlsext_status_cb(ssl_ctx, on_ocsp_stapling_callback);
+        SSL_CTX_set_tlsext_status_arg(ssl_ctx, ssl_config);
+        pthread_mutex_init(&ssl_config->ocsp_stapling.response.mutex, NULL);
+        ssl_config->ocsp_stapling.cmd = ocsp_update_cmd != NULL ? strdup(ocsp_update_cmd->data.scalar) : "share/h2o/fetch-ocsp-response";
+        if (ocsp_update_interval != 0) {
+            if (conf->dry_run) {
+                h2o_buffer_t *respbuf;
+                fprintf(stderr, "[OCSP Stapling] testing for certificate file:%s\n", certificate_file->data.scalar);
+                switch (get_ocsp_response(certificate_file->data.scalar, ssl_config->ocsp_stapling.cmd, &respbuf)) {
+                case 0:
+                    h2o_buffer_dispose(&respbuf);
+                    fprintf(stderr, "[OCSP Stapling] stapling works for file:%s\n", certificate_file->data.scalar);
+                    break;
+                case EX_TEMPFAIL:
+                    h2o_configurator_errprintf(cmd, certificate_file, "[OCSP Stapling] temporary failed for file:%s\n", certificate_file->data.scalar);
+                    break;
+                default:
+                    h2o_configurator_errprintf(cmd, certificate_file, "[OCSP Stapling] does not work, will be disabled for file:%s\n", certificate_file->data.scalar);
+                    break;
+                }
+            } else {
+                ssl_config->ocsp_stapling.interval = ocsp_update_interval; /* is also used as a flag for indicating if the updater thread was spawned */
+                ssl_config->ocsp_stapling.max_failures = ocsp_max_failures;
+                pthread_create(&ssl_config->ocsp_stapling.updater_tid, NULL, ocsp_updater_thread, ssl_config);
+            }
+        }
     }
 
     return 0;
@@ -388,6 +567,7 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
     }
     /* add new listener */
     if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1
+        || fcntl(fd, F_SETFD, FD_CLOEXEC) != 0
         || bind(fd, (void *)sun, sizeof(*sun)) != 0
         || listen(fd, SOMAXCONN) != 0) {
         if (fd != -1)
@@ -405,6 +585,7 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, cons
 
     if ((fd = socket(domain, type, protocol)) == -1)
         goto Error;
+    fcntl(fd, F_SETFD, FD_CLOEXEC);
     { /* set reuseaddr */
         int flag = 1;
         if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag)) != 0)
@@ -522,7 +703,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             listener = add_listener(conf, fd, (struct sockaddr*)&sun, sizeof(sun));
             listener_is_new = 1;
         }
-        if (listener_setup_ssl(cmd, ctx, node, ssl_node, listener, listener_is_new) != 0)
+        if (listener_setup_ssl(conf, cmd, ctx, node, ssl_node, listener, listener_is_new) != 0)
             return -1;
 
     } else if (strcmp(type, "tcp") == 0) {
@@ -562,7 +743,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 listener = add_listener(conf, fd, ai->ai_addr, ai->ai_addrlen);
                 listener_is_new = 1;
             }
-            if (listener_setup_ssl(cmd, ctx, node, ssl_node, listener, listener_is_new) != 0)
+            if (listener_setup_ssl(conf, cmd, ctx, node, ssl_node, listener, listener_is_new) != 0)
                 return -1;
         }
         /* release res */
@@ -842,6 +1023,14 @@ static void setup_configurators(struct config_t *conf)
             "                         SSLv3, TLSv1, TLSv1.1, TLSv1.2 (default: TLSv1)",
             "       cipher-suite:     list of cipher suites to be passed to OpenSSL via",
             "                         SSL_CTX_set_cipher_list (optional)",
+            "       ocsp-update-interval:",
+            "                         interval for updating the OCSP stapling data (in",
+            "                         seconds), or set to zero to disable OCSP stapling",
+            "                         (default: 14400 = 4 hours)",
+            "       ocsp-max-failures:",
+            "                         number of consecutive OCSP queriy failures before",
+            "                         stopping to send OCSP stapling data to the client",
+            "                         (default: 3)",
             " - if the value is a sequence, each element should be either a scalar or a",
             "   mapping that conform to the requirements above");
     }

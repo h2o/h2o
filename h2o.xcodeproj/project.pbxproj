@@ -196,6 +196,8 @@
 		104B9A311A59D7A2009EEE64 /* 40running-user.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40running-user.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		104B9A321A59E27A009EEE64 /* 40ssl-cipher-suite.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40ssl-cipher-suite.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		104B9A331A59E594009EEE64 /* 01cxx-compile.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "01cxx-compile.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		104B9A401A5CD69B009EEE64 /* fetch-ocsp-response */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = "fetch-ocsp-response"; sourceTree = "<group>"; };
+		104B9A451A5D1004009EEE64 /* 90live-fetch-ocsp-response.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "90live-fetch-ocsp-response.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534BD1A3B8F7700627ECB /* file.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = file.c; sourceTree = "<group>"; };
 		105534C01A3B911300627ECB /* hpack.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpack.c; sourceTree = "<group>"; };
 		105534C21A3B917000627ECB /* mimemap.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = mimemap.c; sourceTree = "<group>"; };
@@ -346,6 +348,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		104B9A3F1A5CD684009EEE64 /* share */ = {
+			isa = PBXGroup;
+			children = (
+				104B9A431A5D0028009EEE64 /* h2o */,
+			);
+			path = share;
+			sourceTree = "<group>";
+		};
+		104B9A431A5D0028009EEE64 /* h2o */ = {
+			isa = PBXGroup;
+			children = (
+				104B9A401A5CD69B009EEE64 /* fetch-ocsp-response */,
+			);
+			path = h2o;
+			sourceTree = "<group>";
+		};
 		105534BF1A3B90E600627ECB /* http2 */ = {
 			isa = PBXGroup;
 			children = (
@@ -423,6 +441,7 @@
 				1079239E19A3215F00C52AD6 /* include */,
 				107923AD19A3217300C52AD6 /* lib */,
 				107923AA19A3216B00C52AD6 /* misc */,
+				104B9A3F1A5CD684009EEE64 /* share */,
 				10F417D419C190DD00B6E31A /* src */,
 				10D0906D19F494990043D458 /* t */,
 				107923FE19A3239200C52AD6 /* examples */,
@@ -607,6 +626,7 @@
 				105534FA1A460F4200627ECB /* 50sni.t */,
 				105534FE1A46134A00627ECB /* 80issues61.t */,
 				105534FB1A460F4200627ECB /* Util.pm */,
+				104B9A451A5D1004009EEE64 /* 90live-fetch-ocsp-response.t */,
 			);
 			path = t;
 			sourceTree = "<group>";

@@ -364,11 +364,12 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     int fd;
 
 #ifdef __linux__
-    if ((fd = accept4(listener->fd, (void*)&addr, &addrlen, O_NONBLOCK)) == -1)
+    if ((fd = accept4(listener->fd, (void*)&addr, &addrlen, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
         return NULL;
 #else
     if ((fd = accept(listener->fd, (void*)&addr, &addrlen)) == -1)
         return NULL;
+    fcntl(fd, F_SETFD, FD_CLOEXEC);
     fcntl(fd, F_SETFL, O_NONBLOCK);
 #endif
 
@@ -380,8 +381,16 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
     int fd;
     struct st_h2o_evloop_socket_t *sock;
 
-    if ((fd = socket(addr->sa_family, SOCK_STREAM, IPPROTO_TCP)) == -1)
+    if ((fd = socket(addr->sa_family,
+        SOCK_STREAM
+#ifdef SOCK_CLOEXEC
+        | SOCK_CLOEXEC
+#endif
+        , IPPROTO_TCP)) == -1)
         return NULL;
+#ifndef SOCK_CLOEXEC
+    fcntl(fd, F_SETFD, FD_CLOEXEC);
+#endif
     fcntl(fd, F_SETFL, O_NONBLOCK);
     if (! (connect(fd, addr, addrlen) == 0 || errno == EINPROGRESS)) {
         close(fd);

@@ -23,12 +23,15 @@
 #include <grp.h>
 #include <pthread.h>
 #include <signal.h>
+#include <spawn.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include "h2o/memory.h"
 #include "h2o/serverutil.h"
+#include "h2o/socket.h"
 #include "h2o/string_.h"
 
 void h2o_set_signal_handler(int signo, void (*cb)(int signo))
@@ -127,4 +130,60 @@ ssize_t h2o_server_starter_get_fds(int **_fds)
 
     *_fds = fds.entries;
     return fds.size;
+}
+
+int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *child_status)
+{
+    int respfds[2] = { -1, -1 };
+    posix_spawn_file_actions_t file_actions;
+    pid_t pid = -1;
+    int ret = -1;
+    extern char **environ;
+
+    h2o_buffer_init(resp, &h2o_socket_buffer_prototype);
+
+    /* create pipe for reading the result */
+    if (pipe(respfds) != 0)
+        goto Exit;
+
+    /* spawn */
+    posix_spawn_file_actions_init(&file_actions);
+    posix_spawn_file_actions_adddup2(&file_actions, respfds[1], 1);
+    if ((errno = posix_spawnp(&pid, cmd, &file_actions, NULL, argv, environ)) != 0) {
+        pid = -1;
+        goto Exit;
+    }
+    close(respfds[1]);
+    respfds[1] = -1;
+
+    /* read the response from pipe */
+    while (1) {
+        h2o_iovec_t buf = h2o_buffer_reserve(resp, 8192);
+        ssize_t r;
+        while ((r = read(respfds[0], buf.base, buf.len)) == -1 && errno == EINTR)
+            ;
+        if (r <= 0)
+            break;
+        (*resp)->size += r;
+    }
+
+Exit:
+    if (pid != -1) {
+        /* wait for the child to complete */
+        pid_t r;
+        while ((r = waitpid(pid, child_status, 0)) == -1 && errno == EINTR)
+            ;
+        if (r == pid) {
+            /* success */
+            ret = 0;
+        }
+    }
+    if (respfds[0] != -1)
+        close(respfds[0]);
+    if (respfds[1] != -1)
+        close(respfds[1]);
+    if (ret != 0)
+        h2o_buffer_dispose(resp);
+
+    return ret;
 }
