@@ -54,27 +54,46 @@ static void test_server_starter(void)
     ok(fds[0] == 4);
 }
 
-static void test_fetch_ocsp_response(void)
+static void test_read_command(void)
 {
+    char *argv[] = {
+        "t/00unit/assets/read_command.pl",
+        "hello",
+        NULL
+    };
     h2o_buffer_t *resp;
-    int ret;
+    int ret, status;
 
-    ret = h2o_get_ocsp_response("dummy.crt", "t/00unit/assets/fake_ocsp_response", &resp);
+    /* success */
+    ret = h2o_read_command(argv[0], argv, &resp, &status);
     ok(ret == 0);
     if (ret == 0) {
-        ok(h2o_memis(resp->bytes, resp->size, H2O_STRLIT("dummy.crt")));
+        ok(WIFEXITED(status));
+        ok(WEXITSTATUS(status) == 0);
+        ok(h2o_memis(resp->bytes, resp->size, H2O_STRLIT("hello")));
         h2o_buffer_dispose(&resp);
     }
 
-    setenv("FAKE_OCSP_RESPONSE_EXIT_STATUS", "75", 1);
-    ret = h2o_get_ocsp_response("dummy.crt", "t/00unit/assets/fake_ocsp_response", &resp);
-    ok(ret == 75);
+    /* exit status */
+    setenv("READ_COMMAND_EXIT_STATUS", "75", 1);
+    ret = h2o_read_command(argv[0], argv, &resp, &status);
+    ok(ret == 0);
+    if (ret == 0) {
+        ok(WIFEXITED(status));
+        ok(WEXITSTATUS(status) == 75);
+        ok(h2o_memis(resp->bytes, resp->size, H2O_STRLIT("hello")));
+        h2o_buffer_dispose(&resp);
+    }
+    unsetenv("READ_COMMAND_EXIT_STATUS");
 
-    unsetenv("FAKE_OCSP_RESPONSE_EXIT_STATUS");
+    /* command not an executable */
+    argv[0] = "t/00unit/assets";
+    ret = h2o_read_command(argv[0], argv, &resp, &status);
+    ok(ret != 0);
 }
 
 void test_lib__serverutil_c(void)
 {
     subtest("server-starter", test_server_starter);
-    subtest("fetch-ocsp-response", test_fetch_ocsp_response);
+    subtest("read-command", test_read_command);
 }
