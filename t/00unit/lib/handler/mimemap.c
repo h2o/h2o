@@ -19,8 +19,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include "../test.h"
-#include "../../../lib/mimemap.c"
+#include "../../test.h"
+#include "../../../../lib/handler/mimemap.c"
 
 void test_lib__mimemap_c()
 {

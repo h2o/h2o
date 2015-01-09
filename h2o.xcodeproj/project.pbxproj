@@ -365,6 +365,77 @@
 			path = h2o;
 			sourceTree = "<group>";
 		};
+		104B9A4A1A5FA7E5009EEE64 /* common */ = {
+			isa = PBXGroup;
+			children = (
+				107923BA19A3217300C52AD6 /* memory.c */,
+				10D0905419F102C70043D458 /* http1client.c */,
+				104B9A241A4A4FEE009EEE64 /* serverutil.c */,
+				101788B119B561AA0084C6D8 /* socket.c */,
+				1065E70919BF18A600686E72 /* socket */,
+				10EC2A371A0B4DC70083514F /* socketpool.c */,
+				10D0905A19F230280043D458 /* string.c */,
+				1065E6F819BEBAC600686E72 /* timeout.c */,
+			);
+			path = common;
+			sourceTree = "<group>";
+		};
+		104B9A4B1A5FA804009EEE64 /* handler */ = {
+			isa = PBXGroup;
+			children = (
+				105534D91A3C7A2000627ECB /* configurator */,
+				101B670B19ADD3380084A351 /* access_log.c */,
+				107923AE19A3217300C52AD6 /* chunked.c */,
+				107923AF19A3217300C52AD6 /* file.c */,
+				105534E91A42A83700627ECB /* file */,
+				107923BB19A3217300C52AD6 /* mimemap.c */,
+				10D0907219F633B00043D458 /* proxy.c */,
+			);
+			path = handler;
+			sourceTree = "<group>";
+		};
+		104B9A4C1A5FA8B5009EEE64 /* core */ = {
+			isa = PBXGroup;
+			children = (
+				105534EE1A440FC800627ECB /* config.c */,
+				10F4180419CA75C500B6E31A /* configurator.c */,
+				107923B919A3217300C52AD6 /* context.c */,
+				107923B019A3217300C52AD6 /* headers.c */,
+				107923BC19A3217300C52AD6 /* request.c */,
+				107923BF19A3217300C52AD6 /* token.c */,
+				1079245319A32C0800C52AD6 /* token_table.h */,
+				107923C019A3217300C52AD6 /* util.c */,
+			);
+			path = core;
+			sourceTree = "<group>";
+		};
+		104B9A4D1A5FAA7B009EEE64 /* common */ = {
+			isa = PBXGroup;
+			children = (
+				104B9A271A4A5139009EEE64 /* serverutil.c */,
+				105534C61A3BB29100627ECB /* string.c */,
+			);
+			path = common;
+			sourceTree = "<group>";
+		};
+		104B9A4E1A5FAA91009EEE64 /* core */ = {
+			isa = PBXGroup;
+			children = (
+				104B9A471A5F9472009EEE64 /* headers.c */,
+			);
+			path = core;
+			sourceTree = "<group>";
+		};
+		104B9A4F1A5FAAA5009EEE64 /* handler */ = {
+			isa = PBXGroup;
+			children = (
+				105534BD1A3B8F7700627ECB /* file.c */,
+				105534C21A3B917000627ECB /* mimemap.c */,
+				105534C81A3BB41C00627ECB /* proxy.c */,
+			);
+			path = handler;
+			sourceTree = "<group>";
+		};
 		105534BF1A3B90E600627ECB /* http2 */ = {
 			isa = PBXGroup;
 			children = (
@@ -386,13 +457,10 @@
 		105534C51A3BB1E700627ECB /* lib */ = {
 			isa = PBXGroup;
 			children = (
+				104B9A4D1A5FAA7B009EEE64 /* common */,
+				104B9A4E1A5FAA91009EEE64 /* core */,
+				104B9A4F1A5FAAA5009EEE64 /* handler */,
 				105534BF1A3B90E600627ECB /* http2 */,
-				105534BD1A3B8F7700627ECB /* file.c */,
-				105534C21A3B917000627ECB /* mimemap.c */,
-				105534C81A3BB41C00627ECB /* proxy.c */,
-				104B9A271A4A5139009EEE64 /* serverutil.c */,
-				105534C61A3BB29100627ECB /* string.c */,
-				104B9A471A5F9472009EEE64 /* headers.c */,
 			);
 			path = lib;
 			sourceTree = "<group>";
@@ -535,31 +603,11 @@
 		107923AD19A3217300C52AD6 /* lib */ = {
 			isa = PBXGroup;
 			children = (
-				101B670B19ADD3380084A351 /* access_log.c */,
-				107923AE19A3217300C52AD6 /* chunked.c */,
-				105534EE1A440FC800627ECB /* config.c */,
-				10F4180419CA75C500B6E31A /* configurator.c */,
-				105534D91A3C7A2000627ECB /* configurator */,
-				107923B919A3217300C52AD6 /* context.c */,
-				107923AF19A3217300C52AD6 /* file.c */,
-				105534E91A42A83700627ECB /* file */,
-				107923B019A3217300C52AD6 /* headers.c */,
+				104B9A4A1A5FA7E5009EEE64 /* common */,
+				104B9A4C1A5FA8B5009EEE64 /* core */,
+				104B9A4B1A5FA804009EEE64 /* handler */,
 				107923B119A3217300C52AD6 /* http1.c */,
-				10D0905419F102C70043D458 /* http1client.c */,
 				107923B219A3217300C52AD6 /* http2 */,
-				107923BA19A3217300C52AD6 /* memory.c */,
-				107923BB19A3217300C52AD6 /* mimemap.c */,
-				10D0907219F633B00043D458 /* proxy.c */,
-				107923BC19A3217300C52AD6 /* request.c */,
-				104B9A241A4A4FEE009EEE64 /* serverutil.c */,
-				101788B119B561AA0084C6D8 /* socket.c */,
-				1065E70919BF18A600686E72 /* socket */,
-				10EC2A371A0B4DC70083514F /* socketpool.c */,
-				10D0905A19F230280043D458 /* string.c */,
-				1065E6F819BEBAC600686E72 /* timeout.c */,
-				107923BF19A3217300C52AD6 /* token.c */,
-				1079245319A32C0800C52AD6 /* token_table.h */,
-				107923C019A3217300C52AD6 /* util.c */,
 				107923C119A3217300C52AD6 /* websocket.c */,
 			);
 			path = lib;

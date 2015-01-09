@@ -19,8 +19,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include "../test.h"
-#include "../../../lib/file.c"
+#include "../../test.h"
+#include "../../../../lib/handler/file.c"
 
 static int check_header(h2o_res_t *res, const h2o_token_t *header_name, const char *expected)
 {

@@ -37,53 +37,58 @@ ENDIF (WSLAY_FOUND)
 
 SET(LIB_SOURCE_FILES
     deps/picohttpparser/picohttpparser.c
-    lib/access_log.c
-    lib/chunked.c
-    lib/context.c
-    lib/config.c
-    lib/configurator.c
-    lib/configurator/access_log.c
-    lib/configurator/file.c
-    lib/configurator/proxy.c
-    lib/file.c
-    lib/headers.c
+
+    lib/common/memory.c
+    lib/common/http1client.c
+    lib/common/serverutil.c
+    lib/common/socket.c
+    lib/common/socketpool.c
+    lib/common/string.c
+    lib/common/timeout.c
+
+    lib/core/config.c
+    lib/core/configurator.c
+    lib/core/context.c
+    lib/core/headers.c
+    lib/core/request.c
+    lib/core/token.c
+    lib/core/util.c
+
+    lib/handler/access_log.c
+    lib/handler/chunked.c
+    lib/handler/file.c
+    lib/handler/mimemap.c
+    lib/handler/proxy.c
+    lib/handler/configurator/access_log.c
+    lib/handler/configurator/file.c
+    lib/handler/configurator/proxy.c
+
     lib/http1.c
-    lib/http1client.c
+
     lib/http2/connection.c
     lib/http2/frame.c
     lib/http2/hpack.c
-    lib/http2/stream.c
-    lib/memory.c
-    lib/mimemap.c
-    lib/proxy.c
-    lib/request.c
-    lib/serverutil.c
-    lib/socket.c
-    lib/socketpool.c
-    lib/string.c
-    lib/timeout.c
-    lib/token.c
-    lib/util.c)
+    lib/http2/stream.c)
 
 SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}
     deps/picotest/picotest.c
     t/00unit/test.c
-    t/00unit/lib/http2/hpack.c
-    t/00unit/lib/file.c
-    t/00unit/lib/headers.c
-    t/00unit/lib/mimemap.c
-    t/00unit/lib/proxy.c
-    t/00unit/lib/serverutil.c
-    t/00unit/lib/string.c)
+    t/00unit/lib/common/serverutil.c
+    t/00unit/lib/common/string.c
+    t/00unit/lib/core/headers.c
+    t/00unit/lib/handler/file.c
+    t/00unit/lib/handler/mimemap.c
+    t/00unit/lib/handler/proxy.c
+    t/00unit/lib/http2/hpack.c)
 LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
-    lib/http2/hpack.c
-    lib/file.c
-    lib/headers.c
-    lib/mimemap.c
-    lib/proxy.c
-    lib/serverutil.c
-    lib/string.c)
+    lib/common/serverutil.c
+    lib/common/string.c
+    lib/core/headers.c
+    lib/handler/file.c
+    lib/handler/mimemap.c
+    lib/handler/proxy.c
+    lib/http2/hpack.c)
 
 SET(EXTRA_LIBRARIES ${CMAKE_DL_LIBS})
 

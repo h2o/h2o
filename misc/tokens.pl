@@ -85,8 +85,8 @@ EOT
 close $fh;
 
 # generate token_table.h
-open $fh, '>', 'lib/token_table.h'
-    or die "failed to open lib/token_table.h:$!";
+open $fh, '>', 'lib/core/token_table.h'
+    or die "failed to open lib/core/token_table.h:$!";
 print $fh render_mt(<< 'EOT', \@tokens, LICENSE)->as_string;
 ? my ($tokens, $license) = @_;
 <?= $license ?>

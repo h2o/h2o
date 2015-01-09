@@ -19,8 +19,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include "../test.h"
-#include "../../../lib/string.c"
+#include "../../test.h"
+#include "../../../../lib/common/string.c"
 
 static void test_decode_base64(void)
 {

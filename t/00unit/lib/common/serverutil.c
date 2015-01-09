@@ -20,8 +20,8 @@
  * IN THE SOFTWARE.
  */
 #include <stdlib.h>
-#include "../test.h"
-#include "../../../lib/serverutil.c"
+#include "../../test.h"
+#include "../../../../lib/common/serverutil.c"
 
 static void test_server_starter(void)
 {
