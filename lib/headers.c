@@ -121,6 +121,24 @@ void h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const c
     }
 }
 
+void h2o_add_header_token(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len)
+{
+    ssize_t cursor = h2o_find_header(headers, token, -1);
+    if (cursor != -1) {
+        h2o_iovec_t src = headers->entries[cursor].value, dst;
+        dst.len = src.len + value_len + 2;
+        dst.base = h2o_mem_alloc_pool(pool, dst.len + 1);
+        dst.base[dst.len] = '\0';
+        memcpy(dst.base, src.base, src.len);
+        dst.base[src.len] = ',';
+        dst.base[src.len + 1] = ' ';
+        memcpy(dst.base + src.len + 2, value, value_len);
+        headers->entries[cursor].value = dst;
+    } else {
+        h2o_add_header(pool, headers, token, value, value_len);
+    }
+}
+
 ssize_t h2o_delete_header(h2o_headers_t *headers, ssize_t cursor)
 {
     assert(cursor != -1);

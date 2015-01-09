@@ -19,41 +19,29 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__t__test_h
-#define h2o__t__test_h
+#include "../test.h"
+#include "../../../lib/headers.c"
 
-#include "picotest.h"
-#include "h2o.h"
+static void test_add_header_token(void)
+{
+    h2o_mem_pool_t pool;
+    h2o_headers_t headers = {};
 
-typedef struct st_h2o_loopback_conn_t {
-    h2o_conn_t super;
-    /**
-     * the response
-     */
-    h2o_buffer_t *body;
-    /* internal structure */
-    h2o_ostream_t _ostr_final;
-    int _is_complete;
-    /**
-     * the HTTP request / response (intentionally placed at the last, since it is a large structure and has it's own ctor)
-     */
-    h2o_req_t req;
-} h2o_loopback_conn_t;
+    h2o_mem_init_pool(&pool);
 
-h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx);
-void h2o_loopback_destroy(h2o_loopback_conn_t *conn);
-void h2o_loopback_run_loop(h2o_loopback_conn_t *conn);
+    h2o_add_header_token(&pool, &headers, H2O_TOKEN_VARY, H2O_STRLIT("Cookie"));
+    ok(headers.size == 1);
+    ok(headers.entries[0].name == &H2O_TOKEN_VARY->buf);
+    ok(h2o_memis(headers.entries[0].value.base, headers.entries[0].value.len, H2O_STRLIT("Cookie")));
+    h2o_add_header_token(&pool, &headers, H2O_TOKEN_VARY, H2O_STRLIT("Accept-Encoding"));
+    ok(headers.size == 1);
+    ok(headers.entries[0].name == &H2O_TOKEN_VARY->buf);
+    ok(h2o_memis(headers.entries[0].value.base, headers.entries[0].value.len, H2O_STRLIT("Cookie, Accept-Encoding")));
 
-extern h2o_loop_t *test_loop;
+    h2o_mem_clear_pool(&pool);
+}
 
-char *sha1sum(const void *src, size_t len);
-
-void test_lib__serverutil_c(void);
-void test_lib__string_c(void);
-void test_lib__headers_c(void);
-void test_lib__http2__hpack(void);
-void test_lib__file_c(void);
-void test_lib__mimemap_c(void);
-void test_lib__proxy_c(void);
-
-#endif
+void test_lib__headers_c(void)
+{
+    subtest("add_header_token", test_add_header_token);
+}
