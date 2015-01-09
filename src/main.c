@@ -33,8 +33,10 @@
 #include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <openssl/crypto.h>
@@ -1169,7 +1171,10 @@ int main(int argc, char **argv)
         if (getrlimit(RLIMIT_NOFILE, &limit) == 0) {
             limit.rlim_cur = limit.rlim_max;
             if (setrlimit(RLIMIT_NOFILE, &limit) == 0
-                || (limit.rlim_cur = OPEN_MAX, setrlimit(RLIMIT_NOFILE, &limit)) == 0) {
+#ifdef __APPLE__
+                || (limit.rlim_cur = OPEN_MAX, setrlimit(RLIMIT_NOFILE, &limit)) == 0
+#endif
+                ) {
                 fprintf(stderr, "[INFO] raised RLIMIT_NOFILE to %d\n", (int)limit.rlim_cur);
             }
         }
