@@ -1164,6 +1164,17 @@ int main(int argc, char **argv)
         return 0;
     }
 
+    { /* raise RLIMIT_NOFILE */
+        struct rlimit limit;
+        if (getrlimit(RLIMIT_NOFILE, &limit) == 0) {
+            limit.rlim_cur = limit.rlim_max;
+            if (setrlimit(RLIMIT_NOFILE, &limit) == 0
+                || (limit.rlim_cur = OPEN_MAX, setrlimit(RLIMIT_NOFILE, &limit)) == 0) {
+                fprintf(stderr, "[INFO] raised RLIMIT_NOFILE to %d\n", (int)limit.rlim_cur);
+            }
+        }
+    }
+
     if (config.running_user != NULL) {
         if (h2o_setuidgid(config.running_user) != 0) {
             fprintf(stderr, "failed to change the running user (are you sure you are running as root?)\n");
