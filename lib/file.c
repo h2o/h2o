@@ -39,6 +39,8 @@ struct st_h2o_sendfile_generator_t {
     char last_modified_buf[H2O_TIMESTR_RFC1123_LEN + 1];
     char etag_buf[sizeof("\"deadbeef-deadbeefdeadbeef\"")];
     size_t etag_len;
+    char is_gzip;
+    char send_vary;
     char *buf;
 };
 
@@ -124,17 +126,33 @@ static int do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_t *buf)
     return 1;
 }
 
-static struct st_h2o_sendfile_generator_t *create_generator(h2o_mem_pool_t *pool, const char *path, int *is_dir, int flags)
+static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, const char *path, size_t path_len, int *is_dir, int flags)
 {
     struct st_h2o_sendfile_generator_t *self;
-    int fd;
+    int fd, is_gzip;
     struct stat st;
     size_t bufsz;
 
     *is_dir = 0;
 
+    if ((flags & H2O_FILE_FLAG_SEND_GZIP) != 0 && req->version >= 0x101) {
+        ssize_t header_index;
+        if ((header_index = h2o_find_header(&req->headers, H2O_TOKEN_ACCEPT_ENCODING, -1)) != -1
+            && h2o_contains_token(req->headers.entries[header_index].value.base, req->headers.entries[header_index].value.len, H2O_STRLIT("gzip"))) {
+            char *gzpath = h2o_mem_alloc_pool(&req->pool, path_len + 4);
+            memcpy(gzpath, path, path_len);
+            strcpy(gzpath + path_len, ".gz");
+            if ((fd = open(gzpath, O_RDONLY | O_CLOEXEC)) != -1) {
+                is_gzip = 1;
+                goto Opened;
+            }
+        }
+    }
     if ((fd = open(path, O_RDONLY | O_CLOEXEC)) == -1)
         return NULL;
+    is_gzip = 0;
+
+Opened:
     if (fstat(fd, &st) != 0) {
         perror("fstat");
         close(fd);
@@ -149,7 +167,7 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_mem_pool_t *pool
     bufsz = MAX_BUF_SIZE;
     if (st.st_size < bufsz)
         bufsz = st.st_size;
-    self = h2o_mem_alloc_pool(pool, sizeof(*self));
+    self = h2o_mem_alloc_pool(&req->pool, sizeof(*self));
     self->super.proceed = do_proceed;
     self->super.stop = do_close;
     self->fd = fd;
@@ -162,6 +180,8 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_mem_pool_t *pool
     } else {
         self->etag_len = sprintf(self->etag_buf, "\"%08x-%zx\"", (unsigned)st.st_mtime, (size_t)st.st_size);
     }
+    self->is_gzip = is_gzip;
+    self->send_vary = (flags & H2O_FILE_FLAG_SEND_GZIP) != 0;
 
     return self;
 }
@@ -179,6 +199,10 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LAST_MODIFIED, self->last_modified_buf, H2O_TIMESTR_RFC1123_LEN);
     if (self->etag_len != 0)
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ETAG, self->etag_buf, self->etag_len);
+    if (self->send_vary)
+        h2o_add_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
+    if (self->is_gzip)
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_ENCODING, H2O_STRLIT("gzip"));
 
     /* send data */
     h2o_start_response(req, &self->super);
@@ -199,7 +223,7 @@ int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *pa
     struct st_h2o_sendfile_generator_t *self;
     int is_dir;
 
-    if ((self = create_generator(&req->pool, path, &is_dir, flags)) == NULL)
+    if ((self = create_generator(req, path, strlen(path), &is_dir, flags)) == NULL)
         return -1;
     /* note: is_dir is not handled */
     do_send_file(self, req, status, reason, mime_type);
@@ -309,7 +333,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         for (index_file = self->index_files; index_file->base != NULL; ++index_file) {
             memcpy(rpath + rpath_len, index_file->base, index_file->len);
             rpath[rpath_len + index_file->len] = '\0';
-            if ((generator = create_generator(&req->pool, rpath, &is_dir, self->flags)) != NULL) {
+            if ((generator = create_generator(req, rpath, rpath_len + index_file->len, &is_dir, self->flags)) != NULL) {
                 rpath_len += index_file->len;
                 goto Opened;
             }
@@ -329,7 +353,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         }
     } else {
         rpath[rpath_len] = '\0';
-        if ((generator = create_generator(&req->pool, rpath, &is_dir, self->flags)) != NULL)
+        if ((generator = create_generator(req, rpath, rpath_len, &is_dir, self->flags)) != NULL)
             goto Opened;
         if (is_dir)
             return redirect_to_dir(req, req->path.base, req->path.len);
