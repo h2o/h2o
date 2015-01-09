@@ -1055,6 +1055,7 @@ static void setup_configurators(struct config_t *conf)
     }
 
     h2o_access_log_register_configurator(&conf->globalconf);
+    h2o_expires_register_configurator(&conf->globalconf);
     h2o_file_register_configurator(&conf->globalconf);
     h2o_proxy_register_configurator(&conf->globalconf);
 }

@@ -701,6 +701,30 @@ void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
  */
 void h2o_chunked_register(h2o_pathconf_t *pathconf);
 
+/* lib/expires.c */
+
+enum {
+    H2O_EXPIRES_MODE_ABSOLUTE,
+    H2O_EXPIRES_MODE_MAX_AGE
+};
+
+typedef struct st_h2o_expires_args_t {
+    int mode;
+    union {
+        const char* absolute;
+        uint64_t max_age;
+    } data;
+} h2o_expires_args_t;
+
+/**
+ * registers a filter that adds an Expires (or Cache-Control) header
+ */
+void h2o_expires_register(h2o_pathconf_t *pathconf, h2o_expires_args_t *args);
+/**
+ *
+ */
+void h2o_expires_register_configurator(h2o_globalconf_t *conf);
+
 /* lib/file.c */
 
 enum {

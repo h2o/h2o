@@ -15,6 +15,8 @@
 		104B9A461A5F608A009EEE64 /* serverutil.c in Sources */ = {isa = PBXBuildFile; fileRef = 104B9A241A4A4FEE009EEE64 /* serverutil.c */; };
 		104B9A481A5F9472009EEE64 /* headers.c in Sources */ = {isa = PBXBuildFile; fileRef = 104B9A471A5F9472009EEE64 /* headers.c */; };
 		104B9A491A5F9638009EEE64 /* headers.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B019A3217300C52AD6 /* headers.c */; };
+		104B9A511A5FB096009EEE64 /* expires.c in Sources */ = {isa = PBXBuildFile; fileRef = 104B9A501A5FB096009EEE64 /* expires.c */; };
+		104B9A531A5FC7C4009EEE64 /* expires.c in Sources */ = {isa = PBXBuildFile; fileRef = 104B9A521A5FC7C4009EEE64 /* expires.c */; };
 		105534BE1A3B8F7700627ECB /* file.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534BD1A3B8F7700627ECB /* file.c */; };
 		105534C11A3B911300627ECB /* hpack.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534C01A3B911300627ECB /* hpack.c */; };
 		105534C31A3B917000627ECB /* mimemap.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534C21A3B917000627ECB /* mimemap.c */; };
@@ -199,6 +201,9 @@
 		104B9A401A5CD69B009EEE64 /* fetch-ocsp-response */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = "fetch-ocsp-response"; sourceTree = "<group>"; };
 		104B9A451A5D1004009EEE64 /* 90live-fetch-ocsp-response.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "90live-fetch-ocsp-response.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		104B9A471A5F9472009EEE64 /* headers.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers.c; sourceTree = "<group>"; };
+		104B9A501A5FB096009EEE64 /* expires.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = expires.c; sourceTree = "<group>"; };
+		104B9A521A5FC7C4009EEE64 /* expires.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = expires.c; sourceTree = "<group>"; };
+		104B9A541A60773E009EEE64 /* 50expires.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50expires.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534BD1A3B8F7700627ECB /* file.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = file.c; sourceTree = "<group>"; };
 		105534C01A3B911300627ECB /* hpack.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpack.c; sourceTree = "<group>"; };
 		105534C21A3B917000627ECB /* mimemap.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = mimemap.c; sourceTree = "<group>"; };
@@ -386,6 +391,7 @@
 				105534D91A3C7A2000627ECB /* configurator */,
 				101B670B19ADD3380084A351 /* access_log.c */,
 				107923AE19A3217300C52AD6 /* chunked.c */,
+				104B9A501A5FB096009EEE64 /* expires.c */,
 				107923AF19A3217300C52AD6 /* file.c */,
 				105534E91A42A83700627ECB /* file */,
 				107923BB19A3217300C52AD6 /* mimemap.c */,
@@ -469,6 +475,7 @@
 			isa = PBXGroup;
 			children = (
 				105534DA1A3C7A5400627ECB /* access_log.c */,
+				104B9A521A5FC7C4009EEE64 /* expires.c */,
 				105534DC1A3C7AA900627ECB /* file.c */,
 				105534DE1A3C7B9800627ECB /* proxy.c */,
 			);
@@ -668,6 +675,7 @@
 				104B9A311A59D7A2009EEE64 /* 40running-user.t */,
 				104B9A321A59E27A009EEE64 /* 40ssl-cipher-suite.t */,
 				104B9A221A47BBA1009EEE64 /* 40unix-socket.t */,
+				104B9A541A60773E009EEE64 /* 50expires.t */,
 				105534F61A460EF600627ECB /* 50file-config.t */,
 				105534F71A460F2E00627ECB /* 50mimemap.t */,
 				105534F81A460F2E00627ECB /* 50post-size-limit.t */,
@@ -911,6 +919,7 @@
 				101788B219B561AA0084C6D8 /* socket.c in Sources */,
 				10D0905519F102C70043D458 /* http1client.c in Sources */,
 				107923D219A3217300C52AD6 /* token.c in Sources */,
+				104B9A511A5FB096009EEE64 /* expires.c in Sources */,
 				105534DB1A3C7A5400627ECB /* access_log.c in Sources */,
 				107923CE19A3217300C52AD6 /* mimemap.c in Sources */,
 				107923C619A3217300C52AD6 /* connection.c in Sources */,
@@ -928,6 +937,7 @@
 				10BA72AA19AAD6300059392A /* stream.c in Sources */,
 				10D0907319F633B00043D458 /* proxy.c in Sources */,
 				107923CF19A3217300C52AD6 /* request.c in Sources */,
+				104B9A531A5FC7C4009EEE64 /* expires.c in Sources */,
 				107923CB19A3217300C52AD6 /* frame.c in Sources */,
 				104B9A491A5F9638009EEE64 /* headers.c in Sources */,
 				107923C219A3217300C52AD6 /* chunked.c in Sources */,

@@ -56,10 +56,12 @@ SET(LIB_SOURCE_FILES
 
     lib/handler/access_log.c
     lib/handler/chunked.c
+    lib/handler/expires.c
     lib/handler/file.c
     lib/handler/mimemap.c
     lib/handler/proxy.c
     lib/handler/configurator/access_log.c
+    lib/handler/configurator/expires.c
     lib/handler/configurator/file.c
     lib/handler/configurator/proxy.c
 
