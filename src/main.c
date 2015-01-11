@@ -1051,7 +1051,7 @@ static void setup_configurators(struct config_t *conf)
         h2o_configurator_define_command(
             c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
             on_config_num_threads,
-            "number of worker threads (default: 1)");
+            "number of worker threads (default: getconf NPROCESSORS_ONLN)");
     }
 
     h2o_access_log_register_configurator(&conf->globalconf);
@@ -1074,6 +1074,11 @@ int main(int argc, char **argv)
         NULL, /* thread_ids */
         {}, /* state */
     };
+
+    long sys_thread_count = sysconf(_SC_NPROCESSORS_ONLN);
+    if (sys_thread_count > config.num_threads) {
+      config.num_threads = sys_thread_count;
+    }
 
     const char *opt_config_file = "h2o.conf";
 
@@ -1201,7 +1206,7 @@ int main(int argc, char **argv)
 
     fprintf(stderr, "h2o server (pid:%d) is ready to serve requests\n", (int)getpid());
 
-    if (config.num_threads <= 1) {
+    if (config.num_threads == 1) {
         run_loop(&config);
     } else {
         config.thread_ids = alloca(sizeof(pthread_t) * config.num_threads);
