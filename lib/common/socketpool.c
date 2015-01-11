@@ -158,10 +158,7 @@ static void on_connect(h2o_socket_t *sock, int status)
 static void on_close(void *data)
 {
     h2o_socketpool_t *pool = data;
-
-    pthread_mutex_lock(&pool->_mutex);
-    --pool->_shared.count;
-    pthread_mutex_unlock(&pool->_mutex);
+    __sync_sub_and_fetch(&pool->_shared.count, 1);
 }
 
 void h2o_socketpool_connect(h2o_socketpool_t *pool, h2o_loop_t *loop, h2o_timeout_t *zero_timeout, h2o_socketpool_connect_cb cb, void *data)
@@ -212,9 +209,7 @@ void h2o_socketpool_connect(h2o_socketpool_t *pool, h2o_loop_t *loop, h2o_timeou
             sock->data = cbinfo;
             sock->on_close.cb = on_close;
             sock->on_close.data = pool;
-            pthread_mutex_lock(&pool->_mutex);
-            ++pool->_shared.count;
-            pthread_mutex_unlock(&pool->_mutex);
+            __sync_add_and_fetch(&pool->_shared.count, 1);
         }
         freeaddrinfo(res);
         return;
@@ -235,9 +230,7 @@ int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
     entry = h2o_mem_alloc(sizeof(*entry));
     if (h2o_socket_export(sock, &entry->sockinfo) != 0) {
         free(entry);
-        pthread_mutex_lock(&pool->_mutex);
-        --pool->_shared.count;
-        pthread_mutex_unlock(&pool->_mutex);
+        __sync_sub_and_fetch(&pool->_shared.count, 1);
         return -1;
     }
     memset(&entry->link, 0, sizeof(entry->link));
