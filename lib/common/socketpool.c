@@ -60,7 +60,7 @@ static void destroy_expired(h2o_socketpool_t *pool)
         if (entry->added_at > expire_before)
             break;
         destroy_attached(entry);
-        --pool->_shared.count;
+        __sync_sub_and_fetch(&pool->_shared.count, 1);
     }
 }
 
@@ -99,7 +99,7 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
     while (! h2o_linklist_is_empty(&pool->_shared.sockets)) {
         struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_shared.sockets.next);
         destroy_attached(entry);
-        --pool->_shared.count;
+        __sync_sub_and_fetch(&pool->_shared.count, 1);
     }
     pthread_mutex_unlock(&pool->_mutex);
     pthread_mutex_destroy(&pool->_mutex);
