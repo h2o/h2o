@@ -10,6 +10,8 @@ before_install:
   - sudo apt-get install -qq g++-4.8 libstdc++-4.8-dev
   - if [ "$CXX" = "g++" ]; then export CXX="g++-4.8"; fi
   - $CXX --version
+  # for speed, pre-install deps installed in `before_script` section as ubuntu packages
+  - sudo apt-get install -qq cpanminus libipc-signal-perl liblist-moreutils-perl libplack-perl libtest-tcp-perl libscope-guard-perl libwww-perl
 
 before_script:
   # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
