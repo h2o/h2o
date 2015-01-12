@@ -56,7 +56,7 @@ $ make
 $ sudo make install
 ```
 
-Extra components are requried for running tests.  A list of them can be found in the `before_script` section of [.travis.yml](https://github.com/h2o/h2o/blob/master/.travis.yml).  To execute the tests, install them and then run `make test`.
+Type `make test` to run the unit tests (note that extra components are required for running the tests; a complete list of prerequisites can be found in the `before_script` section of [.travis.yml](https://github.com/h2o/h2o/blob/master/.travis.yml)).
 
 ### Running the Server
 
