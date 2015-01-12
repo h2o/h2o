@@ -22,5 +22,6 @@ print "checking if cpanm is installed...\n";
 if (system("which cpanm > /dev/null 2>&1") != 0) {
     run_cmd("curl -L http://cpanmin.us | perl - --sudo --notest App::cpanminus");
 }
+
 install_module($_)
-    for qw(Net::EmptyPort Scope::Guard Starlet);
+    for @ARGV;
