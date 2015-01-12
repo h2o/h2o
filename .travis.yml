@@ -4,13 +4,21 @@ compiler:
   - gcc
 
 before_script:
-  - curl -L https://github.com/joyent/libuv/archive/v1.0.0-rc1.tar.gz | tar xzf -
-  - (cd libuv-1.0.0-rc1 && ./autogen.sh && ./configure --prefix=/usr && make && sudo make install)
-  - cmake .
-  - misc/install-perl-modules.pl
+  # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
+  - curl -L https://github.com/joyent/libuv/archive/v1.0.0.tar.gz | tar xzf -
+  - (cd libuv-1.0.0 && ./autogen.sh && ./configure --prefix=/usr && make && sudo make install)
+  # install perl modules (mandatory for testing)
+  - misc/install-perl-module.pl Net::EmptyPort
+  - misc/install-perl-module.pl Scope::Guard
+  - misc/install-perl-module.pl Starlet
+  # install the `ab` command (a.k.a. ApacheBench; optionally required for running some of the tests)
   - sudo apt-get install -qq apache2-utils
+  # install nghttp2 (optionally required for running HTTP/2 tests)
   - curl -L http://github.com/tatsuhiro-t/nghttp2/releases/download/v0.6.4/nghttp2-0.6.4.tar.gz | tar xzf -
   - (cd nghttp2-0.6.4 && ./configure --prefix=/usr --disable-threads --enable-app && make && sudo make install)
+  - cmake .
 
 script:
-  - make all test
+  - cmake .
+  - make all
+  - make test
