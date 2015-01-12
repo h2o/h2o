@@ -56,6 +56,8 @@ $ make
 $ sudo make install
 ```
 
+Extra components are requried for running tests.  A list of them can be found in the `before_script` section of [.travis.yml](https://github.com/h2o/h2o/blob/master/.travis.yml).  To execute the tests, install them and then run `make test`.
+
 ### Running the Server
 
 First, let's try running the server using a configuration file included in the `examples/` directory.  The command below invokes the standalone server using [examples/h2o/h2o.conf](https://github.com/kazuho/h2o/blob/master/examples/h2o/h2o.conf), which directs the server to listen on port 8080.  Try accessing [http://127.0.0.1:8080/](http://127.0.0.1:8080/).
