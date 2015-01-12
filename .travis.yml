@@ -13,9 +13,10 @@ before_script:
   - misc/install-perl-module.pl Starlet
   # install the `ab` command (a.k.a. ApacheBench; optionally required for running some of the tests)
   - sudo apt-get install -qq apache2-utils
-  # install nghttp2 (optionally required for running HTTP/2 tests)
-  - curl -L http://github.com/tatsuhiro-t/nghttp2/releases/download/v0.6.4/nghttp2-0.6.4.tar.gz | tar xzf -
-  - (cd nghttp2-0.6.4 && ./configure --prefix=/usr --disable-threads --enable-app && make && sudo make install)
+  # install nghttp2 with `--enable-app` (optionally required for running HTTP/2 tests)
+  - sudo apt-get install -qq libev-dev
+  - curl -L http://github.com/tatsuhiro-t/nghttp2/releases/download/v0.7.1/nghttp2-0.7.1.tar.gz | tar xzf -
+  - (cd nghttp2-0.7.1 && ./configure --prefix=/usr --disable-threads --enable-app && make && sudo make install)
   - cmake .
 
 script:
