@@ -80,4 +80,9 @@ ssize_t h2o_server_starter_get_fds(int **_fds);
  */
 int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *child_status);
 
+/**
+ * Gets the maximum number of threads the system supports
+ */
+size_t h2o_sys_thread_count();
+
 #endif

@@ -96,7 +96,7 @@ struct config_t {
     size_t num_listeners;
     struct passwd *running_user; /* NULL if not set */
     int max_connections;
-    unsigned num_threads;
+    size_t num_threads;
     pthread_t *thread_ids;
     struct {
         /* unused buffers exist to avoid false sharing of the cache line */
@@ -835,7 +835,7 @@ static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_config
 static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
-    return h2o_configurator_scanf(cmd, node, "%u", &conf->num_threads);
+    return h2o_configurator_scanf(cmd, node, "%zu", &conf->num_threads);
 }
 
 static void usage_print_directives(h2o_globalconf_t *conf)
@@ -1062,7 +1062,7 @@ static void setup_configurators(struct config_t *conf)
 
 int main(int argc, char **argv)
 {
-    static struct config_t config = {
+    struct config_t config = {
         {}, /* globalconf */
         0, /* dry-run */
         {}, /* server_starter */
@@ -1070,15 +1070,10 @@ int main(int argc, char **argv)
         0, /* num_listeners */
         NULL, /* running_user */
         1024, /* max_connections */
-        1, /* num_threads */
+        h2o_sys_thread_count(), /* num_threads */
         NULL, /* thread_ids */
         {}, /* state */
     };
-
-    long sys_thread_count = sysconf(_SC_NPROCESSORS_ONLN);
-    if (sys_thread_count > config.num_threads) {
-      config.num_threads = sys_thread_count;
-    }
 
     const char *opt_config_file = "h2o.conf";
 

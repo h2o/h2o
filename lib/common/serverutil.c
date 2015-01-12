@@ -187,3 +187,13 @@ Exit:
 
     return ret;
 }
+
+size_t h2o_sys_thread_count () {
+#if  defined(__APPLE__) && defined(__MACH__) || defined(__linux__)
+  size_t sys_thread_count = sysconf(_SC_NPROCESSORS_ONLN);
+#else
+  size_t sys_thread_count = 1;
+#endif
+  return sys_thread_count > 1 ? sys_thread_count : 1;
+}
+
