@@ -1,7 +1,7 @@
 language: cpp
 
 compiler:
-  - gcc
+  - clang
 
 before_script:
   # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
