@@ -11,8 +11,6 @@ plan skip_all => 'plackup not found'
 plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 
-my $upstream_port = empty_port();
-
 my %files = map { do {
     my $fn = DOC_ROOT . "/$_";
     +($_ => { size => (stat $fn)[7], md5 => md5_file($fn) });
@@ -26,14 +24,15 @@ for my $i (0..7) {
     my $h2o_keepalive = $i & 1 ? 1 : 0;
     my $starlet_keepalive = $i & 2 ? 1 : 0;
     my $starlet_force_chunked = $i & 4 ? 1 : 0;
+    my $upstream_port = empty_port();
 
     subtest "e2e (h2o:$h2o_keepalive, starlet: $starlet_keepalive, starlet-chunked: $starlet_force_chunked)" => sub {
         ok ! check_port($upstream_port), "upstream should be down now";
 
         local $ENV{FORCE_CHUNKED} = $starlet_force_chunked;
-        my $guard = spawn_upstream($starlet_keepalive ? +("--max-keepalive-reqs=100") : ());
+        my $guard = spawn_upstream($upstream_port, $starlet_keepalive ? +("--max-keepalive-reqs=100") : ());
 
-        run_tests_with_conf(<< "EOT");
+        run_tests_with_conf($upstream_port, << "EOT");
 hosts:
   default:
     paths:
@@ -49,6 +48,7 @@ EOT
 subtest 'upstream-down' => sub {
     plan skip_all => 'curl not found'
         unless prog_exists('curl');
+    my $upstream_port = empty_port();
     my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
@@ -62,21 +62,21 @@ EOT
 };
 
 sub spawn_upstream {
-    my @extra = @_;
+    my ($port, @extra) = @_;
     spawn_server(
         argv     => [
-            qw(plackup -MPlack::App::File -s Starlet --access-log /dev/null -p), $upstream_port,
+            qw(plackup -MPlack::App::File -s Starlet --access-log /dev/null -p), $port,
             @extra,
             ASSETS_DIR . "/upstream.psgi",
         ],
         is_ready =>  sub {
-            check_port($upstream_port);
+            check_port($port);
         },
     );
 }
 
 sub run_tests_with_conf {
-    my $h2o_conf = shift;
+    my ($upstream_port, $h2o_conf) = @_;
     my $server = spawn_h2o($h2o_conf);
     my $port = $server->{port};
     my $tls_port = $server->{tls_port};
