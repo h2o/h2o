@@ -54,7 +54,7 @@ h2o_linklist_t *h2o_http2_scheduler_iterate(h2o_http2_scheduler_t *scheduler, h2
         h2o_http2_sched_slot_t *slot = scheduler->_slots.entries[iter->slot_index];
         if (! h2o_linklist_is_empty(&slot->_active)) {
             h2o_linklist_t *link = slot->_active.next;
-            /* TODO unlink and then relink it from do_emit_write_req to make it round-robin */
+            h2o_linklist_unlink(link);
             return link;
         }
     }

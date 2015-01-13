@@ -722,14 +722,12 @@ int do_emit_writereq(h2o_http2_conn_t *conn)
             h2o_http2_stream_send_pending_data(conn, stream);
             if (h2o_http2_stream_has_pending_data(stream)) {
                 if (h2o_http2_window_get_window(&stream->output_window) <= 0) {
-                    h2o_linklist_unlink(&stream->_link.link);
                     h2o_http2_scheduler_link_blocked(stream->_link.sched_slot, &stream->_link.link);
                 } else {
-                    /* still in active */
                     assert(h2o_http2_conn_get_buffer_window(conn) <= 0);
+                    h2o_http2_scheduler_link_active(stream->_link.sched_slot, &stream->_link.link);
                 }
             } else {
-                h2o_linklist_unlink(&stream->_link.link);
                 h2o_http2_scheduler_link_starved(&conn->_write.scheduler, &stream->_link.link);
             }
             if (h2o_http2_conn_get_buffer_window(conn) <= 0)
