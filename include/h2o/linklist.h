@@ -28,6 +28,7 @@ extern "C" {
 
 #include <assert.h>
 #include <stddef.h>
+#include <stdio.h>
 
 /**
  * linklist
@@ -57,7 +58,8 @@ static int h2o_linklist_is_linked(h2o_linklist_t *node);
  * @param pos insert position; the node will be inserted before pos (or NULL in case *head is NULL)
  * @param node the node to be inserted
  */
-static void h2o_linklist_insert(h2o_linklist_t *pos, h2o_linklist_t *node);
+#define h2o_linklist_insert(pos, node) h2o_linklist_insert_((pos), (node), __FILE__, __LINE__)
+static void h2o_linklist_insert_(h2o_linklist_t *pos, h2o_linklist_t *node, const char *file, int line);
 /**
  * unlinks a node from the linked list
  */
@@ -80,8 +82,10 @@ inline int h2o_linklist_is_empty(h2o_linklist_t *anchor)
     return anchor->next == anchor;
 }
 
-inline void h2o_linklist_insert(h2o_linklist_t *pos, h2o_linklist_t *node)
+inline void h2o_linklist_insert_(h2o_linklist_t *pos, h2o_linklist_t *node, const char *file, int line)
 {
+    if (h2o_linklist_is_linked(node))
+        fprintf(stderr, "at %s:%d\n", file, line);
     assert(! h2o_linklist_is_linked(node));
 
     node->prev = pos->prev;
