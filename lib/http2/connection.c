@@ -67,8 +67,6 @@ static h2o_http2_stream_priolist_slot_t *priolist_link(h2o_http2_stream_priolist
     h2o_http2_stream_priolist_slot_t *slot;
     size_t i;
 
-    ++priolist->refcnt;
-
     /* locate the slot */
     for (i = 0; i != priolist->list.size; ++i) {
         slot = priolist->list.entries[i];
@@ -95,14 +93,11 @@ static h2o_http2_stream_priolist_slot_t *priolist_link(h2o_http2_stream_priolist
 static void priolist_unlink(h2o_http2_stream_priolist_t *priolist, h2o_http2_stream_priolist_slot_t *slot)
 {
     assert(slot->refcnt != 0);
-    assert(priolist->refcnt != 0);
     --slot->refcnt;
-    --priolist->refcnt;
 }
 
 static void priolist_destroy(h2o_http2_stream_priolist_t *priolist)
 {
-    assert(priolist->refcnt == 0);
     if (priolist->list.size != 0) {
         size_t i;
         for (i = 0; i != priolist->list.size; ++i) {

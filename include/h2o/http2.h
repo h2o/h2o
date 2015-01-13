@@ -170,7 +170,6 @@ typedef struct h2o_http2_stream_priolist_slot_t {
 } h2o_http2_stream_priolist_slot_t;
 
 typedef struct st_h2o_http2_stream_priolist_t {
-    size_t refcnt;
     H2O_VECTOR(h2o_http2_stream_priolist_slot_t*) list;
 } h2o_http2_stream_priolist_t;
 
