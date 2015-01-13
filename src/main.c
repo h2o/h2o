@@ -1070,7 +1070,7 @@ int main(int argc, char **argv)
         0, /* num_listeners */
         NULL, /* running_user */
         1024, /* max_connections */
-        h2o_sys_thread_count(), /* num_threads */
+        h2o_numproc(), /* num_threads */
         NULL, /* thread_ids */
         {}, /* state */
     };
