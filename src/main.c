@@ -96,7 +96,7 @@ struct config_t {
     size_t num_listeners;
     struct passwd *running_user; /* NULL if not set */
     int max_connections;
-    unsigned num_threads;
+    size_t num_threads;
     pthread_t *thread_ids;
     struct {
         /* unused buffers exist to avoid false sharing of the cache line */
@@ -835,7 +835,13 @@ static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_config
 static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
-    return h2o_configurator_scanf(cmd, node, "%u", &conf->num_threads);
+    if (h2o_configurator_scanf(cmd, node, "%zu", &conf->num_threads) != 0)
+        return -1;
+    if (conf->num_threads == 0) {
+        h2o_configurator_errprintf(cmd, node, "num-threads should be >=1");
+        return -1;
+    }
+    return 0;
 }
 
 static void usage_print_directives(h2o_globalconf_t *conf)
@@ -1051,7 +1057,7 @@ static void setup_configurators(struct config_t *conf)
         h2o_configurator_define_command(
             c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
             on_config_num_threads,
-            "number of worker threads (default: 1)");
+            "number of worker threads (default: getconf NPROCESSORS_ONLN)");
     }
 
     h2o_access_log_register_configurator(&conf->globalconf);
@@ -1062,7 +1068,7 @@ static void setup_configurators(struct config_t *conf)
 
 int main(int argc, char **argv)
 {
-    static struct config_t config = {
+    struct config_t config = {
         {}, /* globalconf */
         0, /* dry-run */
         {}, /* server_starter */
@@ -1070,7 +1076,7 @@ int main(int argc, char **argv)
         0, /* num_listeners */
         NULL, /* running_user */
         1024, /* max_connections */
-        1, /* num_threads */
+        h2o_numproc(), /* num_threads */
         NULL, /* thread_ids */
         {}, /* state */
     };
@@ -1201,7 +1207,8 @@ int main(int argc, char **argv)
 
     fprintf(stderr, "h2o server (pid:%d) is ready to serve requests\n", (int)getpid());
 
-    if (config.num_threads <= 1) {
+    assert(config.num_threads != 0);
+    if (config.num_threads == 1) {
         run_loop(&config);
     } else {
         config.thread_ids = alloca(sizeof(pthread_t) * config.num_threads);

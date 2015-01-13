@@ -29,6 +29,9 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#if ! defined(_SC_NPROCESSORS_ONLN)
+#include <sys/sysctl.h>
+#endif
 #include "h2o/memory.h"
 #include "h2o/serverutil.h"
 #include "h2o/socket.h"
@@ -186,4 +189,22 @@ Exit:
         h2o_buffer_dispose(resp);
 
     return ret;
+}
+
+size_t h2o_numproc()
+{
+#if defined(_SC_NPROCESSORS_ONLN)
+    return (size_t)sysconf(_SC_NPROCESSORS_ONLN);
+#elif defined(CTL_HW) && defined(HW_AVAILCPU)
+    int name[] = { CTL_HW, HW_AVAILCPU };
+    int ncpu;
+    size_t ncpu_sz = sizeof(ncpu);
+    if (sysctl(name, sizeof(name) / sizeof(name[0]), &ncpu, &ncpu_sz, NULL, 0) != 0 || sizeof(ncpu) != ncpu_sz) {
+        fprintf(stderr, "[ERROR] failed to obtain number of CPU cores, assuming as one\n");
+        ncpu = 1;
+    }
+    return ncpu;
+#else
+    return 1;
+#endif
 }
