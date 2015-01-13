@@ -12,12 +12,11 @@ before_install:
   - $CXX --version
   # for speed, pre-install deps installed in `before_script` section as ubuntu packages
   - sudo apt-get install -qq cpanminus libipc-signal-perl liblist-moreutils-perl libplack-perl libtest-tcp-perl libscope-guard-perl libwww-perl
-  - sudo apt-get install -qq valgrind
 
 before_script:
   # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
   - curl -L https://github.com/joyent/libuv/archive/v1.0.0.tar.gz | tar xzf -
-  - (cd libuv-1.0.0 && ./autogen.sh && ./configure --prefix=/usr && make && sudo make install)
+  #- (cd libuv-1.0.0 && ./autogen.sh && ./configure --prefix=/usr && make && sudo make install)
   # install perl modules (mandatory for testing)
   - misc/install-perl-module.pl Net::EmptyPort
   - misc/install-perl-module.pl Scope::Guard
