@@ -835,7 +835,13 @@ static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_config
 static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
-    return h2o_configurator_scanf(cmd, node, "%zu", &conf->num_threads);
+    if (h2o_configurator_scanf(cmd, node, "%zu", &conf->num_threads) != 0)
+        return -1;
+    if (conf->num_threads == 0) {
+        h2o_configurator_errprintf(cmd, node, "num-threads should be >=1");
+        return -1;
+    }
+    return 0;
 }
 
 static void usage_print_directives(h2o_globalconf_t *conf)
@@ -1201,6 +1207,7 @@ int main(int argc, char **argv)
 
     fprintf(stderr, "h2o server (pid:%d) is ready to serve requests\n", (int)getpid());
 
+    assert(config.num_threads != 0);
     if (config.num_threads == 1) {
         run_loop(&config);
     } else {
