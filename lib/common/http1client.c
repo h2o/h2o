@@ -85,7 +85,7 @@ static void on_body_content_length(h2o_socket_t *sock, int status)
     h2o_timeout_unlink(&client->_timeout);
 
     if (status != 0) {
-        on_body_error(client, "I/O error");
+        on_body_error(client, "I/O error (body; content-length)");
         return;
     }
 
@@ -126,7 +126,7 @@ static void on_body_chunked(h2o_socket_t *sock, int status)
     h2o_timeout_unlink(&client->_timeout);
 
     if (status != 0) {
-        on_body_error(client, "I/O error");
+        on_body_error(client, "I/O error (body; chunked)");
         return;
     }
 
@@ -171,6 +171,7 @@ static void on_body_chunked(h2o_socket_t *sock, int status)
 
 static void on_error_before_head(h2o_http1client_t *client, const char *errstr)
 {
+    assert(! client->_can_keepalive);
     client->_cb.on_head(client, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0);
     close_client(client);
 }
@@ -187,7 +188,7 @@ static void on_head(h2o_socket_t *sock, int status)
     h2o_timeout_unlink(&client->_timeout);
 
     if (status != 0) {
-        on_error_before_head(client , "I/O error");
+        on_error_before_head(client , "I/O error (head)");
         return;
     }
 
@@ -277,7 +278,7 @@ static void on_send_request(h2o_socket_t *sock, int status)
     h2o_timeout_unlink(&client->_timeout);
 
     if (status != 0) {
-        on_error_before_head(client, "I/O error");
+        on_error_before_head(client, "I/O error (send request)");
         return;
     }
 
