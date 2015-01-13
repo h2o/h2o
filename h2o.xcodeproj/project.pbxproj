@@ -17,6 +17,7 @@
 		104B9A491A5F9638009EEE64 /* headers.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B019A3217300C52AD6 /* headers.c */; };
 		104B9A511A5FB096009EEE64 /* expires.c in Sources */ = {isa = PBXBuildFile; fileRef = 104B9A501A5FB096009EEE64 /* expires.c */; };
 		104B9A531A5FC7C4009EEE64 /* expires.c in Sources */ = {isa = PBXBuildFile; fileRef = 104B9A521A5FC7C4009EEE64 /* expires.c */; };
+		104B9A561A650116009EEE64 /* scheduler.c in Sources */ = {isa = PBXBuildFile; fileRef = 104B9A551A650116009EEE64 /* scheduler.c */; };
 		105534BE1A3B8F7700627ECB /* file.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534BD1A3B8F7700627ECB /* file.c */; };
 		105534C11A3B911300627ECB /* hpack.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534C01A3B911300627ECB /* hpack.c */; };
 		105534C31A3B917000627ECB /* mimemap.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534C21A3B917000627ECB /* mimemap.c */; };
@@ -204,6 +205,7 @@
 		104B9A501A5FB096009EEE64 /* expires.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = expires.c; sourceTree = "<group>"; };
 		104B9A521A5FC7C4009EEE64 /* expires.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = expires.c; sourceTree = "<group>"; };
 		104B9A541A60773E009EEE64 /* 50expires.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50expires.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		104B9A551A650116009EEE64 /* scheduler.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = scheduler.c; sourceTree = "<group>"; };
 		105534BD1A3B8F7700627ECB /* file.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = file.c; sourceTree = "<group>"; };
 		105534C01A3B911300627ECB /* hpack.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpack.c; sourceTree = "<group>"; };
 		105534C21A3B917000627ECB /* mimemap.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = mimemap.c; sourceTree = "<group>"; };
@@ -629,6 +631,7 @@
 				107923B319A3217300C52AD6 /* connection.c */,
 				107923B819A3217300C52AD6 /* frame.c */,
 				107923B419A3217300C52AD6 /* hpack.c */,
+				104B9A551A650116009EEE64 /* scheduler.c */,
 				10BA72A919AAD6300059392A /* stream.c */,
 			);
 			path = http2;
@@ -942,6 +945,7 @@
 				104B9A491A5F9638009EEE64 /* headers.c in Sources */,
 				107923C219A3217300C52AD6 /* chunked.c in Sources */,
 				105534EF1A440FC800627ECB /* config.c in Sources */,
+				104B9A561A650116009EEE64 /* scheduler.c in Sources */,
 				107923D319A3217300C52AD6 /* util.c in Sources */,
 				105534CA1A3BB46900627ECB /* string.c in Sources */,
 				105534DF1A3C7B9800627ECB /* proxy.c in Sources */,

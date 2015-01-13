@@ -162,16 +162,21 @@ typedef struct st_h2o_http2_window_t {
     ssize_t _avail;
 } h2o_http2_window_t;
 
-typedef struct h2o_http2_stream_priolist_slot_t {
+typedef struct st_h2o_http2_sched_slot_t {
     uint16_t weight;
-    h2o_linklist_t active_streams; /* stream that has data, that can be sent */
-    h2o_linklist_t blocked_streams; /* stream that has data, but those blocked by the stream-level window */
-    size_t refcnt;
-} h2o_http2_stream_priolist_slot_t;
+    h2o_linklist_t _active; /* stream that has data, that can be sent */
+    h2o_linklist_t _blocked; /* stream that has data, but those blocked by the stream-level window */
+    size_t _refcnt;
+} h2o_http2_sched_slot_t;
 
-typedef struct st_h2o_http2_stream_priolist_t {
-    H2O_VECTOR(h2o_http2_stream_priolist_slot_t*) list;
-} h2o_http2_stream_priolist_t;
+typedef struct st_h2o_http2_scheduler_t {
+    H2O_VECTOR(h2o_http2_sched_slot_t*) _slots;
+    h2o_linklist_t _starved; /* stream that has no data to send */
+} h2o_http2_scheduler_t;
+
+typedef struct st_h2o_http2_scheduler_iterator_t {
+    size_t slot_index;
+} h2o_http2_scheduler_iterator_t;
 
 typedef enum enum_h2o_http2_stream_state_t {
     H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS,
@@ -197,7 +202,7 @@ struct st_h2o_http2_stream_t {
     /* link list governed by connection.c for handling various things */
     struct {
         h2o_linklist_t link;
-        h2o_http2_stream_priolist_slot_t *slot;
+        h2o_http2_sched_slot_t *sched_slot;
     } _link;
     /* placed at last since it is large and has it's own ctor */
     h2o_req_t req;
@@ -232,8 +237,7 @@ struct st_h2o_http2_conn_t {
     struct {
         h2o_buffer_t *buf;
         h2o_buffer_t *buf_in_flight;
-        h2o_http2_stream_priolist_t streams_with_pending_data;
-        h2o_linklist_t streams_without_pending_data;
+        h2o_http2_scheduler_t scheduler;
         h2o_timeout_entry_t timeout_entry;
         h2o_http2_window_t window;
     } _write;
@@ -274,6 +278,17 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
 static int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream);
 void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 
+/* scheduler */
+void h2o_http2_scheduler_init(h2o_http2_scheduler_t *scheduler);
+void h2o_http2_scheduler_destroy(h2o_http2_scheduler_t *scheduler);
+h2o_linklist_t *h2o_http2_scheduler_iterate(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_iterator_t *iter);
+static h2o_linklist_t *h2o_http2_scheduler_shift_starved(h2o_http2_scheduler_t *scheduler);
+h2o_http2_sched_slot_t *h2o_http2_scheduler_open(h2o_http2_scheduler_t *scheduler, uint16_t weight);
+void h2o_http2_scheduler_close(h2o_http2_scheduler_t *scheduler, h2o_http2_sched_slot_t *slot);
+static void h2o_http2_scheduler_link_active(h2o_http2_sched_slot_t *sched_slot, h2o_linklist_t *link);
+static void h2o_http2_scheduler_link_blocked(h2o_http2_sched_slot_t *sched_slot, h2o_linklist_t *link);
+static void h2o_http2_scheduler_link_starved(h2o_http2_scheduler_t *scheduler, h2o_linklist_t *link);
+
 /* misc */
 static void h2o_http2_window_init(h2o_http2_window_t *window, const h2o_http2_settings_t *peer_settings);
 static void h2o_http2_window_update(h2o_http2_window_t *window, ssize_t delta);
@@ -307,6 +322,35 @@ inline ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn)
 inline int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream)
 {
     return stream->_data.size != 0;
+}
+
+inline h2o_linklist_t *h2o_http2_scheduler_shift_starved(h2o_http2_scheduler_t *scheduler)
+{
+    h2o_linklist_t *link;
+
+    if (h2o_linklist_is_empty(&scheduler->_starved))
+        return NULL;
+    link = scheduler->_starved.next;
+    h2o_linklist_unlink(link);
+    return link;
+}
+
+inline void h2o_http2_scheduler_link_active(h2o_http2_sched_slot_t *sched_slot, h2o_linklist_t *link)
+{
+    assert(! h2o_linklist_is_linked(link));
+    h2o_linklist_insert(&sched_slot->_active, link);
+}
+
+inline void h2o_http2_scheduler_link_blocked(h2o_http2_sched_slot_t *sched_slot, h2o_linklist_t *link)
+{
+    assert(! h2o_linklist_is_linked(link));
+    h2o_linklist_insert(&sched_slot->_blocked, link);
+}
+
+inline void h2o_http2_scheduler_link_starved(h2o_http2_scheduler_t *scheduler, h2o_linklist_t *link)
+{
+    assert(! h2o_linklist_is_linked(link));
+    h2o_linklist_insert(&scheduler->_starved, link);
 }
 
 inline void h2o_http2_window_init(h2o_http2_window_t *window, const h2o_http2_settings_t *peer_settings)

@@ -70,6 +70,7 @@ SET(LIB_SOURCE_FILES
     lib/http2/connection.c
     lib/http2/frame.c
     lib/http2/hpack.c
+    lib/http2/scheduler.c
     lib/http2/stream.c)
 
 SET(UNIT_TEST_SOURCE_FILES
