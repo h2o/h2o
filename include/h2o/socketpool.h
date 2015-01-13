@@ -45,12 +45,11 @@ typedef struct st_h2o_socketpool_t {
         h2o_timeout_t timeout;
         h2o_timeout_entry_t entry;
     } _interval_cb;
-    /* mutex */
-    pthread_mutex_t _mutex;
     /* vars that are modified by multiple threads */
     struct {
-        size_t count;
-        h2o_linklist_t sockets; /* list of struct pool_entry_t defined in socket/pool.c */
+        size_t count; /* synchronous operations should be used to access the variable */
+        pthread_mutex_t mutex;
+        h2o_linklist_t sockets; /* guarded by the mutex; list of struct pool_entry_t defined in socket/pool.c */
     } _shared;
 } h2o_socketpool_t;
 
