@@ -171,6 +171,7 @@ static void on_body_chunked(h2o_socket_t *sock, int status)
 
 static void on_error_before_head(h2o_http1client_t *client, const char *errstr)
 {
+    assert(! client->_can_keepalive);
     client->_cb.on_head(client, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0);
     close_client(client);
 }
