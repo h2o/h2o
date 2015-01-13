@@ -85,7 +85,7 @@ sub spawn_server {
 # returns a hash containing `port`, `tls_port`, `guard`
 sub spawn_h2o {
     my ($conf) = @_;
-    my @prefix;
+    my @prefix = qw(valgrind --tool=memcheck);
 
     # decide the port numbers
     my $port = empty_port();

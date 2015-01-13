@@ -12,6 +12,7 @@ before_install:
   - $CXX --version
   # for speed, pre-install deps installed in `before_script` section as ubuntu packages
   - sudo apt-get install -qq cpanminus libipc-signal-perl liblist-moreutils-perl libplack-perl libtest-tcp-perl libscope-guard-perl libwww-perl
+  - sudo apt-get install -qq valgrind
 
 before_script:
   # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
@@ -24,11 +25,12 @@ before_script:
   # install the `ab` command (a.k.a. ApacheBench; optionally required for running some of the tests)
   - sudo apt-get install -qq apache2-utils
   # install nghttp2 with `--enable-app` (optionally required for running HTTP/2 tests)
-  - sudo apt-get install -qq libev-dev
-  - curl -L http://github.com/tatsuhiro-t/nghttp2/releases/download/v0.7.1/nghttp2-0.7.1.tar.gz | tar xzf -
-  - (cd nghttp2-0.7.1 && ./configure --prefix=/usr --disable-threads --enable-app && make && sudo make install)
+  #- sudo apt-get install -qq libev-dev
+  #- curl -L http://github.com/tatsuhiro-t/nghttp2/releases/download/v0.7.1/nghttp2-0.7.1.tar.gz | tar xzf -
+  #- (cd nghttp2-0.7.1 && ./configure --prefix=/usr --disable-threads --enable-app && make && sudo make install)
 
 script:
   - cmake .
   - make all
-  - make test
+  - prove -v t/50reverse-proxy.t
+  #- make test
