@@ -77,6 +77,9 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
 
     ctx->_module_configs = h2o_mem_alloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
     memset(ctx->_module_configs, 0, sizeof(*ctx->_module_configs) * config->_num_config_slots);
+
+    static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_lock(&mutex);
     for (i = 0; i != config->hosts.size; ++i) {
         h2o_hostconf_t *hostconf = config->hosts.entries + i;
         for (j = 0; j != hostconf->paths.size; ++j) {
@@ -85,6 +88,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
         }
         on_context_init(ctx, &hostconf->fallback_path);
     }
+    pthread_mutex_unlock(&mutex);
 }
 
 void h2o_context_dispose(h2o_context_t *ctx)
