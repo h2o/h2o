@@ -224,6 +224,11 @@ void h2o_vector__expand(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t eleme
  */
 static int h2o_memis(const void *target, size_t target_len, const void *test, size_t test_len);
 
+/**
+ * emits hexdump of given buffer to fp
+ */
+void h2o_dump_memory(FILE *fp, const char *buf, size_t len);
+
 /* inline defs */
 
 inline h2o_iovec_t h2o_iovec_init(const void *base, size_t len)
