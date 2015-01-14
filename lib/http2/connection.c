@@ -480,13 +480,20 @@ static void handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fra
 static void handle_window_update_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
 {
     h2o_http2_window_update_payload_t payload;
+    int ret;
 
-    if (h2o_http2_decode_window_update_payload(&payload, frame) != 0) {
-        if (frame->stream_id == 0)
-            enqueue_goaway_and_initiate_close(conn, H2O_HTTP2_ERROR_FLOW_CONTROL,
-                                              h2o_iovec_init(H2O_STRLIT("invalid connection-level window_update")));
-        else
-            send_stream_error(conn, frame->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
+    if ((ret = h2o_http2_decode_window_update_payload(&payload, frame)) != 0) {
+        switch (ret) {
+        case H2O_HTTP2_ERROR_FRAME_SIZE:
+            enqueue_goaway_and_initiate_close(conn, ret, (h2o_iovec_t){});
+            break;
+        default:
+            if (frame->stream_id == 0)
+                enqueue_goaway_and_initiate_close(conn, ret, h2o_iovec_init(H2O_STRLIT("invalid connection-level window_update")));
+            else
+                send_stream_error(conn, frame->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
+            break;
+        }
         return;
     }
 

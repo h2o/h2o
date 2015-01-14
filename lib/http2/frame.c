@@ -216,11 +216,11 @@ int h2o_http2_decode_goaway_payload(h2o_http2_goaway_payload_t *payload, const h
 int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *payload, const h2o_http2_frame_t *frame)
 {
     if (frame->length != 4)
-        return -1;
+        return H2O_HTTP2_ERROR_FRAME_SIZE;
 
     payload->window_size_increment = decode32u(frame->payload) & 0x7fffffff;
     if (payload->window_size_increment == 0)
-        return -1;
+        return H2O_HTTP2_ERROR_PROTOCOL;
 
     return 0;
 }
