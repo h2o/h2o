@@ -80,7 +80,6 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
     while ((rret = read(self->fd, self->buf, rlen)) == -1 && errno == EINTR)
         ;
     if (rret == -1) {
-        is_final = 1;
         req->http1_is_persistent = 0; /* FIXME need a better interface to dispose an errored response w. content-length */
         h2o_send(req, NULL, 0, 1);
         do_close(&self->super, req);
@@ -127,7 +126,6 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
     struct st_h2o_sendfile_generator_t *self;
     int fd, is_gzip;
     struct stat st;
-    size_t bufsz;
 
     *is_dir = 0;
 
@@ -161,9 +159,6 @@ Opened:
         return NULL;
     }
 
-    bufsz = MAX_BUF_SIZE;
-    if (st.st_size < bufsz)
-        bufsz = st.st_size;
     self = h2o_mem_alloc_pool(&req->pool, sizeof(*self));
     self->super.proceed = do_proceed;
     self->super.stop = do_close;
