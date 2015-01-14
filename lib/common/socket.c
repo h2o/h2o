@@ -313,7 +313,7 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
 {
 #if H2O_SOCKET_DUMP_WRITE
     {
-        size_t i, j, k;
+        size_t i;
         for (i = 0; i != bufcnt; ++i) {
             fprintf(stderr, "writing %zu bytes to fd:%d\n", bufs[i].len,
 #if H2O_USE_LIBUV
@@ -322,13 +322,7 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
                 ((struct st_h2o_evloop_socket_t*)sock)->fd
 #endif
 );
-            for (j = 0; j < bufs[i].len; j += 16) {
-                for (k = 0; k != 16; ++k) {
-                    if (j + k < bufs[i].len)
-                        fprintf(stderr, " %02x", (int)(unsigned char)bufs[i].base[j + k]);
-                }
-                fprintf(stderr, "\n");
-            }
+            h2o_dump_memory(stderr, bufs[i].base, bufs[i].len);
         }
     }
 #endif
