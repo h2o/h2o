@@ -50,15 +50,14 @@ struct st_h2o_decode_header_result_t {
 
 static inline int value_is_part_of_static_table(const h2o_iovec_t *value)
 {
-    return
-        &h2o_hpack_static_table[0].value <= value
-        && value < &h2o_hpack_static_table[sizeof(h2o_hpack_static_table) / sizeof(h2o_hpack_static_table[0])].value;
+    return &h2o_hpack_static_table[0].value <= value &&
+           value < &h2o_hpack_static_table[sizeof(h2o_hpack_static_table) / sizeof(h2o_hpack_static_table[0])].value;
 }
 
 static h2o_iovec_t *alloc_buf(h2o_mem_pool_t *pool, size_t len)
 {
     h2o_iovec_t *buf = h2o_mem_alloc_shared(pool, sizeof(h2o_iovec_t) + len + 1, NULL);
-    buf->base = (char*)buf + sizeof(h2o_iovec_t);
+    buf->base = (char *)buf + sizeof(h2o_iovec_t);
     buf->len = len;
     return buf;
 }
@@ -71,7 +70,7 @@ static int32_t decode_int(const uint8_t **src, const uint8_t *src_end, size_t pr
     if (*src == src_end)
         return -1;
 
-    value = (uint8_t)*(*src)++ & prefix_max;
+    value = (uint8_t) * (*src)++ & prefix_max;
     if (value != prefix_max) {
         return value;
     }
@@ -81,7 +80,7 @@ static int32_t decode_int(const uint8_t **src, const uint8_t *src_end, size_t pr
         src_end = *src + 4;
 
     value = prefix_max;
-    for (mult = 1; ; mult *= 128) {
+    for (mult = 1;; mult *= 128) {
         if (*src == src_end)
             return -1;
         value += (**src & 127) * mult;
@@ -120,7 +119,7 @@ static h2o_iovec_t *decode_huffman(h2o_mem_pool_t *pool, const uint8_t *src, siz
             return NULL;
     }
 
-    if (! maybe_eos)
+    if (!maybe_eos)
         return NULL;
 
     *dst = '\0';
@@ -140,7 +139,7 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, con
     is_huffman = (**src & 0x80) != 0;
     if ((len = decode_int(src, src_end, 7)) == -1)
         return NULL;
-    
+
     if (is_huffman) {
         if ((ret = decode_huffman(pool, *src, len)) == NULL)
             return NULL;
@@ -171,15 +170,16 @@ static void header_table_evict_one(h2o_hpack_header_table_t *table)
 
     entry = header_table_get(table, --table->num_entries);
     table->hpack_size -= entry->name->len + entry->value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET;
-    if (! h2o_iovec_is_token(entry->name))
+    if (!h2o_iovec_is_token(entry->name))
         h2o_mem_release_shared(entry->name);
-    if (! value_is_part_of_static_table(entry->value))
+    if (!value_is_part_of_static_table(entry->value))
         h2o_mem_release_shared(entry->value);
     entry->name = NULL;
     entry->value = NULL;
 }
 
-static struct st_h2o_hpack_header_table_entry_t *header_table_add(h2o_hpack_header_table_t *table, size_t size_add, size_t max_num_entries)
+static struct st_h2o_hpack_header_table_entry_t *header_table_add(h2o_hpack_header_table_t *table, size_t size_add,
+                                                                  size_t max_num_entries)
 {
     /* adjust the size */
     while (table->num_entries != 0 && table->hpack_size + size_add > table->hpack_capacity)
@@ -198,7 +198,8 @@ static struct st_h2o_hpack_header_table_entry_t *header_table_add(h2o_hpack_head
         size_t new_capacity = table->num_entries * 2;
         if (new_capacity < 16)
             new_capacity = 16;
-        struct st_h2o_hpack_header_table_entry_t *new_entries = h2o_mem_alloc(new_capacity * sizeof(struct st_h2o_hpack_header_table_entry_t));
+        struct st_h2o_hpack_header_table_entry_t *new_entries =
+            h2o_mem_alloc(new_capacity * sizeof(struct st_h2o_hpack_header_table_entry_t));
         if (table->num_entries != 0) {
             size_t src_index = table->entry_start_index, dst_index = 0;
             do {
@@ -219,7 +220,8 @@ static struct st_h2o_hpack_header_table_entry_t *header_table_add(h2o_hpack_head
     return table->entries + table->entry_start_index;
 }
 
-static int decode_header(h2o_mem_pool_t *pool, struct st_h2o_decode_header_result_t *result, h2o_hpack_header_table_t *hpack_header_table, const uint8_t ** const src, const uint8_t *src_end)
+static int decode_header(h2o_mem_pool_t *pool, struct st_h2o_decode_header_result_t *result,
+                         h2o_hpack_header_table_t *hpack_header_table, const uint8_t **const src, const uint8_t *src_end)
 {
     int32_t index = 0;
     int value_is_indexed = 0, do_index = 0;
@@ -267,14 +269,14 @@ static int decode_header(h2o_mem_pool_t *pool, struct st_h2o_decode_header_resul
     if (index != 0) {
         /* existing name (and value?) */
         if (index < HEADER_TABLE_OFFSET) {
-            result->name = (h2o_iovec_t*)h2o_hpack_static_table[index - 1].name;
+            result->name = (h2o_iovec_t *)h2o_hpack_static_table[index - 1].name;
             if (value_is_indexed) {
-                result->value = (h2o_iovec_t*)&h2o_hpack_static_table[index - 1].value;
+                result->value = (h2o_iovec_t *)&h2o_hpack_static_table[index - 1].value;
             }
         } else if (index - HEADER_TABLE_OFFSET < hpack_header_table->num_entries) {
             struct st_h2o_hpack_header_table_entry_t *entry = header_table_get(hpack_header_table, index - HEADER_TABLE_OFFSET);
             result->name = entry->name;
-            if (! h2o_iovec_is_token(result->name))
+            if (!h2o_iovec_is_token(result->name))
                 h2o_mem_link_shared(pool, result->name);
             if (value_is_indexed) {
                 result->value = entry->value;
@@ -290,24 +292,25 @@ static int decode_header(h2o_mem_pool_t *pool, struct st_h2o_decode_header_resul
             return -1;
         /* predefined header names should be interned */
         if ((name_token = h2o_lookup_token(result->name->base, result->name->len)) != NULL)
-            result->name = (h2o_iovec_t*)&name_token->buf;
+            result->name = (h2o_iovec_t *)&name_token->buf;
     }
 
     /* determine the value (if necessary) */
-    if (! value_is_indexed) {
+    if (!value_is_indexed) {
         if ((result->value = decode_string(pool, src, src_end)) == NULL)
             return -1;
     }
 
     /* add the decoded header to the header table if necessary */
     if (do_index) {
-        struct st_h2o_hpack_header_table_entry_t *entry = header_table_add(hpack_header_table, result->name->len + result->value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET, SIZE_MAX);
+        struct st_h2o_hpack_header_table_entry_t *entry =
+            header_table_add(hpack_header_table, result->name->len + result->value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET, SIZE_MAX);
         if (entry != NULL) {
             entry->name = result->name;
-            if (! h2o_iovec_is_token(entry->name))
+            if (!h2o_iovec_is_token(entry->name))
                 h2o_mem_addref_shared(entry->name);
             entry->value = result->value;
-            if (! value_is_part_of_static_table(entry->value))
+            if (!value_is_part_of_static_table(entry->value))
                 h2o_mem_addref_shared(entry->value);
         }
     }
@@ -322,20 +325,23 @@ static uint8_t *encode_status(uint8_t *dst, int status)
     assert(100 <= status && status <= 999);
 
     switch (status) {
-#define COMMON_CODE(code, st) case st: *dst++ = 0x80 | code; break
-    COMMON_CODE(8, 200);
-    COMMON_CODE(9, 204);
-    COMMON_CODE(10, 206);
-    COMMON_CODE(11, 304);
-    COMMON_CODE(12, 400);
-    COMMON_CODE(13, 404);
-    COMMON_CODE(14, 500);
+#define COMMON_CODE(code, st)                                                                                                      \
+    case st:                                                                                                                       \
+        *dst++ = 0x80 | code;                                                                                                      \
+        break
+        COMMON_CODE(8, 200);
+        COMMON_CODE(9, 204);
+        COMMON_CODE(10, 206);
+        COMMON_CODE(11, 304);
+        COMMON_CODE(12, 400);
+        COMMON_CODE(13, 404);
+        COMMON_CODE(14, 500);
 #undef COMMON_CODE
     default:
         /* use literal header field without indexing - indexed name */
         *dst++ = 8;
         *dst++ = 3;
-        sprintf((char*)dst, "%d", status);
+        sprintf((char *)dst, "%d", status);
         dst += 3;
         break;
     }
@@ -349,9 +355,9 @@ void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table)
         size_t index = header_table->entry_start_index;
         do {
             struct st_h2o_hpack_header_table_entry_t *entry = header_table->entries + index;
-            if (! h2o_iovec_is_token(entry->name))
+            if (!h2o_iovec_is_token(entry->name))
                 h2o_mem_release_shared(entry->name);
-            if (! value_is_part_of_static_table(entry->value))
+            if (!value_is_part_of_static_table(entry->value))
                 h2o_mem_release_shared(entry->value);
             index = (index + 1) % header_table->entry_capacity;
         } while (--header_table->num_entries != 0);
@@ -359,7 +365,8 @@ void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table)
     free(header_table->entries);
 }
 
-int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, int *allow_psuedo, const uint8_t *src, size_t len)
+int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, int *allow_psuedo, const uint8_t *src,
+                            size_t len)
 {
     const uint8_t *src_end = src + len;
 
@@ -402,12 +409,14 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
             *allow_psuedo = 0;
             if (h2o_iovec_is_token(r.name)) {
                 if (r.name == &H2O_TOKEN_CONTENT_LENGTH->buf) {
-                    /* ignore (draft 15 8.1.2.6 says: a server MAY send an HTTP response prior to closing or resetting the stream if content-length and the actual length differs) */
+                    /* ignore (draft 15 8.1.2.6 says: a server MAY send an HTTP response prior to closing or resetting the stream if
+                     * content-length and the actual length differs) */
                 } else if (r.name == &H2O_TOKEN_TRANSFER_ENCODING->buf) {
                     fprintf(stderr, "Transfer-Encoding is not supported in HTTP/2");
                     return -1;
                 } else {
-                    h2o_add_header(&req->pool, &req->headers, H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, r.name), r.value->base, r.value->len);
+                    h2o_add_header(&req->pool, &req->headers, H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, r.name), r.value->base,
+                                   r.value->len);
                 }
             } else {
                 h2o_add_header_by_str(&req->pool, &req->headers, r.name->base, r.name->len, 0, r.value->base, r.value->len);
@@ -475,7 +484,7 @@ size_t h2o_hpack_encode_string(uint8_t *_dst, const char *s, size_t len)
 
     /* try to encode in huffman */
     if (0 < len && len < sizeof(huffbuf)) {
-        size_t hufflen = encode_huffman(huffbuf, (const uint8_t*)s, len);
+        size_t hufflen = encode_huffman(huffbuf, (const uint8_t *)s, len);
         if (hufflen != 0) {
             *dst = '\x80';
             dst = encode_int(dst, (uint32_t)hufflen, 7);
@@ -495,7 +504,8 @@ Exit:
     return dst - _dst;
 }
 
-static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_iovec_t *name, const h2o_iovec_t *value)
+static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_iovec_t *name,
+                              const h2o_iovec_t *value)
 {
     int static_table_name_index, name_is_token = h2o_iovec_is_token(name);
 
@@ -508,11 +518,11 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
                 if (name != entry->name)
                     goto Next;
             } else {
-                if (! h2o_memis(name->base, name->len, entry->name->base, entry->name->len))
+                if (!h2o_memis(name->base, name->len, entry->name->base, entry->name->len))
                     goto Next;
             }
             /* name matched! */
-            if (! h2o_memis(value->base, value->len, entry->value->base, entry->value->len))
+            if (!h2o_memis(value->base, value->len, entry->value->base, entry->value->len))
                 continue;
             /* name and value matched! */
             *dst = 0x80;
@@ -543,11 +553,13 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
     }
     dst += h2o_hpack_encode_string(dst, value->base, value->len);
 
-    { /* add to header table (maximum number of entries in output header table is limited to 32 so that the search (see above) would not take too long) */
-        struct st_h2o_hpack_header_table_entry_t *entry = header_table_add(header_table, name->len + value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET, 32);
+    { /* add to header table (maximum number of entries in output header table is limited to 32 so that the search (see above) would
+         not take too long) */
+        struct st_h2o_hpack_header_table_entry_t *entry =
+            header_table_add(header_table, name->len + value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET, 32);
         if (entry != NULL) {
             if (static_table_name_index != 0) {
-                entry->name = (h2o_iovec_t*)h2o_hpack_static_table[static_table_name_index - 1].name;
+                entry->name = (h2o_iovec_t *)h2o_hpack_static_table[static_table_name_index - 1].name;
             } else {
                 entry->name = alloc_buf(NULL, name->len);
                 entry->name->base[name->len] = '\0';
@@ -562,18 +574,18 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
     return dst;
 }
 
-int h2o_hpack_flatten_headers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id, size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t* ts, const h2o_iovec_t *server_name)
+int h2o_hpack_flatten_headers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id, size_t max_frame_size,
+                              h2o_res_t *res, h2o_timestamp_t *ts, const h2o_iovec_t *server_name)
 {
     const h2o_header_t *header, *header_end;
     size_t max_capacity = 0;
     uint8_t *base, *dst;
 
-    { /* calculate maximum required memory */
-        size_t max_cur_frame_size =
-            STATUS_HEADER_MAX_SIZE /* for :status: */
+    {                                                      /* calculate maximum required memory */
+        size_t max_cur_frame_size = STATUS_HEADER_MAX_SIZE /* for :status: */
 #ifndef H2O_UNITTEST
-            + 2 + H2O_TIMESTR_RFC1123_LEN /* for Date: */
-            + 5 + server_name->len /* for Server: */
+                                    + 2 + H2O_TIMESTR_RFC1123_LEN /* for Date: */
+                                    + 5 + server_name->len        /* for Server: */
 #endif
             ;
 
@@ -592,23 +604,21 @@ int h2o_hpack_flatten_headers(h2o_buffer_t **buf, h2o_hpack_header_table_t *head
     }
 
     /* allocate */
-    base = dst = (void*)h2o_buffer_reserve(buf, max_capacity).base;
+    base = dst = (void *)h2o_buffer_reserve(buf, max_capacity).base;
 
     { /* encode */
         uint8_t *cur_frame;
         h2o_iovec_t date_value;
-        
-#define EMIT_HEADER(end_headers) h2o_http2_encode_frame_header( \
-    cur_frame, \
-    dst - cur_frame - H2O_HTTP2_FRAME_HEADER_SIZE, \
-    cur_frame == (uint8_t*)base ? H2O_HTTP2_FRAME_TYPE_HEADERS : H2O_HTTP2_FRAME_TYPE_CONTINUATION, \
-    end_headers ? H2O_HTTP2_FRAME_FLAG_END_HEADERS : 0, \
-    stream_id)
+
+#define EMIT_HEADER(end_headers)                                                                                                   \
+    h2o_http2_encode_frame_header(cur_frame, dst - cur_frame - H2O_HTTP2_FRAME_HEADER_SIZE,                                        \
+                                  cur_frame == (uint8_t *)base ? H2O_HTTP2_FRAME_TYPE_HEADERS : H2O_HTTP2_FRAME_TYPE_CONTINUATION, \
+                                  end_headers ? H2O_HTTP2_FRAME_FLAG_END_HEADERS : 0, stream_id)
 
         cur_frame = dst;
         dst += H2O_HTTP2_FRAME_HEADER_SIZE;
         dst = encode_status(dst, res->status);
-        /* TODO keep some kind of reference to the indexed headers of Server and Date, and reuse them */
+/* TODO keep some kind of reference to the indexed headers of Server and Date, and reuse them */
 #ifndef H2O_UNITTEST
         dst = encode_header(header_table, dst, &H2O_TOKEN_SERVER->buf, server_name);
         date_value = h2o_iovec_init(ts->str->rfc1123, H2O_TIMESTR_RFC1123_LEN);

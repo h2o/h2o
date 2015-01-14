@@ -33,7 +33,7 @@ struct st_expires_t {
 
 static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)
 {
-    struct st_expires_t *self = (void*)_self;
+    struct st_expires_t *self = (void *)_self;
 
     switch (req->res.status) {
     case 200:
@@ -66,7 +66,7 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
 
 void h2o_expires_register(h2o_pathconf_t *pathconf, h2o_expires_args_t *args)
 {
-    struct st_expires_t *self = (void*)h2o_create_filter(pathconf, sizeof(*self));
+    struct st_expires_t *self = (void *)h2o_create_filter(pathconf, sizeof(*self));
     self->super.on_setup_ostream = on_setup_ostream;
     self->mode = args->mode;
     switch (args->mode) {

@@ -71,8 +71,7 @@ static int apply_commands(h2o_configurator_context_t *ctx, int flags_mask, yoml_
 
     /* handle the configuration commands */
     for (i = 0; i != node->data.mapping.size; ++i) {
-        yoml_t *key = node->data.mapping.elements[i].key,
-            *value = node->data.mapping.elements[i].value;
+        yoml_t *key = node->data.mapping.elements[i].key, *value = node->data.mapping.elements[i].value;
         h2o_configurator_command_t *cmd;
         /* obtain the target command */
         if (key->type != YOML_TYPE_SCALAR) {
@@ -88,7 +87,8 @@ static int apply_commands(h2o_configurator_context_t *ctx, int flags_mask, yoml_
             return -1;
         }
         /* check value type */
-        if ((cmd->flags & (H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING)) != 0) {
+        if ((cmd->flags & (H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE |
+                           H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING)) != 0) {
             switch (value->type) {
             case YOML_TYPE_SCALAR:
                 if ((cmd->flags & H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR) == 0) {
@@ -137,8 +137,7 @@ static int apply_commands(h2o_configurator_context_t *ctx, int flags_mask, yoml_
 
 static int sort_from_longer_paths(const yoml_mapping_element_t *x, const yoml_mapping_element_t *y)
 {
-    size_t xlen = strlen(x->key->data.scalar),
-        ylen = strlen(y->key->data.scalar);
+    size_t xlen = strlen(x->key->data.scalar), ylen = strlen(y->key->data.scalar);
     if (xlen < ylen)
         return 1;
     else if (xlen > ylen)
@@ -159,7 +158,8 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
             return -1;
         }
     }
-    qsort(node->data.mapping.elements, node->data.mapping.size, sizeof(node->data.mapping.elements[0]), (void*)sort_from_longer_paths);
+    qsort(node->data.mapping.elements, node->data.mapping.size, sizeof(node->data.mapping.elements[0]),
+          (void *)sort_from_longer_paths);
 
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key;
@@ -238,7 +238,8 @@ static int on_config_http2_idle_timeout(h2o_configurator_command_t *cmd, h2o_con
     return 0;
 }
 
-static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
+                                                                  yoml_t *node)
 {
     return h2o_configurator_scanf(cmd, node, "%zu", &ctx->globalconf->http2.max_concurrent_requests_per_connection);
 }
@@ -251,54 +252,43 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
 
     { /* `hosts` and `paths` */
         h2o_configurator_t *c = h2o_configurator_create(conf, sizeof(*c));
-        h2o_configurator_define_command(
-            c, "hosts",
-            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING | H2O_CONFIGURATOR_FLAG_DEFERRED,
-            on_config_hosts,
-            "map of hostname -> map of per-host configs");
-        h2o_configurator_define_command(
-            c, "paths",
-            H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING | H2O_CONFIGURATOR_FLAG_DEFERRED,
-            on_config_paths,
-            "map of URL-path -> configuration");
+        h2o_configurator_define_command(c, "hosts", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING |
+                                                        H2O_CONFIGURATOR_FLAG_DEFERRED,
+                                        on_config_hosts, "map of hostname -> map of per-host configs");
+        h2o_configurator_define_command(c, "paths", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING |
+                                                        H2O_CONFIGURATOR_FLAG_DEFERRED,
+                                        on_config_paths, "map of URL-path -> configuration");
     };
 
     { /* setup global configurators */
         h2o_configurator_t *c = h2o_configurator_create(conf, sizeof(*c));
+        h2o_configurator_define_command(c, "limit-request-body", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_limit_request_body,
+                                        "maximum size of request body in bytes (e.g. content of POST)\n"
+                                        "(default: unlimited)");
         h2o_configurator_define_command(
-            c, "limit-request-body",
-            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-            on_config_limit_request_body,
-            "maximum size of request body in bytes (e.g. content of POST)\n"
-            "(default: unlimited)");
-        h2o_configurator_define_command(
-            c, "http1-request-timeout",
-            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+            c, "http1-request-timeout", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
             on_config_http1_request_timeout,
             "timeout for incoming requests in seconds (default: " H2O_TO_STR(H2O_DEFAULT_HTTP1_REQ_TIMEOUT_IN_SECS) ")");
         h2o_configurator_define_command(
-            c, "http1-upgrade-to-http2",
-            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-            on_config_http1_upgrade_to_http2,
-            "boolean flag (ON/OFF) indicating whether or not to allow upgrade to HTTP/2\n"
-            "(default: ON)");
+            c, "http1-upgrade-to-http2", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+            on_config_http1_upgrade_to_http2, "boolean flag (ON/OFF) indicating whether or not to allow upgrade to HTTP/2\n"
+                                              "(default: ON)");
         h2o_configurator_define_command(
-            c, "http2-idle-timeout",
-            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+            c, "http2-idle-timeout", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
             on_config_http2_idle_timeout,
             "timeout for idle connections in seconds (default: " H2O_TO_STR(H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS) ")");
-        h2o_configurator_define_command(
-            c, "http2-max-concurrent-requests-per-connection",
-            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-            on_config_http2_max_concurrent_requests_per_connection,
-            "max. number of requests to be handled concurrently within a single HTTP/2\n"
-            "stream (default: 16)");
+        h2o_configurator_define_command(c, "http2-max-concurrent-requests-per-connection",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http2_max_concurrent_requests_per_connection,
+                                        "max. number of requests to be handled concurrently within a single HTTP/2\n"
+                                        "stream (default: 16)");
     }
 }
 
 void h2o_configurator__dispose_configurators(h2o_globalconf_t *conf)
 {
-    while (! h2o_linklist_is_empty(&conf->configurators)) {
+    while (!h2o_linklist_is_empty(&conf->configurators)) {
         h2o_configurator_t *c = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, conf->configurators.next);
         h2o_linklist_unlink(&c->_link);
         if (c->dispose != NULL)
@@ -320,11 +310,13 @@ h2o_configurator_t *h2o_configurator_create(h2o_globalconf_t *conf, size_t sz)
     return c;
 }
 
-void h2o_configurator_define_command(h2o_configurator_t *configurator, const char *name, int flags, h2o_configurator_command_cb cb, const char *desc)
+void h2o_configurator_define_command(h2o_configurator_t *configurator, const char *name, int flags, h2o_configurator_command_cb cb,
+                                     const char *desc)
 {
     h2o_configurator_command_t *cmd;
 
-    h2o_vector_reserve(NULL, (void*)&configurator->commands, sizeof(configurator->commands.entries[0]), configurator->commands.size + 1);
+    h2o_vector_reserve(NULL, (void *)&configurator->commands, sizeof(configurator->commands.entries[0]),
+                       configurator->commands.size + 1);
     cmd = configurator->commands.entries + configurator->commands.size++;
     cmd->configurator = configurator;
     cmd->flags = flags;
@@ -353,7 +345,7 @@ h2o_configurator_command_t *h2o_configurator_get_command(h2o_globalconf_t *conf,
 
 int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node)
 {
-    h2o_configurator_context_t ctx = { config };
+    h2o_configurator_context_t ctx = {config};
 
     if (apply_commands(&ctx, H2O_CONFIGURATOR_FLAG_GLOBAL, node) != 0)
         return -1;
@@ -409,9 +401,9 @@ ssize_t h2o_configurator_get_one_of(h2o_configurator_command_t *cmd, yoml_t *nod
     config_str_len = strlen(config_str);
 
     cand_str = candidates;
-    for (cand_index = 0; ; ++cand_index) {
-        if (strncasecmp(cand_str, config_str, config_str_len) == 0
-            && (cand_str[config_str_len] == '\0' || cand_str[config_str_len] == ',')) {
+    for (cand_index = 0;; ++cand_index) {
+        if (strncasecmp(cand_str, config_str, config_str_len) == 0 &&
+            (cand_str[config_str_len] == '\0' || cand_str[config_str_len] == ',')) {
             /* found */
             return cand_index;
         }
@@ -420,7 +412,7 @@ ssize_t h2o_configurator_get_one_of(h2o_configurator_command_t *cmd, yoml_t *nod
             goto Error;
         cand_str += 1; /* skip ',' */
     }
-    /* not reached */
+/* not reached */
 
 Error:
     h2o_configurator_errprintf(cmd, node, "argument must be one of: %s", candidates);

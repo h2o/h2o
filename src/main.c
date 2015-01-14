@@ -127,7 +127,7 @@ static void openssl_thread_lock_callback(int mode, int n, const char *file, int 
 static void init_openssl(void)
 {
     static int ready = 0;
-    if (! ready) {
+    if (!ready) {
         int nlocks = CRYPTO_num_locks(), i;
         openssl_thread_locks = h2o_mem_alloc(sizeof(*openssl_thread_locks) * nlocks);
         for (i = 0; i != nlocks; ++i)
@@ -188,11 +188,7 @@ static void update_ocsp_stapling(struct listener_ssl_config_t *ssl_conf, h2o_buf
 
 static int get_ocsp_response(const char *cert_fn, const char *cmd, h2o_buffer_t **resp)
 {
-    char *argv[] = {
-        (char*)cmd,
-        (char*)cert_fn,
-        NULL
-    };
+    char *argv[] = {(char *)cmd, (char *)cert_fn, NULL};
     int child_status;
 
     if (cmd[0] != '/' && strchr(cmd, '/') != NULL) {
@@ -223,9 +219,9 @@ static int get_ocsp_response(const char *cert_fn, const char *cmd, h2o_buffer_t 
         }
     }
 
-    if (! (WIFEXITED(child_status) && WEXITSTATUS(child_status) == 0))
+    if (!(WIFEXITED(child_status) && WEXITSTATUS(child_status) == 0))
         h2o_buffer_dispose(resp);
-    if (! WIFEXITED(child_status)) {
+    if (!WIFEXITED(child_status)) {
         fprintf(stderr, "[OCSP Stapling] command %s was killed by signal %d\n", cmd, WTERMSIG(child_status));
         return EX_TEMPFAIL;
     }
@@ -242,7 +238,7 @@ static void *ocsp_updater_thread(void *_ssl_conf)
 
     assert(ssl_conf->ocsp_stapling.interval != 0);
 
-    while (! h2o_thread_is_notified()) {
+    while (!h2o_thread_is_notified()) {
         /* sleep until next_at */
         if ((now = time(NULL)) < next_at) {
             time_t sleep_secs = next_at - now;
@@ -255,19 +251,24 @@ static void *ocsp_updater_thread(void *_ssl_conf)
         case 0: /* success */
             fail_cnt = 0;
             update_ocsp_stapling(ssl_conf, resp);
-            fprintf(stderr, "[OCSP Stapling] successfully updated the response for certificate file:%s\n", ssl_conf->certificate_file);
+            fprintf(stderr, "[OCSP Stapling] successfully updated the response for certificate file:%s\n",
+                    ssl_conf->certificate_file);
             break;
         case EX_TEMPFAIL: /* temporary failure */
             if (fail_cnt == ssl_conf->ocsp_stapling.max_failures) {
-                fprintf(stderr, "[OCSP Stapling] OCSP stapling is temporary disabled due to repeated errors for certificate file:%s\n", ssl_conf->certificate_file);
+                fprintf(stderr,
+                        "[OCSP Stapling] OCSP stapling is temporary disabled due to repeated errors for certificate file:%s\n",
+                        ssl_conf->certificate_file);
                 update_ocsp_stapling(ssl_conf, NULL);
             } else {
-                fprintf(stderr, "[OCSP Stapling] reusing old response due to a temporary error occurred while fetching OCSP response for certificate file:%s\n", ssl_conf->certificate_file);
+                fprintf(stderr, "[OCSP Stapling] reusing old response due to a temporary error occurred while fetching OCSP "
+                                "response for certificate file:%s\n",
+                        ssl_conf->certificate_file);
                 ++fail_cnt;
             }
             break;
         default: /* permanent failure */
-            fprintf(stderr, "[OCSP Stapling] disabled for certificate file:%s\n",  ssl_conf->certificate_file);
+            fprintf(stderr, "[OCSP Stapling] disabled for certificate file:%s\n", ssl_conf->certificate_file);
             goto Exit;
         }
         /* update next_at */
@@ -309,19 +310,22 @@ static void listener_setup_ssl_add_host(struct listener_ssl_config_t *ssl_config
     if (host_end == NULL)
         host_end = host.base + host.len;
 
-    h2o_vector_reserve(NULL, (void*)&ssl_config->hostnames, sizeof(ssl_config->hostnames.entries[0]), ssl_config->hostnames.size + 1);
+    h2o_vector_reserve(NULL, (void *)&ssl_config->hostnames, sizeof(ssl_config->hostnames.entries[0]),
+                       ssl_config->hostnames.size + 1);
     ssl_config->hostnames.entries[ssl_config->hostnames.size++] = h2o_iovec_init(host.base, host_end - host.base);
 }
 
-static int listener_setup_ssl(struct config_t *conf, h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *listen_node, yoml_t *ssl_node, struct listener_config_t *listener, int listener_is_new)
+static int listener_setup_ssl(struct config_t *conf, h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
+                              yoml_t *listen_node, yoml_t *ssl_node, struct listener_config_t *listener, int listener_is_new)
 {
     SSL_CTX *ssl_ctx = NULL;
-    yoml_t *certificate_file = NULL, *key_file = NULL, *minimum_version = NULL, *cipher_suite = NULL, *ocsp_update_cmd = NULL, *ocsp_update_interval_node = NULL, *ocsp_max_failures_node = NULL;
+    yoml_t *certificate_file = NULL, *key_file = NULL, *minimum_version = NULL, *cipher_suite = NULL, *ocsp_update_cmd = NULL,
+           *ocsp_update_interval_node = NULL, *ocsp_max_failures_node = NULL;
     long ssl_options = SSL_OP_ALL;
     uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
-    unsigned ocsp_max_failures = 3; /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
+    unsigned ocsp_max_failures = 3;              /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
 
-    if (! listener_is_new) {
+    if (!listener_is_new) {
         if (listener->ssl.size != 0 && ssl_node == NULL) {
             h2o_configurator_errprintf(cmd, listen_node, "cannot accept HTTP; already defined to accept HTTPS");
             return -1;
@@ -342,21 +346,20 @@ static int listener_setup_ssl(struct config_t *conf, h2o_configurator_command_t 
     { /* parse */
         size_t i;
         for (i = 0; i != ssl_node->data.sequence.size; ++i) {
-            yoml_t *key = ssl_node->data.mapping.elements[i].key,
-                *value = ssl_node->data.mapping.elements[i].value;
+            yoml_t *key = ssl_node->data.mapping.elements[i].key, *value = ssl_node->data.mapping.elements[i].value;
             /* obtain the target command */
             if (key->type != YOML_TYPE_SCALAR) {
                 h2o_configurator_errprintf(NULL, key, "command must be a string");
                 return -1;
             }
-#define FETCH_PROPERTY(n, p) \
-    if (strcmp(key->data.scalar, n) == 0) { \
-        if (value->type != YOML_TYPE_SCALAR) { \
-            h2o_configurator_errprintf(cmd, value, "property of `" n "` must be a string"); \
-            return -1; \
-        } \
-        p = value; \
-        continue; \
+#define FETCH_PROPERTY(n, p)                                                                                                       \
+    if (strcmp(key->data.scalar, n) == 0) {                                                                                        \
+        if (value->type != YOML_TYPE_SCALAR) {                                                                                     \
+            h2o_configurator_errprintf(cmd, value, "property of `" n "` must be a string");                                        \
+            return -1;                                                                                                             \
+        }                                                                                                                          \
+        p = value;                                                                                                                 \
+        continue;                                                                                                                  \
     } else
             FETCH_PROPERTY("certificate-file", certificate_file);
             FETCH_PROPERTY("key-file", key_file);
@@ -378,7 +381,11 @@ static int listener_setup_ssl(struct config_t *conf, h2o_configurator_command_t 
             return -1;
         }
         if (minimum_version != NULL) {
-#define MAP(tok, op) if (strcasecmp(minimum_version->data.scalar, tok) == 0) { ssl_options |= (op); goto VersionFound; }
+#define MAP(tok, op)                                                                                                               \
+    if (strcasecmp(minimum_version->data.scalar, tok) == 0) {                                                                      \
+        ssl_options |= (op);                                                                                                       \
+        goto VersionFound;                                                                                                         \
+    }
             MAP("sslv2", 0);
             MAP("sslv3", SSL_OP_NO_SSLv2);
             MAP("tlsv1", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
@@ -440,7 +447,7 @@ static int listener_setup_ssl(struct config_t *conf, h2o_configurator_command_t 
         goto Error;
     }
 
-    /* setup protocol negotiation methods */
+/* setup protocol negotiation methods */
 #if H2O_USE_NPN
     h2o_ssl_register_npn_protocols(ssl_ctx, h2o_http2_npn_protocols);
 #endif
@@ -456,7 +463,7 @@ static int listener_setup_ssl(struct config_t *conf, h2o_configurator_command_t 
 
     { /* create a new entry in the SSL context list */
         struct listener_ssl_config_t *ssl_config;
-        h2o_vector_reserve(NULL, (void*)&listener->ssl, sizeof(listener->ssl.entries[0]), listener->ssl.size + 1);
+        h2o_vector_reserve(NULL, (void *)&listener->ssl, sizeof(listener->ssl.entries[0]), listener->ssl.size + 1);
         ssl_config = listener->ssl.entries + listener->ssl.size++;
         memset(ssl_config, 0, sizeof(*ssl_config));
         if (ctx->hostconf != NULL) {
@@ -467,7 +474,8 @@ static int listener_setup_ssl(struct config_t *conf, h2o_configurator_command_t 
         SSL_CTX_set_tlsext_status_cb(ssl_ctx, on_ocsp_stapling_callback);
         SSL_CTX_set_tlsext_status_arg(ssl_ctx, ssl_config);
         pthread_mutex_init(&ssl_config->ocsp_stapling.response.mutex, NULL);
-        ssl_config->ocsp_stapling.cmd = ocsp_update_cmd != NULL ? strdup(ocsp_update_cmd->data.scalar) : "share/h2o/fetch-ocsp-response";
+        ssl_config->ocsp_stapling.cmd =
+            ocsp_update_cmd != NULL ? strdup(ocsp_update_cmd->data.scalar) : "share/h2o/fetch-ocsp-response";
         if (ocsp_update_interval != 0) {
             if (conf->dry_run) {
                 h2o_buffer_t *respbuf;
@@ -478,14 +486,18 @@ static int listener_setup_ssl(struct config_t *conf, h2o_configurator_command_t 
                     fprintf(stderr, "[OCSP Stapling] stapling works for file:%s\n", certificate_file->data.scalar);
                     break;
                 case EX_TEMPFAIL:
-                    h2o_configurator_errprintf(cmd, certificate_file, "[OCSP Stapling] temporary failed for file:%s\n", certificate_file->data.scalar);
+                    h2o_configurator_errprintf(cmd, certificate_file, "[OCSP Stapling] temporary failed for file:%s\n",
+                                               certificate_file->data.scalar);
                     break;
                 default:
-                    h2o_configurator_errprintf(cmd, certificate_file, "[OCSP Stapling] does not work, will be disabled for file:%s\n", certificate_file->data.scalar);
+                    h2o_configurator_errprintf(cmd, certificate_file,
+                                               "[OCSP Stapling] does not work, will be disabled for file:%s\n",
+                                               certificate_file->data.scalar);
                     break;
                 }
             } else {
-                ssl_config->ocsp_stapling.interval = ocsp_update_interval; /* is also used as a flag for indicating if the updater thread was spawned */
+                ssl_config->ocsp_stapling.interval =
+                    ocsp_update_interval; /* is also used as a flag for indicating if the updater thread was spawned */
                 ssl_config->ocsp_stapling.max_failures = ocsp_max_failures;
                 pthread_create(&ssl_config->ocsp_stapling.updater_tid, NULL, ocsp_updater_thread, ssl_config);
             }
@@ -506,8 +518,7 @@ static struct listener_config_t *find_listener(struct config_t *conf, struct soc
 
     for (i = 0; i != conf->num_listeners; ++i) {
         struct listener_config_t *listener = conf->listeners[i];
-        if (listener->addrlen == addrlen
-            && h2o_socket_compare_address((void*)&listener->addr, addr) == 0)
+        if (listener->addrlen == addrlen && h2o_socket_compare_address((void *)&listener->addr, addr) == 0)
             return listener;
     }
 
@@ -538,11 +549,12 @@ static int find_listener_from_server_starter(struct config_t *conf, struct socka
     for (i = 0; i != conf->server_starter.num_fds; ++i) {
         struct sockaddr_storage sa;
         socklen_t salen = sizeof(sa);
-        if (getsockname(conf->server_starter.fds[i], (void*)&sa, &salen) != 0) {
-            fprintf(stderr, "could not get the socket address of fd %d given as $SERVER_STARTER_PORT\n", conf->server_starter.fds[i]);
+        if (getsockname(conf->server_starter.fds[i], (void *)&sa, &salen) != 0) {
+            fprintf(stderr, "could not get the socket address of fd %d given as $SERVER_STARTER_PORT\n",
+                    conf->server_starter.fds[i]);
             exit(EX_CONFIG);
         }
-        if (h2o_socket_compare_address((void*)&sa, addr) == 0)
+        if (h2o_socket_compare_address((void *)&sa, addr) == 0)
             goto Found;
     }
     /* not found */
@@ -568,10 +580,8 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
         }
     }
     /* add new listener */
-    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1
-        || fcntl(fd, F_SETFD, FD_CLOEXEC) != 0
-        || bind(fd, (void *)sun, sizeof(*sun)) != 0
-        || listen(fd, SOMAXCONN) != 0) {
+    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1 || fcntl(fd, F_SETFD, FD_CLOEXEC) != 0 ||
+        bind(fd, (void *)sun, sizeof(*sun)) != 0 || listen(fd, SOMAXCONN) != 0) {
         if (fd != -1)
             close(fd);
         h2o_configurator_errprintf(NULL, node, "failed to listen to socket:%s: %s", sun->sun_path, strerror(errno));
@@ -581,7 +591,8 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
     return fd;
 }
 
-static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
+static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain,
+                             int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
 {
     int fd;
 
@@ -618,13 +629,14 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, cons
 Error:
     if (fd != -1)
         close(fd);
-    h2o_configurator_errprintf(NULL, node, "failed to listen to port %s:%s: %s", hostname != NULL ? hostname : "ANY", servname, strerror(errno));
+    h2o_configurator_errprintf(NULL, node, "failed to listen to port %s:%s: %s", hostname != NULL ? hostname : "ANY", servname,
+                               strerror(errno));
     return -1;
 }
 
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct listener_configurator_t *configurator = (void*)cmd->configurator;
+    struct listener_configurator_t *configurator = (void *)cmd->configurator;
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
     const char *hostname = NULL, *servname = NULL, *type = "tcp";
     yoml_t *ssl_node = NULL;
@@ -639,36 +651,34 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     case YOML_TYPE_SCALAR:
         servname = node->data.scalar;
         break;
-    case YOML_TYPE_MAPPING:
-        {
-            yoml_t *t;
-            if ((t = yoml_get(node, "host")) != NULL) {
-                if (t->type != YOML_TYPE_SCALAR) {
-                    h2o_configurator_errprintf(cmd, t, "`host` is not a string");
-                    return -1;
-                }
-                hostname = t->data.scalar;
-            }
-            if ((t = yoml_get(node, "port")) == NULL) {
-                h2o_configurator_errprintf(cmd, node, "cannot find mandatory property `port`");
-                return -1;
-            }
+    case YOML_TYPE_MAPPING: {
+        yoml_t *t;
+        if ((t = yoml_get(node, "host")) != NULL) {
             if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, node, "`port` is not a string");
+                h2o_configurator_errprintf(cmd, t, "`host` is not a string");
                 return -1;
             }
-            servname = t->data.scalar;
-            if ((t = yoml_get(node, "type")) != NULL) {
-                if (t->type != YOML_TYPE_SCALAR) {
-                    h2o_configurator_errprintf(cmd, t, "`type` is not a string");
-                    return -1;
-                }
-                type = t->data.scalar;
-            }
-            if ((t = yoml_get(node, "ssl")) != NULL)
-                ssl_node = t;
+            hostname = t->data.scalar;
         }
-        break;
+        if ((t = yoml_get(node, "port")) == NULL) {
+            h2o_configurator_errprintf(cmd, node, "cannot find mandatory property `port`");
+            return -1;
+        }
+        if (t->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, node, "`port` is not a string");
+            return -1;
+        }
+        servname = t->data.scalar;
+        if ((t = yoml_get(node, "type")) != NULL) {
+            if (t->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, t, "`type` is not a string");
+                return -1;
+            }
+            type = t->data.scalar;
+        }
+        if ((t = yoml_get(node, "ssl")) != NULL)
+            ssl_node = t;
+    } break;
     default:
         h2o_configurator_errprintf(cmd, node, "value must be a string or a mapping (with keys: `port` and optionally `host`)");
         return -1;
@@ -689,10 +699,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         strcpy(sun.sun_path, servname);
         /* find existing listener or create a new one */
         listener_is_new = 0;
-        if ((listener = find_listener(conf, (void*)&sun, sizeof(sun))) == NULL) {
+        if ((listener = find_listener(conf, (void *)&sun, sizeof(sun))) == NULL) {
             int fd;
             if (conf->server_starter.fds != NULL) {
-                if ((fd = find_listener_from_server_starter(conf, (void*)&sun)) == -1) {
+                if ((fd = find_listener_from_server_starter(conf, (void *)&sun)) == -1) {
                     h2o_configurator_errprintf(cmd, node, "unix socket:%s is not being bound to the server\n", sun.sun_path);
                     return -1;
                 }
@@ -702,7 +712,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 if ((fd = open_unix_listener(cmd, node, &sun)) == -1)
                     return -1;
             }
-            listener = add_listener(conf, fd, (struct sockaddr*)&sun, sizeof(sun));
+            listener = add_listener(conf, fd, (struct sockaddr *)&sun, sizeof(sun));
             listener_is_new = 1;
         }
         if (listener_setup_ssl(conf, cmd, ctx, node, ssl_node, listener, listener_is_new) != 0)
@@ -733,13 +743,15 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 int fd;
                 if (conf->server_starter.fds != NULL) {
                     if ((fd = find_listener_from_server_starter(conf, ai->ai_addr)) == -1) {
-                        h2o_configurator_errprintf(cmd, node, "tcp socket:%s:%s is not being bound to the server\n", hostname, servname);
+                        h2o_configurator_errprintf(cmd, node, "tcp socket:%s:%s is not being bound to the server\n", hostname,
+                                                   servname);
                         return -1;
                     }
                 } else if (conf->dry_run) {
                     fd = -1;
                 } else {
-                    if ((fd = open_tcp_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol, ai->ai_addr, ai->ai_addrlen)) == -1)
+                    if ((fd = open_tcp_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
+                                                ai->ai_addr, ai->ai_addrlen)) == -1)
                         return -1;
                 }
                 listener = add_listener(conf, fd, ai->ai_addr, ai->ai_addrlen);
@@ -755,7 +767,6 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 
         h2o_configurator_errprintf(cmd, node, "unknown listen type: %s", type);
         return -1;
-
     }
 
     return 0;
@@ -763,7 +774,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 
 static int on_config_listen_enter(h2o_configurator_t *_configurator, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct listener_configurator_t *configurator = (void*)_configurator;
+    struct listener_configurator_t *configurator = (void *)_configurator;
 
     /* bail-out unless at host-level */
     if (ctx->hostconf == NULL || ctx->pathconf != NULL)
@@ -775,7 +786,7 @@ static int on_config_listen_enter(h2o_configurator_t *_configurator, h2o_configu
 
 static int on_config_listen_exit(h2o_configurator_t *_configurator, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct listener_configurator_t *configurator = (void*)_configurator;
+    struct listener_configurator_t *configurator = (void *)_configurator;
 
     /* bail-out unless at host-level */
     if (ctx->hostconf == NULL || ctx->pathconf != NULL)
@@ -831,7 +842,6 @@ static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_config
     return h2o_configurator_scanf(cmd, node, "%d", &conf->max_connections);
 }
 
-
 static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct config_t *conf = H2O_STRUCT_FROM_MEMBER(struct config_t, globalconf, ctx->globalconf);
@@ -854,10 +864,9 @@ static void usage_print_directives(h2o_globalconf_t *conf)
         for (i = 0; i != configurator->commands.size; ++i) {
             h2o_configurator_command_t *cmd = configurator->commands.entries + i;
             const char *desc_line;
-            printf("  %s: [%s%s%s]\n", cmd->name,
-                ("g") + ((cmd->flags & H2O_CONFIGURATOR_FLAG_GLOBAL) == 0),
-                ("h") + ((cmd->flags & H2O_CONFIGURATOR_FLAG_HOST) == 0),
-                ("p") + ((cmd->flags & H2O_CONFIGURATOR_FLAG_PATH) == 0));
+            printf("  %s: [%s%s%s]\n", cmd->name, ("g") + ((cmd->flags & H2O_CONFIGURATOR_FLAG_GLOBAL) == 0),
+                   ("h") + ((cmd->flags & H2O_CONFIGURATOR_FLAG_HOST) == 0),
+                   ("p") + ((cmd->flags & H2O_CONFIGURATOR_FLAG_PATH) == 0));
             desc_line = cmd->description;
             while (*desc_line != '\0') {
                 const char *eol = strchr(desc_line, '\n');
@@ -967,7 +976,7 @@ static void update_listener_state(struct config_t *conf, struct listener_ctx_t *
 
     if (num_connections(conf, 0) < conf->max_connections) {
         for (i = 0; i != conf->num_listeners; ++i) {
-            if (! h2o_socket_is_reading(listeners[i].sock))
+            if (!h2o_socket_is_reading(listeners[i].sock))
                 h2o_socket_read_start(listeners[i].sock, on_accept);
         }
     } else {
@@ -995,10 +1004,8 @@ static void *run_loop(void *_conf)
         struct listener_config_t *listener_config = conf->listeners[i];
         listeners[i].ctx = &ctx;
         listeners[i].ssl_ctx = listener_config->ssl.size != 0 ? listener_config->ssl.entries[0].ctx : NULL;
-        listeners[i].sock = h2o_evloop_socket_create(
-            ctx.loop, listener_config->fd,
-            (struct sockaddr*)&listener_config->addr, listener_config->addrlen,
-            H2O_SOCKET_FLAG_IS_ACCEPT);
+        listeners[i].sock = h2o_evloop_socket_create(ctx.loop, listener_config->fd, (struct sockaddr *)&listener_config->addr,
+                                                     listener_config->addrlen, H2O_SOCKET_FLAG_IS_ACCEPT);
         listeners[i].sock->data = listeners + i;
     }
     /* and start listening */
@@ -1020,53 +1027,45 @@ static void setup_configurators(struct config_t *conf)
     h2o_config_init(&conf->globalconf);
 
     {
-        struct listener_configurator_t *c = (void*)h2o_configurator_create(&conf->globalconf, sizeof(*c));
+        struct listener_configurator_t *c = (void *)h2o_configurator_create(&conf->globalconf, sizeof(*c));
         c->super.enter = on_config_listen_enter;
         c->super.exit = on_config_listen_exit;
-        h2o_configurator_define_command(
-            &c->super, "listen",
-            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST,
-            on_config_listen,
-            "port at which the server should listen for incoming requests (mandatory)\n"
-            " - if the value is a scalar, it is treated as the port number (or as the\n"
-            "   service name)\n"
-            " - if the value is a mapping, following properties are recognized:\n"
-            "     port: incoming port number or service name (mandatory)\n"
-            "     host: incoming address (default: any address)\n"
-            "     ssl: mapping of SSL configuration using the keys below (default: none)\n"
-            "       certificate-file: path of the SSL certificate file (mandatory)\n"
-            "       key-file:         path of the SSL private key file (mandatory)\n"
-            "       minimum-version:  minimum protocol version, should be one of: SSLv2,\n"
-            "                         SSLv3, TLSv1, TLSv1.1, TLSv1.2 (default: TLSv1)\n"
-            "       cipher-suite:     list of cipher suites to be passed to OpenSSL via\n"
-            "                         SSL_CTX_set_cipher_list (optional)\n"
-            "       ocsp-update-interval:\n"
-            "                         interval for updating the OCSP stapling data (in\n"
-            "                         seconds), or set to zero to disable OCSP stapling\n"
-            "                         (default: 14400 = 4 hours)\n"
-            "       ocsp-max-failures:\n"
-            "                         number of consecutive OCSP queriy failures before\n"
-            "                         stopping to send OCSP stapling data to the client\n"
-            "                         (default: 3)\n"
-            " - if the value is a sequence, each element should be either a scalar or a\n"
-            "   mapping that conform to the requirements above");
+        h2o_configurator_define_command(&c->super, "listen", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST,
+                                        on_config_listen,
+                                        "port at which the server should listen for incoming requests (mandatory)\n"
+                                        " - if the value is a scalar, it is treated as the port number (or as the\n"
+                                        "   service name)\n"
+                                        " - if the value is a mapping, following properties are recognized:\n"
+                                        "     port: incoming port number or service name (mandatory)\n"
+                                        "     host: incoming address (default: any address)\n"
+                                        "     ssl: mapping of SSL configuration using the keys below (default: none)\n"
+                                        "       certificate-file: path of the SSL certificate file (mandatory)\n"
+                                        "       key-file:         path of the SSL private key file (mandatory)\n"
+                                        "       minimum-version:  minimum protocol version, should be one of: SSLv2,\n"
+                                        "                         SSLv3, TLSv1, TLSv1.1, TLSv1.2 (default: TLSv1)\n"
+                                        "       cipher-suite:     list of cipher suites to be passed to OpenSSL via\n"
+                                        "                         SSL_CTX_set_cipher_list (optional)\n"
+                                        "       ocsp-update-interval:\n"
+                                        "                         interval for updating the OCSP stapling data (in\n"
+                                        "                         seconds), or set to zero to disable OCSP stapling\n"
+                                        "                         (default: 14400 = 4 hours)\n"
+                                        "       ocsp-max-failures:\n"
+                                        "                         number of consecutive OCSP queriy failures before\n"
+                                        "                         stopping to send OCSP stapling data to the client\n"
+                                        "                         (default: 3)\n"
+                                        " - if the value is a sequence, each element should be either a scalar or a\n"
+                                        "   mapping that conform to the requirements above");
     }
 
     {
         h2o_configurator_t *c = h2o_configurator_create(&conf->globalconf, sizeof(*c));
-        h2o_configurator_define_command(
-            c, "user",
-            H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-            on_config_user,
-            "user under with the server should handle incoming requests (default: none)");
-        h2o_configurator_define_command(
-            c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL,
-            on_config_max_connections,
-            "max connections (default: 1024)");
-        h2o_configurator_define_command(
-            c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
-            on_config_num_threads,
-            "number of worker threads (default: getconf NPROCESSORS_ONLN)");
+        h2o_configurator_define_command(c, "user", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_user,
+                                        "user under with the server should handle incoming requests (default: none)");
+        h2o_configurator_define_command(c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_connections,
+                                        "max connections (default: 1024)");
+        h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads,
+                                        "number of worker threads (default: getconf NPROCESSORS_ONLN)");
     }
 
     h2o_access_log_register_configurator(&conf->globalconf);
@@ -1078,16 +1077,16 @@ static void setup_configurators(struct config_t *conf)
 int main(int argc, char **argv)
 {
     struct config_t config = {
-        {}, /* globalconf */
-        0, /* dry-run */
-        {}, /* server_starter */
-        NULL, /* listeners */
-        0, /* num_listeners */
-        NULL, /* running_user */
-        1024, /* max_connections */
+        {},            /* globalconf */
+        0,             /* dry-run */
+        {},            /* server_starter */
+        NULL,          /* listeners */
+        0,             /* num_listeners */
+        NULL,          /* running_user */
+        1024,          /* max_connections */
         h2o_numproc(), /* num_threads */
-        NULL, /* thread_ids */
-        {}, /* state */
+        NULL,          /* thread_ids */
+        {},            /* state */
     };
 
     const char *opt_config_file = "h2o.conf";
@@ -1096,13 +1095,11 @@ int main(int argc, char **argv)
 
     { /* parse options */
         int ch;
-        static struct option longopts[] = {
-            { "conf", required_argument, NULL, 'c' },
-            { "test", no_argument, NULL, 't' },
-            { "version", no_argument, NULL, 'v' },
-            { "help", no_argument, NULL, 'h' },
-            { NULL, 0, NULL, 0 }
-        };
+        static struct option longopts[] = {{"conf", required_argument, NULL, 'c'},
+                                           {"test", no_argument, NULL, 't'},
+                                           {"version", no_argument, NULL, 'v'},
+                                           {"help", no_argument, NULL, 'h'},
+                                           {NULL, 0, NULL, 0}};
         while ((ch = getopt_long(argc, argv, "c:tvh", longopts, NULL)) != -1) {
             switch (ch) {
             case 'c':
@@ -1115,23 +1112,22 @@ int main(int argc, char **argv)
                 printf("h2o version " H2O_VERSION "\n");
                 exit(0);
             case 'h':
-                printf(
-                    "h2o version " H2O_VERSION "\n"
-                    "\n"
-                    "Usage:\n"
-                    "  h2o [options]\n"
-                    "\n"
-                    "Options:\n"
-                    "  -c, --conf FILE  configuration file (default: h2o.conf)\n"
-                    "  -t, --test       tests the configuration\n"
-                    "  -v, --version    prints the version number\n"
-                    "  -h, --help       print this help\n"
-                    "\n"
-                    "Configuration File:\n"
-                    "  The configuration file should be written in YAML format.  Below is the list\n"
-                    "  of configuration directives; the flags indicate at which level the directives\n"
-                    "  can be used; g=global, h=host, p=path.\n"
-                    "\n");
+                printf("h2o version " H2O_VERSION "\n"
+                       "\n"
+                       "Usage:\n"
+                       "  h2o [options]\n"
+                       "\n"
+                       "Options:\n"
+                       "  -c, --conf FILE  configuration file (default: h2o.conf)\n"
+                       "  -t, --test       tests the configuration\n"
+                       "  -v, --version    prints the version number\n"
+                       "  -h, --help       print this help\n"
+                       "\n"
+                       "Configuration File:\n"
+                       "  The configuration file should be written in YAML format.  Below is the list\n"
+                       "  of configuration directives; the flags indicate at which level the directives\n"
+                       "  can be used; g=global, h=host, p=path.\n"
+                       "\n");
                 usage_print_directives(&config.globalconf);
                 exit(0);
                 break;
@@ -1164,12 +1160,13 @@ int main(int argc, char **argv)
         size_t i;
         int all_were_bound = 1;
         for (i = 0; i != config.server_starter.num_fds; ++i) {
-            if (! config.server_starter.bound_fd_map[i]) {
-                fprintf(stderr, "no configuration found for fd:%d passed in by $SERVER_STARTER_PORT\n", config.server_starter.fds[i]);
+            if (!config.server_starter.bound_fd_map[i]) {
+                fprintf(stderr, "no configuration found for fd:%d passed in by $SERVER_STARTER_PORT\n",
+                        config.server_starter.fds[i]);
                 all_were_bound = 0;
             }
         }
-        if (! all_were_bound) {
+        if (!all_were_bound) {
             fprintf(stderr, "note: $SERVER_STARTER_PORT was \"%s\"\n", getenv("SERVER_STARTER_PORT"));
             return EX_CONFIG;
         }
@@ -1206,7 +1203,8 @@ int main(int argc, char **argv)
             if (setup_running_user(&config, "nobody") == 0) {
                 fprintf(stderr, "cowardly switching to nobody; please use the `user` directive to set the running user\n");
             } else {
-                fprintf(stderr, "refusing to run as root (and failed to switch to `nobody`); you can use the `user` directive to set the running user\n");
+                fprintf(stderr, "refusing to run as root (and failed to switch to `nobody`); you can use the `user` directive to "
+                                "set the running user\n");
                 return EX_CONFIG;
             }
         }

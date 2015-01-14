@@ -34,10 +34,9 @@ struct st_h2o_file_configurator_t {
     struct st_h2o_file_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
-
 static int on_config_dir(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+    struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
 
     h2o_file_register(ctx->pathconf, node->data.scalar, self->vars->index_files, self->vars->mimemap, self->vars->flags);
     return 0;
@@ -45,7 +44,7 @@ static int on_config_dir(h2o_configurator_command_t *cmd, h2o_configurator_conte
 
 static int on_config_index(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+    struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
     size_t i;
 
     free(self->vars->index_files);
@@ -115,7 +114,8 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
             }
             break;
         default:
-            h2o_configurator_errprintf(cmd, value, "only scalar or sequence of scalar is permitted at the value part of the argument");
+            h2o_configurator_errprintf(cmd, value,
+                                       "only scalar or sequence of scalar is permitted at the value part of the argument");
             return -1;
         }
     }
@@ -125,7 +125,7 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
 
 static int on_config_mime_settypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+    struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
     h2o_mimemap_t *newmap = h2o_mimemap_create();
 
     h2o_mimemap_set_default_type(newmap, h2o_mimemap_get_default_type(self->vars->mimemap).base);
@@ -149,7 +149,7 @@ static void clone_mimemap_if_clean(struct st_h2o_file_configurator_t *self)
 
 static int on_config_mime_addtypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+    struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
 
     clone_mimemap_if_clean(self);
 
@@ -158,7 +158,7 @@ static int on_config_mime_addtypes(h2o_configurator_command_t *cmd, h2o_configur
 
 static int on_config_mime_removetypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+    struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
     size_t i;
 
     clone_mimemap_if_clean(self);
@@ -175,7 +175,7 @@ static int on_config_mime_removetypes(h2o_configurator_command_t *cmd, h2o_confi
 
 static int on_config_mime_setdefaulttype(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+    struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
 
     if (assert_is_mimetype(cmd, node) != 0)
         return -1;
@@ -188,7 +188,7 @@ static int on_config_mime_setdefaulttype(h2o_configurator_command_t *cmd, h2o_co
 
 static int on_config_etag(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+    struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
 
     switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
     case 0: /* off */
@@ -206,7 +206,7 @@ static int on_config_etag(h2o_configurator_command_t *cmd, h2o_configurator_cont
 
 static int on_config_send_gzip(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+    struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
 
     switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
     case 0: /* off */
@@ -224,7 +224,7 @@ static int on_config_send_gzip(h2o_configurator_command_t *cmd, h2o_configurator
 
 static int on_config_dir_listing(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_h2o_file_configurator_t *self = (void*)cmd->configurator;
+    struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
 
     switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
     case 0: /* off */
@@ -257,7 +257,7 @@ static const char **dup_strlist(const char **s)
 
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_h2o_file_configurator_t *self = (void*)_self;
+    struct st_h2o_file_configurator_t *self = (void *)_self;
     ++self->vars;
     self->vars[0].index_files = dup_strlist(self->vars[-1].index_files);
     self->vars[0].mimemap = self->vars[-1].mimemap;
@@ -268,7 +268,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
 
 static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_h2o_file_configurator_t *self = (void*)_self;
+    struct st_h2o_file_configurator_t *self = (void *)_self;
     free(self->vars->index_files);
     h2o_mem_release_shared(self->vars->mimemap);
     --self->vars;
@@ -277,7 +277,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 
 void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
 {
-    struct st_h2o_file_configurator_t *self = (void*)h2o_configurator_create(globalconf, sizeof(*self));
+    struct st_h2o_file_configurator_t *self = (void *)h2o_configurator_create(globalconf, sizeof(*self));
 
     self->super.enter = on_config_enter;
     self->super.exit = on_config_exit;
@@ -285,49 +285,38 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
     self->vars->mimemap = h2o_mimemap_create();
     self->vars->index_files = h2o_file_default_index_files;
 
+    h2o_configurator_define_command(&self->super, "file.dir", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
+                                                                  H2O_CONFIGURATOR_FLAG_DEFERRED,
+                                    on_config_dir, "directory under which to serve the target path");
+    h2o_configurator_define_command(&self->super, "file.index",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
+                                    on_config_index, "sequence of index file names (default: index.html index.htm index.txt)");
+    h2o_configurator_define_command(&self->super, "file.mime.settypes",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
+                                    on_config_mime_settypes, "map of mime-type -> (extension | sequence-of-extensions)");
+    h2o_configurator_define_command(&self->super, "file.mime.addtypes",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
+                                    on_config_mime_addtypes, "map of mime-type -> (extension | sequence-of-extensions)");
+    h2o_configurator_define_command(&self->super, "file.mime.removetypes",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
+                                    on_config_mime_removetypes, "sequence of extensions");
+    h2o_configurator_define_command(&self->super, "file.mime.setdefaulttype",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_mime_setdefaulttype, "default mime-type");
+    h2o_configurator_define_command(&self->super, "file.etag", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
+                                                                   H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_etag, "whether or not to send etag (ON or OFF, default: ON)");
     h2o_configurator_define_command(
-        &self->super, "file.dir",
-        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_DEFERRED,
-        on_config_dir,
-        "directory under which to serve the target path");
-    h2o_configurator_define_command(
-        &self->super, "file.index",
-        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
-        on_config_index,
-        "sequence of index file names (default: index.html index.htm index.txt)");
-    h2o_configurator_define_command(
-        &self->super, "file.mime.settypes",
-        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
-        on_config_mime_settypes,
-        "map of mime-type -> (extension | sequence-of-extensions)");
-    h2o_configurator_define_command(
-        &self->super, "file.mime.addtypes",
-        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
-        on_config_mime_addtypes,
-        "map of mime-type -> (extension | sequence-of-extensions)");
-    h2o_configurator_define_command(
-        &self->super, "file.mime.removetypes",
-        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
-        on_config_mime_removetypes,
-        "sequence of extensions");
-    h2o_configurator_define_command(
-        &self->super, "file.mime.setdefaulttype",
-        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-        on_config_mime_setdefaulttype,
-        "default mime-type");
-    h2o_configurator_define_command(
-        &self->super, "file.etag",
-        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-        on_config_etag,
-        "whether or not to send etag (ON or OFF, default: ON)");
-    h2o_configurator_define_command(
-        &self->super, "file.send-gzip",
-        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-        on_config_send_gzip,
-        "whether or not to send .gz variants if possible (ON or OFF, default: OFF)");
-    h2o_configurator_define_command(
-        &self->super, "file.dirlisting",
-        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-        on_config_dir_listing,
-        "whether or not to send directory indexes (ON or OFF, default: OFF)");
+        &self->super, "file.send-gzip", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
+                                            H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        on_config_send_gzip, "whether or not to send .gz variants if possible (ON or OFF, default: OFF)");
+    h2o_configurator_define_command(&self->super, "file.dirlisting",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_dir_listing, "whether or not to send directory indexes (ON or OFF, default: OFF)");
 }

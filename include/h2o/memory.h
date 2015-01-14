@@ -32,7 +32,7 @@
 extern "C" {
 #endif
 
-#define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s*)((char*)(p) - offsetof(s, m)))
+#define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s *)((char *)(p)-offsetof(s, m)))
 
 typedef struct st_h2o_buffer_prototype_t h2o_buffer_prototype_t;
 
@@ -104,11 +104,11 @@ struct st_h2o_buffer_prototype_t {
     h2o_buffer_mmap_settings_t *mmap_settings;
 };
 
-#define H2O_VECTOR(type) \
-    struct { \
-        type *entries; \
-        size_t size; \
-        size_t capacity; \
+#define H2O_VECTOR(type)                                                                                                           \
+    struct {                                                                                                                       \
+        type *entries;                                                                                                             \
+        size_t size;                                                                                                               \
+        size_t capacity;                                                                                                           \
     }
 
 typedef H2O_VECTOR(void) h2o_vector_t;
@@ -179,7 +179,7 @@ static int h2o_mem_release_shared(void *p);
  */
 static void h2o_buffer_init(h2o_buffer_t **buffer, h2o_buffer_prototype_t *prototype);
 /**
- * 
+ *
  */
 void h2o_buffer__do_free(h2o_buffer_t *buffer);
 /**
@@ -191,7 +191,8 @@ static void h2o_buffer_dispose(h2o_buffer_t **buffer);
  * @param inbuf - pointer to a pointer pointing to the structure (set *inbuf to NULL to allocate a new buffer)
  * @param min_guarantee minimum number of bytes to reserve
  * @return buffer to which the next data should be stored
- * @note When called against a new buffer, the function returns a buffer twice the size of requested guarantee.  The function uses exponential backoff for already-allocated buffers.
+ * @note When called against a new buffer, the function returns a buffer twice the size of requested guarantee.  The function uses
+ * exponential backoff for already-allocated buffers.
  */
 h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **inbuf, size_t min_guarantee);
 /**
@@ -204,7 +205,8 @@ void h2o_buffer_consume(h2o_buffer_t **inbuf, size_t delta);
  */
 static void h2o_buffer_set_prototype(h2o_buffer_t **buffer, h2o_buffer_prototype_t *prototype);
 /**
- * registers a buffer to memory pool, so that it would be freed when the pool is flushed.  Note that the buffer cannot be resized after it is linked.
+ * registers a buffer to memory pool, so that it would be freed when the pool is flushed.  Note that the buffer cannot be resized
+ * after it is linked.
  */
 static void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool);
 /**
@@ -228,7 +230,7 @@ inline h2o_iovec_t h2o_iovec_init(const void *base, size_t len)
 {
     /* intentionally declared to take a "const void*" since it may contain any type of data and since _some_ buffers are constant */
     h2o_iovec_t buf;
-    buf.base = (char*)base;
+    buf.base = (char *)base;
     buf.len = len;
     return buf;
 }
@@ -293,7 +295,7 @@ inline void h2o_buffer_set_prototype(h2o_buffer_t **buffer, h2o_buffer_prototype
 
 inline void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool)
 {
-    h2o_buffer_t **slot = (h2o_buffer_t**)h2o_mem_alloc_shared(pool, sizeof(*slot), (void (*)(void*))(void*)h2o_buffer_dispose);
+    h2o_buffer_t **slot = (h2o_buffer_t **)h2o_mem_alloc_shared(pool, sizeof(*slot), (void (*)(void *))(void *)h2o_buffer_dispose);
     *slot = buffer;
 }
 

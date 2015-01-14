@@ -23,9 +23,9 @@
 #include <sys/select.h>
 
 #if 0
-# define DEBUG_LOG(...) fprintf(stderr, __VA_ARGS__)
+#define DEBUG_LOG(...) fprintf(stderr, __VA_ARGS__)
 #else
-# define DEBUG_LOG(...)
+#define DEBUG_LOG(...)
 #endif
 
 struct st_h2o_evloop_select_t {
@@ -64,7 +64,8 @@ static void update_fdset(struct st_h2o_evloop_select_t *loop)
                 FD_CLR(sock->fd, &loop->readfds);
                 sock->_flags &= ~H2O_SOCKET_FLAG_IS_POLLED_FOR_READ;
             }
-            if (h2o_socket_is_writing(&sock->super) && (sock->_wreq.cnt != 0 || (sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0)) {
+            if (h2o_socket_is_writing(&sock->super) &&
+                (sock->_wreq.cnt != 0 || (sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0)) {
                 DEBUG_LOG("setting WRITE for fd: %d\n", sock->fd);
                 FD_SET(sock->fd, &loop->writefds);
                 sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE;
@@ -80,7 +81,7 @@ static void update_fdset(struct st_h2o_evloop_select_t *loop)
 
 int evloop_do_proceed(h2o_evloop_t *_loop)
 {
-    struct st_h2o_evloop_select_t *loop = (struct st_h2o_evloop_select_t*)_loop;
+    struct st_h2o_evloop_select_t *loop = (struct st_h2o_evloop_select_t *)_loop;
     fd_set rfds, wfds;
     int32_t max_wait;
     struct timeval timeout;
@@ -106,7 +107,8 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
     /* update readable flags, perform writes */
     if (ret > 0) {
         for (fd = 0; fd <= loop->max_fd; ++fd) {
-            /* set read_ready flag before calling the write cb, since app. code invoked by the latter may close the socket, clearing the former flag */
+            /* set read_ready flag before calling the write cb, since app. code invoked by the latter may close the socket, clearing
+             * the former flag */
             if (FD_ISSET(fd, &rfds)) {
                 struct st_h2o_evloop_socket_t *sock = loop->socks[fd];
                 assert(sock != NULL);
@@ -132,7 +134,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
 
 static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock)
 {
-    struct st_h2o_evloop_select_t *loop = (struct st_h2o_evloop_select_t*)sock->loop;
+    struct st_h2o_evloop_select_t *loop = (struct st_h2o_evloop_select_t *)sock->loop;
 
     if (loop->max_fd < sock->fd)
         loop->max_fd = sock->fd;
@@ -140,13 +142,13 @@ static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock)
     if (loop->socks[sock->fd] != NULL) {
         assert(loop->socks[sock->fd]->_flags == H2O_SOCKET_FLAG_IS_DISPOSED);
     }
-    assert(! FD_ISSET(sock->fd, &loop->readfds));
-    assert(! FD_ISSET(sock->fd, &loop->writefds));
+    assert(!FD_ISSET(sock->fd, &loop->readfds));
+    assert(!FD_ISSET(sock->fd, &loop->writefds));
 }
 
 static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
 {
-    struct st_h2o_evloop_select_t *loop = (struct st_h2o_evloop_select_t*)sock->loop;
+    struct st_h2o_evloop_select_t *loop = (struct st_h2o_evloop_select_t *)sock->loop;
     if (sock->fd == -1)
         return;
     assert(loop->socks[sock->fd] != NULL);
@@ -157,13 +159,13 @@ static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
 
 static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
 {
-    struct st_h2o_evloop_select_t *loop = (struct st_h2o_evloop_select_t*)sock->loop;
+    struct st_h2o_evloop_select_t *loop = (struct st_h2o_evloop_select_t *)sock->loop;
     evloop_do_on_socket_close(sock);
     loop->socks[sock->fd] = NULL;
 }
 
 h2o_evloop_t *h2o_evloop_create(void)
 {
-    struct st_h2o_evloop_select_t *loop = (struct st_h2o_evloop_select_t*)create_evloop(sizeof(*loop));
+    struct st_h2o_evloop_select_t *loop = (struct st_h2o_evloop_select_t *)create_evloop(sizeof(*loop));
     return &loop->super;
 }

@@ -25,9 +25,9 @@
 #include <sys/epoll.h>
 
 #if 0
-# define DEBUG_LOG(...) fprintf(stderr, __VA_ARGS__)
+#define DEBUG_LOG(...) fprintf(stderr, __VA_ARGS__)
 #else
-# define DEBUG_LOG(...)
+#define DEBUG_LOG(...)
 #endif
 
 struct st_h2o_evloop_epoll_t {
@@ -61,7 +61,8 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
                     changed = 1;
                 }
             }
-            if (h2o_socket_is_writing(&sock->super) && (sock->_wreq.cnt != 0 || (sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0)) {
+            if (h2o_socket_is_writing(&sock->super) &&
+                (sock->_wreq.cnt != 0 || (sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0)) {
                 ev.events |= EPOLLOUT;
                 if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE) == 0) {
                     sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE;
@@ -91,7 +92,7 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
 
 int evloop_do_proceed(h2o_evloop_t *_loop)
 {
-    struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t*)_loop;
+    struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)_loop;
     struct epoll_event events[256];
     int nevents, i;
 
@@ -134,7 +135,7 @@ static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
 
 static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
 {
-    struct st_h2o_evloop_epoll_t *loop = (void*)sock->loop;
+    struct st_h2o_evloop_epoll_t *loop = (void *)sock->loop;
     int ret;
 
     if ((sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED) == 0)
@@ -147,7 +148,7 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
 
 h2o_evloop_t *h2o_evloop_create(void)
 {
-    struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t*)create_evloop(sizeof(*loop));
+    struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)create_evloop(sizeof(*loop));
 
     loop->ep = epoll_create(10);
 

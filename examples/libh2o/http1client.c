@@ -31,8 +31,10 @@ static h2o_mem_pool_t pool;
 static const char *url;
 static int cnt_left = 3;
 
-static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt, int *method_is_head);
-static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg, struct phr_header *headers, size_t num_headers);
+static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
+                                          int *method_is_head);
+static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
+                                       h2o_iovec_t msg, struct phr_header *headers, size_t num_headers);
 
 static void start_request(h2o_http1client_ctx_t *ctx)
 {
@@ -59,7 +61,8 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     /* build request */
     req = h2o_mem_alloc_pool(&pool, sizeof(*req));
     req->base = h2o_mem_alloc_pool(&pool, 1024);
-    req->len = snprintf(req->base, 1024, "GET %.*s HTTP/1.1\r\nhost: %s:%u\r\n\r\n", (int)path.len, path.base, host.base, (unsigned)port);
+    req->len =
+        snprintf(req->base, 1024, "GET %.*s HTTP/1.1\r\nhost: %s:%u\r\n\r\n", (int)path.len, path.base, host.base, (unsigned)port);
     assert(req->len < 1024);
 
     /* initiate the request */
@@ -99,7 +102,8 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     return 0;
 }
 
-h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg, struct phr_header *headers, size_t num_headers)
+h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
+                                struct phr_header *headers, size_t num_headers)
 {
     size_t i;
 
@@ -123,7 +127,8 @@ h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, i
     return on_body;
 }
 
-h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt, int *method_is_head)
+h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
+                                   int *method_is_head)
 {
     if (errstr != NULL) {
         fprintf(stderr, "%s\n", errstr);
@@ -131,7 +136,7 @@ h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr
         return NULL;
     }
 
-    *reqbufs = (h2o_iovec_t*)client->data;
+    *reqbufs = (h2o_iovec_t *)client->data;
     *reqbufcnt = 1;
     *method_is_head = 0;
 
@@ -140,11 +145,7 @@ h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr
 
 int main(int argc, char **argv)
 {
-    h2o_http1client_ctx_t ctx = {
-        NULL,
-        &zero_timeout,
-        &io_timeout
-    };
+    h2o_http1client_ctx_t ctx = {NULL, &zero_timeout, &io_timeout};
 
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <url>\n", argv[0]);
@@ -154,7 +155,7 @@ int main(int argc, char **argv)
 
     h2o_mem_init_pool(&pool);
 
-    /* setup context */
+/* setup context */
 #if H2O_USE_LIBUV
     ctx.loop = uv_loop_new();
 #else

@@ -27,16 +27,16 @@
 
 /* taken from sysexits.h */
 #ifndef EX_SOFTWARE
-# define EX_SOFTWARE 70
+#define EX_SOFTWARE 70
 #endif
 #ifndef EX_OSERR
-# define EX_OSERR 71
+#define EX_OSERR 71
 #endif
 #ifndef EX_TEMPFAIL
-# define EX_TEMPFAIL 75
+#define EX_TEMPFAIL 75
 #endif
 #ifndef EX_CONFIG
-# define EX_CONFIG 78
+#define EX_CONFIG 78
 #endif
 
 /**

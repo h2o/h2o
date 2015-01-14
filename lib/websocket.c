@@ -32,7 +32,7 @@ static void create_accept_key(char *dst, const char *client_key)
     uint8_t sha1buf[20], key_src[60];
 
     memcpy(key_src, client_key, 24);
-    memcpy(key_src+24, WS_GUID, 36);
+    memcpy(key_src + 24, WS_GUID, 36);
     SHA1(key_src, sizeof(key_src), sha1buf);
     h2o_base64_encode(dst, sha1buf, sizeof(sha1buf), 0);
     dst[28] = '\0';
@@ -127,7 +127,8 @@ static void on_complete(void *user_data, h2o_socket_t *sock, size_t reqsize)
     h2o_websocket_proceed(conn);
 }
 
-h2o_websocket_conn_t *h2o_upgrade_to_websocket(h2o_http1_conn_t *src_conn, const char *client_key, void *data, h2o_websocket_msg_callback cb)
+h2o_websocket_conn_t *h2o_upgrade_to_websocket(h2o_http1_conn_t *src_conn, const char *client_key, void *data,
+                                               h2o_websocket_msg_callback cb)
 {
     h2o_websocket_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
     char accept_key[29];
@@ -148,7 +149,8 @@ h2o_websocket_conn_t *h2o_upgrade_to_websocket(h2o_http1_conn_t *src_conn, const
     src_conn->req.res.status = 101;
     src_conn->req.res.reason = "Switching Protocols";
     h2o_add_header(&src_conn->req.pool, &src_conn->req.res.headers, H2O_TOKEN_UPGRADE, H2O_STRLIT("websocket"));
-    h2o_add_header_by_str(&src_conn->req.pool, &src_conn->req.res.headers, H2O_STRLIT("sec-websocket-accept"), 0, accept_key, strlen(accept_key));
+    h2o_add_header_by_str(&src_conn->req.pool, &src_conn->req.res.headers, H2O_STRLIT("sec-websocket-accept"), 0, accept_key,
+                          strlen(accept_key));
 
     /* send */
     h2o_http1_upgrade(src_conn, NULL, 0, on_complete, conn);
@@ -204,7 +206,7 @@ void h2o_websocket_proceed(h2o_websocket_conn_t *conn)
     /* run the loop until getting to a point where no more progress can be achieved */
     do {
         handled = 0;
-        if (! h2o_socket_is_writing(conn->sock) && wslay_event_want_write(conn->ws_ctx)) {
+        if (!h2o_socket_is_writing(conn->sock) && wslay_event_want_write(conn->ws_ctx)) {
             if (wslay_event_send(conn->ws_ctx) != 0) {
                 goto Close;
             }

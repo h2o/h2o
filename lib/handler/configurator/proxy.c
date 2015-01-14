@@ -29,22 +29,21 @@ struct proxy_configurator_t {
     h2o_proxy_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
-
 static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct proxy_configurator_t *self = (void*)cmd->configurator;
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
     return h2o_configurator_scanf(cmd, node, "%" PRIu64, &self->vars->io_timeout);
 }
 
 static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct proxy_configurator_t *self = (void*)cmd->configurator;
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
     return h2o_configurator_scanf(cmd, node, "%" PRIu64, &self->vars->keepalive_timeout);
 }
 
 static int on_config_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct proxy_configurator_t *self = (void*)cmd->configurator;
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
     ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
     if (ret == -1)
         return -1;
@@ -54,7 +53,7 @@ static int on_config_keepalive(h2o_configurator_command_t *cmd, h2o_configurator
 
 static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct proxy_configurator_t *self = (void*)cmd->configurator;
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
     h2o_mem_pool_t pool;
     h2o_iovec_t scheme, host, path;
     uint16_t port;
@@ -65,17 +64,13 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         h2o_configurator_errprintf(cmd, node, "failed to parse URL: %s\n", node->data.scalar);
         goto ErrExit;
     }
-    if (! h2o_memis(scheme.base, scheme.len, H2O_STRLIT("http"))) {
+    if (!h2o_memis(scheme.base, scheme.len, H2O_STRLIT("http"))) {
         h2o_configurator_errprintf(cmd, node, "only HTTP URLs are supported");
         goto ErrExit;
     }
     /* register */
-    h2o_proxy_register_reverse_proxy(
-        ctx->pathconf,
-        h2o_strdup(&pool, host.base, host.len).base,
-        port,
-        h2o_strdup(&pool, path.base, path.len).base,
-        self->vars);
+    h2o_proxy_register_reverse_proxy(ctx->pathconf, h2o_strdup(&pool, host.base, host.len).base, port,
+                                     h2o_strdup(&pool, path.base, path.len).base, self->vars);
 
     h2o_mem_clear_pool(&pool);
     return 0;
@@ -87,7 +82,7 @@ ErrExit:
 
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct proxy_configurator_t *self = (void*)_self;
+    struct proxy_configurator_t *self = (void *)_self;
 
     memcpy(self->vars + 1, self->vars, sizeof(*self->vars));
     ++self->vars;
@@ -96,7 +91,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
 
 static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct proxy_configurator_t *self = (void*)_self;
+    struct proxy_configurator_t *self = (void *)_self;
 
     --self->vars;
     return 0;
@@ -104,7 +99,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 
 void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
 {
-    struct proxy_configurator_t *c = (void*)h2o_configurator_create(conf, sizeof(*c));
+    struct proxy_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
 
     /* set default vars */
     c->vars = c->_vars_stack;
@@ -115,20 +110,20 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->super.enter = on_config_enter;
     c->super.exit = on_config_exit;
     h2o_configurator_define_command(&c->super, "proxy.reverse.url",
-        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_DEFERRED,
-        on_config_reverse_url,
-        "upstream URL (only HTTP is suppported)");
+                                    H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
+                                        H2O_CONFIGURATOR_FLAG_DEFERRED,
+                                    on_config_reverse_url, "upstream URL (only HTTP is suppported)");
     h2o_configurator_define_command(&c->super, "proxy.keepalive",
-        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-        on_config_keepalive,
-        "boolean flag (ON/OFF) indicating whether or not to use persistent\n"
-        "connections to upstream (default: OFF)");
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_keepalive, "boolean flag (ON/OFF) indicating whether or not to use persistent\n"
+                                                         "connections to upstream (default: OFF)");
     h2o_configurator_define_command(&c->super, "proxy.timeout.io",
-        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-        on_config_timeout_io,
-        "sets upstream I/O timeout (in milliseconds, default: 5000)");
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_timeout_io, "sets upstream I/O timeout (in milliseconds, default: 5000)");
     h2o_configurator_define_command(&c->super, "proxy.timeout.keepalive",
-        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-        on_config_timeout_keepalive,
-        "timeout for idle conncections (in milliseconds, default: 2000)");
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_timeout_keepalive, "timeout for idle conncections (in milliseconds, default: 2000)");
 }

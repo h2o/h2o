@@ -24,21 +24,17 @@
 
 void test_lib__proxy_c()
 {
-    h2o_proxy_location_t conf = {
-        { H2O_STRLIT("realhost") },
-        81,
-        { H2O_STRLIT("/real/") }
-    };
+    h2o_proxy_location_t conf = {{H2O_STRLIT("realhost")}, 81, {H2O_STRLIT("/real/")}};
     h2o_mem_pool_t pool;
     h2o_iovec_t ret;
 
     h2o_mem_init_pool(&pool);
 
-    ret = rewrite_location(&pool, H2O_STRLIT("http://realhost:81/real/abc"), &conf,
-        h2o_iovec_init(H2O_STRLIT("https")), h2o_iovec_init(H2O_STRLIT("vhost:8443")), h2o_iovec_init(H2O_STRLIT("/virtual/")));
+    ret = rewrite_location(&pool, H2O_STRLIT("http://realhost:81/real/abc"), &conf, h2o_iovec_init(H2O_STRLIT("https")),
+                           h2o_iovec_init(H2O_STRLIT("vhost:8443")), h2o_iovec_init(H2O_STRLIT("/virtual/")));
     ok(h2o_memis(ret.base, ret.len, H2O_STRLIT("https://vhost:8443/virtual/abc")));
-    ret = rewrite_location(&pool, H2O_STRLIT("http://realhost:81/other/abc"), &conf,
-        h2o_iovec_init(H2O_STRLIT("https")), h2o_iovec_init(H2O_STRLIT("vhost:8443")), h2o_iovec_init(H2O_STRLIT("/virtual/")));
+    ret = rewrite_location(&pool, H2O_STRLIT("http://realhost:81/other/abc"), &conf, h2o_iovec_init(H2O_STRLIT("https")),
+                           h2o_iovec_init(H2O_STRLIT("vhost:8443")), h2o_iovec_init(H2O_STRLIT("/virtual/")));
     ok(h2o_memis(ret.base, ret.len, H2O_STRLIT("http://realhost:81/other/abc")));
 
     h2o_mem_clear_pool(&pool);

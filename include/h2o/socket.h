@@ -32,22 +32,22 @@ extern "C" {
 #include "h2o/memory.h"
 
 #ifndef H2O_USE_LIBUV
-# if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_KQUEUE
-#  define H2O_USE_LIBUV 0
-# else
-#  define H2O_USE_LIBUV 1
-# endif
+#if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_KQUEUE
+#define H2O_USE_LIBUV 0
+#else
+#define H2O_USE_LIBUV 1
+#endif
 #endif
 
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L
-# define H2O_USE_ALPN 1
-# define H2O_USE_NPN 1
+#define H2O_USE_ALPN 1
+#define H2O_USE_NPN 1
 #elif OPENSSL_VERSION_NUMBER >= 0x10001000L
-# define H2O_USE_ALPN 0
-# define H2O_USE_NPN 1
+#define H2O_USE_ALPN 0
+#define H2O_USE_NPN 1
 #else
-# define H2O_USE_ALPN 0
-# define H2O_USE_NPN 0
+#define H2O_USE_ALPN 0
+#define H2O_USE_NPN 0
 #endif
 
 #define H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE 4096
@@ -57,9 +57,9 @@ typedef struct st_h2o_socket_t h2o_socket_t;
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, int err);
 
 #if H2O_USE_LIBUV
-# include "socket/uv-binding.h"
+#include "socket/uv-binding.h"
 #else
-# include "socket/evloop.h"
+#include "socket/evloop.h"
 #endif
 
 typedef struct st_h2o_socket_peername_t {
