@@ -532,7 +532,7 @@ static void handle_ping_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame)
     h2o_http2_ping_payload_t payload;
 
     if (frame->stream_id != 0 || h2o_http2_decode_ping_payload(&payload, frame) != 0) {
-        enqueue_goaway_and_initiate_close(conn, H2O_HTTP2_ERROR_PROTOCOL, h2o_iovec_init(H2O_STRLIT("invalid PING frame")));
+        enqueue_goaway_and_initiate_close(conn, H2O_HTTP2_ERROR_FRAME_SIZE, h2o_iovec_init(H2O_STRLIT("invalid PING frame")));
         return;
     }
 
