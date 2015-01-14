@@ -140,8 +140,10 @@ system(q{date '+%H:%M:%S.%N'});
             is $out, "hello\n" x 10, "$proto://127.0.0.1/index.txt x 10 times";
 system(q{date '+%H:%M:%S.%N'});
             $out = `nghttp $opt -H':method: POST' -d $huge_file $proto://127.0.0.1:$port/echo`;
+system(q{date '+%H:%M:%S.%N'});
             is length($out), $huge_file_size, "$proto://127.0.0.1/echo (mmap-backed, size)";
             is md5_hex($out), $huge_file_md5, "$proto://127.0.0.1/echo (mmap-backed, md5)";
+system(q{date '+%H:%M:%S.%N'});
         };
         subtest 'http' => sub {
             $doit->('http', $port);
