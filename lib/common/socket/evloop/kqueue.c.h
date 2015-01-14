@@ -26,9 +26,9 @@
 #include <sys/time.h>
 
 #if 0
-# define DEBUG_LOG(...) fprintf(stderr, __VA_ARGS__)
+#define DEBUG_LOG(...) fprintf(stderr, __VA_ARGS__)
 #else
-# define DEBUG_LOG(...)
+#define DEBUG_LOG(...)
 #endif
 
 struct st_h2o_socket_loop_kqueue_t {
@@ -40,17 +40,18 @@ static int collect_status(struct st_h2o_socket_loop_kqueue_t *loop, struct keven
 {
     int change_index = 0;
 
-#define SET_AND_UPDATE(filter, flags) do { \
-    EV_SET(changelist + change_index++, sock->fd, filter, flags, 0, 0, sock); \
-    if (change_index == changelist_capacity) { \
-        int ret; \
-        while ((ret = kevent(loop->kq, changelist, change_index, NULL, 0, NULL)) != 0 && errno == EINTR) \
-            ; \
-        if (ret == -1) \
-            return -1; \
-        change_index = 0; \
-    } \
-} while (0)
+#define SET_AND_UPDATE(filter, flags)                                                                                              \
+    do {                                                                                                                           \
+        EV_SET(changelist + change_index++, sock->fd, filter, flags, 0, 0, sock);                                                  \
+        if (change_index == changelist_capacity) {                                                                                 \
+            int ret;                                                                                                               \
+            while ((ret = kevent(loop->kq, changelist, change_index, NULL, 0, NULL)) != 0 && errno == EINTR)                       \
+                ;                                                                                                                  \
+            if (ret == -1)                                                                                                         \
+                return -1;                                                                                                         \
+            change_index = 0;                                                                                                      \
+        }                                                                                                                          \
+    } while (0)
 
     while (loop->super._statechanged.head != NULL) {
         /* detach the top */
@@ -72,7 +73,8 @@ static int collect_status(struct st_h2o_socket_loop_kqueue_t *loop, struct keven
                     SET_AND_UPDATE(EVFILT_READ, EV_DELETE);
                 }
             }
-            if (h2o_socket_is_writing(&sock->super) && (sock->_wreq.cnt != 0 || (sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0)) {
+            if (h2o_socket_is_writing(&sock->super) &&
+                (sock->_wreq.cnt != 0 || (sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0)) {
                 if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE) == 0) {
                     sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE;
                     SET_AND_UPDATE(EVFILT_WRITE, EV_ADD);
@@ -94,7 +96,7 @@ static int collect_status(struct st_h2o_socket_loop_kqueue_t *loop, struct keven
 
 int evloop_do_proceed(h2o_evloop_t *_loop)
 {
-    struct st_h2o_socket_loop_kqueue_t *loop = (struct st_h2o_socket_loop_kqueue_t*)_loop;
+    struct st_h2o_socket_loop_kqueue_t *loop = (struct st_h2o_socket_loop_kqueue_t *)_loop;
     struct kevent changelist[64], events[128];
     int nchanges, nevents, i;
     int32_t max_wait;
@@ -147,7 +149,7 @@ static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
 
 static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
 {
-    struct st_h2o_socket_loop_kqueue_t *loop = (void*)sock->loop;
+    struct st_h2o_socket_loop_kqueue_t *loop = (void *)sock->loop;
     struct kevent changelist[2];
     int change_index = 0, ret;
 
@@ -165,7 +167,7 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
 
 h2o_evloop_t *h2o_evloop_create(void)
 {
-    struct st_h2o_socket_loop_kqueue_t *loop = (struct st_h2o_socket_loop_kqueue_t*)create_evloop(sizeof(*loop));
+    struct st_h2o_socket_loop_kqueue_t *loop = (struct st_h2o_socket_loop_kqueue_t *)create_evloop(sizeof(*loop));
 
     loop->kq = kqueue();
 

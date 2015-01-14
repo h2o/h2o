@@ -68,7 +68,7 @@ void h2o_loopback_run_loop(h2o_loopback_conn_t *conn)
 
     h2o_process_request(&conn->req);
 
-    while (! conn->_is_complete) {
+    while (!conn->_is_complete) {
 #if H2O_USE_LIBUV
         uv_run(conn->super.ctx->loop, UV_RUN_ONCE);
 #else
@@ -146,7 +146,7 @@ int main(int argc, char **argv)
         uv_loop_close(test_loop);
         free(test_loop);
 #else
-        //h2o_evloop_destroy(loop);
+// h2o_evloop_destroy(loop);
 #endif
     }
 

@@ -65,14 +65,16 @@ typedef struct st_h2o_hpack_header_table_t {
     size_t num_entries, entry_capacity, entry_start_index;
     /* size and capacities are 32+name_len+value_len (as defined by hpack spec.) */
     size_t hpack_size;
-    size_t hpack_capacity; /* the value set by SETTINGS_HEADER_TABLE_SIZE _and_ dynamic table size update */
+    size_t hpack_capacity;     /* the value set by SETTINGS_HEADER_TABLE_SIZE _and_ dynamic table size update */
     size_t hpack_max_capacity; /* the value set by SETTINGS_HEADER_TABLE_SIZE */
 } h2o_hpack_header_table_t;
 
 void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table);
-int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, int *allow_psuedo, const uint8_t *src, size_t len);
+int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, int *allow_psuedo, const uint8_t *src,
+                            size_t len);
 size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len);
-int h2o_hpack_flatten_headers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id, size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t* ts, const h2o_iovec_t *server_name);
+int h2o_hpack_flatten_headers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id, size_t max_frame_size,
+                              h2o_res_t *res, h2o_timestamp_t *ts, const h2o_iovec_t *server_name);
 
 /* settings */
 
@@ -97,7 +99,7 @@ const h2o_http2_settings_t H2O_HTTP2_SETTINGS_HOST;
 typedef struct st_h2o_http2_priority_t {
     int exclusive;
     uint32_t dependency; /* 0 if not set */
-    uint16_t weight; /* 0 if not set */
+    uint16_t weight;     /* 0 if not set */
 } h2o_http2_priority_t;
 
 /* frames */
@@ -164,14 +166,14 @@ typedef struct st_h2o_http2_window_t {
 
 typedef struct h2o_http2_stream_priolist_slot_t {
     uint16_t weight;
-    h2o_linklist_t active_streams; /* stream that has data, that can be sent */
+    h2o_linklist_t active_streams;  /* stream that has data, that can be sent */
     h2o_linklist_t blocked_streams; /* stream that has data, but those blocked by the stream-level window */
     size_t refcnt;
 } h2o_http2_stream_priolist_slot_t;
 
 typedef struct st_h2o_http2_stream_priolist_t {
     size_t refcnt;
-    H2O_VECTOR(h2o_http2_stream_priolist_slot_t*) list;
+    H2O_VECTOR(h2o_http2_stream_priolist_slot_t *) list;
 } h2o_http2_stream_priolist_t;
 
 typedef enum enum_h2o_http2_stream_state_t {
@@ -204,12 +206,9 @@ struct st_h2o_http2_stream_t {
     h2o_req_t req;
 };
 
-KHASH_MAP_INIT_INT64(h2o_http2_stream_t, h2o_http2_stream_t*)
+KHASH_MAP_INIT_INT64(h2o_http2_stream_t, h2o_http2_stream_t *)
 
-typedef enum enum_h2o_http2_conn_state_t {
-    H2O_HTTP2_CONN_STATE_OPEN,
-    H2O_HTTP2_CONN_STATE_IS_CLOSING
-} h2o_http2_conn_state_t;
+typedef enum enum_h2o_http2_conn_state_t { H2O_HTTP2_CONN_STATE_OPEN, H2O_HTTP2_CONN_STATE_IS_CLOSING } h2o_http2_conn_state_t;
 
 struct st_h2o_http2_conn_t {
     h2o_conn_t super;
@@ -217,7 +216,7 @@ struct st_h2o_http2_conn_t {
     /* settings */
     h2o_http2_settings_t peer_settings;
     /* streams */
-    khash_t(h2o_http2_stream_t) *open_streams;
+    khash_t(h2o_http2_stream_t) * open_streams;
     uint32_t max_open_stream_id;
     uint32_t max_processed_stream_id;
     uint32_t num_responding_streams;
@@ -267,7 +266,8 @@ void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_ht
 static ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn);
 
 /* stream */
-h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, const h2o_http2_priority_t *priority, h2o_req_t *src_req);
+h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, const h2o_http2_priority_t *priority,
+                                          h2o_req_t *src_req);
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int errnum);
 void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);

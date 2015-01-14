@@ -24,8 +24,8 @@
 
 #include <uv.h>
 
-#if ! (defined(UV_VERSION_MAJOR) && UV_VERSION_MAJOR == 1)
-# error "libh2o (libuv binding) requires libuv version 1.x.y"
+#if !(defined(UV_VERSION_MAJOR) && UV_VERSION_MAJOR == 1)
+#error "libh2o (libuv binding) requires libuv version 1.x.y"
 #endif
 
 typedef uv_loop_t h2o_loop_t;

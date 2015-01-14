@@ -65,9 +65,9 @@ struct st_h2o_configurator_command_t {
      */
     h2o_configurator_command_cb cb;
     /**
-     * lines of strings (NULL-terminated) describing of the command (printed by h2o --help)
+     * multi-line string describing of the command (printed by h2o --help)
      */
-    const char **description;
+    const char *description;
 };
 
 /**
@@ -100,12 +100,8 @@ h2o_configurator_t *h2o_configurator_create(h2o_globalconf_t *conf, size_t sz);
 /**
  *
  */
-#define h2o_configurator_define_command(configurator, name, flags, cb, ...) \
-    do { \
-        static const char *desc[] = { __VA_ARGS__, NULL }; \
-        h2o_configurator__define_command(configurator, name, flags, cb, desc); \
-    } while (0)
-void h2o_configurator__define_command(h2o_configurator_t *configurator, const char *name, int flags, h2o_configurator_command_cb cb, const char **desc);
+void h2o_configurator_define_command(h2o_configurator_t *configurator, const char *name, int flags, h2o_configurator_command_cb cb,
+                                     const char *desc);
 /**
  * returns a configurator of given command name
  * @return configurator for given name or NULL if not found
@@ -119,7 +115,8 @@ int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node);
 /**
  * emits configuration error
  */
-void h2o_configurator_errprintf(h2o_configurator_command_t *cmd, yoml_t *node, const char *reason, ...) __attribute__((format (printf, 3, 4)));
+void h2o_configurator_errprintf(h2o_configurator_command_t *cmd, yoml_t *node, const char *reason, ...)
+    __attribute__((format(printf, 3, 4)));
 /**
  * interprets the configuration value using sscanf, or prints an error upon failure
  * @param configurator configurator
@@ -127,9 +124,11 @@ void h2o_configurator_errprintf(h2o_configurator_command_t *cmd, yoml_t *node, c
  * @param fmt scanf-style format string
  * @return 0 if successful, -1 if not
  */
-int h2o_configurator_scanf(h2o_configurator_command_t *cmd, yoml_t *node, const char *fmt, ...) __attribute__((format (scanf, 3, 4)));
+int h2o_configurator_scanf(h2o_configurator_command_t *cmd, yoml_t *node, const char *fmt, ...)
+    __attribute__((format(scanf, 3, 4)));
 /**
- * interprets the configuration value and returns the index of the matched string within the candidate strings, or prints an error upon failure
+ * interprets the configuration value and returns the index of the matched string within the candidate strings, or prints an error
+ * upon failure
  * @param configurator configurator
  * @param node configuration value
  * @param candidates a comma-separated list of strings (should not contain whitespaces)

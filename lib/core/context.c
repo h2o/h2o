@@ -26,14 +26,14 @@
 
 static void on_context_init(h2o_context_t *ctx, h2o_pathconf_t *pathconf)
 {
-#define DOIT(type, list) \
-    do { \
-        size_t i; \
-        for (i = 0; i != pathconf->list.size; ++i) { \
-            type *o = pathconf->list.entries[i]; \
-            if (o->on_context_init != NULL) \
-                ctx->_module_configs[o->_config_slot] = o->on_context_init(o, ctx); \
-        } \
+#define DOIT(type, list)                                                                                                           \
+    do {                                                                                                                           \
+        size_t i;                                                                                                                  \
+        for (i = 0; i != pathconf->list.size; ++i) {                                                                               \
+            type *o = pathconf->list.entries[i];                                                                                   \
+            if (o->on_context_init != NULL)                                                                                        \
+                ctx->_module_configs[o->_config_slot] = o->on_context_init(o, ctx);                                                \
+        }                                                                                                                          \
     } while (0)
 
     DOIT(h2o_handler_t, handlers);
@@ -45,14 +45,14 @@ static void on_context_init(h2o_context_t *ctx, h2o_pathconf_t *pathconf)
 
 static void on_context_dispose(h2o_context_t *ctx, h2o_pathconf_t *pathconf)
 {
-#define DOIT(type, list) \
-    do { \
-        size_t i; \
-        for (i = 0; i != pathconf->list.size; ++i) { \
-            type *o = pathconf->list.entries[i]; \
-            if (o->on_context_dispose != NULL) \
-                o->on_context_dispose(o, ctx); \
-        } \
+#define DOIT(type, list)                                                                                                           \
+    do {                                                                                                                           \
+        size_t i;                                                                                                                  \
+        for (i = 0; i != pathconf->list.size; ++i) {                                                                               \
+            type *o = pathconf->list.entries[i];                                                                                   \
+            if (o->on_context_dispose != NULL)                                                                                     \
+                o->on_context_dispose(o, ctx);                                                                                     \
+        }                                                                                                                          \
     } while (0)
 
     DOIT(h2o_handler_t, handlers);

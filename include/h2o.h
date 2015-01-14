@@ -45,14 +45,14 @@ extern "C" {
 #include "h2o/version.h"
 
 #ifndef H2O_MAX_HEADERS
-# define H2O_MAX_HEADERS 100
+#define H2O_MAX_HEADERS 100
 #endif
 #ifndef H2O_MAX_REQLEN
-# define H2O_MAX_REQLEN (8192+4096*(H2O_MAX_HEADERS))
+#define H2O_MAX_REQLEN (8192 + 4096 * (H2O_MAX_HEADERS))
 #endif
 
 #ifndef H2O_MAX_TOKENS
-# define H2O_MAX_TOKENS 10240
+#define H2O_MAX_TOKENS 10240
 #endif
 
 #define H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE (1024 * 1024 * 1024)
@@ -96,7 +96,7 @@ typedef struct st_h2o_handler_t {
     void (*dispose)(struct st_h2o_handler_t *self);
     int (*on_req)(struct st_h2o_handler_t *self, h2o_req_t *req);
 } h2o_handler_t;
- 
+
 /**
  * basic structure of a filter (an object that MAY modify a response)
  * The filters should register themselves to h2o_context_t::filters.
@@ -153,15 +153,15 @@ typedef struct st_h2o_pathconf_t {
     /**
      * list of handlers
      */
-    H2O_VECTOR(h2o_handler_t*) handlers;
+    H2O_VECTOR(h2o_handler_t *) handlers;
     /**
      * list of filters
      */
-    H2O_VECTOR(h2o_filter_t*) filters;
+    H2O_VECTOR(h2o_filter_t *) filters;
     /**
      * list of loggers (h2o_logger_t)
      */
-    H2O_VECTOR(h2o_logger_t*) loggers;
+    H2O_VECTOR(h2o_logger_t *) loggers;
 } h2o_pathconf_t;
 
 struct st_h2o_hostconf_t {
@@ -219,7 +219,8 @@ struct st_h2o_globalconf_t {
         uint64_t idle_timeout;
         /**
          * maximum number of HTTP2 requests (per connection) to be handled simultaneously internally.
-         * H2O accepts at most 256 requests over HTTP/2, but internally limits the number of in-flight requests to the value specified by this property in order to limit the resources allocated to a single connection.
+         * H2O accepts at most 256 requests over HTTP/2, but internally limits the number of in-flight requests to the value
+         * specified by this property in order to limit the resources allocated to a single connection.
          */
         size_t max_concurrent_requests_per_connection;
     } http2;
@@ -317,7 +318,8 @@ struct st_h2o_ostream_t {
     struct st_h2o_ostream_t *next;
     /**
      * called by the core to send output.
-     * Intermediary output streams should process the given output and call the h2o_ostream_send_next function if any data can be sent.
+     * Intermediary output streams should process the given output and call the h2o_ostream_send_next function if any data can be
+     * sent.
      */
     void (*do_send)(struct st_h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final);
     /**
@@ -487,19 +489,23 @@ void h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_toke
 /**
  * adds a header to list
  */
-void h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token, const char *value, size_t value_len);
+void h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
+                           const char *value, size_t value_len);
 /**
  * adds or replaces a header into the list
  */
-void h2o_set_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len, int overwrite_if_exists);
+void h2o_set_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len,
+                    int overwrite_if_exists);
 /**
  * adds or replaces a header into the list
  */
-void h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token, const char *value, size_t value_len, int overwrite_if_exists);
+void h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
+                           const char *value, size_t value_len, int overwrite_if_exists);
 /**
  * adds a header token
  */
-void h2o_add_header_token(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len);
+void h2o_add_header_token(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value,
+                          size_t value_len);
 /**
  * deletes a header from list
  */
@@ -640,9 +646,7 @@ static void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *lo
 
 /* built-in generators */
 
-enum {
-    H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION = 0x1
-};
+enum { H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION = 0x1 };
 
 /**
  * sends the given string as the response
@@ -703,15 +707,12 @@ void h2o_chunked_register(h2o_pathconf_t *pathconf);
 
 /* lib/expires.c */
 
-enum {
-    H2O_EXPIRES_MODE_ABSOLUTE,
-    H2O_EXPIRES_MODE_MAX_AGE
-};
+enum { H2O_EXPIRES_MODE_ABSOLUTE, H2O_EXPIRES_MODE_MAX_AGE };
 
 typedef struct st_h2o_expires_args_t {
     int mode;
     union {
-        const char* absolute;
+        const char *absolute;
         uint64_t max_age;
     } data;
 } h2o_expires_args_t;
@@ -727,11 +728,7 @@ void h2o_expires_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/file.c */
 
-enum {
-    H2O_FILE_FLAG_NO_ETAG = 0x1,
-    H2O_FILE_FLAG_DIR_LISTING = 0x2,
-    H2O_FILE_FLAG_SEND_GZIP = 0x4
-};
+enum { H2O_FILE_FLAG_NO_ETAG = 0x1, H2O_FILE_FLAG_DIR_LISTING = 0x2, H2O_FILE_FLAG_SEND_GZIP = 0x4 };
 
 typedef struct st_h2o_file_handler_t h2o_file_handler_t;
 
@@ -749,7 +746,8 @@ int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *pa
  * @param index_files optional NULL-terminated list of of filenames to be considered as the "directory-index"
  * @param mimemap the mimemap (h2o_mimemap_create is called internally if the argument is NULL)
  */
-h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real_path, const char **index_files, h2o_mimemap_t *mimemap, int flags);
+h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real_path, const char **index_files,
+                                      h2o_mimemap_t *mimemap, int flags);
 /**
  * returns the associated mimemap
  */
@@ -780,11 +778,13 @@ int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_
 /**
  * delegates the request to given server, rewriting the path as specified
  */
-int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *upstream, h2o_socketpool_t *sockpool);
+int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *upstream,
+                             h2o_socketpool_t *sockpool);
 /**
  * registers the reverse proxy handler to the context
  */
-void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, const char *host, uint16_t port, const char *real_path, h2o_proxy_config_vars_t *config);
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, const char *host, uint16_t port, const char *real_path,
+                                      h2o_proxy_config_vars_t *config);
 /**
  * registers the configurator
  */

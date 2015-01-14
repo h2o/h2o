@@ -23,15 +23,16 @@
 #include <stdio.h>
 #include "h2o.h"
 
-static h2o_header_t *add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_iovec_t *name, const char *value, size_t value_len)
+static h2o_header_t *add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_iovec_t *name, const char *value,
+                                size_t value_len)
 {
     h2o_header_t *slot;
 
-    h2o_vector_reserve(pool, (h2o_vector_t*)headers, sizeof(h2o_header_t), headers->size + 1);
+    h2o_vector_reserve(pool, (h2o_vector_t *)headers, sizeof(h2o_header_t), headers->size + 1);
     slot = headers->entries + headers->size++;
 
     slot->name = name;
-    slot->value.base = (char*)value;
+    slot->value.base = (char *)value;
     slot->value.len = value_len;
 
     return slot;
@@ -60,33 +61,35 @@ ssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, s
 
 void h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len)
 {
-    add_header(pool, headers, (h2o_iovec_t*)&token->buf, value, value_len);
+    add_header(pool, headers, (h2o_iovec_t *)&token->buf, value, value_len);
 }
 
-void h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token, const char *value, size_t value_len)
+void h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
+                           const char *value, size_t value_len)
 {
     h2o_iovec_t *name_buf;
 
     if (maybe_token) {
         const h2o_token_t *token = h2o_lookup_token(name, name_len);
         if (token != NULL) {
-            add_header(pool, headers, (h2o_iovec_t*)token, value, value_len);
+            add_header(pool, headers, (h2o_iovec_t *)token, value, value_len);
             return;
         }
     }
     name_buf = h2o_mem_alloc_pool(pool, sizeof(h2o_iovec_t));
-    name_buf->base = (char*)name;
+    name_buf->base = (char *)name;
     name_buf->len = name_len;
     add_header(pool, headers, name_buf, value, value_len);
 }
 
-void h2o_set_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len, int overwrite_if_exists)
+void h2o_set_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len,
+                    int overwrite_if_exists)
 {
     ssize_t cursor = h2o_find_header(headers, token, -1);
     if (cursor != -1) {
         if (overwrite_if_exists) {
             h2o_iovec_t *slot = &headers->entries[cursor].value;
-            slot->base = (char*)value;
+            slot->base = (char *)value;
             slot->len = value_len;
         }
     } else {
@@ -94,14 +97,15 @@ void h2o_set_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_toke
     }
 }
 
-void h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token, const char *value, size_t value_len, int overwrite_if_exists)
+void h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
+                           const char *value, size_t value_len, int overwrite_if_exists)
 {
     ssize_t cursor;
 
     if (maybe_token) {
         const h2o_token_t *token = h2o_lookup_token(name, name_len);
         if (token != NULL) {
-            h2o_set_header(pool, headers, token ,value, value_len, overwrite_if_exists);
+            h2o_set_header(pool, headers, token, value, value_len, overwrite_if_exists);
             return;
         }
     }
@@ -110,18 +114,19 @@ void h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const c
     if (cursor != -1) {
         if (overwrite_if_exists) {
             h2o_iovec_t *slot = &headers->entries[cursor].value;
-            slot->base = (char*)value;
+            slot->base = (char *)value;
             slot->len = value_len;
         }
     } else {
         h2o_iovec_t *name_buf = h2o_mem_alloc_pool(pool, sizeof(h2o_iovec_t));
-        name_buf->base = (char*)name;
+        name_buf->base = (char *)name;
         name_buf->len = name_len;
         add_header(pool, headers, name_buf, value, value_len);
     }
 }
 
-void h2o_add_header_token(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len)
+void h2o_add_header_token(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value,
+                          size_t value_len)
 {
     ssize_t cursor = h2o_find_header(headers, token, -1);
     if (cursor != -1) {

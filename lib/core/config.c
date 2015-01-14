@@ -34,16 +34,17 @@ static void init_pathconf(h2o_pathconf_t *pathconf, h2o_hostconf_t *hostconf)
 
 static void dispose_pathconf(h2o_pathconf_t *pathconf)
 {
-#define DESTROY_LIST(type, list) do { \
-    size_t i; \
-    for (i = 0; i != list.size; ++i) { \
-        type *e = list.entries[i]; \
-        if (e->dispose != NULL) \
-            e->dispose(e); \
-        free(e); \
-    } \
-    free(list.entries); \
-} while (0)
+#define DESTROY_LIST(type, list)                                                                                                   \
+    do {                                                                                                                           \
+        size_t i;                                                                                                                  \
+        for (i = 0; i != list.size; ++i) {                                                                                         \
+            type *e = list.entries[i];                                                                                             \
+            if (e->dispose != NULL)                                                                                                \
+                e->dispose(e);                                                                                                     \
+            free(e);                                                                                                               \
+        }                                                                                                                          \
+        free(list.entries);                                                                                                        \
+    } while (0)
 
     DESTROY_LIST(h2o_handler_t, pathconf->handlers);
     DESTROY_LIST(h2o_filter_t, pathconf->filters);
@@ -89,7 +90,7 @@ h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *p
 {
     h2o_pathconf_t *pathconf;
 
-    h2o_vector_reserve(NULL, (void*)&hostconf->paths, sizeof(hostconf->paths.entries[0]), hostconf->paths.size + 1);
+    h2o_vector_reserve(NULL, (void *)&hostconf->paths, sizeof(hostconf->paths.entries[0]), hostconf->paths.size + 1);
     pathconf = hostconf->paths.entries + hostconf->paths.size++;
 
     init_pathconf(pathconf, hostconf);
@@ -103,7 +104,7 @@ h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, const char *h
     h2o_hostconf_t *hostconf;
     size_t i;
 
-    h2o_vector_reserve(NULL, (void*)&config->hosts, sizeof(config->hosts.entries[0]), config->hosts.size + 1);
+    h2o_vector_reserve(NULL, (void *)&config->hosts, sizeof(config->hosts.entries[0]), config->hosts.size + 1);
     hostconf = config->hosts.entries + config->hosts.size++;
 
     init_hostconf(hostconf, config);
@@ -134,7 +135,7 @@ h2o_handler_t *h2o_create_handler(h2o_pathconf_t *conf, size_t sz)
     memset(handler, 0, sz);
     handler->_config_slot = conf->host->global->_num_config_slots++;
 
-    h2o_vector_reserve(NULL, (void*)&conf->handlers, sizeof(conf->handlers.entries[0]), conf->handlers.size + 1);
+    h2o_vector_reserve(NULL, (void *)&conf->handlers, sizeof(conf->handlers.entries[0]), conf->handlers.size + 1);
     conf->handlers.entries[conf->handlers.size++] = handler;
 
     return handler;
@@ -147,7 +148,7 @@ h2o_filter_t *h2o_create_filter(h2o_pathconf_t *conf, size_t sz)
     memset(filter, 0, sz);
     filter->_config_slot = conf->host->global->_num_config_slots++;
 
-    h2o_vector_reserve(NULL, (void*)&conf->filters, sizeof(conf->filters.entries[0]), conf->filters.size + 1);
+    h2o_vector_reserve(NULL, (void *)&conf->filters, sizeof(conf->filters.entries[0]), conf->filters.size + 1);
     conf->filters.entries[conf->filters.size++] = filter;
 
     return filter;
@@ -160,7 +161,7 @@ h2o_logger_t *h2o_create_logger(h2o_pathconf_t *conf, size_t sz)
     memset(logger, 0, sz);
     logger->_config_slot = conf->host->global->_num_config_slots++;
 
-    h2o_vector_reserve(NULL, (void*)&conf->loggers, sizeof(conf->loggers.entries[0]), conf->loggers.size + 1);
+    h2o_vector_reserve(NULL, (void *)&conf->loggers, sizeof(conf->loggers.entries[0]), conf->loggers.size + 1);
     conf->loggers.entries[conf->loggers.size++] = logger;
 
     return logger;

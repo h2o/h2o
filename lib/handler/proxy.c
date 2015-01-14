@@ -45,11 +45,12 @@ struct rp_handler_t {
     h2o_proxy_config_vars_t config;
 };
 
-static int test_location_match(h2o_proxy_location_t *location, h2o_iovec_t scheme, h2o_iovec_t host, uint16_t port, h2o_iovec_t path)
+static int test_location_match(h2o_proxy_location_t *location, h2o_iovec_t scheme, h2o_iovec_t host, uint16_t port,
+                               h2o_iovec_t path)
 {
-    if (! h2o_memis(scheme.base, scheme.len, H2O_STRLIT("http")))
+    if (!h2o_memis(scheme.base, scheme.len, H2O_STRLIT("http")))
         return 0;
-    if (! h2o_lcstris(host.base, host.len, location->host.base, location->host.len))
+    if (!h2o_lcstris(host.base, host.len, location->host.base, location->host.len))
         return 0;
     if (port != location->port)
         return 0;
@@ -60,35 +61,30 @@ static int test_location_match(h2o_proxy_location_t *location, h2o_iovec_t schem
     return 1;
 }
 
-static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, size_t location_len, h2o_proxy_location_t *upstream, h2o_iovec_t req_scheme, h2o_iovec_t req_authority, h2o_iovec_t req_basepath)
+static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, size_t location_len, h2o_proxy_location_t *upstream,
+                                    h2o_iovec_t req_scheme, h2o_iovec_t req_authority, h2o_iovec_t req_basepath)
 {
     h2o_iovec_t loc_scheme, loc_host, loc_path;
     uint16_t loc_port;
 
-    if (h2o_parse_url(location, location_len, &loc_scheme, &loc_host, &loc_port, &loc_path) != 0
-        || ! test_location_match(upstream, loc_scheme, loc_host, loc_port, loc_path))
+    if (h2o_parse_url(location, location_len, &loc_scheme, &loc_host, &loc_port, &loc_path) != 0 ||
+        !test_location_match(upstream, loc_scheme, loc_host, loc_port, loc_path))
         return h2o_iovec_init(location, location_len);
 
-    return h2o_concat(pool,
-        req_scheme,
-        h2o_iovec_init(H2O_STRLIT("://")),
-        req_authority,
-        req_basepath,
-        h2o_iovec_init(loc_path.base + upstream->path.len, loc_path.len - upstream->path.len));
+    return h2o_concat(pool, req_scheme, h2o_iovec_init(H2O_STRLIT("://")), req_authority, req_basepath,
+                      h2o_iovec_init(loc_path.base + upstream->path.len, loc_path.len - upstream->path.len));
 }
 
 static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream, int keepalive)
 {
     h2o_iovec_t buf;
     size_t bufsz;
-    const h2o_header_t *h, * h_end;
+    const h2o_header_t *h, *h_end;
     char *p;
 
     /* calc buffer length */
-    bufsz = sizeof("  HTTP/1.1\r\nhost: :65535\r\nconnection: keep-alive\r\ncontent-length: 18446744073709551615\r\n\r\n")
-        + req->method.len
-        + req->path.len - req->pathconf->path.len + upstream->path.len
-        + upstream->host.len;
+    bufsz = sizeof("  HTTP/1.1\r\nhost: :65535\r\nconnection: keep-alive\r\ncontent-length: 18446744073709551615\r\n\r\n") +
+            req->method.len + req->path.len - req->pathconf->path.len + upstream->path.len + upstream->host.len;
     for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h)
         bufsz += h->name->len + h->value.len + 4;
 
@@ -97,11 +93,9 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
 
     /* build response */
     p = buf.base;
-    p += sprintf(p, "%.*s %.*s%.*s HTTP/1.1\r\nconnection: %s\r\n",
-        (int)req->method.len, req->method.base,
-        (int)upstream->path.len, upstream->path.base,
-        (int)(req->path.len - req->pathconf->path.len), req->path.base + req->pathconf->path.len,
-        keepalive ? "keep-alive" : "close");
+    p += sprintf(p, "%.*s %.*s%.*s HTTP/1.1\r\nconnection: %s\r\n", (int)req->method.len, req->method.base, (int)upstream->path.len,
+                 upstream->path.base, (int)(req->path.len - req->pathconf->path.len), req->path.base + req->pathconf->path.len,
+                 keepalive ? "keep-alive" : "close");
     if (upstream->port == 80)
         p += sprintf(p, "host: %.*s\r\n", (int)upstream->host.len, upstream->host.base);
     else
@@ -110,11 +104,9 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
         p += sprintf(p, "content-length: %zu\r\n", req->entity.len);
     }
     for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h) {
-        if (h2o_iovec_is_token(h->name) && ((h2o_token_t*)h->name)->is_connection_specific)
+        if (h2o_iovec_is_token(h->name) && ((h2o_token_t *)h->name)->is_connection_specific)
             continue;
-        p += sprintf(p, "%.*s: %.*s\r\n",
-            (int)h->name->len, h->name->base,
-            (int)h->value.len, h->value.base);
+        p += sprintf(p, "%.*s: %.*s\r\n", (int)h->name->len, h->name->base, (int)h->value.len, h->value.base);
     }
     *p++ = '\r';
     *p++ = '\n';
@@ -128,7 +120,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
 
 static void do_close(h2o_generator_t *generator, h2o_req_t *req)
 {
-    struct rp_generator_t *self = (void*)generator;
+    struct rp_generator_t *self = (void *)generator;
 
     if (self->client != NULL) {
         h2o_http1client_cancel(self->client);
@@ -147,9 +139,7 @@ static void do_send(struct rp_generator_t *self)
 {
     assert(self->buf_sending->size == 0);
 
-    swap_buffer(
-        &self->buf_sending,
-        self->client != NULL ? &self->client->sock->input : &self->last_content_before_send);
+    swap_buffer(&self->buf_sending, self->client != NULL ? &self->client->sock->input : &self->last_content_before_send);
 
     if (self->buf_sending->size != 0) {
         h2o_iovec_t buf = h2o_iovec_init(self->buf_sending->bytes, self->buf_sending->size);
@@ -161,7 +151,7 @@ static void do_send(struct rp_generator_t *self)
 
 static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
 {
-    struct rp_generator_t *self = (void*)generator;
+    struct rp_generator_t *self = (void *)generator;
 
     h2o_buffer_consume(&self->buf_sending, self->buf_sending->size);
 
@@ -186,7 +176,8 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     return 0;
 }
 
-static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg, struct phr_header *headers, size_t num_headers)
+static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
+                                       h2o_iovec_t msg, struct phr_header *headers, size_t num_headers)
 {
     struct rp_generator_t *self = client->data;
     size_t i;
@@ -208,15 +199,16 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 goto Skip;
             }
             if (token == H2O_TOKEN_CONTENT_LENGTH) {
-                if (self->src_req->res.content_length != SIZE_MAX
-                    || (self->src_req->res.content_length = h2o_strtosize(headers[i].value, headers[i].value_len)) == SIZE_MAX) {
+                if (self->src_req->res.content_length != SIZE_MAX ||
+                    (self->src_req->res.content_length = h2o_strtosize(headers[i].value, headers[i].value_len)) == SIZE_MAX) {
                     self->client = NULL;
                     h2o_send_error(self->src_req, 502, "Gateway Error", "invalid response from upstream", 0);
                     return NULL;
                 }
                 goto Skip;
             } else if (token == H2O_TOKEN_LOCATION) {
-                value = rewrite_location(&self->src_req->pool, headers[i].value, headers[i].value_len, self->upstream, self->src_req->scheme, self->src_req->authority, self->src_req->pathconf->path);
+                value = rewrite_location(&self->src_req->pool, headers[i].value, headers[i].value_len, self->upstream,
+                                         self->src_req->scheme, self->src_req->authority, self->src_req->pathconf->path);
                 goto AddHeader;
             }
             /* default behaviour, transfer the header downstream */
@@ -244,7 +236,8 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     return on_body;
 }
 
-static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt, int *method_is_head)
+static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
+                                          int *method_is_head)
 {
     struct rp_generator_t *self = client->data;
 
@@ -291,16 +284,14 @@ int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_
     struct rp_generator_t *self = proxy_send_prepare(req, upstream, 0);
 
     self->client = h2o_http1client_connect(
-        client_ctx, &req->pool,
-        h2o_strdup(&req->pool, upstream->host.base, upstream->host.len).base,
-        upstream->port,
-        on_connect);
+        client_ctx, &req->pool, h2o_strdup(&req->pool, upstream->host.base, upstream->host.len).base, upstream->port, on_connect);
     self->client->data = self;
 
     return 0;
 }
 
-int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *upstream, h2o_socketpool_t *sockpool)
+int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *upstream,
+                             h2o_socketpool_t *sockpool)
 {
     struct rp_generator_t *self = proxy_send_prepare(req, upstream, 1);
 
@@ -312,7 +303,7 @@ int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, 
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
-    struct rp_handler_t *self = (void*)_self;
+    struct rp_handler_t *self = (void *)_self;
     h2o_http1client_ctx_t *client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
 
     if (self->sockpool != NULL)
@@ -323,7 +314,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
 static void *on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 {
-    struct rp_handler_t *self = (void*)_self;
+    struct rp_handler_t *self = (void *)_self;
     h2o_http1client_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*ctx) + sizeof(*client_ctx->io_timeout));
 
     /* use the loop of first context for handling socketpool timeouts */
@@ -332,15 +323,16 @@ static void *on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 
     client_ctx->loop = ctx->loop;
     client_ctx->zero_timeout = &ctx->zero_timeout;
-    client_ctx->io_timeout = (void*)(client_ctx + 1);
-    h2o_timeout_init(client_ctx->loop, client_ctx->io_timeout, self->config.io_timeout); /* TODO add a way to configure the variable */
+    client_ctx->io_timeout = (void *)(client_ctx + 1);
+    h2o_timeout_init(client_ctx->loop, client_ctx->io_timeout,
+                     self->config.io_timeout); /* TODO add a way to configure the variable */
 
     return client_ctx;
 }
 
 static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
 {
-    struct rp_handler_t *self = (void*)_self;
+    struct rp_handler_t *self = (void *)_self;
     h2o_http1client_ctx_t *client_ctx = h2o_context_get_handler_context(ctx, &self->super);
 
     free(client_ctx);
@@ -348,7 +340,7 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
 
 static void on_handler_dispose(h2o_handler_t *_self)
 {
-    struct rp_handler_t *self = (void*)_self;
+    struct rp_handler_t *self = (void *)_self;
 
     free(self->upstream.host.base);
     free(self->upstream.path.base);
@@ -360,9 +352,10 @@ static void on_handler_dispose(h2o_handler_t *_self)
     free(self);
 }
 
-void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, const char *host, uint16_t port, const char *real_path, h2o_proxy_config_vars_t *config)
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, const char *host, uint16_t port, const char *real_path,
+                                      h2o_proxy_config_vars_t *config)
 {
-    struct rp_handler_t *self = (void*)h2o_create_handler(pathconf, sizeof(*self));
+    struct rp_handler_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
     self->super.on_context_init = on_context_init;
     self->super.on_context_dispose = on_context_dispose;
     self->super.dispose = on_handler_dispose;

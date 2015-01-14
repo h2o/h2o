@@ -82,7 +82,7 @@ inline int h2o_linklist_is_empty(h2o_linklist_t *anchor)
 
 inline void h2o_linklist_insert(h2o_linklist_t *pos, h2o_linklist_t *node)
 {
-    assert(! h2o_linklist_is_linked(node));
+    assert(!h2o_linklist_is_linked(node));
 
     node->prev = pos->prev;
     node->next = pos;

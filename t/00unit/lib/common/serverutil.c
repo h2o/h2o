@@ -56,11 +56,7 @@ static void test_server_starter(void)
 
 static void test_read_command(void)
 {
-    char *argv[] = {
-        "t/00unit/assets/read_command.pl",
-        "hello",
-        NULL
-    };
+    char *argv[] = {"t/00unit/assets/read_command.pl", "hello", NULL};
     h2o_buffer_t *resp;
     int ret, status;
 

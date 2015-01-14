@@ -38,7 +38,7 @@ struct st_h2o_mem_recycle_chunk_t {
 struct st_h2o_mem_pool_chunk_t {
     struct st_h2o_mem_pool_chunk_t *next;
     size_t _dummy; /* align to 2*sizeof(void*) */
-    char bytes[4096 - sizeof(void*) * 2];
+    char bytes[4096 - sizeof(void *) * 2];
 };
 
 struct st_h2o_mem_pool_direct_t {
@@ -52,7 +52,7 @@ struct st_h2o_mem_pool_shared_ref_t {
     struct st_h2o_mem_pool_shared_entry_t *entry;
 };
 
-static __thread h2o_mem_recycle_t mempool_allocator = { 16 };
+static __thread h2o_mem_recycle_t mempool_allocator = {16};
 
 void h2o_fatal(const char *msg)
 {

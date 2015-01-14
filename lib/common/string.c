@@ -44,7 +44,6 @@ h2o_iovec_t h2o_strdup(h2o_mem_pool_t *pool, const char *s, size_t slen)
     return ret;
 }
 
-
 h2o_iovec_t h2o_strdup_slashed(h2o_mem_pool_t *pool, const char *src, size_t len)
 {
     h2o_iovec_t ret;
@@ -77,7 +76,7 @@ size_t h2o_strtosize(const char *s, size_t len)
 
     while (1) {
         int ch = *--p;
-        if (! ('0' <= ch && ch <= '9'))
+        if (!('0' <= ch && ch <= '9'))
             goto Error;
         v += (ch - '0') * m;
         if (p == s)
@@ -133,12 +132,12 @@ h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t l
 {
     h2o_iovec_t decoded;
     uint32_t t;
-    uint8_t* dst;
+    uint8_t *dst;
     char remaining_input[4];
 
     decoded.len = len * 3 / 4;
     decoded.base = h2o_mem_alloc_pool(pool, decoded.len + 1);
-    dst = (uint8_t*)decoded.base;
+    dst = (uint8_t *)decoded.base;
 
     while (len >= 4) {
         if ((t = decode_base64url_quad(src)) == UINT32_MAX)
@@ -175,7 +174,7 @@ h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t l
         break;
     }
 
-    assert((char*)dst - decoded.base == decoded.len);
+    assert((char *)dst - decoded.base == decoded.len);
     decoded.base[decoded.len] = '\0';
 
     return decoded;
@@ -186,23 +185,19 @@ Error:
 
 void h2o_base64_encode(char *dst, const void *_src, size_t len, int url_encoded)
 {
-    static const char *MAP =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz"
-        "0123456789+/";
-    static const char *MAP_URL_ENCODED =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz"
-        "0123456789-_";
+    static const char *MAP = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                             "abcdefghijklmnopqrstuvwxyz"
+                             "0123456789+/";
+    static const char *MAP_URL_ENCODED = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                                         "abcdefghijklmnopqrstuvwxyz"
+                                         "0123456789-_";
 
     const uint8_t *src = _src;
     const char *map = url_encoded ? MAP_URL_ENCODED : MAP;
     uint32_t quad;
 
     for (; len >= 3; src += 3, len -= 3) {
-        quad = ((uint32_t)src[0] << 16)
-            | ((uint32_t)src[1] << 8)
-            | src[2];
+        quad = ((uint32_t)src[0] << 16) | ((uint32_t)src[1] << 8) | src[2];
         *dst++ = map[quad >> 18];
         *dst++ = map[(quad >> 12) & 63];
         *dst++ = map[(quad >> 6) & 63];
@@ -215,11 +210,11 @@ void h2o_base64_encode(char *dst, const void *_src, size_t len, int url_encoded)
             quad |= (uint32_t)src[1] << 8;
             *dst++ = map[(quad >> 12) & 63];
             *dst++ = map[(quad >> 6) & 63];
-            if (! url_encoded)
+            if (!url_encoded)
                 *dst++ = '=';
         } else {
             *dst++ = map[(quad >> 12) & 63];
-            if (! url_encoded) {
+            if (!url_encoded) {
                 *dst++ = '=';
                 *dst++ = '=';
             }
@@ -275,7 +270,8 @@ void h2o_time2str_rfc1123(char *buf, time_t time)
     p = emit_digits(p, gmt.tm_min, 2);
     *p++ = ':';
     p = emit_digits(p, gmt.tm_sec, 2);
-    memcpy(p, " GMT", 4); p += 4;
+    memcpy(p, " GMT", 4);
+    p += 4;
     *p = '\0';
 
     assert(p - buf == H2O_TIMESTR_RFC1123_LEN);
@@ -295,18 +291,9 @@ void h2o_time2str_log(char *buf, time_t time)
         gmt_sign = '-';
     }
 
-    int len = sprintf(
-        buf,
-        "%02d/%s/%d:%02d:%02d:%02d %c%02d%02d",
-        localt.tm_mday,
-        ("Jan\0Feb\0Mar\0Apr\0May\0Jun\0Jul\0Aug\0Sep\0Oct\0Nov\0Dec\0") + localt.tm_mon * 4,
-        localt.tm_year + 1900,
-        localt.tm_hour,
-        localt.tm_min,
-        localt.tm_sec,
-        gmt_sign,
-        gmt_off / 60,
-        gmt_off % 60);
+    int len = sprintf(buf, "%02d/%s/%d:%02d:%02d:%02d %c%02d%02d", localt.tm_mday,
+                      ("Jan\0Feb\0Mar\0Apr\0May\0Jun\0Jul\0Aug\0Sep\0Oct\0Nov\0Dec\0") + localt.tm_mon * 4, localt.tm_year + 1900,
+                      localt.tm_hour, localt.tm_min, localt.tm_sec, gmt_sign, gmt_off / 60, gmt_off % 60);
     assert(len == H2O_TIMESTR_LOG_LEN);
 }
 
@@ -325,7 +312,7 @@ const char *h2o_get_filext(const char *path, size_t len)
 }
 
 /* note: returns a zero-width match as well */
-const char *h2o_next_token(const char* elements, size_t elements_len, size_t *element_len, const char *cur)
+const char *h2o_next_token(const char *elements, size_t elements_len, size_t *element_len, const char *cur)
 {
     const char *elements_end = elements + elements_len;
     size_t off, off_non_ws;
@@ -404,8 +391,8 @@ static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *path, size_t l
     while (src != src_end) {
         if (*src == '?')
             break;
-        if ((src_end - src == 3 && memcmp(src, H2O_STRLIT("/..")) == 0)
-            || (src_end - src > 3 && memcmp(src, H2O_STRLIT("/../")) == 0)) {
+        if ((src_end - src == 3 && memcmp(src, H2O_STRLIT("/..")) == 0) ||
+            (src_end - src > 3 && memcmp(src, H2O_STRLIT("/../")) == 0)) {
             /* go back the previous "/" */
             if (ret.base < dst)
                 --dst;
@@ -416,8 +403,8 @@ static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *path, size_t l
                 *dst++ = '/';
             goto Next;
         }
-        if ((src_end - src == 2 && memcmp(src, H2O_STRLIT("/.")) == 0)
-            || (src_end - src > 2 && memcmp(src, H2O_STRLIT("/./")) == 0)) {
+        if ((src_end - src == 2 && memcmp(src, H2O_STRLIT("/.")) == 0) ||
+            (src_end - src > 2 && memcmp(src, H2O_STRLIT("/./")) == 0)) {
             src += 2;
             if (src == src_end)
                 *dst++ = '/';
@@ -425,8 +412,7 @@ static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *path, size_t l
         }
         if (src_end - src >= 3 && *src == '%') {
             int hi, lo;
-            if ((hi = decode_hex(src[1])) != -1
-                && (lo = decode_hex(src[2])) != -1) {
+            if ((hi = decode_hex(src[1])) != -1 && (lo = decode_hex(src[2])) != -1) {
                 *dst++ = (hi << 4) | lo;
                 src += 3;
                 goto Next;
@@ -452,8 +438,7 @@ h2o_iovec_t h2o_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t le
         goto Rewrite;
 
     for (; p + 1 < end; ++p) {
-        if ((p[0] == '/' && p[1] == '.')
-            || p[0] == '%') {
+        if ((p[0] == '/' && p[1] == '.') || p[0] == '%') {
             /* detect false positives as well */
             goto Rewrite;
         } else if (p[0] == '?') {
@@ -467,7 +452,7 @@ h2o_iovec_t h2o_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t le
     }
 
 Return:
-    ret.base = (char*)path;
+    ret.base = (char *)path;
     ret.len = p - path;
     return ret;
 
@@ -507,9 +492,7 @@ int h2o_parse_url(const char *url, size_t url_len, h2o_iovec_t *scheme, h2o_iove
         *host = h2o_iovec_init(token_start, token_end - token_start);
         token_start = token_end + 1;
     } else {
-        for (token_end = token_start;
-            ! (token_end == url_end || *token_end == '/' || *token_end == ':');
-            ++token_end)
+        for (token_end = token_start; !(token_end == url_end || *token_end == '/' || *token_end == ':'); ++token_end)
             ;
         *host = h2o_iovec_init(token_start, token_end - token_start);
         token_start = token_end;
@@ -545,18 +528,21 @@ h2o_iovec_t h2o_htmlescape(h2o_mem_pool_t *pool, const char *src, size_t len)
     const char *s, *end = src + len;
     size_t add_size = 0;
 
-#define ENTITY_MAP() \
-    ENTITY('"', "&quot;"); \
-    ENTITY('&', "&amp;"); \
-    ENTITY('\'', "&#39;"); \
-    ENTITY('<', "&lt;"); \
+#define ENTITY_MAP()                                                                                                               \
+    ENTITY('"', "&quot;");                                                                                                         \
+    ENTITY('&', "&amp;");                                                                                                          \
+    ENTITY('\'', "&#39;");                                                                                                         \
+    ENTITY('<', "&lt;");                                                                                                           \
     ENTITY('>', "&gt;");
 
     for (s = src; s != end; ++s) {
         if ((unsigned)(unsigned char)*s - '"' <= '>' - '"') {
             switch (*s) {
-#define ENTITY(code, quoted) case code: add_size += sizeof(quoted) - 2; break
-            ENTITY_MAP()
+#define ENTITY(code, quoted)                                                                                                       \
+    case code:                                                                                                                     \
+        add_size += sizeof(quoted) - 2;                                                                                            \
+        break
+                ENTITY_MAP()
 #undef ENTITY
             }
         }
@@ -565,12 +551,16 @@ h2o_iovec_t h2o_htmlescape(h2o_mem_pool_t *pool, const char *src, size_t len)
     /* escape and return the result if necessary */
     if (add_size != 0) {
         /* allocate buffer and fill in the chars that are known not to require escaping */
-        h2o_iovec_t escaped = { h2o_mem_alloc_pool(pool, len + add_size + 1), 0 };
+        h2o_iovec_t escaped = {h2o_mem_alloc_pool(pool, len + add_size + 1), 0};
         /* fill-in the rest */
         for (s = src; s != end; ++s) {
             switch (*s) {
-#define ENTITY(code, quoted) case code: memcpy(escaped.base + escaped.len, quoted, sizeof(quoted) - 1); escaped.len += sizeof(quoted) - 1; break
-            ENTITY_MAP()
+#define ENTITY(code, quoted)                                                                                                       \
+    case code:                                                                                                                     \
+        memcpy(escaped.base + escaped.len, quoted, sizeof(quoted) - 1);                                                            \
+        escaped.len += sizeof(quoted) - 1;                                                                                         \
+        break
+                ENTITY_MAP()
 #undef ENTITY
             default:
                 escaped.base[escaped.len++] = *s;
@@ -591,7 +581,7 @@ h2o_iovec_t h2o_htmlescape(h2o_mem_pool_t *pool, const char *src, size_t len)
 
 h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t count)
 {
-    h2o_iovec_t ret = { NULL, 0 };
+    h2o_iovec_t ret = {NULL, 0};
     size_t i;
 
     /* calc the length */

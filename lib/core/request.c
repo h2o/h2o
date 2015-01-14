@@ -61,8 +61,7 @@ static void bind_conf(h2o_req_t *req)
         req->path_normalized = h2o_normalize_path(&req->pool, req->path.base, req->path.len);
         do {
             pathconf = hostconf->paths.entries + i;
-            if (req->path.len >= pathconf->path.len
-                && memcmp(req->path.base, pathconf->path.base, pathconf->path.len) == 0)
+            if (req->path.len >= pathconf->path.len && memcmp(req->path.base, pathconf->path.base, pathconf->path.len) == 0)
                 goto PathFound;
         } while (++i != hostconf->paths.size);
         pathconf = &hostconf->fallback_path;
@@ -95,17 +94,18 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
     req->res.content_length = SIZE_MAX;
 
     if (src != NULL) {
-#define COPY(buf) do { \
-    req->buf.base = h2o_mem_alloc_pool(&req->pool, src->buf.len); \
-    memcpy(req->buf.base, src->buf.base, src->buf.len); \
-    req->buf.len = src->buf.len; \
-} while (0)
+#define COPY(buf)                                                                                                                  \
+    do {                                                                                                                           \
+        req->buf.base = h2o_mem_alloc_pool(&req->pool, src->buf.len);                                                              \
+        memcpy(req->buf.base, src->buf.base, src->buf.len);                                                                        \
+        req->buf.len = src->buf.len;                                                                                               \
+    } while (0)
         COPY(authority);
         COPY(method);
         COPY(path);
         COPY(scheme);
         req->version = src->version;
-        h2o_vector_reserve(&req->pool, (h2o_vector_t*)&req->headers, sizeof(h2o_header_t), src->headers.size);
+        h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->headers, sizeof(h2o_header_t), src->headers.size);
         memcpy(req->headers.entries, src->headers.entries, sizeof(req->headers.entries[0]) * src->headers.size);
         req->headers.size = src->headers.size;
         req->entity = src->entity;
@@ -154,9 +154,7 @@ void h2o_process_request(h2o_req_t *req)
 
     bind_conf(req);
 
-    for (handler = req->pathconf->handlers.entries, end = handler + req->pathconf->handlers.size;
-        handler != end;
-        ++handler) {
+    for (handler = req->pathconf->handlers.entries, end = handler + req->pathconf->handlers.size; handler != end; ++handler) {
         if ((*handler)->on_req(*handler, req) == 0)
             return;
     }
@@ -219,7 +217,7 @@ void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *
 
 void h2o_send_inline(h2o_req_t *req, const char *body, size_t len)
 {
-    static h2o_generator_t generator = { NULL, NULL };
+    static h2o_generator_t generator = {NULL, NULL};
 
     h2o_iovec_t buf = h2o_strdup(&req->pool, body, len);
     /* the function intentionally does not set the content length, since it may be used for generating 304 response, etc. */

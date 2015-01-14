@@ -25,12 +25,12 @@
 static void test_decode_base64(void)
 {
     h2o_mem_pool_t pool;
-        char buf[256];
+    char buf[256];
 
     h2o_mem_init_pool(&pool);
 
-    h2o_iovec_t src = { H2O_STRLIT("The quick brown fox jumps over the lazy dog.") }, decoded;
-    h2o_base64_encode(buf, (const uint8_t*)src.base, src.len, 1);
+    h2o_iovec_t src = {H2O_STRLIT("The quick brown fox jumps over the lazy dog.")}, decoded;
+    h2o_base64_encode(buf, (const uint8_t *)src.base, src.len, 1);
     ok(strcmp(buf, "VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4") == 0);
     decoded = h2o_decode_base64url(&pool, buf, strlen(buf));
     ok(src.len == decoded.len);
@@ -177,10 +177,10 @@ static void test_htmlescape(void)
     h2o_mem_pool_t pool;
     h2o_mem_init_pool(&pool);
 
-#define TEST(src, expected) \
-    do { \
-        h2o_iovec_t escaped = h2o_htmlescape(&pool, H2O_STRLIT(src)); \
-        ok(h2o_memis(escaped.base, escaped.len, H2O_STRLIT(expected))); \
+#define TEST(src, expected)                                                                                                        \
+    do {                                                                                                                           \
+        h2o_iovec_t escaped = h2o_htmlescape(&pool, H2O_STRLIT(src));                                                              \
+        ok(h2o_memis(escaped.base, escaped.len, H2O_STRLIT(expected)));                                                            \
     } while (0)
 
     TEST("hello world", "hello world");
