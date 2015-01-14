@@ -178,6 +178,7 @@ void h2o_socketpool_connect(h2o_socketpool_t *pool, h2o_loop_t *loop, h2o_timeou
 
     /* return the socket deferred, if any */
     if (entry != NULL) {
+fprintf(stderr, "sockpool returning old socket\n");
         h2o_socket_t *sock = h2o_socket_import(loop, &entry->sockinfo);
         struct connect_callback_t *cbinfo = setup_connect_callback(cb, sock, NULL, data);
         h2o_timeout_link(loop, zero_timeout, &cbinfo->timeout);
@@ -186,6 +187,7 @@ void h2o_socketpool_connect(h2o_socketpool_t *pool, h2o_loop_t *loop, h2o_timeou
         free(entry);
         return;
     }
+fprintf(stderr, "sockpool returning new socket\n");
 
     { /* connect and return (FIXME repsect the `capacity`, timeout) */
         struct addrinfo hints, *res;
