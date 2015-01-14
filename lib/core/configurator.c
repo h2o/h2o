@@ -254,7 +254,7 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_t *c = h2o_configurator_create(conf, sizeof(*c));
         h2o_configurator_define_command(c, "hosts", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING |
                                                         H2O_CONFIGURATOR_FLAG_DEFERRED,
-                                        on_config_hosts, "map of hostname -> map of per-host configs");
+                                        on_config_hosts, "map of `host[:port]` -> map of per-host configs");
         h2o_configurator_define_command(c, "paths", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING |
                                                         H2O_CONFIGURATOR_FLAG_DEFERRED,
                                         on_config_paths, "map of URL-path -> configuration");
