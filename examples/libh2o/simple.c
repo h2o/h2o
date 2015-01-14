@@ -40,9 +40,9 @@ static void register_handler(h2o_hostconf_t *hostconf, const char *path, int (*o
 
 static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
 {
-    static h2o_generator_t generator = { NULL, NULL };
+    static h2o_generator_t generator = {NULL, NULL};
 
-    if (! h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
+    if (!h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
         return -1;
 
     h2o_iovec_t body = h2o_strdup(&req->pool, "hello world\n", SIZE_MAX);
@@ -57,7 +57,7 @@ static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
 
 static int reproxy_test(h2o_handler_t *self, h2o_req_t *req)
 {
-    if (! h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
+    if (!h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
         return -1;
 
     req->res.status = 200;
@@ -70,9 +70,9 @@ static int reproxy_test(h2o_handler_t *self, h2o_req_t *req)
 
 static int post_test(h2o_handler_t *self, h2o_req_t *req)
 {
-    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("POST"))
-        && h2o_memis(req->path.base, req->path.len, H2O_STRLIT("/post-test"))) {
-        static h2o_generator_t generator = { NULL, NULL };
+    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("POST")) &&
+        h2o_memis(req->path.base, req->path.len, H2O_STRLIT("/post-test"))) {
+        static h2o_generator_t generator = {NULL, NULL};
         req->res.status = 200;
         req->res.reason = "OK";
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
@@ -101,12 +101,12 @@ static void on_accept(uv_stream_t *listener, int status)
     conn = h2o_mem_alloc(sizeof(*conn));
     uv_tcp_init(listener->loop, conn);
 
-    if (uv_accept(listener, (uv_stream_t*)conn) != 0) {
-        uv_close((uv_handle_t*)conn, (uv_close_cb)free);
+    if (uv_accept(listener, (uv_stream_t *)conn) != 0) {
+        uv_close((uv_handle_t *)conn, (uv_close_cb)free);
         return;
     }
 
-    sock = h2o_uv_socket_create((uv_stream_t*)conn, NULL, 0, (uv_close_cb)free);
+    sock = h2o_uv_socket_create((uv_stream_t *)conn, NULL, 0, (uv_close_cb)free);
     if (ssl_ctx != NULL)
         h2o_accept_ssl(&ctx, sock, ssl_ctx);
     else
@@ -121,18 +121,18 @@ static int create_listener(void)
 
     uv_tcp_init(ctx.loop, &listener);
     uv_ip4_addr("127.0.0.1", 7890, &addr);
-    if ((r = uv_tcp_bind(&listener, (struct sockaddr*)&addr, 0)) != 0) {
+    if ((r = uv_tcp_bind(&listener, (struct sockaddr *)&addr, 0)) != 0) {
         fprintf(stderr, "uv_tcp_bind:%s\n", uv_strerror(r));
         goto Error;
     }
-    if ((r = uv_listen((uv_stream_t*)&listener, 128, on_accept)) != 0) {
+    if ((r = uv_listen((uv_stream_t *)&listener, 128, on_accept)) != 0) {
         fprintf(stderr, "uv_listen:%s\n", uv_strerror(r));
         goto Error;
     }
 
     return 0;
 Error:
-    uv_close((uv_handle_t*)&listener, NULL);
+    uv_close((uv_handle_t *)&listener, NULL);
     return r;
 }
 
@@ -166,10 +166,9 @@ static int create_listener(void)
     addr.sin_addr.s_addr = htonl(0x7f000001);
     addr.sin_port = htons(7890);
 
-    if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1
-        || setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0
-        || bind(fd, (struct sockaddr*)&addr, sizeof(addr)) != 0
-        || listen(fd, SOMAXCONN) != 0) {
+    if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1 ||
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0 ||
+        bind(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0 || listen(fd, SOMAXCONN) != 0) {
         return -1;
     }
 
@@ -200,7 +199,7 @@ static int setup_ssl(const char *cert_file, const char *key_file)
         return -1;
     }
 
-    /* setup protocol negotiation methods */
+/* setup protocol negotiation methods */
 #if H2O_USE_NPN
     h2o_ssl_register_npn_protocols(ssl_ctx, h2o_http2_npn_protocols);
 #endif

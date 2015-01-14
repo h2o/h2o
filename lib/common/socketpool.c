@@ -55,7 +55,7 @@ static void destroy_expired(h2o_socketpool_t *pool)
 {
     /* caller should lock the mutex */
     uint64_t expire_before = h2o_now(pool->_interval_cb.loop) - pool->timeout;
-    while (! h2o_linklist_is_empty(&pool->_shared.sockets)) {
+    while (!h2o_linklist_is_empty(&pool->_shared.sockets)) {
         struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_shared.sockets.next);
         if (entry->added_at > expire_before)
             break;
@@ -96,7 +96,7 @@ void h2o_socketpool_init(h2o_socketpool_t *pool, const char *host, uint16_t port
 void h2o_socketpool_dispose(h2o_socketpool_t *pool)
 {
     pthread_mutex_lock(&pool->_shared.mutex);
-    while (! h2o_linklist_is_empty(&pool->_shared.sockets)) {
+    while (!h2o_linklist_is_empty(&pool->_shared.sockets)) {
         struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_shared.sockets.next);
         destroy_attached(entry);
         __sync_sub_and_fetch(&pool->_shared.count, 1);
@@ -129,7 +129,8 @@ static void on_deferred_connect_cb(h2o_timeout_entry_t *timeout)
     free(cbinfo);
 }
 
-static struct connect_callback_t *setup_connect_callback(h2o_socketpool_connect_cb cb, h2o_socket_t *sock, const char *errstr, void *data)
+static struct connect_callback_t *setup_connect_callback(h2o_socketpool_connect_cb cb, h2o_socket_t *sock, const char *errstr,
+                                                         void *data)
 {
     struct connect_callback_t *cbinfo = h2o_mem_alloc(sizeof(*cbinfo));
 
@@ -161,14 +162,15 @@ static void on_close(void *data)
     __sync_sub_and_fetch(&pool->_shared.count, 1);
 }
 
-void h2o_socketpool_connect(h2o_socketpool_t *pool, h2o_loop_t *loop, h2o_timeout_t *zero_timeout, h2o_socketpool_connect_cb cb, void *data)
+void h2o_socketpool_connect(h2o_socketpool_t *pool, h2o_loop_t *loop, h2o_timeout_t *zero_timeout, h2o_socketpool_connect_cb cb,
+                            void *data)
 {
     struct pool_entry_t *entry = NULL;
 
     /* fetch an entry */
     pthread_mutex_lock(&pool->_shared.mutex);
     destroy_expired(pool);
-    if (! h2o_linklist_is_empty(&pool->_shared.sockets)) {
+    if (!h2o_linklist_is_empty(&pool->_shared.sockets)) {
         entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_shared.sockets.next);
         h2o_linklist_unlink(&entry->link);
     }

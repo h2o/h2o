@@ -29,11 +29,11 @@
 #include "h2o/timeout.h"
 
 #if defined(__APPLE__) && defined(__clang__)
-# pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #endif
 
 #ifndef IOV_MAX
-# define IOV_MAX UIO_MAXIOV
+#define IOV_MAX UIO_MAXIOV
 #endif
 
 struct st_h2o_socket_ssl_t {
@@ -70,21 +70,19 @@ static int decode_ssl_input(h2o_socket_t *sock);
 static void on_write_complete(h2o_socket_t *sock, int status);
 
 #if H2O_USE_LIBUV
-# include "socket/uv-binding.c.h"
+#include "socket/uv-binding.c.h"
 #else
-# include "socket/evloop.c.h"
+#include "socket/evloop.c.h"
 #endif
 
 h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings = {
     32 * 1024 * 1024, /* 32MB, should better be greater than max frame size of HTTP2 for performance reasons */
-    "/tmp/h2o.b.XXXXXX"
-};
+    "/tmp/h2o.b.XXXXXX"};
 
 __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype = {
-    { 16 }, /* keep 16 recently used chunks */
-    { H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2 }, /* minimum initial capacity */
-    &h2o_socket_buffer_mmap_settings
-};
+    {16},                                       /* keep 16 recently used chunks */
+    {H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2}, /* minimum initial capacity */
+    &h2o_socket_buffer_mmap_settings};
 
 static int read_bio(BIO *b, char *out, int len)
 {
@@ -124,7 +122,8 @@ static int write_bio(BIO *b, const char *in, int len)
     bytes_alloced = h2o_mem_alloc_pool(&sock->ssl->output.pool, len);
     memcpy(bytes_alloced, in, len);
 
-    h2o_vector_reserve(&sock->ssl->output.pool, (h2o_vector_t*)&sock->ssl->output.bufs, sizeof(h2o_iovec_t), sock->ssl->output.bufs.size + 1);
+    h2o_vector_reserve(&sock->ssl->output.pool, (h2o_vector_t *)&sock->ssl->output.bufs, sizeof(h2o_iovec_t),
+                       sock->ssl->output.bufs.size + 1);
     sock->ssl->output.bufs.entries[sock->ssl->output.bufs.size++] = h2o_iovec_init(bytes_alloced, len);
 
     return len;
@@ -268,7 +267,7 @@ int h2o_socket_export(h2o_socket_t *sock, h2o_socket_export_t *info)
 {
     static h2o_buffer_prototype_t nonpooling_prototype = {};
 
-    assert(! h2o_socket_is_writing(sock));
+    assert(!h2o_socket_is_writing(sock));
 
     if (do_export(sock, info) == -1)
         return -1;
@@ -361,21 +360,23 @@ void h2o_socket_read_stop(h2o_socket_t *sock)
 
 int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y)
 {
-#define CMP(a, b) if (a != b) return a < b ? -1 : 1
+#define CMP(a, b)                                                                                                                  \
+    if (a != b)                                                                                                                    \
+    return a < b ? -1 : 1
 
     CMP(x->sa_family, y->sa_family);
 
     if (x->sa_family == AF_UNIX) {
-        struct sockaddr_un *xun = (void*)x, *yun = (void*)y;
+        struct sockaddr_un *xun = (void *)x, *yun = (void *)y;
         int r = strcmp(xun->sun_path, yun->sun_path);
         if (r != 0)
             return r;
     } else if (x->sa_family == AF_INET) {
-        struct sockaddr_in *xin = (void*)x, *yin = (void*)y;
+        struct sockaddr_in *xin = (void *)x, *yin = (void *)y;
         CMP(ntohl(xin->sin_addr.s_addr), ntohl(yin->sin_addr.s_addr));
         CMP(ntohs(xin->sin_port), ntohs(yin->sin_port));
     } else if (x->sa_family == AF_INET6) {
-        struct sockaddr_in6 *xin6 = (void*)x, *yin6 = (void*)y;
+        struct sockaddr_in6 *xin6 = (void *)x, *yin6 = (void *)y;
         int r = memcmp(xin6->sin6_addr.s6_addr, yin6->sin6_addr.s6_addr, sizeof(xin6->sin6_addr.s6_addr));
         if (r != 0)
             return r;
@@ -436,18 +437,8 @@ Complete:
 
 void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, h2o_socket_cb handshake_cb)
 {
-    static BIO_METHOD bio_methods = {
-        BIO_TYPE_FD,
-        "h2o_socket",
-        write_bio,
-        read_bio,
-        puts_bio,
-        NULL,
-        ctrl_bio,
-        new_bio,
-        free_bio,
-        NULL
-    };
+    static BIO_METHOD bio_methods = {BIO_TYPE_FD, "h2o_socket", write_bio, read_bio, puts_bio,
+                                     NULL,        ctrl_bio,     new_bio,   free_bio, NULL};
 
     BIO *bio;
 
@@ -486,7 +477,8 @@ h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)
 
 #if H2O_USE_ALPN
 
-static int on_alpn_select(SSL *ssl, const unsigned char **out, unsigned char *outlen, const unsigned char *in, unsigned int inlen, void *_protocols)
+static int on_alpn_select(SSL *ssl, const unsigned char **out, unsigned char *outlen, const unsigned char *in, unsigned int inlen,
+                          void *_protocols)
 {
     const h2o_iovec_t *protocols = _protocols;
     const unsigned char *in_end = in + inlen;
@@ -509,14 +501,14 @@ static int on_alpn_select(SSL *ssl, const unsigned char **out, unsigned char *ou
     return SSL_TLSEXT_ERR_NOACK;
 
 Found:
-    *out = (const unsigned char*)protocols[i].base;
+    *out = (const unsigned char *)protocols[i].base;
     *outlen = (unsigned char)protocols[i].len;
     return SSL_TLSEXT_ERR_OK;
 }
 
 void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_iovec_t *protocols)
 {
-    SSL_CTX_set_alpn_select_cb(ctx, on_alpn_select, (void*)protocols);
+    SSL_CTX_set_alpn_select_cb(ctx, on_alpn_select, (void *)protocols);
 }
 
 #endif
@@ -532,7 +524,7 @@ static int on_npn_advertise(SSL *ssl, const unsigned char **out, unsigned *outle
 
 void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols)
 {
-    SSL_CTX_set_next_protos_advertised_cb(ctx, on_npn_advertise, (void*)protocols);
+    SSL_CTX_set_next_protos_advertised_cb(ctx, on_npn_advertise, (void *)protocols);
 }
 
 #endif

@@ -31,7 +31,7 @@ typedef struct st_chunked_encoder_t {
 
 static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
 {
-    chunked_encoder_t *self = (void*)_self;
+    chunked_encoder_t *self = (void *)_self;
     h2o_iovec_t *outbufs = alloca(sizeof(h2o_iovec_t) * (inbufcnt + 2));
     size_t chunk_size, outbufcnt = 0, i;
 
@@ -85,7 +85,7 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, H2O_STRLIT("chunked"));
 
     /* setup filter */
-    encoder = (void*)h2o_add_ostream(req, sizeof(chunked_encoder_t), slot);
+    encoder = (void *)h2o_add_ostream(req, sizeof(chunked_encoder_t), slot);
     encoder->super.do_send = send_chunk;
     slot = &encoder->super.next;
 

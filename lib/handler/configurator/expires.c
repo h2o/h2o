@@ -33,7 +33,7 @@ struct expires_configurator_t {
 
 static int on_config_expires(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct expires_configurator_t *self = (void*)cmd->configurator;
+    struct expires_configurator_t *self = (void *)cmd->configurator;
     uint64_t value;
     char unit[32];
 
@@ -65,7 +65,8 @@ static int on_config_expires(h2o_configurator_command_t *cmd, h2o_configurator_c
         (*self->args)->mode = H2O_EXPIRES_MODE_MAX_AGE;
         (*self->args)->data.max_age = value;
     } else {
-        h2o_configurator_errprintf(cmd, node, "failed to parse the value, should be in form of: `<number> <unit>` or `OFF` (see --help)");
+        h2o_configurator_errprintf(cmd, node,
+                                   "failed to parse the value, should be in form of: `<number> <unit>` or `OFF` (see --help)");
         return -1;
     }
 
@@ -74,7 +75,7 @@ static int on_config_expires(h2o_configurator_command_t *cmd, h2o_configurator_c
 
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct expires_configurator_t *self = (void*)_self;
+    struct expires_configurator_t *self = (void *)_self;
 
     if (self->args[0] != NULL) {
         /* duplicate */
@@ -90,7 +91,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
 
 static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct expires_configurator_t *self = (void*)_self;
+    struct expires_configurator_t *self = (void *)_self;
 
     if (*self->args != NULL) {
         /* setup */
@@ -109,7 +110,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 
 void h2o_expires_register_configurator(h2o_globalconf_t *conf)
 {
-    struct expires_configurator_t *c = (void*)h2o_configurator_create(conf, sizeof(*c));
+    struct expires_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
 
     /* set default vars */
     c->args = c->_args_stack;
@@ -117,13 +118,13 @@ void h2o_expires_register_configurator(h2o_globalconf_t *conf)
     /* setup handlers */
     c->super.enter = on_config_enter;
     c->super.exit = on_config_exit;
-    h2o_configurator_define_command(&c->super, "expires",
-        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-        on_config_expires,
-        "sets `Cache-Control: max-age` header (default: OFF)",
-        "  - if the value is `OFF` then the feature is not used",
-        "  - if the value is `<number> <unit>` then the header is set",
-        "  - the units recognized are: `second`,`minute`,`hour`,`day`,`month`,`year`",
-        "  - the units can also be in plural forms",
-        "example: `expires: 1 day` sets `Cache-Control: max-age=86400`");
+    h2o_configurator_define_command(&c->super, "expires", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
+                                                              H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_expires,
+                                    "sets `Cache-Control: max-age` header (default: OFF)\n"
+                                    "  - if the value is `OFF` then the feature is not used\n"
+                                    "  - if the value is `<number> <unit>` then the header is set\n"
+                                    "  - the units recognized are: `second`,`minute`,`hour`,`day`,`month`,`year`\n"
+                                    "  - the units can also be in plural forms\n"
+                                    "example: `expires: 1 day` sets `Cache-Control: max-age=86400`");
 }

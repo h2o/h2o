@@ -26,7 +26,7 @@
 KHASH_MAP_INIT_STR(exttable, h2o_iovec_t)
 
 struct st_h2o_mimemap_t {
-    khash_t(exttable) *table;
+    khash_t(exttable) * table;
     h2o_iovec_t default_type;
 };
 
@@ -46,7 +46,7 @@ static void on_dispose(void *_mimemap)
     h2o_iovec_t type;
 
     kh_foreach(mimemap->table, ext, type, {
-        h2o_mem_release_shared((char*)ext);
+        h2o_mem_release_shared((char *)ext);
         h2o_mem_release_shared(type.base);
     });
     kh_destroy(exttable, mimemap->table);
@@ -61,17 +61,9 @@ h2o_mimemap_t *h2o_mimemap_create()
     mimemap->default_type = dupref("application/octet-stream");
 
     { /* setup the tiny default */
-        static const char *default_types[] = {
-            "txt", "text/plain",
-            "html", "text/html",
-            "gif", "image/gif",
-            "png", "image/png",
-            "jpg", "image/jpeg",
-            "jpeg", "image/jpeg",
-            "css", "text/css",
-            "js", "application/javascript",
-            NULL
-        };
+        static const char *default_types[] = {"txt", "text/plain", "html", "text/html", "gif", "image/gif", "png", "image/png",
+                                              "jpg", "image/jpeg", "jpeg", "image/jpeg", "css", "text/css", "js",
+                                              "application/javascript", NULL};
         const char **p;
         for (p = default_types; *p != NULL; p += 2)
             h2o_mimemap_set_type(mimemap, p[0], p[1]);
@@ -91,7 +83,7 @@ h2o_mimemap_t *h2o_mimemap_clone(h2o_mimemap_t *src)
         int r;
         khiter_t iter = kh_put(exttable, dst->table, ext, &r);
         kh_val(dst->table, iter) = type;
-        h2o_mem_addref_shared((char*)ext);
+        h2o_mem_addref_shared((char *)ext);
         h2o_mem_addref_shared(type.base);
     });
     dst->default_type = src->default_type;
@@ -126,7 +118,7 @@ void h2o_mimemap_remove_type(h2o_mimemap_t *mimemap, const char *ext)
         const char *key = kh_key(mimemap->table, iter);
         h2o_mem_release_shared(kh_val(mimemap->table, iter).base);
         kh_del(exttable, mimemap->table, iter);
-        h2o_mem_release_shared((char*)key);
+        h2o_mem_release_shared((char *)key);
     }
 }
 

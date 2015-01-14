@@ -35,7 +35,8 @@ typedef void (*h2o_timeout_cb)(h2o_timeout_entry_t *entry);
 
 /**
  * an entry linked to h2o_timeout_t.
- * Modules willing to use timeouts should embed this object as part of itself, and link it to a specific timeout by calling h2o_timeout_link.
+ * Modules willing to use timeouts should embed this object as part of itself, and link it to a specific timeout by calling
+ * h2o_timeout_link.
  */
 struct st_h2o_timeout_entry_t {
     uint64_t registered_at;
@@ -61,7 +62,7 @@ typedef struct st_h2o_timeout_t {
  */
 void h2o_timeout_init(h2o_loop_t *loop, h2o_timeout_t *timeout, uint64_t millis);
 /**
- * 
+ *
  */
 void h2o_timeout_dispose(h2o_loop_t *loop, h2o_timeout_t *timeout);
 /**

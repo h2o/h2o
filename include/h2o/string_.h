@@ -84,9 +84,9 @@ void h2o_time2str_log(char *buf, time_t time);
  */
 const char *h2o_get_filext(const char *path, size_t len);
 /**
- * 
+ *
  */
-const char *h2o_next_token(const char* elements, size_t elements_len, size_t *element_len, const char *cur);
+const char *h2o_next_token(const char *elements, size_t elements_len, size_t *element_len, const char *cur);
 /**
  * tests if string needle exists within a comma-separated string (for handling "#rule" of RFC 2616)
  */
@@ -114,7 +114,8 @@ h2o_iovec_t h2o_htmlescape(h2o_mem_pool_t *pool, const char *src, size_t len);
 /**
  * concatenates a list of iovecs (with NUL termination)
  */
-#define h2o_concat(pool, ...) h2o_concat_list(pool, (h2o_iovec_t[]){ __VA_ARGS__ }, sizeof((h2o_iovec_t[]){ __VA_ARGS__ }) / sizeof(h2o_iovec_t))
+#define h2o_concat(pool, ...)                                                                                                      \
+    h2o_concat_list(pool, (h2o_iovec_t[]){__VA_ARGS__}, sizeof((h2o_iovec_t[]){__VA_ARGS__}) / sizeof(h2o_iovec_t))
 h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t count);
 
 int h2o__lcstris_core(const char *target, const char *test, size_t test_len);

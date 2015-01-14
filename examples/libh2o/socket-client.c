@@ -76,7 +76,7 @@ int main(int argc, char **argv)
     struct addrinfo hints, *res = NULL;
     int err, ret = 1;
     h2o_socket_t *sock;
-    h2o_iovec_t send_data = { H2O_STRLIT("GET / HTTP/1.0\r\n\r\n") };
+    h2o_iovec_t send_data = {H2O_STRLIT("GET / HTTP/1.0\r\n\r\n")};
 
     if (argc != 3) {
         fprintf(stderr, "Usage: %s <host> <port>\n", argv[0]);
@@ -105,7 +105,7 @@ int main(int argc, char **argv)
     }
     sock->data = &send_data;
 
-    while (! exit_loop) {
+    while (!exit_loop) {
 #if H2O_USE_LIBUV
         uv_run(loop, UV_RUN_DEFAULT);
 #else
@@ -120,8 +120,8 @@ Exit:
 #if H2O_USE_LIBUV
         uv_loop_delete(loop);
 #else
-        // FIXME
-        //h2o_evloop_destroy(loop);
+// FIXME
+// h2o_evloop_destroy(loop);
 #endif
     }
     return ret;

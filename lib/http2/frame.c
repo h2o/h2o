@@ -28,8 +28,7 @@ const h2o_http2_settings_t H2O_HTTP2_SETTINGS_DEFAULT = {
     /* enable_push */ 1,
     /* max_concurrent_streams */ UINT32_MAX,
     /* initial_window_size */ 65535,
-    /* max_frame_size */ 16384
-};
+    /* max_frame_size */ 16384};
 
 int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t *src, size_t len)
 {
@@ -37,16 +36,17 @@ int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t
         uint16_t identifier = decode16u(src);
         uint32_t value = decode32u(src + 2);
         switch (identifier) {
-#define SET(label, member, min, max) \
-    case H2O_HTTP2_SETTINGS_##label: \
-        if (! (min <= value && value <= max)) return -1; \
-        settings->member = value; \
+#define SET(label, member, min, max)                                                                                               \
+    case H2O_HTTP2_SETTINGS_##label:                                                                                               \
+        if (!(min <= value && value <= max))                                                                                       \
+            return -1;                                                                                                             \
+        settings->member = value;                                                                                                  \
         break
-        SET(HEADER_TABLE_SIZE, header_table_size, 0, UINT32_MAX);
-        SET(ENABLE_PUSH, enable_push, 0, 1);
-        SET(MAX_CONCURRENT_STREAMS, max_concurrent_streams, 0, UINT32_MAX);
-        SET(INITIAL_WINDOW_SIZE, initial_window_size, 0, 0x7fffffff);
-        SET(MAX_FRAME_SIZE, max_frame_size, 16384, 16777215);
+            SET(HEADER_TABLE_SIZE, header_table_size, 0, UINT32_MAX);
+            SET(ENABLE_PUSH, enable_push, 0, 1);
+            SET(MAX_CONCURRENT_STREAMS, max_concurrent_streams, 0, UINT32_MAX);
+            SET(INITIAL_WINDOW_SIZE, initial_window_size, 0, 0x7fffffff);
+            SET(MAX_FRAME_SIZE, max_frame_size, 16384, 16777215);
 #undef SET
         default:
             /* ignore unknown (5.5) */
@@ -76,7 +76,7 @@ static uint8_t *allocate_frame(h2o_buffer_t **buf, size_t length, uint8_t type, 
 {
     h2o_iovec_t alloced = h2o_buffer_reserve(buf, H2O_HTTP2_FRAME_HEADER_SIZE + length);
     (*buf)->size += H2O_HTTP2_FRAME_HEADER_SIZE + length;
-    return h2o_http2_encode_frame_header((uint8_t*)alloced.base, length, type, flags, stream_id);
+    return h2o_http2_encode_frame_header((uint8_t *)alloced.base, length, type, flags, stream_id);
 }
 
 void h2o_http2_encode_rst_stream_frame(h2o_buffer_t **buf, uint32_t stream_id, int errnum)
@@ -219,7 +219,7 @@ int h2o_http2_decode_goaway_payload(h2o_http2_goaway_payload_t *payload, const h
     payload->last_stream_id = decode32u(frame->payload) & 0x7fffffff;
     payload->error_code = decode32u(frame->payload + 4);
     if ((payload->debug_data.len = frame->length - 8) != 0)
-        payload->debug_data.base = (char*)frame->payload + 8;
+        payload->debug_data.base = (char *)frame->payload + 8;
     else
         payload->debug_data.base = NULL;
 

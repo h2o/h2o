@@ -36,12 +36,8 @@ static void on_ws_message(h2o_websocket_conn_t *conn, const struct wslay_event_o
         return;
     }
 
-    if (! wslay_is_ctrl_frame(arg->opcode)) {
-        struct wslay_event_msg msgarg = {
-            arg->opcode,
-            arg->msg,
-            arg->msg_length
-        };
+    if (!wslay_is_ctrl_frame(arg->opcode)) {
+        struct wslay_event_msg msgarg = {arg->opcode, arg->msg, arg->msg_length};
         wslay_event_queue_msg(conn->ws_ctx, &msgarg);
     }
 }
@@ -53,7 +49,7 @@ static int on_req(h2o_handler_t *self, h2o_req_t *req)
     if (h2o_is_websocket_handshake(req, &client_key) != 0 || client_key == NULL) {
         return -1;
     }
-    h2o_upgrade_to_websocket((h2o_http1_conn_t*)req->conn, client_key, NULL, on_ws_message);
+    h2o_upgrade_to_websocket((h2o_http1_conn_t *)req->conn, client_key, NULL, on_ws_message);
     return 0;
 }
 
@@ -71,12 +67,12 @@ static void on_connect(uv_stream_t *server, int status)
 
     conn = h2o_mem_alloc(sizeof(*conn));
     uv_tcp_init(server->loop, conn);
-    if (uv_accept(server, (uv_stream_t*)conn) != 0) {
-        uv_close((uv_handle_t*)conn, (uv_close_cb)free);
+    if (uv_accept(server, (uv_stream_t *)conn) != 0) {
+        uv_close((uv_handle_t *)conn, (uv_close_cb)free);
         return;
     }
 
-    sock = h2o_uv_socket_create((uv_stream_t*)conn, NULL, 0, (uv_close_cb)free);
+    sock = h2o_uv_socket_create((uv_stream_t *)conn, NULL, 0, (uv_close_cb)free);
     if (ssl_ctx != NULL)
         h2o_accept_ssl(&ctx, sock, ssl_ctx);
     else
@@ -119,11 +115,11 @@ int main(int argc, char **argv)
         goto Error;
     }
     uv_ip4_addr("127.0.0.1", 7890, &sockaddr);
-    if ((r = uv_tcp_bind(&listener, (struct sockaddr*)&sockaddr, sizeof(sockaddr))) != 0) {
+    if ((r = uv_tcp_bind(&listener, (struct sockaddr *)&sockaddr, sizeof(sockaddr))) != 0) {
         fprintf(stderr, "uv_tcp_bind:%s\n", uv_strerror(r));
         goto Error;
     }
-    if ((r = uv_listen((uv_stream_t*)&listener, 128, on_connect)) != 0) {
+    if ((r = uv_listen((uv_stream_t *)&listener, 128, on_connect)) != 0) {
         fprintf(stderr, "uv_listen:%s\n", uv_strerror(r));
         goto Error;
     }

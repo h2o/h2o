@@ -53,12 +53,7 @@ struct st_h2o_file_handler_t {
     h2o_iovec_t index_files[1];
 };
 
-static const char *default_index_files[] = {
-    "index.html",
-    "index.htm",
-    "index.txt",
-    NULL
-};
+static const char *default_index_files[] = {"index.html", "index.htm", "index.txt", NULL};
 
 const char **h2o_file_default_index_files = default_index_files;
 
@@ -66,13 +61,13 @@ const char **h2o_file_default_index_files = default_index_files;
 
 static void do_close(h2o_generator_t *_self, h2o_req_t *req)
 {
-    struct st_h2o_sendfile_generator_t *self = (void*)_self;
+    struct st_h2o_sendfile_generator_t *self = (void *)_self;
     close(self->fd);
 }
 
 static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
-    struct st_h2o_sendfile_generator_t *self = (void*)_self;
+    struct st_h2o_sendfile_generator_t *self = (void *)_self;
     size_t rlen;
     ssize_t rret;
     h2o_iovec_t vec;
@@ -104,7 +99,7 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 
 static int do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_t *buf)
 {
-    struct st_h2o_sendfile_generator_t *self = (void*)_self;
+    struct st_h2o_sendfile_generator_t *self = (void *)_self;
     ssize_t rret;
 
     if (self->bytesleft < buf->len)
@@ -126,7 +121,8 @@ static int do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_t *buf)
     return 1;
 }
 
-static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, const char *path, size_t path_len, int *is_dir, int flags)
+static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, const char *path, size_t path_len, int *is_dir,
+                                                            int flags)
 {
     struct st_h2o_sendfile_generator_t *self;
     int fd, is_gzip;
@@ -137,8 +133,9 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
 
     if ((flags & H2O_FILE_FLAG_SEND_GZIP) != 0 && req->version >= 0x101) {
         ssize_t header_index;
-        if ((header_index = h2o_find_header(&req->headers, H2O_TOKEN_ACCEPT_ENCODING, -1)) != -1
-            && h2o_contains_token(req->headers.entries[header_index].value.base, req->headers.entries[header_index].value.len, H2O_STRLIT("gzip"))) {
+        if ((header_index = h2o_find_header(&req->headers, H2O_TOKEN_ACCEPT_ENCODING, -1)) != -1 &&
+            h2o_contains_token(req->headers.entries[header_index].value.base, req->headers.entries[header_index].value.len,
+                               H2O_STRLIT("gzip"))) {
             char *gzpath = h2o_mem_alloc_pool(&req->pool, path_len + 4);
             memcpy(gzpath, path, path_len);
             strcpy(gzpath + path_len, ".gz");
@@ -186,7 +183,8 @@ Opened:
     return self;
 }
 
-static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *req, int status, const char *reason, h2o_iovec_t mime_type)
+static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *req, int status, const char *reason,
+                         h2o_iovec_t mime_type)
 {
     /* link the request */
     self->req = req;
@@ -232,13 +230,10 @@ int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *pa
 
 static int redirect_to_dir(h2o_req_t *req, const char *path, size_t path_len)
 {
-    static h2o_generator_t generator = { NULL, NULL };
+    static h2o_generator_t generator = {NULL, NULL};
     static const h2o_iovec_t body_prefix = {
-        H2O_STRLIT("<!DOCTYPE html><TITLE>301 Moved Permanently</TITLE><P>The document has moved <A HREF=\"")
-    };
-    static const h2o_iovec_t body_suffix = {
-        H2O_STRLIT("\">here</A>")
-    };
+        H2O_STRLIT("<!DOCTYPE html><TITLE>301 Moved Permanently</TITLE><P>The document has moved <A HREF=\"")};
+    static const h2o_iovec_t body_suffix = {H2O_STRLIT("\">here</A>")};
 
     h2o_iovec_t url;
     size_t alloc_size;
@@ -249,7 +244,8 @@ static int redirect_to_dir(h2o_req_t *req, const char *path, size_t path_len)
 
     /* allocate and build url */
     url.base = h2o_mem_alloc_pool(&req->pool, alloc_size);
-    url.len = sprintf(url.base, "%.*s://%.*s%.*s/", (int)req->scheme.len, req->scheme.base, (int)req->authority.len, req->authority.base, (int)path_len, path);
+    url.len = sprintf(url.base, "%.*s://%.*s%.*s/", (int)req->scheme.len, req->scheme.base, (int)req->authority.len,
+                      req->authority.base, (int)path_len, path);
     assert(url.len + 1 == alloc_size);
 
     /* build response header */
@@ -273,7 +269,7 @@ static int redirect_to_dir(h2o_req_t *req, const char *path, size_t path_len)
 
 static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len)
 {
-    static h2o_generator_t generator = { NULL, NULL };
+    static h2o_generator_t generator = {NULL, NULL};
     DIR *dp;
     h2o_buffer_t *body;
     h2o_iovec_t bodyvec;
@@ -299,7 +295,7 @@ static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len)
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
-    h2o_file_handler_t *self = (void*)_self;
+    h2o_file_handler_t *self = (void *)_self;
     h2o_iovec_t mime_type;
     char *rpath;
     size_t rpath_len, req_path_prefix;
@@ -308,7 +304,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     int is_dir;
 
     /* only accept GET (TODO accept HEAD as well) */
-    if (! h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
+    if (!h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
         return -1;
     /* do not handle non-normalized paths */
     if (req->path_normalized.base == NULL)
@@ -316,11 +312,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
     /* build path (still unterminated at the end of the block) */
     req_path_prefix = req->pathconf->path.len;
-    rpath = alloca(
-        self->real_path.len
-        + (req->path_normalized.len - req_path_prefix)
-        + self->max_index_file_len
-        + 1);
+    rpath = alloca(self->real_path.len + (req->path_normalized.len - req_path_prefix) + self->max_index_file_len + 1);
     rpath_len = 0;
     memcpy(rpath + rpath_len, self->real_path.base, self->real_path.len);
     rpath_len += self->real_path.len;
@@ -340,7 +332,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
             if (is_dir) {
                 /* note: apache redirects "path/" to "path/index.txt/" if index.txt is a dir */
                 char *path = alloca(req->path.len + index_file->len + 1);
-                size_t path_len = sprintf(path, "%.*s%.*s", (int)req->path.len, req->path.base, (int)index_file->len, index_file->base);
+                size_t path_len =
+                    sprintf(path, "%.*s%.*s", (int)req->path.len, req->path.base, (int)index_file->len, index_file->base);
                 return redirect_to_dir(req, path, path_len);
             }
             if (errno != ENOENT)
@@ -394,7 +387,7 @@ NotModified:
 
 static void on_dispose(h2o_handler_t *_self)
 {
-    h2o_file_handler_t *self = (void*)_self;
+    h2o_file_handler_t *self = (void *)_self;
     size_t i;
 
     free(self->real_path.base);
@@ -403,7 +396,8 @@ static void on_dispose(h2o_handler_t *_self)
         free(self->index_files[i].base);
 }
 
-h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real_path, const char **index_files, h2o_mimemap_t *mimemap, int flags)
+h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real_path, const char **index_files,
+                                      h2o_mimemap_t *mimemap, int flags)
 {
     h2o_file_handler_t *self;
     size_t i;
@@ -414,7 +408,8 @@ h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real
     /* allocate memory */
     for (i = 0; index_files[i] != NULL; ++i)
         ;
-    self = (void*)h2o_create_handler(pathconf, offsetof(h2o_file_handler_t, index_files[0]) + sizeof(self->index_files[0]) * (i + 1));
+    self =
+        (void *)h2o_create_handler(pathconf, offsetof(h2o_file_handler_t, index_files[0]) + sizeof(self->index_files[0]) * (i + 1));
 
     /* setup callbacks */
     self->super.dispose = on_dispose;

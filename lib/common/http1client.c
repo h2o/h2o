@@ -135,10 +135,7 @@ static void on_body_chunked(h2o_socket_t *sock, int status)
         const char *errstr;
         int cb_ret;
         size_t newsz = sock->bytes_read;
-        switch (phr_decode_chunked(
-            &client->_body_decoder.chunked.decoder,
-            inbuf->bytes + inbuf->size - newsz,
-            &newsz)) {
+        switch (phr_decode_chunked(&client->_body_decoder.chunked.decoder, inbuf->bytes + inbuf->size - newsz, &newsz)) {
         case -1: /* error */
             newsz = sock->bytes_read;
             client->_can_keepalive = 0;
@@ -149,7 +146,7 @@ static void on_body_chunked(h2o_socket_t *sock, int status)
             break;
         default: /* complete, with garbage on tail; should disable keepalive */
             client->_can_keepalive = 0;
-            /* fallthru */
+        /* fallthru */
         case 0: /* complete */
             errstr = h2o_http1client_error_is_eos;
             break;
@@ -171,7 +168,7 @@ static void on_body_chunked(h2o_socket_t *sock, int status)
 
 static void on_error_before_head(h2o_http1client_t *client, const char *errstr)
 {
-    assert(! client->_can_keepalive);
+    assert(!client->_can_keepalive);
     client->_cb.on_head(client, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0);
     close_client(client);
 }
@@ -188,13 +185,14 @@ static void on_head(h2o_socket_t *sock, int status)
     h2o_timeout_unlink(&client->_timeout);
 
     if (status != 0) {
-        on_error_before_head(client , "I/O error (head)");
+        on_error_before_head(client, "I/O error (head)");
         return;
     }
 
     /* parse response */
     num_headers = sizeof(headers) / sizeof(headers[0]);
-    rlen = phr_parse_response(sock->input->bytes, sock->input->size, &minor_version, &http_status, &msg, &msg_len, headers, &num_headers, 0);
+    rlen = phr_parse_response(sock->input->bytes, sock->input->size, &minor_version, &http_status, &msg, &msg_len, headers,
+                              &num_headers, 0);
     switch (rlen) {
     case -1: /* error */
         on_error_before_head(client, "failed to parse the response");
@@ -226,7 +224,8 @@ static void on_head(h2o_socket_t *sock, int status)
                 return;
             }
         } else if (h2o_lcstris(headers[i].name, headers[i].name_len, H2O_STRLIT("content-length"))) {
-            if ((client->_body_decoder.content_length.bytesleft = h2o_strtosize(headers[i].value, headers[i].value_len)) == SIZE_MAX) {
+            if ((client->_body_decoder.content_length.bytesleft = h2o_strtosize(headers[i].value, headers[i].value_len)) ==
+                SIZE_MAX) {
                 on_error_before_head(client, "invalid content-length");
                 return;
             }
@@ -239,15 +238,15 @@ static void on_head(h2o_socket_t *sock, int status)
         client->_can_keepalive = 0;
 
     /* RFC 2616 4.4 */
-    if (client->_method_is_head
-        || ((100 <= status && status <= 199) || status == 204 || status == 304)) {
+    if (client->_method_is_head || ((100 <= status && status <= 199) || status == 204 || status == 304)) {
         is_eos = 1;
     } else {
         is_eos = 0;
     }
 
     /* call the callback */
-    client->_cb.on_body = client->_cb.on_head(client, is_eos ? h2o_http1client_error_is_eos : NULL, minor_version, http_status, h2o_iovec_init(msg, msg_len), headers, num_headers);
+    client->_cb.on_body = client->_cb.on_head(client, is_eos ? h2o_http1client_error_is_eos : NULL, minor_version, http_status,
+                                              h2o_iovec_init(msg, msg_len), headers, num_headers);
     if (is_eos) {
         close_client(client);
         return;
@@ -357,9 +356,10 @@ static h2o_http1client_t *create_client(h2o_http1client_ctx_t *ctx, h2o_mem_pool
     return client;
 }
 
-const char * const h2o_http1client_error_is_eos = "end of stream";
+const char *const h2o_http1client_error_is_eos = "end of stream";
 
-h2o_http1client_t *h2o_http1client_connect(h2o_http1client_ctx_t *ctx, h2o_mem_pool_t *pool, const char *host, uint16_t port, h2o_http1client_connect_cb cb)
+h2o_http1client_t *h2o_http1client_connect(h2o_http1client_ctx_t *ctx, h2o_mem_pool_t *pool, const char *host, uint16_t port,
+                                           h2o_http1client_connect_cb cb)
 {
     h2o_http1client_t *client;
     struct addrinfo hints, *res;
@@ -395,7 +395,8 @@ Error:
     return client;
 }
 
-h2o_http1client_t *h2o_http1client_connect_with_pool(h2o_http1client_ctx_t *ctx, h2o_mem_pool_t *pool, h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb)
+h2o_http1client_t *h2o_http1client_connect_with_pool(h2o_http1client_ctx_t *ctx, h2o_mem_pool_t *pool, h2o_socketpool_t *sockpool,
+                                                     h2o_http1client_connect_cb cb)
 {
     h2o_http1client_t *client = create_client(ctx, pool, cb);
     client->sockpool = sockpool;

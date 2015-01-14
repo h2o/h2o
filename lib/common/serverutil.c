@@ -29,7 +29,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#if ! defined(_SC_NPROCESSORS_ONLN)
+#if !defined(_SC_NPROCESSORS_ONLN)
 #include <sys/sysctl.h>
 #endif
 #include "h2o/memory.h"
@@ -106,7 +106,7 @@ ssize_t h2o_server_starter_get_fds(int **_fds)
 {
     const char *ports_env, *start, *end, *eq;
     size_t t;
-    H2O_VECTOR(int) fds = {};
+    H2O_VECTOR(int)fds = {};
 
     if ((ports_env = getenv("SERVER_STARTER_PORT")) == NULL)
         return 0;
@@ -127,7 +127,7 @@ ssize_t h2o_server_starter_get_fds(int **_fds)
             fprintf(stderr, "invalid file descriptor number in $SERVER_STARTER_PORT: %s\n", ports_env);
             return -1;
         }
-        h2o_vector_reserve(NULL, (void*)&fds, sizeof(fds.entries[0]), fds.size + 1);
+        h2o_vector_reserve(NULL, (void *)&fds, sizeof(fds.entries[0]), fds.size + 1);
         fds.entries[fds.size++] = (int)t;
     }
 
@@ -137,7 +137,7 @@ ssize_t h2o_server_starter_get_fds(int **_fds)
 
 int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *child_status)
 {
-    int respfds[2] = { -1, -1 };
+    int respfds[2] = {-1, -1};
     posix_spawn_file_actions_t file_actions;
     pid_t pid = -1;
     int ret = -1;
@@ -196,7 +196,7 @@ size_t h2o_numproc()
 #if defined(_SC_NPROCESSORS_ONLN)
     return (size_t)sysconf(_SC_NPROCESSORS_ONLN);
 #elif defined(CTL_HW) && defined(HW_AVAILCPU)
-    int name[] = { CTL_HW, HW_AVAILCPU };
+    int name[] = {CTL_HW, HW_AVAILCPU};
     int ncpu;
     size_t ncpu_sz = sizeof(ncpu);
     if (sysctl(name, sizeof(name) / sizeof(name[0]), &ncpu, &ncpu_sz, NULL, 0) != 0 || sizeof(ncpu) != ncpu_sz) {
