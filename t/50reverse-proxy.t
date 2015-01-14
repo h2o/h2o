@@ -127,14 +127,18 @@ sub run_tests_with_conf {
             my ($proto, $port) = @_;
             my $opt = $proto eq 'http' ? '-u' : '';
             for my $file (sort keys %files) {
+system(q{date '+%H:%M:%S.%N'});
                 my $content = `nghttp $opt $proto://127.0.0.1:$port/$file`;
                 is length($content), $files{$file}->{size}, "$proto://127.0.0.1/$file (size)";
                 is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/$file (md5)";
             }
+system(q{date '+%H:%M:%S.%N'});
             my $out = `nghttp $opt -H':method: POST' -d t/50reverse-proxy/hello.txt $proto://127.0.0.1:$port/echo`;
             is $out, "hello\n", "$proto://127.0.0.1/echo (POST)";
+system(q{date '+%H:%M:%S.%N'});
             $out = `nghttp $opt -m 10 $proto://127.0.0.1:$port/index.txt`;
             is $out, "hello\n" x 10, "$proto://127.0.0.1/index.txt x 10 times";
+system(q{date '+%H:%M:%S.%N'});
             $out = `nghttp $opt -H':method: POST' -d $huge_file $proto://127.0.0.1:$port/echo`;
             is length($out), $huge_file_size, "$proto://127.0.0.1/echo (mmap-backed, size)";
             is md5_hex($out), $huge_file_md5, "$proto://127.0.0.1/echo (mmap-backed, md5)";
