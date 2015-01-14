@@ -853,13 +853,22 @@ static void usage_print_directives(h2o_globalconf_t *conf)
         h2o_configurator_t *configurator = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, node);
         for (i = 0; i != configurator->commands.size; ++i) {
             h2o_configurator_command_t *cmd = configurator->commands.entries + i;
-            const char **desc;
+            const char *desc_line;
             printf("  %s: [%s%s%s]\n", cmd->name,
                 ("g") + ((cmd->flags & H2O_CONFIGURATOR_FLAG_GLOBAL) == 0),
                 ("h") + ((cmd->flags & H2O_CONFIGURATOR_FLAG_HOST) == 0),
                 ("p") + ((cmd->flags & H2O_CONFIGURATOR_FLAG_PATH) == 0));
-            for (desc = cmd->description; *desc != NULL; ++desc)
-                printf("    %s\n", *desc);
+            desc_line = cmd->description;
+            while (*desc_line != '\0') {
+                const char *eol = strchr(desc_line, '\n');
+                if (eol != NULL) {
+                    printf("    %.*s", (int)(eol - desc_line + 1), desc_line);
+                    desc_line += eol - desc_line + 1;
+                } else {
+                    printf("    %s\n", desc_line);
+                    break;
+                }
+            }
         }
         printf("\n");
     }
@@ -1018,28 +1027,28 @@ static void setup_configurators(struct config_t *conf)
             &c->super, "listen",
             H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST,
             on_config_listen,
-            "port at which the server should listen for incoming requests (mandatory)",
-            " - if the value is a scalar, it is treated as the port number (or as the",
-            "   service name)",
-            " - if the value is a mapping, following properties are recognized:",
-            "     port: incoming port number or service name (mandatory)",
-            "     host: incoming address (default: any address)",
-            "     ssl: mapping of SSL configuration using the keys below (default: none)",
-            "       certificate-file: path of the SSL certificate file (mandatory)",
-            "       key-file:         path of the SSL private key file (mandatory)",
-            "       minimum-version:  minimum protocol version, should be one of: SSLv2,",
-            "                         SSLv3, TLSv1, TLSv1.1, TLSv1.2 (default: TLSv1)",
-            "       cipher-suite:     list of cipher suites to be passed to OpenSSL via",
-            "                         SSL_CTX_set_cipher_list (optional)",
-            "       ocsp-update-interval:",
-            "                         interval for updating the OCSP stapling data (in",
-            "                         seconds), or set to zero to disable OCSP stapling",
-            "                         (default: 14400 = 4 hours)",
-            "       ocsp-max-failures:",
-            "                         number of consecutive OCSP queriy failures before",
-            "                         stopping to send OCSP stapling data to the client",
-            "                         (default: 3)",
-            " - if the value is a sequence, each element should be either a scalar or a",
+            "port at which the server should listen for incoming requests (mandatory)\n"
+            " - if the value is a scalar, it is treated as the port number (or as the\n"
+            "   service name)\n"
+            " - if the value is a mapping, following properties are recognized:\n"
+            "     port: incoming port number or service name (mandatory)\n"
+            "     host: incoming address (default: any address)\n"
+            "     ssl: mapping of SSL configuration using the keys below (default: none)\n"
+            "       certificate-file: path of the SSL certificate file (mandatory)\n"
+            "       key-file:         path of the SSL private key file (mandatory)\n"
+            "       minimum-version:  minimum protocol version, should be one of: SSLv2,\n"
+            "                         SSLv3, TLSv1, TLSv1.1, TLSv1.2 (default: TLSv1)\n"
+            "       cipher-suite:     list of cipher suites to be passed to OpenSSL via\n"
+            "                         SSL_CTX_set_cipher_list (optional)\n"
+            "       ocsp-update-interval:\n"
+            "                         interval for updating the OCSP stapling data (in\n"
+            "                         seconds), or set to zero to disable OCSP stapling\n"
+            "                         (default: 14400 = 4 hours)\n"
+            "       ocsp-max-failures:\n"
+            "                         number of consecutive OCSP queriy failures before\n"
+            "                         stopping to send OCSP stapling data to the client\n"
+            "                         (default: 3)\n"
+            " - if the value is a sequence, each element should be either a scalar or a\n"
             "   mapping that conform to the requirements above");
     }
 

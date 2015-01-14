@@ -65,9 +65,9 @@ struct st_h2o_configurator_command_t {
      */
     h2o_configurator_command_cb cb;
     /**
-     * lines of strings (NULL-terminated) describing of the command (printed by h2o --help)
+     * multi-line string describing of the command (printed by h2o --help)
      */
-    const char **description;
+    const char *description;
 };
 
 /**
@@ -100,12 +100,7 @@ h2o_configurator_t *h2o_configurator_create(h2o_globalconf_t *conf, size_t sz);
 /**
  *
  */
-#define h2o_configurator_define_command(configurator, name, flags, cb, ...) \
-    do { \
-        static const char *desc[] = { __VA_ARGS__, NULL }; \
-        h2o_configurator__define_command(configurator, name, flags, cb, desc); \
-    } while (0)
-void h2o_configurator__define_command(h2o_configurator_t *configurator, const char *name, int flags, h2o_configurator_command_cb cb, const char **desc);
+void h2o_configurator_define_command(h2o_configurator_t *configurator, const char *name, int flags, h2o_configurator_command_cb cb, const char *desc);
 /**
  * returns a configurator of given command name
  * @return configurator for given name or NULL if not found

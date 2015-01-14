@@ -269,7 +269,7 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
             c, "limit-request-body",
             H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
             on_config_limit_request_body,
-            "maximum size of request body in bytes (e.g. content of POST)",
+            "maximum size of request body in bytes (e.g. content of POST)\n"
             "(default: unlimited)");
         h2o_configurator_define_command(
             c, "http1-request-timeout",
@@ -280,7 +280,7 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
             c, "http1-upgrade-to-http2",
             H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
             on_config_http1_upgrade_to_http2,
-            "boolean flag (ON/OFF) indicating whether or not to allow upgrade to HTTP/2",
+            "boolean flag (ON/OFF) indicating whether or not to allow upgrade to HTTP/2\n"
             "(default: ON)");
         h2o_configurator_define_command(
             c, "http2-idle-timeout",
@@ -291,7 +291,7 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
             c, "http2-max-concurrent-requests-per-connection",
             H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
             on_config_http2_max_concurrent_requests_per_connection,
-            "max. number of requests to be handled concurrently within a single HTTP/2",
+            "max. number of requests to be handled concurrently within a single HTTP/2\n"
             "stream (default: 16)");
     }
 }
@@ -320,7 +320,7 @@ h2o_configurator_t *h2o_configurator_create(h2o_globalconf_t *conf, size_t sz)
     return c;
 }
 
-void h2o_configurator__define_command(h2o_configurator_t *configurator, const char *name, int flags, h2o_configurator_command_cb cb, const char **desc)
+void h2o_configurator_define_command(h2o_configurator_t *configurator, const char *name, int flags, h2o_configurator_command_cb cb, const char *desc)
 {
     h2o_configurator_command_t *cmd;
 
