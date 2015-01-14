@@ -482,7 +482,11 @@ static void handle_window_update_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t
     h2o_http2_window_update_payload_t payload;
 
     if (h2o_http2_decode_window_update_payload(&payload, frame) != 0) {
-        send_stream_error(conn, frame->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
+        if (frame->stream_id == 0)
+            enqueue_goaway_and_initiate_close(conn, H2O_HTTP2_ERROR_FLOW_CONTROL,
+                                              h2o_iovec_init(H2O_STRLIT("invalid connection-level window_update")));
+        else
+            send_stream_error(conn, frame->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
         return;
     }
 
@@ -629,7 +633,7 @@ static void parse_input(h2o_http2_conn_t *conn)
             /* fallthru */
             case H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY:
                 close_connection(conn);
-                break;
+                return;
             }
             break;
         }
