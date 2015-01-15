@@ -485,7 +485,7 @@ static void handle_window_update_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t
     if ((ret = h2o_http2_decode_window_update_payload(&payload, frame)) != 0) {
         switch (ret) {
         case H2O_HTTP2_ERROR_FRAME_SIZE:
-            enqueue_goaway_and_initiate_close(conn, ret, (h2o_iovec_t){ "invalid WINDOW_UPDATE frame"});
+            enqueue_goaway_and_initiate_close(conn, ret, (h2o_iovec_t){H2O_STRLIT("invalid WINDOW_UPDATE frame")});
             break;
         default:
             if (frame->stream_id == 0)
