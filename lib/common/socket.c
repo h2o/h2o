@@ -317,11 +317,11 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
         for (i = 0; i != bufcnt; ++i) {
             fprintf(stderr, "writing %zu bytes to fd:%d\n", bufs[i].len,
 #if H2O_USE_LIBUV
-                ((struct st_h2o_uv_socket_t*)sock)->uv.stream->io_watcher.fd
+                    ((struct st_h2o_uv_socket_t *)sock)->uv.stream->io_watcher.fd
 #else
-                ((struct st_h2o_evloop_socket_t*)sock)->fd
+                    ((struct st_h2o_evloop_socket_t *)sock)->fd
 #endif
-);
+                    );
             h2o_dump_memory(stderr, bufs[i].base, bufs[i].len);
         }
     }
