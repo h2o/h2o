@@ -33,7 +33,6 @@ typedef struct h2o_http2_scheduler_slot_t {
 } h2o_http2_scheduler_slot_t;
 
 typedef struct st_h2o_http2_scheduler_t {
-    size_t _refcnt;
     H2O_VECTOR(h2o_http2_scheduler_slot_t *) _list;
 } h2o_http2_scheduler_t;
 

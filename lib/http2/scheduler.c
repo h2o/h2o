@@ -27,8 +27,6 @@ h2o_http2_scheduler_slot_t *h2o_http2_scheduler_open(h2o_http2_scheduler_t *sche
     h2o_http2_scheduler_slot_t *slot;
     size_t i;
 
-    ++scheduler->_refcnt;
-
     /* locate the slot */
     for (i = 0; i != scheduler->_list.size; ++i) {
         slot = scheduler->_list.entries[i];
@@ -55,14 +53,11 @@ h2o_http2_scheduler_slot_t *h2o_http2_scheduler_open(h2o_http2_scheduler_t *sche
 void h2o_http2_scheduler_close(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_slot_t *slot)
 {
     assert(slot->_refcnt != 0);
-    assert(scheduler->_refcnt != 0);
     --slot->_refcnt;
-    --scheduler->_refcnt;
 }
 
 void h2o_http2_scheduler_dispose(h2o_http2_scheduler_t *scheduler)
 {
-    assert(scheduler->_refcnt == 0);
     if (scheduler->_list.size != 0) {
         size_t i;
         for (i = 0; i != scheduler->_list.size; ++i) {
