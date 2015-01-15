@@ -167,7 +167,6 @@ typedef struct st_h2o_http2_window_t {
 typedef struct h2o_http2_stream_priolist_slot_t {
     uint16_t weight;
     h2o_linklist_t active_streams;  /* stream that has data, that can be sent */
-    h2o_linklist_t blocked_streams; /* stream that has data, but those blocked by the stream-level window */
     size_t refcnt;
 } h2o_http2_stream_priolist_slot_t;
 
