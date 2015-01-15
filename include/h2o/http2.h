@@ -232,7 +232,7 @@ struct st_h2o_http2_conn_t {
         h2o_buffer_t *buf;
         h2o_buffer_t *buf_in_flight;
         h2o_http2_stream_priolist_t streams_with_pending_data;
-        h2o_linklist_t streams_without_pending_data;
+        h2o_linklist_t streams_to_proceed;
         h2o_timeout_entry_t timeout_entry;
         h2o_http2_window_t window;
     } _write;
