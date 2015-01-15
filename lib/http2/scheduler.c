@@ -22,7 +22,7 @@
 #include "h2o.h"
 #include "h2o/http2.h"
 
-h2o_http2_scheduler_slot_t *h2o_http2_scheduler_open(h2o_http2_scheduler_t *scheduler, uint16_t weight)
+void h2o_http2_scheduler_open(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_openref_t *ref, uint16_t weight)
 {
     h2o_http2_scheduler_slot_t *slot;
     size_t i;
@@ -32,7 +32,7 @@ h2o_http2_scheduler_slot_t *h2o_http2_scheduler_open(h2o_http2_scheduler_t *sche
         slot = scheduler->_list.entries[i];
         if (slot->weight == weight) {
             ++slot->_refcnt;
-            return slot;
+            goto Exit;
         } else if (slot->weight < weight) {
             break;
         }
@@ -47,13 +47,16 @@ h2o_http2_scheduler_slot_t *h2o_http2_scheduler_open(h2o_http2_scheduler_t *sche
             sizeof(scheduler->_list.entries[0]) * (scheduler->_list.size - i));
     scheduler->_list.entries[i] = slot;
     ++scheduler->_list.size;
-    return slot;
+
+Exit:
+    ref->_slot = slot;
 }
 
-void h2o_http2_scheduler_close(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_slot_t *slot)
+void h2o_http2_scheduler_close(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_openref_t *ref)
 {
-    assert(slot->_refcnt != 0);
-    --slot->_refcnt;
+    assert(ref->_slot->_refcnt != 0);
+    --ref->_slot->_refcnt;
+    ref->_slot = NULL;
 }
 
 void h2o_http2_scheduler_dispose(h2o_http2_scheduler_t *scheduler)

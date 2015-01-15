@@ -189,7 +189,7 @@ struct st_h2o_http2_stream_t {
     /* link list governed by connection.c for handling various things */
     struct {
         h2o_linklist_t link;
-        h2o_http2_scheduler_slot_t *slot;
+        h2o_http2_scheduler_openref_t sched_ref;
     } _link;
     /* placed at last since it is large and has it's own ctor */
     h2o_req_t req;

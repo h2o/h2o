@@ -36,23 +36,33 @@ typedef struct st_h2o_http2_scheduler_t {
     H2O_VECTOR(h2o_http2_scheduler_slot_t *) _list;
 } h2o_http2_scheduler_t;
 
+typedef struct st_h2o_http2_scheduler_openref_t {
+    h2o_http2_scheduler_slot_t *_slot;
+} h2o_http2_scheduler_openref_t;
+
 typedef struct st_h2o_http2_scheduler_iterator_t {
     size_t _slot_index;
 } h2o_http2_scheduler_iterator_t;
 
 /* void h2o_http2_scheduler_init(h2o_http2_scheduler_t *scheduler); (zero-clear is sufficient for the time being) */
 void h2o_http2_scheduler_dispose(h2o_http2_scheduler_t *scheduler);
-h2o_http2_scheduler_slot_t *h2o_http2_scheduler_open(h2o_http2_scheduler_t *scheduler, uint16_t weight);
-void h2o_http2_scheduler_close(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_slot_t *slot);
-static void h2o_http2_scheduler_set_active(h2o_http2_scheduler_slot_t *slot, h2o_linklist_t *link);
+void h2o_http2_scheduler_open(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_openref_t *ref, uint16_t weight);
+void h2o_http2_scheduler_close(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_openref_t *ref);
+static int h2o_http2_scheduler_ref_is_open(h2o_http2_scheduler_openref_t *ref);
+static void h2o_http2_scheduler_set_active(h2o_http2_scheduler_openref_t *ref, h2o_linklist_t *link);
 static h2o_linklist_t *h2o_http2_scheduler_get_next(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_iterator_t *iter);
 
 /* inline definitions */
 
-inline void h2o_http2_scheduler_set_active(h2o_http2_scheduler_slot_t *slot, h2o_linklist_t *link)
+inline int h2o_http2_scheduler_ref_is_open(h2o_http2_scheduler_openref_t *ref)
+{
+    return ref->_slot != NULL;
+}
+
+inline void h2o_http2_scheduler_set_active(h2o_http2_scheduler_openref_t *ref, h2o_linklist_t *link)
 {
     assert(!h2o_linklist_is_linked(link));
-    h2o_linklist_insert(&slot->_active_streams, link);
+    h2o_linklist_insert(&ref->_slot->_active_streams, link);
 }
 
 inline h2o_linklist_t *h2o_http2_scheduler_get_next(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_iterator_t *iter)
