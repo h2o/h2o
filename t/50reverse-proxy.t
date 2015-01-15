@@ -65,7 +65,7 @@ sub spawn_upstream {
     my ($port, @extra) = @_;
     spawn_server(
         argv     => [
-            qw(plackup -MPlack::App::File -s Starlet --access-log /dev/null -p), $port,
+            qw(plackup -MPlack::App::File -s Starlet --keepalive-timeout 100 --access-log /dev/null -p), $port,
             @extra,
             ASSETS_DIR . "/upstream.psgi",
         ],
