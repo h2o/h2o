@@ -27,13 +27,13 @@ h2o_http2_scheduler_slot_t *h2o_http2_scheduler_open(h2o_http2_scheduler_t *sche
     h2o_http2_scheduler_slot_t *slot;
     size_t i;
 
-    ++scheduler->refcnt;
+    ++scheduler->_refcnt;
 
     /* locate the slot */
-    for (i = 0; i != scheduler->list.size; ++i) {
-        slot = scheduler->list.entries[i];
+    for (i = 0; i != scheduler->_list.size; ++i) {
+        slot = scheduler->_list.entries[i];
         if (slot->weight == weight) {
-            ++slot->refcnt;
+            ++slot->_refcnt;
             return slot;
         } else if (slot->weight < weight) {
             break;
@@ -42,35 +42,35 @@ h2o_http2_scheduler_slot_t *h2o_http2_scheduler_open(h2o_http2_scheduler_t *sche
     /* not found, create new slot */
     slot = h2o_mem_alloc(sizeof(*slot));
     slot->weight = weight;
-    h2o_linklist_init_anchor(&slot->active_streams);
-    slot->refcnt = 1;
-    h2o_vector_reserve(NULL, (h2o_vector_t *)&scheduler->list, sizeof(scheduler->list.entries[0]), scheduler->list.size + 1);
-    memmove(scheduler->list.entries + i + 1, scheduler->list.entries + i,
-            sizeof(scheduler->list.entries[0]) * (scheduler->list.size - i));
-    scheduler->list.entries[i] = slot;
-    ++scheduler->list.size;
+    h2o_linklist_init_anchor(&slot->_active_streams);
+    slot->_refcnt = 1;
+    h2o_vector_reserve(NULL, (h2o_vector_t *)&scheduler->_list, sizeof(scheduler->_list.entries[0]), scheduler->_list.size + 1);
+    memmove(scheduler->_list.entries + i + 1, scheduler->_list.entries + i,
+            sizeof(scheduler->_list.entries[0]) * (scheduler->_list.size - i));
+    scheduler->_list.entries[i] = slot;
+    ++scheduler->_list.size;
     return slot;
 }
 
 void h2o_http2_scheduler_close(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_slot_t *slot)
 {
-    assert(slot->refcnt != 0);
-    assert(scheduler->refcnt != 0);
-    --slot->refcnt;
-    --scheduler->refcnt;
+    assert(slot->_refcnt != 0);
+    assert(scheduler->_refcnt != 0);
+    --slot->_refcnt;
+    --scheduler->_refcnt;
 }
 
 void h2o_http2_scheduler_dispose(h2o_http2_scheduler_t *scheduler)
 {
-    assert(scheduler->refcnt == 0);
-    if (scheduler->list.size != 0) {
+    assert(scheduler->_refcnt == 0);
+    if (scheduler->_list.size != 0) {
         size_t i;
-        for (i = 0; i != scheduler->list.size; ++i) {
-            h2o_http2_scheduler_slot_t *slot = scheduler->list.entries[i];
-            assert(slot->refcnt == 0);
-            assert(h2o_linklist_is_empty(&slot->active_streams));
+        for (i = 0; i != scheduler->_list.size; ++i) {
+            h2o_http2_scheduler_slot_t *slot = scheduler->_list.entries[i];
+            assert(slot->_refcnt == 0);
+            assert(h2o_linklist_is_empty(&slot->_active_streams));
             free(slot);
         }
-        free(scheduler->list.entries);
+        free(scheduler->_list.entries);
     }
 }
