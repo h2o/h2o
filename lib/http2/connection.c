@@ -58,59 +58,6 @@ static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t
 static int do_emit_writereq(h2o_http2_conn_t *conn);
 static void on_read(h2o_socket_t *sock, int status);
 
-static h2o_http2_scheduler_slot_t *h2o_http2_scheduler_open(h2o_http2_scheduler_t *scheduler, uint16_t weight)
-{
-    h2o_http2_scheduler_slot_t *slot;
-    size_t i;
-
-    ++scheduler->refcnt;
-
-    /* locate the slot */
-    for (i = 0; i != scheduler->list.size; ++i) {
-        slot = scheduler->list.entries[i];
-        if (slot->weight == weight) {
-            ++slot->refcnt;
-            return slot;
-        } else if (slot->weight < weight) {
-            break;
-        }
-    }
-    /* not found, create new slot */
-    slot = h2o_mem_alloc(sizeof(*slot));
-    slot->weight = weight;
-    h2o_linklist_init_anchor(&slot->active_streams);
-    slot->refcnt = 1;
-    h2o_vector_reserve(NULL, (h2o_vector_t *)&scheduler->list, sizeof(scheduler->list.entries[0]), scheduler->list.size + 1);
-    memmove(scheduler->list.entries + i + 1, scheduler->list.entries + i,
-            sizeof(scheduler->list.entries[0]) * (scheduler->list.size - i));
-    scheduler->list.entries[i] = slot;
-    ++scheduler->list.size;
-    return slot;
-}
-
-static void h2o_http2_scheduler_close(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_slot_t *slot)
-{
-    assert(slot->refcnt != 0);
-    assert(scheduler->refcnt != 0);
-    --slot->refcnt;
-    --scheduler->refcnt;
-}
-
-static void h2o_http2_scheduler_dispose(h2o_http2_scheduler_t *scheduler)
-{
-    assert(scheduler->refcnt == 0);
-    if (scheduler->list.size != 0) {
-        size_t i;
-        for (i = 0; i != scheduler->list.size; ++i) {
-            h2o_http2_scheduler_slot_t *slot = scheduler->list.entries[i];
-            assert(slot->refcnt == 0);
-            assert(h2o_linklist_is_empty(&slot->active_streams));
-            free(slot);
-        }
-        free(scheduler->list.entries);
-    }
-}
-
 static void enqueue_goaway_and_initiate_close(h2o_http2_conn_t *conn, int errnum, h2o_iovec_t additional_data)
 {
     h2o_http2_encode_goaway_frame(&conn->_write.buf, conn->max_processed_stream_id, -errnum, additional_data);

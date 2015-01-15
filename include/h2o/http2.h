@@ -28,6 +28,7 @@ extern "C" {
 
 #include <assert.h>
 #include "khash.h"
+#include "./http2/scheduler.h"
 
 typedef struct st_h2o_http2_conn_t h2o_http2_conn_t;
 typedef struct st_h2o_http2_stream_t h2o_http2_stream_t;
@@ -163,17 +164,6 @@ typedef struct st_h2o_http2_window_update_payload_t {
 typedef struct st_h2o_http2_window_t {
     ssize_t _avail;
 } h2o_http2_window_t;
-
-typedef struct h2o_http2_scheduler_slot_t {
-    uint16_t weight;
-    h2o_linklist_t active_streams;  /* stream that has data, that can be sent */
-    size_t refcnt;
-} h2o_http2_scheduler_slot_t;
-
-typedef struct st_h2o_http2_scheduler_t {
-    size_t refcnt;
-    H2O_VECTOR(h2o_http2_scheduler_slot_t *) list;
-} h2o_http2_scheduler_t;
 
 typedef enum enum_h2o_http2_stream_state_t {
     H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS,
