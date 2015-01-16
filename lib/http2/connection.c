@@ -775,7 +775,7 @@ int do_emit_writereq(h2o_http2_conn_t *conn)
 
     /* push DATA frames */
     if (conn->state == H2O_HTTP2_CONN_STATE_OPEN && h2o_http2_conn_get_buffer_window(conn) > 0)
-        h2o_http2_scheduler_iterate(&conn->_write.scheduler, emit_writereq_of_openref, conn);
+        h2o_http2_scheduler_run(&conn->_write.scheduler, emit_writereq_of_openref, conn);
 
     if (conn->_write.buf->size == 0)
         return 0;

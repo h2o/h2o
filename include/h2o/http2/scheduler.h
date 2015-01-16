@@ -46,7 +46,7 @@ typedef struct st_h2o_http2_scheduler_openref_t {
     int _self_is_active;
 } h2o_http2_scheduler_openref_t;
 
-typedef int (*h2o_http2_scheduler_iterate_cb)(h2o_http2_scheduler_openref_t *ref, int *still_is_active, void *cb_arg);
+typedef int (*h2o_http2_scheduler_run_cb)(h2o_http2_scheduler_openref_t *ref, int *still_is_active, void *cb_arg);
 
 /* void h2o_http2_scheduler_init(h2o_http2_scheduler_t *scheduler); (zero-clear is sufficient for the time being) */
 void h2o_http2_scheduler_dispose(h2o_http2_scheduler_t *scheduler);
@@ -55,7 +55,7 @@ void h2o_http2_scheduler_close(h2o_http2_scheduler_openref_t *ref);
 void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *new_parent, int exclusive);
 static int h2o_http2_scheduler_ref_is_open(h2o_http2_scheduler_openref_t *ref);
 void h2o_http2_scheduler_set_active(h2o_http2_scheduler_openref_t *ref);
-int h2o_http2_scheduler_iterate(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_iterate_cb cb, void *cb_arg);
+int h2o_http2_scheduler_run(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_run_cb cb, void *cb_arg);
 
 /* inline definitions */
 

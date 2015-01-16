@@ -194,7 +194,7 @@ void h2o_http2_scheduler_set_active(h2o_http2_scheduler_openref_t *ref)
     incr_active_cnt(&ref->super);
 }
 
-static int iterate_once(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_iterate_cb cb, void *cb_arg, size_t *num_touched)
+static int run_once(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_run_cb cb, void *cb_arg, size_t *num_touched)
 {
     h2o_http2_scheduler_slot_t *slot = NULL;
     h2o_linklist_t *readded_first = NULL;
@@ -239,7 +239,7 @@ SlotIsActive:
             /* run the children */
             h2o_linklist_unlink(&ref->_active_link);
             h2o_linklist_insert(&slot->_active_refs, &ref->_active_link);
-            bail_out = iterate_once(&ref->super, cb, cb_arg, num_touched);
+            bail_out = run_once(&ref->super, cb, cb_arg, num_touched);
             if (readded_first == NULL && h2o_linklist_is_linked(&ref->_active_link))
                 readded_first = &ref->_active_link;
         }
@@ -248,14 +248,14 @@ SlotIsActive:
     return bail_out;
 }
 
-int h2o_http2_scheduler_iterate(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_iterate_cb cb, void *cb_arg)
+int h2o_http2_scheduler_run(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_run_cb cb, void *cb_arg)
 {
     int bail_out = 0;
     size_t num_touched;
 
     do {
         num_touched = 0;
-        bail_out = iterate_once(scheduler, cb, cb_arg, &num_touched);
+        bail_out = run_once(scheduler, cb, cb_arg, &num_touched);
     } while (!bail_out && num_touched != 0);
 
     return bail_out;
