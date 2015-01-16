@@ -90,6 +90,7 @@
 		10D0907319F633B00043D458 /* proxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 10D0907219F633B00043D458 /* proxy.c */; };
 		10E299561A67E62800701AA6 /* scheduler.h in Headers */ = {isa = PBXBuildFile; fileRef = 10E299551A67E62400701AA6 /* scheduler.h */; };
 		10E299581A67E68500701AA6 /* scheduler.c in Sources */ = {isa = PBXBuildFile; fileRef = 10E299571A67E68500701AA6 /* scheduler.c */; };
+		10E2995A1A68D03100701AA6 /* scheduler.c in Sources */ = {isa = PBXBuildFile; fileRef = 10E299591A68D03100701AA6 /* scheduler.c */; };
 		10EC2A361A0B4D370083514F /* socketpool.h in Headers */ = {isa = PBXBuildFile; fileRef = 10EC2A351A0B4D370083514F /* socketpool.h */; };
 		10EC2A381A0B4DC70083514F /* socketpool.c in Sources */ = {isa = PBXBuildFile; fileRef = 10EC2A371A0B4DC70083514F /* socketpool.c */; };
 		10F417CC19C1907B00B6E31A /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
@@ -288,6 +289,7 @@
 		10D0907219F633B00043D458 /* proxy.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = proxy.c; sourceTree = "<group>"; };
 		10E299551A67E62400701AA6 /* scheduler.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = scheduler.h; sourceTree = "<group>"; };
 		10E299571A67E68500701AA6 /* scheduler.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = scheduler.c; sourceTree = "<group>"; };
+		10E299591A68D03100701AA6 /* scheduler.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = scheduler.c; sourceTree = "<group>"; };
 		10EC2A351A0B4D370083514F /* socketpool.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = socketpool.h; sourceTree = "<group>"; };
 		10EC2A371A0B4DC70083514F /* socketpool.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = socketpool.c; sourceTree = "<group>"; };
 		10F417D319C1907B00B6E31A /* h2o */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = h2o; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -450,6 +452,7 @@
 			isa = PBXGroup;
 			children = (
 				105534C01A3B911300627ECB /* hpack.c */,
+				10E299591A68D03100701AA6 /* scheduler.c */,
 			);
 			path = http2;
 			sourceTree = "<group>";
@@ -1000,6 +1003,7 @@
 				1079245219A3266700C52AD6 /* util.c in Sources */,
 				1079244419A3265C00C52AD6 /* chunked.c in Sources */,
 				104B9A481A5F9472009EEE64 /* headers.c in Sources */,
+				10E2995A1A68D03100701AA6 /* scheduler.c in Sources */,
 				105534BE1A3B8F7700627ECB /* file.c in Sources */,
 				1079244719A3265C00C52AD6 /* http1.c in Sources */,
 				1079244819A3265C00C52AD6 /* connection.c in Sources */,

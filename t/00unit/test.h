@@ -52,6 +52,7 @@ void test_lib__serverutil_c(void);
 void test_lib__string_c(void);
 void test_lib__headers_c(void);
 void test_lib__http2__hpack(void);
+void test_lib__http2__scheduler(void);
 void test_lib__file_c(void);
 void test_lib__mimemap_c(void);
 void test_lib__proxy_c(void);

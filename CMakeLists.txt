@@ -83,7 +83,8 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/handler/file.c
     t/00unit/lib/handler/mimemap.c
     t/00unit/lib/handler/proxy.c
-    t/00unit/lib/http2/hpack.c)
+    t/00unit/lib/http2/hpack.c
+    t/00unit/lib/http2/scheduler.c)
 LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/serverutil.c
     lib/common/string.c
@@ -91,7 +92,8 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/handler/file.c
     lib/handler/mimemap.c
     lib/handler/proxy.c
-    lib/http2/hpack.c)
+    lib/http2/hpack.c
+    lib/http2/scheduler.c)
 
 SET(EXTRA_LIBRARIES ${CMAKE_DL_LIBS})
 
