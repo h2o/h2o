@@ -111,7 +111,48 @@ static void test_round_robin(void)
     h2o_http2_scheduler_dispose(&scheduler);
 }
 
+static void test_priority(void)
+{
+    h2o_http2_scheduler_t scheduler = {};
+    node_t nodeA = { {}, "A", 1, 0 };
+    node_t nodeB = { {}, "B", 1, 0 };
+    node_t nodeC = { {}, "C", 1, 0 };
+
+    h2o_http2_scheduler_open(&scheduler, &nodeA.ref, 32);
+    h2o_http2_scheduler_set_active(&nodeA.ref);
+    h2o_http2_scheduler_open(&scheduler, &nodeB.ref, 32);
+    h2o_http2_scheduler_set_active(&nodeB.ref);
+    h2o_http2_scheduler_open(&scheduler, &nodeC.ref, 12);
+    h2o_http2_scheduler_set_active(&nodeC.ref);
+
+    /* should only get the higher ones */
+    iterate_out[0] = '\0';
+    iterate_max = 5;
+    h2o_http2_scheduler_iterate(&scheduler, iterate_cb, NULL);
+    ok(strcmp(iterate_out, "A,B,A,B,A") == 0);
+
+    /* A should retire */
+    nodeA.still_is_active = 0;
+    iterate_out[0] = '\0';
+    iterate_max = 5;
+    h2o_http2_scheduler_iterate(&scheduler, iterate_cb, NULL);
+    ok(strcmp(iterate_out, "B,A,B,B,B") == 0);
+
+    /* should start serving C as B retires */
+    nodeB.still_is_active = 0;
+    iterate_out[0] = '\0';
+    iterate_max = 5;
+    h2o_http2_scheduler_iterate(&scheduler, iterate_cb, NULL);
+    ok(strcmp(iterate_out, "B,C,C,C,C") == 0);
+
+    h2o_http2_scheduler_close(&scheduler, &nodeA.ref);
+    h2o_http2_scheduler_close(&scheduler, &nodeB.ref);
+    h2o_http2_scheduler_close(&scheduler, &nodeC.ref);
+    h2o_http2_scheduler_dispose(&scheduler);
+}
+
 void test_lib__http2__scheduler(void)
 {
     subtest("round-robin", test_round_robin);
+    subtest("priority", test_priority);
 }
