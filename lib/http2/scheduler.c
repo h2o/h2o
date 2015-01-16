@@ -145,17 +145,10 @@ void h2o_http2_scheduler_close(h2o_http2_scheduler_openref_t *ref)
     }
 }
 
-void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *new_parent, int exclusive)
+static void do_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *new_parent, int exclusive)
 {
-    h2o_http2_scheduler_slot_t *new_slot;
+    h2o_http2_scheduler_slot_t *new_slot = get_or_create_slot(new_parent, ref->super._slot->weight);
 
-    assert(h2o_http2_scheduler_ref_is_open(ref));
-
-    /* do nothing if trying to link to the current parent */
-    if (new_parent == ref->super._parent)
-        return;
-
-    new_slot = get_or_create_slot(new_parent, ref->super._slot->weight);
     /* rebind _all_link */
     h2o_linklist_unlink(&ref->_all_link);
     h2o_linklist_insert(&new_slot->_all_refs, &ref->_all_link);
@@ -172,6 +165,28 @@ void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_sc
 
     if (exclusive)
         convert_to_exclusive(new_parent, ref);
+}
+
+void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *new_parent, int exclusive)
+{
+    assert(h2o_http2_scheduler_ref_is_open(ref));
+    assert(&ref->super != new_parent);
+
+    /* do nothing if trying to link to the current parent */
+    if (new_parent == ref->super._parent)
+        return;
+
+    { /* if new_parent is dependent to ref, make new_parent a sibling of ref before applying the final transition (see draft-16 5.3.3) */
+        h2o_http2_scheduler_node_t *t;
+        for (t = new_parent; t->_parent != NULL; t = t->_parent) {
+            if (t->_parent == &ref->super) {
+                do_rebind((h2o_http2_scheduler_openref_t*)new_parent, ref->super._parent, 0);
+                break;
+            }
+        }
+    }
+
+    do_rebind(ref, new_parent, exclusive);
 }
 
 void h2o_http2_scheduler_dispose(h2o_http2_scheduler_t *scheduler)
