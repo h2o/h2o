@@ -269,10 +269,86 @@ static void test_exclusive(void)
     h2o_http2_scheduler_dispose(&scheduler);
 }
 
+static void test_firefox(void)
+{
+    /*
+     * firefox sends something like below
+     *
+     * PRIORITY: id:3, dependency:0, weight: 201
+     * PRIORITY: id:5, dependency:0, weight: 101
+     * PRIORITY: id:7, dependency:0, weight: 1
+     * PRIORITY: id:9, dependency:7, weight: 1
+     * PRIORITY: id:11, dependency:3, weight: 1
+     * HEADERS: id:13, dependency:11, weight: 22
+     * HEADERS: id:15, dependency:3, weight: 22
+     * HEADERS: id:17, dependency:3, weight: 22
+     */
+    h2o_http2_scheduler_t scheduler = {};
+    node_t g1 = { {}, "g1", 0, 0 };
+    node_t g2 = { {}, "g2", 0, 0 };
+    node_t g3 = { {}, "g3", 0, 0 };
+    node_t g4 = { {}, "g4", 0, 0 };
+    node_t g5 = { {}, "g5", 0, 0 };
+    node_t r1 = { {}, "r1", 1, 0 };
+    node_t r2 = { {}, "r2", 1, 0 };
+    node_t r3 = { {}, "r3", 1, 0 };
+
+    /* setup the proirity groups */
+    h2o_http2_scheduler_open(&scheduler, &g1.ref, 201, 0);
+    h2o_http2_scheduler_open(&scheduler, &g2.ref, 101, 0);
+    h2o_http2_scheduler_open(&scheduler, &g3.ref, 1, 0);
+    h2o_http2_scheduler_open(&g3.ref.super, &g4.ref, 1, 0);
+    h2o_http2_scheduler_open(&g1.ref.super, &g5.ref, 1, 0);
+
+    /* open r1 and set serving */
+    h2o_http2_scheduler_open(&g5.ref.super, &r1.ref, 22, 0);
+    h2o_http2_scheduler_set_active(&r1.ref);
+    iterate_out[0] = '\0';
+    iterate_max = 5;
+    h2o_http2_scheduler_iterate(&scheduler, iterate_cb, NULL);
+    ok(strcmp(iterate_out, "r1,r1,r1,r1,r1") == 0);
+
+    /* open r2,r3 and serve */
+    h2o_http2_scheduler_open(&g1.ref.super, &r2.ref, 22, 0);
+    h2o_http2_scheduler_set_active(&r2.ref);
+    h2o_http2_scheduler_open(&g1.ref.super, &r3.ref, 22, 0);
+    h2o_http2_scheduler_set_active(&r3.ref);
+    iterate_out[0] = '\0';
+    iterate_max = 5;
+    h2o_http2_scheduler_iterate(&scheduler, iterate_cb, NULL);
+    ok(strcmp(iterate_out, "r2,r3,r2,r3,r2") == 0);
+
+    /* eventually disactive r2,r3 */
+    r2.still_is_active = 0;
+    r3.still_is_active = 0;
+    iterate_out[0] = '\0';
+    iterate_max = 5;
+    h2o_http2_scheduler_iterate(&scheduler, iterate_cb, NULL);
+    ok(strcmp(iterate_out, "r3,r2,r1,r1,r1") == 0);
+
+    /* close r2,r3 */
+    h2o_http2_scheduler_close(&r2.ref);
+    h2o_http2_scheduler_close(&r3.ref);
+    iterate_out[0] = '\0';
+    iterate_max = 5;
+    h2o_http2_scheduler_iterate(&scheduler, iterate_cb, NULL);
+    ok(strcmp(iterate_out, "r1,r1,r1,r1,r1") == 0);
+
+    h2o_http2_scheduler_close(&r1.ref);
+
+    h2o_http2_scheduler_close(&g1.ref);
+    h2o_http2_scheduler_close(&g2.ref);
+    h2o_http2_scheduler_close(&g3.ref);
+    h2o_http2_scheduler_close(&g4.ref);
+    h2o_http2_scheduler_close(&g5.ref);
+    h2o_http2_scheduler_dispose(&scheduler);
+}
+
 void test_lib__http2__scheduler(void)
 {
     subtest("round-robin", test_round_robin);
     subtest("priority", test_priority);
     subtest("dependency", test_dependency);
     subtest("exclusive", test_exclusive);
+    subtest("firefox", test_firefox);
 }
