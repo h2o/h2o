@@ -87,12 +87,33 @@ static void decr_active_cnt(h2o_http2_scheduler_node_t *node)
     decr_active_cnt(ref->super._parent);
 }
 
-void h2o_http2_scheduler_open(h2o_http2_scheduler_node_t *parent, h2o_http2_scheduler_openref_t *ref, uint16_t weight)
+static void convert_to_exclusive(h2o_http2_scheduler_node_t *parent, h2o_http2_scheduler_openref_t *added)
+{
+    size_t slot_index;
+
+    for (slot_index = 0; slot_index != parent->_list.size; ++slot_index) {
+        h2o_http2_scheduler_slot_t *slot = parent->_list.entries[slot_index];
+        while (!h2o_linklist_is_empty(&slot->_all_refs)) {
+            h2o_http2_scheduler_openref_t *child_ref = H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _all_link, slot->_all_refs.next);
+            if (child_ref == added) {
+                /* precond: the added node should exist as the last item within the slot */
+                assert(slot->_all_refs.prev == &added->_all_link);
+                break;
+            }
+            h2o_http2_scheduler_rebind(&added->super, child_ref, 0);
+        }
+    }
+}
+
+void h2o_http2_scheduler_open(h2o_http2_scheduler_node_t *parent, h2o_http2_scheduler_openref_t *ref, uint16_t weight, int exclusive)
 {
     h2o_http2_scheduler_slot_t *slot = get_or_create_slot(parent, weight);
 
     *ref = (h2o_http2_scheduler_openref_t){ { parent, slot } };
     h2o_linklist_insert(&slot->_all_refs, &ref->_all_link);
+
+    if (exclusive)
+        convert_to_exclusive(parent, ref);
 }
 
 void h2o_http2_scheduler_close(h2o_http2_scheduler_node_t *parent, h2o_http2_scheduler_openref_t *ref)
@@ -106,7 +127,7 @@ void h2o_http2_scheduler_close(h2o_http2_scheduler_node_t *parent, h2o_http2_sch
             h2o_http2_scheduler_slot_t *src_slot = ref->super._list.entries[slot_index];
             while (!h2o_linklist_is_empty(&src_slot->_all_refs)) {
                 h2o_http2_scheduler_openref_t *child_ref = H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _all_link, src_slot->_all_refs.next);
-                h2o_http2_scheduler_rebind(parent, child_ref);
+                h2o_http2_scheduler_rebind(parent, child_ref, 0);
             }
         }
     }
@@ -124,7 +145,7 @@ void h2o_http2_scheduler_close(h2o_http2_scheduler_node_t *parent, h2o_http2_sch
     }
 }
 
-void h2o_http2_scheduler_rebind(h2o_http2_scheduler_node_t *parent, h2o_http2_scheduler_openref_t *ref)
+void h2o_http2_scheduler_rebind(h2o_http2_scheduler_node_t *parent, h2o_http2_scheduler_openref_t *ref, int exclusive)
 {
     h2o_http2_scheduler_slot_t *new_slot;
 
@@ -135,16 +156,19 @@ void h2o_http2_scheduler_rebind(h2o_http2_scheduler_node_t *parent, h2o_http2_sc
         return;
 
     new_slot = get_or_create_slot(parent, ref->super._slot->weight);
-    /* rebind all_link */
+    /* rebind _all_link */
     h2o_linklist_unlink(&ref->_all_link);
     h2o_linklist_insert(&new_slot->_all_refs, &ref->_all_link);
-    /* rebind active_link (as well as adjust active_cnt) */
+    /* rebind _active_link (as well as adjust active_cnt) */
     if (h2o_linklist_is_linked(&ref->_active_link)) {
         h2o_linklist_unlink(&ref->_active_link);
         h2o_linklist_insert(&new_slot->_active_refs, &ref->_active_link);
         decr_active_cnt(ref->super._parent);
         incr_active_cnt(parent);
     }
+
+    if (exclusive)
+        convert_to_exclusive(parent, ref);
 }
 
 void h2o_http2_scheduler_dispose(h2o_http2_scheduler_t *scheduler)

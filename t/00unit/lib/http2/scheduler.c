@@ -54,9 +54,9 @@ static void test_round_robin(void)
     node_t nodeB = { {}, "B", 1, 0 };
     node_t nodeC = { {}, "C", 1, 0 };
 
-    h2o_http2_scheduler_open(&scheduler, &nodeA.ref, 12);
-    h2o_http2_scheduler_open(&scheduler, &nodeB.ref, 12);
-    h2o_http2_scheduler_open(&scheduler, &nodeC.ref, 12);
+    h2o_http2_scheduler_open(&scheduler, &nodeA.ref, 12, 0);
+    h2o_http2_scheduler_open(&scheduler, &nodeB.ref, 12, 0);
+    h2o_http2_scheduler_open(&scheduler, &nodeC.ref, 12, 0);
 
     /* none are active */
     iterate_out[0] = '\0';
@@ -118,11 +118,11 @@ static void test_priority(void)
     node_t nodeB = { {}, "B", 1, 0 };
     node_t nodeC = { {}, "C", 1, 0 };
 
-    h2o_http2_scheduler_open(&scheduler, &nodeA.ref, 32);
+    h2o_http2_scheduler_open(&scheduler, &nodeA.ref, 32, 0);
     h2o_http2_scheduler_set_active(&nodeA.ref);
-    h2o_http2_scheduler_open(&scheduler, &nodeB.ref, 32);
+    h2o_http2_scheduler_open(&scheduler, &nodeB.ref, 32, 0);
     h2o_http2_scheduler_set_active(&nodeB.ref);
-    h2o_http2_scheduler_open(&scheduler, &nodeC.ref, 12);
+    h2o_http2_scheduler_open(&scheduler, &nodeC.ref, 12, 0);
     h2o_http2_scheduler_set_active(&nodeC.ref);
 
     /* should only get the higher ones */
@@ -167,13 +167,13 @@ static void test_dependency(void)
      * D
      */
 
-    h2o_http2_scheduler_open(&scheduler, &nodeA.ref, 32);
+    h2o_http2_scheduler_open(&scheduler, &nodeA.ref, 32, 0);
     h2o_http2_scheduler_set_active(&nodeA.ref);
-    h2o_http2_scheduler_open(&scheduler, &nodeB.ref, 32);
+    h2o_http2_scheduler_open(&scheduler, &nodeB.ref, 32, 0);
     h2o_http2_scheduler_set_active(&nodeB.ref);
-    h2o_http2_scheduler_open(&scheduler, &nodeC.ref, 12);
+    h2o_http2_scheduler_open(&scheduler, &nodeC.ref, 12, 0);
     h2o_http2_scheduler_set_active(&nodeC.ref);
-    h2o_http2_scheduler_open(&nodeA.ref.super, &nodeD.ref, 24);
+    h2o_http2_scheduler_open(&nodeA.ref.super, &nodeD.ref, 24, 0);
     h2o_http2_scheduler_set_active(&nodeD.ref);
 
     /* should only get A and B */
@@ -214,9 +214,65 @@ static void test_dependency(void)
     h2o_http2_scheduler_dispose(&scheduler);
 }
 
+static void test_exclusive(void)
+{
+    h2o_http2_scheduler_t scheduler = {};
+    node_t nodeA = { {}, "A", 1, 0 };
+    node_t nodeB = { {}, "B", 1, 0 };
+    node_t nodeC = { {}, "C", 1, 0 };
+
+    /*
+     * root      root
+     *  /\        |
+     * A  B  =>   C
+     *            |\
+     *            A B
+     */
+
+    /* open A & B */
+    h2o_http2_scheduler_open(&scheduler, &nodeA.ref, 32, 0);
+    h2o_http2_scheduler_set_active(&nodeA.ref);
+    h2o_http2_scheduler_open(&scheduler, &nodeB.ref, 32, 0);
+    h2o_http2_scheduler_set_active(&nodeB.ref);
+
+    iterate_out[0] = '\0';
+    iterate_max = 5;
+    h2o_http2_scheduler_iterate(&scheduler, iterate_cb, NULL);
+    ok(strcmp(iterate_out, "A,B,A,B,A") == 0);
+
+    /* add C as an exclusive */
+    h2o_http2_scheduler_open(&scheduler, &nodeC.ref, 12, 1);
+
+    /* should get A & B since C is inactive */
+    iterate_out[0] = '\0';
+    iterate_max = 5;
+    h2o_http2_scheduler_iterate(&scheduler, iterate_cb, NULL);
+    ok(strcmp(iterate_out, "A,B,A,B,A") == 0); /* under current impl, moving the deps causes them to be ordered using _all_ref */
+
+    /* should see C once it is activated */
+    h2o_http2_scheduler_set_active(&nodeC.ref);
+    iterate_out[0] = '\0';
+    iterate_max = 5;
+    h2o_http2_scheduler_iterate(&scheduler, iterate_cb, NULL);
+    ok(strcmp(iterate_out, "C,C,C,C,C") == 0);
+
+    /* eventually disabling C should show A and B */
+    nodeC.still_is_active = 0;
+    iterate_out[0] = '\0';
+    iterate_max = 5;
+    h2o_http2_scheduler_iterate(&scheduler, iterate_cb, NULL);
+    ok(strcmp(iterate_out, "C,B,A,B,A") == 0);
+
+    h2o_http2_scheduler_close(&scheduler, &nodeA.ref);
+    h2o_http2_scheduler_close(&scheduler, &nodeB.ref);
+    h2o_http2_scheduler_close(&scheduler, &nodeC.ref);
+    h2o_http2_scheduler_dispose(&scheduler);
+}
+
 void test_lib__http2__scheduler(void)
 {
     subtest("round-robin", test_round_robin);
     subtest("priority", test_priority);
     subtest("dependency", test_dependency);
+    subtest("exclusive", test_exclusive);
 }
