@@ -157,7 +157,7 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
         --conn->num_responding_streams;
         if (h2o_linklist_is_linked(&stream->_link.link))
             h2o_linklist_unlink(&stream->_link.link);
-        h2o_http2_scheduler_close(&conn->_write.scheduler, &stream->_link.sched_ref);
+        h2o_http2_scheduler_close(&stream->_link.sched_ref);
         break;
     }
 

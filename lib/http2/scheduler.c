@@ -116,7 +116,7 @@ void h2o_http2_scheduler_open(h2o_http2_scheduler_node_t *parent, h2o_http2_sche
         convert_to_exclusive(parent, ref);
 }
 
-void h2o_http2_scheduler_close(h2o_http2_scheduler_node_t *parent, h2o_http2_scheduler_openref_t *ref)
+void h2o_http2_scheduler_close(h2o_http2_scheduler_openref_t *ref)
 {
     assert(h2o_http2_scheduler_ref_is_open(ref));
 
@@ -127,7 +127,7 @@ void h2o_http2_scheduler_close(h2o_http2_scheduler_node_t *parent, h2o_http2_sch
             h2o_http2_scheduler_slot_t *src_slot = ref->super._list.entries[slot_index];
             while (!h2o_linklist_is_empty(&src_slot->_all_refs)) {
                 h2o_http2_scheduler_openref_t *child_ref = H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _all_link, src_slot->_all_refs.next);
-                h2o_http2_scheduler_rebind(parent, child_ref, 0);
+                h2o_http2_scheduler_rebind(ref->super._parent, child_ref, 0);
             }
         }
     }
