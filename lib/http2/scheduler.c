@@ -100,7 +100,7 @@ static void convert_to_exclusive(h2o_http2_scheduler_node_t *parent, h2o_http2_s
                 assert(slot->_all_refs.prev == &added->_all_link);
                 break;
             }
-            h2o_http2_scheduler_rebind(&added->super, child_ref, 0);
+            h2o_http2_scheduler_rebind(child_ref, &added->super, 0);
         }
     }
 }
@@ -127,7 +127,7 @@ void h2o_http2_scheduler_close(h2o_http2_scheduler_openref_t *ref)
             h2o_http2_scheduler_slot_t *src_slot = ref->super._list.entries[slot_index];
             while (!h2o_linklist_is_empty(&src_slot->_all_refs)) {
                 h2o_http2_scheduler_openref_t *child_ref = H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _all_link, src_slot->_all_refs.next);
-                h2o_http2_scheduler_rebind(ref->super._parent, child_ref, 0);
+                h2o_http2_scheduler_rebind(child_ref, ref->super._parent, 0);
             }
         }
     }
@@ -145,17 +145,17 @@ void h2o_http2_scheduler_close(h2o_http2_scheduler_openref_t *ref)
     }
 }
 
-void h2o_http2_scheduler_rebind(h2o_http2_scheduler_node_t *parent, h2o_http2_scheduler_openref_t *ref, int exclusive)
+void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *new_parent, int exclusive)
 {
     h2o_http2_scheduler_slot_t *new_slot;
 
     assert(h2o_http2_scheduler_ref_is_open(ref));
 
     /* do nothing if trying to link to the current parent */
-    if (parent == ref->super._parent)
+    if (new_parent == ref->super._parent)
         return;
 
-    new_slot = get_or_create_slot(parent, ref->super._slot->weight);
+    new_slot = get_or_create_slot(new_parent, ref->super._slot->weight);
     /* rebind _all_link */
     h2o_linklist_unlink(&ref->_all_link);
     h2o_linklist_insert(&new_slot->_all_refs, &ref->_all_link);
@@ -164,14 +164,14 @@ void h2o_http2_scheduler_rebind(h2o_http2_scheduler_node_t *parent, h2o_http2_sc
         h2o_linklist_unlink(&ref->_active_link);
         h2o_linklist_insert(&new_slot->_active_refs, &ref->_active_link);
         decr_active_cnt(ref->super._parent);
-        incr_active_cnt(parent);
+        incr_active_cnt(new_parent);
     }
     /* update the backlinks */
-    ref->super._parent = parent;
+    ref->super._parent = new_parent;
     ref->super._slot = new_slot;
 
     if (exclusive)
-        convert_to_exclusive(parent, ref);
+        convert_to_exclusive(new_parent, ref);
 }
 
 void h2o_http2_scheduler_dispose(h2o_http2_scheduler_t *scheduler)

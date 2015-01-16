@@ -52,7 +52,7 @@ typedef int (*h2o_http2_scheduler_iterate_cb)(h2o_http2_scheduler_openref_t *ref
 void h2o_http2_scheduler_dispose(h2o_http2_scheduler_t *scheduler);
 void h2o_http2_scheduler_open(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_openref_t *ref, uint16_t weight, int exclusive);
 void h2o_http2_scheduler_close(h2o_http2_scheduler_openref_t *ref);
-void h2o_http2_scheduler_rebind(h2o_http2_scheduler_node_t *parent, h2o_http2_scheduler_openref_t *ref, int exclusive);
+void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *new_parent, int exclusive);
 static int h2o_http2_scheduler_ref_is_open(h2o_http2_scheduler_openref_t *ref);
 void h2o_http2_scheduler_set_active(h2o_http2_scheduler_openref_t *ref);
 int h2o_http2_scheduler_iterate(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_iterate_cb cb, void *cb_arg);
