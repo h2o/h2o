@@ -344,6 +344,85 @@ static void test_firefox(void)
     h2o_http2_scheduler_dispose(&scheduler);
 }
 
+static void dump_tree(h2o_http2_scheduler_node_t *node)
+{
+    if (node->_parent != NULL) {
+        strcat(output, ((node_t*)node)->name);
+    }
+
+    if (node->_list.size != 0) {
+        size_t slot_index;
+        int found_any = 0;
+        for (slot_index = 0; slot_index != node->_list.size; ++slot_index) {
+            h2o_http2_scheduler_slot_t *slot = node->_list.entries[slot_index];
+            h2o_linklist_t *link;
+            for (link = slot->_all_refs.next; link != &slot->_all_refs; link = link->next) {
+                h2o_http2_scheduler_openref_t *ref = H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _all_link, link);
+                if (! found_any) {
+                    found_any = 1;
+                    strcat(output, "(");
+                }
+                dump_tree(&ref->super);
+            }
+        }
+        if (found_any)
+            strcat(output, ")");
+    }
+}
+
+static int test_reprioritize_exclusive;
+
+static void test_reprioritize(void)
+{
+    /* from 5.3.3 of HTTP-2 draft 16
+     *    ?                ?                ?                 ?
+     *    |               / \               |                 |
+     *    A              D   A              D                 D
+     *   / \            /   / \            / \                |
+     *  B   C     ==>  F   B   C   ==>    F   A       OR      A
+     *     / \                 |             / \             /|\
+     *    D   E                E            B   C           B C F
+     *    |                                     |             |
+     *    F                                     E             E
+     *               (intermediate)   (non-exclusive)    (exclusive)
+     */
+    h2o_http2_scheduler_t scheduler = {};
+    node_t a = { {}, "A" };
+    node_t b = { {}, "B" };
+    node_t c = { {}, "C" };
+    node_t d = { {}, "D" };
+    node_t e = { {}, "E" };
+    node_t f = { {}, "F" };
+
+    h2o_http2_scheduler_open(&scheduler, &a.ref, 16, 0);
+    h2o_http2_scheduler_open(&a.ref.super, &b.ref, 16, 0);
+    h2o_http2_scheduler_open(&a.ref.super, &c.ref, 16, 0);
+    h2o_http2_scheduler_open(&c.ref.super, &d.ref, 16, 0);
+    h2o_http2_scheduler_open(&c.ref.super, &e.ref, 16, 0);
+    h2o_http2_scheduler_open(&d.ref.super, &f.ref, 16, 0);
+
+    output[0] = '\0';
+    dump_tree(&scheduler);
+    ok(strcmp(output, "(A(BC(D(F)E)))") == 0);
+
+    h2o_http2_scheduler_rebind(&a.ref, &d.ref.super, test_reprioritize_exclusive);
+    output[0] = '\0';
+    dump_tree(&scheduler);
+    if (!test_reprioritize_exclusive) {
+        ok(strcmp(output, "(D(FA(BC(E))))") == 0);
+    } else {
+        ok(strcmp(output, "(D(A(BC(E)F)))") == 0);
+    }
+
+    h2o_http2_scheduler_close(&a.ref);
+    h2o_http2_scheduler_close(&b.ref);
+    h2o_http2_scheduler_close(&c.ref);
+    h2o_http2_scheduler_close(&d.ref);
+    h2o_http2_scheduler_close(&e.ref);
+    h2o_http2_scheduler_close(&f.ref);
+    h2o_http2_scheduler_dispose(&scheduler);
+}
+
 void test_lib__http2__scheduler(void)
 {
     subtest("round-robin", test_round_robin);
@@ -351,4 +430,8 @@ void test_lib__http2__scheduler(void)
     subtest("dependency", test_dependency);
     subtest("exclusive", test_exclusive);
     subtest("firefox", test_firefox);
+    test_reprioritize_exclusive = 0;
+    subtest("repriortize-nonexclusive", test_reprioritize);
+    test_reprioritize_exclusive = 1;
+    subtest("repriortize-exclusive", test_reprioritize);
 }
