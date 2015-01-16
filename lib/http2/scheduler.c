@@ -166,6 +166,9 @@ void h2o_http2_scheduler_rebind(h2o_http2_scheduler_node_t *parent, h2o_http2_sc
         decr_active_cnt(ref->super._parent);
         incr_active_cnt(parent);
     }
+    /* update the backlinks */
+    ref->super._parent = parent;
+    ref->super._slot = new_slot;
 
     if (exclusive)
         convert_to_exclusive(parent, ref);
