@@ -99,9 +99,11 @@ const h2o_http2_settings_t H2O_HTTP2_SETTINGS_HOST;
 
 typedef struct st_h2o_http2_priority_t {
     int exclusive;
-    uint32_t dependency; /* 0 if not set */
-    uint16_t weight;     /* 0 if not set */
+    uint32_t dependency;
+    uint16_t weight;
 } h2o_http2_priority_t;
+
+extern const h2o_http2_priority_t h2o_http2_default_priority;
 
 /* frames */
 
@@ -166,6 +168,7 @@ typedef struct st_h2o_http2_window_t {
 } h2o_http2_window_t;
 
 typedef enum enum_h2o_http2_stream_state_t {
+    H2O_HTTP2_STREAM_STATE_IDLE,
     H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS,
     H2O_HTTP2_STREAM_STATE_RECV_HEADERS,
     H2O_HTTP2_STREAM_STATE_RECV_BODY,
@@ -258,6 +261,7 @@ static ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn);
 /* stream */
 h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, const h2o_http2_priority_t *priority,
                                           h2o_req_t *src_req);
+static void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int errnum);
 void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
@@ -292,6 +296,13 @@ inline ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn)
     if (winsz < ret)
         ret = winsz;
     return ret;
+}
+
+inline void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+{
+    assert(stream->state == H2O_HTTP2_STREAM_STATE_IDLE);
+    stream->state = H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS;
+    h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
 }
 
 inline int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream)

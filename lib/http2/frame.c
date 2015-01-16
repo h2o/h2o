@@ -174,9 +174,7 @@ int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const
             return -1;
         src = decode_priority(&payload->priority, src);
     } else {
-        payload->priority.exclusive = 0;
-        payload->priority.dependency = 0;
-        payload->priority.weight = 16;
+        payload->priority = h2o_http2_default_priority;
     }
 
     payload->headers = src;
