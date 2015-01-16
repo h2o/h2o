@@ -176,7 +176,9 @@ int h2o_http2_scheduler_iterate(h2o_http2_scheduler_t *scheduler, h2o_http2_sche
 
     for (slot_index = 0; slot_index != scheduler->_list.size; ++slot_index) {
         h2o_http2_scheduler_slot_t *slot = scheduler->_list.entries[slot_index];
-        while (!h2o_linklist_is_empty(&slot->_active_refs)) {
+        /* the flag is used for exitting the loop without reexecuting child nodes */
+        h2o_linklist_t *readded_first = scheduler->_parent != NULL ? NULL : (void*)1;
+        while (!h2o_linklist_is_empty(&slot->_active_refs) && slot->_active_refs.next != readded_first) {
             h2o_http2_scheduler_openref_t *ref = H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _active_link,
                                                                         slot->_active_refs.next);
             if (ref->_self_is_active) {
@@ -187,15 +189,24 @@ int h2o_http2_scheduler_iterate(h2o_http2_scheduler_t *scheduler, h2o_http2_sche
                 if (still_is_active) {
                     h2o_linklist_unlink(&ref->_active_link);
                     h2o_linklist_insert(&slot->_active_refs, &ref->_active_link);
+                    if (readded_first == NULL)
+                        readded_first = &ref->_active_link;
                 } else {
                     ref->_self_is_active = 0;
                     decr_active_cnt(&ref->super);
+                    if (ref->_active_cnt != 0) {
+                        /* relink to the end */
+                        h2o_linklist_unlink(&ref->_active_link);
+                        h2o_linklist_insert(&slot->_active_refs, &ref->_active_link);
+                    }
                 }
             } else {
                 /* run the children */
                 h2o_linklist_unlink(&ref->_active_link);
                 h2o_linklist_insert(&slot->_active_refs, &ref->_active_link);
                 bail_out = h2o_http2_scheduler_iterate(&ref->super, cb, cb_arg);
+                if (readded_first == NULL && h2o_linklist_is_linked(&ref->_active_link))
+                    readded_first = &ref->_active_link;
             }
             if (bail_out)
                 goto Exit;
