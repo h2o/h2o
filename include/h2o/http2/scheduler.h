@@ -41,9 +41,7 @@ typedef struct st_h2o_http2_scheduler_openref_t {
     h2o_linklist_t _link; /* linked to _active_refs if is active */
 } h2o_http2_scheduler_openref_t;
 
-typedef struct st_h2o_http2_scheduler_iterator_t {
-    size_t _slot_index;
-} h2o_http2_scheduler_iterator_t;
+typedef int (*h2o_http2_scheduler_iterate_cb)(h2o_http2_scheduler_openref_t *ref, int *still_is_active, void *cb_arg);
 
 /* void h2o_http2_scheduler_init(h2o_http2_scheduler_t *scheduler); (zero-clear is sufficient for the time being) */
 void h2o_http2_scheduler_dispose(h2o_http2_scheduler_t *scheduler);
@@ -51,7 +49,7 @@ void h2o_http2_scheduler_open(h2o_http2_scheduler_t *scheduler, h2o_http2_schedu
 void h2o_http2_scheduler_close(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_openref_t *ref);
 static int h2o_http2_scheduler_ref_is_open(h2o_http2_scheduler_openref_t *ref);
 static void h2o_http2_scheduler_set_active(h2o_http2_scheduler_openref_t *ref);
-static h2o_http2_scheduler_openref_t *h2o_http2_scheduler_get_next(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_iterator_t *iter);
+void h2o_http2_scheduler_iterate(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_iterate_cb cb, void *cb_arg);
 
 /* inline definitions */
 
@@ -64,19 +62,6 @@ inline void h2o_http2_scheduler_set_active(h2o_http2_scheduler_openref_t *ref)
 {
     assert(!h2o_linklist_is_linked(&ref->_link));
     h2o_linklist_insert(&ref->_slot->_active_refs, &ref->_link);
-}
-
-inline h2o_http2_scheduler_openref_t *h2o_http2_scheduler_get_next(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_iterator_t *iter)
-{
-    for (; iter->_slot_index != scheduler->_list.size; ++iter->_slot_index) {
-        h2o_http2_scheduler_slot_t *slot = scheduler->_list.entries[iter->_slot_index];
-        if (!h2o_linklist_is_empty(&slot->_active_refs)) {
-            h2o_http2_scheduler_openref_t *ref = H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _link, slot->_active_refs.next);
-            h2o_linklist_unlink(&ref->_link);
-            return ref;
-        }
-    }
-    return NULL;
 }
 
 #endif

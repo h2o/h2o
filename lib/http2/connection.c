@@ -701,34 +701,37 @@ static void on_write_complete(h2o_socket_t *sock, int status)
         parse_input(conn);
 }
 
+static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *still_is_active, void *cb_arg)
+{
+    h2o_http2_conn_t *conn = cb_arg;
+    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link.sched_ref, ref);
+
+    assert(h2o_http2_stream_has_pending_data(stream) || stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM);
+
+    *still_is_active = 0;
+
+    h2o_http2_stream_send_pending_data(conn, stream);
+    if (h2o_http2_stream_has_pending_data(stream)) {
+        if (h2o_http2_window_get_window(&stream->output_window) <= 0) {
+            /* is blocked */
+        } else {
+            assert(h2o_http2_conn_get_buffer_window(conn) <= 0);
+            *still_is_active = 1;
+        }
+    } else {
+        h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_link.link);
+    }
+
+    return h2o_http2_conn_get_buffer_window(conn) > 0 ? 0 : -1;
+}
+
 int do_emit_writereq(h2o_http2_conn_t *conn)
 {
     assert(conn->_write.buf_in_flight == NULL);
 
     /* push DATA frames */
-    if (conn->state == H2O_HTTP2_CONN_STATE_OPEN && h2o_http2_conn_get_buffer_window(conn) > 0) {
-        h2o_http2_scheduler_iterator_t iter = {};
-        h2o_http2_scheduler_openref_t *ref;
-        while ((ref = h2o_http2_scheduler_get_next(&conn->_write.scheduler, &iter)) != NULL) {
-            h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link.sched_ref, ref);
-            assert(h2o_http2_stream_has_pending_data(stream) || stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM);
-            h2o_http2_stream_send_pending_data(conn, stream);
-            if (h2o_http2_stream_has_pending_data(stream)) {
-                if (h2o_http2_window_get_window(&stream->output_window) <= 0) {
-                    /* is blocked */
-                } else {
-                    assert(h2o_http2_conn_get_buffer_window(conn) <= 0);
-                    h2o_http2_scheduler_set_active(&stream->_link.sched_ref);
-                }
-            } else {
-                h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_link.link);
-            }
-            if (h2o_http2_conn_get_buffer_window(conn) <= 0)
-                goto DonePush;
-        }
-    DonePush:
-        ;
-    }
+    if (conn->state == H2O_HTTP2_CONN_STATE_OPEN && h2o_http2_conn_get_buffer_window(conn) > 0)
+        h2o_http2_scheduler_iterate(&conn->_write.scheduler, emit_writereq_of_openref, conn);
 
     if (conn->_write.buf->size == 0)
         return 0;

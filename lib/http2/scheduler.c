@@ -75,3 +75,23 @@ void h2o_http2_scheduler_dispose(h2o_http2_scheduler_t *scheduler)
         free(scheduler->_list.entries);
     }
 }
+
+void h2o_http2_scheduler_iterate(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_iterate_cb cb, void *cb_arg)
+{
+    size_t slot_index;
+    int bail_out, still_is_active;
+
+    for (slot_index = 0; slot_index != scheduler->_list.size; ++slot_index) {
+        h2o_http2_scheduler_slot_t *slot = scheduler->_list.entries[slot_index];
+        while (!h2o_linklist_is_empty(&slot->_active_refs)) {
+            h2o_http2_scheduler_openref_t *ref = H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _link,
+                                                                        slot->_active_refs.next);
+            h2o_linklist_unlink(&ref->_link);
+            bail_out = cb(ref, &still_is_active, cb_arg);
+            if (still_is_active)
+                h2o_http2_scheduler_set_active(ref);
+            if (bail_out)
+                break;
+        }
+    }
+}
