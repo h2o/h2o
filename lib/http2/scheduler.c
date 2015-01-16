@@ -91,10 +91,8 @@ void h2o_http2_scheduler_open(h2o_http2_scheduler_node_t *parent, h2o_http2_sche
 {
     h2o_http2_scheduler_slot_t *slot = get_or_create_slot(parent, weight);
 
-    ref->super = (h2o_http2_scheduler_node_t){ parent, slot };
-    ref->_all_link = (h2o_linklist_t){};
+    *ref = (h2o_http2_scheduler_openref_t){ { parent, slot } };
     h2o_linklist_insert(&slot->_all_refs, &ref->_all_link);
-    ref->_active_link = (h2o_linklist_t){};
 }
 
 void h2o_http2_scheduler_close(h2o_http2_scheduler_node_t *parent, h2o_http2_scheduler_openref_t *ref)
