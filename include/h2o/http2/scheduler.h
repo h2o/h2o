@@ -28,17 +28,22 @@
 
 typedef struct h2o_http2_scheduler_slot_t {
     uint16_t weight;
-    h2o_linklist_t _active_refs;  /* stream that has data, that can be sent */
-    size_t _refcnt;
+    h2o_linklist_t _all_refs; /* all openrefs */
+    h2o_linklist_t _active_refs; /* openrefs that have data, that can be sent (incl. the dependents) */
 } h2o_http2_scheduler_slot_t;
 
-typedef struct st_h2o_http2_scheduler_t {
+typedef struct st_h2o_http2_scheduler_node_t {
+    struct st_h2o_http2_scheduler_node_t *_parent;
+    h2o_http2_scheduler_slot_t *_slot;
     H2O_VECTOR(h2o_http2_scheduler_slot_t *) _list;
-} h2o_http2_scheduler_t;
+} h2o_http2_scheduler_node_t, h2o_http2_scheduler_t;
 
 typedef struct st_h2o_http2_scheduler_openref_t {
-    h2o_http2_scheduler_slot_t *_slot;
-    h2o_linklist_t _link; /* linked to _active_refs if is active */
+    h2o_http2_scheduler_node_t super;
+    h2o_linklist_t _all_link; /* linked to _all_refs */
+    h2o_linklist_t _active_link; /* linked to _active_refs if is active */
+    size_t _active_cnt; /* COUNT(active_streams_in_dependents) + _self_is_active */
+    int _self_is_active;
 } h2o_http2_scheduler_openref_t;
 
 typedef int (*h2o_http2_scheduler_iterate_cb)(h2o_http2_scheduler_openref_t *ref, int *still_is_active, void *cb_arg);
@@ -47,21 +52,16 @@ typedef int (*h2o_http2_scheduler_iterate_cb)(h2o_http2_scheduler_openref_t *ref
 void h2o_http2_scheduler_dispose(h2o_http2_scheduler_t *scheduler);
 void h2o_http2_scheduler_open(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_openref_t *ref, uint16_t weight);
 void h2o_http2_scheduler_close(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_openref_t *ref);
+void h2o_http2_scheduler_rebind(h2o_http2_scheduler_node_t *parent, h2o_http2_scheduler_openref_t *ref);
 static int h2o_http2_scheduler_ref_is_open(h2o_http2_scheduler_openref_t *ref);
-static void h2o_http2_scheduler_set_active(h2o_http2_scheduler_openref_t *ref);
-void h2o_http2_scheduler_iterate(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_iterate_cb cb, void *cb_arg);
+void h2o_http2_scheduler_set_active(h2o_http2_scheduler_openref_t *ref);
+int h2o_http2_scheduler_iterate(h2o_http2_scheduler_t *scheduler, h2o_http2_scheduler_iterate_cb cb, void *cb_arg);
 
 /* inline definitions */
 
 inline int h2o_http2_scheduler_ref_is_open(h2o_http2_scheduler_openref_t *ref)
 {
-    return ref->_slot != NULL;
-}
-
-inline void h2o_http2_scheduler_set_active(h2o_http2_scheduler_openref_t *ref)
-{
-    assert(!h2o_linklist_is_linked(&ref->_link));
-    h2o_linklist_insert(&ref->_slot->_active_refs, &ref->_link);
+    return h2o_linklist_is_linked(&ref->_all_link);
 }
 
 #endif
