@@ -198,9 +198,10 @@ int h2o_http2_scheduler_iterate(h2o_http2_scheduler_t *scheduler, h2o_http2_sche
                 bail_out = h2o_http2_scheduler_iterate(&ref->super, cb, cb_arg);
             }
             if (bail_out)
-                break;
+                goto Exit;
         }
     }
 
+Exit:
     return bail_out;
 }
