@@ -3,9 +3,17 @@ H2O - an optimized HTTP server with support for HTTP/1.x and HTTP/2
 
 [![Build Status](https://travis-ci.org/h2o/h2o.svg?branch=master)](https://travis-ci.org/h2o/h2o)
 
+Copyright (c) 2014,2015 [DeNA Co., Ltd.](http://dena.com/), [Tatsuhiko Kubo](https://github.com/cubicdaiya/).
+
 H2O is a very fast HTTP server written in C.  It can also be used as a library.
 
 This is the README for H2O version 0.9.1-alpha1 (HEAD).
+
+### License
+
+[The MIT License](http://opensource.org/licenses/MIT).
+
+Includes third-party softwares (also licensed under the MIT license): [klib](https://github.com/attractivechaos/klib/), [picohttpparser](https://github.com/h2o/picohttpparser), [hpack-huffman-table.h](https://github.com/h2o/h2o/blob/master/lib/http2/hpack_huffman_table.h).
 
 ### Features
 
