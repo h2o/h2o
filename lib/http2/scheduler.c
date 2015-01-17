@@ -185,8 +185,9 @@ void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_sc
         h2o_http2_scheduler_node_t *t;
         for (t = new_parent; t->_parent != NULL; t = t->_parent) {
             if (t->_parent == &ref->node) {
-                /* TODO: current impl. assigns new_parent the old weight of the node being replaced, is it as spec says? */
-                do_rebind((h2o_http2_scheduler_openref_t *)new_parent, ref->node._parent, h2o_http2_scheduler_get_weight(ref), 0);
+                /* quoting the spec: "The moved dependency retains its weight." */
+                h2o_http2_scheduler_openref_t *new_parent_ref = (void *)new_parent;
+                do_rebind(new_parent_ref, ref->node._parent, h2o_http2_scheduler_get_weight(new_parent_ref), 0);
                 break;
             }
         }

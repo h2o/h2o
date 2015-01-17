@@ -396,24 +396,24 @@ static void test_reprioritize(void)
     node_t e = {{}, "E"};
     node_t f = {{}, "F"};
 
-    h2o_http2_scheduler_open(&root, &a.ref, 16, 0);
-    h2o_http2_scheduler_open(&a.ref.node, &b.ref, 16, 0);
-    h2o_http2_scheduler_open(&a.ref.node, &c.ref, 16, 0);
-    h2o_http2_scheduler_open(&c.ref.node, &d.ref, 16, 0);
-    h2o_http2_scheduler_open(&c.ref.node, &e.ref, 16, 0);
-    h2o_http2_scheduler_open(&d.ref.node, &f.ref, 16, 0);
+    h2o_http2_scheduler_open(&root, &a.ref, 6, 0);
+    h2o_http2_scheduler_open(&a.ref.node, &b.ref, 5, 0);
+    h2o_http2_scheduler_open(&a.ref.node, &c.ref, 4, 0);
+    h2o_http2_scheduler_open(&c.ref.node, &d.ref, 3, 0);
+    h2o_http2_scheduler_open(&c.ref.node, &e.ref, 2, 0);
+    h2o_http2_scheduler_open(&d.ref.node, &f.ref, 1, 0);
 
     output[0] = '\0';
     dump_tree(&root);
-    ok(strcmp(output, "(A16(B16C16(D16(F16)E16)))") == 0);
+    ok(strcmp(output, "(A6(B5C4(D3(F1)E2)))") == 0);
 
-    h2o_http2_scheduler_rebind(&a.ref, &d.ref.node, 16, test_reprioritize_exclusive);
+    h2o_http2_scheduler_rebind(&a.ref, &d.ref.node, 1, test_reprioritize_exclusive);
     output[0] = '\0';
     dump_tree(&root);
     if (!test_reprioritize_exclusive) {
-        ok(strcmp(output, "(D16(F16A16(B16C16(E16))))") == 0);
+        ok(strcmp(output, "(D3(F1A1(B5C4(E2))))") == 0);
     } else {
-        ok(strcmp(output, "(D16(A16(B16C16(E16)F16)))") == 0);
+        ok(strcmp(output, "(D3(A1(B5C4(E2)F1)))") == 0);
     }
 
     h2o_http2_scheduler_close(&a.ref);
