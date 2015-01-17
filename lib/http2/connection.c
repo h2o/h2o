@@ -300,7 +300,8 @@ static void update_input_window(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_
     }
 }
 
-static int set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const h2o_http2_priority_t *priority, int scheduler_is_open)
+static int set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const h2o_http2_priority_t *priority,
+                        int scheduler_is_open)
 {
     h2o_http2_scheduler_node_t *parent_sched;
 
@@ -321,7 +322,7 @@ static int set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, cons
     }
 
     /* setup the scheduler */
-    if (! scheduler_is_open) {
+    if (!scheduler_is_open) {
         h2o_http2_scheduler_open(parent_sched, &stream->_refs.scheduler, priority->weight, priority->exclusive);
     } else {
         h2o_http2_scheduler_rebind(&stream->_refs.scheduler, parent_sched, priority->weight, priority->exclusive);
@@ -425,7 +426,8 @@ static void handle_priority_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fra
         return;
     }
     if (frame->stream_id == payload.dependency) {
-        enqueue_goaway_and_initiate_close(conn, H2O_HTTP2_ERROR_PROTOCOL, (h2o_iovec_t){H2O_STRLIT("stream cannot depend on itself")});
+        enqueue_goaway_and_initiate_close(conn, H2O_HTTP2_ERROR_PROTOCOL,
+                                          (h2o_iovec_t){H2O_STRLIT("stream cannot depend on itself")});
         return;
     }
 
