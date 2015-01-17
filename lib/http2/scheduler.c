@@ -105,7 +105,7 @@ static void convert_to_exclusive(h2o_http2_scheduler_node_t *parent, h2o_http2_s
     }
 }
 
-void h2o_http2_scheduler_open(h2o_http2_scheduler_node_t *parent, h2o_http2_scheduler_openref_t *ref, uint16_t weight,
+void h2o_http2_scheduler_open(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *parent, uint16_t weight,
                               int exclusive)
 {
     h2o_http2_scheduler_slot_t *slot = get_or_create_slot(parent, weight);

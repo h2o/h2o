@@ -26,18 +26,28 @@
 #include "h2o/linklist.h"
 #include "h2o/memory.h"
 
+/**
+ * holds a link-list of openrefs with certain weight
+ */
 typedef struct h2o_http2_scheduler_slot_t {
     uint16_t weight;
     h2o_linklist_t _all_refs;    /* all openrefs */
     h2o_linklist_t _active_refs; /* openrefs that have data, that can be sent (incl. the dependents) */
 } h2o_http2_scheduler_slot_t;
 
+/**
+ * resembles a node in the dependency tree; i.e. assigned for each HTTP/2 stream (as a member of openref), or the root of the tree
+ * associated to the connection
+ */
 typedef struct st_h2o_http2_scheduler_node_t {
-    struct st_h2o_http2_scheduler_node_t *_parent;
-    h2o_http2_scheduler_slot_t *_slot;
-    H2O_VECTOR(h2o_http2_scheduler_slot_t *) _list;
+    struct st_h2o_http2_scheduler_node_t *_parent;  /* NULL if root */
+    h2o_http2_scheduler_slot_t *_slot;              /* slot within parent, or NULL if root */
+    H2O_VECTOR(h2o_http2_scheduler_slot_t *) _list; /* presorted list of slots in descending order of weight */
 } h2o_http2_scheduler_node_t;
 
+/**
+ * the entry to be scheduled; is assigned for every HTTP/2 stream.
+ */
 typedef struct st_h2o_http2_scheduler_openref_t {
     h2o_http2_scheduler_node_t node;
     h2o_linklist_t _all_link;    /* linked to _all_refs */
@@ -46,17 +56,52 @@ typedef struct st_h2o_http2_scheduler_openref_t {
     int _self_is_active;
 } h2o_http2_scheduler_openref_t;
 
+/**
+ * callback called by h2o_http2_scheduler_run.
+ * @param ref reference to an active stream that should consume resource
+ * @param still_is_active [out] flag to indicate whether the ref should still be marked as active after returning from the function
+ * @param cb_arg value of cb_arg passed to h2o_http2_scheduler_run
+ * @return non-zero value to stop traversing through the tree, or 0 to continue
+ */
 typedef int (*h2o_http2_scheduler_run_cb)(h2o_http2_scheduler_openref_t *ref, int *still_is_active, void *cb_arg);
 
 /* void h2o_http2_scheduler_init(h2o_http2_scheduler_node_t *root); (zero-clear is sufficient for the time being) */
+
+/**
+ * disposes of the scheduler.  All open references belonging to the node must be closed before calling this functions.
+ */
 void h2o_http2_scheduler_dispose(h2o_http2_scheduler_node_t *root);
-void h2o_http2_scheduler_open(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_openref_t *ref, uint16_t weight, int exclusive);
+/**
+ * opens a reference with given parent as its dependency
+ */
+void h2o_http2_scheduler_open(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *parent, uint16_t weight,
+                              int exclusive);
+/**
+ * closes a reference.  All the dependents are raised to become the dependents of the parent of the reference being closed.
+ */
 void h2o_http2_scheduler_close(h2o_http2_scheduler_openref_t *ref);
+/**
+ * reprioritizes the reference.
+ */
 void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *new_parent, uint16_t weight,
                                 int exclusive);
+/**
+ * tests if the ref is open
+ */
 static int h2o_http2_scheduler_is_open(h2o_http2_scheduler_openref_t *ref);
+/**
+ * returns weight associated to the reference
+ */
 static uint16_t h2o_http2_scheduler_get_weight(h2o_http2_scheduler_openref_t *ref);
+/**
+ * activates a reference so that it would be passed back as the argument to the callback of the h2o_http2_scheduler_run function
+ * if any resource should be allocated
+ */
 void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref);
+/**
+ * calls the callback of the references linked to the dependency tree one by one, in the order defined by the dependency and the
+ * weight.
+ */
 int h2o_http2_scheduler_run(h2o_http2_scheduler_node_t *root, h2o_http2_scheduler_run_cb cb, void *cb_arg);
 
 /* inline definitions */
