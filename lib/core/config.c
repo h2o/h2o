@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
+#include "h2o/http2.h"
 
 static void init_pathconf(h2o_pathconf_t *pathconf, h2o_hostconf_t *hostconf)
 {
@@ -81,7 +82,7 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->http1.req_timeout = H2O_DEFAULT_HTTP1_REQ_TIMEOUT;
     config->http1.upgrade_to_http2 = H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2;
     config->http2.idle_timeout = H2O_DEFAULT_HTTP2_IDLE_TIMEOUT;
-    config->http2.max_concurrent_requests_per_connection = H2O_DEFAULT_HTTP2_MAX_CONCURRENT_REQUESTS_PER_CONNECTION;
+    config->http2.max_concurrent_requests_per_connection = H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams;
 
     h2o_configurator__init_core(config);
 }
