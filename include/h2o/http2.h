@@ -188,11 +188,11 @@ struct st_h2o_http2_stream_t {
     h2o_buffer_t *_req_body;
     H2O_VECTOR(h2o_iovec_t) _data;
     h2o_ostream_pull_cb _pull_cb;
-    /* link list governed by connection.c for handling various things */
+    /* references governed by connection.c for handling various things */
     struct {
         h2o_linklist_t link;
-        h2o_http2_scheduler_openref_t sched_ref;
-    } _link;
+        h2o_http2_scheduler_openref_t scheduler;
+    } _refs;
     /* placed at last since it is large and has it's own ctor */
     h2o_req_t req;
 };
@@ -298,7 +298,7 @@ inline ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn)
 
 inline void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
-    assert(h2o_http2_scheduler_ref_is_open(&stream->_link.sched_ref));
+    assert(h2o_http2_scheduler_ref_is_open(&stream->_refs.scheduler));
     assert(stream->state == H2O_HTTP2_STREAM_STATE_IDLE);
     stream->state = H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS;
     h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
