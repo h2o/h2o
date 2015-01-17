@@ -423,6 +423,82 @@ static void test_reprioritize(void)
     h2o_http2_scheduler_dispose(&scheduler);
 }
 
+static void test_change_weight(void)
+{
+    h2o_http2_scheduler_t scheduler = {};
+    node_t nodeA = { {}, "A", 1, 0 };
+    node_t nodeB = { {}, "B", 1, 0 };
+    node_t nodeC = { {}, "C", 1, 0 };
+
+    /* open them all with priority=16 */
+    h2o_http2_scheduler_open(&scheduler, &nodeA.ref, 16, 0);
+    h2o_http2_scheduler_set_active(&nodeA.ref);
+    h2o_http2_scheduler_open(&scheduler, &nodeB.ref, 16, 0);
+    h2o_http2_scheduler_set_active(&nodeB.ref);
+    h2o_http2_scheduler_open(&scheduler, &nodeC.ref, 16, 0);
+    h2o_http2_scheduler_set_active(&nodeC.ref);
+
+    /* check the output */
+    output[0] = '\0';
+    max_cnt = 5;
+    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    ok(strcmp(output, "A,B,C,A,B") == 0);
+
+    /* nodeA.priority = 1 */
+    h2o_http2_scheduler_rebind(&nodeA.ref, &scheduler, 1, 0);
+    output[0] = '\0';
+    dump_tree(&scheduler);
+    ok(strcmp(output, "(BCA)") == 0);
+    output[0] = '\0';
+    max_cnt = 5;
+    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    ok(strcmp(output, "C,B,C,B,C") == 0);
+
+    /* eventually disactivate B,C */
+    nodeB.still_is_active = 0;
+    nodeC.still_is_active = 0;
+    output[0] = '\0';
+    max_cnt = 5;
+    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    ok(strcmp(output, "B,C,A,A,A") == 0);
+
+    h2o_http2_scheduler_close(&nodeA.ref);
+    h2o_http2_scheduler_close(&nodeB.ref);
+    h2o_http2_scheduler_close(&nodeC.ref);
+    h2o_http2_scheduler_dispose(&scheduler);
+}
+
+static void test_exclusive_at_current_pos(void)
+{
+    h2o_http2_scheduler_t scheduler = {};
+    node_t nodeA = { {}, "A", 1, 0 };
+    node_t nodeB = { {}, "B", 1, 0 };
+    node_t nodeC = { {}, "C", 1, 0 };
+
+    /* open them all with priority=16 */
+    h2o_http2_scheduler_open(&scheduler, &nodeA.ref, 16, 0);
+    h2o_http2_scheduler_set_active(&nodeA.ref);
+    h2o_http2_scheduler_open(&scheduler, &nodeB.ref, 16, 0);
+    h2o_http2_scheduler_set_active(&nodeB.ref);
+    h2o_http2_scheduler_open(&scheduler, &nodeC.ref, 16, 0);
+    h2o_http2_scheduler_set_active(&nodeC.ref);
+
+    output[0] = '\0';
+    dump_tree(&scheduler);
+    ok(strcmp(output, "(ABC)") == 0);
+
+    h2o_http2_scheduler_rebind(&nodeB.ref, &scheduler, 1, 1);
+
+    output[0] = '\0';
+    dump_tree(&scheduler);
+    ok(strcmp(output, "(B(AC))") == 0);
+
+    h2o_http2_scheduler_close(&nodeA.ref);
+    h2o_http2_scheduler_close(&nodeB.ref);
+    h2o_http2_scheduler_close(&nodeC.ref);
+    h2o_http2_scheduler_dispose(&scheduler);
+}
+
 void test_lib__http2__scheduler(void)
 {
     subtest("round-robin", test_round_robin);
@@ -434,4 +510,6 @@ void test_lib__http2__scheduler(void)
     subtest("repriortize-nonexclusive", test_reprioritize);
     test_reprioritize_exclusive = 1;
     subtest("repriortize-exclusive", test_reprioritize);
+    subtest("change-weight", test_change_weight);
+    subtest("exclusive-at-current-pos", test_exclusive_at_current_pos);
 }
