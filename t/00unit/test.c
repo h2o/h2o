@@ -127,6 +127,7 @@ int main(int argc, char **argv)
         subtest("lib/headers.c", test_lib__headers_c);
         subtest("lib/server_starter.c", test_lib__serverutil_c);
         subtest("lib/http2/hpack.c", test_lib__http2__hpack);
+        subtest("lib/http2/scheduler.c", test_lib__http2__scheduler);
         subtest("lib/mimemap.c", test_lib__mimemap_c);
     }
 

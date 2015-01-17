@@ -145,6 +145,16 @@ int h2o_http2_decode_data_payload(h2o_http2_data_payload_t *payload, const h2o_h
     return 0;
 }
 
+static const uint8_t *decode_priority(h2o_http2_priority_t *priority, const uint8_t *src)
+{
+    uint32_t u4 = decode32u(src);
+    src += 4;
+    priority->exclusive = u4 >> 31;
+    priority->dependency = u4 & 0x7fffffff;
+    priority->weight = (uint16_t)*src++ + 1;
+    return src;
+}
+
 int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const h2o_http2_frame_t *frame)
 {
     const uint8_t *src = frame->payload, *src_end = frame->payload + frame->length;
@@ -160,23 +170,24 @@ int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const
     }
 
     if ((frame->flags & H2O_HTTP2_FRAME_FLAG_PRIORITY) != 0) {
-        uint32_t u4;
         if (src_end - src < 5)
             return -1;
-        u4 = decode32u(src);
-        src += 4;
-        payload->priority.exclusive = u4 >> 31;
-        payload->priority.dependency = u4 & 0x7fffffff;
-        payload->priority.weight = (uint16_t)*src++ + 1;
+        src = decode_priority(&payload->priority, src);
     } else {
-        payload->priority.exclusive = 0;
-        payload->priority.dependency = 0;
-        payload->priority.weight = 16;
+        payload->priority = h2o_http2_default_priority;
     }
 
     payload->headers = src;
     payload->headers_len = src_end - src;
 
+    return 0;
+}
+
+int h2o_http2_decode_priority_payload(h2o_http2_priority_t *payload, const h2o_http2_frame_t *frame)
+{
+    if (frame->length != 5)
+        return -1;
+    decode_priority(payload, frame->payload);
     return 0;
 }
 
