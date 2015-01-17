@@ -212,6 +212,7 @@ struct st_h2o_http2_conn_t {
     uint32_t max_processed_stream_id;
     uint32_t num_responding_streams;
     /* internal */
+    h2o_http2_scheduler_node_t scheduler;
     h2o_http2_conn_state_t state;
     ssize_t (*_read_expect)(h2o_http2_conn_t *conn, const uint8_t *src, size_t len);
     h2o_buffer_t *_http1_req_input; /* contains data referred to by original request via HTTP/1.1 */
@@ -223,7 +224,6 @@ struct st_h2o_http2_conn_t {
     struct {
         h2o_buffer_t *buf;
         h2o_buffer_t *buf_in_flight;
-        h2o_http2_scheduler_node_t scheduler;
         h2o_linklist_t streams_to_proceed;
         h2o_timeout_entry_t timeout_entry;
         h2o_http2_window_t window;
