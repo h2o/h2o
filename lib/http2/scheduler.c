@@ -100,7 +100,7 @@ static void convert_to_exclusive(h2o_http2_scheduler_node_t *parent, h2o_http2_s
                 assert(slot->_all_refs.prev == &added->_all_link);
                 break;
             }
-            h2o_http2_scheduler_rebind(child_ref, &added->node, child_ref->node._slot->weight, 0);
+            h2o_http2_scheduler_rebind(child_ref, &added->node, h2o_http2_scheduler_get_weight(child_ref), 0);
         }
     }
 }
@@ -130,7 +130,7 @@ void h2o_http2_scheduler_close(h2o_http2_scheduler_openref_t *ref)
                 h2o_http2_scheduler_openref_t *child_ref =
                     H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _all_link, src_slot->_all_refs.next);
                 /* TODO draft-16 5.3.4 says the weight of the closed parent should be distributed proportionally to the children */
-                h2o_http2_scheduler_rebind(child_ref, ref->node._parent, child_ref->node._slot->weight, 0);
+                h2o_http2_scheduler_rebind(child_ref, ref->node._parent, h2o_http2_scheduler_get_weight(child_ref), 0);
             }
         }
     }
@@ -177,7 +177,7 @@ void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_sc
     assert(&ref->node != new_parent);
 
     /* do nothing if there'd be no change at all */
-    if (ref->node._parent == new_parent && ref->node._slot->weight == weight && !exclusive)
+    if (ref->node._parent == new_parent && h2o_http2_scheduler_get_weight(ref) == weight && !exclusive)
         return;
 
     { /* if new_parent is dependent to ref, make new_parent a sibling of ref before applying the final transition (see draft-16
@@ -185,8 +185,9 @@ void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_sc
         h2o_http2_scheduler_node_t *t;
         for (t = new_parent; t->_parent != NULL; t = t->_parent) {
             if (t->_parent == &ref->node) {
-                /* TODO: current impl. assigns new_parent the old weight of the node being replaced, is it as spec says? */
-                do_rebind((h2o_http2_scheduler_openref_t *)new_parent, ref->node._parent, ref->node._slot->weight, 0);
+                /* quoting the spec: "The moved dependency retains its weight." */
+                h2o_http2_scheduler_openref_t *new_parent_ref = (void *)new_parent;
+                do_rebind(new_parent_ref, ref->node._parent, h2o_http2_scheduler_get_weight(new_parent_ref), 0);
                 break;
             }
         }

@@ -55,6 +55,7 @@ void h2o_http2_scheduler_close(h2o_http2_scheduler_openref_t *ref);
 void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *new_parent, uint16_t weight,
                                 int exclusive);
 static int h2o_http2_scheduler_is_open(h2o_http2_scheduler_openref_t *ref);
+static uint16_t h2o_http2_scheduler_get_weight(h2o_http2_scheduler_openref_t *ref);
 void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref);
 int h2o_http2_scheduler_run(h2o_http2_scheduler_node_t *root, h2o_http2_scheduler_run_cb cb, void *cb_arg);
 
@@ -63,6 +64,11 @@ int h2o_http2_scheduler_run(h2o_http2_scheduler_node_t *root, h2o_http2_schedule
 inline int h2o_http2_scheduler_is_open(h2o_http2_scheduler_openref_t *ref)
 {
     return h2o_linklist_is_linked(&ref->_all_link);
+}
+
+inline uint16_t h2o_http2_scheduler_get_weight(h2o_http2_scheduler_openref_t *ref)
+{
+    return ref->node._slot->weight;
 }
 
 #endif
