@@ -49,43 +49,43 @@ static int iterate_cb(h2o_http2_scheduler_openref_t *ref, int *still_is_active, 
 
 static void test_round_robin(void)
 {
-    h2o_http2_scheduler_t scheduler = {};
+    h2o_http2_scheduler_node_t root = {};
     node_t nodeA = { {}, "A", 1, 0 };
     node_t nodeB = { {}, "B", 1, 0 };
     node_t nodeC = { {}, "C", 1, 0 };
 
-    h2o_http2_scheduler_open(&scheduler, &nodeA.ref, 12, 0);
-    h2o_http2_scheduler_open(&scheduler, &nodeB.ref, 12, 0);
-    h2o_http2_scheduler_open(&scheduler, &nodeC.ref, 12, 0);
+    h2o_http2_scheduler_open(&root, &nodeA.ref, 12, 0);
+    h2o_http2_scheduler_open(&root, &nodeB.ref, 12, 0);
+    h2o_http2_scheduler_open(&root, &nodeC.ref, 12, 0);
 
     /* none are active */
     output[0] = '\0';
     max_cnt = 4;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "") == 0);
 
     /* set A to active */
-    h2o_http2_scheduler_set_active(&nodeA.ref);
+    h2o_http2_scheduler_activate(&nodeA.ref);
     output[0] = '\0';
     max_cnt = 4;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "A,A,A,A") == 0);
 
     /* A should change to inactive */
     nodeA.still_is_active = 0;
     output[0] = '\0';
     max_cnt = 4;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "A") == 0);
 
     /* set all to active */
-    h2o_http2_scheduler_set_active(&nodeA.ref);
+    h2o_http2_scheduler_activate(&nodeA.ref);
     nodeA.still_is_active = 1;
-    h2o_http2_scheduler_set_active(&nodeB.ref);
-    h2o_http2_scheduler_set_active(&nodeC.ref);
+    h2o_http2_scheduler_activate(&nodeB.ref);
+    h2o_http2_scheduler_activate(&nodeC.ref);
     output[0] = '\0';
     max_cnt = 7;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "A,B,C,A,B,C,A") == 0);
 
     /* change them to inactive */
@@ -94,66 +94,66 @@ static void test_round_robin(void)
     nodeC.still_is_active = 0;
     output[0] = '\0';
     max_cnt = 4;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "B,C,A") == 0);
 
     /* close C */
     h2o_http2_scheduler_close(&nodeC.ref);
-    h2o_http2_scheduler_set_active(&nodeA.ref);
-    h2o_http2_scheduler_set_active(&nodeB.ref);
+    h2o_http2_scheduler_activate(&nodeA.ref);
+    h2o_http2_scheduler_activate(&nodeB.ref);
     output[0] = '\0';
     max_cnt = 4;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "A,B") == 0);
 
     h2o_http2_scheduler_close(&nodeA.ref);
     h2o_http2_scheduler_close(&nodeB.ref);
-    h2o_http2_scheduler_dispose(&scheduler);
+    h2o_http2_scheduler_dispose(&root);
 }
 
 static void test_priority(void)
 {
-    h2o_http2_scheduler_t scheduler = {};
+    h2o_http2_scheduler_node_t root = {};
     node_t nodeA = { {}, "A", 1, 0 };
     node_t nodeB = { {}, "B", 1, 0 };
     node_t nodeC = { {}, "C", 1, 0 };
 
-    h2o_http2_scheduler_open(&scheduler, &nodeA.ref, 32, 0);
-    h2o_http2_scheduler_set_active(&nodeA.ref);
-    h2o_http2_scheduler_open(&scheduler, &nodeB.ref, 32, 0);
-    h2o_http2_scheduler_set_active(&nodeB.ref);
-    h2o_http2_scheduler_open(&scheduler, &nodeC.ref, 12, 0);
-    h2o_http2_scheduler_set_active(&nodeC.ref);
+    h2o_http2_scheduler_open(&root, &nodeA.ref, 32, 0);
+    h2o_http2_scheduler_activate(&nodeA.ref);
+    h2o_http2_scheduler_open(&root, &nodeB.ref, 32, 0);
+    h2o_http2_scheduler_activate(&nodeB.ref);
+    h2o_http2_scheduler_open(&root, &nodeC.ref, 12, 0);
+    h2o_http2_scheduler_activate(&nodeC.ref);
 
     /* should only get the higher ones */
     output[0] = '\0';
     max_cnt = 5;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "A,B,A,B,A") == 0);
 
     /* eventually disactivate A */
     nodeA.still_is_active = 0;
     output[0] = '\0';
     max_cnt = 5;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "B,A,B,B,B") == 0);
 
     /* should start serving C as B gets disactivated */
     nodeB.still_is_active = 0;
     output[0] = '\0';
     max_cnt = 5;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "B,C,C,C,C") == 0);
 
     h2o_http2_scheduler_close(&nodeA.ref);
     h2o_http2_scheduler_close(&nodeB.ref);
     h2o_http2_scheduler_close(&nodeC.ref);
-    h2o_http2_scheduler_dispose(&scheduler);
+    h2o_http2_scheduler_dispose(&root);
 }
 
 static void test_dependency(void)
 {
-    h2o_http2_scheduler_t scheduler = {};
+    h2o_http2_scheduler_node_t root = {};
     node_t nodeA = { {}, "A", 1, 0 };
     node_t nodeB = { {}, "B", 1, 0 };
     node_t nodeC = { {}, "C", 1, 0 };
@@ -167,56 +167,56 @@ static void test_dependency(void)
      * D
      */
 
-    h2o_http2_scheduler_open(&scheduler, &nodeA.ref, 32, 0);
-    h2o_http2_scheduler_set_active(&nodeA.ref);
-    h2o_http2_scheduler_open(&scheduler, &nodeB.ref, 32, 0);
-    h2o_http2_scheduler_set_active(&nodeB.ref);
-    h2o_http2_scheduler_open(&scheduler, &nodeC.ref, 12, 0);
-    h2o_http2_scheduler_set_active(&nodeC.ref);
-    h2o_http2_scheduler_open(&nodeA.ref.super, &nodeD.ref, 24, 0);
-    h2o_http2_scheduler_set_active(&nodeD.ref);
+    h2o_http2_scheduler_open(&root, &nodeA.ref, 32, 0);
+    h2o_http2_scheduler_activate(&nodeA.ref);
+    h2o_http2_scheduler_open(&root, &nodeB.ref, 32, 0);
+    h2o_http2_scheduler_activate(&nodeB.ref);
+    h2o_http2_scheduler_open(&root, &nodeC.ref, 12, 0);
+    h2o_http2_scheduler_activate(&nodeC.ref);
+    h2o_http2_scheduler_open(&nodeA.ref.node, &nodeD.ref, 24, 0);
+    h2o_http2_scheduler_activate(&nodeD.ref);
 
     /* should only get A and B */
     output[0] = '\0';
     max_cnt = 5;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "A,B,A,B,A") == 0);
 
     /* eventually disactivate A, should get C and B */
     nodeA.still_is_active = 0;
     output[0] = '\0';
     max_cnt = 7;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "B,A,B,D,B,D,B") == 0);
 
     /* eventually disactivate B, should get D only */
     nodeB.still_is_active = 0;
     output[0] = '\0';
     max_cnt = 5;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "D,B,D,D,D") == 0);
 
     /* closing A raises D, and the priority becomes B -> D -> C */
     h2o_http2_scheduler_close(&nodeA.ref);
-    h2o_http2_scheduler_set_active(&nodeB.ref);
+    h2o_http2_scheduler_activate(&nodeB.ref);
     nodeB.still_is_active = 0;
     nodeD.still_is_active = 0;
     nodeC.still_is_active = 0;
     output[0] = '\0';
     max_cnt = 5;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "B,D,C") == 0);
-    h2o_http2_scheduler_set_active(&nodeB.ref);
+    h2o_http2_scheduler_activate(&nodeB.ref);
 
     h2o_http2_scheduler_close(&nodeB.ref);
     h2o_http2_scheduler_close(&nodeC.ref);
     h2o_http2_scheduler_close(&nodeD.ref);
-    h2o_http2_scheduler_dispose(&scheduler);
+    h2o_http2_scheduler_dispose(&root);
 }
 
 static void test_exclusive(void)
 {
-    h2o_http2_scheduler_t scheduler = {};
+    h2o_http2_scheduler_node_t scheduler = {};
     node_t nodeA = { {}, "A", 1, 0 };
     node_t nodeB = { {}, "B", 1, 0 };
     node_t nodeC = { {}, "C", 1, 0 };
@@ -231,9 +231,9 @@ static void test_exclusive(void)
 
     /* open A & B */
     h2o_http2_scheduler_open(&scheduler, &nodeA.ref, 32, 0);
-    h2o_http2_scheduler_set_active(&nodeA.ref);
+    h2o_http2_scheduler_activate(&nodeA.ref);
     h2o_http2_scheduler_open(&scheduler, &nodeB.ref, 32, 0);
-    h2o_http2_scheduler_set_active(&nodeB.ref);
+    h2o_http2_scheduler_activate(&nodeB.ref);
 
     output[0] = '\0';
     max_cnt = 5;
@@ -250,7 +250,7 @@ static void test_exclusive(void)
     ok(strcmp(output, "A,B,A,B,A") == 0); /* under current impl, moving the deps causes them to be ordered using _all_ref */
 
     /* should see C once it is activated */
-    h2o_http2_scheduler_set_active(&nodeC.ref);
+    h2o_http2_scheduler_activate(&nodeC.ref);
     output[0] = '\0';
     max_cnt = 5;
     h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
@@ -283,7 +283,7 @@ static void test_firefox(void)
      * HEADERS: id:15, dependency:3, weight: 22
      * HEADERS: id:17, dependency:3, weight: 22
      */
-    h2o_http2_scheduler_t scheduler = {};
+    h2o_http2_scheduler_node_t root = {};
     node_t g1 = { {}, "g1", 0, 0 };
     node_t g2 = { {}, "g2", 0, 0 };
     node_t g3 = { {}, "g3", 0, 0 };
@@ -294,28 +294,28 @@ static void test_firefox(void)
     node_t r3 = { {}, "r3", 1, 0 };
 
     /* setup the proirity groups */
-    h2o_http2_scheduler_open(&scheduler, &g1.ref, 201, 0);
-    h2o_http2_scheduler_open(&scheduler, &g2.ref, 101, 0);
-    h2o_http2_scheduler_open(&scheduler, &g3.ref, 1, 0);
-    h2o_http2_scheduler_open(&g3.ref.super, &g4.ref, 1, 0);
-    h2o_http2_scheduler_open(&g1.ref.super, &g5.ref, 1, 0);
+    h2o_http2_scheduler_open(&root, &g1.ref, 201, 0);
+    h2o_http2_scheduler_open(&root, &g2.ref, 101, 0);
+    h2o_http2_scheduler_open(&root, &g3.ref, 1, 0);
+    h2o_http2_scheduler_open(&g3.ref.node, &g4.ref, 1, 0);
+    h2o_http2_scheduler_open(&g1.ref.node, &g5.ref, 1, 0);
 
     /* open r1 and set serving */
-    h2o_http2_scheduler_open(&g5.ref.super, &r1.ref, 22, 0);
-    h2o_http2_scheduler_set_active(&r1.ref);
+    h2o_http2_scheduler_open(&g5.ref.node, &r1.ref, 22, 0);
+    h2o_http2_scheduler_activate(&r1.ref);
     output[0] = '\0';
     max_cnt = 5;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "r1,r1,r1,r1,r1") == 0);
 
     /* open r2,r3 and serve */
-    h2o_http2_scheduler_open(&g1.ref.super, &r2.ref, 22, 0);
-    h2o_http2_scheduler_set_active(&r2.ref);
-    h2o_http2_scheduler_open(&g1.ref.super, &r3.ref, 22, 0);
-    h2o_http2_scheduler_set_active(&r3.ref);
+    h2o_http2_scheduler_open(&g1.ref.node, &r2.ref, 22, 0);
+    h2o_http2_scheduler_activate(&r2.ref);
+    h2o_http2_scheduler_open(&g1.ref.node, &r3.ref, 22, 0);
+    h2o_http2_scheduler_activate(&r3.ref);
     output[0] = '\0';
     max_cnt = 5;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "r2,r3,r2,r3,r2") == 0);
 
     /* eventually disactive r2,r3 */
@@ -323,7 +323,7 @@ static void test_firefox(void)
     r3.still_is_active = 0;
     output[0] = '\0';
     max_cnt = 5;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "r3,r2,r1,r1,r1") == 0);
 
     /* close r2,r3 */
@@ -331,7 +331,7 @@ static void test_firefox(void)
     h2o_http2_scheduler_close(&r3.ref);
     output[0] = '\0';
     max_cnt = 5;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "r1,r1,r1,r1,r1") == 0);
 
     h2o_http2_scheduler_close(&r1.ref);
@@ -341,7 +341,7 @@ static void test_firefox(void)
     h2o_http2_scheduler_close(&g3.ref);
     h2o_http2_scheduler_close(&g4.ref);
     h2o_http2_scheduler_close(&g5.ref);
-    h2o_http2_scheduler_dispose(&scheduler);
+    h2o_http2_scheduler_dispose(&root);
 }
 
 static void dump_tree(h2o_http2_scheduler_node_t *node)
@@ -362,7 +362,7 @@ static void dump_tree(h2o_http2_scheduler_node_t *node)
                     found_any = 1;
                     strcat(output, "(");
                 }
-                dump_tree(&ref->super);
+                dump_tree(&ref->node);
             }
         }
         if (found_any)
@@ -386,7 +386,7 @@ static void test_reprioritize(void)
      *    F                                     E             E
      *               (intermediate)   (non-exclusive)    (exclusive)
      */
-    h2o_http2_scheduler_t scheduler = {};
+    h2o_http2_scheduler_node_t root = {};
     node_t a = { {}, "A" };
     node_t b = { {}, "B" };
     node_t c = { {}, "C" };
@@ -394,20 +394,20 @@ static void test_reprioritize(void)
     node_t e = { {}, "E" };
     node_t f = { {}, "F" };
 
-    h2o_http2_scheduler_open(&scheduler, &a.ref, 16, 0);
-    h2o_http2_scheduler_open(&a.ref.super, &b.ref, 16, 0);
-    h2o_http2_scheduler_open(&a.ref.super, &c.ref, 16, 0);
-    h2o_http2_scheduler_open(&c.ref.super, &d.ref, 16, 0);
-    h2o_http2_scheduler_open(&c.ref.super, &e.ref, 16, 0);
-    h2o_http2_scheduler_open(&d.ref.super, &f.ref, 16, 0);
+    h2o_http2_scheduler_open(&root, &a.ref, 16, 0);
+    h2o_http2_scheduler_open(&a.ref.node, &b.ref, 16, 0);
+    h2o_http2_scheduler_open(&a.ref.node, &c.ref, 16, 0);
+    h2o_http2_scheduler_open(&c.ref.node, &d.ref, 16, 0);
+    h2o_http2_scheduler_open(&c.ref.node, &e.ref, 16, 0);
+    h2o_http2_scheduler_open(&d.ref.node, &f.ref, 16, 0);
 
     output[0] = '\0';
-    dump_tree(&scheduler);
+    dump_tree(&root);
     ok(strcmp(output, "(A(BC(D(F)E)))") == 0);
 
-    h2o_http2_scheduler_rebind(&a.ref, &d.ref.super, 16, test_reprioritize_exclusive);
+    h2o_http2_scheduler_rebind(&a.ref, &d.ref.node, 16, test_reprioritize_exclusive);
     output[0] = '\0';
-    dump_tree(&scheduler);
+    dump_tree(&root);
     if (!test_reprioritize_exclusive) {
         ok(strcmp(output, "(D(FA(BC(E))))") == 0);
     } else {
@@ -420,38 +420,38 @@ static void test_reprioritize(void)
     h2o_http2_scheduler_close(&d.ref);
     h2o_http2_scheduler_close(&e.ref);
     h2o_http2_scheduler_close(&f.ref);
-    h2o_http2_scheduler_dispose(&scheduler);
+    h2o_http2_scheduler_dispose(&root);
 }
 
 static void test_change_weight(void)
 {
-    h2o_http2_scheduler_t scheduler = {};
+    h2o_http2_scheduler_node_t root = {};
     node_t nodeA = { {}, "A", 1, 0 };
     node_t nodeB = { {}, "B", 1, 0 };
     node_t nodeC = { {}, "C", 1, 0 };
 
     /* open them all with priority=16 */
-    h2o_http2_scheduler_open(&scheduler, &nodeA.ref, 16, 0);
-    h2o_http2_scheduler_set_active(&nodeA.ref);
-    h2o_http2_scheduler_open(&scheduler, &nodeB.ref, 16, 0);
-    h2o_http2_scheduler_set_active(&nodeB.ref);
-    h2o_http2_scheduler_open(&scheduler, &nodeC.ref, 16, 0);
-    h2o_http2_scheduler_set_active(&nodeC.ref);
+    h2o_http2_scheduler_open(&root, &nodeA.ref, 16, 0);
+    h2o_http2_scheduler_activate(&nodeA.ref);
+    h2o_http2_scheduler_open(&root, &nodeB.ref, 16, 0);
+    h2o_http2_scheduler_activate(&nodeB.ref);
+    h2o_http2_scheduler_open(&root, &nodeC.ref, 16, 0);
+    h2o_http2_scheduler_activate(&nodeC.ref);
 
     /* check the output */
     output[0] = '\0';
     max_cnt = 5;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "A,B,C,A,B") == 0);
 
     /* nodeA.priority = 1 */
-    h2o_http2_scheduler_rebind(&nodeA.ref, &scheduler, 1, 0);
+    h2o_http2_scheduler_rebind(&nodeA.ref, &root, 1, 0);
     output[0] = '\0';
-    dump_tree(&scheduler);
+    dump_tree(&root);
     ok(strcmp(output, "(BCA)") == 0);
     output[0] = '\0';
     max_cnt = 5;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "C,B,C,B,C") == 0);
 
     /* eventually disactivate B,C */
@@ -459,44 +459,44 @@ static void test_change_weight(void)
     nodeC.still_is_active = 0;
     output[0] = '\0';
     max_cnt = 5;
-    h2o_http2_scheduler_run(&scheduler, iterate_cb, NULL);
+    h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "B,C,A,A,A") == 0);
 
     h2o_http2_scheduler_close(&nodeA.ref);
     h2o_http2_scheduler_close(&nodeB.ref);
     h2o_http2_scheduler_close(&nodeC.ref);
-    h2o_http2_scheduler_dispose(&scheduler);
+    h2o_http2_scheduler_dispose(&root);
 }
 
 static void test_exclusive_at_current_pos(void)
 {
-    h2o_http2_scheduler_t scheduler = {};
+    h2o_http2_scheduler_node_t root = {};
     node_t nodeA = { {}, "A", 1, 0 };
     node_t nodeB = { {}, "B", 1, 0 };
     node_t nodeC = { {}, "C", 1, 0 };
 
     /* open them all with priority=16 */
-    h2o_http2_scheduler_open(&scheduler, &nodeA.ref, 16, 0);
-    h2o_http2_scheduler_set_active(&nodeA.ref);
-    h2o_http2_scheduler_open(&scheduler, &nodeB.ref, 16, 0);
-    h2o_http2_scheduler_set_active(&nodeB.ref);
-    h2o_http2_scheduler_open(&scheduler, &nodeC.ref, 16, 0);
-    h2o_http2_scheduler_set_active(&nodeC.ref);
+    h2o_http2_scheduler_open(&root, &nodeA.ref, 16, 0);
+    h2o_http2_scheduler_activate(&nodeA.ref);
+    h2o_http2_scheduler_open(&root, &nodeB.ref, 16, 0);
+    h2o_http2_scheduler_activate(&nodeB.ref);
+    h2o_http2_scheduler_open(&root, &nodeC.ref, 16, 0);
+    h2o_http2_scheduler_activate(&nodeC.ref);
 
     output[0] = '\0';
-    dump_tree(&scheduler);
+    dump_tree(&root);
     ok(strcmp(output, "(ABC)") == 0);
 
-    h2o_http2_scheduler_rebind(&nodeB.ref, &scheduler, 1, 1);
+    h2o_http2_scheduler_rebind(&nodeB.ref, &root, 1, 1);
 
     output[0] = '\0';
-    dump_tree(&scheduler);
+    dump_tree(&root);
     ok(strcmp(output, "(B(AC))") == 0);
 
     h2o_http2_scheduler_close(&nodeA.ref);
     h2o_http2_scheduler_close(&nodeB.ref);
     h2o_http2_scheduler_close(&nodeC.ref);
-    h2o_http2_scheduler_dispose(&scheduler);
+    h2o_http2_scheduler_dispose(&root);
 }
 
 void test_lib__http2__scheduler(void)

@@ -223,7 +223,7 @@ struct st_h2o_http2_conn_t {
     struct {
         h2o_buffer_t *buf;
         h2o_buffer_t *buf_in_flight;
-        h2o_http2_scheduler_t scheduler;
+        h2o_http2_scheduler_node_t scheduler;
         h2o_linklist_t streams_to_proceed;
         h2o_timeout_entry_t timeout_entry;
         h2o_http2_window_t window;
@@ -298,7 +298,7 @@ inline ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn)
 
 inline void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
-    assert(h2o_http2_scheduler_ref_is_open(&stream->_refs.scheduler));
+    assert(h2o_http2_scheduler_is_open(&stream->_refs.scheduler));
     assert(stream->state == H2O_HTTP2_STREAM_STATE_IDLE);
     stream->state = H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS;
     h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
