@@ -405,7 +405,7 @@ static void test_reprioritize(void)
     dump_tree(&scheduler);
     ok(strcmp(output, "(A(BC(D(F)E)))") == 0);
 
-    h2o_http2_scheduler_rebind(&a.ref, &d.ref.super, test_reprioritize_exclusive);
+    h2o_http2_scheduler_rebind(&a.ref, &d.ref.super, 16, test_reprioritize_exclusive);
     output[0] = '\0';
     dump_tree(&scheduler);
     if (!test_reprioritize_exclusive) {
