@@ -28,7 +28,7 @@
 
 typedef struct h2o_http2_scheduler_slot_t {
     uint16_t weight;
-    h2o_linklist_t _all_refs; /* all openrefs */
+    h2o_linklist_t _all_refs;    /* all openrefs */
     h2o_linklist_t _active_refs; /* openrefs that have data, that can be sent (incl. the dependents) */
 } h2o_http2_scheduler_slot_t;
 
@@ -40,9 +40,9 @@ typedef struct st_h2o_http2_scheduler_node_t {
 
 typedef struct st_h2o_http2_scheduler_openref_t {
     h2o_http2_scheduler_node_t node;
-    h2o_linklist_t _all_link; /* linked to _all_refs */
+    h2o_linklist_t _all_link;    /* linked to _all_refs */
     h2o_linklist_t _active_link; /* linked to _active_refs if is active */
-    size_t _active_cnt; /* COUNT(active_streams_in_dependents) + _self_is_active */
+    size_t _active_cnt;          /* COUNT(active_streams_in_dependents) + _self_is_active */
     int _self_is_active;
 } h2o_http2_scheduler_openref_t;
 
@@ -52,7 +52,8 @@ typedef int (*h2o_http2_scheduler_run_cb)(h2o_http2_scheduler_openref_t *ref, in
 void h2o_http2_scheduler_dispose(h2o_http2_scheduler_node_t *root);
 void h2o_http2_scheduler_open(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_openref_t *ref, uint16_t weight, int exclusive);
 void h2o_http2_scheduler_close(h2o_http2_scheduler_openref_t *ref);
-void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *new_parent, uint16_t weight, int exclusive);
+void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *new_parent, uint16_t weight,
+                                int exclusive);
 static int h2o_http2_scheduler_is_open(h2o_http2_scheduler_openref_t *ref);
 void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref);
 int h2o_http2_scheduler_run(h2o_http2_scheduler_node_t *root, h2o_http2_scheduler_run_cb cb, void *cb_arg);

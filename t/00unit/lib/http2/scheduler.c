@@ -35,7 +35,7 @@ static size_t max_cnt;
 
 static int iterate_cb(h2o_http2_scheduler_openref_t *ref, int *still_is_active, void *_unused)
 {
-    node_t *node = (void*)ref;
+    node_t *node = (void *)ref;
 
     if (output[0] != '\0')
         strcat(output, ",");
@@ -50,9 +50,9 @@ static int iterate_cb(h2o_http2_scheduler_openref_t *ref, int *still_is_active, 
 static void test_round_robin(void)
 {
     h2o_http2_scheduler_node_t root = {};
-    node_t nodeA = { {}, "A", 1, 0 };
-    node_t nodeB = { {}, "B", 1, 0 };
-    node_t nodeC = { {}, "C", 1, 0 };
+    node_t nodeA = {{}, "A", 1, 0};
+    node_t nodeB = {{}, "B", 1, 0};
+    node_t nodeC = {{}, "C", 1, 0};
 
     h2o_http2_scheduler_open(&root, &nodeA.ref, 12, 0);
     h2o_http2_scheduler_open(&root, &nodeB.ref, 12, 0);
@@ -114,9 +114,9 @@ static void test_round_robin(void)
 static void test_priority(void)
 {
     h2o_http2_scheduler_node_t root = {};
-    node_t nodeA = { {}, "A", 1, 0 };
-    node_t nodeB = { {}, "B", 1, 0 };
-    node_t nodeC = { {}, "C", 1, 0 };
+    node_t nodeA = {{}, "A", 1, 0};
+    node_t nodeB = {{}, "B", 1, 0};
+    node_t nodeC = {{}, "C", 1, 0};
 
     h2o_http2_scheduler_open(&root, &nodeA.ref, 32, 0);
     h2o_http2_scheduler_activate(&nodeA.ref);
@@ -154,10 +154,10 @@ static void test_priority(void)
 static void test_dependency(void)
 {
     h2o_http2_scheduler_node_t root = {};
-    node_t nodeA = { {}, "A", 1, 0 };
-    node_t nodeB = { {}, "B", 1, 0 };
-    node_t nodeC = { {}, "C", 1, 0 };
-    node_t nodeD = { {}, "D", 1, 0 };
+    node_t nodeA = {{}, "A", 1, 0};
+    node_t nodeB = {{}, "B", 1, 0};
+    node_t nodeC = {{}, "C", 1, 0};
+    node_t nodeD = {{}, "D", 1, 0};
 
     /*
      * root
@@ -217,9 +217,9 @@ static void test_dependency(void)
 static void test_exclusive(void)
 {
     h2o_http2_scheduler_node_t scheduler = {};
-    node_t nodeA = { {}, "A", 1, 0 };
-    node_t nodeB = { {}, "B", 1, 0 };
-    node_t nodeC = { {}, "C", 1, 0 };
+    node_t nodeA = {{}, "A", 1, 0};
+    node_t nodeB = {{}, "B", 1, 0};
+    node_t nodeC = {{}, "C", 1, 0};
 
     /*
      * root      root
@@ -284,14 +284,14 @@ static void test_firefox(void)
      * HEADERS: id:17, dependency:3, weight: 22
      */
     h2o_http2_scheduler_node_t root = {};
-    node_t g1 = { {}, "g1", 0, 0 };
-    node_t g2 = { {}, "g2", 0, 0 };
-    node_t g3 = { {}, "g3", 0, 0 };
-    node_t g4 = { {}, "g4", 0, 0 };
-    node_t g5 = { {}, "g5", 0, 0 };
-    node_t r1 = { {}, "r1", 1, 0 };
-    node_t r2 = { {}, "r2", 1, 0 };
-    node_t r3 = { {}, "r3", 1, 0 };
+    node_t g1 = {{}, "g1", 0, 0};
+    node_t g2 = {{}, "g2", 0, 0};
+    node_t g3 = {{}, "g3", 0, 0};
+    node_t g4 = {{}, "g4", 0, 0};
+    node_t g5 = {{}, "g5", 0, 0};
+    node_t r1 = {{}, "r1", 1, 0};
+    node_t r2 = {{}, "r2", 1, 0};
+    node_t r3 = {{}, "r3", 1, 0};
 
     /* setup the proirity groups */
     h2o_http2_scheduler_open(&root, &g1.ref, 201, 0);
@@ -347,7 +347,7 @@ static void test_firefox(void)
 static void dump_tree(h2o_http2_scheduler_node_t *node)
 {
     if (node->_parent != NULL) {
-        strcat(output, ((node_t*)node)->name);
+        strcat(output, ((node_t *)node)->name);
     }
 
     if (node->_list.size != 0) {
@@ -358,7 +358,7 @@ static void dump_tree(h2o_http2_scheduler_node_t *node)
             h2o_linklist_t *link;
             for (link = slot->_all_refs.next; link != &slot->_all_refs; link = link->next) {
                 h2o_http2_scheduler_openref_t *ref = H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _all_link, link);
-                if (! found_any) {
+                if (!found_any) {
                     found_any = 1;
                     strcat(output, "(");
                 }
@@ -387,12 +387,12 @@ static void test_reprioritize(void)
      *               (intermediate)   (non-exclusive)    (exclusive)
      */
     h2o_http2_scheduler_node_t root = {};
-    node_t a = { {}, "A" };
-    node_t b = { {}, "B" };
-    node_t c = { {}, "C" };
-    node_t d = { {}, "D" };
-    node_t e = { {}, "E" };
-    node_t f = { {}, "F" };
+    node_t a = {{}, "A"};
+    node_t b = {{}, "B"};
+    node_t c = {{}, "C"};
+    node_t d = {{}, "D"};
+    node_t e = {{}, "E"};
+    node_t f = {{}, "F"};
 
     h2o_http2_scheduler_open(&root, &a.ref, 16, 0);
     h2o_http2_scheduler_open(&a.ref.node, &b.ref, 16, 0);
@@ -426,9 +426,9 @@ static void test_reprioritize(void)
 static void test_change_weight(void)
 {
     h2o_http2_scheduler_node_t root = {};
-    node_t nodeA = { {}, "A", 1, 0 };
-    node_t nodeB = { {}, "B", 1, 0 };
-    node_t nodeC = { {}, "C", 1, 0 };
+    node_t nodeA = {{}, "A", 1, 0};
+    node_t nodeB = {{}, "B", 1, 0};
+    node_t nodeC = {{}, "C", 1, 0};
 
     /* open them all with priority=16 */
     h2o_http2_scheduler_open(&root, &nodeA.ref, 16, 0);
@@ -471,9 +471,9 @@ static void test_change_weight(void)
 static void test_exclusive_at_current_pos(void)
 {
     h2o_http2_scheduler_node_t root = {};
-    node_t nodeA = { {}, "A", 1, 0 };
-    node_t nodeB = { {}, "B", 1, 0 };
-    node_t nodeC = { {}, "C", 1, 0 };
+    node_t nodeA = {{}, "A", 1, 0};
+    node_t nodeB = {{}, "B", 1, 0};
+    node_t nodeC = {{}, "C", 1, 0};
 
     /* open them all with priority=16 */
     h2o_http2_scheduler_open(&root, &nodeA.ref, 16, 0);
