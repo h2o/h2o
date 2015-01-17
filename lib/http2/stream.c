@@ -26,8 +26,7 @@
 static void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb);
 static void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final);
 
-h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, const h2o_http2_priority_t *priority,
-                                          h2o_req_t *src_req)
+h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req)
 {
     h2o_http2_stream_t *stream = h2o_mem_alloc(sizeof(*stream));
 
@@ -41,7 +40,6 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     stream->state = H2O_HTTP2_STREAM_STATE_IDLE;
     h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
     h2o_http2_window_init(&stream->input_window, &H2O_HTTP2_SETTINGS_HOST);
-    memcpy(&stream->priority, priority, sizeof(stream->priority));
     h2o_buffer_init(&stream->_req_body, &h2o_socket_buffer_prototype);
 
     /* init request */
@@ -52,22 +50,6 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     stream->req._ostr_top = &stream->_ostr_final;
 
     h2o_http2_conn_register_stream(conn, stream);
-
-    { /* register to the scheduler */
-        h2o_http2_scheduler_node_t *parent_sched;
-        if (stream->priority.dependency != 0) {
-            h2o_http2_stream_t *parent = h2o_http2_conn_get_stream(conn, stream->priority.dependency);
-            if (parent == NULL)
-                parent = h2o_http2_stream_open(conn, stream->priority.dependency, &h2o_http2_default_priority, NULL);
-            parent_sched = &parent->_link.sched_ref.super;
-        } else {
-            parent_sched = &conn->_write.scheduler;
-        }
-        h2o_http2_scheduler_open(parent_sched, &stream->_link.sched_ref, stream->priority.weight, stream->priority.exclusive);
-    }
-
-    if (src_req != NULL)
-        h2o_http2_stream_prepare_for_request(conn, stream);
 
     return stream;
 }

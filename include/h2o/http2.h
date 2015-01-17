@@ -185,7 +185,6 @@ struct st_h2o_http2_stream_t {
     h2o_http2_stream_state_t state;
     h2o_http2_window_t output_window;
     h2o_http2_window_t input_window;
-    h2o_http2_priority_t priority;
     h2o_buffer_t *_req_body;
     H2O_VECTOR(h2o_iovec_t) _data;
     h2o_ostream_pull_cb _pull_cb;
@@ -259,8 +258,7 @@ void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_ht
 static ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn);
 
 /* stream */
-h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, const h2o_http2_priority_t *priority,
-                                          h2o_req_t *src_req);
+h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req);
 static void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int errnum);
@@ -300,6 +298,7 @@ inline ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn)
 
 inline void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
+    assert(h2o_http2_scheduler_ref_is_open(&stream->_link.sched_ref));
     assert(stream->state == H2O_HTTP2_STREAM_STATE_IDLE);
     stream->state = H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS;
     h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
