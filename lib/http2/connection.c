@@ -187,7 +187,7 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     h2o_buffer_dispose(&conn->_write.buf);
     if (conn->_write.buf_in_flight != NULL)
         h2o_buffer_dispose(&conn->_write.buf_in_flight);
-    h2o_http2_scheduler_dispose(&conn->_write.scheduler);
+    h2o_http2_scheduler_dispose(&conn->scheduler);
     assert(h2o_linklist_is_empty(&conn->_write.streams_to_proceed));
     assert(!h2o_timeout_is_linked(&conn->_write.timeout_entry));
 
@@ -317,7 +317,7 @@ static int set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, cons
         }
         parent_sched = &parent_stream->_refs.scheduler.node;
     } else {
-        parent_sched = &conn->_write.scheduler;
+        parent_sched = &conn->scheduler;
     }
 
     /* setup the scheduler */
@@ -442,7 +442,7 @@ static void resume_send(h2o_http2_conn_t *conn)
     if (h2o_http2_conn_get_buffer_window(conn) <= 0)
         return;
 #if 0 /* TODO reenable this check for performance? */
-    if (conn->_write.scheduler.list.size == 0)
+    if (conn->scheduler.list.size == 0)
         return;
 #endif
     request_gathered_write(conn);
@@ -800,7 +800,7 @@ int do_emit_writereq(h2o_http2_conn_t *conn)
 
     /* push DATA frames */
     if (conn->state == H2O_HTTP2_CONN_STATE_OPEN && h2o_http2_conn_get_buffer_window(conn) > 0)
-        h2o_http2_scheduler_run(&conn->_write.scheduler, emit_writereq_of_openref, conn);
+        h2o_http2_scheduler_run(&conn->scheduler, emit_writereq_of_openref, conn);
 
     if (conn->_write.buf->size == 0)
         return 0;
@@ -890,7 +890,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req)
 
     /* open the stream, now that the function is guaranteed to succeed */
     stream = h2o_http2_stream_open(http2conn, 1, req);
-    h2o_http2_scheduler_open(&http2conn->_write.scheduler, &stream->_refs.scheduler, h2o_http2_default_priority.weight, 0);
+    h2o_http2_scheduler_open(&http2conn->scheduler, &stream->_refs.scheduler, h2o_http2_default_priority.weight, 0);
     h2o_http2_stream_prepare_for_request(http2conn, stream);
 
     /* send response */
