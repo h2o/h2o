@@ -50,7 +50,7 @@ typedef int (*h2o_http2_scheduler_run_cb)(h2o_http2_scheduler_openref_t *ref, in
 
 /* void h2o_http2_scheduler_init(h2o_http2_scheduler_node_t *root); (zero-clear is sufficient for the time being) */
 void h2o_http2_scheduler_dispose(h2o_http2_scheduler_node_t *root);
-void h2o_http2_scheduler_open(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_openref_t *ref, uint16_t weight, int exclusive);
+void h2o_http2_scheduler_open(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *parent, uint16_t weight, int exclusive);
 void h2o_http2_scheduler_close(h2o_http2_scheduler_openref_t *ref);
 void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *new_parent, uint16_t weight,
                                 int exclusive);

@@ -323,7 +323,7 @@ static int set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, cons
 
     /* setup the scheduler */
     if (!scheduler_is_open) {
-        h2o_http2_scheduler_open(parent_sched, &stream->_refs.scheduler, priority->weight, priority->exclusive);
+        h2o_http2_scheduler_open(&stream->_refs.scheduler, parent_sched, priority->weight, priority->exclusive);
     } else {
         h2o_http2_scheduler_rebind(&stream->_refs.scheduler, parent_sched, priority->weight, priority->exclusive);
     }
@@ -892,7 +892,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req)
 
     /* open the stream, now that the function is guaranteed to succeed */
     stream = h2o_http2_stream_open(http2conn, 1, req);
-    h2o_http2_scheduler_open(&http2conn->scheduler, &stream->_refs.scheduler, h2o_http2_default_priority.weight, 0);
+    h2o_http2_scheduler_open(&stream->_refs.scheduler, &http2conn->scheduler, h2o_http2_default_priority.weight, 0);
     h2o_http2_stream_prepare_for_request(http2conn, stream);
 
     /* send response */
