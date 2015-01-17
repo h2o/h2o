@@ -45,11 +45,12 @@ const h2o_http2_priority_t h2o_http2_default_priority = {
 };
 
 const h2o_http2_settings_t H2O_HTTP2_SETTINGS_HOST = {
-    /* header_table_size = */ 4096,
-    /* enable_push = */ 0,
-    /* max_concurrent_streams = */ 100,
-    /* initial_window_size = */ 262144,
-    /* max_frame_size = */ 16384};
+    4096,   /* header_table_size */
+    0,      /* enable_push */
+    100,    /* max_concurrent_streams */
+    262144, /* initial_window_size */
+    16384   /* max_frame_size */
+};
 
 static const h2o_iovec_t SETTINGS_HOST_BIN = {H2O_STRLIT("\x00\x00\x12"     /* frame size */
                                                          "\x04"             /* settings frame */
