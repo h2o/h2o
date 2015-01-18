@@ -179,7 +179,7 @@ Opened:
 }
 
 static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *req, int status, const char *reason,
-                         h2o_iovec_t mime_type)
+                         h2o_iovec_t mime_type, int is_get)
 {
     /* link the request */
     self->req = req;
@@ -197,6 +197,9 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     if (self->is_gzip)
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_ENCODING, H2O_STRLIT("gzip"));
 
+    if (!is_get)
+        goto HeadRequest;
+
     /* send data */
     h2o_start_response(req, &self->super);
 
@@ -209,6 +212,11 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
         self->buf = h2o_mem_alloc_pool(&req->pool, bufsz);
         do_proceed(&self->super, req);
     }
+
+HeadRequest:
+    h2o_send_inline(req, NULL, 0);
+    do_close(&self->super, req);
+    return;
 }
 
 int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *path, h2o_iovec_t mime_type, int flags)
@@ -219,7 +227,7 @@ int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *pa
     if ((self = create_generator(req, path, strlen(path), &is_dir, flags)) == NULL)
         return -1;
     /* note: is_dir is not handled */
-    do_send_file(self, req, status, reason, mime_type);
+    do_send_file(self, req, status, reason, mime_type, 1);
     return 0;
 }
 
@@ -262,7 +270,7 @@ static int redirect_to_dir(h2o_req_t *req, const char *path, size_t path_len)
     return 0;
 }
 
-static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len)
+static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len, int is_get)
 {
     static h2o_generator_t generator = {NULL, NULL};
     DIR *dp;
@@ -282,9 +290,17 @@ static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len)
     req->res.status = 200;
     req->res.reason = "OK";
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/html; charset=utf-8"));
+
+    if (!is_get)
+        goto HeadRequest;
+
     h2o_start_response(req, &generator);
     h2o_send(req, &bodyvec, 1, 1);
 
+    return 0;
+
+HeadRequest:
+    h2o_send_inline(req, NULL, 0);
     return 0;
 }
 
@@ -296,11 +312,17 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     size_t rpath_len, req_path_prefix;
     struct st_h2o_sendfile_generator_t *generator = NULL;
     size_t if_modified_since_header_index, if_none_match_header_index;
-    int is_dir;
+    int is_dir, is_get;
 
-    /* only accept GET (TODO accept HEAD as well) */
-    if (!h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
+    /* only accept GET and HEAD */
+    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))) {
+        is_get = 1;
+    } else if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"))) {
+        is_get = 0;
+    } else {
         return -1;
+    }
+
     /* do not handle non-normalized paths */
     if (req->path_normalized.base == NULL)
         return -1;
@@ -336,7 +358,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         }
         if (index_file->base == NULL && (self->flags & H2O_FILE_FLAG_DIR_LISTING) != 0) {
             rpath[rpath_len] = '\0';
-            if (send_dir_listing(req, rpath, rpath_len) == 0)
+            if (send_dir_listing(req, rpath, rpath_len, is_get) == 0)
                 return 0;
         }
     } else {
@@ -369,7 +391,7 @@ Opened:
     mime_type = h2o_mimemap_get_type(self->mimemap, h2o_get_filext(rpath, rpath_len));
 
     /* return file */
-    do_send_file(generator, req, 200, "OK", mime_type);
+    do_send_file(generator, req, 200, "OK", mime_type, is_get);
     return 0;
 
 NotModified:
