@@ -645,7 +645,10 @@ static void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *lo
 
 /* built-in generators */
 
-enum { H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION = 0x1 };
+enum {
+    H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION = 0x1,
+    H2O_SEND_ERROR_KEEP_CUSTOM_HEADERS    = 0x2
+};
 
 /**
  * sends the given string as the response
