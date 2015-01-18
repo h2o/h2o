@@ -106,7 +106,8 @@ void h2o_http2_encode_window_update_frame(h2o_buffer_t **buf, uint32_t stream_id
     dst = encode32u(dst, window_size_increment);
 }
 
-ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, const h2o_http2_settings_t *host_settings)
+ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, const h2o_http2_settings_t *host_settings,
+                               const char **err_desc)
 {
     if (len < H2O_HTTP2_FRAME_HEADER_SIZE)
         return H2O_HTTP2_ERROR_INCOMPLETE;
@@ -224,14 +225,20 @@ int h2o_http2_decode_goaway_payload(h2o_http2_goaway_payload_t *payload, const h
     return 0;
 }
 
-int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *payload, const h2o_http2_frame_t *frame)
+int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *payload, const h2o_http2_frame_t *frame,
+                                           const char **err_desc, int *err_is_stream_level)
 {
-    if (frame->length != 4)
+    if (frame->length != 4) {
+        *err_is_stream_level = 0;
         return H2O_HTTP2_ERROR_FRAME_SIZE;
+    }
 
     payload->window_size_increment = decode32u(frame->payload) & 0x7fffffff;
-    if (payload->window_size_increment == 0)
+    if (payload->window_size_increment == 0) {
+        *err_is_stream_level = frame->stream_id != 0;
+        *err_desc = "invaild WINDOW_UPDATE frame";
         return H2O_HTTP2_ERROR_PROTOCOL;
+    }
 
     return 0;
 }

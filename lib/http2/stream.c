@@ -64,7 +64,7 @@ void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     free(stream);
 }
 
-void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int errnum)
+void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     switch (stream->state) {
     case H2O_HTTP2_STREAM_STATE_IDLE:
