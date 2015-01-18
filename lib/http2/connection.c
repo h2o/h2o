@@ -393,7 +393,7 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
     h2o_http2_headers_payload_t payload;
     h2o_http2_stream_t *stream;
 
-    if (frame->stream_id == 0 || !(conn->max_open_stream_id < frame->stream_id)) {
+    if (frame->stream_id == 0 || (frame->stream_id & 1) == 0 || !(conn->max_open_stream_id < frame->stream_id)) {
         *err_desc = "invalid stream id in HEADERS frame";
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
