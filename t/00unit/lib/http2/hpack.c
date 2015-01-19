@@ -27,7 +27,8 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     h2o_hpack_header_table_t header_table;
     h2o_req_t req;
     h2o_iovec_t in;
-    int r, err_is_stream_level;
+    int r, pseudo_headers_map;
+    size_t content_length;
     const char *err_desc;
 
     memset(&header_table, 0, sizeof(header_table));
@@ -36,7 +37,8 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     memset(&req, 0, sizeof(req));
     h2o_mem_init_pool(&req.pool);
     in = first_req;
-    r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len, &err_desc, &err_is_stream_level);
+    r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len, &pseudo_headers_map, &content_length,
+                                &err_desc);
     ok(r == 0);
     ok(req.authority.len == 15);
     ok(memcmp(req.authority.base, H2O_STRLIT("www.example.com")) == 0);
@@ -53,7 +55,8 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     memset(&req, 0, sizeof(req));
     h2o_mem_init_pool(&req.pool);
     in = second_req;
-    r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len, &err_desc, &err_is_stream_level);
+    r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len, &pseudo_headers_map, &content_length,
+                                &err_desc);
     ok(r == 0);
     ok(req.authority.len == 15);
     ok(memcmp(req.authority.base, H2O_STRLIT("www.example.com")) == 0);
@@ -72,7 +75,8 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     memset(&req, 0, sizeof(req));
     h2o_mem_init_pool(&req.pool);
     in = third_req;
-    r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len, &err_desc, &err_is_stream_level);
+    r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len, &pseudo_headers_map, &content_length,
+                                &err_desc);
     ok(r == 0);
     ok(req.authority.len == 15);
     ok(memcmp(req.authority.base, H2O_STRLIT("www.example.com")) == 0);
