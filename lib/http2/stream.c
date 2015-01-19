@@ -33,14 +33,11 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     /* init properties (other than req) */
     memset(stream, 0, offsetof(h2o_http2_stream_t, req));
     stream->stream_id = stream_id;
-    if (src_req != NULL)
-        stream->is_half_closed = 1;
     stream->_ostr_final.do_send = finalostream_send;
     stream->_ostr_final.start_pull = finalostream_start_pull;
     stream->state = H2O_HTTP2_STREAM_STATE_IDLE;
     h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
     h2o_http2_window_init(&stream->input_window, &H2O_HTTP2_SETTINGS_HOST);
-    h2o_buffer_init(&stream->_req_body, &h2o_socket_buffer_prototype);
 
     /* init request */
     h2o_init_request(&stream->req, &conn->super, src_req);
@@ -57,7 +54,10 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     h2o_http2_conn_unregister_stream(conn, stream);
-    h2o_buffer_dispose(&stream->_req_body);
+    if (stream->_req_headers != NULL)
+        h2o_buffer_dispose(&stream->_req_headers);
+    if (stream->_req_body != NULL)
+        h2o_buffer_dispose(&stream->_req_body);
     h2o_dispose_request(&stream->req);
     if (stream->stream_id == 1 && conn->_http1_req_input != NULL)
         h2o_buffer_dispose(&conn->_http1_req_input);
@@ -68,7 +68,6 @@ void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     switch (stream->state) {
     case H2O_HTTP2_STREAM_STATE_IDLE:
-    case H2O_HTTP2_STREAM_STATE_RECV_PSUEDO_HEADERS:
     case H2O_HTTP2_STREAM_STATE_RECV_HEADERS:
     case H2O_HTTP2_STREAM_STATE_RECV_BODY:
     case H2O_HTTP2_STREAM_STATE_REQ_PENDING:

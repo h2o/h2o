@@ -27,18 +27,16 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     h2o_hpack_header_table_t header_table;
     h2o_req_t req;
     h2o_iovec_t in;
-    int r, allow_psuedo;
+    int r;
 
     memset(&header_table, 0, sizeof(header_table));
     header_table.hpack_capacity = 4096;
 
     memset(&req, 0, sizeof(req));
     h2o_mem_init_pool(&req.pool);
-    allow_psuedo = 1;
     in = first_req;
-    r = h2o_hpack_parse_headers(&req, &header_table, &allow_psuedo, (const uint8_t *)in.base, in.len);
+    r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len);
     ok(r == 0);
-    ok(allow_psuedo == 1);
     ok(req.authority.len == 15);
     ok(memcmp(req.authority.base, H2O_STRLIT("www.example.com")) == 0);
     ok(req.method.len == 3);
@@ -53,11 +51,9 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
 
     memset(&req, 0, sizeof(req));
     h2o_mem_init_pool(&req.pool);
-    allow_psuedo = 1;
     in = second_req;
-    r = h2o_hpack_parse_headers(&req, &header_table, &allow_psuedo, (const uint8_t *)in.base, in.len);
+    r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len);
     ok(r == 0);
-    ok(allow_psuedo == 0);
     ok(req.authority.len == 15);
     ok(memcmp(req.authority.base, H2O_STRLIT("www.example.com")) == 0);
     ok(req.method.len == 3);
@@ -74,11 +70,9 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
 
     memset(&req, 0, sizeof(req));
     h2o_mem_init_pool(&req.pool);
-    allow_psuedo = 1;
     in = third_req;
-    r = h2o_hpack_parse_headers(&req, &header_table, &allow_psuedo, (const uint8_t *)in.base, in.len);
+    r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len);
     ok(r == 0);
-    ok(allow_psuedo == 0);
     ok(req.authority.len == 15);
     ok(memcmp(req.authority.base, H2O_STRLIT("www.example.com")) == 0);
     ok(req.method.len == 3);

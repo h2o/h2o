@@ -365,10 +365,10 @@ void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table)
     free(header_table->entries);
 }
 
-int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, int *allow_psuedo, const uint8_t *src,
-                            size_t len)
+int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len)
 {
     const uint8_t *src_end = src + len;
+    int allow_pseudo = 1;
 
     while (src != src_end) {
         struct st_h2o_decode_header_result_t r;
@@ -380,7 +380,7 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                 return -1;
         }
         if (r.name->base[0] == ':') {
-            if (*allow_psuedo) {
+            if (allow_pseudo) {
                 /* FIXME validate the chars in the value (e.g. reject SP in path) */
                 if (r.name == &H2O_TOKEN_AUTHORITY->buf) {
                     /* FIXME should we perform this check? */
@@ -406,7 +406,7 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                 return -1;
             }
         } else {
-            *allow_psuedo = 0;
+            allow_pseudo = 0;
             if (h2o_iovec_is_token(r.name)) {
                 if (r.name == &H2O_TOKEN_CONTENT_LENGTH->buf) {
                     /* ignore (draft 15 8.1.2.6 says: a server MAY send an HTTP response prior to closing or resetting the stream if
