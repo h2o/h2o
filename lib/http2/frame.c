@@ -250,10 +250,16 @@ int h2o_http2_decode_ping_payload(h2o_http2_ping_payload_t *payload, const h2o_h
     return 0;
 }
 
-int h2o_http2_decode_goaway_payload(h2o_http2_goaway_payload_t *payload, const h2o_http2_frame_t *frame)
+int h2o_http2_decode_goaway_payload(h2o_http2_goaway_payload_t *payload, const h2o_http2_frame_t *frame, const char **err_desc)
 {
-    if (frame->length < 8)
-        return -1;
+    if (frame->stream_id != 0) {
+        *err_desc = "invalid stream id in GOAWAY frame";
+        return H2O_HTTP2_ERROR_PROTOCOL;
+    }
+    if (frame->length < 8) {
+        *err_desc = "invalid GOAWAY frame";
+        return H2O_HTTP2_ERROR_FRAME_SIZE; /* TODO http2-spec #691 */
+    }
 
     payload->last_stream_id = decode32u(frame->payload) & 0x7fffffff;
     payload->error_code = decode32u(frame->payload + 4);

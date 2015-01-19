@@ -524,13 +524,10 @@ static int handle_window_update_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t 
 static int handle_goaway_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, const char **err_desc)
 {
     h2o_http2_goaway_payload_t payload;
+    int ret;
 
-    assert(conn->state == H2O_HTTP2_CONN_STATE_OPEN);
-
-    if (frame->stream_id != 0 || h2o_http2_decode_goaway_payload(&payload, frame) != 0) {
-        *err_desc = "invalid GOAWAY frame";
-        return H2O_HTTP2_ERROR_PROTOCOL;
-    }
+    if ((ret = h2o_http2_decode_goaway_payload(&payload, frame, err_desc)) != 0)
+        return ret;
 
     /* nothing to do, since we do not open new streams by ourselves */
     return 0;
