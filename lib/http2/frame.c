@@ -130,15 +130,24 @@ ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, siz
     return H2O_HTTP2_FRAME_HEADER_SIZE + frame->length;
 }
 
-int h2o_http2_decode_data_payload(h2o_http2_data_payload_t *payload, const h2o_http2_frame_t *frame)
+int h2o_http2_decode_data_payload(h2o_http2_data_payload_t *payload, const h2o_http2_frame_t *frame, const char **err_desc)
 {
+    if (frame->stream_id == 0) {
+        *err_desc = "invalid stream id in DATA frame";
+        return H2O_HTTP2_ERROR_PROTOCOL;
+    }
+
     if ((frame->flags & H2O_HTTP2_FRAME_FLAG_PADDED) != 0) {
         uint8_t padding_length;
-        if (frame->length < 1)
-            return -1;
+        if (frame->length < 1) {
+            *err_desc = "invalid DATA frame";
+            return H2O_HTTP2_ERROR_PROTOCOL;
+        }
         padding_length = frame->payload[0];
-        if (frame->length < 1 + padding_length)
-            return -1;
+        if (frame->length < 1 + padding_length) {
+            *err_desc = "invalid DATA frame";
+            return H2O_HTTP2_ERROR_PROTOCOL;
+        }
         payload->data = frame->payload + 1;
         payload->length = frame->length - (1 + padding_length);
     } else {

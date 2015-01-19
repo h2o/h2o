@@ -340,11 +340,10 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
 {
     h2o_http2_data_payload_t payload;
     h2o_http2_stream_t *stream;
+    int ret;
 
-    if (frame->stream_id == 0 || h2o_http2_decode_data_payload(&payload, frame) != 0) {
-        *err_desc = "invalid DATA frame";
-        return H2O_HTTP2_ERROR_PROTOCOL;
-    }
+    if ((ret = h2o_http2_decode_data_payload(&payload, frame, err_desc)) != 0)
+        return ret;
 
     stream = h2o_http2_conn_get_stream(conn, frame->stream_id);
 
