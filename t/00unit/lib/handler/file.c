@@ -86,6 +86,16 @@ void test_lib__file_c()
     }
     {
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        conn->req.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
+        conn->req.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(conn->body->size == 0);
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
         conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
         h2o_loopback_run_loop(conn);
@@ -93,6 +103,16 @@ void test_lib__file_c()
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
         ok(conn->body->size == 1000);
         ok(strcmp(sha1sum(conn->body->bytes, conn->body->size), "dfd3ae1f5c475555fad62efe42e07309fa45f2ed") == 0);
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        conn->req.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
+        conn->req.path = h2o_iovec_init(H2O_STRLIT("/1000000.txt"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(conn->body->size == 0);
         h2o_loopback_destroy(conn);
     }
     {
@@ -133,7 +153,6 @@ void test_lib__file_c()
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 301);
         ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "http://default/index_txt/"));
-        ok(conn->body->size == 0);
         h2o_loopback_destroy(conn);
     }
     {
@@ -152,7 +171,6 @@ void test_lib__file_c()
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 301);
         ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "http://default/index_txt_as_dir/index.txt/"));
-        ok(conn->body->size == 0);
         h2o_loopback_destroy(conn);
     }
     {
