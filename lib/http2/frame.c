@@ -219,10 +219,17 @@ int h2o_http2_decode_priority_payload(h2o_http2_priority_t *payload, const h2o_h
     return 0;
 }
 
-int h2o_http2_decode_rst_stream_payload(h2o_http2_rst_stream_payload_t *payload, const h2o_http2_frame_t *frame)
+int h2o_http2_decode_rst_stream_payload(h2o_http2_rst_stream_payload_t *payload, const h2o_http2_frame_t *frame,
+                                        const char **err_desc)
 {
-    if (frame->length != sizeof(payload->error_code))
-        return -1;
+    if (frame->stream_id == 0) {
+        *err_desc = "invalid stream id in RST_STREAM frame";
+        return H2O_HTTP2_ERROR_PROTOCOL;
+    }
+    if (frame->length != sizeof(payload->error_code)) {
+        *err_desc = "invalid RST_STREAM frame";
+        return H2O_HTTP2_ERROR_FRAME_SIZE;
+    }
 
     payload->error_code = decode32u(frame->payload);
     return 0;
