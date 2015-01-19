@@ -62,6 +62,16 @@ static h2o_iovec_t *alloc_buf(h2o_mem_pool_t *pool, size_t len)
     return buf;
 }
 
+static int contains_uppercase(const char *s, size_t len)
+{
+    for (; len != 0; ++s, --len) {
+        unsigned ch = *(unsigned char*)s;
+        if (ch - 'A' < 26U)
+            return 1;
+    }
+    return 0;
+}
+
 static int32_t decode_int(const uint8_t **src, const uint8_t *src_end, size_t prefix_bits)
 {
     int32_t value, mult;
@@ -293,6 +303,10 @@ Redo:
         const h2o_token_t *name_token;
         if ((result->name = decode_string(pool, src, src_end)) == NULL)
             return H2O_HTTP2_ERROR_COMPRESSION;
+        if (contains_uppercase(result->name->base, result->name->len)) {
+            *err_desc = "found an upper-case letter in header name";
+            return H2O_HTTP2_ERROR_PROTOCOL;
+        }
         /* predefined header names should be interned */
         if ((name_token = h2o_lookup_token(result->name->base, result->name->len)) != NULL)
             result->name = (h2o_iovec_t *)&name_token->buf;
