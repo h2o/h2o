@@ -206,13 +206,14 @@ static void on_head(h2o_socket_t *sock, int status)
     reader = on_body_until_close;
     client->_can_keepalive = minor_version >= 1;
     for (i = 0; i != num_headers; ++i) {
-        if (h2o_lcstris(headers[i].name, headers[i].name_len, H2O_STRLIT("connection"))) {
+        h2o_strtolower((char *)headers[i].name, headers[i].name_len);
+        if (h2o_memis(headers[i].name, headers[i].name_len, H2O_STRLIT("connection"))) {
             if (h2o_contains_token(headers[i].value, headers[i].value_len, H2O_STRLIT("keep-alive"))) {
                 client->_can_keepalive = 1;
             } else {
                 client->_can_keepalive = 0;
             }
-        } else if (h2o_lcstris(headers[i].name, headers[i].name_len, H2O_STRLIT("transfer-encoding"))) {
+        } else if (h2o_memis(headers[i].name, headers[i].name_len, H2O_STRLIT("transfer-encoding"))) {
             if (h2o_memis(headers[i].value, headers[i].value_len, H2O_STRLIT("chunked"))) {
                 /* precond: _body_decoder.chunked is zero-filled */
                 client->_body_decoder.chunked.decoder.consume_trailer = 1;
@@ -223,7 +224,7 @@ static void on_head(h2o_socket_t *sock, int status)
                 on_error_before_head(client, "unexpected type of transfer-encoding");
                 return;
             }
-        } else if (h2o_lcstris(headers[i].name, headers[i].name_len, H2O_STRLIT("content-length"))) {
+        } else if (h2o_memis(headers[i].name, headers[i].name_len, H2O_STRLIT("content-length"))) {
             if ((client->_body_decoder.content_length.bytesleft = h2o_strtosize(headers[i].value, headers[i].value_len)) ==
                 SIZE_MAX) {
                 on_error_before_head(client, "invalid content-length");
