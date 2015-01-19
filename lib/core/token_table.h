@@ -83,285 +83,285 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
 {
     switch (len) {
     case 3:
-        switch (h2o_tolower(name[2])) {
+        switch (name[2]) {
         case 'a':
-            if (h2o__lcstris_core(name, "vi", 2))
+            if (memcmp(name, "vi", 2) == 0)
                 return H2O_TOKEN_VIA;
             break;
         case 'e':
-            if (h2o__lcstris_core(name, "ag", 2))
+            if (memcmp(name, "ag", 2) == 0)
                 return H2O_TOKEN_AGE;
             break;
         }
         break;
     case 4:
-        switch (h2o_tolower(name[3])) {
+        switch (name[3]) {
         case 'e':
-            if (h2o__lcstris_core(name, "dat", 3))
+            if (memcmp(name, "dat", 3) == 0)
                 return H2O_TOKEN_DATE;
             break;
         case 'g':
-            if (h2o__lcstris_core(name, "eta", 3))
+            if (memcmp(name, "eta", 3) == 0)
                 return H2O_TOKEN_ETAG;
             break;
         case 'k':
-            if (h2o__lcstris_core(name, "lin", 3))
+            if (memcmp(name, "lin", 3) == 0)
                 return H2O_TOKEN_LINK;
             break;
         case 'm':
-            if (h2o__lcstris_core(name, "fro", 3))
+            if (memcmp(name, "fro", 3) == 0)
                 return H2O_TOKEN_FROM;
             break;
         case 't':
-            if (h2o__lcstris_core(name, "hos", 3))
+            if (memcmp(name, "hos", 3) == 0)
                 return H2O_TOKEN_HOST;
             break;
         case 'y':
-            if (h2o__lcstris_core(name, "var", 3))
+            if (memcmp(name, "var", 3) == 0)
                 return H2O_TOKEN_VARY;
             break;
         }
         break;
     case 5:
-        switch (h2o_tolower(name[4])) {
+        switch (name[4]) {
         case 'e':
-            if (h2o__lcstris_core(name, "rang", 4))
+            if (memcmp(name, "rang", 4) == 0)
                 return H2O_TOKEN_RANGE;
             break;
         case 'h':
-            if (h2o__lcstris_core(name, ":pat", 4))
+            if (memcmp(name, ":pat", 4) == 0)
                 return H2O_TOKEN_PATH;
             break;
         case 'w':
-            if (h2o__lcstris_core(name, "allo", 4))
+            if (memcmp(name, "allo", 4) == 0)
                 return H2O_TOKEN_ALLOW;
             break;
         }
         break;
     case 6:
-        switch (h2o_tolower(name[5])) {
+        switch (name[5]) {
         case 'e':
-            if (h2o__lcstris_core(name, "cooki", 5))
+            if (memcmp(name, "cooki", 5) == 0)
                 return H2O_TOKEN_COOKIE;
             break;
         case 'r':
-            if (h2o__lcstris_core(name, "serve", 5))
+            if (memcmp(name, "serve", 5) == 0)
                 return H2O_TOKEN_SERVER;
             break;
         case 't':
-            if (h2o__lcstris_core(name, "accep", 5))
+            if (memcmp(name, "accep", 5) == 0)
                 return H2O_TOKEN_ACCEPT;
-            if (h2o__lcstris_core(name, "expec", 5))
+            if (memcmp(name, "expec", 5) == 0)
                 return H2O_TOKEN_EXPECT;
             break;
         }
         break;
     case 7:
-        switch (h2o_tolower(name[6])) {
+        switch (name[6]) {
         case 'd':
-            if (h2o__lcstris_core(name, ":metho", 6))
+            if (memcmp(name, ":metho", 6) == 0)
                 return H2O_TOKEN_METHOD;
             break;
         case 'e':
-            if (h2o__lcstris_core(name, ":schem", 6))
+            if (memcmp(name, ":schem", 6) == 0)
                 return H2O_TOKEN_SCHEME;
-            if (h2o__lcstris_core(name, "upgrad", 6))
+            if (memcmp(name, "upgrad", 6) == 0)
                 return H2O_TOKEN_UPGRADE;
             break;
         case 'h':
-            if (h2o__lcstris_core(name, "refres", 6))
+            if (memcmp(name, "refres", 6) == 0)
                 return H2O_TOKEN_REFRESH;
             break;
         case 'r':
-            if (h2o__lcstris_core(name, "refere", 6))
+            if (memcmp(name, "refere", 6) == 0)
                 return H2O_TOKEN_REFERER;
             break;
         case 's':
-            if (h2o__lcstris_core(name, ":statu", 6))
+            if (memcmp(name, ":statu", 6) == 0)
                 return H2O_TOKEN_STATUS;
-            if (h2o__lcstris_core(name, "expire", 6))
+            if (memcmp(name, "expire", 6) == 0)
                 return H2O_TOKEN_EXPIRES;
             break;
         }
         break;
     case 8:
-        switch (h2o_tolower(name[7])) {
+        switch (name[7]) {
         case 'e':
-            if (h2o__lcstris_core(name, "if-rang", 7))
+            if (memcmp(name, "if-rang", 7) == 0)
                 return H2O_TOKEN_IF_RANGE;
             break;
         case 'h':
-            if (h2o__lcstris_core(name, "if-matc", 7))
+            if (memcmp(name, "if-matc", 7) == 0)
                 return H2O_TOKEN_IF_MATCH;
             break;
         case 'n':
-            if (h2o__lcstris_core(name, "locatio", 7))
+            if (memcmp(name, "locatio", 7) == 0)
                 return H2O_TOKEN_LOCATION;
             break;
         }
         break;
     case 10:
-        switch (h2o_tolower(name[9])) {
+        switch (name[9]) {
         case 'e':
-            if (h2o__lcstris_core(name, "set-cooki", 9))
+            if (memcmp(name, "set-cooki", 9) == 0)
                 return H2O_TOKEN_SET_COOKIE;
             break;
         case 'n':
-            if (h2o__lcstris_core(name, "connectio", 9))
+            if (memcmp(name, "connectio", 9) == 0)
                 return H2O_TOKEN_CONNECTION;
             break;
         case 't':
-            if (h2o__lcstris_core(name, "user-agen", 9))
+            if (memcmp(name, "user-agen", 9) == 0)
                 return H2O_TOKEN_USER_AGENT;
             break;
         case 'y':
-            if (h2o__lcstris_core(name, ":authorit", 9))
+            if (memcmp(name, ":authorit", 9) == 0)
                 return H2O_TOKEN_AUTHORITY;
             break;
         }
         break;
     case 11:
-        switch (h2o_tolower(name[10])) {
+        switch (name[10]) {
         case 'r':
-            if (h2o__lcstris_core(name, "retry-afte", 10))
+            if (memcmp(name, "retry-afte", 10) == 0)
                 return H2O_TOKEN_RETRY_AFTER;
             break;
         }
         break;
     case 12:
-        switch (h2o_tolower(name[11])) {
+        switch (name[11]) {
         case 'e':
-            if (h2o__lcstris_core(name, "content-typ", 11))
+            if (memcmp(name, "content-typ", 11) == 0)
                 return H2O_TOKEN_CONTENT_TYPE;
             break;
         case 's':
-            if (h2o__lcstris_core(name, "max-forward", 11))
+            if (memcmp(name, "max-forward", 11) == 0)
                 return H2O_TOKEN_MAX_FORWARDS;
             break;
         }
         break;
     case 13:
-        switch (h2o_tolower(name[12])) {
+        switch (name[12]) {
         case 'd':
-            if (h2o__lcstris_core(name, "last-modifie", 12))
+            if (memcmp(name, "last-modifie", 12) == 0)
                 return H2O_TOKEN_LAST_MODIFIED;
             break;
         case 'e':
-            if (h2o__lcstris_core(name, "content-rang", 12))
+            if (memcmp(name, "content-rang", 12) == 0)
                 return H2O_TOKEN_CONTENT_RANGE;
             break;
         case 'h':
-            if (h2o__lcstris_core(name, "if-none-matc", 12))
+            if (memcmp(name, "if-none-matc", 12) == 0)
                 return H2O_TOKEN_IF_NONE_MATCH;
             break;
         case 'l':
-            if (h2o__lcstris_core(name, "cache-contro", 12))
+            if (memcmp(name, "cache-contro", 12) == 0)
                 return H2O_TOKEN_CACHE_CONTROL;
-            if (h2o__lcstris_core(name, "x-reproxy-ur", 12))
+            if (memcmp(name, "x-reproxy-ur", 12) == 0)
                 return H2O_TOKEN_X_REPROXY_URL;
             break;
         case 'n':
-            if (h2o__lcstris_core(name, "authorizatio", 12))
+            if (memcmp(name, "authorizatio", 12) == 0)
                 return H2O_TOKEN_AUTHORIZATION;
             break;
         case 's':
-            if (h2o__lcstris_core(name, "accept-range", 12))
+            if (memcmp(name, "accept-range", 12) == 0)
                 return H2O_TOKEN_ACCEPT_RANGES;
             break;
         }
         break;
     case 14:
-        switch (h2o_tolower(name[13])) {
+        switch (name[13]) {
         case 'h':
-            if (h2o__lcstris_core(name, "content-lengt", 13))
+            if (memcmp(name, "content-lengt", 13) == 0)
                 return H2O_TOKEN_CONTENT_LENGTH;
             break;
         case 's':
-            if (h2o__lcstris_core(name, "http2-setting", 13))
+            if (memcmp(name, "http2-setting", 13) == 0)
                 return H2O_TOKEN_HTTP2_SETTINGS;
             break;
         case 't':
-            if (h2o__lcstris_core(name, "accept-charse", 13))
+            if (memcmp(name, "accept-charse", 13) == 0)
                 return H2O_TOKEN_ACCEPT_CHARSET;
             break;
         }
         break;
     case 15:
-        switch (h2o_tolower(name[14])) {
+        switch (name[14]) {
         case 'e':
-            if (h2o__lcstris_core(name, "accept-languag", 14))
+            if (memcmp(name, "accept-languag", 14) == 0)
                 return H2O_TOKEN_ACCEPT_LANGUAGE;
             break;
         case 'g':
-            if (h2o__lcstris_core(name, "accept-encodin", 14))
+            if (memcmp(name, "accept-encodin", 14) == 0)
                 return H2O_TOKEN_ACCEPT_ENCODING;
             break;
         }
         break;
     case 16:
-        switch (h2o_tolower(name[15])) {
+        switch (name[15]) {
         case 'e':
-            if (h2o__lcstris_core(name, "content-languag", 15))
+            if (memcmp(name, "content-languag", 15) == 0)
                 return H2O_TOKEN_CONTENT_LANGUAGE;
-            if (h2o__lcstris_core(name, "www-authenticat", 15))
+            if (memcmp(name, "www-authenticat", 15) == 0)
                 return H2O_TOKEN_WWW_AUTHENTICATE;
             break;
         case 'g':
-            if (h2o__lcstris_core(name, "content-encodin", 15))
+            if (memcmp(name, "content-encodin", 15) == 0)
                 return H2O_TOKEN_CONTENT_ENCODING;
             break;
         case 'n':
-            if (h2o__lcstris_core(name, "content-locatio", 15))
+            if (memcmp(name, "content-locatio", 15) == 0)
                 return H2O_TOKEN_CONTENT_LOCATION;
             break;
         }
         break;
     case 17:
-        switch (h2o_tolower(name[16])) {
+        switch (name[16]) {
         case 'e':
-            if (h2o__lcstris_core(name, "if-modified-sinc", 16))
+            if (memcmp(name, "if-modified-sinc", 16) == 0)
                 return H2O_TOKEN_IF_MODIFIED_SINCE;
             break;
         case 'g':
-            if (h2o__lcstris_core(name, "transfer-encodin", 16))
+            if (memcmp(name, "transfer-encodin", 16) == 0)
                 return H2O_TOKEN_TRANSFER_ENCODING;
             break;
         }
         break;
     case 18:
-        switch (h2o_tolower(name[17])) {
+        switch (name[17]) {
         case 'e':
-            if (h2o__lcstris_core(name, "proxy-authenticat", 17))
+            if (memcmp(name, "proxy-authenticat", 17) == 0)
                 return H2O_TOKEN_PROXY_AUTHENTICATE;
             break;
         }
         break;
     case 19:
-        switch (h2o_tolower(name[18])) {
+        switch (name[18]) {
         case 'e':
-            if (h2o__lcstris_core(name, "if-unmodified-sinc", 18))
+            if (memcmp(name, "if-unmodified-sinc", 18) == 0)
                 return H2O_TOKEN_IF_UNMODIFIED_SINCE;
             break;
         case 'n':
-            if (h2o__lcstris_core(name, "content-dispositio", 18))
+            if (memcmp(name, "content-dispositio", 18) == 0)
                 return H2O_TOKEN_CONTENT_DISPOSITION;
-            if (h2o__lcstris_core(name, "proxy-authorizatio", 18))
+            if (memcmp(name, "proxy-authorizatio", 18) == 0)
                 return H2O_TOKEN_PROXY_AUTHORIZATION;
             break;
         }
         break;
     case 25:
-        switch (h2o_tolower(name[24])) {
+        switch (name[24]) {
         case 'y':
-            if (h2o__lcstris_core(name, "strict-transport-securit", 24))
+            if (memcmp(name, "strict-transport-securit", 24) == 0)
                 return H2O_TOKEN_STRICT_TRANSPORT_SECURITY;
             break;
         }
         break;
     case 27:
-        switch (h2o_tolower(name[26])) {
+        switch (name[26]) {
         case 'n':
-            if (h2o__lcstris_core(name, "access-control-allow-origi", 26))
+            if (memcmp(name, "access-control-allow-origi", 26) == 0)
                 return H2O_TOKEN_ACCESS_CONTROL_ALLOW_ORIGIN;
             break;
         }
