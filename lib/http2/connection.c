@@ -265,7 +265,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
 #undef EXPECTED_MAP
 
     /* handle the request */
-    if (kh_size(conn->open_streams) > H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams) {
+    if (kh_size(conn->open_streams) - conn->num_steams_for_priority > H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams) {
         ret = H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM;
         goto SendRSTStream;
     }
@@ -336,21 +336,33 @@ static void update_input_window(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_
     }
 }
 
+static int open_stream(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_http2_stream_t **stream, const char **err_desc)
+{
+    if (conn->num_steams_for_priority >= conn->super.ctx->globalconf->http2.max_streams_for_priority) {
+        *err_desc = "too many streams in idle/closed state";
+        return H2O_HTTP2_ERROR_INTERNAL; /* FIXME? */
+    }
+    *stream = h2o_http2_stream_open(conn, stream_id, NULL);
+    return 0;
+}
+
 static int set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const h2o_http2_priority_t *priority,
-                        int scheduler_is_open)
+                        int scheduler_is_open, const char **err_desc)
 {
     h2o_http2_scheduler_node_t *parent_sched;
 
     /* cannot depend on itself */
     if (stream->stream_id == priority->dependency)
-        return -1;
+        return H2O_HTTP2_ERROR_PROTOCOL;
 
     /* determine the parent */
     if (priority->dependency != 0) {
         h2o_http2_stream_t *parent_stream = h2o_http2_conn_get_stream(conn, priority->dependency);
         if (parent_stream == NULL) {
-            parent_stream = h2o_http2_stream_open(conn, priority->dependency, NULL);
-            set_priority(conn, parent_stream, &h2o_http2_default_priority, 0);
+            int ret = open_stream(conn, priority->dependency, &parent_stream, err_desc);
+            if (ret != 0)
+                return ret;
+            set_priority(conn, parent_stream, &h2o_http2_default_priority, 0, err_desc); /* guaranteed to succeed */
         }
         parent_sched = &parent_stream->_refs.scheduler.node;
     } else {
@@ -436,12 +448,14 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
 
     /* open or determine the stream and prepare */
     if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) != NULL) {
-        if ((frame->flags & H2O_HTTP2_FRAME_FLAG_PRIORITY) != 0) {
-            set_priority(conn, stream, &payload.priority, 1);
-        }
+        if ((frame->flags & H2O_HTTP2_FRAME_FLAG_PRIORITY) != 0)
+            if ((ret = set_priority(conn, stream, &payload.priority, 1, err_desc)) != 0)
+                return ret;
     } else {
-        stream = h2o_http2_stream_open(conn, frame->stream_id, NULL);
-        set_priority(conn, stream, &payload.priority, 0);
+        if ((ret = open_stream(conn, frame->stream_id, &stream, err_desc)) != 0)
+            return ret;
+        if ((ret = set_priority(conn, stream, &payload.priority, 0, err_desc)) != 0)
+            return ret;
     }
     h2o_http2_stream_prepare_for_request(conn, stream);
 
@@ -477,10 +491,13 @@ static int handle_priority_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
     }
 
     if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) != NULL) {
-        set_priority(conn, stream, &payload, 1);
+        if ((ret = set_priority(conn, stream, &payload, 1, err_desc)) != 0)
+            return ret;
     } else {
-        stream = h2o_http2_stream_open(conn, frame->stream_id, NULL);
-        set_priority(conn, stream, &payload, 0);
+        if ((ret = open_stream(conn, frame->stream_id, &stream, err_desc)) != 0)
+            return ret;
+        if ((ret = set_priority(conn, stream, &payload, 0, err_desc)) != 0)
+            return ret;
     }
 
     return 0;

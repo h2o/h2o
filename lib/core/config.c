@@ -83,6 +83,7 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->http1.upgrade_to_http2 = H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2;
     config->http2.idle_timeout = H2O_DEFAULT_HTTP2_IDLE_TIMEOUT;
     config->http2.max_concurrent_requests_per_connection = H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams;
+    config->http2.max_streams_for_priority = 16;
 
     h2o_configurator__init_core(config);
 }

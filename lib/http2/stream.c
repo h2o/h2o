@@ -48,6 +48,7 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     stream->req._ostr_top = &stream->_ostr_final;
 
     h2o_http2_conn_register_stream(conn, stream);
+    ++conn->num_steams_for_priority;
 
     return stream;
 }

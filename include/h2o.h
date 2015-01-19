@@ -223,6 +223,10 @@ struct st_h2o_globalconf_t {
          * specified by this property in order to limit the resources allocated to a single connection.
          */
         size_t max_concurrent_requests_per_connection;
+        /**
+         * maximum nuber of streams (per connection) to be allowed in IDLE / CLOSED state (used for tracking dependencies).
+         */
+        size_t max_streams_for_priority;
     } http2;
 
     size_t _num_config_slots;

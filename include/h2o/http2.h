@@ -216,6 +216,7 @@ struct st_h2o_http2_conn_t {
     uint32_t max_open_stream_id;
     uint32_t max_processed_stream_id;
     uint32_t num_responding_streams;
+    uint32_t num_steams_for_priority;
     /* internal */
     h2o_http2_scheduler_node_t scheduler;
     h2o_http2_conn_state_t state;
@@ -309,6 +310,7 @@ inline void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_htt
     assert(h2o_http2_scheduler_is_open(&stream->_refs.scheduler));
     assert(stream->state == H2O_HTTP2_STREAM_STATE_IDLE);
     stream->state = H2O_HTTP2_STREAM_STATE_RECV_HEADERS;
+    --conn->num_steams_for_priority;
     h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
 }
 
