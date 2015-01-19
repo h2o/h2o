@@ -63,7 +63,7 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     ok(req.scheme.len == 4);
     ok(memcmp(req.scheme.base, H2O_STRLIT("http")) == 0);
     ok(req.headers.size == 1);
-    ok(h2o_lcstris(req.headers.entries[0].name->base, req.headers.entries[0].name->len, H2O_STRLIT("cache-control")));
+    ok(h2o_memis(req.headers.entries[0].name->base, req.headers.entries[0].name->len, H2O_STRLIT("cache-control")));
     ok(h2o_lcstris(req.headers.entries[0].value.base, req.headers.entries[0].value.len, H2O_STRLIT("no-cache")));
 
     h2o_mem_clear_pool(&req.pool);
@@ -82,7 +82,7 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     ok(req.scheme.len == 5);
     ok(memcmp(req.scheme.base, H2O_STRLIT("https")) == 0);
     ok(req.headers.size == 1);
-    ok(h2o_lcstris(req.headers.entries[0].name->base, req.headers.entries[0].name->len, H2O_STRLIT("custom-key")));
+    ok(h2o_memis(req.headers.entries[0].name->base, req.headers.entries[0].name->len, H2O_STRLIT("custom-key")));
     ok(h2o_lcstris(req.headers.entries[0].value.base, req.headers.entries[0].value.len, H2O_STRLIT("custom-value")));
 
     h2o_hpack_dispose_header_table(&header_table);
