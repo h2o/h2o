@@ -1,6 +1,6 @@
 Revision history for H2O.
 
-0.9.1 TBD
+0.9.1 2015-01-19 21:13:00+0000
 	- added configuration directives: ssl/cipher-suite, ssl/ocsp-update-interval, ssl/ocsp-max-failures, expires, file.send-gzip
 	- [http2] added support for draft-16 (draft-14 is also supported)
 	- [http2] dependency-based prioritization
