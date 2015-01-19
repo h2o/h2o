@@ -38,6 +38,7 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     stream->state = H2O_HTTP2_STREAM_STATE_IDLE;
     h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
     h2o_http2_window_init(&stream->input_window, &H2O_HTTP2_SETTINGS_HOST);
+    stream->_expected_content_length = SIZE_MAX;
 
     /* init request */
     h2o_init_request(&stream->req, &conn->super, src_req);
