@@ -80,6 +80,7 @@ typedef struct st_h2o_token_t {
     char http2_static_table_name_index; /* non-zero if any */
     char proxy_should_drop;
     char is_init_header_special;
+    char http2_should_reject;
 } h2o_token_t;
 
 #include "h2o/token.h"
