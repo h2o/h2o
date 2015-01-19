@@ -70,6 +70,7 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, 1, 0, 0, 0},
                              {{H2O_STRLIT("server")}, 54, 1, 0, 0},
                              {{H2O_STRLIT("set-cookie")}, 55, 0, 0, 0},
                              {{H2O_STRLIT("strict-transport-security")}, 56, 0, 0, 0},
+                             {{H2O_STRLIT("te")}, 0, 1, 0, 1},
                              {{H2O_STRLIT("transfer-encoding")}, 57, 1, 1, 1},
                              {{H2O_STRLIT("upgrade")}, 0, 1, 1, 1},
                              {{H2O_STRLIT("user-agent")}, 58, 0, 0, 0},
@@ -77,11 +78,19 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, 1, 0, 0, 0},
                              {{H2O_STRLIT("via")}, 60, 0, 0, 0},
                              {{H2O_STRLIT("www-authenticate")}, 61, 0, 0, 0},
                              {{H2O_STRLIT("x-reproxy-url")}, 0, 0, 0, 0}};
-size_t h2o__num_tokens = 56;
+size_t h2o__num_tokens = 57;
 
 const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
 {
     switch (len) {
+    case 2:
+        switch (name[1]) {
+        case 'e':
+            if (memcmp(name, "t", 1) == 0)
+                return H2O_TOKEN_TE;
+            break;
+        }
+        break;
     case 3:
         switch (name[2]) {
         case 'a':

@@ -65,7 +65,7 @@ static h2o_iovec_t *alloc_buf(h2o_mem_pool_t *pool, size_t len)
 static int contains_uppercase(const char *s, size_t len)
 {
     for (; len != 0; ++s, --len) {
-        unsigned ch = *(unsigned char*)s;
+        unsigned ch = *(unsigned char *)s;
         if (ch - 'A' < 26U)
             return 1;
     }
@@ -426,9 +426,15 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                 if (token == H2O_TOKEN_CONTENT_LENGTH) {
                     /* ignore (draft 15 8.1.2.6 says: a server MAY send an HTTP response prior to closing or resetting the stream if
                      * content-length and the actual length differs) */
-                } else if (token->http2_should_reject) {
-                    return H2O_HTTP2_ERROR_PROTOCOL;
                 } else {
+                    /* reject headers as defined in draft-16 8.1.2.2 */
+                    if (token->http2_should_reject) {
+                        if (token == H2O_TOKEN_TE && h2o_lcstris(r.value->base, r.value->len, H2O_STRLIT("trailers"))) {
+                            /* do not reject */
+                        } else {
+                            return H2O_HTTP2_ERROR_PROTOCOL;
+                        }
+                    }
                     h2o_add_header(&req->pool, &req->headers, token, r.value->base, r.value->len);
                 }
             } else {
