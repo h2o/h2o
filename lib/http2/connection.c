@@ -421,13 +421,10 @@ static int handle_priority_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
 {
     h2o_http2_priority_t payload;
     h2o_http2_stream_t *stream;
+    int ret;
 
-    if (frame->stream_id == 0) {
-        *err_desc = "invalid stream id";
-        return H2O_HTTP2_ERROR_PROTOCOL;
-    }
-    if (h2o_http2_decode_priority_payload(&payload, frame) != 0)
-        return H2O_HTTP2_ERROR_FRAME_SIZE;
+    if ((ret = h2o_http2_decode_priority_payload(&payload, frame, err_desc)) != 0)
+        return ret;
     if (frame->stream_id == payload.dependency) {
         *err_desc = "stream cannot depend on itself";
         return H2O_HTTP2_ERROR_PROTOCOL;
