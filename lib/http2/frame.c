@@ -167,17 +167,26 @@ static const uint8_t *decode_priority(h2o_http2_priority_t *priority, const uint
     return src;
 }
 
-int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const h2o_http2_frame_t *frame)
+int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const h2o_http2_frame_t *frame, const char **err_desc)
 {
     const uint8_t *src = frame->payload, *src_end = frame->payload + frame->length;
 
+    if (frame->stream_id == 0) {
+        *err_desc = "invalid stream id in HEADERS frame";
+        return H2O_HTTP2_ERROR_PROTOCOL;
+    }
+
     if ((frame->flags & H2O_HTTP2_FRAME_FLAG_PADDED) != 0) {
         uint32_t padlen;
-        if (src == src_end)
-            return -1;
+        if (src == src_end) {
+            *err_desc = "invalid HEADERS frame";
+            return H2O_HTTP2_ERROR_PROTOCOL;
+        }
         padlen = *src++;
-        if (src_end - src < padlen)
-            return -1;
+        if (src_end - src < padlen) {
+            *err_desc = "invalid HEADERS frame";
+            return H2O_HTTP2_ERROR_PROTOCOL;
+        }
         src_end -= padlen;
     }
 
