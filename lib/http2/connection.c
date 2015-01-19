@@ -237,10 +237,12 @@ static void update_stream_output_window(h2o_http2_stream_t *stream, ssize_t delt
 static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const uint8_t *src, size_t len,
                                    const char **err_desc)
 {
+    int ret, err_is_stream_level;
+
     assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS);
 
-    if (h2o_hpack_parse_headers(&stream->req, &conn->_input_header_table, src, len) != 0)
-        return H2O_HTTP2_ERROR_COMPRESSION;
+    if ((ret = h2o_hpack_parse_headers(&stream->req, &conn->_input_header_table, src, len, err_desc)) != 0)
+        return ret;
 
     /* handle the request */
     conn->_read_expect = expect_default;
@@ -252,7 +254,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         }
     } else {
         send_stream_error(conn, stream->stream_id, H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM);
-        h2o_http2_stream_close(conn, stream);
+        h2o_http2_stream_reset(conn, stream);
     }
 
     return 0;
