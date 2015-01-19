@@ -51,6 +51,16 @@ static int on_config_keepalive(h2o_configurator_command_t *cmd, h2o_configurator
     return 0;
 }
 
+static int on_config_preserve_host(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
+    if (ret == -1)
+        return -1;
+    self->vars->preserve_host = (int)ret;
+    return 0;
+}
+
 static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
@@ -118,6 +128,11 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_keepalive, "boolean flag (ON/OFF) indicating whether or not to use persistent\n"
                                                          "connections to upstream (default: OFF)");
+    h2o_configurator_define_command(&c->super, "proxy.preserve_host",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_preserve_host, "boolean flag (ON/OFF) indicating whether or not to pass Host header\n"
+                                                         "from imcoming request to upstream (default: OFF)");
     h2o_configurator_define_command(&c->super, "proxy.timeout.io",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
