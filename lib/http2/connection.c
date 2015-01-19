@@ -66,6 +66,7 @@ static const h2o_iovec_t SETTINGS_HOST_BIN = {H2O_STRLIT("\x00\x00\x12"     /* f
 
 static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
+static void send_stream_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum);
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
 static int do_emit_writereq(h2o_http2_conn_t *conn);
 static void on_read(h2o_socket_t *sock, int status);
@@ -115,6 +116,14 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
 static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     assert(stream->state < H2O_HTTP2_STREAM_STATE_REQ_PENDING);
+
+    if (stream->_req_body != NULL && stream->_expected_content_length != SIZE_MAX &&
+        stream->_req_body->size != stream->_expected_content_length) {
+        send_stream_error(conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
+        h2o_http2_stream_reset(conn, stream);
+        return;
+    }
+
     stream->state = H2O_HTTP2_STREAM_STATE_REQ_PENDING;
 
     /* TODO schedule the pending reqs using the scheduler */
@@ -206,7 +215,7 @@ static void close_connection(h2o_http2_conn_t *conn)
     }
 }
 
-static void send_stream_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum)
+void send_stream_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum)
 {
     assert(stream_id != 0);
     assert(conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING);
