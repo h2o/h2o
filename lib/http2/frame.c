@@ -258,7 +258,7 @@ int h2o_http2_decode_goaway_payload(h2o_http2_goaway_payload_t *payload, const h
     }
     if (frame->length < 8) {
         *err_desc = "invalid GOAWAY frame";
-        return H2O_HTTP2_ERROR_FRAME_SIZE; /* TODO http2-spec #691 */
+        return H2O_HTTP2_ERROR_FRAME_SIZE;
     }
 
     payload->last_stream_id = decode32u(frame->payload) & 0x7fffffff;
