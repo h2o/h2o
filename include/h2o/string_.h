@@ -56,6 +56,10 @@ h2o_iovec_t h2o_strdup_slashed(h2o_mem_pool_t *pool, const char *s, size_t len);
  */
 static int h2o_tolower(int ch);
 /**
+ * tr/A-Z/a-z/
+ */
+static void h2o_strtolower(char *s, size_t len);
+/**
  * tests if target string (target_len bytes long) is equal to test string (test_len bytes long) after being converted to lower-case
  */
 static int h2o_lcstris(const char *target, size_t target_len, const char *test, size_t test_len);
@@ -125,6 +129,12 @@ int h2o__lcstris_core(const char *target, const char *test, size_t test_len);
 inline int h2o_tolower(int ch)
 {
     return 'A' <= ch && ch <= 'Z' ? ch + 0x20 : ch;
+}
+
+inline void h2o_strtolower(char *s, size_t len)
+{
+    for (; len != 0; ++s, --len)
+        *s = h2o_tolower(*s);
 }
 
 inline int h2o_lcstris(const char *target, size_t target_len, const char *test, size_t test_len)
