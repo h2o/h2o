@@ -24,7 +24,7 @@
  *   picotemplate.pl --conf=misc/picotemplate-conf.pl lib/file/_templates.c.h
  */
 
-static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t path_normalized, DIR *dp)
+static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t path_normalized, DIR* dp)
 {
     h2o_buffer_t *_;
     h2o_iovec_t path_normalized_escaped = h2o_htmlescape(pool, path_normalized.base, path_normalized.len);
@@ -33,17 +33,18 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
 
     h2o_buffer_init(&_, &h2o_socket_buffer_prototype);
 
-    ? <!DOCTYPE html> ? <TITLE> Index of < ? = path_normalized_escaped ? > </ TITLE> ? <H2> Index of <
-        ? =
-              path_normalized_escaped ? > </ H2> ? <UL> ? <LI><A HREF = ".."> Parent Directory</ A>
+?<!DOCTYPE html>
+?<TITLE>Index of <?= path_normalized_escaped ?></TITLE>
+?<H2>Index of <?= path_normalized_escaped ?></H2>
+?<UL>
+?<LI><A HREF="..">Parent Directory</A>
 
-        while ((ret = readdir_r(dp, &dent, &dentp)) == 0 && dentp != NULL)
-    {
+    while ((ret = readdir_r(dp, &dent, &dentp)) == 0 && dentp != NULL) {
         h2o_iovec_t fn_escaped;
         if (strcmp(dent.d_name, ".") == 0 || strcmp(dent.d_name, "..") == 0)
             continue;
         fn_escaped = h2o_htmlescape(pool, dent.d_name, strlen(dent.d_name));
-        ? <LI><A HREF = "<?= fn_escaped ?>"> < ? = fn_escaped ? > </ A>
+?<LI><A HREF="<?= fn_escaped ?>"><?= fn_escaped ?></A>
     }
 
     return _;
