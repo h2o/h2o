@@ -237,7 +237,7 @@ static void update_stream_output_window(h2o_http2_stream_t *stream, ssize_t delt
 static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const uint8_t *src, size_t len,
                                    const char **err_desc)
 {
-    int ret, err_is_stream_level;
+    int ret;
 
     assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS);
 
