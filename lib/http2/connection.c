@@ -138,8 +138,8 @@ void h2o_http2_conn_register_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *
     khiter_t iter;
     int r;
 
-    assert(conn->max_open_stream_id < stream->stream_id);
-    conn->max_open_stream_id = stream->stream_id;
+    if (conn->max_open_stream_id < stream->stream_id)
+        conn->max_open_stream_id = stream->stream_id;
 
     iter = kh_put(h2o_http2_stream_t, conn->open_streams, stream->stream_id, &r);
     assert(iter != kh_end(conn->open_streams));
