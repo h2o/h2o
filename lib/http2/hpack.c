@@ -386,7 +386,12 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                             const char **err_desc)
 {
     const uint8_t *src_end = src + len;
-    int allow_pseudo = 1;
+    int allow_pseudo = 1, received_pseudo_fields = 0;
+
+#define RECEIVED_METHOD 1
+#define RECEIVED_PATH 2
+#define RECEIVED_SCHEME 4
+#define RECEIVED_ALL_MANDATORY_PSEUDO_HEADERS 7
 
     while (src != src_end) {
         struct st_h2o_decode_header_result_t r;
@@ -405,14 +410,17 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                     if (req->method.base != NULL)
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     req->method = *r.value;
+                    received_pseudo_fields |= RECEIVED_METHOD;
                 } else if (r.name == &H2O_TOKEN_PATH->buf) {
                     if (req->path.base != NULL)
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     req->path = *r.value;
+                    received_pseudo_fields |= RECEIVED_PATH;
                 } else if (r.name == &H2O_TOKEN_SCHEME->buf) {
                     if (req->scheme.base != NULL)
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     req->scheme = *r.value;
+                    received_pseudo_fields |= RECEIVED_SCHEME;
                 } else {
                     return H2O_HTTP2_ERROR_PROTOCOL;
                 }
@@ -442,6 +450,15 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
             }
         }
     }
+
+    /* fix this in case we need to support CONNECT method over HTTP/2 */
+    if (received_pseudo_fields != RECEIVED_ALL_MANDATORY_PSEUDO_HEADERS)
+        return H2O_HTTP2_ERROR_PROTOCOL;
+
+#undef RECEIVED_METHOD
+#undef RECEIVED_PATH
+#undef RECEIVED_SCHEME
+#undef RECEIVED_ALL_MANDATORY_PSEUDO_HEADERS
 
     return 0;
 }
