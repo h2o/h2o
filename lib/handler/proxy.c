@@ -104,7 +104,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
         p += sprintf(p, "content-length: %zu\r\n", req->entity.len);
     }
     for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h) {
-        if (h2o_iovec_is_token(h->name) && ((h2o_token_t *)h->name)->is_connection_specific)
+        if (h2o_iovec_is_token(h->name) && ((h2o_token_t *)h->name)->proxy_should_drop)
             continue;
         p += sprintf(p, "%.*s: %.*s\r\n", (int)h->name->len, h->name->base, (int)h->value.len, h->value.base);
     }
@@ -195,7 +195,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
         const h2o_token_t *token = h2o_lookup_token(headers[i].name, headers[i].name_len);
         h2o_iovec_t value;
         if (token != NULL) {
-            if (token->is_connection_specific) {
+            if (token->proxy_should_drop) {
                 goto Skip;
             }
             if (token == H2O_TOKEN_CONTENT_LENGTH) {

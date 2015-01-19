@@ -55,9 +55,9 @@ my @hpack;
 
 while (my $line = <DATA>) {
     chomp $line;
-    my ($hpack_index, $is_connection_specific, $is_init_header_special, $name, $value) = split /\s+/, $line, 5;
+    my ($hpack_index, $proxy_should_drop, $is_init_header_special, $name, $value) = split /\s+/, $line, 5;
     next unless $name ne '';
-    $tokens{$name} = [ $hpack_index, $is_connection_specific, $is_init_header_special ]
+    $tokens{$name} = [ $hpack_index, $proxy_should_drop, $is_init_header_special ]
         unless defined $tokens{$name};
     if ($hpack_index != 0) {
         $hpack[$hpack_index - 1] = [ $name, $value ];
