@@ -65,7 +65,7 @@ static h2o_iovec_t *alloc_buf(h2o_mem_pool_t *pool, size_t len)
 static int contains_uppercase(const char *s, size_t len)
 {
     for (; len != 0; ++s, --len) {
-        unsigned ch = *(unsigned char*)s;
+        unsigned ch = *(unsigned char *)s;
         if (ch - 'A' < 26U)
             return 1;
     }
@@ -383,10 +383,13 @@ void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table)
 }
 
 int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len,
-                            const char **err_desc)
+                            int *pseudo_header_exists_map, size_t *content_length, const char **err_desc)
 {
     const uint8_t *src_end = src + len;
     int allow_pseudo = 1;
+
+    *pseudo_header_exists_map = 0;
+    *content_length = SIZE_MAX;
 
     while (src != src_end) {
         struct st_h2o_decode_header_result_t r;
@@ -401,18 +404,22 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                     if (req->authority.base != NULL)
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     req->authority = *r.value;
+                    *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS;
                 } else if (r.name == &H2O_TOKEN_METHOD->buf) {
                     if (req->method.base != NULL)
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     req->method = *r.value;
+                    *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS;
                 } else if (r.name == &H2O_TOKEN_PATH->buf) {
                     if (req->path.base != NULL)
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     req->path = *r.value;
+                    *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
                 } else if (r.name == &H2O_TOKEN_SCHEME->buf) {
                     if (req->scheme.base != NULL)
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     req->scheme = *r.value;
+                    *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS;
                 } else {
                     return H2O_HTTP2_ERROR_PROTOCOL;
                 }
@@ -422,15 +429,20 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
         } else {
             allow_pseudo = 0;
             if (h2o_iovec_is_token(r.name)) {
-                if (r.name == &H2O_TOKEN_CONTENT_LENGTH->buf) {
-                    /* ignore (draft 15 8.1.2.6 says: a server MAY send an HTTP response prior to closing or resetting the stream if
-                     * content-length and the actual length differs) */
-                } else if (r.name == &H2O_TOKEN_TRANSFER_ENCODING->buf) {
-                    /* Transfer-Encoding is not supported in HTTP/2 */
-                    return H2O_HTTP2_ERROR_PROTOCOL;
+                h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, r.name);
+                if (token == H2O_TOKEN_CONTENT_LENGTH) {
+                    if ((*content_length = h2o_strtosize(r.value->base, r.value->len)) == SIZE_MAX)
+                        return H2O_HTTP2_ERROR_PROTOCOL;
                 } else {
-                    h2o_add_header(&req->pool, &req->headers, H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, r.name), r.value->base,
-                                   r.value->len);
+                    /* reject headers as defined in draft-16 8.1.2.2 */
+                    if (token->http2_should_reject) {
+                        if (token == H2O_TOKEN_TE && h2o_lcstris(r.value->base, r.value->len, H2O_STRLIT("trailers"))) {
+                            /* do not reject */
+                        } else {
+                            return H2O_HTTP2_ERROR_PROTOCOL;
+                        }
+                    }
+                    h2o_add_header(&req->pool, &req->headers, token, r.value->base, r.value->len);
                 }
             } else {
                 h2o_add_header_by_str(&req->pool, &req->headers, r.name->base, r.name->len, 0, r.value->base, r.value->len);
