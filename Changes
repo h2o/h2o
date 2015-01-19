@@ -1,4 +1,20 @@
 Revision history for H2O.
 
+0.9.1 TBD
+	- added configuration diretives: ssl/cipher-suite, ssl/ocsp-update-interval, ssl/ocsp-max-failures, expires, file.send-gzip
+	- [http2] added support for draft-16 (draft-14 is also supported)
+	- [http2] added support for dependency-based prioritization
+	- [http2] improved conformance to the HTTP2 specification
+	- [SSL] OCSP stapling (automatically enabled by default)
+	- [SSL] fix compile error with OpenSSL earlier than version 1.0.1
+	- [file] added support for Content-Encoding: gzip
+	- [expires] added support for Cache-Control: max-age
+	- [libh2o] libh2o and the header files are installed by `make install`
+	- [libh2o] fix compile error when included from C++ source files
+	- automatically setuids to nobody when run as root and if `user` directive is not set
+	- automatically raises RLIMIT_NOFILE
+	- uses all CPU cores by default
+	- now compiles on NetBSD and other BSD-based systems
+
 0.9.0 2014-12-25 20:17:00+0000
 	- initial release
