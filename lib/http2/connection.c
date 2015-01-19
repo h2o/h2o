@@ -241,15 +241,8 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
 
     assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS);
 
-    if ((ret = h2o_hpack_parse_headers(&stream->req, &conn->_input_header_table, src, len, err_desc, &err_is_stream_level)) != 0) {
-        if (err_is_stream_level) {
-            send_stream_error(conn, stream->stream_id, ret);
-            h2o_http2_stream_reset(conn, stream);
-            return 0;
-        } else {
-            return ret;
-        }
-    }
+    if ((ret = h2o_hpack_parse_headers(&stream->req, &conn->_input_header_table, src, len, err_desc)) != 0)
+        return ret;
 
     /* handle the request */
     conn->_read_expect = expect_default;

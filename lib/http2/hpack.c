@@ -383,7 +383,7 @@ void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table)
 }
 
 int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len,
-                            const char **err_desc, int *err_is_stream_level)
+                            const char **err_desc)
 {
     const uint8_t *src_end = src + len;
     int allow_pseudo = 1;
@@ -391,35 +391,33 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
     while (src != src_end) {
         struct st_h2o_decode_header_result_t r;
         int ret = decode_header(&req->pool, &r, header_table, &src, src_end, err_desc);
-        if (ret != 0) {
-            *err_is_stream_level = 0;
+        if (ret != 0)
             return ret;
-        }
         if (r.name->base[0] == ':') {
             if (allow_pseudo) {
                 /* FIXME validate the chars in the value (e.g. reject SP in path) */
                 if (r.name == &H2O_TOKEN_AUTHORITY->buf) {
                     /* FIXME should we perform this check? */
                     if (req->authority.base != NULL)
-                        goto StreamLevelProcotolError;
+                        return H2O_HTTP2_ERROR_PROTOCOL;
                     req->authority = *r.value;
                 } else if (r.name == &H2O_TOKEN_METHOD->buf) {
                     if (req->method.base != NULL)
-                        goto StreamLevelProcotolError;
+                        return H2O_HTTP2_ERROR_PROTOCOL;
                     req->method = *r.value;
                 } else if (r.name == &H2O_TOKEN_PATH->buf) {
                     if (req->path.base != NULL)
-                        goto StreamLevelProcotolError;
+                        return H2O_HTTP2_ERROR_PROTOCOL;
                     req->path = *r.value;
                 } else if (r.name == &H2O_TOKEN_SCHEME->buf) {
                     if (req->scheme.base != NULL)
-                        goto StreamLevelProcotolError;
+                        return H2O_HTTP2_ERROR_PROTOCOL;
                     req->scheme = *r.value;
                 } else {
-                    goto StreamLevelProcotolError;
+                    return H2O_HTTP2_ERROR_PROTOCOL;
                 }
             } else {
-                goto StreamLevelProcotolError;
+                return H2O_HTTP2_ERROR_PROTOCOL;
             }
         } else {
             allow_pseudo = 0;
@@ -429,7 +427,7 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                      * content-length and the actual length differs) */
                 } else if (r.name == &H2O_TOKEN_TRANSFER_ENCODING->buf) {
                     /* Transfer-Encoding is not supported in HTTP/2 */
-                    goto StreamLevelProcotolError;
+                    return H2O_HTTP2_ERROR_PROTOCOL;
                 } else {
                     h2o_add_header(&req->pool, &req->headers, H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, r.name), r.value->base,
                                    r.value->len);
@@ -441,10 +439,6 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
     }
 
     return 0;
-
-StreamLevelProcotolError:
-    *err_is_stream_level = 1;
-    return H2O_HTTP2_ERROR_PROTOCOL;
 }
 
 static uint8_t *encode_int(uint8_t *dst, uint32_t value, size_t prefix_bits)
