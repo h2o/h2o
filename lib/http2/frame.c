@@ -30,23 +30,25 @@ const h2o_http2_settings_t H2O_HTTP2_SETTINGS_DEFAULT = {
     /* initial_window_size */ 65535,
     /* max_frame_size */ 16384};
 
-int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t *src, size_t len)
+int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t *src, size_t len, const char **err_desc)
 {
     for (; len >= 6; len -= 6, src += 6) {
         uint16_t identifier = decode16u(src);
         uint32_t value = decode32u(src + 2);
         switch (identifier) {
-#define SET(label, member, min, max)                                                                                               \
+#define SET(label, member, min, max, err_code)                                                                                     \
     case H2O_HTTP2_SETTINGS_##label:                                                                                               \
-        if (!(min <= value && value <= max))                                                                                       \
-            return -1;                                                                                                             \
+        if (!(min <= value && value <= max)) {                                                                                     \
+            *err_desc = "invalid SETTINGS frame";                                                                                  \
+            return err_code;                                                                                                       \
+        }                                                                                                                          \
         settings->member = value;                                                                                                  \
         break
-            SET(HEADER_TABLE_SIZE, header_table_size, 0, UINT32_MAX);
-            SET(ENABLE_PUSH, enable_push, 0, 1);
-            SET(MAX_CONCURRENT_STREAMS, max_concurrent_streams, 0, UINT32_MAX);
-            SET(INITIAL_WINDOW_SIZE, initial_window_size, 0, 0x7fffffff);
-            SET(MAX_FRAME_SIZE, max_frame_size, 16384, 16777215);
+            SET(HEADER_TABLE_SIZE, header_table_size, 0, UINT32_MAX, 0);
+            SET(ENABLE_PUSH, enable_push, 0, 1, H2O_HTTP2_ERROR_PROTOCOL);
+            SET(MAX_CONCURRENT_STREAMS, max_concurrent_streams, 0, UINT32_MAX, 0);
+            SET(INITIAL_WINDOW_SIZE, initial_window_size, 0, 0x7fffffff, H2O_HTTP2_ERROR_FLOW_CONTROL);
+            SET(MAX_FRAME_SIZE, max_frame_size, 16384, 16777215, H2O_HTTP2_ERROR_PROTOCOL);
 #undef SET
         default:
             /* ignore unknown (5.5) */
@@ -55,7 +57,7 @@ int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t
     }
 
     if (len != 0)
-        return -1;
+        return H2O_HTTP2_ERROR_FRAME_SIZE;
     return 0;
 }
 

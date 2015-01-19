@@ -470,10 +470,9 @@ static int handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
     } else {
         uint32_t prev_initial_window_size = conn->peer_settings.initial_window_size;
         /* FIXME handle SETTINGS_HEADER_TABLE_SIZE */
-        if (h2o_http2_update_peer_settings(&conn->peer_settings, frame->payload, frame->length) != 0) {
-            *err_desc = "invalid SETTINGS frame";
-            return H2O_HTTP2_ERROR_PROTOCOL;
-        }
+        int ret = h2o_http2_update_peer_settings(&conn->peer_settings, frame->payload, frame->length, err_desc);
+        if (ret != 0)
+            return ret;
         { /* schedule ack */
             h2o_iovec_t header_buf = h2o_buffer_reserve(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE);
             h2o_http2_encode_frame_header((void *)header_buf.base, 0, H2O_HTTP2_FRAME_TYPE_SETTINGS, H2O_HTTP2_FRAME_FLAG_ACK, 0);
@@ -875,6 +874,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req)
     h2o_http2_stream_t *stream;
     ssize_t connection_index, settings_index;
     h2o_iovec_t settings_decoded;
+    const char *err_desc;
 
     assert(req->version < 0x200); /* from HTTP/1.x */
 
@@ -894,7 +894,8 @@ int h2o_http2_handle_upgrade(h2o_req_t *req)
                                                  req->headers.entries[settings_index].value.len)).base == NULL) {
         goto Error;
     }
-    if (h2o_http2_update_peer_settings(&http2conn->peer_settings, (uint8_t *)settings_decoded.base, settings_decoded.len) != 0) {
+    if (h2o_http2_update_peer_settings(&http2conn->peer_settings, (uint8_t *)settings_decoded.base, settings_decoded.len,
+                                       &err_desc) != 0) {
         goto Error;
     }
 
