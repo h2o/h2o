@@ -311,6 +311,20 @@ const char *h2o_get_filext(const char *path, size_t len)
     return NULL;
 }
 
+size_t h2o_strstr(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len)
+{
+    /* TODO optimize */
+    if (haysack_len >= needle_len) {
+        size_t off, max = haysack_len - needle_len;
+        if (needle_len == 0)
+            return 0;
+        for (off = 0; off != max; ++off)
+            if (haysack[off] == needle[0] && memcmp(haysack + off + 1, needle + 1, needle_len - 1) == 0)
+                return off;
+    }
+    return SIZE_MAX;
+}
+
 /* note: returns a zero-width match as well */
 const char *h2o_next_token(const char *elements, size_t elements_len, size_t *element_len, const char *cur)
 {
