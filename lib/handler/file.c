@@ -319,7 +319,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         is_get = 0;
     } else {
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ALLOW, H2O_STRLIT("GET, HEAD"));
-        h2o_send_error(req, 405, "Method Not Allowed", "method not allowed", H2O_SEND_ERROR_KEEP_CUSTOM_HEADERS);
+        h2o_send_error(req, 405, "Method Not Allowed", "method not allowed", H2O_SEND_ERROR_KEEP_HEADERS);
         return 0;
     }
 

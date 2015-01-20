@@ -646,8 +646,14 @@ static void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *lo
 /* built-in generators */
 
 enum {
+    /**
+     * enforces the http1 protocol handler to close the connection after sending the response
+     */
     H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION = 0x1,
-    H2O_SEND_ERROR_KEEP_CUSTOM_HEADERS    = 0x2
+    /**
+     * if set, does not flush the registered response headers
+     */
+    H2O_SEND_ERROR_KEEP_HEADERS = 0x2
 };
 
 /**

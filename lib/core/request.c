@@ -238,7 +238,7 @@ void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *
     req->res.reason = reason;
     req->res.content_length = strlen(body);
 
-    if ((flags & H2O_SEND_ERROR_KEEP_CUSTOM_HEADERS) == 0)
+    if ((flags & H2O_SEND_ERROR_KEEP_HEADERS) == 0)
         memset(&req->res.headers, 0, sizeof(req->res.headers));
 
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
