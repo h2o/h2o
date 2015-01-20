@@ -90,10 +90,11 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
     if (req->conn->peername.addr != NULL)
         remote_addr_len = h2o_socket_getnumerichost(req->conn->peername.addr, req->conn->peername.len, remote_addr);
 
-    /* calc buffer length (TODO switch to a safer way of building request as the current approach is potentially vulnerable to buffer overrun) */
+    /* calc buffer length (TODO switch to a safer way of building request as the current approach is potentially vulnerable to
+     * buffer overrun) */
     bufsz = sizeof("  HTTP/1.1\r\nhost: :65535\r\nconnection: keep-alive\r\ncontent-length: 18446744073709551615\r\n") +
-        sizeof("x-forwarded-proto: https\r\nx-forwarded-for: \r\n\r\n") +
-        req->method.len + req->path.len - req->pathconf->path.len + upstream->path.len + upstream->host.len + (remote_addr_len + 1);
+            sizeof("x-forwarded-proto: https\r\nx-forwarded-for: \r\n\r\n") + req->method.len + req->path.len -
+            req->pathconf->path.len + upstream->path.len + upstream->host.len + (remote_addr_len + 1);
     for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h)
         bufsz += h->name->len + h->value.len + 4;
     /* allocate */
@@ -104,7 +105,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
     p += sprintf(p, "%.*s %.*s%.*s HTTP/1.1\r\nconnection: %s\r\n", (int)req->method.len, req->method.base, (int)upstream->path.len,
                  upstream->path.base, (int)(req->path.len - req->pathconf->path.len), req->path.base + req->pathconf->path.len,
                  keepalive ? "keep-alive" : "close");
-    if ( preserve_host ) {
+    if (preserve_host) {
         p += sprintf(p, "host: %.*s\r\n", (int)req->authority.len, req->authority.base);
     } else {
         if (upstream->port == 80)
@@ -122,15 +123,16 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
             continue;
         if (h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-for"))) {
             xff++;
-            if ( remote_addr_len != SIZE_MAX ) {
-                p += sprintf(p, "x-forwarded-for: %.*s, %.*s\r\n", (int)h->value.len, h->value.base, (int)remote_addr_len, remote_addr);
+            if (remote_addr_len != SIZE_MAX) {
+                p += sprintf(p, "x-forwarded-for: %.*s, %.*s\r\n", (int)h->value.len, h->value.base, (int)remote_addr_len,
+                             remote_addr);
                 continue;
             }
         }
         p += sprintf(p, "%.*s: %.*s\r\n", (int)h->name->len, h->name->base, (int)h->value.len, h->value.base);
     }
     p += sprintf(p, "x-forwarded-proto: %.*s\r\n", (int)req->scheme.len, req->scheme.base);
-    if ( xff == 0 && remote_addr_len != SIZE_MAX ) {
+    if (xff == 0 && remote_addr_len != SIZE_MAX) {
         p += sprintf(p, "x-forwarded-for: %.*s\r\n", (int)remote_addr_len, remote_addr);
     }
     *p++ = '\r';
