@@ -51,7 +51,7 @@ struct st_h2o_decode_header_result_t {
 static inline int value_is_part_of_static_table(const h2o_iovec_t *value)
 {
     return &h2o_hpack_static_table[0].value <= value &&
-           value < &h2o_hpack_static_table[sizeof(h2o_hpack_static_table) / sizeof(h2o_hpack_static_table[0])].value;
+           value <= &h2o_hpack_static_table[sizeof(h2o_hpack_static_table) / sizeof(h2o_hpack_static_table[0]) - 1].value;
 }
 
 static h2o_iovec_t *alloc_buf(h2o_mem_pool_t *pool, size_t len)
