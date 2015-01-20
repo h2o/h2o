@@ -1,5 +1,11 @@
 Revision history for H2O.
 
+0.9.2 TBD
+	- [file] add support for HEAD requests
+	- [proxy] added configuration directive `proxy.preserve-host`
+	- [proxy] sends X-Forwared-For and X-Forwarded-Proto headers
+	- [http1] MSIE workaround (send `Cache-Control: private` in place of Vary)
+
 0.9.1 2015-01-19 21:13:00+0000
 	- added configuration directives: ssl/cipher-suite, ssl/ocsp-update-interval, ssl/ocsp-max-failures, expires, file.send-gzip
 	- [http2] added support for draft-16 (draft-14 is also supported)
