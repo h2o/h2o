@@ -529,6 +529,11 @@ static struct listener_config_t *add_listener(struct config_t *conf, int fd, str
 {
     struct listener_config_t *listener = h2o_mem_alloc(sizeof(*listener));
 
+    if (listener == NULL) {
+        fprintf(stderr, "failed to allocate memory\n");
+        return NULL;
+    }
+
     memcpy(&listener->addr, addr, addrlen);
     listener->fd = fd;
     listener->addrlen = addrlen;
@@ -713,6 +718,8 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                     return -1;
             }
             listener = add_listener(conf, fd, (struct sockaddr *)&sun, sizeof(sun));
+            if (listener == NULL)
+                return -1;
             listener_is_new = 1;
         }
         if (listener_setup_ssl(conf, cmd, ctx, node, ssl_node, listener, listener_is_new) != 0)
@@ -755,6 +762,8 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         return -1;
                 }
                 listener = add_listener(conf, fd, ai->ai_addr, ai->ai_addrlen);
+                if (listener == NULL)
+                    return -1;
                 listener_is_new = 1;
             }
             if (listener_setup_ssl(conf, cmd, ctx, node, ssl_node, listener, listener_is_new) != 0)

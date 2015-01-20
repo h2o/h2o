@@ -62,6 +62,12 @@ static int on_config_expires(h2o_configurator_command_t *cmd, h2o_configurator_c
         /* save the value */
         if (*self->args == NULL)
             *self->args = h2o_mem_alloc(sizeof(**self->args));
+
+        if (*self->args == NULL) {
+          h2o_configurator_errprintf(cmd, node, "failed to allocate memory");
+          return -1;
+        }
+
         (*self->args)->mode = H2O_EXPIRES_MODE_MAX_AGE;
         (*self->args)->data.max_age = value;
     } else {
@@ -81,7 +87,13 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
         /* duplicate */
         assert(self->args[0]->mode == H2O_EXPIRES_MODE_MAX_AGE);
         self->args[1] = h2o_mem_alloc(sizeof(**self->args));
-        *self->args[1] = *self->args[0];
+
+        if (self->args[1] == NULL) {
+            fprintf(stderr, "failed to allocate memory\n");
+        } else {
+            *self->args[1] = *self->args[0];
+        }
+
     } else {
         self->args[1] = NULL;
     }
