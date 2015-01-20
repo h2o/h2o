@@ -34,13 +34,23 @@ extern "C" {
 
 #define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s *)((char *)(p)-offsetof(s, m)))
 
-#if defined(__clang__) || defined(__GNUC__) && (__GNUC__ > 2 || __GNUC__ == 2 && __GNUC_MINOR__ >= 5)
+#ifdef __GNUC__
+#define H2O_GNUC_VERSION (__GNUC__ << 16) | (__GNUC__MINOR__ << 8) | __GNUC_PATCHLEVEL__
+#else
+#define H2O_GNUC_VERSION 0
+#endif
+
+#if __STDC_VERSION__ >= 201112L
+#define H2O_NORETURN _Noreturn
+#elif defined(__clang__) || defined(__GNUC__) && H2O_GNUC_VERSION >= 0x20500
+// noreturn was not defined before gcc 2.5
 #define H2O_NORETURN __attribute__((noreturn))
 #else
 #define H2O_NORETURN
 #endif
 
-#if defined(__GNUC__) && !defined(__clang__)
+#if !defined(__clang__) && defined(__GNUC__) && H2O_GNUC_VERSION >= 0x40802
+// returns_nonnull was seemingly not defined before gcc 4.8.2
 #define H2O_RETURNS_NONNULL __attribute__((returns_nonnull))
 #else
 #define H2O_RETURNS_NONNULL
