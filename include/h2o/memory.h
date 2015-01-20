@@ -35,7 +35,7 @@ extern "C" {
 #define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s *)((char *)(p)-offsetof(s, m)))
 
 #ifdef __GNUC__
-#define H2O_GNUC_VERSION (__GNUC__ << 16) | (__GNUC__MINOR__ << 8) | __GNUC_PATCHLEVEL__
+#define H2O_GNUC_VERSION ((__GNUC__ << 16) | (__GNUC__MINOR__ << 8) | __GNUC_PATCHLEVEL__)
 #else
 #define H2O_GNUC_VERSION 0
 #endif
