@@ -19,9 +19,9 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <netdb.h>
 #include <sys/socket.h>
 #include "h2o.h"
 #include "h2o/http1client.h"
@@ -80,28 +80,20 @@ static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, 
 static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream, int keepalive, int preserve_host)
 {
     h2o_iovec_t buf;
-    size_t bufsz, remote_addr_len = 0;
+    size_t bufsz, remote_addr_len = SIZE_MAX;
     const h2o_header_t *h, *h_end;
     char *p;
     int xff = 0;
     char remote_addr[NI_MAXHOST];
 
     /* for x-f-f */
-    if (req->conn->peername.addr != NULL && req->conn->peername.addr->sa_family == AF_INET) {
-        struct sockaddr_in *sin = (void *)req->conn->peername.addr;
-        uint32_t addr;
-        addr = htonl(sin->sin_addr.s_addr);
-        remote_addr_len = sprintf(remote_addr, "%d.%d.%d.%d", addr >> 24, (addr >> 16) & 255, (addr >> 8) & 255, addr & 255);
-    } else if (req->conn->peername.addr != NULL &&
-               getnameinfo(req->conn->peername.addr, req->conn->peername.len, remote_addr, sizeof(remote_addr), NULL, 0,
-                           NI_NUMERICHOST) == 0) {
-        remote_addr_len = strlen(remote_addr);
-    }
+    if (req->conn->peername.addr != NULL)
+        remote_addr_len = h2o_socket_getnumerichost(req->conn->peername.addr, req->conn->peername.len, remote_addr);
 
-    /* calc buffer length */
+    /* calc buffer length (TODO switch to a safer way of building request as the current approach is potentially vulnerable to buffer overrun) */
     bufsz = sizeof("  HTTP/1.1\r\nhost: :65535\r\nconnection: keep-alive\r\ncontent-length: 18446744073709551615\r\n") +
         sizeof("x-forwarded-proto: https\r\nx-forwarded-for: \r\n\r\n") +
-        req->method.len + req->path.len - req->pathconf->path.len + upstream->path.len + upstream->host.len + remote_addr_len;
+        req->method.len + req->path.len - req->pathconf->path.len + upstream->path.len + upstream->host.len + (remote_addr_len + 1);
     for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h)
         bufsz += h->name->len + h->value.len + 4;
     /* allocate */
@@ -130,7 +122,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
             continue;
         if (h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-for"))) {
             xff++;
-            if ( remote_addr_len ) {
+            if ( remote_addr_len != SIZE_MAX ) {
                 p += sprintf(p, "x-forwarded-for: %.*s, %.*s\r\n", (int)h->value.len, h->value.base, (int)remote_addr_len, remote_addr);
                 continue;
             }
@@ -138,7 +130,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
         p += sprintf(p, "%.*s: %.*s\r\n", (int)h->name->len, h->name->base, (int)h->value.len, h->value.base);
     }
     p += sprintf(p, "x-forwarded-proto: %.*s\r\n", (int)req->scheme.len, req->scheme.base);
-    if ( xff == 0 && remote_addr_len > 0 ) {
+    if ( xff == 0 && remote_addr_len != SIZE_MAX ) {
         p += sprintf(p, "x-forwarded-for: %.*s\r\n", (int)remote_addr_len, remote_addr);
     }
     *p++ = '\r';

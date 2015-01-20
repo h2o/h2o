@@ -215,6 +215,7 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
     char *line, *pos, *line_end;
     size_t element_index;
 
+    /* note: LOG_ALLOCA_SIZE should be much greater than NI_MAXHOST to avoid unnecessary reallocations */
     line = alloca(LOG_ALLOCA_SIZE);
     pos = line;
     line_end = line + LOG_ALLOCA_SIZE;
@@ -236,25 +237,19 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
         case ELEMENT_TYPE_EMPTY:
             RESERVE(0);
             break;
-        case ELEMENT_TYPE_REMOTE_ADDR: {
-            char hostname[NI_MAXHOST];
-            if (req->conn->peername.addr != NULL && req->conn->peername.addr->sa_family == AF_INET) {
-                struct sockaddr_in *sin = (void *)req->conn->peername.addr;
-                uint32_t addr;
-                RESERVE(sizeof("255.255.255.255") - 1);
-                addr = htonl(sin->sin_addr.s_addr);
-                pos += sprintf(pos, "%d.%d.%d.%d", addr >> 24, (addr >> 16) & 255, (addr >> 8) & 255, addr & 255);
-            } else if (req->conn->peername.addr != NULL &&
-                       getnameinfo(req->conn->peername.addr, req->conn->peername.len, hostname, sizeof(hostname), NULL, 0,
-                                   NI_NUMERICHOST) == 0) {
-                size_t len = strlen(hostname);
-                RESERVE(len);
-                pos = append_safe_string(pos, hostname, len);
+        case ELEMENT_TYPE_REMOTE_ADDR:
+            if (req->conn->peername.addr != NULL) {
+                RESERVE(NI_MAXHOST);
+                size_t l = h2o_socket_getnumerichost(req->conn->peername.addr, req->conn->peername.len, pos);
+                if (l != SIZE_MAX)
+                    pos += l;
+                else
+                    *pos++ = '-';
             } else {
                 RESERVE(1);
                 *pos++ = '-';
             }
-        } break;
+            break;
         case ELEMENT_TYPE_LOGNAME:
         case ELEMENT_TYPE_REMOTE_USER:
             RESERVE(1);

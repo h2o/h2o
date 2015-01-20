@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <netdb.h>
 #include <string.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -404,6 +405,21 @@ int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y)
 
 #undef CMP
     return 0;
+}
+
+size_t h2o_socket_getnumerichost(struct sockaddr *sa, socklen_t salen, char *buf)
+{
+    if (sa->sa_family == AF_INET) {
+        /* fast path for IPv4 addresses */
+        struct sockaddr_in *sin = (void *)sa;
+        uint32_t addr;
+        addr = htonl(sin->sin_addr.s_addr);
+        return sprintf(buf, "%d.%d.%d.%d", addr >> 24, (addr >> 16) & 255, (addr >> 8) & 255, addr & 255);
+    }
+
+    if (getnameinfo(sa, salen, buf, NI_MAXHOST, NULL, 0, NI_NUMERICHOST) != 0)
+        return SIZE_MAX;
+    return strlen(buf);
 }
 
 static void on_handshake_complete(h2o_socket_t *sock, int status)

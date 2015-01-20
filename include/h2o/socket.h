@@ -157,6 +157,10 @@ static int h2o_socket_is_reading(h2o_socket_t *sock);
  */
 int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y);
 /**
+ * getnameinfo (buf should be NI_MAXHOST in length), returns SIZE_MAX if failed
+ */
+size_t h2o_socket_getnumerichost(struct sockaddr *sa, socklen_t salen, char *buf);
+/**
  * performs SSL handshake on a socket
  * @param sock the socket
  * @param ssl_ctx SSL context
