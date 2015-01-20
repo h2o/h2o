@@ -27,7 +27,7 @@ subtest 'http1' => sub {
             if $chunked;
         subtest "$proto, @{[ $chunked ? 'chunked' : 'content-length' ]}" => sub {
             my $resp = `curl --silent --dump-header /dev/stderr --data hello $extra $url 2>&1 > /dev/null`;
-            like $resp, qr{^HTTP/1\.[0-9]+ 404 }s, 'shorter than the limit';
+            like $resp, qr{^HTTP/1\.[0-9]+ 405 }s, 'shorter than the limit';
             $resp = `curl --silent --dump-header /dev/stderr --data helloworld $extra $url 2>&1 > /dev/null`;
             like $resp, qr{^HTTP/1\.[0-9]+ 413 }s, 'longer than the limit';
         };
@@ -54,7 +54,7 @@ subtest 'http2' => sub {
                 print $tempfh 'hello';
                 close $tempfh;
                 my $resp = `nghttp -d $tempfn -s $url 2>&1`;
-                like $resp, qr/^\s*status:\s*404\s*$/im, 'shorter than the limit';
+                like $resp, qr/^\s*status:\s*405\s*$/im, 'shorter than the limit';
             }
             {
                 my ($tempfh, $tempfn) = tempfile;
