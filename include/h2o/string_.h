@@ -88,6 +88,10 @@ void h2o_time2str_log(char *buf, time_t time);
  */
 const char *h2o_get_filext(const char *path, size_t len);
 /**
+ * returns the offset of given substring or SIZE_MAX if not found
+ */
+size_t h2o_strstr(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len);
+/**
  *
  */
 const char *h2o_next_token(const char *elements, size_t elements_len, size_t *element_len, const char *cur);
