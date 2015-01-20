@@ -34,6 +34,18 @@ extern "C" {
 
 #define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s *)((char *)(p)-offsetof(s, m)))
 
+#if defined(__clang__) || defined(__GNUC__) && (__GNUC__ > 2 || __GNUC__ == 2 && __GNUC_MINOR__ >= 5)
+#define H2O_NORETURN __attribute__((noreturn))
+#else
+#define H2O_NORETURN
+#endif
+
+#if defined(__GNUC__) && !defined(__clang__)
+#define H2O_RETURNS_NONNULL __attribute__((returns_nonnull))
+#else
+#define H2O_RETURNS_NONNULL
+#endif
+
 typedef struct st_h2o_buffer_prototype_t h2o_buffer_prototype_t;
 
 /**
@@ -116,7 +128,7 @@ typedef H2O_VECTOR(void) h2o_vector_t;
 /**
  * prints an error message and aborts
  */
-void h2o_fatal(const char *msg);
+H2O_NORETURN void h2o_fatal(const char *msg);
 
 /**
  * constructor for h2o_iovec_t
@@ -125,7 +137,7 @@ static h2o_iovec_t h2o_iovec_init(const void *base, size_t len);
 /**
  * wrapper of malloc; allocates given size of memory or dies if impossible
  */
-static void *h2o_mem_alloc(size_t sz);
+H2O_RETURNS_NONNULL static void *h2o_mem_alloc(size_t sz);
 /**
  * warpper of realloc; reallocs the given chunk or dies if impossible
  */
