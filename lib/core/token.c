@@ -24,5 +24,5 @@
 
 int h2o_iovec_is_token(const h2o_iovec_t *buf)
 {
-    return &h2o__tokens[0].buf <= buf && buf < &h2o__tokens[H2O_MAX_TOKENS].buf;
+    return &h2o__tokens[0].buf <= buf && buf <= &h2o__tokens[H2O_MAX_TOKENS - 1].buf;
 }
