@@ -55,7 +55,8 @@ static int is_msie(h2o_req_t *req)
     ssize_t cursor = h2o_find_header(&req->headers, H2O_TOKEN_USER_AGENT, -1);
     if (cursor == -1)
         return 0;
-    if (h2o_strstr(req->headers.entries[cursor].value.base, req->headers.entries[cursor].value.len, H2O_STRLIT("; MSIE ")) == SIZE_MAX)
+    if (h2o_strstr(req->headers.entries[cursor].value.base, req->headers.entries[cursor].value.len, H2O_STRLIT("; MSIE ")) ==
+        SIZE_MAX)
         return 0;
     return 1;
 }
@@ -542,7 +543,7 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
                  * - https://www.igvita.com/2013/05/01/deploying-webp-via-accept-content-negotiation/
                  */
                 if (is_msie(req)) {
-                    static h2o_header_t cache_control_private = { &H2O_TOKEN_CACHE_CONTROL->buf, { H2O_STRLIT("private") } };
+                    static h2o_header_t cache_control_private = {&H2O_TOKEN_CACHE_CONTROL->buf, {H2O_STRLIT("private")}};
                     header = &cache_control_private;
                 }
             }
