@@ -111,13 +111,16 @@ sub run_tests_with_conf {
                 $content = `curl --silent --insecure --dump-header /dev/stdout --max-redirs 0 $proto://127.0.0.1:$port/redirect/http://127.0.0.1:$upstream_port/abc`;
                 like $content, qr{^location: $proto://127.0.0.1:$port/abc\r$}m;
             };
+            subtest "x-forwarded ($proto)" => sub {
+                my $resp = `curl --silent --insecure --dump-header /dev/stderr $proto://127.0.0.1:$port/echo 2>&1 > /dev/null`;
+                like $resp, qr/^x-req-x-forwarded-for: 127\.0\.0\.1\r$/mi, "x-forwarded-for";
+                like $resp, qr/^x-req-x-forwarded-proto: $proto\r$/mi, "x-forwarded-proto";
+                $resp = `curl --silent --insecure --header 'X-Forwarded-For: 127.0.0.2' --dump-header /dev/stderr $proto://127.0.0.1:$port/echo 2>&1 > /dev/null`;
+                like $resp, qr/^x-req-x-forwarded-for: 127\.0\.0\.2, 127\.0\.0\.1\r$/mi, "x-forwarded-for (append)";
+            };
         };
         $doit->('http', $port);
         $doit->('https', $tls_port);
-        subtest 'host-header-not-preserved' => sub {
-            my $resp = `curl --silent --dump-header /dev/stderr http://127.0.0.1:$port/echo 2>&1 > /dev/null`;
-            like $resp, qr/^x-req-host: 127.0.0.1:$upstream_port\r$/m;
-        };
     };
 
     subtest 'nghttp' => sub {

@@ -19,8 +19,10 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/socket.h>
 #include "h2o.h"
 #include "h2o/http1client.h"
 #include "h2o/socketpool.h"
@@ -75,19 +77,25 @@ static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, 
                       h2o_iovec_init(loc_path.base + upstream->path.len, loc_path.len - upstream->path.len));
 }
 
-static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream, int keepalive)
+static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream, int keepalive, int preserve_host)
 {
     h2o_iovec_t buf;
-    size_t bufsz;
+    size_t bufsz, remote_addr_len = SIZE_MAX;
     const h2o_header_t *h, *h_end;
     char *p;
+    int xff = 0;
+    char remote_addr[NI_MAXHOST];
 
-    /* calc buffer length */
-    bufsz = sizeof("  HTTP/1.1\r\nhost: :65535\r\nconnection: keep-alive\r\ncontent-length: 18446744073709551615\r\n\r\n") +
-            req->method.len + req->path.len - req->pathconf->path.len + upstream->path.len + upstream->host.len;
+    /* for x-f-f */
+    if (req->conn->peername.addr != NULL)
+        remote_addr_len = h2o_socket_getnumerichost(req->conn->peername.addr, req->conn->peername.len, remote_addr);
+
+    /* calc buffer length (TODO switch to a safer way of building request as the current approach is potentially vulnerable to buffer overrun) */
+    bufsz = sizeof("  HTTP/1.1\r\nhost: :65535\r\nconnection: keep-alive\r\ncontent-length: 18446744073709551615\r\n") +
+        sizeof("x-forwarded-proto: https\r\nx-forwarded-for: \r\n\r\n") +
+        req->method.len + req->path.len - req->pathconf->path.len + upstream->path.len + upstream->host.len + (remote_addr_len + 1);
     for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h)
         bufsz += h->name->len + h->value.len + 4;
-
     /* allocate */
     buf.base = h2o_mem_alloc_pool(&req->pool, bufsz);
 
@@ -96,17 +104,34 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
     p += sprintf(p, "%.*s %.*s%.*s HTTP/1.1\r\nconnection: %s\r\n", (int)req->method.len, req->method.base, (int)upstream->path.len,
                  upstream->path.base, (int)(req->path.len - req->pathconf->path.len), req->path.base + req->pathconf->path.len,
                  keepalive ? "keep-alive" : "close");
-    if (upstream->port == 80)
-        p += sprintf(p, "host: %.*s\r\n", (int)upstream->host.len, upstream->host.base);
-    else
-        p += sprintf(p, "host: %.*s:%u\r\n", (int)upstream->host.len, upstream->host.base, (unsigned)upstream->port);
+    if ( preserve_host ) {
+        p += sprintf(p, "host: %.*s\r\n", (int)req->authority.len, req->authority.base);
+    } else {
+        if (upstream->port == 80)
+            p += sprintf(p, "host: %.*s\r\n", (int)upstream->host.len, upstream->host.base);
+        else
+            p += sprintf(p, "host: %.*s:%u\r\n", (int)upstream->host.len, upstream->host.base, (unsigned)upstream->port);
+    }
     if (req->entity.base != NULL) {
         p += sprintf(p, "content-length: %zu\r\n", req->entity.len);
     }
     for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h) {
         if (h2o_iovec_is_token(h->name) && ((h2o_token_t *)h->name)->proxy_should_drop)
             continue;
+        if (h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-proto")))
+            continue;
+        if (h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-for"))) {
+            xff++;
+            if ( remote_addr_len != SIZE_MAX ) {
+                p += sprintf(p, "x-forwarded-for: %.*s, %.*s\r\n", (int)h->value.len, h->value.base, (int)remote_addr_len, remote_addr);
+                continue;
+            }
+        }
         p += sprintf(p, "%.*s: %.*s\r\n", (int)h->name->len, h->name->base, (int)h->value.len, h->value.base);
+    }
+    p += sprintf(p, "x-forwarded-proto: %.*s\r\n", (int)req->scheme.len, req->scheme.base);
+    if ( xff == 0 && remote_addr_len != SIZE_MAX ) {
+        p += sprintf(p, "x-forwarded-for: %.*s\r\n", (int)remote_addr_len, remote_addr);
     }
     *p++ = '\r';
     *p++ = '\n';
@@ -262,7 +287,7 @@ static void on_generator_dispose(void *_self)
     h2o_buffer_dispose(&self->buf_sending);
 }
 
-static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_proxy_location_t *upstream, int keepalive)
+static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_proxy_location_t *upstream, int keepalive, int preserve_host)
 {
     struct rp_generator_t *self = h2o_mem_alloc_shared(&req->pool, sizeof(*self), on_generator_dispose);
 
@@ -270,7 +295,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_proxy_locat
     self->super.stop = do_close;
     self->upstream = upstream;
     self->src_req = req;
-    self->up_req.bufs[0] = build_request(req, upstream, keepalive);
+    self->up_req.bufs[0] = build_request(req, upstream, keepalive, preserve_host);
     self->up_req.bufs[1] = req->entity;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
@@ -279,9 +304,9 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_proxy_locat
     return self;
 }
 
-int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *upstream)
+int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *upstream, int preserve_host)
 {
-    struct rp_generator_t *self = proxy_send_prepare(req, upstream, 0);
+    struct rp_generator_t *self = proxy_send_prepare(req, upstream, 0, preserve_host);
 
     self->client = h2o_http1client_connect(
         client_ctx, &req->pool, h2o_strdup(&req->pool, upstream->host.base, upstream->host.len).base, upstream->port, on_connect);
@@ -291,9 +316,9 @@ int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_
 }
 
 int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *upstream,
-                             h2o_socketpool_t *sockpool)
+                             h2o_socketpool_t *sockpool, int preserve_host)
 {
-    struct rp_generator_t *self = proxy_send_prepare(req, upstream, 1);
+    struct rp_generator_t *self = proxy_send_prepare(req, upstream, 1, preserve_host);
 
     self->client = h2o_http1client_connect_with_pool(client_ctx, &req->pool, sockpool, on_connect);
     self->client->data = self;
@@ -307,9 +332,9 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     h2o_http1client_ctx_t *client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
 
     if (self->sockpool != NULL)
-        return h2o_proxy_send_with_pool(req, client_ctx, &self->upstream, self->sockpool);
+        return h2o_proxy_send_with_pool(req, client_ctx, &self->upstream, self->sockpool, self->config.preserve_host);
     else
-        return h2o_proxy_send(req, client_ctx, &self->upstream);
+        return h2o_proxy_send(req, client_ctx, &self->upstream, self->config.preserve_host);
 }
 
 static void *on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
