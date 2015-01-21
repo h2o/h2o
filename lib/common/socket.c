@@ -38,7 +38,8 @@
 #endif
 
 struct st_h2o_socket_ssl_t {
-    SSL *ssl;
+    SSL *ssl; /* initialized lazily */
+    SSL_CTX *ssl_ctx;
     int *did_write_in_read; /* used for detecting and closing the connection upon renegotiation (FIXME implement renegotiation) */
     struct {
         h2o_socket_cb cb;
@@ -204,7 +205,10 @@ static void flush_pending_ssl(h2o_socket_t *sock, h2o_socket_cb cb)
 
 static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
 {
-    SSL_free(ssl->ssl);
+    if (ssl->ssl != NULL) {
+        SSL_free(ssl->ssl);
+        ssl->ssl = NULL;
+    }
     h2o_buffer_dispose(&ssl->input.encrypted);
     h2o_mem_clear_pool(&ssl->output.pool);
     free(ssl);
@@ -230,9 +234,9 @@ static void dispose_socket(h2o_socket_t *sock, int status)
 
 static void shutdown_ssl(h2o_socket_t *sock, int status)
 {
-    int ret;
+    int ret = 1;
 
-    if (status != 0)
+    if (status != 0 || sock->ssl->ssl == NULL)
         goto Close;
 
     if ((ret = SSL_shutdown(sock->ssl->ssl)) == -1) {
@@ -441,6 +445,16 @@ static void proceed_handshake(h2o_socket_t *sock, int status)
         goto Complete;
     }
 
+    if (sock->ssl->ssl == NULL) {
+        /* setup the SSL */
+        static BIO_METHOD bio_methods = {BIO_TYPE_FD, "h2o_socket", write_bio, read_bio, puts_bio,
+                                         NULL,        ctrl_bio,     new_bio,   free_bio, NULL};
+        BIO *bio = BIO_new(&bio_methods);
+        bio->ptr = sock;
+        bio->init = 1;
+        sock->ssl->ssl = SSL_new(sock->ssl->ssl_ctx);
+        SSL_set_bio(sock->ssl->ssl, bio, bio);
+    }
     ret = SSL_accept(sock->ssl->ssl);
 
     if (ret == 2 || (ret < 0 && SSL_get_error(sock->ssl->ssl, ret) != SSL_ERROR_WANT_READ)) {
@@ -468,23 +482,15 @@ Complete:
 
 void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, h2o_socket_cb handshake_cb)
 {
-    static BIO_METHOD bio_methods = {BIO_TYPE_FD, "h2o_socket", write_bio, read_bio, puts_bio,
-                                     NULL,        ctrl_bio,     new_bio,   free_bio, NULL};
-
-    BIO *bio;
-
     sock->ssl = h2o_mem_alloc(sizeof(*sock->ssl));
     memset(sock->ssl, 0, offsetof(struct st_h2o_socket_ssl_t, output.pool));
+    /* sock->ssl->ssl is initialized after receiving the first packet */
+    sock->ssl->ssl_ctx = ssl_ctx;
     h2o_buffer_init(&sock->ssl->input.encrypted, &h2o_socket_buffer_prototype);
     h2o_mem_init_pool(&sock->ssl->output.pool);
-    bio = BIO_new(&bio_methods);
-    bio->ptr = sock;
-    bio->init = 1;
-    sock->ssl->ssl = SSL_new(ssl_ctx);
-    SSL_set_bio(sock->ssl->ssl, bio, bio);
 
     sock->ssl->handshake.cb = handshake_cb;
-    proceed_handshake(sock, 0);
+    h2o_socket_read_start(sock, proceed_handshake);
 }
 
 h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)
