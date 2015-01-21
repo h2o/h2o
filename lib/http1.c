@@ -50,6 +50,10 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
 static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final);
 static void reqread_on_read(h2o_socket_t *sock, int status);
 
+const h2o_protocol_callbacks_t H2O_HTTP1_CALLBACKS = {
+    NULL /* graceful_shutdown (note: nothing special needs to be done for handling graceful shutdown) */
+};
+
 static int is_msie(h2o_req_t *req)
 {
     ssize_t cursor = h2o_find_header(&req->headers, H2O_TOKEN_USER_AGENT, -1);
@@ -321,6 +325,9 @@ static ssize_t fixup_request(h2o_http1_conn_t *conn, struct phr_header *headers,
         /* defaults to keep-alive if >= HTTP/1.1 */
         conn->req.http1_is_persistent = 1;
     }
+    /* disable keep-alive if shutdown is requested */
+    if (conn->req.http1_is_persistent && conn->super.ctx->shutdown_requested)
+        conn->req.http1_is_persistent = 0;
 
     return entity_header_index;
 }

@@ -66,23 +66,69 @@ static const h2o_iovec_t SETTINGS_HOST_BIN = {H2O_STRLIT("\x00\x00\x12"     /* f
 
 static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
+static void initiate_graceful_shutdown(h2o_context_t *ctx);
+static void close_connection(h2o_http2_conn_t *conn);
 static void send_stream_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum);
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
 static int do_emit_writereq(h2o_http2_conn_t *conn);
 static void on_read(h2o_socket_t *sock, int status);
 
-static void enqueue_goaway_and_initiate_close(h2o_http2_conn_t *conn, int errnum, h2o_iovec_t additional_data)
+const h2o_protocol_callbacks_t H2O_HTTP2_CALLBACKS = { initiate_graceful_shutdown };
+
+static void enqueue_goaway(h2o_http2_conn_t *conn, int errnum, h2o_iovec_t additional_data)
 {
-    h2o_http2_encode_goaway_frame(&conn->_write.buf, conn->max_processed_stream_id, -errnum, additional_data);
-    h2o_http2_conn_request_write(conn);
-    conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
+    if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
+        /* http2 spec allows sending GOAWAY more than once (for one reason since errors may arise after sending the first one) */
+        h2o_http2_encode_goaway_frame(&conn->_write.buf, conn->max_open_stream_id, errnum, additional_data);
+        h2o_http2_conn_request_write(conn);
+        conn->state = H2O_HTTP2_CONN_STATE_HALF_CLOSED;
+    }
+}
+
+static void graceful_shutdown_resend_goaway(h2o_timeout_entry_t *entry)
+{
+    h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http2._graceful_shutdown_timeout, entry);
+    h2o_linklist_t *node;
+
+    for (node = ctx->http2._conns.next; node != &ctx->http2._conns; node = node->next) {
+        h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _conns, node);
+        if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED)
+            enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, (h2o_iovec_t){});
+    }
+}
+
+static void initiate_graceful_shutdown(h2o_context_t *ctx)
+{
+    /* draft-16 6.8
+     * A server that is attempting to gracefully shut down a connection SHOULD send an initial GOAWAY frame with the last stream
+     * identifier set to 231-1 and a NO_ERROR code. This signals to the client that a shutdown is imminent and that no further
+     * requests can be initiated. After waiting at least one round trip time, the server can send another GOAWAY frame with an
+     * updated last stream identifier. This ensures that a connection can be cleanly shut down without losing requests.
+     */
+    h2o_linklist_t *node;
+
+    /* only doit once */
+    if (ctx->http2._graceful_shutdown_timeout.cb != NULL)
+        return;
+    ctx->http2._graceful_shutdown_timeout.cb = graceful_shutdown_resend_goaway;
+
+    for (node = ctx->http2._conns.next; node != &ctx->http2._conns; node = node->next) {
+        h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _conns, node);
+        if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED) {
+            h2o_http2_encode_goaway_frame(&conn->_write.buf, INT32_MAX, H2O_HTTP2_ERROR_NONE,
+                                          (h2o_iovec_t){H2O_STRLIT("graceful shutdown")});
+            h2o_http2_conn_request_write(conn);
+        }
+    }
+    h2o_timeout_link(ctx->loop, &ctx->one_sec_timeout, &ctx->http2._graceful_shutdown_timeout);
 }
 
 static void on_idle_timeout(h2o_timeout_entry_t *entry)
 {
     h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _timeout_entry, entry);
 
-    enqueue_goaway_and_initiate_close(conn, H2O_HTTP2_ERROR_INTERNAL, h2o_iovec_init(H2O_STRLIT("idle timeout")));
+    enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, h2o_iovec_init(H2O_STRLIT("idle timeout")));
+    close_connection(conn);
 }
 
 static void update_idle_timeout(h2o_http2_conn_t *conn)
@@ -174,7 +220,7 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
         break;
     }
 
-    if (conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING) {
+    if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
         run_pending_requests(conn);
         update_idle_timeout(conn);
     }
@@ -199,12 +245,13 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     h2o_http2_scheduler_dispose(&conn->scheduler);
     assert(h2o_linklist_is_empty(&conn->_write.streams_to_proceed));
     assert(!h2o_timeout_is_linked(&conn->_write.timeout_entry));
+    h2o_linklist_unlink(&conn->_conns);
 
     h2o_socket_close(conn->sock);
     free(conn);
 }
 
-static void close_connection(h2o_http2_conn_t *conn)
+void close_connection(h2o_http2_conn_t *conn)
 {
     conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
 
@@ -218,7 +265,7 @@ static void close_connection(h2o_http2_conn_t *conn)
 void send_stream_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum)
 {
     assert(stream_id != 0);
-    assert(conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING);
+    assert(conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING);
 
     h2o_http2_encode_rst_stream_frame(&conn->_write.buf, stream_id, -errnum);
     h2o_http2_conn_request_write(conn);
@@ -226,7 +273,7 @@ void send_stream_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum)
 
 static void request_gathered_write(h2o_http2_conn_t *conn)
 {
-    assert(conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING);
+    assert(conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING);
     if (conn->_write.buf_in_flight == NULL) {
         if (!h2o_timeout_is_linked(&conn->_write.timeout_entry))
             h2o_timeout_link(conn->super.ctx->loop, &conn->super.ctx->zero_timeout, &conn->_write.timeout_entry);
@@ -292,11 +339,14 @@ static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn, const uint
 
     if ((ret = h2o_http2_decode_frame(&frame, src, len, &H2O_HTTP2_SETTINGS_HOST, err_desc)) < 0)
         return ret;
-
     if (frame.type != H2O_HTTP2_FRAME_TYPE_CONTINUATION) {
         *err_desc = "expected CONTINUATION frame";
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
+
+    if (conn->state >= H2O_HTTP2_CONN_STATE_HALF_CLOSED)
+        return 0;
+
     if (frame.stream_id != conn->max_open_stream_id ||
         (stream = h2o_http2_conn_get_stream(conn, conn->max_open_stream_id)) == NULL ||
         stream->state != H2O_HTTP2_STREAM_STATE_RECV_HEADERS) {
@@ -388,6 +438,9 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
     if ((ret = h2o_http2_decode_data_payload(&payload, frame, err_desc)) != 0)
         return ret;
 
+    if (conn->state >= H2O_HTTP2_CONN_STATE_HALF_CLOSED)
+        return 0;
+
     stream = h2o_http2_conn_get_stream(conn, frame->stream_id);
 
     /* save the input in the request body buffer, or send error (and close the stream) */
@@ -442,6 +495,9 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
         *err_desc = "invalid stream id in HEADERS frame";
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
+
+    if (conn->state >= H2O_HTTP2_CONN_STATE_HALF_CLOSED)
+        return 0;
 
     /* adjust state */
     conn->_read_expect = expect_continuation_of_headers;
@@ -705,7 +761,7 @@ static void parse_input(h2o_http2_conn_t *conn)
         perform_early_exit = 1;
 
     /* handle the input */
-    while (conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING && conn->sock->input->size != 0) {
+    while (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING && conn->sock->input->size != 0) {
         if (perform_early_exit == 1 && conn->num_responding_streams == http2_max_concurrent_requests_per_connection)
             goto EarlyExit;
         /* process a frame */
@@ -715,8 +771,8 @@ static void parse_input(h2o_http2_conn_t *conn)
             break;
         } else if (ret < 0) {
             if (ret != H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY) {
-                enqueue_goaway_and_initiate_close(
-                    conn, (int)ret, err_desc != NULL ? (h2o_iovec_t){(char *)err_desc, strlen(err_desc)} : (h2o_iovec_t){});
+                enqueue_goaway(conn, (int)ret,
+                               err_desc != NULL ? (h2o_iovec_t){(char *)err_desc, strlen(err_desc)} : (h2o_iovec_t){});
             }
             close_connection(conn);
             return;
@@ -812,7 +868,7 @@ static void on_write_complete(h2o_socket_t *sock, int status)
     assert(conn->_write.buf_in_flight == NULL);
 
     /* call the proceed callback of the streams that have been flushed (while unlinking them from the list) */
-    if (status == 0 && conn->state == H2O_HTTP2_CONN_STATE_OPEN) {
+    if (status == 0 && conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
         while (!h2o_linklist_is_empty(&conn->_write.streams_to_proceed)) {
             h2o_http2_stream_t *stream =
                 H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.link, conn->_write.streams_to_proceed.next);
@@ -827,7 +883,15 @@ static void on_write_complete(h2o_socket_t *sock, int status)
         return;
 
     /* close the connection if necessary */
-    if (conn->state == H2O_HTTP2_CONN_STATE_IS_CLOSING) {
+    switch (conn->state) {
+    case H2O_HTTP2_CONN_STATE_OPEN:
+        break;
+    case H2O_HTTP2_CONN_STATE_HALF_CLOSED:
+        if (conn->num_responding_streams != 0)
+            break;
+        conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
+        /* fall-thru */
+    case H2O_HTTP2_CONN_STATE_IS_CLOSING:
         close_connection_now(conn);
         return;
     }
@@ -866,7 +930,7 @@ int do_emit_writereq(h2o_http2_conn_t *conn)
     assert(conn->_write.buf_in_flight == NULL);
 
     /* push DATA frames */
-    if (conn->state == H2O_HTTP2_CONN_STATE_OPEN && h2o_http2_conn_get_buffer_window(conn) > 0)
+    if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING && h2o_http2_conn_get_buffer_window(conn) > 0)
         h2o_http2_scheduler_run(&conn->scheduler, emit_writereq_of_openref, conn);
 
     if (conn->_write.buf->size == 0)
@@ -901,6 +965,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock, str
     conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
     conn->open_streams = kh_init(h2o_http2_stream_t);
     conn->state = H2O_HTTP2_CONN_STATE_OPEN;
+    h2o_linklist_insert(&ctx->http2._conns, &conn->_conns);
     conn->_read_expect = expect_preface;
     conn->_input_header_table.hpack_capacity = conn->_input_header_table.hpack_max_capacity =
         H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;

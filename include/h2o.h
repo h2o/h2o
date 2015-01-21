@@ -183,6 +183,10 @@ struct st_h2o_hostconf_t {
     h2o_pathconf_t fallback_path;
 };
 
+typedef struct st_h2o_protocol_callbacks_t {
+    void (*request_shutdown)(h2o_context_t *ctx);
+} h2o_protocol_callbacks_t;
+
 struct st_h2o_globalconf_t {
     /**
      * list of host contexts (h2o_hostconf_t)
@@ -210,6 +214,10 @@ struct st_h2o_globalconf_t {
          * a boolean value indicating whether or not to upgrade to HTTP/2
          */
         int upgrade_to_http2;
+        /**
+         * list of callbacks
+         */
+        h2o_protocol_callbacks_t callbacks;
     } http1;
 
     struct {
@@ -227,6 +235,10 @@ struct st_h2o_globalconf_t {
          * maximum nuber of streams (per connection) to be allowed in IDLE / CLOSED state (used for tracking dependencies).
          */
         size_t max_streams_for_priority;
+        /**
+         * list of callbacks
+         */
+        h2o_protocol_callbacks_t callbacks;
     } http2;
 
     size_t _num_config_slots;
@@ -245,9 +257,17 @@ struct st_h2o_context_t {
      */
     h2o_timeout_t zero_timeout;
     /**
+     * timeout structure to be used for registering 1-second timeout callbacks
+     */
+    h2o_timeout_t one_sec_timeout;
+    /**
      * pointer to the global configuration
      */
     h2o_globalconf_t *globalconf;
+    /**
+     * flag indicating if shutdown has been requested
+     */
+    int shutdown_requested;
 
     struct {
         /**
@@ -261,6 +281,14 @@ struct st_h2o_context_t {
          * idle timeout
          */
         h2o_timeout_t idle_timeout;
+        /**
+         * link-list of h2o_http2_conn_t
+         */
+        h2o_linklist_t _conns;
+        /**
+         * timeout entry used for graceful shutdown
+         */
+        h2o_timeout_entry_t _graceful_shutdown_timeout;
     } http2;
 
     /**
@@ -628,6 +656,10 @@ void h2o_context_init(h2o_context_t *context, h2o_loop_t *loop, h2o_globalconf_t
  * disposes of the resources allocated for the context
  */
 void h2o_context_dispose(h2o_context_t *context);
+/**
+ * requests shutdown to the connections governed by the context
+ */
+void h2o_context_request_shutdown(h2o_context_t *context);
 /**
  * returns current timestamp
  * @param ctx the context
