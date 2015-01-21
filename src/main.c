@@ -1039,11 +1039,12 @@ static void *run_loop(void *_unused)
         h2o_evloop_run(loop);
     }
 
-    /* shutdown requested, close the listeners and continue running the loop */
+    /* shutdown requested, close the listeners, notify the protocol handlers, and continue running the loop */
     for (i = 0; i != conf.num_listeners; ++i) {
         h2o_socket_close(listeners[i].sock);
         listeners[i].sock = NULL;
     }
+    h2o_context_request_shutdown(&ctx);
     while (1)
         h2o_evloop_run(loop);
 

@@ -72,6 +72,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     ctx->loop = loop;
     ctx->globalconf = config;
     h2o_timeout_init(ctx->loop, &ctx->zero_timeout, 0);
+    h2o_timeout_init(ctx->loop, &ctx->one_sec_timeout, 1000);
     h2o_timeout_init(ctx->loop, &ctx->http1.req_timeout, config->http1.req_timeout);
     h2o_timeout_init(ctx->loop, &ctx->http2.idle_timeout, config->http2.idle_timeout);
     h2o_linklist_init_anchor(&ctx->http2._conns);
@@ -106,6 +107,7 @@ void h2o_context_dispose(h2o_context_t *ctx)
     }
     free(ctx->_module_configs);
     h2o_timeout_dispose(ctx->loop, &ctx->zero_timeout);
+    h2o_timeout_dispose(ctx->loop, &ctx->one_sec_timeout);
     h2o_timeout_dispose(ctx->loop, &ctx->http1.req_timeout);
     h2o_timeout_dispose(ctx->loop, &ctx->http2.idle_timeout);
     /* what should we do here? assert(!h2o_linklist_is_empty(&ctx->http2._conns); */
@@ -114,6 +116,15 @@ void h2o_context_dispose(h2o_context_t *ctx)
     /* make sure the handles released by h2o_timeout_dispose get freed */
     uv_run(ctx->loop, UV_RUN_NOWAIT);
 #endif
+}
+
+void h2o_context_request_shutdown(h2o_context_t *ctx)
+{
+    ctx->shutdown_requested = 1;
+    if (ctx->globalconf->http1.callbacks.request_shutdown != NULL)
+        ctx->globalconf->http1.callbacks.request_shutdown(ctx);
+    if (ctx->globalconf->http2.callbacks.request_shutdown != NULL)
+        ctx->globalconf->http2.callbacks.request_shutdown(ctx);
 }
 
 void h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts)

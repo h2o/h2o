@@ -36,6 +36,8 @@ typedef struct st_h2o_http2_stream_t h2o_http2_stream_t;
 extern const char *h2o_http2_npn_protocols;
 extern const h2o_iovec_t *h2o_http2_alpn_protocols;
 
+extern const h2o_protocol_callbacks_t H2O_HTTP2_CALLBACKS;
+
 /* connection flow control window + alpha */
 #define H2O_HTTP2_DEFAULT_OUTBUF_SIZE 81920
 
@@ -204,7 +206,11 @@ struct st_h2o_http2_stream_t {
 
 KHASH_MAP_INIT_INT64(h2o_http2_stream_t, h2o_http2_stream_t *)
 
-typedef enum enum_h2o_http2_conn_state_t { H2O_HTTP2_CONN_STATE_OPEN, H2O_HTTP2_CONN_STATE_IS_CLOSING } h2o_http2_conn_state_t;
+typedef enum enum_h2o_http2_conn_state_t {
+    H2O_HTTP2_CONN_STATE_OPEN,        /* accepting new connections */
+    H2O_HTTP2_CONN_STATE_HALF_CLOSED, /* no more accepting new streams */
+    H2O_HTTP2_CONN_STATE_IS_CLOSING   /* nothing should be sent */
+} h2o_http2_conn_state_t;
 
 struct st_h2o_http2_conn_t {
     h2o_conn_t super;

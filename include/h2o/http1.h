@@ -29,6 +29,8 @@ extern "C" {
 typedef struct st_h2o_http1_conn_t h2o_http1_conn_t;
 typedef void (*h2o_http1_upgrade_cb)(void *user_data, h2o_socket_t *sock, size_t reqsize);
 
+extern const h2o_protocol_callbacks_t H2O_HTTP1_CALLBACKS;
+
 typedef struct st_h2o_http1_finalostream_t {
     h2o_ostream_t super;
     int sent_headers;
