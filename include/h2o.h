@@ -265,6 +265,10 @@ struct st_h2o_context_t {
          * idle timeout
          */
         h2o_timeout_t idle_timeout;
+        /**
+         * link-list of h2o_http2_conn_t
+         */
+        h2o_linklist_t _conns;
     } http2;
 
     /**
