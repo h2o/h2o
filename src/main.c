@@ -98,6 +98,7 @@ static struct {
     int max_connections;
     size_t num_threads;
     pthread_t *thread_ids;
+    volatile sig_atomic_t shutdown_requested;
     struct {
         /* unused buffers exist to avoid false sharing of the cache line */
         char _unused1[32];
@@ -114,6 +115,7 @@ static struct {
     1024, /* max_connections */
     0,    /* initialized in main() */
     NULL, /* thread_ids */
+    0,    /* shutdown_requested */
     {},   /* state */
 };
 
@@ -912,10 +914,24 @@ yoml_t *load_config(const char *fn)
     return yoml;
 }
 
+static void notify_all_threads(void)
+{
+    unsigned i;
+    for (i = 0; i != conf.num_threads; ++i)
+        h2o_thread_notify(conf.thread_ids[i]);
+}
+
+static void graceful_shutdown(int signo)
+{
+    conf.shutdown_requested = 1;
+    notify_all_threads();
+}
+
 static void setup_signal_handlers(void)
 {
     /* ignore SIGPIPE */
     h2o_set_signal_handler(SIGPIPE, SIG_IGN);
+    h2o_set_signal_handler(SIGTERM, graceful_shutdown);
     /* use SIGCONT for notifying the worker threads */
     h2o_thread_initialize_signal_for_notification(SIGCONT);
 }
@@ -931,13 +947,7 @@ static void on_socketclose(void *data)
 
     if (prev_num_connections == conf.max_connections) {
         /* ready to accept new connections. wake up all the threads! */
-        if (conf.thread_ids != NULL) {
-            unsigned i;
-            for (i = 0; i != conf.num_threads; ++i)
-                h2o_thread_notify(conf.thread_ids[i]);
-        } else {
-            h2o_thread_notify(pthread_self());
-        }
+        notify_all_threads();
     }
 }
 
@@ -1004,9 +1014,14 @@ static void *run_loop(void *_unused)
     /* setup listeners */
     for (i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];
+        int fd = dup(listener_config->fd);
+        if (fd == -1) {
+            perror("failed to dup listening socket");
+            return NULL;
+        }
         listeners[i].ctx = &ctx;
         listeners[i].ssl_ctx = listener_config->ssl.size != 0 ? listener_config->ssl.entries[0].ctx : NULL;
-        listeners[i].sock = h2o_evloop_socket_create(ctx.loop, listener_config->fd, (struct sockaddr *)&listener_config->addr,
+        listeners[i].sock = h2o_evloop_socket_create(ctx.loop, fd, (struct sockaddr *)&listener_config->addr,
                                                      listener_config->addrlen, H2O_SOCKET_FLAG_IS_ACCEPT);
         listeners[i].sock->data = listeners + i;
     }
@@ -1015,11 +1030,24 @@ static void *run_loop(void *_unused)
 
     /* the main loop */
     while (1) {
-        if (h2o_thread_is_notified())
+        if (h2o_thread_is_notified()) {
+            if (conf.shutdown_requested)
+                break;
             update_listener_state(listeners);
+        }
         /* run the loop once */
         h2o_evloop_run(loop);
     }
+
+    /* shutdown requested, close the listeners and continue running the loop */
+    for (i = 0; i != conf.num_listeners; ++i) {
+        h2o_socket_close(listeners[i].sock);
+        listeners[i].sock = NULL;
+    }
+    while (1)
+        h2o_evloop_run(loop);
+
+    /* the process gets killed as num_connections become zero */
 
     return NULL;
 }
@@ -1204,18 +1232,27 @@ int main(int argc, char **argv)
     fprintf(stderr, "h2o server (pid:%d) is ready to serve requests\n", (int)getpid());
 
     assert(conf.num_threads != 0);
-    if (conf.num_threads == 1) {
-        run_loop(NULL);
-    } else {
+
+    { /* the main loop */
+        unsigned int i;
+        /* satrt the threads */
         conf.thread_ids = alloca(sizeof(pthread_t) * conf.num_threads);
-        unsigned i;
         for (i = 0; i != conf.num_threads; ++i) {
             pthread_create(conf.thread_ids + i, NULL, run_loop, NULL);
         }
-        for (i = 0; i < conf.num_threads; ++i) {
-            pthread_join(conf.thread_ids[i], NULL);
+        /* wait until shutdown is requested */
+        while (! conf.shutdown_requested)
+            sleep(86400);
+        fprintf(stderr, "received SIGTERM, gracefully shutting down\n");
+        /* close all the listeners */
+        for (i = 0; i != conf.num_listeners; ++i) {
+            close(conf.listeners[i]->fd);
+            conf.listeners[i]->fd = -1;
         }
-    }
+        /* wait until the number of connections becomes zero, and exit */
+        while (num_connections(0) != 0)
+            usleep(100 * 1000);
 
-    return 0;
+        _exit(0);
+    }
 }

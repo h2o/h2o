@@ -248,6 +248,10 @@ struct st_h2o_context_t {
      * pointer to the global configuration
      */
     h2o_globalconf_t *globalconf;
+    /**
+     * flag indicating if shutdown has been requested
+     */
+    int shutdown_requested;
 
     struct {
         /**

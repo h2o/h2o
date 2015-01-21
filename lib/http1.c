@@ -321,6 +321,9 @@ static ssize_t fixup_request(h2o_http1_conn_t *conn, struct phr_header *headers,
         /* defaults to keep-alive if >= HTTP/1.1 */
         conn->req.http1_is_persistent = 1;
     }
+    /* disable keep-alive if shutdown is requested */
+    if (conn->req.http1_is_persistent && conn->super.ctx->shutdown_requested)
+        conn->req.http1_is_persistent = 0;
 
     return entity_header_index;
 }
