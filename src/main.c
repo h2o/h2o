@@ -1242,7 +1242,7 @@ int main(int argc, char **argv)
             pthread_create(conf.thread_ids + i, NULL, run_loop, NULL);
         }
         /* wait until shutdown is requested */
-        while (! conf.shutdown_requested)
+        while (!conf.shutdown_requested)
             sleep(86400);
         fprintf(stderr, "received SIGTERM, gracefully shutting down\n");
         /* close all the listeners */
