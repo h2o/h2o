@@ -4,8 +4,8 @@
  */
 
 #include "yrmcds.h"
+#include "portability.h"
 
-#include <endian.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -17,6 +17,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/uio.h>
 #include <unistd.h>
 
 static const size_t HEADER_SIZE = 12;
