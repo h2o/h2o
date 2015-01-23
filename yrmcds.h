@@ -11,6 +11,10 @@
 #define LIBYRMCDS_VERSION        "1.1.0"
 #define LIBYRMCDS_VERSION_NUMBER  10100
 
+#ifndef LIBYRMCDS_USE_LZ4
+#define LIBYRMCDS_USE_LZ4 1
+#endif
+
 #include <pthread.h>
 #include <stddef.h>
 #include <stdint.h>
