@@ -1,7 +1,9 @@
 // (C) 2013 Cybozu et al.
 
 #include "yrmcds.h"
+#if LIBYRMCDS_USE_LZ4
 #include "lz4/lib/lz4.h"
+#endif
 #include "portability.h"
 
 #include <errno.h>
@@ -134,6 +136,7 @@ yrmcds_error yrmcds_recv(yrmcds* c, yrmcds_response* r) {
     r->value = 0;
 
     if( c->compress_size && (r->flags & YRMCDS_FLAG_COMPRESS) ) {
+#if LIBYRMCDS_USE_LZ4
         if( data_len == 0 ) {
             c->invalid = 1;
             return YRMCDS_PROTOCOL_ERROR;
@@ -159,6 +162,9 @@ yrmcds_error yrmcds_recv(yrmcds* c, yrmcds_response* r) {
         }
         r->data = c->decompressed;
         r->data_len = decompress_size;
+#else
+        return YRMCDS_PROTOCOL_ERROR;
+#endif
     } else {
         r->data = data_len ? pdata : NULL;
         r->data_len = data_len;
