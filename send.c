@@ -1,7 +1,7 @@
 // (C) 2013-2015 Cybozu et al.
 
 #include "yrmcds.h"
-#include "lz4/lz4.h"
+#include "lz4/lib/lz4.h"
 #include "portability.h"
 
 #include <errno.h>
