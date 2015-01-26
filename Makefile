@@ -6,7 +6,7 @@ CC = gcc
 CXX = g++ -std=gnu++11
 CPPFLAGS = -D_GNU_SOURCE
 OPTFLAGS = -gdwarf-3 -O2
-CFLAGS = -Wall $(OPTFLAGS)
+CFLAGS = -Wall -Wconversion $(OPTFLAGS)
 CXXFLAGS = $(CFLAGS) -Wnon-virtual-dtor -Woverloaded-virtual
 LDFLAGS = -L.
 LDLIBS = -lyrmcds -lpthread

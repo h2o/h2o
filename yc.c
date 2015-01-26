@@ -117,7 +117,7 @@ static void write_data(const yrmcds_response* r) {
         ssize_t n = write(STDOUT_FILENO, p, to_write);
         if( n == -1 ) return;
         p += n;
-        to_write -= n;
+        to_write -= (size_t)n;
     }
     // writing a newline breaks data equality...
     //char nl = '\n';
@@ -155,7 +155,7 @@ static size_t read_data(const char* filename, char** pdata) {
             return 0;
         }
         if( n == 0 ) break;
-        data_len += n;
+        data_len += (size_t)n;
     }
 
     if( fd != STDIN_FILENO )
@@ -174,17 +174,17 @@ static size_t read_data(const char* filename, char** pdata) {
         return 2;                                                       \
     }
 
-#define CHECK_RESPONSE(r)                                         \
-    if( r->status != YRMCDS_STATUS_OK ) {                         \
-        fprintf(stderr, "Command failed: 0x%04x %.*s\n",          \
-                r->status, (int)r->data_len, r->data);            \
-        return 3;                                                 \
+#define CHECK_RESPONSE(r)                                   \
+    if( r->status != YRMCDS_STATUS_OK ) {                   \
+        fprintf(stderr, "Command failed: 0x%04x %.*s\n",    \
+                r->status, (int)r->data_len, r->data);      \
+        return 3;                                           \
     }
 
 int cmd_noop(int argc, char** argv, yrmcds* s) {
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_noop(s, &serial);
+    yrmcds_error e = yrmcds_noop(s, &serial);
     CHECK_ERROR(e);
     if( debug )
         fprintf(stderr, "request serial = %u\n", serial);
@@ -204,7 +204,7 @@ int cmd_get(int argc, char** argv, yrmcds* s) {
     }
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_get(s, argv[0], strlen(argv[0]), quiet, &serial);
+    yrmcds_error e = yrmcds_get(s, argv[0], strlen(argv[0]), quiet, &serial);
     CHECK_ERROR(e);
     if( quiet ) {
         e = yrmcds_noop(s, &serial);
@@ -232,7 +232,7 @@ int cmd_getk(int argc, char** argv, yrmcds* s) {
     }
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_getk(s, argv[0], strlen(argv[0]), quiet, &serial);
+    yrmcds_error e = yrmcds_getk(s, argv[0], strlen(argv[0]), quiet, &serial);
     CHECK_ERROR(e);
     if( quiet ) {
         e = yrmcds_noop(s, &serial);
@@ -263,7 +263,7 @@ int cmd_gat(int argc, char** argv, yrmcds* s) {
 
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_get_touch(s, key, strlen(key), expire, quiet, &serial);
+    yrmcds_error e = yrmcds_get_touch(s, key, strlen(key), expire, quiet, &serial);
     CHECK_ERROR(e);
     if( quiet ) {
         e = yrmcds_noop(s, &serial);
@@ -294,7 +294,7 @@ int cmd_gatk(int argc, char** argv, yrmcds* s) {
 
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_getk_touch(s, key, strlen(key), expire, quiet, &serial);
+    yrmcds_error e = yrmcds_getk_touch(s, key, strlen(key), expire, quiet, &serial);
     CHECK_ERROR(e);
     if( quiet ) {
         e = yrmcds_noop(s, &serial);
@@ -322,7 +322,7 @@ int cmd_lag(int argc, char** argv, yrmcds* s) {
     }
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_lock_get(s, argv[0], strlen(argv[0]), quiet, &serial);
+    yrmcds_error e = yrmcds_lock_get(s, argv[0], strlen(argv[0]), quiet, &serial);
     CHECK_ERROR(e);
     if( quiet ) {
         e = yrmcds_noop(s, &serial);
@@ -352,7 +352,7 @@ int cmd_lagk(int argc, char** argv, yrmcds* s) {
     }
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_lock_getk(s, argv[0], strlen(argv[0]), quiet, &serial);
+    yrmcds_error e = yrmcds_lock_getk(s, argv[0], strlen(argv[0]), quiet, &serial);
     CHECK_ERROR(e);
     if( quiet ) {
         e = yrmcds_noop(s, &serial);
@@ -385,7 +385,7 @@ int cmd_touch(int argc, char** argv, yrmcds* s) {
 
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_touch(s, key, strlen(key), expire, quiet, &serial);
+    yrmcds_error e = yrmcds_touch(s, key, strlen(key), expire, quiet, &serial);
     CHECK_ERROR(e);
     if( quiet ) {
         e = yrmcds_noop(s, &serial);
@@ -430,8 +430,8 @@ int cmd_set(int argc, char** argv, yrmcds* s) {
 
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_set(s, key, strlen(key), data, data_len,
-                       flags, expire, cas, quiet, &serial);
+    yrmcds_error e = yrmcds_set(s, key, strlen(key), data, data_len,
+                                flags, expire, cas, quiet, &serial);
     free(data);
     CHECK_ERROR(e);
     if( quiet ) {
@@ -477,8 +477,8 @@ int cmd_replace(int argc, char** argv, yrmcds* s) {
 
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_replace(s, key, strlen(key), data, data_len,
-                           flags, expire, cas, quiet, &serial);
+    yrmcds_error e = yrmcds_replace(s, key, strlen(key), data, data_len,
+                                    flags, expire, cas, quiet, &serial);
     free(data);
     CHECK_ERROR(e);
     if( quiet ) {
@@ -524,8 +524,8 @@ int cmd_add(int argc, char** argv, yrmcds* s) {
 
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_add(s, key, strlen(key), data, data_len,
-                       flags, expire, cas, quiet, &serial);
+    yrmcds_error e = yrmcds_add(s, key, strlen(key), data, data_len,
+                                flags, expire, cas, quiet, &serial);
     free(data);
     CHECK_ERROR(e);
     if( quiet ) {
@@ -568,8 +568,8 @@ int cmd_rau(int argc, char** argv, yrmcds* s) {
 
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_replace_unlock(s, key, strlen(key), data, data_len,
-                                  flags, expire, quiet, &serial);
+    yrmcds_error e = yrmcds_replace_unlock(s, key, strlen(key), data, data_len,
+                                           flags, expire, quiet, &serial);
     free(data);
     CHECK_ERROR(e);
     if( quiet ) {
@@ -609,7 +609,7 @@ int cmd_incr(int argc, char** argv, yrmcds* s) {
 
     yrmcds_response r[1];
     uint32_t serial;
-    int e;
+    yrmcds_error e;
     if( argc == 2 ) {
         e = yrmcds_incr(s, key, strlen(key), value, quiet, &serial);
     } else {
@@ -655,7 +655,7 @@ int cmd_decr(int argc, char** argv, yrmcds* s) {
 
     yrmcds_response r[1];
     uint32_t serial;
-    int e;
+    yrmcds_error e;
     if( argc == 2 ) {
         e = yrmcds_decr(s, key, strlen(key), value, quiet, &serial);
     } else {
@@ -697,8 +697,8 @@ int cmd_append(int argc, char** argv, yrmcds* s) {
 
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_append(s, key, strlen(key),
-                          data, data_len, quiet, &serial);
+    yrmcds_error e = yrmcds_append(s, key, strlen(key),
+                                   data, data_len, quiet, &serial);
     free(data);
     CHECK_ERROR(e);
     if( quiet ) {
@@ -734,8 +734,8 @@ int cmd_prepend(int argc, char** argv, yrmcds* s) {
 
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_prepend(s, key, strlen(key),
-                           data, data_len, quiet, &serial);
+    yrmcds_error e = yrmcds_prepend(s, key, strlen(key),
+                                    data, data_len, quiet, &serial);
     free(data);
     CHECK_ERROR(e);
     if( quiet ) {
@@ -763,7 +763,7 @@ int cmd_delete(int argc, char** argv, yrmcds* s) {
     }
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_remove(s, argv[0], strlen(argv[0]), quiet, &serial);
+    yrmcds_error e = yrmcds_remove(s, argv[0], strlen(argv[0]), quiet, &serial);
     CHECK_ERROR(e);
     if( quiet ) {
         e = yrmcds_noop(s, &serial);
@@ -791,7 +791,7 @@ int cmd_lock(int argc, char** argv, yrmcds* s) {
     }
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_lock(s, argv[0], strlen(argv[0]), quiet, &serial);
+    yrmcds_error e = yrmcds_lock(s, argv[0], strlen(argv[0]), quiet, &serial);
     CHECK_ERROR(e);
     if( quiet ) {
         e = yrmcds_noop(s, &serial);
@@ -820,7 +820,7 @@ int cmd_unlock(int argc, char** argv, yrmcds* s) {
     }
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_unlock(s, argv[0], strlen(argv[0]), quiet, &serial);
+    yrmcds_error e = yrmcds_unlock(s, argv[0], strlen(argv[0]), quiet, &serial);
     CHECK_ERROR(e);
     if( quiet ) {
         e = yrmcds_noop(s, &serial);
@@ -843,7 +843,7 @@ int cmd_unlock(int argc, char** argv, yrmcds* s) {
 int cmd_unlockall(int argc, char** argv, yrmcds* s) {
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_unlockall(s, quiet, &serial);
+    yrmcds_error e = yrmcds_unlockall(s, quiet, &serial);
     CHECK_ERROR(e);
     if( quiet ) {
         e = yrmcds_noop(s, &serial);
@@ -870,7 +870,7 @@ int cmd_flush(int argc, char** argv, yrmcds* s) {
 
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_flush(s, delay, quiet, &serial);
+    yrmcds_error e = yrmcds_flush(s, delay, quiet, &serial);
     CHECK_ERROR(e);
     if( quiet ) {
         e = yrmcds_noop(s, &serial);
@@ -893,7 +893,7 @@ int cmd_flush(int argc, char** argv, yrmcds* s) {
 int cmd_stat(int argc, char** argv, yrmcds* s) {
     yrmcds_response r[1];
     uint32_t serial;
-    int e;
+    yrmcds_error e;
     if( argc > 0 ) {
         if( strcmp(argv[0], "settings") == 0 ) {
             e = yrmcds_stat_settings(s, &serial);
@@ -928,7 +928,7 @@ int cmd_stat(int argc, char** argv, yrmcds* s) {
 int cmd_version(int argc, char** argv, yrmcds* s) {
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_version(s, &serial);
+    yrmcds_error e = yrmcds_version(s, &serial);
     CHECK_ERROR(e);
     e = yrmcds_recv(s, r);
     CHECK_ERROR(e);
@@ -942,7 +942,7 @@ int cmd_version(int argc, char** argv, yrmcds* s) {
 int cmd_quit(int argc, char** argv, yrmcds* s) {
     yrmcds_response r[1];
     uint32_t serial;
-    int e = yrmcds_quit(s, quiet, &serial);
+    yrmcds_error e = yrmcds_quit(s, quiet, &serial);
     CHECK_ERROR(e);
     if( debug )
         fprintf(stderr, "request serial = %u\n", serial);
@@ -983,7 +983,7 @@ int main(int argc, char** argv) {
                 fprintf(stderr, "Invalid compression thoreshold.\n");
                 return 1;
             }
-            compression = n;
+            compression = (size_t)n;
             break;
         case 'd':
             debug = 1;
@@ -1012,7 +1012,7 @@ int main(int argc, char** argv) {
     argv += optind + 1;
 
     yrmcds s[1];
-    int e = yrmcds_connect(s, server, port);
+    yrmcds_error e = yrmcds_connect(s, server, port);
     CHECK_ERROR(e);
     e = yrmcds_set_compression(s, compression);
     if( e != 0 )
@@ -1023,7 +1023,7 @@ int main(int argc, char** argv) {
 #define do_cmd(name)                            \
     if( strcmp(cmd, #name) == 0 )  {            \
         ret = cmd_##name(argc, argv, s);        \
-        goto OUT;                               \
+            goto OUT;                           \
     }
 
     do_cmd(noop);

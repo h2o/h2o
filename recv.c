@@ -34,7 +34,7 @@ static inline yrmcds_error recv_data(yrmcds* c) {
     }
     if( n == 0 )
         return YRMCDS_DISCONNECTED;
-    c->used += n;
+    c->used += (size_t)n;
     return YRMCDS_OK;
 }
 
@@ -73,7 +73,7 @@ yrmcds_error yrmcds_recv(yrmcds* c, yrmcds_response* r) {
     }
 
     while( c->used < BINARY_HEADER_SIZE ) {
-        int e = recv_data(c);
+        yrmcds_error e = recv_data(c);
         if( e != 0 ) return e;
     }
 
@@ -87,7 +87,7 @@ yrmcds_error yrmcds_recv(yrmcds* c, yrmcds_response* r) {
         return YRMCDS_PROTOCOL_ERROR;
     }
     while( c->used < (BINARY_HEADER_SIZE + total_len) ) {
-        int e = recv_data(c);
+        yrmcds_error e = recv_data(c);
         if( e != 0 ) return e;
     }
 
@@ -138,7 +138,7 @@ yrmcds_error yrmcds_recv(yrmcds* c, yrmcds_response* r) {
             c->invalid = 1;
             return YRMCDS_PROTOCOL_ERROR;
         }
-        r->flags &= ~YRMCDS_FLAG_COMPRESS;
+        r->flags &= ~(uint32_t)YRMCDS_FLAG_COMPRESS;
         uint32_t decompress_size = ntoh32(pdata);
         if( UINT32_MAX > INT_MAX ) {
             if( decompress_size > INT_MAX ) {
@@ -151,8 +151,8 @@ yrmcds_error yrmcds_recv(yrmcds* c, yrmcds_response* r) {
             return YRMCDS_OUT_OF_MEMORY;
         int d = LZ4_decompress_safe(pdata + sizeof(uint32_t),
                                     c->decompressed,
-                                    data_len - sizeof(uint32_t),
-                                    decompress_size);
+                                    (int)(data_len - sizeof(uint32_t)),
+                                    (int)decompress_size);
         if( d != decompress_size ) {
             c->invalid = 1;
             return YRMCDS_PROTOCOL_ERROR;

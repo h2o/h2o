@@ -1,4 +1,4 @@
-// (C) 2013 Cybozu et al.
+// (C) 2013-2015 Cybozu et al.
 
 #include "yrmcds.h"
 #include "lz4/lz4.h"
@@ -47,8 +47,8 @@ static yrmcds_error send_command(
     h[1] = (char)cmd;
     hton16((uint16_t)key_len, &h[2]);
     h[4] = (char)extras_len;
-    uint32_t total_len = key_len + extras_len + data_len;
-    hton32(total_len, &h[8]);
+    size_t total_len = (key_len + extras_len + data_len);
+    hton32((uint32_t)total_len, &h[8]);
     hton64(cas, &h[16]);
 
     int e = pthread_mutex_lock(&c->lock);
@@ -86,18 +86,19 @@ static yrmcds_error send_command(
 
     while( iovcnt > 0 ) {
         ssize_t n = writev(c->sock, iov, iovcnt);
+        size_t n2 = (size_t)n;
         if( n == -1 ) {
             if( errno == EINTR ) continue;
             ret = YRMCDS_SYSTEM_ERROR;
             goto OUT;
         }
-        while( n > 0 ) {
-            if( n < iov[0].iov_len ) {
-                iov[0].iov_base = (char*)iov[0].iov_base + n;
-                iov[0].iov_len -= n;
+        while( n2 > 0 ) {
+            if( n2 < iov[0].iov_len ) {
+                iov[0].iov_base = (char*)iov[0].iov_base + n2;
+                iov[0].iov_len -= n2;
                 break;
             }
-            n -= iov[0].iov_len;
+            n2 -= iov[0].iov_len;
             iovcnt --;
             if( iovcnt == 0 )
                 break;
@@ -126,17 +127,18 @@ static yrmcds_error send_data(
         if( flags & YRMCDS_FLAG_COMPRESS )
             return YRMCDS_BAD_ARGUMENT;
 
-        size_t bound = LZ4_compressBound(data_len);
+        size_t bound = (size_t)LZ4_compressBound((int)data_len);
         char* new_data = (char*)malloc(bound + sizeof(uint32_t));
         if( new_data == NULL )
             return YRMCDS_OUT_OF_MEMORY;
-        uint32_t new_size = LZ4_compress(data, new_data + sizeof(uint32_t),
-                                         data_len);
+        uint32_t new_size =
+            (uint32_t)LZ4_compress(data, new_data + sizeof(uint32_t),
+                                   (int)data_len);
         if( new_size == 0 ) {
             free(new_data);
             return YRMCDS_COMPRESS_FAILED;
         }
-        hton32(data_len, new_data);
+        hton32((uint32_t)data_len, new_data);
         flags |= YRMCDS_FLAG_COMPRESS;
         data_len = sizeof(uint32_t) + new_size;
         data = new_data;
