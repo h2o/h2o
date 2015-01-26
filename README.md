@@ -50,6 +50,14 @@ Usage
 
 See [USAGE.md](USAGE.md).
 
+Authors & Contributors
+----------------------
+
+* Yamamoto, Hirotaka [@ymmt2005](https://github.com/ymmt2005)
+* Nojima, Yusuke [@nojima](https://github.com/nojima)
+* Tanuma, Shuhei [@chobie](https://github.com/chobie)
+* Oku, Kazuho [@kazuho](https://github.com/kazuho)
+
 [memcached]: http://memcached.org/
 [yrmcds]: http://cybozu.github.io/yrmcds/
 [binprot]: https://code.google.com/p/memcached/wiki/BinaryProtocolRevamped
