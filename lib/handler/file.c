@@ -279,7 +279,7 @@ static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len, i
     /* build html */
     if ((dp = opendir(path)) == NULL)
         return -1;
-    body = build_dir_listing_html(&req->pool, h2o_iovec_init(path, path_len), dp);
+    body = build_dir_listing_html(&req->pool, req->path_normalized, dp);
     closedir(dp);
 
     bodyvec = h2o_iovec_init(body->bytes, body->size);
