@@ -1237,7 +1237,7 @@ int main(int argc, char **argv)
 
     { /* the main loop */
         unsigned int i;
-        /* satrt the threads */
+        /* start the threads */
         conf.thread_ids = alloca(sizeof(pthread_t) * conf.num_threads);
         for (i = 0; i != conf.num_threads; ++i) {
             pthread_create(conf.thread_ids + i, NULL, run_loop, NULL);
