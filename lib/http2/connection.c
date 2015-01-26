@@ -878,6 +878,10 @@ static void on_write_complete(h2o_socket_t *sock, int status)
         }
     }
 
+    /* cancel the write callback if scheduled (as the generator may have scheduled a write just before this function gets called) */
+    if (h2o_timeout_is_linked(&conn->_write.timeout_entry))
+        h2o_timeout_unlink(&conn->_write.timeout_entry);
+
     /* write more, if possible */
     if (do_emit_writereq(conn))
         return;
