@@ -101,13 +101,14 @@ EOT
 
     my $fetch = sub {
         my $path = shift;
-        return `curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}$path 2>&1 > /dev/null`;
+        run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}$path");
     };
 
-    my $resp = $fetch->("/on/");
-    like $resp, qr{^HTTP/1\.[0-9]+ 200 }s, "ON returns 200";
-    $resp = $fetch->("/off/");
-    like $resp, qr{^HTTP/1\.[0-9]+ 403 }s, "OFF returns 403";
+    my ($headers, $content) = $fetch->("/on/");
+    like $headers, qr{^HTTP/1\.[0-9]+ 200 }s, "ON returns 200";
+    unlike $content, qr{examples}, "result should not include internal info";
+    ($headers, $content) = $fetch->("/off/");
+    like $headers, qr{^HTTP/1\.[0-9]+ 403 }s, "OFF returns 403";
 };
 
 done_testing();
