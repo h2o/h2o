@@ -100,14 +100,14 @@ static void print_response(const yrmcds_response* r) {
             "  cas:      %" PRIu64 "\n"
             "  flags:    0x%08x\n"
             "  value:    %" PRIu64 "\n",
-            r->serial, r->length, r->status, r->command,
+            r->serial, (unsigned long)r->length, r->status, r->command,
             r->cas_unique, r->flags, r->value);
     if( r->key_len )
         fprintf(stderr, "  key:      %.*s (%lu bytes)\n",
-                (int)r->key_len, r->key, r->key_len);
+                (int)r->key_len, r->key, (unsigned long)r->key_len);
     if( r->data_len )
         fprintf(stderr, "  data:     %.*s (%lu bytes)\n",
-                (int)r->data_len, r->data, r->data_len);
+                (int)r->data_len, r->data, (unsigned long)r->data_len);
 }
 
 static void write_data(const yrmcds_response* r) {
