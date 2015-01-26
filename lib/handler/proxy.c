@@ -284,7 +284,10 @@ static void on_generator_dispose(void *_self)
 {
     struct rp_generator_t *self = _self;
 
-    assert(self->client == NULL);
+    if (self->client != NULL) {
+        h2o_http1client_cancel(self->client);
+        self->client = NULL;
+    }
     h2o_buffer_dispose(&self->last_content_before_send);
     h2o_buffer_dispose(&self->buf_sending);
 }
