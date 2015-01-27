@@ -25,6 +25,7 @@
 #include "yrmcds.h"
 
 typedef struct st_h2o_memcached_conn_t h2o_memcached_conn_t;
+typedef struct st_h2o_memcached_request_t h2o_memcached_request_t;
 
 typedef struct st_h2o_memcached_response_t {
     yrmcds_error err;
@@ -40,10 +41,13 @@ typedef void (*h2o_memcached_response_cb)(h2o_memcached_response_t *resp);
 
 h2o_memcached_conn_t *h2o_memcached_open(const char *host, uint16_t port);
 void h2o_memcached_dispatch_response(void);
-void h2o_memcached_get(h2o_memcached_conn_t *conn, const char *key, size_t keylen, h2o_memcached_response_cb cb, void *app_data);
-void h2o_memcached_set(h2o_memcached_conn_t *conn, const char *key, size_t keylen, const char *data, size_t datalen,
-                       uint32_t expires, h2o_memcached_response_cb cb, void *app_data);
-void h2o_memcached_remove(h2o_memcached_conn_t *conn, const char *key, size_t keylen, h2o_memcached_response_cb cb, void *app_data);
+h2o_memcached_request_t *h2o_memcached_get(h2o_memcached_conn_t *conn, const char *key, size_t keylen, h2o_memcached_response_cb cb,
+                                           void *app_data);
+h2o_memcached_request_t *h2o_memcached_set(h2o_memcached_conn_t *conn, const char *key, size_t keylen, const char *data,
+                                           size_t datalen, uint32_t expires, h2o_memcached_response_cb cb, void *app_data);
+h2o_memcached_request_t *h2o_memcached_remove(h2o_memcached_conn_t *conn, const char *key, size_t keylen,
+                                              h2o_memcached_response_cb cb, void *app_data);
+void h2o_memcached_discard_response(h2o_memcached_request_t *req);
 void h2o_memcached_print_error(yrmcds_error err);
 
 #endif

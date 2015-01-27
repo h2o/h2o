@@ -31,14 +31,14 @@
 struct st_client_thread_t {
     pthread_t tid;
     pthread_mutex_t mutex;
-    h2o_linklist_t responses; /* link-list of st_request_t */
+    h2o_linklist_t responses; /* link-list of h2o_memcached_request_t */
 };
 
-struct st_request_t {
+struct st_h2o_memcached_request_t {
     h2o_linklist_t link; /* linklist connected to pending_reqs or st_client_thread_t::responses */
     uint32_t serial;
-    void (*cb)(h2o_memcached_response_t *response); /* may be NULL */
-    struct st_client_thread_t *resp_thread; /* thread to respond to (or NULL if cb == NULL) */
+    void (*cb)(h2o_memcached_response_t *response); /* may be NULL (may become NULL if discard_response is called) */
+    struct st_client_thread_t *resp_thread;         /* thread to respond to (immutable) */
     h2o_memcached_response_t response;
 };
 
@@ -51,9 +51,9 @@ struct st_h2o_memcached_conn_t {
 
 static __thread struct st_client_thread_t *client_thd;
 
-static struct st_request_t *create_request(size_t sz, h2o_memcached_response_cb cb, void *app_data)
+static h2o_memcached_request_t *create_request(size_t sz, h2o_memcached_response_cb cb, void *app_data)
 {
-    struct st_request_t *req = h2o_mem_alloc(sz);
+    h2o_memcached_request_t *req = h2o_mem_alloc(sz);
     memset(req, 0, sz);
 
     if (cb != NULL) {
@@ -71,7 +71,7 @@ static struct st_request_t *create_request(size_t sz, h2o_memcached_response_cb 
     return req;
 }
 
-static void destroy_request(struct st_request_t *req)
+static void destroy_request(h2o_memcached_request_t *req)
 {
     assert(!h2o_linklist_is_linked(&req->link));
 
@@ -91,7 +91,7 @@ static void destroy_request(struct st_request_t *req)
     free(req);
 }
 
-static void link_pending_request(h2o_memcached_conn_t *conn, struct st_request_t *req)
+static void link_pending_request(h2o_memcached_conn_t *conn, h2o_memcached_request_t *req)
 {
     assert(!h2o_linklist_is_linked(&req->link));
 
@@ -100,15 +100,15 @@ static void link_pending_request(h2o_memcached_conn_t *conn, struct st_request_t
     pthread_mutex_unlock(&conn->mutex);
 }
 
-static struct st_request_t *pop_pending_request(h2o_memcached_conn_t *conn, uint32_t serial)
+static h2o_memcached_request_t *pop_pending_request(h2o_memcached_conn_t *conn, uint32_t serial)
 {
     h2o_linklist_t *link;
-    struct st_request_t *req;
+    h2o_memcached_request_t *req;
 
     pthread_mutex_lock(&conn->mutex);
 
     for (link = conn->pending_reqs.next; link != &conn->pending_reqs; link = link->next) {
-        req = H2O_STRUCT_FROM_MEMBER(struct st_request_t, link, link);
+        req = H2O_STRUCT_FROM_MEMBER(h2o_memcached_request_t, link, link);
         if (req->serial == serial) {
             h2o_linklist_unlink(&req->link);
             goto Exit;
@@ -122,12 +122,11 @@ Exit:
     return req;
 }
 
-static void link_response(struct st_request_t *req)
+static void link_response(h2o_memcached_request_t *req)
 {
     int need_notify;
 
     assert(!h2o_linklist_is_linked(&req->link));
-    assert(req->cb != NULL);
 
     pthread_mutex_lock(&req->resp_thread->mutex);
     need_notify = h2o_linklist_is_empty(&req->resp_thread->responses);
@@ -146,12 +145,12 @@ static void *run_loop(void *_conn)
     while (1) {
         /* handle response */
         while ((err = yrmcds_recv(&conn->yrmcds, &resp)) == YRMCDS_OK) {
-            struct st_request_t *req = pop_pending_request(conn, resp.serial);
+            h2o_memcached_request_t *req = pop_pending_request(conn, resp.serial);
             if (req == NULL) {
                 fprintf(stderr, "[memcached] received unknown serial\n");
                 goto Error;
             }
-            if (req->cb != NULL) {
+            if (req->resp_thread != NULL) {
                 req->response.err = YRMCDS_OK;
                 req->response.status = resp.status;
                 req->response.cmd = resp.command;
@@ -223,55 +222,72 @@ void h2o_memcached_dispatch_response(void)
 
     /* dispatch */
     while (!h2o_linklist_is_empty(&responses)) {
-        struct st_request_t *req = H2O_STRUCT_FROM_MEMBER(struct st_request_t, link, responses.next);
+        h2o_memcached_request_t *req = H2O_STRUCT_FROM_MEMBER(h2o_memcached_request_t, link, responses.next);
         h2o_linklist_unlink(&req->link);
-        req->cb(&req->response);
+        if (req->cb != NULL)
+            req->cb(&req->response);
         destroy_request(req);
     }
 }
 
-void h2o_memcached_get(h2o_memcached_conn_t *conn, const char *key, size_t keylen, h2o_memcached_response_cb cb, void *app_data)
+h2o_memcached_request_t *h2o_memcached_get(h2o_memcached_conn_t *conn, const char *key, size_t keylen, h2o_memcached_response_cb cb,
+                                           void *app_data)
 {
-    struct st_request_t *req = (void *)create_request(sizeof(*req), cb, app_data);
+    h2o_memcached_request_t *req = (void *)create_request(sizeof(*req), cb, app_data);
 
     assert(cb != NULL);
 
     if ((req->response.err = yrmcds_get(&conn->yrmcds, key, keylen, 0, &req->serial)) != YRMCDS_OK) {
         link_response(req);
-        return;
+        goto Exit;
     }
 
     link_pending_request(conn, req);
+
+Exit:
+    return req;
 }
 
-void h2o_memcached_set(h2o_memcached_conn_t *conn, const char *key, size_t keylen, const char *data, size_t datalen,
-                       uint32_t expires, h2o_memcached_response_cb cb, void *app_data)
+h2o_memcached_request_t *h2o_memcached_set(h2o_memcached_conn_t *conn, const char *key, size_t keylen, const char *data,
+                                           size_t datalen, uint32_t expires, h2o_memcached_response_cb cb, void *app_data)
 {
-    struct st_request_t *req = (void *)create_request(sizeof(*req), cb, app_data);
+    h2o_memcached_request_t *req = (void *)create_request(sizeof(*req), cb, app_data);
 
     /* TODO use setq in case cb == NULL? */
     if ((req->response.err = yrmcds_set(&conn->yrmcds, key, keylen, data, datalen, 0, expires, 0, 0, &req->serial)) != YRMCDS_OK) {
         if (cb != NULL)
             link_response(req);
-        return;
+        goto Exit;
     }
 
     link_pending_request(conn, req);
+
+Exit:
+    return cb != NULL ? req : NULL;
 }
 
-void h2o_memcached_remove(h2o_memcached_conn_t *conn, const char *key, size_t keylen, h2o_memcached_response_cb cb, void *app_data)
+h2o_memcached_request_t *h2o_memcached_remove(h2o_memcached_conn_t *conn, const char *key, size_t keylen,
+                                              h2o_memcached_response_cb cb, void *app_data)
 {
-    struct st_request_t *req = (void *)create_request(sizeof(*req), cb, app_data);
-
-    assert(cb != NULL);
+    h2o_memcached_request_t *req = (void *)create_request(sizeof(*req), cb, app_data);
 
     /* TODO use removeq in case cb == NULL? */
     if ((req->response.err = yrmcds_remove(&conn->yrmcds, key, keylen, 0, &req->serial)) != YRMCDS_OK) {
-        link_response(req);
-        return;
+        if (cb != NULL)
+            link_response(req);
+        goto Exit;
     }
 
     link_pending_request(conn, req);
+
+Exit:
+    return cb != NULL ? req : NULL;
+}
+
+void h2o_memcached_discard_response(h2o_memcached_request_t *req)
+{
+    assert(req->resp_thread != NULL);
+    req->cb = NULL;
 }
 
 void h2o_memcached_print_error(yrmcds_error err)
