@@ -5,6 +5,12 @@ PREFIX = /usr/local
 CC = gcc
 CXX = g++ -std=gnu++11
 CPPFLAGS = -D_GNU_SOURCE
+
+# Uncomment the next line to remove the internal lock used to
+# serialize sending commands.
+#
+#CPPFLAGS += -DLIBYRMCDS_NO_INTERNAL_LOCK
+
 OPTFLAGS = -gdwarf-3 -O2
 CFLAGS = -Wall -Wconversion $(OPTFLAGS)
 CXXFLAGS = $(CFLAGS) -Wnon-virtual-dtor -Woverloaded-virtual
