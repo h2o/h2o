@@ -40,6 +40,14 @@ Build
 
 Just run `make`.
 
+To support [transparent LZ4 compression][compress], obtain LZ4 source
+code and rebuild the library as follows:
+
+```
+$ make lz4
+$ make clean; make
+```
+
 Install
 -------
 
@@ -64,3 +72,4 @@ Authors & Contributors
 [locking]: https://github.com/cybozu/yrmcds/blob/master/docs/locking.md
 [counter]: https://github.com/cybozu/yrmcds/blob/master/docs/counter.md
 [LZ4]: https://code.google.com/p/lz4/
+[compress]: USAGE.md#transparent-compression

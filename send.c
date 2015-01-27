@@ -1,8 +1,11 @@
 // (C) 2013-2015 Cybozu et al.
 
 #include "yrmcds.h"
-#include "lz4/lib/lz4.h"
 #include "portability.h"
+
+#ifdef LIBYRMCDS_USE_LZ4
+#  include "lz4/lib/lz4.h"
+#endif
 
 #include <errno.h>
 #include <stdlib.h>
@@ -123,6 +126,7 @@ static yrmcds_error send_data(
         return YRMCDS_BAD_ARGUMENT;
 
     int compressed = 0;
+#ifdef LIBYRMCDS_USE_LZ4
     if( (c->compress_size > 0) && (data_len > c->compress_size) ) {
         if( flags & YRMCDS_FLAG_COMPRESS )
             return YRMCDS_BAD_ARGUMENT;
@@ -144,6 +148,7 @@ static yrmcds_error send_data(
         data = new_data;
         compressed = 1;
     }
+#endif // LIBYRMCDS_USE_LZ4
 
     char extras[8];
     hton32(flags, extras);
