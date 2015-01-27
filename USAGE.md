@@ -106,9 +106,20 @@ Transparent compression
 
 libyrmcds provides optional transparent data compression by [LZ4][].
 
-The feature is disabled by default.  To enable it, set compression
-threshold with `yrmcds_set_compression()`.  Note that all clients
-must enable the compression to properly handle compressed data.
+To use this feature, the library must be built with LZ4 as follows:
+
+```
+$ make lz4
+$ make
+```
+
+If the library supports LZ4 compression, you can enable transparent
+LZ4 (de)compression for large objects.  The threshold for compression
+can be set by `yrmcds_set_compression()`.  The compression is disabled
+by default.
+
+Note that all clients must support and enable the compression to
+properly handle compressed data.
 
 Counter extension
 -----------------
