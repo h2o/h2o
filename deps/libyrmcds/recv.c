@@ -1,10 +1,11 @@
 // (C) 2013 Cybozu et al.
 
 #include "yrmcds.h"
-#if LIBYRMCDS_USE_LZ4
-#include "lz4/lib/lz4.h"
-#endif
 #include "portability.h"
+
+#ifdef LIBYRMCDS_USE_LZ4
+#  include "lz4/lib/lz4.h"
+#endif
 
 #include <errno.h>
 #include <limits.h>
@@ -36,7 +37,7 @@ static inline yrmcds_error recv_data(yrmcds* c) {
     }
     if( n == 0 )
         return YRMCDS_DISCONNECTED;
-    c->used += n;
+    c->used += (size_t)n;
     return YRMCDS_OK;
 }
 
@@ -75,7 +76,7 @@ yrmcds_error yrmcds_recv(yrmcds* c, yrmcds_response* r) {
     }
 
     while( c->used < BINARY_HEADER_SIZE ) {
-        int e = recv_data(c);
+        yrmcds_error e = recv_data(c);
         if( e != 0 ) return e;
     }
 
@@ -89,7 +90,7 @@ yrmcds_error yrmcds_recv(yrmcds* c, yrmcds_response* r) {
         return YRMCDS_PROTOCOL_ERROR;
     }
     while( c->used < (BINARY_HEADER_SIZE + total_len) ) {
-        int e = recv_data(c);
+        yrmcds_error e = recv_data(c);
         if( e != 0 ) return e;
     }
 
@@ -134,14 +135,16 @@ yrmcds_error yrmcds_recv(yrmcds* c, yrmcds_response* r) {
         return YRMCDS_OK;
     }
     r->value = 0;
+    r->data = data_len ? pdata : NULL;
+    r->data_len = data_len;
 
+#ifdef LIBYRMCDS_USE_LZ4
     if( c->compress_size && (r->flags & YRMCDS_FLAG_COMPRESS) ) {
-#if LIBYRMCDS_USE_LZ4
         if( data_len == 0 ) {
             c->invalid = 1;
             return YRMCDS_PROTOCOL_ERROR;
         }
-        r->flags &= ~YRMCDS_FLAG_COMPRESS;
+        r->flags &= ~(uint32_t)YRMCDS_FLAG_COMPRESS;
         uint32_t decompress_size = ntoh32(pdata);
         if( UINT32_MAX > INT_MAX ) {
             if( decompress_size > INT_MAX ) {
@@ -154,21 +157,17 @@ yrmcds_error yrmcds_recv(yrmcds* c, yrmcds_response* r) {
             return YRMCDS_OUT_OF_MEMORY;
         int d = LZ4_decompress_safe(pdata + sizeof(uint32_t),
                                     c->decompressed,
-                                    data_len - sizeof(uint32_t),
-                                    decompress_size);
+                                    (int)(data_len - sizeof(uint32_t)),
+                                    (int)decompress_size);
         if( d != decompress_size ) {
             c->invalid = 1;
             return YRMCDS_PROTOCOL_ERROR;
         }
         r->data = c->decompressed;
         r->data_len = decompress_size;
-#else
-        return YRMCDS_PROTOCOL_ERROR;
-#endif
-    } else {
-        r->data = data_len ? pdata : NULL;
-        r->data_len = data_len;
     }
+#endif // LIBYRMCDS_USE_LZ4
+
     c->last_size = r->length;
     return YRMCDS_OK;
 }

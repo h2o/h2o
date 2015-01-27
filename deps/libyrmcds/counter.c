@@ -1,7 +1,4 @@
-/** @file counter.c
- * yrmcds counter extension public API.
- * (C) 2014 Cybozu.
- */
+// (C) 2013-2015 Cybozu et al.
 
 #include "yrmcds.h"
 #include "portability.h"
@@ -71,7 +68,9 @@ yrmcds_cnt_close(yrmcds_cnt* c) {
 
     close(c->sock);
     c->sock = -1;
+#ifndef LIBYRMCDS_NO_INTERNAL_LOCK
     pthread_mutex_destroy(&(c->lock));
+#endif
     free(c->recvbuf);
     c->recvbuf = NULL;
     free(c->stats.records);
@@ -104,7 +103,7 @@ recv_data(yrmcds_cnt* c) {
     }
     if( n == 0 )
         return YRMCDS_DISCONNECTED;
-    c->used += n;
+    c->used += (size_t)n;
     return YRMCDS_OK;
 }
 
@@ -268,30 +267,32 @@ yrmcds_cnt_recv(yrmcds_cnt* c, yrmcds_cnt_response* r) {
 
 static yrmcds_error
 send_command(yrmcds_cnt* c, yrmcds_cnt_command cmd, uint32_t* serial,
-             uint32_t body1_len, const char* body1,
-             uint32_t body2_len, const char* body2) {
+             size_t body1_len, const char* body1,
+             size_t body2_len, const char* body2) {
     if( c == NULL ||
         body1_len > UINT32_MAX - body2_len ||
         (body1_len != 0 && body1 == NULL) ||
         (body2_len != 0 && body2 == NULL) )
         return YRMCDS_BAD_ARGUMENT;
 
+#ifndef LIBYRMCDS_NO_INTERNAL_LOCK
     int e = pthread_mutex_lock(&c->lock);
     if( e != 0 ) {
         errno = e;
         return YRMCDS_SYSTEM_ERROR;
     }
+#endif // ! LIBYRMCDS_NO_INTERNAL_LOCK
 
     c->serial += 1;
     if( serial != NULL )
         *serial = c->serial;
 
     char header[HEADER_SIZE];
-    header[0] = 0x90;
-    header[1] = (uint8_t)cmd;
+    header[0] = '\x90';
+    header[1] = (char)cmd;
     header[2] = 0;
     header[3] = 0;
-    hton32(body1_len + body2_len, header + 4);
+    hton32((uint32_t)(body1_len + body2_len), header + 4);
     memcpy(header + 8, &c->serial, 4);
 
     yrmcds_error ret = YRMCDS_OK;
@@ -315,24 +316,27 @@ send_command(yrmcds_cnt* c, yrmcds_cnt_command cmd, uint32_t* serial,
 
     size_t i;
     for( i = 0; i < iovcnt; ) {
-        ssize_t n = writev(c->sock, iov + i, iovcnt - i);
+        ssize_t n = writev(c->sock, iov + i, (int)(iovcnt - i));
+        size_t n2 = (size_t)n;
         if( n == -1 ) {
             if( errno == EINTR ) continue;
             ret = YRMCDS_SYSTEM_ERROR;
             break;
         }
-        while( n > 0 ) {
-            if( n < iov[i].iov_len ) {
-                iov[i].iov_base = (char*)iov[i].iov_base + n;
-                iov[i].iov_len -= n;
+        while( n2 > 0 ) {
+            if( n2 < iov[i].iov_len ) {
+                iov[i].iov_base = (char*)iov[i].iov_base + n2;
+                iov[i].iov_len -= n2;
                 break;
             }
-            n -= iov[i].iov_len;
+            n2 -= iov[i].iov_len;
             ++i;
         }
     }
 
+#ifndef LIBYRMCDS_NO_INTERNAL_LOCK
     pthread_mutex_unlock(&c->lock);
+#endif
     return ret;
 }
 

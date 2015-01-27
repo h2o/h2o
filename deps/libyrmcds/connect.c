@@ -124,11 +124,13 @@ static yrmcds_error connect_to_server(const char* node, uint16_t port, int* serv
 yrmcds_error yrmcds_connect(yrmcds* c, const char* node, uint16_t port) {
     if( c == NULL )
         return YRMCDS_BAD_ARGUMENT;
+#ifndef LIBYRMCDS_NO_INTERNAL_LOCK
     int e = pthread_mutex_init(&(c->lock), NULL);
     if( e != 0 ) {
         errno = e;
         return YRMCDS_SYSTEM_ERROR;
     }
+#endif // ! LIBYRMCDS_NO_INTERNAL_LOCK
     int server_fd;
     yrmcds_error err = connect_to_server(node, port, &server_fd);
     if( err != YRMCDS_OK )
@@ -139,7 +141,9 @@ yrmcds_error yrmcds_connect(yrmcds* c, const char* node, uint16_t port) {
     c->recvbuf = (char*)malloc(1 << 20);
     if( c->recvbuf == NULL ) {
         close(server_fd);
+#ifndef LIBYRMCDS_NO_INTERNAL_LOCK
         pthread_mutex_destroy(&(c->lock));
+#endif
         return YRMCDS_OUT_OF_MEMORY;
     }
     c->capacity = 1 << 20;
@@ -153,11 +157,13 @@ yrmcds_error yrmcds_connect(yrmcds* c, const char* node, uint16_t port) {
 yrmcds_error yrmcds_cnt_connect(yrmcds_cnt* c, const char* node, uint16_t port) {
     if( c == NULL )
         return YRMCDS_BAD_ARGUMENT;
+#ifndef LIBYRMCDS_NO_INTERNAL_LOCK
     int e = pthread_mutex_init(&(c->lock), NULL);
     if( e != 0 ) {
         errno = e;
         return YRMCDS_SYSTEM_ERROR;
     }
+#endif // ! LIBYRMCDS_NO_INTERNAL_LOCK
     int server_fd;
     yrmcds_error err = connect_to_server(node, port, &server_fd);
     if( err != YRMCDS_OK )
@@ -167,7 +173,9 @@ yrmcds_error yrmcds_cnt_connect(yrmcds_cnt* c, const char* node, uint16_t port) 
     c->recvbuf = (char*)malloc(4096);
     if( c->recvbuf == NULL ) {
         close(server_fd);
+#ifndef LIBYRMCDS_NO_INTERNAL_LOCK
         pthread_mutex_destroy(&(c->lock));
+#endif
         return YRMCDS_OUT_OF_MEMORY;
     }
     c->capacity = 4096;

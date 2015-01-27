@@ -269,7 +269,7 @@
 		105999CE1A720D54003415E2 /* yrmcds.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = yrmcds.h; path = libyrmcds/yrmcds.h; sourceTree = "<group>"; };
 		105999D91A72DE05003415E2 /* memcached.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = memcached.h; sourceTree = "<group>"; };
 		105999DB1A72E7EB003415E2 /* memcached.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = memcached.c; sourceTree = "<group>"; };
-		105999F11A72EAB8003415E2 /* examples-http1client copy */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "examples-http1client copy"; sourceTree = BUILT_PRODUCTS_DIR; };
+		105999F11A72EAB8003415E2 /* examples-memcached */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "examples-memcached"; sourceTree = BUILT_PRODUCTS_DIR; };
 		105999F21A72EB15003415E2 /* memcached.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = memcached.c; sourceTree = "<group>"; };
 		1065E6EF19B8C64200686E72 /* evloop.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = evloop.c.h; sourceTree = "<group>"; };
 		1065E6F419B996B400686E72 /* select.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = select.c.h; sourceTree = "<group>"; };
@@ -609,7 +609,7 @@
 				10F417D319C1907B00B6E31A /* h2o */,
 				10D0905119F0CA9C0043D458 /* examples-socket-server */,
 				10D0906919F38B2E0043D458 /* examples-http1client */,
-				105999F11A72EAB8003415E2 /* examples-http1client copy */,
+				105999F11A72EAB8003415E2 /* examples-memcached */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -860,7 +860,7 @@
 			);
 			name = "examples-memcached";
 			productName = simple;
-			productReference = 105999F11A72EAB8003415E2 /* examples-http1client copy */;
+			productReference = 105999F11A72EAB8003415E2 /* examples-memcached */;
 			productType = "com.apple.product-type.tool";
 		};
 		1079231419A320A700C52AD6 /* h2o */ = {
@@ -1295,7 +1295,6 @@
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
-					"LIBYRMCDS_USE_LZ4=0",
 					"$(inherited)",
 				);
 				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
@@ -1432,7 +1431,7 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
-				GCC_PREPROCESSOR_DEFINITIONS = "LIBYRMCDS_USE_LZ4=0";
+				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;
@@ -1556,7 +1555,6 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"H2O_USE_LIBUV=0",
-					"LIBYRMCDS_USE_LZ4=0",
 					"$(inherited)",
 				);
 				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
@@ -1596,7 +1594,7 @@
 				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"H2O_USE_LIBUV=0",
-					"LIBYRMCDS_USE_LZ4=0",
+					"$(inherited)",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;

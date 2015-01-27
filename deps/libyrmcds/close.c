@@ -13,7 +13,9 @@ yrmcds_error yrmcds_close(yrmcds* c) {
 
     close(c->sock);
     c->sock = -1;
+#ifndef LIBYRMCDS_NO_INTERNAL_LOCK
     pthread_mutex_destroy(&(c->lock));
+#endif
     free(c->recvbuf);
     c->recvbuf = NULL;
     free(c->decompressed);
