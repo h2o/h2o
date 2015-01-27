@@ -1,4 +1,4 @@
-// (C) 2013 Cybozu.
+// (C) 2013-2015 Cybozu.
 
 #include "yrmcds.h"
 
@@ -1015,9 +1015,10 @@ int main(int argc, char** argv) {
     yrmcds_error e = yrmcds_connect(s, server, port);
     CHECK_ERROR(e);
     e = yrmcds_set_compression(s, compression);
-    if( e != 0 )
+    if( e != 0 && e != YRMCDS_NOT_IMPLEMENTED ) {
         yrmcds_close(s);
-    CHECK_ERROR(e);
+        CHECK_ERROR(e);
+    }
 
     int ret = 1;
 #define do_cmd(name)                            \

@@ -1,4 +1,4 @@
-// (C) 2013 Cybozu.
+// (C) 2013-2015 Cybozu.
 
 #include "yrmcds.h"
 
@@ -22,6 +22,8 @@ const char* yrmcds_strerror(yrmcds_error e) {
         return "Failed to compress data";
     case YRMCDS_PROTOCOL_ERROR:
         return "Received malformed packet";
+    case YRMCDS_NOT_IMPLEMENTED:
+        return "Not implemented";
     default:
         return "Unknown error";
     };

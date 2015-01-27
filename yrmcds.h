@@ -1,6 +1,6 @@
 /** @file yrmcds.h
  * libyrmcds public API.
- * (C) 2013 Cybozu.
+ * (C) 2013-2015 Cybozu.
  */
 
 #pragma once
@@ -143,6 +143,7 @@ typedef enum {
     YRMCDS_OUT_OF_MEMORY,     ///< malloc/realloc failed.
     YRMCDS_COMPRESS_FAILED,   ///< LZ4 compression failed.
     YRMCDS_PROTOCOL_ERROR,    ///< received malformed packet.
+    YRMCDS_NOT_IMPLEMENTED,   ///< the function is not available.
 } yrmcds_error;
 
 
@@ -200,6 +201,9 @@ yrmcds_error yrmcds_close(yrmcds* c);
  * is greater than 0.  If \p threshold is 0, then compression is disabled.
  *
  * The compression is disabled by default.
+ *
+ * If the library is built without LZ4, this function always return
+ * ::YRMCDS_NOT_IMPLEMENTED.
  *
  * Note that ::YRMCDS_FLAG_COMPRESS bit in the flags of compressed objects
  * will be used by the library iff the compression is enabled.
