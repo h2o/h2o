@@ -54,11 +54,13 @@ static yrmcds_error send_command(
     hton32((uint32_t)total_len, &h[8]);
     hton64(cas, &h[16]);
 
+#ifndef LIBYRMCDS_NO_INTERNAL_LOCK
     int e = pthread_mutex_lock(&c->lock);
     if( e != 0 ) {
         errno = e;
         return YRMCDS_SYSTEM_ERROR;
     }
+#endif // ! LIBYRMCDS_NO_INTERNAL_LOCK
 
     yrmcds_error ret = YRMCDS_OK;
     c->serial = c->serial + 1;
@@ -113,7 +115,9 @@ static yrmcds_error send_command(
     }
 
   OUT:
+#ifndef LIBYRMCDS_NO_INTERNAL_LOCK
     pthread_mutex_unlock(&c->lock);
+#endif
     return ret;
 }
 

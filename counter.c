@@ -68,7 +68,9 @@ yrmcds_cnt_close(yrmcds_cnt* c) {
 
     close(c->sock);
     c->sock = -1;
+#ifndef LIBYRMCDS_NO_INTERNAL_LOCK
     pthread_mutex_destroy(&(c->lock));
+#endif
     free(c->recvbuf);
     c->recvbuf = NULL;
     free(c->stats.records);
@@ -273,11 +275,13 @@ send_command(yrmcds_cnt* c, yrmcds_cnt_command cmd, uint32_t* serial,
         (body2_len != 0 && body2 == NULL) )
         return YRMCDS_BAD_ARGUMENT;
 
+#ifndef LIBYRMCDS_NO_INTERNAL_LOCK
     int e = pthread_mutex_lock(&c->lock);
     if( e != 0 ) {
         errno = e;
         return YRMCDS_SYSTEM_ERROR;
     }
+#endif // ! LIBYRMCDS_NO_INTERNAL_LOCK
 
     c->serial += 1;
     if( serial != NULL )
@@ -330,7 +334,9 @@ send_command(yrmcds_cnt* c, yrmcds_cnt_command cmd, uint32_t* serial,
         }
     }
 
+#ifndef LIBYRMCDS_NO_INTERNAL_LOCK
     pthread_mutex_unlock(&c->lock);
+#endif
     return ret;
 }
 
