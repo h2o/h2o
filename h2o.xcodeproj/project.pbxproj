@@ -30,6 +30,17 @@
 		105534EB1A42A87E00627ECB /* _templates.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 105534EA1A42A87E00627ECB /* _templates.c.h */; };
 		105534ED1A42AD5E00627ECB /* templates.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 105534EC1A42AD5E00627ECB /* templates.c.h */; };
 		105534EF1A440FC800627ECB /* config.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534EE1A440FC800627ECB /* config.c */; };
+		105999DA1A72DE05003415E2 /* memcached.h in Headers */ = {isa = PBXBuildFile; fileRef = 105999D91A72DE05003415E2 /* memcached.h */; };
+		105999DC1A72E7EB003415E2 /* memcached.c in Sources */ = {isa = PBXBuildFile; fileRef = 105999DB1A72E7EB003415E2 /* memcached.c */; };
+		105999DD1A72E962003415E2 /* close.c in Sources */ = {isa = PBXBuildFile; fileRef = 105999C61A720D54003415E2 /* close.c */; };
+		105999DE1A72E962003415E2 /* connect.c in Sources */ = {isa = PBXBuildFile; fileRef = 105999C71A720D54003415E2 /* connect.c */; };
+		105999DF1A72E962003415E2 /* counter.c in Sources */ = {isa = PBXBuildFile; fileRef = 105999C81A720D54003415E2 /* counter.c */; };
+		105999E01A72E962003415E2 /* recv.c in Sources */ = {isa = PBXBuildFile; fileRef = 105999CA1A720D54003415E2 /* recv.c */; };
+		105999E11A72E962003415E2 /* send.c in Sources */ = {isa = PBXBuildFile; fileRef = 105999CB1A720D54003415E2 /* send.c */; };
+		105999E21A72E962003415E2 /* socket.c in Sources */ = {isa = PBXBuildFile; fileRef = 105999CC1A720D54003415E2 /* socket.c */; };
+		105999E31A72E962003415E2 /* strerror.c in Sources */ = {isa = PBXBuildFile; fileRef = 105999CD1A720D54003415E2 /* strerror.c */; };
+		105999EA1A72EAB8003415E2 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
+		105999F31A72EB15003415E2 /* memcached.c in Sources */ = {isa = PBXBuildFile; fileRef = 105999F21A72EB15003415E2 /* memcached.c */; };
 		1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923C119A3217300C52AD6 /* websocket.c */; };
 		1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923A319A3215F00C52AD6 /* websocket.h */; };
 		1065E6F919BEBAC600686E72 /* timeout.c in Sources */ = {isa = PBXBuildFile; fileRef = 1065E6F819BEBAC600686E72 /* timeout.c */; };
@@ -74,6 +85,7 @@
 		1079245119A3266700C52AD6 /* token.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BF19A3217300C52AD6 /* token.c */; };
 		1079245219A3266700C52AD6 /* util.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923C019A3217300C52AD6 /* util.c */; };
 		1079245419A32C0800C52AD6 /* token_table.h in Headers */ = {isa = PBXBuildFile; fileRef = 1079245319A32C0800C52AD6 /* token_table.h */; };
+		107D288F1A786B4900C3B3EC /* memcached.c in Sources */ = {isa = PBXBuildFile; fileRef = 107D288E1A786B4900C3B3EC /* memcached.c */; };
 		10BA72AA19AAD6300059392A /* stream.c in Sources */ = {isa = PBXBuildFile; fileRef = 10BA72A919AAD6300059392A /* stream.c */; };
 		10D0903A19F0A51C0043D458 /* memory.h in Headers */ = {isa = PBXBuildFile; fileRef = 10D0903919F0A51C0043D458 /* memory.h */; };
 		10D0903E19F0A8190043D458 /* socket.h in Headers */ = {isa = PBXBuildFile; fileRef = 10D0903D19F0A8190043D458 /* socket.h */; };
@@ -101,6 +113,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		105999E61A72EAB8003415E2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1079230D19A320A700C52AD6 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1079231419A320A700C52AD6;
+			remoteInfo = h2o;
+		};
 		107923FF19A3241000C52AD6 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 1079230D19A320A700C52AD6 /* Project object */;
@@ -132,6 +151,15 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		105999EB1A72EAB8003415E2 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
 		107923D719A321F400C52AD6 /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -231,6 +259,19 @@
 		105534FA1A460F4200627ECB /* 50sni.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 50sni.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534FB1A460F4200627ECB /* Util.pm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = Util.pm; sourceTree = "<group>"; };
 		105534FE1A46134A00627ECB /* 80issues61.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 80issues61.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		105999C61A720D54003415E2 /* close.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = close.c; path = libyrmcds/close.c; sourceTree = "<group>"; };
+		105999C71A720D54003415E2 /* connect.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = connect.c; path = libyrmcds/connect.c; sourceTree = "<group>"; };
+		105999C81A720D54003415E2 /* counter.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = counter.c; path = libyrmcds/counter.c; sourceTree = "<group>"; };
+		105999C91A720D54003415E2 /* portability.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = portability.h; path = libyrmcds/portability.h; sourceTree = "<group>"; };
+		105999CA1A720D54003415E2 /* recv.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = recv.c; path = libyrmcds/recv.c; sourceTree = "<group>"; };
+		105999CB1A720D54003415E2 /* send.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = send.c; path = libyrmcds/send.c; sourceTree = "<group>"; };
+		105999CC1A720D54003415E2 /* socket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = socket.c; path = libyrmcds/socket.c; sourceTree = "<group>"; };
+		105999CD1A720D54003415E2 /* strerror.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = strerror.c; path = libyrmcds/strerror.c; sourceTree = "<group>"; };
+		105999CE1A720D54003415E2 /* yrmcds.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = yrmcds.h; path = libyrmcds/yrmcds.h; sourceTree = "<group>"; };
+		105999D91A72DE05003415E2 /* memcached.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = memcached.h; sourceTree = "<group>"; };
+		105999DB1A72E7EB003415E2 /* memcached.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = memcached.c; sourceTree = "<group>"; };
+		105999F11A72EAB8003415E2 /* examples-memcached */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "examples-memcached"; sourceTree = BUILT_PRODUCTS_DIR; };
+		105999F21A72EB15003415E2 /* memcached.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = memcached.c; sourceTree = "<group>"; };
 		1065E6EF19B8C64200686E72 /* evloop.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = evloop.c.h; sourceTree = "<group>"; };
 		1065E6F419B996B400686E72 /* select.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = select.c.h; sourceTree = "<group>"; };
 		1065E6F619B99E6D00686E72 /* kqueue.c.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = kqueue.c.h; sourceTree = "<group>"; };
@@ -272,6 +313,7 @@
 		1079241319A324B400C52AD6 /* websocket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = websocket.c; sourceTree = "<group>"; };
 		1079243519A3260E00C52AD6 /* unittest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = unittest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1079245319A32C0800C52AD6 /* token_table.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = token_table.h; sourceTree = "<group>"; };
+		107D288E1A786B4900C3B3EC /* memcached.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = memcached.c; sourceTree = "<group>"; };
 		10BA72A919AAD6300059392A /* stream.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = stream.c; sourceTree = "<group>"; };
 		10D0903919F0A51C0043D458 /* memory.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = memory.h; sourceTree = "<group>"; };
 		10D0903D19F0A8190043D458 /* socket.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = socket.h; sourceTree = "<group>"; };
@@ -303,6 +345,14 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		105999E91A72EAB8003415E2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				105999EA1A72EAB8003415E2 /* libh2o.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1079231219A320A700C52AD6 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -380,6 +430,7 @@
 		104B9A4A1A5FA7E5009EEE64 /* common */ = {
 			isa = PBXGroup;
 			children = (
+				105999DB1A72E7EB003415E2 /* memcached.c */,
 				107923BA19A3217300C52AD6 /* memory.c */,
 				10D0905419F102C70043D458 /* http1client.c */,
 				104B9A241A4A4FEE009EEE64 /* serverutil.c */,
@@ -425,6 +476,7 @@
 		104B9A4D1A5FAA7B009EEE64 /* common */ = {
 			isa = PBXGroup;
 			children = (
+				107D288E1A786B4900C3B3EC /* memcached.c */,
 				104B9A271A4A5139009EEE64 /* serverutil.c */,
 				105534C61A3BB29100627ECB /* string.c */,
 			);
@@ -499,6 +551,22 @@
 			path = file;
 			sourceTree = "<group>";
 		};
+		105999C51A720D0A003415E2 /* libyrmcds */ = {
+			isa = PBXGroup;
+			children = (
+				105999C61A720D54003415E2 /* close.c */,
+				105999C71A720D54003415E2 /* connect.c */,
+				105999C81A720D54003415E2 /* counter.c */,
+				105999C91A720D54003415E2 /* portability.h */,
+				105999CA1A720D54003415E2 /* recv.c */,
+				105999CB1A720D54003415E2 /* send.c */,
+				105999CC1A720D54003415E2 /* socket.c */,
+				105999CD1A720D54003415E2 /* strerror.c */,
+				105999CE1A720D54003415E2 /* yrmcds.h */,
+			);
+			name = libyrmcds;
+			sourceTree = "<group>";
+		};
 		1065E6F319B9969000686E72 /* evloop */ = {
 			isa = PBXGroup;
 			children = (
@@ -544,6 +612,7 @@
 				10F417D319C1907B00B6E31A /* h2o */,
 				10D0905119F0CA9C0043D458 /* examples-socket-server */,
 				10D0906919F38B2E0043D458 /* examples-http1client */,
+				105999F11A72EAB8003415E2 /* examples-memcached */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -552,6 +621,7 @@
 			isa = PBXGroup;
 			children = (
 				1079231F19A3210D00C52AD6 /* klib */,
+				105999C51A720D0A003415E2 /* libyrmcds */,
 				1079235619A3210D00C52AD6 /* picohttpparser */,
 				10F417FB19C2D2B400B6E31A /* picotest */,
 				10F417FC19C2D2BA00B6E31A /* yoml */,
@@ -594,6 +664,7 @@
 				107923A119A3215F00C52AD6 /* http2.h */,
 				10E299541A67E5F600701AA6 /* http2 */,
 				10D0904219F0BA780043D458 /* linklist.h */,
+				105999D91A72DE05003415E2 /* memcached.h */,
 				10D0903919F0A51C0043D458 /* memory.h */,
 				104B9A231A4A4FAF009EEE64 /* serverutil.h */,
 				10D0903F19F0B90A0043D458 /* socket */,
@@ -656,6 +727,7 @@
 			isa = PBXGroup;
 			children = (
 				10D0906A19F38B850043D458 /* http1client.c */,
+				105999F21A72EB15003415E2 /* memcached.c */,
 				10D0905219F0CB130043D458 /* socket-client.c */,
 				107923FC19A3238500C52AD6 /* simple.c */,
 				1079241319A324B400C52AD6 /* websocket.c */,
@@ -765,6 +837,7 @@
 				105534ED1A42AD5E00627ECB /* templates.c.h in Headers */,
 				10D0903E19F0A8190043D458 /* socket.h in Headers */,
 				10F4180119C2D31600B6E31A /* yoml.h in Headers */,
+				105999DA1A72DE05003415E2 /* memcached.h in Headers */,
 				1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */,
 				1079245419A32C0800C52AD6 /* token_table.h in Headers */,
 				1065E70D19BF6D4600686E72 /* uv-binding.h in Headers */,
@@ -775,6 +848,24 @@
 /* End PBXHeadersBuildPhase section */
 
 /* Begin PBXNativeTarget section */
+		105999E41A72EAB8003415E2 /* examples-memcached */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 105999EC1A72EAB8003415E2 /* Build configuration list for PBXNativeTarget "examples-memcached" */;
+			buildPhases = (
+				105999E71A72EAB8003415E2 /* Sources */,
+				105999E91A72EAB8003415E2 /* Frameworks */,
+				105999EB1A72EAB8003415E2 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				105999E51A72EAB8003415E2 /* PBXTargetDependency */,
+			);
+			name = "examples-memcached";
+			productName = simple;
+			productReference = 105999F11A72EAB8003415E2 /* examples-memcached */;
+			productType = "com.apple.product-type.tool";
+		};
 		1079231419A320A700C52AD6 /* h2o */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 1079231919A320A700C52AD6 /* Build configuration list for PBXNativeTarget "h2o" */;
@@ -926,32 +1017,47 @@
 				1079240219A3247A00C52AD6 /* examples-websocket */,
 				10D0904419F0CA9C0043D458 /* examples-socket-client */,
 				10D0905C19F38B2E0043D458 /* examples-http1client */,
+				105999E41A72EAB8003415E2 /* examples-memcached */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXSourcesBuildPhase section */
+		105999E71A72EAB8003415E2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				105999F31A72EB15003415E2 /* memcached.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1079231119A320A700C52AD6 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				105999DD1A72E962003415E2 /* close.c in Sources */,
 				107923C719A3217300C52AD6 /* hpack.c in Sources */,
 				101788B219B561AA0084C6D8 /* socket.c in Sources */,
 				10D0905519F102C70043D458 /* http1client.c in Sources */,
 				107923D219A3217300C52AD6 /* token.c in Sources */,
+				105999E21A72E962003415E2 /* socket.c in Sources */,
 				104B9A511A5FB096009EEE64 /* expires.c in Sources */,
+				105999DC1A72E7EB003415E2 /* memcached.c in Sources */,
 				105534DB1A3C7A5400627ECB /* access_log.c in Sources */,
 				107923CE19A3217300C52AD6 /* mimemap.c in Sources */,
 				107923C619A3217300C52AD6 /* connection.c in Sources */,
 				107923C319A3217300C52AD6 /* file.c in Sources */,
 				107923CD19A3217300C52AD6 /* memory.c in Sources */,
+				105999DE1A72E962003415E2 /* connect.c in Sources */,
 				107923CC19A3217300C52AD6 /* context.c in Sources */,
 				107923C519A3217300C52AD6 /* http1.c in Sources */,
 				10EC2A381A0B4DC70083514F /* socketpool.c in Sources */,
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
 				1065E6F919BEBAC600686E72 /* timeout.c in Sources */,
+				105999DF1A72E962003415E2 /* counter.c in Sources */,
 				10F4180519CA75C500B6E31A /* configurator.c in Sources */,
 				104B9A461A5F608A009EEE64 /* serverutil.c in Sources */,
+				105999E11A72E962003415E2 /* send.c in Sources */,
 				1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */,
 				101B670C19ADD3380084A351 /* access_log.c in Sources */,
 				10BA72AA19AAD6300059392A /* stream.c in Sources */,
@@ -963,9 +1069,11 @@
 				107923C219A3217300C52AD6 /* chunked.c in Sources */,
 				105534EF1A440FC800627ECB /* config.c in Sources */,
 				10E299581A67E68500701AA6 /* scheduler.c in Sources */,
+				105999E01A72E962003415E2 /* recv.c in Sources */,
 				107923D319A3217300C52AD6 /* util.c in Sources */,
 				105534CA1A3BB46900627ECB /* string.c in Sources */,
 				105534DF1A3C7B9800627ECB /* proxy.c in Sources */,
+				105999E31A72E962003415E2 /* strerror.c in Sources */,
 				105534DD1A3C7AA900627ECB /* file.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -995,6 +1103,7 @@
 				1079244C19A3266700C52AD6 /* memory.c in Sources */,
 				105534C71A3BB29100627ECB /* string.c in Sources */,
 				1079244E19A3266700C52AD6 /* request.c in Sources */,
+				107D288F1A786B4900C3B3EC /* memcached.c in Sources */,
 				10D0907019F494CC0043D458 /* test.c in Sources */,
 				105534C11A3B911300627ECB /* hpack.c in Sources */,
 				105534C31A3B917000627ECB /* mimemap.c in Sources */,
@@ -1040,6 +1149,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		105999E51A72EAB8003415E2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1079231419A320A700C52AD6 /* h2o */;
+			targetProxy = 105999E61A72EAB8003415E2 /* PBXContainerItemProxy */;
+		};
 		1079240019A3241000C52AD6 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 1079231419A320A700C52AD6 /* h2o */;
@@ -1063,6 +1177,104 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		105999ED1A72EAB8003415E2 /* evloop-debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+				);
+				PRODUCT_NAME = "examples-memcached";
+			};
+			name = "evloop-debug";
+		};
+		105999EE1A72EAB8003415E2 /* libuv-debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-luv",
+				);
+				PRODUCT_NAME = "examples-memcached";
+			};
+			name = "libuv-debug";
+		};
+		105999EF1A72EAB8003415E2 /* evloop-release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+				);
+				PRODUCT_NAME = "examples-memcached";
+			};
+			name = "evloop-release";
+		};
+		105999F01A72EAB8003415E2 /* libuv-release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-luv",
+				);
+				PRODUCT_NAME = "examples-memcached";
+			};
+			name = "libuv-release";
+		};
 		1065E70F19BF752300686E72 /* libuv-debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1223,6 +1435,7 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;
@@ -1383,7 +1596,10 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
-				GCC_PREPROCESSOR_DEFINITIONS = "H2O_USE_LIBUV=0";
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"H2O_USE_LIBUV=0",
+					"$(inherited)",
+				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;
@@ -1777,10 +1993,7 @@
 		10F417CF19C1907B00B6E31A /* evloop-debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
-					"$(inherited)",
-				);
+				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
@@ -1805,10 +2018,7 @@
 		10F417D019C1907B00B6E31A /* libuv-debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
-					"$(inherited)",
-				);
+				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
@@ -1834,6 +2044,7 @@
 		10F417D119C1907B00B6E31A /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
@@ -1858,6 +2069,7 @@
 		10F417D219C1907B00B6E31A /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
@@ -1883,6 +2095,17 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		105999EC1A72EAB8003415E2 /* Build configuration list for PBXNativeTarget "examples-memcached" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				105999ED1A72EAB8003415E2 /* evloop-debug */,
+				105999EE1A72EAB8003415E2 /* libuv-debug */,
+				105999EF1A72EAB8003415E2 /* evloop-release */,
+				105999F01A72EAB8003415E2 /* libuv-release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "evloop-release";
+		};
 		1079231019A320A700C52AD6 /* Build configuration list for PBXProject "h2o" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

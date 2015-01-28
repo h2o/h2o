@@ -84,6 +84,10 @@ void h2o_time2str_rfc1123(char *buf, time_t time);
  */
 void h2o_time2str_log(char *buf, time_t time);
 /**
+ * convert given string to a zero-terminated string of hexademicals.  dst should have len * 2 + 1 bytes of space
+ */
+void h2o_strtohex(char *dst, const char *src, size_t len);
+/**
  * returns the extension portion of path
  */
 const char *h2o_get_filext(const char *path, size_t len);

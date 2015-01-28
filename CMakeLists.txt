@@ -15,6 +15,7 @@ SET(CMAKE_C_FLAGS "-O2 -g -Wall -Wno-unused-function ${CMAKE_C_FLAGS} -DH2O_ROOT
 INCLUDE_DIRECTORIES(
     include
     deps/klib
+    deps/libyrmcds
     deps/picohttpparser
     deps/picotest
     deps/yoml
@@ -36,8 +37,18 @@ ELSE (WSLAY_FOUND)
 ENDIF (WSLAY_FOUND)
 
 SET(LIB_SOURCE_FILES
+    deps/libyrmcds/close.c
+    deps/libyrmcds/connect.c
+    deps/libyrmcds/counter.c
+    deps/libyrmcds/recv.c
+    deps/libyrmcds/send.c
+    deps/libyrmcds/set_compression.c
+    deps/libyrmcds/socket.c
+    deps/libyrmcds/strerror.c
+
     deps/picohttpparser/picohttpparser.c
 
+    lib/common/memcached.c
     lib/common/memory.c
     lib/common/http1client.c
     lib/common/serverutil.c
@@ -77,6 +88,7 @@ SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}
     deps/picotest/picotest.c
     t/00unit/test.c
+    t/00unit/lib/common/memcached.c
     t/00unit/lib/common/serverutil.c
     t/00unit/lib/common/string.c
     t/00unit/lib/core/headers.c
@@ -86,6 +98,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/http2/hpack.c
     t/00unit/lib/http2/scheduler.c)
 LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
+    lib/common/memcached.c
     lib/common/serverutil.c
     lib/common/string.c
     lib/core/headers.c
@@ -100,7 +113,7 @@ SET(EXTRA_LIBRARIES ${CMAKE_DL_LIBS})
 ADD_LIBRARY(libh2o STATIC ${LIB_SOURCE_FILES})
 SET_TARGET_PROPERTIES(libh2o PROPERTIES OUTPUT_NAME h2o)
 
-ADD_CUSTOM_TARGET(lib-examples DEPENDS examples-http1client examples-simple examples-socket-client)
+ADD_CUSTOM_TARGET(lib-examples DEPENDS examples-http1client examples-memcached examples-simple examples-socket-client)
 IF (WSLAY_FOUND)
     ADD_DEPENDENCIES(lib-examples examples-websocket)
 ENDIF (WSLAY_FOUND)
@@ -109,6 +122,11 @@ ADD_EXECUTABLE(examples-http1client examples/libh2o/http1client.c)
 SET_TARGET_PROPERTIES(examples-http1client PROPERTIES
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-http1client libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} ${EXTRA_LIBRARIES})
+
+ADD_EXECUTABLE(examples-memcached examples/libh2o/memcached.c)
+SET_TARGET_PROPERTIES(examples-memcached PROPERTIES
+    EXCLUDE_FROM_ALL 1)
+TARGET_LINK_LIBRARIES(examples-memcached libh2o ${OPENSSL_LIBRARIES} ${LIBUV_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} ${EXTRA_LIBRARIES})
 
 ADD_EXECUTABLE(examples-socket-client examples/libh2o/socket-client.c)
 SET_TARGET_PROPERTIES(examples-socket-client PROPERTIES

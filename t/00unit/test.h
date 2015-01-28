@@ -48,6 +48,7 @@ extern h2o_loop_t *test_loop;
 
 char *sha1sum(const void *src, size_t len);
 
+void test_lib__memcached_c(void);
 void test_lib__serverutil_c(void);
 void test_lib__string_c(void);
 void test_lib__headers_c(void);

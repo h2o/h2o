@@ -297,6 +297,15 @@ void h2o_time2str_log(char *buf, time_t time)
     assert(len == H2O_TIMESTR_LOG_LEN);
 }
 
+void h2o_strtohex(char *dst, const char *src, size_t len)
+{
+    for (; len != 0; ++src, --len) {
+        *dst++ = "0123456789abcdef"[(*src >> 4) & 0xf];
+        *dst++ = "0123456789abcdef"[*src & 0xf];
+    }
+    *dst = '\0';
+}
+
 const char *h2o_get_filext(const char *path, size_t len)
 {
     const char *p = path + len;
