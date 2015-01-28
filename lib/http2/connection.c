@@ -839,7 +839,7 @@ void h2o_http2_conn_request_write(h2o_http2_conn_t *conn)
 
 void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
-    request_gathered_write(conn);
+    h2o_http2_conn_request_write(conn);
 
     if (h2o_http2_stream_has_pending_data(stream) || stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
         if (h2o_http2_window_get_window(&stream->output_window) > 0) {
