@@ -28,15 +28,16 @@ sub exec_unittest {
 
     # setup and spawn memcached
     my $memcached_guard = do {
-        return unless prog_exists("memcached");
-        my $memcached_port = empty_port();
-        $ENV{MEMCACHED_PORT} = $memcached_port;
-        spawn_server(
-            argv     => [ qw(memcached -l 127.0.0.1 -p), $memcached_port ],
-            is_ready => sub {
-                check_port($memcached_port);
-            },
-        );
+        if (prog_exists("memcached")) {
+            my $memcached_port = empty_port();
+            $ENV{MEMCACHED_PORT} = $memcached_port;
+            spawn_server(
+                argv     => [ qw(memcached -l 127.0.0.1 -p), $memcached_port ],
+                is_ready => sub {
+                    check_port($memcached_port);
+                },
+            );
+        }
     };
 
     return system($fn);
