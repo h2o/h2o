@@ -474,7 +474,8 @@ static SSL_SESSION *on_async_resumption_get(SSL *ssl, unsigned char *data, int l
         sock->ssl->handshake.resumption.session_id.len = len;
     } else if (sock->ssl->handshake.resumption.session_data != NULL) {
         /* return the session data */
-        assert(h2o_memis(data, len, sock->ssl->handshake.resumption.session_id.bytes, sock->ssl->handshake.resumption.session_id.len));
+        assert(
+            h2o_memis(data, len, sock->ssl->handshake.resumption.session_id.bytes, sock->ssl->handshake.resumption.session_id.len));
         *copy = 1;
         return sock->ssl->handshake.resumption.session_data;
     }
@@ -537,7 +538,8 @@ static void proceed_handshake(h2o_socket_t *sock, int status)
         sock->ssl->input.encrypted->size = first_input.len;
         clear_ssl_output_bufs(sock);
         h2o_socket_read_stop(sock);
-        resumption_get_async(sock, (h2o_iovec_t){sock->ssl->handshake.resumption.session_id.bytes, sock->ssl->handshake.resumption.session_id.len});
+        resumption_get_async(
+            sock, (h2o_iovec_t){sock->ssl->handshake.resumption.session_id.bytes, sock->ssl->handshake.resumption.session_id.len});
         return;
     } else {
         sock->ssl->handshake.resumption.session_id.len = 0;

@@ -25,8 +25,21 @@ sub exec_unittest {
     my $fn = bindir() . "/t-00unit-$base.t";
     plan skip_all => "unit test:$base does not exist"
         if ! -e $fn;
-    exec $fn;
-    die "failed to exec $fn:$!";
+
+    # setup and spawn memcached
+    my $memcached_guard = do {
+        return unless prog_exists("memcached");
+        my $memcached_port = empty_port();
+        $ENV{MEMCACHED_PORT} = $memcached_port;
+        spawn_server(
+            argv     => [ qw(memcached -l 127.0.0.1 -p), $memcached_port ],
+            is_ready => sub {
+                check_port($memcached_port);
+            },
+        );
+    };
+
+    return system($fn);
 }
 
 # spawns a child process and returns a guard object that kills the process when destroyed

@@ -88,6 +88,7 @@ SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}
     deps/picotest/picotest.c
     t/00unit/test.c
+    t/00unit/lib/common/memcached.c
     t/00unit/lib/common/serverutil.c
     t/00unit/lib/common/string.c
     t/00unit/lib/core/headers.c
@@ -97,6 +98,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/http2/hpack.c
     t/00unit/lib/http2/scheduler.c)
 LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
+    lib/common/memcached.c
     lib/common/serverutil.c
     lib/common/string.c
     lib/core/headers.c
