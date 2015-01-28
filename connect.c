@@ -15,6 +15,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+// workaround for a known-bug in NetBSD, from https://lists.gnu.org/archive/html/bug-gnulib/2010-02/msg00071.html
+#ifndef AI_V4MAPPED
+#define AI_V4MAPPED 0
+#endif
+
 static yrmcds_error connect_to_server(const char* node, uint16_t port, int* server_fd) {
     if( node == NULL )
         return YRMCDS_BAD_ARGUMENT;
