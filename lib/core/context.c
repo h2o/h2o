@@ -110,7 +110,7 @@ void h2o_context_dispose(h2o_context_t *ctx)
     h2o_timeout_dispose(ctx->loop, &ctx->one_sec_timeout);
     h2o_timeout_dispose(ctx->loop, &ctx->http1.req_timeout);
     h2o_timeout_dispose(ctx->loop, &ctx->http2.idle_timeout);
-    /* what should we do here? assert(!h2o_linklist_is_empty(&ctx->http2._conns); */
+/* what should we do here? assert(!h2o_linklist_is_empty(&ctx->http2._conns); */
 
 #if H2O_USE_LIBUV
     /* make sure the handles released by h2o_timeout_dispose get freed */

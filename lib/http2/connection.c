@@ -73,7 +73,7 @@ static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t
 static int do_emit_writereq(h2o_http2_conn_t *conn);
 static void on_read(h2o_socket_t *sock, int status);
 
-const h2o_protocol_callbacks_t H2O_HTTP2_CALLBACKS = { initiate_graceful_shutdown };
+const h2o_protocol_callbacks_t H2O_HTTP2_CALLBACKS = {initiate_graceful_shutdown};
 
 static void enqueue_goaway(h2o_http2_conn_t *conn, int errnum, h2o_iovec_t additional_data)
 {
@@ -878,6 +878,10 @@ static void on_write_complete(h2o_socket_t *sock, int status)
         }
     }
 
+    /* cancel the write callback if scheduled (as the generator may have scheduled a write just before this function gets called) */
+    if (h2o_timeout_is_linked(&conn->_write.timeout_entry))
+        h2o_timeout_unlink(&conn->_write.timeout_entry);
+
     /* write more, if possible */
     if (do_emit_writereq(conn))
         return;
@@ -890,7 +894,7 @@ static void on_write_complete(h2o_socket_t *sock, int status)
         if (conn->num_responding_streams != 0)
             break;
         conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
-        /* fall-thru */
+    /* fall-thru */
     case H2O_HTTP2_CONN_STATE_IS_CLOSING:
         close_connection_now(conn);
         return;

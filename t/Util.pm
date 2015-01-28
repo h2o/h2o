@@ -11,7 +11,7 @@ use Test::More;
 use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir exec_unittest spawn_server spawn_h2o create_data_file md5_file prog_exists openssl_can_negotiate);
+our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir exec_unittest spawn_server spawn_h2o create_data_file md5_file prog_exists run_prog openssl_can_negotiate);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
@@ -160,6 +160,14 @@ sub md5_file {
 sub prog_exists {
     my $prog = shift;
     system("which $prog > /dev/null 2>&1") == 0;
+}
+
+sub run_prog {
+    my $cmd = shift;
+    my ($tempfh, $tempfn) = tempfile();
+    my $stderr = `$cmd 2>&1 > $tempfn`;
+    my $stdout = do { local $/; <$tempfh> };
+    return ($stderr, $stdout);
 }
 
 sub openssl_can_negotiate {

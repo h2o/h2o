@@ -39,6 +39,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/un.h>
+#include <sys/wait.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -118,6 +119,9 @@ static struct {
     0,    /* shutdown_requested */
     {},   /* state */
 };
+
+/* list of signals blocked, and caught by sigwait(2) called from the main thread */
+static sigset_t sigs_blocked;
 
 static unsigned long openssl_thread_id_callback(void)
 {
@@ -921,17 +925,14 @@ static void notify_all_threads(void)
         h2o_thread_notify(conf.thread_ids[i]);
 }
 
-static void graceful_shutdown(int signo)
-{
-    conf.shutdown_requested = 1;
-    notify_all_threads();
-}
-
 static void setup_signal_handlers(void)
 {
+    /* block sigs to be caught by the main thread */
+    sigemptyset(&sigs_blocked);
+    sigaddset(&sigs_blocked, SIGTERM);
+    pthread_sigmask(SIG_BLOCK, &sigs_blocked, NULL);
     /* ignore SIGPIPE */
     h2o_set_signal_handler(SIGPIPE, SIG_IGN);
-    h2o_set_signal_handler(SIGTERM, graceful_shutdown);
     /* use SIGCONT for notifying the worker threads */
     h2o_thread_initialize_signal_for_notification(SIGCONT);
 }
@@ -1236,14 +1237,29 @@ int main(int argc, char **argv)
 
     { /* the main loop */
         unsigned int i;
-        /* satrt the threads */
+        /* start the threads */
         conf.thread_ids = alloca(sizeof(pthread_t) * conf.num_threads);
         for (i = 0; i != conf.num_threads; ++i) {
             pthread_create(conf.thread_ids + i, NULL, run_loop, NULL);
         }
         /* wait until shutdown is requested */
-        while (! conf.shutdown_requested)
-            sleep(86400);
+        while (!conf.shutdown_requested) {
+            int signo, err = sigwait(&sigs_blocked, &signo);
+            if (err != 0) {
+                if (err == EINTR)
+                    continue;
+                perror("sigwait failed");
+                abort();
+            }
+            switch (signo) {
+            case SIGTERM:
+                conf.shutdown_requested = 1;
+                break;
+            default:
+                fprintf(stderr, "sigwait returned unexpected signal:%d\n", signo);
+                break;
+            }
+        }
         fprintf(stderr, "received SIGTERM, gracefully shutting down\n");
         /* close all the listeners */
         for (i = 0; i != conf.num_listeners; ++i) {

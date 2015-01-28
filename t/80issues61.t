@@ -4,6 +4,11 @@ use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
 use t::Util;
 
+plan skip_all => 'plackup not found'
+    unless prog_exists('plackup');
+plan skip_all => 'Starlet not found'
+    unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
+
 my $upstream_port = empty_port();
 
 my $upstream = spawn_server(

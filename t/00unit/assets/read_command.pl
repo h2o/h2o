@@ -1,4 +1,6 @@
-#! /usr/bin/perl
+#! /bin/sh
+exec perl -x $0 "$@"
+#! perl
 
 use strict;
 use warnings;
