@@ -348,9 +348,9 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
             }
             if (is_dir) {
                 /* note: apache redirects "path/" to "path/index.txt/" if index.txt is a dir */
-                char *path = alloca(req->path.len + index_file->len + 1);
-                size_t path_len =
-                    sprintf(path, "%.*s%.*s", (int)req->path.len, req->path.base, (int)index_file->len, index_file->base);
+                char *path = alloca(req->path_normalized.len + index_file->len + 1);
+                size_t path_len = sprintf(path, "%.*s%.*s", (int)req->path_normalized.len, req->path_normalized.base,
+                                          (int)index_file->len, index_file->base);
                 return redirect_to_dir(req, path, path_len);
             }
             if (errno != ENOENT)
@@ -366,7 +366,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         if ((generator = create_generator(req, rpath, rpath_len, &is_dir, self->flags)) != NULL)
             goto Opened;
         if (is_dir)
-            return redirect_to_dir(req, req->path.base, req->path.len);
+            return redirect_to_dir(req, req->path_normalized.base, req->path_normalized.len);
     }
     /* failed to open */
     if (errno == ENOENT) {

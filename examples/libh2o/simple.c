@@ -71,7 +71,7 @@ static int reproxy_test(h2o_handler_t *self, h2o_req_t *req)
 static int post_test(h2o_handler_t *self, h2o_req_t *req)
 {
     if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("POST")) &&
-        h2o_memis(req->path.base, req->path.len, H2O_STRLIT("/post-test"))) {
+        h2o_memis(req->path_normalized.base, req->path_normalized.len, H2O_STRLIT("/post-test"))) {
         static h2o_generator_t generator = {NULL, NULL};
         req->res.status = 200;
         req->res.reason = "OK";

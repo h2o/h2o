@@ -61,7 +61,8 @@ static void bind_conf(h2o_req_t *req)
         req->path_normalized = h2o_normalize_path(&req->pool, req->path.base, req->path.len);
         do {
             pathconf = hostconf->paths.entries + i;
-            if (req->path.len >= pathconf->path.len && memcmp(req->path.base, pathconf->path.base, pathconf->path.len) == 0)
+            if (req->path_normalized.len >= pathconf->path.len &&
+                memcmp(req->path_normalized.base, pathconf->path.base, pathconf->path.len) == 0)
                 goto PathFound;
         } while (++i != hostconf->paths.size);
         pathconf = &hostconf->fallback_path;
