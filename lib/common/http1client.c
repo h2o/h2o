@@ -29,12 +29,17 @@
 static void close_client(h2o_http1client_t *client)
 {
     if (client->sock != NULL) {
-        if (client->sockpool != NULL && client->_can_keepalive) {
+        if (client->sockpool.pool != NULL && client->_can_keepalive) {
             /* we do not send pipelined requests, and thus can trash all the received input at the end of the request */
             h2o_buffer_consume(&client->sock->input, client->sock->input->size);
-            h2o_socketpool_return(client->sockpool, client->sock);
+            h2o_socketpool_return(client->sockpool.pool, client->sock);
         } else {
             h2o_socket_close(client->sock);
+        }
+    } else {
+        if (client->sockpool.connect_req != NULL) {
+            h2o_socketpool_cancel_connect(client->sockpool.connect_req);
+            client->sockpool.connect_req = NULL;
         }
     }
     if (h2o_timeout_is_linked(&client->_timeout))
@@ -327,6 +332,8 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data)
 {
     h2o_http1client_t *client = data;
 
+    client->sockpool.connect_req = NULL;
+
     if (sock == NULL) {
         assert(errstr != NULL);
         on_connect_error(client, errstr);
@@ -400,8 +407,8 @@ h2o_http1client_t *h2o_http1client_connect_with_pool(h2o_http1client_ctx_t *ctx,
                                                      h2o_http1client_connect_cb cb)
 {
     h2o_http1client_t *client = create_client(ctx, pool, cb);
-    client->sockpool = sockpool;
-    h2o_socketpool_connect(sockpool, ctx->loop, ctx->zero_timeout, on_pool_connect, client);
+    client->sockpool.pool = sockpool;
+    client->sockpool.connect_req = h2o_socketpool_connect(sockpool, ctx->loop, ctx->zero_timeout, on_pool_connect, client);
     return client;
 }
 
