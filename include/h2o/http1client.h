@@ -50,7 +50,10 @@ typedef struct st_h2o_http1client_ctx_t {
 struct st_h2o_http1client_t {
     h2o_http1client_ctx_t *ctx;
     h2o_mem_pool_t *pool;
-    h2o_socketpool_t *sockpool;
+    struct {
+        h2o_socketpool_t *pool;
+        h2o_socketpool_connect_request_t *connect_req;
+    } sockpool;
     h2o_socket_t *sock;
     void *data;
     union {

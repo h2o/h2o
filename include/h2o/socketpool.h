@@ -53,6 +53,8 @@ typedef struct st_h2o_socketpool_t {
     } _shared;
 } h2o_socketpool_t;
 
+typedef struct st_h2o_socketpool_connect_request_t h2o_socketpool_connect_request_t;
+
 typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr, void *data);
 /**
  * initializes a socket loop
@@ -69,8 +71,12 @@ void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64
 /**
  * connects to the peer (or returns a pooled connection)
  */
-void h2o_socketpool_connect(h2o_socketpool_t *pool, h2o_loop_t *loop, h2o_timeout_t *zero_timeout, h2o_socketpool_connect_cb cb,
+h2o_socketpool_connect_request_t *h2o_socketpool_connect(h2o_socketpool_t *pool, h2o_loop_t *loop, h2o_timeout_t *zero_timeout, h2o_socketpool_connect_cb cb,
                             void *data);
+/**
+ * cancels a connect request
+ */
+void h2o_socketpool_cancel_connect(h2o_socketpool_connect_request_t *req);
 /**
  * returns an idling socket to the socket pool
  */
