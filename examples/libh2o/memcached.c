@@ -56,7 +56,7 @@ static void get_cb(h2o_memcached_response_t *resp)
 
 int main(int argc, char **argv)
 {
-    h2o_thread_initialize_signal_for_notification(SIGCONT);
+    h2o_thread_initialize_signal_for_notification(SIGUSR1);
 
     h2o_memcached_conn_t *conn = h2o_memcached_open("127.0.0.1", 11211);
     if (conn == NULL)

@@ -124,7 +124,7 @@ static void test_loopback(void)
 
 int main(int argc, char **argv)
 {
-    h2o_thread_initialize_signal_for_notification(SIGCONT);
+    h2o_thread_initialize_signal_for_notification(SIGUSR1);
 
     { /* library tests */
         subtest("lib/string.c", test_lib__string_c);
