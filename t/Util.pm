@@ -26,21 +26,27 @@ sub exec_unittest {
     plan skip_all => "unit test:$base does not exist"
         if ! -e $fn;
 
-    # setup and spawn memcached
-    my $memcached_guard = do {
-        if (prog_exists("memcached")) {
-            my $memcached_port = empty_port();
-            $ENV{MEMCACHED_PORT} = $memcached_port;
-            spawn_server(
-                argv     => [ qw(memcached -l 127.0.0.1 -p), $memcached_port ],
-                is_ready => sub {
-                    check_port($memcached_port);
-                },
-            );
-        }
+    my $ret = do {
+        # setup and spawn memcached
+        my $memcached_guard = do {
+            if (prog_exists("memcached")) {
+                my $memcached_port = empty_port();
+                $ENV{MEMCACHED_PORT} = $memcached_port;
+                spawn_server(
+                    argv     => [ qw(memcached -l 127.0.0.1 -p), $memcached_port ],
+                    is_ready => sub {
+                        check_port($memcached_port);
+                    },
+                );
+            }
+        };
+        system($fn);
     };
 
-    return system($fn);
+    # seems like that on NetBSD we need to call exit after global destrution or exit status gets clobbered
+    die "$fn failed:$ret"
+        if $ret != 0;
+    exit 0;
 }
 
 # spawns a child process and returns a guard object that kills the process when destroyed
