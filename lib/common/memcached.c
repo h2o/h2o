@@ -94,10 +94,7 @@ static void destroy_request(h2o_memcached_request_t *req)
 static void link_pending_request(h2o_memcached_conn_t *conn, h2o_memcached_request_t *req)
 {
     assert(!h2o_linklist_is_linked(&req->link));
-
-    pthread_mutex_lock(&conn->mutex);
     h2o_linklist_insert(&conn->pending_reqs, &req->link);
-    pthread_mutex_unlock(&conn->mutex);
 }
 
 static h2o_memcached_request_t *pop_pending_request(h2o_memcached_conn_t *conn, uint32_t serial)
@@ -237,14 +234,16 @@ h2o_memcached_request_t *h2o_memcached_get(h2o_memcached_conn_t *conn, const cha
 
     assert(cb != NULL);
 
+    pthread_mutex_lock(&conn->mutex);
+
     if ((req->response.err = yrmcds_get(&conn->yrmcds, key, keylen, 0, &req->serial)) != YRMCDS_OK) {
         link_response(req);
         goto Exit;
     }
-
     link_pending_request(conn, req);
 
 Exit:
+    pthread_mutex_unlock(&conn->mutex);
     return req;
 }
 
@@ -253,16 +252,18 @@ h2o_memcached_request_t *h2o_memcached_set(h2o_memcached_conn_t *conn, const cha
 {
     h2o_memcached_request_t *req = (void *)create_request(sizeof(*req), cb, app_data);
 
+    pthread_mutex_lock(&conn->mutex);
+
     /* TODO use setq in case cb == NULL? */
     if ((req->response.err = yrmcds_set(&conn->yrmcds, key, keylen, data, datalen, 0, expires, 0, 0, &req->serial)) != YRMCDS_OK) {
         if (cb != NULL)
             link_response(req);
         goto Exit;
     }
-
     link_pending_request(conn, req);
 
 Exit:
+    pthread_mutex_unlock(&conn->mutex);
     return cb != NULL ? req : NULL;
 }
 
@@ -270,6 +271,8 @@ h2o_memcached_request_t *h2o_memcached_remove(h2o_memcached_conn_t *conn, const 
                                               h2o_memcached_response_cb cb, void *app_data)
 {
     h2o_memcached_request_t *req = (void *)create_request(sizeof(*req), cb, app_data);
+
+    pthread_mutex_lock(&conn->mutex);
 
     /* TODO use removeq in case cb == NULL? */
     if ((req->response.err = yrmcds_remove(&conn->yrmcds, key, keylen, 0, &req->serial)) != YRMCDS_OK) {
@@ -281,6 +284,7 @@ h2o_memcached_request_t *h2o_memcached_remove(h2o_memcached_conn_t *conn, const 
     link_pending_request(conn, req);
 
 Exit:
+    pthread_mutex_unlock(&conn->mutex);
     return cb != NULL ? req : NULL;
 }
 
