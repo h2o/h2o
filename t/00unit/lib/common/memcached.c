@@ -98,7 +98,7 @@ void test_lib__memcached_c(void)
         printf("# SKIP skipping memcached tests (setenv MEMCACHED_PORT=<port> to run)\n");
         return;
     }
-    if (sscanf(memcached_port_str, "%" PRIu16, &memcached_port) != 1) {
+    if (sscanf(memcached_port_str, "%" SCNu16, &memcached_port) != 1) {
         fprintf(stderr, "MEMCACHED_PORT is invalid\n");
         ok(0);
         return;
