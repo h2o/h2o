@@ -25,19 +25,13 @@
 
 #define INITIAL_INBUFSZ 8192
 
-static void bind_conf(h2o_req_t *req)
+static h2o_hostconf_t *setup_before_processing(h2o_req_t *req)
 {
-    h2o_context_t *ctx;
+    h2o_context_t *ctx = req->conn->ctx;
     h2o_hostconf_t *hostconf;
-    h2o_pathconf_t *pathconf;
 
-    if (req->pathconf != NULL) {
-        /* already bound */
-        return;
-    }
-
-    ctx = req->conn->ctx;
     h2o_get_timestamp(ctx, &req->pool, &req->processed_at);
+    req->path_normalized = h2o_normalize_path(&req->pool, req->path.base, req->path.len);
 
     /* find the host context */
     if (req->authority.base != NULL) {
@@ -55,24 +49,23 @@ static void bind_conf(h2o_req_t *req)
         req->authority = hostconf->hostname;
     }
 
-    /* find the path context (as well as building path_normalized) */
-    if (hostconf->paths.size != 0) {
-        size_t i = 0;
-        req->path_normalized = h2o_normalize_path(&req->pool, req->path.base, req->path.len);
-        do {
-            pathconf = hostconf->paths.entries + i;
-            if (req->path_normalized.len >= pathconf->path.len &&
-                memcmp(req->path_normalized.base, pathconf->path.base, pathconf->path.len) == 0)
-                goto PathFound;
-        } while (++i != hostconf->paths.size);
-        pathconf = &hostconf->fallback_path;
-    PathFound:
-        ;
-    } else {
-        pathconf = &hostconf->fallback_path;
-    }
+    req->pathconf = &hostconf->fallback_path; /* for non-error case, should be adjusted laterwards */
 
-    req->pathconf = pathconf;
+    return hostconf;
+}
+
+static void setup_adjust_pathconf(h2o_req_t *req, h2o_hostconf_t *hostconf)
+{
+    size_t i;
+
+    for (i = 0; i != hostconf->paths.size; ++i) {
+        h2o_pathconf_t *pathconf = hostconf->paths.entries + i;
+        if (req->path_normalized.len >= pathconf->path.len &&
+            memcmp(req->path_normalized.base, pathconf->path.base, pathconf->path.len) == 0) {
+            req->pathconf = pathconf;
+            return;
+        }
+    }
 }
 
 static void deferred_proceed_cb(h2o_timeout_entry_t *entry)
@@ -152,8 +145,10 @@ void h2o_dispose_request(h2o_req_t *req)
 void h2o_process_request(h2o_req_t *req)
 {
     h2o_handler_t **handler, **end;
+    h2o_hostconf_t *hostconf;
 
-    bind_conf(req);
+    hostconf = setup_before_processing(req);
+    setup_adjust_pathconf(req, hostconf);
 
     for (handler = req->pathconf->handlers.entries, end = handler + req->pathconf->handlers.size; handler != end; ++handler) {
         if ((*handler)->on_req(*handler, req) == 0)
@@ -230,7 +225,8 @@ void h2o_send_inline(h2o_req_t *req, const char *body, size_t len)
 
 void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body, int flags)
 {
-    bind_conf(req);
+    if (req->pathconf == NULL)
+        setup_before_processing(req);
 
     if ((flags & H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION) != 0)
         req->http1_is_persistent = 0;

@@ -323,10 +323,6 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         return 0;
     }
 
-    /* do not handle non-normalized paths */
-    if (req->path_normalized.base == NULL)
-        return -1;
-
     /* build path (still unterminated at the end of the block) */
     req_path_prefix = req->pathconf->path.len;
     rpath = alloca(self->real_path.len + (req->path_normalized.len - req_path_prefix) + self->max_index_file_len + 1);
