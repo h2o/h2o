@@ -955,7 +955,7 @@ static void on_socketclose(void *data)
 static void on_accept(h2o_socket_t *listener, int status)
 {
     struct listener_ctx_t *ctx = listener->data;
-    int num_accepts = 16;
+    int num_accepts = conf.max_connections / 16;
 
     if (status == -1) {
         return;
