@@ -50,6 +50,9 @@
 #include "h2o/http2.h"
 #include "h2o/serverutil.h"
 
+/* simply use a large value, and let the kernel clip it to the internal max */
+#define H2O_SOMAXCONN (65536)
+
 struct listener_configurator_t {
     h2o_configurator_t super;
     size_t num_global_listeners;
@@ -598,7 +601,7 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
     }
     /* add new listener */
     if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1 || fcntl(fd, F_SETFD, FD_CLOEXEC) != 0 ||
-        bind(fd, (void *)sun, sizeof(*sun)) != 0 || listen(fd, SOMAXCONN) != 0) {
+        bind(fd, (void *)sun, sizeof(*sun)) != 0 || listen(fd, H2O_SOMAXCONN) != 0) {
         if (fd != -1)
             close(fd);
         h2o_configurator_errprintf(NULL, node, "failed to listen to socket:%s: %s", sun->sun_path, strerror(errno));
@@ -638,7 +641,7 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, cons
 #endif
     if (bind(fd, addr, addrlen) != 0)
         goto Error;
-    if (listen(fd, SOMAXCONN) != 0)
+    if (listen(fd, H2O_SOMAXCONN) != 0)
         goto Error;
 
     return fd;
