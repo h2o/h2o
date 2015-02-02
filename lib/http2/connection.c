@@ -232,6 +232,9 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     assert(!h2o_timeout_is_linked(&conn->_write.timeout_entry));
 
     kh_foreach_value(conn->streams, stream, { h2o_http2_stream_close(conn, stream); });
+    assert(conn->num_streams.receiving == 0);
+    assert(conn->num_streams.responding == 0);
+    assert(conn->num_streams.priority == 0);
     kh_destroy(h2o_http2_stream_t, conn->streams);
     assert(conn->_http1_req_input == NULL);
     h2o_hpack_dispose_header_table(&conn->_input_header_table);
