@@ -293,6 +293,7 @@
 		10E299591A68D03100701AA6 /* scheduler.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = scheduler.c; sourceTree = "<group>"; };
 		10EC2A351A0B4D370083514F /* socketpool.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = socketpool.h; sourceTree = "<group>"; };
 		10EC2A371A0B4DC70083514F /* socketpool.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = socketpool.c; sourceTree = "<group>"; };
+		10F198EB1A7ED2CC00F4585E /* 40pathconf-redirect.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40pathconf-redirect.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10F417D319C1907B00B6E31A /* h2o */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = h2o; sourceTree = BUILT_PRODUCTS_DIR; };
 		10F417D519C190F800B6E31A /* main.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = main.c; sourceTree = "<group>"; };
 		10F417FD19C2D2F800B6E31A /* picotest.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picotest.c; sourceTree = "<group>"; };
@@ -681,6 +682,7 @@
 				104B9A331A59E594009EEE64 /* 01cxx-compile.t */,
 				105534F41A460EF600627ECB /* 10http1client.t */,
 				104B9A301A58F55E009EEE64 /* 40max-connections.t */,
+				10F198EB1A7ED2CC00F4585E /* 40pathconf-redirect.t */,
 				105534F51A460EF600627ECB /* 40protocol.t */,
 				104B9A311A59D7A2009EEE64 /* 40running-user.t */,
 				104B9A321A59E27A009EEE64 /* 40ssl-cipher-suite.t */,
