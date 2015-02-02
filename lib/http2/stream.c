@@ -48,7 +48,7 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     stream->req._ostr_top = &stream->_ostr_final;
 
     h2o_http2_conn_register_stream(conn, stream);
-    ++conn->num_steams_for_priority;
+    ++conn->num_streams.priority;
 
     return stream;
 }
@@ -77,9 +77,10 @@ void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         break;
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
     case H2O_HTTP2_STREAM_STATE_SEND_BODY:
+        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
+    /* continues */
     case H2O_HTTP2_STREAM_STATE_END_STREAM:
-        /* change the state to EOS, clear all the queued bufs, and close the connection in the callback */
-        stream->state = H2O_HTTP2_STREAM_STATE_END_STREAM;
+        /* clear all the queued bufs, and close the connection in the callback */
         stream->_data.size = 0;
         if (h2o_linklist_is_linked(&stream->_refs.link)) {
             /* will be closed in the callback */
@@ -189,7 +190,7 @@ static void send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     h2o_hpack_flatten_headers(&conn->_write.buf, &conn->_output_header_table, stream->stream_id, conn->peer_settings.max_frame_size,
                               &stream->req.res, &ts, &conn->super.ctx->globalconf->server_name);
     h2o_http2_conn_request_write(conn);
-    stream->state = H2O_HTTP2_STREAM_STATE_SEND_BODY;
+    h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY);
 }
 
 void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb)
@@ -229,7 +230,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
     /* fallthru */
     case H2O_HTTP2_STREAM_STATE_SEND_BODY:
         if (is_final)
-            stream->state = H2O_HTTP2_STREAM_STATE_END_STREAM;
+            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
         break;
     case H2O_HTTP2_STREAM_STATE_END_STREAM:
         /* might get set by h2o_http2_stream_reset */
@@ -255,10 +256,11 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
 
     if (stream->_pull_cb != NULL) {
         /* pull mode */
+        assert(stream->state != H2O_HTTP2_STREAM_STATE_END_STREAM);
         if (send_data_pull(conn, stream)) {
             /* sent all data */
             stream->_data.size = 0;
-            stream->state = H2O_HTTP2_STREAM_STATE_END_STREAM;
+            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
         }
     } else {
         /* push mode */
