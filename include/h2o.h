@@ -701,6 +701,10 @@ void h2o_send_inline(h2o_req_t *req, const char *body, size_t len);
  * sends the given information as an error response to the client
  */
 void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body, int flags);
+/**
+ * sends a redirect response
+ */
+void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const char *path, size_t path_len);
 
 /* mime mapper */
 

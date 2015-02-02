@@ -230,45 +230,6 @@ int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *pa
     return 0;
 }
 
-static int redirect_to_dir(h2o_req_t *req, const char *path, size_t path_len)
-{
-    static h2o_generator_t generator = {NULL, NULL};
-    static const h2o_iovec_t body_prefix = {
-        H2O_STRLIT("<!DOCTYPE html><TITLE>301 Moved Permanently</TITLE><P>The document has moved <A HREF=\"")};
-    static const h2o_iovec_t body_suffix = {H2O_STRLIT("\">here</A>")};
-
-    h2o_iovec_t url;
-    size_t alloc_size;
-    h2o_iovec_t bufs[3];
-
-    /* determine the size of the memory needed */
-    alloc_size = sizeof(":///") + req->scheme.len + req->authority.len + path_len;
-
-    /* allocate and build url */
-    url.base = h2o_mem_alloc_pool(&req->pool, alloc_size);
-    url.len = sprintf(url.base, "%.*s://%.*s%.*s/", (int)req->scheme.len, req->scheme.base, (int)req->authority.len,
-                      req->authority.base, (int)path_len, path);
-    assert(url.len + 1 == alloc_size);
-
-    /* build response header */
-    req->res.status = 301;
-    req->res.reason = "Moved Permanently";
-    memset(&req->res.headers, 0, sizeof(req->res.headers));
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LOCATION, url.base, url.len);
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/html; charset=utf-8"));
-
-    /* build response */
-    bufs[0] = body_prefix;
-    bufs[1] = h2o_htmlescape(&req->pool, url.base, url.len);
-    bufs[2] = body_suffix;
-
-    /* send */
-    h2o_start_response(req, &generator);
-    h2o_send(req, bufs, 3, 1);
-
-    return 0;
-}
-
 static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len, int is_get)
 {
     static h2o_generator_t generator = {NULL, NULL};
@@ -323,10 +284,6 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         return 0;
     }
 
-    /* do not handle non-normalized paths */
-    if (req->path_normalized.base == NULL)
-        return -1;
-
     /* build path (still unterminated at the end of the block) */
     req_path_prefix = req->pathconf->path.len;
     rpath = alloca(self->real_path.len + (req->path_normalized.len - req_path_prefix) + self->max_index_file_len + 1);
@@ -348,10 +305,10 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
             }
             if (is_dir) {
                 /* note: apache redirects "path/" to "path/index.txt/" if index.txt is a dir */
-                char *path = alloca(req->path_normalized.len + index_file->len + 1);
-                size_t path_len = sprintf(path, "%.*s%.*s", (int)req->path_normalized.len, req->path_normalized.base,
-                                          (int)index_file->len, index_file->base);
-                return redirect_to_dir(req, path, path_len);
+                h2o_iovec_t slashed = h2o_concat(&req->pool, req->path_normalized, *index_file);
+                slashed.base[slashed.len++] = '/'; /* rewrite the NUL char */
+                h2o_send_redirect(req, 301, "Moved Permantently", slashed.base, slashed.len);
+                return 0;
             }
             if (errno != ENOENT)
                 break;
@@ -365,8 +322,11 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         rpath[rpath_len] = '\0';
         if ((generator = create_generator(req, rpath, rpath_len, &is_dir, self->flags)) != NULL)
             goto Opened;
-        if (is_dir)
-            return redirect_to_dir(req, req->path_normalized.base, req->path_normalized.len);
+        if (is_dir) {
+            h2o_iovec_t slashed = h2o_strdup_slashed(&req->pool, req->path_normalized.base, req->path_normalized.len);
+            h2o_send_redirect(req, 301, "Moved Permanently", slashed.base, slashed.len);
+            return 0;
+        }
     }
     /* failed to open */
     if (errno == ENOENT) {
