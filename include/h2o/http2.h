@@ -266,6 +266,7 @@ int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *pa
 /* connection */
 void h2o_http2_conn_register_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
+static size_t h2o_http2_conn_num_open_streams(h2o_http2_conn_t *conn);
 static h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uint32_t stream_id);
 void h2o_http2_accept(h2o_context_t *ctx, h2o_socket_t *sock);
 int h2o_http2_handle_upgrade(h2o_req_t *req);
@@ -289,6 +290,11 @@ static ssize_t h2o_http2_window_get_window(h2o_http2_window_t *window);
 static void h2o_http2_window_consume_window(h2o_http2_window_t *window, size_t bytes);
 
 /* inline definitions */
+
+inline size_t h2o_http2_conn_num_open_streams(h2o_http2_conn_t *conn)
+{
+    return kh_size(conn->streams) - conn->num_steams_for_priority;
+}
 
 inline h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uint32_t stream_id)
 {

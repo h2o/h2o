@@ -312,7 +312,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
 #undef EXPECTED_MAP
 
     /* handle the request */
-    if (kh_size(conn->streams) - conn->num_steams_for_priority > H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams) {
+    if (h2o_http2_conn_num_open_streams(conn) > H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams) {
         ret = H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM;
         goto SendRSTStream;
     }
