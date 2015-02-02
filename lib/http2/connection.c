@@ -187,16 +187,16 @@ void h2o_http2_conn_register_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *
     if (conn->max_open_stream_id < stream->stream_id)
         conn->max_open_stream_id = stream->stream_id;
 
-    iter = kh_put(h2o_http2_stream_t, conn->open_streams, stream->stream_id, &r);
-    assert(iter != kh_end(conn->open_streams));
-    kh_val(conn->open_streams, iter) = stream;
+    iter = kh_put(h2o_http2_stream_t, conn->streams, stream->stream_id, &r);
+    assert(iter != kh_end(conn->streams));
+    kh_val(conn->streams, iter) = stream;
 }
 
 void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
-    khiter_t iter = kh_get(h2o_http2_stream_t, conn->open_streams, stream->stream_id);
-    assert(iter != kh_end(conn->open_streams));
-    kh_del(h2o_http2_stream_t, conn->open_streams, iter);
+    khiter_t iter = kh_get(h2o_http2_stream_t, conn->streams, stream->stream_id);
+    assert(iter != kh_end(conn->streams));
+    kh_del(h2o_http2_stream_t, conn->streams, iter);
 
     assert(h2o_http2_scheduler_is_open(&stream->_refs.scheduler));
     h2o_http2_scheduler_close(&stream->_refs.scheduler);
@@ -232,8 +232,8 @@ static void close_connection_now(h2o_http2_conn_t *conn)
 
     assert(!h2o_timeout_is_linked(&conn->_write.timeout_entry));
 
-    kh_foreach_value(conn->open_streams, stream, { h2o_http2_stream_close(conn, stream); });
-    kh_destroy(h2o_http2_stream_t, conn->open_streams);
+    kh_foreach_value(conn->streams, stream, { h2o_http2_stream_close(conn, stream); });
+    kh_destroy(h2o_http2_stream_t, conn->streams);
     assert(conn->_http1_req_input == NULL);
     h2o_hpack_dispose_header_table(&conn->_input_header_table);
     h2o_hpack_dispose_header_table(&conn->_output_header_table);
@@ -312,7 +312,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
 #undef EXPECTED_MAP
 
     /* handle the request */
-    if (kh_size(conn->open_streams) - conn->num_steams_for_priority > H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams) {
+    if (kh_size(conn->streams) - conn->num_steams_for_priority > H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams) {
         ret = H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM;
         goto SendRSTStream;
     }
@@ -598,7 +598,7 @@ static int handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
         if (prev_initial_window_size != conn->peer_settings.initial_window_size) {
             ssize_t delta = conn->peer_settings.initial_window_size - prev_initial_window_size;
             h2o_http2_stream_t *stream;
-            kh_foreach_value(conn->open_streams, stream, { update_stream_output_window(stream, delta); });
+            kh_foreach_value(conn->streams, stream, { update_stream_output_window(stream, delta); });
             resume_send(conn);
         }
     }
@@ -967,7 +967,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock, str
     conn->super.peername.len = addrlen;
     conn->sock = sock;
     conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
-    conn->open_streams = kh_init(h2o_http2_stream_t);
+    conn->streams = kh_init(h2o_http2_stream_t);
     conn->state = H2O_HTTP2_CONN_STATE_OPEN;
     h2o_linklist_insert(&ctx->http2._conns, &conn->_conns);
     conn->_read_expect = expect_preface;

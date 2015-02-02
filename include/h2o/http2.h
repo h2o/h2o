@@ -218,7 +218,7 @@ struct st_h2o_http2_conn_t {
     /* settings */
     h2o_http2_settings_t peer_settings;
     /* streams */
-    khash_t(h2o_http2_stream_t) * open_streams;
+    khash_t(h2o_http2_stream_t) *streams;
     uint32_t max_open_stream_id;
     uint32_t max_processed_stream_id;
     uint32_t num_responding_streams;
@@ -292,9 +292,9 @@ static void h2o_http2_window_consume_window(h2o_http2_window_t *window, size_t b
 
 inline h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uint32_t stream_id)
 {
-    khiter_t iter = kh_get(h2o_http2_stream_t, conn->open_streams, stream_id);
-    if (iter != kh_end(conn->open_streams))
-        return kh_val(conn->open_streams, iter);
+    khiter_t iter = kh_get(h2o_http2_stream_t, conn->streams, stream_id);
+    if (iter != kh_end(conn->streams))
+        return kh_val(conn->streams, iter);
     return NULL;
 }
 
