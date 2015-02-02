@@ -256,6 +256,7 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
 
     if (stream->_pull_cb != NULL) {
         /* pull mode */
+        assert(stream->state != H2O_HTTP2_STREAM_STATE_END_STREAM);
         if (send_data_pull(conn, stream)) {
             /* sent all data */
             stream->_data.size = 0;
