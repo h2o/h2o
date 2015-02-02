@@ -54,20 +54,6 @@ static h2o_hostconf_t *setup_before_processing(h2o_req_t *req)
     return hostconf;
 }
 
-static void setup_adjust_pathconf(h2o_req_t *req, h2o_hostconf_t *hostconf)
-{
-    size_t i;
-
-    for (i = 0; i != hostconf->paths.size; ++i) {
-        h2o_pathconf_t *pathconf = hostconf->paths.entries + i;
-        if (req->path_normalized.len >= pathconf->path.len &&
-            memcmp(req->path_normalized.base, pathconf->path.base, pathconf->path.len) == 0) {
-            req->pathconf = pathconf;
-            return;
-        }
-    }
-}
-
 static void deferred_proceed_cb(h2o_timeout_entry_t *entry)
 {
     h2o_req_t *req = H2O_STRUCT_FROM_MEMBER(h2o_req_t, _timeout_entry, entry);
@@ -146,9 +132,26 @@ void h2o_process_request(h2o_req_t *req)
 {
     h2o_handler_t **handler, **end;
     h2o_hostconf_t *hostconf;
+    size_t i;
 
     hostconf = setup_before_processing(req);
-    setup_adjust_pathconf(req, hostconf);
+
+    /* setup pathconf, or redirect to "path/" */
+    for (i = 0; i != hostconf->paths.size; ++i) {
+        h2o_pathconf_t *pathconf = hostconf->paths.entries + i;
+        size_t confpath_wo_slash = pathconf->path.len - 1;
+        if (req->path_normalized.len >= confpath_wo_slash &&
+            memcmp(req->path_normalized.base, pathconf->path.base, confpath_wo_slash) == 0) {
+            if (req->path_normalized.len == confpath_wo_slash) {
+                h2o_send_redirect(req, 301, "Moved Permanently", pathconf->path.base, pathconf->path.len);
+                return;
+            }
+            if (req->path_normalized.base[confpath_wo_slash] == '/') {
+                req->pathconf = pathconf;
+                break;
+            }
+        }
+    }
 
     for (handler = req->pathconf->handlers.entries, end = handler + req->pathconf->handlers.size; handler != end; ++handler) {
         if ((*handler)->on_req(*handler, req) == 0)
@@ -241,4 +244,31 @@ void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
 
     h2o_send_inline(req, body, SIZE_MAX);
+}
+
+void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const char *path, size_t path_len)
+{
+    static h2o_generator_t generator = {NULL, NULL};
+    static const h2o_iovec_t body_prefix = {
+        H2O_STRLIT("<!DOCTYPE html><TITLE>301 Moved Permanently</TITLE><P>The document has moved <A HREF=\"")};
+    static const h2o_iovec_t body_suffix = {H2O_STRLIT("\">here</A>")};
+
+    h2o_iovec_t url = h2o_concat(&req->pool, req->scheme, (h2o_iovec_t){H2O_STRLIT("://")}, req->authority, (h2o_iovec_t){(char*)path, path_len});
+    h2o_iovec_t bufs[3];
+
+    /* build response header */
+    req->res.status = 301;
+    req->res.reason = "Moved Permanently";
+    req->res.headers = (h2o_headers_t){};
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LOCATION, url.base, url.len);
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/html; charset=utf-8"));
+
+    /* build response */
+    bufs[0] = body_prefix;
+    bufs[1] = h2o_htmlescape(&req->pool, url.base, url.len);
+    bufs[2] = body_suffix;
+
+    /* send */
+    h2o_start_response(req, &generator);
+    h2o_send(req, bufs, 3, 1);
 }
