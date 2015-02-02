@@ -135,7 +135,7 @@ static void update_idle_timeout(h2o_http2_conn_t *conn)
 {
     h2o_timeout_unlink(&conn->_timeout_entry);
 
-    if (conn->num_responding_streams == 0) {
+    if (conn->num_streams.responding == 0) {
         assert(h2o_linklist_is_empty(&conn->_pending_reqs));
         conn->_timeout_entry.cb = on_idle_timeout;
         h2o_timeout_link(conn->super.ctx->loop, &conn->super.ctx->http2.idle_timeout, &conn->_timeout_entry);
@@ -145,14 +145,12 @@ static void update_idle_timeout(h2o_http2_conn_t *conn)
 static void run_pending_requests(h2o_http2_conn_t *conn)
 {
     while (!h2o_linklist_is_empty(&conn->_pending_reqs) &&
-           conn->num_responding_streams < conn->super.ctx->globalconf->http2.max_concurrent_requests_per_connection) {
+           conn->num_streams.responding < conn->super.ctx->globalconf->http2.max_concurrent_requests_per_connection) {
         /* fetch and detach a pending stream */
         h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.link, conn->_pending_reqs.next);
         h2o_linklist_unlink(&stream->_refs.link);
         /* handle it */
-        assert(stream->state == H2O_HTTP2_STREAM_STATE_REQ_PENDING);
-        ++conn->num_responding_streams;
-        stream->state = H2O_HTTP2_STREAM_STATE_SEND_HEADERS;
+        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
         if (conn->max_processed_stream_id < stream->stream_id)
             conn->max_processed_stream_id = stream->stream_id;
         h2o_process_request(&stream->req);
@@ -170,7 +168,7 @@ static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_
         return;
     }
 
-    stream->state = H2O_HTTP2_STREAM_STATE_REQ_PENDING;
+    h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
 
     /* TODO schedule the pending reqs using the scheduler */
     h2o_linklist_insert(&conn->_pending_reqs, &stream->_refs.link);
@@ -214,11 +212,12 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
     case H2O_HTTP2_STREAM_STATE_SEND_BODY:
     case H2O_HTTP2_STREAM_STATE_END_STREAM:
-        --conn->num_responding_streams;
         if (h2o_linklist_is_linked(&stream->_refs.link))
             h2o_linklist_unlink(&stream->_refs.link);
         break;
     }
+    if (stream->state != H2O_HTTP2_STREAM_STATE_END_STREAM)
+        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
 
     if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
         run_pending_requests(conn);
@@ -320,7 +319,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     if (stream->_req_body == NULL) {
         execute_or_enqueue_request(conn, stream);
     } else {
-        stream->state = H2O_HTTP2_STREAM_STATE_RECV_BODY;
+        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_RECV_BODY);
     }
     return 0;
 
@@ -388,7 +387,7 @@ static void update_input_window(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_
 
 static int open_stream(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_http2_stream_t **stream, const char **err_desc)
 {
-    if (conn->num_steams_for_priority >= conn->super.ctx->globalconf->http2.max_streams_for_priority) {
+    if (conn->num_streams.priority >= conn->super.ctx->globalconf->http2.max_streams_for_priority) {
         *err_desc = "too many streams in idle/closed state";
         return H2O_HTTP2_ERROR_INTERNAL; /* FIXME? */
     }
@@ -757,12 +756,12 @@ static void parse_input(h2o_http2_conn_t *conn)
     size_t http2_max_concurrent_requests_per_connection = conn->super.ctx->globalconf->http2.max_concurrent_requests_per_connection;
     int perform_early_exit = 0;
 
-    if (conn->num_responding_streams != http2_max_concurrent_requests_per_connection)
+    if (conn->num_streams.responding != http2_max_concurrent_requests_per_connection)
         perform_early_exit = 1;
 
     /* handle the input */
     while (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING && conn->sock->input->size != 0) {
-        if (perform_early_exit == 1 && conn->num_responding_streams == http2_max_concurrent_requests_per_connection)
+        if (perform_early_exit == 1 && conn->num_streams.responding == http2_max_concurrent_requests_per_connection)
             goto EarlyExit;
         /* process a frame */
         const char *err_desc = NULL;
@@ -891,7 +890,7 @@ static void on_write_complete(h2o_socket_t *sock, int status)
     case H2O_HTTP2_CONN_STATE_OPEN:
         break;
     case H2O_HTTP2_CONN_STATE_HALF_CLOSED:
-        if (conn->num_responding_streams != 0)
+        if (conn->num_streams.responding != 0)
             break;
         conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
     /* fall-thru */

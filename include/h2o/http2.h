@@ -221,8 +221,10 @@ struct st_h2o_http2_conn_t {
     khash_t(h2o_http2_stream_t) *streams;
     uint32_t max_open_stream_id;
     uint32_t max_processed_stream_id;
-    uint32_t num_responding_streams;
-    uint32_t num_steams_for_priority;
+    struct {
+        uint32_t responding;
+        uint32_t priority;
+    } num_streams;
     /* internal */
     h2o_http2_scheduler_node_t scheduler;
     h2o_http2_conn_state_t state;
@@ -276,6 +278,7 @@ static ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn);
 
 /* stream */
 h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req);
+static void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_http2_stream_state_t new_state);
 static void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
@@ -293,7 +296,7 @@ static void h2o_http2_window_consume_window(h2o_http2_window_t *window, size_t b
 
 inline size_t h2o_http2_conn_num_open_streams(h2o_http2_conn_t *conn)
 {
-    return kh_size(conn->streams) - conn->num_steams_for_priority;
+    return kh_size(conn->streams) - conn->num_streams.priority;
 }
 
 inline h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uint32_t stream_id)
@@ -318,12 +321,50 @@ inline ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn)
     return ret;
 }
 
+inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_http2_stream_state_t new_state)
+{
+    switch (new_state) {
+    case H2O_HTTP2_STREAM_STATE_IDLE:
+        assert(!"FIXME");
+        break;
+    case H2O_HTTP2_STREAM_STATE_RECV_HEADERS:
+        assert(stream->state == H2O_HTTP2_STREAM_STATE_IDLE);
+        stream->state = new_state;
+        --conn->num_streams.priority;
+        break;
+    case H2O_HTTP2_STREAM_STATE_RECV_BODY:
+        stream->state = new_state;
+        break;
+    case H2O_HTTP2_STREAM_STATE_REQ_PENDING:
+        stream->state = new_state;
+        break;
+    case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
+        assert(stream->state == H2O_HTTP2_STREAM_STATE_REQ_PENDING);
+        ++conn->num_streams.responding;
+        stream->state = new_state;
+        break;
+    case H2O_HTTP2_STREAM_STATE_SEND_BODY:
+        stream->state = new_state;
+        break;
+    case H2O_HTTP2_STREAM_STATE_END_STREAM:
+        assert(stream->state != H2O_HTTP2_STREAM_STATE_END_STREAM);
+        switch (stream->state) {
+        case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
+        case H2O_HTTP2_STREAM_STATE_SEND_BODY:
+            --conn->num_streams.responding;
+            break;
+        default:
+            break;
+        }
+        stream->state = new_state;
+        break;
+    }
+}
+
 inline void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     assert(h2o_http2_scheduler_is_open(&stream->_refs.scheduler));
-    assert(stream->state == H2O_HTTP2_STREAM_STATE_IDLE);
-    stream->state = H2O_HTTP2_STREAM_STATE_RECV_HEADERS;
-    --conn->num_steams_for_priority;
+    h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_RECV_HEADERS);
     h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
 }
 
