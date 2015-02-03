@@ -38,8 +38,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 
 static void start_request(h2o_http1client_ctx_t *ctx)
 {
-    h2o_iovec_t scheme, host, path;
-    uint16_t port;
+    h2o_parse_url_t url_parsed;
     h2o_iovec_t *req;
     h2o_http1client_t *client;
 
@@ -47,34 +46,32 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     h2o_mem_clear_pool(&pool);
 
     /* parse URL */
-    if (h2o_parse_url(url, SIZE_MAX, &scheme, &host, &port, &path) != 0) {
+    if (h2o_parse_url(url, SIZE_MAX, &url_parsed) != 0) {
         fprintf(stderr, "unrecognized type of URL: %s\n", url);
         exit(1);
     }
-    if (h2o_memis(scheme.base, scheme.len, H2O_STRLIT("https"))) {
+    if (h2o_memis(url_parsed.scheme.base, url_parsed.scheme.len, H2O_STRLIT("https"))) {
         fprintf(stderr, "https is not (yet) supported\n");
         exit(1);
     }
-    /* NUL-terminate the host */
-    host = h2o_strdup(&pool, host.base, host.len);
 
     /* build request */
     req = h2o_mem_alloc_pool(&pool, sizeof(*req));
     req->base = h2o_mem_alloc_pool(&pool, 1024);
     req->len =
-        snprintf(req->base, 1024, "GET %.*s HTTP/1.1\r\nhost: %s:%u\r\n\r\n", (int)path.len, path.base, host.base, (unsigned)port);
+        snprintf(req->base, 1024, "GET %.*s HTTP/1.1\r\nhost: %.*s\r\n\r\n", (int)url_parsed.path.len, url_parsed.path.base, (int)url_parsed.authority.len, url_parsed.authority.base);
     assert(req->len < 1024);
 
     /* initiate the request */
     if (1) {
         if (sockpool == NULL) {
             sockpool = h2o_mem_alloc(sizeof(*sockpool));
-            h2o_socketpool_init(sockpool, host.base, port, 10);
+            h2o_socketpool_init(sockpool, h2o_strdup(&pool, url_parsed.host.base, url_parsed.host.len).base, url_parsed.port, 10);
             h2o_socketpool_set_timeout(sockpool, ctx->loop, 5000 /* in msec */);
         }
         client = h2o_http1client_connect_with_pool(ctx, &pool, sockpool, on_connect);
     } else {
-        client = h2o_http1client_connect(ctx, &pool, host.base, port, on_connect);
+        client = h2o_http1client_connect(ctx, &pool, h2o_strdup(&pool, url_parsed.host.base, url_parsed.host.len).base, url_parsed.port, on_connect);
     }
     assert(client != NULL);
     client->data = req;
