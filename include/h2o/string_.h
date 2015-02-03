@@ -78,7 +78,7 @@ void h2o_base64_encode(char *dst, const void *src, size_t len, int url_encoded);
 /**
  * builds a RFC-1123 style date string
  */
-void h2o_time2str_rfc1123(char *buf, time_t time);
+void h2o_time2str_rfc1123(char *buf, struct tm *gmt);
 /**
  * builds an Apache log-style date string
  */

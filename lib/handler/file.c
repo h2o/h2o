@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 #include "h2o.h"
 
@@ -36,7 +37,10 @@ struct st_h2o_sendfile_generator_t {
     int fd;
     h2o_req_t *req;
     size_t bytesleft;
-    char last_modified_buf[H2O_TIMESTR_RFC1123_LEN + 1];
+    struct {
+        struct tm tm;
+        char buf[H2O_TIMESTR_RFC1123_LEN + 1];
+    } last_modified;
     char etag_buf[sizeof("\"deadbeef-deadbeefdeadbeef\"")];
     size_t etag_len;
     char is_gzip;
@@ -166,7 +170,8 @@ Opened:
     self->req = NULL;
     self->bytesleft = st.st_size;
 
-    h2o_time2str_rfc1123(self->last_modified_buf, st.st_mtime);
+    gmtime_r(&st.st_mtime, &self->last_modified.tm);
+    h2o_time2str_rfc1123(self->last_modified.buf, &self->last_modified.tm);
     if ((flags & H2O_FILE_FLAG_NO_ETAG) != 0) {
         self->etag_len = 0;
     } else {
@@ -189,7 +194,7 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     req->res.reason = reason;
     req->res.content_length = self->bytesleft;
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, mime_type.base, mime_type.len);
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LAST_MODIFIED, self->last_modified_buf, H2O_TIMESTR_RFC1123_LEN);
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LAST_MODIFIED, self->last_modified.buf, H2O_TIMESTR_RFC1123_LEN);
     if (self->etag_len != 0)
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ETAG, self->etag_buf, self->etag_len);
     if (self->send_vary)
@@ -343,7 +348,7 @@ Opened:
             goto NotModified;
     } else if ((if_modified_since_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_MODIFIED_SINCE, SIZE_MAX)) != -1) {
         h2o_iovec_t *if_modified_since = &req->headers.entries[if_modified_since_header_index].value;
-        if (h2o_memis(if_modified_since->base, if_modified_since->len, generator->last_modified_buf, H2O_TIMESTR_RFC1123_LEN))
+        if (h2o_memis(if_modified_since->base, if_modified_since->len, generator->last_modified.buf, H2O_TIMESTR_RFC1123_LEN))
             goto NotModified;
     }
 
