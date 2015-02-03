@@ -44,6 +44,7 @@ SET(LIB_SOURCE_FILES
     lib/common/socket.c
     lib/common/socketpool.c
     lib/common/string.c
+    lib/common/time.c
     lib/common/timeout.c
 
     lib/core/config.c
