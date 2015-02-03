@@ -187,8 +187,9 @@ static void send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     h2o_get_timestamp(conn->super.ctx, &stream->req.pool, &ts);
 
     /* FIXME the function may return error, check it! */
-    h2o_hpack_flatten_headers(&conn->_write.buf, &conn->_output_header_table, stream->stream_id, conn->peer_settings.max_frame_size,
-                              &stream->req.res, &ts, &conn->super.ctx->globalconf->server_name);
+    h2o_hpack_flatten_response(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
+                               conn->peer_settings.max_frame_size, &stream->req.res, &ts,
+                               &conn->super.ctx->globalconf->server_name);
     h2o_http2_conn_request_write(conn);
     h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY);
 }
