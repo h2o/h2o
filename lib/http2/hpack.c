@@ -600,72 +600,92 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
     return dst;
 }
 
-int h2o_hpack_flatten_headers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id, size_t max_frame_size,
-                              h2o_res_t *res, h2o_timestamp_t *ts, const h2o_iovec_t *server_name)
+static size_t flatten_headers_calc_capacity(const h2o_header_t *headers, size_t num_headers)
 {
-    const h2o_header_t *header, *header_end;
-    size_t max_capacity = 0;
-    uint8_t *base, *dst;
+    const h2o_header_t *header;
+    size_t capacity = 0;
 
-    {                                                      /* calculate maximum required memory */
-        size_t max_cur_frame_size = STATUS_HEADER_MAX_SIZE /* for :status: */
-#ifndef H2O_UNITTEST
-                                    + 2 + H2O_TIMESTR_RFC1123_LEN /* for Date: */
-                                    + 5 + server_name->len        /* for Server: */
-#endif
-            ;
-
-        for (header = res->headers.entries, header_end = header + res->headers.size; header != header_end; ++header) {
-            size_t max_header_size = header->name->len + header->value.len + 1 + H2O_HTTP2_ENCODE_INT_MAX_LENGTH * 2;
-            if (max_header_size > 16383)
-                return -1;
-            if (max_cur_frame_size + max_header_size > max_frame_size) {
-                max_capacity += H2O_HTTP2_FRAME_HEADER_SIZE + max_cur_frame_size;
-                max_cur_frame_size = max_header_size;
-            } else {
-                max_cur_frame_size += max_header_size;
-            }
-        }
-        max_capacity += H2O_HTTP2_FRAME_HEADER_SIZE + max_cur_frame_size;
+    for (header = headers; num_headers != 0; ++header, --num_headers) {
+        size_t max_header_size = header->name->len + header->value.len + 1 + H2O_HTTP2_ENCODE_INT_MAX_LENGTH * 2;
+        if (max_header_size > 16383)
+            return SIZE_MAX;
+        capacity += max_header_size;
     }
 
-    /* allocate */
-    base = dst = (void *)h2o_buffer_reserve(buf, max_capacity).base;
+    return capacity;
+}
 
-    { /* encode */
-        uint8_t *cur_frame;
-        h2o_iovec_t date_value;
+static uint8_t *flatten_headers(uint8_t *dst, h2o_hpack_header_table_t *header_table, const h2o_header_t *headers,
+                                size_t num_headers)
+{
+    const h2o_header_t *header;
+    for (header = headers; num_headers != 0; ++header, --num_headers)
+        dst = encode_header(header_table, dst, header->name, &header->value);
+    return dst;
+}
 
-#define EMIT_HEADER(end_headers)                                                                                                   \
-    h2o_http2_encode_frame_header(cur_frame, dst - cur_frame - H2O_HTTP2_FRAME_HEADER_SIZE,                                        \
-                                  cur_frame == (uint8_t *)base ? H2O_HTTP2_FRAME_TYPE_HEADERS : H2O_HTTP2_FRAME_TYPE_CONTINUATION, \
-                                  end_headers ? H2O_HTTP2_FRAME_FLAG_END_HEADERS : 0, stream_id)
-
-        cur_frame = dst;
-        dst += H2O_HTTP2_FRAME_HEADER_SIZE;
-        dst = encode_status(dst, res->status);
-/* TODO keep some kind of reference to the indexed headers of Server and Date, and reuse them */
-#ifndef H2O_UNITTEST
-        dst = encode_header(header_table, dst, &H2O_TOKEN_SERVER->buf, server_name);
-        date_value = h2o_iovec_init(ts->str->rfc1123, H2O_TIMESTR_RFC1123_LEN);
-        dst = encode_header(header_table, dst, &H2O_TOKEN_DATE->buf, &date_value);
-#endif
-        for (header = res->headers.entries, header_end = header + res->headers.size; header != header_end; ++header) {
-            size_t max_header_size = header->name->len + header->value.len + 1 + H2O_HTTP2_ENCODE_INT_MAX_LENGTH * 2;
-            if (dst - cur_frame - H2O_HTTP2_FRAME_HEADER_SIZE + max_header_size > max_frame_size) {
-                EMIT_HEADER(0);
-                cur_frame = dst;
-                dst += H2O_HTTP2_FRAME_HEADER_SIZE;
-            }
-            dst = encode_header(header_table, dst, header->name, &header->value);
-        }
-        EMIT_HEADER(1);
-
-#undef EMIT_HEADER
+static void fixup_frame_headers(h2o_buffer_t **buf, size_t start_at, uint8_t type, uint32_t stream_id, size_t max_frame_size)
+{
+    /* try to fit all data into single frame, using the preallocated space for the frame header */
+    size_t payload_size = (*buf)->size - start_at - H2O_HTTP2_FRAME_HEADER_SIZE;
+    if (payload_size <= max_frame_size) {
+        h2o_http2_encode_frame_header((uint8_t *)((*buf)->bytes + start_at), payload_size, H2O_HTTP2_FRAME_TYPE_HEADERS,
+                                      H2O_HTTP2_FRAME_FLAG_END_HEADERS, stream_id);
+        return;
     }
 
-    assert(dst - base < max_capacity);
-    (*buf)->size += dst - base;
+    /* need to setup continuation frames */
+    size_t off;
+    h2o_http2_encode_frame_header((uint8_t *)((*buf)->bytes + start_at), max_frame_size, H2O_HTTP2_FRAME_TYPE_HEADERS, 0,
+                                  stream_id);
+    off = start_at + H2O_HTTP2_FRAME_HEADER_SIZE + max_frame_size;
+    while (1) {
+        size_t left = (*buf)->size - off;
+        h2o_buffer_reserve(buf, H2O_HTTP2_FRAME_HEADER_SIZE);
+        memmove((*buf)->bytes + off + H2O_HTTP2_FRAME_HEADER_SIZE, (*buf)->bytes + off, left);
+        (*buf)->size += H2O_HTTP2_FRAME_HEADER_SIZE;
+        if (left <= max_frame_size) {
+            h2o_http2_encode_frame_header((uint8_t *)((*buf)->bytes + off), left, H2O_HTTP2_FRAME_TYPE_CONTINUATION,
+                                          H2O_HTTP2_FRAME_FLAG_END_HEADERS, stream_id);
+            break;
+        } else {
+            h2o_http2_encode_frame_header((uint8_t *)((*buf)->bytes + off), max_frame_size, H2O_HTTP2_FRAME_TYPE_CONTINUATION, 0,
+                                          stream_id);
+            off += H2O_HTTP2_FRAME_HEADER_SIZE + max_frame_size;
+        }
+    }
+}
+
+int h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
+                               size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t *ts, const h2o_iovec_t *server_name)
+{
+    size_t capacity = flatten_headers_calc_capacity(res->headers.entries, res->headers.size);
+
+    if (capacity == SIZE_MAX)
+        return -1;
+    capacity += H2O_HTTP2_FRAME_HEADER_SIZE; /* for the first header */
+    capacity += STATUS_HEADER_MAX_SIZE;      /* for :status: */
+#ifndef H2O_UNITTEST
+    capacity += 2 + H2O_TIMESTR_RFC1123_LEN; /* for Date: */
+    capacity += 5 + server_name->len;        /* for Server: */
+#endif
+
+    size_t start_at = (*buf)->size;
+    uint8_t *dst = (void *)h2o_buffer_reserve(buf, capacity).base + H2O_HTTP2_FRAME_HEADER_SIZE; /* skip frame header */
+
+    /* encode */
+    dst = encode_status(dst, res->status);
+#ifndef H2O_UNITTEST
+    /* TODO keep some kind of reference to the indexed headers of Server and Date, and reuse them */
+    dst = encode_header(header_table, dst, &H2O_TOKEN_SERVER->buf, server_name);
+    h2o_iovec_t date_value = {ts->str->rfc1123, H2O_TIMESTR_RFC1123_LEN};
+    dst = encode_header(header_table, dst, &H2O_TOKEN_DATE->buf, &date_value);
+#endif
+    dst = flatten_headers(dst, header_table, res->headers.entries, res->headers.size);
+    (*buf)->size = (char *)dst - (*buf)->bytes;
+
+    /* setup the frame headers */
+    fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_HEADERS, stream_id, max_frame_size);
 
     return 0;
 }
