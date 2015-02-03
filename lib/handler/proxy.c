@@ -66,15 +66,14 @@ static int test_location_match(h2o_proxy_location_t *location, h2o_iovec_t schem
 static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, size_t location_len, h2o_proxy_location_t *upstream,
                                     h2o_iovec_t req_scheme, h2o_iovec_t req_authority, h2o_iovec_t req_basepath)
 {
-    h2o_iovec_t loc_scheme, loc_host, loc_path;
-    uint16_t loc_port;
+    h2o_parse_url_t loc_parsed;
 
-    if (h2o_parse_url(location, location_len, &loc_scheme, &loc_host, &loc_port, &loc_path) != 0 ||
-        !test_location_match(upstream, loc_scheme, loc_host, loc_port, loc_path))
+    if (h2o_parse_url(location, location_len, &loc_parsed) != 0 ||
+        !test_location_match(upstream, loc_parsed.scheme, loc_parsed.host, loc_parsed.port, loc_parsed.path))
         return h2o_iovec_init(location, location_len);
 
     return h2o_concat(pool, req_scheme, h2o_iovec_init(H2O_STRLIT("://")), req_authority, req_basepath,
-                      h2o_iovec_init(loc_path.base + upstream->path.len, loc_path.len - upstream->path.len));
+                      h2o_iovec_init(loc_parsed.path.base + upstream->path.len, loc_parsed.path.len - upstream->path.len));
 }
 
 static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream, int keepalive, int preserve_host)

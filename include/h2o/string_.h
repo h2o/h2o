@@ -39,6 +39,13 @@ extern "C" {
 #define H2O_TIMESTR_RFC1123_LEN (sizeof("Sun, 06 Nov 1994 08:49:37 GMT") - 1)
 #define H2O_TIMESTR_LOG_LEN (sizeof("29/Aug/2014:15:34:38 +0900") - 1)
 
+typedef struct st_h2o_parse_url_t {
+    h2o_iovec_t scheme;
+    h2o_iovec_t host;
+    h2o_iovec_t path;
+    uint16_t port;
+} h2o_parse_url_t;
+
 /**
  * duplicates given string
  * @param pool memory pool (or NULL to use malloc)
@@ -110,7 +117,7 @@ h2o_iovec_t h2o_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t le
 /**
  * parses absolute URL (either http or https)
  */
-int h2o_parse_url(const char *url, size_t url_len, h2o_iovec_t *scheme, h2o_iovec_t *host, uint16_t *port, h2o_iovec_t *path);
+int h2o_parse_url(const char *url, size_t url_len, h2o_parse_url_t *result);
 /**
  * HTML-escapes a string
  * @param pool memory pool
