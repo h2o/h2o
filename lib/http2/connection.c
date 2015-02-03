@@ -232,7 +232,7 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     assert(!h2o_timeout_is_linked(&conn->_write.timeout_entry));
 
     kh_foreach_value(conn->streams, stream, { h2o_http2_stream_close(conn, stream); });
-    assert(conn->num_streams.receiving == 0);
+    assert(conn->num_streams.open_pull == 0);
     assert(conn->num_streams.responding == 0);
     assert(conn->num_streams.priority == 0);
     kh_destroy(h2o_http2_stream_t, conn->streams);
@@ -314,7 +314,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
 #undef EXPECTED_MAP
 
     /* handle the request */
-    if (h2o_http2_conn_num_open_streams(conn) > H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams) {
+    if (conn->num_streams.open_pull > H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams) {
         ret = H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM;
         goto SendRSTStream;
     }
