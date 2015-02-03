@@ -26,7 +26,7 @@
 static void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb);
 static void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final);
 
-h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req)
+h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req, uint32_t push_parent_stream_id)
 {
     h2o_http2_stream_t *stream = h2o_mem_alloc(sizeof(*stream));
 
@@ -39,6 +39,7 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
     h2o_http2_window_init(&stream->input_window, &H2O_HTTP2_SETTINGS_HOST);
     stream->_expected_content_length = SIZE_MAX;
+    stream->push.parent_stream_id = push_parent_stream_id;
 
     /* init request */
     h2o_init_request(&stream->req, &conn->super, src_req);
@@ -197,7 +198,7 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
             return -1;
         }
         h2o_hpack_flatten_request(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
-                                  conn->peer_settings.max_frame_size, &stream->req);
+                                  conn->peer_settings.max_frame_size, &stream->req, stream->push.parent_stream_id);
     }
 
     /* FIXME the function may return error, check it! */

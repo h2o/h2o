@@ -406,7 +406,7 @@ static int open_stream(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_http2_str
         *err_desc = "too many streams in idle/closed state";
         return H2O_HTTP2_ERROR_INTERNAL; /* FIXME? */
     }
-    *stream = h2o_http2_stream_open(conn, stream_id, NULL);
+    *stream = h2o_http2_stream_open(conn, stream_id, NULL, 0);
     return 0;
 }
 
@@ -1017,7 +1017,7 @@ void h2o_http2_conn_push_url(h2o_http2_conn_t *conn, h2o_iovec_t url, h2o_http2_
 
     /* open the stream with heighest weight (TODO find a better way to determine the weight) */
     conn->push_stream_ids.max_open += 2;
-    stream = h2o_http2_stream_open(conn, conn->push_stream_ids.max_open, NULL);
+    stream = h2o_http2_stream_open(conn, conn->push_stream_ids.max_open, NULL, src_stream->stream_id);
     h2o_http2_scheduler_open(&stream->_refs.scheduler, &conn->scheduler, 256, 0);
     h2o_http2_stream_prepare_for_request(conn, stream);
 
@@ -1075,7 +1075,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req)
     }
 
     /* open the stream, now that the function is guaranteed to succeed */
-    stream = h2o_http2_stream_open(http2conn, 1, req);
+    stream = h2o_http2_stream_open(http2conn, 1, req, 0);
     h2o_http2_scheduler_open(&stream->_refs.scheduler, &http2conn->scheduler, h2o_http2_default_priority.weight, 0);
     h2o_http2_stream_prepare_for_request(http2conn, stream);
 
