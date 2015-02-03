@@ -41,6 +41,7 @@ extern "C" {
 
 typedef struct st_h2o_parse_url_t {
     h2o_iovec_t scheme;
+    h2o_iovec_t authority; /* i.e. host:port */
     h2o_iovec_t host;
     h2o_iovec_t path;
     uint16_t port;
