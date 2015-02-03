@@ -181,10 +181,24 @@ Exit:
     return bufs;
 }
 
-static void send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     h2o_timestamp_t ts;
+    size_t i;
+
     h2o_get_timestamp(conn->super.ctx, &stream->req.pool, &ts);
+
+    /* send PUSH_PROMISE frame if is push */
+    if (h2o_http2_stream_is_push(stream->stream_id)) {
+        /* cancel the PUSH unless it is 200 OK */
+        if (stream->req.res.status != 200) {
+            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
+            h2o_http2_conn_register_for_proceed_callback(conn, stream);
+            return -1;
+        }
+        h2o_hpack_flatten_request(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
+                                  conn->peer_settings.max_frame_size, &stream->req);
+    }
 
     /* FIXME the function may return error, check it! */
     h2o_hpack_flatten_response(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
@@ -192,6 +206,12 @@ static void send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
                                &conn->super.ctx->globalconf->server_name);
     h2o_http2_conn_request_write(conn);
     h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY);
+
+    /* push URLs */
+    for (i = 0; i != stream->req.http2_push_urls.size; ++i)
+        h2o_http2_conn_push_url(conn, stream->req.http2_push_urls.entries[i], stream);
+
+    return 0;
 }
 
 void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb)
@@ -206,7 +226,8 @@ void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb)
     stream->_pull_cb = cb;
 
     /* send headers */
-    send_headers(conn, stream);
+    if (send_headers(conn, stream) != 0)
+        return;
 
     /* set dummy data in the send buffer */
     h2o_vector_reserve(&stream->req.pool, (h2o_vector_t *)&stream->_data, sizeof(h2o_iovec_t), 1);
@@ -227,7 +248,8 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
     /* send headers */
     switch (stream->state) {
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
-        send_headers(conn, stream);
+        if (send_headers(conn, stream) != 0)
+            return;
     /* fallthru */
     case H2O_HTTP2_STREAM_STATE_SEND_BODY:
         if (is_final)

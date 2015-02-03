@@ -468,6 +468,10 @@ struct st_h2o_req_t {
      */
     int http1_is_persistent;
     /**
+     * push URLs
+     */
+    H2O_VECTOR(h2o_iovec_t) http2_push_urls;
+    /**
      * the Upgrade request header (or { NULL, 0 } if not available)
      */
     h2o_iovec_t upgrade;
