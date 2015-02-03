@@ -19,6 +19,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <signal.h>
+#include "h2o/serverutil.h"
 #include "./test.h"
 
 static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
@@ -122,8 +124,11 @@ static void test_loopback(void)
 
 int main(int argc, char **argv)
 {
+    h2o_thread_initialize_signal_for_notification(SIGUSR1);
+
     { /* library tests */
         subtest("lib/string.c", test_lib__string_c);
+        subtest("lib/memcached.c", test_lib__memcached_c);
         subtest("lib/headers.c", test_lib__headers_c);
         subtest("lib/server_starter.c", test_lib__serverutil_c);
         subtest("lib/http2/hpack.c", test_lib__http2__hpack);

@@ -94,6 +94,10 @@ typedef struct st_h2o_socket_export_t {
     h2o_buffer_t *input;
 } h2o_socket_export_t;
 
+typedef void (*h2o_socket_ssl_resumption_get_async_cb)(h2o_socket_t *sock, h2o_iovec_t session_id);
+typedef void (*h2o_socket_ssl_resumption_new_cb)(h2o_iovec_t session_id, h2o_iovec_t session_data);
+typedef void (*h2o_socket_ssl_resumption_remove_cb)(h2o_iovec_t session_id);
+
 extern h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings;
 extern __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype;
 
@@ -167,6 +171,21 @@ size_t h2o_socket_getnumerichost(struct sockaddr *sa, socklen_t salen, char *buf
  * @param handshake_cb callback to be called when handshake is complete
  */
 void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, h2o_socket_cb handshake_cb);
+/**
+ * resumes SSL handshake with given session data
+ * @param sock the socket
+ * @param session_data session data (or {NULL,0} if not available)
+ */
+void h2o_socket_ssl_resume_server_handshake(h2o_socket_t *sock, h2o_iovec_t session_data);
+/**
+ * registers callbacks to be called for handling session data
+ */
+void h2o_socket_ssl_async_resumption_init(h2o_socket_ssl_resumption_get_async_cb get_cb, h2o_socket_ssl_resumption_new_cb new_cb,
+                                          h2o_socket_ssl_resumption_remove_cb remove_cb);
+/**
+ * setups the SSL context to use the async resumption
+ */
+void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx);
 /**
  * returns the name of the protocol selected using either NPN or ALPN (ALPN has the precedence).
  * @param sock the socket

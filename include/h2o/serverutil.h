@@ -23,7 +23,9 @@
 #define h2o__server_starter_h
 
 #include <stddef.h>
+#include <pthread.h>
 #include <pwd.h>
+#include "h2o/memory.h"
 
 /* taken from sysexits.h */
 #ifndef EX_SOFTWARE

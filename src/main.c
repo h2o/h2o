@@ -936,8 +936,8 @@ static void setup_signal_handlers(void)
     pthread_sigmask(SIG_BLOCK, &sigs_blocked, NULL);
     /* ignore SIGPIPE */
     h2o_set_signal_handler(SIGPIPE, SIG_IGN);
-    /* use SIGCONT for notifying the worker threads */
-    h2o_thread_initialize_signal_for_notification(SIGCONT);
+    /* use SIGUSR1 for notifying the worker threads */
+    h2o_thread_initialize_signal_for_notification(SIGUSR1);
 }
 
 static int num_connections(int delta)
