@@ -600,18 +600,17 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
     return dst;
 }
 
+static size_t calc_capacity(size_t name_len, size_t value_len)
+{
+    return name_len + value_len + 1 + H2O_HTTP2_ENCODE_INT_MAX_LENGTH * 2;
+}
+
 static size_t flatten_headers_calc_capacity(const h2o_header_t *headers, size_t num_headers)
 {
     const h2o_header_t *header;
     size_t capacity = 0;
-
-    for (header = headers; num_headers != 0; ++header, --num_headers) {
-        size_t max_header_size = header->name->len + header->value.len + 1 + H2O_HTTP2_ENCODE_INT_MAX_LENGTH * 2;
-        if (max_header_size > 16383)
-            return SIZE_MAX;
-        capacity += max_header_size;
-    }
-
+    for (header = headers; num_headers != 0; ++header, --num_headers)
+        capacity += calc_capacity(header->name->len, header->value.len);
     return capacity;
 }
 
@@ -656,13 +655,10 @@ static void fixup_frame_headers(h2o_buffer_t **buf, size_t start_at, uint8_t typ
     }
 }
 
-int h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
-                               size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t *ts, const h2o_iovec_t *server_name)
+void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
+                                size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t *ts, const h2o_iovec_t *server_name)
 {
     size_t capacity = flatten_headers_calc_capacity(res->headers.entries, res->headers.size);
-
-    if (capacity == SIZE_MAX)
-        return -1;
     capacity += H2O_HTTP2_FRAME_HEADER_SIZE; /* for the first header */
     capacity += STATUS_HEADER_MAX_SIZE;      /* for :status: */
 #ifndef H2O_UNITTEST
@@ -686,6 +682,4 @@ int h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
 
     /* setup the frame headers */
     fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_HEADERS, stream_id, max_frame_size);
-
-    return 0;
 }
