@@ -89,7 +89,7 @@ sub spawn_h2o {
 
     # decide the port numbers
     my $port = empty_port();
-    my $tls_port = empty_port($port + 1);
+    my $tls_port = empty_port();
 
     # setup the configuration file
     my ($conffh, $conffn) = tempfile();
