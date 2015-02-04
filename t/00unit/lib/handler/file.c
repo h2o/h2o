@@ -64,6 +64,27 @@ static void test_if_modified_since(void)
         ok(conn->body->size == 0);
         h2o_loopback_destroy(conn);
     }
+
+    { /* send if-modified-since using an old date */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_MODIFIED_SINCE, H2O_STRLIT("Sun, 06 Nov 1994 08:49:37 GMT"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        h2o_loopback_destroy(conn);
+    }
+
+    { /* send if-modified-since using a date in the future */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_MODIFIED_SINCE, H2O_STRLIT("Wed, 18 May 2033 12:33:20 GMT"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 304);
+        ok(conn->body->size == 0);
+        h2o_loopback_destroy(conn);
+    }
 }
 
 static void test_if_match(void)
