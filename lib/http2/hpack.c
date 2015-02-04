@@ -600,6 +600,15 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
     return dst;
 }
 
+static uint8_t *encode_literal_header_without_indexing(uint8_t *dst, const h2o_iovec_t *name, const h2o_iovec_t *value)
+{
+    /* literal header field without indexing / never indexed */
+    *dst++ = 0;
+    dst += h2o_hpack_encode_string(dst, name->base, name->len);
+    dst += h2o_hpack_encode_string(dst, value->base, value->len);
+    return dst;
+}
+
 static size_t calc_capacity(size_t name_len, size_t value_len)
 {
     return name_len + value_len + 1 + H2O_HTTP2_ENCODE_INT_MAX_LENGTH * 2;
