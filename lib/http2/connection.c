@@ -1018,7 +1018,7 @@ void h2o_http2_conn_push_url(h2o_http2_conn_t *conn, h2o_iovec_t url, h2o_http2_
     /* open the stream with heighest weight (TODO find a better way to determine the weight) */
     conn->push_stream_ids.max_open += 2;
     stream = h2o_http2_stream_open(conn, conn->push_stream_ids.max_open, NULL, src_stream->stream_id);
-    h2o_http2_scheduler_open(&stream->_refs.scheduler, &conn->scheduler, 256, 0);
+    h2o_http2_scheduler_open(&stream->_refs.scheduler, &conn->scheduler, 257, 0);
     h2o_http2_stream_prepare_for_request(conn, stream);
 
     /* setup request */
