@@ -79,9 +79,10 @@ typedef struct st_h2o_mimemap_t h2o_mimemap_t;
 typedef struct st_h2o_token_t {
     h2o_iovec_t buf;
     char http2_static_table_name_index; /* non-zero if any */
-    char proxy_should_drop;
-    char is_init_header_special;
-    char http2_should_reject;
+    char proxy_should_drop : 1;
+    char is_init_header_special : 1;
+    char http2_should_reject : 1;
+    char copy_for_push_request : 1;
 } h2o_token_t;
 
 #include "h2o/token.h"

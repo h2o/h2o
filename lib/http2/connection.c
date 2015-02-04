@@ -1027,6 +1027,22 @@ void h2o_http2_conn_push_url(h2o_http2_conn_t *conn, h2o_iovec_t url, h2o_http2_
     stream->req.authority = h2o_strdup(&stream->req.pool, url_parsed.authority.base, url_parsed.authority.len);
     stream->req.path = h2o_strdup(&stream->req.pool, url_parsed.path.base, url_parsed.path.len);
     stream->req.version = 0x200;
+
+    { /* copy headers that may affect the response (of a cacheable response) */
+        size_t i;
+        for (i = 0; i != src_stream->req.headers.size; ++i) {
+            h2o_header_t *src_header = src_stream->req.headers.entries + i;
+            if (h2o_iovec_is_token(src_header->name)) {
+                h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, src_header->name);
+                if (token->copy_for_push_request) {
+                    h2o_add_header(&stream->req.pool, &stream->req.headers, token,
+                                   h2o_strdup(&stream->req.pool, src_header->value.base, src_header->value.len).base,
+                                   src_header->value.len);
+                }
+            }
+        }
+    }
+
     /* TODO copy headers? */
 
     execute_or_enqueue_request(conn, stream);
