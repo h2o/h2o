@@ -192,9 +192,10 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     /* send PUSH_PROMISE frame if is push */
     if (h2o_http2_stream_is_push(stream->stream_id)) {
         /* cancel the PUSH unless it is 200 OK */
+        assert(!h2o_linklist_is_linked(&stream->_refs.link));
         if (stream->req.res.status != 200) {
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
-            h2o_http2_conn_register_for_proceed_callback(conn, stream);
+            h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_refs.link);
             return -1;
         }
         h2o_hpack_flatten_request(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
