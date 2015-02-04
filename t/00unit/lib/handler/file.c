@@ -19,8 +19,11 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <alloca.h>
 #include "../../test.h"
 #include "../../../../lib/handler/file.c"
+
+static h2o_context_t ctx;
 
 static int check_header(h2o_res_t *res, const h2o_token_t *header_name, const char *expected)
 {
@@ -30,12 +33,77 @@ static int check_header(h2o_res_t *res, const h2o_token_t *header_name, const ch
     return h2o_lcstris(res->headers.entries[index].value.base, res->headers.entries[index].value.len, expected, strlen(expected));
 }
 
+static void test_if_modified_since(void)
+{
+    char lm_date[H2O_TIMESTR_RFC1123_LEN + 1];
+
+    { /* obtain last-modified */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        ssize_t lm_index;
+        conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        if ((lm_index = h2o_find_header(&conn->req.res.headers, H2O_TOKEN_LAST_MODIFIED, -1)) == -1) {
+            ok(0);
+            return;
+        }
+        ok(conn->req.res.headers.entries[lm_index].value.len == H2O_TIMESTR_RFC1123_LEN);
+        memcpy(lm_date, conn->req.res.headers.entries[lm_index].value.base, H2O_TIMESTR_RFC1123_LEN);
+        lm_date[H2O_TIMESTR_RFC1123_LEN] = '\0';
+        h2o_loopback_destroy(conn);
+    }
+
+    { /* send if-modified-since using the obtained last-modified */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_MODIFIED_SINCE, lm_date, H2O_TIMESTR_RFC1123_LEN);
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 304);
+        ok(conn->body->size == 0);
+        h2o_loopback_destroy(conn);
+    }
+}
+
+static void test_if_match(void)
+{
+    h2o_iovec_t etag = {};
+
+    { /* obtain etag */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        ssize_t etag_index;
+        conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        if ((etag_index = h2o_find_header(&conn->req.res.headers, H2O_TOKEN_ETAG, -1)) == -1) {
+            ok(0);
+            return;
+        }
+        etag = h2o_strdup(NULL, conn->req.res.headers.entries[etag_index].value.base, conn->req.res.headers.entries[etag_index].value.len);
+        h2o_loopback_destroy(conn);
+    }
+
+    { /* send if-non-match using the obtained etag */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_NONE_MATCH, etag.base, etag.len);
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 304);
+        ok(conn->body->size == 0);
+        h2o_loopback_destroy(conn);
+    }
+
+    free(etag.base);
+}
+
 void test_lib__file_c()
 {
     h2o_globalconf_t globalconf;
     h2o_hostconf_t *hostconf;
     h2o_pathconf_t *pathconf;
-    h2o_context_t ctx;
 
     h2o_config_init(&globalconf);
     hostconf = h2o_config_register_host(&globalconf, "default");
@@ -182,6 +250,9 @@ void test_lib__file_c()
         ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "http://default/index_txt_as_dir/index.txt/"));
         h2o_loopback_destroy(conn);
     }
+
+    subtest("if-modified-since", test_if_modified_since);
+    subtest("if-match", test_if_match);
 
     h2o_context_dispose(&ctx);
     h2o_config_dispose(&globalconf);
