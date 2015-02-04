@@ -181,7 +181,7 @@ __DATA__
 29 0 0 0 0 content-location
 30 0 0 0 0 content-range
 31 0 0 0 0 content-type
-32 0 0 0 1 cookie
+32 0 0 0 0 cookie
 33 1 0 0 0 date
 34 0 0 0 0 etag
 35 0 1 0 0 expect
