@@ -124,6 +124,7 @@ int main(int argc, char **argv)
 {
     { /* library tests */
         subtest("lib/string.c", test_lib__string_c);
+        subtest("lib/time.c", test_lib__time_c);
         subtest("lib/headers.c", test_lib__headers_c);
         subtest("lib/server_starter.c", test_lib__serverutil_c);
         subtest("lib/http2/hpack.c", test_lib__http2__hpack);

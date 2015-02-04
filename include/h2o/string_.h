@@ -36,9 +36,6 @@ extern "C" {
 
 #define H2O_STRLIT(s) (s), sizeof(s) - 1
 
-#define H2O_TIMESTR_RFC1123_LEN (sizeof("Sun, 06 Nov 1994 08:49:37 GMT") - 1)
-#define H2O_TIMESTR_LOG_LEN (sizeof("29/Aug/2014:15:34:38 +0900") - 1)
-
 typedef struct st_h2o_parse_url_t {
     h2o_iovec_t scheme;
     h2o_iovec_t authority; /* i.e. host:port */
@@ -83,14 +80,6 @@ h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t l
  * base64 encoder
  */
 void h2o_base64_encode(char *dst, const void *src, size_t len, int url_encoded);
-/**
- * builds a RFC-1123 style date string
- */
-void h2o_time2str_rfc1123(char *buf, time_t time);
-/**
- * builds an Apache log-style date string
- */
-void h2o_time2str_log(char *buf, time_t time);
 /**
  * returns the extension portion of path
  */

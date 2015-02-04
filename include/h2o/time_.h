@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 DeNA Co., Ltd.
+ * Copyright (c) 2015 DeNA Co., Ltd.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -19,43 +19,33 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__t__test_h
-#define h2o__t__test_h
+#ifndef h2o__time_h
+#define h2o__time_h
 
-#include "picotest.h"
-#include "h2o.h"
+#include <time.h>
 
-typedef struct st_h2o_loopback_conn_t {
-    h2o_conn_t super;
-    /**
-     * the response
-     */
-    h2o_buffer_t *body;
-    /* internal structure */
-    h2o_ostream_t _ostr_final;
-    int _is_complete;
-    /**
-     * the HTTP request / response (intentionally placed at the last, since it is a large structure and has it's own ctor)
-     */
-    h2o_req_t req;
-} h2o_loopback_conn_t;
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx);
-void h2o_loopback_destroy(h2o_loopback_conn_t *conn);
-void h2o_loopback_run_loop(h2o_loopback_conn_t *conn);
+#define H2O_TIMESTR_RFC1123_LEN (sizeof("Sun, 06 Nov 1994 08:49:37 GMT") - 1)
+#define H2O_TIMESTR_LOG_LEN (sizeof("29/Aug/2014:15:34:38 +0900") - 1)
 
-extern h2o_loop_t *test_loop;
+/**
+ * builds a RFC-1123 style date string
+ */
+void h2o_time2str_rfc1123(char *buf, struct tm *gmt);
+/**
+ * converts HTTP-date to packed format (or returns UINT64_MAX on failure)
+ */
+int h2o_time_parse_rfc1123(const char *s, size_t len, struct tm *tm);
+/**
+ * builds an Apache log-style date string
+ */
+void h2o_time2str_log(char *buf, time_t time);
 
-char *sha1sum(const void *src, size_t len);
-
-void test_lib__serverutil_c(void);
-void test_lib__string_c(void);
-void test_lib__time_c(void);
-void test_lib__headers_c(void);
-void test_lib__http2__hpack(void);
-void test_lib__http2__scheduler(void);
-void test_lib__file_c(void);
-void test_lib__mimemap_c(void);
-void test_lib__proxy_c(void);
+#ifdef __cplusplus
+}
+#endif
 
 #endif
