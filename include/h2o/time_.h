@@ -36,6 +36,10 @@ extern "C" {
  */
 void h2o_time2str_rfc1123(char *buf, struct tm *gmt);
 /**
+ * converts HTTP-date to packed format (or returns UINT64_MAX on failure)
+ */
+int h2o_time_parse_rfc1123(const char *s, size_t len, struct tm *tm);
+/**
  * builds an Apache log-style date string
  */
 void h2o_time2str_log(char *buf, time_t time);

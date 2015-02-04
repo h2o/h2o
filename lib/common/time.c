@@ -75,6 +75,61 @@ void h2o_time2str_rfc1123(char *buf, struct tm *gmt)
     assert(p - buf == H2O_TIMESTR_RFC1123_LEN);
 }
 
+static int fetch_digits(const char *s, size_t n)
+{
+    int value = 0;
+    for (; n != 0; ++s, --n) {
+        if (!('0' <= *s && *s <= '9'))
+            return -1;
+        value = value * 10 + *s - '0';
+    }
+    return value;
+}
+
+int h2o_time_parse_rfc1123(const char *s, size_t len, struct tm *tm)
+{
+    if (len != H2O_TIMESTR_RFC1123_LEN)
+        return -1;
+
+    /*           1         2
+     * 01234567890123456789012345678
+     * Fri, 19 Sep 2014 05:24:04 GMT
+     */
+
+#define FETCH(dst, pos, n) if ((dst = fetch_digits(s + pos, n)) == -1) return -1;
+    FETCH(tm->tm_year, 12, 4);
+    tm->tm_year -= 1900;
+    /* month is parsed afterwards */
+    FETCH(tm->tm_mday, 5, 2);
+    FETCH(tm->tm_hour, 17, 2);
+    FETCH(tm->tm_min, 20, 2);
+    FETCH(tm->tm_sec, 23, 2);
+#undef FETCH
+
+#define PACK3(a, b, c) (((a) & 0xff) << 16 | ((b) & 0xff) << 8 | ((c) & 0xff))
+#define MAP(c1, c2, c3, value) case PACK3(c1, c2, c3): tm->tm_mon = value; break
+    switch (PACK3(s[8], s[9], s[10])) {
+    MAP('J', 'a', 'n', 0);
+    MAP('F', 'e', 'b', 1);
+    MAP('M', 'a', 'r', 2);
+    MAP('A', 'p', 'r', 3);
+    MAP('M', 'a', 'y', 4);
+    MAP('J', 'u', 'n', 5);
+    MAP('J', 'u', 'l', 6);
+    MAP('A', 'u', 'g', 7);
+    MAP('S', 'e', 'p', 8);
+    MAP('O', 'c', 't', 9);
+    MAP('N', 'o', 'v', 10);
+    MAP('D', 'e', 'c', 11);
+    default:
+        return -1;
+    }
+#undef MAP
+#undef PACK4
+
+    return 0;
+}
+
 void h2o_time2str_log(char *buf, time_t time)
 {
     struct tm localt;
