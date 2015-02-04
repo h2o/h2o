@@ -38,7 +38,7 @@ struct st_h2o_sendfile_generator_t {
     h2o_req_t *req;
     size_t bytesleft;
     struct {
-        struct tm tm;
+        uint64_t packed;
         char buf[H2O_TIMESTR_RFC1123_LEN + 1];
     } last_modified;
     char etag_buf[sizeof("\"deadbeef-deadbeefdeadbeef\"")];
@@ -62,6 +62,16 @@ static const char *default_index_files[] = {"index.html", "index.htm", "index.tx
 const char **h2o_file_default_index_files = default_index_files;
 
 #include "file/templates.c.h"
+
+static uint64_t time2packed(struct tm *tm)
+{
+    return (uint64_t)(tm->tm_year + 1900) << 40 /* year:  24-bits */
+           | (uint64_t)tm->tm_mon << 32         /* month:  8-bits */
+           | (uint64_t)tm->tm_mday << 24        /* mday:   8-bits */
+           | (uint64_t)tm->tm_hour << 16        /* hour:   8-bits */
+           | (uint64_t)tm->tm_min << 8          /* min:    8-bits */
+           | (uint64_t)tm->tm_sec;              /* sec:    8-bits */
+}
 
 static void do_close(h2o_generator_t *_self, h2o_req_t *req)
 {
@@ -130,6 +140,7 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
     struct st_h2o_sendfile_generator_t *self;
     int fd, is_gzip;
     struct stat st;
+    struct tm last_modified_gmt;
 
     *is_dir = 0;
 
@@ -170,8 +181,9 @@ Opened:
     self->req = NULL;
     self->bytesleft = st.st_size;
 
-    gmtime_r(&st.st_mtime, &self->last_modified.tm);
-    h2o_time2str_rfc1123(self->last_modified.buf, &self->last_modified.tm);
+    gmtime_r(&st.st_mtime, &last_modified_gmt);
+    self->last_modified.packed = time2packed(&last_modified_gmt);
+    h2o_time2str_rfc1123(self->last_modified.buf, &last_modified_gmt);
     if ((flags & H2O_FILE_FLAG_NO_ETAG) != 0) {
         self->etag_len = 0;
     } else {
@@ -347,8 +359,10 @@ Opened:
         if (h2o_memis(if_none_match->base, if_none_match->len, generator->etag_buf, generator->etag_len))
             goto NotModified;
     } else if ((if_modified_since_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_MODIFIED_SINCE, SIZE_MAX)) != -1) {
-        h2o_iovec_t *if_modified_since = &req->headers.entries[if_modified_since_header_index].value;
-        if (h2o_memis(if_modified_since->base, if_modified_since->len, generator->last_modified.buf, H2O_TIMESTR_RFC1123_LEN))
+        h2o_iovec_t *ims_vec = &req->headers.entries[if_modified_since_header_index].value;
+        struct tm ims_tm;
+        if (h2o_time_parse_rfc1123(ims_vec->base, ims_vec->len, &ims_tm) == 0 &&
+            generator->last_modified.packed <= time2packed(&ims_tm))
             goto NotModified;
     }
 
