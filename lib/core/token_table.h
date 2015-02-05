@@ -77,8 +77,9 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, 1, 0, 0, 0, 0},
                              {{H2O_STRLIT("vary")}, 59, 0, 0, 0, 0},
                              {{H2O_STRLIT("via")}, 60, 0, 0, 0, 0},
                              {{H2O_STRLIT("www-authenticate")}, 61, 0, 0, 0, 0},
-                             {{H2O_STRLIT("x-reproxy-url")}, 0, 0, 0, 0, 0}};
-size_t h2o__num_tokens = 57;
+                             {{H2O_STRLIT("x-reproxy-url")}, 0, 0, 0, 0, 0},
+                             {{H2O_STRLIT("x-server-push")}, 0, 0, 0, 0, 0}};
+size_t h2o__num_tokens = 58;
 
 const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
 {
@@ -262,6 +263,8 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
         case 'h':
             if (memcmp(name, "if-none-matc", 12) == 0)
                 return H2O_TOKEN_IF_NONE_MATCH;
+            if (memcmp(name, "x-server-pus", 12) == 0)
+                return H2O_TOKEN_X_SERVER_PUSH;
             break;
         case 'l':
             if (memcmp(name, "cache-contro", 12) == 0)
