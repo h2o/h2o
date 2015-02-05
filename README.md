@@ -3,7 +3,7 @@ H2O - an optimized HTTP server with support for HTTP/1.x and HTTP/2
 
 [![Build Status](https://travis-ci.org/h2o/h2o.svg?branch=master)](https://travis-ci.org/h2o/h2o)
 
-Copyright (c) 2014,2015 [DeNA Co., Ltd.](http://dena.com/), [Tatsuhiko Kubo](https://github.com/cubicdaiya/), [Domingo Alvarez Duarte](https://github.com/mingodad/), [Nick Desaulniers](https://github.com/nickdesaulniers/), [Marc Hörsken](https://github.com/mback2k), [Masahiro Nagano](https://github.com/kazeburo/)
+Copyright (c) 2014,2015 [DeNA Co., Ltd.](http://dena.com/), [Kazuho Oku](https://github.com/kazuho/), [Tatsuhiko Kubo](https://github.com/cubicdaiya/), [Domingo Alvarez Duarte](https://github.com/mingodad/), [Nick Desaulniers](https://github.com/nickdesaulniers/), [Marc Hörsken](https://github.com/mback2k), [Masahiro Nagano](https://github.com/kazeburo/)
 
 H2O is a very fast HTTP server written in C.  It can also be used as a library.
 
@@ -25,6 +25,7 @@ Includes third-party softwares (also licensed under the MIT license): [klib](htt
  - draft 16 (and draft 14 to support older clients)
  - negotiation methods: NPN, ALPN, Upgrade, direct
  - dependency and weight-based prioritization
+ - server push
 - [WebSocket](http://www.ietf.org/rfc/rfc6455.txt)
  - uses [wslay](https://github.com/tatsuhiro-t/wslay/)
  - only usable at library level
