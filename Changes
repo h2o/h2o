@@ -1,10 +1,16 @@
 Revision history for H2O.
 
 0.9.2 TBD
-	- [file] add support for HEAD requests
-	- [proxy] added configuration directive `proxy.preserve-host`
-	- [proxy] sends X-Forwared-For and X-Forwarded-Proto headers
-	- [http1] MSIE workaround (send `Cache-Control: private` in place of Vary)
+	- [core] graceful shutdown on SIGTERM #119 (Kazuho Oku)
+	- [core] less TCP errors under high load #81 (Kazuho Oku)
+	- [file] add support for HEAD requests #110 (Mark Hoersken)
+	- [http1] MSIE workaround #114 (send `Cache-Control: private` in place of Vary) (Kazuho Oku)
+	- [http2] support server-push #133 (Kazuho Oku)
+	- [http2] fix spurious RST_STREAMS being sent #132 (Kazuho Oku)
+	- [proxy] added configuration directive `proxy.preserve-host` #112 (Masahiro Nagano)
+	- [proxy] sends X-Forwared-For and X-Forwarded-Proto headers #112 (Masahiro Nagano)
+	- [proxy] stability improvements #61 (Kazuho Oku)
+	- [misc] adjustments to make the source code more analyzer-friendly #113,#117 (Nick Desaulniers, Maks Naumov)
 
 0.9.1 2015-01-19 21:13:00+0000
 	- added configuration directives: ssl/cipher-suite, ssl/ocsp-update-interval, ssl/ocsp-max-failures, expires, file.send-gzip
