@@ -66,15 +66,14 @@ static int test_location_match(h2o_proxy_location_t *location, h2o_iovec_t schem
 static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, size_t location_len, h2o_proxy_location_t *upstream,
                                     h2o_iovec_t req_scheme, h2o_iovec_t req_authority, h2o_iovec_t req_basepath)
 {
-    h2o_iovec_t loc_scheme, loc_host, loc_path;
-    uint16_t loc_port;
+    h2o_parse_url_t loc_parsed;
 
-    if (h2o_parse_url(location, location_len, &loc_scheme, &loc_host, &loc_port, &loc_path) != 0 ||
-        !test_location_match(upstream, loc_scheme, loc_host, loc_port, loc_path))
+    if (h2o_parse_url(location, location_len, &loc_parsed) != 0 ||
+        !test_location_match(upstream, loc_parsed.scheme, loc_parsed.host, loc_parsed.port, loc_parsed.path))
         return h2o_iovec_init(location, location_len);
 
     return h2o_concat(pool, req_scheme, h2o_iovec_init(H2O_STRLIT("://")), req_authority, req_basepath,
-                      h2o_iovec_init(loc_path.base + upstream->path.len, loc_path.len - upstream->path.len));
+                      h2o_iovec_init(loc_parsed.path.base + upstream->path.len, loc_parsed.path.len - upstream->path.len));
 }
 
 static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream, int keepalive, int preserve_host)
@@ -203,6 +202,25 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     return 0;
 }
 
+static void on_server_push_header(h2o_req_t *req, const char *value, size_t value_len)
+{
+    h2o_iovec_t url, iter = h2o_iovec_init(value, value_len);
+
+    if (req->version < 0x200)
+        return;
+
+    /* extract URL value from: X-Server-Push: http://server/pushed.css; attr1=foo; attr2=bar */
+    /* TODO log malformed headers */
+    if ((url.base = (char *)h2o_next_token(&iter, ';', &url.len, NULL)) == NULL)
+        return;
+    if (!(url.len >= sizeof("http://") - 1 && memcmp(url.base, H2O_STRLIT("http")) == 0))
+        return;
+
+    h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->http2_push_urls, sizeof(req->http2_push_urls.entries[0]),
+                       req->http2_push_urls.size + 1);
+    req->http2_push_urls.entries[req->http2_push_urls.size++] = h2o_strdup(&req->pool, url.base, url.len);
+}
+
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
                                        h2o_iovec_t msg, struct phr_header *headers, size_t num_headers)
 {
@@ -237,6 +255,9 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 value = rewrite_location(&self->src_req->pool, headers[i].value, headers[i].value_len, self->upstream,
                                          self->src_req->scheme, self->src_req->authority, self->src_req->pathconf->path);
                 goto AddHeader;
+            } else if (token == H2O_TOKEN_X_SERVER_PUSH) {
+                on_server_push_header(self->src_req, headers[i].value, headers[i].value_len);
+                goto Skip;
             }
             /* default behaviour, transfer the header downstream */
             value = h2o_strdup(&self->src_req->pool, headers[i].value, headers[i].value_len);

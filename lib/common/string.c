@@ -253,55 +253,58 @@ size_t h2o_strstr(const char *haysack, size_t haysack_len, const char *needle, s
 }
 
 /* note: returns a zero-width match as well */
-const char *h2o_next_token(const char *elements, size_t elements_len, size_t *element_len, const char *cur)
+const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len, h2o_iovec_t *value)
 {
-    const char *elements_end = elements + elements_len;
-    size_t off, off_non_ws;
-
-    /* skip through current token */
-    if (cur == NULL) {
-        cur = elements;
-    } else {
-        while (*cur != ',') {
-            if (cur == elements_end) {
-                return NULL;
-            }
-            ++cur;
-        }
-        ++cur;
-    }
+    const char *cur = iter->base, *end = iter->base + iter->len, *token_start, *token_end;
 
     /* find start */
-    while (*cur == ' ' || *cur == '\t') {
-        if (cur == elements_end) {
-            *element_len = 0;
-            return cur;
-        }
-        ++cur;
+    for (; ; ++cur) {
+        if (cur == end)
+            return NULL;
+        if (!(*cur == ' ' || *cur == '\t'))
+            break;
     }
+    token_start = cur;
+    token_end = cur;
 
     /* find last */
-    off_non_ws = 0;
-    for (off = 0; off != elements_end - cur; ++off) {
-        if (cur[off] == ',') {
+    for (; ; ++cur) {
+        if (cur == end)
             break;
-        } else if (cur[off] == ' ' || cur[off] == '\t') {
-            /* is ws */
-        } else {
-            off_non_ws = off + 1;
+        if (*cur == separator) {
+            ++cur;
+            break;
         }
+        if (value != NULL && *cur == '=') {
+            ++cur;
+            goto FindValue;
+        }
+        if (!(*cur == ' ' || *cur == '\t'))
+            token_end = cur + 1;
     }
 
-    *element_len = off_non_ws;
-    return cur;
+    /* found */
+    *iter = h2o_iovec_init(cur, end - cur);
+    *element_len = token_end - token_start;
+    if (value != NULL)
+        *value = (h2o_iovec_t){};
+    return token_start;
+
+FindValue:
+    *iter = h2o_iovec_init(cur, end - cur);
+    *element_len = token_end - token_start;
+    if ((value->base = (char *)h2o_next_token(iter, separator, &value->len, NULL)) == NULL)
+        *value = (h2o_iovec_t){"", 0};
+    return token_start;
 }
 
-int h2o_contains_token(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len)
+int h2o_contains_token(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len, int separator)
 {
+    h2o_iovec_t iter = h2o_iovec_init(haysack, haysack_len);
     const char *token = NULL;
     size_t token_len = 0;
 
-    while ((token = h2o_next_token(haysack, haysack_len, &token_len, token + token_len)) != NULL) {
+    while ((token = h2o_next_token(&iter, separator, &token_len, NULL)) != NULL) {
         if (h2o_lcstris(token, token_len, needle, needle_len)) {
             return 1;
         }
@@ -401,7 +404,7 @@ Rewrite:
     return rebuild_path(pool, path, len);
 }
 
-int h2o_parse_url(const char *url, size_t url_len, h2o_iovec_t *scheme, h2o_iovec_t *host, uint16_t *port, h2o_iovec_t *path)
+int h2o_parse_url(const char *url, size_t url_len, h2o_parse_url_t *parsed)
 {
     const char *url_end, *token_start, *token_end;
 
@@ -411,13 +414,13 @@ int h2o_parse_url(const char *url, size_t url_len, h2o_iovec_t *scheme, h2o_iove
 
     /* check and skip scheme */
     if (url_len >= 7 && memcmp(url, "http://", 7) == 0) {
-        *scheme = h2o_iovec_init(H2O_STRLIT("http"));
+        parsed->scheme = h2o_iovec_init(H2O_STRLIT("http"));
         token_start = url + 7;
-        *port = 80;
+        parsed->port = 80;
     } else if (url_len >= 8 && memcmp(url, "https://", 8) == 0) {
-        *scheme = h2o_iovec_init(H2O_STRLIT("https"));
+        parsed->scheme = h2o_iovec_init(H2O_STRLIT("https"));
         token_start = url + 8;
-        *port = 443;
+        parsed->port = 443;
     } else {
         return -1;
     }
@@ -425,17 +428,18 @@ int h2o_parse_url(const char *url, size_t url_len, h2o_iovec_t *scheme, h2o_iove
     /* parse host */
     if (token_start == url_end)
         return -1;
+    parsed->authority.base = (char *)token_start;
     if (*token_start == '[') {
         /* is IPv6 address */
         ++token_start;
         if ((token_end = memchr(token_start, ']', url_end - token_start)) == NULL)
             return -1;
-        *host = h2o_iovec_init(token_start, token_end - token_start);
+        parsed->host = h2o_iovec_init(token_start, token_end - token_start);
         token_start = token_end + 1;
     } else {
         for (token_end = token_start; !(token_end == url_end || *token_end == '/' || *token_end == ':'); ++token_end)
             ;
-        *host = h2o_iovec_init(token_start, token_end - token_start);
+        parsed->host = h2o_iovec_init(token_start, token_end - token_start);
         token_start = token_end;
     }
     if (token_start == url_end)
@@ -449,18 +453,20 @@ int h2o_parse_url(const char *url, size_t url_len, h2o_iovec_t *scheme, h2o_iove
             token_end = url_end;
         if ((p = h2o_strtosize(token_start, token_end - token_start)) >= 65535)
             return -1;
-        *port = p;
+        parsed->port = p;
         token_start = token_end;
         if (token_start == url_end)
             goto PathOmitted;
     }
 
     /* a non-empty path */
-    *path = h2o_iovec_init(token_start, url_end - token_start);
+    parsed->authority.len = token_start - parsed->authority.base;
+    parsed->path = h2o_iovec_init(token_start, url_end - token_start);
 
     return 0;
 PathOmitted:
-    *path = h2o_iovec_init(H2O_STRLIT("/"));
+    parsed->authority.len = url_end - parsed->authority.base;
+    parsed->path = h2o_iovec_init(H2O_STRLIT("/"));
     return 0;
 }
 

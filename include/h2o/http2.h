@@ -81,8 +81,10 @@ void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table);
 int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len,
                             int *pseudo_header_exists_map, size_t *content_length, const char **err_desc);
 size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len);
-int h2o_hpack_flatten_headers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id, size_t max_frame_size,
-                              h2o_res_t *res, h2o_timestamp_t *ts, const h2o_iovec_t *server_name);
+void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
+                               size_t max_frame_size, h2o_req_t *req, uint32_t parent_stream_id);
+void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
+                                size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t *ts, const h2o_iovec_t *server_name);
 
 /* settings */
 
@@ -195,6 +197,9 @@ struct st_h2o_http2_stream_t {
     size_t _expected_content_length; /* SIZE_MAX if unknown */
     H2O_VECTOR(h2o_iovec_t) _data;
     h2o_ostream_pull_cb _pull_cb;
+    struct {
+        uint32_t parent_stream_id;
+    } push;
     /* references governed by connection.c for handling various things */
     struct {
         h2o_linklist_t link;
@@ -219,10 +224,16 @@ struct st_h2o_http2_conn_t {
     h2o_http2_settings_t peer_settings;
     /* streams */
     khash_t(h2o_http2_stream_t) *streams;
-    uint32_t max_open_stream_id;
-    uint32_t max_processed_stream_id;
     struct {
-        uint32_t receiving;
+        uint32_t max_open;
+        uint32_t max_processed;
+    } pull_stream_ids;
+    struct {
+        uint32_t max_open;
+    } push_stream_ids;
+    struct {
+        uint32_t open_pull;
+        uint32_t open_push;
         uint32_t responding;
         uint32_t priority;
     } num_streams;
@@ -236,6 +247,7 @@ struct st_h2o_http2_conn_t {
     h2o_http2_window_t _input_window;
     h2o_hpack_header_table_t _output_header_table;
     h2o_linklist_t _pending_reqs; /* list of h2o_http2_stream_t that contain pending requests */
+    int _is_dispatching_pending_reqs;
     h2o_timeout_entry_t _timeout_entry;
     struct {
         h2o_buffer_t *buf;
@@ -269,8 +281,9 @@ int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *pa
 /* connection */
 void h2o_http2_conn_register_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
-static size_t h2o_http2_conn_num_open_streams(h2o_http2_conn_t *conn);
 static h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uint32_t stream_id);
+void h2o_http2_conn_push_url(h2o_http2_conn_t *conn, h2o_iovec_t url, h2o_http2_stream_t *src_stream);
+int h2o_http2_conn_send_push_promise(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_accept(h2o_context_t *ctx, h2o_socket_t *sock);
 int h2o_http2_handle_upgrade(h2o_req_t *req);
 void h2o_http2_conn_request_write(h2o_http2_conn_t *conn);
@@ -278,7 +291,8 @@ void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_ht
 static ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn);
 
 /* stream */
-h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req);
+static int h2o_http2_stream_is_push(uint32_t stream_id);
+h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req, uint32_t push_parent_stream_id);
 static void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_http2_stream_state_t new_state);
 static void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
@@ -295,17 +309,17 @@ static void h2o_http2_window_consume_window(h2o_http2_window_t *window, size_t b
 
 /* inline definitions */
 
-inline size_t h2o_http2_conn_num_open_streams(h2o_http2_conn_t *conn)
-{
-    return conn->num_streams.receiving + conn->num_streams.responding;
-}
-
 inline h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uint32_t stream_id)
 {
     khiter_t iter = kh_get(h2o_http2_stream_t, conn->streams, stream_id);
     if (iter != kh_end(conn->streams))
         return kh_val(conn->streams, iter);
     return NULL;
+}
+
+inline int h2o_http2_stream_is_push(uint32_t stream_id)
+{
+    return stream_id % 2 == 0;
 }
 
 inline ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn)
@@ -331,14 +345,16 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
     case H2O_HTTP2_STREAM_STATE_RECV_HEADERS:
         assert(stream->state == H2O_HTTP2_STREAM_STATE_IDLE);
         --conn->num_streams.priority;
-        ++conn->num_streams.receiving;
+        if (h2o_http2_stream_is_push(stream->stream_id))
+            ++conn->num_streams.open_push;
+        else
+            ++conn->num_streams.open_pull;
         stream->state = new_state;
         break;
     case H2O_HTTP2_STREAM_STATE_RECV_BODY:
         stream->state = new_state;
         break;
     case H2O_HTTP2_STREAM_STATE_REQ_PENDING:
-        --conn->num_streams.receiving;
         stream->state = new_state;
         break;
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
@@ -356,12 +372,19 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
             break;
         case H2O_HTTP2_STREAM_STATE_RECV_BODY:
         case H2O_HTTP2_STREAM_STATE_RECV_HEADERS:
-            --conn->num_streams.receiving;
+            if (h2o_http2_stream_is_push(stream->stream_id))
+                --conn->num_streams.open_push;
+            else
+                --conn->num_streams.open_pull;
             break;
         case H2O_HTTP2_STREAM_STATE_REQ_PENDING:
             break;
         case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
         case H2O_HTTP2_STREAM_STATE_SEND_BODY:
+            if (h2o_http2_stream_is_push(stream->stream_id))
+                --conn->num_streams.open_push;
+            else
+                --conn->num_streams.open_pull;
             --conn->num_streams.responding;
             break;
         case H2O_HTTP2_STREAM_STATE_END_STREAM:

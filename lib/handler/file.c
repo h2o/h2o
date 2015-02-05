@@ -148,7 +148,7 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
         ssize_t header_index;
         if ((header_index = h2o_find_header(&req->headers, H2O_TOKEN_ACCEPT_ENCODING, -1)) != -1 &&
             h2o_contains_token(req->headers.entries[header_index].value.base, req->headers.entries[header_index].value.len,
-                               H2O_STRLIT("gzip"))) {
+                               H2O_STRLIT("gzip"), ',')) {
             char *gzpath = h2o_mem_alloc_pool(&req->pool, path_len + 4);
             memcpy(gzpath, path, path_len);
             strcpy(gzpath + path_len, ".gz");

@@ -315,10 +315,10 @@ static ssize_t fixup_request(h2o_http1_conn_t *conn, struct phr_header *headers,
     /* setup persistent flag (and upgrade info) */
     if (connection.base != NULL) {
         /* TODO contains_token function can be faster */
-        if (h2o_contains_token(connection.base, connection.len, H2O_STRLIT("keep-alive"))) {
+        if (h2o_contains_token(connection.base, connection.len, H2O_STRLIT("keep-alive"), ',')) {
             conn->req.http1_is_persistent = 1;
         }
-        if (upgrade.base != NULL && h2o_contains_token(connection.base, connection.len, H2O_STRLIT("upgrade"))) {
+        if (upgrade.base != NULL && h2o_contains_token(connection.base, connection.len, H2O_STRLIT("upgrade"), ',')) {
             conn->req.upgrade = upgrade;
         }
     } else if (conn->req.version >= 0x101) {
