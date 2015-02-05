@@ -1059,8 +1059,10 @@ int h2o_http2_conn_send_push_promise(h2o_http2_conn_t *conn, h2o_http2_stream_t 
         h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_refs.link);
         return -1;
     }
+
     h2o_hpack_flatten_request(&conn->_write.buf, &conn->_output_header_table, stream->stream_id, conn->peer_settings.max_frame_size,
                               &stream->req, stream->push.parent_stream_id);
+    h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-pushed"), 0, H2O_STRLIT("1"));
     return 0;
 }
 
