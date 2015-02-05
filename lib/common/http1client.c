@@ -213,7 +213,7 @@ static void on_head(h2o_socket_t *sock, int status)
     for (i = 0; i != num_headers; ++i) {
         h2o_strtolower((char *)headers[i].name, headers[i].name_len);
         if (h2o_memis(headers[i].name, headers[i].name_len, H2O_STRLIT("connection"))) {
-            if (h2o_contains_token(headers[i].value, headers[i].value_len, H2O_STRLIT("keep-alive"))) {
+            if (h2o_contains_token(headers[i].value, headers[i].value_len, H2O_STRLIT("keep-alive"), ',')) {
                 client->_can_keepalive = 1;
             } else {
                 client->_can_keepalive = 0;

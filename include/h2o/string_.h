@@ -91,11 +91,11 @@ size_t h2o_strstr(const char *haysack, size_t haysack_len, const char *needle, s
 /**
  *
  */
-const char *h2o_next_token(const char *elements, size_t elements_len, size_t *element_len, const char *cur);
+const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len, h2o_iovec_t *value);
 /**
- * tests if string needle exists within a comma-separated string (for handling "#rule" of RFC 2616)
+ * tests if string needle exists within a separator-separated string (for handling "#rule" of RFC 2616)
  */
-int h2o_contains_token(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len);
+int h2o_contains_token(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len, int separator);
 /**
  * removes "..", ".", decodes %xx from a path representation
  * @param pool memory pool to be used in case the path contained references to directories
