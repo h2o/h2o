@@ -253,55 +253,44 @@ size_t h2o_strstr(const char *haysack, size_t haysack_len, const char *needle, s
 }
 
 /* note: returns a zero-width match as well */
-const char *h2o_next_token(const char *elements, size_t elements_len, size_t *element_len, const char *cur)
+const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len)
 {
-    const char *elements_end = elements + elements_len;
-    size_t off, off_non_ws;
-
-    /* skip through current token */
-    if (cur == NULL) {
-        cur = elements;
-    } else {
-        while (*cur != ',') {
-            if (cur == elements_end) {
-                return NULL;
-            }
-            ++cur;
-        }
-        ++cur;
-    }
+    const char *cur = iter->base, *end = iter->base + iter->len, *token_start, *token_end;
 
     /* find start */
-    while (*cur == ' ' || *cur == '\t') {
-        if (cur == elements_end) {
-            *element_len = 0;
-            return cur;
-        }
-        ++cur;
+    for (; ; ++cur) {
+        if (cur == end)
+            return NULL;
+        if (!(*cur == ' ' || *cur == '\t'))
+            break;
     }
+    token_start = cur;
+    token_end = cur;
 
     /* find last */
-    off_non_ws = 0;
-    for (off = 0; off != elements_end - cur; ++off) {
-        if (cur[off] == ',') {
+    for (; ; ++cur) {
+        if (cur == end)
             break;
-        } else if (cur[off] == ' ' || cur[off] == '\t') {
-            /* is ws */
-        } else {
-            off_non_ws = off + 1;
+        if (*cur == separator) {
+            ++cur;
+            break;
         }
+        if (!(*cur == ' ' || *cur == '\t'))
+            token_end = cur + 1;
     }
 
-    *element_len = off_non_ws;
-    return cur;
+    *iter = h2o_iovec_init(cur, end - cur);
+    *element_len = token_end - token_start;
+    return token_start;
 }
 
-int h2o_contains_token(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len)
+int h2o_contains_token(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len, int separator)
 {
+    h2o_iovec_t iter = h2o_iovec_init(haysack, haysack_len);
     const char *token = NULL;
     size_t token_len = 0;
 
-    while ((token = h2o_next_token(haysack, haysack_len, &token_len, token + token_len)) != NULL) {
+    while ((token = h2o_next_token(&iter, separator, &token_len)) != NULL) {
         if (h2o_lcstris(token, token_len, needle, needle_len)) {
             return 1;
         }

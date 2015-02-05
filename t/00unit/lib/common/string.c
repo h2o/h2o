@@ -22,6 +22,53 @@
 #include "../../test.h"
 #include "../../../../lib/common/string.c"
 
+static void test_next_token(void)
+{
+    h2o_iovec_t iter;
+    const char *token;
+    size_t token_len;
+
+#define NEXT() \
+    if ((token = h2o_next_token(&iter, ',', &token_len)) == NULL) { \
+        ok(0); \
+        return; \
+    }
+
+    iter = h2o_iovec_init(H2O_STRLIT("public, max-age=86400, must-revalidate"));
+    NEXT();
+    ok(h2o_memis(token, token_len, H2O_STRLIT("public")));
+    NEXT();
+    ok(h2o_memis(token, token_len, H2O_STRLIT("max-age=86400")));
+    NEXT();
+    ok(h2o_memis(token, token_len, H2O_STRLIT("must-revalidate")));
+    token = h2o_next_token(&iter, ',', &token_len);
+    ok(token == NULL);
+
+    iter = h2o_iovec_init(H2O_STRLIT("  public  ,max-age=86400  ,"));
+    NEXT();
+    ok(h2o_memis(token, token_len, H2O_STRLIT("public")));
+    NEXT();
+    ok(h2o_memis(token, token_len, H2O_STRLIT("max-age=86400")));
+    token = h2o_next_token(&iter, ',', &token_len);
+    ok(token == NULL);
+
+    iter = h2o_iovec_init(H2O_STRLIT(""));
+    token = h2o_next_token(&iter, ',', &token_len);
+    ok(token == NULL);
+
+    iter = h2o_iovec_init(H2O_STRLIT(", ,a, "));
+    NEXT();
+    ok(token_len == 0);
+    NEXT();
+    ok(token_len == 0);
+    NEXT();
+    ok(h2o_memis(token, token_len, H2O_STRLIT("a")));
+    token = h2o_next_token(&iter, ',', &token_len);
+    ok(token == NULL);
+
+#undef NEXT
+}
+
 static void test_decode_base64(void)
 {
     h2o_mem_pool_t pool;
@@ -194,6 +241,7 @@ static void test_htmlescape(void)
 
 void test_lib__string_c(void)
 {
+    subtest("next_token", test_next_token);
     subtest("decode_base64", test_decode_base64);
     subtest("normalize_path", test_normalize_path);
     subtest("parse_url", test_parse_url);

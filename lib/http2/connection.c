@@ -1011,7 +1011,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req)
     connection_index = h2o_find_header(&req->headers, H2O_TOKEN_CONNECTION, -1);
     assert(connection_index != -1);
     if (!h2o_contains_token(req->headers.entries[connection_index].value.base, req->headers.entries[connection_index].value.len,
-                            H2O_STRLIT("http2-settings"))) {
+                            H2O_STRLIT("http2-settings"), ',')) {
         goto Error;
     }
 
