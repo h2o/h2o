@@ -54,10 +54,14 @@ static int h2o_linklist_is_empty(h2o_linklist_t *anchor);
 static int h2o_linklist_is_linked(h2o_linklist_t *node);
 /**
  * inserts a node to the linked list
- * @param pos insert position; the node will be inserted before pos (or NULL in case *head is NULL)
+ * @param pos insert position; the node will be inserted before pos
  * @param node the node to be inserted
  */
 static void h2o_linklist_insert(h2o_linklist_t *pos, h2o_linklist_t *node);
+/**
+ * inserts all the elements of list before pos (list becomes empty)
+ */
+static void h2o_linklist_insert_list(h2o_linklist_t *pos, h2o_linklist_t *list);
 /**
  * unlinks a node from the linked list
  */
@@ -88,6 +92,17 @@ inline void h2o_linklist_insert(h2o_linklist_t *pos, h2o_linklist_t *node)
     node->next = pos;
     node->prev->next = node;
     node->next->prev = node;
+}
+
+inline void h2o_linklist_insert_list(h2o_linklist_t *pos, h2o_linklist_t *list)
+{
+    if(h2o_linklist_is_empty(list))
+        return;
+    list->next->prev = pos->prev;
+    list->prev->next = pos;
+    pos->prev->next = list->next;
+    pos->prev = list->prev;
+    h2o_linklist_init_anchor(list);
 }
 
 inline void h2o_linklist_unlink(h2o_linklist_t *node)
