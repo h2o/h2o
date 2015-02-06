@@ -119,22 +119,21 @@ static int send_data_pull(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     h2o_iovec_t cbuf;
     int is_final = 0;
 
-    do {
-        if ((max_payload_size = calc_max_payload_size(conn, stream)) == 0)
-            break;
-        /* reserve buffer */
-        h2o_buffer_reserve(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE + max_payload_size);
-        /* obtain content */
-        cbuf.base = conn->_write.buf->bytes + conn->_write.buf->size + H2O_HTTP2_FRAME_HEADER_SIZE;
-        cbuf.len = max_payload_size;
-        is_final = h2o_pull(&stream->req, stream->_pull_cb, &cbuf);
-        /* write the header */
-        encode_data_header_and_consume_window(conn, stream, (void *)(conn->_write.buf->bytes + conn->_write.buf->size), cbuf.len,
-                                              is_final);
-        /* adjust the write buf size */
-        conn->_write.buf->size += H2O_HTTP2_FRAME_HEADER_SIZE + cbuf.len;
-    } while (!is_final);
+    if ((max_payload_size = calc_max_payload_size(conn, stream)) == 0)
+        goto Exit;
+    /* reserve buffer */
+    h2o_buffer_reserve(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE + max_payload_size);
+    /* obtain content */
+    cbuf.base = conn->_write.buf->bytes + conn->_write.buf->size + H2O_HTTP2_FRAME_HEADER_SIZE;
+    cbuf.len = max_payload_size;
+    is_final = h2o_pull(&stream->req, stream->_pull_cb, &cbuf);
+    /* write the header */
+    encode_data_header_and_consume_window(conn, stream, (void *)(conn->_write.buf->bytes + conn->_write.buf->size), cbuf.len,
+                                          is_final);
+    /* adjust the write buf size */
+    conn->_write.buf->size += H2O_HTTP2_FRAME_HEADER_SIZE + cbuf.len;
 
+Exit:
     return is_final;
 }
 
