@@ -933,7 +933,6 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
         if (h2o_http2_window_get_window(&stream->output_window) <= 0) {
             /* is blocked */
         } else {
-            assert(h2o_http2_conn_get_buffer_window(conn) <= 0);
             *still_is_active = 1;
         }
     } else {
