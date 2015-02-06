@@ -39,6 +39,9 @@ static h2o_http2_scheduler_slot_t *get_or_create_slot(h2o_http2_scheduler_node_t
     h2o_http2_scheduler_slot_t *slot;
     size_t i;
 
+    assert(1 <= weight);
+    assert(weight <= 256);
+
     /* locate the slot */
     for (i = 0; i != node->_list.size; ++i) {
         slot = node->_list.entries[i];
