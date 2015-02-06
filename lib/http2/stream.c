@@ -237,13 +237,14 @@ void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb)
     stream->_data.entries[0].len = 1;
     stream->_data.size = 1;
 
-    h2o_http2_conn_register_for_proceed_callback(conn, stream);
+    h2o_http2_conn_register_for_proceed_callback(conn, stream, 1);
 }
 
 void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _ostr_final, self);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)req->conn;
+    int is_first_shot = 0;
 
     assert(stream->_data.size == 0);
 
@@ -252,6 +253,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
         if (send_headers(conn, stream) != 0)
             return;
+        is_first_shot = 1;
     /* fallthru */
     case H2O_HTTP2_STREAM_STATE_SEND_BODY:
         if (is_final)
@@ -271,7 +273,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
         stream->_data.size = bufcnt;
     }
 
-    h2o_http2_conn_register_for_proceed_callback(conn, stream);
+    h2o_http2_conn_register_for_proceed_callback(conn, stream, is_first_shot);
 }
 
 void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)

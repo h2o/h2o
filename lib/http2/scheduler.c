@@ -62,7 +62,7 @@ Exit:
     return slot;
 }
 
-static void incr_active_cnt(h2o_http2_scheduler_node_t *node)
+static void incr_active_cnt(h2o_http2_scheduler_node_t *node, int is_immediate)
 {
     h2o_http2_scheduler_openref_t *ref;
 
@@ -75,9 +75,9 @@ static void incr_active_cnt(h2o_http2_scheduler_node_t *node)
         return;
     /* now changing to active */
     assert(!h2o_linklist_is_linked(&ref->_active_link));
-    h2o_linklist_insert(&ref->node._slot->_wait_refs, &ref->_active_link);
+    h2o_linklist_insert(is_immediate ? &ref->node._parent->_run_refs : &ref->node._slot->_wait_refs, &ref->_active_link);
     /* delegate the change towards root */
-    incr_active_cnt(ref->node._parent);
+    incr_active_cnt(ref->node._parent, 0 /* TODO delegate the flag */);
 }
 
 static void decr_active_cnt(h2o_http2_scheduler_node_t *node)
@@ -177,7 +177,7 @@ static void do_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_no
         h2o_linklist_unlink(&ref->_active_link);
         h2o_linklist_insert(&new_slot->_wait_refs, &ref->_active_link);
         decr_active_cnt(ref->node._parent);
-        incr_active_cnt(new_parent);
+        incr_active_cnt(new_parent, 0);
     }
     /* update the backlinks */
     ref->node._parent = new_parent;
@@ -231,11 +231,11 @@ void h2o_http2_scheduler_dispose(h2o_http2_scheduler_node_t *root)
     }
 }
 
-void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref)
+void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref, int is_immediate)
 {
     assert(!ref->_self_is_active);
     ref->_self_is_active = 1;
-    incr_active_cnt(&ref->node);
+    incr_active_cnt(&ref->node, is_immediate);
 }
 
 static uint64_t xorshift128plus(uint64_t s[2])

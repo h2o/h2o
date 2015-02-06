@@ -102,7 +102,7 @@ static uint16_t h2o_http2_scheduler_get_weight(h2o_http2_scheduler_openref_t *re
  * activates a reference so that it would be passed back as the argument to the callback of the h2o_http2_scheduler_run function
  * if any resource should be allocated
  */
-void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref);
+void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref, int is_immidiate);
 /**
  * calls the callback of the references linked to the dependency tree one by one, in the order defined by the dependency and the
  * weight.

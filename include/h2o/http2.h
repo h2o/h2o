@@ -287,7 +287,7 @@ int h2o_http2_conn_send_push_promise(h2o_http2_conn_t *conn, h2o_http2_stream_t 
 void h2o_http2_accept(h2o_context_t *ctx, h2o_socket_t *sock);
 int h2o_http2_handle_upgrade(h2o_req_t *req);
 void h2o_http2_conn_request_write(h2o_http2_conn_t *conn);
-void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
+void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int is_first_shot);
 static ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn);
 
 /* stream */
