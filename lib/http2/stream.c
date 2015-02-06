@@ -26,7 +26,8 @@
 static void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb);
 static void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final);
 
-h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req, uint32_t push_parent_stream_id)
+h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req,
+                                          uint32_t push_parent_stream_id)
 {
     h2o_http2_stream_t *stream = h2o_mem_alloc(sizeof(*stream));
 
@@ -140,41 +141,47 @@ Exit:
 static h2o_iovec_t *send_data_push(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_iovec_t *bufs, size_t bufcnt,
                                    int is_final)
 {
-    ssize_t max_payload_size = 0, payload_size = 0;
-    size_t data_header_offset = 0;
+    h2o_iovec_t dst;
+    size_t max_payload_size;
 
-    for (; bufcnt != 0; ++bufs, --bufcnt) {
-        while (bufs->len != 0) {
-            size_t fill_size;
-            /* encode the header, and allocate space for the next header */
-            if (payload_size == max_payload_size) {
-                if (payload_size != 0)
-                    encode_data_header_and_consume_window(conn, stream, (uint8_t *)conn->_write.buf->bytes + data_header_offset,
-                                                          payload_size, 0);
-                if ((max_payload_size = calc_max_payload_size(conn, stream)) == 0)
-                    goto Exit;
-                h2o_buffer_reserve(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE);
-                data_header_offset = conn->_write.buf->size;
-                conn->_write.buf->size += H2O_HTTP2_FRAME_HEADER_SIZE;
-                payload_size = 0;
-            }
-            /* emit payload */
-            fill_size = sz_min(max_payload_size, bufs->len);
-            memcpy(h2o_buffer_reserve(&conn->_write.buf, fill_size).base, bufs->base, fill_size);
-            conn->_write.buf->size += fill_size;
-            bufs->base += fill_size;
-            bufs->len -= fill_size;
-            payload_size += fill_size;
-        }
+    if ((max_payload_size = calc_max_payload_size(conn, stream)) == 0)
+        goto Exit;
+
+    /* reserve buffer and point dst to the payload */
+    dst.base =
+        h2o_buffer_reserve(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE + max_payload_size).base + H2O_HTTP2_FRAME_HEADER_SIZE;
+    dst.len = max_payload_size;
+
+    /* emit data */
+    while (bufcnt != 0) {
+        if (bufs->len != 0)
+            break;
+        ++bufs;
+        --bufcnt;
     }
-    /* all data have been emitted */
-    if (payload_size != 0) {
-        encode_data_header_and_consume_window(conn, stream, (uint8_t *)conn->_write.buf->bytes + data_header_offset, payload_size,
-                                              is_final);
-    } else if (is_final) {
-        encode_data_header_and_consume_window(
-            conn, stream, (void *)h2o_buffer_reserve(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE).base, 0, 1);
-        conn->_write.buf->size += H2O_HTTP2_FRAME_HEADER_SIZE;
+    while (bufcnt != 0) {
+        size_t fill_size = sz_min(dst.len, bufs->len);
+        memcpy(dst.base, bufs->base, fill_size);
+        dst.base += fill_size;
+        dst.len -= fill_size;
+        bufs->base += fill_size;
+        bufs->len -= fill_size;
+        while (bufs->len == 0) {
+            ++bufs;
+            --bufcnt;
+            if (bufcnt == 0)
+                break;
+        }
+        if (dst.len == 0)
+            break;
+    }
+
+    /* commit the DATA frame if we have actually emitted payload */
+    if (dst.len != max_payload_size || is_final) {
+        size_t payload_len = max_payload_size - dst.len;
+        encode_data_header_and_consume_window(conn, stream, (uint8_t *)conn->_write.buf->bytes + conn->_write.buf->size,
+                                              payload_len, is_final && bufcnt == 0);
+        conn->_write.buf->size += H2O_HTTP2_FRAME_HEADER_SIZE + payload_len;
     }
 
 Exit:
