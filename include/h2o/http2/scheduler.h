@@ -44,6 +44,7 @@ typedef struct st_h2o_http2_scheduler_node_t {
     h2o_http2_scheduler_slot_t *_slot;              /* slot within parent, or NULL if root */
     H2O_VECTOR(h2o_http2_scheduler_slot_t *) _list; /* presorted list of slots in descending order of weight */
     h2o_linklist_t _run_refs;                       /* the run queue */
+    uint64_t _rand_state[2];
 } h2o_http2_scheduler_node_t;
 
 /**

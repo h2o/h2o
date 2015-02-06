@@ -24,7 +24,13 @@
 
 static void init_node(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_node_t *parent, h2o_http2_scheduler_slot_t *slot)
 {
-    *node = (h2o_http2_scheduler_node_t){parent, slot};
+    *node = (h2o_http2_scheduler_node_t){
+        parent,                                  /* _parent */
+        slot,                                    /* _slot */
+        {},                                      /* _list */
+        {},                                      /* _run_refs */
+        {0x536c6005dfa85e15, 0x8fa5832dd420e956} /* _rand_state */
+    };
     h2o_linklist_init_anchor(&node->_run_refs);
 }
 
@@ -232,12 +238,34 @@ void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref)
     incr_active_cnt(&ref->node);
 }
 
+static uint64_t xorshift128plus(uint64_t s[2])
+{
+    /*
+    xorshift128+ (paper: http://arxiv.org/abs/1404.0390)
+    copied from http://xorshift.di.unimi.it/xorshift128plus.c under the following license
+
+    Written in 2014 by Sebastiano Vigna (vigna@acm.org)
+
+    To the extent possible under law, the author has dedicated all copyright
+    and related and neighboring rights to this software to the public domain
+    worldwide. This software is distributed without any warranty.
+
+    See <http://creativecommons.org/publicdomain/zero/1.0/>.
+    */
+	uint64_t s1 = s[0];
+	const uint64_t s0 = s[ 1];
+	s[ 0 ] = s0;
+	s1 ^= s1 << 23; // a
+	return ( s[ 1 ] = ( s1 ^ s0 ^ ( s1 >> 17 ) ^ ( s0 >> 26 ) ) ) + s0; // b, c
+}
+
 static int run_once(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_run_cb cb, void *cb_arg, size_t *num_touched)
 {
     /* promote non-empty wait_refs of the heighest priority to the run_refs (if run_refs is empty) */
     if (h2o_linklist_is_empty(&node->_run_refs)) {
         h2o_http2_scheduler_slot_t *slot;
         size_t slot_index;
+        uint16_t min_promote_weight;
         for (slot_index = 0; slot_index != node->_list.size; ++slot_index) {
             slot = node->_list.entries[slot_index];
             if (!h2o_linklist_is_empty(&slot->_wait_refs))
@@ -246,7 +274,26 @@ static int run_once(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_run_cb
         /* no active nodes */
         return 0;
     FoundActiveSlot:
-        h2o_linklist_insert_list(&node->_run_refs, &slot->_wait_refs);
+        /* promote _wait_refs above a random value to _run_refs */
+#ifdef H2O_UNITTEST
+        min_promote_weight = slot->weight - 1;
+#else
+        min_promote_weight = xorshift128plus(node->_rand_state) % slot->weight;
+#endif
+        while (1) {
+            h2o_linklist_insert_list(&node->_run_refs, &slot->_wait_refs);
+            for (++slot_index; ; ++slot_index) {
+                if (slot_index == node->_list.size)
+                    goto EndPromote;
+                slot = node->_list.entries[slot_index];
+                if (slot->weight <= min_promote_weight)
+                    goto EndPromote;
+                if (!h2o_linklist_is_empty(&slot->_wait_refs))
+                    break;
+            }
+        }
+    EndPromote:
+        ;
     }
 
     int bail_out = 0;
