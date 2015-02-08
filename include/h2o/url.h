@@ -24,13 +24,13 @@
 
 #include "h2o/memory.h"
 
-typedef struct st_h2o_parse_url_t {
+typedef struct st_h2o_url_t {
     h2o_iovec_t scheme;
     h2o_iovec_t authority; /* i.e. host:port */
     h2o_iovec_t host;
     h2o_iovec_t path;
     uint16_t port;
-} h2o_parse_url_t;
+} h2o_url_t;
 
 /**
  * removes "..", ".", decodes %xx from a path representation
@@ -39,10 +39,10 @@ typedef struct st_h2o_parse_url_t {
  * @param len source length
  * @return buffer pointing to source, or buffer pointing to an allocated chunk with normalized representation of the given path
  */
-h2o_iovec_t h2o_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t len);
+h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t len);
 /**
  * parses absolute URL (either http or https)
  */
-int h2o_parse_url(const char *url, size_t url_len, h2o_parse_url_t *result);
+int h2o_url_parse(const char *url, size_t url_len, h2o_url_t *result);
 
 #endif

@@ -84,7 +84,7 @@ static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *path, size_t l
     return ret;
 }
 
-h2o_iovec_t h2o_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t len)
+h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t len)
 {
     const char *p = path, *end = path + len;
     h2o_iovec_t ret;
@@ -115,7 +115,7 @@ Rewrite:
     return rebuild_path(pool, path, len);
 }
 
-int h2o_parse_url(const char *url, size_t url_len, h2o_parse_url_t *parsed)
+int h2o_url_parse(const char *url, size_t url_len, h2o_url_t *parsed)
 {
     const char *url_end, *token_start, *token_end;
 

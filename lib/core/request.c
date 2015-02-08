@@ -31,7 +31,7 @@ static h2o_hostconf_t *setup_before_processing(h2o_req_t *req)
     h2o_hostconf_t *hostconf;
 
     h2o_get_timestamp(ctx, &req->pool, &req->processed_at);
-    req->path_normalized = h2o_normalize_path(&req->pool, req->path.base, req->path.len);
+    req->path_normalized = h2o_url_normalize_path(&req->pool, req->path.base, req->path.len);
 
     /* find the host context */
     if (req->authority.base != NULL) {

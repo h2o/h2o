@@ -39,7 +39,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 
 static void start_request(h2o_http1client_ctx_t *ctx)
 {
-    h2o_parse_url_t url_parsed;
+    h2o_url_t url_parsed;
     h2o_iovec_t *req;
     h2o_http1client_t *client;
 
@@ -47,7 +47,7 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     h2o_mem_clear_pool(&pool);
 
     /* parse URL */
-    if (h2o_parse_url(url, SIZE_MAX, &url_parsed) != 0) {
+    if (h2o_url_parse(url, SIZE_MAX, &url_parsed) != 0) {
         fprintf(stderr, "unrecognized type of URL: %s\n", url);
         exit(1);
     }

@@ -65,11 +65,11 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
     h2o_mem_pool_t pool;
-    h2o_parse_url_t parsed;
+    h2o_url_t parsed;
 
     h2o_mem_init_pool(&pool);
 
-    if (h2o_parse_url(node->data.scalar, SIZE_MAX, &parsed) != 0) {
+    if (h2o_url_parse(node->data.scalar, SIZE_MAX, &parsed) != 0) {
         h2o_configurator_errprintf(cmd, node, "failed to parse URL: %s\n", node->data.scalar);
         goto ErrExit;
     }

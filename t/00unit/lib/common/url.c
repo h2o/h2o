@@ -28,55 +28,55 @@ static void test_normalize_path(void)
 
     h2o_mem_init_pool(&pool);
 
-    h2o_iovec_t b = h2o_normalize_path(&pool, H2O_STRLIT("/"));
+    h2o_iovec_t b = h2o_url_normalize_path(&pool, H2O_STRLIT("/"));
     ok(b.len == 1);
     ok(memcmp(b.base, H2O_STRLIT("/")) == 0);
 
-    b = h2o_normalize_path(&pool, H2O_STRLIT("/abc"));
+    b = h2o_url_normalize_path(&pool, H2O_STRLIT("/abc"));
     ok(b.len == 4);
     ok(memcmp(b.base, H2O_STRLIT("/abc")) == 0);
 
-    b = h2o_normalize_path(&pool, H2O_STRLIT("/abc"));
+    b = h2o_url_normalize_path(&pool, H2O_STRLIT("/abc"));
     ok(b.len == 4);
     ok(memcmp(b.base, H2O_STRLIT("/abc")) == 0);
 
-    b = h2o_normalize_path(&pool, H2O_STRLIT("/abc/../def"));
+    b = h2o_url_normalize_path(&pool, H2O_STRLIT("/abc/../def"));
     ok(b.len == 4);
     ok(memcmp(b.base, H2O_STRLIT("/def")) == 0);
 
-    b = h2o_normalize_path(&pool, H2O_STRLIT("/abc/../../def"));
+    b = h2o_url_normalize_path(&pool, H2O_STRLIT("/abc/../../def"));
     ok(b.len == 4);
     ok(memcmp(b.base, H2O_STRLIT("/def")) == 0);
 
-    b = h2o_normalize_path(&pool, H2O_STRLIT("/abc/./def"));
+    b = h2o_url_normalize_path(&pool, H2O_STRLIT("/abc/./def"));
     ok(b.len == 8);
     ok(memcmp(b.base, H2O_STRLIT("/abc/def")) == 0);
 
-    b = h2o_normalize_path(&pool, H2O_STRLIT("/abc/def/.."));
+    b = h2o_url_normalize_path(&pool, H2O_STRLIT("/abc/def/.."));
     ok(b.len == 5);
     ok(memcmp(b.base, H2O_STRLIT("/abc/")) == 0);
 
-    b = h2o_normalize_path(&pool, H2O_STRLIT("/abc/def/."));
+    b = h2o_url_normalize_path(&pool, H2O_STRLIT("/abc/def/."));
     ok(b.len == 9);
     ok(memcmp(b.base, H2O_STRLIT("/abc/def/")) == 0);
 
-    b = h2o_normalize_path(&pool, H2O_STRLIT("/abc?xx"));
+    b = h2o_url_normalize_path(&pool, H2O_STRLIT("/abc?xx"));
     ok(b.len == 4);
     ok(memcmp(b.base, H2O_STRLIT("/abc")) == 0);
 
-    b = h2o_normalize_path(&pool, H2O_STRLIT("/abc/../def?xx"));
+    b = h2o_url_normalize_path(&pool, H2O_STRLIT("/abc/../def?xx"));
     ok(b.len == 4);
     ok(memcmp(b.base, H2O_STRLIT("/def")) == 0);
 
-    b = h2o_normalize_path(&pool, H2O_STRLIT("/a%62c"));
+    b = h2o_url_normalize_path(&pool, H2O_STRLIT("/a%62c"));
     ok(b.len == 4);
     ok(memcmp(b.base, H2O_STRLIT("/abc")) == 0);
 
-    b = h2o_normalize_path(&pool, H2O_STRLIT("/a%6"));
+    b = h2o_url_normalize_path(&pool, H2O_STRLIT("/a%6"));
     ok(b.len == 4);
     ok(memcmp(b.base, H2O_STRLIT("/a%6")) == 0);
 
-    b = h2o_normalize_path(&pool, H2O_STRLIT("/a%6?"));
+    b = h2o_url_normalize_path(&pool, H2O_STRLIT("/a%6?"));
     ok(b.len == 4);
     ok(memcmp(b.base, H2O_STRLIT("/a%6")) == 0);
 
@@ -85,10 +85,10 @@ static void test_normalize_path(void)
 
 static void test_parse_url(void)
 {
-    h2o_parse_url_t parsed;
+    h2o_url_t parsed;
     int ret;
 
-    ret = h2o_parse_url("http://example.com/abc", SIZE_MAX, &parsed);
+    ret = h2o_url_parse("http://example.com/abc", SIZE_MAX, &parsed);
     ok(ret == 0);
     ok(h2o_memis(parsed.scheme.base, parsed.scheme.len, H2O_STRLIT("http")));
     ok(h2o_memis(parsed.authority.base, parsed.authority.len, H2O_STRLIT("example.com")));
@@ -96,7 +96,7 @@ static void test_parse_url(void)
     ok(parsed.port == 80);
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/abc")));
 
-    ret = h2o_parse_url("http://example.com", SIZE_MAX, &parsed);
+    ret = h2o_url_parse("http://example.com", SIZE_MAX, &parsed);
     ok(ret == 0);
     ok(h2o_memis(parsed.scheme.base, parsed.scheme.len, H2O_STRLIT("http")));
     ok(h2o_memis(parsed.authority.base, parsed.authority.len, H2O_STRLIT("example.com")));
@@ -104,7 +104,7 @@ static void test_parse_url(void)
     ok(parsed.port == 80);
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/")));
 
-    ret = h2o_parse_url("http://example.com:81/abc", SIZE_MAX, &parsed);
+    ret = h2o_url_parse("http://example.com:81/abc", SIZE_MAX, &parsed);
     ok(ret == 0);
     ok(h2o_memis(parsed.scheme.base, parsed.scheme.len, H2O_STRLIT("http")));
     ok(h2o_memis(parsed.authority.base, parsed.authority.len, H2O_STRLIT("example.com:81")));
@@ -112,7 +112,7 @@ static void test_parse_url(void)
     ok(parsed.port == 81);
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/abc")));
 
-    ret = h2o_parse_url("http://example.com:81", SIZE_MAX, &parsed);
+    ret = h2o_url_parse("http://example.com:81", SIZE_MAX, &parsed);
     ok(ret == 0);
     ok(h2o_memis(parsed.scheme.base, parsed.scheme.len, H2O_STRLIT("http")));
     ok(h2o_memis(parsed.authority.base, parsed.authority.len, H2O_STRLIT("example.com:81")));
@@ -120,7 +120,7 @@ static void test_parse_url(void)
     ok(parsed.port == 81);
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/")));
 
-    ret = h2o_parse_url("https://example.com/abc", SIZE_MAX, &parsed);
+    ret = h2o_url_parse("https://example.com/abc", SIZE_MAX, &parsed);
     ok(ret == 0);
     ok(h2o_memis(parsed.scheme.base, parsed.scheme.len, H2O_STRLIT("https")));
     ok(h2o_memis(parsed.authority.base, parsed.authority.len, H2O_STRLIT("example.com")));
@@ -128,16 +128,16 @@ static void test_parse_url(void)
     ok(parsed.port == 443);
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/abc")));
 
-    ret = h2o_parse_url("http:/abc", SIZE_MAX, &parsed);
+    ret = h2o_url_parse("http:/abc", SIZE_MAX, &parsed);
     ok(ret != 0);
 
-    ret = h2o_parse_url("ftp://example.com/abc", SIZE_MAX, &parsed);
+    ret = h2o_url_parse("ftp://example.com/abc", SIZE_MAX, &parsed);
     ok(ret != 0);
 
-    ret = h2o_parse_url("http://abc:111111/def", SIZE_MAX, &parsed);
+    ret = h2o_url_parse("http://abc:111111/def", SIZE_MAX, &parsed);
     ok(ret != 0);
 
-    ret = h2o_parse_url("http://[::ffff:192.0.2.128]", SIZE_MAX, &parsed);
+    ret = h2o_url_parse("http://[::ffff:192.0.2.128]", SIZE_MAX, &parsed);
     ok(ret == 0);
     ok(h2o_memis(parsed.scheme.base, parsed.scheme.len, H2O_STRLIT("http")));
     ok(h2o_memis(parsed.authority.base, parsed.authority.len, H2O_STRLIT("[::ffff:192.0.2.128]")));
@@ -145,7 +145,7 @@ static void test_parse_url(void)
     ok(parsed.port == 80);
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/")));
 
-    ret = h2o_parse_url("https://[::ffff:192.0.2.128]/abc", SIZE_MAX, &parsed);
+    ret = h2o_url_parse("https://[::ffff:192.0.2.128]/abc", SIZE_MAX, &parsed);
     ok(ret == 0);
     ok(h2o_memis(parsed.scheme.base, parsed.scheme.len, H2O_STRLIT("https")));
     ok(h2o_memis(parsed.authority.base, parsed.authority.len, H2O_STRLIT("[::ffff:192.0.2.128]")));
@@ -153,7 +153,7 @@ static void test_parse_url(void)
     ok(parsed.port == 443);
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/abc")));
 
-    ret = h2o_parse_url("https://[::ffff:192.0.2.128]:111/abc", SIZE_MAX, &parsed);
+    ret = h2o_url_parse("https://[::ffff:192.0.2.128]:111/abc", SIZE_MAX, &parsed);
     ok(ret == 0);
     ok(h2o_memis(parsed.scheme.base, parsed.scheme.len, H2O_STRLIT("https")));
     ok(h2o_memis(parsed.authority.base, parsed.authority.len, H2O_STRLIT("[::ffff:192.0.2.128]:111")));
