@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 DeNA Co., Ltd.
+ * Copyright (c) 2014,2015 DeNA Co., Ltd.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -19,44 +19,30 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__t__test_h
-#define h2o__t__test_h
+#ifndef h2o__url_h
+#define h2o__url_h
 
-#include "picotest.h"
-#include "h2o.h"
+#include "h2o/memory.h"
 
-typedef struct st_h2o_loopback_conn_t {
-    h2o_conn_t super;
-    /**
-     * the response
-     */
-    h2o_buffer_t *body;
-    /* internal structure */
-    h2o_ostream_t _ostr_final;
-    int _is_complete;
-    /**
-     * the HTTP request / response (intentionally placed at the last, since it is a large structure and has it's own ctor)
-     */
-    h2o_req_t req;
-} h2o_loopback_conn_t;
+typedef struct st_h2o_parse_url_t {
+    h2o_iovec_t scheme;
+    h2o_iovec_t authority; /* i.e. host:port */
+    h2o_iovec_t host;
+    h2o_iovec_t path;
+    uint16_t port;
+} h2o_parse_url_t;
 
-h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx);
-void h2o_loopback_destroy(h2o_loopback_conn_t *conn);
-void h2o_loopback_run_loop(h2o_loopback_conn_t *conn);
-
-extern h2o_loop_t *test_loop;
-
-char *sha1sum(const void *src, size_t len);
-
-void test_lib__serverutil_c(void);
-void test_lib__string_c(void);
-void test_lib__time_c(void);
-void test_lib__url_c(void);
-void test_lib__headers_c(void);
-void test_lib__http2__hpack(void);
-void test_lib__http2__scheduler(void);
-void test_lib__file_c(void);
-void test_lib__mimemap_c(void);
-void test_lib__proxy_c(void);
+/**
+ * removes "..", ".", decodes %xx from a path representation
+ * @param pool memory pool to be used in case the path contained references to directories
+ * @param path source path
+ * @param len source length
+ * @return buffer pointing to source, or buffer pointing to an allocated chunk with normalized representation of the given path
+ */
+h2o_iovec_t h2o_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t len);
+/**
+ * parses absolute URL (either http or https)
+ */
+int h2o_parse_url(const char *url, size_t url_len, h2o_parse_url_t *result);
 
 #endif

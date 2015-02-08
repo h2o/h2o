@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include "h2o/socketpool.h"
 #include "h2o/string_.h"
+#include "h2o/url.h"
 #include "h2o/http1client.h"
 
 static h2o_timeout_t zero_timeout, io_timeout;
