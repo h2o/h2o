@@ -115,30 +115,27 @@ Rewrite:
     return rebuild_path(pool, path, len);
 }
 
-int h2o_url_parse(const char *url, size_t url_len, h2o_url_t *parsed)
+static const char *parse_scheme(const char *s, const char *end, h2o_iovec_t *scheme, uint16_t *default_port)
 {
-    const char *url_end, *token_start, *token_end;
-
-    if (url_len == SIZE_MAX)
-        url_len = strlen(url);
-    url_end = url + url_len;
-
-    /* check and skip scheme */
-    if (url_len >= 7 && memcmp(url, "http://", 7) == 0) {
-        parsed->scheme = h2o_iovec_init(H2O_STRLIT("http"));
-        token_start = url + 7;
-        parsed->port = 80;
-    } else if (url_len >= 8 && memcmp(url, "https://", 8) == 0) {
-        parsed->scheme = h2o_iovec_init(H2O_STRLIT("https"));
-        token_start = url + 8;
-        parsed->port = 443;
-    } else {
-        return -1;
+    if (end - s >= 5 && memcmp(s, "http:", 5) == 0) {
+        *scheme = h2o_iovec_init(H2O_STRLIT("http"));
+        *default_port = 80;
+        return s + 5;
+    } else if (end - s >= 6 && memcmp(s, "https:", 6) == 0) {
+        *scheme = h2o_iovec_init(H2O_STRLIT("https"));
+        *default_port = 443;
+        return s + 6;
     }
+    return NULL;
+}
 
-    /* parse host */
+static int parse_authority_and_path(const char *src, const char *url_end, h2o_url_t *parsed)
+{
+    const char *token_start = src, *token_end;
+
     if (token_start == url_end)
         return -1;
+
     parsed->authority.base = (char *)token_start;
     if (*token_start == '[') {
         /* is IPv6 address */
@@ -179,4 +176,24 @@ PathOmitted:
     parsed->authority.len = url_end - parsed->authority.base;
     parsed->path = h2o_iovec_init(H2O_STRLIT("/"));
     return 0;
+}
+
+int h2o_url_parse(const char *url, size_t url_len, h2o_url_t *parsed)
+{
+    const char *url_end, *p;
+
+    if (url_len == SIZE_MAX)
+        url_len = strlen(url);
+    url_end = url + url_len;
+
+    /* check and skip scheme */
+    if ((p = parse_scheme(url, url_end, &parsed->scheme, &parsed->port)) == NULL)
+        return -1;
+
+    /* skip "//" */
+    if (!(url_end - p >= 2 && p[0] == '/' && p[1] == '/'))
+        return -1;
+    p+= 2;
+
+    return parse_authority_and_path(p, url_end, parsed);
 }
