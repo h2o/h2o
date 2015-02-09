@@ -60,6 +60,10 @@ int h2o_url_parse(const char *url, size_t url_len, h2o_url_t *result);
  */
 int h2o_url_parse_relative(const char *url, size_t url_len, h2o_url_t *result);
 /**
+ * parses the authority and returns the next position (i.e. start of path)
+ */
+const char *h2o_url_parse_hostport(const char *s, size_t len, h2o_iovec_t *host, uint16_t *port);
+/**
  * resolves the URL
  */
 h2o_iovec_t h2o_url_resolve(h2o_mem_pool_t *pool, const h2o_url_t *base, const h2o_url_t *relative, h2o_url_t *dest);

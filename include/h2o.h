@@ -440,7 +440,7 @@ struct st_h2o_req_t {
     /**
      * scheme (http, https, etc.)
      */
-    h2o_iovec_t scheme;
+    const h2o_url_scheme_t *scheme;
     /**
      * the HTTP version (represented as 0xMMmm (M=major, m=minor))
      */

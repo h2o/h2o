@@ -130,54 +130,57 @@ static const char *parse_scheme(const char *s, const char *end, const h2o_url_sc
     return NULL;
 }
 
-static int parse_authority_and_path(const char *src, const char *url_end, h2o_url_t *parsed)
+const char *h2o_url_parse_hostport(const char *s, size_t len, h2o_iovec_t *host, uint16_t *port)
 {
-    const char *token_start = src, *token_end;
+    const char *token_start = s, *token_end, *end = s + len;
 
-    parsed->_port = 65535;
+    *port = 65535;
 
-    if (token_start == url_end)
-        return -1;
+    if (token_start == end)
+        return NULL;
 
-    parsed->authority.base = (char *)token_start;
     if (*token_start == '[') {
         /* is IPv6 address */
         ++token_start;
-        if ((token_end = memchr(token_start, ']', url_end - token_start)) == NULL)
-            return -1;
-        parsed->host = h2o_iovec_init(token_start, token_end - token_start);
+        if ((token_end = memchr(token_start, ']', end - token_start)) == NULL)
+            return NULL;
+        *host = h2o_iovec_init(token_start, token_end - token_start);
         token_start = token_end + 1;
     } else {
-        for (token_end = token_start; !(token_end == url_end || *token_end == '/' || *token_end == ':'); ++token_end)
+        for (token_end = token_start; !(token_end == end || *token_end == '/' || *token_end == ':'); ++token_end)
             ;
-        parsed->host = h2o_iovec_init(token_start, token_end - token_start);
+        *host = h2o_iovec_init(token_start, token_end - token_start);
         token_start = token_end;
     }
-    if (token_start == url_end)
-        goto PathOmitted;
 
     /* parse port */
-    if (*token_start == ':') {
+    if (token_start != end && *token_start == ':') {
         size_t p;
         ++token_start;
-        if ((token_end = memchr(token_start, '/', url_end - token_start)) == NULL)
-            token_end = url_end;
+        if ((token_end = memchr(token_start, '/', end - token_start)) == NULL)
+            token_end = end;
         if ((p = h2o_strtosize(token_start, token_end - token_start)) >= 65535)
-            return -1;
-        parsed->_port = (uint16_t)p;
+            return NULL;
+        *port = (uint16_t)p;
         token_start = token_end;
-        if (token_start == url_end)
-            goto PathOmitted;
     }
 
-    /* a non-empty path */
-    parsed->authority.len = token_start - parsed->authority.base;
-    parsed->path = h2o_iovec_init(token_start, url_end - token_start);
+    return token_start;
+}
 
-    return 0;
-PathOmitted:
-    parsed->authority.len = url_end - parsed->authority.base;
-    parsed->path = h2o_iovec_init(H2O_STRLIT("/"));
+static int parse_authority_and_path(const char *src, const char *url_end, h2o_url_t *parsed)
+{
+    const char *p = h2o_url_parse_hostport(src, url_end - src, &parsed->host, &parsed->_port);
+    if (p == NULL)
+        return -1;
+    parsed->authority = h2o_iovec_init(src, p - src);
+    if (p == url_end) {
+        parsed->path = h2o_iovec_init(H2O_STRLIT("/"));
+    } else {
+        if (*p != '/')
+            return -1;
+        parsed->path = h2o_iovec_init(p, url_end - p);
+    }
     return 0;
 }
 
