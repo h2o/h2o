@@ -1001,15 +1001,16 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock, str
 void h2o_http2_conn_push_url(h2o_http2_conn_t *conn, h2o_iovec_t url, h2o_http2_stream_t *src_stream)
 {
     h2o_http2_stream_t *stream;
-    h2o_parse_url_t url_parsed;
+    h2o_url_t url_parsed;
 
     if (!conn->peer_settings.enable_push || conn->num_streams.open_push >= conn->peer_settings.max_concurrent_streams)
         return;
     if (conn->push_stream_ids.max_open >= 0x7ffffff0)
         return;
-    if (h2o_parse_url(url.base, url.len, &url_parsed) != 0)
+    if (h2o_url_parse(url.base, url.len, &url_parsed) != 0)
         return;
-    if (!h2o_memis(url_parsed.scheme.base, url_parsed.scheme.len, src_stream->req.scheme.base, src_stream->req.scheme.len))
+    if (!h2o_memis(url_parsed.scheme->name.base, url_parsed.scheme->name.len, src_stream->req.scheme.base,
+                   src_stream->req.scheme.len))
         return;
     if (!h2o_lcstris(url_parsed.authority.base, url_parsed.authority.len, src_stream->req.authority.base,
                      src_stream->req.authority.len))
@@ -1023,7 +1024,7 @@ void h2o_http2_conn_push_url(h2o_http2_conn_t *conn, h2o_iovec_t url, h2o_http2_
 
     /* setup request */
     stream->req.method = (h2o_iovec_t){H2O_STRLIT("GET")};
-    stream->req.scheme = h2o_strdup(&stream->req.pool, url_parsed.scheme.base, url_parsed.scheme.len);
+    stream->req.scheme = h2o_strdup(&stream->req.pool, url_parsed.scheme->name.base, url_parsed.scheme->name.len);
     stream->req.authority = h2o_strdup(&stream->req.pool, url_parsed.authority.base, url_parsed.authority.len);
     stream->req.path = h2o_strdup(&stream->req.pool, url_parsed.path.base, url_parsed.path.len);
     stream->req.version = 0x200;
