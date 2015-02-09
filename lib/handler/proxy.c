@@ -64,7 +64,7 @@ static int test_location_match(h2o_proxy_location_t *location, const h2o_url_sch
 }
 
 static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, size_t location_len, h2o_proxy_location_t *upstream,
-                                    h2o_iovec_t req_scheme, h2o_iovec_t req_authority, h2o_iovec_t req_basepath)
+                                    const h2o_url_scheme_t *req_scheme, h2o_iovec_t req_authority, h2o_iovec_t req_basepath)
 {
     h2o_url_t loc_parsed;
 
@@ -72,7 +72,7 @@ static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, 
         !test_location_match(upstream, loc_parsed.scheme, loc_parsed.host, h2o_url_get_port(&loc_parsed), loc_parsed.path))
         return h2o_iovec_init(location, location_len);
 
-    return h2o_concat(pool, req_scheme, h2o_iovec_init(H2O_STRLIT("://")), req_authority, req_basepath,
+    return h2o_concat(pool, req_scheme->name, h2o_iovec_init(H2O_STRLIT("://")), req_authority, req_basepath,
                       h2o_iovec_init(loc_parsed.path.base + upstream->path.len, loc_parsed.path.len - upstream->path.len));
 }
 
@@ -130,7 +130,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
         }
         p += sprintf(p, "%.*s: %.*s\r\n", (int)h->name->len, h->name->base, (int)h->value.len, h->value.base);
     }
-    p += sprintf(p, "x-forwarded-proto: %.*s\r\n", (int)req->scheme.len, req->scheme.base);
+    p += sprintf(p, "x-forwarded-proto: %.*s\r\n", (int)req->scheme->name.len, req->scheme->name.base);
     if (xff == 0 && remote_addr_len != SIZE_MAX) {
         p += sprintf(p, "x-forwarded-for: %.*s\r\n", (int)remote_addr_len, remote_addr);
     }

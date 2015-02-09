@@ -283,7 +283,7 @@ static ssize_t fixup_request(h2o_http1_conn_t *conn, struct phr_header *headers,
     expect->base = NULL;
     expect->len = 0;
 
-    conn->req.scheme = conn->sock->ssl != NULL ? h2o_iovec_init(H2O_STRLIT("https")) : h2o_iovec_init(H2O_STRLIT("http"));
+    conn->req.scheme = conn->sock->ssl != NULL ? &H2O_URL_SCHEME_HTTPS : &H2O_URL_SCHEME_HTTP;
     conn->req.version = 0x100 | minor_version;
 
     /* init headers */
