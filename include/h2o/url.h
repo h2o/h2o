@@ -24,14 +24,25 @@
 
 #include "h2o/memory.h"
 
+typedef struct st_h2o_url_scheme_t {
+    h2o_iovec_t name;
+    uint16_t default_port;
+} h2o_url_scheme_t;
+
+extern const h2o_url_scheme_t H2O_URL_SCHEME_HTTP, H2O_URL_SCHEME_HTTPS;
+
 typedef struct st_h2o_url_t {
-    h2o_iovec_t scheme;
+    const h2o_url_scheme_t *scheme;
     h2o_iovec_t authority; /* i.e. host:port */
     h2o_iovec_t host;
     h2o_iovec_t path;
-    uint16_t port;
+    uint16_t _port;
 } h2o_url_t;
 
+/**
+ * retrieves the port number from url
+ */
+static uint16_t h2o_url_get_port(const h2o_url_t *url);
 /**
  * removes "..", ".", decodes %xx from a path representation
  * @param pool memory pool to be used in case the path contained references to directories
@@ -44,5 +55,12 @@ h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_
  * parses absolute URL (either http or https)
  */
 int h2o_url_parse(const char *url, size_t url_len, h2o_url_t *result);
+
+/* inline definitions */
+
+inline uint16_t h2o_url_get_port(const h2o_url_t *url)
+{
+    return url->_port != 65535 ? url->_port : url->scheme->default_port;
+}
 
 #endif

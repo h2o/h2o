@@ -51,7 +51,7 @@ static void start_request(h2o_http1client_ctx_t *ctx)
         fprintf(stderr, "unrecognized type of URL: %s\n", url);
         exit(1);
     }
-    if (h2o_memis(url_parsed.scheme.base, url_parsed.scheme.len, H2O_STRLIT("https"))) {
+    if (url_parsed.scheme == &H2O_URL_SCHEME_HTTPS) {
         fprintf(stderr, "https is not (yet) supported\n");
         exit(1);
     }
@@ -67,12 +67,12 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     if (1) {
         if (sockpool == NULL) {
             sockpool = h2o_mem_alloc(sizeof(*sockpool));
-            h2o_socketpool_init(sockpool, h2o_strdup(&pool, url_parsed.host.base, url_parsed.host.len).base, url_parsed.port, 10);
+            h2o_socketpool_init(sockpool, h2o_strdup(&pool, url_parsed.host.base, url_parsed.host.len).base, h2o_url_get_port(&url_parsed), 10);
             h2o_socketpool_set_timeout(sockpool, ctx->loop, 5000 /* in msec */);
         }
         client = h2o_http1client_connect_with_pool(ctx, &pool, sockpool, on_connect);
     } else {
-        client = h2o_http1client_connect(ctx, &pool, h2o_strdup(&pool, url_parsed.host.base, url_parsed.host.len).base, url_parsed.port, on_connect);
+        client = h2o_http1client_connect(ctx, &pool, h2o_strdup(&pool, url_parsed.host.base, url_parsed.host.len).base, h2o_url_get_port(&url_parsed), on_connect);
     }
     assert(client != NULL);
     client->data = req;

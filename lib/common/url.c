@@ -23,6 +23,9 @@
 #include "h2o/string_.h"
 #include "h2o/url.h"
 
+const h2o_url_scheme_t H2O_URL_SCHEME_HTTP = {{H2O_STRLIT("http")}, 80};
+const h2o_url_scheme_t H2O_URL_SCHEME_HTTPS = {{H2O_STRLIT("https")}, 443};
+
 static int decode_hex(int ch)
 {
     if ('0' <= ch && ch <= '9')
@@ -115,15 +118,13 @@ Rewrite:
     return rebuild_path(pool, path, len);
 }
 
-static const char *parse_scheme(const char *s, const char *end, h2o_iovec_t *scheme, uint16_t *default_port)
+static const char *parse_scheme(const char *s, const char *end, const h2o_url_scheme_t **scheme)
 {
     if (end - s >= 5 && memcmp(s, "http:", 5) == 0) {
-        *scheme = h2o_iovec_init(H2O_STRLIT("http"));
-        *default_port = 80;
+        *scheme = &H2O_URL_SCHEME_HTTP;
         return s + 5;
     } else if (end - s >= 6 && memcmp(s, "https:", 6) == 0) {
-        *scheme = h2o_iovec_init(H2O_STRLIT("https"));
-        *default_port = 443;
+        *scheme = &H2O_URL_SCHEME_HTTPS;
         return s + 6;
     }
     return NULL;
@@ -132,6 +133,8 @@ static const char *parse_scheme(const char *s, const char *end, h2o_iovec_t *sch
 static int parse_authority_and_path(const char *src, const char *url_end, h2o_url_t *parsed)
 {
     const char *token_start = src, *token_end;
+
+    parsed->_port = 65535;
 
     if (token_start == url_end)
         return -1;
@@ -161,7 +164,7 @@ static int parse_authority_and_path(const char *src, const char *url_end, h2o_ur
             token_end = url_end;
         if ((p = h2o_strtosize(token_start, token_end - token_start)) >= 65535)
             return -1;
-        parsed->port = p;
+        parsed->_port = (uint16_t)p;
         token_start = token_end;
         if (token_start == url_end)
             goto PathOmitted;
@@ -187,7 +190,7 @@ int h2o_url_parse(const char *url, size_t url_len, h2o_url_t *parsed)
     url_end = url + url_len;
 
     /* check and skip scheme */
-    if ((p = parse_scheme(url, url_end, &parsed->scheme, &parsed->port)) == NULL)
+    if ((p = parse_scheme(url, url_end, &parsed->scheme)) == NULL)
         return -1;
 
     /* skip "//" */

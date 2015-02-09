@@ -73,13 +73,14 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         h2o_configurator_errprintf(cmd, node, "failed to parse URL: %s\n", node->data.scalar);
         goto ErrExit;
     }
-    if (!h2o_memis(parsed.scheme.base, parsed.scheme.len, H2O_STRLIT("http"))) {
+    if (parsed.scheme != &H2O_URL_SCHEME_HTTP) {
         h2o_configurator_errprintf(cmd, node, "only HTTP URLs are supported");
         goto ErrExit;
     }
     /* register */
-    h2o_proxy_register_reverse_proxy(ctx->pathconf, h2o_strdup(&pool, parsed.host.base, parsed.host.len).base, parsed.port,
-                                     h2o_strdup(&pool, parsed.path.base, parsed.path.len).base, self->vars);
+    h2o_proxy_register_reverse_proxy(ctx->pathconf, h2o_strdup(&pool, parsed.host.base, parsed.host.len).base,
+                                     h2o_url_get_port(&parsed), h2o_strdup(&pool, parsed.path.base, parsed.path.len).base,
+                                     self->vars);
 
     h2o_mem_clear_pool(&pool);
     return 0;

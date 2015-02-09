@@ -47,10 +47,10 @@ struct rp_handler_t {
     h2o_proxy_config_vars_t config;
 };
 
-static int test_location_match(h2o_proxy_location_t *location, h2o_iovec_t scheme, h2o_iovec_t host, uint16_t port,
+static int test_location_match(h2o_proxy_location_t *location, const h2o_url_scheme_t *scheme, h2o_iovec_t host, uint16_t port,
                                h2o_iovec_t path)
 {
-    if (!h2o_memis(scheme.base, scheme.len, H2O_STRLIT("http")))
+    if (scheme != &H2O_URL_SCHEME_HTTP)
         return 0;
     if (!h2o_lcstris(host.base, host.len, location->host.base, location->host.len))
         return 0;
@@ -69,7 +69,7 @@ static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, 
     h2o_url_t loc_parsed;
 
     if (h2o_url_parse(location, location_len, &loc_parsed) != 0 ||
-        !test_location_match(upstream, loc_parsed.scheme, loc_parsed.host, loc_parsed.port, loc_parsed.path))
+        !test_location_match(upstream, loc_parsed.scheme, loc_parsed.host, h2o_url_get_port(&loc_parsed), loc_parsed.path))
         return h2o_iovec_init(location, location_len);
 
     return h2o_concat(pool, req_scheme, h2o_iovec_init(H2O_STRLIT("://")), req_authority, req_basepath,
