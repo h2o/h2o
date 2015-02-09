@@ -204,8 +204,8 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY);
 
     /* push URLs */
-    for (i = 0; i != stream->req.http2_push_urls.size; ++i)
-        h2o_http2_conn_push_url(conn, stream->req.http2_push_urls.entries[i], stream);
+    for (i = 0; i != stream->req.http2_push_paths.size; ++i)
+        h2o_http2_conn_push_path(conn, stream->req.http2_push_paths.entries[i], stream);
 
     return 0;
 }

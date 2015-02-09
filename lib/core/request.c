@@ -31,7 +31,7 @@ static h2o_hostconf_t *setup_before_processing(h2o_req_t *req)
     h2o_hostconf_t *hostconf;
 
     h2o_get_timestamp(ctx, &req->pool, &req->processed_at);
-    req->path_normalized = h2o_normalize_path(&req->pool, req->path.base, req->path.len);
+    req->path_normalized = h2o_url_normalize_path(&req->pool, req->path.base, req->path.len);
 
     /* find the host context */
     if (req->authority.base != NULL) {
@@ -83,7 +83,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
         COPY(authority);
         COPY(method);
         COPY(path);
-        COPY(scheme);
+        req->scheme = src->scheme;
         req->version = src->version;
         h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->headers, sizeof(h2o_header_t), src->headers.size);
         memcpy(req->headers.entries, src->headers.entries, sizeof(req->headers.entries[0]) * src->headers.size);
@@ -253,7 +253,8 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
         H2O_STRLIT("<!DOCTYPE html><TITLE>301 Moved Permanently</TITLE><P>The document has moved <A HREF=\"")};
     static const h2o_iovec_t body_suffix = {H2O_STRLIT("\">here</A>")};
 
-    h2o_iovec_t url = h2o_concat(&req->pool, req->scheme, (h2o_iovec_t){H2O_STRLIT("://")}, req->authority, (h2o_iovec_t){(char*)path, path_len});
+    h2o_iovec_t url = h2o_concat(&req->pool, req->scheme->name, (h2o_iovec_t){H2O_STRLIT("://")}, req->authority,
+                                 (h2o_iovec_t){(char*)path, path_len});
     h2o_iovec_t bufs[3];
 
     /* build response header */

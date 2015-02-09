@@ -43,6 +43,7 @@ extern "C" {
 #include "h2o/string_.h"
 #include "h2o/time_.h"
 #include "h2o/timeout.h"
+#include "h2o/url.h"
 #include "h2o/version.h"
 
 #ifndef H2O_MAX_HEADERS
@@ -439,7 +440,7 @@ struct st_h2o_req_t {
     /**
      * scheme (http, https, etc.)
      */
-    h2o_iovec_t scheme;
+    const h2o_url_scheme_t *scheme;
     /**
      * the HTTP version (represented as 0xMMmm (M=major, m=minor))
      */
@@ -470,9 +471,9 @@ struct st_h2o_req_t {
      */
     int http1_is_persistent;
     /**
-     * push URLs
+     * absolute paths to be pushed (using HTTP/2 server push)
      */
-    H2O_VECTOR(h2o_iovec_t) http2_push_urls;
+    H2O_VECTOR(h2o_iovec_t) http2_push_paths;
     /**
      * the Upgrade request header (or { NULL, 0 } if not available)
      */

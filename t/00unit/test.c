@@ -61,8 +61,8 @@ void h2o_loopback_destroy(h2o_loopback_conn_t *conn)
 
 void h2o_loopback_run_loop(h2o_loopback_conn_t *conn)
 {
-    if (conn->req.scheme.base == NULL)
-        conn->req.scheme = h2o_iovec_init(H2O_STRLIT("http"));
+    if (conn->req.scheme == NULL)
+        conn->req.scheme = &H2O_URL_SCHEME_HTTP;
     if (conn->req.version == 0)
         conn->req.version = 0x100; /* HTTP/1.0 */
 
@@ -124,6 +124,7 @@ int main(int argc, char **argv)
 {
     { /* library tests */
         subtest("lib/string.c", test_lib__string_c);
+        subtest("lib/url.c", test_lib__url_c);
         subtest("lib/time.c", test_lib__time_c);
         subtest("lib/headers.c", test_lib__headers_c);
         subtest("lib/server_starter.c", test_lib__serverutil_c);

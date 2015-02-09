@@ -30,10 +30,10 @@ void test_lib__proxy_c()
 
     h2o_mem_init_pool(&pool);
 
-    ret = rewrite_location(&pool, H2O_STRLIT("http://realhost:81/real/abc"), &conf, h2o_iovec_init(H2O_STRLIT("https")),
+    ret = rewrite_location(&pool, H2O_STRLIT("http://realhost:81/real/abc"), &conf, &H2O_URL_SCHEME_HTTPS,
                            h2o_iovec_init(H2O_STRLIT("vhost:8443")), h2o_iovec_init(H2O_STRLIT("/virtual/")));
     ok(h2o_memis(ret.base, ret.len, H2O_STRLIT("https://vhost:8443/virtual/abc")));
-    ret = rewrite_location(&pool, H2O_STRLIT("http://realhost:81/other/abc"), &conf, h2o_iovec_init(H2O_STRLIT("https")),
+    ret = rewrite_location(&pool, H2O_STRLIT("http://realhost:81/other/abc"), &conf, &H2O_URL_SCHEME_HTTPS,
                            h2o_iovec_init(H2O_STRLIT("vhost:8443")), h2o_iovec_init(H2O_STRLIT("/virtual/")));
     ok(h2o_memis(ret.base, ret.len, H2O_STRLIT("http://realhost:81/other/abc")));
 

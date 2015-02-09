@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include "h2o/socketpool.h"
 #include "h2o/string_.h"
+#include "h2o/url.h"
 #include "h2o/http1client.h"
 
 static h2o_timeout_t zero_timeout, io_timeout;
@@ -38,7 +39,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 
 static void start_request(h2o_http1client_ctx_t *ctx)
 {
-    h2o_parse_url_t url_parsed;
+    h2o_url_t url_parsed;
     h2o_iovec_t *req;
     h2o_http1client_t *client;
 
@@ -46,11 +47,11 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     h2o_mem_clear_pool(&pool);
 
     /* parse URL */
-    if (h2o_parse_url(url, SIZE_MAX, &url_parsed) != 0) {
+    if (h2o_url_parse(url, SIZE_MAX, &url_parsed) != 0) {
         fprintf(stderr, "unrecognized type of URL: %s\n", url);
         exit(1);
     }
-    if (h2o_memis(url_parsed.scheme.base, url_parsed.scheme.len, H2O_STRLIT("https"))) {
+    if (url_parsed.scheme == &H2O_URL_SCHEME_HTTPS) {
         fprintf(stderr, "https is not (yet) supported\n");
         exit(1);
     }
@@ -66,12 +67,12 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     if (1) {
         if (sockpool == NULL) {
             sockpool = h2o_mem_alloc(sizeof(*sockpool));
-            h2o_socketpool_init(sockpool, h2o_strdup(&pool, url_parsed.host.base, url_parsed.host.len).base, url_parsed.port, 10);
+            h2o_socketpool_init(sockpool, h2o_strdup(&pool, url_parsed.host.base, url_parsed.host.len).base, h2o_url_get_port(&url_parsed), 10);
             h2o_socketpool_set_timeout(sockpool, ctx->loop, 5000 /* in msec */);
         }
         client = h2o_http1client_connect_with_pool(ctx, &pool, sockpool, on_connect);
     } else {
-        client = h2o_http1client_connect(ctx, &pool, h2o_strdup(&pool, url_parsed.host.base, url_parsed.host.len).base, url_parsed.port, on_connect);
+        client = h2o_http1client_connect(ctx, &pool, h2o_strdup(&pool, url_parsed.host.base, url_parsed.host.len).base, h2o_url_get_port(&url_parsed), on_connect);
     }
     assert(client != NULL);
     client->data = req;
