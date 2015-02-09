@@ -202,23 +202,46 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     return 0;
 }
 
-static void on_server_push_header(h2o_req_t *req, const char *value, size_t value_len)
+static void on_link_header(h2o_req_t *req, const char *value, size_t value_len, h2o_url_t *base)
 {
-    h2o_iovec_t url, iter = h2o_iovec_init(value, value_len);
+    h2o_iovec_t url;
+    h2o_url_t parsed, resolved;
 
     if (req->version < 0x200)
         return;
 
-    /* extract URL value from: X-Server-Push: http://server/pushed.css; attr1=foo; attr2=bar */
-    /* TODO log malformed headers */
-    if ((url.base = (char *)h2o_next_token(&iter, ';', &url.len, NULL)) == NULL)
+    { /* extract URL value from: Link: </pushed.css>; rel=preload */
+        h2o_iovec_t iter = h2o_iovec_init(value, value_len), token_value;
+        const char *token;
+        size_t token_len;
+        /* first element should be <URL> */
+        if ((token = h2o_next_token(&iter, ';', &token_len, NULL)) == NULL)
+            return;
+        if (!(token_len >= 2 && token[0] == '<' && token[token_len - 1] == '>'))
+            return;
+        url = h2o_iovec_init(token + 1, token_len - 2);
+        /* find rel=preload */
+        while ((token = h2o_next_token(&iter, ';', &token_len, &token_value)) != NULL) {
+            if (h2o_lcstris(token, token_len, H2O_STRLIT("rel")) &&
+                h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload")))
+                break;
+        }
+        if (token == NULL)
+            return;
+    }
+
+    /* check the authority, and extract absolute path */
+    if (h2o_url_parse_relative(url.base, url.len, &parsed) != 0)
         return;
-    if (!(url.len >= sizeof("http://") - 1 && memcmp(url.base, H2O_STRLIT("http")) == 0))
+    h2o_url_resolve(&req->pool, base, &parsed, &resolved);
+    if (!(base->scheme == resolved.scheme &&
+         (parsed.authority.base == NULL ||
+          h2o_lcstris(base->authority.base, base->authority.len, resolved.authority.base, resolved.authority.len))))
         return;
 
-    h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->http2_push_urls, sizeof(req->http2_push_urls.entries[0]),
-                       req->http2_push_urls.size + 1);
-    req->http2_push_urls.entries[req->http2_push_urls.size++] = h2o_strdup(&req->pool, url.base, url.len);
+    h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->http2_push_paths, sizeof(req->http2_push_paths.entries[0]),
+                       req->http2_push_paths.size + 1);
+    req->http2_push_paths.entries[req->http2_push_paths.size++] = resolved.path;
 }
 
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
@@ -226,6 +249,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 {
     struct rp_generator_t *self = client->data;
     size_t i;
+    h2o_url_t url_parsed = {};
 
     if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
         self->client = NULL;
@@ -255,9 +279,21 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 value = rewrite_location(&self->src_req->pool, headers[i].value, headers[i].value_len, self->upstream,
                                          self->src_req->scheme, self->src_req->authority, self->src_req->pathconf->path);
                 goto AddHeader;
-            } else if (token == H2O_TOKEN_X_SERVER_PUSH) {
-                on_server_push_header(self->src_req, headers[i].value, headers[i].value_len);
-                goto Skip;
+            } else if (token == H2O_TOKEN_LINK) {
+                if (url_parsed.scheme == NULL) {
+                    if (h2o_url_parse_hostport(self->src_req->authority.base, self->src_req->authority.len, &url_parsed.host,
+                                               &url_parsed._port) != NULL) {
+                        url_parsed = (h2o_url_t){
+                            self->src_req->scheme, /* scheme */
+                            self->src_req->authority, /* authority */
+                            {}, /* host */
+                            self->src_req->path_normalized, /* path */
+                            65535 /* port */
+                        };
+                    }
+                }
+                if (url_parsed.scheme != NULL)
+                    on_link_header(self->src_req, headers[i].value, headers[i].value_len, &url_parsed);
             }
             /* default behaviour, transfer the header downstream */
             value = h2o_strdup(&self->src_req->pool, headers[i].value, headers[i].value_len);
