@@ -23,6 +23,38 @@
 #include "../../test.h"
 #include "../../../../lib/http2/scheduler.c"
 
+static void test_drr(void)
+{
+    h2o_http2_scheduler_drr_t drr;
+    struct node_t {
+        h2o_http2_scheduler_drr_node_t super;
+        uint16_t weight;
+        size_t cnt;
+    } w256 = {{}, 256}, w128 = {{}, 128}, w32 = {{}, 32}, w1 = {{}, 1};
+    size_t i;
+
+    drr_init(&drr);
+    drr_set(&drr, &w256.super, 256);
+    drr_set(&drr, &w128.super, 128);
+    drr_set(&drr, &w32.super, 32);
+    drr_set(&drr, &w1.super, 1);
+
+    for (i = 0; i != (256 + 128 + 32 + 1) * 100; ++i) {
+        struct node_t *popped = (struct node_t *)drr_pop(&drr);
+        if (popped == NULL) {
+            ok(0);
+            return;
+        }
+        ++popped->cnt;
+        drr_set(&drr, &popped->super, popped->weight);
+    }
+
+    ok(w256.cnt == 25600);
+    ok(w128.cnt == 12800);
+    ok(w32.cnt == 3200);
+    ok(w1.cnt == 100);
+}
+
 typedef struct {
     h2o_http2_scheduler_openref_t ref;
     const char *name;
@@ -506,6 +538,7 @@ static void test_exclusive_at_current_pos(void)
 
 void test_lib__http2__scheduler(void)
 {
+    subtest("drr", test_drr);
     subtest("round-robin", test_round_robin);
     subtest("priority", test_priority);
     subtest("dependency", test_dependency);

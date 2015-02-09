@@ -22,6 +22,74 @@
 #include "h2o.h"
 #include "h2o/http2.h"
 
+struct st_h2o_http2_scheduler_drr_t {
+    uint64_t bits;
+    size_t offset;
+    h2o_linklist_t anchors[64];
+};
+
+static void drr_init(h2o_http2_scheduler_drr_t *drr)
+{
+    size_t i;
+    drr->bits = 0;
+    drr->offset = 0;
+    for (i = 0; i != sizeof(drr->anchors) / sizeof(drr->anchors[0]); ++i)
+        h2o_linklist_init_anchor(drr->anchors + i);
+}
+
+static void drr_set(h2o_http2_scheduler_drr_t *drr, h2o_http2_scheduler_drr_node_t *node, uint16_t weight)
+{
+    /* elements should go into OFFSET_TABLE[priority] / 65536; calculated as: round(2**(8 - log2(weight)) / 5 * 65536) */
+    static const unsigned OFFSET_TABLE[] = {
+        3355443, 1677722, 1118481, 838861, 671089, 559241, 479349, 419430, 372827, 335544, 305040, 279620, 258111, 239675, 223696,
+        209715,  197379,  186414,  176602, 167772, 159783, 152520, 145889, 139810, 134218, 129056, 124276, 119837, 115705, 111848,
+        108240,  104858,  101680,  98690,  95870,  93207,  90688,  88301,  86037,  83886,  81840,  79892,  78034,  76260,  74565,
+        72944,   71392,   69905,   68478,  67109,  65793,  64528,  63310,  62138,  61008,  59919,  58867,  57852,  56872,  55924,
+        55007,   54120,   53261,   52429,  51622,  50840,  50081,  49345,  48630,  47935,  47260,  46603,  45965,  45344,  44739,
+        44151,   43577,   43019,   42474,  41943,  41425,  40920,  40427,  39946,  39476,  39017,  38568,  38130,  37702,  37283,
+        36873,   36472,   36080,   35696,  35320,  34953,  34592,  34239,  33893,  33554,  33222,  32897,  32577,  32264,  31957,
+        31655,   31359,   31069,   30784,  30504,  30229,  29959,  29694,  29434,  29178,  28926,  28679,  28436,  28197,  27962,
+        27731,   27504,   27280,   27060,  26844,  26631,  26421,  26214,  26011,  25811,  25614,  25420,  25229,  25041,  24855,
+        24672,   24492,   24315,   24140,  23967,  23797,  23630,  23465,  23302,  23141,  22982,  22826,  22672,  22520,  22370,
+        22221,   22075,   21931,   21789,  21648,  21509,  21372,  21237,  21103,  20972,  20841,  20713,  20586,  20460,  20336,
+        20214,   20092,   19973,   19855,  19738,  19622,  19508,  19396,  19284,  19174,  19065,  18957,  18851,  18745,  18641,
+        18538,   18437,   18336,   18236,  18138,  18040,  17944,  17848,  17754,  17660,  17568,  17476,  17386,  17296,  17207,
+        17120,   17033,   16947,   16862,  16777,  16694,  16611,  16529,  16448,  16368,  16289,  16210,  16132,  16055,  15978,
+        15903,   15828,   15753,   15680,  15607,  15534,  15463,  15392,  15322,  15252,  15183,  15115,  15047,  14980,  14913,
+        14847,   14782,   14717,   14653,  14589,  14526,  14463,  14401,  14340,  14278,  14218,  14158,  14099,  14040,  13981,
+        13923,   13865,   13808,   13752,  13696,  13640,  13585,  13530,  13476,  13422,  13368,  13315,  13263,  13210,  13159,
+        13107};
+
+    assert(1 <= weight);
+    assert(weight <= 256);
+
+    size_t offset = OFFSET_TABLE[weight - 1] + node->_priority_adjustment;
+    node->_priority_adjustment = offset % 65536;
+    offset = offset / 65536;
+
+    drr->bits |= 1ULL << (sizeof(drr->bits) * 8 - 1 - offset);
+    h2o_linklist_insert(drr->anchors + (drr->offset + offset) % (sizeof(drr->anchors) / sizeof(drr->anchors[0])), &node->_link);
+}
+
+static h2o_http2_scheduler_drr_node_t *drr_pop(h2o_http2_scheduler_drr_t *drr)
+{
+    while (drr->bits != 0) {
+        int zeroes = __builtin_clzll(drr->bits);
+        drr->bits <<= zeroes;
+        drr->offset = (drr->offset + zeroes) % (sizeof(drr->anchors) / sizeof(drr->anchors[0]));
+        if (!h2o_linklist_is_empty(drr->anchors + drr->offset)) {
+            h2o_http2_scheduler_drr_node_t *node =
+                H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_drr_node_t, _link, drr->anchors[drr->offset].next);
+            h2o_linklist_unlink(&node->_link);
+            if (h2o_linklist_is_empty(drr->anchors + drr->offset))
+                drr->bits &= (1ULL << (sizeof(drr->bits) * 8 - 1)) - 1;
+            return node;
+        }
+        drr->bits &= (1ULL << (sizeof(drr->bits) * 8 - 1)) - 1;
+    }
+    return NULL;
+}
+
 static h2o_http2_scheduler_slot_t *get_or_create_slot(h2o_http2_scheduler_node_t *node, uint16_t weight)
 {
     h2o_http2_scheduler_slot_t *slot;
