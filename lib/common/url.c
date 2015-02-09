@@ -200,3 +200,114 @@ int h2o_url_parse(const char *url, size_t url_len, h2o_url_t *parsed)
 
     return parse_authority_and_path(p, url_end, parsed);
 }
+
+int h2o_url_parse_relative(const char *url, size_t url_len, h2o_url_t *parsed)
+{
+    const char *url_end, *p;
+
+    if (url_len == SIZE_MAX)
+        url_len = strlen(url);
+    url_end = url + url_len;
+
+    /* obtain scheme and port number */
+    if ((p = parse_scheme(url, url_end, &parsed->scheme)) == NULL) {
+        parsed->scheme = NULL;
+        p = url;
+    }
+
+    /* handle "//" */
+    if (url_end - p >= 2 && p[0] == '/' && p[1] == '/')
+        return parse_authority_and_path(p + 2, url_end, parsed);
+
+    /* reset authority, host, port, and set path */
+    parsed->authority = (h2o_iovec_t){};
+    parsed->host = (h2o_iovec_t){};
+    parsed->_port = 65535;
+    parsed->path = h2o_iovec_init(p, url_end - p);
+
+    return 0;
+}
+
+h2o_iovec_t h2o_url_resolve(h2o_mem_pool_t *pool, const h2o_url_t *base, const h2o_url_t *relative, h2o_url_t *dest)
+{
+    size_t base_path_len = base->path.len, rel_path_offset = 0;
+    h2o_iovec_t ret;
+
+    assert(base->path.len != 0);
+    assert(base->path.base[0] == '/');
+
+    if (relative == NULL) {
+        /* build URL using base copied to dest */
+        static const h2o_url_t fake_relative = {};
+        relative = &fake_relative;
+        *dest = *base;
+        goto Build;
+    }
+
+    /* scheme */
+    dest->scheme = relative->scheme != NULL ? relative->scheme : base->scheme;
+
+    /* authority (and host:port) */
+    if (relative->authority.base != NULL) {
+        assert(relative->host.base != NULL);
+        dest->authority = relative->authority;
+        dest->host = relative->host;
+        dest->_port = relative->_port;
+    } else {
+        assert(relative->host.base == NULL);
+        assert(relative->_port == 65535);
+        dest->authority = base->authority;
+        dest->host = base->host;
+        dest->_port = base->_port;
+    }
+
+    /* path: setup base_path_len and rel_path_offset */
+    if (relative->path.base != NULL) {
+        if (relative->path.len != 0 && relative->path.base[0] == '/') {
+            base_path_len = 0;
+        } else {
+            /* relative path */
+            while (base->path.base[--base_path_len] != '/')
+                ;
+            while (rel_path_offset != relative->path.len) {
+                if (relative->path.base[rel_path_offset] == '.') {
+                    if (relative->path.len - rel_path_offset >= 2 && relative->path.base[rel_path_offset + 1] == '.' &&
+                        (relative->path.len - rel_path_offset == 2 || relative->path.base[rel_path_offset + 2] == '/')) {
+                        if (base_path_len != 0) {
+                            while (base->path.base[--base_path_len] != '/')
+                                ;
+                        }
+                        rel_path_offset += relative->path.len - rel_path_offset == 2 ? 2 : 3;
+                        continue;
+                    }
+                    if (relative->path.len - rel_path_offset == 1) {
+                        rel_path_offset += 1;
+                        continue;
+                    } else if (relative->path.base[rel_path_offset + 1] == '/') {
+                        rel_path_offset += 2;
+                        continue;
+                    }
+                }
+                break;
+            }
+            base_path_len += 1;
+        }
+    } else {
+        assert(relative->path.len == 0);
+    }
+
+Build:
+    /* build the output */
+    ret = h2o_concat(pool, dest->scheme->name, h2o_iovec_init(H2O_STRLIT("://")), dest->authority,
+                     h2o_iovec_init(base->path.base, base_path_len),
+                     h2o_iovec_init(relative->path.base + rel_path_offset, relative->path.len - rel_path_offset));
+    /* adjust dest */
+    dest->authority.base = ret.base + dest->scheme->name.len + 3;
+    dest->host.base = dest->authority.base;
+    if (dest->authority.len != 0 && dest->authority.base[0] == '[')
+        ++dest->host.base;
+    dest->path.base = dest->authority.base + dest->authority.len;
+    dest->path.len = ret.base + ret.len - dest->path.base;
+
+    return ret;
+}

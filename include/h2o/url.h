@@ -55,12 +55,30 @@ h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_
  * parses absolute URL (either http or https)
  */
 int h2o_url_parse(const char *url, size_t url_len, h2o_url_t *result);
+/**
+ * parses relative URL
+ */
+int h2o_url_parse_relative(const char *url, size_t url_len, h2o_url_t *result);
+/**
+ * resolves the URL
+ */
+h2o_iovec_t h2o_url_resolve(h2o_mem_pool_t *pool, const h2o_url_t *base, const h2o_url_t *relative, h2o_url_t *dest);
+/**
+ * stringifies the URL
+ */
+static h2o_iovec_t h2o_url_stringify(h2o_mem_pool_t *pool, const h2o_url_t *url);
 
 /* inline definitions */
 
 inline uint16_t h2o_url_get_port(const h2o_url_t *url)
 {
     return url->_port != 65535 ? url->_port : url->scheme->default_port;
+}
+
+inline h2o_iovec_t h2o_url_stringify(h2o_mem_pool_t *pool, const h2o_url_t *url)
+{
+    h2o_url_t tmp;
+    return h2o_url_resolve(pool, url, NULL, &tmp);
 }
 
 #endif
