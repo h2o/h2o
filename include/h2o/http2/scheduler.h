@@ -31,8 +31,8 @@
  */
 typedef struct h2o_http2_scheduler_slot_t {
     uint16_t weight;
-    h2o_linklist_t _all_refs;    /* all openrefs */
-    h2o_linklist_t _active_refs; /* openrefs that have data, that can be sent (incl. the dependents) */
+    h2o_linklist_t _all_refs;  /* all openrefs */
+    h2o_linklist_t _wait_refs; /* openrefs that have data, that can be sent (incl. the dependents) (but not in _run_refs) */
 } h2o_http2_scheduler_slot_t;
 
 /**
@@ -43,6 +43,8 @@ typedef struct st_h2o_http2_scheduler_node_t {
     struct st_h2o_http2_scheduler_node_t *_parent;  /* NULL if root */
     h2o_http2_scheduler_slot_t *_slot;              /* slot within parent, or NULL if root */
     H2O_VECTOR(h2o_http2_scheduler_slot_t *) _list; /* presorted list of slots in descending order of weight */
+    h2o_linklist_t _run_refs;                       /* the run queue */
+    uint64_t _rand_state[2];
 } h2o_http2_scheduler_node_t;
 
 /**
@@ -51,7 +53,7 @@ typedef struct st_h2o_http2_scheduler_node_t {
 typedef struct st_h2o_http2_scheduler_openref_t {
     h2o_http2_scheduler_node_t node;
     h2o_linklist_t _all_link;    /* linked to _all_refs */
-    h2o_linklist_t _active_link; /* linked to _active_refs if is active */
+    h2o_linklist_t _active_link; /* linked to _run_refs or _wait_refs if is active */
     size_t _active_cnt;          /* COUNT(active_streams_in_dependents) + _self_is_active */
     int _self_is_active;
 } h2o_http2_scheduler_openref_t;
@@ -65,7 +67,10 @@ typedef struct st_h2o_http2_scheduler_openref_t {
  */
 typedef int (*h2o_http2_scheduler_run_cb)(h2o_http2_scheduler_openref_t *ref, int *still_is_active, void *cb_arg);
 
-/* void h2o_http2_scheduler_init(h2o_http2_scheduler_node_t *root); (zero-clear is sufficient for the time being) */
+/**
+ * initializes the scheduler
+ */
+void h2o_http2_scheduler_init(h2o_http2_scheduler_node_t *root);
 
 /**
  * disposes of the scheduler.  All open references belonging to the node must be closed before calling this functions.

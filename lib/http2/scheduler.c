@@ -22,10 +22,25 @@
 #include "h2o.h"
 #include "h2o/http2.h"
 
+static void init_node(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_node_t *parent, h2o_http2_scheduler_slot_t *slot)
+{
+    *node = (h2o_http2_scheduler_node_t){
+        parent,                                  /* _parent */
+        slot,                                    /* _slot */
+        {},                                      /* _list */
+        {},                                      /* _run_refs */
+        {0x536c6005dfa85e15, 0x8fa5832dd420e956} /* _rand_state */
+    };
+    h2o_linklist_init_anchor(&node->_run_refs);
+}
+
 static h2o_http2_scheduler_slot_t *get_or_create_slot(h2o_http2_scheduler_node_t *node, uint16_t weight)
 {
     h2o_http2_scheduler_slot_t *slot;
     size_t i;
+
+    assert(1 <= weight);
+    assert(weight <= 256);
 
     /* locate the slot */
     for (i = 0; i != node->_list.size; ++i) {
@@ -40,7 +55,7 @@ static h2o_http2_scheduler_slot_t *get_or_create_slot(h2o_http2_scheduler_node_t
     slot = h2o_mem_alloc(sizeof(*slot));
     slot->weight = weight;
     h2o_linklist_init_anchor(&slot->_all_refs);
-    h2o_linklist_init_anchor(&slot->_active_refs);
+    h2o_linklist_init_anchor(&slot->_wait_refs);
     h2o_vector_reserve(NULL, (h2o_vector_t *)&node->_list, sizeof(node->_list.entries[0]), node->_list.size + 1);
     memmove(node->_list.entries + i + 1, node->_list.entries + i, sizeof(node->_list.entries[0]) * (node->_list.size - i));
     node->_list.entries[i] = slot;
@@ -61,9 +76,9 @@ static void incr_active_cnt(h2o_http2_scheduler_node_t *node)
     ref = (h2o_http2_scheduler_openref_t *)node;
     if (++ref->_active_cnt != 1)
         return;
-    /* just changed to active */
+    /* now changing to active */
     assert(!h2o_linklist_is_linked(&ref->_active_link));
-    h2o_linklist_insert(&ref->node._slot->_active_refs, &ref->_active_link);
+    h2o_linklist_insert(&ref->node._slot->_wait_refs, &ref->_active_link);
     /* delegate the change towards root */
     incr_active_cnt(ref->node._parent);
 }
@@ -110,7 +125,12 @@ void h2o_http2_scheduler_open(h2o_http2_scheduler_openref_t *ref, h2o_http2_sche
 {
     h2o_http2_scheduler_slot_t *slot = get_or_create_slot(parent, weight);
 
-    *ref = (h2o_http2_scheduler_openref_t){{parent, slot}};
+    init_node(&ref->node, parent, slot);
+    ref->_all_link = (h2o_linklist_t){};
+    ref->_active_link = (h2o_linklist_t){};
+    ref->_active_cnt = 0;
+    ref->_self_is_active = 0;
+
     h2o_linklist_insert(&slot->_all_refs, &ref->_all_link);
 
     if (exclusive)
@@ -158,7 +178,7 @@ static void do_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_no
     /* rebind _active_link (as well as adjust active_cnt) */
     if (h2o_linklist_is_linked(&ref->_active_link)) {
         h2o_linklist_unlink(&ref->_active_link);
-        h2o_linklist_insert(&new_slot->_active_refs, &ref->_active_link);
+        h2o_linklist_insert(&new_slot->_wait_refs, &ref->_active_link);
         decr_active_cnt(ref->node._parent);
         incr_active_cnt(new_parent);
     }
@@ -196,6 +216,11 @@ void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_sc
     do_rebind(ref, new_parent, weight, exclusive);
 }
 
+void h2o_http2_scheduler_init(h2o_http2_scheduler_node_t *root)
+{
+    init_node(root, NULL, NULL);
+}
+
 void h2o_http2_scheduler_dispose(h2o_http2_scheduler_node_t *root)
 {
     if (root->_list.size != 0) {
@@ -216,56 +241,88 @@ void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref)
     incr_active_cnt(&ref->node);
 }
 
+static uint64_t xorshift128plus(uint64_t s[2])
+{
+    /*
+    xorshift128+ (paper: http://arxiv.org/abs/1404.0390)
+    copied from http://xorshift.di.unimi.it/xorshift128plus.c under the following license
+
+    Written in 2014 by Sebastiano Vigna (vigna@acm.org)
+
+    To the extent possible under law, the author has dedicated all copyright
+    and related and neighboring rights to this software to the public domain
+    worldwide. This software is distributed without any warranty.
+
+    See <http://creativecommons.org/publicdomain/zero/1.0/>.
+    */
+	uint64_t s1 = s[0];
+	const uint64_t s0 = s[ 1];
+	s[ 0 ] = s0;
+	s1 ^= s1 << 23; // a
+	return ( s[ 1 ] = ( s1 ^ s0 ^ ( s1 >> 17 ) ^ ( s0 >> 26 ) ) ) + s0; // b, c
+}
+
 static int run_once(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_run_cb cb, void *cb_arg, size_t *num_touched)
 {
-    h2o_http2_scheduler_slot_t *slot = NULL;
-    h2o_linklist_t *readded_first = NULL;
-    size_t slot_index;
+    /* promote non-empty wait_refs of the heighest priority to the run_refs (if run_refs is empty) */
+    if (h2o_linklist_is_empty(&node->_run_refs)) {
+        h2o_http2_scheduler_slot_t *slot;
+        size_t slot_index;
+        uint16_t min_promote_weight;
+        for (slot_index = 0; slot_index != node->_list.size; ++slot_index) {
+            slot = node->_list.entries[slot_index];
+            if (!h2o_linklist_is_empty(&slot->_wait_refs))
+                goto FoundActiveSlot;
+        }
+        /* no active nodes */
+        return 0;
+    FoundActiveSlot:
+        /* promote _wait_refs above a random value to _run_refs */
+#ifdef H2O_UNITTEST
+        min_promote_weight = slot->weight - 1;
+#else
+        min_promote_weight = xorshift128plus(node->_rand_state) % slot->weight;
+#endif
+        while (1) {
+            h2o_linklist_insert_list(&node->_run_refs, &slot->_wait_refs);
+            for (++slot_index; ; ++slot_index) {
+                if (slot_index == node->_list.size)
+                    goto EndPromote;
+                slot = node->_list.entries[slot_index];
+                if (slot->weight <= min_promote_weight)
+                    goto EndPromote;
+                if (!h2o_linklist_is_empty(&slot->_wait_refs))
+                    break;
+            }
+        }
+    EndPromote:
+        ;
+    }
+
     int bail_out = 0;
 
-    /* find the first active slot, or return */
-    for (slot_index = 0; slot_index != node->_list.size; ++slot_index) {
-        slot = node->_list.entries[slot_index];
-        if (!h2o_linklist_is_empty(&slot->_active_refs))
-            goto SlotIsActive;
-    }
-    return 0;
-
-SlotIsActive:
-    /* handle all the active refs within slot once */
-    readded_first = NULL;
+    /* execute the nodes in _run_refs */
     do {
         h2o_http2_scheduler_openref_t *ref =
-            H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _active_link, slot->_active_refs.next);
+            H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _active_link, node->_run_refs.next);
+        h2o_linklist_unlink(&ref->_active_link);
+        h2o_linklist_insert(&ref->node._slot->_wait_refs, &ref->_active_link);
         if (ref->_self_is_active) {
             /* call the callbacks */
             int still_is_active;
             assert(ref->_active_cnt != 0);
             bail_out = cb(ref, &still_is_active, cb_arg);
             ++*num_touched;
-            if (still_is_active) {
-                h2o_linklist_unlink(&ref->_active_link);
-                h2o_linklist_insert(&slot->_active_refs, &ref->_active_link);
-                if (readded_first == NULL)
-                    readded_first = &ref->_active_link;
-            } else {
+            /* adjust the state if it is going inactive */
+            if (!still_is_active) {
                 ref->_self_is_active = 0;
                 decr_active_cnt(&ref->node);
-                if (ref->_active_cnt != 0) {
-                    /* relink to the end */
-                    h2o_linklist_unlink(&ref->_active_link);
-                    h2o_linklist_insert(&slot->_active_refs, &ref->_active_link);
-                }
             }
         } else {
             /* run the children */
-            h2o_linklist_unlink(&ref->_active_link);
-            h2o_linklist_insert(&slot->_active_refs, &ref->_active_link);
             bail_out = run_once(&ref->node, cb, cb_arg, num_touched);
-            if (readded_first == NULL && h2o_linklist_is_linked(&ref->_active_link))
-                readded_first = &ref->_active_link;
         }
-    } while (!bail_out && !h2o_linklist_is_empty(&slot->_active_refs) && slot->_active_refs.next != readded_first);
+    } while (!bail_out && !h2o_linklist_is_empty(&node->_run_refs));
 
     return bail_out;
 }
