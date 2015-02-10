@@ -26,12 +26,12 @@
 #include "h2o/linklist.h"
 #include "h2o/memory.h"
 
-typedef struct st_h2o_http2_scheduler_drr_node_t {
+typedef struct st_h2o_http2_scheduler_queue_node_t {
     h2o_linklist_t _link;
     size_t _deficit;
-} h2o_http2_scheduler_drr_node_t;
+} h2o_http2_scheduler_queue_node_t;
 
-typedef struct st_h2o_http2_scheduler_drr_t h2o_http2_scheduler_drr_t;
+typedef struct st_h2o_http2_scheduler_queue_t h2o_http2_scheduler_queue_t;
 
 /**
  * resembles a node in the dependency tree; i.e. assigned for each HTTP/2 stream (as a member of openref), or the root of the tree
@@ -40,7 +40,7 @@ typedef struct st_h2o_http2_scheduler_drr_t h2o_http2_scheduler_drr_t;
 typedef struct st_h2o_http2_scheduler_node_t {
     struct st_h2o_http2_scheduler_node_t *_parent; /* NULL if root */
     h2o_linklist_t _all_refs;                      /* list of nodes */
-    h2o_http2_scheduler_drr_t *_drr;               /* priority list (NULL if _all_refs is empty) */
+    h2o_http2_scheduler_queue_t *_queue;               /* priority list (NULL if _all_refs is empty) */
 } h2o_http2_scheduler_node_t;
 
 /**
@@ -52,7 +52,7 @@ typedef struct st_h2o_http2_scheduler_openref_t {
     h2o_linklist_t _all_link; /* linked to _all_refs */
     size_t _active_cnt;       /* COUNT(active_streams_in_dependents) + _self_is_active */
     int _self_is_active;
-    h2o_http2_scheduler_drr_node_t _drr_node;
+    h2o_http2_scheduler_queue_node_t _queue_node;
 } h2o_http2_scheduler_openref_t;
 
 /**

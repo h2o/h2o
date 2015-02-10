@@ -22,22 +22,22 @@
 #include "h2o.h"
 #include "h2o/http2.h"
 
-struct st_h2o_http2_scheduler_drr_t {
+struct st_h2o_http2_scheduler_queue_t {
     uint64_t bits;
     size_t offset;
     h2o_linklist_t anchors[64];
 };
 
-static void drr_init(h2o_http2_scheduler_drr_t *drr)
+static void queue_init(h2o_http2_scheduler_queue_t *queue)
 {
     size_t i;
-    drr->bits = 0;
-    drr->offset = 0;
-    for (i = 0; i != sizeof(drr->anchors) / sizeof(drr->anchors[0]); ++i)
-        h2o_linklist_init_anchor(drr->anchors + i);
+    queue->bits = 0;
+    queue->offset = 0;
+    for (i = 0; i != sizeof(queue->anchors) / sizeof(queue->anchors[0]); ++i)
+        h2o_linklist_init_anchor(queue->anchors + i);
 }
 
-static void drr_set(h2o_http2_scheduler_drr_t *drr, h2o_http2_scheduler_drr_node_t *node, uint16_t weight)
+static void queue_set(h2o_http2_scheduler_queue_t *queue, h2o_http2_scheduler_queue_node_t *node, uint16_t weight)
 {
     /* holds 257 entries of offsets (multiplied by 65536) where nodes with weights between 1..257 should go into
      * each entry (expect for weight=256) is calculated as: round(2**(8 - log2(weight)) * N), where N is adjusted so that the
@@ -72,31 +72,31 @@ static void drr_set(h2o_http2_scheduler_drr_t *drr, h2o_http2_scheduler_drr_node
     node->_deficit = offset % 65536;
     offset = offset / 65536;
 
-    drr->bits |= 1ULL << (sizeof(drr->bits) * 8 - 1 - offset);
-    h2o_linklist_insert(drr->anchors + (drr->offset + offset) % (sizeof(drr->anchors) / sizeof(drr->anchors[0])), &node->_link);
+    queue->bits |= 1ULL << (sizeof(queue->bits) * 8 - 1 - offset);
+    h2o_linklist_insert(queue->anchors + (queue->offset + offset) % (sizeof(queue->anchors) / sizeof(queue->anchors[0])), &node->_link);
 }
 
-static void drr_unset(h2o_http2_scheduler_drr_node_t *node)
+static void queue_unset(h2o_http2_scheduler_queue_node_t *node)
 {
     assert(h2o_linklist_is_linked(&node->_link));
     h2o_linklist_unlink(&node->_link);
 }
 
-static h2o_http2_scheduler_drr_node_t *drr_pop(h2o_http2_scheduler_drr_t *drr)
+static h2o_http2_scheduler_queue_node_t *queue_pop(h2o_http2_scheduler_queue_t *queue)
 {
-    while (drr->bits != 0) {
-        int zeroes = __builtin_clzll(drr->bits);
-        drr->bits <<= zeroes;
-        drr->offset = (drr->offset + zeroes) % (sizeof(drr->anchors) / sizeof(drr->anchors[0]));
-        if (!h2o_linklist_is_empty(drr->anchors + drr->offset)) {
-            h2o_http2_scheduler_drr_node_t *node =
-                H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_drr_node_t, _link, drr->anchors[drr->offset].next);
+    while (queue->bits != 0) {
+        int zeroes = __builtin_clzll(queue->bits);
+        queue->bits <<= zeroes;
+        queue->offset = (queue->offset + zeroes) % (sizeof(queue->anchors) / sizeof(queue->anchors[0]));
+        if (!h2o_linklist_is_empty(queue->anchors + queue->offset)) {
+            h2o_http2_scheduler_queue_node_t *node =
+                H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_queue_node_t, _link, queue->anchors[queue->offset].next);
             h2o_linklist_unlink(&node->_link);
-            if (h2o_linklist_is_empty(drr->anchors + drr->offset))
-                drr->bits &= (1ULL << (sizeof(drr->bits) * 8 - 1)) - 1;
+            if (h2o_linklist_is_empty(queue->anchors + queue->offset))
+                queue->bits &= (1ULL << (sizeof(queue->bits) * 8 - 1)) - 1;
             return node;
         }
-        drr->bits &= (1ULL << (sizeof(drr->bits) * 8 - 1)) - 1;
+        queue->bits &= (1ULL << (sizeof(queue->bits) * 8 - 1)) - 1;
     }
     return NULL;
 }
@@ -107,13 +107,13 @@ static void init_node(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_node
     h2o_linklist_init_anchor(&node->_all_refs);
 }
 
-static h2o_http2_scheduler_drr_t *get_drr(h2o_http2_scheduler_node_t *node)
+static h2o_http2_scheduler_queue_t *get_queue(h2o_http2_scheduler_node_t *node)
 {
-    if (node->_drr == NULL) {
-        node->_drr = malloc(sizeof(*node->_drr));
-        drr_init(node->_drr);
+    if (node->_queue == NULL) {
+        node->_queue = malloc(sizeof(*node->_queue));
+        queue_init(node->_queue);
     }
-    return node->_drr;
+    return node->_queue;
 }
 
 static void incr_active_cnt(h2o_http2_scheduler_node_t *node)
@@ -128,7 +128,7 @@ static void incr_active_cnt(h2o_http2_scheduler_node_t *node)
     if (++ref->_active_cnt != 1)
         return;
     /* just changed to active */
-    drr_set(get_drr(ref->node._parent), &ref->_drr_node, ref->weight);
+    queue_set(get_queue(ref->node._parent), &ref->_queue_node, ref->weight);
     /* delegate the change towards root */
     incr_active_cnt(ref->node._parent);
 }
@@ -145,7 +145,7 @@ static void decr_active_cnt(h2o_http2_scheduler_node_t *node)
     if (--ref->_active_cnt != 0)
         return;
     /* just changed to inactive */
-    drr_unset(&ref->_drr_node);
+    queue_unset(&ref->_queue_node);
     /* delegate the change towards root */
     decr_active_cnt(ref->node._parent);
 }
@@ -172,7 +172,7 @@ void h2o_http2_scheduler_open(h2o_http2_scheduler_openref_t *ref, h2o_http2_sche
     ref->_all_link = (h2o_linklist_t){};
     ref->_active_cnt = 0;
     ref->_self_is_active = 0;
-    ref->_drr_node = (h2o_http2_scheduler_drr_node_t){};
+    ref->_queue_node = (h2o_http2_scheduler_queue_node_t){};
 
     h2o_linklist_insert(&parent->_all_refs, &ref->_all_link);
 
@@ -194,14 +194,14 @@ void h2o_http2_scheduler_close(h2o_http2_scheduler_openref_t *ref)
         } while (!h2o_linklist_is_empty(&ref->node._all_refs));
     }
 
-    free(ref->node._drr);
-    ref->node._drr = NULL;
+    free(ref->node._queue);
+    ref->node._queue = NULL;
 
     /* detach self */
     h2o_linklist_unlink(&ref->_all_link);
     if (ref->_self_is_active) {
         assert(ref->_active_cnt == 1);
-        drr_unset(&ref->_drr_node);
+        queue_unset(&ref->_queue_node);
         decr_active_cnt(ref->node._parent);
     } else {
         assert(ref->_active_cnt == 0);
@@ -215,8 +215,8 @@ static void do_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_no
     h2o_linklist_insert(&new_parent->_all_refs, &ref->_all_link);
     /* rebind to WRR (as well as adjust active_cnt) */
     if (ref->_active_cnt != 0) {
-        drr_unset(&ref->_drr_node);
-        drr_set(get_drr(new_parent), &ref->_drr_node, ref->weight);
+        queue_unset(&ref->_queue_node);
+        queue_set(get_queue(new_parent), &ref->_queue_node, ref->weight);
         decr_active_cnt(ref->node._parent);
         incr_active_cnt(new_parent);
     }
@@ -262,8 +262,8 @@ void h2o_http2_scheduler_init(h2o_http2_scheduler_node_t *root)
 
 void h2o_http2_scheduler_dispose(h2o_http2_scheduler_node_t *root)
 {
-    free(root->_drr);
-    root->_drr = NULL;
+    free(root->_queue);
+    root->_queue = NULL;
 }
 
 void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref)
@@ -275,14 +275,14 @@ void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref)
 
 static int run_once(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_run_cb cb, void *cb_arg, size_t *num_touched)
 {
-    if (node->_drr == NULL)
+    if (node->_queue == NULL)
         return 0;
 
-    h2o_http2_scheduler_drr_node_t *drr_node = drr_pop(node->_drr);
+    h2o_http2_scheduler_queue_node_t *drr_node = queue_pop(node->_queue);
     if (drr_node == NULL)
         return 0;
 
-    h2o_http2_scheduler_openref_t *ref = H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _drr_node, drr_node);
+    h2o_http2_scheduler_openref_t *ref = H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _queue_node, drr_node);
     int bail_out = 0;
     if (ref->_self_is_active) {
         /* call the callbacks */
@@ -291,18 +291,18 @@ static int run_once(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_run_cb
         bail_out = cb(ref, &still_is_active, cb_arg);
         ++*num_touched;
         if (still_is_active) {
-            drr_set(node->_drr, &ref->_drr_node, ref->weight);
+            queue_set(node->_queue, &ref->_queue_node, ref->weight);
         } else {
             ref->_self_is_active = 0;
             if (--ref->_active_cnt != 0) {
-                drr_set(node->_drr, &ref->_drr_node, ref->weight);
+                queue_set(node->_queue, &ref->_queue_node, ref->weight);
             } else if (ref->node._parent != NULL) {
                 decr_active_cnt(ref->node._parent);
             }
         }
     } else {
         /* run the children */
-        drr_set(node->_drr, &ref->_drr_node, ref->weight);
+        queue_set(node->_queue, &ref->_queue_node, ref->weight);
         bail_out = run_once(&ref->node, cb, cb_arg, num_touched);
     }
 
