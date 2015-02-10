@@ -1,5 +1,7 @@
 Revision history for H2O.
 
+0.9.3 TBD
+
 0.9.2 2015-02-10 04:17:00+0000
 	- [core] graceful shutdown on SIGTERM #119 (Kazuho Oku)
 	- [core] less TCP errors under high load #81 (Kazuho Oku)
