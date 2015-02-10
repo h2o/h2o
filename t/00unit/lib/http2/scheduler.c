@@ -231,14 +231,14 @@ static void test_dependency(void)
     h2o_http2_scheduler_run(&root, iterate_cb, NULL);
     ok(strcmp(output, "D,B,C,D,D,D,C,D,D,C,D,D,D,C,D,D,C,D,D,D") == 0);
 
-    /* closing A raises D, and the priority becomes B -> C -> D */
+    /* closing A raises D, and the priority becomes D = B > C */
     h2o_http2_scheduler_close(&nodeA.ref);
     h2o_http2_scheduler_activate(&nodeB.ref);
     nodeB.still_is_active = 1;
     output[0] = '\0';
     max_cnt = 20;
     h2o_http2_scheduler_run(&root, iterate_cb, NULL);
-    ok(strcmp(output, "C,B,B,B,C,B,D,B,C,B,B,B,C,B,B,D,B,C,B,B") == 0);
+    ok(strcmp(output, "D,C,B,D,B,D,B,C,D,B,D,B,D,C,B,D,B,D,B,C") == 0);
 
     h2o_http2_scheduler_close(&nodeB.ref);
     h2o_http2_scheduler_close(&nodeC.ref);
