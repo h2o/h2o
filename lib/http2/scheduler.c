@@ -39,7 +39,11 @@ static void drr_init(h2o_http2_scheduler_drr_t *drr)
 
 static void drr_set(h2o_http2_scheduler_drr_t *drr, h2o_http2_scheduler_drr_node_t *node, uint16_t weight)
 {
-    /* elements should go into OFFSET_TABLE[priority] / 65536; calculated as: round(2**(8 - log2(weight)) * 16128) */
+    /* holds 257 entries of offsets (multiplied by 65536) where nodes with weights between 1..257 should go into
+     * each entry (expect for weight=256) is calculated as: round(2**(8 - log2(weight)) * N), where N is adjusted so that the
+     * value would become 63*65536 for weight=0.
+     * weight=257 is used internally to send data before any of the streams being pulled, and therefore has the offset set to zero.
+     */
     static const unsigned OFFSET_TABLE[] = {
         4128768, 2064384, 1376256, 1032192, 825754, 688128, 589824, 516096, 458752, 412877, 375343, 344064, 317598, 294912, 275251,
         258048,  242869,  229376,  217304,  206438, 196608, 187671, 179512, 172032, 165151, 158799, 152917, 147456, 142371, 137626,
@@ -64,8 +68,8 @@ static void drr_set(h2o_http2_scheduler_drr_t *drr, h2o_http2_scheduler_drr_node
     assert(1 <= weight);
     assert(weight <= 257);
 
-    size_t offset = OFFSET_TABLE[weight - 1] + node->_priority_adjustment;
-    node->_priority_adjustment = offset % 65536;
+    size_t offset = OFFSET_TABLE[weight - 1] + node->_deficit;
+    node->_deficit = offset % 65536;
     offset = offset / 65536;
 
     drr->bits |= 1ULL << (sizeof(drr->bits) * 8 - 1 - offset);

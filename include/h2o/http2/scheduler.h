@@ -28,7 +28,7 @@
 
 typedef struct st_h2o_http2_scheduler_drr_node_t {
     h2o_linklist_t _link;
-    size_t _priority_adjustment;
+    size_t _deficit;
 } h2o_http2_scheduler_drr_node_t;
 
 typedef struct st_h2o_http2_scheduler_drr_t h2o_http2_scheduler_drr_t;
