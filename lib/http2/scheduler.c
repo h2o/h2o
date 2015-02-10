@@ -37,6 +37,11 @@ static void queue_init(h2o_http2_scheduler_queue_t *queue)
         h2o_linklist_init_anchor(queue->anchors + i);
 }
 
+static int queue_is_empty(h2o_http2_scheduler_queue_t *queue)
+{
+    return queue->bits == 0;
+}
+
 static void queue_set(h2o_http2_scheduler_queue_t *queue, h2o_http2_scheduler_queue_node_t *node, uint16_t weight)
 {
     /* holds 257 entries of offsets (multiplied by 65536) where nodes with weights between 1..257 should go into
@@ -273,8 +278,9 @@ void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref)
     incr_active_cnt(&ref->node);
 }
 
-static int run_once(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_run_cb cb, void *cb_arg, size_t *num_touched)
+static int proceed(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_run_cb cb, void *cb_arg)
 {
+Redo:
     if (node->_queue == NULL)
         return 0;
 
@@ -283,27 +289,26 @@ static int run_once(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_run_cb
         return 0;
 
     h2o_http2_scheduler_openref_t *ref = H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _queue_node, drr_node);
-    int bail_out = 0;
-    if (ref->_self_is_active) {
-        /* call the callbacks */
-        int still_is_active;
-        assert(ref->_active_cnt != 0);
-        bail_out = cb(ref, &still_is_active, cb_arg);
-        ++*num_touched;
-        if (still_is_active) {
-            queue_set(node->_queue, &ref->_queue_node, ref->weight);
-        } else {
-            ref->_self_is_active = 0;
-            if (--ref->_active_cnt != 0) {
-                queue_set(node->_queue, &ref->_queue_node, ref->weight);
-            } else if (ref->node._parent != NULL) {
-                decr_active_cnt(ref->node._parent);
-            }
-        }
-    } else {
-        /* run the children */
+
+    if (!ref->_self_is_active) {
+        /* run the children (manually-unrolled tail recursion) */
         queue_set(node->_queue, &ref->_queue_node, ref->weight);
-        bail_out = run_once(&ref->node, cb, cb_arg, num_touched);
+        node = &ref->node;
+        goto Redo;
+    }
+    assert(ref->_active_cnt != 0);
+
+    /* call the callbacks */
+    int still_is_active, bail_out = cb(ref, &still_is_active, cb_arg);
+    if (still_is_active) {
+        queue_set(node->_queue, &ref->_queue_node, ref->weight);
+    } else {
+        ref->_self_is_active = 0;
+        if (--ref->_active_cnt != 0) {
+            queue_set(node->_queue, &ref->_queue_node, ref->weight);
+        } else if (ref->node._parent != NULL) {
+            decr_active_cnt(ref->node._parent);
+        }
     }
 
     return bail_out;
@@ -311,13 +316,12 @@ static int run_once(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_run_cb
 
 int h2o_http2_scheduler_run(h2o_http2_scheduler_node_t *root, h2o_http2_scheduler_run_cb cb, void *cb_arg)
 {
-    int bail_out = 0;
-    size_t num_touched;
-
-    do {
-        num_touched = 0;
-        bail_out = run_once(root, cb, cb_arg, &num_touched);
-    } while (!bail_out && num_touched != 0);
-
-    return bail_out;
+    if (root->_queue != NULL) {
+        while (!queue_is_empty(root->_queue)) {
+            int bail_out = proceed(root, cb, cb_arg);
+            if (bail_out)
+                return bail_out;
+        }
+    }
+    return 0;
 }
