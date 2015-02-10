@@ -58,11 +58,11 @@ static void drr_set(h2o_http2_scheduler_drr_t *drr, h2o_http2_scheduler_drr_node
         19568,   19475,   19384,   19293,   19204,  19115,  19027,  18939,  18853,  18767,  18682,  18598,  18515,  18432,  18350,
         18269,   18188,   18109,   18030,   17951,  17873,  17796,  17720,  17644,  17569,  17495,  17421,  17348,  17275,  17203,
         17132,   17061,   16991,   16921,   16852,  16784,  16716,  16648,  16581,  16515,  16449,  16384,  16319,  16255,  16191,
-        16128};
+        16128,   0};
 
     assert(!h2o_linklist_is_linked(&node->_link));
     assert(1 <= weight);
-    assert(weight <= 256);
+    assert(weight <= 257);
 
     size_t offset = OFFSET_TABLE[weight - 1] + node->_priority_adjustment;
     node->_priority_adjustment = offset % 65536;
