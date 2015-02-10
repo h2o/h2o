@@ -933,7 +933,6 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
         if (h2o_http2_window_get_window(&stream->output_window) <= 0) {
             /* is blocked */
         } else {
-            assert(h2o_http2_conn_get_buffer_window(conn) <= 0);
             *still_is_active = 1;
         }
     } else {
@@ -982,6 +981,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_socket_t *sock, str
     conn->sock = sock;
     conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
     conn->streams = kh_init(h2o_http2_stream_t);
+    h2o_http2_scheduler_init(&conn->scheduler);
     conn->state = H2O_HTTP2_CONN_STATE_OPEN;
     h2o_linklist_insert(&ctx->http2._conns, &conn->_conns);
     conn->_read_expect = expect_preface;
