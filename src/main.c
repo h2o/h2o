@@ -339,9 +339,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                               yoml_t *ssl_node, struct listener_config_t *listener, int listener_is_new)
 {
     SSL_CTX *ssl_ctx = NULL;
-    yoml_t *certificate_file = NULL, *key_file = NULL, *minimum_version = NULL, *cipher_suite = NULL, *ocsp_update_cmd = NULL,
-           *ocsp_update_interval_node = NULL, *ocsp_max_failures_node = NULL;
-    yoml_t *dh_file = NULL;
+    yoml_t *certificate_file = NULL, *key_file = NULL, *dh_file = NULL, *minimum_version = NULL, *cipher_suite = NULL,
+           *ocsp_update_cmd = NULL, *ocsp_update_interval_node = NULL, *ocsp_max_failures_node = NULL;
     long ssl_options = SSL_OP_ALL;
     uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
     unsigned ocsp_max_failures = 3;              /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
@@ -1102,7 +1101,7 @@ static void setup_configurators(void)
                                         "                         SSLv3, TLSv1, TLSv1.1, TLSv1.2 (default: TLSv1)\n"
                                         "       cipher-suite:     list of cipher suites to be passed to OpenSSL via\n"
                                         "                         SSL_CTX_set_cipher_list (optional)\n"
-                                        "       dh-file:          PEM file of dhparam to use\n"
+                                        "       dh-file:          PEM file of dhparam to use (optional)\n"
                                         "       ocsp-update-interval:\n"
                                         "                         interval for updating the OCSP stapling data (in\n"
                                         "                         seconds), or set to zero to disable OCSP stapling\n"
