@@ -851,6 +851,22 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, const char *host
  */
 void h2o_proxy_register_configurator(h2o_globalconf_t *conf);
 
+/* lib/redirect.c */
+
+typedef struct st_h2o_redirect_handler_t h2o_redirect_handler_t;
+
+/**
+ * registers the redirect handler to the context
+ * @param pathconf
+ * @param status status code to be sent (e.g. 301, 303, 308, ...)
+ * @param prefix prefix of the destitation URL
+ */
+h2o_redirect_handler_t *h2o_redirect_register(h2o_pathconf_t *pathconf, int status, const char *prefix);
+/**
+ * registers the configurator
+ */
+void h2o_redirect_register_configurator(h2o_globalconf_t *conf);
+
 /* inline defs */
 
 inline void h2o_proceed_response(h2o_req_t *req)

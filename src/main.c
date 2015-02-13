@@ -1129,6 +1129,7 @@ static void setup_configurators(void)
     h2o_expires_register_configurator(&conf.globalconf);
     h2o_file_register_configurator(&conf.globalconf);
     h2o_proxy_register_configurator(&conf.globalconf);
+    h2o_redirect_register_configurator(&conf.globalconf);
 }
 
 int main(int argc, char **argv)
