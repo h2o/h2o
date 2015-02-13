@@ -143,7 +143,9 @@ void h2o_process_request(h2o_req_t *req)
         if (req->path_normalized.len >= confpath_wo_slash &&
             memcmp(req->path_normalized.base, pathconf->path.base, confpath_wo_slash) == 0) {
             if (req->path_normalized.len == confpath_wo_slash) {
-                h2o_send_redirect(req, 301, "Moved Permanently", pathconf->path.base, pathconf->path.len);
+                h2o_iovec_t dest =
+                     h2o_concat(&req->pool, req->scheme->name, h2o_iovec_init(H2O_STRLIT("://")), req->authority, pathconf->path);
+                h2o_send_redirect(req, 301, "Moved Permanently", dest.base, dest.len);
                 return;
             }
             if (req->path_normalized.base[confpath_wo_slash] == '/') {
@@ -246,27 +248,25 @@ void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *
     h2o_send_inline(req, body, SIZE_MAX);
 }
 
-void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const char *path, size_t path_len)
+void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const char *url, size_t url_len)
 {
     static h2o_generator_t generator = {NULL, NULL};
     static const h2o_iovec_t body_prefix = {
         H2O_STRLIT("<!DOCTYPE html><TITLE>Moved</TITLE><P>The document has moved <A HREF=\"")};
     static const h2o_iovec_t body_suffix = {H2O_STRLIT("\">here</A>")};
 
-    h2o_iovec_t url = h2o_concat(&req->pool, req->scheme->name, (h2o_iovec_t){H2O_STRLIT("://")}, req->authority,
-                                 (h2o_iovec_t){(char*)path, path_len});
     h2o_iovec_t bufs[3];
 
     /* build response header */
     req->res.status = status;
     req->res.reason = reason;
     req->res.headers = (h2o_headers_t){};
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LOCATION, url.base, url.len);
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LOCATION, url, url_len);
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/html; charset=utf-8"));
 
     /* build response */
     bufs[0] = body_prefix;
-    bufs[1] = h2o_htmlescape(&req->pool, url.base, url.len);
+    bufs[1] = h2o_htmlescape(&req->pool, url, url_len);
     bufs[2] = body_suffix;
 
     /* send */

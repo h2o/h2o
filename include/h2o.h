@@ -715,7 +715,7 @@ void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *
 /**
  * sends a redirect response
  */
-void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const char *path, size_t path_len);
+void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const char *url, size_t url_len);
 
 /* mime mapper */
 
