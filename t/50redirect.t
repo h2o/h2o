@@ -27,6 +27,6 @@ sub doit {
 doit("http://127.0.0.1:$server->{port}/foo", 302, "https://example.com/foo");
 doit("https://127.0.0.1:$server->{tls_port}/foo", 302, "https://example.com/foo");
 doit("http://127.0.0.1:$server->{port}/abc/foo", 301, "http://example.net/bar/foo");
-doit("http://127.0.0.1:$server->{port}/foo?abc=def", 302, "https://example.com/foo?abc=def");
+doit("http://127.0.0.1:$server->{port}/foo?abc=def", 302, qr{https://example.com/foo\?abc=def});
 
 done_testing;
