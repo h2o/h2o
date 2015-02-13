@@ -341,7 +341,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
             goto Opened;
         if (is_dir) {
             h2o_iovec_t dest = h2o_concat(&req->pool, req->scheme->name, h2o_iovec_init(H2O_STRLIT("://")), req->authority,
-                                          req->path_normalized, H2O_STRLIT("/"));
+                                          req->path_normalized, h2o_iovec_init(H2O_STRLIT("/")));
             h2o_send_redirect(req, 301, "Moved Permanently", dest.base, dest.len);
             return 0;
         }
