@@ -48,9 +48,10 @@ static uint16_t h2o_url_get_port(const h2o_url_t *url);
  * @param pool memory pool to be used in case the path contained references to directories
  * @param path source path
  * @param len source length
+ * @param returns offset of '?' within `path` if found, or SIZE_MAX if not
  * @return buffer pointing to source, or buffer pointing to an allocated chunk with normalized representation of the given path
  */
-h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t len);
+h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t len, size_t *query_at);
 /**
  * parses absolute URL (either http or https)
  */

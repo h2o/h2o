@@ -322,9 +322,9 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
             }
             if (is_dir) {
                 /* note: apache redirects "path/" to "path/index.txt/" if index.txt is a dir */
-                h2o_iovec_t slashed = h2o_concat(&req->pool, req->path_normalized, *index_file);
-                slashed.base[slashed.len++] = '/'; /* rewrite the NUL char */
-                h2o_send_redirect(req, 301, "Moved Permantently", slashed.base, slashed.len);
+                h2o_iovec_t dest = h2o_concat(&req->pool, req->scheme->name, h2o_iovec_init(H2O_STRLIT("://")), req->authority,
+                                              req->path_normalized, *index_file, h2o_iovec_init(H2O_STRLIT("/")));
+                h2o_send_redirect(req, 301, "Moved Permantently", dest.base, dest.len);
                 return 0;
             }
             if (errno != ENOENT)
@@ -340,8 +340,9 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         if ((generator = create_generator(req, rpath, rpath_len, &is_dir, self->flags)) != NULL)
             goto Opened;
         if (is_dir) {
-            h2o_iovec_t slashed = h2o_strdup_slashed(&req->pool, req->path_normalized.base, req->path_normalized.len);
-            h2o_send_redirect(req, 301, "Moved Permanently", slashed.base, slashed.len);
+            h2o_iovec_t dest = h2o_concat(&req->pool, req->scheme->name, h2o_iovec_init(H2O_STRLIT("://")), req->authority,
+                                          req->path_normalized, h2o_iovec_init(H2O_STRLIT("/")));
+            h2o_send_redirect(req, 301, "Moved Permanently", dest.base, dest.len);
             return 0;
         }
     }
