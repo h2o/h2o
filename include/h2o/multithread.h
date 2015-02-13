@@ -1,0 +1,79 @@
+/*
+ * Copyright (c) 2015 DeNA Co., Ltd., Kazuho Oku
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ */
+#ifndef h2o__multithread_h
+#define h2o__multithread_h
+
+#include <pthread.h>
+#include "h2o/linklist.h"
+#include "h2o/socket.h"
+
+typedef struct st_h2o_multithread_receiver_t h2o_multithread_receiver_t;
+typedef struct st_h2o_multithread_queue_t h2o_multithread_queue_t;
+typedef struct st_h2o_multithread_request_t h2o_multithread_request_t;
+
+typedef void (*h2o_multithread_receiver_cb)(h2o_multithread_receiver_t *receiver, h2o_linklist_t *messages);
+typedef void (*h2o_multithread_response_cb)(h2o_multithread_request_t *req);
+
+struct st_h2o_multithread_receiver_t {
+    h2o_multithread_queue_t *queue;
+    h2o_linklist_t _link;
+    h2o_linklist_t _messages;
+    h2o_multithread_receiver_cb cb;
+};
+
+typedef struct st_h2o_multithread_message_t {
+    h2o_linklist_t link;
+} h2o_multithread_message_t;
+
+struct st_h2o_multithread_request_t {
+    h2o_multithread_message_t super;
+    h2o_multithread_receiver_t *source;
+    h2o_multithread_response_cb cb;
+};
+
+/**
+ * creates a queue that is used for inter-thread communication
+ */
+h2o_multithread_queue_t *h2o_multithread_create_queue(h2o_loop_t *loop);
+/**
+ * destroys the queue
+ */
+void h2o_multithread_destroy_queue(h2o_multithread_queue_t *queue);
+/**
+ * registers a receiver for specific type of message
+ */
+void h2o_multithread_register_receiver(h2o_multithread_queue_t *queue, h2o_multithread_receiver_t *receiver,
+                                       h2o_multithread_receiver_cb cb);
+/**
+ * unregisters a receiver
+ */
+void h2o_multithread_unregister_receiver(h2o_multithread_queue_t *queue, h2o_multithread_receiver_t *receiver);
+/**
+ * sends a message
+ */
+void h2o_multithread_send_message(h2o_multithread_receiver_t *receiver, h2o_multithread_message_t *message);
+/**
+ * sends a request
+ */
+void h2o_multithread_send_request(h2o_multithread_receiver_t *receiver, h2o_multithread_request_t *req);
+
+#endif

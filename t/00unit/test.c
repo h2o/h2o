@@ -141,6 +141,7 @@ int main(int argc, char **argv)
         test_loop = h2o_evloop_create();
 #endif
 
+        subtest("lib/common/multithread.c", test_lib__multithread_c);
         subtest("lib/t/test.c/loopback", test_loopback);
         subtest("lib/file.c", test_lib__file_c);
         subtest("lib/proxy.c", test_lib__proxy_c);
