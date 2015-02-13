@@ -250,7 +250,7 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
 {
     static h2o_generator_t generator = {NULL, NULL};
     static const h2o_iovec_t body_prefix = {
-        H2O_STRLIT("<!DOCTYPE html><TITLE>301 Moved Permanently</TITLE><P>The document has moved <A HREF=\"")};
+        H2O_STRLIT("<!DOCTYPE html><TITLE>Moved</TITLE><P>The document has moved <A HREF=\"")};
     static const h2o_iovec_t body_suffix = {H2O_STRLIT("\">here</A>")};
 
     h2o_iovec_t url = h2o_concat(&req->pool, req->scheme->name, (h2o_iovec_t){H2O_STRLIT("://")}, req->authority,
@@ -258,8 +258,8 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
     h2o_iovec_t bufs[3];
 
     /* build response header */
-    req->res.status = 301;
-    req->res.reason = "Moved Permanently";
+    req->res.status = status;
+    req->res.reason = reason;
     req->res.headers = (h2o_headers_t){};
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LOCATION, url.base, url.len);
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/html; charset=utf-8"));
