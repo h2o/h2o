@@ -438,6 +438,10 @@ struct st_h2o_req_t {
      */
     h2o_iovec_t path_normalized;
     /**
+     * offset of '?' within path, or SIZE_MAX if not found
+     */
+    size_t query_at;
+    /**
      * scheme (http, https, etc.)
      */
     const h2o_url_scheme_t *scheme;

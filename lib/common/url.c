@@ -37,18 +37,22 @@ static int decode_hex(int ch)
     return -1;
 }
 
-static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *path, size_t len)
+static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *path, size_t len, size_t *query_at)
 {
     const char *src = path, *src_end = path + len;
     char *dst;
     h2o_iovec_t ret;
 
+    *query_at = SIZE_MAX;
+
     dst = ret.base = h2o_mem_alloc_pool(pool, len + 1);
     if (len == 0 || path[0] != '/')
         *dst++ = '/';
     while (src != src_end) {
-        if (*src == '?')
+        if (*src == '?') {
+            *query_at = src - path;
             break;
+        }
         if ((src_end - src == 3 && memcmp(src, H2O_STRLIT("/..")) == 0) ||
             (src_end - src > 3 && memcmp(src, H2O_STRLIT("/../")) == 0)) {
             /* go back the previous "/" */
@@ -87,7 +91,7 @@ static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *path, size_t l
     return ret;
 }
 
-h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t len)
+h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t len, size_t *query_at)
 {
     const char *p = path, *end = path + len;
     h2o_iovec_t ret;
@@ -95,16 +99,20 @@ h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_
     if (len == 0 || path[0] != '/')
         goto Rewrite;
 
+    *query_at = SIZE_MAX;
+
     for (; p + 1 < end; ++p) {
         if ((p[0] == '/' && p[1] == '.') || p[0] == '%') {
             /* detect false positives as well */
             goto Rewrite;
         } else if (p[0] == '?') {
+            *query_at = p - path;
             goto Return;
         }
     }
     for (; p < end; ++p) {
         if (p[0] == '?') {
+            *query_at = p - path;
             goto Return;
         }
     }
@@ -115,7 +123,7 @@ Return:
     return ret;
 
 Rewrite:
-    return rebuild_path(pool, path, len);
+    return rebuild_path(pool, path, len, query_at);
 }
 
 static const char *parse_scheme(const char *s, const char *end, const h2o_url_scheme_t **scheme)
