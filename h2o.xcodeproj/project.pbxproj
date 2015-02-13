@@ -80,6 +80,8 @@
 		10AA2E9F1A8807CF004322AC /* url.h in Headers */ = {isa = PBXBuildFile; fileRef = 10AA2E9E1A8807CF004322AC /* url.h */; };
 		10AA2EA11A88082E004322AC /* url.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EA01A88082E004322AC /* url.c */; };
 		10AA2EA31A88090B004322AC /* url.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EA21A88090B004322AC /* url.c */; };
+		10AA2EA51A8D9999004322AC /* redirect.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EA41A8D9999004322AC /* redirect.c */; };
+		10AA2EA71A8DA93C004322AC /* redirect.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EA61A8DA93C004322AC /* redirect.c */; };
 		10BA72AA19AAD6300059392A /* stream.c in Sources */ = {isa = PBXBuildFile; fileRef = 10BA72A919AAD6300059392A /* stream.c */; };
 		10D0903A19F0A51C0043D458 /* memory.h in Headers */ = {isa = PBXBuildFile; fileRef = 10D0903919F0A51C0043D458 /* memory.h */; };
 		10D0903E19F0A8190043D458 /* socket.h in Headers */ = {isa = PBXBuildFile; fileRef = 10D0903D19F0A8190043D458 /* socket.h */; };
@@ -284,6 +286,9 @@
 		10AA2E9E1A8807CF004322AC /* url.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = url.h; sourceTree = "<group>"; };
 		10AA2EA01A88082E004322AC /* url.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = url.c; sourceTree = "<group>"; };
 		10AA2EA21A88090B004322AC /* url.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = url.c; sourceTree = "<group>"; };
+		10AA2EA41A8D9999004322AC /* redirect.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = redirect.c; sourceTree = "<group>"; };
+		10AA2EA61A8DA93C004322AC /* redirect.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = redirect.c; sourceTree = "<group>"; };
+		10AA2EA81A8DAFD4004322AC /* 50redirect.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50redirect.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10BA72A919AAD6300059392A /* stream.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = stream.c; sourceTree = "<group>"; };
 		10D0903919F0A51C0043D458 /* memory.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = memory.h; sourceTree = "<group>"; };
 		10D0903D19F0A8190043D458 /* socket.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = socket.h; sourceTree = "<group>"; };
@@ -418,6 +423,7 @@
 				105534E91A42A83700627ECB /* file */,
 				107923BB19A3217300C52AD6 /* mimemap.c */,
 				10D0907219F633B00043D458 /* proxy.c */,
+				10AA2EA41A8D9999004322AC /* redirect.c */,
 			);
 			path = handler;
 			sourceTree = "<group>";
@@ -503,6 +509,7 @@
 				104B9A521A5FC7C4009EEE64 /* expires.c */,
 				105534DC1A3C7AA900627ECB /* file.c */,
 				105534DE1A3C7B9800627ECB /* proxy.c */,
+				10AA2EA61A8DA93C004322AC /* redirect.c */,
 			);
 			path = configurator;
 			sourceTree = "<group>";
@@ -709,13 +716,14 @@
 				105534F61A460EF600627ECB /* 50file-config.t */,
 				105534F71A460F2E00627ECB /* 50mimemap.t */,
 				105534F81A460F2E00627ECB /* 50post-size-limit.t */,
+				10AA2EA81A8DAFD4004322AC /* 50redirect.t */,
 				105534F91A460F4200627ECB /* 50reverse-proxy.t */,
 				104C65021A6DF36B000AC190 /* 50reverse-proxy-config.t */,
 				104B9A2B1A4BBDA4009EEE64 /* 50server-starter.t */,
 				105534FA1A460F4200627ECB /* 50sni.t */,
 				105534FE1A46134A00627ECB /* 80issues61.t */,
-				105534FB1A460F4200627ECB /* Util.pm */,
 				104B9A451A5D1004009EEE64 /* 90live-fetch-ocsp-response.t */,
+				105534FB1A460F4200627ECB /* Util.pm */,
 			);
 			path = t;
 			sourceTree = "<group>";
@@ -970,6 +978,7 @@
 				107923CD19A3217300C52AD6 /* memory.c in Sources */,
 				107923CC19A3217300C52AD6 /* context.c in Sources */,
 				107923C519A3217300C52AD6 /* http1.c in Sources */,
+				10AA2EA71A8DA93C004322AC /* redirect.c in Sources */,
 				10AA2EA11A88082E004322AC /* url.c in Sources */,
 				10EC2A381A0B4DC70083514F /* socketpool.c in Sources */,
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
@@ -977,6 +986,7 @@
 				10F4180519CA75C500B6E31A /* configurator.c in Sources */,
 				104B9A461A5F608A009EEE64 /* serverutil.c in Sources */,
 				1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */,
+				10AA2EA51A8D9999004322AC /* redirect.c in Sources */,
 				101B670C19ADD3380084A351 /* access_log.c in Sources */,
 				10BA72AA19AAD6300059392A /* stream.c in Sources */,
 				10D0907319F633B00043D458 /* proxy.c in Sources */,
