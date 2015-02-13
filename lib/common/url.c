@@ -207,7 +207,7 @@ int h2o_url_parse(const char *url, size_t url_len, h2o_url_t *parsed)
     /* skip "//" */
     if (!(url_end - p >= 2 && p[0] == '/' && p[1] == '/'))
         return -1;
-    p+= 2;
+    p += 2;
 
     return parse_authority_and_path(p, url_end, parsed);
 }

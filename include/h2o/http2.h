@@ -223,7 +223,7 @@ struct st_h2o_http2_conn_t {
     /* settings */
     h2o_http2_settings_t peer_settings;
     /* streams */
-    khash_t(h2o_http2_stream_t) *streams;
+    khash_t(h2o_http2_stream_t) * streams;
     struct {
         uint32_t max_open;
         uint32_t max_processed;
@@ -292,7 +292,8 @@ static ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn);
 
 /* stream */
 static int h2o_http2_stream_is_push(uint32_t stream_id);
-h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req, uint32_t push_parent_stream_id);
+h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req,
+                                          uint32_t push_parent_stream_id);
 static void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_http2_stream_state_t new_state);
 static void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);

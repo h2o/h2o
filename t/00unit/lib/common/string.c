@@ -28,10 +28,10 @@ static void test_next_token(void)
     const char *token;
     size_t token_len;
 
-#define NEXT() \
-    if ((token = h2o_next_token(&iter, ',', &token_len, NULL)) == NULL) { \
-        ok(0); \
-        return; \
+#define NEXT()                                                                                                                     \
+    if ((token = h2o_next_token(&iter, ',', &token_len, NULL)) == NULL) {                                                          \
+        ok(0);                                                                                                                     \
+        return;                                                                                                                    \
     }
 
     iter = h2o_iovec_init(H2O_STRLIT("public, max-age=86400, must-revalidate"));
@@ -75,10 +75,10 @@ static void test_next_token2(void)
     const char *name;
     size_t name_len;
 
-#define NEXT() \
-    if ((name = h2o_next_token(&iter, ',', &name_len, &value)) == NULL) { \
-        ok(0); \
-        return; \
+#define NEXT()                                                                                                                     \
+    if ((name = h2o_next_token(&iter, ',', &name_len, &value)) == NULL) {                                                          \
+        ok(0);                                                                                                                     \
+        return;                                                                                                                    \
     }
 
     iter = h2o_iovec_init(H2O_STRLIT("public, max-age=86400, must-revalidate"));

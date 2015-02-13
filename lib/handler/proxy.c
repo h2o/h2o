@@ -235,8 +235,8 @@ static void on_link_header(h2o_req_t *req, const char *value, size_t value_len, 
         return;
     h2o_url_resolve(&req->pool, base, &parsed, &resolved);
     if (!(base->scheme == resolved.scheme &&
-         (parsed.authority.base == NULL ||
-          h2o_lcstris(base->authority.base, base->authority.len, resolved.authority.base, resolved.authority.len))))
+          (parsed.authority.base == NULL ||
+           h2o_lcstris(base->authority.base, base->authority.len, resolved.authority.base, resolved.authority.len))))
         return;
 
     h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->http2_push_paths, sizeof(req->http2_push_paths.entries[0]),
@@ -284,11 +284,11 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                     if (h2o_url_parse_hostport(self->src_req->authority.base, self->src_req->authority.len, &url_parsed.host,
                                                &url_parsed._port) != NULL) {
                         url_parsed = (h2o_url_t){
-                            self->src_req->scheme, /* scheme */
-                            self->src_req->authority, /* authority */
-                            {}, /* host */
+                            self->src_req->scheme,          /* scheme */
+                            self->src_req->authority,       /* authority */
+                            {},                             /* host */
                             self->src_req->path_normalized, /* path */
-                            65535 /* port */
+                            65535                           /* port */
                         };
                     }
                 }

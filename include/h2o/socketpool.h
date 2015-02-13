@@ -71,8 +71,8 @@ void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64
 /**
  * connects to the peer (or returns a pooled connection)
  */
-h2o_socketpool_connect_request_t *h2o_socketpool_connect(h2o_socketpool_t *pool, h2o_loop_t *loop, h2o_timeout_t *zero_timeout, h2o_socketpool_connect_cb cb,
-                            void *data);
+h2o_socketpool_connect_request_t *h2o_socketpool_connect(h2o_socketpool_t *pool, h2o_loop_t *loop, h2o_timeout_t *zero_timeout,
+                                                         h2o_socketpool_connect_cb cb, void *data);
 /**
  * cancels a connect request
  */

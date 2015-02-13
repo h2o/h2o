@@ -78,7 +78,8 @@ static void queue_set(h2o_http2_scheduler_queue_t *queue, h2o_http2_scheduler_qu
     offset = offset / 65536;
 
     queue->bits |= 1ULL << (sizeof(queue->bits) * 8 - 1 - offset);
-    h2o_linklist_insert(queue->anchors + (queue->offset + offset) % (sizeof(queue->anchors) / sizeof(queue->anchors[0])), &node->_link);
+    h2o_linklist_insert(queue->anchors + (queue->offset + offset) % (sizeof(queue->anchors) / sizeof(queue->anchors[0])),
+                        &node->_link);
 }
 
 static void queue_unset(h2o_http2_scheduler_queue_node_t *node)

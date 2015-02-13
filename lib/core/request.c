@@ -144,7 +144,7 @@ void h2o_process_request(h2o_req_t *req)
             memcmp(req->path_normalized.base, pathconf->path.base, confpath_wo_slash) == 0) {
             if (req->path_normalized.len == confpath_wo_slash) {
                 h2o_iovec_t dest =
-                     h2o_concat(&req->pool, req->scheme->name, h2o_iovec_init(H2O_STRLIT("://")), req->authority, pathconf->path);
+                    h2o_concat(&req->pool, req->scheme->name, h2o_iovec_init(H2O_STRLIT("://")), req->authority, pathconf->path);
                 h2o_send_redirect(req, 301, "Moved Permanently", dest.base, dest.len);
                 return;
             }
@@ -251,8 +251,7 @@ void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *
 void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const char *url, size_t url_len)
 {
     static h2o_generator_t generator = {NULL, NULL};
-    static const h2o_iovec_t body_prefix = {
-        H2O_STRLIT("<!DOCTYPE html><TITLE>Moved</TITLE><P>The document has moved <A HREF=\"")};
+    static const h2o_iovec_t body_prefix = {H2O_STRLIT("<!DOCTYPE html><TITLE>Moved</TITLE><P>The document has moved <A HREF=\"")};
     static const h2o_iovec_t body_suffix = {H2O_STRLIT("\">here</A>")};
 
     h2o_iovec_t bufs[3];

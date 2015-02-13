@@ -91,12 +91,14 @@ int h2o_time_parse_rfc1123(const char *s, size_t len, struct tm *tm)
     if (len != H2O_TIMESTR_RFC1123_LEN)
         return -1;
 
-    /*           1         2
-     * 01234567890123456789012345678
-     * Fri, 19 Sep 2014 05:24:04 GMT
-     */
+/*           1         2
+ * 01234567890123456789012345678
+ * Fri, 19 Sep 2014 05:24:04 GMT
+ */
 
-#define FETCH(dst, pos, n) if ((dst = fetch_digits(s + pos, n)) == -1) return -1;
+#define FETCH(dst, pos, n)                                                                                                         \
+    if ((dst = fetch_digits(s + pos, n)) == -1)                                                                                    \
+        return -1;
     FETCH(tm->tm_year, 12, 4);
     tm->tm_year -= 1900;
     /* month is parsed afterwards */
@@ -106,21 +108,24 @@ int h2o_time_parse_rfc1123(const char *s, size_t len, struct tm *tm)
     FETCH(tm->tm_sec, 23, 2);
 #undef FETCH
 
-#define PACK3(a, b, c) (((a) & 0xff) << 16 | ((b) & 0xff) << 8 | ((c) & 0xff))
-#define MAP(c1, c2, c3, value) case PACK3(c1, c2, c3): tm->tm_mon = value; break
+#define PACK3(a, b, c) (((a)&0xff) << 16 | ((b)&0xff) << 8 | ((c)&0xff))
+#define MAP(c1, c2, c3, value)                                                                                                     \
+    case PACK3(c1, c2, c3):                                                                                                        \
+        tm->tm_mon = value;                                                                                                        \
+        break
     switch (PACK3(s[8], s[9], s[10])) {
-    MAP('J', 'a', 'n', 0);
-    MAP('F', 'e', 'b', 1);
-    MAP('M', 'a', 'r', 2);
-    MAP('A', 'p', 'r', 3);
-    MAP('M', 'a', 'y', 4);
-    MAP('J', 'u', 'n', 5);
-    MAP('J', 'u', 'l', 6);
-    MAP('A', 'u', 'g', 7);
-    MAP('S', 'e', 'p', 8);
-    MAP('O', 'c', 't', 9);
-    MAP('N', 'o', 'v', 10);
-    MAP('D', 'e', 'c', 11);
+        MAP('J', 'a', 'n', 0);
+        MAP('F', 'e', 'b', 1);
+        MAP('M', 'a', 'r', 2);
+        MAP('A', 'p', 'r', 3);
+        MAP('M', 'a', 'y', 4);
+        MAP('J', 'u', 'n', 5);
+        MAP('J', 'u', 'l', 6);
+        MAP('A', 'u', 'g', 7);
+        MAP('S', 'e', 'p', 8);
+        MAP('O', 'c', 't', 9);
+        MAP('N', 'o', 'v', 10);
+        MAP('D', 'e', 'c', 11);
     default:
         return -1;
     }

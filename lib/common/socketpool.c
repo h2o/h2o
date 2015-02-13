@@ -130,8 +130,8 @@ static void on_deferred_connect_cb(h2o_timeout_entry_t *timeout)
     free(req);
 }
 
-static h2o_socketpool_connect_request_t *setup_connect_callback(h2o_socketpool_connect_cb cb, h2o_socket_t *sock, const char *errstr,
-                                                         void *data)
+static h2o_socketpool_connect_request_t *setup_connect_callback(h2o_socketpool_connect_cb cb, h2o_socket_t *sock,
+                                                                const char *errstr, void *data)
 {
     h2o_socketpool_connect_request_t *req = h2o_mem_alloc(sizeof(*req));
 
@@ -163,8 +163,8 @@ static void on_close(void *data)
     __sync_sub_and_fetch(&pool->_shared.count, 1);
 }
 
-h2o_socketpool_connect_request_t *h2o_socketpool_connect(h2o_socketpool_t *pool, h2o_loop_t *loop, h2o_timeout_t *zero_timeout, h2o_socketpool_connect_cb cb,
-                            void *data)
+h2o_socketpool_connect_request_t *h2o_socketpool_connect(h2o_socketpool_t *pool, h2o_loop_t *loop, h2o_timeout_t *zero_timeout,
+                                                         h2o_socketpool_connect_cb cb, void *data)
 {
     struct pool_entry_t *entry = NULL;
 

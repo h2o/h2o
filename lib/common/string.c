@@ -258,7 +258,7 @@ const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len
     const char *cur = iter->base, *end = iter->base + iter->len, *token_start, *token_end;
 
     /* find start */
-    for (; ; ++cur) {
+    for (;; ++cur) {
         if (cur == end)
             return NULL;
         if (!(*cur == ' ' || *cur == '\t'))
@@ -268,7 +268,7 @@ const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len
     token_end = cur;
 
     /* find last */
-    for (; ; ++cur) {
+    for (;; ++cur) {
         if (cur == end)
             break;
         if (*cur == separator) {

@@ -59,20 +59,22 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     /* build request */
     req = h2o_mem_alloc_pool(&pool, sizeof(*req));
     req->base = h2o_mem_alloc_pool(&pool, 1024);
-    req->len =
-        snprintf(req->base, 1024, "GET %.*s HTTP/1.1\r\nhost: %.*s\r\n\r\n", (int)url_parsed.path.len, url_parsed.path.base, (int)url_parsed.authority.len, url_parsed.authority.base);
+    req->len = snprintf(req->base, 1024, "GET %.*s HTTP/1.1\r\nhost: %.*s\r\n\r\n", (int)url_parsed.path.len, url_parsed.path.base,
+                        (int)url_parsed.authority.len, url_parsed.authority.base);
     assert(req->len < 1024);
 
     /* initiate the request */
     if (1) {
         if (sockpool == NULL) {
             sockpool = h2o_mem_alloc(sizeof(*sockpool));
-            h2o_socketpool_init(sockpool, h2o_strdup(&pool, url_parsed.host.base, url_parsed.host.len).base, h2o_url_get_port(&url_parsed), 10);
+            h2o_socketpool_init(sockpool, h2o_strdup(&pool, url_parsed.host.base, url_parsed.host.len).base,
+                                h2o_url_get_port(&url_parsed), 10);
             h2o_socketpool_set_timeout(sockpool, ctx->loop, 5000 /* in msec */);
         }
         client = h2o_http1client_connect_with_pool(ctx, &pool, sockpool, on_connect);
     } else {
-        client = h2o_http1client_connect(ctx, &pool, h2o_strdup(&pool, url_parsed.host.base, url_parsed.host.len).base, h2o_url_get_port(&url_parsed), on_connect);
+        client = h2o_http1client_connect(ctx, &pool, h2o_strdup(&pool, url_parsed.host.base, url_parsed.host.len).base,
+                                         h2o_url_get_port(&url_parsed), on_connect);
     }
     assert(client != NULL);
     client->data = req;
