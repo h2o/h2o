@@ -100,6 +100,9 @@ static void destroy_loop(h2o_loop_t *loop)
     uv_loop_close(loop);
     free(loop);
 }
+#else
+#define create_loop h2o_evloop_create
+#define destroy_loop(loop) (0) /* FIXME */
 #endif
 
 static void *worker_main(void *_unused)
