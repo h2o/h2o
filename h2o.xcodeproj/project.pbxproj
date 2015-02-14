@@ -404,8 +404,9 @@
 		104B9A4A1A5FA7E5009EEE64 /* common */ = {
 			isa = PBXGroup;
 			children = (
-				107923BA19A3217300C52AD6 /* memory.c */,
 				10D0905419F102C70043D458 /* http1client.c */,
+				107923BA19A3217300C52AD6 /* memory.c */,
+				10AA2EAB1A8DE0AE004322AC /* multithread.c */,
 				104B9A241A4A4FEE009EEE64 /* serverutil.c */,
 				101788B119B561AA0084C6D8 /* socket.c */,
 				1065E70919BF18A600686E72 /* socket */,
@@ -414,7 +415,6 @@
 				10AA2E951A80A612004322AC /* time.c */,
 				1065E6F819BEBAC600686E72 /* timeout.c */,
 				10AA2EA01A88082E004322AC /* url.c */,
-				10AA2EAB1A8DE0AE004322AC /* multithread.c */,
 			);
 			path = common;
 			sourceTree = "<group>";
@@ -627,6 +627,7 @@
 				10E299541A67E5F600701AA6 /* http2 */,
 				10D0904219F0BA780043D458 /* linklist.h */,
 				10D0903919F0A51C0043D458 /* memory.h */,
+				10AA2EA91A8DDC57004322AC /* multithread.h */,
 				104B9A231A4A4FAF009EEE64 /* serverutil.h */,
 				10D0903F19F0B90A0043D458 /* socket */,
 				10D0903D19F0A8190043D458 /* socket.h */,
@@ -638,7 +639,6 @@
 				10AA2E9E1A8807CF004322AC /* url.h */,
 				107923A319A3215F00C52AD6 /* websocket.h */,
 				104B9A2C1A4BE029009EEE64 /* version.h */,
-				10AA2EA91A8DDC57004322AC /* multithread.h */,
 			);
 			path = h2o;
 			sourceTree = "<group>";
