@@ -127,6 +127,14 @@ static struct {
     {},   /* state */
 };
 
+static void set_cloexec(int fd)
+{
+    if (fcntl(fd, F_SETFD, FD_CLOEXEC) == -1) {
+        perror("failed to set FD_CLOEXEC");
+        abort();
+    }
+}
+
 static unsigned long openssl_thread_id_callback(void)
 {
     return (unsigned long)pthread_self();
@@ -620,13 +628,14 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
         }
     }
     /* add new listener */
-    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1 || fcntl(fd, F_SETFD, FD_CLOEXEC) != 0 ||
-        bind(fd, (void *)sun, sizeof(*sun)) != 0 || listen(fd, H2O_SOMAXCONN) != 0) {
+    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1 || bind(fd, (void *)sun, sizeof(*sun)) != 0 ||
+        listen(fd, H2O_SOMAXCONN) != 0) {
         if (fd != -1)
             close(fd);
         h2o_configurator_errprintf(NULL, node, "failed to listen to socket:%s: %s", sun->sun_path, strerror(errno));
         return -1;
     }
+    set_cloexec(fd);
 
     return fd;
 }
@@ -638,7 +647,7 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, cons
 
     if ((fd = socket(domain, type, protocol)) == -1)
         goto Error;
-    fcntl(fd, F_SETFD, FD_CLOEXEC);
+    set_cloexec(fd);
     { /* set reuseaddr */
         int flag = 1;
         if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag)) != 0)
@@ -1057,12 +1066,13 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                 perror("failed to dup listening socket");
                 abort();
             }
+            set_cloexec(fd);
         }
         listeners[i].ctx = &conf.threads[thread_index].ctx;
         listeners[i].ssl_ctx = listener_config->ssl.size != 0 ? listener_config->ssl.entries[0].ctx : NULL;
-        listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd,
-                                                     (struct sockaddr *)&listener_config->addr, listener_config->addrlen,
-                                                     H2O_SOCKET_FLAG_IS_ACCEPT);
+        listeners[i].sock =
+            h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, (struct sockaddr *)&listener_config->addr,
+                                     listener_config->addrlen, H2O_SOCKET_FLAG_IS_ACCEPT);
         listeners[i].sock->data = listeners + i;
     }
     /* and start listening */
@@ -1284,8 +1294,7 @@ int main(int argc, char **argv)
     for (i = 0; i != conf.num_threads; ++i) {
         h2o_loop_t *loop = h2o_evloop_create();
         h2o_context_init(&conf.threads[i].ctx, loop, &conf.globalconf);
-        h2o_multithread_register_receiver(conf.threads[i].ctx.queue, &conf.threads[i].server_notifications,
-                                          on_server_notification);
+        h2o_multithread_register_receiver(conf.threads[i].ctx.queue, &conf.threads[i].server_notifications, on_server_notification);
         if (i == 0) {
             conf.threads[0].tid = pthread_self();
         } else {
