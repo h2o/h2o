@@ -101,7 +101,11 @@ static struct {
     struct passwd *running_user; /* NULL if not set */
     int max_connections;
     size_t num_threads;
-    pthread_t *thread_ids;
+    struct {
+        pthread_t tid;
+        h2o_context_t ctx;
+        h2o_multithread_receiver_t server_notifications;
+    } *threads;
     volatile sig_atomic_t shutdown_requested;
     struct {
         /* unused buffers exist to avoid false sharing of the cache line */
@@ -122,9 +126,6 @@ static struct {
     0,    /* shutdown_requested */
     {},   /* state */
 };
-
-/* list of signals blocked, and caught by sigwait(2) called from the main thread */
-static sigset_t sigs_blocked;
 
 static unsigned long openssl_thread_id_callback(void)
 {
@@ -943,20 +944,23 @@ yoml_t *load_config(const char *fn)
 static void notify_all_threads(void)
 {
     unsigned i;
-    for (i = 0; i != conf.num_threads; ++i)
-        h2o_thread_notify(conf.thread_ids[i]);
+    for (i = 0; i != conf.num_threads; ++i) {
+        h2o_multithread_message_t *message = h2o_mem_alloc(sizeof(*message));
+        *message = (h2o_multithread_message_t){};
+        h2o_multithread_send_message(&conf.threads[i].server_notifications, message);
+    }
+}
+
+static void on_sigterm(int signo)
+{
+    conf.shutdown_requested = 1;
+    notify_all_threads();
 }
 
 static void setup_signal_handlers(void)
 {
-    /* block sigs to be caught by the main thread */
-    sigemptyset(&sigs_blocked);
-    sigaddset(&sigs_blocked, SIGTERM);
-    pthread_sigmask(SIG_BLOCK, &sigs_blocked, NULL);
-    /* ignore SIGPIPE */
+    h2o_set_signal_handler(SIGTERM, on_sigterm);
     h2o_set_signal_handler(SIGPIPE, SIG_IGN);
-    /* use SIGCONT for notifying the worker threads */
-    h2o_thread_initialize_signal_for_notification(SIGCONT);
 }
 
 static int num_connections(int delta)
@@ -988,8 +992,7 @@ static void on_accept(h2o_socket_t *listener, int status)
     do {
         h2o_socket_t *sock;
         if (num_connections(0) >= conf.max_connections) {
-            /* active threads notifies only itself so that it could update the state at the beginning of next loop */
-            h2o_thread_notify(pthread_self());
+            /* the accepting socket is disactivated before entering the next in `run_loop` */
             break;
         }
         if ((sock = h2o_evloop_socket_accept(listener)) == NULL) {
@@ -1025,29 +1028,41 @@ static void update_listener_state(struct listener_ctx_t *listeners)
     }
 }
 
-static void *run_loop(void *_unused)
+static void on_server_notification(h2o_multithread_receiver_t *receiver, h2o_linklist_t *messages)
 {
-    h2o_evloop_t *loop;
-    h2o_context_t ctx;
+    /* the notification is used only for exitting h2o_evloop_run; actual changes are done in the main loop of run_loop */
+
+    while (!h2o_linklist_is_empty(messages)) {
+        h2o_multithread_message_t *message = H2O_STRUCT_FROM_MEMBER(h2o_multithread_message_t, link, messages->next);
+        h2o_linklist_unlink(&message->link);
+        free(message);
+    }
+}
+
+H2O_NORETURN static void *run_loop(void *_thread_index)
+{
+    size_t thread_index = (size_t)_thread_index;
     struct listener_ctx_t *listeners = alloca(sizeof(*listeners) * conf.num_listeners);
     size_t i;
-
-    /* setup loop and context */
-    loop = h2o_evloop_create();
-    h2o_context_init(&ctx, loop, &conf.globalconf);
 
     /* setup listeners */
     for (i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];
-        int fd = dup(listener_config->fd);
-        if (fd == -1) {
-            perror("failed to dup listening socket");
-            return NULL;
+        int fd;
+        /* dup the listener fd for other threads than the main thread */
+        if (thread_index == 0) {
+            fd = listener_config->fd;
+        } else {
+            if ((fd = dup(listener_config->fd)) == -1) {
+                perror("failed to dup listening socket");
+                abort();
+            }
         }
-        listeners[i].ctx = &ctx;
+        listeners[i].ctx = &conf.threads[thread_index].ctx;
         listeners[i].ssl_ctx = listener_config->ssl.size != 0 ? listener_config->ssl.entries[0].ctx : NULL;
-        listeners[i].sock = h2o_evloop_socket_create(ctx.loop, fd, (struct sockaddr *)&listener_config->addr,
-                                                     listener_config->addrlen, H2O_SOCKET_FLAG_IS_ACCEPT);
+        listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd,
+                                                     (struct sockaddr *)&listener_config->addr, listener_config->addrlen,
+                                                     H2O_SOCKET_FLAG_IS_ACCEPT);
         listeners[i].sock->data = listeners + i;
     }
     /* and start listening */
@@ -1055,27 +1070,29 @@ static void *run_loop(void *_unused)
 
     /* the main loop */
     while (1) {
-        if (h2o_thread_is_notified()) {
-            if (conf.shutdown_requested)
-                break;
-            update_listener_state(listeners);
-        }
+        if (conf.shutdown_requested)
+            break;
+        update_listener_state(listeners);
         /* run the loop once */
-        h2o_evloop_run(loop);
+        h2o_evloop_run(conf.threads[thread_index].ctx.loop);
     }
+
+    if (thread_index == 0)
+        fprintf(stderr, "received SIGTERM, gracefully shutting down\n");
 
     /* shutdown requested, close the listeners, notify the protocol handlers, and continue running the loop */
     for (i = 0; i != conf.num_listeners; ++i) {
         h2o_socket_close(listeners[i].sock);
         listeners[i].sock = NULL;
     }
-    h2o_context_request_shutdown(&ctx);
-    while (1)
-        h2o_evloop_run(loop);
-
-    /* the process gets killed as num_connections become zero */
-
-    return NULL;
+    h2o_context_request_shutdown(&conf.threads[thread_index].ctx);
+    while (1) {
+        if (num_connections(0) == 0) {
+            /* terminate the process once the number of connections becomes zero */
+            _exit(0);
+        }
+        h2o_evloop_run(conf.threads[thread_index].ctx.loop);
+    }
 }
 
 static void setup_configurators(void)
@@ -1261,41 +1278,24 @@ int main(int argc, char **argv)
 
     assert(conf.num_threads != 0);
 
-    { /* the main loop */
-        unsigned int i;
-        /* start the threads */
-        conf.thread_ids = alloca(sizeof(pthread_t) * conf.num_threads);
-        for (i = 0; i != conf.num_threads; ++i) {
-            pthread_create(conf.thread_ids + i, NULL, run_loop, NULL);
+    /* start the threads */
+    conf.threads = alloca(sizeof(conf.threads[0]) * conf.num_threads);
+    size_t i;
+    for (i = 0; i != conf.num_threads; ++i) {
+        h2o_loop_t *loop = h2o_evloop_create();
+        h2o_context_init(&conf.threads[i].ctx, loop, &conf.globalconf);
+        h2o_multithread_register_receiver(conf.threads[i].ctx.queue, &conf.threads[i].server_notifications,
+                                          on_server_notification);
+        if (i == 0) {
+            conf.threads[0].tid = pthread_self();
+        } else {
+            pthread_create(&conf.threads[i].tid, NULL, run_loop, (void *)i);
         }
-        /* wait until shutdown is requested */
-        while (!conf.shutdown_requested) {
-            int signo, err = sigwait(&sigs_blocked, &signo);
-            if (err != 0) {
-                if (err == EINTR)
-                    continue;
-                perror("sigwait failed");
-                abort();
-            }
-            switch (signo) {
-            case SIGTERM:
-                conf.shutdown_requested = 1;
-                break;
-            default:
-                fprintf(stderr, "sigwait returned unexpected signal:%d\n", signo);
-                break;
-            }
-        }
-        fprintf(stderr, "received SIGTERM, gracefully shutting down\n");
-        /* close all the listeners */
-        for (i = 0; i != conf.num_listeners; ++i) {
-            close(conf.listeners[i]->fd);
-            conf.listeners[i]->fd = -1;
-        }
-        /* wait until the number of connections becomes zero, and exit */
-        while (num_connections(0) != 0)
-            usleep(100 * 1000);
-
-        _exit(0);
     }
+
+    /* this thread becomes the first thread */
+    run_loop((void *)0);
+
+    /* notreached */
+    return 0;
 }
