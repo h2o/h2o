@@ -36,13 +36,24 @@ struct st_h2o_socket_loop_kqueue_t {
     int kq;
 };
 
+static void ev_set(struct kevent *ev, int fd, int filter, int flags, struct st_h2o_evloop_socket_t *sock)
+{
+    EV_SET(ev, fd, filter, flags, 0, 0,
+#ifdef __NetBSD__
+           (intptr_t)sock
+#else
+           sock
+#endif
+           );
+}
+
 static int collect_status(struct st_h2o_socket_loop_kqueue_t *loop, struct kevent *changelist, int changelist_capacity)
 {
     int change_index = 0;
 
 #define SET_AND_UPDATE(filter, flags)                                                                                              \
     do {                                                                                                                           \
-        EV_SET(changelist + change_index++, sock->fd, filter, flags, 0, 0, sock);                                                  \
+        ev_set(changelist + change_index++, sock->fd, filter, flags, sock);                                                        \
         if (change_index == changelist_capacity) {                                                                                 \
             int ret;                                                                                                               \
             while ((ret = kevent(loop->kq, changelist, change_index, NULL, 0, NULL)) != 0 && errno == EINTR)                       \
