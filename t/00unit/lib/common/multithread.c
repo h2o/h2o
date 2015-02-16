@@ -32,8 +32,8 @@ struct {
     h2o_loop_t *loop;
     h2o_multithread_queue_t *queue;
     h2o_multithread_receiver_t pong_receiver;
-    h2o_multithread_receiver_t exit_receiver;
-    int received_exit;
+    h2o_multithread_receiver_t shutdown_receiver;
+    int received_shutdown;
 } main_thread;
 
 struct {
@@ -65,7 +65,7 @@ static void on_ping(h2o_multithread_receiver_t *receiver, h2o_linklist_t *list)
         if (++worker_thread.num_ping_received < 100) {
             send_empty_message(&main_thread.pong_receiver);
         } else {
-            send_empty_message(&main_thread.exit_receiver);
+            send_empty_message(&main_thread.shutdown_receiver);
             worker_thread.should_exit = 1;
         }
     }
@@ -79,11 +79,11 @@ static void on_pong(h2o_multithread_receiver_t *receiver, h2o_linklist_t *list)
     }
 }
 
-static void on_exit(h2o_multithread_receiver_t *receiver, h2o_linklist_t *list)
+static void on_shutdown(h2o_multithread_receiver_t *receiver, h2o_linklist_t *list)
 {
     while (!h2o_linklist_is_empty(list))
         pop_empty_message(list);
-    main_thread.received_exit = 1;
+    main_thread.received_shutdown = 1;
 }
 
 #if H2O_USE_LIBUV
@@ -125,7 +125,7 @@ void test_lib__multithread_c(void)
     main_thread.loop = create_loop();
     main_thread.queue = h2o_multithread_create_queue(main_thread.loop);
     h2o_multithread_register_receiver(main_thread.queue, &main_thread.pong_receiver, on_pong);
-    h2o_multithread_register_receiver(main_thread.queue, &main_thread.exit_receiver, on_exit);
+    h2o_multithread_register_receiver(main_thread.queue, &main_thread.shutdown_receiver, on_shutdown);
     worker_thread.loop = create_loop();
     worker_thread.queue = h2o_multithread_create_queue(worker_thread.loop);
     h2o_multithread_register_receiver(worker_thread.queue, &worker_thread.ping_receiver, on_ping);
@@ -135,7 +135,7 @@ void test_lib__multithread_c(void)
     /* send first message */
     send_empty_message(&worker_thread.ping_receiver);
 
-    while (!main_thread.received_exit) {
+    while (!main_thread.received_shutdown) {
 #if H2O_USE_LIBUV
         uv_run(main_thread.loop, UV_RUN_ONCE);
 #else
@@ -147,7 +147,7 @@ void test_lib__multithread_c(void)
     h2o_multithread_destroy_queue(worker_thread.queue);
     destroy_loop(worker_thread.loop);
     h2o_multithread_unregister_receiver(main_thread.queue, &main_thread.pong_receiver);
-    h2o_multithread_unregister_receiver(main_thread.queue, &main_thread.exit_receiver);
+    h2o_multithread_unregister_receiver(main_thread.queue, &main_thread.shutdown_receiver);
     h2o_multithread_destroy_queue(main_thread.queue);
     destroy_loop(main_thread.loop);
 
