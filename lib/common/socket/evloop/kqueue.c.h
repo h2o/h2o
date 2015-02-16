@@ -128,7 +128,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
 
     /* update readable flags, perform writes */
     for (i = 0; i != nevents; ++i) {
-        struct st_h2o_evloop_socket_t *sock = events[i].udata;
+        struct st_h2o_evloop_socket_t *sock = (void *)events[i].udata;
         assert(sock->fd == events[i].ident);
         switch (events[i].filter) {
         case EVFILT_READ:
@@ -165,9 +165,9 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
     int change_index = 0, ret;
 
     if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_READ) != 0)
-        EV_SET(changelist + change_index++, sock->fd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
+        EV_SET(changelist + change_index++, sock->fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
     if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE) != 0)
-        EV_SET(changelist + change_index++, sock->fd, EVFILT_WRITE, EV_DELETE, 0, 0, NULL);
+        EV_SET(changelist + change_index++, sock->fd, EVFILT_WRITE, EV_DELETE, 0, 0, 0);
     if (change_index == 0)
         return;
     while ((ret = kevent(loop->kq, changelist, change_index, NULL, 0, NULL)) != 0 && errno == EINTR)
