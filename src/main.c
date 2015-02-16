@@ -259,7 +259,7 @@ static void *ocsp_updater_thread(void *_ssl_conf)
 
     assert(ssl_conf->ocsp_stapling.interval != 0);
 
-    while (!h2o_thread_is_notified()) {
+    while (1) {
         /* sleep until next_at */
         if ((now = time(NULL)) < next_at) {
             time_t sleep_secs = next_at - now;
