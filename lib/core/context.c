@@ -73,6 +73,8 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     ctx->globalconf = config;
     h2o_timeout_init(ctx->loop, &ctx->zero_timeout, 0);
     h2o_timeout_init(ctx->loop, &ctx->one_sec_timeout, 1000);
+    ctx->queue = h2o_multithread_create_queue(loop);
+
     h2o_timeout_init(ctx->loop, &ctx->http1.req_timeout, config->http1.req_timeout);
     h2o_timeout_init(ctx->loop, &ctx->http2.idle_timeout, config->http2.idle_timeout);
     h2o_linklist_init_anchor(&ctx->http2._conns);
@@ -111,6 +113,8 @@ void h2o_context_dispose(h2o_context_t *ctx)
     h2o_timeout_dispose(ctx->loop, &ctx->http1.req_timeout);
     h2o_timeout_dispose(ctx->loop, &ctx->http2.idle_timeout);
 /* what should we do here? assert(!h2o_linklist_is_empty(&ctx->http2._conns); */
+
+    h2o_multithread_destroy_queue(ctx->queue);
 
 #if H2O_USE_LIBUV
     /* make sure the handles released by h2o_timeout_dispose get freed */
