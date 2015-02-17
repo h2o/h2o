@@ -59,7 +59,7 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
 #if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_KQUEUE
 /* explicitly specified */
 #else
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #define H2O_USE_KQUEUE 1
 #elif defined(__linux)
 #define H2O_USE_EPOLL 1
