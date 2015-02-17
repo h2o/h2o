@@ -34,12 +34,18 @@
 enum {
     ELEMENT_TYPE_EMPTY,             /* empty element (with suffix only) */
     ELEMENT_TYPE_BYTES_SENT,        /* %b */
+    ELEMENT_TYPE_PROTOCOL,          /* %H */
     ELEMENT_TYPE_REMOTE_ADDR,       /* %h */
     ELEMENT_TYPE_LOGNAME,           /* %l */
+    ELEMENT_TYPE_METHOD,            /* %m */
+    ELEMENT_TYPE_QUERY,             /* %q */
     ELEMENT_TYPE_REQUEST_LINE,      /* %r */
     ELEMENT_TYPE_STATUS,            /* %s */
     ELEMENT_TYPE_TIMESTAMP,         /* %t */
+    ELEMENT_TYPE_URL_PATH,          /* %U */
     ELEMENT_TYPE_REMOTE_USER,       /* %u */
+    ELEMENT_TYPE_AUTHORITY,         /* %V */
+    ELEMENT_TYPE_HOSTCONF,          /* %v */
     ELEMENT_TYPE_IN_HEADER_TOKEN,   /* %{data.header_token}i */
     ELEMENT_TYPE_IN_HEADER_STRING,  /* %{data.header_string}i */
     ELEMENT_TYPE_OUT_HEADER_TOKEN,  /* %{data.header_token}o */
@@ -138,12 +144,18 @@ static struct log_element_t *compile_log_format(const char *fmt, size_t *_num_el
         type = ty;                                                                                                                 \
         break
                     TYPE_MAP('b', ELEMENT_TYPE_BYTES_SENT);
+                    TYPE_MAP('H', ELEMENT_TYPE_PROTOCOL);
                     TYPE_MAP('h', ELEMENT_TYPE_REMOTE_ADDR);
                     TYPE_MAP('l', ELEMENT_TYPE_LOGNAME);
+                    TYPE_MAP('m', ELEMENT_TYPE_METHOD);
+                    TYPE_MAP('q', ELEMENT_TYPE_QUERY);
                     TYPE_MAP('r', ELEMENT_TYPE_REQUEST_LINE);
                     TYPE_MAP('s', ELEMENT_TYPE_STATUS);
                     TYPE_MAP('t', ELEMENT_TYPE_TIMESTAMP);
+                    TYPE_MAP('U', ELEMENT_TYPE_URL_PATH);
                     TYPE_MAP('u', ELEMENT_TYPE_REMOTE_USER);
+                    TYPE_MAP('V', ELEMENT_TYPE_AUTHORITY);
+                    TYPE_MAP('v', ELEMENT_TYPE_HOSTCONF);
 #undef TYPE_MAP
                 default:
                     fprintf(stderr, "failed to compile log format: unknown escape sequence: %%%c\n", pt[-1]);
@@ -264,6 +276,10 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             RESERVE(sizeof("18446744073709551615") - 1);
             pos += sprintf(pos, "%llu", (unsigned long long)req->bytes_sent);
             break;
+        case ELEMENT_TYPE_PROTOCOL: /* %H */
+            RESERVE(sizeof("HTTP/1.1") - 1);
+            pos = append_protocol(pos, req->version);
+            break;
         case ELEMENT_TYPE_REMOTE_ADDR: /* %h */
             if (req->conn->peername.addr != NULL) {
                 RESERVE(NI_MAXHOST);
@@ -275,6 +291,17 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             } else {
                 RESERVE(1);
                 *pos++ = '-';
+            }
+            break;
+        case ELEMENT_TYPE_METHOD: /* %m */
+            RESERVE(req->method.len * 4);
+            pos = append_unsafe_string(pos, req->method.base, req->method.len);
+            break;
+        case ELEMENT_TYPE_QUERY: /* %q */
+            if (req->query_at != SIZE_MAX) {
+                size_t len = req->path.len - req->query_at;
+                RESERVE(len * 4);
+                pos = append_unsafe_string(pos, req->path.base + req->query_at, len);
             }
             break;
         case ELEMENT_TYPE_REQUEST_LINE: /* %r */
@@ -294,6 +321,24 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             *pos++ = '[';
             pos = append_safe_string(pos, req->processed_at.str->log, H2O_TIMESTR_LOG_LEN);
             *pos++ = ']';
+            break;
+        case ELEMENT_TYPE_URL_PATH: /* %U */
+            {
+                size_t path_len = req->query_at == SIZE_MAX ? req->path.len : req->query_at;
+                RESERVE(req->scheme->name.len + (sizeof("://") - 1) + (req->authority.len + path_len) * 4);
+                pos = append_safe_string(pos, req->scheme->name.base, req->scheme->name.len);
+                pos = append_safe_string(pos, H2O_STRLIT("://"));
+                pos = append_unsafe_string(pos, req->authority.base, req->authority.len);
+                pos = append_unsafe_string(pos, req->path.base, path_len);
+            }
+            break;
+        case ELEMENT_TYPE_AUTHORITY: /* %V */
+            RESERVE(req->authority.len * 4);
+            pos = append_unsafe_string(pos, req->authority.base, req->authority.len);
+            break;
+        case ELEMENT_TYPE_HOSTCONF: /* %v */
+            RESERVE(req->pathconf->host->hostname.len * 4);
+            pos = append_unsafe_string(pos, req->pathconf->host->hostname.base, req->pathconf->host->hostname.len);
             break;
 
         case ELEMENT_TYPE_LOGNAME: /* %l */
