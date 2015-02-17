@@ -36,13 +36,24 @@ struct st_h2o_socket_loop_kqueue_t {
     int kq;
 };
 
+static void ev_set(struct kevent *ev, int fd, int filter, int flags, struct st_h2o_evloop_socket_t *sock)
+{
+    EV_SET(ev, fd, filter, flags, 0, 0,
+#ifdef __NetBSD__
+           (intptr_t)sock
+#else
+           sock
+#endif
+           );
+}
+
 static int collect_status(struct st_h2o_socket_loop_kqueue_t *loop, struct kevent *changelist, int changelist_capacity)
 {
     int change_index = 0;
 
 #define SET_AND_UPDATE(filter, flags)                                                                                              \
     do {                                                                                                                           \
-        EV_SET(changelist + change_index++, sock->fd, filter, flags, 0, 0, sock);                                                  \
+        ev_set(changelist + change_index++, sock->fd, filter, flags, sock);                                                        \
         if (change_index == changelist_capacity) {                                                                                 \
             int ret;                                                                                                               \
             while ((ret = kevent(loop->kq, changelist, change_index, NULL, 0, NULL)) != 0 && errno == EINTR)                       \
@@ -117,7 +128,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
 
     /* update readable flags, perform writes */
     for (i = 0; i != nevents; ++i) {
-        struct st_h2o_evloop_socket_t *sock = events[i].udata;
+        struct st_h2o_evloop_socket_t *sock = (void *)events[i].udata;
         assert(sock->fd == events[i].ident);
         switch (events[i].filter) {
         case EVFILT_READ:
@@ -154,9 +165,9 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
     int change_index = 0, ret;
 
     if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_READ) != 0)
-        EV_SET(changelist + change_index++, sock->fd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
+        EV_SET(changelist + change_index++, sock->fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
     if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE) != 0)
-        EV_SET(changelist + change_index++, sock->fd, EVFILT_WRITE, EV_DELETE, 0, 0, NULL);
+        EV_SET(changelist + change_index++, sock->fd, EVFILT_WRITE, EV_DELETE, 0, 0, 0);
     if (change_index == 0)
         return;
     while ((ret = kevent(loop->kq, changelist, change_index, NULL, 0, NULL)) != 0 && errno == EINTR)
