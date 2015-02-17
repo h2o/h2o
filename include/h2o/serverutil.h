@@ -43,23 +43,6 @@
  * equivalent of signal(3)
  */
 void h2o_set_signal_handler(int signo, void (*cb)(int signo));
-/**
- * a signal handler that does nothing
- */
-void h2o_noop_signal_handler(int signo);
-
-/**
- * initializes the given signal to be used for waking up other threads
- */
-void h2o_thread_initialize_signal_for_notification(int signo);
-/**
- * notifies a thread
- */
-void h2o_thread_notify(pthread_t tid);
-/**
- * returns if the running thread has received a notification (and clears the flag)
- */
-int h2o_thread_is_notified(void);
 
 /**
  * equiv. to setuidgid of djb

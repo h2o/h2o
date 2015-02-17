@@ -39,6 +39,7 @@ extern "C" {
 #include "h2o/linklist.h"
 #include "h2o/http1client.h"
 #include "h2o/memory.h"
+#include "h2o/multithread.h"
 #include "h2o/socket.h"
 #include "h2o/string_.h"
 #include "h2o/time_.h"
@@ -267,6 +268,10 @@ struct st_h2o_context_t {
      * pointer to the global configuration
      */
     h2o_globalconf_t *globalconf;
+    /**
+     * queue for receiving messages from other contexts
+     */
+    h2o_multithread_queue_t *queue;
     /**
      * flag indicating if shutdown has been requested
      */
