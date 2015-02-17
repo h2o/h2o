@@ -284,7 +284,7 @@ static ssize_t fixup_request(h2o_http1_conn_t *conn, struct phr_header *headers,
     expect->len = 0;
 
     conn->req.scheme = conn->sock->ssl != NULL ? &H2O_URL_SCHEME_HTTPS : &H2O_URL_SCHEME_HTTP;
-    conn->req.version = 0x100 | minor_version;
+    conn->req.version = 0x100 | (minor_version != 0);
 
     /* init headers */
     entity_header_index =
