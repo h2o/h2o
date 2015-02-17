@@ -145,6 +145,7 @@ void h2o_process_request(h2o_req_t *req)
             if (req->path_normalized.len == confpath_wo_slash) {
                 h2o_iovec_t dest =
                     h2o_concat(&req->pool, req->scheme->name, h2o_iovec_init(H2O_STRLIT("://")), req->authority, pathconf->path);
+                req->pathconf = pathconf;
                 h2o_send_redirect(req, 301, "Moved Permanently", dest.base, dest.len);
                 return;
             }
