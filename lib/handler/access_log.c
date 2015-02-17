@@ -67,6 +67,13 @@ struct st_h2o_access_logger_t {
     h2o_access_log_filehandle_t *fh;
 };
 
+static h2o_iovec_t strdup_lowercased(const char *s, size_t len)
+{
+    h2o_iovec_t v = h2o_strdup(NULL, s, len);
+    h2o_strtolower(v.base, v.len);
+    return v;
+}
+
 static struct log_element_t *compile_log_format(const char *fmt, size_t *_num_elements)
 {
     struct log_element_t *elements = NULL;
@@ -94,27 +101,31 @@ static struct log_element_t *compile_log_format(const char *fmt, size_t *_num_el
                     fprintf(stderr, "failed to compile log format: unterminated header name starting at: \"%16s\"\n", pt);
                     goto Error;
                 }
-                token = h2o_lookup_token(pt, quote_end - pt);
+                h2o_iovec_t name = strdup_lowercased(pt, quote_end - pt);
+                token = h2o_lookup_token(name.base, name.len);
                 switch (quote_end[1]) {
                 case 'i':
                     if (token != NULL) {
+                        free(name.base);
                         NEW_ELEMENT(ELEMENT_TYPE_IN_HEADER_TOKEN);
                         elements[num_elements - 1].data.header_token = token;
                     } else {
                         NEW_ELEMENT(ELEMENT_TYPE_IN_HEADER_STRING);
-                        elements[num_elements - 1].data.header_string = h2o_strdup(NULL, pt, quote_end - pt);
+                        elements[num_elements - 1].data.header_string = name;
                     }
                     break;
                 case 'o':
                     if (token != NULL) {
+                        free(name.base);
                         NEW_ELEMENT(ELEMENT_TYPE_OUT_HEADER_TOKEN);
                         elements[num_elements - 1].data.header_token = token;
                     } else {
                         NEW_ELEMENT(ELEMENT_TYPE_OUT_HEADER_STRING);
-                        elements[num_elements - 1].data.header_string = h2o_strdup(NULL, pt, quote_end - pt);
+                        elements[num_elements - 1].data.header_string = name;
                     }
                     break;
                 default:
+                    free(name.base);
                     fprintf(stderr, "failed to compile log format: header name is not followed by either `i` or `o`\n");
                     goto Error;
                 }
