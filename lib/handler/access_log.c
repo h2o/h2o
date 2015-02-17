@@ -198,6 +198,18 @@ static char *append_unsafe_string(char *pos, const char *src, size_t len)
     return pos;
 }
 
+static char *append_protocol(char *pos, int version)
+{
+    if (version < 0x200) {
+        assert(version <= 0x109);
+        pos = append_safe_string(pos, H2O_STRLIT("HTTP/1."));
+        *pos++ = '0' + (version & 0xff);
+    } else {
+        pos = append_safe_string(pos, H2O_STRLIT("HTTP/2"));
+    }
+    return pos;
+}
+
 static char *expand_line_buf(char *line, size_t cur_size, size_t required)
 {
     size_t new_size = cur_size;
@@ -266,21 +278,12 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             }
             break;
         case ELEMENT_TYPE_REQUEST_LINE: /* %r */
-            RESERVE((req->method.len + req->path.len) * 4 + sizeof("  HTTP/1.2147483647") - 1);
+            RESERVE((req->method.len + req->path.len) * 4 + sizeof("  HTTP/1.1") - 1);
             pos = append_unsafe_string(pos, req->method.base, req->method.len);
             *pos++ = ' ';
             pos = append_unsafe_string(pos, req->path.base, req->path.len);
             *pos++ = ' ';
-            if (req->version < 0x200) {
-                pos = append_safe_string(pos, H2O_STRLIT("HTTP/1."));
-                if ((req->version & 0xff) <= 9) {
-                    *pos++ = '0' + (req->version & 0xff);
-                } else {
-                    pos += sprintf(pos, "%d", req->version);
-                }
-            } else {
-                pos = append_safe_string(pos, H2O_STRLIT("HTTP/2"));
-            }
+            pos = append_protocol(pos, req->version);
             break;
         case ELEMENT_TYPE_STATUS: /* %s */
             RESERVE(sizeof("2147483647") - 1);
