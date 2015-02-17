@@ -151,7 +151,8 @@ static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
     struct st_h2o_evloop_select_t *loop = (struct st_h2o_evloop_select_t *)sock->loop;
     if (sock->fd == -1)
         return;
-    assert(loop->socks[sock->fd] != NULL);
+    if (loop->socks[sock->fd] == NULL)
+        return;
     DEBUG_LOG("clearing READ/WRITE for fd: %d\n", sock->fd);
     FD_CLR(sock->fd, &loop->readfds);
     FD_CLR(sock->fd, &loop->writefds);
