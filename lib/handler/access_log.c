@@ -33,13 +33,19 @@
 
 enum {
     ELEMENT_TYPE_EMPTY,             /* empty element (with suffix only) */
+    ELEMENT_TYPE_BYTES_SENT,        /* %b */
+    ELEMENT_TYPE_PROTOCOL,          /* %H */
     ELEMENT_TYPE_REMOTE_ADDR,       /* %h */
     ELEMENT_TYPE_LOGNAME,           /* %l */
-    ELEMENT_TYPE_REMOTE_USER,       /* %u */
-    ELEMENT_TYPE_TIMESTAMP,         /* %t */
+    ELEMENT_TYPE_METHOD,            /* %m */
+    ELEMENT_TYPE_QUERY,             /* %q */
     ELEMENT_TYPE_REQUEST_LINE,      /* %r */
     ELEMENT_TYPE_STATUS,            /* %s */
-    ELEMENT_TYPE_BYTES_SENT,        /* %b */
+    ELEMENT_TYPE_TIMESTAMP,         /* %t */
+    ELEMENT_TYPE_URL_PATH,          /* %U */
+    ELEMENT_TYPE_REMOTE_USER,       /* %u */
+    ELEMENT_TYPE_AUTHORITY,         /* %V */
+    ELEMENT_TYPE_HOSTCONF,          /* %v */
     ELEMENT_TYPE_IN_HEADER_TOKEN,   /* %{data.header_token}i */
     ELEMENT_TYPE_IN_HEADER_STRING,  /* %{data.header_string}i */
     ELEMENT_TYPE_OUT_HEADER_TOKEN,  /* %{data.header_token}o */
@@ -137,13 +143,19 @@ static struct log_element_t *compile_log_format(const char *fmt, size_t *_num_el
     case ch:                                                                                                                       \
         type = ty;                                                                                                                 \
         break
+                    TYPE_MAP('b', ELEMENT_TYPE_BYTES_SENT);
+                    TYPE_MAP('H', ELEMENT_TYPE_PROTOCOL);
                     TYPE_MAP('h', ELEMENT_TYPE_REMOTE_ADDR);
                     TYPE_MAP('l', ELEMENT_TYPE_LOGNAME);
-                    TYPE_MAP('u', ELEMENT_TYPE_REMOTE_USER);
-                    TYPE_MAP('t', ELEMENT_TYPE_TIMESTAMP);
+                    TYPE_MAP('m', ELEMENT_TYPE_METHOD);
+                    TYPE_MAP('q', ELEMENT_TYPE_QUERY);
                     TYPE_MAP('r', ELEMENT_TYPE_REQUEST_LINE);
                     TYPE_MAP('s', ELEMENT_TYPE_STATUS);
-                    TYPE_MAP('b', ELEMENT_TYPE_BYTES_SENT);
+                    TYPE_MAP('t', ELEMENT_TYPE_TIMESTAMP);
+                    TYPE_MAP('U', ELEMENT_TYPE_URL_PATH);
+                    TYPE_MAP('u', ELEMENT_TYPE_REMOTE_USER);
+                    TYPE_MAP('V', ELEMENT_TYPE_AUTHORITY);
+                    TYPE_MAP('v', ELEMENT_TYPE_HOSTCONF);
 #undef TYPE_MAP
                 default:
                     fprintf(stderr, "failed to compile log format: unknown escape sequence: %%%c\n", pt[-1]);
@@ -198,6 +210,18 @@ static char *append_unsafe_string(char *pos, const char *src, size_t len)
     return pos;
 }
 
+static char *append_protocol(char *pos, int version)
+{
+    if (version < 0x200) {
+        assert(version <= 0x109);
+        pos = append_safe_string(pos, H2O_STRLIT("HTTP/1."));
+        *pos++ = '0' + (version & 0xff);
+    } else {
+        pos = append_safe_string(pos, H2O_STRLIT("HTTP/2"));
+    }
+    return pos;
+}
+
 static char *expand_line_buf(char *line, size_t cur_size, size_t required)
 {
     size_t new_size = cur_size;
@@ -248,7 +272,15 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
         case ELEMENT_TYPE_EMPTY:
             RESERVE(0);
             break;
-        case ELEMENT_TYPE_REMOTE_ADDR:
+        case ELEMENT_TYPE_BYTES_SENT: /* %b */
+            RESERVE(sizeof("18446744073709551615") - 1);
+            pos += sprintf(pos, "%llu", (unsigned long long)req->bytes_sent);
+            break;
+        case ELEMENT_TYPE_PROTOCOL: /* %H */
+            RESERVE(sizeof("HTTP/1.1") - 1);
+            pos = append_protocol(pos, req->version);
+            break;
+        case ELEMENT_TYPE_REMOTE_ADDR: /* %h */
             if (req->conn->peername.addr != NULL) {
                 RESERVE(NI_MAXHOST);
                 size_t l = h2o_socket_getnumerichost(req->conn->peername.addr, req->conn->peername.len, pos);
@@ -261,41 +293,58 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
                 *pos++ = '-';
             }
             break;
-        case ELEMENT_TYPE_LOGNAME:
-        case ELEMENT_TYPE_REMOTE_USER:
-            RESERVE(1);
-            *pos++ = '-';
+        case ELEMENT_TYPE_METHOD: /* %m */
+            RESERVE(req->method.len * 4);
+            pos = append_unsafe_string(pos, req->method.base, req->method.len);
             break;
-        case ELEMENT_TYPE_TIMESTAMP:
+        case ELEMENT_TYPE_QUERY: /* %q */
+            if (req->query_at != SIZE_MAX) {
+                size_t len = req->path.len - req->query_at;
+                RESERVE(len * 4);
+                pos = append_unsafe_string(pos, req->path.base + req->query_at, len);
+            }
+            break;
+        case ELEMENT_TYPE_REQUEST_LINE: /* %r */
+            RESERVE((req->method.len + req->path.len) * 4 + sizeof("  HTTP/1.1") - 1);
+            pos = append_unsafe_string(pos, req->method.base, req->method.len);
+            *pos++ = ' ';
+            pos = append_unsafe_string(pos, req->path.base, req->path.len);
+            *pos++ = ' ';
+            pos = append_protocol(pos, req->version);
+            break;
+        case ELEMENT_TYPE_STATUS: /* %s */
+            RESERVE(sizeof("2147483647") - 1);
+            pos += sprintf(pos, "%d", req->res.status);
+            break;
+        case ELEMENT_TYPE_TIMESTAMP: /* %t */
             RESERVE(H2O_TIMESTR_LOG_LEN + 2);
             *pos++ = '[';
             pos = append_safe_string(pos, req->processed_at.str->log, H2O_TIMESTR_LOG_LEN);
             *pos++ = ']';
             break;
-        case ELEMENT_TYPE_REQUEST_LINE:
-            RESERVE((req->method.len + req->path.len) * 4 + sizeof("  HTTP/1.2147483647") - 1);
-            pos = append_unsafe_string(pos, req->method.base, req->method.len);
-            *pos++ = ' ';
-            pos = append_unsafe_string(pos, req->path.base, req->path.len);
-            *pos++ = ' ';
-            if (req->version < 0x200) {
-                pos = append_safe_string(pos, H2O_STRLIT("HTTP/1."));
-                if ((req->version & 0xff) <= 9) {
-                    *pos++ = '0' + (req->version & 0xff);
-                } else {
-                    pos += sprintf(pos, "%d", req->version);
-                }
-            } else {
-                pos = append_safe_string(pos, H2O_STRLIT("HTTP/2"));
+        case ELEMENT_TYPE_URL_PATH: /* %U */
+            {
+                size_t path_len = req->query_at == SIZE_MAX ? req->path.len : req->query_at;
+                RESERVE(req->scheme->name.len + (sizeof("://") - 1) + (req->authority.len + path_len) * 4);
+                pos = append_safe_string(pos, req->scheme->name.base, req->scheme->name.len);
+                pos = append_safe_string(pos, H2O_STRLIT("://"));
+                pos = append_unsafe_string(pos, req->authority.base, req->authority.len);
+                pos = append_unsafe_string(pos, req->path.base, path_len);
             }
             break;
-        case ELEMENT_TYPE_STATUS:
-            RESERVE(sizeof("2147483647") - 1);
-            pos += sprintf(pos, "%d", req->res.status);
+        case ELEMENT_TYPE_AUTHORITY: /* %V */
+            RESERVE(req->authority.len * 4);
+            pos = append_unsafe_string(pos, req->authority.base, req->authority.len);
             break;
-        case ELEMENT_TYPE_BYTES_SENT:
-            RESERVE(sizeof("18446744073709551615") - 1);
-            pos += sprintf(pos, "%llu", (unsigned long long)req->bytes_sent);
+        case ELEMENT_TYPE_HOSTCONF: /* %v */
+            RESERVE(req->pathconf->host->hostname.len * 4);
+            pos = append_unsafe_string(pos, req->pathconf->host->hostname.base, req->pathconf->host->hostname.len);
+            break;
+
+        case ELEMENT_TYPE_LOGNAME: /* %l */
+        case ELEMENT_TYPE_REMOTE_USER: /* %u */
+            RESERVE(1);
+            *pos++ = '-';
             break;
 
 #define EMIT_HEADER(headers, _index)                                                                                               \

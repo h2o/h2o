@@ -10,12 +10,11 @@ plan skip_all => 'curl not found'
 my $tempdir = tempdir(CLEANUP => 1);
 
 sub doit {
-    my ($testname, $getcurlopts, $format, $expected) = @_;
+    my ($cmd, $format, @expected) = @_;
 
-    subtest $testname => sub {
-        unlink "$tempdir/access_log";
+    unlink "$tempdir/access_log";
 
-        my $server = spawn_h2o(<< "EOT");
+    my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
     paths:
@@ -26,26 +25,41 @@ hosts:
       path: $tempdir/access_log
 EOT
 
-        system("curl --silent @{[$getcurlopts->($server)]} > /dev/null");
+    $cmd->($server);
 
-        my $log = do {
-            open my $fh, "<", "$tempdir/access_log"
-                or die "failed to open access_log:$!";
-            join "", <$fh>;
-        };
-
-        like $log, $expected;
+    my @log = do {
+        open my $fh, "<", "$tempdir/access_log"
+            or die "failed to open access_log:$!";
+        map { my $l = $_; chomp $l; $l } <$fh>;
     };
+
+    for (my $i = 0; $i != @expected; ++$i) {
+        like $log[$i], $expected[$i];
+    }
 }
 
-doit(
-    "custom-log",
-    sub {
-        my $server = shift;
-        "--referer http://example.com/ http://127.0.0.1:$server->{port}/";
-    },
-    '%h %l %u %t \"%r\" %s %b \"%{Referer}i\" \"%{User-agent}i\"',
-    qr{^127\.0\.0\.1 - - \[[0-9]{2}/[A-Z][a-z]{2}/20[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2} [+\-][0-9]{4}\] "GET / HTTP/1\.1" 200 6 "http://example.com/" "curl/.*"\n$},
-);
+subtest "custom-log" => sub {
+    doit(
+        sub {
+            my $server = shift;
+            system("curl --silent --referer http://example.com/ http://127.0.0.1:$server->{port}/ > /dev/null");
+        },
+        '%h %l %u %t \"%r\" %s %b \"%{Referer}i\" \"%{User-agent}i\"',
+        qr{^127\.0\.0\.1 - - \[[0-9]{2}/[A-Z][a-z]{2}/20[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2} [+\-][0-9]{4}\] "GET / HTTP/1\.1" 200 6 "http://example.com/" "curl/.*"$},
+    );
+};
+
+subtest 'ltsv-related' => sub {
+    doit(
+        sub {
+            my $server = shift;
+            system("curl --silent http://127.0.0.1:$server->{port} > /dev/null");
+            system("curl --silent http://127.0.0.1:$server->{port}/query?abc=d > /dev/null");
+        },
+        '%m::%U%q::%H::%V::%v',
+        qr{^GET::http://127\.0\.0\.1:[0-9]+/::HTTP/1\.1::127\.0\.0\.1:[0-9]+::default$},
+        qr{^GET::http://127\.0\.0\.1:[0-9]+/query\?abc=d::HTTP/1\.1::127\.0\.0\.1:[0-9]+::default$},
+    );
+};
 
 done_testing;
