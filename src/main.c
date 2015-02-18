@@ -97,6 +97,7 @@ static struct {
     struct listener_config_t **listeners;
     size_t num_listeners;
     struct passwd *running_user; /* NULL if not set */
+    char *pid_file;
     int max_connections;
     size_t num_threads;
     struct {
@@ -118,6 +119,7 @@ static struct {
     NULL, /* listeners */
     0,    /* num_listeners */
     NULL, /* running_user */
+    NULL, /* pid_file */
     1024, /* max_connections */
     0,    /* initialized in main() */
     NULL, /* thread_ids */
@@ -886,6 +888,12 @@ static int on_config_user(h2o_configurator_command_t *cmd, h2o_configurator_cont
     return 0;
 }
 
+static int on_config_pid_file(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    conf.pid_file = h2o_strdup(NULL, node->data.scalar, SIZE_MAX).base;
+    return 0;
+}
+
 static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return h2o_configurator_scanf(cmd, node, "%d", &conf.max_connections);
@@ -1105,6 +1113,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     while (1) {
         if (num_connections(0) == 0) {
             /* terminate the process once the number of connections becomes zero */
+            if (conf.pid_file != NULL)
+                unlink(conf.pid_file);
             _exit(0);
         }
         h2o_evloop_run(conf.threads[thread_index].ctx.loop);
@@ -1151,6 +1161,8 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "user", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_user,
                                         "user under with the server should handle incoming requests (default: none)");
+        h2o_configurator_define_command(c, "pid-file", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_pid_file, "name of the pid file (default: none)");
         h2o_configurator_define_command(c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_connections,
                                         "max connections (default: 1024)");
         h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads,
@@ -1270,6 +1282,9 @@ int main(int argc, char **argv)
         }
     }
 
+    setup_signal_handlers();
+
+    /* setuid */
     if (conf.running_user != NULL) {
         if (h2o_setuidgid(conf.running_user) != 0) {
             fprintf(stderr, "failed to change the running user (are you sure you are running as root?)\n");
@@ -1287,7 +1302,16 @@ int main(int argc, char **argv)
         }
     }
 
-    setup_signal_handlers();
+    /* pid file must be written after setuid, since we need to remove it  */
+    if (conf.pid_file != NULL) {
+        FILE *fp = fopen(conf.pid_file, "wt");
+        if (fp == NULL) {
+            fprintf(stderr, "failed to open pid file:%s:%s\n", conf.pid_file, strerror(errno));
+            return EX_OSERR;
+        }
+        fprintf(fp, "%d\n", (int)getpid());
+        fclose(fp);
+    }
 
     fprintf(stderr, "h2o server (pid:%d) is ready to serve requests\n", (int)getpid());
 
