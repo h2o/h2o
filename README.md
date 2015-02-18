@@ -34,7 +34,7 @@ Includes third-party softwares (also licensed under the MIT license): [klib](htt
  - forward secrecy
  - AEAD ciphers
  - OCSP stapling (automatically enabled)
- - session resumption (internal memory)
+ - session resumption and session tickets (internal memory)
 - static file serving
  - conditional GET using last-modified / etag
  - directory listing
