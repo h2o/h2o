@@ -22,7 +22,7 @@ Includes third-party softwares (also licensed under the MIT license): [klib](htt
  - persistent connections
  - chunked encoding
 - [HTTP/2](http://http2.github.io/)
- - draft 16 (and draft 14 to support older clients)
+ - supports the final version, draft 14 and 16
  - negotiation methods: NPN, ALPN, Upgrade, direct
  - dependency and weight-based prioritization
  - server push
