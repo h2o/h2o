@@ -16,7 +16,8 @@ hosts:
     paths:
       /:
         proxy.reverse.url: http://127.0.0.1:$upstream_port
-@{[ $persistent ? "" : "proxy.timeout.keepalive: 2000" ]}
+        proxy.timeout.io: 2000
+@{[ $persistent ? "" : "proxy.timeout.keepalive: 0" ]}
 EOT
     my $port = $server->{port};
     my $res = `curl --max-time 5 --silent --dump-header /dev/stderr http://127.0.0.1:$port/ 2>&1 > /dev/null`;
