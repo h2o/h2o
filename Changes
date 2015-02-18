@@ -15,6 +15,7 @@ Revision history for H2O.
 	- [proxy] merge the cookie headers before sending to upstream #161 (Kazuho Oku)
 	- [proxy] simplify the configuration directives (and make persistent upstream connections as default) #162 (Kazuho Oku)
 	- [SSL] add configuration directive to preload DH params #148 (Jeff Marrison)
+	- [libh2o] separate versioning scheme using H2O_LIBRARY_VERSION_* #167 (Kazuho Oku)
 
 0.9.2 2015-02-10 04:17:00+0000
 	- [core] graceful shutdown on SIGTERM #119 (Kazuho Oku)
