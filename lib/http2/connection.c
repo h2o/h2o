@@ -28,12 +28,13 @@
 
 static const h2o_iovec_t CONNECTION_PREFACE = {H2O_STRLIT("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")};
 
-static const h2o_iovec_t alpn_protocols[] = {{H2O_STRLIT("h2-16")}, /* the lastest draft */
-                                             {H2O_STRLIT("h2-14")}, /* keep draft-14 for compatibility */
-                                             {NULL, 0}};
+/* h2-14 and h2-16 are kept for backwards compatibility, as they are often used */
+static const h2o_iovec_t alpn_protocols[] = {{H2O_STRLIT("h2")}, {H2O_STRLIT("h2-16")}, {H2O_STRLIT("h2-14")}, {NULL, 0}};
 const h2o_iovec_t *h2o_http2_alpn_protocols = alpn_protocols;
 /* npn defs should match the definition of alpn_protocols */
-const char *h2o_http2_npn_protocols = "\x05"
+const char *h2o_http2_npn_protocols = "\x02"
+                                      "h2"
+                                      "\x05"
                                       "h2-16"
                                       "\x05"
                                       "h2-14";
