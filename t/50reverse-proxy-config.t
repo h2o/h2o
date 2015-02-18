@@ -37,8 +37,8 @@ hosts:
         proxy.reverse.url: http://127.0.0.1:$upstream_port
         proxy.preserve-host: $flag
 EOT
-        my $res = `curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/echo 2>&1 > /dev/null`;
-        like $res, qr/^x-req-host: 127.0.0.1:@{[ $flag eq 'ON' ? $server->{port} : $upstream_port ]}/im;
+        my $res = `curl --silent http://127.0.0.1:$server->{port}/echo-headers`;
+        like $res, qr/^host: 127.0.0.1:@{[ $flag eq 'ON' ? $server->{port} : $upstream_port ]}$/im;
     };
 
     subtest 'ON' => sub {

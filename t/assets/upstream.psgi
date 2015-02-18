@@ -36,9 +36,20 @@ builder {
             [
                 'content-type' => 'text/plain',
                 'content-length' => length $content,
-                map { my $n = lc substr $_, 5; $n =~ tr/_/-/; "x-req-$n" => $env->{$_} } sort grep { /^HTTP_/ } keys %$env,
             ],
             [ $content ],
+        ];
+    };
+    mount "/echo-headers" => sub {
+        my $env = shift;
+        return [
+            200,
+            [
+                'content-type' => 'text/plain',
+            ],
+            [
+                join "\n", map { my $n = lc substr $_, 5; $n =~ tr/_/-/; "$n: $env->{$_}" } sort grep { /^HTTP_/ } keys %$env,
+            ]
         ];
     };
     mount "/redirect" => sub {

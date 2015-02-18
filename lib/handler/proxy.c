@@ -84,6 +84,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
     char *p;
     int xff = 0;
     char remote_addr[NI_MAXHOST];
+    h2o_iovec_t cookie_buf = {};
 
     /* for x-f-f */
     if (req->conn->peername.addr != NULL)
@@ -116,8 +117,28 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
         p += sprintf(p, "content-length: %zu\r\n", req->entity.len);
     }
     for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h) {
-        if (h2o_iovec_is_token(h->name) && ((h2o_token_t *)h->name)->proxy_should_drop)
-            continue;
+        if (h2o_iovec_is_token(h->name)) {
+            const h2o_token_t *token = (void *)h->name;
+            if (token->proxy_should_drop) {
+                continue;
+            } else if (token == H2O_TOKEN_COOKIE) {
+                /* merge the cookie headers; see HTTP/2 8.1.2.5 and HTTP/1 (RFC6265 5.4) */
+                if (h->value.len != 0) {
+                    if (cookie_buf.len == 0) {
+                        cookie_buf = h->value;
+                    } else {
+                        char *buf = h2o_mem_alloc_pool(&req->pool, cookie_buf.len + 2 + h->value.len);
+                        memcpy(buf, cookie_buf.base, cookie_buf.len);
+                        buf[cookie_buf.len] = ';';
+                        buf[cookie_buf.len + 1] = ' ';
+                        memcpy(buf + cookie_buf.len + 2, h->value.base, h->value.len);
+                        cookie_buf.base = buf;
+                        cookie_buf.len += 2 + h->value.len;
+                    }
+                }
+                continue;
+            }
+        }
         if (h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-proto")))
             continue;
         if (h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-for"))) {
@@ -134,6 +155,8 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
     if (xff == 0 && remote_addr_len != SIZE_MAX) {
         p += sprintf(p, "x-forwarded-for: %.*s\r\n", (int)remote_addr_len, remote_addr);
     }
+    if (cookie_buf.len != 0)
+        p += sprintf(p, "cookie: %.*s\r\n", (int)cookie_buf.len, cookie_buf.base);
     *p++ = '\r';
     *p++ = '\n';
 
