@@ -55,12 +55,6 @@
 /* simply use a large value, and let the kernel clip it to the internal max */
 #define H2O_SOMAXCONN (65536)
 
-struct listener_configurator_t {
-    h2o_configurator_t super;
-    size_t num_global_listeners;
-    size_t num_host_listeners;
-};
-
 struct listener_ssl_config_t {
     H2O_VECTOR(h2o_iovec_t) hostnames;
     char *certificate_file;
@@ -687,14 +681,8 @@ Error:
 
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct listener_configurator_t *configurator = (void *)cmd->configurator;
     const char *hostname = NULL, *servname = NULL, *type = "tcp";
     yoml_t *ssl_node = NULL;
-
-    if (ctx->hostconf == NULL)
-        ++configurator->num_global_listeners;
-    else
-        ++configurator->num_host_listeners;
 
     /* fetch servname (and hostname) */
     switch (node->type) {
@@ -824,26 +812,18 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 
 static int on_config_listen_enter(h2o_configurator_t *_configurator, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct listener_configurator_t *configurator = (void *)_configurator;
-
-    /* bail-out unless at host-level */
-    if (ctx->hostconf == NULL || ctx->pathconf != NULL)
-        return 0;
-
-    configurator->num_host_listeners = 0;
     return 0;
 }
 
 static int on_config_listen_exit(h2o_configurator_t *_configurator, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct listener_configurator_t *configurator = (void *)_configurator;
-
     /* bail-out unless at host-level */
     if (ctx->hostconf == NULL || ctx->pathconf != NULL)
         return 0;
 
-    if (configurator->num_host_listeners == 0 && configurator->num_global_listeners == 0) {
-        h2o_configurator_errprintf(NULL, node, "mandatory configuration directive `listen` is missing");
+    if (conf.num_listeners == 0) {
+        h2o_configurator_errprintf(
+            NULL, node, "mandatory configuration directive `listen` does not exist, neither at global level or at this host level");
         return -1;
     }
     return 0;
@@ -1113,11 +1093,10 @@ static void setup_configurators(void)
     h2o_config_init(&conf.globalconf);
 
     {
-        struct listener_configurator_t *c = (void *)h2o_configurator_create(&conf.globalconf, sizeof(*c));
-        c->super.enter = on_config_listen_enter;
-        c->super.exit = on_config_listen_exit;
-        h2o_configurator_define_command(&c->super, "listen", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST,
-                                        on_config_listen,
+        h2o_configurator_t *c = h2o_configurator_create(&conf.globalconf, sizeof(*c));
+        c->enter = on_config_listen_enter;
+        c->exit = on_config_listen_exit;
+        h2o_configurator_define_command(c, "listen", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST, on_config_listen,
                                         "port at which the server should listen for incoming requests (mandatory)\n"
                                         " - if the value is a scalar, it is treated as the port number (or as the\n"
                                         "   service name)\n"
