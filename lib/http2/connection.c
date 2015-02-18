@@ -294,14 +294,16 @@ static void request_gathered_write(h2o_http2_conn_t *conn)
     }
 }
 
-static void update_stream_output_window(h2o_http2_stream_t *stream, ssize_t delta)
+static int update_stream_output_window(h2o_http2_stream_t *stream, ssize_t delta)
 {
     ssize_t cur = h2o_http2_window_get_window(&stream->output_window);
-    h2o_http2_window_update(&stream->output_window, delta);
+    if (h2o_http2_window_update(&stream->output_window, delta) != 0)
+        return -1;
     if (cur <= 0 && h2o_http2_window_get_window(&stream->output_window) > 0 && h2o_http2_stream_has_pending_data(stream)) {
         assert(!h2o_linklist_is_linked(&stream->_refs.link));
         h2o_http2_scheduler_activate(&stream->_refs.scheduler);
     }
+    return 0;
 }
 
 static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const uint8_t *src, size_t len,
@@ -638,11 +640,18 @@ static int handle_window_update_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t 
     }
 
     if (frame->stream_id == 0) {
-        h2o_http2_window_update(&conn->_write.window, payload.window_size_increment);
+        if (h2o_http2_window_update(&conn->_write.window, payload.window_size_increment) != 0) {
+            *err_desc = "flow control window overflow";
+            return H2O_HTTP2_ERROR_FLOW_CONTROL;
+        }
     } else if (!is_idle_stream_id(conn, frame->stream_id)) {
         h2o_http2_stream_t *stream = h2o_http2_conn_get_stream(conn, frame->stream_id);
         if (stream != NULL) {
-            update_stream_output_window(stream, payload.window_size_increment);
+            if (update_stream_output_window(stream, payload.window_size_increment) != 0) {
+                h2o_http2_stream_reset(conn, stream);
+                send_stream_error(conn, frame->stream_id, H2O_HTTP2_ERROR_FLOW_CONTROL);
+                return 0;
+            }
         }
     } else {
         *err_desc = "invaild stream id in WINDOW_UPDATE frame";
