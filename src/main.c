@@ -849,22 +849,23 @@ static int on_config_listen_exit(h2o_configurator_t *_configurator, h2o_configur
 
 static int setup_running_user(const char *login)
 {
-    static struct passwd passwdbuf;
-    static h2o_iovec_t buf;
+    struct passwd *passwdbuf = h2o_mem_alloc(sizeof(*passwdbuf));
+    char *buf;
+    size_t bufsz = 4096;
 
-    if (buf.base == NULL) {
-        long l = sysconf(_SC_GETPW_R_SIZE_MAX);
-        if (l == -1) {
-            perror("failed to obtain sysconf(_SC_GETPW_R_SIZE_MAX)");
-            return -1;
+Redo:
+    buf = h2o_mem_alloc(bufsz);
+    if (getpwnam_r(login, passwdbuf, buf, bufsz, &conf.running_user) != 0) {
+        if (errno == ERANGE
+#ifdef __APPLE__
+            || errno == EINVAL /* OS X 10.9.5 returns EINVAL if bufsz == 16 */
+#endif
+            ) {
+            free(buf);
+            bufsz *= 2;
+            goto Redo;
         }
-        buf.len = (size_t)l;
-        buf.base = h2o_mem_alloc(buf.len);
-    }
-
-    if (getpwnam_r(login, &passwdbuf, buf.base, buf.len, &conf.running_user) != 0) {
         perror("getpwnam_r");
-        return -1;
     }
     if (conf.running_user == NULL)
         return -1;
