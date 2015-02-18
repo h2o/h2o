@@ -112,11 +112,11 @@ sub run_tests_with_conf {
                 like $content, qr{^location: $proto://127.0.0.1:$port/abc\r$}m;
             };
             subtest "x-forwarded ($proto)" => sub {
-                my $resp = `curl --silent --insecure --dump-header /dev/stderr $proto://127.0.0.1:$port/echo 2>&1 > /dev/null`;
-                like $resp, qr/^x-req-x-forwarded-for: 127\.0\.0\.1\r$/mi, "x-forwarded-for";
-                like $resp, qr/^x-req-x-forwarded-proto: $proto\r$/mi, "x-forwarded-proto";
-                $resp = `curl --silent --insecure --header 'X-Forwarded-For: 127.0.0.2' --dump-header /dev/stderr $proto://127.0.0.1:$port/echo 2>&1 > /dev/null`;
-                like $resp, qr/^x-req-x-forwarded-for: 127\.0\.0\.2, 127\.0\.0\.1\r$/mi, "x-forwarded-for (append)";
+                my $resp = `curl --silent --insecure $proto://127.0.0.1:$port/echo-headers`;
+                like $resp, qr/^x-forwarded-for: 127\.0\.0\.1$/mi, "x-forwarded-for";
+                like $resp, qr/^x-forwarded-proto: $proto$/mi, "x-forwarded-proto";
+                $resp = `curl --silent --insecure --header 'X-Forwarded-For: 127.0.0.2' $proto://127.0.0.1:$port/echo-headers`;
+                like $resp, qr/^x-forwarded-for: 127\.0\.0\.2, 127\.0\.0\.1$/mi, "x-forwarded-for (append)";
             };
         };
         $doit->('http', $port);
