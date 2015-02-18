@@ -4,10 +4,11 @@ use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
 use t::Util;
 
-# should return 502 in case of upstream error
-subtest 'upstream-down' => sub {
-    plan skip_all => 'curl not found'
-        unless prog_exists('curl');
+plan skip_all => 'curl not found'
+    unless prog_exists('curl');
+
+sub doit {
+    my $persistent = shift;
     my $upstream_port = empty_port();
     my $server = spawn_h2o(<< "EOT");
 hosts:
@@ -15,10 +16,19 @@ hosts:
     paths:
       /:
         proxy.reverse.url: http://127.0.0.1:$upstream_port
+@{[ $persistent ? "" : "proxy.timeout.keepalive: 2000" ]}
 EOT
     my $port = $server->{port};
-    my $res = `curl --silent --dump-header /dev/stderr http://127.0.0.1:$port/ 2>&1 > /dev/null`;
+    my $res = `curl --max-time 5 --silent --dump-header /dev/stderr http://127.0.0.1:$port/ 2>&1 > /dev/null`;
     like $res, qr{^HTTP/1\.1 502 }, "502 response on upstream error";
+};
+
+subtest 'non-persistent' => sub {
+    doit(0);
+};
+
+subtest 'persistent' => sub {
+    doit(1);
 };
 
 done_testing();
