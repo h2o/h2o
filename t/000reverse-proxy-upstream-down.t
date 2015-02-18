@@ -10,7 +10,7 @@ plan skip_all => 'curl not found'
 sub doit {
     my $persistent = shift;
     my $upstream_port = empty_port();
-    my $server = spawn_h2o(<< "EOT");
+    my $server = spawn_h2o({ prefix => [ qw(valgrind --tool=memcheck --) ], conf => << "EOT" });
 hosts:
   default:
     paths:
