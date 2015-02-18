@@ -127,8 +127,7 @@ sub run_tests_with_conf {
         plan skip_all => 'nghttp not found'
             unless prog_exists('nghttp');
         my $doit = sub {
-            my ($proto, $port) = @_;
-            my $opt = $proto eq 'http' ? '-u' : '';
+            my ($proto, $opt, $port) = @_;
             for my $file (sort keys %files) {
                 my $content = `nghttp $opt $proto://127.0.0.1:$port/$file`;
                 is length($content), $files{$file}->{size}, "$proto://127.0.0.1/$file (size)";
@@ -142,17 +141,22 @@ sub run_tests_with_conf {
             is length($out), $huge_file_size, "$proto://127.0.0.1/echo (mmap-backed, size)";
             is md5_hex($out), $huge_file_md5, "$proto://127.0.0.1/echo (mmap-backed, md5)";
             subtest 'cookies' => sub {
+                plan skip_all => 'nghttp issues #161'
+                    if $opt eq '-u';
                 $out = `nghttp $opt -H 'cookie: a=b' -H 'cookie: c=d' $proto://127.0.0.1:$port/echo-headers`;
                 like $out, qr{^cookie: a=b; c=d$}m;
             };
         };
-        subtest 'http' => sub {
-            $doit->('http', $port);
+        subtest 'http (upgrade)' => sub {
+            $doit->('http', '-u', $port);
+        };
+        subtest 'http (direct)' => sub {
+            $doit->('http', '', $port);
         };
         subtest 'https' => sub {
             plan skip_all => 'OpenSSL does not support protocol negotiation; it is too old'
                 unless openssl_can_negotiate();
-            $doit->('https', $tls_port);
+            $doit->('https', '', $tls_port);
         };
     };
 }
