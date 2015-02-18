@@ -56,7 +56,7 @@ Following softwares are required to build the standalone server.  It is likely t
 
 - [cmake](http://www.cmake.org/)
 - [libyaml](http://pyyaml.org/wiki/LibYAML)
-- [OpenSSL](https://www.openssl.org/) (1.0.2 or above is recommended)
+- [OpenSSL](https://www.openssl.org/) (1.0.2 is mandatory to use HTTP/2 with some web browsers)
 
 Download and extract a source release from [here](https://github.com/h2o/h2o/releases), or clone the Git repository.
 
