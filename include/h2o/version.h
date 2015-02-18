@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 DeNA Co., Ltd.
+ * Copyright (c) 2014,2015 DeNA Co., Ltd.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -22,11 +22,11 @@
 #ifndef h2o__version_h
 #define h2o__version_h
 
-#define H2O_VERSION "0.9.3-alpha1"
+#define H2O_VERSION "1.0.0"
 
-#define H2O_VERSION_MAJOR 0
-#define H2O_VERSION_MINOR 9
-#define H2O_VERSION_PATCH 3
+#define H2O_VERSION_MAJOR 1
+#define H2O_VERSION_MINOR 0
+#define H2O_VERSION_PATCH 0
 
 #define H2O_LIBRARY_VERSION_MAJOR 0
 #define H2O_LIBRARY_VERSION_MINOR 9
