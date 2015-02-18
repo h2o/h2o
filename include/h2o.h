@@ -826,9 +826,8 @@ void h2o_file_register_configurator(h2o_globalconf_t *conf);
 
 typedef struct st_h2o_proxy_config_vars_t {
     uint64_t io_timeout;
-    int use_keepalive;
     int preserve_host;
-    uint64_t keepalive_timeout;
+    uint64_t keepalive_timeout; /* in milliseconds; set to zero to disable keepalive */
 } h2o_proxy_config_vars_t;
 
 typedef struct st_h2o_proxy_location_t {

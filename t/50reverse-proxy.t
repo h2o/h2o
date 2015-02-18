@@ -38,7 +38,7 @@ hosts:
     paths:
       /:
         proxy.reverse.url: http://127.0.0.1:$upstream_port
-        proxy.keepalive: @{[ $h2o_keepalive ? "ON" : "OFF" ]}
+@{[ $h2o_keepalive ? "" : "        proxy.timeout.keepalive: 0" ]}
 EOT
     };
     ok ! check_port($upstream_port), "upstream should be down now";
