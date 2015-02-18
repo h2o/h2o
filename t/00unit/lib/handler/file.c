@@ -38,7 +38,7 @@ static void test_if_modified_since(void)
     char lm_date[H2O_TIMESTR_RFC1123_LEN + 1];
 
     { /* obtain last-modified */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         ssize_t lm_index;
         conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
@@ -55,7 +55,7 @@ static void test_if_modified_since(void)
     }
 
     { /* send if-modified-since using the obtained last-modified */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
         h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_MODIFIED_SINCE, lm_date, H2O_TIMESTR_RFC1123_LEN);
@@ -66,7 +66,7 @@ static void test_if_modified_since(void)
     }
 
     { /* send if-modified-since using an old date */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
         h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_MODIFIED_SINCE,
@@ -77,7 +77,7 @@ static void test_if_modified_since(void)
     }
 
     { /* send if-modified-since using a date in the future */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
         h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_MODIFIED_SINCE,
@@ -94,7 +94,7 @@ static void test_if_match(void)
     h2o_iovec_t etag = {};
 
     { /* obtain etag */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         ssize_t etag_index;
         conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
@@ -110,7 +110,7 @@ static void test_if_match(void)
     }
 
     { /* send if-non-match using the obtained etag */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
         h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_NONE_MATCH, etag.base, etag.len);
@@ -137,7 +137,7 @@ void test_lib__file_c()
     h2o_context_init(&ctx, test_loop, &globalconf);
 
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
         h2o_loopback_run_loop(conn);
@@ -147,7 +147,7 @@ void test_lib__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
         h2o_loopback_run_loop(conn);
@@ -157,7 +157,7 @@ void test_lib__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/index.html"));
         h2o_loopback_run_loop(conn);
@@ -167,7 +167,7 @@ void test_lib__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/index.html"));
         h2o_loopback_run_loop(conn);
@@ -177,7 +177,7 @@ void test_lib__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
         h2o_loopback_run_loop(conn);
@@ -187,7 +187,7 @@ void test_lib__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
         h2o_loopback_run_loop(conn);
@@ -198,7 +198,7 @@ void test_lib__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/1000000.txt"));
         h2o_loopback_run_loop(conn);
@@ -208,7 +208,7 @@ void test_lib__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/1000000.txt"));
         h2o_loopback_run_loop(conn);
@@ -219,7 +219,7 @@ void test_lib__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/index_txt/"));
         h2o_loopback_run_loop(conn);
@@ -229,7 +229,7 @@ void test_lib__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/index_txt/"));
         h2o_loopback_run_loop(conn);
@@ -239,7 +239,7 @@ void test_lib__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/index_txt"));
         h2o_loopback_run_loop(conn);
@@ -248,7 +248,7 @@ void test_lib__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/index_txt"));
         h2o_loopback_run_loop(conn);
@@ -257,7 +257,7 @@ void test_lib__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/index_txt_as_dir/"));
         h2o_loopback_run_loop(conn);
@@ -266,7 +266,7 @@ void test_lib__file_c()
         h2o_loopback_destroy(conn);
     }
     {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx);
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.path = h2o_iovec_init(H2O_STRLIT("/index_txt_as_dir/"));
         h2o_loopback_run_loop(conn);

@@ -66,7 +66,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
 {
     size_t i, j;
 
-    assert(config->hosts.size != 0);
+    assert(config->hosts[0] != NULL);
 
     memset(ctx, 0, sizeof(*ctx));
     ctx->loop = loop;
@@ -84,8 +84,8 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
 
     static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_lock(&mutex);
-    for (i = 0; i != config->hosts.size; ++i) {
-        h2o_hostconf_t *hostconf = config->hosts.entries + i;
+    for (i = 0; config->hosts[i] != NULL; ++i) {
+        h2o_hostconf_t *hostconf = config->hosts[i];
         for (j = 0; j != hostconf->paths.size; ++j) {
             h2o_pathconf_t *pathconf = hostconf->paths.entries + j;
             on_context_init(ctx, pathconf);
@@ -100,8 +100,8 @@ void h2o_context_dispose(h2o_context_t *ctx)
     h2o_globalconf_t *config = ctx->globalconf;
     size_t i, j;
 
-    for (i = 0; i != config->hosts.size; ++i) {
-        h2o_hostconf_t *hostconf = config->hosts.entries + i;
+    for (i = 0; config->hosts[i] != NULL; ++i) {
+        h2o_hostconf_t *hostconf = config->hosts[i];
         for (j = 0; j != hostconf->paths.size; ++j) {
             h2o_pathconf_t *pathconf = hostconf->paths.entries + i;
             on_context_dispose(ctx, pathconf);

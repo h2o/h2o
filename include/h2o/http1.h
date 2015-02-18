@@ -60,7 +60,7 @@ struct st_h2o_http1_conn_t {
 
 /* http1 */
 
-void h2o_http1_accept(h2o_context_t *ctx, h2o_socket_t *sock);
+void h2o_http1_accept(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock);
 void h2o_http1_upgrade(h2o_http1_conn_t *conn, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_http1_upgrade_cb on_complete,
                        void *user_data);
 

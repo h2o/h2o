@@ -1016,9 +1016,9 @@ static void on_accept(h2o_socket_t *listener, int status)
         sock->on_close.data = ctx->ctx;
 
         if (ctx->ssl_ctx != NULL)
-            h2o_accept_ssl(ctx->ctx, sock, ctx->ssl_ctx);
+            h2o_accept_ssl(ctx->ctx, ctx->ctx->globalconf->hosts, sock, ctx->ssl_ctx);
         else
-            h2o_http1_accept(ctx->ctx, sock);
+            h2o_http1_accept(ctx->ctx, ctx->ctx->globalconf->hosts, sock);
 
     } while (--num_accepts != 0);
 }

@@ -402,12 +402,13 @@ static void handle_incoming_request(h2o_http1_conn_t *conn)
             static const h2o_iovec_t HTTP2_SIG = {H2O_STRLIT("PRI * HTTP/2")};
             if (conn->sock->input->size >= HTTP2_SIG.len && memcmp(conn->sock->input->bytes, HTTP2_SIG.base, HTTP2_SIG.len) == 0) {
                 h2o_context_t *ctx = conn->super.ctx;
+                h2o_hostconf_t **hosts = conn->super.hosts;
                 h2o_socket_t *sock = conn->sock;
                 /* destruct the connection after detatching the socket */
                 conn->sock = NULL;
                 close_connection(conn);
                 /* and accept as http2 connection */
-                h2o_http2_accept(ctx, sock);
+                h2o_http2_accept(ctx, hosts, sock);
                 return;
             }
         }
@@ -645,7 +646,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
     }
 }
 
-void h2o_http1_accept(h2o_context_t *ctx, h2o_socket_t *sock)
+void h2o_http1_accept(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock)
 {
     h2o_http1_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
@@ -654,6 +655,7 @@ void h2o_http1_accept(h2o_context_t *ctx, h2o_socket_t *sock)
 
     /* init properties that need to be non-zero */
     conn->super.ctx = ctx;
+    conn->super.hosts = hosts;
     if (sock->peername.len != 0) {
         conn->super.peername.addr = (void *)&sock->peername.addr;
         conn->super.peername.len = sock->peername.len;

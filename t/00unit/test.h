@@ -40,7 +40,7 @@ typedef struct st_h2o_loopback_conn_t {
     h2o_req_t req;
 } h2o_loopback_conn_t;
 
-h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx);
+h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx, h2o_hostconf_t **hosts);
 void h2o_loopback_destroy(h2o_loopback_conn_t *conn);
 void h2o_loopback_run_loop(h2o_loopback_conn_t *conn);
 
