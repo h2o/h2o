@@ -193,9 +193,9 @@ typedef struct st_h2o_protocol_callbacks_t {
 
 struct st_h2o_globalconf_t {
     /**
-     * list of host contexts (h2o_hostconf_t)
+     * a NULL-terminated list of host contexts (h2o_hostconf_t)
      */
-    H2O_VECTOR(h2o_hostconf_t) hosts;
+    h2o_hostconf_t **hosts;
     /**
      * list of configurators
      */
@@ -405,6 +405,10 @@ struct st_h2o_conn_t {
      */
     h2o_context_t *ctx;
     /**
+     * NULL-terminated list of hostconfs bound to the connection
+     */
+    h2o_hostconf_t **hosts;
+    /**
      * peername (peername.addr == NULL if not available)
      */
     struct {
@@ -564,7 +568,7 @@ ssize_t h2o_delete_header(h2o_headers_t *headers, ssize_t cursor);
 /**
  * accepts a SSL connection
  */
-void h2o_accept_ssl(h2o_context_t *ctx, h2o_socket_t *sock, SSL_CTX *ssl_ctx);
+void h2o_accept_ssl(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, SSL_CTX *ssl_ctx);
 
 /* request */
 

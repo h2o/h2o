@@ -251,6 +251,11 @@ static int h2o_memis(const void *target, size_t target_len, const void *test, si
  */
 void h2o_dump_memory(FILE *fp, const char *buf, size_t len);
 
+/**
+ * appends an element to a NULL-terminated list allocated using malloc
+ */
+void h2o_append_to_null_terminated_list(void ***list, void *element);
+
 /* inline defs */
 
 inline h2o_iovec_t h2o_iovec_init(const void *base, size_t len)

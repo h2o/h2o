@@ -96,7 +96,7 @@ inline void h2o_linklist_insert(h2o_linklist_t *pos, h2o_linklist_t *node)
 
 inline void h2o_linklist_insert_list(h2o_linklist_t *pos, h2o_linklist_t *list)
 {
-    if(h2o_linklist_is_empty(list))
+    if (h2o_linklist_is_empty(list))
         return;
     list->next->prev = pos->prev;
     list->prev->next = pos;

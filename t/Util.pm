@@ -11,7 +11,7 @@ use Test::More;
 use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir exec_unittest spawn_server spawn_h2o create_data_file md5_file prog_exists run_prog openssl_can_negotiate);
+our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir exec_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
@@ -88,12 +88,7 @@ sub spawn_h2o {
     my @prefix;
 
     # decide the port numbers
-    my $port = empty_port();
-    my $tls_port;
-    while (1) {
-       $tls_port = empty_port();
-       last if $tls_port != $port;
-    }
+    my ($port, $tls_port) = empty_ports(2);
 
     # setup the configuration file
     my ($conffh, $conffn) = tempfile();
@@ -130,6 +125,17 @@ EOT
         guard    => $guard,
         pid      => $pid,
     };
+}
+
+sub empty_ports {
+    my $n = shift;
+    my @ports;
+    while (@ports < $n) {
+        my $t = empty_port();
+        push @ports, $t
+            unless grep { $_ == $t } @ports;
+    }
+    return @ports;
 }
 
 sub create_data_file {
