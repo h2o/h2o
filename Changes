@@ -2,6 +2,8 @@ Revision history for H2O.
 
 0.9.3 TBD
 	- [core] add redirect handler #150 (Kazuho Oku)
+	- [core] add `pid-file` directive for specifying the pid file #164 (Kazuho Oku)
+	- [core] connections accepted by host-specific listeners should not be handled by handlers of other hosts #163 (Kazuho Oku)
 	- [core] (FreeBSD) fix a bug that prevented the standalone server from booting when run as root #160 (Kazuho Oku)
 	- [core] switch to pipe-based interthread messaging #154 (Kazuho Oku)
 	- [core] use kqueue on all BSDs #156 (Kazuho Oku)
