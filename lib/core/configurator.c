@@ -349,7 +349,7 @@ int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node)
 
     if (apply_commands(&ctx, H2O_CONFIGURATOR_FLAG_GLOBAL, node) != 0)
         return -1;
-    if (config->hosts.size == 0) {
+    if (config->hosts[0] == NULL) {
         h2o_configurator_errprintf(NULL, node, "mandatory configuration directive `hosts` is missing");
         return -1;
     }

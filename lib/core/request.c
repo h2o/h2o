@@ -35,17 +35,18 @@ static h2o_hostconf_t *setup_before_processing(h2o_req_t *req)
 
     /* find the host context */
     if (req->authority.base != NULL) {
-        h2o_hostconf_t *end = ctx->globalconf->hosts.entries + ctx->globalconf->hosts.size;
-        for (hostconf = ctx->globalconf->hosts.entries; hostconf != end; ++hostconf) {
+        h2o_hostconf_t **cand = req->conn->hosts;
+        do {
+            hostconf = *cand;
             if (h2o_memis(req->authority.base, req->authority.len, hostconf->hostname.base, hostconf->hostname.len))
                 goto HostFound;
-        }
-        hostconf = ctx->globalconf->hosts.entries;
+        } while (*++cand != NULL);
+        hostconf = *req->conn->hosts;
     HostFound:
         ;
     } else {
         /* set the authority name to the default one */
-        hostconf = ctx->globalconf->hosts.entries;
+        hostconf = *req->conn->hosts;
         req->authority = hostconf->hostname;
     }
 

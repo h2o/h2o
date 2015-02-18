@@ -38,12 +38,13 @@ static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *i
         h2o_proceed_response(&conn->req);
 }
 
-h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx)
+h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx, h2o_hostconf_t **hosts)
 {
     h2o_loopback_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
     memset(conn, 0, offsetof(struct st_h2o_loopback_conn_t, req));
     conn->super.ctx = ctx;
+    conn->super.hosts = hosts;
     h2o_init_request(&conn->req, &conn->super, NULL);
     h2o_buffer_init(&conn->body, &h2o_socket_buffer_prototype);
     conn->req._ostr_top = &conn->_ostr_final;
@@ -109,7 +110,7 @@ static void test_loopback(void)
     h2o_config_register_host(&conf, "default");
     h2o_context_init(&ctx, test_loop, &conf);
 
-    conn = h2o_loopback_create(&ctx);
+    conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
     conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
     conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
     h2o_loopback_run_loop(conn);

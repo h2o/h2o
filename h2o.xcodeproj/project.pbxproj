@@ -296,6 +296,7 @@
 		10AA2EAB1A8DE0AE004322AC /* multithread.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = multithread.c; sourceTree = "<group>"; };
 		10AA2EAD1A8E22DA004322AC /* multithread.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = multithread.c; sourceTree = "<group>"; };
 		10AA2EB11A931409004322AC /* 50access-log.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50access-log.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		10AA2EB31A94B66D004322AC /* 40virtual-host.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40virtual-host.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10BA72A919AAD6300059392A /* stream.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = stream.c; sourceTree = "<group>"; };
 		10D0903919F0A51C0043D458 /* memory.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = memory.h; sourceTree = "<group>"; };
 		10D0903D19F0A8190043D458 /* socket.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = socket.h; sourceTree = "<group>"; };
@@ -722,6 +723,7 @@
 				104B9A311A59D7A2009EEE64 /* 40running-user.t */,
 				104B9A321A59E27A009EEE64 /* 40ssl-cipher-suite.t */,
 				104B9A221A47BBA1009EEE64 /* 40unix-socket.t */,
+				10AA2EB31A94B66D004322AC /* 40virtual-host.t */,
 				10AA2EB11A931409004322AC /* 50access-log.t */,
 				104B9A541A60773E009EEE64 /* 50expires.t */,
 				105534F61A460EF600627ECB /* 50file-config.t */,
