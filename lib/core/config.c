@@ -112,7 +112,6 @@ h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *p
 h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, const char *hostname)
 {
     h2o_hostconf_t *hostconf;
-    size_t cnt;
 
     /* create hostconf */
     hostconf = create_hostconf(config);
@@ -120,11 +119,7 @@ h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, const char *h
     h2o_strtolower(hostconf->hostname.base, hostconf->hostname.len);
 
     /* append to the list */
-    for (cnt = 0; config->hosts[cnt] != NULL; ++cnt)
-        ;
-    config->hosts = h2o_mem_realloc(config->hosts, (cnt + 2) * sizeof(config->hosts[0]));
-    config->hosts[cnt++] = hostconf;
-    config->hosts[cnt] = NULL;
+    h2o_append_to_null_terminated_list((void *)&config->hosts, hostconf);
 
     return hostconf;
 }
