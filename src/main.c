@@ -1066,6 +1066,11 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     struct listener_ctx_t *listeners = alloca(sizeof(*listeners) * conf.num_listeners);
     size_t i;
 
+    h2o_context_init(&conf.threads[thread_index].ctx, h2o_evloop_create(), &conf.globalconf);
+    h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].server_notifications,
+                                      on_server_notification);
+    conf.threads[thread_index].tid = pthread_self();
+
     /* setup listeners */
     for (i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];
@@ -1320,15 +1325,9 @@ int main(int argc, char **argv)
     /* start the threads */
     conf.threads = alloca(sizeof(conf.threads[0]) * conf.num_threads);
     size_t i;
-    for (i = 0; i != conf.num_threads; ++i) {
-        h2o_loop_t *loop = h2o_evloop_create();
-        h2o_context_init(&conf.threads[i].ctx, loop, &conf.globalconf);
-        h2o_multithread_register_receiver(conf.threads[i].ctx.queue, &conf.threads[i].server_notifications, on_server_notification);
-        if (i == 0) {
-            conf.threads[0].tid = pthread_self();
-        } else {
-            pthread_create(&conf.threads[i].tid, NULL, run_loop, (void *)i);
-        }
+    for (i = 1; i != conf.num_threads; ++i) {
+        pthread_t tid;
+        pthread_create(&tid, NULL, run_loop, (void *)i);
     }
 
     /* this thread becomes the first thread */
