@@ -1,5 +1,7 @@
 Revision history for H2O.
 
+1.0.1 TBD
+
 1.0.0 2015-02-18 20:01:00+0000
 	- [core] add redirect handler #150 (Kazuho Oku)
 	- [core] add `pid-file` directive for specifying the pid file #164 (Kazuho Oku)
