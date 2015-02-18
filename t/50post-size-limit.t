@@ -43,30 +43,32 @@ subtest 'http2' => sub {
         unless prog_exists('nghttp');
 
     my $doit = sub {
-        my ($proto, $port) = @_;
+        my ($proto, $opts, $port) = @_;
         my $url = "$proto://127.0.0.1:$port/";
-        my $opts = '';
-        $opts .= " -u"
-            if $proto eq 'http';
-        subtest $proto => sub {
-            {
-                my ($tempfh, $tempfn) = tempfile;
-                print $tempfh 'hello';
-                close $tempfh;
-                my $resp = `nghttp -d $tempfn -s $url 2>&1`;
-                like $resp, qr/^\s*status:\s*405\s*$/im, 'shorter than the limit';
-            }
-            {
-                my ($tempfh, $tempfn) = tempfile;
-                print $tempfh 'helloworld';
-                close $tempfh;
-                my $resp = `nghttp -v -d $tempfn -s $url 2>&1`;
-                like $resp, qr/recv RST_STREAM[^\n]*\n[^\n]*error_code=REFUSED_STREAM/is, 'shorter than the limit';
-            }
-        };
+        {
+            my ($tempfh, $tempfn) = tempfile;
+            print $tempfh 'hello';
+            close $tempfh;
+            my $resp = `nghttp $opts -d $tempfn -s $url 2>&1`;
+            like $resp, qr/(^|\s)405(\s|$)/im, 'shorter than the limit';
+        }
+        {
+            my ($tempfh, $tempfn) = tempfile;
+            print $tempfh 'helloworld';
+            close $tempfh;
+            my $resp = `nghttp $opts -v -d $tempfn -s $url 2>&1`;
+            like $resp, qr/recv RST_STREAM[^\n]*\n[^\n]*error_code=REFUSED_STREAM/is, 'longer than the limit';
+        }
     };
-    $doit->("http", $server->{port});
-    $doit->("https", $server->{tls_port});
+    subtest "http (direct)" => sub {
+        $doit->("http", "", $server->{port});
+    };
+    subtest "http (upgrade)" => sub {
+        $doit->("http", "-u", $server->{port});
+    };
+    subtest "https" => sub {
+        $doit->("https", "", $server->{tls_port});
+    };
 };
 
 done_testing();
