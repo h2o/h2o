@@ -141,6 +141,10 @@ sub run_tests_with_conf {
             $out = `nghttp $opt -H':method: POST' -d $huge_file $proto://127.0.0.1:$port/echo`;
             is length($out), $huge_file_size, "$proto://127.0.0.1/echo (mmap-backed, size)";
             is md5_hex($out), $huge_file_md5, "$proto://127.0.0.1/echo (mmap-backed, md5)";
+            subtest 'cookies' => sub {
+                $out = `nghttp $opt -H 'cookie: a=b' -H 'cookie: c=d' $proto://127.0.0.1:$port/echo-headers`;
+                like $out, qr{^cookie: a=b; c=d$}m;
+            };
         };
         subtest 'http' => sub {
             $doit->('http', $port);
