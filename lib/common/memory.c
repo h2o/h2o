@@ -350,7 +350,7 @@ void h2o_append_to_null_terminated_list(void ***list, void *element)
 
     for (cnt = 0; (*list)[cnt] != NULL; ++cnt)
         ;
-    *list = h2o_mem_realloc(*list, (cnt + 2) * sizeof(void*));
+    *list = h2o_mem_realloc(*list, (cnt + 2) * sizeof(void *));
     (*list)[cnt++] = element;
     (*list)[cnt] = NULL;
 }

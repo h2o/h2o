@@ -323,15 +323,14 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             *pos++ = ']';
             break;
         case ELEMENT_TYPE_URL_PATH: /* %U */
-            {
-                size_t path_len = req->query_at == SIZE_MAX ? req->path.len : req->query_at;
-                RESERVE(req->scheme->name.len + (sizeof("://") - 1) + (req->authority.len + path_len) * 4);
-                pos = append_safe_string(pos, req->scheme->name.base, req->scheme->name.len);
-                pos = append_safe_string(pos, H2O_STRLIT("://"));
-                pos = append_unsafe_string(pos, req->authority.base, req->authority.len);
-                pos = append_unsafe_string(pos, req->path.base, path_len);
-            }
-            break;
+        {
+            size_t path_len = req->query_at == SIZE_MAX ? req->path.len : req->query_at;
+            RESERVE(req->scheme->name.len + (sizeof("://") - 1) + (req->authority.len + path_len) * 4);
+            pos = append_safe_string(pos, req->scheme->name.base, req->scheme->name.len);
+            pos = append_safe_string(pos, H2O_STRLIT("://"));
+            pos = append_unsafe_string(pos, req->authority.base, req->authority.len);
+            pos = append_unsafe_string(pos, req->path.base, path_len);
+        } break;
         case ELEMENT_TYPE_AUTHORITY: /* %V */
             RESERVE(req->authority.len * 4);
             pos = append_unsafe_string(pos, req->authority.base, req->authority.len);
@@ -341,7 +340,7 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             pos = append_unsafe_string(pos, req->pathconf->host->hostname.base, req->pathconf->host->hostname.len);
             break;
 
-        case ELEMENT_TYPE_LOGNAME: /* %l */
+        case ELEMENT_TYPE_LOGNAME:     /* %l */
         case ELEMENT_TYPE_REMOTE_USER: /* %u */
             RESERVE(1);
             *pos++ = '-';

@@ -969,7 +969,8 @@ static void emit_writereq(h2o_timeout_entry_t *entry)
     do_emit_writereq(conn);
 }
 
-static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, struct sockaddr *addr, socklen_t addrlen)
+static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, struct sockaddr *addr,
+                                     socklen_t addrlen)
 {
     h2o_http2_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
