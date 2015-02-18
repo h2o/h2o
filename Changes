@@ -10,7 +10,10 @@ Revision history for H2O.
 	- [access-log] more logging directives: %H, %m, %q, %U, %V, %v #158 (Kazuho Oku)
 	- [access-log] bugfix: header values were not logged when specified using uppercase letters #157 (Kazuho Oku)
 	- [file] add application/json to defalt MIME-types #159 (Tatsuhiko Kubo)
+	- [http2] add support for the finalized version of HTTP/2 #166 (Kazuho Oku)
+	- [http2] fix issues reported by h2spec v0.0.6 #165 (Kazuho Oku)
 	- [proxy] merge the cookie headers before sending to upstream #161 (Kazuho Oku)
+	- [proxy] simplify the configuration directives (and make persistent upstream connections as default) #162 (Kazuho Oku)
 	- [SSL] add configuration directive to preload DH params #148 (Jeff Marrison)
 
 0.9.2 2015-02-10 04:17:00+0000
