@@ -296,6 +296,7 @@
 		10AA2EAB1A8DE0AE004322AC /* multithread.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = multithread.c; sourceTree = "<group>"; };
 		10AA2EAD1A8E22DA004322AC /* multithread.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = multithread.c; sourceTree = "<group>"; };
 		10AA2EB11A931409004322AC /* 50access-log.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50access-log.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		10AA2EB21A9479B4004322AC /* 50reverse-proxy-upstream-down.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-upstream-down.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10AA2EB31A94B66D004322AC /* 40virtual-host.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40virtual-host.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10BA72A919AAD6300059392A /* stream.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = stream.c; sourceTree = "<group>"; };
 		10D0903919F0A51C0043D458 /* memory.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = memory.h; sourceTree = "<group>"; };
@@ -732,6 +733,7 @@
 				10AA2EA81A8DAFD4004322AC /* 50redirect.t */,
 				105534F91A460F4200627ECB /* 50reverse-proxy.t */,
 				104C65021A6DF36B000AC190 /* 50reverse-proxy-config.t */,
+				10AA2EB21A9479B4004322AC /* 50reverse-proxy-upstream-down.t */,
 				104B9A2B1A4BBDA4009EEE64 /* 50server-starter.t */,
 				105534FA1A460F4200627ECB /* 50sni.t */,
 				105534FE1A46134A00627ECB /* 80issues61.t */,

@@ -409,6 +409,8 @@ h2o_http1client_t *h2o_http1client_connect_with_pool(h2o_http1client_ctx_t *ctx,
     h2o_http1client_t *client = create_client(ctx, pool, cb);
     client->sockpool.pool = sockpool;
     client->sockpool.connect_req = h2o_socketpool_connect(sockpool, ctx->loop, ctx->zero_timeout, on_pool_connect, client);
+    client->_timeout.cb = on_connect_timeout;
+    h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);
     return client;
 }
 
