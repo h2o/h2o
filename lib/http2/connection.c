@@ -638,7 +638,10 @@ static int handle_window_update_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t 
     }
 
     if (frame->stream_id == 0) {
-        h2o_http2_window_update(&conn->_write.window, payload.window_size_increment);
+        if (h2o_http2_window_update(&conn->_write.window, payload.window_size_increment) != 0) {
+            *err_desc = "flow control window overflow";
+            return H2O_HTTP2_ERROR_FLOW_CONTROL;
+        }
     } else if (!is_idle_stream_id(conn, frame->stream_id)) {
         h2o_http2_stream_t *stream = h2o_http2_conn_get_stream(conn, frame->stream_id);
         if (stream != NULL) {
