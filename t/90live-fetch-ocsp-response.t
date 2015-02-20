@@ -12,6 +12,7 @@ my @HOSTS = qw(
     www.cybertrust.ne.jp
     www.comodo.com
     www.godaddy.com
+    www.startssl.com
 );
 
 for my $host (@HOSTS) {
