@@ -46,8 +46,8 @@ typedef struct st_h2o_http2_settings_t {
     uint32_t max_frame_size;
 } h2o_http2_settings_t;
 
-const h2o_http2_settings_t H2O_HTTP2_SETTINGS_DEFAULT;
-const h2o_http2_settings_t H2O_HTTP2_SETTINGS_HOST;
+extern const h2o_http2_settings_t H2O_HTTP2_SETTINGS_DEFAULT;
+extern const h2o_http2_settings_t H2O_HTTP2_SETTINGS_HOST;
 
 typedef struct st_h2o_http2_priority_t {
     int exclusive;
