@@ -26,7 +26,6 @@
 #include <unistd.h>
 #include <uv.h>
 #include "h2o.h"
-#include "h2o/http1.h"
 #include "h2o/websocket.h"
 
 static void on_ws_message(h2o_websocket_conn_t *conn, const struct wslay_event_on_msg_recv_arg *arg)
@@ -49,7 +48,7 @@ static int on_req(h2o_handler_t *self, h2o_req_t *req)
     if (h2o_is_websocket_handshake(req, &client_key) != 0 || client_key == NULL) {
         return -1;
     }
-    h2o_upgrade_to_websocket((h2o_http1_conn_t *)req->conn, client_key, NULL, on_ws_message);
+    h2o_upgrade_to_websocket(req, client_key, NULL, on_ws_message);
     return 0;
 }
 

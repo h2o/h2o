@@ -127,11 +127,13 @@ static void on_complete(void *user_data, h2o_socket_t *sock, size_t reqsize)
     h2o_websocket_proceed(conn);
 }
 
-h2o_websocket_conn_t *h2o_upgrade_to_websocket(h2o_http1_conn_t *src_conn, const char *client_key, void *data,
-                                               h2o_websocket_msg_callback cb)
+h2o_websocket_conn_t *h2o_upgrade_to_websocket(h2o_req_t *req, const char *client_key, void *data, h2o_websocket_msg_callback cb)
 {
     h2o_websocket_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
     char accept_key[29];
+
+    /* only for http1 connection */
+    assert(req->version < 0x200);
 
     /* setup the context */
     memset(conn, 0, sizeof(*conn));
@@ -146,14 +148,13 @@ h2o_websocket_conn_t *h2o_upgrade_to_websocket(h2o_http1_conn_t *src_conn, const
 
     /* build response */
     create_accept_key(accept_key, client_key);
-    src_conn->req.res.status = 101;
-    src_conn->req.res.reason = "Switching Protocols";
-    h2o_add_header(&src_conn->req.pool, &src_conn->req.res.headers, H2O_TOKEN_UPGRADE, H2O_STRLIT("websocket"));
-    h2o_add_header_by_str(&src_conn->req.pool, &src_conn->req.res.headers, H2O_STRLIT("sec-websocket-accept"), 0, accept_key,
-                          strlen(accept_key));
+    req->res.status = 101;
+    req->res.reason = "Switching Protocols";
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, H2O_STRLIT("websocket"));
+    h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("sec-websocket-accept"), 0, accept_key, strlen(accept_key));
 
     /* send */
-    h2o_http1_upgrade(src_conn, NULL, 0, on_complete, conn);
+    h2o_http1_upgrade(req, NULL, 0, on_complete, conn);
 
     return conn;
 }

@@ -1084,7 +1084,6 @@ int h2o_http2_handle_upgrade(h2o_req_t *req)
 {
     h2o_http2_conn_t *http2conn =
         create_conn(req->conn->ctx, req->conn->hosts, NULL, req->conn->peername.addr, req->conn->peername.len);
-    h2o_http1_conn_t *req_conn = (h2o_http1_conn_t *)req->conn;
     h2o_http2_stream_t *stream;
     ssize_t connection_index, settings_index;
     h2o_iovec_t settings_decoded;
@@ -1122,7 +1121,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req)
     req->res.status = 101;
     req->res.reason = "Switching Protocols";
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, H2O_STRLIT("h2c"));
-    h2o_http1_upgrade(req_conn, (h2o_iovec_t *)&SETTINGS_HOST_BIN, 1, on_upgrade_complete, http2conn);
+    h2o_http1_upgrade(req, (h2o_iovec_t *)&SETTINGS_HOST_BIN, 1, on_upgrade_complete, http2conn);
 
     return 0;
 Error:
