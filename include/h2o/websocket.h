@@ -46,7 +46,7 @@ struct st_h2o_websocket_conn_t {
 
 int h2o_is_websocket_handshake(h2o_req_t *req, const char **client_key);
 void h2o_websocket_create_accept_key(char *dst, const char *client_key);
-h2o_websocket_conn_t *h2o_upgrade_to_websocket(h2o_http1_conn_t *conn, const char *client_key, void *user_data,
+h2o_websocket_conn_t *h2o_upgrade_to_websocket(h2o_req_t *req, const char *client_key, void *user_data,
                                                h2o_websocket_msg_callback msg_cb);
 void h2o_websocket_close(h2o_websocket_conn_t *conn);
 void h2o_websocket_proceed(h2o_websocket_conn_t *conn);

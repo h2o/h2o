@@ -21,7 +21,7 @@
  */
 #include "h2o.h"
 #include "h2o/http2.h"
-#include "internal.h"
+#include "h2o/http2_internal.h"
 
 const h2o_http2_settings_t H2O_HTTP2_SETTINGS_DEFAULT = {
     /* header_table_size */ 4096,
@@ -33,8 +33,8 @@ const h2o_http2_settings_t H2O_HTTP2_SETTINGS_DEFAULT = {
 int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t *src, size_t len, const char **err_desc)
 {
     for (; len >= 6; len -= 6, src += 6) {
-        uint16_t identifier = decode16u(src);
-        uint32_t value = decode32u(src + 2);
+        uint16_t identifier = h2o_http2_decode16u(src);
+        uint32_t value = h2o_http2_decode32u(src + 2);
         switch (identifier) {
 #define SET(label, member, min, max, err_code)                                                                                     \
     case H2O_HTTP2_SETTINGS_##label:                                                                                               \
@@ -66,10 +66,10 @@ uint8_t *h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type
     if (length > 0xffffff)
         h2o_fatal("invalid length");
 
-    dst = encode24u(dst, (uint32_t)length);
+    dst = h2o_http2_encode24u(dst, (uint32_t)length);
     *dst++ = type;
     *dst++ = flags;
-    dst = encode32u(dst, stream_id);
+    dst = h2o_http2_encode32u(dst, stream_id);
 
     return dst;
 }
@@ -84,7 +84,7 @@ static uint8_t *allocate_frame(h2o_buffer_t **buf, size_t length, uint8_t type, 
 void h2o_http2_encode_rst_stream_frame(h2o_buffer_t **buf, uint32_t stream_id, int errnum)
 {
     uint8_t *dst = allocate_frame(buf, 4, H2O_HTTP2_FRAME_TYPE_RST_STREAM, 0, stream_id);
-    dst = encode32u(dst, errnum);
+    dst = h2o_http2_encode32u(dst, errnum);
 }
 
 void h2o_http2_encode_ping_frame(h2o_buffer_t **buf, int is_ack, const uint8_t *data)
@@ -97,15 +97,15 @@ void h2o_http2_encode_ping_frame(h2o_buffer_t **buf, int is_ack, const uint8_t *
 void h2o_http2_encode_goaway_frame(h2o_buffer_t **buf, uint32_t last_stream_id, int errnum, h2o_iovec_t additional_data)
 {
     uint8_t *dst = allocate_frame(buf, 8 + additional_data.len, H2O_HTTP2_FRAME_TYPE_GOAWAY, 0, 0);
-    dst = encode32u(dst, last_stream_id);
-    dst = encode32u(dst, (uint32_t)-errnum);
+    dst = h2o_http2_encode32u(dst, last_stream_id);
+    dst = h2o_http2_encode32u(dst, (uint32_t)-errnum);
     memcpy(dst, additional_data.base, additional_data.len);
 }
 
 void h2o_http2_encode_window_update_frame(h2o_buffer_t **buf, uint32_t stream_id, int32_t window_size_increment)
 {
     uint8_t *dst = allocate_frame(buf, 4, H2O_HTTP2_FRAME_TYPE_WINDOW_UPDATE, 0, stream_id);
-    dst = encode32u(dst, window_size_increment);
+    dst = h2o_http2_encode32u(dst, window_size_increment);
 }
 
 ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, const h2o_http2_settings_t *host_settings,
@@ -114,10 +114,10 @@ ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, siz
     if (len < H2O_HTTP2_FRAME_HEADER_SIZE)
         return H2O_HTTP2_ERROR_INCOMPLETE;
 
-    frame->length = decode24u(src);
+    frame->length = h2o_http2_decode24u(src);
     frame->type = src[3];
     frame->flags = src[4];
-    frame->stream_id = decode32u(src + 5);
+    frame->stream_id = h2o_http2_decode32u(src + 5);
 
     if (frame->length > host_settings->max_frame_size)
         return H2O_HTTP2_ERROR_FRAME_SIZE;
@@ -159,7 +159,7 @@ int h2o_http2_decode_data_payload(h2o_http2_data_payload_t *payload, const h2o_h
 
 static const uint8_t *decode_priority(h2o_http2_priority_t *priority, const uint8_t *src)
 {
-    uint32_t u4 = decode32u(src);
+    uint32_t u4 = h2o_http2_decode32u(src);
     src += 4;
     priority->exclusive = u4 >> 31;
     priority->dependency = u4 & 0x7fffffff;
@@ -231,7 +231,7 @@ int h2o_http2_decode_rst_stream_payload(h2o_http2_rst_stream_payload_t *payload,
         return H2O_HTTP2_ERROR_FRAME_SIZE;
     }
 
-    payload->error_code = decode32u(frame->payload);
+    payload->error_code = h2o_http2_decode32u(frame->payload);
     return 0;
 }
 
@@ -261,8 +261,8 @@ int h2o_http2_decode_goaway_payload(h2o_http2_goaway_payload_t *payload, const h
         return H2O_HTTP2_ERROR_FRAME_SIZE;
     }
 
-    payload->last_stream_id = decode32u(frame->payload) & 0x7fffffff;
-    payload->error_code = decode32u(frame->payload + 4);
+    payload->last_stream_id = h2o_http2_decode32u(frame->payload) & 0x7fffffff;
+    payload->error_code = h2o_http2_decode32u(frame->payload + 4);
     if ((payload->debug_data.len = frame->length - 8) != 0)
         payload->debug_data.base = (char *)frame->payload + 8;
     else
@@ -279,7 +279,7 @@ int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *pa
         return H2O_HTTP2_ERROR_FRAME_SIZE;
     }
 
-    payload->window_size_increment = decode32u(frame->payload) & 0x7fffffff;
+    payload->window_size_increment = h2o_http2_decode32u(frame->payload) & 0x7fffffff;
     if (payload->window_size_increment == 0) {
         *err_is_stream_level = frame->stream_id != 0;
         *err_desc = "invaild WINDOW_UPDATE frame";
