@@ -20,7 +20,7 @@
  * IN THE SOFTWARE.
  */
 #include "h2o.h"
-#include "h2o/http2.h"
+#include "../../include/h2o/http2/scheduler.h"
 
 struct st_h2o_http2_scheduler_queue_t {
     uint64_t bits;

@@ -21,10 +21,15 @@
  */
 #include "h2o.h"
 #include "h2o/http2.h"
-#include "internal.h"
+#include "h2o/http2_internal.h"
 
 static void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb);
 static void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final);
+
+static size_t sz_min(size_t x, size_t y)
+{
+    return x < y ? x : y;
+}
 
 h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req,
                                           uint32_t push_parent_stream_id)

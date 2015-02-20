@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include "h2o.h"
 #include "h2o/http2.h"
+#include "h2o/http2_internal.h"
 
 #define HEADER_TABLE_OFFSET 62
 #define HEADER_TABLE_ENTRY_SIZE_OFFSET 32
