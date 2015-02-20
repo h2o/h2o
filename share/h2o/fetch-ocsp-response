@@ -73,6 +73,7 @@ my $ocsp_uri = run_openssl("x509 -in $cert_fn -noout -ocsp_uri");
 chomp $ocsp_uri;
 die "failed to extract ocsp URI from $cert_fn\n"
     if $ocsp_uri !~ m{^https?://};
+my($ocsp_host) = $ocsp_uri =~ m{^https?://([^/:]+)};
 
 # save issuer certificate
 if (! defined $issuer_fn) {
@@ -86,7 +87,7 @@ if (! defined $issuer_fn) {
 # obtain response (without verification)
 print STDERR "sending OCSP request to $ocsp_uri\n";
 my $resp = run_openssl(
-    "ocsp -issuer $issuer_fn -cert $cert_fn -url $ocsp_uri -noverify -respout $tempdir/resp.der " . join(' ', @ARGV),
+    "ocsp -issuer $issuer_fn -cert $cert_fn -url $ocsp_uri -header Host $ocsp_host -noverify -respout $tempdir/resp.der " . join(' ', @ARGV),
     1,
 );
 print STDERR $resp;
