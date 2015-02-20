@@ -25,7 +25,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include "khash.h"
-#include "./http2/scheduler.h"
+#include "h2o/http2_scheduler.h"
 
 typedef struct st_h2o_http2_conn_t h2o_http2_conn_t;
 typedef struct st_h2o_http2_stream_t h2o_http2_stream_t;
