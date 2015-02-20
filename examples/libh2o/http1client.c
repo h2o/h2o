@@ -21,6 +21,7 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include "picohttpparser.h"
 #include "h2o/socketpool.h"
 #include "h2o/string_.h"
 #include "h2o/url.h"

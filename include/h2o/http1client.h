@@ -26,12 +26,12 @@
 extern "C" {
 #endif
 
-#include "picohttpparser.h"
 #include "h2o/memory.h"
 #include "h2o/socket.h"
 #include "h2o/socketpool.h"
 #include "h2o/timeout.h"
 
+struct phr_header;
 typedef struct st_h2o_http1client_t h2o_http1client_t;
 
 typedef int (*h2o_http1client_body_cb)(h2o_http1client_t *client, const char *errstr);
@@ -56,24 +56,6 @@ struct st_h2o_http1client_t {
     } sockpool;
     h2o_socket_t *sock;
     void *data;
-    union {
-        h2o_http1client_connect_cb on_connect;
-        h2o_http1client_head_cb on_head;
-        h2o_http1client_body_cb on_body;
-    } _cb;
-    const char *_errstr;
-    h2o_timeout_entry_t _timeout;
-    int _method_is_head;
-    int _can_keepalive;
-    union {
-        struct {
-            size_t bytesleft;
-        } content_length;
-        struct {
-            struct phr_chunked_decoder decoder;
-            size_t bytes_decoded_in_buf;
-        } chunked;
-    } _body_decoder;
 };
 
 extern const char *const h2o_http1client_error_is_eos;
