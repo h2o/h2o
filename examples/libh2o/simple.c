@@ -150,9 +150,9 @@ static void on_accept(h2o_socket_t *listener, int status)
         return;
     }
     if (ssl_ctx != NULL)
-        h2o_accept_ssl(&ctx, sock, ssl_ctx);
+        h2o_accept_ssl(&ctx, ctx.globalconf->hosts, sock, ssl_ctx);
     else
-        h2o_http1_accept(&ctx, sock);
+        h2o_http1_accept(&ctx, ctx.globalconf->hosts, sock);
 }
 
 static int create_listener(void)
@@ -172,7 +172,7 @@ static int create_listener(void)
         return -1;
     }
 
-    sock = h2o_evloop_socket_create(ctx.loop, fd, H2O_SOCKET_FLAG_IS_ACCEPT);
+    sock = h2o_evloop_socket_create(ctx.loop, fd, (void *)&addr, sizeof(addr), H2O_SOCKET_FLAG_IS_ACCEPT);
     h2o_socket_read_start(sock, on_accept);
 
     return 0;
