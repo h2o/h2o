@@ -54,7 +54,7 @@
 #include "h2o/serverutil.h"
 
 /* simply use a large value, and let the kernel clip it to the internal max */
-#define H2O_SOMAXCONN (65536)
+#define H2O_SOMAXCONN (65535)
 
 struct listener_ssl_config_t {
     H2O_VECTOR(h2o_iovec_t) hostnames;
