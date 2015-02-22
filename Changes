@@ -1,6 +1,14 @@
 Revision history for H2O.
 
 1.0.1 TBD
+	- [core] change backlog size from 65,536 to 65,535 #183 (Tatsuhiko Kubo)
+	- [http2] fix assertion failure in HPACK encoder #186 (Kazuho Oku)
+	- [http2] add `extern` to some global variables that were not marked as such #178 (Kazuho Oku)
+	- [SSL] add host header to OCSP request #176 (Masaaki Hirose)
+	- [libh2o] do not require header files under `deps/` when using libh2o #173 (Kazuho Oku)
+	- [libh2o] fix compile error in examples when compiled with `H2O_USE_LIBUV=0` #177 (Kazuho Oku)
+	- [libh2o] in example, add missing / after the reference path #180 (Matthieu Garrigues)
+	- [misc] fix invalid HTML in sample page #175 (Deepak Prakash)
 
 1.0.0 2015-02-18 20:01:00+0000
 	- [core] add redirect handler #150 (Kazuho Oku)
