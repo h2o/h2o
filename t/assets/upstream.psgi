@@ -36,6 +36,7 @@ builder {
             [
                 'content-type' => 'text/plain',
                 'content-length' => length $content,
+                'foo' => '*', # test for issue #185
             ],
             [ $content ],
         ];
