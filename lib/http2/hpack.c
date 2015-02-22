@@ -493,7 +493,7 @@ static size_t encode_huffman(uint8_t *_dst, const uint8_t *src, size_t len)
             bits <<= 8;
             bits_left += 8;
             if (dst == dst_end) {
-                return -1;
+                return 0;
             }
         }
     }
