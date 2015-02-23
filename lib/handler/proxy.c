@@ -71,7 +71,7 @@ static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, 
 
     if (h2o_url_parse(location, location_len, &loc_parsed) != 0 ||
         !test_location_match(upstream, loc_parsed.scheme, loc_parsed.host, h2o_url_get_port(&loc_parsed), loc_parsed.path))
-        return h2o_iovec_init(location, location_len);
+        return h2o_strdup(pool, location, location_len);
 
     return h2o_concat(pool, req_scheme->name, h2o_iovec_init(H2O_STRLIT("://")), req_authority, req_basepath,
                       h2o_iovec_init(loc_parsed.path.base + upstream->path.len, loc_parsed.path.len - upstream->path.len));
@@ -281,7 +281,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
         return NULL;
     }
 
-    /* copy the response */
+    /* copy the response (note: all the headers must be copied; http1client discards the input once we return from this callback) */
     self->src_req->res.status = status;
     self->src_req->res.reason = h2o_strdup(&self->src_req->pool, msg.base, msg.len).base;
     for (i = 0; i != num_headers; ++i) {
