@@ -286,7 +286,7 @@ static void on_head(h2o_socket_t *sock, int status)
     }
 
     h2o_buffer_consume(&client->super.sock->input, rlen);
-    client->super.sock->bytes_read -= rlen;
+    client->super.sock->bytes_read = client->super.sock->input->size;
 
     client->_timeout.cb = on_body_timeout;
     h2o_socket_read_start(sock, reader);
