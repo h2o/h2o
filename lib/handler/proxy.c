@@ -80,10 +80,8 @@ static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, 
 static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream, int keepalive, int preserve_host)
 {
     h2o_iovec_t buf;
-    size_t bufsz, remote_addr_len = SIZE_MAX;
-    const h2o_header_t *h, *h_end;
-    char *p;
-    int xff = 0;
+    size_t offset = 0, remote_addr_len = SIZE_MAX;
+    const h2o_header_t *x_forwarded_for = NULL;
     char remote_addr[NI_MAXHOST];
     h2o_iovec_t cookie_buf = {};
 
@@ -91,79 +89,119 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
     if (req->conn->peername.addr != NULL)
         remote_addr_len = h2o_socket_getnumerichost(req->conn->peername.addr, req->conn->peername.len, remote_addr);
 
-    /* calc buffer length (TODO switch to a safer way of building request as the current approach is potentially vulnerable to
-     * buffer overrun) */
-    bufsz = sizeof("  HTTP/1.1\r\nhost: :65535\r\nconnection: keep-alive\r\ncontent-length: 18446744073709551615\r\n") +
-            sizeof("x-forwarded-proto: https\r\nx-forwarded-for: \r\n\r\n") + req->method.len + req->path.len -
-            req->pathconf->path.len + upstream->path.len + upstream->host.len + (remote_addr_len + 1);
-    for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h)
-        bufsz += h->name->len + h->value.len + 4;
-    /* allocate */
-    buf.base = h2o_mem_alloc_pool(&req->pool, bufsz);
-
     /* build response */
-    p = buf.base;
-    p += sprintf(p, "%.*s %.*s%.*s HTTP/1.1\r\nconnection: %s\r\n", (int)req->method.len, req->method.base, (int)upstream->path.len,
-                 upstream->path.base, (int)(req->path.len - req->pathconf->path.len), req->path.base + req->pathconf->path.len,
-                 keepalive ? "keep-alive" : "close");
-    if (preserve_host) {
-        p += sprintf(p, "host: %.*s\r\n", (int)req->authority.len, req->authority.base);
+    buf.len = req->method.len + upstream->path.len + req->path.len - req->pathconf->path.len + 512;
+    buf.base = h2o_mem_alloc_pool(&req->pool, buf.len);
+
+#define RESERVE(sz)                                                                                                                \
+    do {                                                                                                                           \
+        if (offset + sz + 4 /* for "\r\n\r\n" */ > buf.len) {                                                                      \
+            buf.len *= 2;                                                                                                          \
+            char *newp = h2o_mem_alloc_pool(&req->pool, buf.len);                                                                  \
+            memcpy(newp, buf.base, offset);                                                                                        \
+            buf.base = newp;                                                                                                       \
+        }                                                                                                                          \
+    } while (0)
+#define APPEND(s, l)                                                                                                               \
+    do {                                                                                                                           \
+        memcpy(buf.base + offset, (s), (l));                                                                                       \
+        offset += (l);                                                                                                             \
+    } while (0)
+#define APPEND_STRLIT(lit) APPEND((lit), sizeof(lit) - 1)
+
+    APPEND(req->method.base, req->method.len);
+    buf.base[offset++] = ' ';
+    APPEND(upstream->path.base, upstream->path.len);
+    APPEND(req->path.base + req->pathconf->path.len, req->path.len - req->pathconf->path.len);
+    APPEND_STRLIT(" HTTP/1.1\r\nconnection: ");
+    if (keepalive) {
+        APPEND_STRLIT("keep-alive\r\nhost: ");
     } else {
-        if (upstream->port == 80)
-            p += sprintf(p, "host: %.*s\r\n", (int)upstream->host.len, upstream->host.base);
-        else
-            p += sprintf(p, "host: %.*s:%u\r\n", (int)upstream->host.len, upstream->host.base, (unsigned)upstream->port);
+        APPEND_STRLIT("close\r\nhost: ");
     }
+    assert(offset <= buf.len);
+    if (preserve_host) {
+        RESERVE(req->authority.len);
+        APPEND(req->authority.base, req->authority.len);
+    } else if (upstream->port == 80) {
+        RESERVE(upstream->host.len);
+        APPEND(upstream->host.base, upstream->host.len);
+    } else {
+        RESERVE(upstream->host.len + sizeof(":65535") - 1);
+        offset += sprintf(buf.base + offset, "%.*s:%u", (int)upstream->host.len, upstream->host.base, (unsigned)upstream->port);
+    }
+    buf.base[offset++] = '\r';
+    buf.base[offset++] = '\n';
     if (req->entity.base != NULL) {
-        p += sprintf(p, "content-length: %zu\r\n", req->entity.len);
+        RESERVE(sizeof("content-length: 18446744073709551615") - 1);
+        offset += sprintf(buf.base + offset, "content-length: %zu\r\n", req->entity.len);
     }
-    for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h) {
-        if (h2o_iovec_is_token(h->name)) {
-            const h2o_token_t *token = (void *)h->name;
-            if (token->proxy_should_drop) {
-                continue;
-            } else if (token == H2O_TOKEN_COOKIE) {
-                /* merge the cookie headers; see HTTP/2 8.1.2.5 and HTTP/1 (RFC6265 5.4) */
-                if (h->value.len != 0) {
-                    if (cookie_buf.len == 0) {
-                        cookie_buf = h->value;
-                    } else {
-                        char *buf = h2o_mem_alloc_pool(&req->pool, cookie_buf.len + 2 + h->value.len);
-                        memcpy(buf, cookie_buf.base, cookie_buf.len);
-                        buf[cookie_buf.len] = ';';
-                        buf[cookie_buf.len + 1] = ' ';
-                        memcpy(buf + cookie_buf.len + 2, h->value.base, h->value.len);
-                        cookie_buf.base = buf;
-                        cookie_buf.len += 2 + h->value.len;
+    {
+        const h2o_header_t *h, *h_end;
+        for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h) {
+            if (h2o_iovec_is_token(h->name)) {
+                const h2o_token_t *token = (void *)h->name;
+                if (token->proxy_should_drop) {
+                    continue;
+                } else if (token == H2O_TOKEN_COOKIE) {
+                    /* merge the cookie headers; see HTTP/2 8.1.2.5 and HTTP/1 (RFC6265 5.4) */
+                    if (h->value.len != 0) {
+                        if (cookie_buf.len == 0) {
+                            cookie_buf = h->value;
+                        } else {
+                            char *buf = h2o_mem_alloc_pool(&req->pool, cookie_buf.len + 2 + h->value.len);
+                            memcpy(buf, cookie_buf.base, cookie_buf.len);
+                            buf[cookie_buf.len] = ';';
+                            buf[cookie_buf.len + 1] = ' ';
+                            memcpy(buf + cookie_buf.len + 2, h->value.base, h->value.len);
+                            cookie_buf.base = buf;
+                            cookie_buf.len += 2 + h->value.len;
+                        }
                     }
+                    continue;
                 }
+            }
+            if (h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-proto")))
+                continue;
+            if (h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-for"))) {
+                x_forwarded_for = h;
                 continue;
             }
+            RESERVE(h->name->len + h->value.len + 2);
+            APPEND(h->name->base, h->name->len);
+            buf.base[offset++] = ':';
+            buf.base[offset++] = ' ';
+            APPEND(h->value.base, h->value.len);
+            buf.base[offset++] = '\r';
+            buf.base[offset++] = '\n';
         }
-        if (h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-proto")))
-            continue;
-        if (h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-for"))) {
-            xff++;
-            if (remote_addr_len != SIZE_MAX) {
-                p += sprintf(p, "x-forwarded-for: %.*s, %.*s\r\n", (int)h->value.len, h->value.base, (int)remote_addr_len,
-                             remote_addr);
-                continue;
-            }
+    }
+    if (cookie_buf.len != 0) {
+        RESERVE(sizeof("cookie: ") - 1 + cookie_buf.len);
+        offset += sprintf(buf.base + offset, "cookie: %.*s\r\n", (int)cookie_buf.len, cookie_buf.base);
+    }
+    RESERVE(sizeof("x-forwarded-proto: ") - 1 + req->scheme->name.len);
+    offset += sprintf(buf.base + offset, "x-forwarded-proto: %.*s\r\n", (int)req->scheme->name.len, req->scheme->name.base);
+    if (remote_addr_len != SIZE_MAX) {
+        if (x_forwarded_for != NULL) {
+            RESERVE(sizeof("x-forwarded-for: , ") - 1 + x_forwarded_for->value.len + remote_addr_len);
+            offset += sprintf(buf.base + offset, "x-forwarded-for: %.*s, %.*s\r\n", (int)x_forwarded_for->value.len,
+                              x_forwarded_for->value.base, (int)remote_addr_len, remote_addr);
+        } else {
+            RESERVE(sizeof("x-forwarded-for: ") - 1 + remote_addr_len);
+            offset += sprintf(buf.base + offset, "x-forwarded-for: %.*s\r\n", (int)remote_addr_len, remote_addr);
         }
-        p += sprintf(p, "%.*s: %.*s\r\n", (int)h->name->len, h->name->base, (int)h->value.len, h->value.base);
     }
-    p += sprintf(p, "x-forwarded-proto: %.*s\r\n", (int)req->scheme->name.len, req->scheme->name.base);
-    if (xff == 0 && remote_addr_len != SIZE_MAX) {
-        p += sprintf(p, "x-forwarded-for: %.*s\r\n", (int)remote_addr_len, remote_addr);
-    }
-    if (cookie_buf.len != 0)
-        p += sprintf(p, "cookie: %.*s\r\n", (int)cookie_buf.len, cookie_buf.base);
-    *p++ = '\r';
-    *p++ = '\n';
+    buf.base[offset++] = '\r';
+    buf.base[offset++] = '\n';
+
+#undef RESERVE
+#undef APPEND
+#undef APPEND_STRLIT
 
     /* set the length */
-    buf.len = p - buf.base;
-    assert(buf.len < bufsz);
+    assert(offset <= buf.len);
+    buf.len = offset;
 
     return buf;
 }
