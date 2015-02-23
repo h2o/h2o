@@ -438,5 +438,6 @@ h2o_http1client_t *h2o_http1client_connect_with_pool(h2o_http1client_ctx_t *ctx,
 void h2o_http1client_cancel(h2o_http1client_t *_client)
 {
     struct st_h2o_http1client_private_t *client = (void *)_client;
+    client->_can_keepalive = 0;
     close_client(client);
 }
