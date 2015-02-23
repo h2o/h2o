@@ -22,7 +22,7 @@
 #ifndef h2o__version_h
 #define h2o__version_h
 
-#define H2O_VERSION "1.0.1-alpha1"
+#define H2O_VERSION "1.0.1"
 
 #define H2O_VERSION_MAJOR 1
 #define H2O_VERSION_MINOR 0

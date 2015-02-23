@@ -1,6 +1,6 @@
 Revision history for H2O.
 
-1.0.1 TBD
+1.0.1 2015-02-23 05:50:00+0000
 	- [core] change backlog size from 65,536 to 65,535 #183 (Tatsuhiko Kubo)
 	- [http2] fix assertion failure in HPACK encoder #186 (Kazuho Oku)
 	- [http2] add `extern` to some global variables that were not marked as such #178 (Kazuho Oku)
