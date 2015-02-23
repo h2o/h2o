@@ -4,6 +4,8 @@ Revision history for H2O.
 	- [core] change backlog size from 65,536 to 65,535 #183 (Tatsuhiko Kubo)
 	- [http2] fix assertion failure in HPACK encoder #186 (Kazuho Oku)
 	- [http2] add `extern` to some global variables that were not marked as such #178 (Kazuho Oku)
+	- [proxy] close persistent upstream connection if client abruptly closes the stream #188 (Kazuho Oku)
+	- [proxy] fix internal state corruption in case upstream sends response headers divided into multpile packets #189 (Kazuho Oku)
 	- [SSL] add host header to OCSP request #176 (Masaaki Hirose)
 	- [libh2o] do not require header files under `deps/` when using libh2o #173 (Kazuho Oku)
 	- [libh2o] fix compile error in examples when compiled with `H2O_USE_LIBUV=0` #177 (Kazuho Oku)
