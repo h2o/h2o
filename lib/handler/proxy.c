@@ -178,10 +178,16 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
     }
     if (cookie_buf.len != 0) {
         RESERVE(sizeof("cookie: ") - 1 + cookie_buf.len);
-        offset += sprintf(buf.base + offset, "cookie: %.*s\r\n", (int)cookie_buf.len, cookie_buf.base);
+        APPEND_STRLIT("cookie: ");
+        APPEND(cookie_buf.base, cookie_buf.len);
+        buf.base[offset++] = '\r';
+        buf.base[offset++] = '\n';
     }
     RESERVE(sizeof("x-forwarded-proto: ") - 1 + req->scheme->name.len);
-    offset += sprintf(buf.base + offset, "x-forwarded-proto: %.*s\r\n", (int)req->scheme->name.len, req->scheme->name.base);
+    APPEND_STRLIT("x-forwarded-proto: ");
+    APPEND(req->scheme->name.base, req->scheme->name.len);
+    buf.base[offset++] = '\r';
+    buf.base[offset++] = '\n';
     if (remote_addr_len != SIZE_MAX) {
         if (x_forwarded_for != NULL) {
             RESERVE(sizeof("x-forwarded-for: , ") - 1 + x_forwarded_for->value.len + remote_addr_len);
@@ -189,7 +195,10 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
                               x_forwarded_for->value.base, (int)remote_addr_len, remote_addr);
         } else {
             RESERVE(sizeof("x-forwarded-for: ") - 1 + remote_addr_len);
-            offset += sprintf(buf.base + offset, "x-forwarded-for: %.*s\r\n", (int)remote_addr_len, remote_addr);
+            APPEND_STRLIT("x-forwarded-for: ");
+            APPEND(remote_addr, remote_addr_len);
+            buf.base[offset++] = '\r';
+            buf.base[offset++] = '\n';
         }
     }
     buf.base[offset++] = '\r';
