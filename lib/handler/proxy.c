@@ -201,8 +201,14 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
             buf.base[offset++] = '\n';
         }
     }
-    buf.base[offset++] = '\r';
-    buf.base[offset++] = '\n';
+    RESERVE(sizeof("via: 1.255 ") - 1 + req->authority.len);
+    if (req->version < 0x200) {
+        offset += sprintf(buf.base + offset, "via: 1.%3d ", (int)(req->version & 0xff));
+    } else {
+        APPEND_STRLIT("via: 2 ");
+    }
+    APPEND(req->authority.base, req->authority.len);
+    APPEND_STRLIT("\r\n\r\n");
 
 #undef RESERVE
 #undef APPEND
