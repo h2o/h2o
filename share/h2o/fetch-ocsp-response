@@ -87,7 +87,9 @@ if (! defined $issuer_fn) {
 # obtain response (without verification)
 print STDERR "sending OCSP request to $ocsp_uri\n";
 my $resp = run_openssl(
-    "ocsp -issuer $issuer_fn -cert $cert_fn -url $ocsp_uri -header Host $ocsp_host -noverify -respout $tempdir/resp.der " . join(' ', @ARGV),
+    "ocsp -issuer $issuer_fn -cert $cert_fn -url $ocsp_uri"
+    . ($openssl_version =~ /^OpenSSL 1\./is ? " -header Host $ocsp_host" : "")
+    . " -noverify -respout $tempdir/resp.der " . join(' ', @ARGV),
     1,
 );
 print STDERR $resp;
