@@ -2,6 +2,7 @@ use strict;
 use warnings;
 use Plack::App::File;
 use Plack::Builder;
+use Plack::Request;
 use Time::HiRes qw(sleep);
 use t::Util;
 
@@ -51,6 +52,15 @@ builder {
             [
                 join "\n", map { my $n = lc substr $_, 5; $n =~ tr/_/-/; "$n: $env->{$_}" } sort grep { /^HTTP_/ } keys %$env,
             ]
+        ];
+    };
+    mount "/set-headers" => sub {
+        my $env = shift;
+        my $query = Plack::Request->new($env)->parameters;
+        return [
+            200,
+            [ map { my $n = $_; map { $n => $_ } $query->get_all($n) } $query->keys ],
+            [ 'body' ],
         ];
     };
     mount "/redirect" => sub {
