@@ -141,6 +141,26 @@ void test_lib__http2__hpack(void)
 #undef TEST
     }
 
+    note("encode_int");
+    {
+        uint8_t buf[16];
+        size_t len;
+#define TEST(encoded, value) \
+        memset(buf, 0, sizeof(buf)); \
+        len = encode_int(buf, value, 7) - buf; \
+        ok(len == sizeof(encoded) - 1); \
+        ok(memcmp(buf, encoded, sizeof(encoded) - 1) == 0);
+        TEST("\x00", 0);
+        TEST("\x03", 3);
+        TEST("\x7e", 126);
+        TEST("\x7f\x00", 127);
+        TEST("\x7f\x01", 128);
+        TEST("\x7f\x7f", 254);
+        TEST("\x7f\x80\x01", 255);
+        TEST("\x7f\xff\xff\xff\x7f", 0xfffffff + 127);
+#undef TEST
+    }
+
     note("decode_huffman");
     {
         h2o_iovec_t huffcode = {H2O_STRLIT("\xf1\xe3\xc2\xe5\xf2\x3a\x6b\xa0\xab\x90\xf4\xff")};
