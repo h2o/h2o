@@ -461,7 +461,7 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
 
 static uint8_t *encode_int(uint8_t *dst, uint32_t value, size_t prefix_bits)
 {
-    if (value < (1 << prefix_bits)) {
+    if (value < (1 << prefix_bits) - 1) {
         *dst++ |= value;
     } else {
         /* see also: MAX_ENCODE_INT_LENGTH */
@@ -469,7 +469,7 @@ static uint8_t *encode_int(uint8_t *dst, uint32_t value, size_t prefix_bits)
         if (value > 0x0fffffff)
             h2o_fatal("value out of range");
         *dst++ |= (1 << prefix_bits) - 1;
-        for (; value >= 256; value >>= 8) {
+        for (; value >= 128; value >>= 7) {
             *dst++ = 0x80 | value;
         }
         *dst++ = value;
