@@ -57,6 +57,7 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, 1, 0, 0, 0, 0},
                              {{H2O_STRLIT("if-none-match")}, 41, 0, 0, 0, 0},
                              {{H2O_STRLIT("if-range")}, 42, 0, 0, 0, 0},
                              {{H2O_STRLIT("if-unmodified-since")}, 43, 0, 0, 0, 0},
+                             {{H2O_STRLIT("keep-alive")}, 0, 1, 0, 0, 0},
                              {{H2O_STRLIT("last-modified")}, 44, 0, 0, 0, 0},
                              {{H2O_STRLIT("link")}, 45, 0, 0, 0, 0},
                              {{H2O_STRLIT("location")}, 46, 0, 0, 0, 0},
@@ -78,7 +79,7 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, 1, 0, 0, 0, 0},
                              {{H2O_STRLIT("via")}, 60, 0, 0, 0, 0},
                              {{H2O_STRLIT("www-authenticate")}, 61, 0, 0, 0, 0},
                              {{H2O_STRLIT("x-reproxy-url")}, 0, 0, 0, 0, 0}};
-size_t h2o__num_tokens = 57;
+size_t h2o__num_tokens = 58;
 
 const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
 {
@@ -212,6 +213,8 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     case 10:
         switch (name[9]) {
         case 'e':
+            if (memcmp(name, "keep-aliv", 9) == 0)
+                return H2O_TOKEN_KEEP_ALIVE;
             if (memcmp(name, "set-cooki", 9) == 0)
                 return H2O_TOKEN_SET_COOKIE;
             break;
