@@ -42,7 +42,7 @@ static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
 {
     static h2o_generator_t generator = {NULL, NULL};
 
-    if (!h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
+    if (!h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("GET")))
         return -1;
 
     h2o_iovec_t body = h2o_strdup(&req->pool, "hello world\n", SIZE_MAX);
@@ -57,7 +57,7 @@ static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
 
 static int reproxy_test(h2o_handler_t *self, h2o_req_t *req)
 {
-    if (!h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
+    if (!h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("GET")))
         return -1;
 
     req->res.status = 200;
@@ -70,7 +70,7 @@ static int reproxy_test(h2o_handler_t *self, h2o_req_t *req)
 
 static int post_test(h2o_handler_t *self, h2o_req_t *req)
 {
-    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("POST")) &&
+    if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("POST")) &&
         h2o_memis(req->path_normalized.base, req->path_normalized.len, H2O_STRLIT("/post-test/"))) {
         static h2o_generator_t generator = {NULL, NULL};
         req->res.status = 200;

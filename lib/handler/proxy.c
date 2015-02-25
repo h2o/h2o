@@ -107,7 +107,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
         remote_addr_len = h2o_socket_getnumerichost(req->conn->peername.addr, req->conn->peername.len, remote_addr);
 
     /* build response */
-    buf.len = req->method.len + upstream->path.len + req->path.len - req->pathconf->path.len + 512;
+    buf.len = req->input.method.len + upstream->path.len + req->input.path.len - req->pathconf->path.len + 512;
     buf.base = h2o_mem_alloc_pool(&req->pool, buf.len);
 
 #define RESERVE(sz)                                                                                                                \
@@ -138,10 +138,10 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
         }                                                                                                                          \
     } while (0)
 
-    APPEND(req->method.base, req->method.len);
+    APPEND(req->input.method.base, req->input.method.len);
     buf.base[offset++] = ' ';
     APPEND(upstream->path.base, upstream->path.len);
-    APPEND(req->path.base + req->pathconf->path.len, req->path.len - req->pathconf->path.len);
+    APPEND(req->input.path.base + req->pathconf->path.len, req->input.path.len - req->pathconf->path.len);
     APPEND_STRLIT(" HTTP/1.1\r\nconnection: ");
     if (keepalive) {
         APPEND_STRLIT("keep-alive\r\nhost: ");
@@ -150,8 +150,8 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
     }
     assert(offset <= buf.len);
     if (preserve_host) {
-        RESERVE(req->authority.len);
-        APPEND(req->authority.base, req->authority.len);
+        RESERVE(req->input.authority.len);
+        APPEND(req->input.authority.base, req->input.authority.len);
     } else if (upstream->port == 80) {
         RESERVE(upstream->host.len);
         APPEND(upstream->host.base, upstream->host.len);
@@ -213,7 +213,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
     }
     buf.base[offset++] = '\r';
     buf.base[offset++] = '\n';
-    FLATTEN_PREFIXED_VALUE("via: ", via_buf, sizeof("1.1 ") - 1 + req->authority.len);
+    FLATTEN_PREFIXED_VALUE("via: ", via_buf, sizeof("1.1 ") - 1 + req->input.authority.len);
     if (req->version < 0x200) {
         buf.base[offset++] = '1';
         buf.base[offset++] = '.';
@@ -222,7 +222,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
         buf.base[offset++] = '2';
     }
     buf.base[offset++] = ' ';
-    APPEND(req->authority.base, req->authority.len);
+    APPEND(req->input.authority.base, req->input.authority.len);
     APPEND_STRLIT("\r\n\r\n");
 
 #undef RESERVE
@@ -370,15 +370,15 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 goto Skip;
             } else if (token == H2O_TOKEN_LOCATION) {
                 value = rewrite_location(&self->src_req->pool, headers[i].value, headers[i].value_len, self->upstream,
-                                         self->src_req->scheme, self->src_req->authority, self->src_req->pathconf->path);
+                                         self->src_req->scheme, self->src_req->input.authority, self->src_req->pathconf->path);
                 goto AddHeader;
             } else if (token == H2O_TOKEN_LINK) {
                 if (url_parsed.scheme == NULL) {
-                    if (h2o_url_parse_hostport(self->src_req->authority.base, self->src_req->authority.len, &url_parsed.host,
-                                               &url_parsed._port) != NULL) {
+                    if (h2o_url_parse_hostport(self->src_req->input.authority.base, self->src_req->input.authority.len,
+                                               &url_parsed.host, &url_parsed._port) != NULL) {
                         url_parsed = (h2o_url_t){
                             self->src_req->scheme,          /* scheme */
-                            self->src_req->authority,       /* authority */
+                            self->src_req->input.authority, /* authority */
                             {},                             /* host */
                             self->src_req->path_normalized, /* path */
                             65535                           /* port */
@@ -452,7 +452,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_proxy_locat
     self->src_req = req;
     self->up_req.bufs[0] = build_request(req, upstream, keepalive, preserve_host);
     self->up_req.bufs[1] = req->entity;
-    self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
+    self->up_req.is_head = h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD"));
     h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&self->buf_sending, &h2o_socket_buffer_prototype);
 

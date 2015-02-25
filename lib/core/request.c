@@ -31,14 +31,14 @@ static h2o_hostconf_t *setup_before_processing(h2o_req_t *req)
     h2o_hostconf_t *hostconf;
 
     h2o_get_timestamp(ctx, &req->pool, &req->processed_at);
-    req->path_normalized = h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at);
+    req->path_normalized = h2o_url_normalize_path(&req->pool, req->input.path.base, req->input.path.len, &req->input.query_at);
 
     /* find the host context */
-    if (req->authority.base != NULL) {
+    if (req->input.authority.base != NULL) {
         h2o_hostconf_t **cand = req->conn->hosts;
         do {
             hostconf = *cand;
-            if (h2o_memis(req->authority.base, req->authority.len, hostconf->hostname.base, hostconf->hostname.len))
+            if (h2o_memis(req->input.authority.base, req->input.authority.len, hostconf->hostname.base, hostconf->hostname.len))
                 goto HostFound;
         } while (*++cand != NULL);
         hostconf = *req->conn->hosts;
@@ -47,7 +47,7 @@ static h2o_hostconf_t *setup_before_processing(h2o_req_t *req)
     } else {
         /* set the authority name to the default one */
         hostconf = *req->conn->hosts;
-        req->authority = hostconf->hostname;
+        req->input.authority = hostconf->hostname;
     }
 
     req->pathconf = &hostconf->fallback_path; /* for non-error case, should be adjusted laterwards */
@@ -81,9 +81,9 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
         memcpy(req->buf.base, src->buf.base, src->buf.len);                                                                        \
         req->buf.len = src->buf.len;                                                                                               \
     } while (0)
-        COPY(authority);
-        COPY(method);
-        COPY(path);
+        COPY(input.authority);
+        COPY(input.method);
+        COPY(input.path);
         req->scheme = src->scheme;
         req->version = src->version;
         h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->headers, sizeof(h2o_header_t), src->headers.size);
@@ -144,8 +144,8 @@ void h2o_process_request(h2o_req_t *req)
         if (req->path_normalized.len >= confpath_wo_slash &&
             memcmp(req->path_normalized.base, pathconf->path.base, confpath_wo_slash) == 0) {
             if (req->path_normalized.len == confpath_wo_slash) {
-                h2o_iovec_t dest =
-                    h2o_concat(&req->pool, req->scheme->name, h2o_iovec_init(H2O_STRLIT("://")), req->authority, pathconf->path);
+                h2o_iovec_t dest = h2o_concat(&req->pool, req->scheme->name, h2o_iovec_init(H2O_STRLIT("://")),
+                                              req->input.authority, pathconf->path);
                 req->pathconf = pathconf;
                 h2o_send_redirect(req, 301, "Moved Permanently", dest.base, dest.len);
                 return;

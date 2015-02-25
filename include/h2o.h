@@ -426,30 +426,34 @@ struct st_h2o_req_t {
      */
     h2o_conn_t *conn;
     /**
+     * the request sent by the client (as is)
+     */
+    struct {
+        /**
+         * authority (a.k.a. the Host header; the value is supplemented if missing before the handlers are being called)
+         */
+        h2o_iovec_t authority;
+        /**
+         * method
+         */
+        h2o_iovec_t method;
+        /**
+         * abs-path of the request (unmodified)
+         */
+        h2o_iovec_t path;
+        /**
+         * offset of '?' within path, or SIZE_MAX if not found
+         */
+        size_t query_at;
+    } input;
+    /**
      * the path context
      */
     h2o_pathconf_t *pathconf;
     /**
-     * authority (a.k.a. the Host header; the value is supplemented if missing before the handlers are being called)
-     */
-    h2o_iovec_t authority;
-    /**
-     * HTTP method
-     * This is a non-terminated string of method_len bytes long.
-     */
-    h2o_iovec_t method;
-    /**
-     * abs-path of the request (unmodified)
-     */
-    h2o_iovec_t path;
-    /**
      * abs-path of the request (normalized, only guaranteed to be non-NULL for non-fallback handler)
      */
     h2o_iovec_t path_normalized;
-    /**
-     * offset of '?' within path, or SIZE_MAX if not found
-     */
-    size_t query_at;
     /**
      * scheme (http, https, etc.)
      */

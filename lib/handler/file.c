@@ -291,9 +291,9 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     int is_dir, is_get;
 
     /* only accept GET and HEAD */
-    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))) {
+    if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("GET"))) {
         is_get = 1;
-    } else if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"))) {
+    } else if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD"))) {
         is_get = 0;
     } else {
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ALLOW, H2O_STRLIT("GET, HEAD"));
@@ -322,8 +322,9 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
             }
             if (is_dir) {
                 /* note: apache redirects "path/" to "path/index.txt/" if index.txt is a dir */
-                h2o_iovec_t dest = h2o_concat(&req->pool, req->scheme->name, h2o_iovec_init(H2O_STRLIT("://")), req->authority,
-                                              req->path_normalized, *index_file, h2o_iovec_init(H2O_STRLIT("/")));
+                h2o_iovec_t dest =
+                    h2o_concat(&req->pool, req->scheme->name, h2o_iovec_init(H2O_STRLIT("://")), req->input.authority,
+                               req->path_normalized, *index_file, h2o_iovec_init(H2O_STRLIT("/")));
                 h2o_send_redirect(req, 301, "Moved Permantently", dest.base, dest.len);
                 return 0;
             }
@@ -340,7 +341,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         if ((generator = create_generator(req, rpath, rpath_len, &is_dir, self->flags)) != NULL)
             goto Opened;
         if (is_dir) {
-            h2o_iovec_t dest = h2o_concat(&req->pool, req->scheme->name, h2o_iovec_init(H2O_STRLIT("://")), req->authority,
+            h2o_iovec_t dest = h2o_concat(&req->pool, req->scheme->name, h2o_iovec_init(H2O_STRLIT("://")), req->input.authority,
                                           req->path_normalized, h2o_iovec_init(H2O_STRLIT("/")));
             h2o_send_redirect(req, 301, "Moved Permanently", dest.base, dest.len);
             return 0;
