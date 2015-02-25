@@ -98,8 +98,10 @@ sub run_tests_with_conf {
                 my $resp = `curl --silent --insecure $proto://127.0.0.1:$port/echo-headers`;
                 like $resp, qr/^x-forwarded-for: 127\.0\.0\.1$/mi, "x-forwarded-for";
                 like $resp, qr/^x-forwarded-proto: $proto$/mi, "x-forwarded-proto";
-                $resp = `curl --silent --insecure --header 'X-Forwarded-For: 127.0.0.2' $proto://127.0.0.1:$port/echo-headers`;
+                like $resp, qr/^via: 1\.1 127\.0\.0\.1:$port$/mi, "via";
+                $resp = `curl --silent --insecure --header 'X-Forwarded-For: 127.0.0.2' --header 'Via: 2 example.com' $proto://127.0.0.1:$port/echo-headers`;
                 like $resp, qr/^x-forwarded-for: 127\.0\.0\.2, 127\.0\.0\.1$/mi, "x-forwarded-for (append)";
+                like $resp, qr/^via: 2 example.com, 1\.1 127\.0\.0\.1:$port$/mi, "via (append)";
             };
         };
         $doit->('http', $port);
