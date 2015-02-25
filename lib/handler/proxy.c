@@ -107,7 +107,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
         remote_addr_len = h2o_socket_getnumerichost(req->conn->peername.addr, req->conn->peername.len, remote_addr);
 
     /* build response */
-    buf.len = req->method.len + upstream->path.len + req->input.path.len - req->pathconf->path.len + 512;
+    buf.len = req->method.len + upstream->path.len + req->path.len - req->pathconf->path.len + 512;
     buf.base = h2o_mem_alloc_pool(&req->pool, buf.len);
 
 #define RESERVE(sz)                                                                                                                \
@@ -141,7 +141,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
     APPEND(req->method.base, req->method.len);
     buf.base[offset++] = ' ';
     APPEND(upstream->path.base, upstream->path.len);
-    APPEND(req->input.path.base + req->pathconf->path.len, req->input.path.len - req->pathconf->path.len);
+    APPEND(req->path.base + req->pathconf->path.len, req->path.len - req->pathconf->path.len);
     APPEND_STRLIT(" HTTP/1.1\r\nconnection: ");
     if (keepalive) {
         APPEND_STRLIT("keep-alive\r\nhost: ");

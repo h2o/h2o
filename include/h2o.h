@@ -459,7 +459,15 @@ struct st_h2o_req_t {
      */
     h2o_iovec_t method;
     /**
-     * abs-path of the request (normalized, only guaranteed to be non-NULL for non-fallback handler)
+     * abs-path of the processing request
+     */
+    h2o_iovec_t path;
+    /**
+     * offset of '?' within path, or SIZE_MAX if not found
+     */
+    size_t query_at;
+    /**
+     * normalized path of the processing request (i.e. no "." or "..", no query)
      */
     h2o_iovec_t path_normalized;
     /**

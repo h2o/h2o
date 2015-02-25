@@ -53,7 +53,9 @@ static h2o_hostconf_t *setup_before_processing(h2o_req_t *req)
 
     req->method = req->input.method;
     req->authority = req->input.authority;
-    req->path_normalized = h2o_url_normalize_path(&req->pool, req->input.path.base, req->input.path.len, &req->input.query_at);
+    req->path = req->input.path;
+    req->path_normalized = h2o_url_normalize_path(&req->pool, req->input.path.base, req->input.path.len, &req->query_at);
+    req->input.query_at = req->query_at; /* we can do this since input.path == path */
 
     return hostconf;
 }
