@@ -81,6 +81,5 @@
 #define H2O_TOKEN_VIA (h2o__tokens + 54)
 #define H2O_TOKEN_WWW_AUTHENTICATE (h2o__tokens + 55)
 #define H2O_TOKEN_X_REPROXY_URL (h2o__tokens + 56)
-#define H2O_TOKEN_X_SERVER_PUSH (h2o__tokens + 57)
 
 #endif
