@@ -77,13 +77,30 @@ static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, 
                       h2o_iovec_init(loc_parsed.path.base + upstream->path.len, loc_parsed.path.len - upstream->path.len));
 }
 
+static h2o_iovec_t build_request_merge_headers(h2o_mem_pool_t *pool, h2o_iovec_t merged, h2o_iovec_t added, int seperator)
+{
+    if (added.len == 0)
+        return merged;
+    if (merged.len == 0)
+        return added;
+
+    size_t newlen = merged.len + 2 + added.len;
+    char *buf = h2o_mem_alloc_pool(pool, newlen);
+    memcpy(buf, merged.base, merged.len);
+    buf[merged.len] = seperator;
+    buf[merged.len + 1] = ' ';
+    memcpy(buf + merged.len + 2, added.base, added.len);
+    merged.base = buf;
+    merged.len = newlen;
+    return merged;
+}
+
 static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream, int keepalive, int preserve_host)
 {
     h2o_iovec_t buf;
     size_t offset = 0, remote_addr_len = SIZE_MAX;
-    const h2o_header_t *x_forwarded_for = NULL;
     char remote_addr[NI_MAXHOST];
-    h2o_iovec_t cookie_buf = {};
+    h2o_iovec_t cookie_buf = {}, xff_buf = {}, via_buf = {};
 
     /* for x-f-f */
     if (req->conn->peername.addr != NULL)
@@ -108,6 +125,18 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
         offset += (l);                                                                                                             \
     } while (0)
 #define APPEND_STRLIT(lit) APPEND((lit), sizeof(lit) - 1)
+#define FLATTEN_PREFIXED_VALUE(prefix, value, add_size)                                                                            \
+    do {                                                                                                                           \
+        RESERVE(sizeof(prefix) - 1 + value.len + 2 + add_size);                                                                    \
+        APPEND_STRLIT(prefix);                                                                                                     \
+        if (value.len != 0) {                                                                                                      \
+            APPEND(value.base, value.len);                                                                                         \
+            if (add_size != 0) {                                                                                                   \
+                buf.base[offset++] = ',';                                                                                          \
+                buf.base[offset++] = ' ';                                                                                          \
+            }                                                                                                                      \
+        }                                                                                                                          \
+    } while (0)
 
     APPEND(req->method.base, req->method.len);
     buf.base[offset++] = ' ';
@@ -145,26 +174,18 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
                     continue;
                 } else if (token == H2O_TOKEN_COOKIE) {
                     /* merge the cookie headers; see HTTP/2 8.1.2.5 and HTTP/1 (RFC6265 5.4) */
-                    if (h->value.len != 0) {
-                        if (cookie_buf.len == 0) {
-                            cookie_buf = h->value;
-                        } else {
-                            char *buf = h2o_mem_alloc_pool(&req->pool, cookie_buf.len + 2 + h->value.len);
-                            memcpy(buf, cookie_buf.base, cookie_buf.len);
-                            buf[cookie_buf.len] = ';';
-                            buf[cookie_buf.len + 1] = ' ';
-                            memcpy(buf + cookie_buf.len + 2, h->value.base, h->value.len);
-                            cookie_buf.base = buf;
-                            cookie_buf.len += 2 + h->value.len;
-                        }
-                    }
+                    /* FIXME current algorithm is O(n^2) against the number of cookie headers */
+                    cookie_buf = build_request_merge_headers(&req->pool, cookie_buf, h->value, ';');
+                    continue;
+                } else if (token == H2O_TOKEN_VIA) {
+                    via_buf = build_request_merge_headers(&req->pool, via_buf, h->value, ',');
                     continue;
                 }
             }
             if (h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-proto")))
                 continue;
             if (h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-for"))) {
-                x_forwarded_for = h;
+                xff_buf = build_request_merge_headers(&req->pool, xff_buf, h->value, ',');
                 continue;
             }
             RESERVE(h->name->len + h->value.len + 2);
@@ -177,42 +198,37 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
         }
     }
     if (cookie_buf.len != 0) {
-        RESERVE(sizeof("cookie: ") - 1 + cookie_buf.len);
-        APPEND_STRLIT("cookie: ");
-        APPEND(cookie_buf.base, cookie_buf.len);
+        FLATTEN_PREFIXED_VALUE("cookie: ", cookie_buf, 0);
         buf.base[offset++] = '\r';
         buf.base[offset++] = '\n';
     }
-    RESERVE(sizeof("x-forwarded-proto: ") - 1 + req->scheme->name.len);
-    APPEND_STRLIT("x-forwarded-proto: ");
-    APPEND(req->scheme->name.base, req->scheme->name.len);
+    FLATTEN_PREFIXED_VALUE("x-forwarded-proto: ", req->scheme->name, 0);
     buf.base[offset++] = '\r';
     buf.base[offset++] = '\n';
     if (remote_addr_len != SIZE_MAX) {
-        if (x_forwarded_for != NULL) {
-            RESERVE(sizeof("x-forwarded-for: , ") - 1 + x_forwarded_for->value.len + remote_addr_len);
-            offset += sprintf(buf.base + offset, "x-forwarded-for: %.*s, %.*s\r\n", (int)x_forwarded_for->value.len,
-                              x_forwarded_for->value.base, (int)remote_addr_len, remote_addr);
-        } else {
-            RESERVE(sizeof("x-forwarded-for: ") - 1 + remote_addr_len);
-            APPEND_STRLIT("x-forwarded-for: ");
-            APPEND(remote_addr, remote_addr_len);
-            buf.base[offset++] = '\r';
-            buf.base[offset++] = '\n';
-        }
-    }
-    RESERVE(sizeof("via: 1.255 ") - 1 + req->authority.len);
-    if (req->version < 0x200) {
-        offset += sprintf(buf.base + offset, "via: 1.%3d ", (int)(req->version & 0xff));
+        FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, remote_addr_len);
+        APPEND(remote_addr, remote_addr_len);
     } else {
-        APPEND_STRLIT("via: 2 ");
+        FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, 0);
     }
+    buf.base[offset++] = '\r';
+    buf.base[offset++] = '\n';
+    FLATTEN_PREFIXED_VALUE("via: ", via_buf, sizeof("1.1 ") - 1 + req->authority.len);
+    if (req->version < 0x200) {
+        buf.base[offset++] = '1';
+        buf.base[offset++] = '.';
+        buf.base[offset++] = '0' + (0x100 <= req->version && req->version <= 0x109 ? req->version - 0x100 : 0);
+    } else {
+        buf.base[offset++] = '2';
+    }
+    buf.base[offset++] = ' ';
     APPEND(req->authority.base, req->authority.len);
     APPEND_STRLIT("\r\n\r\n");
 
 #undef RESERVE
 #undef APPEND
 #undef APPEND_STRLIT
+#undef FLATTEN_PREFIXED_VALUE
 
     /* set the length */
     assert(offset <= buf.len);
