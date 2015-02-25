@@ -402,19 +402,19 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                 /* FIXME validate the chars in the value (e.g. reject SP in path) */
                 if (r.name == &H2O_TOKEN_AUTHORITY->buf) {
                     /* FIXME should we perform this check? */
-                    if (req->authority.base != NULL)
+                    if (req->input.authority.base != NULL)
                         return H2O_HTTP2_ERROR_PROTOCOL;
-                    req->authority = *r.value;
+                    req->input.authority = *r.value;
                     *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS;
                 } else if (r.name == &H2O_TOKEN_METHOD->buf) {
-                    if (req->method.base != NULL)
+                    if (req->input.method.base != NULL)
                         return H2O_HTTP2_ERROR_PROTOCOL;
-                    req->method = *r.value;
+                    req->input.method = *r.value;
                     *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS;
                 } else if (r.name == &H2O_TOKEN_PATH->buf) {
-                    if (req->path.base != NULL)
+                    if (req->input.path.base != NULL)
                         return H2O_HTTP2_ERROR_PROTOCOL;
-                    req->path = *r.value;
+                    req->input.path = *r.value;
                     *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
                 } else if (r.name == &H2O_TOKEN_SCHEME->buf) {
                     if (req->scheme != NULL)
@@ -675,10 +675,10 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
     size_t capacity = flatten_headers_calc_capacity(req->headers.entries, req->headers.size);
     capacity += H2O_HTTP2_FRAME_HEADER_SIZE /* first frame header */
                 + 4;                        /* promised stream id */
-    capacity += calc_capacity(H2O_TOKEN_METHOD->buf.len, req->method.len);
+    capacity += calc_capacity(H2O_TOKEN_METHOD->buf.len, req->input.method.len);
     capacity += calc_capacity(H2O_TOKEN_SCHEME->buf.len, req->scheme->name.len);
-    capacity += calc_capacity(H2O_TOKEN_AUTHORITY->buf.len, req->authority.len);
-    capacity += calc_capacity(H2O_TOKEN_PATH->buf.len, req->path.len);
+    capacity += calc_capacity(H2O_TOKEN_AUTHORITY->buf.len, req->input.authority.len);
+    capacity += calc_capacity(H2O_TOKEN_PATH->buf.len, req->input.path.len);
 
     size_t start_at = (*buf)->size;
     uint8_t *dst = (void *)h2o_buffer_reserve(buf, capacity).base + H2O_HTTP2_FRAME_HEADER_SIZE;
@@ -688,10 +688,10 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
     *dst++ = (uint8_t)(stream_id << 16);
     *dst++ = (uint8_t)(stream_id << 8);
     *dst++ = (uint8_t)stream_id;
-    dst = encode_header(header_table, dst, &H2O_TOKEN_METHOD->buf, &req->method);
+    dst = encode_header(header_table, dst, &H2O_TOKEN_METHOD->buf, &req->input.method);
     dst = encode_header(header_table, dst, &H2O_TOKEN_SCHEME->buf, &req->scheme->name);
-    dst = encode_header(header_table, dst, &H2O_TOKEN_AUTHORITY->buf, &req->authority);
-    dst = encode_header(header_table, dst, &H2O_TOKEN_PATH->buf, &req->path);
+    dst = encode_header(header_table, dst, &H2O_TOKEN_AUTHORITY->buf, &req->input.authority);
+    dst = encode_header(header_table, dst, &H2O_TOKEN_PATH->buf, &req->input.path);
     dst = flatten_headers(dst, header_table, req->headers.entries, req->headers.size);
     (*buf)->size = (char *)dst - (*buf)->bytes;
 

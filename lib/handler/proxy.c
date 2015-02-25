@@ -213,7 +213,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
     }
     buf.base[offset++] = '\r';
     buf.base[offset++] = '\n';
-    FLATTEN_PREFIXED_VALUE("via: ", via_buf, sizeof("1.1 ") - 1 + req->authority.len);
+    FLATTEN_PREFIXED_VALUE("via: ", via_buf, sizeof("1.1 ") - 1 + req->input.authority.len);
     if (req->version < 0x200) {
         buf.base[offset++] = '1';
         buf.base[offset++] = '.';
@@ -222,7 +222,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
         buf.base[offset++] = '2';
     }
     buf.base[offset++] = ' ';
-    APPEND(req->authority.base, req->authority.len);
+    APPEND(req->input.authority.base, req->input.authority.len);
     APPEND_STRLIT("\r\n\r\n");
 
 #undef RESERVE
@@ -370,15 +370,15 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 goto Skip;
             } else if (token == H2O_TOKEN_LOCATION) {
                 value = rewrite_location(&self->src_req->pool, headers[i].value, headers[i].value_len, self->upstream,
-                                         self->src_req->scheme, self->src_req->authority, self->src_req->pathconf->path);
+                                         self->src_req->scheme, self->src_req->input.authority, self->src_req->pathconf->path);
                 goto AddHeader;
             } else if (token == H2O_TOKEN_LINK) {
                 if (url_parsed.scheme == NULL) {
-                    if (h2o_url_parse_hostport(self->src_req->authority.base, self->src_req->authority.len, &url_parsed.host,
-                                               &url_parsed._port) != NULL) {
+                    if (h2o_url_parse_hostport(self->src_req->input.authority.base, self->src_req->input.authority.len,
+                                               &url_parsed.host, &url_parsed._port) != NULL) {
                         url_parsed = (h2o_url_t){
                             self->src_req->scheme,          /* scheme */
-                            self->src_req->authority,       /* authority */
+                            self->src_req->input.authority, /* authority */
                             {},                             /* host */
                             self->src_req->path_normalized, /* path */
                             65535                           /* port */

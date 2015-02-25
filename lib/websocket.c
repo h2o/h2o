@@ -166,7 +166,7 @@ int h2o_is_websocket_handshake(h2o_req_t *req, const char **ws_client_key)
     *ws_client_key = NULL;
 
     /* method */
-    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))) {
+    if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("GET"))) {
         /* ok */
     } else {
         return 0;

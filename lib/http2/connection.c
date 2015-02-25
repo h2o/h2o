@@ -1026,10 +1026,11 @@ void h2o_http2_conn_push_path(h2o_http2_conn_t *conn, h2o_iovec_t path, h2o_http
     h2o_http2_stream_prepare_for_request(conn, stream);
 
     /* setup request */
-    stream->req.method = (h2o_iovec_t){H2O_STRLIT("GET")};
+    stream->req.input.method = (h2o_iovec_t){H2O_STRLIT("GET")};
     stream->req.scheme = src_stream->req.scheme;
-    stream->req.authority = h2o_strdup(&stream->req.pool, src_stream->req.authority.base, src_stream->req.authority.len);
-    stream->req.path = h2o_strdup(&stream->req.pool, path.base, path.len);
+    stream->req.input.authority =
+        h2o_strdup(&stream->req.pool, src_stream->req.input.authority.base, src_stream->req.input.authority.len);
+    stream->req.input.path = h2o_strdup(&stream->req.pool, path.base, path.len);
     stream->req.version = 0x200;
 
     { /* copy headers that may affect the response (of a cacheable response) */

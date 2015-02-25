@@ -40,12 +40,12 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len, &pseudo_headers_map, &content_length,
                                 &err_desc);
     ok(r == 0);
-    ok(req.authority.len == 15);
-    ok(memcmp(req.authority.base, H2O_STRLIT("www.example.com")) == 0);
-    ok(req.method.len == 3);
-    ok(memcmp(req.method.base, H2O_STRLIT("GET")) == 0);
-    ok(req.path.len == 1);
-    ok(memcmp(req.path.base, H2O_STRLIT("/")) == 0);
+    ok(req.input.authority.len == 15);
+    ok(memcmp(req.input.authority.base, H2O_STRLIT("www.example.com")) == 0);
+    ok(req.input.method.len == 3);
+    ok(memcmp(req.input.method.base, H2O_STRLIT("GET")) == 0);
+    ok(req.input.path.len == 1);
+    ok(memcmp(req.input.path.base, H2O_STRLIT("/")) == 0);
     ok(req.scheme == &H2O_URL_SCHEME_HTTP);
     ok(req.headers.size == 0);
 
@@ -57,12 +57,12 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len, &pseudo_headers_map, &content_length,
                                 &err_desc);
     ok(r == 0);
-    ok(req.authority.len == 15);
-    ok(memcmp(req.authority.base, H2O_STRLIT("www.example.com")) == 0);
-    ok(req.method.len == 3);
-    ok(memcmp(req.method.base, H2O_STRLIT("GET")) == 0);
-    ok(req.path.len == 1);
-    ok(memcmp(req.path.base, H2O_STRLIT("/")) == 0);
+    ok(req.input.authority.len == 15);
+    ok(memcmp(req.input.authority.base, H2O_STRLIT("www.example.com")) == 0);
+    ok(req.input.method.len == 3);
+    ok(memcmp(req.input.method.base, H2O_STRLIT("GET")) == 0);
+    ok(req.input.path.len == 1);
+    ok(memcmp(req.input.path.base, H2O_STRLIT("/")) == 0);
     ok(req.scheme == &H2O_URL_SCHEME_HTTP);
     ok(req.headers.size == 1);
     ok(h2o_memis(req.headers.entries[0].name->base, req.headers.entries[0].name->len, H2O_STRLIT("cache-control")));
@@ -76,12 +76,12 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len, &pseudo_headers_map, &content_length,
                                 &err_desc);
     ok(r == 0);
-    ok(req.authority.len == 15);
-    ok(memcmp(req.authority.base, H2O_STRLIT("www.example.com")) == 0);
-    ok(req.method.len == 3);
-    ok(memcmp(req.method.base, H2O_STRLIT("GET")) == 0);
-    ok(req.path.len == 11);
-    ok(memcmp(req.path.base, H2O_STRLIT("/index.html")) == 0);
+    ok(req.input.authority.len == 15);
+    ok(memcmp(req.input.authority.base, H2O_STRLIT("www.example.com")) == 0);
+    ok(req.input.method.len == 3);
+    ok(memcmp(req.input.method.base, H2O_STRLIT("GET")) == 0);
+    ok(req.input.path.len == 11);
+    ok(memcmp(req.input.path.base, H2O_STRLIT("/index.html")) == 0);
     ok(req.scheme == &H2O_URL_SCHEME_HTTPS);
     ok(req.headers.size == 1);
     ok(h2o_memis(req.headers.entries[0].name->base, req.headers.entries[0].name->len, H2O_STRLIT("custom-key")));
@@ -145,11 +145,11 @@ void test_lib__http2__hpack(void)
     {
         uint8_t buf[16];
         size_t len;
-#define TEST(encoded, value) \
-        memset(buf, 0, sizeof(buf)); \
-        len = encode_int(buf, value, 7) - buf; \
-        ok(len == sizeof(encoded) - 1); \
-        ok(memcmp(buf, encoded, sizeof(encoded) - 1) == 0);
+#define TEST(encoded, value)                                                                                                       \
+    memset(buf, 0, sizeof(buf));                                                                                                   \
+    len = encode_int(buf, value, 7) - buf;                                                                                         \
+    ok(len == sizeof(encoded) - 1);                                                                                                \
+    ok(memcmp(buf, encoded, sizeof(encoded) - 1) == 0);
         TEST("\x00", 0);
         TEST("\x03", 3);
         TEST("\x7e", 126);
