@@ -31,7 +31,6 @@ static h2o_hostconf_t *setup_before_processing(h2o_req_t *req)
     h2o_hostconf_t *hostconf;
 
     h2o_get_timestamp(ctx, &req->pool, &req->processed_at);
-    req->path_normalized = h2o_url_normalize_path(&req->pool, req->input.path.base, req->input.path.len, &req->input.query_at);
 
     /* find the host context */
     if (req->input.authority.base != NULL) {
@@ -51,6 +50,10 @@ static h2o_hostconf_t *setup_before_processing(h2o_req_t *req)
     }
 
     req->pathconf = &hostconf->fallback_path; /* for non-error case, should be adjusted laterwards */
+
+    req->method = req->input.method;
+    req->authority = req->input.authority;
+    req->path_normalized = h2o_url_normalize_path(&req->pool, req->input.path.base, req->input.path.len, &req->input.query_at);
 
     return hostconf;
 }

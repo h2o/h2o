@@ -451,6 +451,14 @@ struct st_h2o_req_t {
      */
     h2o_pathconf_t *pathconf;
     /**
+     * authority (of the processing request)
+     */
+    h2o_iovec_t authority;
+    /**
+     * method (of the processing request)
+     */
+    h2o_iovec_t method;
+    /**
      * abs-path of the request (normalized, only guaranteed to be non-NULL for non-fallback handler)
      */
     h2o_iovec_t path_normalized;

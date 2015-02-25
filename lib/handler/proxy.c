@@ -107,7 +107,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
         remote_addr_len = h2o_socket_getnumerichost(req->conn->peername.addr, req->conn->peername.len, remote_addr);
 
     /* build response */
-    buf.len = req->input.method.len + upstream->path.len + req->input.path.len - req->pathconf->path.len + 512;
+    buf.len = req->method.len + upstream->path.len + req->input.path.len - req->pathconf->path.len + 512;
     buf.base = h2o_mem_alloc_pool(&req->pool, buf.len);
 
 #define RESERVE(sz)                                                                                                                \
@@ -138,7 +138,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
         }                                                                                                                          \
     } while (0)
 
-    APPEND(req->input.method.base, req->input.method.len);
+    APPEND(req->method.base, req->method.len);
     buf.base[offset++] = ' ';
     APPEND(upstream->path.base, upstream->path.len);
     APPEND(req->input.path.base + req->pathconf->path.len, req->input.path.len - req->pathconf->path.len);
@@ -150,8 +150,8 @@ static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream,
     }
     assert(offset <= buf.len);
     if (preserve_host) {
-        RESERVE(req->input.authority.len);
-        APPEND(req->input.authority.base, req->input.authority.len);
+        RESERVE(req->authority.len);
+        APPEND(req->authority.base, req->authority.len);
     } else if (upstream->port == 80) {
         RESERVE(upstream->host.len);
         APPEND(upstream->host.base, upstream->host.len);
@@ -452,7 +452,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_proxy_locat
     self->src_req = req;
     self->up_req.bufs[0] = build_request(req, upstream, keepalive, preserve_host);
     self->up_req.bufs[1] = req->entity;
-    self->up_req.is_head = h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD"));
+    self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&self->buf_sending, &h2o_socket_buffer_prototype);
 
