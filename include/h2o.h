@@ -608,6 +608,10 @@ void h2o_dispose_request(h2o_req_t *req);
  */
 void h2o_process_request(h2o_req_t *req);
 /**
+ * reprocesses a request once more (used for internal redirection)
+ */
+void h2o_reprocess_request(h2o_req_t *req);
+/**
  * called by handlers to set the generator
  * @param req the request
  * @param generator the generator

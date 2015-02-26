@@ -25,6 +25,17 @@
 
 #define INITIAL_INBUFSZ 8192
 
+static h2o_hostconf_t *find_hostconf(h2o_hostconf_t **hostconfs, h2o_iovec_t authority)
+{
+    do {
+        h2o_hostconf_t *hostconf = *hostconfs;
+        if (h2o_memis(hostconf->hostname.base, hostconf->hostname.len, authority.base, authority.len))
+            return hostconf;
+    } while (*++hostconfs != NULL);
+
+    return NULL;
+}
+
 static h2o_hostconf_t *setup_before_processing(h2o_req_t *req)
 {
     h2o_context_t *ctx = req->conn->ctx;
@@ -34,22 +45,13 @@ static h2o_hostconf_t *setup_before_processing(h2o_req_t *req)
 
     /* find the host context */
     if (req->input.authority.base != NULL) {
-        h2o_hostconf_t **cand = req->conn->hosts;
-        do {
-            hostconf = *cand;
-            if (h2o_memis(req->input.authority.base, req->input.authority.len, hostconf->hostname.base, hostconf->hostname.len))
-                goto HostFound;
-        } while (*++cand != NULL);
-        hostconf = *req->conn->hosts;
-    HostFound:
-        ;
+        if ((hostconf = find_hostconf(req->conn->hosts, req->input.authority)) == NULL)
+            hostconf = *req->conn->hosts;
     } else {
         /* set the authority name to the default one */
         hostconf = *req->conn->hosts;
         req->input.authority = hostconf->hostname;
     }
-
-    req->pathconf = &hostconf->fallback_path; /* for non-error case, should be adjusted laterwards */
 
     req->method = req->input.method;
     req->authority = req->input.authority;
@@ -58,6 +60,41 @@ static h2o_hostconf_t *setup_before_processing(h2o_req_t *req)
     req->input.query_at = req->query_at; /* we can do this since input.path == path */
 
     return hostconf;
+}
+
+static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
+{
+    size_t i;
+    h2o_handler_t **handler, **end;
+
+    req->pathconf = &hostconf->fallback_path;
+
+    /* setup pathconf, or redirect to "path/" */
+    for (i = 0; i != hostconf->paths.size; ++i) {
+        h2o_pathconf_t *pathconf = hostconf->paths.entries + i;
+        size_t confpath_wo_slash = pathconf->path.len - 1;
+        if (req->path_normalized.len >= confpath_wo_slash &&
+            memcmp(req->path_normalized.base, pathconf->path.base, confpath_wo_slash) == 0) {
+            if (req->path_normalized.len == confpath_wo_slash) {
+                h2o_iovec_t dest = h2o_concat(&req->pool, req->scheme->name, h2o_iovec_init(H2O_STRLIT("://")),
+                                              req->input.authority, pathconf->path);
+                req->pathconf = pathconf;
+                h2o_send_redirect(req, 301, "Moved Permanently", dest.base, dest.len);
+                return;
+            }
+            if (req->path_normalized.base[confpath_wo_slash] == '/') {
+                req->pathconf = pathconf;
+                break;
+            }
+        }
+    }
+
+    for (handler = req->pathconf->handlers.entries, end = handler + req->pathconf->handlers.size; handler != end; ++handler) {
+        if ((*handler)->on_req(*handler, req) == 0)
+            return;
+    }
+
+    h2o_send_error(req, 404, "File Not Found", "not found", 0);
 }
 
 static void deferred_proceed_cb(h2o_timeout_entry_t *entry)
@@ -136,38 +173,21 @@ void h2o_dispose_request(h2o_req_t *req)
 
 void h2o_process_request(h2o_req_t *req)
 {
-    h2o_handler_t **handler, **end;
+    h2o_hostconf_t *hostconf = setup_before_processing(req);
+    process_hosted_request(req, hostconf);
+}
+
+void h2o_reprocess_request(h2o_req_t *req)
+{
     h2o_hostconf_t *hostconf;
-    size_t i;
+    memset(&req->res, 0, sizeof(req->res));
 
-    hostconf = setup_before_processing(req);
-
-    /* setup pathconf, or redirect to "path/" */
-    for (i = 0; i != hostconf->paths.size; ++i) {
-        h2o_pathconf_t *pathconf = hostconf->paths.entries + i;
-        size_t confpath_wo_slash = pathconf->path.len - 1;
-        if (req->path_normalized.len >= confpath_wo_slash &&
-            memcmp(req->path_normalized.base, pathconf->path.base, confpath_wo_slash) == 0) {
-            if (req->path_normalized.len == confpath_wo_slash) {
-                h2o_iovec_t dest = h2o_concat(&req->pool, req->scheme->name, h2o_iovec_init(H2O_STRLIT("://")),
-                                              req->input.authority, pathconf->path);
-                req->pathconf = pathconf;
-                h2o_send_redirect(req, 301, "Moved Permanently", dest.base, dest.len);
-                return;
-            }
-            if (req->path_normalized.base[confpath_wo_slash] == '/') {
-                req->pathconf = pathconf;
-                break;
-            }
-        }
+    if ((hostconf = find_hostconf(req->conn->hosts, req->authority)) != NULL) {
+        process_hosted_request(req, hostconf);
+        return;
     }
 
-    for (handler = req->pathconf->handlers.entries, end = handler + req->pathconf->handlers.size; handler != end; ++handler) {
-        if ((*handler)->on_req(*handler, req) == 0)
-            return;
-    }
-
-    h2o_send_error(req, 404, "File Not Found", "not found", 0);
+    assert(!"FIXME use httpclient");
 }
 
 void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
@@ -237,8 +257,10 @@ void h2o_send_inline(h2o_req_t *req, const char *body, size_t len)
 
 void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body, int flags)
 {
-    if (req->pathconf == NULL)
-        setup_before_processing(req);
+    if (req->pathconf == NULL) {
+        h2o_hostconf_t *hostconf = setup_before_processing(req);
+        req->pathconf = &hostconf->fallback_path;
+    }
 
     if ((flags & H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION) != 0)
         req->http1_is_persistent = 0;
