@@ -72,6 +72,10 @@ h2o_iovec_t h2o_url_resolve(h2o_mem_pool_t *pool, const h2o_url_t *base, const h
  * stringifies the URL
  */
 static h2o_iovec_t h2o_url_stringify(h2o_mem_pool_t *pool, const h2o_url_t *url);
+/**
+ * copies a URL object (null-terminates all the string elements)
+ */
+void h2o_url_copy(h2o_mem_pool_t *pool, h2o_url_t *dest, const h2o_url_t *src);
 
 /* inline definitions */
 

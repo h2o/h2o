@@ -322,3 +322,12 @@ Build:
 
     return ret;
 }
+
+void h2o_url_copy(h2o_mem_pool_t *pool, h2o_url_t *dest, const h2o_url_t *src)
+{
+    dest->scheme = src->scheme;
+    dest->authority = h2o_strdup(pool, src->authority.base, src->authority.len);
+    dest->host = h2o_strdup(pool, src->host.base, src->host.len);
+    dest->path = h2o_strdup(pool, src->path.base, src->path.len);
+    dest->_port = src->_port;
+}

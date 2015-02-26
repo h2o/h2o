@@ -19,477 +19,54 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <netdb.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/socket.h>
-#include "picohttpparser.h"
 #include "h2o.h"
-#include "h2o/http1client.h"
 #include "h2o/socketpool.h"
-
-struct rp_generator_t {
-    h2o_generator_t super;
-    h2o_proxy_location_t *upstream;
-    h2o_req_t *src_req;
-    h2o_http1client_t *client;
-    struct {
-        h2o_iovec_t bufs[2]; /* first buf is the request line and headers, the second is the POST content */
-        int is_head;
-    } up_req;
-    h2o_buffer_t *last_content_before_send;
-    h2o_buffer_t *buf_sending;
-};
 
 struct rp_handler_t {
     h2o_handler_t super;
-    h2o_proxy_location_t upstream;
+    h2o_url_t upstream;         /* host should be NULL-terminated */
     h2o_socketpool_t *sockpool; /* non-NULL if config.use_keepalive == 1 */
     h2o_proxy_config_vars_t config;
 };
 
-static int test_location_match(h2o_proxy_location_t *location, const h2o_url_scheme_t *scheme, h2o_iovec_t host, uint16_t port,
-                               h2o_iovec_t path)
-{
-    if (scheme != &H2O_URL_SCHEME_HTTP)
-        return 0;
-    if (!h2o_lcstris(host.base, host.len, location->host.base, location->host.len))
-        return 0;
-    if (port != location->port)
-        return 0;
-    if (path.len < location->path.len)
-        return 0;
-    if (memcmp(path.base, location->path.base, location->path.len) != 0)
-        return 0;
-    return 1;
-}
-
-static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, size_t location_len, h2o_proxy_location_t *upstream,
-                                    const h2o_url_scheme_t *req_scheme, h2o_iovec_t req_authority, h2o_iovec_t req_basepath)
-{
-    h2o_url_t loc_parsed;
-
-    if (h2o_url_parse(location, location_len, &loc_parsed) != 0 ||
-        !test_location_match(upstream, loc_parsed.scheme, loc_parsed.host, h2o_url_get_port(&loc_parsed), loc_parsed.path))
-        return h2o_strdup(pool, location, location_len);
-
-    return h2o_concat(pool, req_scheme->name, h2o_iovec_init(H2O_STRLIT("://")), req_authority, req_basepath,
-                      h2o_iovec_init(loc_parsed.path.base + upstream->path.len, loc_parsed.path.len - upstream->path.len));
-}
-
-static h2o_iovec_t build_request_merge_headers(h2o_mem_pool_t *pool, h2o_iovec_t merged, h2o_iovec_t added, int seperator)
-{
-    if (added.len == 0)
-        return merged;
-    if (merged.len == 0)
-        return added;
-
-    size_t newlen = merged.len + 2 + added.len;
-    char *buf = h2o_mem_alloc_pool(pool, newlen);
-    memcpy(buf, merged.base, merged.len);
-    buf[merged.len] = seperator;
-    buf[merged.len + 1] = ' ';
-    memcpy(buf + merged.len + 2, added.base, added.len);
-    merged.base = buf;
-    merged.len = newlen;
-    return merged;
-}
-
-static h2o_iovec_t build_request(h2o_req_t *req, h2o_proxy_location_t *upstream, int keepalive, int preserve_host)
-{
-    h2o_iovec_t buf;
-    size_t offset = 0, remote_addr_len = SIZE_MAX;
-    char remote_addr[NI_MAXHOST];
-    h2o_iovec_t cookie_buf = {}, xff_buf = {}, via_buf = {};
-
-    /* for x-f-f */
-    if (req->conn->peername.addr != NULL)
-        remote_addr_len = h2o_socket_getnumerichost(req->conn->peername.addr, req->conn->peername.len, remote_addr);
-
-    /* build response */
-    buf.len = req->method.len + upstream->path.len + req->path.len - req->pathconf->path.len + 512;
-    buf.base = h2o_mem_alloc_pool(&req->pool, buf.len);
-
-#define RESERVE(sz)                                                                                                                \
-    do {                                                                                                                           \
-        if (offset + sz + 4 /* for "\r\n\r\n" */ > buf.len) {                                                                      \
-            buf.len *= 2;                                                                                                          \
-            char *newp = h2o_mem_alloc_pool(&req->pool, buf.len);                                                                  \
-            memcpy(newp, buf.base, offset);                                                                                        \
-            buf.base = newp;                                                                                                       \
-        }                                                                                                                          \
-    } while (0)
-#define APPEND(s, l)                                                                                                               \
-    do {                                                                                                                           \
-        memcpy(buf.base + offset, (s), (l));                                                                                       \
-        offset += (l);                                                                                                             \
-    } while (0)
-#define APPEND_STRLIT(lit) APPEND((lit), sizeof(lit) - 1)
-#define FLATTEN_PREFIXED_VALUE(prefix, value, add_size)                                                                            \
-    do {                                                                                                                           \
-        RESERVE(sizeof(prefix) - 1 + value.len + 2 + add_size);                                                                    \
-        APPEND_STRLIT(prefix);                                                                                                     \
-        if (value.len != 0) {                                                                                                      \
-            APPEND(value.base, value.len);                                                                                         \
-            if (add_size != 0) {                                                                                                   \
-                buf.base[offset++] = ',';                                                                                          \
-                buf.base[offset++] = ' ';                                                                                          \
-            }                                                                                                                      \
-        }                                                                                                                          \
-    } while (0)
-
-    APPEND(req->method.base, req->method.len);
-    buf.base[offset++] = ' ';
-    APPEND(upstream->path.base, upstream->path.len);
-    APPEND(req->path.base + req->pathconf->path.len, req->path.len - req->pathconf->path.len);
-    APPEND_STRLIT(" HTTP/1.1\r\nconnection: ");
-    if (keepalive) {
-        APPEND_STRLIT("keep-alive\r\nhost: ");
-    } else {
-        APPEND_STRLIT("close\r\nhost: ");
-    }
-    assert(offset <= buf.len);
-    if (preserve_host) {
-        RESERVE(req->authority.len);
-        APPEND(req->authority.base, req->authority.len);
-    } else if (upstream->port == 80) {
-        RESERVE(upstream->host.len);
-        APPEND(upstream->host.base, upstream->host.len);
-    } else {
-        RESERVE(upstream->host.len + sizeof(":65535") - 1);
-        offset += sprintf(buf.base + offset, "%.*s:%u", (int)upstream->host.len, upstream->host.base, (unsigned)upstream->port);
-    }
-    buf.base[offset++] = '\r';
-    buf.base[offset++] = '\n';
-    if (req->entity.base != NULL) {
-        RESERVE(sizeof("content-length: 18446744073709551615") - 1);
-        offset += sprintf(buf.base + offset, "content-length: %zu\r\n", req->entity.len);
-    }
-    {
-        const h2o_header_t *h, *h_end;
-        for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h) {
-            if (h2o_iovec_is_token(h->name)) {
-                const h2o_token_t *token = (void *)h->name;
-                if (token->proxy_should_drop) {
-                    continue;
-                } else if (token == H2O_TOKEN_COOKIE) {
-                    /* merge the cookie headers; see HTTP/2 8.1.2.5 and HTTP/1 (RFC6265 5.4) */
-                    /* FIXME current algorithm is O(n^2) against the number of cookie headers */
-                    cookie_buf = build_request_merge_headers(&req->pool, cookie_buf, h->value, ';');
-                    continue;
-                } else if (token == H2O_TOKEN_VIA) {
-                    via_buf = build_request_merge_headers(&req->pool, via_buf, h->value, ',');
-                    continue;
-                }
-            }
-            if (h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-proto")))
-                continue;
-            if (h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-for"))) {
-                xff_buf = build_request_merge_headers(&req->pool, xff_buf, h->value, ',');
-                continue;
-            }
-            RESERVE(h->name->len + h->value.len + 2);
-            APPEND(h->name->base, h->name->len);
-            buf.base[offset++] = ':';
-            buf.base[offset++] = ' ';
-            APPEND(h->value.base, h->value.len);
-            buf.base[offset++] = '\r';
-            buf.base[offset++] = '\n';
-        }
-    }
-    if (cookie_buf.len != 0) {
-        FLATTEN_PREFIXED_VALUE("cookie: ", cookie_buf, 0);
-        buf.base[offset++] = '\r';
-        buf.base[offset++] = '\n';
-    }
-    FLATTEN_PREFIXED_VALUE("x-forwarded-proto: ", req->scheme->name, 0);
-    buf.base[offset++] = '\r';
-    buf.base[offset++] = '\n';
-    if (remote_addr_len != SIZE_MAX) {
-        FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, remote_addr_len);
-        APPEND(remote_addr, remote_addr_len);
-    } else {
-        FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, 0);
-    }
-    buf.base[offset++] = '\r';
-    buf.base[offset++] = '\n';
-    FLATTEN_PREFIXED_VALUE("via: ", via_buf, sizeof("1.1 ") - 1 + req->input.authority.len);
-    if (req->version < 0x200) {
-        buf.base[offset++] = '1';
-        buf.base[offset++] = '.';
-        buf.base[offset++] = '0' + (0x100 <= req->version && req->version <= 0x109 ? req->version - 0x100 : 0);
-    } else {
-        buf.base[offset++] = '2';
-    }
-    buf.base[offset++] = ' ';
-    APPEND(req->input.authority.base, req->input.authority.len);
-    APPEND_STRLIT("\r\n\r\n");
-
-#undef RESERVE
-#undef APPEND
-#undef APPEND_STRLIT
-#undef FLATTEN_PREFIXED_VALUE
-
-    /* set the length */
-    assert(offset <= buf.len);
-    buf.len = offset;
-
-    return buf;
-}
-
-static void do_close(h2o_generator_t *generator, h2o_req_t *req)
-{
-    struct rp_generator_t *self = (void *)generator;
-
-    if (self->client != NULL) {
-        h2o_http1client_cancel(self->client);
-        self->client = NULL;
-    }
-}
-
-static void swap_buffer(h2o_buffer_t **x, h2o_buffer_t **y)
-{
-    h2o_buffer_t *t = *x;
-    *x = *y;
-    *y = t;
-}
-
-static void do_send(struct rp_generator_t *self)
-{
-    assert(self->buf_sending->size == 0);
-
-    swap_buffer(&self->buf_sending, self->client != NULL ? &self->client->sock->input : &self->last_content_before_send);
-
-    if (self->buf_sending->size != 0) {
-        h2o_iovec_t buf = h2o_iovec_init(self->buf_sending->bytes, self->buf_sending->size);
-        h2o_send(self->src_req, &buf, 1, self->client == NULL);
-    } else if (self->client == NULL) {
-        h2o_send(self->src_req, NULL, 0, 1);
-    }
-}
-
-static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
-{
-    struct rp_generator_t *self = (void *)generator;
-
-    h2o_buffer_consume(&self->buf_sending, self->buf_sending->size);
-
-    do_send(self);
-}
-
-static int on_body(h2o_http1client_t *client, const char *errstr)
-{
-    struct rp_generator_t *self = client->data;
-
-    /* FIXME should there be a way to notify error downstream? */
-
-    if (errstr != NULL) {
-        /* detach the content */
-        self->last_content_before_send = self->client->sock->input;
-        h2o_buffer_init(&self->client->sock->input, &h2o_socket_buffer_prototype);
-        self->client = NULL;
-    }
-    if (self->buf_sending->size == 0)
-        do_send(self);
-
-    return 0;
-}
-
-static void on_link_header(h2o_req_t *req, const char *value, size_t value_len, h2o_url_t *base)
-{
-    h2o_iovec_t url;
-    h2o_url_t parsed, resolved;
-
-    if (req->version < 0x200)
-        return;
-
-    { /* extract URL value from: Link: </pushed.css>; rel=preload */
-        h2o_iovec_t iter = h2o_iovec_init(value, value_len), token_value;
-        const char *token;
-        size_t token_len;
-        /* first element should be <URL> */
-        if ((token = h2o_next_token(&iter, ';', &token_len, NULL)) == NULL)
-            return;
-        if (!(token_len >= 2 && token[0] == '<' && token[token_len - 1] == '>'))
-            return;
-        url = h2o_iovec_init(token + 1, token_len - 2);
-        /* find rel=preload */
-        while ((token = h2o_next_token(&iter, ';', &token_len, &token_value)) != NULL) {
-            if (h2o_lcstris(token, token_len, H2O_STRLIT("rel")) &&
-                h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload")))
-                break;
-        }
-        if (token == NULL)
-            return;
-    }
-
-    /* check the authority, and extract absolute path */
-    if (h2o_url_parse_relative(url.base, url.len, &parsed) != 0)
-        return;
-    h2o_url_resolve(&req->pool, base, &parsed, &resolved);
-    if (!(base->scheme == resolved.scheme &&
-          (parsed.authority.base == NULL ||
-           h2o_lcstris(base->authority.base, base->authority.len, resolved.authority.base, resolved.authority.len))))
-        return;
-
-    h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->http2_push_paths, sizeof(req->http2_push_paths.entries[0]),
-                       req->http2_push_paths.size + 1);
-    req->http2_push_paths.entries[req->http2_push_paths.size++] = resolved.path;
-}
-
-static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
-                                       h2o_iovec_t msg, struct phr_header *headers, size_t num_headers)
-{
-    struct rp_generator_t *self = client->data;
-    size_t i;
-    h2o_url_t url_parsed = {};
-
-    if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
-        self->client = NULL;
-        h2o_send_error(self->src_req, 502, "Gateway Error", errstr, 0);
-        return NULL;
-    }
-
-    /* copy the response (note: all the headers must be copied; http1client discards the input once we return from this callback) */
-    self->src_req->res.status = status;
-    self->src_req->res.reason = h2o_strdup(&self->src_req->pool, msg.base, msg.len).base;
-    for (i = 0; i != num_headers; ++i) {
-        const h2o_token_t *token = h2o_lookup_token(headers[i].name, headers[i].name_len);
-        h2o_iovec_t value;
-        if (token != NULL) {
-            if (token->proxy_should_drop) {
-                goto Skip;
-            }
-            if (token == H2O_TOKEN_CONTENT_LENGTH) {
-                if (self->src_req->res.content_length != SIZE_MAX ||
-                    (self->src_req->res.content_length = h2o_strtosize(headers[i].value, headers[i].value_len)) == SIZE_MAX) {
-                    self->client = NULL;
-                    h2o_send_error(self->src_req, 502, "Gateway Error", "invalid response from upstream", 0);
-                    return NULL;
-                }
-                goto Skip;
-            } else if (token == H2O_TOKEN_LOCATION) {
-                value = rewrite_location(&self->src_req->pool, headers[i].value, headers[i].value_len, self->upstream,
-                                         self->src_req->scheme, self->src_req->input.authority, self->src_req->pathconf->path);
-                goto AddHeader;
-            } else if (token == H2O_TOKEN_LINK) {
-                if (url_parsed.scheme == NULL) {
-                    if (h2o_url_parse_hostport(self->src_req->input.authority.base, self->src_req->input.authority.len,
-                                               &url_parsed.host, &url_parsed._port) != NULL) {
-                        url_parsed = (h2o_url_t){
-                            self->src_req->scheme,          /* scheme */
-                            self->src_req->input.authority, /* authority */
-                            {},                             /* host */
-                            self->src_req->path_normalized, /* path */
-                            65535                           /* port */
-                        };
-                    }
-                }
-                if (url_parsed.scheme != NULL)
-                    on_link_header(self->src_req, headers[i].value, headers[i].value_len, &url_parsed);
-            }
-            /* default behaviour, transfer the header downstream */
-            value = h2o_strdup(&self->src_req->pool, headers[i].value, headers[i].value_len);
-        AddHeader:
-            h2o_add_header(&self->src_req->pool, &self->src_req->res.headers, token, value.base, value.len);
-        Skip:
-            ;
-        } else {
-            h2o_iovec_t name = h2o_strdup(&self->src_req->pool, headers[i].name, headers[i].name_len);
-            h2o_iovec_t value = h2o_strdup(&self->src_req->pool, headers[i].value, headers[i].value_len);
-            h2o_add_header_by_str(&self->src_req->pool, &self->src_req->res.headers, name.base, name.len, 0, value.base, value.len);
-        }
-    }
-
-    /* declare the start of the response */
-    h2o_start_response(self->src_req, &self->super);
-
-    if (errstr == h2o_http1client_error_is_eos) {
-        self->client = NULL;
-        h2o_send(self->src_req, NULL, 0, 1);
-        return NULL;
-    }
-
-    return on_body;
-}
-
-static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head)
-{
-    struct rp_generator_t *self = client->data;
-
-    if (errstr != NULL) {
-        self->client = NULL;
-        h2o_send_error(self->src_req, 502, "Gateway Error", errstr, 0);
-        return NULL;
-    }
-
-    *reqbufs = self->up_req.bufs;
-    *reqbufcnt = self->up_req.bufs[1].base != NULL ? 2 : 1;
-    *method_is_head = self->up_req.is_head;
-    return on_head;
-}
-
-static void on_generator_dispose(void *_self)
-{
-    struct rp_generator_t *self = _self;
-
-    if (self->client != NULL) {
-        h2o_http1client_cancel(self->client);
-        self->client = NULL;
-    }
-    h2o_buffer_dispose(&self->last_content_before_send);
-    h2o_buffer_dispose(&self->buf_sending);
-}
-
-static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_proxy_location_t *upstream, int keepalive, int preserve_host)
-{
-    struct rp_generator_t *self = h2o_mem_alloc_shared(&req->pool, sizeof(*self), on_generator_dispose);
-
-    self->super.proceed = do_proceed;
-    self->super.stop = do_close;
-    self->upstream = upstream;
-    self->src_req = req;
-    self->up_req.bufs[0] = build_request(req, upstream, keepalive, preserve_host);
-    self->up_req.bufs[1] = req->entity;
-    self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
-    h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
-    h2o_buffer_init(&self->buf_sending, &h2o_socket_buffer_prototype);
-
-    return self;
-}
-
-int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *upstream, int preserve_host)
-{
-    struct rp_generator_t *self = proxy_send_prepare(req, upstream, 0, preserve_host);
-
-    self->client = h2o_http1client_connect(
-        client_ctx, &req->pool, h2o_strdup(&req->pool, upstream->host.base, upstream->host.len).base, upstream->port, on_connect);
-    self->client->data = self;
-
-    return 0;
-}
-
-int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *upstream,
-                             h2o_socketpool_t *sockpool, int preserve_host)
-{
-    struct rp_generator_t *self = proxy_send_prepare(req, upstream, 1, preserve_host);
-
-    self->client = h2o_http1client_connect_with_pool(client_ctx, &req->pool, sockpool, on_connect);
-    self->client->data = self;
-
-    return 0;
-}
-
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     struct rp_handler_t *self = (void *)_self;
-    h2o_http1client_ctx_t *client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
 
-    if (self->sockpool != NULL)
-        return h2o_proxy_send_with_pool(req, client_ctx, &self->upstream, self->sockpool, self->config.preserve_host);
-    else
-        return h2o_proxy_send(req, client_ctx, &self->upstream, self->config.preserve_host);
+    { /* setup overrides */
+        h2o_req_overrides_t *overrides = NULL;
+#define USING_OVERRIDES()                                                                                                          \
+    do {                                                                                                                           \
+        if (overrides == NULL) {                                                                                                   \
+            overrides = h2o_mem_alloc_pool(&req->pool, sizeof(*overrides));                                                        \
+            *overrides = (h2o_req_overrides_t){};                                                                                  \
+            req->overrides = overrides;                                                                                            \
+        }                                                                                                                          \
+    } while (0)
+        if (self->sockpool != NULL) {
+            USING_OVERRIDES();
+            overrides->socketpool = self->sockpool;
+        } else if (self->config.preserve_host) {
+            USING_OVERRIDES();
+            overrides->hostport.host = self->upstream.host.base;
+            overrides->hostport.port = h2o_url_get_port(&self->upstream);
+        }
+        if (!self->config.preserve_host) {
+            USING_OVERRIDES();
+            overrides->location_rewrite.match = &self->upstream;
+            overrides->location_rewrite.path_prefix = req->pathconf->path;
+        }
+#undef USING_OVERRIDES
+    }
+
+    /* rewrite request */
+    if (!self->config.preserve_host)
+        req->authority = self->upstream.authority;
+    req->path = h2o_concat(&req->pool, self->upstream.path,
+                           h2o_iovec_init(req->path.base + req->pathconf->path.len, req->path.len - req->pathconf->path.len));
+
+    h2o_reprocess_request(req);
+    return 0;
 }
 
 static void *on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
@@ -532,20 +109,17 @@ static void on_handler_dispose(h2o_handler_t *_self)
     free(self);
 }
 
-void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, const char *host, uint16_t port, const char *real_path,
-                                      h2o_proxy_config_vars_t *config)
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstream, h2o_proxy_config_vars_t *config)
 {
     struct rp_handler_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
     self->super.on_context_init = on_context_init;
     self->super.on_context_dispose = on_context_dispose;
     self->super.dispose = on_handler_dispose;
     self->super.on_req = on_req;
-    self->upstream.host = h2o_strdup(NULL, host, SIZE_MAX);
-    self->upstream.port = port;
-    self->upstream.path = h2o_strdup(NULL, real_path, SIZE_MAX);
+    h2o_url_copy(NULL, &self->upstream, upstream);
     if (config->keepalive_timeout != 0) {
         self->sockpool = h2o_mem_alloc(sizeof(*self->sockpool));
-        h2o_socketpool_init(self->sockpool, host, port, SIZE_MAX /* FIXME */);
+        h2o_socketpool_init(self->sockpool, self->upstream.host.base, h2o_url_get_port(&self->upstream), SIZE_MAX /* FIXME */);
     }
     self->config = *config;
 }

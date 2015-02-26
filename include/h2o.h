@@ -64,6 +64,8 @@ extern "C" {
 #define H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2 1
 #define H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS 10
 #define H2O_DEFAULT_HTTP2_IDLE_TIMEOUT (H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS * 1000)
+#define H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS 5
+#define H2O_DEFAULT_PROXY_IO_TIMEOUT (H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS * 1000)
 
 typedef struct st_h2o_conn_t h2o_conn_t;
 typedef struct st_h2o_context_t h2o_context_t;
@@ -245,6 +247,13 @@ struct st_h2o_globalconf_t {
         h2o_protocol_callbacks_t callbacks;
     } http2;
 
+    struct {
+        /**
+         * io timeout (in milliseconds)
+         */
+        uint64_t io_timeout;
+    } proxy;
+
     size_t _num_config_slots;
 };
 
@@ -298,6 +307,17 @@ struct st_h2o_context_t {
          */
         h2o_timeout_entry_t _graceful_shutdown_timeout;
     } http2;
+
+    struct {
+        /**
+         * the default client context for proxy
+         */
+        h2o_http1client_ctx_t client_ctx;
+        /**
+         * timeout handler used by the default client context
+         */
+        h2o_timeout_t io_timeout;
+    } proxy;
 
     /**
      * pointer to per-module configs
@@ -417,6 +437,33 @@ struct st_h2o_conn_t {
     } peername;
 };
 
+typedef struct st_h2o_req_overrides_t {
+    /**
+     * socketpool to be used when connecting to upstream (or NULL)
+     */
+    h2o_socketpool_t *socketpool;
+    /**
+     * upstream host:port to connect to (or host == NULL)
+     */
+    struct {
+        char *host;
+        uint16_t port;
+    } hostport;
+    /**
+     * parameters for rewriting the `Location` header (only used if match.len != 0)
+     */
+    struct {
+        /**
+         * if the prefix of the location header matches the url, then the header will be rewritten
+         */
+        h2o_url_t *match;
+        /**
+         * path prefix to be inserted upon rewrite
+         */
+        h2o_iovec_t path_prefix;
+    } location_rewrite;
+} h2o_req_overrides_t;
+
 /**
  * a HTTP request
  */
@@ -470,6 +517,10 @@ struct st_h2o_req_t {
      * normalized path of the processing request (i.e. no "." or "..", no query)
      */
     h2o_iovec_t path_normalized;
+    /**
+     * overrides (maybe NULL)
+     */
+    h2o_req_overrides_t *overrides;
     /**
      * scheme (http, https, etc.)
      */
@@ -750,6 +801,13 @@ void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *
  */
 void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const char *url, size_t url_len);
 
+/* proxy */
+
+/**
+ * processes a request (by sending the request upstream)
+ */
+void h2o__proxy_process_request(h2o_req_t *req);
+
 /* mime mapper */
 
 /**
@@ -858,26 +916,10 @@ typedef struct st_h2o_proxy_config_vars_t {
     uint64_t keepalive_timeout; /* in milliseconds; set to zero to disable keepalive */
 } h2o_proxy_config_vars_t;
 
-typedef struct st_h2o_proxy_location_t {
-    h2o_iovec_t host;
-    uint16_t port;
-    h2o_iovec_t path;
-} h2o_proxy_location_t;
-
-/**
- * delegates the request to given server, rewriting the path as specified
- */
-int h2o_proxy_send(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *upstream, int preserve_host);
-/**
- * delegates the request to given server, rewriting the path as specified
- */
-int h2o_proxy_send_with_pool(h2o_req_t *req, h2o_http1client_ctx_t *client_ctx, h2o_proxy_location_t *upstream,
-                             h2o_socketpool_t *sockpool, int preserve_host);
 /**
  * registers the reverse proxy handler to the context
  */
-void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, const char *host, uint16_t port, const char *real_path,
-                                      h2o_proxy_config_vars_t *config);
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstream, h2o_proxy_config_vars_t *config);
 /**
  * registers the configurator
  */

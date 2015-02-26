@@ -86,6 +86,7 @@
 		10AA2EAE1A8E22DA004322AC /* multithread.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EAD1A8E22DA004322AC /* multithread.c */; };
 		10AA2EB71A970EFC004322AC /* http2_internal.h in Headers */ = {isa = PBXBuildFile; fileRef = 10AA2EB61A970EFC004322AC /* http2_internal.h */; };
 		10AA2EB91A971280004322AC /* http2_scheduler.h in Headers */ = {isa = PBXBuildFile; fileRef = 10AA2EB81A971280004322AC /* http2_scheduler.h */; };
+		10AA2EBC1A9EEDF8004322AC /* proxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EBB1A9EEDF8004322AC /* proxy.c */; };
 		10BA72AA19AAD6300059392A /* stream.c in Sources */ = {isa = PBXBuildFile; fileRef = 10BA72A919AAD6300059392A /* stream.c */; };
 		10D0903A19F0A51C0043D458 /* memory.h in Headers */ = {isa = PBXBuildFile; fileRef = 10D0903919F0A51C0043D458 /* memory.h */; };
 		10D0903E19F0A8190043D458 /* socket.h in Headers */ = {isa = PBXBuildFile; fileRef = 10D0903D19F0A8190043D458 /* socket.h */; };
@@ -299,6 +300,7 @@
 		10AA2EB31A94B66D004322AC /* 40virtual-host.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40virtual-host.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10AA2EB61A970EFC004322AC /* http2_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = http2_internal.h; sourceTree = "<group>"; };
 		10AA2EB81A971280004322AC /* http2_scheduler.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = http2_scheduler.h; sourceTree = "<group>"; };
+		10AA2EBB1A9EEDF8004322AC /* proxy.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = proxy.c; sourceTree = "<group>"; };
 		10BA72A919AAD6300059392A /* stream.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = stream.c; sourceTree = "<group>"; };
 		10D0903919F0A51C0043D458 /* memory.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = memory.h; sourceTree = "<group>"; };
 		10D0903D19F0A8190043D458 /* socket.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = socket.h; sourceTree = "<group>"; };
@@ -445,6 +447,7 @@
 				10F4180419CA75C500B6E31A /* configurator.c */,
 				107923B919A3217300C52AD6 /* context.c */,
 				107923B019A3217300C52AD6 /* headers.c */,
+				10AA2EBB1A9EEDF8004322AC /* proxy.c */,
 				107923BC19A3217300C52AD6 /* request.c */,
 				107923BF19A3217300C52AD6 /* token.c */,
 				1079245319A32C0800C52AD6 /* token_table.h */,
@@ -469,6 +472,7 @@
 			isa = PBXGroup;
 			children = (
 				104B9A471A5F9472009EEE64 /* headers.c */,
+				105534C81A3BB41C00627ECB /* proxy.c */,
 			);
 			path = core;
 			sourceTree = "<group>";
@@ -478,7 +482,6 @@
 			children = (
 				105534BD1A3B8F7700627ECB /* file.c */,
 				105534C21A3B917000627ECB /* mimemap.c */,
-				105534C81A3BB41C00627ECB /* proxy.c */,
 			);
 			path = handler;
 			sourceTree = "<group>";
@@ -977,6 +980,7 @@
 				101788B219B561AA0084C6D8 /* socket.c in Sources */,
 				10D0905519F102C70043D458 /* http1client.c in Sources */,
 				107923D219A3217300C52AD6 /* token.c in Sources */,
+				10AA2EBC1A9EEDF8004322AC /* proxy.c in Sources */,
 				104B9A511A5FB096009EEE64 /* expires.c in Sources */,
 				105534DB1A3C7A5400627ECB /* access_log.c in Sources */,
 				107923CE19A3217300C52AD6 /* mimemap.c in Sources */,

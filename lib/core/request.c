@@ -180,14 +180,15 @@ void h2o_process_request(h2o_req_t *req)
 void h2o_reprocess_request(h2o_req_t *req)
 {
     h2o_hostconf_t *hostconf;
-    memset(&req->res, 0, sizeof(req->res));
+    req->res = (h2o_res_t){0, NULL, SIZE_MAX, {}};
 
-    if ((hostconf = find_hostconf(req->conn->hosts, req->authority)) != NULL) {
+    if (req->overrides == NULL && (hostconf = find_hostconf(req->conn->hosts, req->authority)) != NULL) {
         process_hosted_request(req, hostconf);
         return;
     }
 
-    assert(!"FIXME use httpclient");
+    /* uses the current pathconf, in other words, proxy uses the previous pathconf for building filters */
+    h2o__proxy_process_request(req);
 }
 
 void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
