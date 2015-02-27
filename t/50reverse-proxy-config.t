@@ -49,4 +49,23 @@ EOT
     };
 };
 
+subtest 'timeout.io' => sub {
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
+        proxy.timeout.io: 2000
+EOT
+    my $fetch = sub {
+        my $sleep = shift;
+        `curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/sleep-and-respond?sleep=$sleep 2>&1 > /dev/null`;
+    };
+    my $resp = $fetch->(1);
+    like $resp, qr{^HTTP/1\.1 200 }s, "respond before timeout";
+    my $resp = $fetch->(3);
+    like $resp, qr{^HTTP/1\.1 502 }s, "respond after timeout";
+};
+
 done_testing;

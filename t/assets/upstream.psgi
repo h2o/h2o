@@ -84,4 +84,18 @@ builder {
             $writer->close;
         };
     };
+    mount "/sleep-and-respond" => sub {
+        my $env = shift;
+        my $query = Plack::Request->new($env)->parameters;
+        sleep($query->{sleep} || 0);
+        return [
+            200,
+            [
+                'content-type' => 'text/plain; charset=utf-8',
+            ],
+            [
+                'hello world',
+            ],
+        ];
+    };
 };
