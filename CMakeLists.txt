@@ -65,11 +65,13 @@ SET(LIB_SOURCE_FILES
     lib/handler/mimemap.c
     lib/handler/proxy.c
     lib/handler/redirect.c
+    lib/handler/reproxy.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/expires.c
     lib/handler/configurator/file.c
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
+    lib/handler/configurator/reproxy.c
 
     lib/http1.c
 
