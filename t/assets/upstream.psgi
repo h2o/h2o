@@ -15,17 +15,20 @@ builder {
             my $env = shift;
             my $query = Plack::Request->new($env)->query_parameters;
             my $res = $app->($env);
-            if ($query->{"resp:status"}) {
-                $res->[0] = $query->get("resp:status");
-                $query->remove("resp:status");
-            }
-            push @{$res->[1]}, map {
-                my $n = $_;
-                +(substr($n, length "resp:") => $query->get($n))
-            } grep {
-                $_ =~ /^resp:/
-            } $query->keys;
-            $res;
+            Plack::Util::response_cb($res, sub {
+                my $res = shift;
+                if ($query->{"resp:status"}) {
+                    $res->[0] = $query->get("resp:status");
+                    $query->remove("resp:status");
+                }
+                push @{$res->[1]}, map {
+                    my $n = $_;
+                    +(substr($n, length "resp:") => $query->get($n))
+                } grep {
+                    $_ =~ /^resp:/
+                } $query->keys;
+                $res;
+            });
         };
     };
     if ($force_chunked) {
