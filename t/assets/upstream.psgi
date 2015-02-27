@@ -9,6 +9,25 @@ use t::Util;
 my $force_chunked = $ENV{FORCE_CHUNKED} || 0;
 
 builder {
+    enable sub {
+        my $app = shift;
+        return sub {
+            my $env = shift;
+            my $query = Plack::Request->new($env)->query_parameters;
+            my $res = $app->($env);
+            if ($query->{"resp:status"}) {
+                $res->[0] = $query->get("resp:status");
+                $query->remove("resp:status");
+            }
+            push @{$res->[1]}, map {
+                my $n = $_;
+                +(substr($n, length "resp:") => $query->get($n))
+            } grep {
+                $_ =~ /^resp:/
+            } $query->keys;
+            $res;
+        };
+    };
     if ($force_chunked) {
         enable sub {
             my $app = shift;
@@ -22,7 +41,7 @@ builder {
                 }
                 $res->[1] = \@headers;
                 return $res;
-            }
+            };
         };
     }
     mount "/" => Plack::App::File->new(root => DOC_ROOT)->to_app;
@@ -51,25 +70,6 @@ builder {
             [
                 join "\n", map { my $n = lc substr $_, 5; $n =~ tr/_/-/; "$n: $env->{$_}" } sort grep { /^HTTP_/ } keys %$env,
             ]
-        ];
-    };
-    mount "/set-headers" => sub {
-        my $env = shift;
-        my $query = Plack::Request->new($env)->parameters;
-        return [
-            200,
-            [ map { my $n = $_; map { $n => $_ } $query->get_all($n) } $query->keys ],
-            [ 'body' ],
-        ];
-    };
-    mount "/redirect" => sub {
-        my $env = shift;
-        return [
-            302,
-            [
-                location => substr($env->{PATH_INFO}, 1),
-            ],
-            [],
         ];
     };
     mount "/streaming-body" => sub {

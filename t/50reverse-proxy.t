@@ -91,7 +91,8 @@ sub run_tests_with_conf {
             is length($content), $huge_file_size, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, size)";
             is md5_hex($content), $huge_file_md5, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, md5)";
             subtest 'rewrite-redirect' => sub {
-                $content = `curl --silent --insecure --dump-header /dev/stdout --max-redirs 0 $proto://127.0.0.1:$port/redirect/http://127.0.0.1:$upstream_port/abc`;
+                $content = `curl --silent --insecure --dump-header /dev/stdout --max-redirs 0 "$proto://127.0.0.1:$port/?resp:status=302&resp:location=http://127.0.0.1:$upstream_port/abc"`;
+                like $content, qr{HTTP/1\.1 302 }m;
                 like $content, qr{^location: $proto://127.0.0.1:$port/abc\r$}m;
             };
             subtest "x-forwarded ($proto)" => sub {
@@ -132,7 +133,7 @@ sub run_tests_with_conf {
                 like $out, qr{^cookie: a=b; c=d$}m;
             };
             subtest 'issues/185' => sub {
-                my $out = `nghttp $opt -v "$proto://127.0.0.1:$port/set-headers?access-control-allow-origin=%2a"`;
+                my $out = `nghttp $opt -v "$proto://127.0.0.1:$port/?resp:access-control-allow-origin=%2a"`;
                 is $?, 0;
                 like $out, qr/ access-control-allow-origin: \*$/m;
             };
@@ -140,7 +141,7 @@ sub run_tests_with_conf {
                 my $cookie = '_yohoushi_session=ZU5tK2FhcllVQ1RGaTZmZE9MUXozZnAzdTdmR250ZjRFU1hNSnZ4Y2JxZm9pYzJJSEpISGFKNmtWcW1HcjBySmUxZzIwNngrdlVIOC9jdmg0R3I3TFR4eVYzaHlFSHdEL1M4dnh1SmRCbVl3ZE5FckZEU1NyRmZveWZwTmVjcVV5V1JhNUd5REIvWjAwQ3RiT1ZBNGVMUkhiN0tWR0c1RzZkSVhrVkdoeW1lWXRDeHJPUW52NUwxSytRTEQrWXdoZ1EvVG9kak9aeUxnUFRNTDB4Vis1RDNUYWVHZm12bDgwL1lTa09MTlJYcGpXN2VUWmdHQ2FuMnVEVDd4c3l1TTJPMXF1dGhYcGRHS2U2bW9UaG0yZGIwQ0ZWVzFsY1hNTkY5cVFvWjNqSWNrQ0pOY1gvMys4UmRHdXJLU1A0ZTZQc3pSK1dKcXlpTEF2djJHLzUwbytwSnVpS0xhdFp6NU9kTDhtcmgxamVXMkI0Nm9Nck1rMStLUmV0TEdUeGFSTjlKSzM0STc3NTlSZ05ZVjJhWUNibkdzY1I1NUg4bG96dWZSeGorYzF4M2tzMGhKSkxmeFBTNkpZS09HTFgrREN4SWd4a29kamRxT3FobDRQZ2xMVUE9PS0tQUxSWU5nWmVTVzRoN09sS3pmUVM3dz09--3a411c0cf59845f0b8ccf61f69b8eb87aa1727ac; path=/; HttpOnly';
                 my $cookie_encoded = $cookie;
                 $cookie_encoded =~ s{([^A-Za-z0-9_])}{sprintf "%%%02x", ord $1}eg;
-                $out = `nghttp $opt -v $proto://127.0.0.1:$port/set-headers?set-cookie=$cookie_encoded`;
+                $out = `nghttp $opt -v $proto://127.0.0.1:$port/?resp:set-cookie=$cookie_encoded`;
                 is $?, 0;
                 like $out, qr/ set-cookie: $cookie$/m;
             };
