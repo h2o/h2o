@@ -38,7 +38,7 @@ subtest 'http1' => sub {
         $extra .= ' --insecure'
             if $proto eq 'https';
         subtest $proto => sub {
-            my $resp = `curl --max-time 1 $extra $proto://127.0.0.1:$port/sleep 2>&1`;
+            my $resp = `curl --max-time 1 $extra $proto://127.0.0.1:$port/streaming-body 2>&1`;
             like $resp, qr/operation timed out/i, "operation should time out";
             sleep 1;
             $resp = `curl --silent --dump-header /dev/stderr $extra $proto://127.0.0.1:$port/ 2>&1 > /dev/null`;

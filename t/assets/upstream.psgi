@@ -72,7 +72,7 @@ builder {
             [],
         ];
     };
-    mount "/sleep" => sub {
+    mount "/streaming-body" => sub {
         my $env = shift;
         return sub {
             my $responder = shift;
