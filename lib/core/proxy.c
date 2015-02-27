@@ -446,15 +446,17 @@ void h2o__proxy_process_request(h2o_req_t *req)
 {
     h2o_context_t *ctx = req->conn->ctx;
     h2o_req_overrides_t *overrides = req->overrides;
+    h2o_http1client_ctx_t *client_ctx =
+        overrides != NULL && overrides->client_ctx != NULL ? overrides->client_ctx : &ctx->proxy.client_ctx;
     struct rp_generator_t *self;
 
     if (overrides != NULL && overrides->socketpool != NULL) {
         self = proxy_send_prepare(req, 1);
-        self->client = h2o_http1client_connect_with_pool(&ctx->proxy.client_ctx, &req->pool, overrides->socketpool, on_connect);
+        self->client = h2o_http1client_connect_with_pool(client_ctx, &req->pool, overrides->socketpool, on_connect);
     } else {
         self = proxy_send_prepare(req, 0);
         if (overrides != NULL && overrides->hostport.host != NULL) {
-            self->client = h2o_http1client_connect(&ctx->proxy.client_ctx, &req->pool, req->overrides->hostport.host,
+            self->client = h2o_http1client_connect(client_ctx, &req->pool, req->overrides->hostport.host,
                                                    req->overrides->hostport.port, on_connect);
         } else {
             h2o_iovec_t host;
@@ -464,8 +466,8 @@ void h2o__proxy_process_request(h2o_req_t *req)
             }
             if (port == 65535)
                 port = 80;
-            self->client = h2o_http1client_connect(&ctx->proxy.client_ctx, &req->pool,
-                                                   h2o_strdup(&req->pool, host.base, host.len).base, port, on_connect);
+            self->client =
+                h2o_http1client_connect(client_ctx, &req->pool, h2o_strdup(&req->pool, host.base, host.len).base, port, on_connect);
         }
     }
     self->client->data = self;

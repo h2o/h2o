@@ -32,6 +32,7 @@ struct rp_handler_t {
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     struct rp_handler_t *self = (void *)_self;
+    h2o_http1client_ctx_t *client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
 
     { /* setup overrides */
         h2o_req_overrides_t *overrides = NULL;
@@ -56,6 +57,10 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
             overrides->location_rewrite.match = &self->upstream;
             overrides->location_rewrite.path_prefix = req->pathconf->path;
         }
+        if (client_ctx != NULL) {
+            USING_OVERRIDES();
+            overrides->client_ctx = client_ctx;
+        }
 #undef USING_OVERRIDES
     }
 
@@ -72,18 +77,19 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 static void *on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 {
     struct rp_handler_t *self = (void *)_self;
-    h2o_http1client_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*ctx) + sizeof(*client_ctx->io_timeout));
 
     /* use the loop of first context for handling socketpool timeouts */
     if (self->sockpool != NULL && self->sockpool->timeout == UINT64_MAX)
         h2o_socketpool_set_timeout(self->sockpool, ctx->loop, self->config.keepalive_timeout);
 
+    /* setup a specific client context if io timeout is different */
+    if (ctx->globalconf->proxy.io_timeout == self->config.io_timeout)
+        return NULL;
+    h2o_http1client_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*ctx) + sizeof(*client_ctx->io_timeout));
     client_ctx->loop = ctx->loop;
     client_ctx->zero_timeout = &ctx->zero_timeout;
     client_ctx->io_timeout = (void *)(client_ctx + 1);
-    h2o_timeout_init(client_ctx->loop, client_ctx->io_timeout,
-                     self->config.io_timeout); /* TODO add a way to configure the variable */
-
+    h2o_timeout_init(client_ctx->loop, client_ctx->io_timeout, self->config.io_timeout);
     return client_ctx;
 }
 
@@ -92,6 +98,10 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
     struct rp_handler_t *self = (void *)_self;
     h2o_http1client_ctx_t *client_ctx = h2o_context_get_handler_context(ctx, &self->super);
 
+    if (client_ctx == NULL)
+        return;
+
+    h2o_timeout_dispose(client_ctx->loop, client_ctx->io_timeout);
     free(client_ctx);
 }
 

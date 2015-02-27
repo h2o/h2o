@@ -439,6 +439,10 @@ struct st_h2o_conn_t {
 
 typedef struct st_h2o_req_overrides_t {
     /**
+     * specific client context (or NULL)
+     */
+    h2o_http1client_ctx_t *client_ctx;
+    /**
      * socketpool to be used when connecting to upstream (or NULL)
      */
     h2o_socketpool_t *socketpool;
