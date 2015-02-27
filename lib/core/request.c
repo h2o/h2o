@@ -103,6 +103,23 @@ static void deferred_proceed_cb(h2o_timeout_entry_t *entry)
     h2o_proceed_response(req);
 }
 
+static void close_generator_and_filters(h2o_req_t *req)
+{
+    /* close the generator if it is still open */
+    if (req->_generator != NULL) {
+        /* close generator */
+        if (req->_generator->stop != NULL)
+            req->_generator->stop(req->_generator, req);
+        req->_generator = NULL;
+    }
+    /* close the ostreams still open */
+    while (req->_ostr_top->next != NULL) {
+        if (req->_ostr_top->stop != NULL)
+            req->_ostr_top->stop(req->_ostr_top, req);
+        req->_ostr_top = req->_ostr_top->next;
+    }
+}
+
 void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
 {
     /* clear all memory (expect memory pool, since it is large) */
@@ -145,19 +162,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
 
 void h2o_dispose_request(h2o_req_t *req)
 {
-    /* close the generator if it is still open */
-    if (req->_generator != NULL) {
-        /* close generator */
-        if (req->_generator->stop != NULL)
-            req->_generator->stop(req->_generator, req);
-        req->_generator = NULL;
-    }
-    /* close the ostreams still open */
-    while (req->_ostr_top->next != NULL) {
-        if (req->_ostr_top->stop != NULL)
-            req->_ostr_top->stop(req->_ostr_top, req);
-        req->_ostr_top = req->_ostr_top->next;
-    }
+    close_generator_and_filters(req);
 
     h2o_timeout_unlink(&req->_timeout_entry);
 
@@ -180,7 +185,11 @@ void h2o_process_request(h2o_req_t *req)
 void h2o_reprocess_request(h2o_req_t *req)
 {
     h2o_hostconf_t *hostconf;
+
+    close_generator_and_filters(req);
+
     req->res = (h2o_res_t){0, NULL, SIZE_MAX, {}};
+    req->_ostr_init_index = 0;
 
     if (req->overrides == NULL && (hostconf = find_hostconf(req->conn->hosts, req->authority)) != NULL) {
         process_hosted_request(req, hostconf);

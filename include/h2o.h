@@ -945,6 +945,19 @@ h2o_redirect_handler_t *h2o_redirect_register(h2o_pathconf_t *pathconf, int stat
  */
 void h2o_redirect_register_configurator(h2o_globalconf_t *conf);
 
+/* lib/handler/reproxy.c */
+
+typedef struct st_h2o_reproxy_handler_t h2o_reproxy_handler_t;
+
+/**
+ * registers the reproxy filter
+ */
+void h2o_reproxy_register(h2o_pathconf_t *pathconf);
+/**
+ * registers the configurator
+ */
+void h2o_reproxy_register_configurator(h2o_globalconf_t *conf);
+
 /* inline defs */
 
 inline void h2o_proceed_response(h2o_req_t *req)
