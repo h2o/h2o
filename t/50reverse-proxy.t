@@ -39,6 +39,7 @@ hosts:
       /:
         proxy.reverse.url: http://127.0.0.1:$upstream_port
 @{[ $h2o_keepalive ? "" : "        proxy.timeout.keepalive: 0" ]}
+reproxy: ON
 EOT
     };
     ok ! check_port($upstream_port), "upstream should be down now";
@@ -95,6 +96,15 @@ sub run_tests_with_conf {
                 like $content, qr{HTTP/1\.1 302 }m;
                 like $content, qr{^location: $proto://127.0.0.1:$port/abc\r$}m;
             };
+            subtest "x-reproxy-url ($proto)" => sub {
+                for my $file (sort keys %files) {
+                    my $content = `curl --silent --show-error --insecure "$proto://127.0.0.1:$port/404?resp:status=200&resp:x-reproxy-url=http://127.0.0.1:$upstream_port/$file"`;
+                    is length($content), $files{$file}->{size}, "$file (size)";
+                    is md5_hex($content), $files{$file}->{md5}, "$file (md5)";
+                }
+                my $content = `curl --silent --show-error --insecure "$proto://127.0.0.1:$port/streaming-body?resp:status=200&resp:x-reproxy-url=http://127.0.0.1:$upstream_port/index.txt"`;
+                is $content, "hello\n", "streaming-body";
+            };
             subtest "x-forwarded ($proto)" => sub {
                 my $resp = `curl --silent --insecure $proto://127.0.0.1:$port/echo-headers`;
                 like $resp, qr/^x-forwarded-for: 127\.0\.0\.1$/mi, "x-forwarded-for";
@@ -131,6 +141,15 @@ sub run_tests_with_conf {
                     if $opt eq '-u';
                 $out = `nghttp $opt -H 'cookie: a=b' -H 'cookie: c=d' $proto://127.0.0.1:$port/echo-headers`;
                 like $out, qr{^cookie: a=b; c=d$}m;
+            };
+            subtest "x-reproxy-url ($proto)" => sub {
+                for my $file (sort keys %files) {
+                    my $content = `nghttp $opt "$proto://127.0.0.1:$port/404?resp:status=200&resp:x-reproxy-url=http://127.0.0.1:$upstream_port/$file"`;
+                    is length($content), $files{$file}->{size}, "$file (size)";
+                    is md5_hex($content), $files{$file}->{md5}, "$file (md5)";
+                }
+                my $content = `nghttp $opt "$proto://127.0.0.1:$port/streaming-body?resp:status=200&resp:x-reproxy-url=http://127.0.0.1:$upstream_port/index.txt"`;
+                is $content, "hello\n", "streaming-body";
             };
             subtest 'issues/185' => sub {
                 my $out = `nghttp $opt -v "$proto://127.0.0.1:$port/?resp:access-control-allow-origin=%2a"`;

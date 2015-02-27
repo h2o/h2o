@@ -37,13 +37,16 @@ builder {
             return sub {
                 my $env = shift;
                 my $res = $app->($env);
-                my @headers;
-                for (my $i = 0; $i != @{$res->[1]}; $i += 2) {
-                    push @headers, $res->[1][$i], $res->[1][$i + 1]
-                        if lc $res->[1][$i] ne 'content-length';
-                }
-                $res->[1] = \@headers;
-                return $res;
+                Plack::Util::response_cb($res, sub {
+                    my $res = shift;
+                    my @headers;
+                    for (my $i = 0; $i != @{$res->[1]}; $i += 2) {
+                        push @headers, $res->[1][$i], $res->[1][$i + 1]
+                            if lc $res->[1][$i] ne 'content-length';
+                    }
+                    $res->[1] = \@headers;
+                    return $res;
+                });
             };
         };
     }
