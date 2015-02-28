@@ -35,33 +35,19 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     h2o_http1client_ctx_t *client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
 
     { /* setup overrides */
-        h2o_req_overrides_t *overrides = NULL;
-#define USING_OVERRIDES()                                                                                                          \
-    do {                                                                                                                           \
-        if (overrides == NULL) {                                                                                                   \
-            overrides = h2o_mem_alloc_pool(&req->pool, sizeof(*overrides));                                                        \
-            *overrides = (h2o_req_overrides_t){};                                                                                  \
-            req->overrides = overrides;                                                                                            \
-        }                                                                                                                          \
-    } while (0)
+        h2o_req_overrides_t *overrides = h2o_mem_alloc_pool(&req->pool, sizeof(*overrides));                                                        \
+        *overrides = (h2o_req_overrides_t){};                                                                                  \
+        req->overrides = overrides;                                                                                            \
         if (self->sockpool != NULL) {
-            USING_OVERRIDES();
             overrides->socketpool = self->sockpool;
         } else if (self->config.preserve_host) {
-            USING_OVERRIDES();
             overrides->hostport.host = self->upstream.host.base;
             overrides->hostport.port = h2o_url_get_port(&self->upstream);
         }
-        if (!self->config.preserve_host) {
-            USING_OVERRIDES();
-            overrides->location_rewrite.match = &self->upstream;
-            overrides->location_rewrite.path_prefix = req->pathconf->path;
-        }
-        if (client_ctx != NULL) {
-            USING_OVERRIDES();
+        overrides->location_rewrite.match = &self->upstream;
+        overrides->location_rewrite.path_prefix = req->pathconf->path;
+        if (client_ctx != NULL)
             overrides->client_ctx = client_ctx;
-        }
-#undef USING_OVERRIDES
     }
 
     /* rewrite request */
