@@ -346,7 +346,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 }
                 goto Skip;
             } else if (token == H2O_TOKEN_LOCATION) {
-                if (self->src_req->overrides != NULL || self->src_req->overrides->location_rewrite.match != NULL) {
+                if (self->src_req->overrides != NULL && self->src_req->overrides->location_rewrite.match != NULL) {
                     value =
                         rewrite_location(&self->src_req->pool, headers[i].value, headers[i].value_len,
                                          self->src_req->overrides->location_rewrite.match, self->src_req->scheme,
