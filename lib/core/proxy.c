@@ -321,40 +321,6 @@ None:
     return (h2o_iovec_t){};
 }
 
-static void handle_internal_redirect(h2o_req_t *req, int status, const char *loc_str, size_t loc_len)
-{
-    h2o_url_t location;
-    int authority_changed;
-    h2o_iovec_t method;
-
-    /* parse the location URL */
-    if (h2o_url_parse_relative(loc_str, loc_len, &location) != 0) {
-        send_error(req, h2o_concat(&req->pool, h2o_iovec_init(H2O_STRLIT("cannot handle location header: ")),
-                                   h2o_iovec_init(loc_str, loc_len)).base);
-        return;
-    }
-    /* convert the location to absolute */
-    if (location.scheme == NULL)
-        location.scheme = req->scheme;
-    if (location.authority.base == NULL) {
-        location.authority = req->authority;
-        authority_changed = 0;
-    } else {
-        authority_changed = !h2o_lcstris(location.authority.base, location.authority.len, req->authority.base, req->authority.len);
-    }
-    h2o_iovec_t base_path = req->path;
-    h2o_url_resolve_path(&base_path, &location.path);
-    location.path = h2o_concat(&req->pool, base_path, location.path);
-
-    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("POST")) && !(status == 307 || status == 308))
-        method = h2o_iovec_init(H2O_STRLIT("GET"));
-    else
-        method = req->method;
-
-    h2o_reprocess_request_deferred(req, method, location.scheme, location.authority, location.path,
-                                   authority_changed ? req->overrides : NULL, 1);
-}
-
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
                                        h2o_iovec_t msg, struct phr_header *headers, size_t num_headers)
 {
@@ -390,7 +356,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
             } else if (token == H2O_TOKEN_LOCATION) {
                 if (req->res_is_delegated && (300 <= status && status <= 399) && status != 304) {
                     self->client = NULL;
-                    handle_internal_redirect(req, status, headers[i].value, headers[i].value_len);
+                    h2o_send_redirect_internal(req, status, headers[i].value, headers[i].value_len);
                     return NULL;
                 }
                 if (req->overrides != NULL && req->overrides->location_rewrite.match != NULL) {

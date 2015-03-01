@@ -328,6 +328,11 @@ void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *
 
 void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const char *url, size_t url_len)
 {
+    if (req->res_is_delegated) {
+        h2o_send_redirect_internal(req, status, url, url_len);
+        return;
+    }
+
     static h2o_generator_t generator = {NULL, NULL};
     static const h2o_iovec_t body_prefix = {H2O_STRLIT("<!DOCTYPE html><TITLE>Moved</TITLE><P>The document has moved <A HREF=\"")};
     static const h2o_iovec_t body_suffix = {H2O_STRLIT("\">here</A>")};
@@ -349,4 +354,37 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
     /* send */
     h2o_start_response(req, &generator);
     h2o_send(req, bufs, 3, 1);
+}
+
+void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str, size_t url_len)
+{
+    h2o_url_t url;
+    int authority_changed;
+    h2o_iovec_t method;
+
+    /* parse the location URL */
+    if (h2o_url_parse_relative(url_str, url_len, &url) != 0) {
+        /* TODO log fprintf(stderr, "[proxy] cannot handle location header: %.*s\n", (int)url_len, url); */
+        h2o_send_error(req, 502, "Gateway Error", "internal error", 0);
+        return;
+    }
+    /* convert the location to absolute */
+    if (url.scheme == NULL)
+        url.scheme = req->scheme;
+    if (url.authority.base == NULL) {
+        url.authority = req->authority;
+        authority_changed = 0;
+    } else {
+        authority_changed = !h2o_lcstris(url.authority.base, url.authority.len, req->authority.base, req->authority.len);
+    }
+    h2o_iovec_t base_path = req->path;
+    h2o_url_resolve_path(&base_path, &url.path);
+    url.path = h2o_concat(&req->pool, base_path, url.path);
+
+    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("POST")) && !(status == 307 || status == 308))
+        method = h2o_iovec_init(H2O_STRLIT("GET"));
+    else
+        method = req->method;
+
+    h2o_reprocess_request_deferred(req, method, url.scheme, url.authority, url.path, authority_changed ? req->overrides : NULL, 1);
 }
