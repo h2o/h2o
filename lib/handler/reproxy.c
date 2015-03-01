@@ -24,6 +24,7 @@
 struct st_reproxy_args_t {
     h2o_timeout_entry_t timeout;
     h2o_req_t *req;
+    const h2o_url_scheme_t *scheme;
     h2o_iovec_t authority;
     h2o_iovec_t path;
 };
@@ -33,6 +34,7 @@ static void on_timeout(h2o_timeout_entry_t *entry)
     struct st_reproxy_args_t *args = H2O_STRUCT_FROM_MEMBER(struct st_reproxy_args_t, timeout, entry);
     h2o_req_t *req = args->req;
 
+    req->scheme = args->scheme;
     req->method = h2o_iovec_init(H2O_STRLIT("GET"));
     req->authority = args->authority;
     req->path = args->path;
@@ -61,17 +63,12 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
         0)
         goto Next;
 
-    /* We got ourselves a X-Reproxy-URL header. make sure we have
-     * "http" scheme, cause that's all we handle
-     */
-    if (xru_parsed.scheme != &H2O_URL_SCHEME_HTTP)
-        goto Next;
-
     /* schedule the reprocessing */
     struct st_reproxy_args_t *args = h2o_mem_alloc_pool(&req->pool, sizeof(*args));
     *args = (struct st_reproxy_args_t){
         {0, on_timeout},      /* timeout */
         req,                  /* req */
+        xru_parsed.scheme,    /* scheme */
         xru_parsed.authority, /* authority */
         xru_parsed.path       /* path */
     };
