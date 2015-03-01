@@ -104,6 +104,8 @@ sub run_tests_with_conf {
                 }
                 my $content = `curl --silent --show-error --insecure "$proto://127.0.0.1:$port/streaming-body?resp:status=200&resp:x-reproxy-url=http://127.0.0.1:$upstream_port/index.txt"`;
                 is $content, "hello\n", "streaming-body";
+                $content = `curl --silent --dump-header /dev/stderr --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=https://127.0.0.1:$upstream_port/index.txt" 2>&1 > /dev/null`;
+                like $content, qr{^HTTP/1\.1 502 }m;
             };
             subtest "x-forwarded ($proto)" => sub {
                 my $resp = `curl --silent --insecure $proto://127.0.0.1:$port/echo-headers`;
@@ -150,6 +152,8 @@ sub run_tests_with_conf {
                 }
                 my $content = `nghttp $opt "$proto://127.0.0.1:$port/streaming-body?resp:status=200&resp:x-reproxy-url=http://127.0.0.1:$upstream_port/index.txt"`;
                 is $content, "hello\n", "streaming-body";
+                $content = `nghttp -v $opt "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=https://127.0.0.1:$upstream_port/index.txt"`;
+                like $content, qr/ :status: 502$/m;
             };
             subtest 'issues/185' => sub {
                 my $out = `nghttp $opt -v "$proto://127.0.0.1:$port/?resp:access-control-allow-origin=%2a"`;
