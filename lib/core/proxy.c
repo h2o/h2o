@@ -39,6 +39,13 @@ struct rp_generator_t {
     h2o_buffer_t *buf_sending;
 };
 
+static void send_error(h2o_req_t *req, const char *internal_reason)
+{
+    fprintf(stderr, "[proxy] an error ocurred while handling internal redirect to %s://%.*s%.*s; %s\n", req->scheme->name.base,
+            (int)req->authority.len, req->authority.base, (int)req->path.len, req->path.base, internal_reason);
+    h2o_send_error(req, 502, "Gateway Error", "internal error", 0);
+}
+
 static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, size_t location_len, h2o_url_t *match,
                                     const h2o_url_scheme_t *req_scheme, h2o_iovec_t req_authority, h2o_iovec_t req_basepath)
 {
@@ -468,8 +475,13 @@ void h2o__proxy_process_request(h2o_req_t *req)
         } else {
             h2o_iovec_t host;
             uint16_t port;
+            if (req->scheme != &H2O_URL_SCHEME_HTTP) {
+                send_error(req, "only HTTP (not HTTPS) URLs are supported");
+                return;
+            }
             if (h2o_url_parse_hostport(req->authority.base, req->authority.len, &host, &port) == NULL) {
-                assert(!"FIXME");
+                send_error(req, "could not parse host and port of URL");
+                return;
             }
             if (port == 65535)
                 port = 80;
