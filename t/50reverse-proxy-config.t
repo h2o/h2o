@@ -74,4 +74,17 @@ EOT
     like $resp, qr{^HTTP/1\.1 502 }s, "respond after timeout";
 };
 
+subtest 'infinite-internal-redirect' => sub {
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
+reproxy: ON
+EOT
+    my $resp = `curl --silent --dump-header /dev/stderr "http://127.0.0.1:$server->{port}/?resp:x-reproxy-url=http://127.0.0.1:$upstream_port/infinite-redirect" 2>&1 > /dev/null`;
+    like $resp, qr{^HTTP/1\.1 502 }s;
+};
+
 done_testing;
