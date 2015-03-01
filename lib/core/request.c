@@ -368,14 +368,20 @@ void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str,
         h2o_send_error(req, 502, "Gateway Error", "internal error", 0);
         return;
     }
-    /* convert the location to absolute */
+    /* convert the location to absolute (while creating copies of the values passed to the deferred call) */
     if (url.scheme == NULL)
         url.scheme = req->scheme;
     if (url.authority.base == NULL) {
         url.authority = req->authority;
         authority_changed = 0;
     } else {
-        authority_changed = !h2o_lcstris(url.authority.base, url.authority.len, req->authority.base, req->authority.len);
+        if (h2o_lcstris(url.authority.base, url.authority.len, req->authority.base, req->authority.len)) {
+            authority_changed = 0;
+            url.authority = req->authority;
+        } else {
+            authority_changed = 1;
+            url.authority = h2o_strdup(&req->pool, url.authority.base, url.authority.len);
+        }
     }
     h2o_iovec_t base_path = req->path;
     h2o_url_resolve_path(&base_path, &url.path);
