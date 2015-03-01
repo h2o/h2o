@@ -38,6 +38,8 @@ hosts:
     paths:
       /:
         proxy.reverse.url: http://127.0.0.1:$upstream_port
+      /files:
+        file.dir: @{[ DOC_ROOT ]}
 @{[ $h2o_keepalive ? "" : "        proxy.timeout.keepalive: 0" ]}
 reproxy: ON
 EOT
@@ -106,6 +108,9 @@ sub run_tests_with_conf {
                 is $content, "hello\n", "streaming-body";
                 $content = `curl --silent --dump-header /dev/stderr --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=https://127.0.0.1:$upstream_port/index.txt" 2>&1 > /dev/null`;
                 like $content, qr{^HTTP/1\.1 502 }m;
+                $content = `curl --silent --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=https://default/files/index.txt"`;
+                is length($content), $files{"index.txt"}->{size}, "to file handler (size)";
+                is md5_hex($content), $files{"index.txt"}->{md5}, "to file handler (md5)";
             };
             subtest "x-forwarded ($proto)" => sub {
                 my $resp = `curl --silent --insecure $proto://127.0.0.1:$port/echo-headers`;
@@ -154,6 +159,9 @@ sub run_tests_with_conf {
                 is $content, "hello\n", "streaming-body";
                 $content = `nghttp -v $opt "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=https://127.0.0.1:$upstream_port/index.txt"`;
                 like $content, qr/ :status: 502$/m;
+                $content = `nghttp $opt "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=https://default/files/index.txt"`;
+                is length($content), $files{"index.txt"}->{size}, "to file handler (size)";
+                is md5_hex($content), $files{"index.txt"}->{md5}, "to file handler (md5)";
             };
             subtest 'issues/185' => sub {
                 my $out = `nghttp $opt -v "$proto://127.0.0.1:$port/?resp:access-control-allow-origin=%2a"`;
