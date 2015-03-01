@@ -215,6 +215,17 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
     req->res = (h2o_res_t){0, NULL, SIZE_MAX, {}};
     req->_ostr_init_index = 0;
 
+    /* check the delegation counter */
+    if (is_delegated) {
+        if (req->num_delegated == req->conn->ctx->globalconf->max_delegations) {
+            /* TODO log */
+            h2o_send_error(req, 502, "Gateway Error", "too many internal redirections", 0);
+            return;
+        }
+        ++req->num_delegated;
+    }
+
+    /* handle the response using the handlers, if hostconf exists */
     if (req->overrides == NULL && (hostconf = find_hostconf(req->conn->hosts, req->authority)) != NULL) {
         process_hosted_request(req, hostconf);
         return;

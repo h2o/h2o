@@ -59,6 +59,7 @@ extern "C" {
 #endif
 
 #define H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE (1024 * 1024 * 1024)
+#define H2O_DEFAULT_MAX_DELEGATIONS 5
 #define H2O_DEFAULT_HTTP1_REQ_TIMEOUT_IN_SECS 10
 #define H2O_DEFAULT_HTTP1_REQ_TIMEOUT (H2O_DEFAULT_HTTP1_REQ_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2 1
@@ -210,6 +211,10 @@ struct st_h2o_globalconf_t {
      * maximum size of the accepted request entity (e.g. POST data)
      */
     size_t max_request_entity_size;
+    /**
+     * maximum count for delegations
+     */
+    unsigned max_delegations;
 
     struct {
         /**
@@ -557,6 +562,10 @@ struct st_h2o_req_t {
      * number of bytes sent by the generator (excluding headers)
      */
     size_t bytes_sent;
+    /**
+     * counts the number of times the request has been delegated
+     */
+    unsigned num_delegated;
 
     /* flags */
 
