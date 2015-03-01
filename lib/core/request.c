@@ -187,8 +187,13 @@ void h2o_reprocess_request(h2o_req_t *req)
 {
     h2o_hostconf_t *hostconf;
 
+    /* close generators and filters that are already running */
     close_generator_and_filters(req);
 
+    /* update path_normalized and query_at */
+    req->path_normalized = h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at);
+
+    /* reset the response */
     req->res = (h2o_res_t){0, NULL, SIZE_MAX, {}};
     req->_ostr_init_index = 0;
 
