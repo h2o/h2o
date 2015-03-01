@@ -355,7 +355,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                         goto AddHeader;
                 }
                 goto AddHeaderDuped;
-            } else if (token == H2O_TOKEN_LINK && req->version >= 0x200) {
+            } else if (token == H2O_TOKEN_LINK && req->version >= 0x200 && !req->res_is_delegated) {
                 if (url_parsed.scheme == NULL) {
                     if (h2o_url_parse_hostport(req->input.authority.base, req->input.authority.len, &url_parsed.host,
                                                &url_parsed._port) != NULL) {
