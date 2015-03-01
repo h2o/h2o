@@ -241,8 +241,7 @@ int h2o_url_parse_relative(const char *url, size_t url_len, h2o_url_t *parsed)
 
 h2o_iovec_t h2o_url_resolve(h2o_mem_pool_t *pool, const h2o_url_t *base, const h2o_url_t *relative, h2o_url_t *dest)
 {
-    size_t base_path_len = base->path.len, rel_path_offset = 0;
-    h2o_iovec_t ret;
+    h2o_iovec_t base_path, relative_path, ret;
 
     assert(base->path.len != 0);
     assert(base->path.base[0] == '/');
@@ -272,46 +271,19 @@ h2o_iovec_t h2o_url_resolve(h2o_mem_pool_t *pool, const h2o_url_t *base, const h
         dest->_port = base->_port;
     }
 
-    /* path: setup base_path_len and rel_path_offset */
+    /* path */
+    base_path = base->path;
     if (relative->path.base != NULL) {
-        if (relative->path.len != 0 && relative->path.base[0] == '/') {
-            base_path_len = 0;
-        } else {
-            /* relative path */
-            while (base->path.base[--base_path_len] != '/')
-                ;
-            while (rel_path_offset != relative->path.len) {
-                if (relative->path.base[rel_path_offset] == '.') {
-                    if (relative->path.len - rel_path_offset >= 2 && relative->path.base[rel_path_offset + 1] == '.' &&
-                        (relative->path.len - rel_path_offset == 2 || relative->path.base[rel_path_offset + 2] == '/')) {
-                        if (base_path_len != 0) {
-                            while (base->path.base[--base_path_len] != '/')
-                                ;
-                        }
-                        rel_path_offset += relative->path.len - rel_path_offset == 2 ? 2 : 3;
-                        continue;
-                    }
-                    if (relative->path.len - rel_path_offset == 1) {
-                        rel_path_offset += 1;
-                        continue;
-                    } else if (relative->path.base[rel_path_offset + 1] == '/') {
-                        rel_path_offset += 2;
-                        continue;
-                    }
-                }
-                break;
-            }
-            base_path_len += 1;
-        }
+        relative_path = relative->path;
+        h2o_url_resolve_path(&base_path, &relative_path);
     } else {
         assert(relative->path.len == 0);
+        relative_path = (h2o_iovec_t){};
     }
 
 Build:
     /* build the output */
-    ret = h2o_concat(pool, dest->scheme->name, h2o_iovec_init(H2O_STRLIT("://")), dest->authority,
-                     h2o_iovec_init(base->path.base, base_path_len),
-                     h2o_iovec_init(relative->path.base + rel_path_offset, relative->path.len - rel_path_offset));
+    ret = h2o_concat(pool, dest->scheme->name, h2o_iovec_init(H2O_STRLIT("://")), dest->authority, base_path, relative_path);
     /* adjust dest */
     dest->authority.base = ret.base + dest->scheme->name.len + 3;
     dest->host.base = dest->authority.base;
@@ -321,6 +293,44 @@ Build:
     dest->path.len = ret.base + ret.len - dest->path.base;
 
     return ret;
+}
+
+void h2o_url_resolve_path(h2o_iovec_t *base, h2o_iovec_t *relative)
+{
+    size_t base_path_len = base->len, rel_path_offset = 0;
+
+    if (relative->len != 0 && relative->base[0] == '/') {
+        base_path_len = 0;
+    } else {
+        /* relative path */
+        while (base->base[--base_path_len] != '/')
+            ;
+        while (rel_path_offset != relative->len) {
+            if (relative->base[rel_path_offset] == '.') {
+                if (relative->len - rel_path_offset >= 2 && relative->base[rel_path_offset + 1] == '.' &&
+                    (relative->len - rel_path_offset == 2 || relative->base[rel_path_offset + 2] == '/')) {
+                    if (base_path_len != 0) {
+                        while (base->base[--base_path_len] != '/')
+                            ;
+                    }
+                    rel_path_offset += relative->len - rel_path_offset == 2 ? 2 : 3;
+                    continue;
+                }
+                if (relative->len - rel_path_offset == 1) {
+                    rel_path_offset += 1;
+                    continue;
+                } else if (relative->base[rel_path_offset + 1] == '/') {
+                    rel_path_offset += 2;
+                    continue;
+                }
+            }
+            break;
+        }
+        base_path_len += 1;
+    }
+
+    base->len = base_path_len;
+    *relative = h2o_iovec_init(relative->base + rel_path_offset, relative->len - rel_path_offset);
 }
 
 void h2o_url_copy(h2o_mem_pool_t *pool, h2o_url_t *dest, const h2o_url_t *src)
