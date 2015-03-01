@@ -104,4 +104,14 @@ builder {
             ],
         ];
     };
+    mount "/infinite-redirect" => sub {
+        my $env = shift;
+        return [
+            302,
+            [
+                location => '/infinite-redirect',
+            ],
+            [],
+        ];
+    };
 };
