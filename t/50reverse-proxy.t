@@ -119,6 +119,8 @@ sub run_tests_with_conf {
                 is md5_hex($content), $files{"index.txt"}->{md5}, "reproxy & internal redirect to file (md5)";
                 $content = `curl --silent --dump-header /dev/stderr --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://127.0.0.1:$upstream_port/?resp:status=302%26resp:location=https://127.0.0.1:$upstream_port/index.txt" 2>&1 > /dev/null`;
                 like $content, qr{^HTTP/1\.1 502 }m, "cannot handle internal redirect via location: to https";
+                $content = `curl --silent --dump-header /dev/stderr --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://default/files" 2>&1 > /dev/null`;
+                unlike $content, qr{^HTTP/1\.1 3}m, "once delegated, redirects of the file handler should be handled internally";
             };
             subtest "x-forwarded ($proto)" => sub {
                 my $resp = `curl --silent --insecure $proto://127.0.0.1:$port/echo-headers`;
@@ -178,6 +180,8 @@ sub run_tests_with_conf {
                 is md5_hex($content), $files{"index.txt"}->{md5}, "reproxy & internal redirect to file (md5)";
                 $content = `nghttp -v $opt "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://127.0.0.1:$upstream_port/?resp:status=302%26resp:location=https://127.0.0.1:$upstream_port/index.txt"`;
                 like $content, qr/ :status: 502$/m, "cannot handle internal redirect via location: to https";
+                $content = `nghttp -v $opt "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://default/files"`;
+                unlike $content, qr/ :status: 3/, "once delegated, redirects of the file handler should be handled internally";
             };
             subtest 'issues/185' => sub {
                 my $out = `nghttp $opt -v "$proto://127.0.0.1:$port/?resp:access-control-allow-origin=%2a"`;
