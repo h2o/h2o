@@ -481,6 +481,10 @@ struct st_h2o_req_t {
      */
     struct {
         /**
+         * scheme (http, https, etc.)
+         */
+        const h2o_url_scheme_t *scheme;
+        /**
          * authority (a.k.a. the Host header; the value is supplemented if missing before the handlers are being called)
          */
         h2o_iovec_t authority;
@@ -501,6 +505,10 @@ struct st_h2o_req_t {
      * the path context
      */
     h2o_pathconf_t *pathconf;
+    /**
+     * scheme (http, https, etc.)
+     */
+    const h2o_url_scheme_t *scheme;
     /**
      * authority (of the processing request)
      */
@@ -525,10 +533,6 @@ struct st_h2o_req_t {
      * overrides (maybe NULL)
      */
     h2o_req_overrides_t *overrides;
-    /**
-     * scheme (http, https, etc.)
-     */
-    const h2o_url_scheme_t *scheme;
     /**
      * the HTTP version (represented as 0xMMmm (M=major, m=minor))
      */

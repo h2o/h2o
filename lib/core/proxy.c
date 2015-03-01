@@ -179,7 +179,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive)
         buf.base[offset++] = '\r';
         buf.base[offset++] = '\n';
     }
-    FLATTEN_PREFIXED_VALUE("x-forwarded-proto: ", req->scheme->name, 0);
+    FLATTEN_PREFIXED_VALUE("x-forwarded-proto: ", req->input.scheme->name, 0);
     buf.base[offset++] = '\r';
     buf.base[offset++] = '\n';
     if (remote_addr_len != SIZE_MAX) {
@@ -350,7 +350,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 if (req->overrides != NULL && req->overrides->location_rewrite.match != NULL) {
                     value =
                         rewrite_location(&req->pool, headers[i].value, headers[i].value_len, req->overrides->location_rewrite.match,
-                                         req->scheme, req->input.authority, req->overrides->location_rewrite.path_prefix);
+                                         req->input.scheme, req->input.authority, req->overrides->location_rewrite.path_prefix);
                     if (value.base != NULL)
                         goto AddHeader;
                 }
@@ -360,7 +360,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                     if (h2o_url_parse_hostport(req->input.authority.base, req->input.authority.len, &url_parsed.host,
                                                &url_parsed._port) != NULL) {
                         url_parsed = (h2o_url_t){
-                            req->scheme,          /* scheme */
+                            req->input.scheme,    /* scheme */
                             req->input.authority, /* authority */
                             {},                   /* host */
                             req->path_normalized, /* path */

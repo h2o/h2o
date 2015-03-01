@@ -46,7 +46,7 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     ok(memcmp(req.input.method.base, H2O_STRLIT("GET")) == 0);
     ok(req.input.path.len == 1);
     ok(memcmp(req.input.path.base, H2O_STRLIT("/")) == 0);
-    ok(req.scheme == &H2O_URL_SCHEME_HTTP);
+    ok(req.input.scheme == &H2O_URL_SCHEME_HTTP);
     ok(req.headers.size == 0);
 
     h2o_mem_clear_pool(&req.pool);
@@ -63,7 +63,7 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     ok(memcmp(req.input.method.base, H2O_STRLIT("GET")) == 0);
     ok(req.input.path.len == 1);
     ok(memcmp(req.input.path.base, H2O_STRLIT("/")) == 0);
-    ok(req.scheme == &H2O_URL_SCHEME_HTTP);
+    ok(req.input.scheme == &H2O_URL_SCHEME_HTTP);
     ok(req.headers.size == 1);
     ok(h2o_memis(req.headers.entries[0].name->base, req.headers.entries[0].name->len, H2O_STRLIT("cache-control")));
     ok(h2o_lcstris(req.headers.entries[0].value.base, req.headers.entries[0].value.len, H2O_STRLIT("no-cache")));
@@ -82,7 +82,7 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     ok(memcmp(req.input.method.base, H2O_STRLIT("GET")) == 0);
     ok(req.input.path.len == 11);
     ok(memcmp(req.input.path.base, H2O_STRLIT("/index.html")) == 0);
-    ok(req.scheme == &H2O_URL_SCHEME_HTTPS);
+    ok(req.input.scheme == &H2O_URL_SCHEME_HTTPS);
     ok(req.headers.size == 1);
     ok(h2o_memis(req.headers.entries[0].name->base, req.headers.entries[0].name->len, H2O_STRLIT("custom-key")));
     ok(h2o_lcstris(req.headers.entries[0].value.base, req.headers.entries[0].value.len, H2O_STRLIT("custom-value")));

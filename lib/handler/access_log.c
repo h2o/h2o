@@ -325,8 +325,8 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
         case ELEMENT_TYPE_URL_PATH: /* %U */
         {
             size_t path_len = req->input.query_at == SIZE_MAX ? req->input.path.len : req->input.query_at;
-            RESERVE(req->scheme->name.len + (sizeof("://") - 1) + (req->input.authority.len + path_len) * 4);
-            pos = append_safe_string(pos, req->scheme->name.base, req->scheme->name.len);
+            RESERVE(req->input.scheme->name.len + (sizeof("://") - 1) + (req->input.authority.len + path_len) * 4);
+            pos = append_safe_string(pos, req->input.scheme->name.base, req->input.scheme->name.len);
             pos = append_safe_string(pos, H2O_STRLIT("://"));
             pos = append_unsafe_string(pos, req->input.authority.base, req->input.authority.len);
             pos = append_unsafe_string(pos, req->input.path.base, path_len);

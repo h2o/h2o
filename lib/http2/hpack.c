@@ -417,13 +417,13 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                     req->input.path = *r.value;
                     *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
                 } else if (r.name == &H2O_TOKEN_SCHEME->buf) {
-                    if (req->scheme != NULL)
+                    if (req->input.scheme != NULL)
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     if (h2o_memis(r.value->base, r.value->len, H2O_STRLIT("https"))) {
-                        req->scheme = &H2O_URL_SCHEME_HTTPS;
+                        req->input.scheme = &H2O_URL_SCHEME_HTTPS;
                     } else {
                         /* draft-16 8.1.2.3 suggests quote: ":scheme is not restricted to http and https schemed URIs" */
-                        req->scheme = &H2O_URL_SCHEME_HTTP;
+                        req->input.scheme = &H2O_URL_SCHEME_HTTP;
                     }
                     *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS;
                 } else {
@@ -676,7 +676,7 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
     capacity += H2O_HTTP2_FRAME_HEADER_SIZE /* first frame header */
                 + 4;                        /* promised stream id */
     capacity += calc_capacity(H2O_TOKEN_METHOD->buf.len, req->input.method.len);
-    capacity += calc_capacity(H2O_TOKEN_SCHEME->buf.len, req->scheme->name.len);
+    capacity += calc_capacity(H2O_TOKEN_SCHEME->buf.len, req->input.scheme->name.len);
     capacity += calc_capacity(H2O_TOKEN_AUTHORITY->buf.len, req->input.authority.len);
     capacity += calc_capacity(H2O_TOKEN_PATH->buf.len, req->input.path.len);
 
@@ -689,7 +689,7 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
     *dst++ = (uint8_t)(stream_id << 8);
     *dst++ = (uint8_t)stream_id;
     dst = encode_header(header_table, dst, &H2O_TOKEN_METHOD->buf, &req->input.method);
-    dst = encode_header(header_table, dst, &H2O_TOKEN_SCHEME->buf, &req->scheme->name);
+    dst = encode_header(header_table, dst, &H2O_TOKEN_SCHEME->buf, &req->input.scheme->name);
     dst = encode_header(header_table, dst, &H2O_TOKEN_AUTHORITY->buf, &req->input.authority);
     dst = encode_header(header_table, dst, &H2O_TOKEN_PATH->buf, &req->input.path);
     dst = flatten_headers(dst, header_table, req->headers.entries, req->headers.size);

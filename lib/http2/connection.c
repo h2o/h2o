@@ -1027,7 +1027,7 @@ void h2o_http2_conn_push_path(h2o_http2_conn_t *conn, h2o_iovec_t path, h2o_http
 
     /* setup request */
     stream->req.input.method = (h2o_iovec_t){H2O_STRLIT("GET")};
-    stream->req.scheme = src_stream->req.scheme;
+    stream->req.input.scheme = src_stream->req.input.scheme;
     stream->req.input.authority =
         h2o_strdup(&stream->req.pool, src_stream->req.input.authority.base, src_stream->req.input.authority.len);
     stream->req.input.path = h2o_strdup(&stream->req.pool, path.base, path.len);

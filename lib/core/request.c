@@ -53,6 +53,7 @@ static h2o_hostconf_t *setup_before_processing(h2o_req_t *req)
         req->input.authority = hostconf->hostname;
     }
 
+    req->scheme = req->input.scheme;
     req->method = req->input.method;
     req->authority = req->input.authority;
     req->path = req->input.path;
@@ -143,7 +144,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
         COPY(input.authority);
         COPY(input.method);
         COPY(input.path);
-        req->scheme = src->scheme;
+        req->input.scheme = src->input.scheme;
         req->version = src->version;
         h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->headers, sizeof(h2o_header_t), src->headers.size);
         memcpy(req->headers.entries, src->headers.entries, sizeof(req->headers.entries[0]) * src->headers.size);

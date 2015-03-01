@@ -62,8 +62,8 @@ void h2o_loopback_destroy(h2o_loopback_conn_t *conn)
 
 void h2o_loopback_run_loop(h2o_loopback_conn_t *conn)
 {
-    if (conn->req.scheme == NULL)
-        conn->req.scheme = &H2O_URL_SCHEME_HTTP;
+    if (conn->req.input.scheme == NULL)
+        conn->req.input.scheme = &H2O_URL_SCHEME_HTTP;
     if (conn->req.version == 0)
         conn->req.version = 0x100; /* HTTP/1.0 */
 
