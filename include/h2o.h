@@ -553,11 +553,20 @@ struct st_h2o_req_t {
      * number of bytes sent by the generator (excluding headers)
      */
     size_t bytes_sent;
+
+    /* flags */
+
     /**
      * whether or not the connection is persistent.
      * Applications should set this flag to zero in case the connection cannot be kept keep-alive (due to an error etc.)
      */
-    int http1_is_persistent;
+    char http1_is_persistent;
+    /**
+     * whether if the response has been delegated (i.e. reproxied).
+     * For delegated responses, redirect responses would be handled internally.
+     */
+    char res_is_delegated;
+
     /**
      * absolute paths to be pushed (using HTTP/2 server push)
      */

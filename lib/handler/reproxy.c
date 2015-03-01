@@ -37,6 +37,7 @@ static void on_timeout(h2o_timeout_entry_t *entry)
     req->authority = args->authority;
     req->path = args->path;
     req->overrides = NULL;
+    req->res_is_delegated |= 1;
 
     h2o_reprocess_request(req);
 }
