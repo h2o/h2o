@@ -464,30 +464,36 @@ void h2o__proxy_process_request(h2o_req_t *req)
         overrides != NULL && overrides->client_ctx != NULL ? overrides->client_ctx : &ctx->proxy.client_ctx;
     struct rp_generator_t *self;
 
-    if (overrides != NULL && overrides->socketpool != NULL) {
-        self = proxy_send_prepare(req, 1);
-        self->client = h2o_http1client_connect_with_pool(client_ctx, &req->pool, overrides->socketpool, on_connect);
-    } else {
-        self = proxy_send_prepare(req, 0);
-        if (overrides != NULL && overrides->hostport.host != NULL) {
+    if (overrides != NULL) {
+        if (overrides->socketpool != NULL) {
+            self = proxy_send_prepare(req, 1);
+            self->client = h2o_http1client_connect_with_pool(client_ctx, &req->pool, overrides->socketpool, on_connect);
+            goto Connecting;
+        } else if (overrides->hostport.host != NULL) {
+            self = proxy_send_prepare(req, 0);
             self->client = h2o_http1client_connect(client_ctx, &req->pool, req->overrides->hostport.host,
                                                    req->overrides->hostport.port, on_connect);
-        } else {
-            h2o_iovec_t host;
-            uint16_t port;
-            if (req->scheme != &H2O_URL_SCHEME_HTTP) {
-                send_error(req, "only HTTP (not HTTPS) URLs are supported");
-                return;
-            }
-            if (h2o_url_parse_hostport(req->authority.base, req->authority.len, &host, &port) == NULL) {
-                send_error(req, "could not parse host and port of URL");
-                return;
-            }
-            if (port == 65535)
-                port = 80;
-            self->client =
-                h2o_http1client_connect(client_ctx, &req->pool, h2o_strdup(&req->pool, host.base, host.len).base, port, on_connect);
+            goto Connecting;
         }
     }
+    { /* default logic */
+        h2o_iovec_t host;
+        uint16_t port;
+        if (req->scheme != &H2O_URL_SCHEME_HTTP) {
+            send_error(req, "only HTTP (not HTTPS) URLs are supported");
+            return;
+        }
+        if (h2o_url_parse_hostport(req->authority.base, req->authority.len, &host, &port) == NULL) {
+            send_error(req, "could not parse host and port of URL");
+            return;
+        }
+        if (port == 65535)
+            port = 80;
+        self = proxy_send_prepare(req, 0);
+        self->client =
+            h2o_http1client_connect(client_ctx, &req->pool, h2o_strdup(&req->pool, host.base, host.len).base, port, on_connect);
+    }
+
+Connecting:
     self->client->data = self;
 }
