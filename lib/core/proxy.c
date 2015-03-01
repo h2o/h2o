@@ -321,28 +321,17 @@ None:
     return (h2o_iovec_t){};
 }
 
-static int handle_internal_redirect(h2o_req_t *req, int status, struct phr_header *headers, size_t num_headers, char **err)
+static void handle_internal_redirect(h2o_req_t *req, int status, const char *loc_str, size_t loc_len)
 {
-    size_t loc_index;
     h2o_url_t location;
     int authority_changed;
     h2o_iovec_t method;
 
-    *err = NULL;
-
-    /* find the location header, or return -1 */
-    for (loc_index = 0; loc_index != num_headers; ++loc_index) {
-        if (h2o_memis(headers[loc_index].name, headers[loc_index].name_len, H2O_STRLIT("location")))
-            goto Found;
-    }
-    return 0;
-
-Found:
     /* parse the location URL */
-    if (h2o_url_parse_relative(headers[loc_index].value, headers[loc_index].value_len, &location) != 0) {
-        *err = h2o_concat(&req->pool, h2o_iovec_init(H2O_STRLIT("cannot handle location header: ")),
-                          h2o_iovec_init(headers[loc_index].value, headers[loc_index].value_len)).base;
-        return 1;
+    if (h2o_url_parse_relative(loc_str, loc_len, &location) != 0) {
+        send_error(req, h2o_concat(&req->pool, h2o_iovec_init(H2O_STRLIT("cannot handle location header: ")),
+                                   h2o_iovec_init(loc_str, loc_len)).base);
+        return;
     }
     /* convert the location to absolute */
     if (location.scheme == NULL)
@@ -364,8 +353,6 @@ Found:
 
     h2o_reprocess_request_deferred(req, method, location.scheme, location.authority, location.path,
                                    authority_changed ? req->overrides : NULL, 1);
-
-    return 1;
 }
 
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
@@ -380,16 +367,6 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
         self->client = NULL;
         h2o_send_error(req, 502, "Gateway Error", errstr, 0);
         return NULL;
-    }
-
-    if (req->res_is_delegated && (300 <= status && status <= 399) && status != 304) {
-        char *err;
-        if (handle_internal_redirect(req, status, headers, num_headers, &err)) {
-            self->client = NULL;
-            if (err != NULL)
-                send_error(req, err);
-            return NULL;
-        }
     }
 
     /* copy the response (note: all the headers must be copied; http1client discards the input once we return from this callback) */
@@ -411,6 +388,11 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 }
                 goto Skip;
             } else if (token == H2O_TOKEN_LOCATION) {
+                if (req->res_is_delegated && (300 <= status && status <= 399) && status != 304) {
+                    self->client = NULL;
+                    handle_internal_redirect(req, status, headers[i].value, headers[i].value_len);
+                    return NULL;
+                }
                 if (req->overrides != NULL && req->overrides->location_rewrite.match != NULL) {
                     value =
                         rewrite_location(&req->pool, headers[i].value, headers[i].value_len, req->overrides->location_rewrite.match,
