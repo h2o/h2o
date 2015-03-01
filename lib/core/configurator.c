@@ -207,6 +207,11 @@ static int on_config_limit_request_body(h2o_configurator_command_t *cmd, h2o_con
     return h2o_configurator_scanf(cmd, node, "%zu", &ctx->globalconf->max_request_entity_size);
 }
 
+static int on_config_max_delegations(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%u", &ctx->globalconf->max_delegations);
+}
+
 static int on_config_http1_request_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     unsigned timeout_in_secs;
@@ -266,6 +271,10 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                         on_config_limit_request_body,
                                         "maximum size of request body in bytes (e.g. content of POST)\n"
                                         "(default: unlimited)");
+        h2o_configurator_define_command(c, "max-delegations", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_max_delegations,
+                                        "limits the number of delegations (i.e. internal redirects using `X-Reproxy-URL`)\n"
+                                        "(default: " H2O_TO_STR(H2O_DEFAULT_MAX_DELEGATIONS) ")");
         h2o_configurator_define_command(
             c, "http1-request-timeout", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
             on_config_http1_request_timeout,
