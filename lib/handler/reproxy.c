@@ -21,20 +21,6 @@
  */
 #include "h2o.h"
 
-struct st_reproxy_args_t {
-    h2o_timeout_entry_t timeout;
-    h2o_req_t *req;
-    const h2o_url_scheme_t *scheme;
-    h2o_iovec_t authority;
-    h2o_iovec_t path;
-};
-
-static void on_timeout(h2o_timeout_entry_t *entry)
-{
-    struct st_reproxy_args_t *args = H2O_STRUCT_FROM_MEMBER(struct st_reproxy_args_t, timeout, entry);
-    h2o_reprocess_request(args->req, h2o_iovec_init(H2O_STRLIT("GET")), args->scheme, args->authority, args->path, NULL, 1);
-}
-
 static void on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
 {
     /* nothing to do */
@@ -55,15 +41,8 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
         goto Next;
 
     /* schedule the reprocessing */
-    struct st_reproxy_args_t *args = h2o_mem_alloc_pool(&req->pool, sizeof(*args));
-    *args = (struct st_reproxy_args_t){
-        {0, on_timeout},      /* timeout */
-        req,                  /* req */
-        xru_parsed.scheme,    /* scheme */
-        xru_parsed.authority, /* authority */
-        xru_parsed.path       /* path */
-    };
-    h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &args->timeout);
+    h2o_reprocess_request_deferred(req, h2o_iovec_init(H2O_STRLIT("GET")), xru_parsed.scheme, xru_parsed.authority, xru_parsed.path,
+                                   NULL, 1);
 
     /* setup filter (that swallows the response until the timeout gets fired) */
     h2o_ostream_t *ostream = h2o_add_ostream(req, sizeof(*ostream), slot);

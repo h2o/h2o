@@ -25,6 +25,17 @@
 
 #define INITIAL_INBUFSZ 8192
 
+struct st_reprocess_request_deferred_t {
+    h2o_req_t *req;
+    h2o_iovec_t method;
+    const h2o_url_scheme_t *scheme;
+    h2o_iovec_t authority;
+    h2o_iovec_t path;
+    h2o_req_overrides_t *overrides;
+    int is_delegated;
+    h2o_timeout_entry_t _timeout;
+};
+
 static h2o_hostconf_t *find_hostconf(h2o_hostconf_t **hostconfs, h2o_iovec_t authority)
 {
     do {
@@ -211,6 +222,21 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
 
     /* uses the current pathconf, in other words, proxy uses the previous pathconf for building filters */
     h2o__proxy_process_request(req);
+}
+
+static void on_reprocess_request_cb(h2o_timeout_entry_t *entry)
+{
+    struct st_reprocess_request_deferred_t *args = H2O_STRUCT_FROM_MEMBER(struct st_reprocess_request_deferred_t, _timeout, entry);
+    h2o_reprocess_request(args->req, args->method, args->scheme, args->authority, args->path, args->overrides, args->is_delegated);
+}
+
+void h2o_reprocess_request_deferred(h2o_req_t *req, h2o_iovec_t method, const h2o_url_scheme_t *scheme, h2o_iovec_t authority,
+                                    h2o_iovec_t path, h2o_req_overrides_t *overrides, int is_delegated)
+{
+    struct st_reprocess_request_deferred_t *args = h2o_mem_alloc_pool(&req->pool, sizeof(*args));
+    *args = (struct st_reprocess_request_deferred_t){req, method, scheme, authority, path, overrides, is_delegated};
+    args->_timeout.cb = on_reprocess_request_cb;
+    h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &args->_timeout);
 }
 
 void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)

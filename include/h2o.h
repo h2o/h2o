@@ -681,6 +681,11 @@ void h2o_process_request(h2o_req_t *req);
 void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_scheme_t *scheme, h2o_iovec_t authority,
                            h2o_iovec_t path, h2o_req_overrides_t *overrides, int is_delegated);
 /**
+ * calls h2o_reprocess_request using zero_timeout callback
+ */
+void h2o_reprocess_request_deferred(h2o_req_t *req, h2o_iovec_t method, const h2o_url_scheme_t *scheme, h2o_iovec_t authority,
+                                    h2o_iovec_t path, h2o_req_overrides_t *overrides, int is_delegated);
+/**
  * called by handlers to set the generator
  * @param req the request
  * @param generator the generator
