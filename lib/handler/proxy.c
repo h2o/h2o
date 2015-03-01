@@ -51,8 +51,10 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     }
 
     /* rewrite request */
-    if (!self->config.preserve_host)
+    if (!self->config.preserve_host) {
+        req->scheme = self->upstream.scheme;
         req->authority = self->upstream.authority;
+    }
     req->path = h2o_concat(&req->pool, self->upstream.path,
                            h2o_iovec_init(req->path.base + req->pathconf->path.len, req->path.len - req->pathconf->path.len));
 
