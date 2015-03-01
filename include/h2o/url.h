@@ -69,6 +69,10 @@ const char *h2o_url_parse_hostport(const char *s, size_t len, h2o_iovec_t *host,
  */
 h2o_iovec_t h2o_url_resolve(h2o_mem_pool_t *pool, const h2o_url_t *base, const h2o_url_t *relative, h2o_url_t *dest);
 /**
+ * resolves the path part of the URL (both the arguments are modified; the result is h2o_concat(*base, *relative))
+ */
+void h2o_url_resolve_path(h2o_iovec_t *base, h2o_iovec_t *relative);
+/**
  * stringifies the URL
  */
 static h2o_iovec_t h2o_url_stringify(h2o_mem_pool_t *pool, const h2o_url_t *url);
