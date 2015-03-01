@@ -183,15 +183,22 @@ void h2o_process_request(h2o_req_t *req)
     process_hosted_request(req, hostconf);
 }
 
-void h2o_reprocess_request(h2o_req_t *req)
+void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_scheme_t *scheme, h2o_iovec_t authority,
+                           h2o_iovec_t path, h2o_req_overrides_t *overrides, int is_delegated)
 {
     h2o_hostconf_t *hostconf;
 
     /* close generators and filters that are already running */
     close_generator_and_filters(req);
 
-    /* update path_normalized and query_at */
+    /* setup the request parameters */
+    req->method = method;
+    req->scheme = scheme;
+    req->authority = authority;
+    req->path = path;
     req->path_normalized = h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at);
+    req->overrides = overrides;
+    req->res_is_delegated |= 1;
 
     /* reset the response */
     req->res = (h2o_res_t){0, NULL, SIZE_MAX, {}};

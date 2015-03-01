@@ -32,33 +32,37 @@ struct rp_handler_t {
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     struct rp_handler_t *self = (void *)_self;
-    h2o_http1client_ctx_t *client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
+    h2o_req_overrides_t *overrides = h2o_mem_alloc_pool(&req->pool, sizeof(*overrides));
+    const h2o_url_scheme_t *scheme;
+    h2o_iovec_t *authority;
 
-    { /* setup overrides */
-        h2o_req_overrides_t *overrides = h2o_mem_alloc_pool(&req->pool, sizeof(*overrides));                                                        \
-        *overrides = (h2o_req_overrides_t){};                                                                                  \
-        req->overrides = overrides;                                                                                            \
-        if (self->sockpool != NULL) {
-            overrides->socketpool = self->sockpool;
-        } else if (self->config.preserve_host) {
-            overrides->hostport.host = self->upstream.host.base;
-            overrides->hostport.port = h2o_url_get_port(&self->upstream);
-        }
-        overrides->location_rewrite.match = &self->upstream;
-        overrides->location_rewrite.path_prefix = req->pathconf->path;
-        if (client_ctx != NULL)
-            overrides->client_ctx = client_ctx;
+    /* setup overrides */
+    *overrides = (h2o_req_overrides_t){};
+    if (self->sockpool != NULL) {
+        overrides->socketpool = self->sockpool;
+    } else if (self->config.preserve_host) {
+        overrides->hostport.host = self->upstream.host.base;
+        overrides->hostport.port = h2o_url_get_port(&self->upstream);
+    }
+    overrides->location_rewrite.match = &self->upstream;
+    overrides->location_rewrite.path_prefix = req->pathconf->path;
+    overrides->client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
+
+    /* determine the scheme and authority */
+    if (self->config.preserve_host) {
+        scheme = req->scheme;
+        authority = &req->authority;
+    } else {
+        scheme = self->upstream.scheme;
+        authority = &self->upstream.authority;
     }
 
-    /* rewrite request */
-    if (!self->config.preserve_host) {
-        req->scheme = self->upstream.scheme;
-        req->authority = self->upstream.authority;
-    }
-    req->path = h2o_concat(&req->pool, self->upstream.path,
-                           h2o_iovec_init(req->path.base + req->pathconf->path.len, req->path.len - req->pathconf->path.len));
+    /* request reprocess */
+    h2o_reprocess_request(req, req->method, scheme, *authority,
+                          h2o_concat(&req->pool, self->upstream.path, h2o_iovec_init(req->path.base + req->pathconf->path.len,
+                                                                                     req->path.len - req->pathconf->path.len)),
+                          overrides, 0);
 
-    h2o_reprocess_request(req);
     return 0;
 }
 

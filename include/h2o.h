@@ -678,7 +678,8 @@ void h2o_process_request(h2o_req_t *req);
 /**
  * reprocesses a request once more (used for internal redirection)
  */
-void h2o_reprocess_request(h2o_req_t *req);
+void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_scheme_t *scheme, h2o_iovec_t authority,
+                           h2o_iovec_t path, h2o_req_overrides_t *overrides, int is_delegated);
 /**
  * called by handlers to set the generator
  * @param req the request

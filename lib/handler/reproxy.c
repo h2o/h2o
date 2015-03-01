@@ -32,16 +32,7 @@ struct st_reproxy_args_t {
 static void on_timeout(h2o_timeout_entry_t *entry)
 {
     struct st_reproxy_args_t *args = H2O_STRUCT_FROM_MEMBER(struct st_reproxy_args_t, timeout, entry);
-    h2o_req_t *req = args->req;
-
-    req->scheme = args->scheme;
-    req->method = h2o_iovec_init(H2O_STRLIT("GET"));
-    req->authority = args->authority;
-    req->path = args->path;
-    req->overrides = NULL;
-    req->res_is_delegated |= 1;
-
-    h2o_reprocess_request(req);
+    h2o_reprocess_request(args->req, h2o_iovec_init(H2O_STRLIT("GET")), args->scheme, args->authority, args->path, NULL, 1);
 }
 
 static void on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
