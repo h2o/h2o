@@ -272,13 +272,13 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     return 0;
 }
 
-static void on_link_header(h2o_req_t *req, const char *value, size_t value_len, h2o_url_t *base)
+/**
+ * extracts path to be pushed from link header (or returns {NULL,0} if none)
+ */
+static h2o_iovec_t extract_pushpath_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len, h2o_url_t *base)
 {
     h2o_iovec_t url;
     h2o_url_t parsed, resolved;
-
-    if (req->version < 0x200)
-        return;
 
     { /* extract URL value from: Link: </pushed.css>; rel=preload */
         h2o_iovec_t iter = h2o_iovec_init(value, value_len), token_value;
@@ -286,9 +286,9 @@ static void on_link_header(h2o_req_t *req, const char *value, size_t value_len, 
         size_t token_len;
         /* first element should be <URL> */
         if ((token = h2o_next_token(&iter, ';', &token_len, NULL)) == NULL)
-            return;
+            goto None;
         if (!(token_len >= 2 && token[0] == '<' && token[token_len - 1] == '>'))
-            return;
+            goto None;
         url = h2o_iovec_init(token + 1, token_len - 2);
         /* find rel=preload */
         while ((token = h2o_next_token(&iter, ';', &token_len, &token_value)) != NULL) {
@@ -297,39 +297,40 @@ static void on_link_header(h2o_req_t *req, const char *value, size_t value_len, 
                 break;
         }
         if (token == NULL)
-            return;
+            goto None;
     }
 
     /* check the authority, and extract absolute path */
     if (h2o_url_parse_relative(url.base, url.len, &parsed) != 0)
-        return;
-    h2o_url_resolve(&req->pool, base, &parsed, &resolved);
+        goto None;
+    h2o_url_resolve(pool, base, &parsed, &resolved);
     if (!(base->scheme == resolved.scheme &&
           (parsed.authority.base == NULL ||
            h2o_lcstris(base->authority.base, base->authority.len, resolved.authority.base, resolved.authority.len))))
-        return;
+        goto None;
 
-    h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->http2_push_paths, sizeof(req->http2_push_paths.entries[0]),
-                       req->http2_push_paths.size + 1);
-    req->http2_push_paths.entries[req->http2_push_paths.size++] = resolved.path;
+    return resolved.path;
+None:
+    return (h2o_iovec_t){};
 }
 
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
                                        h2o_iovec_t msg, struct phr_header *headers, size_t num_headers)
 {
     struct rp_generator_t *self = client->data;
+    h2o_req_t *req = self->src_req;
     size_t i;
     h2o_url_t url_parsed = {};
 
     if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
         self->client = NULL;
-        h2o_send_error(self->src_req, 502, "Gateway Error", errstr, 0);
+        h2o_send_error(req, 502, "Gateway Error", errstr, 0);
         return NULL;
     }
 
     /* copy the response (note: all the headers must be copied; http1client discards the input once we return from this callback) */
-    self->src_req->res.status = status;
-    self->src_req->res.reason = h2o_strdup(&self->src_req->pool, msg.base, msg.len).base;
+    req->res.status = status;
+    req->res.reason = h2o_strdup(&req->pool, msg.base, msg.len).base;
     for (i = 0; i != num_headers; ++i) {
         const h2o_token_t *token = h2o_lookup_token(headers[i].name, headers[i].name_len);
         h2o_iovec_t value;
@@ -338,59 +339,65 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 goto Skip;
             }
             if (token == H2O_TOKEN_CONTENT_LENGTH) {
-                if (self->src_req->res.content_length != SIZE_MAX ||
-                    (self->src_req->res.content_length = h2o_strtosize(headers[i].value, headers[i].value_len)) == SIZE_MAX) {
+                if (req->res.content_length != SIZE_MAX ||
+                    (req->res.content_length = h2o_strtosize(headers[i].value, headers[i].value_len)) == SIZE_MAX) {
                     self->client = NULL;
-                    h2o_send_error(self->src_req, 502, "Gateway Error", "invalid response from upstream", 0);
+                    h2o_send_error(req, 502, "Gateway Error", "invalid response from upstream", 0);
                     return NULL;
                 }
                 goto Skip;
             } else if (token == H2O_TOKEN_LOCATION) {
-                if (self->src_req->overrides != NULL && self->src_req->overrides->location_rewrite.match != NULL) {
+                if (req->overrides != NULL && req->overrides->location_rewrite.match != NULL) {
                     value =
-                        rewrite_location(&self->src_req->pool, headers[i].value, headers[i].value_len,
-                                         self->src_req->overrides->location_rewrite.match, self->src_req->scheme,
-                                         self->src_req->input.authority, self->src_req->overrides->location_rewrite.path_prefix);
+                        rewrite_location(&req->pool, headers[i].value, headers[i].value_len, req->overrides->location_rewrite.match,
+                                         req->scheme, req->input.authority, req->overrides->location_rewrite.path_prefix);
                     if (value.base != NULL)
                         goto AddHeader;
                 }
                 goto AddHeaderDuped;
-            } else if (token == H2O_TOKEN_LINK) {
+            } else if (token == H2O_TOKEN_LINK && req->version >= 0x200) {
                 if (url_parsed.scheme == NULL) {
-                    if (h2o_url_parse_hostport(self->src_req->input.authority.base, self->src_req->input.authority.len,
-                                               &url_parsed.host, &url_parsed._port) != NULL) {
+                    if (h2o_url_parse_hostport(req->input.authority.base, req->input.authority.len, &url_parsed.host,
+                                               &url_parsed._port) != NULL) {
                         url_parsed = (h2o_url_t){
-                            self->src_req->scheme,          /* scheme */
-                            self->src_req->input.authority, /* authority */
-                            {},                             /* host */
-                            self->src_req->path_normalized, /* path */
-                            65535                           /* port */
+                            req->scheme,          /* scheme */
+                            req->input.authority, /* authority */
+                            {},                   /* host */
+                            req->path_normalized, /* path */
+                            65535                 /* port */
                         };
                     }
                 }
-                if (url_parsed.scheme != NULL)
-                    on_link_header(self->src_req, headers[i].value, headers[i].value_len, &url_parsed);
+                if (url_parsed.scheme != NULL) {
+                    h2o_iovec_t path =
+                        extract_pushpath_from_link_header(&req->pool, headers[i].value, headers[i].value_len, &url_parsed);
+                    if (path.base != NULL) {
+                        h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->http2_push_paths,
+                                           sizeof(req->http2_push_paths.entries[0]), req->http2_push_paths.size + 1);
+                        req->http2_push_paths.entries[req->http2_push_paths.size++] = path;
+                    }
+                }
             }
         /* default behaviour, transfer the header downstream */
         AddHeaderDuped:
-            value = h2o_strdup(&self->src_req->pool, headers[i].value, headers[i].value_len);
+            value = h2o_strdup(&req->pool, headers[i].value, headers[i].value_len);
         AddHeader:
-            h2o_add_header(&self->src_req->pool, &self->src_req->res.headers, token, value.base, value.len);
+            h2o_add_header(&req->pool, &req->res.headers, token, value.base, value.len);
         Skip:
             ;
         } else {
-            h2o_iovec_t name = h2o_strdup(&self->src_req->pool, headers[i].name, headers[i].name_len);
-            h2o_iovec_t value = h2o_strdup(&self->src_req->pool, headers[i].value, headers[i].value_len);
-            h2o_add_header_by_str(&self->src_req->pool, &self->src_req->res.headers, name.base, name.len, 0, value.base, value.len);
+            h2o_iovec_t name = h2o_strdup(&req->pool, headers[i].name, headers[i].name_len);
+            h2o_iovec_t value = h2o_strdup(&req->pool, headers[i].value, headers[i].value_len);
+            h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, value.base, value.len);
         }
     }
 
     /* declare the start of the response */
-    h2o_start_response(self->src_req, &self->super);
+    h2o_start_response(req, &self->super);
 
     if (errstr == h2o_http1client_error_is_eos) {
         self->client = NULL;
-        h2o_send(self->src_req, NULL, 0, 1);
+        h2o_send(req, NULL, 0, 1);
         return NULL;
     }
 
