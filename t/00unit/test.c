@@ -62,8 +62,8 @@ void h2o_loopback_destroy(h2o_loopback_conn_t *conn)
 
 void h2o_loopback_run_loop(h2o_loopback_conn_t *conn)
 {
-    if (conn->req.scheme == NULL)
-        conn->req.scheme = &H2O_URL_SCHEME_HTTP;
+    if (conn->req.input.scheme == NULL)
+        conn->req.input.scheme = &H2O_URL_SCHEME_HTTP;
     if (conn->req.version == 0)
         conn->req.version = 0x100; /* HTTP/1.0 */
 
@@ -111,8 +111,8 @@ static void test_loopback(void)
     h2o_context_init(&ctx, test_loop, &conf);
 
     conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-    conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
-    conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
+    conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+    conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
     h2o_loopback_run_loop(conn);
 
     ok(conn->req.res.status == 404);

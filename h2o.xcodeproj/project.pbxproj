@@ -86,6 +86,9 @@
 		10AA2EAE1A8E22DA004322AC /* multithread.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EAD1A8E22DA004322AC /* multithread.c */; };
 		10AA2EB71A970EFC004322AC /* http2_internal.h in Headers */ = {isa = PBXBuildFile; fileRef = 10AA2EB61A970EFC004322AC /* http2_internal.h */; };
 		10AA2EB91A971280004322AC /* http2_scheduler.h in Headers */ = {isa = PBXBuildFile; fileRef = 10AA2EB81A971280004322AC /* http2_scheduler.h */; };
+		10AA2EBC1A9EEDF8004322AC /* proxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EBB1A9EEDF8004322AC /* proxy.c */; };
+		10AA2EC21AA0402E004322AC /* reproxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EC11AA0402E004322AC /* reproxy.c */; };
+		10AA2EC41AA0403A004322AC /* reproxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EC31AA0403A004322AC /* reproxy.c */; };
 		10BA72AA19AAD6300059392A /* stream.c in Sources */ = {isa = PBXBuildFile; fileRef = 10BA72A919AAD6300059392A /* stream.c */; };
 		10D0903A19F0A51C0043D458 /* memory.h in Headers */ = {isa = PBXBuildFile; fileRef = 10D0903919F0A51C0043D458 /* memory.h */; };
 		10D0903E19F0A8190043D458 /* socket.h in Headers */ = {isa = PBXBuildFile; fileRef = 10D0903D19F0A8190043D458 /* socket.h */; };
@@ -299,6 +302,10 @@
 		10AA2EB31A94B66D004322AC /* 40virtual-host.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40virtual-host.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10AA2EB61A970EFC004322AC /* http2_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = http2_internal.h; sourceTree = "<group>"; };
 		10AA2EB81A971280004322AC /* http2_scheduler.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = http2_scheduler.h; sourceTree = "<group>"; };
+		10AA2EBB1A9EEDF8004322AC /* proxy.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = proxy.c; sourceTree = "<group>"; };
+		10AA2EC11AA0402E004322AC /* reproxy.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = reproxy.c; sourceTree = "<group>"; };
+		10AA2EC31AA0403A004322AC /* reproxy.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = reproxy.c; sourceTree = "<group>"; };
+		10AA2EC61AA05598004322AC /* upstream.psgi */ = {isa = PBXFileReference; lastKnownFileType = text; path = upstream.psgi; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10BA72A919AAD6300059392A /* stream.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = stream.c; sourceTree = "<group>"; };
 		10D0903919F0A51C0043D458 /* memory.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = memory.h; sourceTree = "<group>"; };
 		10D0903D19F0A8190043D458 /* socket.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = socket.h; sourceTree = "<group>"; };
@@ -434,6 +441,7 @@
 				107923BB19A3217300C52AD6 /* mimemap.c */,
 				10D0907219F633B00043D458 /* proxy.c */,
 				10AA2EA41A8D9999004322AC /* redirect.c */,
+				10AA2EC31AA0403A004322AC /* reproxy.c */,
 			);
 			path = handler;
 			sourceTree = "<group>";
@@ -445,6 +453,7 @@
 				10F4180419CA75C500B6E31A /* configurator.c */,
 				107923B919A3217300C52AD6 /* context.c */,
 				107923B019A3217300C52AD6 /* headers.c */,
+				10AA2EBB1A9EEDF8004322AC /* proxy.c */,
 				107923BC19A3217300C52AD6 /* request.c */,
 				107923BF19A3217300C52AD6 /* token.c */,
 				1079245319A32C0800C52AD6 /* token_table.h */,
@@ -469,6 +478,7 @@
 			isa = PBXGroup;
 			children = (
 				104B9A471A5F9472009EEE64 /* headers.c */,
+				105534C81A3BB41C00627ECB /* proxy.c */,
 			);
 			path = core;
 			sourceTree = "<group>";
@@ -478,7 +488,6 @@
 			children = (
 				105534BD1A3B8F7700627ECB /* file.c */,
 				105534C21A3B917000627ECB /* mimemap.c */,
-				105534C81A3BB41C00627ECB /* proxy.c */,
 			);
 			path = handler;
 			sourceTree = "<group>";
@@ -521,6 +530,7 @@
 				105534DC1A3C7AA900627ECB /* file.c */,
 				105534DE1A3C7B9800627ECB /* proxy.c */,
 				10AA2EA61A8DA93C004322AC /* redirect.c */,
+				10AA2EC11AA0402E004322AC /* reproxy.c */,
 			);
 			path = configurator;
 			sourceTree = "<group>";
@@ -690,6 +700,14 @@
 			path = examples;
 			sourceTree = "<group>";
 		};
+		10AA2EC51AA0557A004322AC /* assets */ = {
+			isa = PBXGroup;
+			children = (
+				10AA2EC61AA05598004322AC /* upstream.psgi */,
+			);
+			path = assets;
+			sourceTree = "<group>";
+		};
 		10BF213E1A087CDF008F7129 /* libh2o */ = {
 			isa = PBXGroup;
 			children = (
@@ -738,6 +756,7 @@
 				105534FA1A460F4200627ECB /* 50sni.t */,
 				105534FE1A46134A00627ECB /* 80issues61.t */,
 				104B9A451A5D1004009EEE64 /* 90live-fetch-ocsp-response.t */,
+				10AA2EC51AA0557A004322AC /* assets */,
 				105534FB1A460F4200627ECB /* Util.pm */,
 			);
 			path = t;
@@ -977,6 +996,7 @@
 				101788B219B561AA0084C6D8 /* socket.c in Sources */,
 				10D0905519F102C70043D458 /* http1client.c in Sources */,
 				107923D219A3217300C52AD6 /* token.c in Sources */,
+				10AA2EBC1A9EEDF8004322AC /* proxy.c in Sources */,
 				104B9A511A5FB096009EEE64 /* expires.c in Sources */,
 				105534DB1A3C7A5400627ECB /* access_log.c in Sources */,
 				107923CE19A3217300C52AD6 /* mimemap.c in Sources */,
@@ -985,11 +1005,13 @@
 				107923C319A3217300C52AD6 /* file.c in Sources */,
 				107923CD19A3217300C52AD6 /* memory.c in Sources */,
 				107923CC19A3217300C52AD6 /* context.c in Sources */,
+				10AA2EC21AA0402E004322AC /* reproxy.c in Sources */,
 				107923C519A3217300C52AD6 /* http1.c in Sources */,
 				10AA2EA71A8DA93C004322AC /* redirect.c in Sources */,
 				10AA2EA11A88082E004322AC /* url.c in Sources */,
 				10EC2A381A0B4DC70083514F /* socketpool.c in Sources */,
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
+				10AA2EC41AA0403A004322AC /* reproxy.c in Sources */,
 				10AA2EAC1A8DE0AE004322AC /* multithread.c in Sources */,
 				1065E6F919BEBAC600686E72 /* timeout.c in Sources */,
 				10F4180519CA75C500B6E31A /* configurator.c in Sources */,

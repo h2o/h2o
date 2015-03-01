@@ -78,6 +78,10 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     h2o_timeout_init(ctx->loop, &ctx->http1.req_timeout, config->http1.req_timeout);
     h2o_timeout_init(ctx->loop, &ctx->http2.idle_timeout, config->http2.idle_timeout);
     h2o_linklist_init_anchor(&ctx->http2._conns);
+    ctx->proxy.client_ctx.loop = loop;
+    h2o_timeout_init(ctx->loop, &ctx->proxy.io_timeout, config->proxy.io_timeout);
+    ctx->proxy.client_ctx.io_timeout = &ctx->proxy.io_timeout;
+    ctx->proxy.client_ctx.zero_timeout = &ctx->zero_timeout;
 
     ctx->_module_configs = h2o_mem_alloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
     memset(ctx->_module_configs, 0, sizeof(*ctx->_module_configs) * config->_num_config_slots);
@@ -112,6 +116,7 @@ void h2o_context_dispose(h2o_context_t *ctx)
     h2o_timeout_dispose(ctx->loop, &ctx->one_sec_timeout);
     h2o_timeout_dispose(ctx->loop, &ctx->http1.req_timeout);
     h2o_timeout_dispose(ctx->loop, &ctx->http2.idle_timeout);
+    h2o_timeout_dispose(ctx->loop, &ctx->proxy.io_timeout);
     /* what should we do here? assert(!h2o_linklist_is_empty(&ctx->http2._conns); */
 
     h2o_multithread_destroy_queue(ctx->queue);

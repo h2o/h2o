@@ -313,7 +313,7 @@ static ssize_t fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header
     expect->base = NULL;
     expect->len = 0;
 
-    conn->req.scheme = conn->sock->ssl != NULL ? &H2O_URL_SCHEME_HTTPS : &H2O_URL_SCHEME_HTTP;
+    conn->req.input.scheme = conn->sock->ssl != NULL ? &H2O_URL_SCHEME_HTTPS : &H2O_URL_SCHEME_HTTP;
     conn->req.version = 0x100 | (minor_version != 0);
 
     /* init headers */
@@ -323,8 +323,8 @@ static ssize_t fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header
     /* copy the values to pool, since the buffer pointed by the headers may get realloced */
     if (entity_header_index != -1) {
         size_t i;
-        conn->req.method = h2o_strdup(&conn->req.pool, conn->req.method.base, conn->req.method.len);
-        conn->req.path = h2o_strdup(&conn->req.pool, conn->req.path.base, conn->req.path.len);
+        conn->req.input.method = h2o_strdup(&conn->req.pool, conn->req.input.method.base, conn->req.input.method.len);
+        conn->req.input.path = h2o_strdup(&conn->req.pool, conn->req.input.path.base, conn->req.input.path.len);
         for (i = 0; i != conn->req.headers.size; ++i) {
             h2o_header_t *header = conn->req.headers.entries + i;
             if (!h2o_iovec_is_token(header->name)) {
@@ -340,7 +340,7 @@ static ssize_t fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header
 
     /* move host header to req->authority */
     if (host.base != NULL)
-        conn->req.authority = host;
+        conn->req.input.authority = host;
 
     /* setup persistent flag (and upgrade info) */
     if (connection.base != NULL) {
@@ -384,9 +384,9 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
     ssize_t entity_body_header_index;
     h2o_iovec_t expect;
 
-    reqlen = phr_parse_request(conn->sock->input->bytes, inreqlen, (const char **)&conn->req.method.base, &conn->req.method.len,
-                               (const char **)&conn->req.path.base, &conn->req.path.len, &minor_version, headers, &num_headers,
-                               conn->_prevreqlen);
+    reqlen = phr_parse_request(conn->sock->input->bytes, inreqlen, (const char **)&conn->req.input.method.base,
+                               &conn->req.input.method.len, (const char **)&conn->req.input.path.base, &conn->req.input.path.len,
+                               &minor_version, headers, &num_headers, conn->_prevreqlen);
     conn->_prevreqlen = inreqlen;
 
     switch (reqlen) {

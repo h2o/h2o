@@ -294,21 +294,21 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             }
             break;
         case ELEMENT_TYPE_METHOD: /* %m */
-            RESERVE(req->method.len * 4);
-            pos = append_unsafe_string(pos, req->method.base, req->method.len);
+            RESERVE(req->input.method.len * 4);
+            pos = append_unsafe_string(pos, req->input.method.base, req->input.method.len);
             break;
         case ELEMENT_TYPE_QUERY: /* %q */
-            if (req->query_at != SIZE_MAX) {
-                size_t len = req->path.len - req->query_at;
+            if (req->input.query_at != SIZE_MAX) {
+                size_t len = req->input.path.len - req->input.query_at;
                 RESERVE(len * 4);
-                pos = append_unsafe_string(pos, req->path.base + req->query_at, len);
+                pos = append_unsafe_string(pos, req->input.path.base + req->input.query_at, len);
             }
             break;
         case ELEMENT_TYPE_REQUEST_LINE: /* %r */
-            RESERVE((req->method.len + req->path.len) * 4 + sizeof("  HTTP/1.1") - 1);
-            pos = append_unsafe_string(pos, req->method.base, req->method.len);
+            RESERVE((req->input.method.len + req->input.path.len) * 4 + sizeof("  HTTP/1.1") - 1);
+            pos = append_unsafe_string(pos, req->input.method.base, req->input.method.len);
             *pos++ = ' ';
-            pos = append_unsafe_string(pos, req->path.base, req->path.len);
+            pos = append_unsafe_string(pos, req->input.path.base, req->input.path.len);
             *pos++ = ' ';
             pos = append_protocol(pos, req->version);
             break;
@@ -324,16 +324,16 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             break;
         case ELEMENT_TYPE_URL_PATH: /* %U */
         {
-            size_t path_len = req->query_at == SIZE_MAX ? req->path.len : req->query_at;
-            RESERVE(req->scheme->name.len + (sizeof("://") - 1) + (req->authority.len + path_len) * 4);
-            pos = append_safe_string(pos, req->scheme->name.base, req->scheme->name.len);
+            size_t path_len = req->input.query_at == SIZE_MAX ? req->input.path.len : req->input.query_at;
+            RESERVE(req->input.scheme->name.len + (sizeof("://") - 1) + (req->input.authority.len + path_len) * 4);
+            pos = append_safe_string(pos, req->input.scheme->name.base, req->input.scheme->name.len);
             pos = append_safe_string(pos, H2O_STRLIT("://"));
-            pos = append_unsafe_string(pos, req->authority.base, req->authority.len);
-            pos = append_unsafe_string(pos, req->path.base, path_len);
+            pos = append_unsafe_string(pos, req->input.authority.base, req->input.authority.len);
+            pos = append_unsafe_string(pos, req->input.path.base, path_len);
         } break;
         case ELEMENT_TYPE_AUTHORITY: /* %V */
-            RESERVE(req->authority.len * 4);
-            pos = append_unsafe_string(pos, req->authority.base, req->authority.len);
+            RESERVE(req->input.authority.len * 4);
+            pos = append_unsafe_string(pos, req->input.authority.base, req->input.authority.len);
             break;
         case ELEMENT_TYPE_HOSTCONF: /* %v */
             RESERVE(req->pathconf->host->hostname.len * 4);

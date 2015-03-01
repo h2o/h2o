@@ -68,9 +68,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         goto ErrExit;
     }
     /* register */
-    h2o_proxy_register_reverse_proxy(ctx->pathconf, h2o_strdup(&pool, parsed.host.base, parsed.host.len).base,
-                                     h2o_url_get_port(&parsed), h2o_strdup(&pool, parsed.path.base, parsed.path.len).base,
-                                     self->vars);
+    h2o_proxy_register_reverse_proxy(ctx->pathconf, &parsed, self->vars);
 
     h2o_mem_clear_pool(&pool);
     return 0;
@@ -103,7 +101,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
 
     /* set default vars */
     c->vars = c->_vars_stack;
-    c->vars->io_timeout = 5000;
+    c->vars->io_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
     c->vars->keepalive_timeout = 2000;
 
     /* setup handlers */
@@ -121,7 +119,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.timeout.io",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_timeout_io, "sets upstream I/O timeout (in milliseconds, default: 5000)");
+                                    on_config_timeout_io, "sets upstream I/O timeout (in milliseconds, default: " H2O_TO_STR(H2O_DEFAULT_PROXY_IO_TIMEOUT) ")");
     h2o_configurator_define_command(
         &c->super, "proxy.timeout.keepalive", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
                                                   H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,

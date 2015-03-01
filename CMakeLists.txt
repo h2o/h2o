@@ -53,6 +53,7 @@ SET(LIB_SOURCE_FILES
     lib/core/configurator.c
     lib/core/context.c
     lib/core/headers.c
+    lib/core/proxy.c
     lib/core/request.c
     lib/core/token.c
     lib/core/util.c
@@ -64,11 +65,13 @@ SET(LIB_SOURCE_FILES
     lib/handler/mimemap.c
     lib/handler/proxy.c
     lib/handler/redirect.c
+    lib/handler/reproxy.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/expires.c
     lib/handler/configurator/file.c
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
+    lib/handler/configurator/reproxy.c
 
     lib/http1.c
 
@@ -88,9 +91,9 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/common/time.c
     t/00unit/lib/common/url.c
     t/00unit/lib/core/headers.c
+    t/00unit/lib/core/proxy.c
     t/00unit/lib/handler/file.c
     t/00unit/lib/handler/mimemap.c
-    t/00unit/lib/handler/proxy.c
     t/00unit/lib/http2/hpack.c
     t/00unit/lib/http2/scheduler.c)
 LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
@@ -100,9 +103,9 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/time.c
     lib/common/url.c
     lib/core/headers.c
+    lib/core/proxy.c
     lib/handler/file.c
     lib/handler/mimemap.c
-    lib/handler/proxy.c
     lib/http2/hpack.c
     lib/http2/scheduler.c)
 
