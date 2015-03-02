@@ -134,3 +134,10 @@ void h2o_headers_register(h2o_pathconf_t *pathconf, h2o_headers_command_t *cmds)
     self->super.on_setup_ostream = on_setup_ostream;
     self->cmds = cmds;
 }
+
+int h2o_headers_is_prohibited_name(const h2o_token_t *token)
+{
+    if (token == H2O_TOKEN_CONNECTION || token == H2O_TOKEN_CONTENT_LENGTH || token == H2O_TOKEN_TRANSFER_ENCODING)
+        return 1;
+    return 0;
+}

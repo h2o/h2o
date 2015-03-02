@@ -971,6 +971,10 @@ typedef struct st_h2o_headers_command_t {
  */
 void h2o_headers_register(h2o_pathconf_t *pathconf, h2o_headers_command_t *cmds);
 /**
+ * returns whether if the given name can be registered to the filter
+ */
+int h2o_headers_is_prohibited_name(const h2o_token_t *token);
+/**
  * registers the configurator
  */
 void h2o_headers_register_configurator(h2o_globalconf_t *conf);

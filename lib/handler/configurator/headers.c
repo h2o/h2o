@@ -66,22 +66,33 @@ static int extract_name_value(const char *src, h2o_iovec_t **name, h2o_iovec_t *
     return 0;
 }
 
-static void add_cmd(struct headers_configurator_t *self, int cmd_id, h2o_iovec_t *name, h2o_iovec_t value)
+static int add_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2o_iovec_t *name, h2o_iovec_t value)
 {
+    struct headers_configurator_t *self = (void *)cmd->configurator;
+
+    if (h2o_iovec_is_token(name)) {
+        const h2o_token_t *token = (void *)name;
+        if (h2o_headers_is_prohibited_name(token)) {
+            h2o_configurator_errprintf(cmd, node, "the named header cannot be rewritten");
+            return -1;
+        }
+    }
+
     h2o_vector_reserve(NULL, (h2o_vector_t *)self->cmds, sizeof(self->cmds->entries[0]), self->cmds->size + 1);
     self->cmds->entries[self->cmds->size++] = (h2o_headers_command_t){cmd_id, name, value};
+    return 0;
 }
 
 static int on_config_header_2arg(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, int cmd_id, yoml_t *node)
 {
-    struct headers_configurator_t *self = (void *)cmd->configurator;
     h2o_iovec_t *name, value;
 
     if (extract_name_value(node->data.scalar, &name, &value) != 0) {
         h2o_configurator_errprintf(cmd, node, "failed to parse the value; should be in form of `name: value`");
         return -1;
     }
-    add_cmd(self, cmd_id, name, value);
+    if (add_cmd(cmd, node, cmd_id, name, value) != 0)
+        return -1;
     return 0;
 }
 
@@ -101,14 +112,14 @@ DEFINE_2ARG(on_config_header_setifempty, H2O_HEADERS_CMD_SETIFEMPTY)
 
 static int on_config_header_unset(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct headers_configurator_t *self = (void *)cmd->configurator;
     h2o_iovec_t *name;
 
     if (extract_name(node->data.scalar, strlen(node->data.scalar), &name) != 0) {
         h2o_configurator_errprintf(cmd, node, "invalid header name");
         return -1;
     }
-    add_cmd(self, H2O_HEADERS_CMD_UNSET, name, (h2o_iovec_t){});
+    if (add_cmd(cmd, node, H2O_HEADERS_CMD_UNSET, name, (h2o_iovec_t){}) != 0)
+        return -1;
     return 0;
 }
 
