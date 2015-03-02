@@ -42,7 +42,6 @@ static void start_request(h2o_http1client_ctx_t *ctx)
 {
     h2o_url_t url_parsed;
     h2o_iovec_t *req;
-    h2o_http1client_t *client;
 
     /* clear memory pool */
     h2o_mem_clear_pool(&pool);
@@ -72,13 +71,11 @@ static void start_request(h2o_http1client_ctx_t *ctx)
                                 h2o_url_get_port(&url_parsed), 10);
             h2o_socketpool_set_timeout(sockpool, ctx->loop, 5000 /* in msec */);
         }
-        client = h2o_http1client_connect_with_pool(ctx, &pool, sockpool, on_connect);
+        h2o_http1client_connect_with_pool(NULL, req, ctx, &pool, sockpool, on_connect);
     } else {
-        client = h2o_http1client_connect(ctx, &pool, h2o_strdup(&pool, url_parsed.host.base, url_parsed.host.len).base,
-                                         h2o_url_get_port(&url_parsed), on_connect);
+        h2o_http1client_connect(NULL, req, ctx, &pool, h2o_strdup(&pool, url_parsed.host.base, url_parsed.host.len).base,
+                                h2o_url_get_port(&url_parsed), on_connect);
     }
-    assert(client != NULL);
-    client->data = req;
 }
 
 static int on_body(h2o_http1client_t *client, const char *errstr)
