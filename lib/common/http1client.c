@@ -428,9 +428,9 @@ void h2o_http1client_connect_with_pool(h2o_http1client_t **_client, void *data, 
 {
     struct st_h2o_http1client_private_t *client = create_client(_client, data, ctx, pool, cb);
     client->super.sockpool.pool = sockpool;
-    client->super.sockpool.connect_req = h2o_socketpool_connect(sockpool, ctx->loop, ctx->zero_timeout, on_pool_connect, client);
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);
+    h2o_socketpool_connect(&client->super.sockpool.connect_req, sockpool, ctx->loop, on_pool_connect, client);
 }
 
 void h2o_http1client_cancel(h2o_http1client_t *_client)
