@@ -123,7 +123,7 @@ static void test_if_match(void)
     free(etag.base);
 }
 
-void test_lib__file_c()
+void test_lib__handler__file_c()
 {
     h2o_globalconf_t globalconf;
     h2o_hostconf_t *hostconf;

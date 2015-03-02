@@ -167,7 +167,7 @@ static void test_htmlescape(void)
     h2o_mem_clear_pool(&pool);
 }
 
-void test_lib__string_c(void)
+void test_lib__common__string_c(void)
 {
     subtest("stripws", test_stripws);
     subtest("next_token", test_next_token);

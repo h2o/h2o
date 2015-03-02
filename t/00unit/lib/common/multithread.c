@@ -118,7 +118,7 @@ static void *worker_main(void *_unused)
     return NULL;
 }
 
-void test_lib__multithread_c(void)
+void test_lib__common__multithread_c(void)
 {
     pthread_t tid;
 

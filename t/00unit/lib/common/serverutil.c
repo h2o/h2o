@@ -88,7 +88,7 @@ static void test_read_command(void)
     ok(ret != 0 || (ret == 0 && WIFEXITED(status) && WEXITSTATUS(status) == 127));
 }
 
-void test_lib__serverutil_c(void)
+void test_lib__common__serverutil_c(void)
 {
     subtest("server-starter", test_server_starter);
     subtest("read-command", test_read_command);

@@ -41,7 +41,7 @@ static void test_add_header_token(void)
     h2o_mem_clear_pool(&pool);
 }
 
-void test_lib__headers_c(void)
+void test_lib__core__headers_c(void)
 {
     subtest("add_header_token", test_add_header_token);
 }

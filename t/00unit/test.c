@@ -124,14 +124,16 @@ static void test_loopback(void)
 int main(int argc, char **argv)
 {
     { /* library tests */
-        subtest("lib/string.c", test_lib__string_c);
-        subtest("lib/url.c", test_lib__url_c);
-        subtest("lib/time.c", test_lib__time_c);
-        subtest("lib/headers.c", test_lib__headers_c);
-        subtest("lib/server_starter.c", test_lib__serverutil_c);
+        subtest("lib/common/multithread.c", test_lib__common__multithread_c);
+        subtest("lib/common/serverutil.c", test_lib__common__serverutil_c);
+        subtest("lib/common/string.c", test_lib__common__string_c);
+        subtest("lib/common/url.c", test_lib__common__url_c);
+        subtest("lib/common/time.c", test_lib__common__time_c);
+        subtest("lib/core/headers.c", test_lib__core__headers_c);
+        subtest("lib/core/proxy.c", test_lib__core__proxy_c);
+        subtest("lib/handler/mimemap.c", test_lib__handler__mimemap_c);
         subtest("lib/http2/hpack.c", test_lib__http2__hpack);
         subtest("lib/http2/scheduler.c", test_lib__http2__scheduler);
-        subtest("lib/mimemap.c", test_lib__mimemap_c);
     }
 
     { /* tests that use the run loop */
@@ -142,10 +144,8 @@ int main(int argc, char **argv)
         test_loop = h2o_evloop_create();
 #endif
 
-        subtest("lib/common/multithread.c", test_lib__multithread_c);
         subtest("lib/t/test.c/loopback", test_loopback);
-        subtest("lib/file.c", test_lib__file_c);
-        subtest("lib/proxy.c", test_lib__proxy_c);
+        subtest("lib/file.c", test_lib__handler__file_c);
 
 #if H2O_USE_LIBUV
         uv_loop_close(test_loop);

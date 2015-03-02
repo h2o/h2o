@@ -79,7 +79,7 @@ static void test_extract_pushpath_from_link_header(void)
     h2o_mem_clear_pool(&pool);
 }
 
-void test_lib__proxy_c()
+void test_lib__core__proxy_c()
 {
     subtest("rewrite_location", test_rewrite_location);
     subtest("extract_pushpath_from_link_header", test_extract_pushpath_from_link_header);

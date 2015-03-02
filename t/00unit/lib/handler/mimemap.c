@@ -22,7 +22,7 @@
 #include "../../test.h"
 #include "../../../../lib/handler/mimemap.c"
 
-void test_lib__mimemap_c()
+void test_lib__handler__mimemap_c()
 {
     h2o_mimemap_t *mimemap = h2o_mimemap_create(), *mimemap2;
 
