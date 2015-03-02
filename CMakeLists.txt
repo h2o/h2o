@@ -62,6 +62,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/chunked.c
     lib/handler/expires.c
     lib/handler/file.c
+    lib/handler/headers.c
     lib/handler/mimemap.c
     lib/handler/proxy.c
     lib/handler/redirect.c
@@ -69,6 +70,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/access_log.c
     lib/handler/configurator/expires.c
     lib/handler/configurator/file.c
+    lib/handler/configurator/headers.c
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
     lib/handler/configurator/reproxy.c
@@ -93,6 +95,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/core/headers.c
     t/00unit/lib/core/proxy.c
     t/00unit/lib/handler/file.c
+    t/00unit/lib/handler/headers.c
     t/00unit/lib/handler/mimemap.c
     t/00unit/lib/http2/hpack.c
     t/00unit/lib/http2/scheduler.c)
@@ -105,6 +108,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/core/headers.c
     lib/core/proxy.c
     lib/handler/file.c
+    lib/handler/headers.c
     lib/handler/mimemap.c
     lib/http2/hpack.c
     lib/http2/scheduler.c)

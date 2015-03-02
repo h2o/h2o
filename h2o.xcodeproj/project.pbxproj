@@ -30,6 +30,8 @@
 		105534EB1A42A87E00627ECB /* _templates.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 105534EA1A42A87E00627ECB /* _templates.c.h */; };
 		105534ED1A42AD5E00627ECB /* templates.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 105534EC1A42AD5E00627ECB /* templates.c.h */; };
 		105534EF1A440FC800627ECB /* config.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534EE1A440FC800627ECB /* config.c */; };
+		1058C87D1AA41789008D6180 /* headers.c in Sources */ = {isa = PBXBuildFile; fileRef = 1058C87C1AA41789008D6180 /* headers.c */; };
+		1058C87E1AA41A1F008D6180 /* headers.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EBD1AA019D8004322AC /* headers.c */; };
 		1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923C119A3217300C52AD6 /* websocket.c */; };
 		1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923A319A3215F00C52AD6 /* websocket.h */; };
 		1065E6F919BEBAC600686E72 /* timeout.c in Sources */ = {isa = PBXBuildFile; fileRef = 1065E6F819BEBAC600686E72 /* timeout.c */; };
@@ -87,6 +89,7 @@
 		10AA2EB71A970EFC004322AC /* http2_internal.h in Headers */ = {isa = PBXBuildFile; fileRef = 10AA2EB61A970EFC004322AC /* http2_internal.h */; };
 		10AA2EB91A971280004322AC /* http2_scheduler.h in Headers */ = {isa = PBXBuildFile; fileRef = 10AA2EB81A971280004322AC /* http2_scheduler.h */; };
 		10AA2EBC1A9EEDF8004322AC /* proxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EBB1A9EEDF8004322AC /* proxy.c */; };
+		10AA2EC01AA019FC004322AC /* headers.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EBF1AA019FC004322AC /* headers.c */; };
 		10AA2EC21AA0402E004322AC /* reproxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EC11AA0402E004322AC /* reproxy.c */; };
 		10AA2EC41AA0403A004322AC /* reproxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EC31AA0403A004322AC /* reproxy.c */; };
 		10BA72AA19AAD6300059392A /* stream.c in Sources */ = {isa = PBXBuildFile; fileRef = 10BA72A919AAD6300059392A /* stream.c */; };
@@ -245,6 +248,8 @@
 		105534FA1A460F4200627ECB /* 50sni.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 50sni.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534FB1A460F4200627ECB /* Util.pm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = Util.pm; sourceTree = "<group>"; };
 		105534FE1A46134A00627ECB /* 80issues61.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 80issues61.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		1058C87C1AA41789008D6180 /* headers.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers.c; sourceTree = "<group>"; };
+		1058C87F1AA42568008D6180 /* 50headers.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50headers.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		1065E6EF19B8C64200686E72 /* evloop.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = evloop.c.h; sourceTree = "<group>"; };
 		1065E6F419B996B400686E72 /* select.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = select.c.h; sourceTree = "<group>"; };
 		1065E6F619B99E6D00686E72 /* kqueue.c.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = kqueue.c.h; sourceTree = "<group>"; };
@@ -303,6 +308,8 @@
 		10AA2EB61A970EFC004322AC /* http2_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = http2_internal.h; sourceTree = "<group>"; };
 		10AA2EB81A971280004322AC /* http2_scheduler.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = http2_scheduler.h; sourceTree = "<group>"; };
 		10AA2EBB1A9EEDF8004322AC /* proxy.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = proxy.c; sourceTree = "<group>"; };
+		10AA2EBD1AA019D8004322AC /* headers.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers.c; sourceTree = "<group>"; };
+		10AA2EBF1AA019FC004322AC /* headers.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers.c; sourceTree = "<group>"; };
 		10AA2EC11AA0402E004322AC /* reproxy.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = reproxy.c; sourceTree = "<group>"; };
 		10AA2EC31AA0403A004322AC /* reproxy.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = reproxy.c; sourceTree = "<group>"; };
 		10AA2EC61AA05598004322AC /* upstream.psgi */ = {isa = PBXFileReference; lastKnownFileType = text; path = upstream.psgi; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -438,6 +445,7 @@
 				104B9A501A5FB096009EEE64 /* expires.c */,
 				107923AF19A3217300C52AD6 /* file.c */,
 				105534E91A42A83700627ECB /* file */,
+				10AA2EBD1AA019D8004322AC /* headers.c */,
 				107923BB19A3217300C52AD6 /* mimemap.c */,
 				10D0907219F633B00043D458 /* proxy.c */,
 				10AA2EA41A8D9999004322AC /* redirect.c */,
@@ -488,6 +496,7 @@
 			children = (
 				105534BD1A3B8F7700627ECB /* file.c */,
 				105534C21A3B917000627ECB /* mimemap.c */,
+				1058C87C1AA41789008D6180 /* headers.c */,
 			);
 			path = handler;
 			sourceTree = "<group>";
@@ -528,6 +537,7 @@
 				105534DA1A3C7A5400627ECB /* access_log.c */,
 				104B9A521A5FC7C4009EEE64 /* expires.c */,
 				105534DC1A3C7AA900627ECB /* file.c */,
+				10AA2EBF1AA019FC004322AC /* headers.c */,
 				105534DE1A3C7B9800627ECB /* proxy.c */,
 				10AA2EA61A8DA93C004322AC /* redirect.c */,
 				10AA2EC11AA0402E004322AC /* reproxy.c */,
@@ -746,6 +756,7 @@
 				10AA2EB11A931409004322AC /* 50access-log.t */,
 				104B9A541A60773E009EEE64 /* 50expires.t */,
 				105534F61A460EF600627ECB /* 50file-config.t */,
+				1058C87F1AA42568008D6180 /* 50headers.t */,
 				105534F71A460F2E00627ECB /* 50mimemap.t */,
 				105534F81A460F2E00627ECB /* 50post-size-limit.t */,
 				10AA2EA81A8DAFD4004322AC /* 50redirect.t */,
@@ -997,10 +1008,12 @@
 				10D0905519F102C70043D458 /* http1client.c in Sources */,
 				107923D219A3217300C52AD6 /* token.c in Sources */,
 				10AA2EBC1A9EEDF8004322AC /* proxy.c in Sources */,
+				10AA2EC01AA019FC004322AC /* headers.c in Sources */,
 				104B9A511A5FB096009EEE64 /* expires.c in Sources */,
 				105534DB1A3C7A5400627ECB /* access_log.c in Sources */,
 				107923CE19A3217300C52AD6 /* mimemap.c in Sources */,
 				107923C619A3217300C52AD6 /* connection.c in Sources */,
+				1058C87E1AA41A1F008D6180 /* headers.c in Sources */,
 				10AA2E961A80A612004322AC /* time.c in Sources */,
 				107923C319A3217300C52AD6 /* file.c in Sources */,
 				107923CD19A3217300C52AD6 /* memory.c in Sources */,
@@ -1077,6 +1090,7 @@
 				1079244719A3265C00C52AD6 /* http1.c in Sources */,
 				1079244819A3265C00C52AD6 /* connection.c in Sources */,
 				1079244119A3264300C52AD6 /* picohttpparser.c in Sources */,
+				1058C87D1AA41789008D6180 /* headers.c in Sources */,
 				10AA2EAE1A8E22DA004322AC /* multithread.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

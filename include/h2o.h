@@ -839,8 +839,7 @@ void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str,
 /**
  * logs an error
  */
-void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
-    __attribute__((format(printf, 3, 4)));
+void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
 
 /* proxy */
 
@@ -948,6 +947,33 @@ h2o_mimemap_t *h2o_file_get_mimemap(h2o_file_handler_t *handler);
  * registers the configurator
  */
 void h2o_file_register_configurator(h2o_globalconf_t *conf);
+
+/* lib/headers.c */
+
+enum {
+    H2O_HEADERS_CMD_NULL,
+    H2O_HEADERS_CMD_ADD,        /* adds a new header line */
+    H2O_HEADERS_CMD_APPEND,     /* adds a new header line or contenates to the existing header */
+    H2O_HEADERS_CMD_MERGE,      /* merges the value into a comma-listed values of the named header */
+    H2O_HEADERS_CMD_SET,        /* sets a header line, overwriting the existing one (if any) */
+    H2O_HEADERS_CMD_SETIFEMPTY, /* sets a header line if empty */
+    H2O_HEADERS_CMD_UNSET       /* removes the named header(s) */
+};
+
+typedef struct st_h2o_headers_command_t {
+    int cmd;
+    h2o_iovec_t *name; /* maybe a token */
+    h2o_iovec_t value;
+} h2o_headers_command_t;
+
+/**
+ * registers a list of commands terminated by cmd==H2O_HEADERS_CMD_NULL
+ */
+void h2o_headers_register(h2o_pathconf_t *pathconf, h2o_headers_command_t *cmds);
+/**
+ * registers the configurator
+ */
+void h2o_headers_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/proxy.c */
 
