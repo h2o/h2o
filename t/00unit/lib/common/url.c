@@ -347,7 +347,7 @@ static void test_resolve(void)
     h2o_mem_clear_pool(&pool);
 }
 
-void test_lib__url_c(void)
+void test_lib__common__url_c(void)
 {
     subtest("normalize_path", test_normalize_path);
     subtest("parse", test_parse);

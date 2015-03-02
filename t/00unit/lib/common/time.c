@@ -22,7 +22,7 @@
 #include "../../test.h"
 #include "../../../../lib/common/time.c"
 
-void test_lib__time_c(void)
+void test_lib__common__time_c(void)
 {
     struct tm tm = {
         56,  /* sec */
