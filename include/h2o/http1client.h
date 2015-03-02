@@ -43,7 +43,6 @@ typedef h2o_http1client_head_cb (*h2o_http1client_connect_cb)(h2o_http1client_t 
 
 typedef struct st_h2o_http1client_ctx_t {
     h2o_loop_t *loop;
-    h2o_timeout_t *zero_timeout;
     h2o_timeout_t *io_timeout;
 } h2o_http1client_ctx_t;
 

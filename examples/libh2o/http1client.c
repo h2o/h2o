@@ -143,7 +143,7 @@ h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr
 
 int main(int argc, char **argv)
 {
-    h2o_http1client_ctx_t ctx = {NULL, &zero_timeout, &io_timeout};
+    h2o_http1client_ctx_t ctx = {NULL, &io_timeout};
 
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <url>\n", argv[0]);

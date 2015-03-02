@@ -81,7 +81,6 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     ctx->proxy.client_ctx.loop = loop;
     h2o_timeout_init(ctx->loop, &ctx->proxy.io_timeout, config->proxy.io_timeout);
     ctx->proxy.client_ctx.io_timeout = &ctx->proxy.io_timeout;
-    ctx->proxy.client_ctx.zero_timeout = &ctx->zero_timeout;
 
     ctx->_module_configs = h2o_mem_alloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
     memset(ctx->_module_configs, 0, sizeof(*ctx->_module_configs) * config->_num_config_slots);
