@@ -339,7 +339,7 @@ void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *
     h2o_send_inline(req, body, SIZE_MAX);
 }
 
-void h2o_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
+void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
 {
 #define PREFIX "[%s] in request:%.32s:"
     char *fmt_prefixed = alloca(sizeof("[] in request::\n") + 32 + strlen(module) + strlen(fmt)), *p = fmt_prefixed;

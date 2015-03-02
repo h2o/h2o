@@ -324,7 +324,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 
     if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
         self->client = NULL;
-        h2o_log_error(req, "lib/core/proxy.c", "%s", errstr);
+        h2o_req_log_error(req, "lib/core/proxy.c", "%s", errstr);
         h2o_send_error(req, 502, "Gateway Error", errstr, 0);
         return NULL;
     }
@@ -343,7 +343,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 if (req->res.content_length != SIZE_MAX ||
                     (req->res.content_length = h2o_strtosize(headers[i].value, headers[i].value_len)) == SIZE_MAX) {
                     self->client = NULL;
-                    h2o_log_error(req, "lib/core/proxy.c", "%s", "invalid response from upstream (malformed content-length)");
+                    h2o_req_log_error(req, "lib/core/proxy.c", "%s", "invalid response from upstream (malformed content-length)");
                     h2o_send_error(req, 502, "Gateway Error", "invalid response from upstream", 0);
                     return NULL;
                 }
@@ -418,7 +418,7 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
 
     if (errstr != NULL) {
         self->client = NULL;
-        h2o_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
+        h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
         h2o_send_error(self->src_req, 502, "Gateway Error", errstr, 0);
         return NULL;
     }
@@ -482,7 +482,7 @@ void h2o__proxy_process_request(h2o_req_t *req)
         uint16_t port;
         if (req->scheme != &H2O_URL_SCHEME_HTTP ||
             h2o_url_parse_hostport(req->authority.base, req->authority.len, &host, &port) == NULL) {
-            h2o_log_error(req, "lib/core/proxy.c", "invalid URL supplied for internal redirection:%s://%.*s%.*s",
+            h2o_req_log_error(req, "lib/core/proxy.c", "invalid URL supplied for internal redirection:%s://%.*s%.*s",
                           req->scheme->name.base, (int)req->authority.len, req->authority.base, (int)req->path.len, req->path.base);
             h2o_send_error(req, 502, "Gateway Error", "internal error", 0);
             return;

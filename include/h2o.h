@@ -839,7 +839,7 @@ void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str,
 /**
  * logs an error
  */
-void h2o_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
+void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
     __attribute__((format(printf, 3, 4)));
 
 /* proxy */
