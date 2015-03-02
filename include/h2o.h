@@ -836,6 +836,11 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
  * handles redirect internally
  */
 void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str, size_t url_len);
+/**
+ * logs an error
+ */
+void h2o_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
+    __attribute__((format(printf, 3, 4)));
 
 /* proxy */
 

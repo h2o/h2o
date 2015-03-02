@@ -339,6 +339,31 @@ void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *
     h2o_send_inline(req, body, SIZE_MAX);
 }
 
+void h2o_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
+{
+#define PREFIX "[%s] in request:%.32s:"
+    char *fmt_prefixed = alloca(sizeof("[] in request::\n") + 32 + strlen(module) + strlen(fmt)), *p = fmt_prefixed;
+
+    p += sprintf(fmt_prefixed, "[%s] in request:", module);
+    if (req->path.len < 32) {
+        memcpy(p, req->path.base, req->path.len);
+        p += req->path.len;
+    } else {
+        memcpy(p, req->path.base, 29);
+        p += 29;
+        memcpy(p, "...", 3);
+        p += 3;
+    }
+    *p++ = ':';
+    strcpy(p, fmt);
+    strcat(p, "\n");
+
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(stderr, fmt_prefixed, args);
+    va_end(args);
+}
+
 void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const char *url, size_t url_len)
 {
     if (req->res_is_delegated) {
