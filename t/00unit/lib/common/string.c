@@ -22,6 +22,24 @@
 #include "../../test.h"
 #include "../../../../lib/common/string.c"
 
+static void test_stripws(void)
+{
+    h2o_iovec_t t;
+
+    t = h2o_str_stripws(H2O_STRLIT(""));
+    ok(h2o_memis(t.base, t.len, H2O_STRLIT("")));
+    t = h2o_str_stripws(H2O_STRLIT("hello world"));
+    ok(h2o_memis(t.base, t.len, H2O_STRLIT("hello world")));
+    t = h2o_str_stripws(H2O_STRLIT("   hello world"));
+    ok(h2o_memis(t.base, t.len, H2O_STRLIT("hello world")));
+    t = h2o_str_stripws(H2O_STRLIT("hello world   "));
+    ok(h2o_memis(t.base, t.len, H2O_STRLIT("hello world")));
+    t = h2o_str_stripws(H2O_STRLIT("   hello world   "));
+    ok(h2o_memis(t.base, t.len, H2O_STRLIT("hello world")));
+    t = h2o_str_stripws(H2O_STRLIT("     "));
+    ok(h2o_memis(t.base, t.len, H2O_STRLIT("")));
+}
+
 static void test_next_token(void)
 {
     h2o_iovec_t iter;
@@ -151,6 +169,7 @@ static void test_htmlescape(void)
 
 void test_lib__common__string_c(void)
 {
+    subtest("stripws", test_stripws);
     subtest("next_token", test_next_token);
     subtest("next_token2", test_next_token2);
     subtest("decode_base64", test_decode_base64);

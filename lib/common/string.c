@@ -238,6 +238,28 @@ const char *h2o_get_filext(const char *path, size_t len)
     return NULL;
 }
 
+static int is_ws(int ch)
+{
+    return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
+}
+
+h2o_iovec_t h2o_str_stripws(const char *s, size_t len)
+{
+    const char *end = s + len;
+
+    while (s != end) {
+        if (!is_ws(*s))
+            break;
+        ++s;
+    }
+    while (s != end) {
+        if (!is_ws(end[-1]))
+            break;
+        --end;
+    }
+    return h2o_iovec_init(s, end - s);
+}
+
 size_t h2o_strstr(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len)
 {
     /* TODO optimize */

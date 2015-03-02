@@ -56,6 +56,7 @@ void test_lib__common__url_c(void);
 void test_lib__core__headers_c(void);
 void test_lib__core__proxy_c(void);
 void test_lib__handler__file_c(void);
+void test_lib__handler__headers_c(void);
 void test_lib__handler__mimemap_c(void);
 void test_lib__http2__hpack(void);
 void test_lib__http2__scheduler(void);
