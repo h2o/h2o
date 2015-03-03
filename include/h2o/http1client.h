@@ -43,7 +43,6 @@ typedef h2o_http1client_head_cb (*h2o_http1client_connect_cb)(h2o_http1client_t 
 
 typedef struct st_h2o_http1client_ctx_t {
     h2o_loop_t *loop;
-    h2o_timeout_t *zero_timeout;
     h2o_timeout_t *io_timeout;
 } h2o_http1client_ctx_t;
 
@@ -60,10 +59,10 @@ struct st_h2o_http1client_t {
 
 extern const char *const h2o_http1client_error_is_eos;
 
-h2o_http1client_t *h2o_http1client_connect(h2o_http1client_ctx_t *ctx, h2o_mem_pool_t *pool, const char *host, uint16_t port,
-                                           h2o_http1client_connect_cb cb);
-h2o_http1client_t *h2o_http1client_connect_with_pool(h2o_http1client_ctx_t *ctx, h2o_mem_pool_t *pool, h2o_socketpool_t *sockpool,
-                                                     h2o_http1client_connect_cb cb);
+void h2o_http1client_connect(h2o_http1client_t **client, void *data, h2o_http1client_ctx_t *ctx, h2o_mem_pool_t *pool,
+                             const char *host, uint16_t port, h2o_http1client_connect_cb cb);
+void h2o_http1client_connect_with_pool(h2o_http1client_t **client, void *data, h2o_http1client_ctx_t *ctx, h2o_mem_pool_t *pool,
+                                       h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb);
 void h2o_http1client_cancel(h2o_http1client_t *client);
 
 #ifdef __cplusplus

@@ -34,7 +34,6 @@ struct st_h2o_http1client_private_t {
         h2o_http1client_head_cb on_head;
         h2o_http1client_body_cb on_body;
     } _cb;
-    const char *_errstr;
     h2o_timeout_entry_t _timeout;
     int _method_is_head;
     int _can_keepalive;
@@ -372,15 +371,18 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data)
 static void on_connect_timeout(h2o_timeout_entry_t *entry)
 {
     struct st_h2o_http1client_private_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1client_private_t, _timeout, entry);
-    on_connect_error(client, client->_errstr != NULL ? client->_errstr : "connection timeout");
+    on_connect_error(client, "connection timeout");
 }
 
-static struct st_h2o_http1client_private_t *create_client(h2o_http1client_ctx_t *ctx, h2o_mem_pool_t *pool,
-                                                          h2o_http1client_connect_cb cb)
+static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
+                                                          h2o_mem_pool_t *pool, h2o_http1client_connect_cb cb)
 {
     struct st_h2o_http1client_private_t *client = h2o_mem_alloc(sizeof(*client));
 
     *client = (struct st_h2o_http1client_private_t){{ctx, pool}};
+    if (_client != NULL)
+        *_client = &client->super;
+    client->super.data = data;
     client->_cb.on_connect = cb;
     /* caller needs to setup _cb, timeout.cb, sock, and sock->data */
 
@@ -389,8 +391,8 @@ static struct st_h2o_http1client_private_t *create_client(h2o_http1client_ctx_t 
 
 const char *const h2o_http1client_error_is_eos = "end of stream";
 
-h2o_http1client_t *h2o_http1client_connect(h2o_http1client_ctx_t *ctx, h2o_mem_pool_t *pool, const char *host, uint16_t port,
-                                           h2o_http1client_connect_cb cb)
+void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx, h2o_mem_pool_t *pool,
+                             const char *host, uint16_t port, h2o_http1client_connect_cb cb)
 {
     struct st_h2o_http1client_private_t *client;
     struct addrinfo hints, *res;
@@ -398,7 +400,7 @@ h2o_http1client_t *h2o_http1client_connect(h2o_http1client_ctx_t *ctx, h2o_mem_p
     int err;
 
     /* setup */
-    client = create_client(ctx, pool, cb);
+    client = create_client(_client, data, ctx, pool, cb);
     client->_timeout.cb = on_connect_timeout;
     /* resolve destination (FIXME use the function supplied by the loop) */
     sprintf(serv, "%u", (unsigned)port);
@@ -407,34 +409,28 @@ h2o_http1client_t *h2o_http1client_connect(h2o_http1client_ctx_t *ctx, h2o_mem_p
     hints.ai_protocol = IPPROTO_TCP;
     hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV;
     if ((err = getaddrinfo(host, serv, &hints, &res)) != 0) {
-        client->_errstr = "name resulution failure";
-        goto Error;
+        on_connect_error(client, "name resolution failure");
+        return;
     }
     /* start connecting */
     client->super.sock = h2o_socket_connect(ctx->loop, res->ai_addr, res->ai_addrlen, on_connect);
     freeaddrinfo(res);
     if (client->super.sock == NULL) {
-        client->_errstr = "socket create error";
-        goto Error;
+        on_connect_error(client, "socket create error");
+        return;
     }
     client->super.sock->data = client;
     h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);
-
-    return &client->super;
-Error:
-    h2o_timeout_link(ctx->loop, ctx->zero_timeout, &client->_timeout);
-    return &client->super;
 }
 
-h2o_http1client_t *h2o_http1client_connect_with_pool(h2o_http1client_ctx_t *ctx, h2o_mem_pool_t *pool, h2o_socketpool_t *sockpool,
-                                                     h2o_http1client_connect_cb cb)
+void h2o_http1client_connect_with_pool(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx, h2o_mem_pool_t *pool,
+                                       h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb)
 {
-    struct st_h2o_http1client_private_t *client = create_client(ctx, pool, cb);
+    struct st_h2o_http1client_private_t *client = create_client(_client, data, ctx, pool, cb);
     client->super.sockpool.pool = sockpool;
-    client->super.sockpool.connect_req = h2o_socketpool_connect(sockpool, ctx->loop, ctx->zero_timeout, on_pool_connect, client);
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);
-    return &client->super;
+    h2o_socketpool_connect(&client->super.sockpool.connect_req, sockpool, ctx->loop, on_pool_connect, client);
 }
 
 void h2o_http1client_cancel(h2o_http1client_t *_client)
