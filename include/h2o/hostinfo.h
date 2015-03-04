@@ -51,6 +51,8 @@ struct st_h2o_hostinfo_getaddr_req_t {
     };
 };
 
+extern size_t h2o_hostinfo_max_threads;
+
 /**
  * dispatches a (possibly) asynchronous hostname lookup
  */

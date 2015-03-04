@@ -25,10 +25,11 @@ static struct {
     pthread_mutex_t mutex;
     pthread_cond_t cond;
     h2o_linklist_t pending; /* anchor of h2o_hostinfo_getaddr_req_t::_pending */
-    size_t num_workers;
-    size_t num_idle;
-    size_t max_workers;
-} queue = {PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, {&queue.pending, &queue.pending}, 0, 0, 32};
+    size_t num_threads;
+    size_t num_threads_idle;
+} queue = {PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, {&queue.pending, &queue.pending}, 0, 0};
+
+size_t h2o_hostinfo_max_threads = 1;
 
 static void lookup_and_respond(h2o_hostinfo_getaddr_req_t *req)
 {
@@ -77,7 +78,7 @@ static void create_lookup_thread(void)
     pthread_attr_setdetachstate(&attr, 1);
     pthread_attr_setstacksize(&attr, 100 * 1024);
     if ((ret = pthread_create(&tid, NULL, lookup_thread_main, NULL)) != 0) {
-        if (queue.num_workers == 0) {
+        if (queue.num_threads == 0) {
             fprintf(stderr, "failed to start first thread for getaddrinfo:%s\n", strerror(ret));
             abort();
         } else {
@@ -86,8 +87,8 @@ static void create_lookup_thread(void)
         return;
     }
 
-    ++queue.num_workers;
-    ++queue.num_idle;
+    ++queue.num_threads;
+    ++queue.num_threads_idle;
 }
 
 void h2o__hostinfo_getaddr_dispatch(h2o_hostinfo_getaddr_req_t *req)
@@ -96,7 +97,7 @@ void h2o__hostinfo_getaddr_dispatch(h2o_hostinfo_getaddr_req_t *req)
 
     h2o_linklist_insert(&queue.pending, &req->_pending);
 
-    if (queue.num_idle == 0 && queue.num_workers < queue.max_workers)
+    if (queue.num_threads_idle == 0 && queue.num_threads < h2o_hostinfo_max_threads)
         create_lookup_thread();
 
     pthread_cond_signal(&queue.cond);
