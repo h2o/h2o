@@ -23,6 +23,7 @@
 #define h2o__hostinfo_h
 
 #include <netdb.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include "h2o/multithread.h"
@@ -79,10 +80,10 @@ inline void h2o_hostinfo_getaddr(h2o_hostinfo_getaddr_req_t *req, void *data, h2
     req->data = data;
     req->_receiver = receiver;
     req->_cb = cb;
-    req->_pending = (h2o_linklist_t){};
+    memset(&req->_pending, 0, sizeof(req->_pending));
     req->_in.name = name;
     req->_in.serv = serv;
-    req->_in.hints = (struct addrinfo){};
+    memset(&req->_in.hints, 0, sizeof(req->_in.hints));
     req->_in.hints.ai_family = family;
     req->_in.hints.ai_socktype = socktype;
     req->_in.hints.ai_protocol = protocol;
