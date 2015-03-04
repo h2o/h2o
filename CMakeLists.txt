@@ -38,9 +38,10 @@ ENDIF (WSLAY_FOUND)
 SET(LIB_SOURCE_FILES
     deps/picohttpparser/picohttpparser.c
 
+    lib/common/hostinfo.c
+    lib/common/http1client.c
     lib/common/memory.c
     lib/common/multithread.c
-    lib/common/http1client.c
     lib/common/serverutil.c
     lib/common/socket.c
     lib/common/socketpool.c

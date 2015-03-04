@@ -36,6 +36,7 @@ extern "C" {
 #include <time.h>
 #include <unistd.h>
 #include <openssl/ssl.h>
+#include "h2o/hostinfo.h"
 #include "h2o/linklist.h"
 #include "h2o/http1client.h"
 #include "h2o/memory.h"
@@ -286,6 +287,12 @@ struct st_h2o_context_t {
      * queue for receiving messages from other contexts
      */
     h2o_multithread_queue_t *queue;
+    /**
+     * receivers
+     */
+    struct {
+        h2o_multithread_receiver_t hostinfo_getaddr;
+    } receivers;
     /**
      * flag indicating if shutdown has been requested
      */

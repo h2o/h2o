@@ -32,6 +32,8 @@
 		105534EF1A440FC800627ECB /* config.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534EE1A440FC800627ECB /* config.c */; };
 		1058C87D1AA41789008D6180 /* headers.c in Sources */ = {isa = PBXBuildFile; fileRef = 1058C87C1AA41789008D6180 /* headers.c */; };
 		1058C87E1AA41A1F008D6180 /* headers.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EBD1AA019D8004322AC /* headers.c */; };
+		1058C8881AA6DE4B008D6180 /* hostinfo.h in Headers */ = {isa = PBXBuildFile; fileRef = 1058C8871AA6DE4B008D6180 /* hostinfo.h */; };
+		1058C88A1AA6E5E3008D6180 /* hostinfo.c in Sources */ = {isa = PBXBuildFile; fileRef = 1058C8891AA6E5E3008D6180 /* hostinfo.c */; };
 		1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923C119A3217300C52AD6 /* websocket.c */; };
 		1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923A319A3215F00C52AD6 /* websocket.h */; };
 		1065E6F919BEBAC600686E72 /* timeout.c in Sources */ = {isa = PBXBuildFile; fileRef = 1065E6F819BEBAC600686E72 /* timeout.c */; };
@@ -250,6 +252,8 @@
 		105534FE1A46134A00627ECB /* 80issues61.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 80issues61.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		1058C87C1AA41789008D6180 /* headers.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers.c; sourceTree = "<group>"; };
 		1058C87F1AA42568008D6180 /* 50headers.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50headers.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		1058C8871AA6DE4B008D6180 /* hostinfo.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hostinfo.h; sourceTree = "<group>"; };
+		1058C8891AA6E5E3008D6180 /* hostinfo.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hostinfo.c; sourceTree = "<group>"; };
 		1065E6EF19B8C64200686E72 /* evloop.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = evloop.c.h; sourceTree = "<group>"; };
 		1065E6F419B996B400686E72 /* select.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = select.c.h; sourceTree = "<group>"; };
 		1065E6F619B99E6D00686E72 /* kqueue.c.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = kqueue.c.h; sourceTree = "<group>"; };
@@ -421,6 +425,7 @@
 		104B9A4A1A5FA7E5009EEE64 /* common */ = {
 			isa = PBXGroup;
 			children = (
+				1058C8891AA6E5E3008D6180 /* hostinfo.c */,
 				10D0905419F102C70043D458 /* http1client.c */,
 				107923BA19A3217300C52AD6 /* memory.c */,
 				10AA2EAB1A8DE0AE004322AC /* multithread.c */,
@@ -644,6 +649,7 @@
 			isa = PBXGroup;
 			children = (
 				105534D71A3C785000627ECB /* configurator.h */,
+				1058C8871AA6DE4B008D6180 /* hostinfo.h */,
 				107923A019A3215F00C52AD6 /* http1.h */,
 				10D0905619F102DA0043D458 /* http1client.h */,
 				107923A119A3215F00C52AD6 /* http2.h */,
@@ -817,6 +823,7 @@
 				107923A619A3215F00C52AD6 /* http2.h in Headers */,
 				107923A719A3215F00C52AD6 /* token.h in Headers */,
 				107923A919A3215F00C52AD6 /* h2o.h in Headers */,
+				1058C8881AA6DE4B008D6180 /* hostinfo.h in Headers */,
 				10AA2E941A80A592004322AC /* time_.h in Headers */,
 				107923A519A3215F00C52AD6 /* http1.h in Headers */,
 				10D0905719F102DA0043D458 /* http1client.h in Headers */,
@@ -1007,6 +1014,7 @@
 				101788B219B561AA0084C6D8 /* socket.c in Sources */,
 				10D0905519F102C70043D458 /* http1client.c in Sources */,
 				107923D219A3217300C52AD6 /* token.c in Sources */,
+				1058C88A1AA6E5E3008D6180 /* hostinfo.c in Sources */,
 				10AA2EBC1A9EEDF8004322AC /* proxy.c in Sources */,
 				10AA2EC01AA019FC004322AC /* headers.c in Sources */,
 				104B9A511A5FB096009EEE64 /* expires.c in Sources */,
