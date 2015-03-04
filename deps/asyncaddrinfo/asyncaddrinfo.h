@@ -23,6 +23,7 @@
 #define asyncaddrinfo_h
 
 #include <netdb.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -100,6 +101,7 @@ static void asyncaddrinfo__linux(struct asyncaddrinfo_request_t **_req, void *da
     sev.sigev_notify = SIGEV_SIGNAL;
     sev.sigev_signo = asyncaddrinfo_linux_signo;
     sev.sigev_value.sival_ptr = req;
+    sev._sigev_un._tid = pthread_self();
 
     *_req = req;
 

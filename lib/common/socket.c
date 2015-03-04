@@ -559,3 +559,8 @@ void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols)
 }
 
 #endif
+
+/**
+ * intentionally declared within libh2o (to avoid link issues)
+ */
+int asyncaddrinfo_linux_signo;

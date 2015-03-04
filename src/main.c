@@ -46,6 +46,10 @@
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+#ifdef __linux__
+#include <sys/signalfd.h>
+#endif
+#include "asyncaddrinfo.h"
 #include "yoml-parser.h"
 #include "h2o.h"
 #include "h2o/configurator.h"
@@ -127,6 +131,60 @@ static struct {
     0,    /* shutdown_requested */
     {},   /* state */
 };
+
+#ifdef __linux__
+
+static void on_signalfd(h2o_socket_t *sock, int status)
+{
+    struct signalfd_siginfo ssi;
+    ssize_t rret;
+
+    if (status != 0) {
+        perror("signalfd read error");
+        abort();
+    }
+
+    while (1) {
+        while ((rret = read(h2o_socket_get_fd(sock), &ssi, sizeof(ssi))) == -1 && errno == EINTR)
+            ;
+        if (rret == -1) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                return;
+            perror("failed to read signalfd");
+            abort();
+        } else if (rret != sizeof(ssi)) {
+            fprintf(stderr, "unexpected number of bytes read from signalfd (%zd)\n", rret);
+            abort();
+        }
+        assert(ssi.ssi_signo == asyncaddrinfo_linux_signo);
+        if (!asyncaddrinfo_linux_handle_signal(ssi.ssi_code, (void *)ssi.ssi_ptr)) {
+            fprintf(stderr, "received signal with unexpected si_code:%" PRId32 "\n", ssi.ssi_code);
+            abort();
+        }
+    }
+}
+
+static void setup_signalfd(h2o_loop_t *loop)
+{
+    sigset_t sigs;
+    int sfd;
+
+    asyncaddrinfo_linux_signo = SIGRTMIN;
+
+    sigemptyset(&sigs);
+    sigaddset(&sigs, asyncaddrinfo_linux_signo);
+    sigprocmask(SIG_BLOCK, &sigs, NULL);
+
+    if ((sfd = signalfd(-1, &sigs, SFD_NONBLOCK | SFD_CLOEXEC)) == -1) {
+        perror("signalfd");
+        abort();
+    }
+
+    h2o_socket_t *sock = h2o_evloop_socket_create(loop, sfd, NULL, 0, H2O_SOCKET_FLAG_DONT_READ);
+    h2o_socket_read_start(sock, on_signalfd);
+}
+
+#endif
 
 static void set_cloexec(int fd)
 {
@@ -1095,6 +1153,9 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         };
         listeners[i].sock->data = listeners + i;
     }
+#ifdef __linux__
+    setup_signalfd(conf.threads[thread_index].ctx.loop);
+#endif
     /* and start listening */
     update_listener_state(listeners);
 

@@ -116,6 +116,14 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
 
 SET(EXTRA_LIBRARIES ${CMAKE_DL_LIBS})
 
+# environment-specific tweaks
+IF (APPLE)
+    SET_SOURCE_FILES_PROPERTIES(lib/socket.c lib/websocket.c src/main.c examples/simple.c examples/websocket.c PROPERTIES COMPILE_FLAGS -Wno-deprecated-declarations)
+ELSEIF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE")
+    SET(EXTRA_LIBRARIES "${EXTRA_LIBRARIES} -lanl")
+ENDIF (APPLE)
+
 ADD_LIBRARY(libh2o STATIC ${LIB_SOURCE_FILES})
 SET_TARGET_PROPERTIES(libh2o PROPERTIES OUTPUT_NAME h2o)
 
@@ -181,10 +189,3 @@ ADD_CUSTOM_TARGET(test env H2O_ROOT=. BINARY_DIR=${CMAKE_BINARY_DIR} prove -v t/
 IF (LIBUV_FOUND)
     ADD_DEPENDENCIES(test t-00unit-libuv.t lib-examples)
 ENDIF (LIBUV_FOUND)
-
-# environment-specific tweaks
-IF (APPLE)
-    SET_SOURCE_FILES_PROPERTIES(lib/socket.c lib/websocket.c src/main.c examples/simple.c examples/websocket.c PROPERTIES COMPILE_FLAGS -Wno-deprecated-declarations)
-ELSEIF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE")
-ENDIF (APPLE)

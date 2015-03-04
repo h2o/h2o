@@ -405,6 +405,12 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
     return &sock->super;
 }
 
+int h2o_socket_get_fd(h2o_socket_t *_sock)
+{
+    struct st_h2o_evloop_socket_t *sock = (void *)_sock;
+    return sock->fd;
+}
+
 h2o_evloop_t *create_evloop(size_t sz)
 {
     h2o_evloop_t *loop = h2o_mem_alloc(sz);

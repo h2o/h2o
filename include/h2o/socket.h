@@ -154,6 +154,10 @@ static int h2o_socket_is_writing(h2o_socket_t *sock);
  */
 static int h2o_socket_is_reading(h2o_socket_t *sock);
 /**
+ * returns the internal fd
+ */
+int h2o_socket_get_fd(h2o_socket_t *sock);
+/**
  * compares socket addresses
  */
 int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y);
