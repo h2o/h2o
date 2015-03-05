@@ -214,6 +214,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     if (_req != NULL)
         *_req = req;
 
+    /* resolve the name, and connect */
     h2o_hostinfo_getaddr(&req->getaddr_req, getaddr_receiver, pool->host.base, pool->port.s, AF_UNSPEC, SOCK_STREAM, IPPROTO_TCP,
                          AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr);
 }
