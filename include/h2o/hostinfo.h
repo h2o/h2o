@@ -67,6 +67,10 @@ void h2o__hostinfo_getaddr_dispatch(h2o_hostinfo_getaddr_req_t *req);
  * cancels the request
  */
 void h2o_hostinfo_getaddr_cancel(h2o_hostinfo_getaddr_req_t *req);
+/**
+ * tests if getaddr is in flight
+ */
+static int h2o_hostinfo_getaddr_is_active(h2o_hostinfo_getaddr_req_t *req);
 
 /**
  * function that receives and dispatches the responses
@@ -92,6 +96,11 @@ inline void h2o_hostinfo_getaddr(h2o_hostinfo_getaddr_req_t *req, void *data, h2
     req->_in.hints.ai_flags = flags;
 
     h2o__hostinfo_getaddr_dispatch(req);
+}
+
+inline int h2o_hostinfo_getaddr_is_active(h2o_hostinfo_getaddr_req_t *req)
+{
+    return req->_cb != NULL;
 }
 
 #endif
