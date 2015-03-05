@@ -36,11 +36,11 @@ static void lookup_and_respond(h2o_hostinfo_getaddr_req_t *req)
     struct addrinfo *res;
 
     int ret = getaddrinfo(req->_in.name, req->_in.serv, &req->_in.hints, &res);
+    req->_out.message = (h2o_multithread_message_t){};
     if (ret != 0) {
         req->_out.errstr = gai_strerror(ret);
         req->_out.ai = NULL;
     } else {
-        req->_out.message = (h2o_multithread_message_t){};
         req->_out.errstr = NULL;
         req->_out.ai = res;
     }
