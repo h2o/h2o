@@ -33,7 +33,6 @@ typedef struct st_h2o_hostinfo_getaddr_req_t h2o_hostinfo_getaddr_req_t;
 typedef void (*h2o_hostinfo_getaddr_cb)(h2o_hostinfo_getaddr_req_t *req, const char *errstr, struct addrinfo *res);
 
 struct st_h2o_hostinfo_getaddr_req_t {
-    void *data;
     h2o_multithread_receiver_t *_receiver;
     h2o_hostinfo_getaddr_cb _cb;
     h2o_linklist_t _pending;
@@ -56,9 +55,8 @@ extern size_t h2o_hostinfo_max_threads;
 /**
  * dispatches a (possibly) asynchronous hostname lookup
  */
-static void h2o_hostinfo_getaddr(h2o_hostinfo_getaddr_req_t *req, void *data, h2o_multithread_receiver_t *receiver,
-                                 const char *name, const char *serv, int family, int socktype, int protocol, int flags,
-                                 h2o_hostinfo_getaddr_cb cb);
+static void h2o_hostinfo_getaddr(h2o_hostinfo_getaddr_req_t *req, h2o_multithread_receiver_t *receiver, const char *name,
+                                 const char *serv, int family, int socktype, int protocol, int flags, h2o_hostinfo_getaddr_cb cb);
 /**
  * 
  */
@@ -79,11 +77,9 @@ void h2o_hostinfo_getaddr_receiver(h2o_multithread_receiver_t *receiver, h2o_lin
 
 /* inline defs */
 
-inline void h2o_hostinfo_getaddr(h2o_hostinfo_getaddr_req_t *req, void *data, h2o_multithread_receiver_t *receiver,
-                                 const char *name, const char *serv, int family, int socktype, int protocol, int flags,
-                                 h2o_hostinfo_getaddr_cb cb)
+inline void h2o_hostinfo_getaddr(h2o_hostinfo_getaddr_req_t *req, h2o_multithread_receiver_t *receiver, const char *name,
+                                 const char *serv, int family, int socktype, int protocol, int flags, h2o_hostinfo_getaddr_cb cb)
 {
-    req->data = data;
     req->_receiver = receiver;
     req->_cb = cb;
     memset(&req->_pending, 0, sizeof(req->_pending));
