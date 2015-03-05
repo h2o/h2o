@@ -389,6 +389,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     }
     /* start connecting */
     client->super.sock = h2o_socket_connect(client->super.ctx->loop, res->ai_addr, res->ai_addrlen, on_connect);
+    freeaddrinfo(res);
     if (client->super.sock == NULL) {
         on_connect_error(client, "socket create error");
         return;

@@ -166,7 +166,9 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     }
 
     /* start connecting */
-    if ((req->sock = h2o_socket_connect(req->loop, res->ai_addr, res->ai_addrlen, on_connect)) == NULL) {
+    req->sock = h2o_socket_connect(req->loop, res->ai_addr, res->ai_addrlen, on_connect);
+    freeaddrinfo(res);
+    if (req->sock == NULL) {
         __sync_sub_and_fetch(&req->pool->_shared.count, 1);
         call_connect_cb(req, "failed to connect to host");
         return;
