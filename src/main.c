@@ -56,6 +56,8 @@
 /* simply use a large value, and let the kernel clip it to the internal max */
 #define H2O_SOMAXCONN (65535)
 
+#define H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS 32
+
 struct listener_ssl_config_t {
     H2O_VECTOR(h2o_iovec_t) hostnames;
     char *certificate_file;
@@ -911,6 +913,17 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
     return 0;
 }
 
+static int on_config_num_name_resolution_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    if (h2o_configurator_scanf(cmd, node, "%zu", &h2o_hostinfo_max_threads) != 0)
+        return -1;
+    if (h2o_hostinfo_max_threads == 0) {
+        h2o_configurator_errprintf(cmd, node, "num-name-resolution-threads should be >=1");
+        return -1;
+    }
+    return 0;
+}
+
 static void usage_print_directives(h2o_globalconf_t *conf)
 {
     h2o_linklist_t *node;
@@ -1173,6 +1186,10 @@ static void setup_configurators(void)
                                         "max connections (default: 1024)");
         h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads,
                                         "number of worker threads (default: getconf NPROCESSORS_ONLN)");
+        h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
+                                        on_config_num_name_resolution_threads,
+                                        "number of threads to run for name resolution (default: "
+                                        H2O_TO_STR(H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS) ")");
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
@@ -1189,6 +1206,7 @@ int main(int argc, char **argv)
     const char *opt_config_file = "h2o.conf";
 
     conf.num_threads = h2o_numproc();
+    h2o_hostinfo_max_threads = H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS;
     setup_configurators();
 
     { /* parse options */
