@@ -22,12 +22,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "picohttpparser.h"
+#include "h2o/hostinfo.h"
 #include "h2o/socketpool.h"
 #include "h2o/string_.h"
 #include "h2o/url.h"
 #include "h2o/http1client.h"
 
-static h2o_timeout_t zero_timeout, io_timeout;
 static h2o_socketpool_t *sockpool;
 static h2o_mem_pool_t pool;
 static const char *url;
@@ -143,7 +143,10 @@ h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr
 
 int main(int argc, char **argv)
 {
-    h2o_http1client_ctx_t ctx = {NULL, &io_timeout};
+    h2o_multithread_queue_t *queue;
+    h2o_multithread_receiver_t getaddr_receiver;
+    h2o_timeout_t io_timeout;
+    h2o_http1client_ctx_t ctx = {NULL, &getaddr_receiver, &io_timeout};
 
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <url>\n", argv[0]);
@@ -159,7 +162,8 @@ int main(int argc, char **argv)
 #else
     ctx.loop = h2o_evloop_create();
 #endif
-    h2o_timeout_init(ctx.loop, &zero_timeout, 0);
+    queue = h2o_multithread_create_queue(ctx.loop);
+    h2o_multithread_register_receiver(queue, ctx.getaddr_receiver, h2o_hostinfo_getaddr_receiver);
     h2o_timeout_init(ctx.loop, &io_timeout, 5000); /* 5 seconds */
 
     /* setup the first request */
