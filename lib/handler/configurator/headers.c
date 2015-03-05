@@ -165,9 +165,8 @@ void h2o_headers_register_configurator(h2o_globalconf_t *conf)
     DEFINE_CMD("header.append", on_config_header_append,
                "adds a new header line, or appends the value to the existing header with\n"
                "the same name (separated by `,`)");
-    DEFINE_CMD("header.merge", on_config_header_merge,
-               "adds a new header line, or merges the value to the existing header of\n"
-               "comma-separated values");
+    DEFINE_CMD("header.merge", on_config_header_merge, "adds a new header line, or merges the value to the existing header of\n"
+                                                       "comma-separated values");
     DEFINE_CMD("header.set", on_config_header_set, "sets a header line, removing headers with the same name (if exist)");
     DEFINE_CMD("header.setifempty", on_config_header_setifempty,
                "sets a header line, only when a header with the same name does not exist");

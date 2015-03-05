@@ -1186,10 +1186,9 @@ static void setup_configurators(void)
                                         "max connections (default: 1024)");
         h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads,
                                         "number of worker threads (default: getconf NPROCESSORS_ONLN)");
-        h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
-                                        on_config_num_name_resolution_threads,
-                                        "number of threads to run for name resolution (default: "
-                                        H2O_TO_STR(H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS) ")");
+        h2o_configurator_define_command(
+            c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_name_resolution_threads,
+            "number of threads to run for name resolution (default: " H2O_TO_STR(H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS) ")");
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);

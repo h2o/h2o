@@ -61,7 +61,8 @@ void test_lib__handler__headers_c(void)
     rewrite_headers(&pool, &headers, &cmd);
     ok(headers_are(
         &pool, &headers,
-        H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar\nset-cookie: c=d\n")));
+        H2O_STRLIT(
+            "content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar\nset-cookie: c=d\n")));
 
     setup_headers(&pool, &headers);
     cmd = (h2o_headers_command_t){H2O_HEADERS_CMD_APPEND, &H2O_TOKEN_CACHE_CONTROL->buf, {H2O_STRLIT("public")}};
@@ -73,23 +74,20 @@ void test_lib__handler__headers_c(void)
     setup_headers(&pool, &headers);
     cmd = (h2o_headers_command_t){H2O_HEADERS_CMD_MERGE, &H2O_TOKEN_CACHE_CONTROL->buf, {H2O_STRLIT("public")}};
     rewrite_headers(&pool, &headers, &cmd);
-    ok(headers_are(
-        &pool, &headers,
-        H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar\n")));
+    ok(headers_are(&pool, &headers,
+                   H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar\n")));
 
     setup_headers(&pool, &headers);
     cmd = (h2o_headers_command_t){H2O_HEADERS_CMD_SET, &H2O_TOKEN_CACHE_CONTROL->buf, {H2O_STRLIT("no-cache")}};
     rewrite_headers(&pool, &headers, &cmd);
-    ok(headers_are(
-        &pool, &headers,
-        H2O_STRLIT("content-type: text/plain\nset-cookie: a=b\nx-foo: bar\ncache-control: no-cache\n")));
+    ok(headers_are(&pool, &headers,
+                   H2O_STRLIT("content-type: text/plain\nset-cookie: a=b\nx-foo: bar\ncache-control: no-cache\n")));
 
     setup_headers(&pool, &headers);
     cmd = (h2o_headers_command_t){H2O_HEADERS_CMD_SETIFEMPTY, &H2O_TOKEN_CACHE_CONTROL->buf, {H2O_STRLIT("no-cache")}};
     rewrite_headers(&pool, &headers, &cmd);
-    ok(headers_are(
-        &pool, &headers,
-        H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar\n")));
+    ok(headers_are(&pool, &headers,
+                   H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar\n")));
 
     /* tests using non-token headers */
     header_str = h2o_iovec_init(H2O_STRLIT("x-foo"));
@@ -110,23 +108,20 @@ void test_lib__handler__headers_c(void)
     setup_headers(&pool, &headers);
     cmd = (h2o_headers_command_t){H2O_HEADERS_CMD_MERGE, &header_str, {H2O_STRLIT("bar")}};
     rewrite_headers(&pool, &headers, &cmd);
-    ok(headers_are(
-        &pool, &headers,
-        H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar\n")));
+    ok(headers_are(&pool, &headers,
+                   H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar\n")));
 
     setup_headers(&pool, &headers);
     cmd = (h2o_headers_command_t){H2O_HEADERS_CMD_SET, &header_str, {H2O_STRLIT("baz")}};
     rewrite_headers(&pool, &headers, &cmd);
-    ok(headers_are(
-        &pool, &headers,
-        H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: baz\n")));
+    ok(headers_are(&pool, &headers,
+                   H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: baz\n")));
 
     setup_headers(&pool, &headers);
     cmd = (h2o_headers_command_t){H2O_HEADERS_CMD_SETIFEMPTY, &header_str, {H2O_STRLIT("baz")}};
     rewrite_headers(&pool, &headers, &cmd);
-    ok(headers_are(
-        &pool, &headers,
-        H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar\n")));
+    ok(headers_are(&pool, &headers,
+                   H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar\n")));
 
     h2o_mem_clear_pool(&pool);
 }
