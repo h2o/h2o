@@ -26,6 +26,7 @@
 extern "C" {
 #endif
 
+#include <arpa/inet.h>
 #include <pthread.h>
 #include "h2o/linklist.h"
 #include "h2o/multithread.h"
@@ -34,11 +35,16 @@ extern "C" {
 
 typedef struct st_h2o_socketpool_t {
     /* read-only vars */
-    h2o_iovec_t host;
     struct {
-        uint16_t n;
-        char s[sizeof("65535")];
-    } port;
+        union {
+            struct {
+                h2o_iovec_t host;
+                char port[sizeof("65535")];
+            } named;
+            struct sockaddr_in sin;
+        };
+        int is_named;
+    } peer;
     size_t capacity;
     uint64_t timeout; /* in milliseconds (UINT64_MAX if not set) */
     struct {

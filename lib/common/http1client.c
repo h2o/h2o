@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -378,6 +379,15 @@ static void on_connect_timeout(h2o_timeout_entry_t *entry)
     on_connect_error(client, "connection timeout");
 }
 
+static void start_connect(struct st_h2o_http1client_private_t *client, struct sockaddr *addr, socklen_t addrlen)
+{
+    if ((client->super.sock = h2o_socket_connect(client->super.ctx->loop, addr, addrlen, on_connect)) == NULL) {
+        on_connect_error(client, "socket create error");
+        return;
+    }
+    client->super.sock->data = client;
+}
+
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res)
 {
     struct st_h2o_http1client_private_t *client =
@@ -388,12 +398,8 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         return;
     }
     /* start connecting */
-    client->super.sock = h2o_socket_connect(client->super.ctx->loop, res->ai_addr, res->ai_addrlen, on_connect);
-    if (client->super.sock == NULL) {
-        on_connect_error(client, "socket create error");
-        return;
-    }
-    client->super.sock->data = client;
+    start_connect(client, res->ai_addr, res->ai_addrlen);
+    freeaddrinfo(res);
 }
 
 static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
@@ -423,7 +429,16 @@ void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1c
     client = create_client(_client, data, ctx, pool, cb);
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);
-    /* resolve destination (FIXME use the function supplied by the loop) */
+
+    /* directly call connect(2) if `host` is an IP address */
+    struct sockaddr_in sin = {};
+    if (inet_pton(AF_INET, host, &sin.sin_addr) == 1) {
+        sin.sin_family = AF_INET;
+        sin.sin_port = htons(port);
+        start_connect(client, (void *)&sin, sizeof(sin));
+        return;
+    }
+    /* resolve destination and then connect */
     serv = h2o_mem_alloc_pool(pool, sizeof("65536"));
     sprintf(serv, "%u", (unsigned)port);
     h2o_hostinfo_getaddr(&client->_getaddr_req, ctx->getaddr_receiver, host, serv, AF_UNSPEC, SOCK_STREAM, IPPROTO_TCP,

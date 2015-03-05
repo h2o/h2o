@@ -85,9 +85,14 @@ void h2o_socketpool_init(h2o_socketpool_t *pool, const char *host, uint16_t port
 {
     memset(pool, 0, sizeof(*pool));
 
-    pool->host = h2o_strdup(NULL, host, SIZE_MAX);
-    pool->port.n = port;
-    sprintf(pool->port.s, "%u", (unsigned)port);
+    if (inet_pton(AF_INET, host, &pool->peer.sin.sin_addr) == 1) {
+        pool->peer.sin.sin_family = AF_INET;
+        pool->peer.sin.sin_port = htons(port);
+    } else {
+        pool->peer.named.host = h2o_strdup(NULL, host, SIZE_MAX);
+        sprintf(pool->peer.named.port, "%u", (unsigned)port);
+        pool->peer.is_named = 1;
+    }
     pool->capacity = capacity;
     pool->timeout = UINT64_MAX;
 
@@ -110,7 +115,8 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
         h2o_timeout_unlink(&pool->_interval_cb.entry);
         h2o_timeout_dispose(pool->_interval_cb.loop, &pool->_interval_cb.timeout);
     }
-    free(pool->host.base);
+    if (pool->peer.is_named)
+        free(pool->peer.named.host.base);
 }
 
 void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64_t msec)
@@ -155,6 +161,19 @@ static void on_close(void *data)
     __sync_sub_and_fetch(&pool->_shared.count, 1);
 }
 
+static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr *addr, socklen_t addrlen)
+{
+    req->sock = h2o_socket_connect(req->loop, addr, addrlen, on_connect);
+    if (req->sock == NULL) {
+        __sync_sub_and_fetch(&req->pool->_shared.count, 1);
+        call_connect_cb(req, "failed to connect to host");
+        return;
+    }
+    req->sock->data = req;
+    req->sock->on_close.cb = on_close;
+    req->sock->on_close.data = req->pool;
+}
+
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res)
 {
     h2o_socketpool_connect_request_t *req = H2O_STRUCT_FROM_MEMBER(h2o_socketpool_connect_request_t, getaddr_req, getaddr_req);
@@ -165,15 +184,8 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         return;
     }
 
-    /* start connecting */
-    if ((req->sock = h2o_socket_connect(req->loop, res->ai_addr, res->ai_addrlen, on_connect)) == NULL) {
-        __sync_sub_and_fetch(&req->pool->_shared.count, 1);
-        call_connect_cb(req, "failed to connect to host");
-        return;
-    }
-    req->sock->data = req;
-    req->sock->on_close.cb = on_close;
-    req->sock->on_close.data = req->pool;
+    start_connect(req, res->ai_addr, res->ai_addrlen);
+    freeaddrinfo(res);
 }
 
 void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketpool_t *pool, h2o_loop_t *loop,
@@ -206,14 +218,20 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     /* FIXME repsect `capacity` */
     __sync_add_and_fetch(&pool->_shared.count, 1);
 
-    /* connect */
+    /* prepare request object */
     h2o_socketpool_connect_request_t *req = malloc(sizeof(*req));
     *req = (h2o_socketpool_connect_request_t){data, cb, pool, loop};
     if (_req != NULL)
         *_req = req;
 
-    h2o_hostinfo_getaddr(&req->getaddr_req, getaddr_receiver, pool->host.base, pool->port.s, AF_UNSPEC, SOCK_STREAM, IPPROTO_TCP,
-                         AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr);
+    if (pool->peer.is_named) {
+        /* resolve the name, and connect */
+        h2o_hostinfo_getaddr(&req->getaddr_req, getaddr_receiver, pool->peer.named.host.base, pool->peer.named.port, AF_UNSPEC,
+                             SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr);
+    } else {
+        /* connect (using sockaddr_in) */
+        start_connect(req, (void *)&pool->peer.sin, sizeof(pool->peer.sin));
+    }
 }
 
 void h2o_socketpool_cancel_connect(h2o_socketpool_connect_request_t *req)
