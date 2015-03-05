@@ -79,7 +79,7 @@ static void *on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
         return NULL;
     h2o_http1client_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*ctx) + sizeof(*client_ctx->io_timeout));
     client_ctx->loop = ctx->loop;
-    client_ctx->zero_timeout = &ctx->zero_timeout;
+    client_ctx->getaddr_receiver = &ctx->receivers.hostinfo_getaddr;
     client_ctx->io_timeout = (void *)(client_ctx + 1);
     h2o_timeout_init(client_ctx->loop, client_ctx->io_timeout, self->config.io_timeout);
     return client_ctx;

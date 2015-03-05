@@ -172,7 +172,7 @@ static int create_listener(void)
         return -1;
     }
 
-    sock = h2o_evloop_socket_create(ctx.loop, fd, (void *)&addr, sizeof(addr), H2O_SOCKET_FLAG_IS_ACCEPT);
+    sock = h2o_evloop_socket_create(ctx.loop, fd, (void *)&addr, sizeof(addr), H2O_SOCKET_FLAG_DONT_READ);
     h2o_socket_read_start(sock, on_accept);
 
     return 0;

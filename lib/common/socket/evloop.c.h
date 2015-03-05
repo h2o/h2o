@@ -210,7 +210,7 @@ static void read_on_ready(struct st_h2o_evloop_socket_t *sock)
     int status = 0;
     size_t prev_bytes_read = sock->super.input->size;
 
-    if ((sock->_flags & H2O_SOCKET_FLAG_IS_ACCEPT) != 0)
+    if ((sock->_flags & H2O_SOCKET_FLAG_DONT_READ) != 0)
         goto Notify;
 
     if ((status = on_read_core(sock->fd, sock->super.ssl == NULL ? &sock->super.input : &sock->super.ssl->input.encrypted)) != 0)
