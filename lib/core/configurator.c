@@ -273,8 +273,8 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                         "(default: unlimited)");
         h2o_configurator_define_command(c, "max-delegations", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_max_delegations,
-                                        "limits the number of delegations (i.e. internal redirects using `X-Reproxy-URL`)\n"
-                                        "(default: " H2O_TO_STR(H2O_DEFAULT_MAX_DELEGATIONS) ")");
+                                        "limits the number of delegations (i.e. internal redirects using the\n"
+                                        "`X-Reproxy-URL` header) (default: " H2O_TO_STR(H2O_DEFAULT_MAX_DELEGATIONS) ")");
         h2o_configurator_define_command(
             c, "http1-request-timeout", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
             on_config_http1_request_timeout,
