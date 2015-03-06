@@ -88,10 +88,8 @@ static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
         if (req->path_normalized.len >= confpath_wo_slash &&
             memcmp(req->path_normalized.base, pathconf->path.base, confpath_wo_slash) == 0) {
             if (req->path_normalized.len == confpath_wo_slash) {
-                h2o_iovec_t dest = h2o_concat(&req->pool, req->scheme->name, h2o_iovec_init(H2O_STRLIT("://")),
-                                              req->input.authority, pathconf->path);
                 req->pathconf = pathconf;
-                h2o_send_redirect(req, 301, "Moved Permanently", dest.base, dest.len);
+                h2o_send_redirect(req, 301, "Moved Permanently", pathconf->path.base, pathconf->path.len);
                 return;
             }
             if (req->path_normalized.base[confpath_wo_slash] == '/') {

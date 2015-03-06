@@ -244,7 +244,7 @@ void test_lib__handler__file_c()
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 301);
-        ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "http://default/index_txt/"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "/index_txt/"));
         h2o_loopback_destroy(conn);
     }
     {
@@ -253,7 +253,7 @@ void test_lib__handler__file_c()
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 301);
-        ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "http://default/index_txt/"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "/index_txt/"));
         h2o_loopback_destroy(conn);
     }
     {
@@ -262,7 +262,7 @@ void test_lib__handler__file_c()
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt_as_dir/"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 301);
-        ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "http://default/index_txt_as_dir/index.txt/"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "/index_txt_as_dir/index.txt/"));
         h2o_loopback_destroy(conn);
     }
     {
@@ -271,7 +271,7 @@ void test_lib__handler__file_c()
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt_as_dir/"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 301);
-        ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "http://default/index_txt_as_dir/index.txt/"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "/index_txt_as_dir/index.txt/"));
         h2o_loopback_destroy(conn);
     }
 
