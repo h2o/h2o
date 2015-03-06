@@ -1,6 +1,15 @@
 Revision history for H2O.
 
-1.0.02 TBD
+1.1.0 TBD
+	- [core][file] send redirects appending '/' as abs-path redirects #209 (Kazuho Oku)
+	- [headers] add directives for manipulating response headers #204 (Kazuho Oku)
+	- [http2] do not send a corrupt response if header value is longer than 126 bytes #193 (Kazuho Oku)
+	- [http2] fix interoperability issue with nghttp2 0.7.5 and above 5c42eb1 (Kazuho Oku)
+	- [proxy] send `via` header to upstream #191 (Kazuho Oku)
+	- [proxy] resolve hostname asynchronously #207 (Kazuho Oku)
+	- [proxy] distribute load between upstream servers (using `rand()`) #208 (Kazuho Oku)
+	- [proxy] fix a bug that may cause a corrupt `location` header being forwarded #190 (Kazuho Oku)
+	- [reproxy] add support for `x-reproxy-url` header #187 #197 (Daisuke Maki, Kazuho Oku)
 
 1.0.1 2015-02-23 05:50:00+0000
 	- [core] change backlog size from 65,536 to 65,535 #183 (Tatsuhiko Kubo)
