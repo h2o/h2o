@@ -68,7 +68,8 @@ $ make
 $ sudo make install
 ```
 If your meet the error:Could NOT find OpenSSL, try to set the path to OpenSSL root folder in the
-  system variable OPENSSL_ROOT_DIR (missing: OPENSSL_LIBRARIES
+  system variable OPENSSL_ROOT_DIR (missing: OPENSSL_LIBRARIES)
+
 Type and run the command below.
 ```
 $ cmake -DOPENSSL_ROOT_DIR=/usr/local/ssl -DOPENSSL_LIBRARIES=/usr/local/ssl/lib
