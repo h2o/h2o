@@ -26,6 +26,7 @@
 extern "C" {
 #endif
 
+#include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
 #include "h2o/linklist.h"
