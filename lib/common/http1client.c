@@ -397,8 +397,10 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         on_connect_error(client, errstr);
         return;
     }
+
     /* start connecting */
-    start_connect(client, res->ai_addr, res->ai_addrlen);
+    struct addrinfo *selected = h2o_hostinfo_select_one(res);
+    start_connect(client, selected->ai_addr, selected->ai_addrlen);
     freeaddrinfo(res);
 }
 

@@ -23,6 +23,7 @@
 #define h2o__hostinfo_h
 
 #include <netdb.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -75,6 +76,11 @@ static int h2o_hostinfo_getaddr_is_active(h2o_hostinfo_getaddr_req_t *req);
  */
 void h2o_hostinfo_getaddr_receiver(h2o_multithread_receiver_t *receiver, h2o_linklist_t *messages);
 
+/**
+ * select one entry at random from the response
+ */
+static struct addrinfo *h2o_hostinfo_select_one(struct addrinfo *res);
+
 /* inline defs */
 
 inline void h2o_hostinfo_getaddr(h2o_hostinfo_getaddr_req_t *req, h2o_multithread_receiver_t *receiver, const char *name,
@@ -97,6 +103,25 @@ inline void h2o_hostinfo_getaddr(h2o_hostinfo_getaddr_req_t *req, h2o_multithrea
 inline int h2o_hostinfo_getaddr_is_active(h2o_hostinfo_getaddr_req_t *req)
 {
     return req->_cb != NULL;
+}
+
+inline struct addrinfo *h2o_hostinfo_select_one(struct addrinfo *res)
+{
+    if (res->ai_next == NULL)
+        return res;
+
+    /* count the number of candidates */
+    size_t i = 0;
+    struct addrinfo *ai = res;
+    do {
+        ++i;
+    } while ((ai = ai->ai_next) != NULL);
+
+    /* choose one, distributed by rand() :-p */
+    i = rand() % i;
+    for (ai = res; i != 0; ai = ai->ai_next, --i)
+        ;
+    return ai;
 }
 
 #endif

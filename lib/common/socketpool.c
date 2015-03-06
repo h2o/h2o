@@ -184,7 +184,8 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         return;
     }
 
-    start_connect(req, res->ai_addr, res->ai_addrlen);
+    struct addrinfo *selected = h2o_hostinfo_select_one(res);
+    start_connect(req, selected->ai_addr, selected->ai_addrlen);
     freeaddrinfo(res);
 }
 
