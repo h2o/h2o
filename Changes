@@ -1,6 +1,6 @@
 Revision history for H2O.
 
-1.1.0 TBD
+1.1.0 2015-03-06 06:41:00+0000
 	- [core][file] send redirects appending '/' as abs-path redirects #209 (Kazuho Oku)
 	- [headers] add directives for manipulating response headers #204 (Kazuho Oku)
 	- [http2] do not send a corrupt response if header value is longer than 126 bytes #193 (Kazuho Oku)
