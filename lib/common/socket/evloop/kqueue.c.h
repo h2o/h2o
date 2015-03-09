@@ -121,7 +121,9 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
     max_wait = get_max_wait(&loop->super);
     ts.tv_sec = max_wait / 1000;
     ts.tv_nsec = max_wait % 1000 * 1000 * 1000;
-    nevents = kevent(loop->kq, changelist, nchanges, events, sizeof(events) / sizeof(events[0]), &ts);
+    while ((nevents = kevent(loop->kq, changelist, nchanges, events, sizeof(events) / sizeof(events[0]), &ts)) == -1 &&
+           errno == EINTR)
+        ;
     update_now(&loop->super);
     if (nevents == -1)
         return -1;
@@ -165,9 +167,9 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
     int change_index = 0, ret;
 
     if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_READ) != 0)
-        EV_SET(changelist + change_index++, sock->fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
+        ev_set(changelist + change_index++, sock->fd, EVFILT_READ, EV_DELETE, 0);
     if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE) != 0)
-        EV_SET(changelist + change_index++, sock->fd, EVFILT_WRITE, EV_DELETE, 0, 0, 0);
+        ev_set(changelist + change_index++, sock->fd, EVFILT_WRITE, EV_DELETE, 0);
     if (change_index == 0)
         return;
     while ((ret = kevent(loop->kq, changelist, change_index, NULL, 0, NULL)) != 0 && errno == EINTR)
