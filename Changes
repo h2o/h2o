@@ -1,5 +1,7 @@
 Revision history for H2O.
 
+1.1.2 TBD
+
 1.1.1 2015-03-09 06:12:00+0000
 	- [proxy] fix crash on NetBSD when upstream connection is persistent #217 (Kazuho Oku)
 	- [misc] fix compile error on FreeBSD #211 #212 (Syohei Yoshida)
