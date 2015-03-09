@@ -3,6 +3,7 @@ use warnings;
 use Plack::App::File;
 use Plack::Builder;
 use Plack::Request;
+use Plack::TempBuffer;
 use Time::HiRes qw(sleep);
 use t::Util;
 
@@ -53,17 +54,20 @@ builder {
     mount "/" => Plack::App::File->new(root => DOC_ROOT)->to_app;
     mount "/echo" => sub {
         my $env = shift;
-        my $content = '';
+        my $content = Plack::TempBuffer->new;
         if ($env->{'psgi.input'}) {
-            $env->{'psgi.input'}->read($content, 104857600);
+            my $buf;
+            while ($env->{'psgi.input'}->read($buf, 65536)) {
+                $content->print($buf);
+            }
         }
         return [
             200,
             [
                 'content-type' => 'text/plain',
-                'content-length' => length $content,
+                'content-length' => $content->size(),
             ],
-            [ $content ],
+            $content->rewind(),
         ];
     };
     mount "/echo-headers" => sub {
