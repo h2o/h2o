@@ -20,19 +20,19 @@ my $huge_file_size = 50 * 1024 * 1024; # should be larger than the mmap_backend 
 my $huge_file = create_data_file($huge_file_size);
 my $huge_file_md5 = md5_file($huge_file);
 
-for my $i (0..7) {
-    my $h2o_keepalive = $i & 1 ? 1 : 0;
-    my $starlet_keepalive = $i & 2 ? 1 : 0;
-    my $starlet_force_chunked = $i & 4 ? 1 : 0;
-    my $upstream_port = empty_port();
+$0 =~ /-([0-9]+)\.t$/
+    or die "failed to determine mode from \$0";
+my $mode = $1;
 
-    subtest "e2e (h2o:$h2o_keepalive, starlet: $starlet_keepalive, starlet-chunked: $starlet_force_chunked)" => sub {
-        ok ! check_port($upstream_port), "upstream should be down now";
+my $h2o_keepalive = $mode & 1 ? 1 : 0;
+my $starlet_keepalive = $mode & 2 ? 1 : 0;
+my $starlet_force_chunked = $mode & 4 ? 1 : 0;
+my $upstream_port = empty_port();
 
-        local $ENV{FORCE_CHUNKED} = $starlet_force_chunked;
-        my $guard = spawn_upstream($upstream_port, $starlet_keepalive ? +("--max-keepalive-reqs=100") : ());
+local $ENV{FORCE_CHUNKED} = $starlet_force_chunked;
+my $guard = spawn_upstream($upstream_port, $starlet_keepalive ? +("--max-keepalive-reqs=100") : ());
 
-        run_tests_with_conf($upstream_port, << "EOT");
+run_tests_with_conf($upstream_port, << "EOT");
 hosts:
   default:
     paths:
@@ -43,9 +43,6 @@ hosts:
 @{[ $h2o_keepalive ? "" : "        proxy.timeout.keepalive: 0" ]}
 reproxy: ON
 EOT
-    };
-    ok ! check_port($upstream_port), "upstream should be down now";
-}
 
 sub spawn_upstream {
     my ($port, @extra) = @_;
