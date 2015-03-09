@@ -220,12 +220,11 @@ int main(int argc, char **argv)
     hostconf = h2o_config_register_host(&config, "default");
     register_handler(hostconf, "/post-test", post_test);
     register_handler(hostconf, "/chunked-test", chunked_test);
-    h2o_file_register(h2o_config_register_path(hostconf, "/"), "examples/doc_root", NULL, NULL, 0);
 
-#if 0 /* reproxy is not yet implemented */
     register_handler(hostconf, "/reproxy-test", reproxy_test);
-    h2o_reproxy_register(hostconf);
-#endif
+    h2o_reproxy_register(h2o_config_register_path(hostconf, "/reproxy_test"));
+
+    h2o_file_register(h2o_config_register_path(hostconf, "/"), "examples/doc_root", NULL, NULL, 0);
 
 #if H2O_USE_LIBUV
     uv_loop_t loop;
