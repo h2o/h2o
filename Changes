@@ -1,5 +1,9 @@
 Revision history for H2O.
 
+1.1.1 2015-03-09 06:12:00+0000
+	- [proxy] fix crash on NetBSD when upstream connection is persistent #217 (Kazuho Oku)
+	- [misc] fix compile error on FreeBSD #211 #212 (Syohei Yoshida)
+
 1.1.0 2015-03-06 06:41:00+0000
 	- [core][file] send redirects appending '/' as abs-path redirects #209 (Kazuho Oku)
 	- [headers] add directives for manipulating response headers #204 (Kazuho Oku)
