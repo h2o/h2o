@@ -24,6 +24,7 @@
 #include <pthread.h>
 #include <signal.h>
 #include <spawn.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -65,7 +66,7 @@ int h2o_setuidgid(struct passwd *passwd)
     return 0;
 }
 
-ssize_t h2o_server_starter_get_fds(int **_fds)
+size_t h2o_server_starter_get_fds(int **_fds)
 {
     const char *ports_env, *start, *end, *eq;
     size_t t;
@@ -75,7 +76,7 @@ ssize_t h2o_server_starter_get_fds(int **_fds)
         return 0;
     if (ports_env[0] == '\0') {
         fprintf(stderr, "$SERVER_STARTER_PORT is empty\n");
-        return -1;
+        return SIZE_MAX;
     }
 
     /* ports_env example: 127.0.0.1:80=3;/tmp/sock=4 */
@@ -84,11 +85,11 @@ ssize_t h2o_server_starter_get_fds(int **_fds)
             end = start + strlen(start);
         if ((eq = memchr(start, '=', end - start)) == NULL) {
             fprintf(stderr, "invalid $SERVER_STARTER_PORT, an element without `=` in: %s\n", ports_env);
-            return -1;
+            return SIZE_MAX;
         }
         if ((t = h2o_strtosize(eq + 1, end - eq - 1)) == SIZE_MAX) {
             fprintf(stderr, "invalid file descriptor number in $SERVER_STARTER_PORT: %s\n", ports_env);
-            return -1;
+            return SIZE_MAX;
         }
         h2o_vector_reserve(NULL, (void *)&fds, sizeof(fds.entries[0]), fds.size + 1);
         fds.entries[fds.size++] = (int)t;

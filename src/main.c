@@ -1256,7 +1256,7 @@ int main(int argc, char **argv)
     }
 
     /* setup conf.server_starter */
-    if ((conf.server_starter.num_fds = h2o_server_starter_get_fds(&conf.server_starter.fds)) == -1)
+    if ((conf.server_starter.num_fds = h2o_server_starter_get_fds(&conf.server_starter.fds)) == SIZE_MAX)
         exit(EX_CONFIG);
     if (conf.server_starter.fds != 0)
         conf.server_starter.bound_fd_map = alloca(conf.server_starter.num_fds);

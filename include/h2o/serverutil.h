@@ -52,7 +52,7 @@ int h2o_setuidgid(struct passwd *passwd);
 /**
  * return a list of fds passed in from Server::Starter, or 0 if Server::Starter was not used.  -1 on error
  */
-ssize_t h2o_server_starter_get_fds(int **_fds);
+size_t h2o_server_starter_get_fds(int **_fds);
 
 /**
  * executes a command and returns its output
