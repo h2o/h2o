@@ -144,11 +144,11 @@ sub run_tests_with_conf {
                 is length($content), $files{$file}->{size}, "$proto://127.0.0.1/$file (size)";
                 is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/$file (md5)";
             }
-            my $out = `nghttp $opt -H':method: POST' -d t/50reverse-proxy/hello.txt $proto://127.0.0.1:$port/echo`;
+            my $out = `nghttp $opt -d t/50reverse-proxy/hello.txt $proto://127.0.0.1:$port/echo`;
             is $out, "hello\n", "$proto://127.0.0.1/echo (POST)";
             $out = `nghttp $opt -m 10 $proto://127.0.0.1:$port/index.txt`;
             is $out, "hello\n" x 10, "$proto://127.0.0.1/index.txt x 10 times";
-            $out = `nghttp $opt -H':method: POST' -d $huge_file $proto://127.0.0.1:$port/echo`;
+            $out = `nghttp $opt -d $huge_file $proto://127.0.0.1:$port/echo`;
             is length($out), $huge_file_size, "$proto://127.0.0.1/echo (mmap-backed, size)";
             is md5_hex($out), $huge_file_md5, "$proto://127.0.0.1/echo (mmap-backed, md5)";
             subtest 'cookies' => sub {
