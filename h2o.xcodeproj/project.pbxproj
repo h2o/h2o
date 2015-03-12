@@ -302,6 +302,7 @@
 		108215041AAD418700D27E66 /* 50reverse-proxy-6.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-6.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		108215051AAD418700D27E66 /* 50reverse-proxy-7.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-7.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		108215071AAD41CE00D27E66 /* test.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; name = test.pl; path = "50reverse-proxy/test.pl"; sourceTree = "<group>"; };
+		108215081AB14B1100D27E66 /* 40server-push.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40server-push.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10AA2E931A80A592004322AC /* time_.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = time_.h; sourceTree = "<group>"; };
 		10AA2E951A80A612004322AC /* time.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = time.c; sourceTree = "<group>"; };
 		10AA2E981A81F68A004322AC /* time.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = time.c; sourceTree = "<group>"; };
@@ -772,6 +773,7 @@
 				10F198EB1A7ED2CC00F4585E /* 40pathconf-redirect.t */,
 				105534F51A460EF600627ECB /* 40protocol.t */,
 				104B9A311A59D7A2009EEE64 /* 40running-user.t */,
+				108215081AB14B1100D27E66 /* 40server-push.t */,
 				104B9A321A59E27A009EEE64 /* 40ssl-cipher-suite.t */,
 				104B9A221A47BBA1009EEE64 /* 40unix-socket.t */,
 				10AA2EB31A94B66D004322AC /* 40virtual-host.t */,

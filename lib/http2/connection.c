@@ -1048,27 +1048,11 @@ void h2o_http2_conn_push_path(h2o_http2_conn_t *conn, h2o_iovec_t path, h2o_http
         }
     }
 
-    /* TODO copy headers? */
-
-    execute_or_enqueue_request(conn, stream);
-}
-
-int h2o_http2_conn_send_push_promise(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
-{
-    assert(h2o_http2_stream_is_push(stream->stream_id));
-    assert(!h2o_linklist_is_linked(&stream->_refs.link));
-
-    /* cancel the PUSH unless it is 200 OK */
-    if (stream->req.res.status != 200) {
-        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
-        h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_refs.link);
-        return -1;
-    }
-
+    /* send the push_promise frame */
     h2o_hpack_flatten_request(&conn->_write.buf, &conn->_output_header_table, stream->stream_id, conn->peer_settings.max_frame_size,
                               &stream->req, stream->push.parent_stream_id);
-    h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-pushed"), 0, H2O_STRLIT("1"));
-    return 0;
+
+    execute_or_enqueue_request(conn, stream);
 }
 
 void h2o_http2_accept(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock)
