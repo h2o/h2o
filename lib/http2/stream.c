@@ -200,11 +200,14 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 
     h2o_get_timestamp(conn->super.ctx, &stream->req.pool, &ts);
 
-    /* send PUSH_PROMISE frame if is push */
+    /* special care for server-pushed responses */
     if (h2o_http2_stream_is_push(stream->stream_id)) {
-        int ret = h2o_http2_conn_send_push_promise(conn, stream);
-        if (ret != 0)
-            return ret;
+        if (400 <= stream->req.res.status) {
+            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
+            h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_refs.link);
+            return -1;
+        }
+        h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-pushed"), 0, H2O_STRLIT("1"));
     }
 
     /* FIXME the function may return error, check it! */
