@@ -1,4 +1,4 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
+CMAKE_MINIMUM_REQUIRED(VERSION 2.8.8)
 CMAKE_POLICY(SET CMP0003 NEW)
 
 PROJECT(h2o)
@@ -19,6 +19,9 @@ IF (NOT OPENSSL_FOUND)
     FIND_PACKAGE(OpenSSL REQUIRED)
     INCLUDE_DIRECTORIES(${OPENSSL_INCLUDE_DIR})
 ENDIF (NOT OPENSSL_FOUND)
+IF (OPENSSL_VERSION VERSION_LESS "1.0.2")
+    MESSAGE(WARNING "*********************************************************************** OpenSSL 1.0.2 is required for HTTP/2 interoperability with web browsers ***********************************************************************")
+ENDIF (OPENSSL_VERSION VERSION_LESS "1.0.2")
 
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBYAML libyaml)
