@@ -67,6 +67,14 @@ $ cmake -DCMAKE_INSTALL_PREFIX=/usr/local .
 $ make
 $ sudo make install
 ```
+If your meet the error:Could NOT find OpenSSL, try to set the path to OpenSSL root folder in the
+  system variable OPENSSL_ROOT_DIR (missing: OPENSSL_LIBRARIES)
+
+Type and run the command below.
+```
+$ cmake -DOPENSSL_ROOT_DIR=/usr/local/ssl -DOPENSSL_LIBRARIES=/usr/local/ssl/lib
+```
+then rerun the commands before.
 
 Type `make test` to run the unit tests (note that extra components are required for running the tests; a complete list of prerequisites can be found in the `before_script` section of [.travis.yml](https://github.com/h2o/h2o/blob/master/.travis.yml)).
 
