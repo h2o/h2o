@@ -31,4 +31,4 @@ before_script:
 script:
   - cmake .
   - make all
-  - make test
+  - make check

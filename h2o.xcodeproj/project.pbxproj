@@ -303,6 +303,10 @@
 		108215051AAD418700D27E66 /* 50reverse-proxy-7.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-7.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		108215071AAD41CE00D27E66 /* test.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; name = test.pl; path = "50reverse-proxy/test.pl"; sourceTree = "<group>"; };
 		108215081AB14B1100D27E66 /* 40server-push.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40server-push.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		1082150A1AB26F2A00D27E66 /* CMakeLists.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = CMakeLists.txt; sourceTree = "<group>"; };
+		1082150C1AB26F4700D27E66 /* FindWslay.cmake */ = {isa = PBXFileReference; lastKnownFileType = text; path = FindWslay.cmake; sourceTree = "<group>"; };
+		1082150D1AB26F4700D27E66 /* FindLibYAML.cmake */ = {isa = PBXFileReference; lastKnownFileType = text; path = FindLibYAML.cmake; sourceTree = "<group>"; };
+		1082150E1AB26F4700D27E66 /* FindLibUV.cmake */ = {isa = PBXFileReference; lastKnownFileType = text; path = FindLibUV.cmake; sourceTree = "<group>"; };
 		10AA2E931A80A592004322AC /* time_.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = time_.h; sourceTree = "<group>"; };
 		10AA2E951A80A612004322AC /* time.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = time.c; sourceTree = "<group>"; };
 		10AA2E981A81F68A004322AC /* time.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = time.c; sourceTree = "<group>"; };
@@ -591,6 +595,8 @@
 		1079230C19A320A700C52AD6 = {
 			isa = PBXGroup;
 			children = (
+				1082150B1AB26F2F00D27E66 /* cmake */,
+				1082150A1AB26F2A00D27E66 /* CMakeLists.txt */,
 				1079231E19A3210D00C52AD6 /* deps */,
 				1079239E19A3215F00C52AD6 /* include */,
 				107923AD19A3217300C52AD6 /* lib */,
@@ -731,6 +737,16 @@
 				108215071AAD41CE00D27E66 /* test.pl */,
 			);
 			name = "50reverse-proxy";
+			sourceTree = "<group>";
+		};
+		1082150B1AB26F2F00D27E66 /* cmake */ = {
+			isa = PBXGroup;
+			children = (
+				1082150C1AB26F4700D27E66 /* FindWslay.cmake */,
+				1082150D1AB26F4700D27E66 /* FindLibYAML.cmake */,
+				1082150E1AB26F4700D27E66 /* FindLibUV.cmake */,
+			);
+			path = cmake;
 			sourceTree = "<group>";
 		};
 		10AA2EC51AA0557A004322AC /* assets */ = {
