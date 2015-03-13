@@ -49,8 +49,8 @@ extern "C" {
 #define H2O_NORETURN
 #endif
 
-#if !defined(__clang__) && defined(__GNUC__) && H2O_GNUC_VERSION >= 0x40802
-// returns_nonnull was seemingly not defined before gcc 4.8.2
+#if !defined(__clang__) && defined(__GNUC__) && H2O_GNUC_VERSION >= 0x40900
+// returns_nonnull was seemingly not defined before gcc 4.9 (exists in 4.9.1 but not in 4.8.2)
 #define H2O_RETURNS_NONNULL __attribute__((returns_nonnull))
 #else
 #define H2O_RETURNS_NONNULL
