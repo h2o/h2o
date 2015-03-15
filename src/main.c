@@ -140,6 +140,12 @@ static void set_cloexec(int fd)
     }
 }
 
+static int on_openssl_print_errors(const char *str, size_t len, void *fp)
+{
+    fwrite(str, 1, len, fp);
+    return (int)len;
+}
+
 static unsigned long openssl_thread_id_callback(void)
 {
     return (unsigned long)pthread_self();
@@ -472,31 +478,31 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     setup_ecc_key(ssl_ctx);
     if (SSL_CTX_use_certificate_chain_file(ssl_ctx, certificate_file->data.scalar) != 1) {
         h2o_configurator_errprintf(cmd, certificate_file, "failed to load certificate file:%s\n", certificate_file->data.scalar);
-        ERR_print_errors_fp(stderr);
+        ERR_print_errors_cb(on_openssl_print_errors, stderr);
         goto Error;
     }
     if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file->data.scalar, SSL_FILETYPE_PEM) != 1) {
         h2o_configurator_errprintf(cmd, key_file, "failed to load private key file:%s\n", key_file->data.scalar);
-        ERR_print_errors_fp(stderr);
+        ERR_print_errors_cb(on_openssl_print_errors, stderr);
         goto Error;
     }
     if (cipher_suite != NULL && SSL_CTX_set_cipher_list(ssl_ctx, cipher_suite->data.scalar) != 1) {
         h2o_configurator_errprintf(cmd, cipher_suite, "failed to setup SSL cipher suite\n");
-        ERR_print_errors_fp(stderr);
+        ERR_print_errors_cb(on_openssl_print_errors, stderr);
         goto Error;
     }
     if (dh_file != NULL) {
         BIO *bio = BIO_new_file(dh_file->data.scalar, "r");
         if (bio == NULL) {
             h2o_configurator_errprintf(cmd, dh_file, "failed to load dhparam file:%s\n", dh_file->data.scalar);
-            ERR_print_errors_fp(stderr);
+            ERR_print_errors_cb(on_openssl_print_errors, stderr);
             goto Error;
         }
         DH *dh = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
         BIO_free(bio);
         if (dh == NULL) {
             h2o_configurator_errprintf(cmd, dh_file, "failed to load dhparam file:%s\n", dh_file->data.scalar);
-            ERR_print_errors_fp(stderr);
+            ERR_print_errors_cb(on_openssl_print_errors, stderr);
             goto Error;
         }
         SSL_CTX_set_tmp_dh(ssl_ctx, dh);
