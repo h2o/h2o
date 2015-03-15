@@ -62,6 +62,7 @@ struct listener_ssl_config_t {
     H2O_VECTOR(h2o_iovec_t) hostnames;
     char *certificate_file;
     SSL_CTX *ctx;
+#ifndef OPENSSL_NO_OCSP
     struct {
         uint64_t interval;
         unsigned max_failures;
@@ -72,6 +73,7 @@ struct listener_ssl_config_t {
             h2o_buffer_t *data;
         } response;
     } ocsp_stapling;
+#endif
 };
 
 struct listener_config_t {
@@ -209,6 +211,8 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
     return SSL_TLSEXT_ERR_OK;
 }
 
+#ifndef OPENSSL_NO_OCSP
+
 static void update_ocsp_stapling(struct listener_ssl_config_t *ssl_conf, h2o_buffer_t *resp)
 {
     pthread_mutex_lock(&ssl_conf->ocsp_stapling.response.mutex);
@@ -335,6 +339,8 @@ static int on_ocsp_stapling_callback(SSL *ssl, void *_ssl_conf)
         return SSL_TLSEXT_ERR_NOACK;
     }
 }
+
+#endif
 
 static void listener_setup_ssl_add_host(struct listener_ssl_config_t *ssl_config, h2o_iovec_t host)
 {
@@ -522,6 +528,10 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         }
         ssl_config->ctx = ssl_ctx;
         ssl_config->certificate_file = h2o_strdup(NULL, certificate_file->data.scalar, SIZE_MAX).base;
+#ifdef OPENSSL_NO_OCSP
+        if (ocsp_update_interval != 0)
+            fprintf(stderr, "[OCSP Stapling] disabled (not support by the SSL library)\n");
+#else
         SSL_CTX_set_tlsext_status_cb(ssl_ctx, on_ocsp_stapling_callback);
         SSL_CTX_set_tlsext_status_arg(ssl_ctx, ssl_config);
         pthread_mutex_init(&ssl_config->ocsp_stapling.response.mutex, NULL);
@@ -553,6 +563,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 pthread_create(&ssl_config->ocsp_stapling.updater_tid, NULL, ocsp_updater_thread, ssl_config);
             }
         }
+#endif
     }
 
     return 0;
