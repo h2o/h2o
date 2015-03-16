@@ -144,8 +144,8 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
         h2o_headers_register(ctx->pathconf, self->cmds->entries);
     } else {
         free(self->cmds->entries);
-        memset(self->cmds, 0, sizeof(*self->cmds));
     }
+    memset(self->cmds, 0, sizeof(*self->cmds));
 
     --self->cmds;
     return 0;
