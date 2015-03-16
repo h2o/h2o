@@ -9,7 +9,7 @@ use t::Util;
 my $port = empty_port();
 
 # spawn server that only accepts RC4-MD5
-my ($conffh, $conffn) = tempfile();
+my ($conffh, $conffn) = tempfile(UNLINK => 1);
 print $conffh <<"EOT";
 listen:
   host: 127.0.0.1

@@ -8,7 +8,7 @@ use t::Util;
 plan skip_all => 'nc not found'
     unless prog_exists('nc');
 
-my $tempdir = tempdir(CELANUP => 1);
+my $tempdir = tempdir(CLEANUP => 1);
 my $sock_path = "$tempdir/h2o.sock";
 
 my $server = spawn_h2o(<< "EOT");

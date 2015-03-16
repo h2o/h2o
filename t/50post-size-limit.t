@@ -46,14 +46,14 @@ subtest 'http2' => sub {
         my ($proto, $opts, $port) = @_;
         my $url = "$proto://127.0.0.1:$port/";
         {
-            my ($tempfh, $tempfn) = tempfile;
+            my ($tempfh, $tempfn) = tempfile(UNLINK => 1);
             print $tempfh 'hello';
             close $tempfh;
             my $resp = `nghttp $opts -d $tempfn -s $url 2>&1`;
             like $resp, qr/(^|\s)405(\s|$)/im, 'shorter than the limit';
         }
         {
-            my ($tempfh, $tempfn) = tempfile;
+            my ($tempfh, $tempfn) = tempfile(UNLINK => 1);
             print $tempfh 'helloworld';
             close $tempfh;
             my $resp = `nghttp $opts -v -d $tempfn -s $url 2>&1`;

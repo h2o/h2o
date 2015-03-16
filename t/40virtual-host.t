@@ -11,7 +11,7 @@ plan skip_all => 'curl not found'
 
 # create config
 my ($global_port, $alternate_port) = empty_ports(2);
-my ($conffh, $conffn) = tempfile();
+my ($conffh, $conffn) = tempfile(UNLINK => 1);
 print $conffh <<"EOT";
 listen:
   host: 127.0.0.1

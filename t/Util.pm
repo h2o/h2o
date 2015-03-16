@@ -91,7 +91,7 @@ sub spawn_h2o {
     my ($port, $tls_port) = empty_ports(2);
 
     # setup the configuration file
-    my ($conffh, $conffn) = tempfile();
+    my ($conffh, $conffn) = tempfile(UNLINK => 1);
     $conf = $conf->($port, $tls_port)
         if ref $conf eq 'CODE';
     if (ref $conf eq 'HASH') {
@@ -140,7 +140,7 @@ sub empty_ports {
 
 sub create_data_file {
     my $sz = shift;
-    my ($fh, $fn) = tempfile();
+    my ($fh, $fn) = tempfile(UNLINK => 1);
     print $fh '0' x $sz;
     close $fh;
     return $fn;
@@ -161,7 +161,7 @@ sub prog_exists {
 
 sub run_prog {
     my $cmd = shift;
-    my ($tempfh, $tempfn) = tempfile();
+    my ($tempfh, $tempfn) = tempfile(UNLINK => 1);
     my $stderr = `$cmd 2>&1 > $tempfn`;
     my $stdout = do { local $/; <$tempfh> };
     return ($stderr, $stdout);
