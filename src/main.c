@@ -404,7 +404,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         }                                                                                                                          \
         p = value;                                                                                                                 \
         continue;                                                                                                                  \
-    } else
+    }
             FETCH_PROPERTY("certificate-file", certificate_file);
             FETCH_PROPERTY("key-file", key_file);
             FETCH_PROPERTY("minimum-version", minimum_version);
@@ -413,6 +413,17 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             FETCH_PROPERTY("ocsp-update-interval", ocsp_update_interval_node);
             FETCH_PROPERTY("ocsp-max-failures", ocsp_max_failures_node);
             FETCH_PROPERTY("dh-file", dh_file);
+            if (strcmp(key->data.scalar, "cipher-preference") == 0) {
+                if (value->type == YOML_TYPE_SCALAR && strcasecmp(value->data.scalar, "client") == 0) {
+                    ssl_options &= ~SSL_OP_CIPHER_SERVER_PREFERENCE;
+                } else if (value->type == YOML_TYPE_SCALAR && strcasecmp(value->data.scalar, "server") == 0) {
+                    ssl_options |= SSL_OP_CIPHER_SERVER_PREFERENCE;
+                } else {
+                    h2o_configurator_errprintf(cmd, value, "property of `cipher-preference` must be either of: `client`, `server`");
+                    return -1;
+                }
+                continue;
+            }
             h2o_configurator_errprintf(cmd, key, "unknown property: %s", key->data.scalar);
             return -1;
 #undef FETCH_PROPERTY
@@ -1173,21 +1184,24 @@ static void setup_configurators(void)
                                         "     port: incoming port number or service name (mandatory)\n"
                                         "     host: incoming address (default: any address)\n"
                                         "     ssl: mapping of SSL configuration using the keys below (default: none)\n"
-                                        "       certificate-file: path of the SSL certificate file (mandatory)\n"
-                                        "       key-file:         path of the SSL private key file (mandatory)\n"
-                                        "       minimum-version:  minimum protocol version, should be one of: SSLv2,\n"
-                                        "                         SSLv3, TLSv1, TLSv1.1, TLSv1.2 (default: TLSv1)\n"
-                                        "       cipher-suite:     list of cipher suites to be passed to OpenSSL via\n"
-                                        "                         SSL_CTX_set_cipher_list (optional)\n"
-                                        "       dh-file:          PEM file of dhparam to use (optional)\n"
+                                        "       certificate-file:  path of the SSL certificate file (mandatory)\n"
+                                        "       key-file:          path of the SSL private key file (mandatory)\n"
+                                        "       minimum-version:   minimum protocol version, should be one of:\n"
+                                        "                          `SSLv2`, `SSLv3`, `TLSv1`, `TLSv1.1`, `TLSv1.2`\n"
+                                        "                          (default: TLSv1)\n"
+                                        "       cipher-suite:      list of cipher suites to be passed to OpenSSL via\n"
+                                        "                          SSL_CTX_set_cipher_list (optional)\n"
+                                        "       cipher-preference: side of the list that should be used for\n"
+                                        "                          selecting the cipher-suite; should be either of:\n"
+                                        "                          `client`, `server` (default: client)\n"
+                                        "       dh-file:           PEM file of dhparam to use (optional)\n"
                                         "       ocsp-update-interval:\n"
-                                        "                         interval for updating the OCSP stapling data (in\n"
-                                        "                         seconds), or set to zero to disable OCSP stapling\n"
-                                        "                         (default: 14400 = 4 hours)\n"
-                                        "       ocsp-max-failures:\n"
-                                        "                         number of consecutive OCSP queriy failures before\n"
-                                        "                         stopping to send OCSP stapling data to the client\n"
-                                        "                         (default: 3)\n"
+                                        "                          interval for updating the OCSP stapling data (in\n"
+                                        "                          seconds), or set to zero to disable OCSP stapling\n"
+                                        "                          (default: 14400 = 4 hours)\n"
+                                        "       ocsp-max-failures: number of consecutive OCSP queriy failures before\n"
+                                        "                          stopping to send OCSP stapling data to the client\n"
+                                        "                          (default: 3)\n"
                                         " - if the value is a sequence, each element should be either a scalar or a\n"
                                         "   mapping that conform to the requirements above");
     }
