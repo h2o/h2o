@@ -137,7 +137,12 @@ void h2o_headers_register(h2o_pathconf_t *pathconf, h2o_headers_command_t *cmds)
 
 int h2o_headers_is_prohibited_name(const h2o_token_t *token)
 {
+    /* prohibit connection-specific headers */
     if (token == H2O_TOKEN_CONNECTION || token == H2O_TOKEN_CONTENT_LENGTH || token == H2O_TOKEN_TRANSFER_ENCODING)
         return 1;
+    /* prohibit headers added at protocol layer */
+    if (token == H2O_TOKEN_DATE || token == H2O_TOKEN_SERVER)
+        return 1;
+    /* all others are permitted */
     return 0;
 }
