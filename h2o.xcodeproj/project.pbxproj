@@ -40,6 +40,14 @@
 		1065E70C19BF664300686E72 /* evloop.h in Headers */ = {isa = PBXBuildFile; fileRef = 1065E70419BF145700686E72 /* evloop.h */; };
 		1065E70D19BF6D4600686E72 /* uv-binding.h in Headers */ = {isa = PBXBuildFile; fileRef = 1065E70619BF14E500686E72 /* uv-binding.h */; };
 		1065E70E19BF6D9400686E72 /* uv-binding.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 1065E70719BF17FE00686E72 /* uv-binding.c.h */; };
+		10756E2A1AC126420009BF57 /* api.c in Sources */ = {isa = PBXBuildFile; fileRef = 10756E261AC126420009BF57 /* api.c */; };
+		10756E2B1AC126420009BF57 /* dumper.c in Sources */ = {isa = PBXBuildFile; fileRef = 10756E271AC126420009BF57 /* dumper.c */; };
+		10756E2C1AC126420009BF57 /* emitter.c in Sources */ = {isa = PBXBuildFile; fileRef = 10756E281AC126420009BF57 /* emitter.c */; };
+		10756E2D1AC126420009BF57 /* loader.c in Sources */ = {isa = PBXBuildFile; fileRef = 10756E291AC126420009BF57 /* loader.c */; };
+		10756E331AC1264D0009BF57 /* parser.c in Sources */ = {isa = PBXBuildFile; fileRef = 10756E2E1AC1264D0009BF57 /* parser.c */; };
+		10756E341AC1264D0009BF57 /* reader.c in Sources */ = {isa = PBXBuildFile; fileRef = 10756E2F1AC1264D0009BF57 /* reader.c */; };
+		10756E351AC1264D0009BF57 /* scanner.c in Sources */ = {isa = PBXBuildFile; fileRef = 10756E301AC1264D0009BF57 /* scanner.c */; };
+		10756E361AC1264D0009BF57 /* writer.c in Sources */ = {isa = PBXBuildFile; fileRef = 10756E311AC1264D0009BF57 /* writer.c */; };
 		1079236A19A3210E00C52AD6 /* khash.h in Headers */ = {isa = PBXBuildFile; fileRef = 1079232619A3210D00C52AD6 /* khash.h */; };
 		1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */ = {isa = PBXBuildFile; fileRef = 1079235A19A3210D00C52AD6 /* picohttpparser.c */; };
 		1079239719A3210E00C52AD6 /* picohttpparser.h in Headers */ = {isa = PBXBuildFile; fileRef = 1079235B19A3210D00C52AD6 /* picohttpparser.h */; };
@@ -261,6 +269,16 @@
 		1065E70419BF145700686E72 /* evloop.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = evloop.h; sourceTree = "<group>"; };
 		1065E70619BF14E500686E72 /* uv-binding.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "uv-binding.h"; sourceTree = "<group>"; };
 		1065E70719BF17FE00686E72 /* uv-binding.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "uv-binding.c.h"; sourceTree = "<group>"; };
+		10756E251AC126250009BF57 /* yaml.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = yaml.h; sourceTree = "<group>"; };
+		10756E261AC126420009BF57 /* api.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = api.c; sourceTree = "<group>"; };
+		10756E271AC126420009BF57 /* dumper.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = dumper.c; sourceTree = "<group>"; };
+		10756E281AC126420009BF57 /* emitter.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = emitter.c; sourceTree = "<group>"; };
+		10756E291AC126420009BF57 /* loader.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = loader.c; sourceTree = "<group>"; };
+		10756E2E1AC1264D0009BF57 /* parser.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = parser.c; sourceTree = "<group>"; };
+		10756E2F1AC1264D0009BF57 /* reader.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = reader.c; sourceTree = "<group>"; };
+		10756E301AC1264D0009BF57 /* scanner.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = scanner.c; sourceTree = "<group>"; };
+		10756E311AC1264D0009BF57 /* writer.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = writer.c; sourceTree = "<group>"; };
+		10756E321AC1264D0009BF57 /* yaml_private.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = yaml_private.h; sourceTree = "<group>"; };
 		1079231519A320A700C52AD6 /* libh2o.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libh2o.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		1079232619A3210D00C52AD6 /* khash.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = khash.h; sourceTree = "<group>"; };
 		1079235A19A3210D00C52AD6 /* picohttpparser.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picohttpparser.c; sourceTree = "<group>"; };
@@ -592,6 +610,39 @@
 			path = socket;
 			sourceTree = "<group>";
 		};
+		10756E221AC125E00009BF57 /* yaml */ = {
+			isa = PBXGroup;
+			children = (
+				10756E231AC126020009BF57 /* include */,
+				10756E241AC126080009BF57 /* src */,
+			);
+			path = yaml;
+			sourceTree = "<group>";
+		};
+		10756E231AC126020009BF57 /* include */ = {
+			isa = PBXGroup;
+			children = (
+				10756E251AC126250009BF57 /* yaml.h */,
+			);
+			path = include;
+			sourceTree = "<group>";
+		};
+		10756E241AC126080009BF57 /* src */ = {
+			isa = PBXGroup;
+			children = (
+				10756E261AC126420009BF57 /* api.c */,
+				10756E271AC126420009BF57 /* dumper.c */,
+				10756E281AC126420009BF57 /* emitter.c */,
+				10756E291AC126420009BF57 /* loader.c */,
+				10756E2E1AC1264D0009BF57 /* parser.c */,
+				10756E2F1AC1264D0009BF57 /* reader.c */,
+				10756E301AC1264D0009BF57 /* scanner.c */,
+				10756E311AC1264D0009BF57 /* writer.c */,
+				10756E321AC1264D0009BF57 /* yaml_private.h */,
+			);
+			path = src;
+			sourceTree = "<group>";
+		};
 		1079230C19A320A700C52AD6 = {
 			isa = PBXGroup;
 			children = (
@@ -629,6 +680,7 @@
 				1079231F19A3210D00C52AD6 /* klib */,
 				1079235619A3210D00C52AD6 /* picohttpparser */,
 				10F417FB19C2D2B400B6E31A /* picotest */,
+				10756E221AC125E00009BF57 /* yaml */,
 				10F417FC19C2D2BA00B6E31A /* yoml */,
 			);
 			path = deps;
@@ -1165,7 +1217,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				10756E2C1AC126420009BF57 /* emitter.c in Sources */,
+				10756E2A1AC126420009BF57 /* api.c in Sources */,
+				10756E2B1AC126420009BF57 /* dumper.c in Sources */,
+				10756E2D1AC126420009BF57 /* loader.c in Sources */,
+				10756E361AC1264D0009BF57 /* writer.c in Sources */,
+				10756E351AC1264D0009BF57 /* scanner.c in Sources */,
+				10756E331AC1264D0009BF57 /* parser.c in Sources */,
 				10F417D619C190F800B6E31A /* main.c in Sources */,
+				10756E341AC1264D0009BF57 /* reader.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1928,7 +1988,6 @@
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
-					"-lyaml",
 				);
 				PRODUCT_NAME = h2o;
 			};
@@ -1957,7 +2016,6 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
-					"-lyaml",
 				);
 				PRODUCT_NAME = h2o;
 			};
@@ -1981,7 +2039,6 @@
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
-					"-lyaml",
 				);
 				PRODUCT_NAME = h2o;
 			};
@@ -2006,7 +2063,6 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
-					"-lyaml",
 				);
 				PRODUCT_NAME = h2o;
 			};
