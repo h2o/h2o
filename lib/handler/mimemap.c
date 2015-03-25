@@ -62,7 +62,7 @@ h2o_mimemap_t *h2o_mimemap_create()
 
     { /* setup the tiny default */
         static const char *default_types[] = {"txt", "text/plain", "html", "text/html", "gif", "image/gif", "png", "image/png",
-                                              "jpg", "image/jpeg", "jpeg", "image/jpeg",
+                                              "jpg", "image/jpeg", "jpeg", "image/jpeg", "webp", "image/webp",
                                               "css", "text/css", "js", "application/javascript",
                                               "json", "application/json", NULL};
         const char **p;
