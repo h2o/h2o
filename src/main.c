@@ -482,6 +482,11 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         }
     }
 
+/* disable tls compression to avoid "CRIME" attacks (see http://en.wikipedia.org/wiki/CRIME) */
+#ifdef SSL_OP_NO_COMPRESSION
+    ssl_options |= SSL_OP_NO_COMPRESSION;
+#endif
+
     /* setup */
     init_openssl();
     ssl_ctx = SSL_CTX_new(SSLv23_server_method());
