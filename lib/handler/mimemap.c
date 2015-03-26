@@ -61,9 +61,13 @@ h2o_mimemap_t *h2o_mimemap_create()
     mimemap->default_type = dupref("application/octet-stream");
 
     { /* setup the tiny default */
-        static const char *default_types[] = {"txt", "text/plain", "html", "text/html", "gif", "image/gif", "png", "image/png",
-                                              "jpg", "image/jpeg", "jpeg", "image/jpeg", "css", "text/css", "js",
-                                              "application/javascript", "json", "application/json", NULL};
+        static const char *default_types[] = {
+#define MIMEMAP(ext, mime) ext, mime
+            MIMEMAP("txt", "text/plain"), MIMEMAP("html", "text/html"), MIMEMAP("gif", "image/gif"), MIMEMAP("png", "image/png"),
+            MIMEMAP("jpg", "image/jpeg"), MIMEMAP("jpeg", "image/jpeg"), MIMEMAP("webp", "image/webp"), MIMEMAP("css", "text/css"),
+            MIMEMAP("js", "application/javascript"), MIMEMAP("json", "application/json"),
+#undef MIMEMAP
+            NULL};
         const char **p;
         for (p = default_types; *p != NULL; p += 2)
             h2o_mimemap_set_type(mimemap, p[0], p[1]);
