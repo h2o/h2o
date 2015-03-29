@@ -1299,6 +1299,9 @@ int main(int argc, char **argv)
                 usage_print_directives(&conf.globalconf);
                 exit(0);
                 break;
+            case ':':
+            case '?':
+                exit(EX_CONFIG);
             default:
                 assert(0);
                 break;
