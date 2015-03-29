@@ -91,9 +91,15 @@ struct listener_ctx_t {
     h2o_socket_t *sock;
 };
 
+typedef enum en_run_mode_t {
+    RUN_MODE_WORKER = 0,
+    RUN_MODE_MASTER,
+    RUN_MODE_TEST,
+} run_mode_t;
+
 static struct {
     h2o_globalconf_t globalconf;
-    int dry_run;
+    run_mode_t run_mode;
     struct {
         int *fds;
         char *bound_fd_map; /* has `num_fds` elements, set to 1 if fd[index] was bound to one of the listeners */
@@ -573,7 +579,17 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         ssl_config->ocsp_stapling.cmd =
             ocsp_update_cmd != NULL ? strdup(ocsp_update_cmd->data.scalar) : "share/h2o/fetch-ocsp-response";
         if (ocsp_update_interval != 0) {
-            if (conf.dry_run) {
+            switch (conf.run_mode) {
+            case RUN_MODE_WORKER:
+                ssl_config->ocsp_stapling.interval =
+                    ocsp_update_interval; /* is also used as a flag for indicating if the updater thread was spawned */
+                ssl_config->ocsp_stapling.max_failures = ocsp_max_failures;
+                pthread_create(&ssl_config->ocsp_stapling.updater_tid, NULL, ocsp_updater_thread, ssl_config);
+                break;
+            case RUN_MODE_MASTER:
+                /* nothing to do */
+                break;
+            case RUN_MODE_TEST: {
                 h2o_buffer_t *respbuf;
                 fprintf(stderr, "[OCSP Stapling] testing for certificate file:%s\n", certificate_file->data.scalar);
                 switch (get_ocsp_response(certificate_file->data.scalar, ssl_config->ocsp_stapling.cmd, &respbuf)) {
@@ -591,11 +607,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                                certificate_file->data.scalar);
                     break;
                 }
-            } else {
-                ssl_config->ocsp_stapling.interval =
-                    ocsp_update_interval; /* is also used as a flag for indicating if the updater thread was spawned */
-                ssl_config->ocsp_stapling.max_failures = ocsp_max_failures;
-                pthread_create(&ssl_config->ocsp_stapling.updater_tid, NULL, ocsp_updater_thread, ssl_config);
+            } break;
             }
         }
 #endif
@@ -798,16 +810,22 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         listener_is_new = 0;
         if ((listener = find_listener((void *)&sun, sizeof(sun))) == NULL) {
             int fd;
-            if (conf.server_starter.fds != NULL) {
-                if ((fd = find_listener_from_server_starter((void *)&sun)) == -1) {
-                    h2o_configurator_errprintf(cmd, node, "unix socket:%s is not being bound to the server\n", sun.sun_path);
-                    return -1;
+            switch (conf.run_mode) {
+            case RUN_MODE_WORKER:
+                if (conf.server_starter.fds != NULL) {
+                    if ((fd = find_listener_from_server_starter((void *)&sun)) == -1) {
+                        h2o_configurator_errprintf(cmd, node, "unix socket:%s is not being bound to the server\n", sun.sun_path);
+                        return -1;
+                    }
+                } else {
+                    if ((fd = open_unix_listener(cmd, node, &sun)) == -1)
+                        return -1;
                 }
-            } else if (conf.dry_run) {
+                break;
+            case RUN_MODE_MASTER:
+            case RUN_MODE_TEST:
                 fd = -1;
-            } else {
-                if ((fd = open_unix_listener(cmd, node, &sun)) == -1)
-                    return -1;
+                break;
             }
             listener = add_listener(fd, (struct sockaddr *)&sun, sizeof(sun), ctx->hostconf == NULL);
             listener_is_new = 1;
@@ -840,18 +858,24 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             int listener_is_new = 0;
             if (listener == NULL) {
                 int fd;
-                if (conf.server_starter.fds != NULL) {
-                    if ((fd = find_listener_from_server_starter(ai->ai_addr)) == -1) {
-                        h2o_configurator_errprintf(cmd, node, "tcp socket:%s:%s is not being bound to the server\n", hostname,
-                                                   servname);
-                        return -1;
+                switch (conf.run_mode) {
+                case RUN_MODE_WORKER:
+                    if (conf.server_starter.fds != NULL) {
+                        if ((fd = find_listener_from_server_starter(ai->ai_addr)) == -1) {
+                            h2o_configurator_errprintf(cmd, node, "tcp socket:%s:%s is not being bound to the server\n", hostname,
+                                                       servname);
+                            return -1;
+                        }
+                    } else {
+                        if ((fd = open_tcp_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
+                                                    ai->ai_addr, ai->ai_addrlen)) == -1)
+                            return -1;
                     }
-                } else if (conf.dry_run) {
+                    break;
+                case RUN_MODE_MASTER:
+                case RUN_MODE_TEST:
                     fd = -1;
-                } else {
-                    if ((fd = open_tcp_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
-                                                ai->ai_addr, ai->ai_addrlen)) == -1)
-                        return -1;
+                    break;
                 }
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL);
                 listener_is_new = 1;
@@ -1190,6 +1214,52 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     }
 }
 
+static char **build_server_starter_argv(const char *h2o_cmd, const char *config_file)
+{
+    H2O_VECTOR(char *)args = {};
+
+    h2o_vector_reserve(NULL, (void *)&args, sizeof(args.entries[0]), 1);
+    args.entries[args.size++] = get_cmd_path("share/h2o/start_server");
+
+    size_t i;
+    for (i = 0; i != conf.num_listeners; ++i) {
+        char *newarg;
+        switch (conf.listeners[i]->addr.ss_family) {
+        default: {
+            char host[NI_MAXHOST], serv[NI_MAXSERV];
+            int err;
+            if ((err = getnameinfo((void *)&conf.listeners[i]->addr, conf.listeners[i]->addrlen, host, sizeof(host), serv,
+                                   sizeof(serv), NI_NUMERICHOST | NI_NUMERICSERV)) != 0) {
+                fprintf(stderr, "failed to stringify the address of %zu-th listen directive:%s\n", i, gai_strerror(err));
+                exit(EX_OSERR);
+            }
+            newarg = h2o_mem_alloc(sizeof("--port=[]:") + strlen(host) + strlen(serv));
+            if (strchr(host, ':') != NULL) {
+                sprintf(newarg, "--port=[%s]:%s", host, serv);
+            } else {
+                sprintf(newarg, "--port=%s:%s", host, serv);
+            }
+        } break;
+        case AF_UNIX: {
+            struct sockaddr_un *sun = (void *)&conf.listeners[i]->addr;
+            newarg = h2o_mem_alloc(sizeof("--path=") + strlen(sun->sun_path));
+            sprintf(newarg, "--path=%s", sun->sun_path);
+        } break;
+        }
+        h2o_vector_reserve(NULL, (void *)&args, sizeof(args.entries[0]), args.size + 1);
+        args.entries[args.size++] = newarg;
+    }
+
+    h2o_vector_reserve(NULL, (void *)&args, sizeof(args.entries[0]), args.size + 5);
+    args.entries[args.size++] = "--";
+    args.entries[args.size++] = (char *)h2o_cmd;
+    args.entries[args.size++] = "-c";
+    args.entries[args.size++] = (char *)config_file;
+    args.entries[args.size] = NULL;
+
+    return args.entries;
+}
+
 static void setup_configurators(void)
 {
     h2o_config_init(&conf.globalconf);
@@ -1255,7 +1325,7 @@ static void setup_configurators(void)
 
 int main(int argc, char **argv)
 {
-    const char *opt_config_file = "h2o.conf";
+    const char *cmd = argv[0], *opt_config_file = "h2o.conf";
 
     conf.num_threads = h2o_numproc();
     h2o_hostinfo_max_threads = H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS;
@@ -1264,17 +1334,34 @@ int main(int argc, char **argv)
     { /* parse options */
         int ch;
         static struct option longopts[] = {{"conf", required_argument, NULL, 'c'},
+                                           {"mode", required_argument, NULL, 'm'},
                                            {"test", no_argument, NULL, 't'},
                                            {"version", no_argument, NULL, 'v'},
                                            {"help", no_argument, NULL, 'h'},
                                            {NULL, 0, NULL, 0}};
-        while ((ch = getopt_long(argc, argv, "c:tvh", longopts, NULL)) != -1) {
+        while ((ch = getopt_long(argc, argv, "c:m:tvh", longopts, NULL)) != -1) {
             switch (ch) {
             case 'c':
                 opt_config_file = optarg;
                 break;
+            case 'm':
+                if (strcmp(optarg, "worker") == 0) {
+                    conf.run_mode = RUN_MODE_WORKER;
+                } else if (strcmp(optarg, "test") == 0) {
+                    conf.run_mode = RUN_MODE_TEST;
+                } else if (strcmp(optarg, "master") == 0) {
+                    if (getenv("SERVER_STARTER_PORT") != NULL) {
+                        fprintf(stderr,
+                                "refusing to start in `master` mode, environment variable SERVER_STARTER_PORT is already set\n");
+                        exit(EX_SOFTWARE);
+                    }
+                    conf.run_mode = RUN_MODE_MASTER;
+                } else {
+                    fprintf(stderr, "unknown mode:%s\n", optarg);
+                }
+                break;
             case 't':
-                conf.dry_run = 1;
+                conf.run_mode = RUN_MODE_TEST;
                 break;
             case 'v':
                 printf("h2o version " H2O_VERSION "\n");
@@ -1286,10 +1373,19 @@ int main(int argc, char **argv)
                        "  h2o [options]\n"
                        "\n"
                        "Options:\n"
-                       "  -c, --conf FILE  configuration file (default: h2o.conf)\n"
-                       "  -t, --test       tests the configuration\n"
-                       "  -v, --version    prints the version number\n"
-                       "  -h, --help       print this help\n"
+                       "  -c, --conf FILE    configuration file (default: h2o.conf)\n"
+                       "  -m, --mode <mode>  specifies one of the following mode\n"
+                       "                     - worker: invoked process handles incoming connections\n"
+                       "                               (default)\n"
+                       "                     - master: invoked process becomes a master process (using\n"
+                       "                               the `share/h2o/start_server` command) and spawns\n"
+                       "                               a worker process for handling incoming\n"
+                       "                               connections. Users may send SIGHUP to the master\n"
+                       "                               process to reconfigure or upgrade the server.\n"
+                       "                     - test:   tests the configuration and exits\n"
+                       "  -t, --test         synonym of `--mode=test`\n"
+                       "  -v, --version      prints the version number\n"
+                       "  -h, --help         print this help\n"
                        "\n"
                        "Configuration File:\n"
                        "  The configuration file should be written in YAML format.  Below is the list\n"
@@ -1344,7 +1440,16 @@ int main(int argc, char **argv)
 
     unsetenv("SERVER_STARTER_PORT");
 
-    if (conf.dry_run) {
+    switch (conf.run_mode) {
+    case RUN_MODE_WORKER:
+        break;
+    case RUN_MODE_MASTER: { /* start server-starter */
+        char **args = build_server_starter_argv(cmd, opt_config_file);
+        execvp(args[0], args);
+        fprintf(stderr, "failed to spawn %s:%s\n", args[0], strerror(errno));
+        return EX_CONFIG;
+    } break;
+    case RUN_MODE_TEST:
         printf("configuration OK\n");
         return 0;
     }
