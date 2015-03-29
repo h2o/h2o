@@ -140,6 +140,32 @@ static void set_cloexec(int fd)
     }
 }
 
+static char *get_cmd_path(const char *cmd)
+{
+    char *root, *cmd_fullpath;
+
+    /* just return the cmd (being strdup'ed) in case we do not need to prefix the value */
+    if (cmd[0] == '/' || strchr(cmd, '/') == NULL)
+        goto ReturnOrig;
+
+    /* obtain root */
+    if ((root = getenv("H2O_ROOT")) == NULL) {
+#ifdef H2O_ROOT
+        root = H2O_ROOT;
+#endif
+        if (root == NULL)
+            goto ReturnOrig;
+    }
+
+    /* build full-path and return */
+    cmd_fullpath = h2o_mem_alloc(strlen(root) + strlen(cmd) + 2);
+    sprintf(cmd_fullpath, "%s/%s", root, cmd);
+    return cmd_fullpath;
+
+ReturnOrig:
+    return h2o_strdup(NULL, cmd, SIZE_MAX).base;
+}
+
 static int on_openssl_print_errors(const char *str, size_t len, void *fp)
 {
     fwrite(str, 1, len, fp);
@@ -230,44 +256,36 @@ static void update_ocsp_stapling(struct listener_ssl_config_t *ssl_conf, h2o_buf
 
 static int get_ocsp_response(const char *cert_fn, const char *cmd, h2o_buffer_t **resp)
 {
-    char *argv[] = {(char *)cmd, (char *)cert_fn, NULL};
-    int child_status;
+    char *cmd_fullpath = get_cmd_path(cmd), *argv[] = {cmd_fullpath, (char *)cert_fn, NULL};
+    int child_status, ret;
 
-    if (cmd[0] != '/' && strchr(cmd, '/') != NULL) {
-        /* is relative path */
-        char *h2o_root = getenv("H2O_ROOT");
-#ifdef H2O_ROOT
-        if (h2o_root == NULL)
-            h2o_root = H2O_ROOT;
-#endif
-        if (h2o_root != NULL) {
-            char *cmd_fullpath = alloca(strlen(h2o_root) + strlen(cmd) + 2);
-            sprintf(cmd_fullpath, "%s/%s", h2o_root, cmd);
-            cmd = cmd_fullpath;
-            argv[0] = cmd_fullpath;
-        }
-    }
-
-    if (h2o_read_command(cmd, argv, resp, &child_status) != 0) {
+    if (h2o_read_command(cmd_fullpath, argv, resp, &child_status) != 0) {
         fprintf(stderr, "[OCSP Stapling] failed to execute %s:%s\n", cmd, strerror(errno));
         switch (errno) {
         case EACCES:
         case ENOENT:
         case ENOEXEC:
             /* permanent errors */
-            return EX_CONFIG;
+            ret = EX_CONFIG;
+            goto Exit;
         default:
-            return EX_TEMPFAIL;
+            ret = EX_TEMPFAIL;
+            goto Exit;
         }
     }
 
     if (!(WIFEXITED(child_status) && WEXITSTATUS(child_status) == 0))
         h2o_buffer_dispose(resp);
     if (!WIFEXITED(child_status)) {
-        fprintf(stderr, "[OCSP Stapling] command %s was killed by signal %d\n", cmd, WTERMSIG(child_status));
-        return EX_TEMPFAIL;
+        fprintf(stderr, "[OCSP Stapling] command %s was killed by signal %d\n", cmd_fullpath, WTERMSIG(child_status));
+        ret = EX_TEMPFAIL;
+        goto Exit;
     }
-    return WEXITSTATUS(child_status);
+    ret = WEXITSTATUS(child_status);
+
+Exit:
+    free(cmd_fullpath);
+    return ret;
 }
 
 static void *ocsp_updater_thread(void *_ssl_conf)
