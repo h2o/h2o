@@ -1217,11 +1217,17 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
 static char **build_server_starter_argv(const char *h2o_cmd, const char *config_file)
 {
     H2O_VECTOR(char *)args = {};
+    size_t i;
 
     h2o_vector_reserve(NULL, (void *)&args, sizeof(args.entries[0]), 1);
     args.entries[args.size++] = get_cmd_path("share/h2o/start_server");
 
-    size_t i;
+    if (conf.pid_file != NULL) {
+        h2o_vector_reserve(NULL, (void *)&args, sizeof(args.entries[0]), args.size + 1);
+        args.entries[args.size++] =
+            h2o_concat(NULL, h2o_iovec_init(H2O_STRLIT("--pid-file=")), h2o_iovec_init(conf.pid_file, strlen(conf.pid_file))).base;
+    }
+
     for (i = 0; i != conf.num_listeners; ++i) {
         char *newarg;
         switch (conf.listeners[i]->addr.ss_family) {
@@ -1440,11 +1446,13 @@ int main(int argc, char **argv)
 
     unsetenv("SERVER_STARTER_PORT");
 
+    /* handle run_mode == MASTER|TEST */
     switch (conf.run_mode) {
     case RUN_MODE_WORKER:
         break;
     case RUN_MODE_MASTER: { /* start server-starter */
         char **args = build_server_starter_argv(cmd, opt_config_file);
+        setenv("H2O_NO_PID_FILE", "", 1);
         execvp(args[0], args);
         fprintf(stderr, "failed to spawn %s:%s\n", args[0], strerror(errno));
         return EX_CONFIG;
@@ -1453,6 +1461,10 @@ int main(int argc, char **argv)
         printf("configuration OK\n");
         return 0;
     }
+
+    /* do not emit pid file if instructed so by the environment variable */
+    if (getenv("H2O_NO_PID_FILE") != NULL)
+        conf.pid_file = NULL;
 
     { /* raise RLIMIT_NOFILE */
         struct rlimit limit;
