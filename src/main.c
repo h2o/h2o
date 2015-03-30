@@ -1197,21 +1197,21 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     if (thread_index == 0)
         fprintf(stderr, "received SIGTERM, gracefully shutting down\n");
 
-    /* shutdown requested, close the listeners, notify the protocol handlers, and continue running the loop */
+    /* shutdown requested, close the listeners, notify the protocol handlers */
     for (i = 0; i != conf.num_listeners; ++i) {
         h2o_socket_close(listeners[i].sock);
         listeners[i].sock = NULL;
     }
     h2o_context_request_shutdown(&conf.threads[thread_index].ctx);
-    while (1) {
-        if (num_connections(0) == 0) {
-            /* terminate the process once the number of connections becomes zero */
-            if (conf.pid_file != NULL)
-                unlink(conf.pid_file);
-            _exit(0);
-        }
+
+    /* wait until all the connection gets closed */
+    while (num_connections(0) != 0)
         h2o_evloop_run(conf.threads[thread_index].ctx.loop);
-    }
+
+    /* the process that detects num_connections becoming zero performs the last cleanup */
+    if (conf.pid_file != NULL)
+        unlink(conf.pid_file);
+    _exit(0);
 }
 
 static char **build_server_starter_argv(const char *h2o_cmd, const char *config_file)
