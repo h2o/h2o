@@ -85,7 +85,7 @@ sub spawn_server {
 # returns a hash containing `port`, `tls_port`, `guard`
 sub spawn_h2o {
     my ($conf) = @_;
-    my @prefix;
+    my @opts;
 
     # decide the port numbers
     my ($port, $tls_port) = empty_ports(2);
@@ -95,8 +95,8 @@ sub spawn_h2o {
     $conf = $conf->($port, $tls_port)
         if ref $conf eq 'CODE';
     if (ref $conf eq 'HASH') {
-        @prefix = @{$conf->{prefix}}
-            if $conf->{prefix};
+        @opts = @{$conf->{opts}}
+            if $conf->{opts};
         $conf = $conf->{conf};
     }
     print $conffh <<"EOT";
@@ -114,7 +114,7 @@ EOT
 
     # spawn the server
     my ($guard, $pid) = spawn_server(
-        argv     => [ @prefix, bindir() . "/h2o", "-c", $conffn ],
+        argv     => [ bindir() . "/h2o", "-c", $conffn, @opts ],
         is_ready => sub {
             check_port($port) && check_port($tls_port);
         },

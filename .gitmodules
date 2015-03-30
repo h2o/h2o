@@ -1,3 +1,6 @@
 [submodule "misc/picotemplate"]
 	path = misc/picotemplate
 	url = https://github.com/kazuho/picotemplate.git
+[submodule "misc/p5-Server-Starter"]
+	path = misc/p5-Server-Starter
+	url = https://github.com/kazuho/p5-Server-Starter.git
