@@ -139,7 +139,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
     struct headers_configurator_t *self = (void *)_self;
 
     if (ctx->pathconf != NULL && self->cmds->size != 0) {
-        h2o_vector_reserve(NULL, (h2o_vector_t *)self->cmds, sizeof(self->cmds->entries[0]), sizeof(self->cmds->size));
+        h2o_vector_reserve(NULL, (h2o_vector_t *)self->cmds, sizeof(self->cmds->entries[0]), self->cmds->size + 1);
         self->cmds->entries[self->cmds->size] = (h2o_headers_command_t){H2O_HEADERS_CMD_NULL};
         h2o_headers_register(ctx->pathconf, self->cmds->entries);
     } else {
