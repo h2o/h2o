@@ -814,7 +814,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         /* find existing listener or create a new one */
         listener_is_new = 0;
         if ((listener = find_listener((void *)&sun, sizeof(sun))) == NULL) {
-            int fd;
+            int fd = -1;
             switch (conf.run_mode) {
             case RUN_MODE_WORKER:
                 if (conf.server_starter.fds != NULL) {
@@ -827,9 +827,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         return -1;
                 }
                 break;
-            case RUN_MODE_MASTER:
-            case RUN_MODE_TEST:
-                fd = -1;
+            default:
                 break;
             }
             listener = add_listener(fd, (struct sockaddr *)&sun, sizeof(sun), ctx->hostconf == NULL);
@@ -862,7 +860,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             struct listener_config_t *listener = find_listener(ai->ai_addr, ai->ai_addrlen);
             int listener_is_new = 0;
             if (listener == NULL) {
-                int fd;
+                int fd = -1;
                 switch (conf.run_mode) {
                 case RUN_MODE_WORKER:
                     if (conf.server_starter.fds != NULL) {
@@ -877,9 +875,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                             return -1;
                     }
                     break;
-                case RUN_MODE_MASTER:
-                case RUN_MODE_TEST:
-                    fd = -1;
+                default:
                     break;
                 }
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL);
