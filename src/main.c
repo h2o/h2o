@@ -94,6 +94,7 @@ struct listener_ctx_t {
 typedef enum en_run_mode_t {
     RUN_MODE_WORKER = 0,
     RUN_MODE_MASTER,
+    RUN_MODE_DAEMON,
     RUN_MODE_TEST,
 } run_mode_t;
 
@@ -109,6 +110,7 @@ static struct {
     size_t num_listeners;
     struct passwd *running_user; /* NULL if not set */
     char *pid_file;
+    char *error_log;
     int max_connections;
     size_t num_threads;
     struct {
@@ -131,6 +133,7 @@ static struct {
     0,    /* num_listeners */
     NULL, /* running_user */
     NULL, /* pid_file */
+    NULL, /* error_log */
     1024, /* max_connections */
     0,    /* initialized in main() */
     NULL, /* thread_ids */
@@ -592,6 +595,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 pthread_create(&ssl_config->ocsp_stapling.updater_tid, NULL, ocsp_updater_thread, ssl_config);
                 break;
             case RUN_MODE_MASTER:
+            case RUN_MODE_DAEMON:
                 /* nothing to do */
                 break;
             case RUN_MODE_TEST: {
@@ -968,6 +972,12 @@ static int on_config_pid_file(h2o_configurator_command_t *cmd, h2o_configurator_
     return 0;
 }
 
+static int on_config_error_log(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    conf.error_log = h2o_strdup(NULL, node->data.scalar, SIZE_MAX).base;
+    return 0;
+}
+
 static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return h2o_configurator_scanf(cmd, node, "%d", &conf.max_connections);
@@ -1223,10 +1233,25 @@ static char **build_server_starter_argv(const char *h2o_cmd, const char *config_
     h2o_vector_reserve(NULL, (void *)&args, sizeof(args.entries[0]), 1);
     args.entries[args.size++] = get_cmd_path("share/h2o/start_server");
 
+    /* error-log and pid-file are the directives that are handled by server-starter */
     if (conf.pid_file != NULL) {
         h2o_vector_reserve(NULL, (void *)&args, sizeof(args.entries[0]), args.size + 1);
         args.entries[args.size++] =
             h2o_concat(NULL, h2o_iovec_init(H2O_STRLIT("--pid-file=")), h2o_iovec_init(conf.pid_file, strlen(conf.pid_file))).base;
+    }
+    if (conf.error_log != NULL) {
+        h2o_vector_reserve(NULL, (void *)&args, sizeof(args.entries[0]), args.size + 1);
+        args.entries[args.size++] = h2o_concat(NULL, h2o_iovec_init(H2O_STRLIT("--log-file=")),
+                                               h2o_iovec_init(conf.error_log, strlen(conf.error_log))).base;
+    }
+
+    switch (conf.run_mode) {
+    case RUN_MODE_DAEMON:
+        h2o_vector_reserve(NULL, (void *)&args, sizeof(args.entries[0]), args.size + 1);
+        args.entries[args.size++] = "--daemonize";
+        break;
+    default:
+        break;
     }
 
     for (i = 0; i != conf.num_listeners; ++i) {
@@ -1265,6 +1290,15 @@ static char **build_server_starter_argv(const char *h2o_cmd, const char *config_
     args.entries[args.size] = NULL;
 
     return args.entries;
+}
+
+static int run_using_server_starter(const char *h2o_cmd, const char *config_file)
+{
+    char **args = build_server_starter_argv(h2o_cmd, config_file);
+    setenv("H2O_VIA_MASTER", "", 1);
+    execvp(args[0], args);
+    fprintf(stderr, "failed to spawn %s:%s\n", args[0], strerror(errno));
+    return EX_CONFIG;
 }
 
 static void setup_configurators(void)
@@ -1312,6 +1346,11 @@ static void setup_configurators(void)
                                         "user under with the server should handle incoming requests (default: none)");
         h2o_configurator_define_command(c, "pid-file", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_pid_file, "name of the pid file (default: none)");
+        h2o_configurator_define_command(c, "error-log", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_error_log,
+                                        "path of a file to which error logs should be appended; if the path starts\n"
+                                        "with `|`, the rest of the path is considered as a command to which the logs\n"
+                                        "should be piped (default: stdout and stderr)");
         h2o_configurator_define_command(c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_connections,
                                         "max connections (default: 1024)");
         h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads,
@@ -1333,6 +1372,7 @@ static void setup_configurators(void)
 int main(int argc, char **argv)
 {
     const char *cmd = argv[0], *opt_config_file = "h2o.conf";
+    int error_log_fd = -1;
 
     conf.num_threads = h2o_numproc();
     h2o_hostinfo_max_threads = H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS;
@@ -1354,17 +1394,26 @@ int main(int argc, char **argv)
             case 'm':
                 if (strcmp(optarg, "worker") == 0) {
                     conf.run_mode = RUN_MODE_WORKER;
+                } else if (strcmp(optarg, "master") == 0) {
+                    conf.run_mode = RUN_MODE_MASTER;
+                } else if (strcmp(optarg, "daemon") == 0) {
+                    conf.run_mode = RUN_MODE_DAEMON;
                 } else if (strcmp(optarg, "test") == 0) {
                     conf.run_mode = RUN_MODE_TEST;
-                } else if (strcmp(optarg, "master") == 0) {
-                    if (getenv("SERVER_STARTER_PORT") != NULL) {
-                        fprintf(stderr,
-                                "refusing to start in `master` mode, environment variable SERVER_STARTER_PORT is already set\n");
-                        exit(EX_SOFTWARE);
-                    }
-                    conf.run_mode = RUN_MODE_MASTER;
                 } else {
                     fprintf(stderr, "unknown mode:%s\n", optarg);
+                }
+                switch (conf.run_mode) {
+                case RUN_MODE_MASTER:
+                case RUN_MODE_DAEMON:
+                    if (getenv("SERVER_STARTER_PORT") != NULL) {
+                        fprintf(stderr, "refusing to start in `%s` mode, environment variable SERVER_STARTER_PORT is already set\n",
+                                optarg);
+                        exit(EX_SOFTWARE);
+                    }
+                    break;
+                default:
+                    break;
                 }
                 break;
             case 't':
@@ -1451,21 +1500,24 @@ int main(int argc, char **argv)
     switch (conf.run_mode) {
     case RUN_MODE_WORKER:
         break;
-    case RUN_MODE_MASTER: { /* start server-starter */
-        char **args = build_server_starter_argv(cmd, opt_config_file);
-        setenv("H2O_NO_PID_FILE", "", 1);
-        execvp(args[0], args);
-        fprintf(stderr, "failed to spawn %s:%s\n", args[0], strerror(errno));
-        return EX_CONFIG;
-    } break;
+    case RUN_MODE_DAEMON:
+        if (conf.error_log == NULL) {
+            fprintf(stderr, "to run in `daemon` mode, `error-log` must be specified in the configuration file\n");
+            return EX_CONFIG;
+        }
+        return run_using_server_starter(cmd, opt_config_file);
+    case RUN_MODE_MASTER:
+        return run_using_server_starter(cmd, opt_config_file);
     case RUN_MODE_TEST:
         printf("configuration OK\n");
         return 0;
     }
 
-    /* do not emit pid file if instructed so by the environment variable */
-    if (getenv("H2O_NO_PID_FILE") != NULL)
+    if (getenv("H2O_VIA_MASTER") != NULL) {
+        /* pid_file and error_log are the directives that are handled by the master process (invoking start_server) */
         conf.pid_file = NULL;
+        conf.error_log = NULL;
+    }
 
     { /* raise RLIMIT_NOFILE */
         struct rlimit limit;
@@ -1482,6 +1534,12 @@ int main(int argc, char **argv)
     }
 
     setup_signal_handlers();
+
+    /* open the log file to redirect STDIN/STDERR to, before calling setuid */
+    if (conf.error_log != NULL) {
+        if ((error_log_fd = h2o_access_log_open_log(conf.error_log)) == -1)
+            return EX_CONFIG;
+    }
 
     /* setuid */
     if (conf.running_user != NULL) {
@@ -1510,6 +1568,16 @@ int main(int argc, char **argv)
         }
         fprintf(fp, "%d\n", (int)getpid());
         fclose(fp);
+    }
+
+    /* ready to serve; redirect STDOUT and STDERR to error_log (if specified) */
+    if (error_log_fd != -1) {
+        if (dup2(error_log_fd, 1) == -1 || dup2(error_log_fd, 2) == -1) {
+            perror("dup(2) failed");
+            return EX_OSERR;
+        }
+        close(error_log_fd);
+        error_log_fd = -1;
     }
 
     fprintf(stderr, "h2o server (pid:%d) is ready to serve requests\n", (int)getpid());
