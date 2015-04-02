@@ -220,7 +220,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     __sync_add_and_fetch(&pool->_shared.count, 1);
 
     /* prepare request object */
-    h2o_socketpool_connect_request_t *req = malloc(sizeof(*req));
+    h2o_socketpool_connect_request_t *req = h2o_mem_alloc(sizeof(*req));
     *req = (h2o_socketpool_connect_request_t){data, cb, pool, loop};
     if (_req != NULL)
         *_req = req;

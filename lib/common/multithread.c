@@ -103,7 +103,7 @@ static void init_async(h2o_multithread_queue_t *queue, h2o_loop_t *loop)
 
 h2o_multithread_queue_t *h2o_multithread_create_queue(h2o_loop_t *loop)
 {
-    h2o_multithread_queue_t *queue = malloc(sizeof(*queue));
+    h2o_multithread_queue_t *queue = h2o_mem_alloc(sizeof(*queue));
     *queue = (h2o_multithread_queue_t){};
 
 #if H2O_USE_LIBUV
