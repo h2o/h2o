@@ -99,8 +99,11 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive)
 
 #define RESERVE(sz)                                                                                                                \
     do {                                                                                                                           \
-        if (offset + sz + 4 /* for "\r\n\r\n" */ > buf.len) {                                                                      \
-            buf.len *= 2;                                                                                                          \
+        size_t required = offset + sz + 4 /* for "\r\n\r\n" */;                                                                    \
+        if (required > buf.len) {                                                                                                  \
+            do {                                                                                                                   \
+                buf.len *= 2;                                                                                                      \
+            } while (required > buf.len);                                                                                          \
             char *newp = h2o_mem_alloc_pool(&req->pool, buf.len);                                                                  \
             memcpy(newp, buf.base, offset);                                                                                        \
             buf.base = newp;                                                                                                       \
