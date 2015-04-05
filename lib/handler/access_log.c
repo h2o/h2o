@@ -401,6 +401,32 @@ void on_dispose_handle(void *_fh)
     close(fh->fd);
 }
 
+int h2o_access_log_open_log(const char *path)
+{
+    int fd;
+
+    if (path[0] == '|') {
+        FILE *fp;
+        if ((fp = popen(path + 1, "w")) == NULL) {
+            fprintf(stderr, "failed to open log pipe to command:%s\n", path + 1);
+            return -1;
+        }
+        fd = dup(fileno(fp));
+        fclose(fp);
+        if (fd == -1) {
+            fprintf(stderr, "failed to dup pipe fd:%s\n", strerror(errno));
+            return -1;
+        }
+    } else {
+        if ((fd = open(path, O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC, 0644)) == -1) {
+            fprintf(stderr, "failed to open log file:%s:%s\n", path, strerror(errno));
+            return -1;
+        }
+    }
+
+    return fd;
+}
+
 h2o_access_log_filehandle_t *h2o_access_log_open_handle(const char *path, const char *fmt)
 {
     struct log_element_t *elements;
@@ -415,24 +441,8 @@ h2o_access_log_filehandle_t *h2o_access_log_open_handle(const char *path, const 
         return NULL;
 
     /* open log file */
-    if (path[0] == '|') {
-        FILE *fp;
-        if ((fp = popen(path + 1, "w")) == NULL) {
-            fprintf(stderr, "failed to open log pipe to command:%s\n", path + 1);
-            return NULL;
-        }
-        fd = dup(fileno(fp));
-        fclose(fp);
-        if (fd == -1) {
-            fprintf(stderr, "failed to dup pipe fd:%s\n", strerror(errno));
-            return NULL;
-        }
-    } else {
-        if ((fd = open(path, O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC, 0644)) == -1) {
-            fprintf(stderr, "failed to open log file:%s:%s\n", path, strerror(errno));
-            return NULL;
-        }
-    }
+    if ((fd = h2o_access_log_open_log(path)) == -1)
+        return NULL;
 
     fh = h2o_mem_alloc_shared(NULL, sizeof(*fh), on_dispose_handle);
     fh->elements = elements;
