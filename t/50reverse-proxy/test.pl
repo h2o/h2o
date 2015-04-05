@@ -129,6 +129,10 @@ sub run_tests_with_conf {
                 like $resp, qr/^x-forwarded-for: 127\.0\.0\.2, 127\.0\.0\.1$/mi, "x-forwarded-for (append)";
                 like $resp, qr/^via: 2 example.com, 1\.1 127\.0\.0\.1:$port$/mi, "via (append)";
             };
+            subtest 'issues/266' => sub {
+                my $resp = `curl --dump-header /dev/stderr --silent --insecure -H 'cookie: a=@{['x' x 4000]}' $proto://127.0.0.1:$port/index.txt 2>&1 > /dev/null`;
+                like $resp, qr{^HTTP/1\.1 200 }m;
+            };
         };
         $doit->('http', $port);
         $doit->('https', $tls_port);
