@@ -1,3 +1,9 @@
+h2o-server (1.1.1-1ubuntu1) trusty; urgency=medium
+
+  * [59d91dcde0] added build-deps
+
+ -- Lars K.W. Gohlke <lkwg82@gmx.de>  Sun, 05 Apr 2015 21:05:46 +0200
+
 h2o-server (1.1.1-1) trusty; urgency=low
 
   * Initial release 
