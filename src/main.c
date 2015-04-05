@@ -1570,7 +1570,12 @@ int main(int argc, char **argv)
         fclose(fp);
     }
 
-    /* ready to serve; redirect STDOUT and STDERR to error_log (if specified) */
+    /* all setup should be complete by now */
+
+    /* close STDIN */
+    close(0);
+
+    /* redirect STDOUT and STDERR to error_log (if specified) */
     if (error_log_fd != -1) {
         if (dup2(error_log_fd, 1) == -1 || dup2(error_log_fd, 2) == -1) {
             perror("dup(2) failed");
