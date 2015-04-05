@@ -2,7 +2,7 @@ Source: h2o-server
 Section: misc
 Priority: optional
 Maintainer: Lars K.W. Gohlke <lkwg82@gmx.de>
-Build-Depends: debhelper (>= 8.0.0), cmake, libscope-guard-perl, libssl-dev, libyaml-dev
+Build-Depends: debhelper (>= 8.0.0), cmake, libscope-guard-perl, libssl-dev, libyaml-dev, libtest-tcp-perl
 Standards-Version: 3.9.4
 Homepage: https://github.com/h2o/h2o
 Vcs-Git: git@github.com:h2o/h2o.git
