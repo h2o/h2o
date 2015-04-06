@@ -1,3 +1,10 @@
+h2o-server (1.1.1-1ubuntu5) trusty; urgency=medium
+
+  * [b1479f083e] cleanup dependency list
+  * [fe1407aab0] added watch file to track new version
+
+ -- Lars K.W. Gohlke <lkwg82@gmx.de>  Mon, 06 Apr 2015 21:14:16 +0200
+
 h2o-server (1.1.1-1ubuntu4) trusty; urgency=medium
 
   * [95fa4947dc] added another build-deps
