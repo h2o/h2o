@@ -21,12 +21,11 @@
  */
 #include "h2o/timeout.h"
 
-size_t h2o_timeout_run(h2o_timeout_t *timeout, uint64_t now)
+void h2o_timeout_run(h2o_loop_t *loop, h2o_timeout_t *timeout, uint64_t now)
 {
     uint64_t max_registered_at = now - timeout->timeout;
-    size_t n = 0;
 
-    for (; !h2o_linklist_is_empty(&timeout->_entries); ++n) {
+    while (!h2o_linklist_is_empty(&timeout->_entries)) {
         h2o_timeout_entry_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timeout_entry_t, _link, timeout->_entries.next);
         if (entry->registered_at > max_registered_at) {
             break;
@@ -34,22 +33,8 @@ size_t h2o_timeout_run(h2o_timeout_t *timeout, uint64_t now)
         h2o_linklist_unlink(&entry->_link);
         entry->registered_at = 0;
         entry->cb(entry);
+        h2o_timeout__do_post_callback(loop);
     }
-
-    return n;
-}
-
-size_t h2o_timeout_run_all(h2o_linklist_t *timeouts, uint64_t now)
-{
-    h2o_linklist_t *node;
-    size_t n = 0;
-
-    for (node = timeouts->next; node != timeouts; node = node->next) {
-        h2o_timeout_t *timeout = H2O_STRUCT_FROM_MEMBER(h2o_timeout_t, _link, node);
-        n += h2o_timeout_run(timeout, now);
-    }
-
-    return n;
 }
 
 uint64_t h2o_timeout_get_wake_at(h2o_linklist_t *timeouts)

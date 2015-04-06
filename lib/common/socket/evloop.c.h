@@ -467,30 +467,34 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
     }
 }
 
-static size_t run_pending(h2o_evloop_t *loop)
+static void run_pending(h2o_evloop_t *loop)
 {
-    size_t n = 0;
-
-    for (; loop->_pending != NULL; ++n) {
+    while (loop->_pending != NULL) {
         /* detach the first sock and run */
         struct st_h2o_evloop_socket_t *sock = loop->_pending;
         loop->_pending = sock->_next_pending;
         sock->_next_pending = sock;
         run_socket(sock);
     }
-
-    return n;
 }
 
 int h2o_evloop_run(h2o_evloop_t *loop)
 {
+    h2o_linklist_t *node;
+
     /* update socket states, poll, set readable flags, perform pending writes */
     if (evloop_do_proceed(loop) != 0)
         return -1;
 
-    /* run the timeouts and pending callbacks */
-    while (run_pending(loop) + h2o_timeout_run_all(&loop->_timeouts, loop->_now) != 0)
-        ;
+    /* run the pending callbacks */
+    run_pending(loop);
+
+    /* run the timeouts */
+    for (node = loop->_timeouts.next; node != &loop->_timeouts; node = node->next) {
+        h2o_timeout_t *timeout = H2O_STRUCT_FROM_MEMBER(h2o_timeout_t, _link, node);
+        h2o_timeout_run(loop, timeout, loop->_now);
+    }
+    assert(loop->_pending == NULL); /* h2o_timeout_run calls run_pending */
 
     return 0;
 }
@@ -508,4 +512,9 @@ void h2o_timeout__do_dispose(h2o_evloop_t *loop, h2o_timeout_t *timeout)
 void h2o_timeout__do_link(h2o_evloop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)
 {
     /* nothing to do */
+}
+
+void h2o_timeout__do_post_callback(h2o_evloop_t *loop)
+{
+    run_pending(loop);
 }
