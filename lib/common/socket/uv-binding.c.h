@@ -220,7 +220,7 @@ static void on_timeout(uv_timer_t *timer)
 {
     h2o_timeout_t *timeout = H2O_STRUCT_FROM_MEMBER(h2o_timeout_t, _backend.timer, timer);
 
-    h2o_timeout_run(timeout, h2o_now(timer->loop));
+    h2o_timeout_run(timer->loop, timeout, h2o_now(timer->loop));
     if (!h2o_linklist_is_empty(&timeout->_entries))
         schedule_timer(timeout);
 }
@@ -247,4 +247,9 @@ void h2o_timeout__do_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_
     /* register the timer if the entry just being added is the only entry */
     if (timeout->_entries.next == &entry->_link)
         schedule_timer(timeout);
+}
+
+void h2o_timeout__do_post_callback(h2o_loop_t *loop)
+{
+    /* nothing to do */
 }

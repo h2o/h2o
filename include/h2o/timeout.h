@@ -78,12 +78,12 @@ void h2o_timeout_unlink(h2o_timeout_entry_t *entry);
  */
 static int h2o_timeout_is_linked(h2o_timeout_entry_t *entry);
 
-size_t h2o_timeout_run(h2o_timeout_t *timeout, uint64_t now);
-size_t h2o_timeout_run_all(h2o_linklist_t *timeouts, uint64_t now);
+void h2o_timeout_run(h2o_loop_t *loop, h2o_timeout_t *timeout, uint64_t now);
 uint64_t h2o_timeout_get_wake_at(h2o_linklist_t *timeouts);
 void h2o_timeout__do_init(h2o_loop_t *loop, h2o_timeout_t *timeout);
 void h2o_timeout__do_dispose(h2o_loop_t *loop, h2o_timeout_t *timeout);
 void h2o_timeout__do_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry);
+void h2o_timeout__do_post_callback(h2o_loop_t *loop);
 
 /* inline defs */
 
