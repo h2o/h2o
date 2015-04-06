@@ -330,7 +330,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
 
     /* handle the request */
     if (conn->num_streams.open_pull > H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams) {
-        ret = H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM;
+        ret = H2O_HTTP2_ERROR_REFUSED_STREAM;
         goto SendRSTStream;
     }
 
