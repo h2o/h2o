@@ -2,16 +2,22 @@ Revision history for H2O.
 
 1.2.0 TBD
 	- [core] bundle libyaml #248 (Kazuho Oku)
-	- [core] implement master-worker process model (bundles Server::Starter) #258 (Kazuho Oku)
+	- [core] implement master-worker process mode and daemon mode (bundles Server::Starter) #258 #270 (Kazuho Oku)
 	- [file] more mime-types by default #250 (Tatsuhiko Kubo)
+	- [headers] fix heap overrun during configuration #251 (Kazuho Oku)
 	- [http2] do not delay sending PUSH_PROMISE #221 (Kazuho Oku)
-	- [SSL] bundle LibreSSL #236 (Kazuho Oku)
+	- [http2] reduce memory footprint under high load #271 (Kazuho Oku)
+	- [http2] fix incorrect error sent when number of streams exceed the limit #268 (Kazuho Oku)
+	- [proxy] fix heap overrun when building request sent to upstream #266 #269 (Moto Ishizawa, Kazuho Oku)
+	- [SSL] fix potential stall while reading data from client #268 (Kazuho Oku)
+	- [SSL] bundle LibreSSL #236 #272 (Kazuho Oku)
 	- [SSL] obtain source-level compatibility with BoringSSL #228 (Kazuho Oku)
 	- [SSL] add directive `listen.ssl.cipher-preference` for controlling the selection logic of cipher-suites #233 (Kazuho Oku)
 	- [SSL] disable TLS compression #252 (bisho)
 	- [libh2o] fix C++ compatibility (do not use empty struct) #225 (Kazuho Oku)
 	- [libh2o] search external dependencies using pkg-config #227 (Kazuho Oku)
 	- [misc] fix GCC version detection bug used for controlling compiler warnings #224 (Kazuho Oku)
+	- [misc] check merory allocation failures in socket pool #265 (Tatsuhiko Kubo)
 
 1.1.1 2015-03-09 06:12:00+0000
 	- [proxy] fix crash on NetBSD when upstream connection is persistent #217 (Kazuho Oku)
