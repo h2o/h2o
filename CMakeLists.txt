@@ -8,26 +8,35 @@ ENDFUNCTION (PREPEND_INCLUDE_DIRECTORY)
 
 PROJECT(h2o)
 
-IF (UNIX AND NOT CYGWIN)
-    SET(WITH_BUNDLED_SSL_DEFAULT "ON")
-ELSE (UNIX AND NOT CYGWIN)
-    SET(WITH_BUNDLED_SSL_DEFAULT "OFF")
-ENDIF (UNIX AND NOT CYGWIN)
-OPTION(WITH_BUNDLED_SSL "whether or not to use the bundled libressl" ${WITH_BUNDLED_SSL_DEFAULT})
-
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 FIND_PACKAGE(PkgConfig)
 FIND_PACKAGE(Threads REQUIRED)
+
+FIND_PACKAGE(OpenSSL)
+
+SET(WITH_BUNDLED_SSL_DEFAULT "ON")
+IF ((NOT UNIX) OR CYGWIN)
+    SET(WITH_BUNDLED_SSL_DEFAULT "OFF")
+ENDIF ((NOT UNIX) OR CYGWIN)
+IF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.2"))
+    SET(WITH_BUNDLED_SSL_DEFAULT "OFF")
+ENDIF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.2"))
+
+OPTION(WITH_BUNDLED_SSL "whether or not to use the bundled libressl" ${WITH_BUNDLED_SSL_DEFAULT})
 
 IF (WITH_BUNDLED_SSL)
     SET(BUNDLED_SSL_INCLUDE_DIR "${CMAKE_BINARY_DIR}/libressl-build/include")
     SET(BUNDLED_SSL_LIBRARIES "${CMAKE_BINARY_DIR}/libressl-build/lib/libssl.a" "${CMAKE_BINARY_DIR}/libressl-build/lib/libcrypto.a")
     ADD_CUSTOM_TARGET(bundled-ssl make -f ${CMAKE_SOURCE_DIR}/misc/libressl.mk SOURCE_DIR=${CMAKE_SOURCE_DIR}/misc
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
-    FIND_PACKAGE(OpenSSL)
 ELSE (WITH_BUNDLED_SSL)
-    FIND_PACKAGE(OpenSSL REQUIRED)
+    IF (NOT OPENSSL_FOUND)
+        IF ((NOT UNIX) OR CYGWIN)
+            MESSAGE(FATAL_ERROR "OpenSSL not found (and the bundled libressl cannot be used on this platform)")
+        ENDIF ((NOT UNIX) OR CYGWIN)
+        MESSAGE(FATAL_ERROR "OpenSSL not found (nor H2O was configured to used the bundled libressl)")
+    ENDIF (NOT OPENSSL_FOUND)
     IF (OPENSSL_VERSION VERSION_LESS "1.0.2")
         MESSAGE(WARNING "*********************************************************************** OpenSSL 1.0.2 is required for HTTP/2 interoperability with web browsers ***********************************************************************")
     ENDIF (OPENSSL_VERSION VERSION_LESS "1.0.2")
