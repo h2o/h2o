@@ -1,5 +1,5 @@
 SOURCE_DIR=.
-VERSION=2.1.4
+VERSION=2.1.6
 ARCHIVE=$(SOURCE_DIR)/libressl-$(VERSION).tar.gz
 DEST=libressl-build
 
