@@ -271,7 +271,7 @@ static void on_head(h2o_socket_t *sock, int status)
         client->_can_keepalive = 0;
 
     /* RFC 2616 4.4 */
-    if (client->_method_is_head || ((100 <= status && status <= 199) || status == 204 || status == 304)) {
+    if (client->_method_is_head || ((100 <= http_status && http_status <= 199) || http_status == 204 || http_status == 304)) {
         is_eos = 1;
     } else {
         is_eos = 0;
