@@ -3,8 +3,7 @@ Upstream-Name: h2o
 Source: https://github.com/h2o/h2o
 
 Files: *
-Copyright: <years> <put author's name and email here>
-           <years> <likewise for another author>
+Copyright: 2014-2015 Kazuho Oku https://github.com/kazuho/
 License: <special license>
  Copyright (c) 2014 DeNA Co., Ltd.
  
@@ -27,7 +26,7 @@ License: <special license>
  SOFTWARE.
 
 Files: debian/*
-Copyright: 2015 lars <lkwg82@gmx.de>
+Copyright: 2015 Lars K.W. Gohlke <lkwg82@gmx.de>
 License: GPL-3+
  This package is free software; you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
