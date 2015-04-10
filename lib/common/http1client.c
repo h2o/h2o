@@ -121,7 +121,7 @@ static void on_body_content_length(h2o_socket_t *sock, int status)
         return;
     }
 
-    if (sock->bytes_read != 0) {
+    if (sock->bytes_read != 0 || client->_body_decoder.content_length.bytesleft == 0) {
         const char *errstr;
         int ret;
         if (client->_body_decoder.content_length.bytesleft <= sock->bytes_read) {
