@@ -214,9 +214,11 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     if (self->is_gzip)
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_ENCODING, H2O_STRLIT("gzip"));
 
-    /* send headers */
-    if (!is_get) {
-        h2o_send_inline(req, NULL, 0);
+    /* special path for cases where we do not need to send any data */
+    if (!is_get || self->bytesleft == 0) {
+        static h2o_generator_t generator = {NULL, NULL};
+        h2o_start_response(req, &generator);
+        h2o_send(req, NULL, 0, 1);
         do_close(&self->super, req);
         return;
     }
