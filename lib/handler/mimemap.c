@@ -62,10 +62,8 @@ h2o_mimemap_t *h2o_mimemap_create()
 
     { /* setup the tiny default */
         static const char *default_types[] = {
-#define MIMEMAP(ext, mime) ext, mime
-            MIMEMAP("txt", "text/plain"), MIMEMAP("html", "text/html"), MIMEMAP("gif", "image/gif"), MIMEMAP("png", "image/png"),
-            MIMEMAP("jpg", "image/jpeg"), MIMEMAP("jpeg", "image/jpeg"), MIMEMAP("webp", "image/webp"), MIMEMAP("css", "text/css"),
-            MIMEMAP("js", "application/javascript"), MIMEMAP("json", "application/json"),
+#define MIMEMAP(ext, mime) ext, mime,
+#include "mimemap/defaults.c.h"
 #undef MIMEMAP
             NULL};
         const char **p;
