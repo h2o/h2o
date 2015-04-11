@@ -1572,8 +1572,17 @@ int main(int argc, char **argv)
 
     /* all setup should be complete by now */
 
-    /* close STDIN */
-    close(0);
+    /* replace STDIN to an closed pipe */
+    {
+        int fds[2];
+        if (pipe(fds) != 0) {
+            perror("pipe failed");
+            return EX_OSERR;
+        }
+        close(fds[1]);
+        dup2(fds[0], 0);
+        close(fds[0]);
+    }
 
     /* redirect STDOUT and STDERR to error_log (if specified) */
     if (error_log_fd != -1) {
