@@ -3,7 +3,7 @@ Revision history for H2O.
 1.2.0 TBD
 	- [core] bundle libyaml #248 (Kazuho Oku)
 	- [core] implement master-worker process mode and daemon mode (bundles Server::Starter) #258 #270 (Kazuho Oku)
-	- [file] more mime-types by default #250 (Tatsuhiko Kubo)
+	- [file] more mime-types by default #250 #254 #280 (Tatsuhiko Kubo, George Liu, Kazuho Oku)
 	- [file][http1] fix connection being closed if the length of content is zero #276 (Kazuho Oku)
 	- [headers] fix heap overrun during configuration #251 (Kazuho Oku)
 	- [http2] do not delay sending PUSH_PROMISE #221 (Kazuho Oku)
