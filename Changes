@@ -1,5 +1,7 @@
 Revision history for H2O.
 
+1.2.1 TBD
+
 1.2.0 2015-04-14 07:13:00+0000
 	- [core] bundle libyaml #248 (Kazuho Oku)
 	- [core] implement master-worker process mode and daemon mode (bundles Server::Starter) #258 #270 (Kazuho Oku)
