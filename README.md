@@ -7,7 +7,7 @@ Copyright (c) 2014,2015 [DeNA Co., Ltd.](http://dena.com/), [Kazuho Oku](https:/
 
 H2O is a very fast HTTP server written in C.  It can also be used as a library.
 
-This is the README for H2O version 1.1.2-alpha1 (HEAD).
+This is the README for H2O version 1.2.0.
 
 ### License
 
