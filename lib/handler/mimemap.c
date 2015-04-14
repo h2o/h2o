@@ -103,7 +103,7 @@ void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, const char *type)
 void h2o_mimemap_set_type(h2o_mimemap_t *mimemap, const char *ext, const char *type)
 {
     khiter_t iter = kh_get(exttable, mimemap->table, ext);
-    if (iter != kh_end(mimemap->table)) {
+    if (iter != kh_end(mimemap->table) && mimemap->table->vals != NULL) {
         h2o_mem_release_shared(kh_val(mimemap->table, iter).base);
     } else {
         int ret;
