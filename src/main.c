@@ -1170,6 +1170,11 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                                       on_server_notification);
     conf.threads[thread_index].tid = pthread_self();
 
+    if (conf.num_listeners < 1) {
+      perror("not enought listeners to start listening");
+      abort();
+    }
+
     /* setup listeners */
     for (i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];
