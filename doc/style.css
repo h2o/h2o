@@ -1,0 +1,186 @@
+body {
+    background: #f2f2f2;
+    margin: 0;
+    padding: 0;
+    color: black;
+    font-family: Arial, sans-serif;
+    line-height: 1.3em;
+}
+
+a {
+    color: #009;
+}
+
+#body {
+    background: #fff;
+    border-width: 0 1px;
+    border-color: #ccc;
+    border-style: solid;
+    margin: 0 auto;
+    padding: 0;
+    width: 800px;
+    text-align: justify;
+}
+
+#top {
+    background: #336;
+    color: #eee;
+    width: 700px;
+    margin: 0 0;
+    padding: 35px 50px 20px 50px;
+    position: relative;
+}
+
+#top h1 {
+    font-size: 60px;
+    margin: 0;
+    line-height: 1em;
+}
+
+#top h1 a {
+    color: #fff;
+    text-decoration: none;
+}
+
+#top ul {
+    float: right;
+    margin: 20px 0 0 0;
+    padding: 0 50px 0 0;
+}
+
+#top ul li {
+    display: inline;
+    font-weight: bold;
+    margin: 0;
+    padding: 0 0 0 1em;
+}
+
+#top ul li a {
+    color: #600;
+}
+
+#menu {
+    width: 800px;
+    background: #fff;
+    padding: 0;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+#menu td {
+    text-align: center;
+    border: 1px solid #999;
+    background: #ccc;
+}
+
+#menu td a {
+    display: block;
+    padding: 0.4em;
+    color: #333;
+    font-weight: bold;
+    text-decoration: none;
+}
+
+#menu .selected {
+    background: white;
+    font-weight: bold;
+}
+
+#menu .selected a {
+    color: black;
+}
+
+#breadcrumb {
+    margin: 0;
+    padding: 2em 50px 0 50px;
+    font-weight: bold;
+}
+
+#main {
+    margin: 0;
+    padding: 0 50px 1em 50px;
+}
+
+#main h2 {
+    font-size: 120%;
+    margin: 2em 0 1em 0;
+}
+
+#main h3 {
+    font-size: 100%;
+    margin: 2em 0 1em 0;
+}
+
+#main div {
+    margin: 1em 0;
+}
+
+#main dt {
+    margin-top: 0.5em;
+    font-weight: bold;
+}
+
+#main ul li {
+    margin-top: 0.2em;
+    margin-bottom: 0.2em;
+}
+
+#main ul li ul li {
+    margin-top: 0.1em;
+    margin-bottom: 0.1em;
+}
+
+#main pre {
+    border: 1px solid gray;
+    margin: 1em 0;
+    padding: 0.5em;
+    background: #f6f6f6;
+    overflow-x: auto;
+}
+
+#main table {
+    margin: 1em auto;
+    border: 1px solid #ccc;
+    border-collapse: collapse;
+}
+
+#main table td,th {
+    border: 1px solid #ccc;
+    padding: 0.3em 0.5em;
+}
+
+#main table th {
+    background-color: #eee;
+    text-align: center;
+}
+
+#main table caption {
+    caption-side: top;
+    font-size: 100%;
+    font-weight: normal;
+    padding: 0.3em;
+}
+
+#main .citations {
+    margin: 1em 0;
+    font-size: 70%;
+}
+
+#main .doc-image {
+    display: block;
+    margin:  1em auto;
+    border:  0;
+}
+
+#main sup a {
+    text-decoration: none;
+}
+
+#footer {
+    border-width: 1px 0;
+    border-style: solid;
+    border-color: #ccc;
+    margin: 1em 0 0 0;
+    padding: 1em 50px 2em 50px;
+    text-align: center;
+}
