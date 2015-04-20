@@ -15,13 +15,6 @@
 
 <!-- /oktavia -->
 <link rel="stylesheet" href="style.css" type="text/css" />
-<script src="google-code-prettify/prettify.js"></script>
-<script>
-  $(function() {
-    prettyPrint();
-  });
-</script>
-<link rel="stylesheet" href="google-code-prettify/prettify.css" type="text/css" />
 ?= $_[0]
 <div id="footer">
 <p>
