@@ -4,3 +4,9 @@
 [submodule "misc/p5-Server-Starter"]
 	path = misc/p5-Server-Starter
 	url = https://github.com/kazuho/p5-Server-Starter.git
+[submodule "misc/oktavia"]
+	path = misc/oktavia
+	url = https://github.com/shibukawa/oktavia.git
+[submodule "misc/git-pushdir"]
+	path = misc/git-pushdir
+	url = https://github.com/kazuho/git-pushdir.git
