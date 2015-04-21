@@ -18,8 +18,7 @@
 ?= $_[0]
 <div id="footer">
 <p>
-Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.<br>
-Copyright belongs to the authors or to the authors' employers of each contribution.  Please refer to <a href="https://github.com/h2o/h2o/commits/">github.com/h2o/h2o/commits</a>.
+Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
 </p>
 </div>
 
