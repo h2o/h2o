@@ -5,7 +5,8 @@ my $create_tab = sub {
    if ($fn eq $main::context->{filename}) {
        $html = qq{<td class="selected">@{[Text::MicroTemplate::escape_html($title)]}</td>};
    } else {
-       $html = qq{<td><a href="@{[Text::MicroTemplate::escape_html($fn)]}">@{[Text::MicroTemplate::escape_html($title)]}</a></td>};
+       my $linkfn = $fn eq 'index.html' ? './' : $fn;
+       $html = qq{<td><a href="@{[Text::MicroTemplate::escape_html($linkfn)]}">@{[Text::MicroTemplate::escape_html($title)]}</a></td>};
    }
    Text::MicroTemplate::encoded_string($html);
 };
@@ -34,7 +35,7 @@ the optimized HTTP/1.x, HTTP/2 server
 </div>
 <table id="menu">
 <tr>
-<?= $create_tab->("./", "Top") ?>
+<?= $create_tab->("index.html", "Top") ?>
 <?= $create_tab->("install.html", "Install") ?>
 <?= $create_tab->("configure.html", "Configure") ?>
 <?= $create_tab->("libh2o.html", "Libh2o") ?>
