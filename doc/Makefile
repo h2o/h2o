@@ -1,6 +1,7 @@
 VPATH=../srcdoc
 OUTPUT=index.html install.html configure.html libh2o.html faq.html
 PUBLISH_REPO=git@github.com:h2o/h2o.github.io.git
+COMMIT=$(shell git rev-parse --short HEAD)
 
 %.html: %.mt
 	../misc/makedoc.pl $< $@
@@ -21,7 +22,7 @@ publish: all
 	$(MAKE) do-publish
 
 do-publish:
-	MSG="pushing docs as of "`git rev-parse --short HEAD` /bin/sh -c 'exec ../misc/git-pushdir/git-pushdir -m "$$MSG" "$(PUBLISH_REPO)"'
+	../misc/git-pushdir/git-pushdir -m "pushing docs of $(COMMIT)" "$(PUBLISH_REPO)"
 
 clean:
 	rm -f $(OUTPUT) search/searchindex.js
