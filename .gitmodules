@@ -7,3 +7,6 @@
 [submodule "misc/oktavia"]
 	path = misc/oktavia
 	url = https://github.com/shibukawa/oktavia.git
+[submodule "misc/git-pushdir"]
+	path = misc/git-pushdir
+	url = https://github.com/kazuho/git-pushdir.git
