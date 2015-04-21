@@ -77,7 +77,18 @@ When complete, H2O will be installed under <code>/usr/local</code>.
 </p>
 
 <p>
-Please proceed to <a href="configure.html">Configure</a> section for how to setup the server.
+Start the installed server using the example configuration to confirm that it actually works.
+</p>
+
+<pre><code>% /usr/local/bin/h2o -c example/h2o/h2o.conf
+</code></pre>
+
+<p>
+The example configuration starts a server that listens to port 8080 (HTTP) and port 8081 (HTTPS).  Try to access the ports using the protocols respectively (note: when accessing via HTTPS it is likely that you would see hostname mismatch errors reported by the web browsers).
+</p>
+
+<p>
+When complete, proceed to <a href="configure.html">Configure</a> section for how to setup the server.
 </p>
 
 <h4>CMake Options</h4>
