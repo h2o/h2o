@@ -66,7 +66,7 @@ H2O is a very fast HTTP server written in C. It can also be <a href="libh2o.html
 TBD
 </div>
 
-?= $main::context->{citations}->()
+?= $_mt->render_file("notes.mt")
 
 </div>
 

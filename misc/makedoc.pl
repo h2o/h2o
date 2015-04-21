@@ -19,33 +19,25 @@ die "Usage: $0 <src-file> <dst-file>\n"
 
 my ($src_file, $dst_file) = @ARGV;
 
-my @notes;
 $main::context = {
     filename => $dst_file,
-    prettify => build_mt(
-        '<pre class="prettyprint"><code class="language-<?= $_[0] ?>"><?= $_[1] ?></code></pre>',
+    code     => build_mt(
+        '<pre><code><?= $_[0] ?></code></pre>',
     ),
+    notes    => [],
     note     => sub {
         my ($note, $index);
         if (looks_like_number($_[0])) {
-            $index = $_[0] < 0 ? scalar(@notes) + $_[0] : $_[0];
+            $index = $_[0] < 0 ? scalar(@{$main::context->{notes}}) + $_[0] : $_[0];
         } else {
-            $index = scalar @notes;
-            push @notes, $_[0];
+            $index = scalar @{$main::context->{notes}};
+            push @{$main::context->{notes}}, $_[0];
         }
         return render_mt(
             '<sup><a href="#note_<?= $_[0] ?>" title="<?= $_[1] ?>"><?= $_[0] ?></sup></a></sup>',
             $index + 1,
-            $notes[$index],
+            $main::context->{notes}->[$index],
         );
-    },
-    citations => sub {
-        my $output = '';
-        if (@notes) {
-            $output = $mt->render_file("citations.mt", @notes);
-            @notes = ();
-        }
-        return $output;
     },
 };
 my $output = $mt->render_file($src_file);

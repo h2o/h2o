@@ -161,9 +161,20 @@ a {
     padding: 0.3em;
 }
 
-#main .citations {
-    margin: 1em 0;
+#main .notes {
+    margin: 3em 0 1em 0;
     font-size: 70%;
+}
+
+#main .notes h3 {
+    margin: 1em 0 0.2em 0;
+    font-weight: bold;
+}
+
+#main .notes ol {
+    margin: 0;
+    padding-left: 0.5em;
+    list-style: inside decimal;
 }
 
 #main .doc-image {
