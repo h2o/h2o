@@ -83,12 +83,12 @@ Please proceed to <a href="configure.html">Configure</a> section for how to setu
 <h4>CMake Options</h4>
 
 <p>
-Following list shows the interesting arguments to CMake.
+Following list shows the interesting arguments recognized by CMake.
 
 <dl>
 <dt><code>-DWITH_BUNDLED_SSL=<i>on</i>|<i>off</i></code></dt>
 <dd>
-This option instructs whether or not to use <a href="http://www.libressl.org/">LibreSSL</a> being bundled (default: <code>off</code> if <a href="https://www.openssl.org/">OpenSSL</a> version >= 1.0.2 is found, <code>off</code> if otherwise).  Read the section below for comparison between OpenSSL and LibreSSL.
+This option instructs whether or not to use <a href="http://www.libressl.org/">LibreSSL</a> being bundled (default: <code>off</code> if <a href="https://www.openssl.org/">OpenSSL</a> version >= 1.0.2 is found, <code>on</code> if otherwise).  Read the section below for comparison between OpenSSL and LibreSSL.
 </dd>
 <dt><code>-DCMAKE_INSTALL_PREFIX=<i>directory</i></code></dt>
 <dd>
