@@ -38,7 +38,6 @@ the optimized HTTP/1.x, HTTP/2 server
 <?= $create_tab->("index.html", "Top") ?>
 <?= $create_tab->("install.html", "Install") ?>
 <?= $create_tab->("configure.html", "Configure") ?>
-<?= $create_tab->("libh2o.html", "Libh2o") ?>
 <?= $create_tab->("faq.html", "FAQ") ?>
 <td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
 <td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>

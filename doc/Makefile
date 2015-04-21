@@ -1,5 +1,5 @@
 VPATH=../srcdoc
-OUTPUT=index.html install.html configure.html libh2o.html faq.html
+OUTPUT=index.html install.html configure.html faq.html
 PUBLISH_REPO=git@github.com:h2o/h2o.github.io.git
 COMMIT=$(shell git rev-parse --short HEAD)
 

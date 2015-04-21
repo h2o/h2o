@@ -268,7 +268,6 @@
 		10583BE21AE5A22D004A3AD6 /* faq.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = faq.mt; sourceTree = "<group>"; };
 		10583BE31AE5A22D004A3AD6 /* index.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = index.mt; sourceTree = "<group>"; };
 		10583BE41AE5A22D004A3AD6 /* install.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = install.mt; sourceTree = "<group>"; };
-		10583BE51AE5A22D004A3AD6 /* libh2o.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = libh2o.mt; sourceTree = "<group>"; };
 		10583BE61AE5A322004A3AD6 /* clang-format-all.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = "clang-format-all.sh"; sourceTree = "<group>"; };
 		10583BE71AE5A322004A3AD6 /* install-perl-module.pl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = "install-perl-module.pl"; sourceTree = "<group>"; };
 		10583BE81AE5A330004A3AD6 /* libressl.mk */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = libressl.mk; sourceTree = "<group>"; };
@@ -621,7 +620,6 @@
 				10583BE21AE5A22D004A3AD6 /* faq.mt */,
 				10583BE31AE5A22D004A3AD6 /* index.mt */,
 				10583BE41AE5A22D004A3AD6 /* install.mt */,
-				10583BE51AE5A22D004A3AD6 /* libh2o.mt */,
 				10583BDC1AE5A20A004A3AD6 /* snippets */,
 			);
 			path = srcdoc;

@@ -10,7 +10,7 @@
 <h2>About H2O</h2>
 
 <div>
-H2O is a very fast HTTP server written in C. It can also be <a href="libh2o.html">used as a library</a>.
+H2O is a very fast HTTP server written in C. It can also be <a href="faq.html#libh2o">used as a library</a>.
 </div>
 
 <h3>Key Features</h3>

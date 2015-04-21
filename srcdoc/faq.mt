@@ -8,7 +8,7 @@
 
 <h2>Frequently Asked Questions</h2>
 
-<h3>What are the lisense terms?</h3>
+<h3 id="license">What are the license terms?</h3>
 
 <div>
 H2O is licensed under <a href="http://opensource.org/licenses/MIT">the MIT license</a>.
@@ -21,10 +21,16 @@ Portions of the software use following libraries that are also licensed under th
 Depending on how H2O is configured, the software links against OpenSSL or LibreSSL, both of which are <a href="https://www.openssl.org/source/license.html">dual-licensed under the OpenSSL License and the original SSLeay license</a>.
 </div>
 
-<h3>I have a problem.  Where should I look for answers?</h3>
+<h3 id="libh2o">How do I use H2O as a library?</h3>
 
 <div>
-<a href="https://github.com/h2o/h2o/labels/FAQ">The issues on GitHub tagged as FAQ</a> is a good place to look at.
+Please refer to the <a href="https://github.com/h2o/h2o/labels/libh2o">GitHub issues tagged as libh2o</a>.
+</div>
+
+<h3 id="issues">I have a problem.  Where should I look for answers?</h3>
+
+<div>
+Please refer to the <a href="https://github.com/h2o/h2o/labels/FAQ">GitHub issues tagged as FAQ</a>.
 </div>
 
 </div>
