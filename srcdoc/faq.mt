@@ -1,3 +1,4 @@
+? my $ctx = $main::context;
 ? $_mt->wrapper_file("wrapper.mt")->(sub {
 
 <title>Frequently Asked Questions - H2O</title>
@@ -24,7 +25,28 @@ Depending on how H2O is configured, the software links against OpenSSL or LibreS
 <h3 id="libh2o">How do I use H2O as a library?</h3>
 
 <div>
-Please refer to the <a href="https://github.com/h2o/h2o/labels/libh2o">GitHub issues tagged as libh2o</a>.
+<p>
+Aside from the standalone server, H2O can also be used as a software library.
+The name of the library is <code>libh2o</code>.
+</p>
+<p>
+To build H2O as a library you will need to install the following dependencies:
+<ul>
+<li><a href="https://github.com/libuv/libuv/">libuv</a> version 1.0 or above</li>
+<li><a href="https://www.openssl.org/">OpenSSL</a> version 1.0.2 or above<?= $ctx->{note}->("libh2o cannot be linked against the bundled LibreSSL; see https://github.com/h2o/h2o/issues/290") ?></li>
+</ul>
+In case the dependencies are installed under a non-standard path, <code>PKG_CONFIG_PATH</code> configuration variable can be used for specifying their paths.  For example, the following snippet builds <code>libh2o</code> using the libraries installed in their respective paths.
+</p>
+
+<?= $ctx->{code}->(<< 'EOT')
+% PKG_CONFIG_PATH=/usr/local/libuv-1.4/lib/pkgconfig:/usr/local/openssl-1.0.2a/lib/pkgconfig: cmake .
+% make libh2o
+EOT
+?>
+
+<p>
+For more information, please refer to the <a href="https://github.com/h2o/h2o/labels/libh2o">GitHub issues tagged as libh2o</a>.
+</p>
 </div>
 
 <h3 id="issues">I have a problem.  Where should I look for answers?</h3>
@@ -32,6 +54,8 @@ Please refer to the <a href="https://github.com/h2o/h2o/labels/libh2o">GitHub is
 <div>
 Please refer to the <a href="https://github.com/h2o/h2o/labels/FAQ">GitHub issues tagged as FAQ</a>.
 </div>
+
+?= $_mt->render_file("notes.mt")
 
 </div>
 
