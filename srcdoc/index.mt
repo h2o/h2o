@@ -68,7 +68,9 @@ H2O is a very fast HTTP server written in C. It can also be <a href="faq.html#li
 <p>
 Below chart shows the scores recorded on Amazon EC2 running two c3.8xlarge instances (server and client) on a single network placement<?= $note->("for reverse-proxy tests, another H2O process running on the same host was used as the upstream server") ?>.
 </p>
-<a href="assets/remotebench.png" target="_blank"><img src="assets/remotebench.png" width="700"></a>
+<div align="center">
+<a href="assets/remotebench.png" target="_blank"><img src="assets/remotebench.png" width="400"></a>
+</div>
 </div>
 
 <h4>Local Benchmarks</h4>
