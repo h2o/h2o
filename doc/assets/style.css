@@ -13,9 +13,6 @@ a {
 
 #body {
     background: #fff;
-    border-width: 0 1px;
-    border-color: #ccc;
-    border-style: solid;
     margin: 0 auto;
     padding: 0;
     width: 800px;
@@ -69,8 +66,8 @@ a {
 
 #menu td {
     text-align: center;
-    border: 1px solid #999;
-    background: #ccc;
+    border: 1px solid #aaa;
+    background: #ddd;
 }
 
 #menu td a {
@@ -99,6 +96,9 @@ a {
 #main {
     margin: 0;
     padding: 0 50px 1em 50px;
+    display: inline-block;
+    border: 1px solid #aaa;
+    border-top: none;
 }
 
 #main h2 {
@@ -193,10 +193,9 @@ a {
 }
 
 #footer {
-    border-width: 1px 0;
+    border-width: 0 1px;
     border-style: solid;
-    border-color: #ccc;
-    margin: 1em 0 0 0;
-    padding: 1em 50px 2em 50px;
+    border-color: #aaa;
+    padding: 1em 50px 1em 50px;
     text-align: center;
 }
