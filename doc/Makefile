@@ -1,12 +1,23 @@
 VPATH=../srcdoc
-OUTPUT=index.html install.html configure.html faq.html
+OUTPUT=\
+    index.html \
+    install.html \
+    configure.html \
+    configure/quick_start.html \
+    configure/command_options.html \
+    configure/syntax_and_structure.html \
+    faq.html \
+
 PUBLISH_REPO=git@github.com:h2o/h2o.github.io.git
 COMMIT=$(shell git rev-parse --short HEAD)
 
 %.html: %.mt
 	../misc/makedoc.pl $< $@
 
-all: html search/searchindex.js
+all: mkdir html search/searchindex.js
+
+mkdir:
+	mkdir -p doc/configure
 
 html: $(OUTPUT)
 
@@ -27,4 +38,4 @@ do-publish:
 clean:
 	rm -f $(OUTPUT) search/searchindex.js
 
-.PHONY: html publish do-publish
+.PHONY: mkdir html publish do-publish

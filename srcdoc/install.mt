@@ -1,13 +1,5 @@
 ? my $ctx = $main::context;
-? $_mt->wrapper_file("wrapper.mt")->(sub {
-
-<title>Install - H2O</title>
-
-?= $_mt->render_file("header.mt")
-
-<div id="main">
-
-<h2>Install</h2>
+? $_mt->wrapper_file("wrapper.mt", "Install")->(sub {
 
 <h3>Installing the Binary Distribution</h3>
 
@@ -112,9 +104,5 @@ In case your OpenSSL installation does not have the <code>lib/pkgconfig</code> d
 % sudo make install
 EOT
 ?>
-
-?= $_mt->render_file("notes.mt")
-
-</div>
 
 ? })

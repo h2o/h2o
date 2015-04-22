@@ -2,6 +2,7 @@
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<base href="../" />
 
 <!-- oktavia -->
 <link rel="stylesheet" href="assets/searchstyle.css" type="text/css" />
@@ -12,7 +13,7 @@
 
 <link rel="stylesheet" href="assets/style.css" type="text/css" />
 
-<title>Configure - H2O</title>
+<title>Command Options - Configure - H2O</title>
 </head>
 <body>
 <div id="body">
@@ -50,36 +51,35 @@ the optimized HTTP/1.x, HTTP/2 server
 <div id="main">
 
 <h2>
-Configure
+<a href="configure.html">Configure</a> &gt;
+Command Options
 </h2>
 
 
-<ul style="list-style: none; font-weight: bold;">
-<li><a href="configure/quick_start.html">Quick Start</a>
-<li><a href="configure/command_options.html">Command Options</a>
-<li>Configuration File
-<ul>
-<li><a href="configure/syntax_and_structure.html">Syntax and Structure</a>
-<li>Directives
-<ul>
-<li>Base
-<li>HTTP/1
-<li>HTTP/2
-<li>Access Log
-<li>Expires
-<li>File
-<li>Headers
-<li>Proxy
-<li>Redirect
-<li>Reproxy
-</ul>
-</ul>
-</ul>
-
 <p>
-Under construction.
-For the meantime, please refer to <a href="https://gist.github.com/kazuho/f15b79211ea76f1bf6e5" target="_blank">the output of <code>--help</code></a>.
+Full list of command options can be viewed by running <code>h2o --help</code>.
+Following is the output of <code>--help</code> as of version 1.2.0.
 </p>
+
+<pre><code>Options:
+  -c, --conf FILE    configuration file (default: h2o.conf)
+  -m, --mode &lt;mode&gt;  specifies one of the following mode
+                     - worker: invoked process handles incoming connections
+                               (default)
+                     - daemon: spawns a master process and exits. `error-log`
+                               must be configured when using this mode, as all
+                               the errors are logged to the file instead of
+                               being emitted to STDERR
+                     - master: invoked process becomes a master process (using
+                               the `share/h2o/start_server` command) and spawns
+                               a worker process for handling incoming
+                               connections. Users may send SIGHUP to the master
+                               process to reconfigure or upgrade the server.
+                     - test:   tests the configuration and exits
+  -t, --test         synonym of `--mode=test`
+  -v, --version      prints the version number
+  -h, --help         print this help
+</code></pre>
 
 
 
