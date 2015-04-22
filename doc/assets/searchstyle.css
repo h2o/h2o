@@ -1,0 +1,125 @@
+.search {
+    position: absolute;
+    right: 10px;
+    top: 95px;
+    width: 240px;
+}
+
+#searchresult_box {
+    display: none;
+    position: absolute;
+    top: 135px;
+    right: 0px;
+    width: 500px;
+    padding: 10px;
+    background-color: #ffffff;
+    -moz-border-radius: 8px;
+    border-radius: 8px;
+    -moz-box-shadow: 3px 3px 5px 5px #b5b2b2;
+    box-shadow: 3px 3px 5px 5px #b5b2b2;
+    opacity: 0.95;
+    z-index: 100000;
+}
+
+#close_search_box {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 20px;
+    height: 20px;
+    text-align: center;
+    vertical-align: middle;
+    color: #666;
+}
+
+#close_search_box:hover {
+    background-color: #d1e8ff;
+    border: 1px solid gray;
+}
+
+#close_search_box:active {
+    background-color: #b4c8db;
+    border: 1px solid gray;
+}
+
+
+#searchresult_summary {
+    color: #444;
+}
+
+#searchresult .entry {
+    margin: 10px 10px 10px 10px;
+    color: black;
+}
+
+#searchresult .entry .title {
+    font-size: normal;
+}
+
+#searchresult .entry .url {
+    font-size: 14px!important;
+    color: #093;
+    font-style: normal;
+    font-family: arial,sans-serif;
+}
+
+#searchresult .entry .content {
+    font-size: small;
+    font-family: arial,sans-serif;
+    color: #222;
+}
+
+#searchresult .entry .content .hit {
+    font-weight: bolder;
+    text-decoration: underline;
+}
+
+#searchresult .proposal {
+    margin: 10px 10px 10px 10px;
+    color: #222;
+    font-size: small;
+    font-family: arial,sans-serif;
+}
+#searchresult .proposal .option {
+    background-color: #e8f4ff;
+    border-bottom: 1px solid blue;
+}
+
+#searchresult .proposal .option:hover {
+    background-color: #d1e8ff;
+}
+
+#searchresult .proposal .option:active {
+    background-color: #b4c8db;
+}
+
+#searchresult_nav .selected {
+    background-color: #b4c8db;
+    border: 1px solid #6c83db;
+}
+
+#searchresult_nav span {
+    background-color: #ffffff;
+    border: 1px solid #888888;
+    padding: 5px;
+    margin: 5px;
+    color: #222;
+}
+
+#searchresult_nav span:hover {
+    background-color: #d1e8ff;
+    border: 1px solid #7d98ff;
+}
+
+#searchresult_nav span:active {
+    background-color: #b4c8db;
+    border: 1px solid #6c83db;
+}
+
+#searchresult_box span.pr {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    font-size: x-small;
+    color: #555;
+}
