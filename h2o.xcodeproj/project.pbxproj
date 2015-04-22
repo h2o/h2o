@@ -278,6 +278,7 @@
 		10583BF81AE783BE004A3AD6 /* remotebench.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = remotebench.png; path = assets/remotebench.png; sourceTree = "<group>"; };
 		10583BF91AE783BE004A3AD6 /* searchstyle.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = searchstyle.css; path = assets/searchstyle.css; sourceTree = "<group>"; };
 		10583BFA1AE783BE004A3AD6 /* style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = style.css; path = assets/style.css; sourceTree = "<group>"; };
+		10583BFB1AE78DCC004A3AD6 /* syntax_and_structure.mt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = syntax_and_structure.mt; sourceTree = "<group>"; };
 		1058C87C1AA41789008D6180 /* headers.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers.c; sourceTree = "<group>"; };
 		1058C87F1AA42568008D6180 /* 50headers.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50headers.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		1058C8871AA6DE4B008D6180 /* hostinfo.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hostinfo.h; sourceTree = "<group>"; };
@@ -647,6 +648,7 @@
 		10583BF31AE764A7004A3AD6 /* configure */ = {
 			isa = PBXGroup;
 			children = (
+				10583BFB1AE78DCC004A3AD6 /* syntax_and_structure.mt */,
 				10583BF51AE765E0004A3AD6 /* command_options.mt */,
 				10583BF61AE765E0004A3AD6 /* quick_start.mt */,
 			);

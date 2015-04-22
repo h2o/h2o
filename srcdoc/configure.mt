@@ -4,7 +4,23 @@
 <ul style="list-style: none; font-weight: bold;">
 <li><a href="configure/quick_start.html">Quick Start</a>
 <li><a href="configure/command_options.html">Command Options</a>
-<li>Configuration Directives
+<li>Configuration File
+<ul>
+<li><a href="configure/syntax_and_structure.html">Syntax and Structure</a>
+<li>Directives
+<ul>
+<li>Base
+<li>HTTP/1
+<li>HTTP/2
+<li>Access Log
+<li>Expires
+<li>File
+<li>Headers
+<li>Proxy
+<li>Redirect
+<li>Reproxy
+</ul>
+</ul>
 </ul>
 
 <p>
