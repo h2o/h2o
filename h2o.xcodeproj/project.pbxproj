@@ -260,9 +260,6 @@
 		105534FA1A460F4200627ECB /* 50sni.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 50sni.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534FB1A460F4200627ECB /* Util.pm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = Util.pm; sourceTree = "<group>"; };
 		105534FE1A46134A00627ECB /* 80issues61.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 80issues61.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
-		10583BDD1AE5A222004A3AD6 /* breadcrumb.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = breadcrumb.mt; sourceTree = "<group>"; };
-		10583BDE1AE5A222004A3AD6 /* notes.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = notes.mt; sourceTree = "<group>"; };
-		10583BDF1AE5A222004A3AD6 /* header.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = header.mt; sourceTree = "<group>"; };
 		10583BE01AE5A222004A3AD6 /* wrapper.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = wrapper.mt; sourceTree = "<group>"; };
 		10583BE11AE5A22D004A3AD6 /* configure.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = configure.mt; sourceTree = "<group>"; };
 		10583BE21AE5A22D004A3AD6 /* faq.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = faq.mt; sourceTree = "<group>"; };
@@ -278,6 +275,9 @@
 		10583BEE1AE5A37B004A3AD6 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		10583BF51AE765E0004A3AD6 /* command_options.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = command_options.mt; sourceTree = "<group>"; };
 		10583BF61AE765E0004A3AD6 /* quick_start.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = quick_start.mt; sourceTree = "<group>"; };
+		10583BF81AE783BE004A3AD6 /* remotebench.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = remotebench.png; path = assets/remotebench.png; sourceTree = "<group>"; };
+		10583BF91AE783BE004A3AD6 /* searchstyle.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = searchstyle.css; path = assets/searchstyle.css; sourceTree = "<group>"; };
+		10583BFA1AE783BE004A3AD6 /* style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = style.css; path = assets/style.css; sourceTree = "<group>"; };
 		1058C87C1AA41789008D6180 /* headers.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers.c; sourceTree = "<group>"; };
 		1058C87F1AA42568008D6180 /* 50headers.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50headers.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		1058C8871AA6DE4B008D6180 /* hostinfo.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hostinfo.h; sourceTree = "<group>"; };
@@ -629,9 +629,6 @@
 		10583BDC1AE5A20A004A3AD6 /* snippets */ = {
 			isa = PBXGroup;
 			children = (
-				10583BDD1AE5A222004A3AD6 /* breadcrumb.mt */,
-				10583BDE1AE5A222004A3AD6 /* notes.mt */,
-				10583BDF1AE5A222004A3AD6 /* header.mt */,
 				10583BE01AE5A222004A3AD6 /* wrapper.mt */,
 			);
 			path = snippets;
@@ -640,6 +637,7 @@
 		10583BEC1AE5A353004A3AD6 /* doc */ = {
 			isa = PBXGroup;
 			children = (
+				10583BF71AE783AB004A3AD6 /* assets */,
 				10583BED1AE5A37B004A3AD6 /* Makefile */,
 				10583BEE1AE5A37B004A3AD6 /* README.md */,
 			);
@@ -653,6 +651,16 @@
 				10583BF61AE765E0004A3AD6 /* quick_start.mt */,
 			);
 			path = configure;
+			sourceTree = "<group>";
+		};
+		10583BF71AE783AB004A3AD6 /* assets */ = {
+			isa = PBXGroup;
+			children = (
+				10583BF81AE783BE004A3AD6 /* remotebench.png */,
+				10583BF91AE783BE004A3AD6 /* searchstyle.css */,
+				10583BFA1AE783BE004A3AD6 /* style.css */,
+			);
+			name = assets;
 			sourceTree = "<group>";
 		};
 		1065E6F319B9969000686E72 /* evloop */ = {
