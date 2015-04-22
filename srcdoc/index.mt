@@ -62,8 +62,37 @@ H2O is a very fast HTTP server written in C. It can also be <a href="faq.html#li
 
 <h3>Benchmark</h3>
 
+<h4>Remote Benchmark</h4>
+
 <div>
-TBD
+<p>
+Below chart shows the scores recorded on Amazon EC2 running two c3.8xlarge instances (server and client) on a single network placement<?= $note->("for reverse-proxy tests, another H2O process running on the same host was used as the upstream server") ?>.
+</p>
+<a href="assets/remotebench.png" target="_blank"><img src="assets/remotebench.png" width="700"></a>
+</div>
+
+<h4>Local Benchmarks</h4>
+
+<div>
+<p>
+The scores (requests/second.core) were recorded on Ubuntu 14.04 (x86-64) / VMware Fusion 7.1.0 / OS X 10.9.5 / MacBook Pro 15" Early 2013.
+</p>
+
+<table>
+<caption>HTTP/1.1<?= $note->("used command: wrk -c 500 -d 30 -t 1; configuration file of nginx is https://gist.github.com/kazuho/c9c12021567e3ab83809") ?></caption>
+<tr><th>Server \ size of content<th>6 bytes<th>4,096 bytes
+<tr><td>h2o/0.9.0<td align="right">75,483<td align="right">59,673
+<tr><td><a href="http://nginx.org/">nginx</a>/1.7.9<td align="right">37,289<td align="right">43,988
+</table>
+
+<table>
+<caption>HTTP/2<?= $note->("used command: h2load -c 500 -m 100 -n 2000000; configuration file of H2O is https://gist.github.com/kazuho/5966cafb40e4473a62f8") ?></caption>
+<tr><th>Server \ size of content<th>6 bytes<th>4,096 bytes
+<tr><td>h2o/0.9.0<td align="right">272,300<td align="right">116,022
+<tr><td>tiny-nghttpd (<a href="https://github.com/tatsuhiro-t/nghttp2/">nghttpd</a>@ab1dd11)<td align="right">198,018<td align="right">93,868
+<tr><td><a href="https://github.com/matsumoto-r/trusterd">trusterd</a>@cff8e15<td align="right">167,306<td align="right">67,600
+</table>
+
 </div>
 
 ?= $_mt->render_file("notes.mt")

@@ -22,6 +22,12 @@ Portions of the software use following libraries that are also licensed under th
 Depending on how H2O is configured, the software links against OpenSSL or LibreSSL, both of which are <a href="https://www.openssl.org/source/license.html">dual-licensed under the OpenSSL License and the original SSLeay license</a>.
 </div>
 
+<h3 id="design-docs">Are there any design documents?</h3>
+
+<div>
+Please refer to the main developer's <a href="http://www.slideshare.net/kazuho/h2o-20141103pptx" target="_blank">prenestation slides</a> at the HTTP/2 conference, and <a href="http://blog.kazuhooku.com" target="_blank">his weblog</a>.
+</div>
+
 <h3 id="libh2o">How do I use H2O as a library?</h3>
 
 <div>

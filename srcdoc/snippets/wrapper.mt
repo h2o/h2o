@@ -8,13 +8,13 @@
 ? }
 
 <!-- oktavia -->
-<link rel="stylesheet" href="searchstyle.css" type="text/css" />
+<link rel="stylesheet" href="assets/searchstyle.css" type="text/css" />
 <script src="search/jquery-1.9.1.min.js"></script>
 <script src="search/oktavia-jquery-ui.js"></script>
 <script src="search/oktavia-english-search.js"></script>
 
 <!-- /oktavia -->
-<link rel="stylesheet" href="style.css" type="text/css" />
+<link rel="stylesheet" href="assets/style.css" type="text/css" />
 ?= $_[0]
 <div id="footer">
 <p>
