@@ -7,7 +7,7 @@ no warnings qw(once);
 use File::Basename qw(dirname);
 use File::Path qw(mkpath);
 use Scalar::Util qw(looks_like_number);
-use Text::MicroTemplate qw(build_mt render_mt);
+use Text::MicroTemplate qw(build_mt render_mt encoded_string);
 use Text::MicroTemplate::File;
 
 my $mt = Text::MicroTemplate::File->new(
@@ -26,17 +26,21 @@ $main::context = {
     ),
     notes    => [],
     note     => sub {
-        my ($note, $index);
+        my ($index, $html);
         if (looks_like_number($_[0])) {
             $index = $_[0] < 0 ? scalar(@{$main::context->{notes}}) + $_[0] : $_[0];
+            $html = $main::context->{notes}->[$index];
         } else {
             $index = scalar @{$main::context->{notes}};
-            push @{$main::context->{notes}}, $_[0];
+            $html = $_[0];
+            push @{$main::context->{notes}}, encoded_string($html);
         }
+        my $alt = $html;
+        $alt =~ s/<.*?>//g;
         return render_mt(
-            '<sup><a href="#note_<?= $_[0] ?>" title="<?= $_[1] ?>"><?= $_[0] ?></sup></a></sup>',
+            '<sup><a href="#note_<?= $_[0] ?>" id="#cite_<?= $_[0] ?>" title="<?= $_[1] ?>"><?= $_[0] ?></sup></a></sup>',
             $index + 1,
-            $main::context->{notes}->[$index],
+            $alt,
         );
     },
 };

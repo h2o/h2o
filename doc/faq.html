@@ -82,7 +82,7 @@ The name of the library is <code>libh2o</code>.
 To build H2O as a library you will need to install the following dependencies:
 <ul>
 <li><a href="https://github.com/libuv/libuv/">libuv</a> version 1.0 or above</li>
-<li><a href="https://www.openssl.org/">OpenSSL</a> version 1.0.2 or above<sup><a href="#note_1" title="libh2o cannot be linked against the bundled LibreSSL; see https://github.com/h2o/h2o/issues/290">1</sup></a></sup></li>
+<li><a href="https://www.openssl.org/">OpenSSL</a> version 1.0.2 or above<sup><a href="#note_1" id="#cite_1" title="libh2o cannot be linked against the bundled LibreSSL; see issue #290">1</sup></a></sup></li>
 </ul>
 In case the dependencies are installed under a non-standard path, <code>PKG_CONFIG_PATH</code> configuration variable can be used for specifying their paths.  For example, the following snippet builds <code>libh2o</code> using the libraries installed in their respective paths.
 </p>
@@ -105,7 +105,7 @@ Please refer to the <a href="https://github.com/h2o/h2o/labels/FAQ">GitHub issue
 <div class="notes">
 <h3>Notes:</h3>
 <ol>
-<li>libh2o cannot be linked against the bundled LibreSSL; see https://github.com/h2o/h2o/issues/290</li>
+<li id="note_1">libh2o cannot be linked against the bundled LibreSSL; see <a href="https://github.com/h2o/h2o/issues/290">issue #290</a></li>
 </ol>
 </div>
 

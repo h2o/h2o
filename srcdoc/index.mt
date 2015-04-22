@@ -34,7 +34,7 @@ H2O is a very fast HTTP server written in C. It can also be <a href="faq.html#li
 <ul>
 <li>uses OpenSSL or LibreSSL</li>
 <li>forward secrecy</li>
-<li>AEAD ciphers including the upcoming ones preferred by Google Chrome<?= $note->("chaha20-poly1305") ?></li>
+<li>AEAD ciphers including the upcoming ones preferred by Google Chrome<?= $note->(q{chacha20-poly1305; see also: <a href="https://blog.cloudflare.com/do-the-chacha-better-mobile-performance-with-cryptography/">Do the ChaCha: better mobile performance with cryptography</a>}) ?></li>
 <li>OCSP stapling<?= $note->("automatically enabled") ?></li>
 <li>session resumption and session tickets<?= $note->("internal memory is used as the storage") ?></li>
 </ul>
@@ -79,14 +79,14 @@ The scores (requests/second.core) were recorded on Ubuntu 14.04 (x86-64) / VMwar
 </p>
 
 <table>
-<caption>HTTP/1.1<?= $note->("used command: wrk -c 500 -d 30 -t 1; configuration file of nginx is https://gist.github.com/kazuho/c9c12021567e3ab83809") ?></caption>
+<caption>HTTP/1.1<?= $note->(q{used command: <code><a href="https://github.com/wg/wrk">wrk</a> -c 500 -d 30 -t 1</code>; configuration file of nginx is <a href="https://gist.github.com/kazuho/c9c12021567e3ab83809">here</a>}) ?></caption>
 <tr><th>Server \ size of content<th>6 bytes<th>4,096 bytes
 <tr><td>h2o/0.9.0<td align="right">75,483<td align="right">59,673
 <tr><td><a href="http://nginx.org/">nginx</a>/1.7.9<td align="right">37,289<td align="right">43,988
 </table>
 
 <table>
-<caption>HTTP/2<?= $note->("used command: h2load -c 500 -m 100 -n 2000000; configuration file of H2O is https://gist.github.com/kazuho/5966cafb40e4473a62f8") ?></caption>
+<caption>HTTP/2<?= $note->(q{used command: <code><a href="https://github.com/tatsuhiro-t/nghttp2/">h2load</a> -c 500 -m 100 -n 2000000</code>; configuration file of h2o is <a href="https://gist.github.com/kazuho/5966cafb40e4473a62f8">here</a>}) ?></caption>
 <tr><th>Server \ size of content<th>6 bytes<th>4,096 bytes
 <tr><td>h2o/0.9.0<td align="right">272,300<td align="right">116,022
 <tr><td>tiny-nghttpd (<a href="https://github.com/tatsuhiro-t/nghttp2/">nghttpd</a>@ab1dd11)<td align="right">198,018<td align="right">93,868

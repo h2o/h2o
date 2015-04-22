@@ -5,7 +5,7 @@
 <h3>Notes:</h3>
 <ol>
 ? for (my $index = 0; $index < @notes; ++$index) {
-<li><?= $notes[$index] ?></li>
+<li id="note_<?= $index + 1 ?>"><?= $notes[$index] ?></li>
 ? }
 </ol>
 </div>

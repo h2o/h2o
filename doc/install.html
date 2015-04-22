@@ -63,7 +63,7 @@ Therefore you may try to at first install the software using your favorite packa
 <h3>Installing from Source</h3>
 
 <p>
-Download a release version from <a href="https://github.com/h2o/h2o/releases">the releases page</a> or clone the master branch from <a href="https://github.com/h2o/h2o/">the source repository</a>, and build it using <a href="http://www.cmake.org/">CMake</a><sup><a href="#note_1" title="CMake is a popular build tool that can be found as a binary package on most operating systems.">1</sup></a></sup>.
+Download a release version from <a href="https://github.com/h2o/h2o/releases">the releases page</a> or clone the master branch from <a href="https://github.com/h2o/h2o/">the source repository</a>, and build it using <a href="http://www.cmake.org/">CMake</a><sup><a href="#note_1" id="#cite_1" title="CMake is a popular build tool that can be found as a binary package on most operating systems.">1</sup></a></sup>.
 </p>
 
 <pre><code>% cmake -DWITH_BUNDLED_SSL=on .
@@ -110,11 +110,11 @@ This option specifies the directory to which H2O will be installed (default: <co
 <h3>Installing from Source, using OpenSSL</h3>
 
 <p>
-Generally speaking, we believe that using LibreSSL is a better choice for running H2O, since LibreSSL not only is considered to be more secure than OpenSSL but also provides support for new ciphersuites such as <code>chacha20-poly1305</code> which is the preferred method of Google Chrome<sup><a href="#note_2" title="ref: https://blog.cloudflare.com/do-the-chacha-better-mobile-performance-with-cryptography/">2</sup></a></sup>.  However, it is also true that LibreSSL is slower than OpenSSL on some benchmarks.  So if you are interested in benchmark numbers, using OpenSSL is a reasonable choice.
+Generally speaking, we believe that using LibreSSL is a better choice for running H2O, since LibreSSL not only is considered to be more secure than OpenSSL but also provides support for new ciphersuites such as <code>chacha20-poly1305</code> which is the preferred method of Google Chrome<sup><a href="#note_2" id="#cite_2" title="ref: Do the ChaCha: better mobile performance with cryptography">2</sup></a></sup>.  However, it is also true that LibreSSL is slower than OpenSSL on some benchmarks.  So if you are interested in benchmark numbers, using OpenSSL is a reasonable choice.
 </p>
 
 <p>
-The difficulty in using OpenSSL is that the HTTP/2 specification requires the use of an extension to the TLS protocol named ALPN, which has only been supported since OpenSSL 1.0.2<sup><a href="#note_3" title="It is possible to build H2O using prior versions of OpenSSL, but some (if not all) web browsers are known for not using HTTP/2 when connecting to servers configured as such.">3</sup></a></sup>.  Therefore it is highly likely that you would need to manually install or upgrade OpenSSL on your system.
+The difficulty in using OpenSSL is that the HTTP/2 specification requires the use of an extension to the TLS protocol named ALPN, which has only been supported since OpenSSL 1.0.2<sup><a href="#note_3" id="#cite_3" title="It is possible to build H2O using prior versions of OpenSSL, but some (if not all) web browsers are known for not using HTTP/2 when connecting to servers configured as such.">3</sup></a></sup>.  Therefore it is highly likely that you would need to manually install or upgrade OpenSSL on your system.
 </p>
 
 <p>
@@ -138,7 +138,7 @@ The preferred approach is to use the <code>PKG_CONFIG_PATH</code> environment va
 </code></pre>
 
 <p>
-In case your OpenSSL installation does not have the <code>lib/pkgconfig</code> directory, you may use <code>OPENSSL_ROOT_DIR</code> environment variable to specify the root directory of the OpenSSL being installed.  However, it is likely that CMake version 3.1.2 or above is be required when using this approach<sup><a href="#note_4" title="ref: https://github.com/h2o/h2o/issues/277, http://public.kitware.com/Bug/view.php?id=15386">4</sup></a></sup>.
+In case your OpenSSL installation does not have the <code>lib/pkgconfig</code> directory, you may use <code>OPENSSL_ROOT_DIR</code> environment variable to specify the root directory of the OpenSSL being installed.  However, it is likely that CMake version 3.1.2 or above is be required when using this approach<sup><a href="#note_4" id="#cite_4" title="ref: h2o issue #277, CMake issue 0015386">4</sup></a></sup>.
 </p>
 
 <pre><code>% OPENSSL_ROOT_DIR=/usr/local/openssl-1.0.2 cmake -DWITH_BUNDLED_SSL=off
@@ -149,10 +149,10 @@ In case your OpenSSL installation does not have the <code>lib/pkgconfig</code> d
 <div class="notes">
 <h3>Notes:</h3>
 <ol>
-<li>CMake is a popular build tool that can be found as a binary package on most operating systems.</li>
-<li>ref: https://blog.cloudflare.com/do-the-chacha-better-mobile-performance-with-cryptography/</li>
-<li>It is possible to build H2O using prior versions of OpenSSL, but some (if not all) web browsers are known for not using HTTP/2 when connecting to servers configured as such.</li>
-<li>ref: https://github.com/h2o/h2o/issues/277, http://public.kitware.com/Bug/view.php?id=15386</li>
+<li id="note_1">CMake is a popular build tool that can be found as a binary package on most operating systems.</li>
+<li id="note_2">ref: <a href="https://blog.cloudflare.com/do-the-chacha-better-mobile-performance-with-cryptography/">Do the ChaCha: better mobile performance with cryptography</a></li>
+<li id="note_3">It is possible to build H2O using prior versions of OpenSSL, but some (if not all) web browsers are known for not using HTTP/2 when connecting to servers configured as such.</li>
+<li id="note_4">ref: <a href="https://github.com/h2o/h2o/issues/277">h2o issue #277</a>, <a href="http://public.kitware.com/Bug/view.php?id=15386">CMake issue 0015386</a></li>
 </ol>
 </div>
 
