@@ -1,13 +1,5 @@
 ? my $ctx = $main::context;
-? $_mt->wrapper_file("wrapper.mt")->(sub {
-
-<title>Quick Start - Configure - H2O</title>
-
-?= $_mt->render_file("header.mt")
-
-<div id="main">
-
-<h2>Configure &gt; Quick Start</h2>
+? $_mt->wrapper_file("wrapper.mt", "Configure", "Quick Start")->(sub {
 
 <p>
 In order to run the H2O standalone HTTP server, you need to write a configuration file.
@@ -62,7 +54,5 @@ To stop the server, send <code>SIGTERM</code> to the server.
 % sudo kill -TERM `cat /path/to/the/pid-file`
 EOT
 ?>
-
-</div>
 
 ? })

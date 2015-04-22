@@ -1,12 +1,6 @@
 ? my $note = $main::context->{note};
 ? $_mt->wrapper_file("wrapper.mt")->(sub {
 
-<title>H2O</title>
-
-?= $_mt->render_file("header.mt")
-
-<div id="main">
-
 <h2>About H2O</h2>
 
 <div>
@@ -94,10 +88,6 @@ The scores (requests/second.core) were recorded on Ubuntu 14.04 (x86-64) / VMwar
 <tr><td>tiny-nghttpd (<a href="https://github.com/tatsuhiro-t/nghttp2/">nghttpd</a>@ab1dd11)<td align="right">198,018<td align="right">93,868
 <tr><td><a href="https://github.com/matsumoto-r/trusterd">trusterd</a>@cff8e15<td align="right">167,306<td align="right">67,600
 </table>
-
-</div>
-
-?= $_mt->render_file("notes.mt")
 
 </div>
 

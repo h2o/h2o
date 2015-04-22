@@ -1,13 +1,5 @@
 ? my $ctx = $main::context;
-? $_mt->wrapper_file("wrapper.mt")->(sub {
-
-<title>Command Options - Configure - H2O</title>
-
-?= $_mt->render_file("header.mt")
-
-<div id="main">
-
-<h2>Configure &gt; Command Options</h2>
+? $_mt->wrapper_file("wrapper.mt", "Configure", "Command Options")->(sub {
 
 <p>
 Full list of command options can be viewed by running <code>h2o --help</code>.
@@ -35,7 +27,5 @@ Options:
   -h, --help         print this help
 EOT
 ?>
-
-</div>
 
 ? })

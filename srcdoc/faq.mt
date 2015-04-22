@@ -1,13 +1,5 @@
 ? my $ctx = $main::context;
-? $_mt->wrapper_file("wrapper.mt")->(sub {
-
-<title>Frequently Asked Questions - H2O</title>
-
-?= $_mt->render_file("header.mt")
-
-<div id="main">
-
-<h2>Frequently Asked Questions</h2>
+? $_mt->wrapper_file("wrapper.mt", "Frequently Asked Questions")->(sub {
 
 <h3 id="license">What are the license terms?</h3>
 
@@ -59,10 +51,6 @@ For more information, please refer to the <a href="https://github.com/h2o/h2o/la
 
 <div>
 Please refer to the <a href="https://github.com/h2o/h2o/labels/FAQ">GitHub issues tagged as FAQ</a>.
-</div>
-
-?= $_mt->render_file("notes.mt")
-
 </div>
 
 ? })
