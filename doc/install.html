@@ -138,7 +138,7 @@ The preferred approach is to use the <code>PKG_CONFIG_PATH</code> environment va
 </code></pre>
 
 <p>
-In case your OpenSSL installation does not have the <code>lib/pkgconfig</code> directory, you may use <code>OPENSSL_ROOT_DIR</code> environment variable to specify the root directory of the OpenSSL being installed.  However, CMake equal to or above version 3.1.2 may be required when using this approach<sup><a href="#note_4" title="ref: http://public.kitware.com/Bug/view.php?id=15386">4</sup></a></sup>.
+In case your OpenSSL installation does not have the <code>lib/pkgconfig</code> directory, you may use <code>OPENSSL_ROOT_DIR</code> environment variable to specify the root directory of the OpenSSL being installed.  However, it is likely that CMake version 3.1.2 or above is be required when using this approach<sup><a href="#note_4" title="ref: https://github.com/h2o/h2o/issues/277, http://public.kitware.com/Bug/view.php?id=15386">4</sup></a></sup>.
 </p>
 
 <pre><code>% OPENSSL_ROOT_DIR=/usr/local/openssl-1.0.2 cmake -DWITH_BUNDLED_SSL=off
@@ -152,7 +152,7 @@ In case your OpenSSL installation does not have the <code>lib/pkgconfig</code> d
 <li>CMake is a popular build tool that can be found as a binary package on most operating systems.</li>
 <li>ref: https://blog.cloudflare.com/do-the-chacha-better-mobile-performance-with-cryptography/</li>
 <li>It is possible to build H2O using prior versions of OpenSSL, but some (if not all) web browsers are known for not using HTTP/2 when connecting to servers configured as such.</li>
-<li>ref: http://public.kitware.com/Bug/view.php?id=15386</li>
+<li>ref: https://github.com/h2o/h2o/issues/277, http://public.kitware.com/Bug/view.php?id=15386</li>
 </ol>
 </div>
 

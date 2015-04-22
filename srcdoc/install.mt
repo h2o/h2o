@@ -103,7 +103,7 @@ EOT
 ?>
 
 <p>
-In case your OpenSSL installation does not have the <code>lib/pkgconfig</code> directory, you may use <code>OPENSSL_ROOT_DIR</code> environment variable to specify the root directory of the OpenSSL being installed.  However, CMake equal to or above version 3.1.2 may be required when using this approach<?= $ctx->{note}->("ref: http://public.kitware.com/Bug/view.php?id=15386") ?>.
+In case your OpenSSL installation does not have the <code>lib/pkgconfig</code> directory, you may use <code>OPENSSL_ROOT_DIR</code> environment variable to specify the root directory of the OpenSSL being installed.  However, it is likely that CMake version 3.1.2 or above is be required when using this approach<?= $ctx->{note}->("ref: https://github.com/h2o/h2o/issues/277, http://public.kitware.com/Bug/view.php?id=15386") ?>.
 </p>
 
 <?= $ctx->{code}->(<< 'EOT')
