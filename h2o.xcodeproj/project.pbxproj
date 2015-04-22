@@ -276,8 +276,8 @@
 		10583BEB1AE5A341004A3AD6 /* regen-all.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = "regen-all.sh"; sourceTree = "<group>"; };
 		10583BED1AE5A37B004A3AD6 /* Makefile */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.make; path = Makefile; sourceTree = "<group>"; };
 		10583BEE1AE5A37B004A3AD6 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
-		10583BEF1AE5A37B004A3AD6 /* searchstyle.css */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.css; path = searchstyle.css; sourceTree = "<group>"; };
-		10583BF01AE5A37B004A3AD6 /* style.css */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.css; path = style.css; sourceTree = "<group>"; };
+		10583BF51AE765E0004A3AD6 /* command_options.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = command_options.mt; sourceTree = "<group>"; };
+		10583BF61AE765E0004A3AD6 /* quick_start.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = quick_start.mt; sourceTree = "<group>"; };
 		1058C87C1AA41789008D6180 /* headers.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers.c; sourceTree = "<group>"; };
 		1058C87F1AA42568008D6180 /* 50headers.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50headers.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		1058C8871AA6DE4B008D6180 /* hostinfo.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hostinfo.h; sourceTree = "<group>"; };
@@ -616,6 +616,7 @@
 		10583BDB1AE5A1E3004A3AD6 /* srcdoc */ = {
 			isa = PBXGroup;
 			children = (
+				10583BF31AE764A7004A3AD6 /* configure */,
 				10583BE11AE5A22D004A3AD6 /* configure.mt */,
 				10583BE21AE5A22D004A3AD6 /* faq.mt */,
 				10583BE31AE5A22D004A3AD6 /* index.mt */,
@@ -641,10 +642,17 @@
 			children = (
 				10583BED1AE5A37B004A3AD6 /* Makefile */,
 				10583BEE1AE5A37B004A3AD6 /* README.md */,
-				10583BEF1AE5A37B004A3AD6 /* searchstyle.css */,
-				10583BF01AE5A37B004A3AD6 /* style.css */,
 			);
 			path = doc;
+			sourceTree = "<group>";
+		};
+		10583BF31AE764A7004A3AD6 /* configure */ = {
+			isa = PBXGroup;
+			children = (
+				10583BF51AE765E0004A3AD6 /* command_options.mt */,
+				10583BF61AE765E0004A3AD6 /* quick_start.mt */,
+			);
+			path = configure;
 			sourceTree = "<group>";
 		};
 		1065E6F319B9969000686E72 /* evloop */ = {
