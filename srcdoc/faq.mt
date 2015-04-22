@@ -45,7 +45,7 @@ In case the dependencies are installed under a non-standard path, <code>PKG_CONF
 </p>
 
 <?= $ctx->{code}->(<< 'EOT')
-% PKG_CONFIG_PATH=/usr/local/libuv-1.4/lib/pkgconfig:/usr/local/openssl-1.0.2a/lib/pkgconfig: cmake .
+% PKG_CONFIG_PATH=/usr/local/libuv-1.4/lib/pkgconfig:/usr/local/openssl-1.0.2a/lib/pkgconfig cmake .
 % make libh2o
 EOT
 ?>
