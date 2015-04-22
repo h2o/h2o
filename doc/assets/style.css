@@ -66,8 +66,8 @@ a {
 
 #menu td {
     text-align: center;
-    border: 1px solid #999;
-    background: #ccc;
+    border: 1px solid #aaa;
+    background: #ddd;
 }
 
 #menu td a {
@@ -97,7 +97,7 @@ a {
     margin: 0;
     padding: 0 50px 1em 50px;
     display: inline-block;
-    border: 1px solid #ccc;
+    border: 1px solid #aaa;
     border-top: none;
 }
 
@@ -195,7 +195,7 @@ a {
 #footer {
     border-width: 0 1px;
     border-style: solid;
-    border-color: #ccc;
+    border-color: #aaa;
     padding: 1em 50px 1em 50px;
     text-align: center;
 }
