@@ -24,9 +24,11 @@ html: $(OUTPUT)
 search/searchindex.js: html
 	../misc/oktavia/bin/oktavia-mkindex $(patsubst %,-i %,$(OUTPUT)) -m html -u h2 -c 10 -t js -s english
 
-publish: all
-	@DIRTY=`git status | grep 'Changes .* commit'` ; \
-	if [ -n "$$DIRTY" ] ; then \
+publish: all publish-check do-publish
+
+publish-check:
+	@CLEAN=`LANG=C git status . 2>&1 | grep 'working directory clean'` ; \
+	if [ -z "$$CLEAN" ] ; then \
 		echo "uncommitted changes exist; aborting" >&2 ; \
 		exit 1 ; \
 	fi
@@ -38,4 +40,4 @@ do-publish:
 clean:
 	rm -f $(OUTPUT) search/searchindex.js
 
-.PHONY: mkdir html publish do-publish
+.PHONY: mkdir html publish publish-check do-publish
