@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<base href="../" />
+
+<!-- oktavia -->
+<link rel="stylesheet" href="assets/searchstyle.css" type="text/css" />
+<script src="search/jquery-1.9.1.min.js"></script>
+<script src="search/oktavia-jquery-ui.js"></script>
+<script src="search/oktavia-english-search.js"></script>
+<!-- /oktavia -->
+
+<link rel="stylesheet" href="assets/style.css" type="text/css" />
+
+<title>Syntax and Structure - Configure - H2O</title>
+</head>
+<body>
+<div id="body">
+<div id="top">
+
+<h1><a href="./">H2O</a></h1>
+the optimized HTTP/1.x, HTTP/2 server
+
+<!-- oktavia -->
+<form id="searchform">
+<input class="search" type="search" name="search" id="search" results="5" value="" placeholder="Search" />
+<div id="searchresult_box">
+<div id="close_search_box">&times;</div>
+<div id="searchresult_summary"></div>
+<div id="searchresult"></div>
+<div id="searchresult_nav"></div>
+<span class="pr">Powered by <a href="https://github.com/shibukawa/oktavia">Oktavia</a></span>
+</div>
+</form>
+<!-- /oktavia -->
+
+</div>
+
+<table id="menu">
+<tr>
+<td><a href="./">Top</a></td>
+<td><a href="install.html">Install</a></td>
+<td class="selected">Configure</td>
+<td><a href="faq.html">FAQ</a></td>
+<td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
+<td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
+</tr>
+</table>
+
+<div id="main">
+
+<h2>
+<a href="configure.html">Configure</a> &gt;
+Syntax and Structure
+</h2>
+
+
+<h3>Syntax</h3>
+
+H2O uses <a href="http://www.yaml.org/">YAML</a> 1.1 the syntax of its configuration file.
+
+<h3>Levels of Configuration</h3>
+
+<p>
+When using the configuration directives of H2O, it is important to understand that there are three configuration levels: global, host, path.
+</p>
+
+<p>
+Global-level configurations affect the entire server.
+Host-level configurations affect the configuration for the specific hostname (i.e. corresponds to the <a href="http://httpd.apache.org/docs/2.4/vhosts/">&lt;VirtualHost&gt;</a> directive of the Apache HTTP Server).
+Path-level configurations only affect the behavior of resources specific to the path.
+</p>
+
+<p>
+Consider the following example.
+</p>
+
+<pre><code>hosts:
+  &quot;example.com&quot;:
+    listen:
+      port: 443
+      ssl:
+        certificate-file: etc/site1.crt
+        key-file: etc/site1.key
+    paths:
+      &quot;/&quot;:
+        file.dir: htdocs/site1
+      &quot;/icons&quot;:
+        file.dir: icons
+        expires: 1 day
+  &quot;example.com:80&quot;:
+    listen:
+      port: 80
+    paths:
+      &quot;/&quot;:
+        redirect: &quot;https://example.com/&quot;
+</code></pre>
+
+<p>
+In the example, two host-level configurations exist (under the <code>hosts</code> mapping), each of them listening to different ports.
+The first host listens to port 443 using TLS (i.e. HTTPS) using the specified server certificate and key.
+It has two path-level configurations, one for <code>/</code> and the other for <code>/icons</code>, each of them pointing to different local directories containing the files to be served.
+The latter also has the <code>expires</code> directive set, so that <code>Cache-Control: max-age=86400</code><sup><a href="#note_1" id="#cite_1" title="1 day is equivalent to 86400 seconds">1</sup></a></sup> header would be sent.
+The second host accepts connections on port 80 (via the plain-text HTTP protocol), and redirects all the requests to the first host using HTTPS.
+</p>
+
+<p>
+Certain configuration directives can be used in more than one levels.  For example, the <code>listen</code> directive can be used either at the global level or at the host level.
+<code>Expires</code> can be used at all levels.
+On the other hand <code>file.dir</code> can only be used at the path level.
+</p>
+
+
+
+<div class="notes">
+<h3>Notes:</h3>
+<ol>
+<li id="note_1">1 day is equivalent to 86400 seconds</li>
+</ol>
+</div>
+
+</div>
+<div id="footer">
+<p>
+Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+</p>
+</div>
+</body>
+</html>
