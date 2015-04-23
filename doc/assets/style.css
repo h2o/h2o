@@ -95,6 +95,7 @@ a {
 
 #main {
     margin: 0;
+    width: 698px;
     padding: 0 50px 1em 50px;
     display: inline-block;
     border: 1px solid #aaa;
