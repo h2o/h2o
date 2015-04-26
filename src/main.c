@@ -585,7 +585,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         SSL_CTX_set_tlsext_status_arg(ssl_ctx, ssl_config);
         pthread_mutex_init(&ssl_config->ocsp_stapling.response.mutex, NULL);
         ssl_config->ocsp_stapling.cmd =
-            ocsp_update_cmd != NULL ? strdup(ocsp_update_cmd->data.scalar) : "share/h2o/fetch-ocsp-response";
+            ocsp_update_cmd != NULL ? h2o_strdup(NULL, ocsp_update_cmd->data.scalar, SIZE_MAX).base : "share/h2o/fetch-ocsp-response";
         if (ocsp_update_interval != 0) {
             switch (conf.run_mode) {
             case RUN_MODE_WORKER:
