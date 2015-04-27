@@ -6,6 +6,7 @@ OUTPUT=\
     configure/quick_start.html \
     configure/command_options.html \
     configure/syntax_and_structure.html \
+    configure/base_directives.html \
     faq.html \
 
 PUBLISH_REPO=git@github.com:h2o/h2o.github.io.git

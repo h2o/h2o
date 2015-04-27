@@ -7,9 +7,10 @@
 <li>Configuration File
 <ul>
 <li><a href="configure/syntax_and_structure.html">Syntax and Structure</a>
-<li>Directives
+</ul>
+<li>Configuration Directives
 <ul>
-<li>Base
+<li><a href="configure/base_directives.html">Base</a>
 <li>HTTP/1
 <li>HTTP/2
 <li>Access Log
@@ -19,7 +20,6 @@
 <li>Proxy
 <li>Redirect
 <li>Reproxy
-</ul>
 </ul>
 </ul>
 
