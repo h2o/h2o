@@ -56,7 +56,7 @@ static h2o_hostconf_t *setup_before_processing(h2o_req_t *req)
 
     /* find the host context */
     if (req->input.authority.base != NULL) {
-        if ((hostconf = find_hostconf(req->conn->hosts, req->input.authority)) == NULL)
+        if (req->conn->hosts[1] == NULL || (hostconf = find_hostconf(req->conn->hosts, req->input.authority)) == NULL)
             hostconf = *req->conn->hosts;
     } else {
         /* set the authority name to the default one */
