@@ -218,7 +218,7 @@ int main(int argc, char **argv)
     signal(SIGPIPE, SIG_IGN);
 
     h2o_config_init(&config);
-    hostconf = h2o_config_register_host(&config, "default");
+    hostconf = h2o_config_register_host(&config, h2o_iovec_init(H2O_STRLIT("default")), 65535);
     register_handler(hostconf, "/post-test", post_test);
     register_handler(hostconf, "/chunked-test", chunked_test);
     h2o_reproxy_register(register_handler(hostconf, "/reproxy-test", reproxy_test));

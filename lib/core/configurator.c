@@ -185,11 +185,17 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key;
         yoml_t *value = node->data.mapping.elements[i].value;
+        h2o_iovec_t hostname;
+        uint16_t port;
         if (key->type != YOML_TYPE_SCALAR) {
             h2o_configurator_errprintf(cmd, key, "key (representing the hostname) must be a string");
             return -1;
         }
-        ctx->hostconf = h2o_config_register_host(ctx->globalconf, key->data.scalar);
+        if (h2o_url_parse_hostport(key->data.scalar, strlen(key->data.scalar), &hostname, &port) == NULL) {
+            h2o_configurator_errprintf(cmd, key, "invalid key (must be either `host` or `host:port`)");
+            return -1;
+        }
+        ctx->hostconf = h2o_config_register_host(ctx->globalconf, hostname, port);
         if (apply_commands(ctx, H2O_CONFIGURATOR_FLAG_HOST, value) != 0)
             return -1;
         if (yoml_get(value, "paths") == NULL) {

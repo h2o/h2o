@@ -36,11 +36,31 @@ struct st_reprocess_request_deferred_t {
     h2o_timeout_entry_t _timeout;
 };
 
-static h2o_hostconf_t *find_hostconf(h2o_hostconf_t **hostconfs, h2o_iovec_t authority)
+static h2o_hostconf_t *find_hostconf(h2o_hostconf_t **hostconfs, h2o_iovec_t authority, uint16_t default_port)
 {
+    h2o_iovec_t hostname;
+    uint16_t port;
+    char *hostname_lc;
+
+    /* safe-guard for alloca */
+    if (authority.len >= 65536)
+        return NULL;
+
+    /* extract the specified hostname and port */
+    if (h2o_url_parse_hostport(authority.base, authority.len, &hostname, &port) == NULL)
+        return NULL;
+    if (port == 65535)
+        port = default_port;
+
+    /* convert supplied hostname to lower-case */
+    hostname_lc = alloca(hostname.len);
+    memcpy(hostname_lc, hostname.base, hostname.len);
+    h2o_strtolower(hostname_lc, hostname.len);
+
     do {
         h2o_hostconf_t *hostconf = *hostconfs;
-        if (h2o_memis(hostconf->hostname.base, hostconf->hostname.len, authority.base, authority.len))
+        if ((hostconf->authority.port == port || (hostconf->authority.port == 65535 && port == default_port)) &&
+            h2o_memis(hostconf->authority.host.base, hostconf->authority.host.len, hostname_lc, hostname.len))
             return hostconf;
     } while (*++hostconfs != NULL);
 
@@ -56,12 +76,13 @@ static h2o_hostconf_t *setup_before_processing(h2o_req_t *req)
 
     /* find the host context */
     if (req->input.authority.base != NULL) {
-        if (req->conn->hosts[1] == NULL || (hostconf = find_hostconf(req->conn->hosts, req->input.authority)) == NULL)
+        if (req->conn->hosts[1] == NULL ||
+            (hostconf = find_hostconf(req->conn->hosts, req->input.authority, req->input.scheme->default_port)) == NULL)
             hostconf = *req->conn->hosts;
     } else {
         /* set the authority name to the default one */
         hostconf = *req->conn->hosts;
-        req->input.authority = hostconf->hostname;
+        req->input.authority = hostconf->authority.hostport;
     }
 
     req->scheme = req->input.scheme;
@@ -226,7 +247,7 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
     }
 
     /* handle the response using the handlers, if hostconf exists */
-    if (req->overrides == NULL && (hostconf = find_hostconf(req->conn->hosts, req->authority)) != NULL) {
+    if (req->overrides == NULL && (hostconf = find_hostconf(req->conn->hosts, req->authority, req->scheme->default_port)) != NULL) {
         process_hosted_request(req, hostconf);
         return;
     }

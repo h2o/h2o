@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,7 +68,9 @@ static void destroy_hostconf(h2o_hostconf_t *hostconf)
 {
     size_t i;
 
-    free(hostconf->hostname.base);
+    if (hostconf->authority.hostport.base != hostconf->authority.host.base)
+        free(hostconf->authority.hostport.base);
+    free(hostconf->authority.host.base);
     for (i = 0; i != hostconf->paths.size; ++i) {
         h2o_pathconf_t *pathconf = hostconf->paths.entries + i;
         dispose_pathconf(pathconf);
@@ -111,14 +114,27 @@ h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *p
     return pathconf;
 }
 
-h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, const char *hostname)
+h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t host, uint16_t port)
 {
     h2o_hostconf_t *hostconf;
 
     /* create hostconf */
     hostconf = create_hostconf(config);
-    hostconf->hostname = h2o_strdup(NULL, hostname, SIZE_MAX);
-    h2o_strtolower(hostconf->hostname.base, hostconf->hostname.len);
+    hostconf->authority.host = h2o_strdup(NULL, host.base, host.len);
+    h2o_strtolower(hostconf->authority.host.base, hostconf->authority.host.len);
+    hostconf->authority.port = port;
+    if (hostconf->authority.port == 65535) {
+        hostconf->authority.hostport = hostconf->authority.host;
+    } else {
+        hostconf->authority.hostport.base = h2o_mem_alloc(hostconf->authority.host.len + sizeof("[]:65535"));
+        if (strchr(hostconf->authority.host.base, ':') != NULL) {
+            hostconf->authority.hostport.len =
+                sprintf(hostconf->authority.hostport.base, "[%s]:%" PRIu16, hostconf->authority.host.base, port);
+        } else {
+            hostconf->authority.hostport.len =
+                sprintf(hostconf->authority.hostport.base, "%s:%" PRIu16, hostconf->authority.host.base, port);
+        }
+    }
 
     /* append to the list */
     h2o_append_to_null_terminated_list((void *)&config->hosts, hostconf);

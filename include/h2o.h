@@ -178,9 +178,22 @@ struct st_h2o_hostconf_t {
      */
     h2o_globalconf_t *global;
     /**
-     * hostname in lower-case (base is NUL terminated)
+     * host and port
      */
-    h2o_iovec_t hostname;
+    struct {
+        /**
+         * host and port (in lower-case; base is NULL-terminated)
+         */
+        h2o_iovec_t hostport;
+        /**
+         *  in lower-case; base is NULL-terminated
+         */
+        h2o_iovec_t host;
+        /**
+         * port number (or 65535 if default)
+         */
+        uint16_t port;
+    } authority;
     /**
      * list of path configurations
      */
@@ -758,7 +771,7 @@ void h2o_config_init(h2o_globalconf_t *config);
 /**
  * registers a host context
  */
-h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, const char *hostname);
+h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t host, uint16_t port);
 /**
  * registers a path context
  */
