@@ -62,9 +62,9 @@ This document describes the configuration directives common to all the protocols
 
 <h3 id="hosts" class="directive-title"><a href="configure/base_directives.html#hosts"><code>"hosts"</code></a></h3>
 
-<dl>
+<dl class="directive-desc">
 <dt>Description:</dt>
-<dd class="directive-desc"><p>
+<dd><p>
 Maps <code>host:port</code> to the mappings of per-host configs.
 </p>
 <p>
@@ -103,9 +103,9 @@ Otherwise, the entry will match the requests targetting the specified port.
 
 <h3 id="paths" class="directive-title"><a href="configure/base_directives.html#paths"><code>"paths"</code></a></h3>
 
-<dl>
+<dl class="directive-desc">
 <dt>Description:</dt>
-<dd class="directive-desc"><p>
+<dd><p>
 Mapping of paths and their configurations.
 </p>
 <p>
@@ -134,9 +134,9 @@ An <code>404 Not Found</code> error is returned if no matching paths were found.
 
 <h3 id="listen" class="directive-title"><a href="configure/base_directives.html#listen"><code>"listen"</code></a></h3>
 
-<dl>
+<dl class="directive-desc">
 <dt>Description:</dt>
-<dd class="directive-desc"><p>
+<dd><p>
 Specifies the port at which the server should listen to.
 </p>
 <p>
@@ -234,9 +234,9 @@ Default is 3.
 
 <h3 id="error-log" class="directive-title"><a href="configure/base_directives.html#error-log"><code>"error-log"</code></a></h3>
 
-<dl>
+<dl class="directive-desc">
 <dt>Description:</dt>
-<dd class="directive-desc"><p>
+<dd><p>
 Path of the file to which error logs should be appended.
 If the path starts with `|`, the rest of the path is considered as a command to which the logs should be piped.
 </p>
@@ -251,9 +251,9 @@ Default is stderr.
 
 <h3 id="limit-request-body" class="directive-title"><a href="configure/base_directives.html#limit-request-body"><code>"limit-request-body"</code></a></h3>
 
-<dl>
+<dl class="directive-desc">
 <dt>Description:</dt>
-<dd class="directive-desc"><p>
+<dd><p>
 Maximum size of request body in bytes (e.g. content of POST).
 Default is unlimited.
 </p>
@@ -265,49 +265,50 @@ Default is unlimited.
 
 <h3 id="max-connections" class="directive-title"><a href="configure/base_directives.html#max-connections"><code>"max-connections"</code></a></h3>
 
-<dl>
+<dl class="directive-desc">
 <dt>Description:</dt>
-<dd class="directive-desc"><p>
-Number of connections to handle at once at maximum.
-Default is 1,024.
-</p>
+<dd>Number of connections to handle at once at maximum.
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>max-connections: 1024</pre></code>
 </dl>
 
 
 <h3 id="max-delegations" class="directive-title"><a href="configure/base_directives.html#max-delegations"><code>"max-delegations"</code></a></h3>
 
-<dl>
+<dl class="directive-desc">
 <dt>Description:</dt>
-<dd class="directive-desc"><p>
+<dd><p>
 Limits the number of delegations (i.e. internal redirects using the <code>X-Reproxy-URL</code> header).
-Default is 5.
 </p>
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>max-delegations: 5</pre></code>
 </dl>
 
 
 <h3 id="num-name-resolution-threads" class="directive-title"><a href="configure/base_directives.html#num-name-resolution-threads"><code>"num-name-resolution-threads"</code></a></h3>
 
-<dl>
+<dl class="directive-desc">
 <dt>Description:</dt>
-<dd class="directive-desc">Number of threads to run for name resolution.
-Default is 32.
+<dd>Number of threads to run for name resolution.
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>num-name-resolution-threads: 32</pre></code>
 </dl>
 
 
 <h3 id="num-threads" class="directive-title"><a href="configure/base_directives.html#num-threads"><code>"num-threads"</code></a></h3>
 
-<dl>
+<dl class="directive-desc">
 <dt>Description:</dt>
-<dd class="directive-desc"><p>
+<dd><p>
 Number of worker threads.
 Default is the number of the processors connected to the system as obtained by <code>getconf NPROCESSORS_ONLN</code>.
 </p>
@@ -319,9 +320,9 @@ Default is the number of the processors connected to the system as obtained by <
 
 <h3 id="pid-file" class="directive-title"><a href="configure/base_directives.html#pid-file"><code>"pid-file"</code></a></h3>
 
-<dl>
+<dl class="directive-desc">
 <dt>Description:</dt>
-<dd class="directive-desc">Name of the file to which the process id of the server should be written.
+<dd>Name of the file to which the process id of the server should be written.
 Default is none.
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
@@ -331,9 +332,9 @@ Default is none.
 
 <h3 id="user" class="directive-title"><a href="configure/base_directives.html#user"><code>"user"</code></a></h3>
 
-<dl>
+<dl class="directive-desc">
 <dt>Description:</dt>
-<dd class="directive-desc"><p>
+<dd><p>
 Username under which the server should handle incoming requests.
 </p>
 <p>

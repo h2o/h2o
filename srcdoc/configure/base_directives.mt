@@ -197,33 +197,31 @@ EOT
 }) ?>
 
 <?= $_mt->render_file("directive.mt", {
-    name   => "max-connections",
-    levels => [ qw(global) ],
-    desc   => <<'EOT',
-<p>
+    name    => "max-connections",
+    levels  => [ qw(global) ],
+    default => 'max-connections: 1024',
+    desc    => <<'EOT',
 Number of connections to handle at once at maximum.
-Default is 1,024.
-</p>
 EOT
 }) ?>
 
 <?= $_mt->render_file("directive.mt", {
-    name   => "max-delegations",
-    levels => [ qw(global) ],
-    desc   => <<'EOT',
+    name    => "max-delegations",
+    levels  => [ qw(global) ],
+    default => 'max-delegations: 5',
+    desc    => <<'EOT',
 <p>
 Limits the number of delegations (i.e. internal redirects using the <code>X-Reproxy-URL</code> header).
-Default is 5.
 </p>
 EOT
 }) ?>
 
 <?= $_mt->render_file("directive.mt", {
-    name   => "num-name-resolution-threads",
-    levels => [ qw(global) ],
-    desc   => <<'EOT',
+    name    => "num-name-resolution-threads",
+    levels  => [ qw(global) ],
+    default => 'num-name-resolution-threads: 32',
+    desc    => <<'EOT',
 Number of threads to run for name resolution.
-Default is 32.
 EOT
 }) ?>
 

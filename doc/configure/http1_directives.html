@@ -62,30 +62,28 @@ This document describes the configuration directives for controlling the HTTP/1 
 
 <h3 id="http1-request-timeout" class="directive-title"><a href="configure/http1_directives.html#http1-request-timeout"><code>"http1-request-timeout"</code></a></h3>
 
-<dl>
+<dl class="directive-desc">
 <dt>Description:</dt>
-<dd class="directive-desc"><p>
-Timeout for incoming requests in seconds.
-Default is 10.
-</p>
+<dd>Timeout for incoming requests in seconds.
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>http1-request-timeout: 10</pre></code>
 </dl>
 
 
 <h3 id="http1-upgrade-to-http2" class="directive-title"><a href="configure/http1_directives.html#http1-upgrade-to-http2"><code>"http1-upgrade-to-http2"</code></a></h3>
 
-<dl>
+<dl class="directive-desc">
 <dt>Description:</dt>
-<dd class="directive-desc"><p>
-boolean flag indicating whether or not to allow upgrade to HTTP/2.
+<dd>Boolean flag indicating whether or not to allow upgrade to HTTP/2.
 The value should either be <code>ON</code> or <code>OFF</code>.
-Default is <code>ON</code>
-</p>
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>http1-upgrade-to-http2: ON</pre></code>
 </dl>
 
 

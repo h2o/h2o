@@ -7,25 +7,21 @@ This document describes the configuration directives for controlling the HTTP/1 
 
 <?=
 $_mt->render_file("directive.mt", {
-    name   => "http1-request-timeout",
-    levels => [ qw(global) ],
-    desc   => <<'EOT',
-<p>
+    name    => "http1-request-timeout",
+    levels  => [ qw(global) ],
+    default => 'http1-request-timeout: 10',
+    desc    => <<'EOT',
 Timeout for incoming requests in seconds.
-Default is 10.
-</p>
 EOT
 }) ?>
 
 <?= $_mt->render_file("directive.mt", {
-    name   => "http1-upgrade-to-http2",
-    levels => [ qw(global) ],
-    desc   => <<'EOT',
-<p>
-boolean flag indicating whether or not to allow upgrade to HTTP/2.
+    name    => "http1-upgrade-to-http2",
+    levels  => [ qw(global) ],
+    default => 'http1-upgrade-to-http2: ON',
+    desc    => <<'EOT',
+Boolean flag indicating whether or not to allow upgrade to HTTP/2.
 The value should either be <code>ON</code> or <code>OFF</code>.
-Default is <code>ON</code>
-</p>
 EOT
 }) ?>
 
