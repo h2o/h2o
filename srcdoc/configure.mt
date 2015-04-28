@@ -11,7 +11,7 @@
 <li>Configuration Directives
 <ul>
 <li><a href="configure/base_directives.html">Base</a>
-<li>HTTP/1
+<li><a href="configure/http1_directives.html">HTTP/1</a>
 <li>HTTP/2
 <li>Access Log
 <li>Expires
