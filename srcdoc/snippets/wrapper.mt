@@ -20,6 +20,9 @@ my $create_tab = sub {
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+? if ($main::context->{filename} eq 'index.html') {
+<link rel="canonical" href="./" />
+? }
 ? my $base = "../" x (scalar(split '/', $main::context->{filename}) - 1);
 ? if ($base ne '') {
 <base href="<?= $base ?>" />
