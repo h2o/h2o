@@ -503,7 +503,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         for (i = 0; i != listener->ssl.size; ++i) {
             struct listener_ssl_config_t *ssl_config = listener->ssl.entries + i;
             if (strcmp(ssl_config->certificate_file, certificate_file->data.scalar) == 0) {
-                listener_setup_ssl_add_host(ssl_config, ctx->hostconf->hostname);
+                listener_setup_ssl_add_host(ssl_config, ctx->hostconf->authority.hostport);
                 return 0;
             }
         }
@@ -573,7 +573,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         ssl_config = listener->ssl.entries + listener->ssl.size++;
         memset(ssl_config, 0, sizeof(*ssl_config));
         if (ctx->hostconf != NULL) {
-            listener_setup_ssl_add_host(ssl_config, ctx->hostconf->hostname);
+            listener_setup_ssl_add_host(ssl_config, ctx->hostconf->authority.hostport);
         }
         ssl_config->ctx = ssl_ctx;
         ssl_config->certificate_file = h2o_strdup(NULL, certificate_file->data.scalar, SIZE_MAX).base;
@@ -584,8 +584,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         SSL_CTX_set_tlsext_status_cb(ssl_ctx, on_ocsp_stapling_callback);
         SSL_CTX_set_tlsext_status_arg(ssl_ctx, ssl_config);
         pthread_mutex_init(&ssl_config->ocsp_stapling.response.mutex, NULL);
-        ssl_config->ocsp_stapling.cmd =
-            ocsp_update_cmd != NULL ? h2o_strdup(NULL, ocsp_update_cmd->data.scalar, SIZE_MAX).base : "share/h2o/fetch-ocsp-response";
+        ssl_config->ocsp_stapling.cmd = ocsp_update_cmd != NULL ? h2o_strdup(NULL, ocsp_update_cmd->data.scalar, SIZE_MAX).base
+                                                                : "share/h2o/fetch-ocsp-response";
         if (ocsp_update_interval != 0) {
             switch (conf.run_mode) {
             case RUN_MODE_WORKER:

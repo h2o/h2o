@@ -130,7 +130,7 @@ void test_lib__handler__file_c()
     h2o_pathconf_t *pathconf;
 
     h2o_config_init(&globalconf);
-    hostconf = h2o_config_register_host(&globalconf, "default");
+    hostconf = h2o_config_register_host(&globalconf, h2o_iovec_init(H2O_STRLIT("default")), 65535);
     pathconf = h2o_config_register_path(hostconf, "/");
     h2o_file_register(pathconf, "t/00unit/assets", NULL, NULL, 0);
 

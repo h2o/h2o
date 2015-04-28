@@ -108,7 +108,7 @@ void h2o_context_dispose(h2o_context_t *ctx)
     for (i = 0; config->hosts[i] != NULL; ++i) {
         h2o_hostconf_t *hostconf = config->hosts[i];
         for (j = 0; j != hostconf->paths.size; ++j) {
-            h2o_pathconf_t *pathconf = hostconf->paths.entries + i;
+            h2o_pathconf_t *pathconf = hostconf->paths.entries + j;
             on_context_dispose(ctx, pathconf);
         }
     }

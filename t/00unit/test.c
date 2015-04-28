@@ -107,7 +107,7 @@ static void test_loopback(void)
     h2o_loopback_conn_t *conn;
 
     h2o_config_init(&conf);
-    h2o_config_register_host(&conf, "default");
+    h2o_config_register_host(&conf, h2o_iovec_init(H2O_STRLIT("default")), 65535);
     h2o_context_init(&ctx, test_loop, &conf);
 
     conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
@@ -147,6 +147,7 @@ int main(int argc, char **argv)
 
         subtest("lib/t/test.c/loopback", test_loopback);
         subtest("lib/file.c", test_lib__handler__file_c);
+        subtest("issues/293.c", test_issues293);
 
 #if H2O_USE_LIBUV
         uv_loop_close(test_loop);
