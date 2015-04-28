@@ -177,11 +177,19 @@ EOT
     desc   => <<'EOT',
 <p>
 Path of the file to which error logs should be appended.
-If the path starts with `|`, the rest of the path is considered as a command to which the logs should be piped.
+If the path starts with <code>|</code>, the rest of the path is considered as a command to which the logs should be piped.
 </p>
 <p>
 Default is stderr.
 </p>
+<div class="example">
+<div class="caption">Example. Log errors to file</div>
+<pre><code>error-log: /path/to/error-log-file</code></pre>
+</div>
+<div class="example">
+<div class="caption">Example. Log errors through pipe</div>
+<pre><code>error-log: "| <a href="http://packages.ubuntu.com/trusty/apache2-utils">rotatelogs</a> /path/to/error-log-file.%Y%m%d 86400"</code></pre>
+</div>
 EOT
 }) ?>
 
