@@ -32,6 +32,7 @@
 		105534EF1A440FC800627ECB /* config.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534EE1A440FC800627ECB /* config.c */; };
 		10583BF11AE5A37B004A3AD6 /* Makefile in Sources */ = {isa = PBXBuildFile; fileRef = 10583BED1AE5A37B004A3AD6 /* Makefile */; };
 		10583BF21AE5A37B004A3AD6 /* README.md in Sources */ = {isa = PBXBuildFile; fileRef = 10583BEE1AE5A37B004A3AD6 /* README.md */; };
+		10583C001AEF368A004A3AD6 /* 293.c in Sources */ = {isa = PBXBuildFile; fileRef = 10583BFF1AEF368A004A3AD6 /* 293.c */; };
 		1058C87D1AA41789008D6180 /* headers.c in Sources */ = {isa = PBXBuildFile; fileRef = 1058C87C1AA41789008D6180 /* headers.c */; };
 		1058C87E1AA41A1F008D6180 /* headers.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EBD1AA019D8004322AC /* headers.c */; };
 		1058C8881AA6DE4B008D6180 /* hostinfo.h in Headers */ = {isa = PBXBuildFile; fileRef = 1058C8871AA6DE4B008D6180 /* hostinfo.h */; };
@@ -279,6 +280,7 @@
 		10583BF91AE783BE004A3AD6 /* searchstyle.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = searchstyle.css; path = assets/searchstyle.css; sourceTree = "<group>"; };
 		10583BFA1AE783BE004A3AD6 /* style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = style.css; path = assets/style.css; sourceTree = "<group>"; };
 		10583BFB1AE78DCC004A3AD6 /* syntax_and_structure.mt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = syntax_and_structure.mt; sourceTree = "<group>"; };
+		10583BFF1AEF368A004A3AD6 /* 293.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = 293.c; sourceTree = "<group>"; };
 		1058C87C1AA41789008D6180 /* headers.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers.c; sourceTree = "<group>"; };
 		1058C87F1AA42568008D6180 /* 50headers.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50headers.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		1058C8871AA6DE4B008D6180 /* hostinfo.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hostinfo.h; sourceTree = "<group>"; };
@@ -573,6 +575,7 @@
 		105534C41A3BB1C300627ECB /* 00unit */ = {
 			isa = PBXGroup;
 			children = (
+				10583BFE1AEF3652004A3AD6 /* issues */,
 				105534C51A3BB1E700627ECB /* lib */,
 				10D0906F19F494CC0043D458 /* test.h */,
 				10D0906E19F494CC0043D458 /* test.c */,
@@ -663,6 +666,14 @@
 				10583BFA1AE783BE004A3AD6 /* style.css */,
 			);
 			name = assets;
+			sourceTree = "<group>";
+		};
+		10583BFE1AEF3652004A3AD6 /* issues */ = {
+			isa = PBXGroup;
+			children = (
+				10583BFF1AEF368A004A3AD6 /* 293.c */,
+			);
+			path = issues;
 			sourceTree = "<group>";
 		};
 		1065E6F319B9969000686E72 /* evloop */ = {
@@ -1282,6 +1293,7 @@
 				1079244419A3265C00C52AD6 /* chunked.c in Sources */,
 				104B9A481A5F9472009EEE64 /* headers.c in Sources */,
 				10E2995A1A68D03100701AA6 /* scheduler.c in Sources */,
+				10583C001AEF368A004A3AD6 /* 293.c in Sources */,
 				105534BE1A3B8F7700627ECB /* file.c in Sources */,
 				1079244719A3265C00C52AD6 /* http1.c in Sources */,
 				1079244819A3265C00C52AD6 /* connection.c in Sources */,

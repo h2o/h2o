@@ -60,5 +60,6 @@ void test_lib__handler__headers_c(void);
 void test_lib__handler__mimemap_c(void);
 void test_lib__http2__hpack(void);
 void test_lib__http2__scheduler(void);
+void test_issues293(void);
 
 #endif
