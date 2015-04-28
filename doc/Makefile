@@ -8,6 +8,7 @@ OUTPUT=\
     configure/syntax_and_structure.html \
     configure/base_directives.html \
     configure/http1_directives.html \
+    configure/http2_directives.html \
     faq.html \
 
 PUBLISH_REPO=git@github.com:h2o/h2o.github.io.git

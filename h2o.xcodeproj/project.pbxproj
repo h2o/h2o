@@ -284,6 +284,7 @@
 		10583BFD1AE8A7E1004A3AD6 /* directive.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = directive.mt; sourceTree = "<group>"; };
 		10583BFF1AEF368A004A3AD6 /* 293.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = 293.c; sourceTree = "<group>"; };
 		10583C011AEF86E6004A3AD6 /* http1_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = http1_directives.mt; sourceTree = "<group>"; };
+		10583C021AEF8C7D004A3AD6 /* http2_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = http2_directives.mt; sourceTree = "<group>"; };
 		1058C87C1AA41789008D6180 /* headers.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers.c; sourceTree = "<group>"; };
 		1058C87F1AA42568008D6180 /* 50headers.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50headers.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		1058C8871AA6DE4B008D6180 /* hostinfo.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hostinfo.h; sourceTree = "<group>"; };
@@ -660,6 +661,7 @@
 				10583BF61AE765E0004A3AD6 /* quick_start.mt */,
 				10583BFC1AE88782004A3AD6 /* base_directives.mt */,
 				10583C011AEF86E6004A3AD6 /* http1_directives.mt */,
+				10583C021AEF8C7D004A3AD6 /* http2_directives.mt */,
 			);
 			path = configure;
 			sourceTree = "<group>";

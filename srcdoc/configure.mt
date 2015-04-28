@@ -12,7 +12,7 @@
 <ul>
 <li><a href="configure/base_directives.html">Base</a>
 <li><a href="configure/http1_directives.html">HTTP/1</a>
-<li>HTTP/2
+<li><a href="configure/http2_directives.html">HTTP/2</a>
 <li>Access Log
 <li>Expires
 <li>File
