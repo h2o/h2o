@@ -11,8 +11,7 @@ my $create_tab = sub {
     if ($cur_topic eq $tab_topic) {
         $html = qq{<td class="selected">@{[Text::MicroTemplate::escape_html($tab_topic)]}</td>};
     } else {
-        my $linkfn = $fn eq 'index.html' ? './' : $fn;
-        $html = qq{<td><a href="@{[Text::MicroTemplate::escape_html($linkfn)]}">@{[Text::MicroTemplate::escape_html($tab_topic)]}</a></td>};
+        $html = qq{<td><a href="@{[Text::MicroTemplate::escape_html($fn)]}">@{[Text::MicroTemplate::escape_html($tab_topic)]}</a></td>};
     }
     Text::MicroTemplate::encoded_string($html);
 };
@@ -21,6 +20,9 @@ my $create_tab = sub {
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+? if ($main::context->{filename} eq 'index.html') {
+<link rel="canonical" href="./" />
+? }
 ? my $base = "../" x (scalar(split '/', $main::context->{filename}) - 1);
 ? if ($base ne '') {
 <base href="<?= $base ?>" />
@@ -41,7 +43,7 @@ my $create_tab = sub {
 <div id="body">
 <div id="top">
 
-<h1><a href="./">H2O</a></h1>
+<h1><a href="index.html">H2O</a></h1>
 the optimized HTTP/1.x, HTTP/2 server
 
 <!-- oktavia -->
