@@ -1,5 +1,5 @@
 ? my $ctx = $main::context;
-? $_mt->wrapper_file("wrapper.mt", "Configure", "HTTP/1 Directives")->(sub {
+? $_mt->wrapper_file("wrapper.mt", "Configure", "HTTP/2 Directives")->(sub {
 
 <p>
 This document describes the configuration directives for controlling the HTTP/2 protocol handler.

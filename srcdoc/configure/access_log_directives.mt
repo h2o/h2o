@@ -1,5 +1,5 @@
 ? my $ctx = $main::context;
-? $_mt->wrapper_file("wrapper.mt", "Configure", "Base Directives")->(sub {
+? $_mt->wrapper_file("wrapper.mt", "Configure", "Access Log Directives")->(sub {
 
 <p>
 This document describes the configuration directives of the access_log handler.
