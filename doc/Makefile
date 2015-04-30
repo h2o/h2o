@@ -14,6 +14,7 @@ OUTPUT=\
     configure/file_directives.html \
     configure/headers_directives.html \
     configure/proxy_directives.html \
+    configure/redirect_directives.html \
     faq.html \
 
 PUBLISH_REPO=git@github.com:h2o/h2o.github.io.git
