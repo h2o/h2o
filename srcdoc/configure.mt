@@ -15,7 +15,7 @@
 <li><a href="configure/http2_directives.html">HTTP/2</a>
 <li><a href="configure/access_log_directives.html">Access Log</a>
 <li><a href="configure/expires_directives.html">Expires</a>
-<li>File
+<li><a href="configure/file_directives.html">File</a>
 <li>Headers
 <li>Proxy
 <li>Redirect

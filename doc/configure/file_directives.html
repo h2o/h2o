@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<base href="../" />
+
+<!-- oktavia -->
+<link rel="stylesheet" href="assets/searchstyle.css" type="text/css" />
+<script src="search/jquery-1.9.1.min.js"></script>
+<script src="search/oktavia-jquery-ui.js"></script>
+<script src="search/oktavia-english-search.js"></script>
+<!-- /oktavia -->
+
+<link rel="stylesheet" href="assets/style.css" type="text/css" />
+
+<title>File Directives - Configure - H2O</title>
+</head>
+<body>
+<div id="body">
+<div id="top">
+
+<h1><a href="index.html">H2O</a></h1>
+the optimized HTTP/1.x, HTTP/2 server
+
+<!-- oktavia -->
+<form id="searchform">
+<input class="search" type="search" name="search" id="search" results="5" value="" placeholder="Search" />
+<div id="searchresult_box">
+<div id="close_search_box">&times;</div>
+<div id="searchresult_summary"></div>
+<div id="searchresult"></div>
+<div id="searchresult_nav"></div>
+<span class="pr">Powered by <a href="https://github.com/shibukawa/oktavia">Oktavia</a></span>
+</div>
+</form>
+<!-- /oktavia -->
+
+</div>
+
+<table id="menu">
+<tr>
+<td><a href="index.html">Top</a></td>
+<td><a href="install.html">Install</a></td>
+<td class="selected">Configure</td>
+<td><a href="faq.html">FAQ</a></td>
+<td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
+<td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
+</tr>
+</table>
+
+<div id="main">
+
+<h2>
+<a href="configure.html">Configure</a> &gt;
+File Directives
+</h2>
+
+
+<p>
+This document describes the configuration directives of the file handler.
+</p>
+
+<h3 id="file.dir" class="directive-title"><a href="configure/file_directives.html#file.dir"><code>"file.dir"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd><p>
+The directive specifies the directory under which should be served for the corresponding path.
+</p>
+<div class="example">
+<div class="caption">Example. Serving files under different paths</div>
+<pre><code>paths:
+    "/":
+        file.dir: /path/to/doc-root
+    "/icons":
+        file.dir: /path/to/icons-dir
+</code></pre>
+</div>
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>path</dd>
+</dl>
+
+
+<h3 id="file.dirlisting" class="directive-title"><a href="configure/file_directives.html#file.dirlisting"><code>"file.dirlisting"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>A boolean flag (<code>OFF</code>, or <code>ON</code>) specifying whether or not to send the directory listing in case none of the index files (as specified by the <a href="configure/file_directives.html#file.index"><code>file.index</code></a> directive) exists.
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+<dt>Default:</dt>
+<dd><code><pre>file.dirlisting: OFF</pre></code>
+</dl>
+
+
+<h3 id="file.etag" class="directive-title"><a href="configure/file_directives.html#file.etag"><code>"file.etag"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>A boolean flag (<code>OFF</code>, or <code>ON</code>) specifying whether or not to send etags.
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+<dt>Default:</dt>
+<dd><code><pre>file.etag: ON</pre></code>
+</dl>
+
+
+<h3 id="file.index" class="directive-title"><a href="configure/file_directives.html#file.index"><code>"file.index"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd><p>
+Specifies the names of the files that should be served when the client sends a request against the directory.
+</p>
+<p>
+The sequence of filenames afer search from left to right, and the first file that existed is sent to the client.
+</p>
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+<dt>Default:</dt>
+<dd><code><pre>file.etag: [ &#39;index.html&#39;, &#39;index.htm&#39;, &#39;index.txt&#39; ]</pre></code>
+</dl>
+
+
+<h3 id="file.mime.addtypes" class="directive-title"><a href="configure/file_directives.html#file.mime.addtypes"><code>"file.mime.addtypes"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd><p>
+The directive modifies the MIME mappings by adding the specified MIME type mappings.
+</p>
+<div class="example">
+<div class="caption">Example. Adding MIME mappings</div>
+<pre><code>file.mime.addtypes:
+    "application/javascript": ".js"
+    "image/jpeg": [ ".jpg", ".jpeg" ]
+</code></pre>
+</div>
+<p>
+The default mappings is hard-coded in <a href="https://github.com/h2o/h2o/blob/master/lib/handler/mimemap/defaults.c.h">lib/handler/mimemap/defaults.c.h</a>.
+</p>
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+</dl>
+
+
+<h3 id="file.mime.removetypes" class="directive-title"><a href="configure/file_directives.html#file.mime.removetypes"><code>"file.mime.removetypes"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd><p>
+Removes the MIME mappings for specified extensions supplied as a sequence of extensions.
+</p>
+<div clas="example">
+<div class="caption">Example. Remove MIME mappings</div>
+<pre><code>file.mime.removetypes: [ ".jpg", ".jpeg" ]</code></pre>
+</div>
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+</dl>
+
+
+<h3 id="file.mime.setdefaulttype" class="directive-title"><a href="configure/file_directives.html#file.mime.setdefaulttype"><code>"file.mime.setdefaulttype"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>Sets the default MIME-type that is used when an extension does not exist in the MIME mappings.
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+<dt>Default:</dt>
+<dd><code><pre>file.mime.setdefaulttype: &quot;application/octet-stream&quot;</pre></code>
+</dl>
+
+
+<h3 id="file.mime.settypes" class="directive-title"><a href="configure/file_directives.html#file.mime.settypes"><code>"file.mime.settypes"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd><p>
+Resets the MIME mappings to given mapping.
+</p>
+<div class="example">
+<div class="caption">Example. Resets the MIME mappings to minimum</div>
+<pre><code>file.mime.settypes:
+    "text/html":  [ ".html", ".htm" ]
+    "text/plain": ".txt"
+</code></pre>
+</div>
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+</dl>
+
+
+
+<h3 id="file.send-gzip" class="directive-title"><a href="configure/file_directives.html#file.send-gzip"><code>"file.send-gzip"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd><p>
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not so send <code>.gz</code> variants if possible.
+</p>
+<p>
+If set to <code>ON</code>, the handler looks for a file with <code>.gz</code> appended and sends the file  (i.e. sends the contents of <code>index.html.gz</code> in place of <code>index.html</code>) if the client is capable of transparently decoding a gzipped response.
+</p>
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+<dt>Default:</dt>
+<dd><code><pre>file.send-gzip: OFF</pre></code>
+</dl>
+
+
+
+
+
+</div>
+<div id="footer">
+<p>
+Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+</p>
+</div>
+</body>
+</html>
