@@ -16,7 +16,7 @@
 <li><a href="configure/access_log_directives.html">Access Log</a>
 <li><a href="configure/expires_directives.html">Expires</a>
 <li><a href="configure/file_directives.html">File</a>
-<li>Headers
+<li><a href="configure/headers_directives.html">Headers</a>
 <li>Proxy
 <li>Redirect
 <li>Reproxy

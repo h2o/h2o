@@ -12,6 +12,7 @@ OUTPUT=\
     configure/access_log_directives.html \
     configure/expires_directives.html \
     configure/file_directives.html \
+    configure/headers_directives.html \
     faq.html \
 
 PUBLISH_REPO=git@github.com:h2o/h2o.github.io.git
