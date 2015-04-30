@@ -340,7 +340,17 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
                 if (sz > 1400)
                     sz = 1400;
                 ret = SSL_write(sock->ssl->ssl, bufs[0].base + off, (int)sz);
-                assert(ret == sz);
+                if (ret != sz) {
+                    fprintf(stderr, "SSL_write failed; IN %d, OUT %d, ERROR %d\n", (int)sz, ret,
+                            ret < 0 ? SSL_get_error(sock->ssl->ssl, ret) : 0);
+                    memset(&sock->ssl->output.bufs, 0, sizeof(sock->ssl->output.bufs));
+                    h2o_mem_clear_pool(&sock->ssl->output.pool);
+                    flush_pending_ssl(sock, cb);
+#ifndef H2O_USE_LIBUV
+                    ((struct st_h2o_evloop_socket_t*)sock)->_flags |= H2O_SOCKET_FLAG_IS_WRITE_ERROR;
+#endif
+                    return;
+                }
                 off += sz;
             }
         }
