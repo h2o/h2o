@@ -17,7 +17,7 @@
 <li><a href="configure/expires_directives.html">Expires</a>
 <li><a href="configure/file_directives.html">File</a>
 <li><a href="configure/headers_directives.html">Headers</a>
-<li>Proxy
+<li><a href="configure/proxy_directives.html">Proxy</a>
 <li>Redirect
 <li>Reproxy
 </ul>

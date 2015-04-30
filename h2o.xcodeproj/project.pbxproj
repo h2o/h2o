@@ -289,6 +289,7 @@
 		10583C041AF1F315004A3AD6 /* expires_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = expires_directives.mt; sourceTree = "<group>"; };
 		10583C051AF1F893004A3AD6 /* file_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = file_directives.mt; sourceTree = "<group>"; };
 		10583C061AF20BE5004A3AD6 /* headers_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = headers_directives.mt; sourceTree = "<group>"; };
+		10583C071AF21539004A3AD6 /* proxy_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = proxy_directives.mt; sourceTree = "<group>"; };
 		1058C87C1AA41789008D6180 /* headers.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers.c; sourceTree = "<group>"; };
 		1058C87F1AA42568008D6180 /* 50headers.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50headers.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		1058C8871AA6DE4B008D6180 /* hostinfo.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hostinfo.h; sourceTree = "<group>"; };
@@ -670,6 +671,7 @@
 				10583C041AF1F315004A3AD6 /* expires_directives.mt */,
 				10583C051AF1F893004A3AD6 /* file_directives.mt */,
 				10583C061AF20BE5004A3AD6 /* headers_directives.mt */,
+				10583C071AF21539004A3AD6 /* proxy_directives.mt */,
 			);
 			path = configure;
 			sourceTree = "<group>";
