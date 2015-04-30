@@ -2,6 +2,7 @@
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<base href="../" />
 
 <!-- oktavia -->
 <link rel="stylesheet" href="assets/searchstyle.css" type="text/css" />
@@ -12,7 +13,7 @@
 
 <link rel="stylesheet" href="assets/style.css" type="text/css" />
 
-<title>Configure - H2O</title>
+<title>Expires Directives - Configure - H2O</title>
 </head>
 <body>
 <div id="body">
@@ -50,36 +51,38 @@ the optimized HTTP/1.x, HTTP/2 server
 <div id="main">
 
 <h2>
-Configure
+<a href="configure.html">Configure</a> &gt;
+Expires Directives
 </h2>
 
 
-<ul style="list-style: none; font-weight: bold;">
-<li><a href="configure/quick_start.html">Quick Start</a>
-<li><a href="configure/command_options.html">Command Options</a>
-<li>Configuration File
+<p>
+This document describes the configuration directives of the expires handler.
+</p>
+
+<h3 id="expires" class="directive-title"><a href="configure/expires_directives.html#expires"><code>"expires"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd><p>
+An optional directive for setting the <code>Cache-Control: max-age=</code> header.
+</p>
 <ul>
-<li><a href="configure/syntax_and_structure.html">Syntax and Structure</a>
-</ul>
-<li>Configuration Directives
-<ul>
-<li><a href="configure/base_directives.html">Base</a>
-<li><a href="configure/http1_directives.html">HTTP/1</a>
-<li><a href="configure/http2_directives.html">HTTP/2</a>
-<li><a href="configure/access_log_directives.html">Access Log</a>
-<li><a href="configure/expires_directives.html">Expires</a>
-<li>File
-<li>Headers
-<li>Proxy
-<li>Redirect
-<li>Reproxy
-</ul>
+<li>if the argument is <code>OFF</code> the feature is not used
+<li>if the value is <code><i>NUMBER</i> <i>UNIT</i></code> then the header is set
+<li>the units recognized are: <code>second</code>, <code>minute</code>, <code>hour</code>, <code>day</code>, <code>month</code>, <code>year</code>
+<li> the units can also be in plural forms
 </ul>
 
-<p>
-Under construction.
-For the meantime, please refer to <a href="https://gist.github.com/kazuho/f15b79211ea76f1bf6e5" target="_blank">the output of <code>--help</code></a>.
-</p>
+<div class="example">
+<div class="caption">Example. Set <code>Cache-Control: max-age=86400</div>
+<pre><code>expires: 1 day</code></pre>
+</div>
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+</dl>
+
 
 
 
