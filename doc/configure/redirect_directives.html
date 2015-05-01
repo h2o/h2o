@@ -64,9 +64,11 @@ This document describes the configuration directives of the redirect handler.
 
 <dl class="directive-desc">
 <dt>Description:</dt>
-<dd><p>
+<dd>
+<p>
 Redirects the requests to given URL.
 </p>
+
 <p>
 If the argument is a scalar, the value is considered as the URL to where the requests should be redirected.
 If the argument is a mapping, the <code>url</code> property is considered the URL, and the <code>status</code> property indicates the status code to be used for the redirect response.
@@ -77,21 +79,23 @@ The directive rewrites the URL by replacing the host and path part of the URL at
 <div class="example">
 <div class="caption">Example. Redirect all HTTP to HTTPS permanently (except for the files under <code>RSS</code>)</div>
 <pre><code>hosts:
-    "example.com:80":
+    &quot;example.com:80&quot;:
         paths:
-            "/":
+            &quot;/&quot;:
                 redirect:
                     status: 301
-                    url:    "https://example.com/"
-            "/rss":
+                    url:    &quot;https://example.com/&quot;
+            &quot;/rss&quot;:
                 file.dir: /path/to/rss
 </code></pre>
 </div>
+
+
+
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>path</dd>
 </dl>
-
 
 
 

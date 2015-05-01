@@ -24,6 +24,17 @@ $main::context = {
     code     => build_mt(
         '<pre><code><?= $_[0] ?></code></pre>',
     ),
+    example => build_mt(<<'EOT',
+<div class="example">
+<div class="caption">Example. <?= encoded_string($_[0]) ?></div>
+<pre><code><?= $_[1] ?></code></pre>
+</div>
+EOT
+    ),
+    directive => sub {
+        my %args = @_;
+        $mt->wrapper_file("directive.mt", \%args);
+    },
     notes    => [],
     note     => sub {
         my ($index, $html);

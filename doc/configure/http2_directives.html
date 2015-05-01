@@ -64,28 +64,38 @@ This document describes the configuration directives for controlling the HTTP/2 
 
 <dl class="directive-desc">
 <dt>Description:</dt>
-<dd>Timeout for idle connections in seconds.
+<dd>
+<p>
+Timeout for idle connections in seconds.
+
+</p>
+
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
 <dt>Default:</dt>
 <dd><code><pre>http2-idle-timeout: 10</pre></code>
 </dl>
-
-
 <h3 id="http2-max-concurrent-requests-per-connection" class="directive-title"><a href="configure/http2_directives.html#http2-max-concurrent-requests-per-connection"><code>"http2-max-concurrent-requests-per-connection"</code></a></h3>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
-<dd>Maximum number of requests to be handled concurrently within a single HTTP/2 connection.
+<dd>
+<p>
+Maximum number of requests to be handled concurrently within a single HTTP/2 connection.
+
+</p>
+
+<p>
 The value cannot exceed 256.
+</p>
+
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
 <dt>Default:</dt>
 <dd><code><pre>http2-max-concurrent-requests-per-connection: 256</pre></code>
 </dl>
-
 
 
 

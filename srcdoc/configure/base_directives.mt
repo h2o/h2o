@@ -5,14 +5,13 @@
 This document describes the configuration directives common to all the protocols and handlers.
 </p>
 
-<?=
-$_mt->render_file("directive.mt", {
+<?
+$ctx->{directive}->(
     name   => "hosts",
     levels => [ qw(global) ],
-    desc   => <<'EOT',
-<p>
-Maps <code>host:port</code> to the mappings of per-host configs.
-</p>
+    desc   => q{Maps <code>host:port</code> to the mappings of per-host configs.},
+)->(sub {
+?>
 <p>
 The directive specifies the mapping between the authorities (the host or <code>host:port</code> section of an URL) and their configurations.
 The directive is mandatory, and must at least contain one entry.
@@ -21,9 +20,8 @@ The directive is mandatory, and must at least contain one entry.
 When <code>port</code> is omitted, the entry will match the requests targetting the default ports (i.e. port 80 for HTTP, port 443 for HTTPS) with given hostname.
 Otherwise, the entry will match the requests targetting the specified port.
 </p>
-<div class="example">
-<div class="caption">Example. A host redirecting all HTTP requests to HTTPS</div>
-<pre><code>hosts:
+<?= $ctx->{example}->('A host redirecting all HTTP requests to HTTPS', <<'EOT');
+hosts:
   "www.example.com:80":
     listen:
       port: 80
@@ -39,27 +37,25 @@ Otherwise, the entry will match the requests targetting the specified port.
     paths:
       "/":
         file.dir: /path/to/doc-root
-</code></pre>
-</div>
 EOT
-}) ?>
+?>
+? })
 
-<?=
-$_mt->render_file("directive.mt", {
+<?
+$ctx->{directive}->(
     name   => "paths",
     levels => [ qw(host) ],
-    desc   => <<'EOT',
-<p>
-Mapping of paths and their configurations.
+    desc   => q{Mapping of paths and their configurations.},
+)->(sub {
+?>
 </p>
 <p>
 The mapping is searched using prefix-match.
 The entry with the longest path is chosen when more than one matching paths were found.
 An <code>404 Not Found</code> error is returned if no matching paths were found.
 </p>
-<div class="example">
-<div class="caption">Example. Configuration with two paths</div>
-<pre><code>hosts:
+<?= $ctx->{example}->('Configuration with two paths', <<'EOT')
+hosts:
   "www.example.com":
     listen:
       port: 80
@@ -68,25 +64,23 @@ An <code>404 Not Found</code> error is returned if no matching paths were found.
         file.dir: /path/to/doc-root
       "/assets":
         file.dir: /path/to/assets
-</code></pre>
-</div>
 EOT
-}) ?>
+?>
+? })
 
-<?=
-$_mt->render_file("directive.mt", {
+<?
+$ctx->{directive}->(
     name   => "listen",
     levels => [ qw(global host) ],
-    desc   => <<'EOT',
-<p>
-Specifies the port at which the server should listen to.
+    desc   => q{Specifies the port at which the server should listen to.},
+)->(sub {
+?>
 </p>
 <p>
 In addition to specifying the port number, it is also possible to designate the bind address or the SSL configuration.
 </p>
-<div class="example">
-<div class="caption">Example. Listen Directives</div>
-<pre><code># accept HTTP on port 80 on default address (both IPv4 and IPv6)
+<?= $ctx->{example}->('Various ways of using the Listen Directive', <<'EOT')
+# accept HTTP on port 80 on default address (both IPv4 and IPv6)
 listen: 80
 
 # accept HTTP on 127.0.0.1:8080
@@ -100,8 +94,8 @@ listen:
   ssl:
     key-file: /path/to/key-file
     certificate-file: /path/to/key-file
-</code></pre>
-</div>
+EOT
+?>
 <p>
 The directive can be used either at global-level or at host-level.
 At least one <code>listen</code> directive must exist at the global level, or every <i>host</i>-level configuration must have at least one <code>listen</code> directive.
@@ -114,9 +108,8 @@ Host-level listeners specify bind addresses specific to the host-level context.
 However it is permitted to specify the same bind address for more than one host-level contexts, in which case hostname-based lookup will be performed between the host contexts that share the address.
 The feature is useful for setting up a HTTPS virtual host using <a href="https://tools.ietf.org/html/rfc6066">Server-Name Indication (RFC 6066)</a>.
 </p>
-<div class="example">
-<div class="caption">Example. Using host-level listeners for HTTPS virtual-hosting</div>
-<pre><code>hosts:
+<?= $ctx->{example}->('Using host-level listeners for HTTPS virtual-hosting', <<'EOT')
+hosts:
   "www.example.com:443":
     listen:
       port: 443
@@ -135,8 +128,8 @@ The feature is useful for setting up a HTTPS virtual host using <a href="https:/
     paths:
       "/":
         file.dir: /path/to/doc-root_of_www_example_jp
-</code></pre>
-</div>
+EOT
+?>
 <p>
 The <code style="font-weight: bold;">ssl</code> entry recognizes the following attributes.
 </p>
@@ -174,102 +167,100 @@ number of consecutive OCSP queriy failures before stopping to send OCSP stapling
 Default is 3.
 </dd>
 </dl>
-EOT
-}) ?>
+? })
 
-<?= $_mt->render_file("directive.mt", {
+<?
+$ctx->{directive}->(
     name   => "error-log",
     levels => [ qw(global) ],
-    desc   => <<'EOT',
-<p>
-Path of the file to which error logs should be appended.
-If the path starts with <code>|</code>, the rest of the path is considered as a command to which the logs should be piped.
-</p>
+    desc   => q{Path of the file to which error logs should be appended.},
+)->(sub {
+?>
 <p>
 Default is stderr.
 </p>
-<div class="example">
-<div class="caption">Example. Log errors to file</div>
-<pre><code>error-log: /path/to/error-log-file</code></pre>
-</div>
-<div class="example">
-<div class="caption">Example. Log errors through pipe</div>
-<pre><code>error-log: "| <a href="http://packages.ubuntu.com/trusty/apache2-utils">rotatelogs</a> /path/to/error-log-file.%Y%m%d 86400"</code></pre>
-</div>
+<p>
+If the path starts with <code>|</code>, the rest of the path is considered as a command to which the logs should be piped.
+</p>
+<?= $ctx->{example}->('Log errors to file', <<'EOT')
+error-log: /path/to/error-log-file
 EOT
-}) ?>
+?>
+<?= $ctx->{example}->('Log errors through pipe', <<'EOT')
+error-log: "| rotatelogs /path/to/error-log-file.%Y%m%d 86400"
+EOT
+?>
+? })
 
-<?= $_mt->render_file("directive.mt", {
+<?
+$ctx->{directive}->(
     name   => "limit-request-body",
     levels => [ qw(global) ],
-    desc   => <<'EOT',
+    desc   => q{Maximum size of request body in bytes (e.g. content of POST).},
+)->(sub {
+?>
 <p>
-Maximum size of request body in bytes (e.g. content of POST).
 Default is unlimited.
 </p>
-EOT
-}) ?>
+? })
 
-<?= $_mt->render_file("directive.mt", {
+<?
+$ctx->{directive}->(
     name    => "max-connections",
     levels  => [ qw(global) ],
     default => 'max-connections: 1024',
-    desc    => <<'EOT',
-Number of connections to handle at once at maximum.
-EOT
-}) ?>
+    desc    => q{Number of connections to handle at once at maximum.},
+)->(sub {});
 
-<?= $_mt->render_file("directive.mt", {
+$ctx->{directive}->(
     name    => "max-delegations",
     levels  => [ qw(global) ],
     default => 'max-delegations: 5',
-    desc    => <<'EOT',
-<p>
-Limits the number of delegations (i.e. internal redirects using the <code>X-Reproxy-URL</code> header).
-</p>
-EOT
-}) ?>
+    desc    => q{Limits the number of delegations (i.e. internal redirects using the <code>X-Reproxy-URL</code> header).},
+)->(sub {});
 
-<?= $_mt->render_file("directive.mt", {
+$ctx->{directive}->(
     name    => "num-name-resolution-threads",
     levels  => [ qw(global) ],
     default => 'num-name-resolution-threads: 32',
-    desc    => <<'EOT',
-Number of threads to run for name resolution.
-EOT
-}) ?>
+    desc    => q{Number of threads to run for name resolution.},
+)->(sub {});
+?>
 
-<?= $_mt->render_file("directive.mt", {
+<?
+$ctx->{directive}->(
     name   => "num-threads",
     levels => [ qw(global) ],
-    desc   => <<'EOT',
+    desc   => q{Number of worker threads.},
+)->(sub {
+?>
 <p>
-Number of worker threads.
 Default is the number of the processors connected to the system as obtained by <code>getconf NPROCESSORS_ONLN</code>.
 </p>
-EOT
-}) ?>
+? })
 
-<?= $_mt->render_file("directive.mt", {
+<?
+$ctx->{directive}->(
     name   => "pid-file",
     levels => [ qw(global) ],
-    desc   => <<'EOT',
-Name of the file to which the process id of the server should be written.
+    desc   => q{Name of the file to which the process id of the server should be written.},
+)->(sub {
+?>
+<p>
 Default is none.
-EOT
-}) ?>
+</p>
+? })
 
-<?= $_mt->render_file("directive.mt", {
+<?
+$ctx->{directive}->(
     name   => "user",
     levels => [ qw(global) ],
-    desc   => <<'EOT',
-<p>
-Username under which the server should handle incoming requests.
-</p>
+    desc   => q{Username under which the server should handle incoming requests.},
+)->(sub {
+?>
 <p>
 If the directive is omitted and if the server is started under root privileges, the server will attempt to <code>setuid</code> to <code>nobody</code>.
 </p>
-EOT
-}) ?>
+? })
 
 ? })

@@ -64,9 +64,11 @@ This document describes the configuration directives common to all the protocols
 
 <dl class="directive-desc">
 <dt>Description:</dt>
-<dd><p>
+<dd>
+<p>
 Maps <code>host:port</code> to the mappings of per-host configs.
 </p>
+
 <p>
 The directive specifies the mapping between the authorities (the host or <code>host:port</code> section of an URL) and their configurations.
 The directive is mandatory, and must at least contain one entry.
@@ -78,35 +80,39 @@ Otherwise, the entry will match the requests targetting the specified port.
 <div class="example">
 <div class="caption">Example. A host redirecting all HTTP requests to HTTPS</div>
 <pre><code>hosts:
-  "www.example.com:80":
+  &quot;www.example.com:80&quot;:
     listen:
       port: 80
     paths:
-      "/":
+      &quot;/&quot;:
         redirect: https://www.example.com/
-  "www.example.com:443":
+  &quot;www.example.com:443&quot;:
     listen:
       port: 443
       ssl:
         key-file: /path/to/ssl-key-file
         certificate-file: /path/to/ssl-certificate-file
     paths:
-      "/":
+      &quot;/&quot;:
         file.dir: /path/to/doc-root
 </code></pre>
 </div>
+
+
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
 </dl>
 
-
 <h3 id="paths" class="directive-title"><a href="configure/base_directives.html#paths"><code>"paths"</code></a></h3>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
-<dd><p>
+<dd>
+<p>
 Mapping of paths and their configurations.
+</p>
+
 </p>
 <p>
 The mapping is searched using prefix-match.
@@ -116,34 +122,38 @@ An <code>404 Not Found</code> error is returned if no matching paths were found.
 <div class="example">
 <div class="caption">Example. Configuration with two paths</div>
 <pre><code>hosts:
-  "www.example.com":
+  &quot;www.example.com&quot;:
     listen:
       port: 80
     paths:
-      "/":
+      &quot;/&quot;:
         file.dir: /path/to/doc-root
-      "/assets":
+      &quot;/assets&quot;:
         file.dir: /path/to/assets
 </code></pre>
 </div>
+
+
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>host</dd>
 </dl>
 
-
 <h3 id="listen" class="directive-title"><a href="configure/base_directives.html#listen"><code>"listen"</code></a></h3>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
-<dd><p>
+<dd>
+<p>
 Specifies the port at which the server should listen to.
+</p>
+
 </p>
 <p>
 In addition to specifying the port number, it is also possible to designate the bind address or the SSL configuration.
 </p>
 <div class="example">
-<div class="caption">Example. Listen Directives</div>
+<div class="caption">Example. Various ways of using the Listen Directive</div>
 <pre><code># accept HTTP on port 80 on default address (both IPv4 and IPv6)
 listen: 80
 
@@ -160,6 +170,7 @@ listen:
     certificate-file: /path/to/key-file
 </code></pre>
 </div>
+
 <p>
 The directive can be used either at global-level or at host-level.
 At least one <code>listen</code> directive must exist at the global level, or every <i>host</i>-level configuration must have at least one <code>listen</code> directive.
@@ -175,26 +186,27 @@ The feature is useful for setting up a HTTPS virtual host using <a href="https:/
 <div class="example">
 <div class="caption">Example. Using host-level listeners for HTTPS virtual-hosting</div>
 <pre><code>hosts:
-  "www.example.com:443":
+  &quot;www.example.com:443&quot;:
     listen:
       port: 443
       ssl:
         key-file: /path/to/www_example_com.key
         certifilate-file: /path/to/www_example_com.crt
     paths:
-      "/":
+      &quot;/&quot;:
         file.dir: /path/to/doc-root_of_www_example_com
-  "www.example.jp:443":
+  &quot;www.example.jp:443&quot;:
     listen:
       port: 443
       ssl:
         key-file: /path/to/www_example_jp.key
         certifilate-file: /path/to/www_example_jp.crt
     paths:
-      "/":
+      &quot;/&quot;:
         file.dir: /path/to/doc-root_of_www_example_jp
 </code></pre>
 </div>
+
 <p>
 The <code style="font-weight: bold;">ssl</code> entry recognizes the following attributes.
 </p>
@@ -232,84 +244,102 @@ number of consecutive OCSP queriy failures before stopping to send OCSP stapling
 Default is 3.
 </dd>
 </dl>
+
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global, host</dd>
 </dl>
 
-
 <h3 id="error-log" class="directive-title"><a href="configure/base_directives.html#error-log"><code>"error-log"</code></a></h3>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
-<dd><p>
+<dd>
+<p>
 Path of the file to which error logs should be appended.
-If the path starts with <code>|</code>, the rest of the path is considered as a command to which the logs should be piped.
 </p>
+
 <p>
 Default is stderr.
 </p>
+<p>
+If the path starts with <code>|</code>, the rest of the path is considered as a command to which the logs should be piped.
+</p>
 <div class="example">
 <div class="caption">Example. Log errors to file</div>
-<pre><code>error-log: /path/to/error-log-file</code></pre>
+<pre><code>error-log: /path/to/error-log-file
+</code></pre>
 </div>
+
 <div class="example">
 <div class="caption">Example. Log errors through pipe</div>
-<pre><code>error-log: "| <a href="http://packages.ubuntu.com/trusty/apache2-utils">rotatelogs</a> /path/to/error-log-file.%Y%m%d 86400"</code></pre>
+<pre><code>error-log: &quot;| rotatelogs /path/to/error-log-file.%Y%m%d 86400&quot;
+</code></pre>
 </div>
+
+
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
 </dl>
-
 
 <h3 id="limit-request-body" class="directive-title"><a href="configure/base_directives.html#limit-request-body"><code>"limit-request-body"</code></a></h3>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
-<dd><p>
+<dd>
+<p>
 Maximum size of request body in bytes (e.g. content of POST).
+</p>
+
+<p>
 Default is unlimited.
 </p>
+
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
 </dl>
 
-
 <h3 id="max-connections" class="directive-title"><a href="configure/base_directives.html#max-connections"><code>"max-connections"</code></a></h3>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
-<dd>Number of connections to handle at once at maximum.
+<dd>
+<p>
+Number of connections to handle at once at maximum.
+</p>
+
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
 <dt>Default:</dt>
 <dd><code><pre>max-connections: 1024</pre></code>
 </dl>
-
-
 <h3 id="max-delegations" class="directive-title"><a href="configure/base_directives.html#max-delegations"><code>"max-delegations"</code></a></h3>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
-<dd><p>
+<dd>
+<p>
 Limits the number of delegations (i.e. internal redirects using the <code>X-Reproxy-URL</code> header).
 </p>
+
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
 <dt>Default:</dt>
 <dd><code><pre>max-delegations: 5</pre></code>
 </dl>
-
-
 <h3 id="num-name-resolution-threads" class="directive-title"><a href="configure/base_directives.html#num-name-resolution-threads"><code>"num-name-resolution-threads"</code></a></h3>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
-<dd>Number of threads to run for name resolution.
+<dd>
+<p>
+Number of threads to run for name resolution.
+</p>
+
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
@@ -322,43 +352,55 @@ Limits the number of delegations (i.e. internal redirects using the <code>X-Repr
 
 <dl class="directive-desc">
 <dt>Description:</dt>
-<dd><p>
+<dd>
+<p>
 Number of worker threads.
+</p>
+
+<p>
 Default is the number of the processors connected to the system as obtained by <code>getconf NPROCESSORS_ONLN</code>.
 </p>
+
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
 </dl>
-
 
 <h3 id="pid-file" class="directive-title"><a href="configure/base_directives.html#pid-file"><code>"pid-file"</code></a></h3>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
-<dd>Name of the file to which the process id of the server should be written.
+<dd>
+<p>
+Name of the file to which the process id of the server should be written.
+</p>
+
+<p>
 Default is none.
+</p>
+
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
 </dl>
-
 
 <h3 id="user" class="directive-title"><a href="configure/base_directives.html#user"><code>"user"</code></a></h3>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
-<dd><p>
+<dd>
+<p>
 Username under which the server should handle incoming requests.
 </p>
+
 <p>
 If the directive is omitted and if the server is started under root privileges, the server will attempt to <code>setuid</code> to <code>nobody</code>.
 </p>
+
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
 </dl>
-
 
 
 

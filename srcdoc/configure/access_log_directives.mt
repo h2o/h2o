@@ -5,36 +5,35 @@
 This document describes the configuration directives of the access_log handler.
 </p>
 
-<?= $_mt->render_file("directive.mt", {
+<?
+$ctx->{directive}->(
     name    => "access-log",
     levels  => [ qw(global host path) ],
-    desc    => <<'EOT',
-<p>
-The directive sets the path and optionally the format of the access log.
-</p>
+    desc    => q{The directive sets the path and optionally the format of the access log.},
+)->(sub {
+?>
 <p>
 If the supplied argument is a scalar, it is treated as the path of the log file, or if the value starts with a <code>|</code>, it is treated as a command to which the log should be emitted.
 </p>
-<div class="example">
-<div class="caption">Example. Emit access log to file</div>
-<pre><code>access-log: /path/to/access-log-file</code></pre>
-</div>
-<div class="example">
-<div class="caption">Example. Emit access log through pipe</div>
-<pre><code>access-log: "| <a href="http://packages.ubuntu.com/trusty/apache2-utils">rotatelogs</a> /path/to/access-log-file.%Y%m%d 86400"</code></pre>
-</div>
+<?= $ctx->{example}->('Emit access log to file', <<'EOT')
+access-log: /path/to/access-log-file
+EOT
+?>
+<?= $ctx->{example}->('Emit access log through pipe', <<'EOT')
+access-log: "| rotatelogs /path/to/access-log-file.%Y%m%d 86400"
+EOT
+?>
 
 <p>
 If the supplied argument is a mapping, its <code>path</code> property is considered as the path of the log file or the pipe command, and the <code>format</code> property is treated as the format of the log file.
 </p>
 
-<div class="example">
-<div class="caption">Example. Emit access log to file using Common Log Format</div>
-<pre><code>access-log:
+<?= $ctx->{example}->('Emit access log to file using Common Log Format', <<'EOT')
+access-log:
     path: /path/to/access-log-file
     format: "%h %l %u %t \"%r\" %>s %b"
-</code></pre>
-</div>
+EOT
+?>
 
 <p>
 The list of format strings recognized by H2O is as follows.
@@ -62,7 +61,6 @@ The list of format strings recognized by H2O is as follows.
 <p>
 The default format is <code>%h %l %u %t "%r" %s %b "%{Referer}i" "%{User-agent}i"</code>, a.k.a. the <a href="http://httpd.apache.org/docs/2.4/mod/mod_log_config.html.en#examples" target="_blank">NCSA extended/combined log format</a>.
 </p>
-EOT
-}) ?>
+? })
 
 ? })
