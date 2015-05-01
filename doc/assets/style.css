@@ -138,10 +138,15 @@ a {
 
 #main pre {
     border: 1px solid gray;
-    margin: 1em 0;
+    margin: 0.2em 0;
     padding: 0.5em;
     background: #f6f6f6;
     overflow-x: auto;
+}
+
+#main .example .caption {
+    text-align: center;
+    margin-bottom: 0.2em;
 }
 
 #main table {
@@ -191,6 +196,28 @@ a {
 
 #main sup a {
     text-decoration: none;
+}
+
+#main .directive-title {
+    border-bottom: 1px solid #999;
+    font-size: 120%;
+}
+
+#main .directive-title a {
+    color: black;
+    text-decoration: none;
+}
+
+#main .directive-desc dt {
+    margin: 0.5em 0 0.3em 0;
+}
+
+#main .directive-desc dd {
+    margin-top: 0.5em 0 1em 0;
+}
+
+#main .directive-desc dd :first-child {
+    margin-top: 0.3em;
 }
 
 #footer {

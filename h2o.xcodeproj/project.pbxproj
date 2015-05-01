@@ -280,7 +280,18 @@
 		10583BF91AE783BE004A3AD6 /* searchstyle.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = searchstyle.css; path = assets/searchstyle.css; sourceTree = "<group>"; };
 		10583BFA1AE783BE004A3AD6 /* style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = style.css; path = assets/style.css; sourceTree = "<group>"; };
 		10583BFB1AE78DCC004A3AD6 /* syntax_and_structure.mt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = syntax_and_structure.mt; sourceTree = "<group>"; };
+		10583BFC1AE88782004A3AD6 /* base_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = base_directives.mt; sourceTree = "<group>"; };
+		10583BFD1AE8A7E1004A3AD6 /* directive.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = directive.mt; sourceTree = "<group>"; };
 		10583BFF1AEF368A004A3AD6 /* 293.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = 293.c; sourceTree = "<group>"; };
+		10583C011AEF86E6004A3AD6 /* http1_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = http1_directives.mt; sourceTree = "<group>"; };
+		10583C021AEF8C7D004A3AD6 /* http2_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = http2_directives.mt; sourceTree = "<group>"; };
+		10583C031AF1D7D5004A3AD6 /* access_log_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = access_log_directives.mt; sourceTree = "<group>"; };
+		10583C041AF1F315004A3AD6 /* expires_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = expires_directives.mt; sourceTree = "<group>"; };
+		10583C051AF1F893004A3AD6 /* file_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = file_directives.mt; sourceTree = "<group>"; };
+		10583C061AF20BE5004A3AD6 /* headers_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = headers_directives.mt; sourceTree = "<group>"; };
+		10583C071AF21539004A3AD6 /* proxy_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = proxy_directives.mt; sourceTree = "<group>"; };
+		10583C081AF2188E004A3AD6 /* redirect_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = redirect_directives.mt; sourceTree = "<group>"; };
+		10583C091AF2D302004A3AD6 /* reproxy_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = reproxy_directives.mt; sourceTree = "<group>"; };
 		1058C87C1AA41789008D6180 /* headers.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers.c; sourceTree = "<group>"; };
 		1058C87F1AA42568008D6180 /* 50headers.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50headers.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		1058C8871AA6DE4B008D6180 /* hostinfo.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hostinfo.h; sourceTree = "<group>"; };
@@ -634,6 +645,7 @@
 			isa = PBXGroup;
 			children = (
 				10583BE01AE5A222004A3AD6 /* wrapper.mt */,
+				10583BFD1AE8A7E1004A3AD6 /* directive.mt */,
 			);
 			path = snippets;
 			sourceTree = "<group>";
@@ -654,6 +666,16 @@
 				10583BFB1AE78DCC004A3AD6 /* syntax_and_structure.mt */,
 				10583BF51AE765E0004A3AD6 /* command_options.mt */,
 				10583BF61AE765E0004A3AD6 /* quick_start.mt */,
+				10583BFC1AE88782004A3AD6 /* base_directives.mt */,
+				10583C011AEF86E6004A3AD6 /* http1_directives.mt */,
+				10583C021AEF8C7D004A3AD6 /* http2_directives.mt */,
+				10583C031AF1D7D5004A3AD6 /* access_log_directives.mt */,
+				10583C041AF1F315004A3AD6 /* expires_directives.mt */,
+				10583C051AF1F893004A3AD6 /* file_directives.mt */,
+				10583C061AF20BE5004A3AD6 /* headers_directives.mt */,
+				10583C071AF21539004A3AD6 /* proxy_directives.mt */,
+				10583C081AF2188E004A3AD6 /* redirect_directives.mt */,
+				10583C091AF2D302004A3AD6 /* reproxy_directives.mt */,
 			);
 			path = configure;
 			sourceTree = "<group>";

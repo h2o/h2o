@@ -6,6 +6,16 @@ OUTPUT=\
     configure/quick_start.html \
     configure/command_options.html \
     configure/syntax_and_structure.html \
+    configure/base_directives.html \
+    configure/http1_directives.html \
+    configure/http2_directives.html \
+    configure/access_log_directives.html \
+    configure/expires_directives.html \
+    configure/file_directives.html \
+    configure/headers_directives.html \
+    configure/proxy_directives.html \
+    configure/redirect_directives.html \
+    configure/reproxy_directives.html \
     faq.html \
 
 PUBLISH_REPO=git@github.com:h2o/h2o.github.io.git

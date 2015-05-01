@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<base href="../" />
+
+<!-- oktavia -->
+<link rel="stylesheet" href="assets/searchstyle.css" type="text/css" />
+<script src="search/jquery-1.9.1.min.js"></script>
+<script src="search/oktavia-jquery-ui.js"></script>
+<script src="search/oktavia-english-search.js"></script>
+<!-- /oktavia -->
+
+<link rel="stylesheet" href="assets/style.css" type="text/css" />
+
+<title>Proxy Directives - Configure - H2O</title>
+</head>
+<body>
+<div id="body">
+<div id="top">
+
+<h1><a href="index.html">H2O</a></h1>
+the optimized HTTP/1.x, HTTP/2 server
+
+<!-- oktavia -->
+<form id="searchform">
+<input class="search" type="search" name="search" id="search" results="5" value="" placeholder="Search" />
+<div id="searchresult_box">
+<div id="close_search_box">&times;</div>
+<div id="searchresult_summary"></div>
+<div id="searchresult"></div>
+<div id="searchresult_nav"></div>
+<span class="pr">Powered by <a href="https://github.com/shibukawa/oktavia">Oktavia</a></span>
+</div>
+</form>
+<!-- /oktavia -->
+
+</div>
+
+<table id="menu">
+<tr>
+<td><a href="index.html">Top</a></td>
+<td><a href="install.html">Install</a></td>
+<td class="selected">Configure</td>
+<td><a href="faq.html">FAQ</a></td>
+<td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
+<td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
+</tr>
+</table>
+
+<div id="main">
+
+<h2>
+<a href="configure.html">Configure</a> &gt;
+Proxy Directives
+</h2>
+
+
+<p>
+This document describes the configuration directives of the proxy handler.
+</p>
+
+<h3 id="proxy.reverse.url" class="directive-title"><a href="configure/proxy_directives.html#proxy.reverse.url"><code>"proxy.reverse.url"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd><p>
+Forwards the requests to the specified URL, and transfers the response.
+At the moment, only HTTP is supported.
+</p>
+<div class="example">
+<div class="caption">Example. Forwarding the requests to application server running on <code>127.0.0.1:8080</code></div>
+<pre><code>proxy.reverse.url: "http://127.0.0.1:8080/"</code></pre>
+</div>
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>path</dd>
+</dl>
+
+
+<h3 id="proxy.preserve-host" class="directive-title"><a href="configure/proxy_directives.html#proxy.preserve-host"><code>"proxy.preserve-host"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>A boolean flag (<code>ON</code> or <code>OFF</code>) designating whether or not to pass <code>Host</code> header from incoming request to upstream.
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.preserve-host: OFF</pre></code>
+</dl>
+
+
+<h3 id="proxy.timeout.io" class="directive-title"><a href="configure/proxy_directives.html#proxy.timeout.io"><code>"proxy.timeout.io"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>Sets the upstream I/O timeout in milliseconds.
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.timeout.io: 5000</pre></code>
+</dl>
+
+
+<h3 id="proxy.timeout.keepalive" class="directive-title"><a href="configure/proxy_directives.html#proxy.timeout.keepalive"><code>"proxy.timeout.keepalive"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd><p>
+Sets the upstream timeout for idle connections in milliseconds.
+The value should be set to something smaller than that being set at the upstream server.
+</p>
+<p>
+Upstream connection becomes non-persistent if the value is set to zero.
+</p>
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.timeout.keepalive: 2000</pre></code>
+</dl>
+
+
+
+
+
+</div>
+<div id="footer">
+<p>
+Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+</p>
+</div>
+</body>
+</html>

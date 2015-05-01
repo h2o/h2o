@@ -262,6 +262,7 @@ ELSE (LIBUV_FOUND)
 ENDIF (LIBUV_FOUND)
 
 INSTALL(PROGRAMS share/h2o/fetch-ocsp-response share/h2o/start_server DESTINATION share/h2o)
+INSTALL(DIRECTORY doc/ DESTINATION share/doc/h2o PATTERN "Makefile" EXCLUDE PATTERN "README.md" EXCLUDE)
 
 # tests
 ADD_EXECUTABLE(t-00unit-evloop.t ${UNIT_TEST_SOURCE_FILES})

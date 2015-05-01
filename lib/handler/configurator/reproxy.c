@@ -78,6 +78,5 @@ void h2o_reproxy_register_configurator(h2o_globalconf_t *conf)
     /* reproxy: ON | OFF */
     h2o_configurator_define_command(&c->super, "reproxy", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
                                                               H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_reproxy, "boolean flag (ON/OFF) indicating whether or not to accept Reproxy-URL\n"
-                                                       "response headers from upstream (default: OFF)");
+                                    on_config_reproxy);
 }

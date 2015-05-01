@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<base href="../" />
+
+<!-- oktavia -->
+<link rel="stylesheet" href="assets/searchstyle.css" type="text/css" />
+<script src="search/jquery-1.9.1.min.js"></script>
+<script src="search/oktavia-jquery-ui.js"></script>
+<script src="search/oktavia-english-search.js"></script>
+<!-- /oktavia -->
+
+<link rel="stylesheet" href="assets/style.css" type="text/css" />
+
+<title>Headers Directives - Configure - H2O</title>
+</head>
+<body>
+<div id="body">
+<div id="top">
+
+<h1><a href="index.html">H2O</a></h1>
+the optimized HTTP/1.x, HTTP/2 server
+
+<!-- oktavia -->
+<form id="searchform">
+<input class="search" type="search" name="search" id="search" results="5" value="" placeholder="Search" />
+<div id="searchresult_box">
+<div id="close_search_box">&times;</div>
+<div id="searchresult_summary"></div>
+<div id="searchresult"></div>
+<div id="searchresult_nav"></div>
+<span class="pr">Powered by <a href="https://github.com/shibukawa/oktavia">Oktavia</a></span>
+</div>
+</form>
+<!-- /oktavia -->
+
+</div>
+
+<table id="menu">
+<tr>
+<td><a href="index.html">Top</a></td>
+<td><a href="install.html">Install</a></td>
+<td class="selected">Configure</td>
+<td><a href="faq.html">FAQ</a></td>
+<td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
+<td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
+</tr>
+</table>
+
+<div id="main">
+
+<h2>
+<a href="configure.html">Configure</a> &gt;
+Headers Directives
+</h2>
+
+
+<p>
+This document describes the configuration directives of the headers handler.
+</p>
+
+<h3 id="header.add" class="directive-title"><a href="configure/headers_directives.html#header.add"><code>"header.add"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd><p>
+Adds a new header line to the response headers, regardless if a header with the same name already exists.
+</p>
+<div class="example">
+<div class="caption">Example. Setting the <code>Set-Cookie</code> header</div>
+<pre><code>header.add: "Set-Cookie: test=1"</code></pre>
+</div>
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+</dl>
+
+
+<h3 id="header.append" class="directive-title"><a href="configure/headers_directives.html#header.append"><code>"header.append"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>Adds a new header line, or appends the value to the existing header with the same name, separated by <code>,</code>.
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+</dl>
+
+
+<h3 id="header.merge" class="directive-title"><a href="configure/headers_directives.html#header.merge"><code>"header.merge"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd><p>
+Adds a new header line, or merges the value to the existing header of comma-separated values.
+</p>
+<p>
+The following example sets the <code>must-revalidate</code> attribute of the <code>Cache-Control</code> header when and only when the attribute is not yet being set.
+</p>
+<div class="example">
+<div class="caption">Example. Setting the <code>must-revalidate</code> attribute</div>
+<pre><code>header.merge: "Cache-Control: must-revalidate"</code></pre>
+</div>
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+</dl>
+
+
+
+<h3 id="header.set" class="directive-title"><a href="configure/headers_directives.html#header.set"><code>"header.set"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd><p>
+Sets a header line, removing headers with the same name if exists.
+</p>
+<div class="example">
+<div class="caption">Example. Setting the <code>X-Content-Type-Options: nosniff</code> header</div>
+<pre><code>header.append: "X-Content-Type-Options: nosniff"</code></pre>
+</div>
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+</dl>
+
+
+<h3 id="header.setifempty" class="directive-title"><a href="configure/headers_directives.html#header.setifempty"><code>"header.setifempty"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>Sets a header line when and only when a header with the same name does not already exist.
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+</dl>
+
+
+<h3 id="header.setifempty" class="directive-title"><a href="configure/headers_directives.html#header.setifempty"><code>"header.setifempty"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>Sets a header line when and only when a header with the same name does not already exist.
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+</dl>
+
+
+<h3 id="header.unset" class="directive-title"><a href="configure/headers_directives.html#header.unset"><code>"header.unset"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd><p>
+Removes headers with given name.
+</p>
+<div class="example">
+<div class="caption">Example. Removing the <code>X-Powered-By</code> header</div>
+<pre><code>header.unset: "X-Powered-By"</code></pre>
+</div>
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+</dl>
+
+
+
+
+
+</div>
+<div id="footer">
+<p>
+Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+</p>
+</div>
+</body>
+</html>

@@ -5,7 +5,7 @@
 
 H2O uses <a href="http://www.yaml.org/">YAML</a> 1.1 the syntax of its configuration file.
 
-<h3>Levels of Configuration</h3>
+<h3 id="config_levels">Levels of Configuration</h3>
 
 <p>
 When using the configuration directives of H2O, it is important to understand that there are three configuration levels: global, host, path.

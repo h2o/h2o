@@ -7,19 +7,19 @@
 <li>Configuration File
 <ul>
 <li><a href="configure/syntax_and_structure.html">Syntax and Structure</a>
-<li>Directives
-<ul>
-<li>Base
-<li>HTTP/1
-<li>HTTP/2
-<li>Access Log
-<li>Expires
-<li>File
-<li>Headers
-<li>Proxy
-<li>Redirect
-<li>Reproxy
 </ul>
+<li>Configuration Directives
+<ul>
+<li><a href="configure/base_directives.html">Base</a>
+<li><a href="configure/http1_directives.html">HTTP/1</a>
+<li><a href="configure/http2_directives.html">HTTP/2</a>
+<li><a href="configure/access_log_directives.html">Access Log</a>
+<li><a href="configure/expires_directives.html">Expires</a>
+<li><a href="configure/file_directives.html">File</a>
+<li><a href="configure/headers_directives.html">Headers</a>
+<li><a href="configure/proxy_directives.html">Proxy</a>
+<li><a href="configure/redirect_directives.html">Redirect</a>
+<li><a href="configure/reproxy_directives.html">Reproxy</a>
 </ul>
 </ul>
 

@@ -2,6 +2,7 @@
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<base href="../" />
 
 <!-- oktavia -->
 <link rel="stylesheet" href="assets/searchstyle.css" type="text/css" />
@@ -12,7 +13,7 @@
 
 <link rel="stylesheet" href="assets/style.css" type="text/css" />
 
-<title>Configure - H2O</title>
+<title>HTTP/2 Directives - Configure - H2O</title>
 </head>
 <body>
 <div id="body">
@@ -50,36 +51,41 @@ the optimized HTTP/1.x, HTTP/2 server
 <div id="main">
 
 <h2>
-Configure
+<a href="configure.html">Configure</a> &gt;
+HTTP/2 Directives
 </h2>
 
 
-<ul style="list-style: none; font-weight: bold;">
-<li><a href="configure/quick_start.html">Quick Start</a>
-<li><a href="configure/command_options.html">Command Options</a>
-<li>Configuration File
-<ul>
-<li><a href="configure/syntax_and_structure.html">Syntax and Structure</a>
-</ul>
-<li>Configuration Directives
-<ul>
-<li><a href="configure/base_directives.html">Base</a>
-<li><a href="configure/http1_directives.html">HTTP/1</a>
-<li><a href="configure/http2_directives.html">HTTP/2</a>
-<li><a href="configure/access_log_directives.html">Access Log</a>
-<li><a href="configure/expires_directives.html">Expires</a>
-<li><a href="configure/file_directives.html">File</a>
-<li><a href="configure/headers_directives.html">Headers</a>
-<li><a href="configure/proxy_directives.html">Proxy</a>
-<li><a href="configure/redirect_directives.html">Redirect</a>
-<li><a href="configure/reproxy_directives.html">Reproxy</a>
-</ul>
-</ul>
-
 <p>
-Under construction.
-For the meantime, please refer to <a href="https://gist.github.com/kazuho/f15b79211ea76f1bf6e5" target="_blank">the output of <code>--help</code></a>.
+This document describes the configuration directives for controlling the HTTP/2 protocol handler.
 </p>
+
+<h3 id="http2-idle-timeout" class="directive-title"><a href="configure/http2_directives.html#http2-idle-timeout"><code>"http2-idle-timeout"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>Timeout for idle connections in seconds.
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>http2-idle-timeout: 10</pre></code>
+</dl>
+
+
+<h3 id="http2-max-concurrent-requests-per-connection" class="directive-title"><a href="configure/http2_directives.html#http2-max-concurrent-requests-per-connection"><code>"http2-max-concurrent-requests-per-connection"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>Maximum number of requests to be handled concurrently within a single HTTP/2 connection.
+The value cannot exceed 256.
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>http2-max-concurrent-requests-per-connection: 256</pre></code>
+</dl>
+
 
 
 
