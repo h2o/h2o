@@ -67,10 +67,5 @@ void h2o_redirect_register_configurator(h2o_globalconf_t *conf)
 {
     h2o_configurator_t *c = h2o_configurator_create(conf, sizeof(*c));
 
-    h2o_configurator_define_command(c, "redirect", H2O_CONFIGURATOR_FLAG_PATH, on_config,
-                                    "redirects the request to given URL prefix\n"
-                                    " - if the value is a scalar, it is considered as the destination URL prefix\n"
-                                    " - if the value is a mapping, it should contain the following properties:\n"
-                                    "     status: HTTP status code to be sent (e.g. 301)\n"
-                                    "     url:    the destination URL prefix");
+    h2o_configurator_define_command(c, "redirect", H2O_CONFIGURATOR_FLAG_PATH, on_config);
 }

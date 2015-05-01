@@ -1005,35 +1005,6 @@ static int on_config_num_name_resolution_threads(h2o_configurator_command_t *cmd
     return 0;
 }
 
-static void usage_print_directives(h2o_globalconf_t *conf)
-{
-    h2o_linklist_t *node;
-    size_t i;
-
-    for (node = conf->configurators.next; node != &conf->configurators; node = node->next) {
-        h2o_configurator_t *configurator = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, node);
-        for (i = 0; i != configurator->commands.size; ++i) {
-            h2o_configurator_command_t *cmd = configurator->commands.entries + i;
-            const char *desc_line;
-            printf("  %s: [%s%s%s]\n", cmd->name, ("g") + ((cmd->flags & H2O_CONFIGURATOR_FLAG_GLOBAL) == 0),
-                   ("h") + ((cmd->flags & H2O_CONFIGURATOR_FLAG_HOST) == 0),
-                   ("p") + ((cmd->flags & H2O_CONFIGURATOR_FLAG_PATH) == 0));
-            desc_line = cmd->description;
-            while (*desc_line != '\0') {
-                const char *eol = strchr(desc_line, '\n');
-                if (eol != NULL) {
-                    printf("    %.*s", (int)(eol - desc_line + 1), desc_line);
-                    desc_line += eol - desc_line + 1;
-                } else {
-                    printf("    %s\n", desc_line);
-                    break;
-                }
-            }
-        }
-        printf("\n");
-    }
-}
-
 yoml_t *load_config(const char *fn)
 {
     FILE *fp;
@@ -1309,55 +1280,21 @@ static void setup_configurators(void)
         h2o_configurator_t *c = h2o_configurator_create(&conf.globalconf, sizeof(*c));
         c->enter = on_config_listen_enter;
         c->exit = on_config_listen_exit;
-        h2o_configurator_define_command(c, "listen", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST, on_config_listen,
-                                        "port at which the server should listen for incoming requests (mandatory)\n"
-                                        " - if the value is a scalar, it is treated as the port number (or as the\n"
-                                        "   service name)\n"
-                                        " - if the value is a mapping, following properties are recognized:\n"
-                                        "     port: incoming port number or service name (mandatory)\n"
-                                        "     host: incoming address (default: any address)\n"
-                                        "     ssl: mapping of SSL configuration using the keys below (default: none)\n"
-                                        "       certificate-file:  path of the SSL certificate file (mandatory)\n"
-                                        "       key-file:          path of the SSL private key file (mandatory)\n"
-                                        "       minimum-version:   minimum protocol version, should be one of:\n"
-                                        "                          `SSLv2`, `SSLv3`, `TLSv1`, `TLSv1.1`, `TLSv1.2`\n"
-                                        "                          (default: TLSv1)\n"
-                                        "       cipher-suite:      list of cipher suites to be passed to OpenSSL via\n"
-                                        "                          SSL_CTX_set_cipher_list (optional)\n"
-                                        "       cipher-preference: side of the list that should be used for\n"
-                                        "                          selecting the cipher-suite; should be either of:\n"
-                                        "                          `client`, `server` (default: client)\n"
-                                        "       dh-file:           PEM file of dhparam to use (optional)\n"
-                                        "       ocsp-update-interval:\n"
-                                        "                          interval for updating the OCSP stapling data (in\n"
-                                        "                          seconds), or set to zero to disable OCSP stapling\n"
-                                        "                          (default: 14400 = 4 hours)\n"
-                                        "       ocsp-max-failures: number of consecutive OCSP queriy failures before\n"
-                                        "                          stopping to send OCSP stapling data to the client\n"
-                                        "                          (default: 3)\n"
-                                        " - if the value is a sequence, each element should be either a scalar or a\n"
-                                        "   mapping that conform to the requirements above");
+        h2o_configurator_define_command(c, "listen", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST, on_config_listen);
     }
 
     {
         h2o_configurator_t *c = h2o_configurator_create(&conf.globalconf, sizeof(*c));
         h2o_configurator_define_command(c, "user", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                        on_config_user,
-                                        "user under with the server should handle incoming requests (default: none)");
+                                        on_config_user);
         h2o_configurator_define_command(c, "pid-file", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                        on_config_pid_file, "name of the pid file (default: none)");
+                                        on_config_pid_file);
         h2o_configurator_define_command(c, "error-log", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                        on_config_error_log,
-                                        "path of a file to which error logs should be appended; if the path starts\n"
-                                        "with `|`, the rest of the path is considered as a command to which the logs\n"
-                                        "should be piped (default: stdout and stderr)");
-        h2o_configurator_define_command(c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_connections,
-                                        "max connections (default: 1024)");
-        h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads,
-                                        "number of worker threads (default: getconf NPROCESSORS_ONLN)");
-        h2o_configurator_define_command(
-            c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_name_resolution_threads,
-            "number of threads to run for name resolution (default: " H2O_TO_STR(H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS) ")");
+                                        on_config_error_log);
+        h2o_configurator_define_command(c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_connections);
+        h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads);
+        h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
+                                        on_config_num_name_resolution_threads);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
@@ -1447,12 +1384,9 @@ int main(int argc, char **argv)
                        "  -v, --version      prints the version number\n"
                        "  -h, --help         print this help\n"
                        "\n"
-                       "Configuration File:\n"
-                       "  The configuration file should be written in YAML format.  Below is the list\n"
-                       "  of configuration directives; the flags indicate at which level the directives\n"
-                       "  can be used; g=global, h=host, p=path.\n"
+                       "Please refer to the documentation under `share/doc/h2o` (or available online at\n"
+                       "http://h2o.github.io/) for how to configure the server.\n"
                        "\n");
-                usage_print_directives(&conf.globalconf);
                 exit(0);
                 break;
             case ':':

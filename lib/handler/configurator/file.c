@@ -287,36 +287,36 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
 
     h2o_configurator_define_command(&self->super, "file.dir", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
                                                                   H2O_CONFIGURATOR_FLAG_DEFERRED,
-                                    on_config_dir, "directory under which to serve the target path");
+                                    on_config_dir);
     h2o_configurator_define_command(&self->super, "file.index",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
-                                    on_config_index, "sequence of index file names (default: index.html index.htm index.txt)");
+                                    on_config_index);
     h2o_configurator_define_command(&self->super, "file.mime.settypes",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
-                                    on_config_mime_settypes, "map of mime-type -> (extension | sequence-of-extensions)");
+                                    on_config_mime_settypes);
     h2o_configurator_define_command(&self->super, "file.mime.addtypes",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
-                                    on_config_mime_addtypes, "map of mime-type -> (extension | sequence-of-extensions)");
+                                    on_config_mime_addtypes);
     h2o_configurator_define_command(&self->super, "file.mime.removetypes",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
-                                    on_config_mime_removetypes, "sequence of extensions");
+                                    on_config_mime_removetypes);
     h2o_configurator_define_command(&self->super, "file.mime.setdefaulttype",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_mime_setdefaulttype, "default mime-type");
+                                    on_config_mime_setdefaulttype);
     h2o_configurator_define_command(&self->super, "file.etag", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
                                                                    H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_etag, "whether or not to send etag (ON or OFF, default: ON)");
-    h2o_configurator_define_command(
-        &self->super, "file.send-gzip", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
-                                            H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-        on_config_send_gzip, "whether or not to send .gz variants if possible (ON or OFF, default: OFF)");
+                                    on_config_etag);
+    h2o_configurator_define_command(&self->super, "file.send-gzip",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_send_gzip);
     h2o_configurator_define_command(&self->super, "file.dirlisting",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_dir_listing, "whether or not to send directory indexes (ON or OFF, default: OFF)");
+                                    on_config_dir_listing);
 }

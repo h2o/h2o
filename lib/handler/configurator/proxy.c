@@ -112,22 +112,19 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     /* setup handlers */
     c->super.enter = on_config_enter;
     c->super.exit = on_config_exit;
-    h2o_configurator_define_command(&c->super, "proxy.reverse.url",
-                                    H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
-                                        H2O_CONFIGURATOR_FLAG_DEFERRED,
-                                    on_config_reverse_url, "upstream URL (only HTTP is suppported)");
+    h2o_configurator_define_command(
+        &c->super, "proxy.reverse.url",
+        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_DEFERRED, on_config_reverse_url);
     h2o_configurator_define_command(&c->super, "proxy.preserve-host",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_preserve_host, "boolean flag (ON/OFF) indicating whether or not to pass Host header\n"
-                                                             "from imcoming request to upstream (default: OFF)");
-    h2o_configurator_define_command(
-        &c->super, "proxy.timeout.io", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
-                                           H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-        on_config_timeout_io, "sets upstream I/O timeout (in milliseconds, default: " H2O_TO_STR(H2O_DEFAULT_PROXY_IO_TIMEOUT) ")");
-    h2o_configurator_define_command(
-        &c->super, "proxy.timeout.keepalive", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
-                                                  H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-        on_config_timeout_keepalive, "timeout for idle conncections (set to zero to disable persistent connections\n"
-                                     "upstream; in milliseconds, default: 2000)");
+                                    on_config_preserve_host);
+    h2o_configurator_define_command(&c->super, "proxy.timeout.io",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_timeout_io);
+    h2o_configurator_define_command(&c->super, "proxy.timeout.keepalive",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_timeout_keepalive);
 }

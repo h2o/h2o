@@ -120,11 +120,5 @@ void h2o_expires_register_configurator(h2o_globalconf_t *conf)
     c->super.exit = on_config_exit;
     h2o_configurator_define_command(&c->super, "expires", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
                                                               H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_expires,
-                                    "sets `Cache-Control: max-age` header (default: OFF)\n"
-                                    "  - if the value is `OFF` then the feature is not used\n"
-                                    "  - if the value is `<number> <unit>` then the header is set\n"
-                                    "  - the units recognized are: `second`,`minute`,`hour`,`day`,`month`,`year`\n"
-                                    "  - the units can also be in plural forms\n"
-                                    "example: `expires: 1 day` sets `Cache-Control: max-age=86400`");
+                                    on_config_expires);
 }

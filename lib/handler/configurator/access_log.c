@@ -126,20 +126,5 @@ void h2o_access_log_register_configurator(h2o_globalconf_t *conf)
 
     h2o_configurator_define_command(&self->super, "access-log",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH,
-                                    on_config, "path and optionally the format of the access log (default: none)\n"
-                                               "  - if the value is a scalar, it is treated as the path of the log file\n"
-                                               "  - if the value is a mapping, its `path` property is treated as the path\n"
-                                               "    and `format` property is treated as the format\n"
-                                               "  - if the path starts with `|`, the rest of the path is considered as a \n"
-                                               "    command pipe to which the logs should be emitted\n"
-                                               "following format strings are recognized:\n"
-                                               "  %h:         remote host\n"
-                                               "  %l:         remote logname (always '-')\n"
-                                               "  %u:         remote user (always '-')\n"
-                                               "  %t:         request time\n"
-                                               "  %r:         first line of request\n"
-                                               "  %s:         status\n"
-                                               "  %b:         size of the response body in bytes\n"
-                                               "  %{Foobar}i: the contents of the request header `Foobar`\n"
-                                               "  %{Foobar}o: the contents of the response header `Foobar`");
+                                    on_config);
 }
