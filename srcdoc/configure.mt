@@ -19,7 +19,7 @@
 <li><a href="configure/headers_directives.html">Headers</a>
 <li><a href="configure/proxy_directives.html">Proxy</a>
 <li><a href="configure/redirect_directives.html">Redirect</a>
-<li>Reproxy
+<li><a href="configure/reproxy_directives.html">Reproxy</a>
 </ul>
 </ul>
 
