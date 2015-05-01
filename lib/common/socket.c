@@ -26,6 +26,7 @@
 #include <string.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <openssl/err.h>
 #include "h2o/socket.h"
 #include "h2o/timeout.h"
 
@@ -341,8 +342,13 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
                     sz = 1400;
                 ret = SSL_write(sock->ssl->ssl, bufs[0].base + off, (int)sz);
                 if (ret != sz) {
-                    fprintf(stderr, "SSL_write failed; IN %d, OUT %d, ERROR %d\n", (int)sz, ret,
-                            ret < 0 ? SSL_get_error(sock->ssl->ssl, ret) : 0);
+                    fprintf(stderr, "SSL_write(3) failed; IN %d, OUT %d\n", (int)sz, ret);
+                    if (ret < 0) {
+                        int sslerr = SSL_get_error(sock->ssl->ssl, ret);
+                        fprintf(stderr, "result of SSL_get_error is %d\n", sslerr);
+                        if (sslerr == SSL_ERROR_SSL)
+                            ERR_print_errors_fp(stderr);
+                    }
                     memset(&sock->ssl->output.bufs, 0, sizeof(sock->ssl->output.bufs));
                     h2o_mem_clear_pool(&sock->ssl->output.pool);
                     flush_pending_ssl(sock, cb);
