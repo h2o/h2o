@@ -129,6 +129,7 @@
 		10F417FF19C2D2F800B6E31A /* picotest.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F417FD19C2D2F800B6E31A /* picotest.c */; };
 		10F4180119C2D31600B6E31A /* yoml.h in Headers */ = {isa = PBXBuildFile; fileRef = 10F4180019C2D31600B6E31A /* yoml.h */; };
 		10F4180519CA75C500B6E31A /* configurator.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F4180419CA75C500B6E31A /* configurator.c */; };
+		10F9F2651AF4795D0056F26B /* redirect.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F9F2641AF4795D0056F26B /* redirect.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -412,6 +413,7 @@
 		10F4180019C2D31600B6E31A /* yoml.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = yoml.h; path = yoml/yoml.h; sourceTree = "<group>"; };
 		10F4180219C2D32100B6E31A /* yoml-parser.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "yoml-parser.h"; path = "yoml/yoml-parser.h"; sourceTree = "<group>"; };
 		10F4180419CA75C500B6E31A /* configurator.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = configurator.c; sourceTree = "<group>"; };
+		10F9F2641AF4795D0056F26B /* redirect.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = redirect.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -570,6 +572,7 @@
 				105534BD1A3B8F7700627ECB /* file.c */,
 				105534C21A3B917000627ECB /* mimemap.c */,
 				1058C87C1AA41789008D6180 /* headers.c */,
+				10F9F2641AF4795D0056F26B /* redirect.c */,
 			);
 			path = handler;
 			sourceTree = "<group>";
@@ -1318,6 +1321,7 @@
 				10583C001AEF368A004A3AD6 /* 293.c in Sources */,
 				105534BE1A3B8F7700627ECB /* file.c in Sources */,
 				1079244719A3265C00C52AD6 /* http1.c in Sources */,
+				10F9F2651AF4795D0056F26B /* redirect.c in Sources */,
 				1079244819A3265C00C52AD6 /* connection.c in Sources */,
 				1079244119A3264300C52AD6 /* picohttpparser.c in Sources */,
 				1058C87D1AA41789008D6180 /* headers.c in Sources */,
