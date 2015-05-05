@@ -46,7 +46,7 @@ EOT
 $ctx->{directive}->(
     name    => "file.index",
     levels  => [ qw(global host path) ],
-    default => "file.etag: [ 'index.html', 'index.htm', 'index.txt' ]",
+    default => "file.index: [ 'index.html', 'index.htm', 'index.txt' ]",
     desc    => q{Specifies the names of the files that should be served when the client sends a request against the directory.},
 )->(sub {
 ?>

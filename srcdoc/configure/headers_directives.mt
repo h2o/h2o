@@ -54,7 +54,7 @@ $ctx->{directive}->(
 )->(sub {
 ?>
 <?= $ctx->{example}->('Setting the <code>X-Content-Type-Options: nosniff</code> header', <<'EOT')
-header.append: "X-Content-Type-Options: nosniff"
+header.set: "X-Content-Type-Options: nosniff"
 EOT
 ?>
 ? })
