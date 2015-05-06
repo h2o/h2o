@@ -349,6 +349,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     /* failed to open */
     if (errno == ENOENT) {
         h2o_send_error(req, 404, "File Not Found", "file not found", 0);
+    } else if (errno == ENFILE || errno == EMFILE) {
+        h2o_send_error(req, 503, "Service Unavailable", "please try again later", 0);
     } else {
         h2o_send_error(req, 403, "Access Forbidden", "access forbidden", 0);
     }
