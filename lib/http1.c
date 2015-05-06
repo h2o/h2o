@@ -32,7 +32,6 @@
 
 struct st_h2o_http1_finalostream_t {
     h2o_ostream_t super;
-    int sent_headers;
     struct {
         void *buf;
         h2o_ostream_pull_cb cb;
@@ -74,7 +73,8 @@ struct st_h2o_http1_chunked_entity_reader {
 
 static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled);
 static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb);
-static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final);
+static void finalostream_send_headers_and_body(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final);
+static void finalostream_send_body(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final);
 static void reqread_on_read(h2o_socket_t *sock, int status);
 
 const h2o_protocol_callbacks_t H2O_HTTP1_CALLBACKS = {
@@ -99,9 +99,8 @@ static void init_request(struct st_h2o_http1_conn_t *conn, int reinit)
     h2o_init_request(&conn->req, &conn->super, NULL);
 
     conn->req._ostr_top = &conn->_ostr_final.super;
-    conn->_ostr_final.super.do_send = finalostream_send;
+    conn->_ostr_final.super.do_send = finalostream_send_headers_and_body;
     conn->_ostr_final.super.start_pull = finalostream_start_pull;
-    conn->_ostr_final.sent_headers = 0;
 }
 
 static void close_connection(struct st_h2o_http1_conn_t *conn)
@@ -625,7 +624,7 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
     size_t bufsz, headers_len;
 
     assert(conn->req._ostr_top == &conn->_ostr_final.super);
-    assert(!conn->_ostr_final.sent_headers);
+    assert(conn->_ostr_final.super.do_send == finalostream_send_headers_and_body);
 
     /* register the pull callback */
     conn->_ostr_final.pull.cb = cb;
@@ -643,37 +642,47 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
 
     /* fill-in the header */
     headers_len = flatten_headers(conn->_ostr_final.pull.buf, &conn->req, connection);
-    conn->_ostr_final.sent_headers = 1;
+    conn->_ostr_final.super.do_send = NULL; /* kill the push interface */
 
     proceed_pull(conn, headers_len);
 }
 
-void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
+static void do_send(struct st_h2o_http1_conn_t *conn, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
 {
-    struct st_h2o_http1_finalostream_t *self = (void *)_self;
-    struct st_h2o_http1_conn_t *conn = (struct st_h2o_http1_conn_t *)req->conn;
-    h2o_iovec_t *bufs = alloca(sizeof(h2o_iovec_t) * (inbufcnt + 1));
-    int bufcnt = 0;
-
-    assert(self == &conn->_ostr_final);
-
-    if (!self->sent_headers) {
-        /* build headers and send */
-        const char *connection = req->http1_is_persistent ? "keep-alive" : "close";
-        bufs[bufcnt].base = h2o_mem_alloc_pool(
-            &req->pool, flatten_headers_estimate_size(req, conn->super.ctx->globalconf->server_name.len + strlen(connection)));
-        bufs[bufcnt].len = flatten_headers(bufs[bufcnt].base, req, connection);
-        ++bufcnt;
-        self->sent_headers = 1;
-    }
-    memcpy(bufs + bufcnt, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
-    bufcnt += inbufcnt;
-
     if (bufcnt != 0) {
         h2o_socket_write(conn->sock, bufs, bufcnt, is_final ? on_send_complete : on_send_next_push);
     } else {
         on_send_complete(conn->sock, 0);
     }
+}
+
+void finalostream_send_headers_and_body(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
+{
+    struct st_h2o_http1_conn_t *conn = (struct st_h2o_http1_conn_t *)req->conn;
+    h2o_iovec_t *bufs = alloca(sizeof(h2o_iovec_t) * (inbufcnt + 1));
+    int bufcnt = 0;
+
+    assert(self == &conn->_ostr_final.super);
+
+    /* build the headers and concat the body */
+    const char *connection = req->http1_is_persistent ? "keep-alive" : "close";
+    bufs[bufcnt].base = h2o_mem_alloc_pool(
+        &req->pool, flatten_headers_estimate_size(req, conn->super.ctx->globalconf->server_name.len + strlen(connection)));
+    bufs[bufcnt].len = flatten_headers(bufs[bufcnt].base, req, connection);
+    ++bufcnt;
+    memcpy(bufs + bufcnt, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
+    bufcnt += inbufcnt;
+
+    /* change the callback to body sender */
+    conn->_ostr_final.super.do_send = finalostream_send_body;
+
+    do_send(conn, bufs, bufcnt, is_final);
+}
+
+void finalostream_send_body(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
+{
+    struct st_h2o_http1_conn_t *conn = (struct st_h2o_http1_conn_t *)req->conn;
+    do_send(conn, bufs, bufcnt, is_final);
 }
 
 void h2o_http1_accept(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock)
