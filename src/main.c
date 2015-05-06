@@ -219,7 +219,13 @@ static void init_openssl(void)
 
 static void setup_ecc_key(SSL_CTX *ssl_ctx)
 {
-    EC_KEY *key = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
+    int nid = NID_X9_62_prime256v1;
+    EC_KEY *key = EC_KEY_new_by_curve_name(nid);
+    if (key == NULL) {
+        fprintf(stderr, "Failed to create curve \"%s\"\n", OBJ_nid2sn(nid));
+        return;
+    }
+
     SSL_CTX_set_tmp_ecdh(ssl_ctx, key);
     EC_KEY_free(key);
 }
@@ -518,6 +524,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     init_openssl();
     ssl_ctx = SSL_CTX_new(SSLv23_server_method());
     SSL_CTX_set_options(ssl_ctx, ssl_options);
+
     setup_ecc_key(ssl_ctx);
     if (SSL_CTX_use_certificate_chain_file(ssl_ctx, certificate_file->data.scalar) != 1) {
         h2o_configurator_errprintf(cmd, certificate_file, "failed to load certificate file:%s\n", certificate_file->data.scalar);
