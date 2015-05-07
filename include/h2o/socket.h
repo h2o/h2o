@@ -129,7 +129,7 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
  * @param bufcnt length of the buffer array
  * @param cb callback to be called when write is complete
  */
-void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
+void h2o_socket_write(h2o_socket_t *sock, const h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
 /**
  * starts polling on the socket (for read) and calls given callback when data arrives
  * @param sock the socket

@@ -61,7 +61,7 @@ struct st_h2o_ssl_context_t {
 
 /* backend functions */
 static void do_dispose_socket(h2o_socket_t *sock);
-static void do_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
+static void do_write(h2o_socket_t *sock, const h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
 static void do_read_start(h2o_socket_t *sock);
 static void do_read_stop(h2o_socket_t *sock);
 static int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info);
@@ -316,7 +316,7 @@ void h2o_socket_close(h2o_socket_t *sock)
     }
 }
 
-void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
+void h2o_socket_write(h2o_socket_t *sock, const h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
 #if H2O_SOCKET_DUMP_WRITE
     {
