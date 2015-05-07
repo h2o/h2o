@@ -316,6 +316,72 @@ void h2o_socket_close(h2o_socket_t *sock)
     }
 }
 
+static int encrypt_ssl(h2o_socket_t *sock, const h2o_iovec_t *bufs, size_t bufcnt)
+{
+    char smallbuf[H2O_SSL_MAX_PAYLOAD_SIZE];
+    size_t smallbufsz = 0;
+    h2o_iovec_t pending = {};
+    int wret;
+
+#define COPY_PENDING()                                                                                                             \
+    if (pending.len != 0) {                                                                                                        \
+        memcpy(smallbuf + smallbufsz - pending.len, pending.base, pending.len);                                                    \
+        pending.len = 0;                                                                                                           \
+    }
+#define WRITE_SSL(p, s)                                                                                                            \
+    if ((wret = SSL_write(sock->ssl->ssl, (p), (s))) != (s))                                                                       \
+    goto Error
+#define WRITE_SMALL()                                                                                                              \
+    do {                                                                                                                           \
+        if (smallbufsz == pending.len) {                                                                                           \
+            WRITE_SSL(pending.base, (int)pending.len);                                                                             \
+        } else {                                                                                                                   \
+            COPY_PENDING();                                                                                                        \
+            WRITE_SSL(smallbuf, (int)smallbufsz);                                                                                  \
+        }                                                                                                                          \
+    } while (0)
+
+    for (; bufcnt != 0; ++bufs, --bufcnt) {
+        if (smallbufsz + bufs->len < sizeof(smallbuf)) {
+            COPY_PENDING();
+            smallbufsz += bufs->len;
+            pending = *bufs;
+        } else {
+            if (smallbufsz != 0) {
+                WRITE_SMALL();
+                smallbufsz = 0;
+            }
+            size_t off = 0;
+            while (bufs->len - off >= sizeof(smallbuf)) {
+                WRITE_SSL(bufs->base + off, sizeof(smallbuf));
+                off += sizeof(smallbuf);
+            }
+            if (bufs->len != off) {
+                pending = (h2o_iovec_t){bufs->base + off, bufs->len - off};
+                smallbufsz = pending.len;
+            }
+        }
+    }
+    if (smallbufsz != 0)
+        WRITE_SMALL();
+
+    return 0;
+
+Error:
+    assert(wret <= 0);
+    {
+        int sslerr = SSL_get_error(sock->ssl->ssl, wret);
+        fprintf(stderr, "result of SSL_get_error is %d\n", sslerr);
+        if (sslerr == SSL_ERROR_SSL)
+            ERR_print_errors_fp(stderr);
+    }
+    return -1;
+
+#undef COPY_PENDING
+#undef WRITE_SSL
+#undef WRITE_SMALL
+}
+
 void h2o_socket_write(h2o_socket_t *sock, const h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
 #if H2O_SOCKET_DUMP_WRITE
@@ -338,32 +404,14 @@ void h2o_socket_write(h2o_socket_t *sock, const h2o_iovec_t *bufs, size_t bufcnt
     } else {
         assert(sock->ssl->output.bufs.size == 0);
         /* fill in the data */
-        for (; bufcnt != 0; ++bufs, --bufcnt) {
-            size_t off = 0;
-            while (off != bufs[0].len) {
-                int ret;
-                size_t sz = bufs[0].len - off;
-                if (sz > 1400)
-                    sz = 1400;
-                ret = SSL_write(sock->ssl->ssl, bufs[0].base + off, (int)sz);
-                if (ret != sz) {
-                    fprintf(stderr, "SSL_write(3) failed; IN %d, OUT %d\n", (int)sz, ret);
-                    if (ret < 0) {
-                        int sslerr = SSL_get_error(sock->ssl->ssl, ret);
-                        fprintf(stderr, "result of SSL_get_error is %d\n", sslerr);
-                        if (sslerr == SSL_ERROR_SSL)
-                            ERR_print_errors_fp(stderr);
-                    }
-                    memset(&sock->ssl->output.bufs, 0, sizeof(sock->ssl->output.bufs));
-                    h2o_mem_clear_pool(&sock->ssl->output.pool);
-                    flush_pending_ssl(sock, cb);
+        if (encrypt_ssl(sock, bufs, bufcnt) != 0) {
+            memset(&sock->ssl->output.bufs, 0, sizeof(sock->ssl->output.bufs));
+            h2o_mem_clear_pool(&sock->ssl->output.pool);
+            flush_pending_ssl(sock, cb);
 #ifndef H2O_USE_LIBUV
-                    ((struct st_h2o_evloop_socket_t*)sock)->_flags |= H2O_SOCKET_FLAG_IS_WRITE_ERROR;
+            ((struct st_h2o_evloop_socket_t *)sock)->_flags |= H2O_SOCKET_FLAG_IS_WRITE_ERROR;
 #endif
-                    return;
-                }
-                off += sz;
-            }
+            return;
         }
         flush_pending_ssl(sock, cb);
     }

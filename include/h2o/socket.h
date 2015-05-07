@@ -51,6 +51,7 @@ extern "C" {
 #endif
 
 #define H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE 4096
+#define H2O_SSL_MAX_PAYLOAD_SIZE 1400
 
 typedef struct st_h2o_socket_t h2o_socket_t;
 
