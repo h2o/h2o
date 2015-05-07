@@ -333,7 +333,11 @@ void h2o_send_inline(h2o_req_t *req, const char *body, size_t len)
     /* req->res.content_length = buf.len; */
 
     h2o_start_response(req, &generator);
-    h2o_send(req, &buf, 1, 1);
+
+    if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")))
+        h2o_send(req, NULL, 0, 1);
+    else
+        h2o_send(req, &buf, 1, 1);
 }
 
 void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body, int flags)
