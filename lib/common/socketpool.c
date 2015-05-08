@@ -81,15 +81,15 @@ static void on_timeout(h2o_timeout_entry_t *timeout_entry)
     h2o_timeout_link(pool->_interval_cb.loop, &pool->_interval_cb.timeout, &pool->_interval_cb.entry);
 }
 
-void h2o_socketpool_init(h2o_socketpool_t *pool, const char *host, uint16_t port, size_t capacity)
+void h2o_socketpool_init(h2o_socketpool_t *pool, h2o_iovec_t host, uint16_t port, size_t capacity)
 {
     memset(pool, 0, sizeof(*pool));
 
-    if (inet_pton(AF_INET, host, &pool->peer.sin.sin_addr) == 1) {
+    if (h2o_hostinfo_aton(host, &pool->peer.sin.sin_addr) == 0) {
         pool->peer.sin.sin_family = AF_INET;
         pool->peer.sin.sin_port = htons(port);
     } else {
-        pool->peer.named.host = h2o_strdup(NULL, host, SIZE_MAX);
+        pool->peer.named.host = h2o_strdup(NULL, host.base, host.len);
         pool->peer.named.port.base = h2o_mem_alloc(sizeof("65535"));
         pool->peer.named.port.len = sprintf(pool->peer.named.port.base, "%u", (unsigned)port);
         pool->peer.is_named = 1;
