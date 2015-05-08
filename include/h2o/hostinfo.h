@@ -31,33 +31,16 @@
 
 typedef struct st_h2o_hostinfo_getaddr_req_t h2o_hostinfo_getaddr_req_t;
 
-typedef void (*h2o_hostinfo_getaddr_cb)(h2o_hostinfo_getaddr_req_t *req, const char *errstr, struct addrinfo *res);
-
-struct st_h2o_hostinfo_getaddr_req_t {
-    h2o_multithread_receiver_t *_receiver;
-    h2o_hostinfo_getaddr_cb _cb;
-    h2o_linklist_t _pending;
-    union {
-        struct {
-            const char *name;
-            const char *serv;
-            struct addrinfo hints;
-        } _in;
-        struct {
-            h2o_multithread_message_t message;
-            const char *errstr;
-            struct addrinfo *ai;
-        } _out;
-    };
-};
+typedef void (*h2o_hostinfo_getaddr_cb)(h2o_hostinfo_getaddr_req_t *req, const char *errstr, struct addrinfo *res, void *cbdata);
 
 extern size_t h2o_hostinfo_max_threads;
 
 /**
  * dispatches a (possibly) asynchronous hostname lookup
  */
-static void h2o_hostinfo_getaddr(h2o_hostinfo_getaddr_req_t *req, h2o_multithread_receiver_t *receiver, const char *name,
-                                 const char *serv, int family, int socktype, int protocol, int flags, h2o_hostinfo_getaddr_cb cb);
+h2o_hostinfo_getaddr_req_t *h2o_hostinfo_getaddr(h2o_multithread_receiver_t *receiver, const char *name, const char *serv,
+                                                 int family, int socktype, int protocol, int flags, h2o_hostinfo_getaddr_cb cb,
+                                                 void *cbdata);
 /**
  *
  */
@@ -66,10 +49,6 @@ void h2o__hostinfo_getaddr_dispatch(h2o_hostinfo_getaddr_req_t *req);
  * cancels the request
  */
 void h2o_hostinfo_getaddr_cancel(h2o_hostinfo_getaddr_req_t *req);
-/**
- * tests if getaddr is in flight
- */
-static int h2o_hostinfo_getaddr_is_active(h2o_hostinfo_getaddr_req_t *req);
 
 /**
  * function that receives and dispatches the responses
@@ -82,28 +61,6 @@ void h2o_hostinfo_getaddr_receiver(h2o_multithread_receiver_t *receiver, h2o_lin
 static struct addrinfo *h2o_hostinfo_select_one(struct addrinfo *res);
 
 /* inline defs */
-
-inline void h2o_hostinfo_getaddr(h2o_hostinfo_getaddr_req_t *req, h2o_multithread_receiver_t *receiver, const char *name,
-                                 const char *serv, int family, int socktype, int protocol, int flags, h2o_hostinfo_getaddr_cb cb)
-{
-    req->_receiver = receiver;
-    req->_cb = cb;
-    memset(&req->_pending, 0, sizeof(req->_pending));
-    req->_in.name = name;
-    req->_in.serv = serv;
-    memset(&req->_in.hints, 0, sizeof(req->_in.hints));
-    req->_in.hints.ai_family = family;
-    req->_in.hints.ai_socktype = socktype;
-    req->_in.hints.ai_protocol = protocol;
-    req->_in.hints.ai_flags = flags;
-
-    h2o__hostinfo_getaddr_dispatch(req);
-}
-
-inline int h2o_hostinfo_getaddr_is_active(h2o_hostinfo_getaddr_req_t *req)
-{
-    return req->_cb != NULL;
-}
 
 inline struct addrinfo *h2o_hostinfo_select_one(struct addrinfo *res)
 {

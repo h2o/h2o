@@ -42,7 +42,7 @@ struct st_h2o_socketpool_connect_request_t {
     h2o_socketpool_connect_cb cb;
     h2o_socketpool_t *pool;
     h2o_loop_t *loop;
-    h2o_hostinfo_getaddr_req_t getaddr_req;
+    h2o_hostinfo_getaddr_req_t *getaddr_req;
     h2o_socket_t *sock;
 };
 
@@ -174,9 +174,12 @@ static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr
     req->sock->on_close.data = req->pool;
 }
 
-static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res)
+static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_req)
 {
-    h2o_socketpool_connect_request_t *req = H2O_STRUCT_FROM_MEMBER(h2o_socketpool_connect_request_t, getaddr_req, getaddr_req);
+    h2o_socketpool_connect_request_t *req = _req;
+
+    assert(getaddr_req == req->getaddr_req);
+    req->getaddr_req = NULL;
 
     if (errstr != NULL) {
         __sync_sub_and_fetch(&req->pool->_shared.count, 1);
@@ -186,7 +189,6 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
 
     struct addrinfo *selected = h2o_hostinfo_select_one(res);
     start_connect(req, selected->ai_addr, selected->ai_addrlen);
-    freeaddrinfo(res);
 }
 
 void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketpool_t *pool, h2o_loop_t *loop,
@@ -227,8 +229,8 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
 
     if (pool->peer.is_named) {
         /* resolve the name, and connect */
-        h2o_hostinfo_getaddr(&req->getaddr_req, getaddr_receiver, pool->peer.named.host.base, pool->peer.named.port, AF_UNSPEC,
-                             SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr);
+        req->getaddr_req = h2o_hostinfo_getaddr(getaddr_receiver, pool->peer.named.host.base, pool->peer.named.port, AF_UNSPEC,
+                                                SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, req);
     } else {
         /* connect (using sockaddr_in) */
         start_connect(req, (void *)&pool->peer.sin, sizeof(pool->peer.sin));
@@ -237,8 +239,10 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
 
 void h2o_socketpool_cancel_connect(h2o_socketpool_connect_request_t *req)
 {
-    if (h2o_hostinfo_getaddr_is_active(&req->getaddr_req))
-        h2o_hostinfo_getaddr_cancel(&req->getaddr_req);
+    if (req->getaddr_req != NULL) {
+        h2o_hostinfo_getaddr_cancel(req->getaddr_req);
+        req->getaddr_req = NULL;
+    }
     if (req->sock != NULL)
         h2o_socket_close(req->sock);
     free(req);
