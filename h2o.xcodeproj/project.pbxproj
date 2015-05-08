@@ -130,6 +130,7 @@
 		10F4180119C2D31600B6E31A /* yoml.h in Headers */ = {isa = PBXBuildFile; fileRef = 10F4180019C2D31600B6E31A /* yoml.h */; };
 		10F4180519CA75C500B6E31A /* configurator.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F4180419CA75C500B6E31A /* configurator.c */; };
 		10F9F2651AF4795D0056F26B /* redirect.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F9F2641AF4795D0056F26B /* redirect.c */; };
+		10F9F2671AFC5F550056F26B /* hostinfo.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F9F2661AFC5F550056F26B /* hostinfo.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -414,6 +415,7 @@
 		10F4180219C2D32100B6E31A /* yoml-parser.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "yoml-parser.h"; path = "yoml/yoml-parser.h"; sourceTree = "<group>"; };
 		10F4180419CA75C500B6E31A /* configurator.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = configurator.c; sourceTree = "<group>"; };
 		10F9F2641AF4795D0056F26B /* redirect.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = redirect.c; sourceTree = "<group>"; };
+		10F9F2661AFC5F550056F26B /* hostinfo.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hostinfo.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -548,6 +550,7 @@
 		104B9A4D1A5FAA7B009EEE64 /* common */ = {
 			isa = PBXGroup;
 			children = (
+				10F9F2661AFC5F550056F26B /* hostinfo.c */,
 				10AA2EAD1A8E22DA004322AC /* multithread.c */,
 				104B9A271A4A5139009EEE64 /* serverutil.c */,
 				105534C61A3BB29100627ECB /* string.c */,
@@ -1320,6 +1323,7 @@
 				10E2995A1A68D03100701AA6 /* scheduler.c in Sources */,
 				10583C001AEF368A004A3AD6 /* 293.c in Sources */,
 				105534BE1A3B8F7700627ECB /* file.c in Sources */,
+				10F9F2671AFC5F550056F26B /* hostinfo.c in Sources */,
 				1079244719A3265C00C52AD6 /* http1.c in Sources */,
 				10F9F2651AF4795D0056F26B /* redirect.c in Sources */,
 				1079244819A3265C00C52AD6 /* connection.c in Sources */,

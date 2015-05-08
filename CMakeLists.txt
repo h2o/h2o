@@ -155,6 +155,7 @@ SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}
     deps/picotest/picotest.c
     t/00unit/test.c
+    t/00unit/lib/common/hostinfo.c
     t/00unit/lib/common/multithread.c
     t/00unit/lib/common/serverutil.c
     t/00unit/lib/common/string.c
@@ -170,6 +171,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/http2/scheduler.c
     t/00unit/issues/293.c)
 LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
+    lib/common/hostinfo.c
     lib/common/multithread.c
     lib/common/serverutil.c
     lib/common/string.c

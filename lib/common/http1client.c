@@ -38,7 +38,7 @@ struct st_h2o_http1client_private_t {
     } _cb;
     h2o_timeout_entry_t _timeout;
     int _method_is_head;
-    h2o_hostinfo_getaddr_req_t _getaddr_req;
+    h2o_hostinfo_getaddr_req_t *_getaddr_req;
     int _can_keepalive;
     union {
         struct {
@@ -53,8 +53,10 @@ struct st_h2o_http1client_private_t {
 
 static void close_client(struct st_h2o_http1client_private_t *client)
 {
-    if (h2o_hostinfo_getaddr_is_active(&client->_getaddr_req))
-        h2o_hostinfo_getaddr_cancel(&client->_getaddr_req);
+    if (client->_getaddr_req != NULL) {
+        h2o_hostinfo_getaddr_cancel(client->_getaddr_req);
+        client->_getaddr_req = NULL;
+    }
     if (client->super.sock != NULL) {
         if (client->super.sockpool.pool != NULL && client->_can_keepalive) {
             /* we do not send pipelined requests, and thus can trash all the received input at the end of the request */
@@ -388,10 +390,12 @@ static void start_connect(struct st_h2o_http1client_private_t *client, struct so
     client->super.sock->data = client;
 }
 
-static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res)
+static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_client)
 {
-    struct st_h2o_http1client_private_t *client =
-        H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1client_private_t, _getaddr_req, getaddr_req);
+    struct st_h2o_http1client_private_t *client = _client;
+
+    assert(getaddr_req == client->_getaddr_req);
+    client->_getaddr_req = NULL;
 
     if (errstr != NULL) {
         on_connect_error(client, errstr);
@@ -401,15 +405,14 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     /* start connecting */
     struct addrinfo *selected = h2o_hostinfo_select_one(res);
     start_connect(client, selected->ai_addr, selected->ai_addrlen);
-    freeaddrinfo(res);
 }
 
 static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
-                                                          h2o_mem_pool_t *pool, h2o_http1client_connect_cb cb)
+                                                          h2o_http1client_connect_cb cb)
 {
     struct st_h2o_http1client_private_t *client = h2o_mem_alloc(sizeof(*client));
 
-    *client = (struct st_h2o_http1client_private_t){{ctx, pool}};
+    *client = (struct st_h2o_http1client_private_t){{ctx}};
     if (_client != NULL)
         *_client = &client->super;
     client->super.data = data;
@@ -421,36 +424,35 @@ static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_c
 
 const char *const h2o_http1client_error_is_eos = "end of stream";
 
-void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx, h2o_mem_pool_t *pool,
-                             const char *host, uint16_t port, h2o_http1client_connect_cb cb)
+void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx, h2o_iovec_t host, uint16_t port,
+                             h2o_http1client_connect_cb cb)
 {
     struct st_h2o_http1client_private_t *client;
-    char *serv;
+    char serv[sizeof("65536")];
 
     /* setup */
-    client = create_client(_client, data, ctx, pool, cb);
+    client = create_client(_client, data, ctx, cb);
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);
 
     /* directly call connect(2) if `host` is an IP address */
     struct sockaddr_in sin = {};
-    if (inet_pton(AF_INET, host, &sin.sin_addr) == 1) {
+    if (h2o_hostinfo_aton(host, &sin.sin_addr) == 0) {
         sin.sin_family = AF_INET;
         sin.sin_port = htons(port);
         start_connect(client, (void *)&sin, sizeof(sin));
         return;
     }
     /* resolve destination and then connect */
-    serv = h2o_mem_alloc_pool(pool, sizeof("65536"));
-    sprintf(serv, "%u", (unsigned)port);
-    h2o_hostinfo_getaddr(&client->_getaddr_req, ctx->getaddr_receiver, host, serv, AF_UNSPEC, SOCK_STREAM, IPPROTO_TCP,
-                         AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr);
+    client->_getaddr_req =
+        h2o_hostinfo_getaddr(ctx->getaddr_receiver, host, h2o_iovec_init(serv, sprintf(serv, "%u", (unsigned)port)), AF_UNSPEC,
+                             SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, client);
 }
 
-void h2o_http1client_connect_with_pool(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx, h2o_mem_pool_t *pool,
+void h2o_http1client_connect_with_pool(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
                                        h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb)
 {
-    struct st_h2o_http1client_private_t *client = create_client(_client, data, ctx, pool, cb);
+    struct st_h2o_http1client_private_t *client = create_client(_client, data, ctx, cb);
     client->super.sockpool.pool = sockpool;
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);

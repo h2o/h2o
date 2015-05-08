@@ -21,6 +21,25 @@
  */
 #include "h2o/hostinfo.h"
 
+struct st_h2o_hostinfo_getaddr_req_t {
+    h2o_multithread_receiver_t *_receiver;
+    h2o_hostinfo_getaddr_cb _cb;
+    void *cbdata;
+    h2o_linklist_t _pending;
+    union {
+        struct {
+            char *name;
+            char *serv;
+            struct addrinfo hints;
+        } _in;
+        struct {
+            h2o_multithread_message_t message;
+            const char *errstr;
+            struct addrinfo *ai;
+        } _out;
+    };
+};
+
 static struct {
     pthread_mutex_t mutex;
     pthread_cond_t cond;
@@ -91,6 +110,32 @@ static void create_lookup_thread(void)
     ++queue.num_threads_idle;
 }
 
+h2o_hostinfo_getaddr_req_t *h2o_hostinfo_getaddr(h2o_multithread_receiver_t *receiver, h2o_iovec_t name, h2o_iovec_t serv,
+                                                 int family, int socktype, int protocol, int flags, h2o_hostinfo_getaddr_cb cb,
+                                                 void *cbdata)
+{
+    h2o_hostinfo_getaddr_req_t *req = h2o_mem_alloc(sizeof(*req) + name.len + 1 + serv.len + 1);
+    req->_receiver = receiver;
+    req->_cb = cb;
+    req->cbdata = cbdata;
+    req->_pending = (h2o_linklist_t){};
+    req->_in.name = (char *)req + sizeof(*req);
+    memcpy(req->_in.name, name.base, name.len);
+    req->_in.name[name.len] = '\0';
+    req->_in.serv = req->_in.name + name.len + 1;
+    memcpy(req->_in.serv, serv.base, serv.len);
+    req->_in.serv[serv.len] = '\0';
+    memset(&req->_in.hints, 0, sizeof(req->_in.hints));
+    req->_in.hints.ai_family = family;
+    req->_in.hints.ai_socktype = socktype;
+    req->_in.hints.ai_protocol = protocol;
+    req->_in.hints.ai_flags = flags;
+
+    h2o__hostinfo_getaddr_dispatch(req);
+
+    return req;
+}
+
 void h2o__hostinfo_getaddr_dispatch(h2o_hostinfo_getaddr_req_t *req)
 {
     pthread_mutex_lock(&queue.mutex);
@@ -106,15 +151,21 @@ void h2o__hostinfo_getaddr_dispatch(h2o_hostinfo_getaddr_req_t *req)
 
 void h2o_hostinfo_getaddr_cancel(h2o_hostinfo_getaddr_req_t *req)
 {
+    int should_free = 0;
+
     pthread_mutex_lock(&queue.mutex);
 
     if (h2o_linklist_is_linked(&req->_pending)) {
         h2o_linklist_unlink(&req->_pending);
+        should_free = 1;
     } else {
         req->_cb = NULL;
     }
 
     pthread_mutex_unlock(&queue.mutex);
+
+    if (should_free)
+        free(req);
 }
 
 void h2o_hostinfo_getaddr_receiver(h2o_multithread_receiver_t *receiver, h2o_linklist_t *messages)
@@ -125,7 +176,53 @@ void h2o_hostinfo_getaddr_receiver(h2o_multithread_receiver_t *receiver, h2o_lin
         h2o_hostinfo_getaddr_cb cb = req->_cb;
         if (cb != NULL) {
             req->_cb = NULL;
-            cb(req, req->_out.errstr, req->_out.ai);
+            cb(req, req->_out.errstr, req->_out.ai, req->cbdata);
         }
+        if (req->_out.ai != NULL)
+            freeaddrinfo(req->_out.ai);
+        free(req);
     }
+}
+
+static const char *fetch_aton_digit(const char *p, const char *end, unsigned char *value)
+{
+    size_t ndigits = 0;
+    int v = 0;
+
+    while (p != end && ('0' <= *p && *p <= '9')) {
+        v = v * 10 + *p++ - '0';
+        ++ndigits;
+    }
+    if (!(1 <= ndigits && ndigits <= 3))
+        return NULL;
+    if (v > 255)
+        return NULL;
+    *value = (unsigned char)v;
+    return p;
+}
+
+int h2o_hostinfo_aton(h2o_iovec_t host, struct in_addr *addr)
+{
+    union {
+        int32_t n;
+        unsigned char c[4];
+    } value;
+    const char *p = host.base, *end = p + host.len;
+    size_t ndots = 0;
+
+    while (1) {
+        if ((p = fetch_aton_digit(p, end, value.c + ndots)) == NULL)
+            return -1;
+        if (ndots == 3)
+            break;
+        if (p == end || !(*p == '.'))
+            return -1;
+        ++p;
+        ++ndots;
+    }
+    if (p != end)
+        return -1;
+
+    addr->s_addr = value.n;
+    return 0;
 }
