@@ -73,8 +73,7 @@ static void start_request(h2o_http1client_ctx_t *ctx)
         }
         h2o_http1client_connect_with_pool(NULL, req, ctx, &pool, sockpool, on_connect);
     } else {
-        h2o_http1client_connect(NULL, req, ctx, &pool, h2o_strdup(&pool, url_parsed.host.base, url_parsed.host.len).base,
-                                h2o_url_get_port(&url_parsed), on_connect);
+        h2o_http1client_connect(NULL, req, ctx, &pool, url_parsed.host, h2o_url_get_port(&url_parsed), on_connect);
     }
 }
 

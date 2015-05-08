@@ -472,10 +472,10 @@ typedef struct st_h2o_req_overrides_t {
      */
     h2o_socketpool_t *socketpool;
     /**
-     * upstream host:port to connect to (or host == NULL)
+     * upstream host:port to connect to (or host.base == NULL)
      */
     struct {
-        char *host;
+        h2o_iovec_t host;
         uint16_t port;
     } hostport;
     /**

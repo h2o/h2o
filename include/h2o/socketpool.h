@@ -40,7 +40,7 @@ typedef struct st_h2o_socketpool_t {
         union {
             struct {
                 h2o_iovec_t host;
-                char port[sizeof("65535")];
+                h2o_iovec_t port;
             } named;
             struct sockaddr_in sin;
         };

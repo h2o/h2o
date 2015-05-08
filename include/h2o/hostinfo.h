@@ -38,7 +38,7 @@ extern size_t h2o_hostinfo_max_threads;
 /**
  * dispatches a (possibly) asynchronous hostname lookup
  */
-h2o_hostinfo_getaddr_req_t *h2o_hostinfo_getaddr(h2o_multithread_receiver_t *receiver, const char *name, const char *serv,
+h2o_hostinfo_getaddr_req_t *h2o_hostinfo_getaddr(h2o_multithread_receiver_t *receiver, h2o_iovec_t name, h2o_iovec_t serv,
                                                  int family, int socktype, int protocol, int flags, h2o_hostinfo_getaddr_cb cb,
                                                  void *cbdata);
 /**

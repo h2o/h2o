@@ -110,20 +110,21 @@ static void create_lookup_thread(void)
     ++queue.num_threads_idle;
 }
 
-h2o_hostinfo_getaddr_req_t *h2o_hostinfo_getaddr(h2o_multithread_receiver_t *receiver, const char *name, const char *serv,
+h2o_hostinfo_getaddr_req_t *h2o_hostinfo_getaddr(h2o_multithread_receiver_t *receiver, h2o_iovec_t name, h2o_iovec_t serv,
                                                  int family, int socktype, int protocol, int flags, h2o_hostinfo_getaddr_cb cb,
                                                  void *cbdata)
 {
-    size_t name_len = strlen(name), serv_len = strlen(serv);
-    h2o_hostinfo_getaddr_req_t *req = h2o_mem_alloc(sizeof(*req) + name_len + 1 + serv_len + 1);
+    h2o_hostinfo_getaddr_req_t *req = h2o_mem_alloc(sizeof(*req) + name.len + 1 + serv.len + 1);
     req->_receiver = receiver;
     req->_cb = cb;
     req->cbdata = cbdata;
     req->_pending = (h2o_linklist_t){};
     req->_in.name = (char *)req + sizeof(*req);
-    memcpy(req->_in.name, name, name_len + 1);
-    req->_in.serv = req->_in.name + name_len + 1;
-    memcpy(req->_in.serv, serv, serv_len + 1);
+    memcpy(req->_in.name, name.base, name.len);
+    req->_in.name[name.len] = '\0';
+    req->_in.serv = req->_in.name + name.len + 1;
+    memcpy(req->_in.serv, serv.base, serv.len);
+    req->_in.serv[serv.len] = '\0';
     memset(&req->_in.hints, 0, sizeof(req->_in.hints));
     req->_in.hints.ai_family = family;
     req->_in.hints.ai_socktype = socktype;

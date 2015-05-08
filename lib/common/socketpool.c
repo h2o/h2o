@@ -90,7 +90,8 @@ void h2o_socketpool_init(h2o_socketpool_t *pool, const char *host, uint16_t port
         pool->peer.sin.sin_port = htons(port);
     } else {
         pool->peer.named.host = h2o_strdup(NULL, host, SIZE_MAX);
-        sprintf(pool->peer.named.port, "%u", (unsigned)port);
+        pool->peer.named.port.base = h2o_mem_alloc(sizeof("65535"));
+        pool->peer.named.port.len = sprintf(pool->peer.named.port.base, "%u", (unsigned)port);
         pool->peer.is_named = 1;
     }
     pool->capacity = capacity;
@@ -115,8 +116,10 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
         h2o_timeout_unlink(&pool->_interval_cb.entry);
         h2o_timeout_dispose(pool->_interval_cb.loop, &pool->_interval_cb.timeout);
     }
-    if (pool->peer.is_named)
+    if (pool->peer.is_named) {
         free(pool->peer.named.host.base);
+        free(pool->peer.named.port.base);
+    }
 }
 
 void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64_t msec)
@@ -229,7 +232,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
 
     if (pool->peer.is_named) {
         /* resolve the name, and connect */
-        req->getaddr_req = h2o_hostinfo_getaddr(getaddr_receiver, pool->peer.named.host.base, pool->peer.named.port, AF_UNSPEC,
+        req->getaddr_req = h2o_hostinfo_getaddr(getaddr_receiver, pool->peer.named.host, pool->peer.named.port, AF_UNSPEC,
                                                 SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, req);
     } else {
         /* connect (using sockaddr_in) */

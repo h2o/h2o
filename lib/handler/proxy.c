@@ -41,7 +41,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     if (self->sockpool != NULL) {
         overrides->socketpool = self->sockpool;
     } else if (self->config.preserve_host) {
-        overrides->hostport.host = self->upstream.host.base;
+        overrides->hostport.host = self->upstream.host;
         overrides->hostport.port = h2o_url_get_port(&self->upstream);
     }
     overrides->location_rewrite.match = &self->upstream;
