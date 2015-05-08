@@ -70,9 +70,9 @@ static void start_request(h2o_http1client_ctx_t *ctx)
             h2o_socketpool_init(sockpool, url_parsed.host, h2o_url_get_port(&url_parsed), 10);
             h2o_socketpool_set_timeout(sockpool, ctx->loop, 5000 /* in msec */);
         }
-        h2o_http1client_connect_with_pool(NULL, req, ctx, &pool, sockpool, on_connect);
+        h2o_http1client_connect_with_pool(NULL, req, ctx, sockpool, on_connect);
     } else {
-        h2o_http1client_connect(NULL, req, ctx, &pool, url_parsed.host, h2o_url_get_port(&url_parsed), on_connect);
+        h2o_http1client_connect(NULL, req, ctx, url_parsed.host, h2o_url_get_port(&url_parsed), on_connect);
     }
 }
 
