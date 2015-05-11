@@ -22,7 +22,9 @@
 #ifndef h2o__hostinfo_h
 #define h2o__hostinfo_h
 
+#include <arpa/inet.h>
 #include <netdb.h>
+#include <netinet/in.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
