@@ -115,7 +115,7 @@ hosts:
       port: 443
       ssl:
         key-file: /path/to/www_example_com.key
-        certifilate-file: /path/to/www_example_com.crt
+        certificate-file: /path/to/www_example_com.crt
     paths:
       "/":
         file.dir: /path/to/doc-root_of_www_example_com
@@ -124,7 +124,7 @@ hosts:
       port: 443
       ssl:
         key-file: /path/to/www_example_jp.key
-        certifilate-file: /path/to/www_example_jp.crt
+        certificate-file: /path/to/www_example_jp.crt
     paths:
       "/":
         file.dir: /path/to/doc-root_of_www_example_jp
