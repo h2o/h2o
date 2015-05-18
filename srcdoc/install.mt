@@ -31,7 +31,7 @@ Start the installed server using the example configuration to confirm that it ac
 </p>
 
 <?= $ctx->{code}->(<< 'EOT')
-% /usr/local/bin/h2o -c example/h2o/h2o.conf
+% /usr/local/bin/h2o -c examples/h2o/h2o.conf
 EOT
 ?>
 
