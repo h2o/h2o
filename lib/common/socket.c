@@ -457,9 +457,10 @@ static void proceed_handshake(h2o_socket_t *sock, int status)
         goto Complete;
     }
 
+Redo:
     ret = SSL_accept(sock->ssl->ssl);
 
-    if (ret == 2 || (ret < 0 && SSL_get_error(sock->ssl->ssl, ret) != SSL_ERROR_WANT_READ)) {
+    if (ret == 0 || (ret < 0 && SSL_get_error(sock->ssl->ssl, ret) != SSL_ERROR_WANT_READ)) {
         /* failed */
         status = -1;
         goto Complete;
@@ -472,7 +473,8 @@ static void proceed_handshake(h2o_socket_t *sock, int status)
         if (ret == 1) {
             goto Complete;
         }
-        assert(sock->ssl->input.encrypted->size == 0);
+        if (sock->ssl->input.encrypted->size != 0)
+            goto Redo;
         h2o_socket_read_start(sock, proceed_handshake);
     }
     return;
