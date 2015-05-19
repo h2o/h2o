@@ -23,6 +23,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <netdb.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -318,19 +319,23 @@ void h2o_socket_close(h2o_socket_t *sock)
 
 static int encrypt_ssl(h2o_socket_t *sock, const h2o_iovec_t *bufs, size_t bufcnt)
 {
-    char smallbuf[H2O_SSL_MAX_PAYLOAD_SIZE];
+    char *smallbuf = NULL;
     size_t smallbufsz = 0;
     h2o_iovec_t pending = {};
     int wret;
 
 #define COPY_PENDING()                                                                                                             \
     if (pending.len != 0) {                                                                                                        \
+        if (smallbuf == NULL)                                                                                                      \
+            smallbuf = alloca(H2O_SSL_MAX_PAYLOAD_SIZE);                                                                           \
         memcpy(smallbuf + smallbufsz - pending.len, pending.base, pending.len);                                                    \
         pending.len = 0;                                                                                                           \
     }
 #define WRITE_SSL(p, s)                                                                                                            \
-    if ((wret = SSL_write(sock->ssl->ssl, (p), (s))) != (s))                                                                       \
-    goto Error
+    do {                                                                                                                           \
+        if ((wret = SSL_write(sock->ssl->ssl, (p), (s))) != (s))                                                                   \
+            goto Error;                                                                                                            \
+    } while (0)
 #define WRITE_SMALL()                                                                                                              \
     do {                                                                                                                           \
         if (smallbufsz == pending.len) {                                                                                           \
@@ -342,7 +347,7 @@ static int encrypt_ssl(h2o_socket_t *sock, const h2o_iovec_t *bufs, size_t bufcn
     } while (0)
 
     for (; bufcnt != 0; ++bufs, --bufcnt) {
-        if (smallbufsz + bufs->len < sizeof(smallbuf)) {
+        if (smallbufsz + bufs->len < H2O_SSL_MAX_PAYLOAD_SIZE) {
             COPY_PENDING();
             smallbufsz += bufs->len;
             pending = *bufs;
@@ -352,9 +357,9 @@ static int encrypt_ssl(h2o_socket_t *sock, const h2o_iovec_t *bufs, size_t bufcn
                 smallbufsz = 0;
             }
             size_t off = 0;
-            while (bufs->len - off >= sizeof(smallbuf)) {
-                WRITE_SSL(bufs->base + off, sizeof(smallbuf));
-                off += sizeof(smallbuf);
+            while (bufs->len - off >= H2O_SSL_MAX_PAYLOAD_SIZE) {
+                WRITE_SSL(bufs->base + off, H2O_SSL_MAX_PAYLOAD_SIZE);
+                off += H2O_SSL_MAX_PAYLOAD_SIZE;
             }
             if (bufs->len != off) {
                 pending = (h2o_iovec_t){bufs->base + off, bufs->len - off};
