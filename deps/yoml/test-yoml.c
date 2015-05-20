@@ -38,7 +38,7 @@ static yoml_t *parse(const char *fn, const char *s)
     return doc;
 }
 
-void test_yoml(void)
+int main(int argc, char **argv)
 {
     yoml_t *doc, *t;
 
@@ -137,4 +137,6 @@ void test_yoml(void)
     ok(strcmp(t->filename, "baz.yaml") == 0);
     ok(t->type == YOML_TYPE_SCALAR);
     ok(strcmp(t->data.scalar, "2") == 0);
+
+    return done_testing();
 }

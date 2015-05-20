@@ -118,7 +118,7 @@ static inline yoml_t *yoml_find_anchor(yoml_t *node, const char *name)
     case YOML_TYPE_MAPPING:
         for (i = 0; i != node->data.mapping.size; ++i)
             if ((n = yoml_find_anchor(node->data.mapping.elements[i].key, name)) != NULL
-                || (n = yoml_find_anchor(node->data.mapping.elements[i].key, name)) != NULL)
+                || (n = yoml_find_anchor(node->data.mapping.elements[i].value, name)) != NULL)
                 return n;
         break;
     default:
