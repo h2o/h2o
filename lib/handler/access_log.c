@@ -23,6 +23,7 @@
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -407,17 +408,30 @@ int h2o_access_log_open_log(const char *path)
     int fd;
 
     if (path[0] == '|') {
-        FILE *fp;
-        if ((fp = popen(path + 1, "w")) == NULL) {
-            fprintf(stderr, "failed to open log pipe to command:%s\n", path + 1);
+        int pipefds[2];
+        posix_spawn_file_actions_t file_actions;
+        pid_t pid;
+        char* argv[4] = {"/bin/sh", "-c", (char *)(path + 1), NULL};
+        extern char **environ;
+         /* create pipe */
+        if (pipe(pipefds) != 0) {
+            perror("pipe failed");
             return -1;
         }
-        fd = dup(fileno(fp));
-        fclose(fp);
-        if (fd == -1) {
-            fprintf(stderr, "failed to dup pipe fd:%s\n", strerror(errno));
+        if (fcntl(pipefds[1], FD_CLOEXEC, 1) == -1) {
+            perror("failed to set FD_CLOEXEC on pipefds[1]");
             return -1;
         }
+        /* spawn the logger */
+        posix_spawn_file_actions_init(&file_actions);
+        posix_spawn_file_actions_adddup2(&file_actions, pipefds[0], 0);
+        if ((errno = posix_spawnp(&pid, argv[0], &file_actions, NULL, argv, environ)) != 0) {
+            fprintf(stderr, "failed to open logger: %s:%s\n", path + 1, strerror(errno));
+            return -1;
+        }
+        /* close the read side of the pipefds and return the write side */
+        close(pipefds[0]);
+        fd = pipefds[1];
     } else {
         if ((fd = open(path, O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC, 0644)) == -1) {
             fprintf(stderr, "failed to open log file:%s:%s\n", path, strerror(errno));
