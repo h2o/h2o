@@ -412,7 +412,6 @@ int h2o_access_log_open_log(const char *path)
         int pipefds[2];
         pid_t pid;
         char* argv[4] = {"/bin/sh", "-c", (char *)(path + 1), NULL};
-        extern char **environ;
          /* create pipe */
         if (pipe(pipefds) != 0) {
             perror("pipe failed");

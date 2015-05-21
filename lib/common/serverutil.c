@@ -181,7 +181,6 @@ int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *chi
     int respfds[2] = {-1, -1};
     pid_t pid = -1;
     int ret = -1;
-    extern char **environ;
 
     h2o_buffer_init(resp, &h2o_socket_buffer_prototype);
 
