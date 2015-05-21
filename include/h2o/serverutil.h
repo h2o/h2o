@@ -59,7 +59,8 @@ size_t h2o_server_starter_get_fds(int **_fds);
  * @param cmd file being executed
  * @param argv argv passed to the executable
  * @param mapped_fds if non-NULL, must point to an array contain containing a list of pair of file descriptors, terminated with -1.
- *        Every pair of the mapping will be duplicated by calling `dup2` before execvp is being called.
+ *        Every pair of the mapping will be duplicated by calling `dup2` before execvp is being called if the second value of the
+ *        pair is not -1.  If the second value is -1, then `close` is called with the first value as the argument.
  * @return pid of the process being spawned if successful, or -1 if otherwise
  */
 pid_t h2o_spawnp(const char *cmd, char **argv, const int *mapped_fds);

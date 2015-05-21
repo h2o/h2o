@@ -121,8 +121,12 @@ pid_t h2o_spawnp(const char *cmd, char **argv, const int *mapped_fds)
     if (pid == 0) {
         /* in child process, map the file descriptors and execute; return the errnum through pipe if exec failed */
         if (mapped_fds != NULL) {
-            for (; *mapped_fds != -1; mapped_fds += 2)
-                dup2(mapped_fds[0], mapped_fds[1]);
+            for (; *mapped_fds != -1; mapped_fds += 2) {
+                if (mapped_fds[1] != -1)
+                    dup2(mapped_fds[0], mapped_fds[1]);
+                else
+                    close(mapped_fds[0]);
+            }
         }
         execvp(cmd, argv);
         errnum = errno;
@@ -191,6 +195,7 @@ int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *chi
     /* spawn */
     int mapped_fds[] = {
         respfds[1], 1, /* stdout of the child process is read from the pipe */
+        respfds[1], -1, /* close respfds[1] before exec */
         -1
     };
     if ((pid = h2o_spawnp(cmd, argv, mapped_fds)) == -1)

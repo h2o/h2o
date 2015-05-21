@@ -424,6 +424,7 @@ int h2o_access_log_open_log(const char *path)
         /* spawn the logger */
         int mapped_fds[] = {
             pipefds[0], 0, /* map pipefds[0] to stdin */
+            pipefds[0], -1, /* close pipefds[0] before exec */
             -1
         };
         if ((pid = h2o_spawnp(argv[0], argv, mapped_fds)) == -1) {
