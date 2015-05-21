@@ -373,13 +373,12 @@ static int encrypt_ssl(h2o_socket_t *sock, const h2o_iovec_t *bufs, size_t bufcn
     return 0;
 
 Error:
+    /* The error happens if SSL_write is called after SSL_read returns a fatal error (e.g. due to corrupt TCP packet being
+     * received). We need to take care of this since some protocol implementations send data after the read-side of the connection
+     * gets closed (note that protocol implementations are (yet) incapable of distinguishing a normal shutdown and close due to an
+     * error using the `status` value of the read callback).
+     */
     assert(wret <= 0);
-    {
-        int sslerr = SSL_get_error(sock->ssl->ssl, wret);
-        fprintf(stderr, "result of SSL_get_error is %d\n", sslerr);
-        if (sslerr == SSL_ERROR_SSL)
-            ERR_print_errors_fp(stderr);
-    }
     return -1;
 
 #undef COPY_PENDING
