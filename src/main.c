@@ -1066,7 +1066,7 @@ static int popen_annotate_backtrace_symbols(void)
         perror("pipe failed");
         return -1;
     }
-    if (fcntl(pipefds[1], FD_CLOEXEC, 1) == -1) {
+    if (fcntl(pipefds[1], F_SETFD, FD_CLOEXEC) == -1) {
         perror("failed to set FD_CLOEXEC on pipefds[1]");
         return -1;
     }
