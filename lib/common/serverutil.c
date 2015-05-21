@@ -20,6 +20,7 @@
  * IN THE SOFTWARE.
  */
 #include <errno.h>
+#include <fcntl.h>
 #include <grp.h>
 #include <pthread.h>
 #include <signal.h>
@@ -99,10 +100,85 @@ size_t h2o_server_starter_get_fds(int **_fds)
     return fds.size;
 }
 
+pid_t h2o_spawnp(const char *cmd, char **argv, const int *mapped_fds)
+{
+#if defined(__linux__)
+
+    /* posix_spawnp of Linux does not return error if the executable does not exist, see
+     * https://gist.github.com/kazuho/0c233e6f86d27d6e4f09
+     */
+    int pipefds[2] = {-1, -1}, errnum;
+    pid_t pid;
+
+    /* create pipe, used for sending error codes */
+    if (pipe2(pipefds, O_CLOEXEC) != 0)
+        goto Error;
+
+    /* fork */
+    if ((pid = fork()) == -1)
+        goto Error;
+
+    if (pid == 0) {
+        /* in child process, map the file descriptors and execute; return the errnum through pipe if exec failed */
+        if (mapped_fds != NULL) {
+            for (; *mapped_fds != -1; mapped_fds += 2)
+                dup2(mapped_fds[0], mapped_fds[1]);
+        }
+        execvp(cmd, argv);
+        errnum = errno;
+        write(pipefds[1], &errnum, sizeof(errnum));
+        _exit(EX_SOFTWARE);
+    }
+
+    /* parent process */
+    close(pipefds[1]);
+    pipefds[1] = -1;
+    ssize_t rret;
+    errnum = 0;
+    while ((rret = read(pipefds[0], &errnum, sizeof(errnum))) == -1 && errno == EINTR)
+        ;
+    if (rret != 0) {
+        /* spawn failed */
+        while (waitpid(pid, NULL, 0) != pid)
+            ;
+        pid = -1;
+        errno = errnum;
+        goto Error;
+    }
+
+    /* spawn succeeded */
+    close(pipefds[0]);
+    return pid;
+
+Error:
+    errnum = errno;
+    if (pipefds[0] != -1)
+        close(pipefds[0]);
+    if (pipefds[1] != -1)
+        close(pipefds[1]);
+    errno = errnum;
+    return -1;
+
+#else
+
+    posix_spawn_file_actions_t file_actions;
+    pid_t pid;
+    extern char** environ;
+    posix_spawn_file_actions_init(&file_actions);
+    if (mapped_fds != NULL) {
+        for (; *mapped_fds != -1; mapped_fds += 2)
+            posix_spawn_file_actions_adddup2(&file_actions, mapped_fds[0], mapped_fds[1]);
+    }
+    if ((errno = posix_spawnp(&pid, cmd, &file_actions, NULL, argv, environ)) != 0)
+        return -1;
+    return pid;
+
+#endif
+}
+
 int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *child_status)
 {
     int respfds[2] = {-1, -1};
-    posix_spawn_file_actions_t file_actions;
     pid_t pid = -1;
     int ret = -1;
     extern char **environ;
@@ -114,12 +190,12 @@ int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *chi
         goto Exit;
 
     /* spawn */
-    posix_spawn_file_actions_init(&file_actions);
-    posix_spawn_file_actions_adddup2(&file_actions, respfds[1], 1);
-    if ((errno = posix_spawnp(&pid, cmd, &file_actions, NULL, argv, environ)) != 0) {
-        pid = -1;
+    int mapped_fds[] = {
+        respfds[1], 1, /* stdout of the child process is read from the pipe */
+        -1
+    };
+    if ((pid = h2o_spawnp(cmd, argv, mapped_fds)) == -1)
         goto Exit;
-    }
     close(respfds[1]);
     respfds[1] = -1;
 

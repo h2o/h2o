@@ -78,7 +78,7 @@ When complete, H2O will be installed under <code>/usr/local</code>.
 </p>
 
 <p>
-Start the installed server using the example configuration to confirm that it actually works.
+Start the installed server using the example configuration to confirm that it actually works (note: without the use of <code>-m</code> option the server runs as a foreground process; press <code>Ctrl-C</code> to stop).
 </p>
 
 <pre><code>% /usr/local/bin/h2o -c examples/h2o/h2o.conf
@@ -166,5 +166,15 @@ In case your OpenSSL installation does not have the <code>lib/pkgconfig</code> d
 Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
 </p>
 </div>
+<script type="text/javascript">
+if (location.protocol.match(/^https?/) && location.hostname == "h2o.github.io") {
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+    (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+    m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+    })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+  ga('create', 'UA-19422636-3', 'auto');
+  ga('send', 'pageview');
+}
+</script>
 </body>
 </html>

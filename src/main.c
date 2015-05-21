@@ -34,6 +34,7 @@
 #include <pthread.h>
 #include <pwd.h>
 #include <signal.h>
+#include <spawn.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/resource.h>
@@ -46,6 +47,9 @@
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+#ifdef __linux__
+#include <execinfo.h>
+#endif
 #include "yoml-parser.h"
 #include "h2o.h"
 #include "h2o/configurator.h"
@@ -1051,10 +1055,67 @@ static void on_sigterm(int signo)
     notify_all_threads();
 }
 
+#ifdef __linux__
+static int popen_annotate_backtrace_symbols(void)
+{
+    char *cmd_fullpath = get_cmd_path("share/h2o/annotate-backtrace-symbols"), *argv[] = {cmd_fullpath, NULL};
+    int pipefds[2];
+
+     /* create pipe */
+    if (pipe(pipefds) != 0) {
+        perror("pipe failed");
+        return -1;
+    }
+    if (fcntl(pipefds[1], FD_CLOEXEC, 1) == -1) {
+        perror("failed to set FD_CLOEXEC on pipefds[1]");
+        return -1;
+    }
+    /* spawn the logger */
+    int mapped_fds[] = {
+        pipefds[0], 0, /* output of the pipe is connected to STDIN of the spawned process */
+        2, 1, /* STDOUT of the spawned process in connected to STDERR of h2o */
+        -1
+    };
+    if (h2o_spawnp(cmd_fullpath, argv, mapped_fds) == -1) {
+        /* silently ignore error */
+        close(pipefds[0]);
+        close(pipefds[1]);
+        return -1;
+    }
+    /* do the rest, and return the fd */
+    close(pipefds[0]);
+    return pipefds[1];
+}
+
+static int backtrace_symbols_to_fd = -1;
+
+static void on_sigfatal(int signo)
+{
+    fprintf(stderr, "received fatal signal %d; backtrace follows\n", signo);
+
+    h2o_set_signal_handler(signo, SIG_DFL);
+
+    void *frames[128];
+    int framecnt = backtrace(frames, sizeof(frames) / sizeof(frames[0]));
+    backtrace_symbols_fd(frames, framecnt, backtrace_symbols_to_fd);
+
+    raise(signo);
+}
+#endif
+
 static void setup_signal_handlers(void)
 {
     h2o_set_signal_handler(SIGTERM, on_sigterm);
     h2o_set_signal_handler(SIGPIPE, SIG_IGN);
+#ifdef __linux__
+    if ((backtrace_symbols_to_fd = popen_annotate_backtrace_symbols()) == -1)
+        backtrace_symbols_to_fd = 2;
+    h2o_set_signal_handler(SIGABRT, on_sigfatal);
+    h2o_set_signal_handler(SIGBUS, on_sigfatal);
+    h2o_set_signal_handler(SIGFPE, on_sigfatal);
+    h2o_set_signal_handler(SIGILL, on_sigfatal);
+    h2o_set_signal_handler(SIGSEGV, on_sigfatal);
+#endif
 }
 
 static int num_connections(int delta)

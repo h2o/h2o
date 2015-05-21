@@ -27,7 +27,7 @@ When complete, H2O will be installed under <code>/usr/local</code>.
 </p>
 
 <p>
-Start the installed server using the example configuration to confirm that it actually works.
+Start the installed server using the example configuration to confirm that it actually works (note: without the use of <code>-m</code> option the server runs as a foreground process; press <code>Ctrl-C</code> to stop).
 </p>
 
 <?= $ctx->{code}->(<< 'EOT')
