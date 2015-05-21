@@ -114,7 +114,7 @@ EOT
 
     # spawn the server
     my ($guard, $pid) = spawn_server(
-        argv     => [ bindir() . "/h2o", "-c", $conffn, @opts ],
+        argv     => [ "valgrind", "--tool=memcheck", bindir() . "/h2o", "-c", $conffn, @opts ],
         is_ready => sub {
             check_port($port) && check_port($tls_port);
         },
