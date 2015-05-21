@@ -1,0 +1,26 @@
+#! /bin/sh
+exec perl -x $0 "$@"
+#! perl
+
+use strict;
+use warnings;
+
+while (my $line = <STDIN>) {
+    chomp $line;
+    if ($line =~ m{^([^\(\[]+)(.*?)\[(0x[0-9A-Fa-f]+)\]}) {
+        my ($exe, $info, $addr) = ($1, $2, $3);
+        my $resolved = addr2line($exe, $addr);
+        $line = "$exe${info}[$addr] $resolved"
+            if $resolved;
+    }
+    print "$line\n";
+}
+
+sub addr2line {
+    my ($exe, $addr) = @_;
+    open my $fh, "-|", qw(addr2line -pif -e), $exe, $addr
+        or return;
+    my $resolved = <$fh>;
+    chomp $resolved;
+    $resolved;
+}

@@ -266,7 +266,7 @@ ELSE (LIBUV_FOUND)
   SET_TARGET_PROPERTIES(libh2o PROPERTIES EXCLUDE_FROM_ALL 1)
 ENDIF (LIBUV_FOUND)
 
-INSTALL(PROGRAMS share/h2o/fetch-ocsp-response share/h2o/start_server DESTINATION share/h2o)
+INSTALL(PROGRAMS share/h2o/annotate-backtrace-symbols share/h2o/fetch-ocsp-response share/h2o/start_server DESTINATION share/h2o)
 INSTALL(DIRECTORY doc/ DESTINATION share/doc/h2o PATTERN "Makefile" EXCLUDE PATTERN "README.md" EXCLUDE)
 
 # tests

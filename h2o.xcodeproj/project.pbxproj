@@ -363,6 +363,7 @@
 		1082150D1AB26F4700D27E66 /* FindLibYAML.cmake */ = {isa = PBXFileReference; lastKnownFileType = text; path = FindLibYAML.cmake; sourceTree = "<group>"; };
 		1082150E1AB26F4700D27E66 /* FindLibUV.cmake */ = {isa = PBXFileReference; lastKnownFileType = text; path = FindLibUV.cmake; sourceTree = "<group>"; };
 		108867741AD9069900987967 /* defaults.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = defaults.c.h; sourceTree = "<group>"; };
+		10A60DE91B0D87FE006E38EC /* annotate-backtrace-symbols */ = {isa = PBXFileReference; lastKnownFileType = text; path = "annotate-backtrace-symbols"; sourceTree = "<group>"; };
 		10AA2E931A80A592004322AC /* time_.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = time_.h; sourceTree = "<group>"; };
 		10AA2E951A80A612004322AC /* time.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = time.c; sourceTree = "<group>"; };
 		10AA2E981A81F68A004322AC /* time.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = time.c; sourceTree = "<group>"; };
@@ -489,6 +490,7 @@
 			isa = PBXGroup;
 			children = (
 				104B9A401A5CD69B009EEE64 /* fetch-ocsp-response */,
+				10A60DE91B0D87FE006E38EC /* annotate-backtrace-symbols */,
 			);
 			path = h2o;
 			sourceTree = "<group>";
