@@ -179,7 +179,6 @@ Error:
 int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *child_status)
 {
     int respfds[2] = {-1, -1};
-    posix_spawn_file_actions_t file_actions;
     pid_t pid = -1;
     int ret = -1;
     extern char **environ;
@@ -191,12 +190,12 @@ int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *chi
         goto Exit;
 
     /* spawn */
-    posix_spawn_file_actions_init(&file_actions);
-    posix_spawn_file_actions_adddup2(&file_actions, respfds[1], 1);
-    if ((errno = posix_spawnp(&pid, cmd, &file_actions, NULL, argv, environ)) != 0) {
-        pid = -1;
+    int mapped_fds[] = {
+        respfds[1], 1, /* stdout of the child process is read from the pipe */
+        -1
+    };
+    if ((pid = h2o_spawnp(cmd, argv, mapped_fds)) == -1)
         goto Exit;
-    }
     close(respfds[1]);
     respfds[1] = -1;
 
