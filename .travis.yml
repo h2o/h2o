@@ -31,4 +31,12 @@ before_script:
 script:
   - cmake .
   - make all
-  - make check
+  - prove -v t/50reverse-proxy-4.t
+  - prove -v t/50reverse-proxy-4.t
+  - prove -v t/50reverse-proxy-4.t
+  - prove -v t/50reverse-proxy-4.t
+  - prove -v t/50reverse-proxy-4.t
+  - prove -v t/50reverse-proxy-4.t
+  - prove -v t/50reverse-proxy-4.t
+  - prove -v t/50reverse-proxy-4.t
+  - prove -v t/50reverse-proxy-4.t
