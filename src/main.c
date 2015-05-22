@@ -1036,6 +1036,8 @@ yoml_t *load_config(const char *fn)
 
     yaml_parser_delete(&parser);
 
+    fclose(fp);
+
     return yoml;
 }
 
