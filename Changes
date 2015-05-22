@@ -1,6 +1,15 @@
 Revision history for H2O.
 
 1.2.1 TBD
+	- [core] improve virtual-host lookup logic #293 #296 (Kazuho Oku)
+	- [core] fix content being mis-sent for HEAD requests #300 #302 (Kazuho Oku)
+	- [doc] bundle documents #292 (Kazuho Oku)
+	- [file] send 503 (not 403) in case if too many files are open #304 (Kazuho Oku)
+	- [proxy] fix potential use-after-free issue in case upstream name is resolved using getaddrinfo #307 (Kazuho Oku)
+	- [SSL] fix assertion failure during handshake #316 (Kazuho Oku)
+	- [SSL] fix assertion failure when receiving a corrupt TLS record (http2 only) #297 (Kazuho Oku)
+	- [misc] emit stacktrace in case of fatal error (Linux only) #331 (Kazuho Oku)
+	- [misc] improve NetBSD compatibility #289 (Kazuho Oku)
 
 1.2.0 2015-04-14 07:13:00+0000
 	- [core] bundle libyaml #248 (Kazuho Oku)
