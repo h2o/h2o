@@ -1036,6 +1036,8 @@ yoml_t *load_config(const char *fn)
 
     yaml_parser_delete(&parser);
 
+    fclose(fp);
+
     return yoml;
 }
 
@@ -1473,8 +1475,12 @@ int main(int argc, char **argv)
     /* setup conf.server_starter */
     if ((conf.server_starter.num_fds = h2o_server_starter_get_fds(&conf.server_starter.fds)) == SIZE_MAX)
         exit(EX_CONFIG);
-    if (conf.server_starter.fds != 0)
+    if (conf.server_starter.fds != 0) {
+        size_t i;
+        for (i = 0; i != conf.server_starter.num_fds; ++i)
+            set_cloexec(conf.server_starter.fds[i]);
         conf.server_starter.bound_fd_map = alloca(conf.server_starter.num_fds);
+    }
 
     { /* configure */
         yoml_t *yoml;
