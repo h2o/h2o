@@ -417,7 +417,7 @@ int h2o_access_log_open_log(const char *path)
             perror("pipe failed");
             return -1;
         }
-        if (fcntl(pipefds[1], FD_CLOEXEC, 1) == -1) {
+        if (fcntl(pipefds[1], F_SETFD, FD_CLOEXEC) == -1) {
             perror("failed to set FD_CLOEXEC on pipefds[1]");
             return -1;
         }
