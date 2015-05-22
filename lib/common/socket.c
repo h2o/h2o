@@ -539,18 +539,18 @@ static int on_alpn_select(SSL *ssl, const unsigned char **out, unsigned char *ou
     const unsigned char *in_end = in + inlen;
     size_t i;
 
-    while (in != in_end) {
-        size_t cand_len = *in++;
-        if (in_end - in < cand_len) {
-            /* broken request */
-            break;
-        }
-        for (i = 0; protocols[i].len != 0; ++i) {
+    for (i = 0; protocols[i].len !=0; ++i) {
+        while (in != in_end) {
+            size_t cand_len = *in++;
+            if (in_end - in < cand_len) {
+                /* broken request */
+                return SSL_TLSEXT_ERR_NOACK;
+            }
             if (cand_len == protocols[i].len && memcmp(in, protocols[i].base, cand_len) == 0) {
                 goto Found;
             }
+            in += cand_len;
         }
-        in += cand_len;
     }
     /* not found */
     return SSL_TLSEXT_ERR_NOACK;
