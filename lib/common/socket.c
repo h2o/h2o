@@ -530,8 +530,6 @@ h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)
     return h2o_iovec_init(data, len);
 }
 
-#if H2O_USE_ALPN
-
 static int on_alpn_select(SSL *ssl, const unsigned char **out, unsigned char *outlen, const unsigned char *_in, unsigned int inlen,
                           void *_protocols)
 {
@@ -561,6 +559,8 @@ Found:
     *outlen = (unsigned char)protocols[i].len;
     return SSL_TLSEXT_ERR_OK;
 }
+
+#if H2O_USE_ALPN
 
 void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_iovec_t *protocols)
 {
