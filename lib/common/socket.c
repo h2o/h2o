@@ -530,27 +530,25 @@ h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)
     return h2o_iovec_init(data, len);
 }
 
-#if H2O_USE_ALPN
-
-static int on_alpn_select(SSL *ssl, const unsigned char **out, unsigned char *outlen, const unsigned char *in, unsigned int inlen,
+static int on_alpn_select(SSL *ssl, const unsigned char **out, unsigned char *outlen, const unsigned char *_in, unsigned int inlen,
                           void *_protocols)
 {
     const h2o_iovec_t *protocols = _protocols;
-    const unsigned char *in_end = in + inlen;
     size_t i;
 
-    while (in != in_end) {
-        size_t cand_len = *in++;
-        if (in_end - in < cand_len) {
-            /* broken request */
-            break;
-        }
-        for (i = 0; protocols[i].len != 0; ++i) {
+    for (i = 0; protocols[i].len !=0; ++i) {
+        const unsigned char *in = _in, *in_end = in + inlen;
+        while (in != in_end) {
+            size_t cand_len = *in++;
+            if (in_end - in < cand_len) {
+                /* broken request */
+                return SSL_TLSEXT_ERR_NOACK;
+            }
             if (cand_len == protocols[i].len && memcmp(in, protocols[i].base, cand_len) == 0) {
                 goto Found;
             }
+            in += cand_len;
         }
-        in += cand_len;
     }
     /* not found */
     return SSL_TLSEXT_ERR_NOACK;
@@ -560,6 +558,8 @@ Found:
     *outlen = (unsigned char)protocols[i].len;
     return SSL_TLSEXT_ERR_OK;
 }
+
+#if H2O_USE_ALPN
 
 void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_iovec_t *protocols)
 {

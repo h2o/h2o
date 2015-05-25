@@ -51,6 +51,7 @@ char *sha1sum(const void *src, size_t len);
 void test_lib__common__hostinfo_c(void);
 void test_lib__common__multithread_c(void);
 void test_lib__common__serverutil_c(void);
+void test_lib__common__socket_c(void);
 void test_lib__common__string_c(void);
 void test_lib__common__time_c(void);
 void test_lib__common__url_c(void);
