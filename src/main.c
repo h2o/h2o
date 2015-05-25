@@ -1456,7 +1456,7 @@ int main(int argc, char **argv)
                        "  -h, --help         print this help\n"
                        "\n"
                        "Please refer to the documentation under `share/doc/h2o` (or available online at\n"
-                       "http://h2o.github.io/) for how to configure the server.\n"
+                       "http://h2o.examp1e.net/) for how to configure the server.\n"
                        "\n");
                 exit(0);
                 break;
