@@ -8,8 +8,13 @@ Revision history for H2O.
 	- [proxy] fix potential use-after-free issue in case upstream name is resolved using getaddrinfo #307 (Kazuho Oku)
 	- [SSL] fix assertion failure during handshake #316 (Kazuho Oku)
 	- [SSL] fix assertion failure when receiving a corrupt TLS record (http2 only) #297 (Kazuho Oku)
+	- [SSL] fix build error on OpenSUSE using libressl #337 (Kazuho Oku)
+	- [SSL] select ALPN protocol based on server-side preference #335 (Justin Zhu)
+	- [libh2o] build shared libraries as well #324 (pyos)
+	- [libh2o] build libh2o-evloop #327 (Laurentiu Nicola)
 	- [misc] emit stacktrace in case of fatal error (Linux only) #331 (Kazuho Oku)
 	- [misc] improve NetBSD compatibility #289 (Kazuho Oku)
+	- [misc] fix file descriptor leaks #336 (Kazuho Oku)
 
 1.2.0 2015-04-14 07:13:00+0000
 	- [core] bundle libyaml #248 (Kazuho Oku)
