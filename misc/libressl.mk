@@ -7,5 +7,5 @@ all: $(DEST)/lib/libssl.a
 
 $(DEST)/lib/libssl.a:
 	if [ ! -e "libressl-$(VERSION)" ] ; then tar xzf "$(ARCHIVE)" ; fi
-	if [ ! -e "libressl-$(VERSION)/Makefile" ] ; then (P=`pwd`/$(DEST); cd libressl-$(VERSION) && ./configure --prefix="$$P" --disable-shared) ; fi
+	if [ ! -e "libressl-$(VERSION)/Makefile" ] ; then (P=`pwd`/$(DEST); cd libressl-$(VERSION) && ./configure --prefix="$$P" --libdir="$$P/lib" --disable-shared) ; fi
 	(cd libressl-$(VERSION) && make && make install)
