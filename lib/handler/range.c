@@ -42,8 +42,7 @@ const size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size
     do {
         range_start = -1; range_count = 0;
         if (likely(*buf >= '0') && likely(*buf <= '9')) {
-            range_start = *buf++ - '0';
-            CHECK_EOF();
+            range_start = 0;
             while (likely(*buf >= '0') && likely(*buf <= '9')) {
                 range_start *= 10;
                 range_start += *buf++ - '0';
@@ -91,7 +90,7 @@ const size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size
                 range_count += *buf++ - '0';
             }
 	    if (unlikely(range_count > file_size))
-	      range_count = file_size;
+                range_count = file_size;
             range_start = file_size - range_count;
             if (unlikely(buf < buf_end) && unlikely(*buf++ == ','))
                 CHECK_EOF();
@@ -101,13 +100,13 @@ const size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size
         }
     GotOneRange:
         if (likely(good_range)) {
-        h2o_vector_reserve(pool, (void*)&ranges, sizeof(ranges.entries[0]), ranges.size + 2);
-        vector_reserve(&ranges, sizeof(ranges.entries[0]), ranges.size + 2);
-        ranges.entries[ranges.size++] = range_start;
-        ranges.entries[ranges.size++] = range_count;
+            h2o_vector_reserve(pool, (void*)&ranges, sizeof(ranges.entries[0]), ranges.size + 2);
+            vector_reserve(&ranges, sizeof(ranges.entries[0]), ranges.size + 2);
+            ranges.entries[ranges.size++] = range_start;
+            ranges.entries[ranges.size++] = range_count;
         }
         good_range=1;
     } while (unlikely(buf < buf_end));
-    *ret = ranges.size;
+    *ret = ranges.size / 2;
     return ranges.entries;
 }
