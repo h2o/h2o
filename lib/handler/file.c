@@ -299,6 +299,7 @@ static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len, i
     return 0;
 }
 
+size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t file_size, size_t* ret);
 
 static void h2o_gen_rand_string(h2o_iovec_t *s)
 {
@@ -411,7 +412,7 @@ Opened:
         h2o_iovec_t *range = &req->headers.entries[range_header_index].value, range_count;
         size_t *range_infos;
         range_infos = process_range(&req->pool, range, generator->bytesleft, &range_count);
-        if (range_info == NULL) {
+        if (range_infos == NULL) {
             h2o_iovec_t content_range;
             content_range.base = h2o_mem_alloc_pool(&req->pool, 128);
             content_range.len = sprintf(content_range.base, "bytes */%d", generator->bytesleft);

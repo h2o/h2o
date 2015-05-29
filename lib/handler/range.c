@@ -25,7 +25,7 @@
         return NULL;                            \
     }
 
-const size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t file_size, size_t* ret)
+size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t file_size, size_t* ret)
 {
     size_t range_start = -1, range_count = 0;
     char *buf = range_value->base, *buf_end = buf + range_value->len;
