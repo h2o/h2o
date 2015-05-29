@@ -226,7 +226,7 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
         h2o_iovec_t content_range;
         content_range.base = h2o_mem_alloc_pool(&req->pool, 128);
         content_range.len = sprintf(content_range.base, "bytes %d-%d/%d", self->range_infos[0],
-                                    self->range_infos[0] + self->range_infos[1], self->filesize);
+                                    self->range_infos[0] + self->range_infos[1] - 1, self->filesize);
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_RANGE, content_range.base, content_range.len);
     }
 
