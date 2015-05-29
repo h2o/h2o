@@ -408,8 +408,7 @@ Opened:
 
     /* check if range request */
     if ((range_header_index = h2o_find_header(&req->headers, H2O_TOKEN_RANGE, SIZE_MAX)) != -1) {
-        h2o_iovec_t *range = &req->headers.entries[range_header_index].value;
-        int range_count;
+        h2o_iovec_t *range = &req->headers.entries[range_header_index].value, range_count;
         size_t *range_infos;
         range_infos = process_range(&req->pool, range, generator->bytesleft, &range_count);
         if (range_info == NULL) {
@@ -428,8 +427,7 @@ Opened:
         if (range_count == 1)
             generator->bytesleft = range_infos[1];
         else {
-            size_t final_content_len = 0, size_tmp, size_fixed_each_part;
-            int i;
+            size_t final_content_len = 0, size_tmp, size_fixed_each_part, i;
             generator->boundary.base = h2o_mem_alloc_pool(&req->pool, 21);
             generator->boundary.len = 20;
             h2o_gen_rand_string(&generator->boundary);
