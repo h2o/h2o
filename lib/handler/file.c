@@ -29,6 +29,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+#include <assert.h>
 #include "h2o.h"
 
 #define MAX_BUF_SIZE 65000
@@ -241,6 +242,7 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
 
     /* send data */
     h2o_start_response(req, &self->super);
+    assert(fnctl(self->fd, F_GETFL)>=0);
     if (status == 206) 
         lseek(self->fd, self->range_infos[0], SEEK_SET);
     if (req->_ostr_top->start_pull != NULL) {
