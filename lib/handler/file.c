@@ -226,7 +226,7 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     else {
         h2o_iovec_t content_range;
         content_range.base = h2o_mem_alloc_pool(&req->pool, 128);
-        content_range.len = sprintf(content_range.base, "bytes %d-%d/%d", self->range_infos[0],
+        content_range.len = sprintf(content_range.base, "bytes %zd-%zd/%zd", self->range_infos[0],
                                     self->range_infos[0] + self->range_infos[1] - 1, self->filesize);
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_RANGE, content_range.base, content_range.len);
     }
@@ -417,7 +417,7 @@ Opened:
         if (range_infos == NULL) {
             h2o_iovec_t content_range;
             content_range.base = h2o_mem_alloc_pool(&req->pool, 32);
-            content_range.len = sprintf(content_range.base, "bytes */%d", generator->bytesleft);
+            content_range.len = sprintf(content_range.base, "bytes */%zd", generator->bytesleft);
             h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_RANGE, content_range.base, content_range.len);
             do_close(&generator->super, req);
             h2o_send_error(req, 416, "Requested Range Not Satisfiable", "requested range not satisfiable", 0);
@@ -431,27 +431,28 @@ Opened:
         if (range_count == 1)
             generator->bytesleft = range_infos[1];
         else {
-            size_t final_content_len = 0, size_tmp, size_fixed_each_part, i;
+            size_t final_content_len = 0, size_tmp = 0, size_fixed_each_part, i;
             generator->boundary.base = h2o_mem_alloc_pool(&req->pool, 21);
             generator->boundary.len = 20;
             h2o_gen_rand_string(&generator->boundary);
-            size_tmp = generator->bytesleft;
-            while (!size_tmp) {size_tmp /= 10; final_content_len++;}
+            i = generator->bytesleft;
+            while (i) {i /= 10; size_tmp++;}
             size_fixed_each_part = 69 + mime_type.len + size_tmp;
             for (i = 0; i < range_count; i++) {
                 size_tmp = *range_infos++;
                 if (size_tmp == 0) final_content_len++;
-                while (!size_tmp) {size_tmp /= 10; final_content_len++;}
+                while (size_tmp) {size_tmp /= 10; final_content_len++;}
                 final_content_len += *range_infos;
                 size_tmp = *(range_infos - 1);
                 size_tmp += *range_infos++;
                 if (size_tmp == 0) final_content_len++;
-                while (!size_tmp) {size_tmp /= 10; final_content_len++;}
+                while (size_tmp) {size_tmp /= 10; final_content_len++;}
             }
             final_content_len += 28 + size_fixed_each_part * range_count;
             generator->bytesleft = final_content_len;
         }
         do_send_file(generator, req, 206, "Partial Content", mime_type, is_get);
+        return 0;
     }
 
     /* return file */
