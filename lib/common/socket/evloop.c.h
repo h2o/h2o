@@ -388,7 +388,7 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
                                           | SOCK_CLOEXEC
 #endif
                      ,
-                     IPPROTO_TCP)) == -1)
+                     0)) == -1)
         return NULL;
 #ifndef SOCK_CLOEXEC
     fcntl(fd, F_SETFD, FD_CLOEXEC);

@@ -686,6 +686,10 @@ ssize_t h2o_delete_header(h2o_headers_t *headers, ssize_t cursor);
  * accepts a SSL connection
  */
 void h2o_accept_ssl(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, SSL_CTX *ssl_ctx);
+/**
+ * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")
+ */
+size_t h2o_stringify_protocol_version(char *dst, int version);
 
 /* request */
 
@@ -937,6 +941,22 @@ void h2o_expires_register(h2o_pathconf_t *pathconf, h2o_expires_args_t *args);
  *
  */
 void h2o_expires_register_configurator(h2o_globalconf_t *conf);
+
+/* lib/fastcgi.c */
+
+typedef struct st_h2o_fastcgi_handler_t h2o_fastcgi_handler_t;
+
+/**
+ * registers the fastcgi handler to the context
+ * @param pathconf
+ * @param status status code to be sent (e.g. 301, 303, 308, ...)
+ * @param prefix prefix of the destitation URL
+ */
+h2o_fastcgi_handler_t *h2o_fastcgi_register(h2o_pathconf_t *pathconf, struct sockaddr *sa, socklen_t salen);
+/**
+ * registers the configurator
+ */
+void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/file.c */
 

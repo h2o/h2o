@@ -162,6 +162,10 @@ int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y);
  */
 size_t h2o_socket_getnumerichost(struct sockaddr *sa, socklen_t salen, char *buf);
 /**
+ * returns the port number, or -1 if failed
+ */
+int32_t h2o_socket_getport(struct sockaddr *sa);
+/**
  * performs SSL handshake on a socket
  * @param sock the socket
  * @param ssl_ctx SSL context

@@ -212,18 +212,6 @@ static char *append_unsafe_string(char *pos, const char *src, size_t len)
     return pos;
 }
 
-static char *append_protocol(char *pos, int version)
-{
-    if (version < 0x200) {
-        assert(version <= 0x109);
-        pos = append_safe_string(pos, H2O_STRLIT("HTTP/1."));
-        *pos++ = '0' + (version & 0xff);
-    } else {
-        pos = append_safe_string(pos, H2O_STRLIT("HTTP/2"));
-    }
-    return pos;
-}
-
 static char *expand_line_buf(char *line, size_t cur_size, size_t required)
 {
     size_t new_size = cur_size;
@@ -279,8 +267,8 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             pos += sprintf(pos, "%llu", (unsigned long long)req->bytes_sent);
             break;
         case ELEMENT_TYPE_PROTOCOL: /* %H */
-            RESERVE(sizeof("HTTP/1.1") - 1);
-            pos = append_protocol(pos, req->version);
+            RESERVE(sizeof("HTTP/1.1"));
+            pos += h2o_stringify_protocol_version(pos, req->version);
             break;
         case ELEMENT_TYPE_REMOTE_ADDR: /* %h */
             if (req->conn->peername.addr != NULL) {
@@ -307,12 +295,12 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             }
             break;
         case ELEMENT_TYPE_REQUEST_LINE: /* %r */
-            RESERVE((req->input.method.len + req->input.path.len) * 4 + sizeof("  HTTP/1.1") - 1);
+            RESERVE((req->input.method.len + req->input.path.len) * 4 + sizeof("  HTTP/1.1"));
             pos = append_unsafe_string(pos, req->input.method.base, req->input.method.len);
             *pos++ = ' ';
             pos = append_unsafe_string(pos, req->input.path.base, req->input.path.len);
             *pos++ = ' ';
-            pos = append_protocol(pos, req->version);
+            pos += h2o_stringify_protocol_version(pos, req->version);
             break;
         case ELEMENT_TYPE_STATUS: /* %s */
             RESERVE(sizeof("2147483647") - 1);
