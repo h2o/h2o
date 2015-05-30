@@ -242,7 +242,7 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
 
     /* send data */
     h2o_start_response(req, &self->super);
-    assert(fnctl(self->fd, F_GETFL)>=0);
+    assert(fcntl(self->fd, F_GETFL)>=0);
     if (status == 206) 
         lseek(self->fd, self->range_infos[0], SEEK_SET);
     if (req->_ostr_top->start_pull != NULL) {
@@ -416,11 +416,12 @@ Opened:
         range_infos = process_range(&req->pool, range, generator->bytesleft, &range_count);
         if (range_infos == NULL) {
             h2o_iovec_t content_range;
-            content_range.base = h2o_mem_alloc_pool(&req->pool, 128);
+            content_range.base = h2o_mem_alloc_pool(&req->pool, 32);
             content_range.len = sprintf(content_range.base, "bytes */%d", generator->bytesleft);
             h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_RANGE, content_range.base, content_range.len);
             do_close(&generator->super, req);
             h2o_send_error(req, 416, "Requested Range Not Satisfiable", "requested range not satisfiable", 0);
+            return 0;
         }
         generator->range_count = range_count;
         generator->range_infos = range_infos;
