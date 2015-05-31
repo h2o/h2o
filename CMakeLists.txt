@@ -156,6 +156,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/proxy.c
     lib/handler/redirect.c
     lib/handler/reproxy.c
+    lib/handler/range.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/expires.c
     lib/handler/configurator/file.c
