@@ -76,6 +76,10 @@ size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t fil
             if (unlikely(range_count <= 0)) {
                 good_range=0;
             }
+            if (unlikely(buf < buf_end) && unlikely(*buf != ',')) {
+                *ret = -1;
+                return NULL;
+            }
             if (unlikely(buf < buf_end) && unlikely(*buf++ == ','))
                 CHECK_EOF();
         } else if (likely(*buf++ == '-')) {
@@ -92,6 +96,10 @@ size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t fil
 	    if (unlikely(range_count > file_size))
                 range_count = file_size;
             range_start = file_size - range_count;
+            if (unlikely(buf < buf_end) && unlikely(*buf != ',')) {
+                *ret = -1;
+                return NULL;
+            }
             if (unlikely(buf < buf_end) && unlikely(*buf++ == ','))
                 CHECK_EOF();
         } else {
