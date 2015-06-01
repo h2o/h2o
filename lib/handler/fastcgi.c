@@ -39,6 +39,8 @@
 #define FCGI_RECORD_HEADER_SIZE (sizeof(struct st_fcgi_record_header_t))
 #define FCGI_BEGIN_REQUEST_BODY_SIZE 8
 
+#define MODULE_NAME "lib/handler/fastcgi.c"
+
 #define APPEND_BLOCKSIZE 512 /* the size should be small enough to be allocated within the buffer of the memory pool */
 
 struct st_fcgi_record_header_t {
@@ -329,8 +331,7 @@ static int fill_headers(h2o_req_t *req, struct phr_header *headers, size_t num_h
             h2o_iovec_t value = h2o_iovec_init(headers[i].value, headers[i].value_len);
             if (value.len < 3 || !(_isdigit(value.base[0]) && _isdigit(value.base[1]) && _isdigit(value.base[2])) ||
                 (value.len >= 4 && value.base[3] != ' ')) {
-                h2o_req_log_error(req, "lib/handler/fastcgi.c", "failed to parse Status header, got:`%.*s`", (int)value.len,
-                                  value.base);
+                h2o_req_log_error(req, MODULE_NAME, "failed to parse Status header, got: %.*s", (int)value.len, value.base);
                 return -1;
             }
             req->res.status = (value.base[0] - '0') * 100 + (value.base[1] - '0') * 10 + (value.base[2] - '0');
@@ -379,7 +380,7 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
             /* incomplete */
             return 0;
         } else {
-            /* TODO log the error */
+            h2o_req_log_error(generator->req, MODULE_NAME, "received broken response");
             return -1;
         }
     }
@@ -410,7 +411,7 @@ static void on_read(h2o_socket_t *sock, int status)
     struct st_fcgi_generator_t *generator = sock->data;
 
     if (status != 0) {
-        /* TODO log error */
+        h2o_req_log_error(generator->req, MODULE_NAME, "fastcgi connection closed unexpectedly");
         if (generator->sent_headers)
             send_eos_and_close(generator);
         else
@@ -440,15 +441,14 @@ static void on_read(h2o_socket_t *sock, int status)
             break;
         case FCGI_END_REQUEST:
             if (!generator->sent_headers) {
-                /* TODO log */
+                h2o_req_log_error(generator->req, MODULE_NAME, "received FCGI_END_REQUEST before end of the headers");
                 goto Error;
             }
             goto EOS_Received;
         default:
-            if (!generator->sent_headers) {
-                /* TODO log */
+            h2o_req_log_error(generator->req, MODULE_NAME, "received unexpected record, type: %u", header.type);
+            if (!generator->sent_headers)
                 goto Error;
-            }
             goto EOS_Received;
         }
         h2o_buffer_consume(&sock->input, recsize);
@@ -570,7 +570,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     struct st_fcgi_generator_t *generator;
 
     if ((sock = h2o_socket_connect(req->conn->ctx->loop, &handler->sa, handler->salen, on_connect)) == NULL) {
-        h2o_req_log_error(req, "lib/handler/fastcgi.c", "failed to connect to upstream");
+        h2o_req_log_error(req, MODULE_NAME, "failed to connect to upstream");
         h2o_send_error(req, 503, "Internal Server Error", "Internal Server Error", 0);
         return 0;
     }
