@@ -345,7 +345,8 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     /* raise the priority of asset files that block rendering to highest if the user-agent is not using sophisticated prioritization
      * logic (e.g. that of Firefox)
      */
-    if (conn->num_streams.priority == 0 && h2o_http2_scheduler_get_parent(&stream->_refs.scheduler) == &conn->scheduler &&
+    if (conn->num_streams.priority == 0 && conn->super.ctx->globalconf->http2.reprioritize_blocking_assets &&
+        h2o_http2_scheduler_get_parent(&stream->_refs.scheduler) == &conn->scheduler &&
         h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("GET")) &&
         is_blocking_asset(stream->req.input.path.base, stream->req.input.path.len)) {
         h2o_http2_scheduler_rebind(&stream->_refs.scheduler, &conn->scheduler, 257, 0);
