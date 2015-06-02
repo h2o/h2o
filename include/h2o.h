@@ -261,6 +261,10 @@ struct st_h2o_globalconf_t {
          */
         size_t max_streams_for_priority;
         /**
+         * a boolean value indicating whether or not to raise priority of blocking asset files
+         */
+        int reprioritize_blocking_assets;
+        /**
          * list of callbacks
          */
         h2o_protocol_callbacks_t callbacks;

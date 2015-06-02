@@ -96,6 +96,10 @@ static int h2o_http2_scheduler_is_open(h2o_http2_scheduler_openref_t *ref);
  */
 static uint16_t h2o_http2_scheduler_get_weight(h2o_http2_scheduler_openref_t *ref);
 /**
+ * returns the parent
+ */
+static h2o_http2_scheduler_node_t *h2o_http2_scheduler_get_parent(h2o_http2_scheduler_openref_t *ref);
+/**
  * activates a reference so that it would be passed back as the argument to the callback of the h2o_http2_scheduler_run function
  * if any resource should be allocated
  */
@@ -116,6 +120,11 @@ inline int h2o_http2_scheduler_is_open(h2o_http2_scheduler_openref_t *ref)
 inline uint16_t h2o_http2_scheduler_get_weight(h2o_http2_scheduler_openref_t *ref)
 {
     return ref->weight;
+}
+
+inline h2o_http2_scheduler_node_t *h2o_http2_scheduler_get_parent(h2o_http2_scheduler_openref_t *ref)
+{
+    return ref->node._parent;
 }
 
 #endif
