@@ -252,7 +252,7 @@ void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_sc
     assert(h2o_http2_scheduler_is_open(ref));
     assert(&ref->node != new_parent);
     assert(1 <= weight);
-    assert(weight <= 256);
+    assert(weight <= 257);
 
     /* do nothing if there'd be no change at all */
     if (ref->node._parent == new_parent && ref->weight == weight && !exclusive)
