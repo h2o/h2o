@@ -247,7 +247,7 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     kh_foreach_value(conn->streams, stream, { h2o_http2_stream_close(conn, stream); });
     assert(conn->num_streams.open_pull == 0);
     assert(conn->num_streams.responding == 0);
-    assert(conn->num_streams.priority == 0);
+    assert(conn->num_streams.open_priority == 0);
     kh_destroy(h2o_http2_stream_t, conn->streams);
     assert(conn->_http1_req_input == NULL);
     h2o_hpack_dispose_header_table(&conn->_input_header_table);
@@ -345,7 +345,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     /* raise the priority of asset files that block rendering to highest if the user-agent is not using sophisticated prioritization
      * logic (e.g. that of Firefox)
      */
-    if (conn->num_streams.priority == 0 && conn->super.ctx->globalconf->http2.reprioritize_blocking_assets &&
+    if (conn->num_streams.open_priority == 0 && conn->super.ctx->globalconf->http2.reprioritize_blocking_assets &&
         h2o_http2_scheduler_get_parent(&stream->_refs.scheduler) == &conn->scheduler &&
         h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("GET")) &&
         is_blocking_asset(stream->req.input.path.base, stream->req.input.path.len)) {
@@ -439,7 +439,7 @@ static void update_input_window(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_
 
 static int open_stream(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_http2_stream_t **stream, const char **err_desc)
 {
-    if (conn->num_streams.priority >= conn->super.ctx->globalconf->http2.max_streams_for_priority) {
+    if (conn->num_streams.open_priority >= conn->super.ctx->globalconf->http2.max_streams_for_priority) {
         *err_desc = "too many streams in idle/closed state";
         return H2O_HTTP2_ERROR_INTERNAL; /* FIXME? */
     }
