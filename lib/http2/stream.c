@@ -55,7 +55,9 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     stream->req._ostr_top = &stream->_ostr_final;
 
     h2o_http2_conn_register_stream(conn, stream);
-    ++conn->num_streams.priority;
+
+    ++conn->num_streams.open_priority;
+    stream->_num_streams_open_slot = &conn->num_streams.open_priority;
 
     return stream;
 }
@@ -63,6 +65,7 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     h2o_http2_conn_unregister_stream(conn, stream);
+    --*stream->_num_streams_open_slot;
     if (stream->_req_headers != NULL)
         h2o_buffer_dispose(&stream->_req_headers);
     if (stream->_req_body != NULL)

@@ -97,6 +97,29 @@ The value cannot exceed 256.
 <dd><code><pre>http2-max-concurrent-requests-per-connection: 256</pre></code>
 </dl>
 
+<h3 id="http2-reprioritize-blocking-assets" class="directive-title"><a href="configure/http2_directives.html#http2-reprioritize-blocking-assets"><code>"http2-reprioritize-blocking-assets"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if the server should send CSS and JS files above anything else.
+
+
+</p>
+
+<p>
+This option has a positive impact on first-paint time on Google Chrome.
+For more information please refer to <a href="http://blog.kazuhooku.com/2015/06/http2-and-h2o-improves-user-experience.html">HTTP/2 (and H2O) improves user experience over HTTP/1.1 or SPDY</a>.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>http2-reprioritize-blocking-assets: OFF</pre></code>
+</dl>
+
 
 
 

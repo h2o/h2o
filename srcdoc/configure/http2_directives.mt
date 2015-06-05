@@ -29,4 +29,21 @@ The value cannot exceed 256.
 </p>
 ? })
 
+<?
+$ctx->{directive}->(
+    name    => "http2-reprioritize-blocking-assets",
+    levels  => [ qw(global) ],
+    default => 'http2-reprioritize-blocking-assets: OFF',
+    desc    => <<'EOT',
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if the server should send CSS and JS files above anything else.
+
+EOT
+)->(sub {
+?>
+<p>
+This option has a positive impact on first-paint time on Google Chrome.
+For more information please refer to <a href="http://blog.kazuhooku.com/2015/06/http2-and-h2o-improves-user-experience.html">HTTP/2 (and H2O) improves user experience over HTTP/1.1 or SPDY</a>.
+</p>
+? });
+
 ? })
