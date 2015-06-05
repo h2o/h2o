@@ -538,19 +538,17 @@ static void on_connect(h2o_socket_t *sock, int status)
     annotate_params(&req->pool, &vecs, REQUEST_ID, 65535);
     /* setup FCGI_STDIN headers */
     if (req->entity.len != 0) {
-#define CHUNKSIZE 0xffc0 /* an aligned number below 0xffff */
         size_t off = 0;
-        for (; off + CHUNKSIZE < req->entity.len; off += CHUNKSIZE) {
+        for (; off + 65535 < req->entity.len; off += 65535) {
             h2o_vector_reserve(&req->pool, (void *)&vecs, sizeof(vecs.entries[0]), vecs.size + 2);
-            vecs.entries[vecs.size++] = create_header(&req->pool, FCGI_STDIN, REQUEST_ID, CHUNKSIZE);
-            vecs.entries[vecs.size++] = h2o_iovec_init(req->entity.base + off, CHUNKSIZE);
+            vecs.entries[vecs.size++] = create_header(&req->pool, FCGI_STDIN, REQUEST_ID, 65535);
+            vecs.entries[vecs.size++] = h2o_iovec_init(req->entity.base + off, 65535);
         }
         if (off != req->entity.len) {
             h2o_vector_reserve(&req->pool, (void *)&vecs, sizeof(vecs.entries[0]), vecs.size + 2);
             vecs.entries[vecs.size++] = create_header(&req->pool, FCGI_STDIN, REQUEST_ID, req->entity.len - off);
             vecs.entries[vecs.size++] = h2o_iovec_init(req->entity.base + off, req->entity.len - off);
         }
-#undef CHUNKSIZE
     }
     h2o_vector_reserve(&req->pool, (void *)&vecs, sizeof(vecs.entries[0]), vecs.size + 1);
     vecs.entries[vecs.size++] = create_header(&req->pool, FCGI_STDIN, REQUEST_ID, 0);
