@@ -248,6 +248,41 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs)
     }
 }
 
+static void annotate_params(h2o_mem_pool_t *pool, iovec_vector_t *vecs, unsigned request_id, size_t max_record_size)
+{
+    size_t index = 2, recsize = 0, header_slot = 1;
+
+    while (index != vecs->size) {
+        if (recsize + vecs->entries[index].len < max_record_size) {
+            ++index;
+        } else {
+            vecs->entries[header_slot] = create_header(pool, FCGI_PARAMS, request_id, max_record_size);
+            if (recsize + vecs->entries[index].len == max_record_size) {
+                h2o_vector_reserve(pool, (void *)&vecs, sizeof(vecs->entries[0]), vecs->size + 1);
+                memmove(vecs->entries + index + 2, vecs->entries + index + 1, vecs->size - (index + 1));
+                ++vecs->size;
+            } else {
+                h2o_vector_reserve(pool, (void *)&vecs, sizeof(vecs->entries[0]), vecs->size + 2);
+                memmove(vecs->entries + index + 2, vecs->entries + index, vecs->size - index);
+                vecs->size += 2;
+                size_t lastsz = max_record_size - recsize;
+                vecs->entries[index].len = lastsz;
+                vecs->entries[index + 2].base += lastsz;
+                vecs->entries[index + 2].len -= lastsz;
+            }
+            header_slot = index + 1;
+            index += 2;
+            recsize = 0;
+        }
+    }
+
+    vecs->entries[header_slot] = create_header(pool, FCGI_PARAMS, request_id, recsize);
+    if (recsize != 0) {
+        h2o_vector_reserve(pool, (void *)&vecs, sizeof(vecs->entries[0]), vecs->size + 1);
+        vecs->entries[vecs->size++] = create_header(pool, FCGI_PARAMS, request_id, 0);
+    }
+}
+
 static void close_generator(struct st_fcgi_generator_t *generator)
 {
     /* can be called more than once */
@@ -498,29 +533,9 @@ static void on_connect(h2o_socket_t *sock, int status)
     /* second entry is reserved for FCGI_PARAMS header */
     vecs.entries[1] = h2o_iovec_init(NULL, APPEND_BLOCKSIZE); /* dummy value set to prevent params being appended to the entry */
     vecs.size = 2;
-    /* accumulate the params data */
+    /* accumulate the params data, and annotate them with FCGI_PARAM headers */
     append_params(req, &vecs);
-    { /* setup the FCGI_PARAMS headers */
-        size_t i, recsize = 0, header_slot = 1;
-        for (i = 2; i != vecs.size; ++i) {
-            if (recsize + vecs.entries[i].len > 65535) {
-                /* write the header, expand, and update header_slot */
-                vecs.entries[header_slot] = create_header(&req->pool, FCGI_PARAMS, REQUEST_ID, recsize);
-                h2o_vector_reserve(&req->pool, (void *)&vecs, sizeof(vecs.entries[0]), vecs.size + 1);
-                memmove(vecs.entries + i + 1, vecs.entries + i, vecs.size - i);
-                ++vecs.size;
-                recsize = 0;
-                header_slot = i;
-            } else {
-                recsize += vecs.entries[i].len;
-            }
-        }
-        vecs.entries[header_slot] = create_header(&req->pool, FCGI_PARAMS, REQUEST_ID, recsize);
-        if (recsize != 0) {
-            h2o_vector_reserve(&req->pool, (void *)&vecs, sizeof(vecs.entries[0]), vecs.size + 1);
-            vecs.entries[vecs.size++] = create_header(&req->pool, FCGI_PARAMS, REQUEST_ID, 0);
-        }
-    }
+    annotate_params(&req->pool, &vecs, REQUEST_ID, 65535);
     /* setup FCGI_STDIN headers */
     if (req->entity.len != 0) {
 #define CHUNKSIZE 0xffc0 /* an aligned number below 0xffff */
