@@ -148,6 +148,7 @@ int main(int argc, char **argv)
 #endif
 
         subtest("lib/t/test.c/loopback", test_loopback);
+        subtest("lib/fastcgi.c", test_lib__handler__fastcgi_c);
         subtest("lib/file.c", test_lib__handler__file_c);
         subtest("lib/redirect.c", test_lib__handler__redirect_c);
         subtest("issues/293.c", test_issues293);

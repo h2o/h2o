@@ -187,6 +187,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/common/url.c
     t/00unit/lib/core/headers.c
     t/00unit/lib/core/proxy.c
+    t/00unit/lib/handler/fastcgi.c
     t/00unit/lib/handler/file.c
     t/00unit/lib/handler/headers.c
     t/00unit/lib/handler/mimemap.c
@@ -204,6 +205,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/url.c
     lib/core/headers.c
     lib/core/proxy.c
+    lib/handler/fastcgi.c
     lib/handler/file.c
     lib/handler/headers.c
     lib/handler/mimemap.c
