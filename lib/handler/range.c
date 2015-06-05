@@ -4,13 +4,6 @@
 
 #include "h2o.h"
 
-#if __GNUC__ >= 3
-# define likely(x) __builtin_expect(!!(x), 1)
-# define unlikely(x) __builtin_expect(!!(x), 0)
-#else
-# define likely(x) (x)
-# define unlikely(x) (x)
-#endif
 
 #define CHECK_EOF()                             \
     if (buf == buf_end) {                       \
@@ -32,88 +25,86 @@ size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t fil
     int good_range=1;
     H2O_VECTOR(size_t) ranges = {};
     
-    EXPECT_CHAR('b');
-    EXPECT_CHAR('y');
-    EXPECT_CHAR('t');
-    EXPECT_CHAR('e');
-    EXPECT_CHAR('s');
-    EXPECT_CHAR('=');
+    if (range_value->len < 6 || memcmp(buf, "bytes=", 6) != 0) {
+        *ret = -1;
+        return NULL;
+    }
+
+    buf += 6;
+    
     /* most range requests contain only one range */
     do {
         range_start = -1; range_count = 0;
-        if (likely(*buf >= '0') && likely(*buf <= '9')) {
-            range_start = 0;
-            while (likely(*buf >= '0') && likely(*buf <= '9')) {
-                range_start *= 10;
-                range_start += *buf++ - '0';
-                CHECK_EOF();
-            }
+        if (H2O_LIKELY(*buf >= '0') && H2O_LIKELY(*buf <= '9')) {
+            range_start = h2o_strtosizefwd(&buf, buf_end - buf);
             EXPECT_CHAR('-');
-	    if (unlikely(range_start >= file_size)) {
+	    if (H2O_UNLIKELY(range_start >= file_size)) {
                 good_range=0;
 	    }
-            if (unlikely(buf == buf_end)) {
+            if (H2O_UNLIKELY(buf == buf_end)) {
                 range_count = file_size - range_start;
                 goto GotOneRange;
-            } else if (unlikely(*buf == ',')) {
-                buf++;
-                CHECK_EOF();
+            } else if (H2O_UNLIKELY(*buf == ',')) {
+                do {
+                    buf++;
+                    CHECK_EOF();
+                } while (*buf == ' ');
                 range_count = file_size - range_start;
                 goto GotOneRange;
             }
-            if (unlikely(*buf < '0') || unlikely(*buf > '9')) {
+            if (H2O_UNLIKELY(*buf < '0') || H2O_UNLIKELY(*buf > '9')) {
                 *ret = -1;
                 return NULL;
             }
-            while (likely(*buf >= '0') && likely(*buf <= '9')) {
-                CHECK_EOF();
-                range_count *= 10;
-                range_count += *buf++ - '0';
-            }
-            if (unlikely(range_count > file_size - 1))
+            range_count = h2o_strtosizefwd(&buf, buf_end - buf);
+            if (H2O_UNLIKELY(range_count > file_size - 1))
                 range_count = file_size - 1;
             range_count -= range_start - 1;
-            if (unlikely(range_count <= 0)) {
+            if (H2O_UNLIKELY(range_count <= 0)) {
                 good_range=0;
             }
-            if (unlikely(buf < buf_end) && unlikely(*buf != ',')) {
+            if (H2O_UNLIKELY(buf < buf_end) && H2O_UNLIKELY(*buf != ',')) {
                 *ret = -1;
                 return NULL;
             }
-            if (unlikely(buf < buf_end) && unlikely(*buf++ == ','))
-                CHECK_EOF();
-        } else if (likely(*buf++ == '-')) {
+            if (H2O_UNLIKELY(buf < buf_end) && H2O_UNLIKELY(*buf == ',')) {
+                do {
+                    buf ++;
+                    CHECK_EOF();
+                } while (*buf == ' ');
+            }
+        } else if (H2O_LIKELY(*buf++ == '-')) {
             CHECK_EOF();
-            if (unlikely(*buf < '0') || unlikely(*buf > '9')) {
+            if (H2O_UNLIKELY(*buf < '0') || H2O_UNLIKELY(*buf > '9')) {
                 *ret = -1;
                 return NULL;
             }
-            while (likely(*buf >= '0') && likely(*buf <= '9')) {
-                CHECK_EOF();
-                range_count *= 10;
-                range_count += *buf++ - '0';
-            }
-	    if (unlikely(range_count > file_size))
+            range_count = h2o_strtosizefwd(&buf, buf_end - buf);
+	    if (H2O_UNLIKELY(range_count > file_size))
                 range_count = file_size;
             range_start = file_size - range_count;
-            if (unlikely(buf < buf_end) && unlikely(*buf != ',')) {
+            if (H2O_UNLIKELY(buf < buf_end) && H2O_UNLIKELY(*buf != ',')) {
                 *ret = -1;
                 return NULL;
             }
-            if (unlikely(buf < buf_end) && unlikely(*buf++ == ','))
-                CHECK_EOF();
+            if (H2O_UNLIKELY(buf < buf_end) && H2O_UNLIKELY(*buf == ',')) {
+                do {
+                    buf ++;
+                    CHECK_EOF();
+                } while (*buf == ' ');
+            }
         } else {
             *ret = -1;
             return NULL;
         }
     GotOneRange:
-        if (likely(good_range)) {
+        if (H2O_LIKELY(good_range)) {
             h2o_vector_reserve(pool, (void*)&ranges, sizeof(ranges.entries[0]), ranges.size + 2);
             ranges.entries[ranges.size++] = range_start;
             ranges.entries[ranges.size++] = range_count;
         }
         good_range=1;
-    } while (unlikely(buf < buf_end));
+    } while (H2O_UNLIKELY(buf < buf_end));
     *ret = ranges.size / 2;
     return ranges.entries;
 }

@@ -33,13 +33,17 @@
 #include "h2o.h"
 
 #define MAX_BUF_SIZE 65000
+#define BOUNDARY_SIZE 20
+#define FIXED_PART_SIZE 49
+/* = size of five "\r\n"s + size of "--" 
+ *   + size of header names w/ column and space (Content-Range and Content-Type) 
+ *   + size of "bytes " and "-" and "/" */
 
 struct st_h2o_sendfile_generator_t {
     h2o_generator_t super;
     int fd;
     h2o_req_t *req;
     size_t bytesleft;
-    size_t filesize;
     struct {
         uint64_t packed;
         char buf[H2O_TIMESTR_RFC1123_LEN + 1];
@@ -49,12 +53,16 @@ struct st_h2o_sendfile_generator_t {
     char is_gzip;
     char send_vary;
     char *buf;
-    int range_count;
-    size_t *range_infos; /* size_t shows in pair. first is start offset, then length */
-    h2o_iovec_t boundary; /* boundary used for multipart/byteranges */
-    h2o_iovec_t mimetype; /* original mimetype for multipart */
-    int current_range; /* range that processing now */
-    int finished_range; /* range that processed till now */
+    struct {
+        size_t filesize;
+        size_t range_count;
+        size_t *range_infos; /* size_t shows in pair. first is start offset, then length */
+        h2o_iovec_t boundary; /* boundary used for multipart/byteranges */
+        h2o_iovec_t mimetype; /* original mimetype for multipart */
+        size_t current_range; /* range that processing now */
+        size_t finished_range; /* range that processed till now */
+        h2o_iovec_t end_marker_buf;
+    } ranged;
 };
 
 struct st_h2o_file_handler_t {
@@ -121,22 +129,17 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 
 static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req) {
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
-    size_t rlen, *range_cur = self->range_infos + 2 * self->finished_range, used_buf = 0;
-    ssize_t rret;
-    h2o_iovec_t vec;
+    size_t rlen, *range_cur = self->ranged.range_infos + 2 * self->ranged.finished_range, used_buf = 0;
+    ssize_t rret, vecarrsize;
+    h2o_iovec_t vec, *vecarr;
+    int is_finished;
 
-    if (self->bytesleft == 28) {
-        vec.len = sprintf(self->buf, "\r\n--%s--\r\n", self->boundary.base);
-        vec.base = self->buf;
-        h2o_send(req, &vec, 1, 1);
-        do_close(&self->super, req);
-        return;
-    } else if (self->current_range == self->finished_range) {
+    if (self->ranged.current_range == self->ranged.finished_range) {
         size_t range_end = *range_cur + *(range_cur + 1) - 1;
         used_buf = sprintf(self->buf, "\r\n--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
-                           self->boundary.base, self->mimetype.base, *range_cur, range_end, self->filesize);
-        self->current_range ++;
-        self->bytesleft -= used_buf;
+                           self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end,
+                           self->ranged.filesize);
+        self->ranged.current_range ++;
         lseek(self->fd, *range_cur, SEEK_SET);
     }
     range_cur ++;
@@ -151,12 +154,23 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req) {
         do_close(&self->super, req);
         return;
     }
-    self->bytesleft -= rret;
     *range_cur -= rret;
+    if (*range_cur == 0) self->ranged.finished_range ++;
 
     vec.base = self->buf;
     vec.len = rret + used_buf;
-    h2o_send(req, &vec, 1, 0);
+    if (self->ranged.finished_range == self->ranged.range_count) {
+        vecarr = (void *)h2o_mem_alloc_pool(&req->pool, 2 * sizeof(h2o_iovec_t));
+        *vecarr = vec;
+        *(vecarr + 1) = self->ranged.end_marker_buf;
+        vecarrsize = 2;
+        is_finished = 1;
+    } else {
+        vecarr = &vec;
+        vecarrsize = 1;
+        is_finished = 0;
+    }
+    h2o_send(req, vecarr, vecarrsize, is_finished);
 }
 
 static int do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_t *buf)
@@ -186,23 +200,25 @@ static int do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_t *buf)
 static int do_multirange_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_t *buf)
 {
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
-    size_t *range_cur = self->range_infos + 2 * self->finished_range, used_buf = 0;
-    ssize_t rret;
+    size_t *range_cur = self->ranged.range_infos + 2 * self->ranged.finished_range, used_buf = 0;
+    ssize_t rret, original_len;
 
     /* dirty code assume that buf has at least length for boundary & part header */
-    if (self->bytesleft == 28) {
-        buf->len = sprintf(buf->base, "\r\n--%s--\r\n", self->boundary.base);
+    if (self->ranged.finished_range == self->ranged.range_count) {
+        buf->len = sprintf(buf->base, "\r\n--%s--\r\n", self->ranged.boundary.base);
         do_close(&self->super, req);
         return 1;
-    } else if (self->current_range == self->finished_range) {
+    }
+    if (self->ranged.current_range == self->ranged.finished_range) {
         size_t range_end = *range_cur + *(range_cur + 1) - 1;
         used_buf = sprintf(buf->base, "\r\n--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
-                               self->boundary.base, self->mimetype.base, *range_cur, range_end, self->filesize);
-        self->current_range ++;
-        self->bytesleft -= used_buf;
+                           self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end,
+                           self->ranged.filesize);
+        self->ranged.current_range ++;
         lseek(self->fd, *range_cur, SEEK_SET);
     }
     range_cur ++;
+    original_len = buf->len;
     if (*range_cur < buf->len - used_buf)
         buf->len = *range_cur + used_buf;
     while ((rret = read(self->fd, buf->base + used_buf, buf->len - used_buf)) == -1 && errno == EINTR)
@@ -213,11 +229,15 @@ static int do_multirange_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_
         return 1;
     } else {
         buf->len = rret + used_buf;
-        self->bytesleft -= rret;
         *range_cur -= rret;
     }
 
-    if (*range_cur == 0) self->finished_range ++;
+    if (*range_cur == 0) self->ranged.finished_range ++;
+    if (self->ranged.finished_range == self->ranged.range_count &&
+        self->ranged.end_marker_buf.len <= original_len - buf->len) {
+        memcpy(buf->base + buf->len, self->ranged.end_marker_buf.base, self->ranged.end_marker_buf.len);
+        buf->len += self->ranged.end_marker_buf.len;
+    }
     return 0;
 }
 
@@ -267,8 +287,8 @@ Opened:
     self->fd = fd;
     self->req = NULL;
     self->bytesleft = st.st_size;
-    self->range_count = 0;
-    self->range_infos = NULL;
+    self->ranged.range_count = 0;
+    self->ranged.range_infos = NULL;
 
     gmtime_r(&st.st_mtime, &last_modified_gmt);
     self->last_modified.packed = time2packed(&last_modified_gmt);
@@ -295,9 +315,9 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     req->res.reason = reason;
     req->res.content_length = self->bytesleft;
 
-    if (self->range_count > 1) {
+    if (self->ranged.range_count > 1) {
         mime_type.base = h2o_mem_alloc_pool(&req->pool, 52);
-        mime_type.len = sprintf(mime_type.base, "multipart/byteranges; boundary=%s", self->boundary.base);
+        mime_type.len = sprintf(mime_type.base, "multipart/byteranges; boundary=%s", self->ranged.boundary.base);
     }
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, mime_type.base, mime_type.len);
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LAST_MODIFIED, self->last_modified.buf, H2O_TIMESTR_RFC1123_LEN);
@@ -307,13 +327,13 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
         h2o_add_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
     if (self->is_gzip)
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_ENCODING, H2O_STRLIT("gzip"));
-    if (self->range_count == 0)
+    if (self->ranged.range_count == 0)
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ACCEPT_RANGES, H2O_STRLIT("bytes"));
-    else if (self->range_count == 1) {
+    else if (self->ranged.range_count == 1) {
         h2o_iovec_t content_range;
         content_range.base = h2o_mem_alloc_pool(&req->pool, 128);
-        content_range.len = sprintf(content_range.base, "bytes %zd-%zd/%zd", self->range_infos[0],
-                                    self->range_infos[0] + self->range_infos[1] - 1, self->filesize);
+        content_range.len = sprintf(content_range.base, "bytes %zd-%zd/%zd", self->ranged.range_infos[0],
+                                    self->ranged.range_infos[0] + self->ranged.range_infos[1] - 1, self->ranged.filesize);
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_RANGE, content_range.base, content_range.len);
     }
 
@@ -329,10 +349,10 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     /* send data */
     h2o_start_response(req, &self->super);
     assert(fcntl(self->fd, F_GETFL)>=0);
-    if (self->range_count == 1) 
-        lseek(self->fd, self->range_infos[0], SEEK_SET);
+    if (self->ranged.range_count == 1) 
+        lseek(self->fd, self->ranged.range_infos[0], SEEK_SET);
     if (req->_ostr_top->start_pull != NULL) {
-        if (self->range_count < 2)
+        if (self->ranged.range_count < 2)
             req->_ostr_top->start_pull(req->_ostr_top, do_pull);
         else
             req->_ostr_top->start_pull(req->_ostr_top, do_multirange_pull);
@@ -341,10 +361,12 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
         if (self->bytesleft < bufsz)
             bufsz = self->bytesleft;
         self->buf = h2o_mem_alloc_pool(&req->pool, bufsz);
-        if (self->range_count < 2)
+        if (self->ranged.range_count < 2)
             do_proceed(&self->super, req);
-        else
+        else {
+            self->super.proceed = do_multirange_proceed;
             do_multirange_proceed(&self->super, req);
+        }
     }
 }
 
@@ -519,24 +541,28 @@ Opened:
             h2o_send_inline(req, "requested range not satisfiable", req->res.content_length);
             return 0;
         }
-        generator->range_count = range_count;
-        generator->range_infos = range_infos;
-        generator->finished_range = 0;
-        generator->current_range = 0;
-        generator->filesize = generator->bytesleft;
+        generator->ranged.range_count = range_count;
+        generator->ranged.range_infos = range_infos;
+        generator->ranged.finished_range = 0;
+        generator->ranged.current_range = 0;
+        generator->ranged.filesize = generator->bytesleft;
 
         /* set content-length according to range */
         if (range_count == 1)
             generator->bytesleft = range_infos[1];
         else {
-            generator->mimetype = h2o_strdup(&req->pool, mime_type.base, mime_type.len);
+            generator->ranged.mimetype = h2o_strdup(&req->pool, mime_type.base, mime_type.len);
             size_t final_content_len = 0, size_tmp = 0, size_fixed_each_part, i;
-            generator->boundary.base = h2o_mem_alloc_pool(&req->pool, 21);
-            generator->boundary.len = 20;
-            h2o_gen_rand_string(&generator->boundary);
+            h2o_iovec_t end_marker;
+            end_marker.base = h2o_mem_alloc_pool(&req->pool, BOUNDARY_SIZE + 8 + 1);
+            generator->ranged.boundary.base = h2o_mem_alloc_pool(&req->pool, BOUNDARY_SIZE + 1);
+            generator->ranged.boundary.len = BOUNDARY_SIZE;
+            h2o_gen_rand_string(&generator->ranged.boundary);
+            end_marker.len = sprintf(end_marker.base, "\r\n--%s--\r\n", generator->ranged.boundary.base);
+            generator->ranged.end_marker_buf = end_marker;
             i = generator->bytesleft;
             while (i) {i /= 10; size_tmp++;}
-            size_fixed_each_part = 69 + mime_type.len + size_tmp;
+            size_fixed_each_part = BOUNDARY_SIZE + FIXED_PART_SIZE + mime_type.len + size_tmp;
             for (i = 0; i < range_count; i++) {
                 size_tmp = *range_infos++;
                 if (size_tmp == 0) final_content_len++;
