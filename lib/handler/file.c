@@ -537,7 +537,7 @@ Opened:
             req->res.status = 416;
             req->res.reason = "Requested Range Not Satisfiable";
             req->res.content_length = strlen("requested range not satisfiable");
-            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
+            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
             h2o_send_inline(req, "requested range not satisfiable", req->res.content_length);
             return 0;
         }
@@ -567,13 +567,13 @@ Opened:
                 size_tmp = *range_infos++;
                 if (size_tmp == 0) final_content_len++;
                 while (size_tmp) {size_tmp /= 10; final_content_len++;}
-                final_content_len += *range_infos;
                 size_tmp = *(range_infos - 1);
-                size_tmp += *range_infos++;
+                final_content_len += *range_infos;
+                size_tmp += *range_infos++ - 1;
                 if (size_tmp == 0) final_content_len++;
                 while (size_tmp) {size_tmp /= 10; final_content_len++;}
             }
-            final_content_len += 28 + size_fixed_each_part * range_count;
+            final_content_len += 8 + BOUNDARY_SIZE + size_fixed_each_part * range_count;
             generator->bytesleft = final_content_len;
         }
         do_send_file(generator, req, 206, "Partial Content", mime_type, is_get);

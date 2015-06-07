@@ -18,6 +18,12 @@
         return NULL;                            \
     }
 
+#define CHECK_OVERFLOW(range)                   \
+    if (range == SIZE_MAX) {                    \
+        *ret = -1;                              \
+        return NULL;                            \
+    }
+
 size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t file_size, size_t* ret)
 {
     size_t range_start = -1, range_count = 0;
@@ -37,6 +43,7 @@ size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t fil
         range_start = -1; range_count = 0;
         if (H2O_LIKELY(*buf >= '0') && H2O_LIKELY(*buf <= '9')) {
             range_start = h2o_strtosizefwd(&buf, buf_end - buf);
+            CHECK_OVERFLOW(range_start);
             EXPECT_CHAR('-');
 	    if (H2O_UNLIKELY(range_start >= file_size)) {
                 good_range=0;
@@ -57,12 +64,13 @@ size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t fil
                 return NULL;
             }
             range_count = h2o_strtosizefwd(&buf, buf_end - buf);
+            CHECK_OVERFLOW(range_count);
             if (H2O_UNLIKELY(range_count > file_size - 1))
                 range_count = file_size - 1;
-            range_count -= range_start - 1;
-            if (H2O_UNLIKELY(range_count <= 0)) {
-                good_range=0;
+            if (H2O_UNLIKELY(range_start > range_count)) {
+                good_range = 0;
             }
+            range_count -= range_start - 1;
             if (H2O_UNLIKELY(buf < buf_end) && H2O_UNLIKELY(*buf != ',')) {
                 *ret = -1;
                 return NULL;
@@ -80,6 +88,9 @@ size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t fil
                 return NULL;
             }
             range_count = h2o_strtosizefwd(&buf, buf_end - buf);
+            CHECK_OVERFLOW(range_count);
+            if (H2O_UNLIKELY(range_count == 0))
+                good_range = 0;
 	    if (H2O_UNLIKELY(range_count > file_size))
                 range_count = file_size;
             range_start = file_size - range_count;
