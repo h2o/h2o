@@ -83,11 +83,11 @@ const char **h2o_file_default_index_files = default_index_files;
 static uint64_t time2packed(struct tm *tm)
 {
     return (uint64_t)(tm->tm_year + 1900) << 40 /* year:  24-bits */
-           | (uint64_t)tm->tm_mon << 32         /* month:  8-bits */
-           | (uint64_t)tm->tm_mday << 24        /* mday:   8-bits */
-           | (uint64_t)tm->tm_hour << 16        /* hour:   8-bits */
-           | (uint64_t)tm->tm_min << 8          /* min:    8-bits */
-           | (uint64_t)tm->tm_sec;              /* sec:    8-bits */
+        | (uint64_t)tm->tm_mon << 32         /* month:  8-bits */
+        | (uint64_t)tm->tm_mday << 24        /* mday:   8-bits */
+        | (uint64_t)tm->tm_hour << 16        /* hour:   8-bits */
+        | (uint64_t)tm->tm_min << 8          /* min:    8-bits */
+        | (uint64_t)tm->tm_sec;              /* sec:    8-bits */
 }
 
 static void do_close(h2o_generator_t *_self, h2o_req_t *req)
@@ -136,9 +136,14 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req) {
 
     if (self->ranged.current_range == self->ranged.finished_range) {
         size_t range_end = *range_cur + *(range_cur + 1) - 1;
-        used_buf = sprintf(self->buf, "\r\n--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
-                           self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end,
-                           self->ranged.filesize);
+        if (H2O_LIKELY(self->ranged.current_range != 0))
+            used_buf = sprintf(self->buf, "\r\n--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
+                               self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end,
+                               self->ranged.filesize);
+        else
+            used_buf = sprintf(self->buf, "--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
+                               self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end,
+                               self->ranged.filesize);            
         self->ranged.current_range ++;
         lseek(self->fd, *range_cur, SEEK_SET);
     }
@@ -211,9 +216,14 @@ static int do_multirange_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_
     }
     if (self->ranged.current_range == self->ranged.finished_range) {
         size_t range_end = *range_cur + *(range_cur + 1) - 1;
-        used_buf = sprintf(buf->base, "\r\n--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
-                           self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end,
-                           self->ranged.filesize);
+        if (H2O_LIKELY(self->ranged.current_range != 0))
+            used_buf = sprintf(buf->base, "\r\n--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
+                               self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end,
+                               self->ranged.filesize);
+        else
+            used_buf = sprintf(buf->base, "--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
+                               self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end,
+                               self->ranged.filesize);
         self->ranged.current_range ++;
         lseek(self->fd, *range_cur, SEEK_SET);
     }
@@ -269,7 +279,7 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
         return NULL;
     is_gzip = 0;
 
-Opened:
+ Opened:
     if (fstat(fd, &st) != 0) {
         perror("fstat");
         close(fd);
@@ -507,7 +517,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     }
     return 0;
 
-Opened:
+ Opened:
     if ((if_none_match_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_NONE_MATCH, SIZE_MAX)) != -1) {
         h2o_iovec_t *if_none_match = &req->headers.entries[if_none_match_header_index].value;
         if (h2o_memis(if_none_match->base, if_none_match->len, generator->etag_buf, generator->etag_len))
@@ -573,7 +583,7 @@ Opened:
                 if (size_tmp == 0) final_content_len++;
                 while (size_tmp) {size_tmp /= 10; final_content_len++;}
             }
-            final_content_len += 8 + BOUNDARY_SIZE + size_fixed_each_part * range_count;
+            final_content_len += 8 + BOUNDARY_SIZE - 2 + size_fixed_each_part * range_count;
             generator->bytesleft = final_content_len;
         }
         do_send_file(generator, req, 206, "Partial Content", mime_type, is_get);
@@ -584,7 +594,7 @@ Opened:
     do_send_file(generator, req, 200, "OK", mime_type, is_get);
     return 0;
 
-NotModified:
+ NotModified:
     req->res.status = 304;
     req->res.reason = "Not Modified";
     h2o_send_inline(req, NULL, 0);

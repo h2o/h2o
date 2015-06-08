@@ -37,10 +37,17 @@ static int check_multirange_body(char *resbody, const char* boundary, const h2o_
 {
     char* bptr = resbody;
     h2o_iovec_t *eptr = expected;
+    int not_first_line = 0;
     while (partlen--) {
-        if (!h2o_memis(bptr, 4, H2O_STRLIT("\r\n--")))
+        if (not_first_line) {
+            if (!h2o_memis(bptr, 2, H2O_STRLIT("\r\n")))
+                return 0;
+            bptr += 2;
+        } else
+            not_first_line = 1;
+        if (!h2o_memis(bptr, 2, H2O_STRLIT("--")))
             return 0;
-        bptr += 4;
+        bptr += 2;
         if (!h2o_memis(bptr, BOUNDARY_SIZE, boundary, BOUNDARY_SIZE))
             return 0;
         bptr += 20;
@@ -215,6 +222,16 @@ static void test_process_range(void)
         ok(*ranges++ == 20);
         ok(*ranges == 181);
     }
+
+    { /* check a range with plenty of WS and COMMA */
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=\t,1-3 ,, ,5-9,"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ret == 2);
+        ok(*ranges++ == 1);
+        ok(*ranges++ == 3);
+        ok(*ranges++ == 5);
+        ok(*ranges == 5);
+    }
     
     h2o_mem_clear_pool(&testpool);
 }
@@ -309,158 +326,8 @@ static void test_if_match(void)
     free(etag.base);
 }
 
-void test_lib__handler__file_c()
+static void test_range_req(void)
 {
-    h2o_globalconf_t globalconf;
-    h2o_hostconf_t *hostconf;
-    h2o_pathconf_t *pathconf;
-
-    h2o_config_init(&globalconf);
-    hostconf = h2o_config_register_host(&globalconf, h2o_iovec_init(H2O_STRLIT("default")), 65535);
-    pathconf = h2o_config_register_path(hostconf, "/");
-    h2o_file_register(pathconf, "t/00unit/assets", NULL, NULL, 0);
-
-    h2o_context_init(&ctx, test_loop, &globalconf);
-
-    {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
-        h2o_loopback_run_loop(conn);
-        ok(conn->req.res.status == 200);
-        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/html"));
-        ok(conn->body->size == 0);
-        h2o_loopback_destroy(conn);
-    }
-    {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
-        h2o_loopback_run_loop(conn);
-        ok(conn->req.res.status == 200);
-        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/html"));
-        ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("hello html\n")));
-        h2o_loopback_destroy(conn);
-    }
-    {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index.html"));
-        h2o_loopback_run_loop(conn);
-        ok(conn->req.res.status == 200);
-        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/html"));
-        ok(conn->body->size == 0);
-        h2o_loopback_destroy(conn);
-    }
-    {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index.html"));
-        h2o_loopback_run_loop(conn);
-        ok(conn->req.res.status == 200);
-        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/html"));
-        ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("hello html\n")));
-        h2o_loopback_destroy(conn);
-    }
-    {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_loopback_run_loop(conn);
-        ok(conn->req.res.status == 200);
-        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
-        ok(conn->body->size == 0);
-        h2o_loopback_destroy(conn);
-    }
-    {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_loopback_run_loop(conn);
-        ok(conn->req.res.status == 200);
-        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
-        ok(conn->body->size == 1000);
-        ok(strcmp(sha1sum(conn->body->bytes, conn->body->size), "dfd3ae1f5c475555fad62efe42e07309fa45f2ed") == 0);
-        h2o_loopback_destroy(conn);
-    }
-    {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000000.txt"));
-        h2o_loopback_run_loop(conn);
-        ok(conn->req.res.status == 200);
-        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
-        ok(conn->body->size == 0);
-        h2o_loopback_destroy(conn);
-    }
-    {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000000.txt"));
-        h2o_loopback_run_loop(conn);
-        ok(conn->req.res.status == 200);
-        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
-        ok(conn->body->size == 1000000);
-        ok(strcmp(sha1sum(conn->body->bytes, conn->body->size), "00c8ab71d0914dce6a1ec2eaa0fda0df7044b2a2") == 0);
-        h2o_loopback_destroy(conn);
-    }
-    {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt/"));
-        h2o_loopback_run_loop(conn);
-        ok(conn->req.res.status == 200);
-        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
-        ok(conn->body->size == 0);
-        h2o_loopback_destroy(conn);
-    }
-    {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt/"));
-        h2o_loopback_run_loop(conn);
-        ok(conn->req.res.status == 200);
-        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
-        ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("hello text\n")));
-        h2o_loopback_destroy(conn);
-    }
-    {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt"));
-        h2o_loopback_run_loop(conn);
-        ok(conn->req.res.status == 301);
-        ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "/index_txt/"));
-        h2o_loopback_destroy(conn);
-    }
-    {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt"));
-        h2o_loopback_run_loop(conn);
-        ok(conn->req.res.status == 301);
-        ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "/index_txt/"));
-        h2o_loopback_destroy(conn);
-    }
-    {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt_as_dir/"));
-        h2o_loopback_run_loop(conn);
-        ok(conn->req.res.status == 301);
-        ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "/index_txt_as_dir/index.txt/"));
-        h2o_loopback_destroy(conn);
-    }
-    {
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt_as_dir/"));
-        h2o_loopback_run_loop(conn);
-        ok(conn->req.res.status == 301);
-        ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "/index_txt_as_dir/index.txt/"));
-        h2o_loopback_destroy(conn);
-    }
-    /* range request tests start */
     { /* check if accept-ranges is "bytes" */
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
@@ -470,7 +337,7 @@ void test_lib__handler__file_c()
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
         if (check_header(&conn->req.res, H2O_TOKEN_ACCEPT_RANGES, "none")) {
             ok(1);
-            goto FileSubtest;
+            return;
         }
         ok(check_header(&conn->req.res, H2O_TOKEN_ACCEPT_RANGES, "bytes"));
         ok(conn->body->size == 1000);
@@ -640,20 +507,203 @@ void test_lib__handler__file_c()
         memcpy(boundary, content_type.base + mimebaselen, BOUNDARY_SIZE);
         boundary[BOUNDARY_SIZE] = 0;
         expected[0].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
-        expected[0].len = sprintf(expected[0].base, "\r\n--%s\r\nContent-Type: %s\r\nContent-Range: bytes 0-9/1000\r\n\r\n%s",
-                                  boundary, "text/plain", "123456789\n");
+        expected[0].len = sprintf(expected[0].base, "Content-Type: %s\r\nContent-Range: bytes 0-9/1000\r\n\r\n%s",
+                                  "text/plain", "123456789\n");
         expected[1].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
-        expected[1].len = sprintf(expected[1].base, "\r\n--%s\r\nContent-Type: %s\r\nContent-Range: bytes 989-999/1000\r\n\r\n%s",
-                                  boundary, "text/plain", "\n123456789\n");
+        expected[1].len = sprintf(expected[1].base, "Content-Type: %s\r\nContent-Range: bytes 989-999/1000\r\n\r\n%s",
+                                  "text/plain", "\n123456789\n");
         ok(h2o_find_header(&conn->req.res.headers, H2O_TOKEN_CONTENT_RANGE, -1) == -1);
+        ok(conn->body->size == conn->req.res.content_length);
         ok(check_multirange_body(conn->body->bytes, boundary, expected, 2));
         h2o_loopback_destroy(conn);
     }
-    /* Range request test end */
-    FileSubtest:
+    { /* multiple ranges with plenty of WS and COMMA */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        ssize_t content_type_index;
+        h2o_iovec_t content_type, expected[2]={};
+        char boundary[BOUNDARY_SIZE+1];
+        size_t mimebaselen = strlen("multipart/byteranges; boundary=");
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=\t,1-3 ,, ,5-9,"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 206);
+        if ((content_type_index = h2o_find_header(&conn->req.res.headers, H2O_TOKEN_CONTENT_TYPE, -1)) == -1) {
+            ok(0);
+            return;
+        }
+        content_type = conn->req.res.headers.entries[content_type_index].value;
+        ok(h2o_memis(content_type.base, mimebaselen, "multipart/byteranges; boundary=", mimebaselen));
+        memcpy(boundary, content_type.base + mimebaselen, BOUNDARY_SIZE);
+        boundary[BOUNDARY_SIZE] = 0;
+        expected[0].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
+        expected[0].len = sprintf(expected[0].base, "Content-Type: %s\r\nContent-Range: bytes 1-3/1000\r\n\r\n%s",
+                                  "text/plain", "234");
+        expected[1].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
+        expected[1].len = sprintf(expected[1].base, "Content-Type: %s\r\nContent-Range: bytes 5-9/1000\r\n\r\n%s",
+                                  "text/plain", "6789\n");
+        ok(h2o_find_header(&conn->req.res.headers, H2O_TOKEN_CONTENT_RANGE, -1) == -1);
+        ok(conn->body->size == conn->req.res.content_length);
+        ok(check_multirange_body(conn->body->bytes, boundary, expected, 2));
+        h2o_loopback_destroy(conn);
+    }    
+}
+
+void test_lib__handler__file_c()
+{
+    h2o_globalconf_t globalconf;
+    h2o_hostconf_t *hostconf;
+    h2o_pathconf_t *pathconf;
+
+    h2o_config_init(&globalconf);
+    hostconf = h2o_config_register_host(&globalconf, h2o_iovec_init(H2O_STRLIT("default")), 65535);
+    pathconf = h2o_config_register_path(hostconf, "/");
+    h2o_file_register(pathconf, "t/00unit/assets", NULL, NULL, 0);
+
+    h2o_context_init(&ctx, test_loop, &globalconf);
+
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/html"));
+        ok(conn->body->size == 0);
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/html"));
+        ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("hello html\n")));
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index.html"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/html"));
+        ok(conn->body->size == 0);
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index.html"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/html"));
+        ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("hello html\n")));
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(conn->body->size == 0);
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(conn->body->size == 1000);
+        ok(strcmp(sha1sum(conn->body->bytes, conn->body->size), "dfd3ae1f5c475555fad62efe42e07309fa45f2ed") == 0);
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000000.txt"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(conn->body->size == 0);
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000000.txt"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(conn->body->size == 1000000);
+        ok(strcmp(sha1sum(conn->body->bytes, conn->body->size), "00c8ab71d0914dce6a1ec2eaa0fda0df7044b2a2") == 0);
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt/"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(conn->body->size == 0);
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt/"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("hello text\n")));
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 301);
+        ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "/index_txt/"));
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 301);
+        ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "/index_txt/"));
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("HEAD"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt_as_dir/"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 301);
+        ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "/index_txt_as_dir/index.txt/"));
+        h2o_loopback_destroy(conn);
+    }
+    {
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/index_txt_as_dir/"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 301);
+        ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "/index_txt_as_dir/index.txt/"));
+        h2o_loopback_destroy(conn);
+    }
     subtest("if-modified-since", test_if_modified_since);
     subtest("if-match", test_if_match);
     subtest("process_range()", test_process_range);
+    subtest("range request", test_range_req);
 
     h2o_context_dispose(&ctx);
     h2o_config_dispose(&globalconf);

@@ -40,6 +40,9 @@ size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t fil
     
     /* most range requests contain only one range */
     do {
+        while (H2O_UNLIKELY(*buf == ' ') || H2O_UNLIKELY(*buf == '\t') || H2O_UNLIKELY(*buf == ','))
+            buf ++;
+        if (H2O_UNLIKELY(buf == buf_end)) break;
         range_start = -1; range_count = 0;
         if (H2O_LIKELY(*buf >= '0') && H2O_LIKELY(*buf <= '9')) {
             range_start = h2o_strtosizefwd(&buf, buf_end - buf);
@@ -71,16 +74,6 @@ size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t fil
                 good_range = 0;
             }
             range_count -= range_start - 1;
-            if (H2O_UNLIKELY(buf < buf_end) && H2O_UNLIKELY(*buf != ',')) {
-                *ret = -1;
-                return NULL;
-            }
-            if (H2O_UNLIKELY(buf < buf_end) && H2O_UNLIKELY(*buf == ',')) {
-                do {
-                    buf ++;
-                    CHECK_EOF();
-                } while (*buf == ' ');
-            }
         } else if (H2O_LIKELY(*buf++ == '-')) {
             CHECK_EOF();
             if (H2O_UNLIKELY(*buf < '0') || H2O_UNLIKELY(*buf > '9')) {
@@ -94,15 +87,9 @@ size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t fil
 	    if (H2O_UNLIKELY(range_count > file_size))
                 range_count = file_size;
             range_start = file_size - range_count;
-            if (H2O_UNLIKELY(buf < buf_end) && H2O_UNLIKELY(*buf != ',')) {
+            if (H2O_UNLIKELY(*buf == '-')) {
                 *ret = -1;
                 return NULL;
-            }
-            if (H2O_UNLIKELY(buf < buf_end) && H2O_UNLIKELY(*buf == ',')) {
-                do {
-                    buf ++;
-                    CHECK_EOF();
-                } while (*buf == ' ');
             }
         } else {
             *ret = -1;
