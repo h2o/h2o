@@ -39,6 +39,12 @@ static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurato
     return h2o_configurator_scanf(cmd, node, "%" PRIu64, &self->vars->io_timeout);
 }
 
+static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct fastcgi_configurator_t *self = (void *)cmd->configurator;
+    return h2o_configurator_scanf(cmd, node, "%" PRIu64, &self->vars->keepalive_timeout);
+}
+
 static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct fastcgi_configurator_t *self = (void *)cmd->configurator;
@@ -124,6 +130,7 @@ void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf)
     /* set default vars */
     c->vars = c->_vars_stack;
     c->vars->io_timeout = H2O_DEFAULT_FASTCGI_IO_TIMEOUT;
+    c->vars->keepalive_timeout = 0;
 
     /* setup handlers */
     c->super.enter = on_config_enter;
@@ -134,4 +141,8 @@ void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf)
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_timeout_io);
+    h2o_configurator_define_command(&c->super, "fastcgi.timeout.keepalive",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_timeout_keepalive);
 }
