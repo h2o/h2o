@@ -78,7 +78,7 @@ static void test_process_range(void)
     h2o_mem_init_pool(&testpool);
 
     { /* check single range within filesize */
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=0-10"));
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes= 0-10"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ret == 1);
         ok(*ranges++ == 0);
@@ -173,7 +173,7 @@ static void test_process_range(void)
         ok(*ranges++ == 5);
     }
 
-    { /* this and next 4 check malformed ranges */
+    { /* this and next 5 check malformed ranges */
         testrange = h2o_iovec_init(H2O_STRLIT("bytes 20-1002"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ret >= -2);
@@ -189,6 +189,13 @@ static void test_process_range(void)
 
     {
         testrange = h2o_iovec_init(H2O_STRLIT("bytes=100-102, 90-102, -72-30,-22,95-"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ret >= -2);
+        ok(ranges == NULL);
+    }
+
+    {
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=10-12-13, 90-102, -72, -22, 95-"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ret >= -2);
         ok(ranges == NULL);
@@ -414,6 +421,19 @@ static void test_range_req(void)
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
         h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-0-10, 9-, -10"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 416);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes */1000"));
+        ok(conn->body->size == strlen("requested range not satisfiable"));
+        ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("requested range not satisfiable")));
+        h2o_loopback_destroy(conn);
+    }
+    { /* malformed range */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=0-10-12, 9-, -10"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 416);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));

@@ -74,6 +74,10 @@ size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t fil
                 good_range = 0;
             }
             range_count -= range_start - 1;
+            if (H2O_UNLIKELY(*buf == '-')) {
+                *ret = -1;
+                return NULL;
+            }
         } else if (H2O_LIKELY(*buf++ == '-')) {
             CHECK_EOF();
             if (H2O_UNLIKELY(*buf < '0') || H2O_UNLIKELY(*buf > '9')) {
