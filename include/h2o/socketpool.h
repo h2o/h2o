@@ -42,7 +42,10 @@ typedef struct st_h2o_socketpool_t {
                 h2o_iovec_t host;
                 h2o_iovec_t port;
             } named;
-            struct sockaddr_in sin;
+            struct {
+                struct sockaddr_storage bytes;
+                socklen_t len;
+            } sockaddr;
         };
         int is_named;
     } peer;
