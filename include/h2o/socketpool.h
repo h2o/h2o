@@ -70,7 +70,11 @@ typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr
 /**
  * initializes a socket loop
  */
-void h2o_socketpool_init(h2o_socketpool_t *pool, h2o_iovec_t host, uint16_t port, size_t capacity);
+void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa, socklen_t salen, size_t capacity);
+/**
+ * initializes a socket loop
+ */
+void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, uint16_t port, size_t capacity);
 /**
  * disposes of a socket loop
  */

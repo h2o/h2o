@@ -121,7 +121,8 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
     h2o_url_copy(NULL, &self->upstream, upstream);
     if (config->keepalive_timeout != 0) {
         self->sockpool = h2o_mem_alloc(sizeof(*self->sockpool));
-        h2o_socketpool_init(self->sockpool, self->upstream.host, h2o_url_get_port(&self->upstream), SIZE_MAX /* FIXME */);
+        h2o_socketpool_init_by_hostport(self->sockpool, self->upstream.host, h2o_url_get_port(&self->upstream),
+                                        SIZE_MAX /* FIXME */);
     }
     self->config = *config;
 }
