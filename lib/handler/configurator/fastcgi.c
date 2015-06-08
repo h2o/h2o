@@ -48,7 +48,7 @@ static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_conf
 static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct fastcgi_configurator_t *self = (void *)cmd->configurator;
-    const char *hostname = NULL, *servname = NULL, *type = "tcp";
+    const char *hostname = "127.0.0.1", *servname = NULL, *type = "tcp";
 
     /* fetch servname (and hostname) */
     switch (node->type) {
@@ -96,9 +96,16 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
         }
         sun.sun_family = AF_UNIX;
         strcpy(sun.sun_path, servname);
-        h2o_fastcgi_register(ctx->pathconf, (void *)&sun, sizeof(sun), self->vars);
+        h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sun, sizeof(sun), self->vars);
+    } else if (strcmp(type, "tcp") == 0) {
+        /* tcp socket */
+        uint16_t port;
+        if (sscanf(servname, "%" SCNu16, &port) != 1) {
+            h2o_configurator_errprintf(cmd, node, "invaild port number:%s", servname);
+            return -1;
+        }
+        h2o_fastcgi_register_by_hostport(ctx->pathconf, hostname, port, self->vars);
     } else {
-        /* TODO add support for TCP */
         h2o_configurator_errprintf(cmd, node, "unknown listen type: %s", type);
         return -1;
     }

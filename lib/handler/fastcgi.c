@@ -686,17 +686,33 @@ static void on_context_dispose(h2o_handler_t *_handler, h2o_context_t *ctx)
     free(handler_ctx);
 }
 
-h2o_fastcgi_handler_t *h2o_fastcgi_register(h2o_pathconf_t *pathconf, struct sockaddr *sa, socklen_t salen,
-                                            h2o_fastcgi_config_vars_t *vars)
+static h2o_fastcgi_handler_t *register_common(h2o_pathconf_t *pathconf, h2o_fastcgi_config_vars_t *vars)
 {
     h2o_fastcgi_handler_t *handler = (void *)h2o_create_handler(pathconf, sizeof(*handler));
 
     handler->super.on_context_init = on_context_init;
     handler->super.on_context_dispose = on_context_dispose;
     handler->super.on_req = on_req;
-    h2o_socketpool_init_by_address(&handler->sockpool, sa, salen, SIZE_MAX /* FIXME */);
     handler->config.io_timeout = vars->io_timeout;
     handler->config.keepalive_timeout = vars->keepalive_timeout;
 
+    return handler;
+}
+
+h2o_fastcgi_handler_t *h2o_fastcgi_register_by_hostport(h2o_pathconf_t *pathconf, const char *host, uint16_t port,
+                                                        h2o_fastcgi_config_vars_t *vars)
+{
+    h2o_fastcgi_handler_t *handler = register_common(pathconf, vars);
+
+    h2o_socketpool_init_by_hostport(&handler->sockpool, h2o_iovec_init(host, strlen(host)), port, SIZE_MAX /* FIXME */);
+    return handler;
+}
+
+h2o_fastcgi_handler_t *h2o_fastcgi_register_by_address(h2o_pathconf_t *pathconf, struct sockaddr *sa, socklen_t salen,
+                                                       h2o_fastcgi_config_vars_t *vars)
+{
+    h2o_fastcgi_handler_t *handler = register_common(pathconf, vars);
+
+    h2o_socketpool_init_by_address(&handler->sockpool, sa, salen, SIZE_MAX /* FIXME */);
     return handler;
 }
