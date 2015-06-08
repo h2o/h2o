@@ -27,9 +27,9 @@ static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *i
     size_t i;
 
     for (i = 0; i != inbufcnt; ++i) {
-        h2o_buffer_reserve(&conn->body, inbufs->len);
-        memcpy(conn->body->bytes + conn->body->size, inbufs->base, inbufs->len);
-        conn->body->size += inbufs->len;
+        h2o_buffer_reserve(&conn->body, inbufs[i].len);
+        memcpy(conn->body->bytes + conn->body->size, inbufs[i].base, inbufs[i].len);
+        conn->body->size += inbufs[i].len;
     }
 
     if (is_final)
