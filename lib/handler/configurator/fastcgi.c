@@ -20,14 +20,28 @@
  * IN THE SOFTWARE.
  */
 #include <arpa/inet.h>
+#include <inttypes.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/un.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
 
+struct fastcgi_configurator_t {
+    h2o_configurator_t super;
+    h2o_fastcgi_config_vars_t *vars;
+    h2o_fastcgi_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+};
+
+static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct fastcgi_configurator_t *self = (void *)cmd->configurator;
+    return h2o_configurator_scanf(cmd, node, "%" PRIu64, &self->vars->io_timeout);
+}
+
 static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
+    struct fastcgi_configurator_t *self = (void *)cmd->configurator;
     const char *hostname = NULL, *servname = NULL, *type = "tcp";
 
     /* fetch servname (and hostname) */
@@ -76,18 +90,48 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
         }
         sun.sun_family = AF_UNIX;
         strcpy(sun.sun_path, servname);
-        h2o_fastcgi_register(ctx->pathconf, (void *)&sun, sizeof(sun));
+        h2o_fastcgi_register(ctx->pathconf, (void *)&sun, sizeof(sun), self->vars);
     } else {
         /* TODO add support for TCP */
         h2o_configurator_errprintf(cmd, node, "unknown listen type: %s", type);
         return -1;
-   }
+    }
 
+    return 0;
+}
+
+static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct fastcgi_configurator_t *self = (void *)_self;
+
+    memcpy(self->vars + 1, self->vars, sizeof(*self->vars));
+    ++self->vars;
+    return 0;
+}
+
+static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct fastcgi_configurator_t *self = (void *)_self;
+
+    --self->vars;
     return 0;
 }
 
 void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf)
 {
-    h2o_configurator_t *c = h2o_configurator_create(conf, sizeof(*c));
-    h2o_configurator_define_command(c, "fastcgi.connect", H2O_CONFIGURATOR_FLAG_PATH, on_config_connect);
+    struct fastcgi_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
+
+    /* set default vars */
+    c->vars = c->_vars_stack;
+    c->vars->io_timeout = H2O_DEFAULT_FASTCGI_IO_TIMEOUT;
+
+    /* setup handlers */
+    c->super.enter = on_config_enter;
+    c->super.exit = on_config_exit;
+
+    h2o_configurator_define_command(&c->super, "fastcgi.connect", H2O_CONFIGURATOR_FLAG_PATH, on_config_connect);
+    h2o_configurator_define_command(&c->super, "fastcgi.timeout.io",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_timeout_io);
 }
