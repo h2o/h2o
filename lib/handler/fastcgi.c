@@ -448,6 +448,13 @@ static int fill_headers(h2o_req_t *req, struct phr_header *headers, size_t num_h
     return 0;
 }
 
+static void append_content(struct st_fcgi_generator_t *generator, const void *src, size_t len)
+{
+    h2o_iovec_t reserved = h2o_buffer_reserve(&generator->resp.receiving, len);
+    memcpy(reserved.base, src, len);
+    generator->resp.receiving->size += len;
+}
+
 static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_fcgi_record_header_t *header)
 {
     h2o_buffer_t *input = generator->sock->input;
@@ -460,8 +467,7 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
 
     if (generator->sent_headers) {
         /* simply accumulate the data to response buffer */
-        memcpy(h2o_buffer_reserve(&generator->resp.receiving, header->contentLength).base, input->bytes + FCGI_RECORD_HEADER_SIZE,
-               header->contentLength);
+        append_content(generator, input->bytes + FCGI_RECORD_HEADER_SIZE, header->contentLength);
         return 0;
     }
 
@@ -496,9 +502,7 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
     if (generator->resp.receiving->size == 0) {
         size_t leftlen = header->contentLength - parse_result;
         if (leftlen != 0) {
-            memcpy(h2o_buffer_reserve(&generator->resp.receiving, leftlen).base,
-                   input->bytes + FCGI_RECORD_HEADER_SIZE + parse_result, leftlen);
-            generator->resp.receiving->size = leftlen;
+            append_content(generator, input->bytes + FCGI_RECORD_HEADER_SIZE + parse_result, leftlen);
         }
     } else {
         h2o_buffer_consume(&generator->resp.receiving, parse_result);
