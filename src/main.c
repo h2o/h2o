@@ -117,6 +117,7 @@ static struct {
     char *error_log;
     int max_connections;
     size_t num_threads;
+    int tfo_queues;
     struct {
         pthread_t tid;
         h2o_context_t ctx;
@@ -139,6 +140,7 @@ static struct {
     NULL, /* pid_file */
     NULL, /* error_log */
     1024, /* max_connections */
+    0,    /* initialized in main() */
     0,    /* initialized in main() */
     NULL, /* thread_ids */
     0,    /* shutdown_requested */
@@ -755,6 +757,13 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, cons
             goto Error;
     }
 #endif
+#ifdef TCP_FASTOPEN
+    { /* set TCP_FASTOPEN */
+        /* When tfo_queues is zero TFO is always disabled */
+        if (conf.tfo_queues > 0 && setsockopt(fd, IPPROTO_TCP, TCP_FASTOPEN, (const void *)&conf.tfo_queues, sizeof(conf.tfo_queues)) != 0)
+            goto Error;
+    }
+#endif
     if (bind(fd, addr, addrlen) != 0)
         goto Error;
     if (listen(fd, H2O_SOMAXCONN) != 0)
@@ -1015,6 +1024,14 @@ static int on_config_num_name_resolution_threads(h2o_configurator_command_t *cmd
     }
     return 0;
 }
+
+static int on_config_tcp_fastopen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    if (h2o_configurator_scanf(cmd, node, "%d", &conf.tfo_queues) != 0)
+        return -1;
+    return 0;
+}
+
 
 yoml_t *load_config(const char *fn)
 {
@@ -1366,6 +1383,8 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads);
         h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
                                         on_config_num_name_resolution_threads);
+        h2o_configurator_define_command(c, "tcp-fastopen", H2O_CONFIGURATOR_FLAG_GLOBAL,
+                                        on_config_tcp_fastopen);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
@@ -1383,6 +1402,7 @@ int main(int argc, char **argv)
     int error_log_fd = -1;
 
     conf.num_threads = h2o_numproc();
+    conf.tfo_queues = 0;
     h2o_hostinfo_max_threads = H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS;
     setup_configurators();
 
