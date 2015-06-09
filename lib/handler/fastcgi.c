@@ -358,13 +358,14 @@ static void close_generator(struct st_fcgi_generator_t *generator)
 
 static void do_send(struct st_fcgi_generator_t *generator)
 {
-    h2o_iovec_t vec;
+    h2o_iovec_t vecs[1];
+    size_t veccnt;
     int is_final;
 
     assert(generator->resp.inflight->size == 0);
 
     /* just return if nothing to send */
-    if (generator->sock != NULL && generator->sock->input->size == 0)
+    if (generator->sock != NULL && generator->resp.receiving->bytes == 0)
         return;
 
     { /* swap the buffers */
@@ -374,8 +375,12 @@ static void do_send(struct st_fcgi_generator_t *generator)
     }
 
     /* send */
-    vec = h2o_iovec_init(generator->resp.inflight->bytes, generator->resp.inflight->size);
-
+    if (generator->resp.inflight->size != 0) {
+        vecs[0] = h2o_iovec_init(generator->resp.inflight->bytes, generator->resp.inflight->size);
+        veccnt = 1;
+    } else {
+        veccnt = 0;
+    }
     if (generator->sock == NULL) {
         is_final = 1;
         if (!(generator->leftsize == 0 || generator->leftsize == SIZE_MAX))
@@ -383,7 +388,7 @@ static void do_send(struct st_fcgi_generator_t *generator)
     } else {
         is_final = 0;
     }
-    h2o_send(generator->req, &vec, 1, is_final);
+    h2o_send(generator->req, vecs, veccnt, is_final);
 }
 
 static void send_eos_and_close(struct st_fcgi_generator_t *generator, int can_keepalive)
