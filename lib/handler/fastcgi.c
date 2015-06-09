@@ -726,12 +726,21 @@ static void on_context_dispose(h2o_handler_t *_handler, h2o_context_t *ctx)
     free(handler_ctx);
 }
 
+static void on_handler_dispose(h2o_handler_t *_handler)
+{
+    h2o_fastcgi_handler_t *handler = (void *)_handler;
+
+    h2o_socketpool_dispose(&handler->sockpool);
+    free(handler);
+}
+
 static h2o_fastcgi_handler_t *register_common(h2o_pathconf_t *pathconf, h2o_fastcgi_config_vars_t *vars)
 {
     h2o_fastcgi_handler_t *handler = (void *)h2o_create_handler(pathconf, sizeof(*handler));
 
     handler->super.on_context_init = on_context_init;
     handler->super.on_context_dispose = on_context_dispose;
+    handler->super.dispose = on_handler_dispose;
     handler->super.on_req = on_req;
     handler->config.io_timeout = vars->io_timeout;
     handler->config.keepalive_timeout = vars->keepalive_timeout;
