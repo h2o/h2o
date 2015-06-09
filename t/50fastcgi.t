@@ -62,12 +62,16 @@ EOT
             $doit->('http', $server->{port});
             $doit->('https', $server->{tls_port});
         };
+        $server = undef;
     };
 }
 
 doit(0, 0);
-doit(0, 1);
 doit(1, 0);
-doit(1, 1);
+
+if ($ENV{TEST_FCGI_KEEPALIVE}) {
+    doit(1, 1);
+    doit(1, 1);
+}
 
 done_testing();
