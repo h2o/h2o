@@ -134,14 +134,12 @@ static void test_process_range(void)
     { /* check ranges entirely out of filesize */
         testrange = h2o_iovec_init(H2O_STRLIT("bytes=100-102"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
-        ok(ret == 0);
         ok(ranges == NULL);
     }
 
     { /* check ranges with "negative" length */
         testrange = h2o_iovec_init(H2O_STRLIT("bytes=70-21"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
-        ok(ret == 0);
         ok(ranges == NULL);
     }
     
@@ -173,45 +171,45 @@ static void test_process_range(void)
         ok(*ranges++ == 5);
     }
 
-    { /* this and next 5 check malformed ranges */
+    { /* this and next 6 check malformed ranges */
         testrange = h2o_iovec_init(H2O_STRLIT("bytes 20-1002"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
-        ok(ret >= -2);
         ok(ranges == NULL);
     }
 
     {
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes="));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ranges == NULL);
+    }
+    
+    {
         testrange = h2o_iovec_init(H2O_STRLIT("bsdfeadsfjwleakjf"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
-        ok(ret >= -2);
         ok(ranges == NULL);
     }
 
     {
         testrange = h2o_iovec_init(H2O_STRLIT("bytes=100-102, 90-102, -72-30,-22,95-"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
-        ok(ret >= -2);
         ok(ranges == NULL);
     }
 
     {
         testrange = h2o_iovec_init(H2O_STRLIT("bytes=10-12-13, 90-102, -72, -22, 95-"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
-        ok(ret >= -2);
         ok(ranges == NULL);
     }
 
     {
         testrange = h2o_iovec_init(H2O_STRLIT("bytes=100-102, 90-102, 70-39, -22$"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
-        ok(ret >= -2);
         ok(ranges == NULL);
     }
 
     {
         testrange = h2o_iovec_init(H2O_STRLIT("bytes=-0"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
-        ok(ret == 0);
         ok(ranges == NULL);
     }
 
@@ -243,13 +241,12 @@ static void test_process_range(void)
     {
         testrange = h2o_iovec_init(H2O_STRLIT("bytes= 1-3"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
-        ok(ret >= -2);
         ok(ranges == NULL);
     }
+
     {
         testrange = h2o_iovec_init(H2O_STRLIT("bytes=1-3 5-10"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
-        ok(ret >= -2);
         ok(ranges == NULL);
     }
 

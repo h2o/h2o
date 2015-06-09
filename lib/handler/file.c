@@ -142,12 +142,8 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req) {
                                self->ranged.filesize);
         self->ranged.current_range ++;
         rret = lseek(self->fd, *range_cur, SEEK_SET);
-        if (rret == -1) {
-            req->http1_is_persistent = 0;
-            h2o_send(req, NULL, 0, 1);
-            do_close(&self->super, req);
-            return;
-        }
+        if (rret == -1)
+            goto Error;
         self->bytesleft = * ++range_cur;
     }
     rlen = self->bytesleft;
@@ -156,6 +152,7 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req) {
     while ((rret = read(self->fd, self->buf + used_buf, rlen)) == -1 && errno == EINTR)
         ;
     if (rret == -1) {
+    Error:
         req->http1_is_persistent = 0;
         h2o_send(req, NULL, 0, 1);
         do_close(&self->super, req);
@@ -381,7 +378,105 @@ static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len, i
     return 0;
 }
 
-size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t file_size, size_t* ret);
+size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t file_size, size_t* ret)
+{
+#define CHECK_EOF()                             \
+    if (buf == buf_end)                         \
+        return NULL;
+
+
+#define CHECK_OVERFLOW(range)                   \
+    if (range == SIZE_MAX)                      \
+        return NULL;
+
+    size_t range_start = SIZE_MAX, range_count = 0;
+    char *buf = range_value->base, *buf_end = buf + range_value->len;
+    int needs_comma = 0, range_has_end;
+    H2O_VECTOR(size_t) ranges = {};
+
+    if (range_value->len < 6 || memcmp(buf, "bytes=", 6) != 0)
+        return NULL;
+
+    buf += 6;
+    CHECK_EOF();
+    
+    /* most range requests contain only one range */
+    do {
+        while (1) {
+            if (*buf != ',') {
+                if (needs_comma)
+                    return NULL;
+                break;
+            }
+            needs_comma = 0;
+            buf ++;
+            while (H2O_UNLIKELY(*buf == ' ') || H2O_UNLIKELY(*buf == '\t')) {
+                buf ++;
+                CHECK_EOF();
+            }
+        }
+        if (H2O_UNLIKELY(buf == buf_end)) break;
+        range_start = SIZE_MAX; range_count = 0;
+        if (H2O_LIKELY(*buf >= '0') && H2O_LIKELY(*buf <= '9')) {
+            range_has_end = 1;
+            range_start = h2o_strtosizefwd(&buf, buf_end - buf);
+            CHECK_OVERFLOW(range_start);
+            CHECK_EOF();
+            if (*buf++ != '-')
+                return NULL;
+	    if (H2O_UNLIKELY(range_start >= file_size)) {
+                range_start = SIZE_MAX;
+	    }
+            if (H2O_UNLIKELY(buf == buf_end)) {
+                range_count = file_size - range_start;
+                range_has_end = 0;
+            }
+            if (H2O_UNLIKELY(*buf < '0') || H2O_UNLIKELY(*buf > '9')) {
+                range_count = file_size - range_start;
+                range_has_end = 0;
+            }
+            if (range_has_end) {
+                range_count = h2o_strtosizefwd(&buf, buf_end - buf);
+                CHECK_OVERFLOW(range_count);
+                if (H2O_UNLIKELY(range_count > file_size - 1))
+                    range_count = file_size - 1;
+                if (H2O_UNLIKELY(range_start > range_count)) {
+                    range_start = SIZE_MAX;
+                }
+                range_count -= range_start - 1;
+            }
+        } else if (H2O_LIKELY(*buf++ == '-')) {
+            CHECK_EOF();
+            if (H2O_UNLIKELY(*buf < '0') || H2O_UNLIKELY(*buf > '9'))
+                return NULL;
+            range_count = h2o_strtosizefwd(&buf, buf_end - buf);
+            CHECK_OVERFLOW(range_count);
+	    if (H2O_UNLIKELY(range_count > file_size))
+                range_count = file_size;
+            range_start = file_size - range_count;
+            if (H2O_UNLIKELY(range_count == 0))
+                range_start = SIZE_MAX;
+        } else {
+            return NULL;
+        }
+
+        if (H2O_LIKELY(range_start != SIZE_MAX)) {
+            h2o_vector_reserve(pool, (void*)&ranges, sizeof(ranges.entries[0]), ranges.size + 2);
+            ranges.entries[ranges.size++] = range_start;
+            ranges.entries[ranges.size++] = range_count;
+        }
+        if (buf != buf_end)
+            while (H2O_UNLIKELY(*buf == ' ') || H2O_UNLIKELY(*buf == '\t')) {
+                buf ++;
+                CHECK_EOF();
+            }
+        needs_comma = 1;
+    } while (H2O_UNLIKELY(buf < buf_end));
+    *ret = ranges.size / 2;
+    return ranges.entries;
+#undef CHECK_EOF
+#undef CHECK_OVERFLOW
+}
 
 static void h2o_gen_rand_string(h2o_iovec_t *s)
 {
