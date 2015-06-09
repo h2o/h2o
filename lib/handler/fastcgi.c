@@ -193,12 +193,14 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs)
         int l = sprintf(buf, "%zu", req->entity.len);
         append_pair(&req->pool, vecs, H2O_STRLIT("CONTENT_LENGTH"), buf, (size_t)l);
     }
-    /* TODO: PATH_INFO & PATH_TRANSLATED */
-    /* QUERY_STRING */
+    /* TODO: PATH_TRANSLATED */
+    /* QUERY_STRING (and adjust PATH_INFO) */
     if (req->query_at != SIZE_MAX) {
+        append_pair(&req->pool, vecs, H2O_STRLIT("PATH_INFO"), req->path.base, req->query_at);
         append_pair(&req->pool, vecs, H2O_STRLIT("QUERY_STRING"), req->path.base + req->query_at + 1,
                     req->path.len - (req->query_at + 1));
     } else {
+        append_pair(&req->pool, vecs, H2O_STRLIT("PATH_INFO"), req->path.base, req->path.len);
         append_pair(&req->pool, vecs, H2O_STRLIT("QUERY_STRING"), NULL, 0);
     }
     /* REMOTE_ADDR & REMOTE_PORT */
@@ -234,8 +236,8 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs)
     /* SERVER_SOFTWARE */
     append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_SOFTWARE"), req->conn->ctx->globalconf->server_name.base,
                 req->conn->ctx->globalconf->server_name.len);
-    /* SCRIPT_FILENAME */
-    append_pair(&req->pool, vecs, H2O_STRLIT("SCRIPT_NAME"), req->path_normalized.base, req->path_normalized.len);
+    /* SCRIPT_NAME */
+    append_pair(&req->pool, vecs, H2O_STRLIT("SCRIPT_NAME"), H2O_STRLIT(""));
     { /* headers */
         const h2o_header_t *h = req->headers.entries, *h_end = h + req->headers.size;
         for (; h != h_end; ++h) {
