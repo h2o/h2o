@@ -78,7 +78,7 @@ static void test_process_range(void)
     h2o_mem_init_pool(&testpool);
 
     { /* check single range within filesize */
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes= 0-10"));
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=, 0-10"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ret == 1);
         ok(*ranges++ == 0);
@@ -231,13 +231,36 @@ static void test_process_range(void)
     }
 
     { /* check a range with plenty of WS and COMMA */
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=\t,1-3 ,, ,5-9,"));
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=,\t,1-3 ,, ,5-9,"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ret == 2);
         ok(*ranges++ == 1);
         ok(*ranges++ == 3);
         ok(*ranges++ == 5);
         ok(*ranges == 5);
+    }
+
+    {
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes= 1-3"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ret >= -2);
+        ok(ranges == NULL);
+    }
+    {
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=1-3 5-10"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ret >= -2);
+        ok(ranges == NULL);
+    }
+
+    {
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=1-\t,5-10"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ret == 2);
+        ok(*ranges++ == 1);
+        ok(*ranges++ == 99);
+        ok(*ranges++ == 5);
+        ok(*ranges == 6);
     }
     
     h2o_mem_clear_pool(&testpool);
@@ -545,7 +568,7 @@ static void test_range_req(void)
         size_t mimebaselen = strlen("multipart/byteranges; boundary=");
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=\t,1-3 ,, ,5-9,"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=,\t,1-3 ,, ,5-9,"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 206);
         if ((content_type_index = h2o_find_header(&conn->req.res.headers, H2O_TOKEN_CONTENT_TYPE, -1)) == -1) {
