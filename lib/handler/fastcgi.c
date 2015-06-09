@@ -73,6 +73,7 @@ struct st_fcgi_generator_t {
     h2o_socketpool_connect_request_t *connect_req;
     h2o_socket_t *sock;
     int sent_headers;
+    size_t leftsize; /* remaining amount of the content to receive (or SIZE_MAX if unknown) */
     struct {
         h2o_buffer_t *inflight;
         h2o_buffer_t *receiving;
@@ -358,6 +359,7 @@ static void close_generator(struct st_fcgi_generator_t *generator)
 static void do_send(struct st_fcgi_generator_t *generator)
 {
     h2o_iovec_t vec;
+    int is_final;
 
     assert(generator->resp.inflight->size == 0);
 
@@ -373,7 +375,15 @@ static void do_send(struct st_fcgi_generator_t *generator)
 
     /* send */
     vec = h2o_iovec_init(generator->resp.inflight->bytes, generator->resp.inflight->size);
-    h2o_send(generator->req, &vec, 1, generator->sock == NULL);
+
+    if (generator->sock == NULL) {
+        is_final = 1;
+        if (!(generator->leftsize == 0 || generator->leftsize == SIZE_MAX))
+            generator->req->http1_is_persistent = 0;
+    } else {
+        is_final = 0;
+    }
+    h2o_send(generator->req, &vec, 1, is_final);
 }
 
 static void send_eos_and_close(struct st_fcgi_generator_t *generator, int can_keepalive)
@@ -414,20 +424,33 @@ static int fill_headers(h2o_req_t *req, struct phr_header *headers, size_t num_h
     /* set the defaults */
     req->res.status = 200;
     req->res.reason = "OK";
+    req->res.content_length = SIZE_MAX;
 
     for (i = 0; i != num_headers; ++i) {
         const h2o_token_t *token;
         h2o_strtolower((char *)headers[i].name, headers[i].name_len);
         if ((token = h2o_lookup_token(headers[i].name, headers[i].name_len)) != NULL) {
-            /*
+            if (token == H2O_TOKEN_CONTENT_LENGTH) {
+                if (req->res.content_length != SIZE_MAX) {
+                    h2o_req_log_error(req, MODULE_NAME, "received multiple content-length headers from fcgi");
+                    return -1;
+                }
+                if ((req->res.content_length = h2o_strtosize(headers[i].value, headers[i].value_len)) == SIZE_MAX) {
+                    h2o_req_log_error(req, MODULE_NAME, "failed to parse content-length header sent from fcgi: %.*s",
+                                      (int)headers[i].value_len, headers[i].value);
+                    return -1;
+                }
+            } else {
+                /*
                 RFC 3875 defines three headers to have special meaning: Content-Type, Status, Location.
                 Status is handled as below.
                 Content-Type does not seem to have any need to be handled specially.
-                RFC suggests abs-path-style Location headers should trigger an internal redirection, but is that how the web serers
+                RFC suggests abs-path-style Location headers should trigger an internal redirection, but is that how the web servers
                 work?
-             */
-            h2o_add_header_token(&req->pool, &req->res.headers, token,
-                                 h2o_strdup(&req->pool, headers[i].value, headers[i].value_len).base, headers[i].value_len);
+                 */
+                h2o_add_header_token(&req->pool, &req->res.headers, token,
+                                     h2o_strdup(&req->pool, headers[i].value, headers[i].value_len).base, headers[i].value_len);
+            }
         } else if (h2o_memis(headers[i].name, headers[i].name_len, H2O_STRLIT("status"))) {
             h2o_iovec_t value = h2o_iovec_init(headers[i].value, headers[i].value_len);
             if (value.len < 3 || !(_isdigit(value.base[0]) && _isdigit(value.base[1]) && _isdigit(value.base[2])) ||
@@ -450,6 +473,16 @@ static int fill_headers(h2o_req_t *req, struct phr_header *headers, size_t num_h
 
 static void append_content(struct st_fcgi_generator_t *generator, const void *src, size_t len)
 {
+    /* do not accumulate more than content-length bytes */
+    if (generator->leftsize != SIZE_MAX) {
+        if (generator->leftsize < len) {
+            len = generator->leftsize;
+            if (len == 0)
+                return;
+        }
+        generator->leftsize -= len;
+    }
+
     h2o_iovec_t reserved = h2o_buffer_reserve(&generator->resp.receiving, len);
     memcpy(reserved.base, src, len);
     generator->resp.receiving->size += len;
@@ -495,6 +528,7 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
     /* fill-in the headers, and start the response */
     if (fill_headers(generator->req, headers, num_headers) != 0)
         return -1;
+    generator->leftsize = generator->req->res.content_length;
     h2o_start_response(generator->req, &generator->super);
     generator->sent_headers = 1;
 
