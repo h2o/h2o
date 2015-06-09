@@ -42,7 +42,7 @@ static void test_build_request(void)
                    H2O_STRLIT("Mozilla/5.0 (X11; Linux) KHTML/4.9.1 (like Gecko) Konqueror/4.9"));
 
     /* build with max_record_size=65535 */
-    build_request(&conn->req, &vecs, 0x1234, 65535);
+    build_request(&conn->req, &vecs, 0x1234, 65535, 0);
     ok(vecs.size == 5);
     ok(h2o_memis(vecs.entries[0].base, vecs.entries[0].len, H2O_STRLIT("\x01\x01\x12\x34\x00\x08\x00\x00"
                                                                        "\x00\x01\0\0\0\0\0\0")));
@@ -64,7 +64,7 @@ static void test_build_request(void)
     /* build with max_record_size=64, and content */
     conn->req.entity = h2o_iovec_init(H2O_STRLIT("The above copyright notice and this permission notice shall be included in all "
                                                  "copies or substantial portions of the Software."));
-    build_request(&conn->req, &vecs, 0x1234, 64);
+    build_request(&conn->req, &vecs, 0x1234, 64, 0);
     ok(vecs.size == 17);
     ok(h2o_memis(vecs.entries[0].base, vecs.entries[0].len, H2O_STRLIT("\x01\x01\x12\x34\x00\x08\x00\x00"
                                                                        "\x00\x01\0\0\0\0\0\0")));
