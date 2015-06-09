@@ -396,6 +396,7 @@
 		10BCF2FC1B168CAE0076939D /* fastcgi.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = fastcgi.c; sourceTree = "<group>"; };
 		10BCF2FE1B1A892F0076939D /* fastcgi.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = fastcgi.c; sourceTree = "<group>"; };
 		10BCF3001B214C460076939D /* fastcgi.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = fastcgi.c; sourceTree = "<group>"; };
+		10C5A6311B268632006094A6 /* 50fastcgi.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50fastcgi.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10D0903919F0A51C0043D458 /* memory.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = memory.h; sourceTree = "<group>"; };
 		10D0903D19F0A8190043D458 /* socket.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = socket.h; sourceTree = "<group>"; };
 		10D0904019F0B9CD0043D458 /* timeout.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = timeout.h; sourceTree = "<group>"; };
@@ -991,6 +992,7 @@
 				10AA2EB31A94B66D004322AC /* 40virtual-host.t */,
 				10AA2EB11A931409004322AC /* 50access-log.t */,
 				104B9A541A60773E009EEE64 /* 50expires.t */,
+				10C5A6311B268632006094A6 /* 50fastcgi.t */,
 				105534F61A460EF600627ECB /* 50file-config.t */,
 				1058C87F1AA42568008D6180 /* 50headers.t */,
 				105534F71A460F2E00627ECB /* 50mimemap.t */,
