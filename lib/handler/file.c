@@ -381,7 +381,7 @@ static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len, i
     return 0;
 }
 
-size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t file_size, size_t *ret)
+static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t file_size, size_t *ret)
 {
 #define CHECK_EOF()                                                                                                                \
     if (buf == buf_end)                                                                                                            \
@@ -470,7 +470,7 @@ size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t fil
 #undef CHECK_OVERFLOW
 }
 
-static void h2o_gen_rand_string(h2o_iovec_t *s)
+static void gen_rand_string(h2o_iovec_t *s)
 {
     int i;
     static const char alphanum[] = "0123456789"
@@ -606,7 +606,7 @@ Opened:
             size_t final_content_len = 0, size_tmp = 0, size_fixed_each_part, i;
             generator->ranged.boundary.base = h2o_mem_alloc_pool(&req->pool, BOUNDARY_SIZE + 1);
             generator->ranged.boundary.len = BOUNDARY_SIZE;
-            h2o_gen_rand_string(&generator->ranged.boundary);
+            gen_rand_string(&generator->ranged.boundary);
             i = generator->bytesleft;
             while (i) {
                 i /= 10;
