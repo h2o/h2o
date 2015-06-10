@@ -97,14 +97,20 @@ Error:
 
 size_t h2o_strtosizefwd(char **s, size_t len)
 {
-    uint64_t v = 0, c = 0;
+    uint64_t v, c;
     char *p = *s, *p_end = *s + len;
 
     if (len == 0)
         goto Error;
 
+    int ch = *p++;
+    if (!('0' <= ch && ch <= '9'))
+        goto Error;
+    v = ch - '0';
+    c = 1;
+
     while (1) {
-        int ch = *p;
+        ch = *p;
         if (!('0' <= ch && ch <= '9'))
             break;
         v *= 10;
