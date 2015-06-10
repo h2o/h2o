@@ -60,6 +60,7 @@
 /* simply use a large value, and let the kernel clip it to the internal max */
 #define H2O_SOMAXCONN (65535)
 
+#define H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE 4096
 #define H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS 32
 
 struct listener_ssl_config_t {
@@ -1402,7 +1403,7 @@ int main(int argc, char **argv)
     int error_log_fd = -1;
 
     conf.num_threads = h2o_numproc();
-    conf.tfo_queues = 0;
+    conf.tfo_queues = H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE;
     h2o_hostinfo_max_threads = H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS;
     setup_configurators();
 
