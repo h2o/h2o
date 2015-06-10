@@ -25,10 +25,55 @@
 
 static h2o_context_t ctx;
 
+static int check_params(h2o_iovec_t *vecs, size_t *index, uint16_t request_id, const char *expected, size_t expected_len)
+{
+#define DECODE_UINT16(p) (((unsigned char *)&p)[0] << 8 | ((unsigned char *)&p)[1])
+
+    char buf[4096];
+    size_t offset = 0;
+
+    while (1) {
+        if (vecs[*index].len != FCGI_RECORD_HEADER_SIZE) {
+            fprintf(stderr, "record too short (index: %zu)\n", *index);
+            return 0;
+        }
+        struct st_fcgi_record_header_t *header = (void *)vecs[*index].base;
+        if (header->version != FCGI_VERSION_1 || header->type != FCGI_PARAMS || header->paddingLength != 0 ||
+            header->reserved != 0) {
+            fprintf(stderr, "header is corrupt (index: %zu)\n", *index);
+            return 0;
+        }
+        if (DECODE_UINT16(header->requestId) != request_id) {
+            fprintf(stderr, "unexpected request id (index: %zu)\n", *index);
+            return 0;
+        }
+        ++*index;
+        if (DECODE_UINT16(header->contentLength) == 0)
+            break;
+        if (vecs[*index].len != DECODE_UINT16(header->contentLength)) {
+            fprintf(stderr, "unexpected body size (index: %zu)\n", *index);
+            return 0;
+        }
+        memcpy(buf + offset, vecs[*index].base, vecs[*index].len);
+        offset += vecs[*index].len;
+        ++*index;
+    }
+
+    if (!h2o_memis(buf, offset, expected, expected_len)) {
+        fprintf(stderr, "PARAMS content mistach\n");
+        return 0;
+    }
+
+    return 1;
+
+#undef DECODE_UINT16
+}
+
 static void test_build_request(void)
 {
     h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
     iovec_vector_t vecs;
+    size_t vec_index;
 
     conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
     conn->req.scheme = &H2O_URL_SCHEME_HTTP;
@@ -43,61 +88,59 @@ static void test_build_request(void)
 
     /* build with max_record_size=65535 */
     build_request(&conn->req, &vecs, 0x1234, 65535, 0);
-    ok(vecs.size == 5);
     ok(h2o_memis(vecs.entries[0].base, vecs.entries[0].len, H2O_STRLIT("\x01\x01\x12\x34\x00\x08\x00\x00"
                                                                        "\x00\x01\0\0\0\0\0\0")));
-    ok(h2o_memis(vecs.entries[1].base, vecs.entries[1].len, H2O_STRLIT("\x01\x04\x12\x34\x01\x00\x00\x00")));
-    ok(h2o_memis(vecs.entries[2].base, vecs.entries[2].len,
-                 H2O_STRLIT("\x0c\x00QUERY_STRING"                    /* */
-                            "\x0e\x03REQUEST_METHODGET"               /* */
-                            "\x0b\x01REQUEST_URI/"                    /* */
-                            "\x0b\x07SERVER_NAMEdefault"              /* */
-                            "\x0b\x05SERVER_PORT65535"                /* */
-                            "\x0f\x08SERVER_PROTOCOLHTTP/1.1"         /* */
-                            "\x0f\x10SERVER_SOFTWAREh2o/1.2.1-alpha1" /* */
-                            "\x0b\x00SCRIPT_NAME"                     /* */
-                            "\x0b\x07HTTP_COOKIEfoo=bar"              /* */
-                            "\x0f\x3fHTTP_USER_AGENTMozilla/5.0 (X11; Linux) KHTML/4.9.1 (like Gecko) Konqueror/4.9" /* */)));
-    ok(h2o_memis(vecs.entries[3].base, vecs.entries[3].len, H2O_STRLIT("\x01\x04\x12\x34\x00\x00\x00\x00")));
-    ok(h2o_memis(vecs.entries[4].base, vecs.entries[4].len, H2O_STRLIT("\x01\x05\x12\x34\x00\x00\x00\x00")));
+    vec_index = 1;
+    ok(check_params(vecs.entries, &vec_index, 0x1234,
+                    H2O_STRLIT("\x09\x01PATH_INFO/"                      /* */
+                               "\x0c\x00QUERY_STRING"                    /* */
+                               "\x0e\x03REQUEST_METHODGET"               /* */
+                               "\x0b\x01REQUEST_URI/"                    /* */
+                               "\x0b\x07SERVER_NAMEdefault"              /* */
+                               "\x0b\x05SERVER_PORT65535"                /* */
+                               "\x0f\x08SERVER_PROTOCOLHTTP/1.1"         /* */
+                               "\x0f\x10SERVER_SOFTWAREh2o/1.2.1-alpha1" /* */
+                               "\x0b\x00SCRIPT_NAME"                     /* */
+                               "\x0b\x07HTTP_COOKIEfoo=bar"              /* */
+                               "\x0f\x3fHTTP_USER_AGENTMozilla/5.0 (X11; Linux) KHTML/4.9.1 (like Gecko) Konqueror/4.9" /* */)));
+    ok(h2o_memis(vecs.entries[vec_index].base, vecs.entries[vec_index].len, H2O_STRLIT("\x01\x05\x12\x34\x00\x00\x00\x00")));
+    ++vec_index;
+    ok(vec_index == vecs.size);
 
     /* build with max_record_size=64, and content */
     conn->req.entity = h2o_iovec_init(H2O_STRLIT("The above copyright notice and this permission notice shall be included in all "
                                                  "copies or substantial portions of the Software."));
     build_request(&conn->req, &vecs, 0x1234, 64, 0);
-    ok(vecs.size == 17);
     ok(h2o_memis(vecs.entries[0].base, vecs.entries[0].len, H2O_STRLIT("\x01\x01\x12\x34\x00\x08\x00\x00"
                                                                        "\x00\x01\0\0\0\0\0\0")));
-    ok(h2o_memis(vecs.entries[1].base, vecs.entries[1].len, H2O_STRLIT("\x01\x04\x12\x34\x00\x40\x00\x00")));
-    ok(h2o_memis(vecs.entries[2].base, vecs.entries[2].len, H2O_STRLIT("\x0e\x03"
-                                                                       "CONTENT_LENGTH126"         /* */
-                                                                       "\x0c\x00QUERY_STRING"      /* */
-                                                                       "\x0e\x03REQUEST_METHODGET" /* */
-                                                                       "\x0b\x01REQUEST_UR")));
-    ok(h2o_memis(vecs.entries[3].base, vecs.entries[3].len, H2O_STRLIT("\x01\x04\x12\x34\x00\x40\x00\x00")));
-    ok(h2o_memis(vecs.entries[4].base, vecs.entries[4].len, H2O_STRLIT("I/"                         /* */
-                                                                       "\x0b\x07SERVER_NAMEdefault" /* */
-                                                                       "\x0b\x05SERVER_PORT65535"   /* */
-                                                                       "\x0f\x08SERVER_PROTOCOLHTTP/1.")));
-    ok(h2o_memis(vecs.entries[5].base, vecs.entries[5].len, H2O_STRLIT("\x01\x04\x12\x34\x00\x40\x00\x00")));
-    ok(h2o_memis(vecs.entries[6].base, vecs.entries[6].len, H2O_STRLIT("1"                                       /* */
-                                                                       "\x0f\x10SERVER_SOFTWAREh2o/1.2.1-alpha1" /* */
-                                                                       "\x0b\x00SCRIPT_NAME"                     /* */
-                                                                       "\x0b\x07HTTP_COOKIEfoo=")));
-    ok(h2o_memis(vecs.entries[7].base, vecs.entries[7].len, H2O_STRLIT("\x01\x04\x12\x34\x00\x40\x00\x00")));
-    ok(h2o_memis(vecs.entries[8].base, vecs.entries[8].len,
-                 H2O_STRLIT("bar" /* */
-                            "\x0f\x3fHTTP_USER_AGENTMozilla/5.0 (X11; Linux) KHTML/4.9.1 (like G")));
-    ok(h2o_memis(vecs.entries[9].base, vecs.entries[9].len, H2O_STRLIT("\x01\x04\x12\x34\x00\x13\x00\x00")));
-    ok(h2o_memis(vecs.entries[10].base, vecs.entries[10].len, H2O_STRLIT("ecko) Konqueror/4.9")));
-    ok(h2o_memis(vecs.entries[11].base, vecs.entries[11].len, H2O_STRLIT("\x01\x04\x12\x34\x00\x00\x00\x00")));
-    ok(h2o_memis(vecs.entries[12].base, vecs.entries[12].len, H2O_STRLIT("\x01\x05\x12\x34\x00\x40\x00\x00")));
-    ok(h2o_memis(vecs.entries[13].base, vecs.entries[13].len,
+    vec_index = 1;
+    ok(check_params(vecs.entries, &vec_index, 0x1234,
+                    H2O_STRLIT("\x0e\x03"
+                               "CONTENT_LENGTH126"                       /* */
+                               "\x09\x01PATH_INFO/"                      /* */
+                               "\x0c\x00QUERY_STRING"                    /* */
+                               "\x0e\x03REQUEST_METHODGET"               /* */
+                               "\x0b\x01REQUEST_URI/"                    /* */
+                               "\x0b\x07SERVER_NAMEdefault"              /* */
+                               "\x0b\x05SERVER_PORT65535"                /* */
+                               "\x0f\x08SERVER_PROTOCOLHTTP/1.1"         /* */
+                               "\x0f\x10SERVER_SOFTWAREh2o/1.2.1-alpha1" /* */
+                               "\x0b\x00SCRIPT_NAME"                     /* */
+                               "\x0b\x07HTTP_COOKIEfoo=bar"              /* */
+                               "\x0f\x3fHTTP_USER_AGENTMozilla/5.0 (X11; Linux) KHTML/4.9.1 (like Gecko) Konqueror/4.9" /* */)));
+    ok(h2o_memis(vecs.entries[vec_index].base, vecs.entries[vec_index].len, H2O_STRLIT("\x01\x05\x12\x34\x00\x40\x00\x00")));
+    ++vec_index;
+    ok(h2o_memis(vecs.entries[vec_index].base, vecs.entries[vec_index].len,
                  H2O_STRLIT("The above copyright notice and this permission notice shall be i")));
-    ok(h2o_memis(vecs.entries[14].base, vecs.entries[14].len, H2O_STRLIT("\x01\x05\x12\x34\x00\x3e\x00\x00")));
-    ok(h2o_memis(vecs.entries[15].base, vecs.entries[15].len,
+    ++vec_index;
+    ok(h2o_memis(vecs.entries[vec_index].base, vecs.entries[vec_index].len, H2O_STRLIT("\x01\x05\x12\x34\x00\x3e\x00\x00")));
+    ++vec_index;
+    ok(h2o_memis(vecs.entries[vec_index].base, vecs.entries[vec_index].len,
                  H2O_STRLIT("ncluded in all copies or substantial portions of the Software.")));
-    ok(h2o_memis(vecs.entries[16].base, vecs.entries[16].len, H2O_STRLIT("\x01\x05\x12\x34\x00\x00\x00\x00")));
+    ++vec_index;
+    ok(h2o_memis(vecs.entries[vec_index].base, vecs.entries[vec_index].len, H2O_STRLIT("\x01\x05\x12\x34\x00\x00\x00\x00")));
+    ++vec_index;
+    ok(vec_index == vecs.size);
 
     h2o_loopback_destroy(conn);
 }
