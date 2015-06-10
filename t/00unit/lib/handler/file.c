@@ -33,6 +33,236 @@ static int check_header(h2o_res_t *res, const h2o_token_t *header_name, const ch
     return h2o_lcstris(res->headers.entries[index].value.base, res->headers.entries[index].value.len, expected, strlen(expected));
 }
 
+static int check_multirange_body(char *resbody, const char *boundary, const h2o_iovec_t *expected, size_t partlen)
+{
+    char *bptr = resbody;
+    h2o_iovec_t *eptr = expected;
+    int not_first_line = 0;
+    while (partlen--) {
+        if (not_first_line) {
+            if (!h2o_memis(bptr, 2, H2O_STRLIT("\r\n")))
+                return 0;
+            bptr += 2;
+        } else
+            not_first_line = 1;
+        if (!h2o_memis(bptr, 2, H2O_STRLIT("--")))
+            return 0;
+        bptr += 2;
+        if (!h2o_memis(bptr, BOUNDARY_SIZE, boundary, BOUNDARY_SIZE))
+            return 0;
+        bptr += 20;
+        if (!h2o_memis(bptr, 2, H2O_STRLIT("\r\n")))
+            return 0;
+        bptr += 2;
+        if (!h2o_memis(bptr, eptr->len, eptr->base, eptr->len))
+            return 0;
+        bptr += eptr->len;
+        eptr++;
+    }
+    if (!h2o_memis(bptr, 4, H2O_STRLIT("\r\n--")))
+        return 0;
+    bptr += 4;
+    if (!h2o_memis(bptr, BOUNDARY_SIZE, boundary, BOUNDARY_SIZE))
+        return 0;
+    bptr += 20;
+    if (!h2o_memis(bptr, 4, H2O_STRLIT("--\r\n")))
+        return 0;
+    return 1;
+}
+
+static void test_process_range(void)
+{
+    h2o_mem_pool_t testpool;
+    size_t ret, *ranges;
+    h2o_iovec_t testrange;
+    h2o_mem_init_pool(&testpool);
+
+    { /* check single range within filesize */
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=, 0-10"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ret == 1);
+        ok(*ranges++ == 0);
+        ok(*ranges == 11);
+    }
+
+    { /* check single range with only start */
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=60-"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ret == 1);
+        ok(*ranges++ == 60);
+        ok(*ranges == 40);
+    }
+
+    { /* check single suffix range */
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=-10"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ret == 1);
+        ok(*ranges++ == 90);
+        ok(*ranges == 10);
+    }
+
+    { /* this and next two check multiple ranges within filesize */
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=0-10, -10"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ret == 2);
+        ok(*ranges++ == 0);
+        ok(*ranges++ == 11);
+        ok(*ranges++ == 90);
+        ok(*ranges == 10);
+    }
+
+    {
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=0-0, 20-89"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ret == 2);
+        ok(*ranges++ == 0);
+        ok(*ranges++ == 1);
+        ok(*ranges++ == 20);
+        ok(*ranges == 70);
+    }
+
+    {
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=-10,-20"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ret == 2);
+        ok(*ranges++ == 90);
+        ok(*ranges++ == 10);
+        ok(*ranges++ == 80);
+        ok(*ranges++ == 20);
+    }
+
+    { /* check ranges entirely out of filesize */
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=100-102"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ranges == NULL);
+    }
+
+    { /* check ranges with "negative" length */
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=70-21"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ranges == NULL);
+    }
+
+    { /* check ranges with one side inside filesize */
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=90-102"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ret == 1);
+        ok(*ranges++ == 90);
+        ok(*ranges == 10);
+    }
+
+    { /* check suffix range larger than filesize */
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=-200"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ret == 1);
+        ok(*ranges++ == 0);
+        ok(*ranges == 100);
+    }
+
+    { /* check multiple ranges with unsatisfiable ranges, but also contain satisfiable ranges */
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=100-102,  90-102, 72-30,-22, 95-"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ret == 3);
+        ok(*ranges++ == 90);
+        ok(*ranges++ == 10);
+        ok(*ranges++ == 78);
+        ok(*ranges++ == 22);
+        ok(*ranges++ == 95);
+        ok(*ranges++ == 5);
+    }
+
+    { /* this and next 6 check malformed ranges */
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes 20-1002"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ranges == NULL);
+    }
+
+    {
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes="));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ranges == NULL);
+    }
+
+    {
+        testrange = h2o_iovec_init(H2O_STRLIT("bsdfeadsfjwleakjf"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ranges == NULL);
+    }
+
+    {
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=100-102, 90-102, -72-30,-22,95-"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ranges == NULL);
+    }
+
+    {
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=10-12-13, 90-102, -72, -22, 95-"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ranges == NULL);
+    }
+
+    {
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=100-102, 90-102, 70-39, -22$"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ranges == NULL);
+    }
+
+    {
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=-0"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ranges == NULL);
+    }
+
+    { /* check same ranges with different filesize */
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=20-200"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ret == 1);
+        ok(*ranges++ == 20);
+        ok(*ranges == 80);
+    }
+
+    {
+        ranges = process_range(&testpool, &testrange, 1000, &ret);
+        ok(ret == 1);
+        ok(*ranges++ == 20);
+        ok(*ranges == 181);
+    }
+
+    { /* check a range with plenty of WS and COMMA */
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=,\t,1-3 ,, ,5-9,"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ret == 2);
+        ok(*ranges++ == 1);
+        ok(*ranges++ == 3);
+        ok(*ranges++ == 5);
+        ok(*ranges == 5);
+    }
+
+    {
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes= 1-3"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ranges == NULL);
+    }
+
+    {
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=1-3 5-10"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ranges == NULL);
+    }
+
+    {
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=1-\t,5-10"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ret == 2);
+        ok(*ranges++ == 1);
+        ok(*ranges++ == 99);
+        ok(*ranges++ == 5);
+        ok(*ranges == 6);
+    }
+
+    h2o_mem_clear_pool(&testpool);
+}
+
 static void test_if_modified_since(void)
 {
     char lm_date[H2O_TIMESTR_RFC1123_LEN + 1];
@@ -121,6 +351,242 @@ static void test_if_match(void)
     }
 
     free(etag.base);
+}
+
+static void test_range_req(void)
+{
+    { /* check if accept-ranges is "bytes" */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 200);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        if (check_header(&conn->req.res, H2O_TOKEN_ACCEPT_RANGES, "none")) {
+            ok(1);
+            return;
+        }
+        ok(check_header(&conn->req.res, H2O_TOKEN_ACCEPT_RANGES, "bytes"));
+        ok(conn->body->size == 1000);
+        ok(strcmp(sha1sum(conn->body->bytes, conn->body->size), "dfd3ae1f5c475555fad62efe42e07309fa45f2ed") == 0);
+        h2o_loopback_destroy(conn);
+    }
+    { /* check a normal single range */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=0-10"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 206);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes 0-10/1000"));
+        ok(conn->body->size == 11);
+        ok(memcmp(conn->body->bytes, "123456789\n1", 11) == 0);
+        h2o_loopback_destroy(conn);
+    }
+    { /* check an over range single range */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=990-1100"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 206);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes 990-999/1000"));
+        ok(conn->body->size == 10);
+        ok(memcmp(conn->body->bytes, "123456789\n", 10) == 0);
+        h2o_loopback_destroy(conn);
+    }
+    { /* check a single range without end */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=989-"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 206);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes 989-999/1000"));
+        ok(conn->body->size == 11);
+        ok(memcmp(conn->body->bytes, "\n123456789\n", 11) == 0);
+        h2o_loopback_destroy(conn);
+    }
+    { /* check a single suffix range */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-21"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 206);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes 979-999/1000"));
+        ok(conn->body->size == 21);
+        ok(memcmp(conn->body->bytes, "\n123456789\n123456789\n", 21) == 0);
+        h2o_loopback_destroy(conn);
+    }
+    { /* check a single suffix range over filesize */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-2100"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 206);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes 0-999/1000"));
+        ok(conn->body->size == 1000);
+        ok(strcmp(sha1sum(conn->body->bytes, conn->body->size), "dfd3ae1f5c475555fad62efe42e07309fa45f2ed") == 0);
+        h2o_loopback_destroy(conn);
+    }
+    { /* malformed range */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-0-10, 9-, -10"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 416);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes */1000"));
+        ok(conn->body->size == strlen("requested range not satisfiable"));
+        ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("requested range not satisfiable")));
+        h2o_loopback_destroy(conn);
+    }
+    { /* malformed range */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=0-10-12, 9-, -10"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 416);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes */1000"));
+        ok(conn->body->size == strlen("requested range not satisfiable"));
+        ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("requested range not satisfiable")));
+        h2o_loopback_destroy(conn);
+    }
+    { /* malformed range */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytfasdf"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 416);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes */1000"));
+        ok(conn->body->size == strlen("requested range not satisfiable"));
+        ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("requested range not satisfiable")));
+        h2o_loopback_destroy(conn);
+    }
+    { /* half-malformed range */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-0"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 416);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes */1000"));
+        ok(conn->body->size == strlen("requested range not satisfiable"));
+        ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("requested range not satisfiable")));
+        h2o_loopback_destroy(conn);
+    }
+    { /* single range over filesize */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=1000-1001"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 416);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes */1000"));
+        ok(conn->body->size == strlen("requested range not satisfiable"));
+        ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("requested range not satisfiable")));
+        h2o_loopback_destroy(conn);
+    }
+    { /* single range with "negative" length */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=900-100"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 416);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes */1000"));
+        ok(conn->body->size == strlen("requested range not satisfiable"));
+        ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("requested range not satisfiable")));
+        h2o_loopback_destroy(conn);
+    }
+    { /* check a half-malformed range with a normal range */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-0, 0-0"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 206);
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes 0-0/1000"));
+        ok(conn->body->size == 1);
+        ok(memcmp(conn->body->bytes, "1", 1) == 0);
+        h2o_loopback_destroy(conn);
+    }
+    { /* multiple ranges */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        ssize_t content_type_index;
+        h2o_iovec_t content_type, expected[2] = {};
+        char boundary[BOUNDARY_SIZE + 1];
+        size_t mimebaselen = strlen("multipart/byteranges; boundary=");
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-0, 0-9,-11"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 206);
+        if ((content_type_index = h2o_find_header(&conn->req.res.headers, H2O_TOKEN_CONTENT_TYPE, -1)) == -1) {
+            ok(0);
+            return;
+        }
+        content_type = conn->req.res.headers.entries[content_type_index].value;
+        ok(h2o_memis(content_type.base, mimebaselen, "multipart/byteranges; boundary=", mimebaselen));
+        memcpy(boundary, content_type.base + mimebaselen, BOUNDARY_SIZE);
+        boundary[BOUNDARY_SIZE] = 0;
+        expected[0].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
+        expected[0].len =
+            sprintf(expected[0].base, "Content-Type: %s\r\nContent-Range: bytes 0-9/1000\r\n\r\n%s", "text/plain", "123456789\n");
+        expected[1].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
+        expected[1].len = sprintf(expected[1].base, "Content-Type: %s\r\nContent-Range: bytes 989-999/1000\r\n\r\n%s", "text/plain",
+                                  "\n123456789\n");
+        ok(h2o_find_header(&conn->req.res.headers, H2O_TOKEN_CONTENT_RANGE, -1) == -1);
+        ok(conn->body->size == conn->req.res.content_length);
+        ok(check_multirange_body(conn->body->bytes, boundary, expected, 2));
+        h2o_loopback_destroy(conn);
+    }
+    { /* multiple ranges with plenty of WS and COMMA */
+        h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+        ssize_t content_type_index;
+        h2o_iovec_t content_type, expected[2] = {};
+        char boundary[BOUNDARY_SIZE + 1];
+        size_t mimebaselen = strlen("multipart/byteranges; boundary=");
+        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
+        conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=,\t,1-3 ,, ,5-9,"));
+        h2o_loopback_run_loop(conn);
+        ok(conn->req.res.status == 206);
+        if ((content_type_index = h2o_find_header(&conn->req.res.headers, H2O_TOKEN_CONTENT_TYPE, -1)) == -1) {
+            ok(0);
+            return;
+        }
+        content_type = conn->req.res.headers.entries[content_type_index].value;
+        ok(h2o_memis(content_type.base, mimebaselen, "multipart/byteranges; boundary=", mimebaselen));
+        memcpy(boundary, content_type.base + mimebaselen, BOUNDARY_SIZE);
+        boundary[BOUNDARY_SIZE] = 0;
+        expected[0].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
+        expected[0].len =
+            sprintf(expected[0].base, "Content-Type: %s\r\nContent-Range: bytes 1-3/1000\r\n\r\n%s", "text/plain", "234");
+        expected[1].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
+        expected[1].len =
+            sprintf(expected[1].base, "Content-Type: %s\r\nContent-Range: bytes 5-9/1000\r\n\r\n%s", "text/plain", "6789\n");
+        ok(h2o_find_header(&conn->req.res.headers, H2O_TOKEN_CONTENT_RANGE, -1) == -1);
+        ok(conn->body->size == conn->req.res.content_length);
+        ok(check_multirange_body(conn->body->bytes, boundary, expected, 2));
+        h2o_loopback_destroy(conn);
+    }
 }
 
 void test_lib__handler__file_c()
@@ -274,9 +740,10 @@ void test_lib__handler__file_c()
         ok(check_header(&conn->req.res, H2O_TOKEN_LOCATION, "/index_txt_as_dir/index.txt/"));
         h2o_loopback_destroy(conn);
     }
-
     subtest("if-modified-since", test_if_modified_since);
     subtest("if-match", test_if_match);
+    subtest("process_range()", test_process_range);
+    subtest("range request", test_range_req);
 
     h2o_context_dispose(&ctx);
     h2o_config_dispose(&globalconf);

@@ -26,11 +26,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+
 #include "h2o.h"
 
 #define MAX_BUF_SIZE 65000
+#define BOUNDARY_SIZE 20
+#define FIXED_PART_SIZE (sizeof("\r\n--") - 1 + BOUNDARY_SIZE + sizeof("\r\nContent-Range: bytes=-/\r\nContent-Type: \r\n\r\n") - 1)
 
 struct st_h2o_sendfile_generator_t {
     h2o_generator_t super;
@@ -46,6 +50,14 @@ struct st_h2o_sendfile_generator_t {
     char is_gzip;
     char send_vary;
     char *buf;
+    struct {
+        size_t filesize;
+        size_t range_count;
+        size_t *range_infos;  /* size_t shows in pair. first is start offset, then length */
+        h2o_iovec_t boundary; /* boundary used for multipart/byteranges */
+        h2o_iovec_t mimetype; /* original mimetype for multipart */
+        size_t current_range; /* range that processing now */
+    } ranged;
 };
 
 struct st_h2o_file_handler_t {
@@ -108,6 +120,61 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
     h2o_send(req, &vec, 1, is_final);
     if (is_final)
         do_close(&self->super, req);
+}
+
+static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
+{
+    struct st_h2o_sendfile_generator_t *self = (void *)_self;
+    size_t rlen, used_buf = 0;
+    ssize_t rret, vecarrsize;
+    h2o_iovec_t vec[2];
+    int is_finished;
+
+    if (self->bytesleft == 0) {
+        size_t *range_cur = self->ranged.range_infos + 2 * self->ranged.current_range;
+        size_t range_end = *range_cur + *(range_cur + 1) - 1;
+        if (H2O_LIKELY(self->ranged.current_range != 0))
+            used_buf =
+                sprintf(self->buf, "\r\n--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
+                        self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end, self->ranged.filesize);
+        else
+            used_buf =
+                sprintf(self->buf, "--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
+                        self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end, self->ranged.filesize);
+        self->ranged.current_range++;
+        rret = lseek(self->fd, *range_cur, SEEK_SET);
+        if (rret == -1)
+            goto Error;
+        self->bytesleft = *++range_cur;
+    }
+    rlen = self->bytesleft;
+    if (rlen + used_buf > MAX_BUF_SIZE)
+        rlen = MAX_BUF_SIZE - used_buf;
+    while ((rret = read(self->fd, self->buf + used_buf, rlen)) == -1 && errno == EINTR)
+        ;
+    if (rret == -1)
+        goto Error;
+    self->bytesleft -= rret;
+
+    vec[0].base = self->buf;
+    vec[0].len = rret + used_buf;
+    if (self->ranged.current_range == self->ranged.range_count && self->bytesleft == 0) {
+        vec[1].base = h2o_mem_alloc_pool(&req->pool, sizeof("\r\n--") - 1 + BOUNDARY_SIZE + sizeof("--\r\n"));
+        vec[1].len = sprintf(vec[1].base, "\r\n--%s--\r\n", self->ranged.boundary.base);
+        vecarrsize = 2;
+        is_finished = 1;
+    } else {
+        vecarrsize = 1;
+        is_finished = 0;
+    }
+    h2o_send(req, vec, vecarrsize, is_finished);
+    return;
+
+Error:
+    req->http1_is_persistent = 0;
+    h2o_send(req, NULL, 0, 1);
+    do_close(&self->super, req);
+    return;
 }
 
 static int do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_t *buf)
@@ -180,6 +247,8 @@ Opened:
     self->fd = fd;
     self->req = NULL;
     self->bytesleft = st.st_size;
+    self->ranged.range_count = 0;
+    self->ranged.range_infos = NULL;
 
     gmtime_r(&st.st_mtime, &last_modified_gmt);
     self->last_modified.packed = time2packed(&last_modified_gmt);
@@ -205,6 +274,11 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     req->res.status = status;
     req->res.reason = reason;
     req->res.content_length = self->bytesleft;
+
+    if (self->ranged.range_count > 1) {
+        mime_type.base = h2o_mem_alloc_pool(&req->pool, 52);
+        mime_type.len = sprintf(mime_type.base, "multipart/byteranges; boundary=%s", self->ranged.boundary.base);
+    }
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, mime_type.base, mime_type.len);
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LAST_MODIFIED, self->last_modified.buf, H2O_TIMESTR_RFC1123_LEN);
     if (self->etag_len != 0)
@@ -213,6 +287,15 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
         h2o_add_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
     if (self->is_gzip)
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_ENCODING, H2O_STRLIT("gzip"));
+    if (self->ranged.range_count == 0)
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ACCEPT_RANGES, H2O_STRLIT("bytes"));
+    else if (self->ranged.range_count == 1) {
+        h2o_iovec_t content_range;
+        content_range.base = h2o_mem_alloc_pool(&req->pool, 128);
+        content_range.len = sprintf(content_range.base, "bytes %zd-%zd/%zd", self->ranged.range_infos[0],
+                                    self->ranged.range_infos[0] + self->ranged.range_infos[1] - 1, self->ranged.filesize);
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_RANGE, content_range.base, content_range.len);
+    }
 
     /* special path for cases where we do not need to send any data */
     if (!is_get || self->bytesleft == 0) {
@@ -226,14 +309,30 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     /* send data */
     h2o_start_response(req, &self->super);
 
-    if (req->_ostr_top->start_pull != NULL) {
+    if (self->ranged.range_count == 1) {
+        ssize_t rret;
+        rret = lseek(self->fd, self->ranged.range_infos[0], SEEK_SET);
+        if (rret == -1) {
+            req->http1_is_persistent = 0;
+            h2o_send(req, NULL, 0, 1);
+            do_close(&self->super, req);
+            return;
+        }
+    }
+    if (req->_ostr_top->start_pull != NULL && self->ranged.range_count < 2) {
         req->_ostr_top->start_pull(req->_ostr_top, do_pull);
     } else {
         size_t bufsz = MAX_BUF_SIZE;
         if (self->bytesleft < bufsz)
             bufsz = self->bytesleft;
         self->buf = h2o_mem_alloc_pool(&req->pool, bufsz);
-        do_proceed(&self->super, req);
+        if (self->ranged.range_count < 2)
+            do_proceed(&self->super, req);
+        else {
+            self->bytesleft = 0;
+            self->super.proceed = do_multirange_proceed;
+            do_multirange_proceed(&self->super, req);
+        }
     }
 }
 
@@ -282,6 +381,109 @@ static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len, i
     return 0;
 }
 
+size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t file_size, size_t *ret)
+{
+#define CHECK_EOF()                                                                                                                \
+    if (buf == buf_end)                                                                                                            \
+        return NULL;
+
+#define CHECK_OVERFLOW(range)                                                                                                      \
+    if (range == SIZE_MAX)                                                                                                         \
+        return NULL;
+
+    size_t range_start = SIZE_MAX, range_count = 0;
+    char *buf = range_value->base, *buf_end = buf + range_value->len;
+    int needs_comma = 0;
+    H2O_VECTOR(size_t) ranges = {};
+
+    if (range_value->len < 6 || memcmp(buf, "bytes=", 6) != 0)
+        return NULL;
+
+    buf += 6;
+    CHECK_EOF();
+
+    /* most range requests contain only one range */
+    do {
+        while (1) {
+            if (*buf != ',') {
+                if (needs_comma)
+                    return NULL;
+                break;
+            }
+            needs_comma = 0;
+            buf++;
+            while (H2O_UNLIKELY(*buf == ' ') || H2O_UNLIKELY(*buf == '\t')) {
+                buf++;
+                CHECK_EOF();
+            }
+        }
+        if (H2O_UNLIKELY(buf == buf_end))
+            break;
+        if (H2O_LIKELY((range_start = h2o_strtosizefwd(&buf, buf_end - buf)) != SIZE_MAX)) {
+            CHECK_EOF();
+            if (*buf++ != '-')
+                return NULL;
+            range_count = h2o_strtosizefwd(&buf, buf_end - buf);
+            if (H2O_UNLIKELY(range_start >= file_size)) {
+                range_start = SIZE_MAX;
+            } else if (H2O_LIKELY(range_count != SIZE_MAX)) {
+                if (H2O_UNLIKELY(range_count > file_size - 1))
+                    range_count = file_size - 1;
+                if (H2O_LIKELY(range_start <= range_count))
+                    range_count -= range_start - 1;
+                else
+                    range_start = SIZE_MAX;
+            } else {
+                range_count = file_size - range_start;
+            }
+        } else if (H2O_LIKELY(*buf++ == '-')) {
+            CHECK_EOF();
+            range_count = h2o_strtosizefwd(&buf, buf_end - buf);
+            if (H2O_UNLIKELY(range_count == SIZE_MAX))
+                return NULL;
+            if (H2O_LIKELY(range_count != 0)) {
+                if (H2O_UNLIKELY(range_count > file_size))
+                    range_count = file_size;
+                range_start = file_size - range_count;
+            } else {
+                range_start = SIZE_MAX;
+            }
+        } else {
+            return NULL;
+        }
+
+        if (H2O_LIKELY(range_start != SIZE_MAX)) {
+            h2o_vector_reserve(pool, (void *)&ranges, sizeof(ranges.entries[0]), ranges.size + 2);
+            ranges.entries[ranges.size++] = range_start;
+            ranges.entries[ranges.size++] = range_count;
+        }
+        if (buf != buf_end)
+            while (H2O_UNLIKELY(*buf == ' ') || H2O_UNLIKELY(*buf == '\t')) {
+                buf++;
+                CHECK_EOF();
+            }
+        needs_comma = 1;
+    } while (H2O_UNLIKELY(buf < buf_end));
+    *ret = ranges.size / 2;
+    return ranges.entries;
+#undef CHECK_EOF
+#undef CHECK_OVERFLOW
+}
+
+static void h2o_gen_rand_string(h2o_iovec_t *s)
+{
+    int i;
+    static const char alphanum[] = "0123456789"
+                                   "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                                   "abcdefghijklmnopqrstuvwxyz";
+
+    for (i = 0; i < s->len; ++i) {
+        s->base[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
+    }
+
+    s->base[s->len] = 0;
+}
+
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     h2o_file_handler_t *self = (void *)_self;
@@ -290,6 +492,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     size_t rpath_len, req_path_prefix;
     struct st_h2o_sendfile_generator_t *generator = NULL;
     size_t if_modified_since_header_index, if_none_match_header_index;
+    size_t range_header_index;
     int is_dir, is_get;
 
     /* only accept GET and HEAD */
@@ -371,6 +574,72 @@ Opened:
 
     /* obtain mime type */
     mime_type = h2o_mimemap_get_type(self->mimemap, h2o_get_filext(rpath, rpath_len));
+
+    /* check if range request */
+    if ((range_header_index = h2o_find_header(&req->headers, H2O_TOKEN_RANGE, SIZE_MAX)) != -1) {
+        h2o_iovec_t *range = &req->headers.entries[range_header_index].value;
+        size_t *range_infos, range_count;
+        range_infos = process_range(&req->pool, range, generator->bytesleft, &range_count);
+        if (range_infos == NULL) {
+            h2o_iovec_t content_range;
+            content_range.base = h2o_mem_alloc_pool(&req->pool, 32);
+            content_range.len = sprintf(content_range.base, "bytes */%zd", generator->bytesleft);
+            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_RANGE, content_range.base, content_range.len);
+            do_close(&generator->super, req);
+            req->res.status = 416;
+            req->res.reason = "Requested Range Not Satisfiable";
+            req->res.content_length = strlen("requested range not satisfiable");
+            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
+            h2o_send_inline(req, "requested range not satisfiable", req->res.content_length);
+            return 0;
+        }
+        generator->ranged.range_count = range_count;
+        generator->ranged.range_infos = range_infos;
+        generator->ranged.current_range = 0;
+        generator->ranged.filesize = generator->bytesleft;
+
+        /* set content-length according to range */
+        if (range_count == 1)
+            generator->bytesleft = range_infos[1];
+        else {
+            generator->ranged.mimetype = h2o_strdup(&req->pool, mime_type.base, mime_type.len);
+            size_t final_content_len = 0, size_tmp = 0, size_fixed_each_part, i;
+            generator->ranged.boundary.base = h2o_mem_alloc_pool(&req->pool, BOUNDARY_SIZE + 1);
+            generator->ranged.boundary.len = BOUNDARY_SIZE;
+            h2o_gen_rand_string(&generator->ranged.boundary);
+            i = generator->bytesleft;
+            while (i) {
+                i /= 10;
+                size_tmp++;
+            }
+            size_fixed_each_part = FIXED_PART_SIZE + mime_type.len + size_tmp;
+            for (i = 0; i < range_count; i++) {
+                size_tmp = *range_infos++;
+                if (size_tmp == 0)
+                    final_content_len++;
+                while (size_tmp) {
+                    size_tmp /= 10;
+                    final_content_len++;
+                }
+
+                size_tmp = *(range_infos - 1);
+                final_content_len += *range_infos;
+
+                size_tmp += *range_infos++ - 1;
+                if (size_tmp == 0)
+                    final_content_len++;
+                while (size_tmp) {
+                    size_tmp /= 10;
+                    final_content_len++;
+                }
+            }
+            final_content_len += sizeof("\r\n--") - 1 + BOUNDARY_SIZE + sizeof("--\r\n") - 1 + size_fixed_each_part * range_count -
+                                 (sizeof("\r\n") - 1);
+            generator->bytesleft = final_content_len;
+        }
+        do_send_file(generator, req, 206, "Partial Content", mime_type, is_get);
+        return 0;
+    }
 
     /* return file */
     do_send_file(generator, req, 200, "OK", mime_type, is_get);

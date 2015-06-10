@@ -34,6 +34,14 @@ extern "C" {
 
 #define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s *)((char *)(p)-offsetof(s, m)))
 
+#if __GNUC__ >= 3
+#define H2O_LIKELY(x) __builtin_expect(!!(x), 1)
+#define H2O_UNLIKELY(x) __builtin_expect(!!(x), 0)
+#else
+#define H2O_LIKELY(x) (x)
+#define H2O_UNLIKELY(x) (x)
+#endif
+
 #ifdef __GNUC__
 #define H2O_GNUC_VERSION ((__GNUC__ << 16) | (__GNUC_MINOR__ << 8) | __GNUC_PATCHLEVEL__)
 #else
