@@ -36,7 +36,7 @@ static int check_header(h2o_res_t *res, const h2o_token_t *header_name, const ch
 static int check_multirange_body(char *resbody, const char *boundary, const h2o_iovec_t *expected, size_t partlen)
 {
     char *bptr = resbody;
-    h2o_iovec_t *eptr = expected;
+    const h2o_iovec_t *eptr = expected;
     int not_first_line = 0;
     while (partlen--) {
         if (not_first_line) {
