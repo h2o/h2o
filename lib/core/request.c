@@ -400,7 +400,6 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
     static const h2o_iovec_t body_prefix = {H2O_STRLIT("<!DOCTYPE html><TITLE>Moved</TITLE><P>The document has moved <A HREF=\"")};
     static const h2o_iovec_t body_suffix = {H2O_STRLIT("\">here</A>")};
 
-
     /* build and emit the response header */
     req->res.status = status;
     req->res.reason = reason;

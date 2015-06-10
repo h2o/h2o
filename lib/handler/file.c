@@ -487,7 +487,7 @@ static void gen_rand_string(h2o_iovec_t *s)
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     h2o_file_handler_t *self = (void *)_self;
-    h2o_iovec_t mime_type;
+    h2o_mimemap_type_t *mime_type;
     char *rpath;
     size_t rpath_len, req_path_prefix;
     struct st_h2o_sendfile_generator_t *generator = NULL;
@@ -574,6 +574,11 @@ Opened:
 
     /* obtain mime type */
     mime_type = h2o_mimemap_get_type(self->mimemap, h2o_get_filext(rpath, rpath_len));
+    if (mime_type->type != H2O_MIMEMAP_TYPE_MIMETYPE) {
+        h2o_req_log_error(req, "lib/handler/file.c", "extension-based dynamic handlers are not supported (yet)");
+        h2o_send_error(req, 503, "Internal Server Error", "internal server error", 0);
+        return 0;
+    }
 
     /* check if range request */
     if ((range_header_index = h2o_find_header(&req->headers, H2O_TOKEN_RANGE, SIZE_MAX)) != -1) {
@@ -602,7 +607,7 @@ Opened:
         if (range_count == 1)
             generator->bytesleft = range_infos[1];
         else {
-            generator->ranged.mimetype = h2o_strdup(&req->pool, mime_type.base, mime_type.len);
+            generator->ranged.mimetype = h2o_strdup(&req->pool, mime_type->data.mimetype.base, mime_type->data.mimetype.len);
             size_t final_content_len = 0, size_tmp = 0, size_fixed_each_part, i;
             generator->ranged.boundary.base = h2o_mem_alloc_pool(&req->pool, BOUNDARY_SIZE + 1);
             generator->ranged.boundary.len = BOUNDARY_SIZE;
@@ -612,7 +617,7 @@ Opened:
                 i /= 10;
                 size_tmp++;
             }
-            size_fixed_each_part = FIXED_PART_SIZE + mime_type.len + size_tmp;
+            size_fixed_each_part = FIXED_PART_SIZE + mime_type->data.mimetype.len + size_tmp;
             for (i = 0; i < range_count; i++) {
                 size_tmp = *range_infos++;
                 if (size_tmp == 0)
@@ -637,12 +642,12 @@ Opened:
                                  (sizeof("\r\n") - 1);
             generator->bytesleft = final_content_len;
         }
-        do_send_file(generator, req, 206, "Partial Content", mime_type, is_get);
+        do_send_file(generator, req, 206, "Partial Content", mime_type->data.mimetype, is_get);
         return 0;
     }
 
     /* return file */
-    do_send_file(generator, req, 200, "OK", mime_type, is_get);
+    do_send_file(generator, req, 200, "OK", mime_type->data.mimetype, is_get);
     return 0;
 
 NotModified:

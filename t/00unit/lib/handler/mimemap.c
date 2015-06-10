@@ -22,41 +22,47 @@
 #include "../../test.h"
 #include "../../../../lib/handler/mimemap.c"
 
+static int is_mimetype(h2o_mimemap_type_t *type, const char *expected)
+{
+    return type->type == H2O_MIMEMAP_TYPE_MIMETYPE && type->data.mimetype.len == strlen(expected) &&
+           memcmp(type->data.mimetype.base, expected, type->data.mimetype.len) == 0;
+}
+
 void test_lib__handler__mimemap_c()
 {
     h2o_mimemap_t *mimemap = h2o_mimemap_create(), *mimemap2;
 
     /* default and set default */
-    ok(strcmp(h2o_mimemap_get_default_type(mimemap).base, "application/octet-stream") == 0);
+    ok(is_mimetype(h2o_mimemap_get_default_type(mimemap), "application/octet-stream"));
     {
         char buf[sizeof("text/plain")];
         strcpy(buf, "text/plain");
-        h2o_mimemap_set_default_type(mimemap, buf);
+        h2o_mimemap_set_default_type(mimemap, h2o_mimemap_create_extension_type(buf), 0);
         memset(buf, 0, sizeof(buf));
     }
-    ok(strcmp(h2o_mimemap_get_default_type(mimemap).base, "text/plain") == 0);
+    ok(is_mimetype(h2o_mimemap_get_default_type(mimemap), "text/plain"));
 
     /* set and overwrite */
-    h2o_mimemap_set_type(mimemap, "foo", "example/foo");
-    ok(strcmp(h2o_mimemap_get_type(mimemap, "foo").base, "example/foo") == 0);
-    h2o_mimemap_set_type(mimemap, "foo", "example/overwritten");
-    ok(strcmp(h2o_mimemap_get_type(mimemap, "foo").base, "example/overwritten") == 0);
+    h2o_mimemap_set_type(mimemap, "foo", h2o_mimemap_create_extension_type("example/foo"), 0);
+    ok(is_mimetype(h2o_mimemap_get_type(mimemap, "foo"), "example/foo"));
+    h2o_mimemap_set_type(mimemap, "foo", h2o_mimemap_create_extension_type("example/overwritten"), 0);
+    ok(is_mimetype(h2o_mimemap_get_type(mimemap, "foo"), "example/overwritten"));
 
     /* clone and release */
     mimemap2 = h2o_mimemap_clone(mimemap);
-    ok(strcmp(h2o_mimemap_get_default_type(mimemap2).base, "text/plain") == 0);
-    ok(strcmp(h2o_mimemap_get_type(mimemap2, "foo").base, "example/overwritten") == 0);
+    ok(is_mimetype(h2o_mimemap_get_default_type(mimemap2), "text/plain"));
+    ok(is_mimetype(h2o_mimemap_get_type(mimemap2, "foo"), "example/overwritten"));
     h2o_mem_release_shared(mimemap2);
 
     /* check original */
-    ok(strcmp(h2o_mimemap_get_default_type(mimemap).base, "text/plain") == 0);
-    ok(strcmp(h2o_mimemap_get_type(mimemap, "foo").base, "example/overwritten") == 0);
+    ok(is_mimetype(h2o_mimemap_get_default_type(mimemap), "text/plain"));
+    ok(is_mimetype(h2o_mimemap_get_type(mimemap, "foo"), "example/overwritten"));
 
     /* remove */
     h2o_mimemap_remove_type(mimemap, "foo");
-    ok(strcmp(h2o_mimemap_get_type(mimemap, "foo").base, "text/plain") == 0);
+    ok(is_mimetype(h2o_mimemap_get_type(mimemap, "foo"), "text/plain"));
     h2o_mimemap_remove_type(mimemap, "foo");
-    ok(strcmp(h2o_mimemap_get_type(mimemap, "foo").base, "text/plain") == 0);
+    ok(is_mimetype(h2o_mimemap_get_type(mimemap, "foo"), "text/plain"));
 
     h2o_mem_release_shared(mimemap);
 }

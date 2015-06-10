@@ -327,8 +327,7 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             break;
         case ELEMENT_TYPE_HOSTCONF: /* %v */
             RESERVE(req->hostconf->authority.hostport.len * 4);
-            pos = append_unsafe_string(pos, req->hostconf->authority.hostport.base,
-                                       req->hostconf->authority.hostport.len);
+            pos = append_unsafe_string(pos, req->hostconf->authority.hostport.base, req->hostconf->authority.hostport.len);
             break;
 
         case ELEMENT_TYPE_LOGNAME:     /* %l */
@@ -399,8 +398,8 @@ int h2o_access_log_open_log(const char *path)
     if (path[0] == '|') {
         int pipefds[2];
         pid_t pid;
-        char* argv[4] = {"/bin/sh", "-c", (char *)(path + 1), NULL};
-         /* create pipe */
+        char *argv[4] = {"/bin/sh", "-c", (char *)(path + 1), NULL};
+        /* create pipe */
         if (pipe(pipefds) != 0) {
             perror("pipe failed");
             return -1;
@@ -410,11 +409,9 @@ int h2o_access_log_open_log(const char *path)
             return -1;
         }
         /* spawn the logger */
-        int mapped_fds[] = {
-            pipefds[0], 0, /* map pipefds[0] to stdin */
-            pipefds[0], -1, /* close pipefds[0] before exec */
-            -1
-        };
+        int mapped_fds[] = {pipefds[0], 0,  /* map pipefds[0] to stdin */
+                            pipefds[0], -1, /* close pipefds[0] before exec */
+                            -1};
         if ((pid = h2o_spawnp(argv[0], argv, mapped_fds)) == -1) {
             fprintf(stderr, "failed to open logger: %s:%s\n", path + 1, strerror(errno));
             return -1;

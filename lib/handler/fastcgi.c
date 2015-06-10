@@ -222,8 +222,7 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs)
     /* REQUEST_URI */
     append_pair(&req->pool, vecs, H2O_STRLIT("REQUEST_URI"), req->path.base, req->path.len);
     /* SERVER_NAME */
-    append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_NAME"), req->hostconf->authority.host.base,
-                req->hostconf->authority.host.len);
+    append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_NAME"), req->hostconf->authority.host.base, req->hostconf->authority.host.len);
     { /* SERVER_PORT */
         char buf[6];
         int l = sprintf(buf, "%" PRIu16, req->hostconf->authority.port);

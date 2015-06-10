@@ -277,6 +277,14 @@ struct st_h2o_globalconf_t {
     size_t _num_config_slots;
 };
 
+typedef struct st_h2o_mimemap_type_t {
+    enum { H2O_MIMEMAP_TYPE_MIMETYPE = 0, H2O_MIMEMAP_TYPE_PATHCONF = 1 } type;
+    union {
+        h2o_iovec_t mimetype;
+        h2o_pathconf_t pathconf;
+    } data;
+} h2o_mimemap_type_t;
+
 /**
  * context of the http server.
  */
@@ -880,6 +888,10 @@ void h2o__proxy_process_request(h2o_req_t *req);
 /* mime mapper */
 
 /**
+ *
+ */
+h2o_mimemap_type_t *h2o_mimemap_create_extension_type(const char *ext);
+/**
  * initializes the mimemap (the returned chunk is refcounted)
  */
 h2o_mimemap_t *h2o_mimemap_create(void);
@@ -890,11 +902,11 @@ h2o_mimemap_t *h2o_mimemap_clone(h2o_mimemap_t *src);
 /**
  * sets the default mime-type
  */
-void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, const char *type);
+void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, h2o_mimemap_type_t *type, int incref);
 /**
  * adds a mime-type mapping
  */
-void h2o_mimemap_set_type(h2o_mimemap_t *mimemap, const char *ext, const char *type);
+void h2o_mimemap_set_type(h2o_mimemap_t *mimemap, const char *ext, h2o_mimemap_type_t *type, int incref);
 /**
  * removes a mime-type mapping
  */
@@ -902,11 +914,11 @@ void h2o_mimemap_remove_type(h2o_mimemap_t *mimemap, const char *ext);
 /**
  * sets the default mime-type
  */
-h2o_iovec_t h2o_mimemap_get_default_type(h2o_mimemap_t *mimemap);
+h2o_mimemap_type_t *h2o_mimemap_get_default_type(h2o_mimemap_t *mimemap);
 /**
  * returns the mime-type corresponding to given extension
  */
-h2o_iovec_t h2o_mimemap_get_type(h2o_mimemap_t *mimemap, const char *ext);
+h2o_mimemap_type_t *h2o_mimemap_get_type(h2o_mimemap_t *mimemap, const char *ext);
 
 /* various handlers */
 
