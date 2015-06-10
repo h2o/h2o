@@ -60,7 +60,11 @@
 /* simply use a large value, and let the kernel clip it to the internal max */
 #define H2O_SOMAXCONN (65535)
 
+#ifdef TCP_FASTOPEN
 #define H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE 4096
+#else
+#define H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE 0
+#endif
 #define H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS 32
 
 struct listener_ssl_config_t {
@@ -758,13 +762,17 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, cons
             goto Error;
     }
 #endif
+    /* set TCP_FASTOPEN; when tfo_queues is zero TFO is always disabled */
+    if (conf.tfo_queues > 0) {
 #ifdef TCP_FASTOPEN
-    { /* set TCP_FASTOPEN */
-        /* When tfo_queues is zero TFO is always disabled */
-        if (conf.tfo_queues > 0 && setsockopt(fd, IPPROTO_TCP, TCP_FASTOPEN, (const void *)&conf.tfo_queues, sizeof(conf.tfo_queues)) != 0)
+        if (setsockopt(fd, IPPROTO_TCP, TCP_FASTOPEN, (const void *)&conf.tfo_queues, sizeof(conf.tfo_queues)) != 0) {
+            fprintf(stderr, "failed to set TCP_FASTOPEN:%s\n", strerror(errno));
             goto Error;
-    }
+        }
+#else
+        assert(!"conf.tfo_queues not zero on platform without TCP_FASTOPEN");
 #endif
+    }
     if (bind(fd, addr, addrlen) != 0)
         goto Error;
     if (listen(fd, H2O_SOMAXCONN) != 0)
@@ -1030,9 +1038,14 @@ static int on_config_tcp_fastopen(h2o_configurator_command_t *cmd, h2o_configura
 {
     if (h2o_configurator_scanf(cmd, node, "%d", &conf.tfo_queues) != 0)
         return -1;
+#ifndef TCP_FASTOPEN
+    if (conf.tfo_queues != 0) {
+        h2o_configurator_errprintf(cmd, node, "[warning] ignoring the value; the platform does not support TCP_FASTOPEN");
+        conf.tfo_queues = 0;
+    }
+#endif
     return 0;
 }
-
 
 yoml_t *load_config(const char *fn)
 {
@@ -1384,8 +1397,7 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads);
         h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
                                         on_config_num_name_resolution_threads);
-        h2o_configurator_define_command(c, "tcp-fastopen", H2O_CONFIGURATOR_FLAG_GLOBAL,
-                                        on_config_tcp_fastopen);
+        h2o_configurator_define_command(c, "tcp-fastopen", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_tcp_fastopen);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
