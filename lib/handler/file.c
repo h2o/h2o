@@ -393,7 +393,7 @@ size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t fil
 
     size_t range_start = SIZE_MAX, range_count = 0;
     char *buf = range_value->base, *buf_end = buf + range_value->len;
-    int needs_comma = 0, range_has_end;
+    int needs_comma = 0;
     H2O_VECTOR(size_t) ranges = {};
 
     if (range_value->len < 6 || memcmp(buf, "bytes=", 6) != 0)
@@ -419,47 +419,35 @@ size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t fil
         }
         if (H2O_UNLIKELY(buf == buf_end))
             break;
-        range_start = SIZE_MAX;
-        range_count = 0;
-        if (H2O_LIKELY(*buf >= '0') && H2O_LIKELY(*buf <= '9')) {
-            range_has_end = 1;
-            range_start = h2o_strtosizefwd(&buf, buf_end - buf);
-            CHECK_OVERFLOW(range_start);
+        if (H2O_LIKELY((range_start = h2o_strtosizefwd(&buf, buf_end - buf)) != SIZE_MAX)) {
             CHECK_EOF();
             if (*buf++ != '-')
                 return NULL;
+            range_count = h2o_strtosizefwd(&buf, buf_end - buf);
             if (H2O_UNLIKELY(range_start >= file_size)) {
                 range_start = SIZE_MAX;
-            }
-            if (H2O_UNLIKELY(buf == buf_end)) {
-                range_count = file_size - range_start;
-                range_has_end = 0;
-            }
-            if (H2O_UNLIKELY(*buf < '0') || H2O_UNLIKELY(*buf > '9')) {
-                range_count = file_size - range_start;
-                range_has_end = 0;
-            }
-            if (range_has_end) {
-                range_count = h2o_strtosizefwd(&buf, buf_end - buf);
-                CHECK_OVERFLOW(range_count);
+            } else if (H2O_LIKELY(range_count != SIZE_MAX)) {
                 if (H2O_UNLIKELY(range_count > file_size - 1))
                     range_count = file_size - 1;
-                if (H2O_UNLIKELY(range_start > range_count)) {
+                if (H2O_LIKELY(range_start <= range_count))
+                    range_count -= range_start - 1;
+                else
                     range_start = SIZE_MAX;
-                }
-                range_count -= range_start - 1;
+            } else {
+                range_count = file_size - range_start;
             }
         } else if (H2O_LIKELY(*buf++ == '-')) {
             CHECK_EOF();
-            if (H2O_UNLIKELY(*buf < '0') || H2O_UNLIKELY(*buf > '9'))
-                return NULL;
             range_count = h2o_strtosizefwd(&buf, buf_end - buf);
-            CHECK_OVERFLOW(range_count);
-            if (H2O_UNLIKELY(range_count > file_size))
-                range_count = file_size;
-            range_start = file_size - range_count;
-            if (H2O_UNLIKELY(range_count == 0))
+            if (H2O_UNLIKELY(range_count == SIZE_MAX))
+                return NULL;
+            if (H2O_LIKELY(range_count != 0)) {
+                if (H2O_UNLIKELY(range_count > file_size))
+                    range_count = file_size;
+                range_start = file_size - range_count;
+            } else {
                 range_start = SIZE_MAX;
+            }
         } else {
             return NULL;
         }
