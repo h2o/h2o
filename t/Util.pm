@@ -119,12 +119,13 @@ EOT
             check_port($port) && check_port($tls_port);
         },
     );
-    return +{
+    my $ret = {
         port     => $port,
         tls_port => $tls_port,
         guard    => $guard,
         pid      => $pid,
     };
+    return $ret;
 }
 
 sub empty_ports {

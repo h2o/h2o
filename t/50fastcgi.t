@@ -71,15 +71,13 @@ EOT
             };
             $doit->('http', $server->{port});
         };
+        delete $server->{guard};
     };
 }
 
 doit(0, 0);
 doit(1, 0);
-
-if ($ENV{TEST_FCGI_KEEPALIVE}) {
-    doit(1, 1);
-    doit(1, 1);
-}
+doit(1, 1);
+doit(1, 1);
 
 done_testing();
