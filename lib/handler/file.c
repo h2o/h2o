@@ -152,13 +152,8 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
         rlen = MAX_BUF_SIZE - used_buf;
     while ((rret = read(self->fd, self->buf + used_buf, rlen)) == -1 && errno == EINTR)
         ;
-    if (rret == -1) {
-    Error:
-        req->http1_is_persistent = 0;
-        h2o_send(req, NULL, 0, 1);
-        do_close(&self->super, req);
-        return;
-    }
+    if (rret == -1)
+        goto Error;
     self->bytesleft -= rret;
 
     vec[0].base = self->buf;
@@ -173,6 +168,13 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
         is_finished = 0;
     }
     h2o_send(req, vec, vecarrsize, is_finished);
+    return;
+
+Error:
+    req->http1_is_persistent = 0;
+    h2o_send(req, NULL, 0, 1);
+    do_close(&self->super, req);
+    return;
 }
 
 static int do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_t *buf)
