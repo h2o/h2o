@@ -53,7 +53,7 @@ struct st_h2o_sendfile_generator_t {
     struct {
         size_t filesize;
         size_t range_count;
-        size_t *range_infos; /* size_t shows in pair. first is start offset, then length */
+        size_t *range_infos;  /* size_t shows in pair. first is start offset, then length */
         h2o_iovec_t boundary; /* boundary used for multipart/byteranges */
         h2o_iovec_t mimetype; /* original mimetype for multipart */
         size_t current_range; /* range that processing now */
@@ -78,11 +78,11 @@ const char **h2o_file_default_index_files = default_index_files;
 static uint64_t time2packed(struct tm *tm)
 {
     return (uint64_t)(tm->tm_year + 1900) << 40 /* year:  24-bits */
-        | (uint64_t)tm->tm_mon << 32         /* month:  8-bits */
-        | (uint64_t)tm->tm_mday << 24        /* mday:   8-bits */
-        | (uint64_t)tm->tm_hour << 16        /* hour:   8-bits */
-        | (uint64_t)tm->tm_min << 8          /* min:    8-bits */
-        | (uint64_t)tm->tm_sec;              /* sec:    8-bits */
+           | (uint64_t)tm->tm_mon << 32         /* month:  8-bits */
+           | (uint64_t)tm->tm_mday << 24        /* mday:   8-bits */
+           | (uint64_t)tm->tm_hour << 16        /* hour:   8-bits */
+           | (uint64_t)tm->tm_min << 8          /* min:    8-bits */
+           | (uint64_t)tm->tm_sec;              /* sec:    8-bits */
 }
 
 static void do_close(h2o_generator_t *_self, h2o_req_t *req)
@@ -122,7 +122,8 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
         do_close(&self->super, req);
 }
 
-static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req) {
+static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
+{
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
     size_t rlen, used_buf = 0;
     ssize_t rret, vecarrsize;
@@ -133,18 +134,18 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req) {
         size_t *range_cur = self->ranged.range_infos + 2 * self->ranged.current_range;
         size_t range_end = *range_cur + *(range_cur + 1) - 1;
         if (H2O_LIKELY(self->ranged.current_range != 0))
-            used_buf = sprintf(self->buf, "\r\n--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
-                               self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end,
-                               self->ranged.filesize);
+            used_buf =
+                sprintf(self->buf, "\r\n--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
+                        self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end, self->ranged.filesize);
         else
-            used_buf = sprintf(self->buf, "--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
-                               self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end,
-                               self->ranged.filesize);
-        self->ranged.current_range ++;
+            used_buf =
+                sprintf(self->buf, "--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
+                        self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end, self->ranged.filesize);
+        self->ranged.current_range++;
         rret = lseek(self->fd, *range_cur, SEEK_SET);
         if (rret == -1)
             goto Error;
-        self->bytesleft = * ++range_cur;
+        self->bytesleft = *++range_cur;
     }
     rlen = self->bytesleft;
     if (rlen + used_buf > MAX_BUF_SIZE)
@@ -226,7 +227,7 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
         return NULL;
     is_gzip = 0;
 
- Opened:
+Opened:
     if (fstat(fd, &st) != 0) {
         perror("fstat");
         close(fd);
@@ -378,15 +379,14 @@ static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len, i
     return 0;
 }
 
-size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t file_size, size_t* ret)
+size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t file_size, size_t *ret)
 {
-#define CHECK_EOF()                             \
-    if (buf == buf_end)                         \
+#define CHECK_EOF()                                                                                                                \
+    if (buf == buf_end)                                                                                                            \
         return NULL;
 
-
-#define CHECK_OVERFLOW(range)                   \
-    if (range == SIZE_MAX)                      \
+#define CHECK_OVERFLOW(range)                                                                                                      \
+    if (range == SIZE_MAX)                                                                                                         \
         return NULL;
 
     size_t range_start = SIZE_MAX, range_count = 0;
@@ -399,7 +399,7 @@ size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t fil
 
     buf += 6;
     CHECK_EOF();
-    
+
     /* most range requests contain only one range */
     do {
         while (1) {
@@ -409,14 +409,16 @@ size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t fil
                 break;
             }
             needs_comma = 0;
-            buf ++;
+            buf++;
             while (H2O_UNLIKELY(*buf == ' ') || H2O_UNLIKELY(*buf == '\t')) {
-                buf ++;
+                buf++;
                 CHECK_EOF();
             }
         }
-        if (H2O_UNLIKELY(buf == buf_end)) break;
-        range_start = SIZE_MAX; range_count = 0;
+        if (H2O_UNLIKELY(buf == buf_end))
+            break;
+        range_start = SIZE_MAX;
+        range_count = 0;
         if (H2O_LIKELY(*buf >= '0') && H2O_LIKELY(*buf <= '9')) {
             range_has_end = 1;
             range_start = h2o_strtosizefwd(&buf, buf_end - buf);
@@ -424,9 +426,9 @@ size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t fil
             CHECK_EOF();
             if (*buf++ != '-')
                 return NULL;
-	    if (H2O_UNLIKELY(range_start >= file_size)) {
+            if (H2O_UNLIKELY(range_start >= file_size)) {
                 range_start = SIZE_MAX;
-	    }
+            }
             if (H2O_UNLIKELY(buf == buf_end)) {
                 range_count = file_size - range_start;
                 range_has_end = 0;
@@ -451,7 +453,7 @@ size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t fil
                 return NULL;
             range_count = h2o_strtosizefwd(&buf, buf_end - buf);
             CHECK_OVERFLOW(range_count);
-	    if (H2O_UNLIKELY(range_count > file_size))
+            if (H2O_UNLIKELY(range_count > file_size))
                 range_count = file_size;
             range_start = file_size - range_count;
             if (H2O_UNLIKELY(range_count == 0))
@@ -461,13 +463,13 @@ size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t fil
         }
 
         if (H2O_LIKELY(range_start != SIZE_MAX)) {
-            h2o_vector_reserve(pool, (void*)&ranges, sizeof(ranges.entries[0]), ranges.size + 2);
+            h2o_vector_reserve(pool, (void *)&ranges, sizeof(ranges.entries[0]), ranges.size + 2);
             ranges.entries[ranges.size++] = range_start;
             ranges.entries[ranges.size++] = range_count;
         }
         if (buf != buf_end)
             while (H2O_UNLIKELY(*buf == ' ') || H2O_UNLIKELY(*buf == '\t')) {
-                buf ++;
+                buf++;
                 CHECK_EOF();
             }
         needs_comma = 1;
@@ -481,10 +483,9 @@ size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t fil
 static void h2o_gen_rand_string(h2o_iovec_t *s)
 {
     int i;
-    static const char alphanum[] =
-        "0123456789"
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz";
+    static const char alphanum[] = "0123456789"
+                                   "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                                   "abcdefghijklmnopqrstuvwxyz";
 
     for (i = 0; i < s->len; ++i) {
         s->base[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
@@ -568,7 +569,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     }
     return 0;
 
- Opened:
+Opened:
     if ((if_none_match_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_NONE_MATCH, SIZE_MAX)) != -1) {
         h2o_iovec_t *if_none_match = &req->headers.entries[if_none_match_header_index].value;
         if (h2o_memis(if_none_match->base, if_none_match->len, generator->etag_buf, generator->etag_len))
@@ -617,22 +618,33 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
             generator->ranged.boundary.len = BOUNDARY_SIZE;
             h2o_gen_rand_string(&generator->ranged.boundary);
             i = generator->bytesleft;
-            while (i) {i /= 10; size_tmp++;}
+            while (i) {
+                i /= 10;
+                size_tmp++;
+            }
             size_fixed_each_part = FIXED_PART_SIZE + mime_type.len + size_tmp;
             for (i = 0; i < range_count; i++) {
                 size_tmp = *range_infos++;
-                if (size_tmp == 0) final_content_len++;
-                while (size_tmp) {size_tmp /= 10; final_content_len++;}
-                
+                if (size_tmp == 0)
+                    final_content_len++;
+                while (size_tmp) {
+                    size_tmp /= 10;
+                    final_content_len++;
+                }
+
                 size_tmp = *(range_infos - 1);
                 final_content_len += *range_infos;
-                
+
                 size_tmp += *range_infos++ - 1;
-                if (size_tmp == 0) final_content_len++;
-                while (size_tmp) {size_tmp /= 10; final_content_len++;}
+                if (size_tmp == 0)
+                    final_content_len++;
+                while (size_tmp) {
+                    size_tmp /= 10;
+                    final_content_len++;
+                }
             }
-            final_content_len += sizeof("\r\n--") - 1 + BOUNDARY_SIZE + sizeof("--\r\n") - 1
-                + size_fixed_each_part * range_count - (sizeof("\r\n") - 1);
+            final_content_len += sizeof("\r\n--") - 1 + BOUNDARY_SIZE + sizeof("--\r\n") - 1 + size_fixed_each_part * range_count -
+                                 (sizeof("\r\n") - 1);
             generator->bytesleft = final_content_len;
         }
         do_send_file(generator, req, 206, "Partial Content", mime_type, is_get);
@@ -643,7 +655,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     do_send_file(generator, req, 200, "OK", mime_type, is_get);
     return 0;
 
- NotModified:
+NotModified:
     req->res.status = 304;
     req->res.reason = "Not Modified";
     h2o_send_inline(req, NULL, 0);

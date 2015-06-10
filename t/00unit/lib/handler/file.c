@@ -33,9 +33,9 @@ static int check_header(h2o_res_t *res, const h2o_token_t *header_name, const ch
     return h2o_lcstris(res->headers.entries[index].value.base, res->headers.entries[index].value.len, expected, strlen(expected));
 }
 
-static int check_multirange_body(char *resbody, const char* boundary, const h2o_iovec_t *expected, size_t partlen)
+static int check_multirange_body(char *resbody, const char *boundary, const h2o_iovec_t *expected, size_t partlen)
 {
-    char* bptr = resbody;
+    char *bptr = resbody;
     h2o_iovec_t *eptr = expected;
     int not_first_line = 0;
     while (partlen--) {
@@ -142,7 +142,7 @@ static void test_process_range(void)
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ranges == NULL);
     }
-    
+
     { /* check ranges with one side inside filesize */
         testrange = h2o_iovec_init(H2O_STRLIT("bytes=90-102"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
@@ -182,7 +182,7 @@ static void test_process_range(void)
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ranges == NULL);
     }
-    
+
     {
         testrange = h2o_iovec_init(H2O_STRLIT("bsdfeadsfjwleakjf"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
@@ -259,7 +259,7 @@ static void test_process_range(void)
         ok(*ranges++ == 5);
         ok(*ranges == 6);
     }
-    
+
     h2o_mem_clear_pool(&testpool);
 }
 
@@ -530,8 +530,8 @@ static void test_range_req(void)
     { /* multiple ranges */
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         ssize_t content_type_index;
-        h2o_iovec_t content_type, expected[2]={};
-        char boundary[BOUNDARY_SIZE+1];
+        h2o_iovec_t content_type, expected[2] = {};
+        char boundary[BOUNDARY_SIZE + 1];
         size_t mimebaselen = strlen("multipart/byteranges; boundary=");
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
@@ -547,11 +547,11 @@ static void test_range_req(void)
         memcpy(boundary, content_type.base + mimebaselen, BOUNDARY_SIZE);
         boundary[BOUNDARY_SIZE] = 0;
         expected[0].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
-        expected[0].len = sprintf(expected[0].base, "Content-Type: %s\r\nContent-Range: bytes 0-9/1000\r\n\r\n%s",
-                                  "text/plain", "123456789\n");
+        expected[0].len =
+            sprintf(expected[0].base, "Content-Type: %s\r\nContent-Range: bytes 0-9/1000\r\n\r\n%s", "text/plain", "123456789\n");
         expected[1].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
-        expected[1].len = sprintf(expected[1].base, "Content-Type: %s\r\nContent-Range: bytes 989-999/1000\r\n\r\n%s",
-                                  "text/plain", "\n123456789\n");
+        expected[1].len = sprintf(expected[1].base, "Content-Type: %s\r\nContent-Range: bytes 989-999/1000\r\n\r\n%s", "text/plain",
+                                  "\n123456789\n");
         ok(h2o_find_header(&conn->req.res.headers, H2O_TOKEN_CONTENT_RANGE, -1) == -1);
         ok(conn->body->size == conn->req.res.content_length);
         ok(check_multirange_body(conn->body->bytes, boundary, expected, 2));
@@ -560,8 +560,8 @@ static void test_range_req(void)
     { /* multiple ranges with plenty of WS and COMMA */
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         ssize_t content_type_index;
-        h2o_iovec_t content_type, expected[2]={};
-        char boundary[BOUNDARY_SIZE+1];
+        h2o_iovec_t content_type, expected[2] = {};
+        char boundary[BOUNDARY_SIZE + 1];
         size_t mimebaselen = strlen("multipart/byteranges; boundary=");
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
@@ -577,16 +577,16 @@ static void test_range_req(void)
         memcpy(boundary, content_type.base + mimebaselen, BOUNDARY_SIZE);
         boundary[BOUNDARY_SIZE] = 0;
         expected[0].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
-        expected[0].len = sprintf(expected[0].base, "Content-Type: %s\r\nContent-Range: bytes 1-3/1000\r\n\r\n%s",
-                                  "text/plain", "234");
+        expected[0].len =
+            sprintf(expected[0].base, "Content-Type: %s\r\nContent-Range: bytes 1-3/1000\r\n\r\n%s", "text/plain", "234");
         expected[1].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
-        expected[1].len = sprintf(expected[1].base, "Content-Type: %s\r\nContent-Range: bytes 5-9/1000\r\n\r\n%s",
-                                  "text/plain", "6789\n");
+        expected[1].len =
+            sprintf(expected[1].base, "Content-Type: %s\r\nContent-Range: bytes 5-9/1000\r\n\r\n%s", "text/plain", "6789\n");
         ok(h2o_find_header(&conn->req.res.headers, H2O_TOKEN_CONTENT_RANGE, -1) == -1);
         ok(conn->body->size == conn->req.res.content_length);
         ok(check_multirange_body(conn->body->bytes, boundary, expected, 2));
         h2o_loopback_destroy(conn);
-    }    
+    }
 }
 
 void test_lib__handler__file_c()

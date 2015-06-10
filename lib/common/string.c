@@ -95,7 +95,8 @@ Error:
     return SIZE_MAX;
 }
 
-size_t h2o_strtosizefwd(char **s, size_t len) {
+size_t h2o_strtosizefwd(char **s, size_t len)
+{
     uint64_t v = 0, c = 0;
     char *p = *s, *p_end = *s + len;
 
@@ -108,7 +109,8 @@ size_t h2o_strtosizefwd(char **s, size_t len) {
             break;
         v *= 10;
         v += ch - '0';
-        p ++; c ++;
+        p++;
+        c++;
         if (p == p_end)
             break;
         /* similar as above, do not even try to overflow */
