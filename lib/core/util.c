@@ -64,3 +64,25 @@ void h2o_accept_ssl(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *so
     sock->data2 = hosts;
     h2o_socket_ssl_server_handshake(sock, ssl_ctx, on_ssl_handshake_complete);
 }
+
+size_t h2o_stringify_protocol_version(char *dst, int version)
+{
+    char *p = dst;
+
+    if (version < 0x200) {
+        assert(version <= 0x109);
+#define PREFIX "HTTP/1."
+        memcpy(p, PREFIX, sizeof(PREFIX) - 1);
+        p += sizeof(PREFIX) - 1;
+#undef PREFIX
+        *p++ = '0' + (version & 0xff);
+    } else {
+#define PROTO "HTTP/2"
+        memcpy(p, PROTO, sizeof(PROTO) - 1);
+        p += sizeof(PROTO) - 1;
+#undef PROTO
+    }
+
+    *p = '\0';
+    return p - dst;
+}

@@ -444,6 +444,18 @@ size_t h2o_socket_getnumerichost(struct sockaddr *sa, socklen_t salen, char *buf
     return strlen(buf);
 }
 
+int32_t h2o_socket_getport(struct sockaddr *sa)
+{
+    switch (sa->sa_family) {
+    case AF_INET:
+        return htons(((struct sockaddr_in*)sa)->sin_port);
+    case AF_INET6:
+        return htons(((struct sockaddr_in6*)sa)->sin6_port);
+    default:
+        return -1;
+    }
+}
+
 static void on_handshake_complete(h2o_socket_t *sock, int status)
 {
     h2o_socket_cb handshake_cb = sock->ssl->handshake.cb;

@@ -690,6 +690,10 @@ ssize_t h2o_delete_header(h2o_headers_t *headers, ssize_t cursor);
  * accepts a SSL connection
  */
 void h2o_accept_ssl(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, SSL_CTX *ssl_ctx);
+/**
+ * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")
+ */
+size_t h2o_stringify_protocol_version(char *dst, int version);
 
 /* request */
 
@@ -941,6 +945,32 @@ void h2o_expires_register(h2o_pathconf_t *pathconf, h2o_expires_args_t *args);
  *
  */
 void h2o_expires_register_configurator(h2o_globalconf_t *conf);
+
+/* lib/fastcgi.c */
+
+typedef struct st_h2o_fastcgi_handler_t h2o_fastcgi_handler_t;
+
+#define H2O_DEFAULT_FASTCGI_IO_TIMEOUT 5000
+
+typedef struct st_h2o_fastcgi_config_vars_t {
+    uint64_t io_timeout;
+    uint64_t keepalive_timeout;
+} h2o_fastcgi_config_vars_t;
+
+/**
+ * registers the fastcgi handler to the context
+ */
+h2o_fastcgi_handler_t *h2o_fastcgi_register_by_hostport(h2o_pathconf_t *pathconf, const char *host, uint16_t port,
+                                                        h2o_fastcgi_config_vars_t *vars);
+/**
+ * registers the fastcgi handler to the context
+ */
+h2o_fastcgi_handler_t *h2o_fastcgi_register_by_address(h2o_pathconf_t *pathconf, struct sockaddr *sa, socklen_t salen,
+                                                       h2o_fastcgi_config_vars_t *vars);
+/**
+ * registers the configurator
+ */
+void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/file.c */
 

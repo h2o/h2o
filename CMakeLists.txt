@@ -150,6 +150,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/access_log.c
     lib/handler/chunked.c
     lib/handler/expires.c
+    lib/handler/fastcgi.c
     lib/handler/file.c
     lib/handler/headers.c
     lib/handler/mimemap.c
@@ -158,6 +159,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/reproxy.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/expires.c
+    lib/handler/configurator/fastcgi.c
     lib/handler/configurator/file.c
     lib/handler/configurator/headers.c
     lib/handler/configurator/proxy.c
@@ -185,6 +187,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/common/url.c
     t/00unit/lib/core/headers.c
     t/00unit/lib/core/proxy.c
+    t/00unit/lib/handler/fastcgi.c
     t/00unit/lib/handler/file.c
     t/00unit/lib/handler/headers.c
     t/00unit/lib/handler/mimemap.c
@@ -202,6 +205,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/url.c
     lib/core/headers.c
     lib/core/proxy.c
+    lib/handler/fastcgi.c
     lib/handler/file.c
     lib/handler/headers.c
     lib/handler/mimemap.c

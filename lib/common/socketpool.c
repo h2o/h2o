@@ -81,24 +81,42 @@ static void on_timeout(h2o_timeout_entry_t *timeout_entry)
     h2o_timeout_link(pool->_interval_cb.loop, &pool->_interval_cb.timeout, &pool->_interval_cb.entry);
 }
 
-void h2o_socketpool_init(h2o_socketpool_t *pool, h2o_iovec_t host, uint16_t port, size_t capacity)
+static void common_init(h2o_socketpool_t *pool, size_t capacity)
 {
     memset(pool, 0, sizeof(*pool));
 
-    if (h2o_hostinfo_aton(host, &pool->peer.sin.sin_addr) == 0) {
-        pool->peer.sin.sin_family = AF_INET;
-        pool->peer.sin.sin_port = htons(port);
-    } else {
-        pool->peer.named.host = h2o_strdup(NULL, host.base, host.len);
-        pool->peer.named.port.base = h2o_mem_alloc(sizeof("65535"));
-        pool->peer.named.port.len = sprintf(pool->peer.named.port.base, "%u", (unsigned)port);
-        pool->peer.is_named = 1;
-    }
     pool->capacity = capacity;
     pool->timeout = UINT64_MAX;
 
     pthread_mutex_init(&pool->_shared.mutex, NULL);
     h2o_linklist_init_anchor(&pool->_shared.sockets);
+}
+
+void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa, socklen_t salen, size_t capacity)
+{
+    assert(salen <= sizeof(pool->peer.sockaddr.bytes));
+
+    common_init(pool, capacity);
+    memcpy(&pool->peer.sockaddr.bytes, sa, salen);
+    pool->peer.sockaddr.len = salen;
+}
+
+void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, uint16_t port, size_t capacity)
+{
+    struct sockaddr_in sin = {};
+
+    if (h2o_hostinfo_aton(host, &sin.sin_addr) == 0) {
+        sin.sin_family = AF_INET;
+        sin.sin_port = htons(port);
+        h2o_socketpool_init_by_address(pool, (void *)&sin, sizeof(sin), capacity);
+        return;
+    }
+
+    common_init(pool, capacity);
+    pool->peer.named.host = h2o_strdup(NULL, host.base, host.len);
+    pool->peer.named.port.base = h2o_mem_alloc(sizeof("65535"));
+    pool->peer.named.port.len = sprintf(pool->peer.named.port.base, "%u", (unsigned)port);
+    pool->peer.is_named = 1;
 }
 
 void h2o_socketpool_dispose(h2o_socketpool_t *pool)
@@ -236,7 +254,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
                                                 SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, req);
     } else {
         /* connect (using sockaddr_in) */
-        start_connect(req, (void *)&pool->peer.sin, sizeof(pool->peer.sin));
+        start_connect(req, (void *)&pool->peer.sockaddr.bytes, pool->peer.sockaddr.len);
     }
 }
 
