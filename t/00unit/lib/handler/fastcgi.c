@@ -81,7 +81,8 @@ static void test_build_request(void)
     conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
     conn->req.query_at = SIZE_MAX;
     conn->req.version = 0x101;
-    conn->req.pathconf = (*ctx.globalconf->hosts)->paths.entries;
+    conn->req.hostconf = *ctx.globalconf->hosts;
+    conn->req.pathconf = conn->req.hostconf->paths.entries;
     h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_COOKIE, H2O_STRLIT("foo=bar"));
     h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_USER_AGENT,
                    H2O_STRLIT("Mozilla/5.0 (X11; Linux) KHTML/4.9.1 (like Gecko) Konqueror/4.9"));

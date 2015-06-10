@@ -148,16 +148,13 @@ typedef struct st_h2o_timestamp_t {
 
 typedef struct st_h2o_pathconf_t {
     /**
-     * reverse reference to the host configuration
+     * globalconf to which the pathconf belongs
      */
-    h2o_hostconf_t *host;
+    h2o_globalconf_t *global;
     /**
      * pathname in lower case (has "/" appended at last (unless it is the fallback path), base is NUL terminated)
      */
     h2o_iovec_t path;
-    /**
-     * list of handlers
-     */
     /**
      * list of handlers
      */
@@ -530,6 +527,10 @@ struct st_h2o_req_t {
          */
         size_t query_at;
     } input;
+    /**
+     * the host context
+     */
+    h2o_hostconf_t *hostconf;
     /**
      * the path context
      */

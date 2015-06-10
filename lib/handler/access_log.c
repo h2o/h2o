@@ -326,9 +326,9 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             pos = append_unsafe_string(pos, req->input.authority.base, req->input.authority.len);
             break;
         case ELEMENT_TYPE_HOSTCONF: /* %v */
-            RESERVE(req->pathconf->host->authority.hostport.len * 4);
-            pos = append_unsafe_string(pos, req->pathconf->host->authority.hostport.base,
-                                       req->pathconf->host->authority.hostport.len);
+            RESERVE(req->hostconf->authority.hostport.len * 4);
+            pos = append_unsafe_string(pos, req->hostconf->authority.hostport.base,
+                                       req->hostconf->authority.hostport.len);
             break;
 
         case ELEMENT_TYPE_LOGNAME:     /* %l */
