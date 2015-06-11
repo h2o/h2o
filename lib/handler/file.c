@@ -484,6 +484,25 @@ static void gen_rand_string(h2o_iovec_t *s)
     s->base[s->len] = 0;
 }
 
+static int delegate_dynamic_request(h2o_req_t *req, size_t url_path_len, const char *local_path, size_t local_path_len,
+                                    h2o_mimemap_type_t *mime_type)
+{
+    h2o_filereq_t *filereq;
+    h2o_handler_t *handler;
+
+    assert(mime_type->data.dynamic.pathconf.handlers.size == 1);
+
+    filereq = h2o_mem_alloc_pool(&req->pool, sizeof(*filereq));
+    filereq->url_path_len = url_path_len;
+    filereq->local_path = h2o_iovec_init(local_path, local_path_len);
+
+    req->pathconf = &mime_type->data.dynamic.pathconf;
+    req->filereq = filereq;
+
+    handler = mime_type->data.dynamic.pathconf.handlers.entries[0];
+    return handler->on_req(handler, req);
+}
+
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     h2o_file_handler_t *self = (void *)_self;
@@ -574,10 +593,12 @@ Opened:
 
     /* obtain mime type */
     mime_type = h2o_mimemap_get_type(self->mimemap, h2o_get_filext(rpath, rpath_len));
-    if (mime_type->type != H2O_MIMEMAP_TYPE_MIMETYPE) {
-        h2o_req_log_error(req, "lib/handler/file.c", "extension-based dynamic handlers are not supported (yet)");
-        h2o_send_error(req, 503, "Internal Server Error", "internal server error", 0);
-        return 0;
+    switch (mime_type->type) {
+    case H2O_MIMEMAP_TYPE_MIMETYPE:
+        break;
+    case H2O_MIMEMAP_TYPE_DYNAMIC:
+        do_close(&generator->super, req);
+        return delegate_dynamic_request(req, req->path_normalized.len, rpath, rpath_len, mime_type);
     }
 
     /* check if range request */
@@ -590,13 +611,12 @@ Opened:
             content_range.base = h2o_mem_alloc_pool(&req->pool, 32);
             content_range.len = sprintf(content_range.base, "bytes */%zd", generator->bytesleft);
             h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_RANGE, content_range.base, content_range.len);
-            do_close(&generator->super, req);
             req->res.status = 416;
             req->res.reason = "Requested Range Not Satisfiable";
             req->res.content_length = strlen("requested range not satisfiable");
             h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
             h2o_send_inline(req, "requested range not satisfiable", req->res.content_length);
-            return 0;
+            goto Close;
         }
         generator->ranged.range_count = range_count;
         generator->ranged.range_infos = range_infos;
@@ -654,8 +674,23 @@ NotModified:
     req->res.status = 304;
     req->res.reason = "Not Modified";
     h2o_send_inline(req, NULL, 0);
+Close:
     do_close(&generator->super, req);
     return 0;
+}
+
+static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
+{
+    h2o_file_handler_t *self = (void *)_self;
+
+    h2o_mimemap_on_context_init(self->mimemap, ctx);
+}
+
+static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
+{
+    h2o_file_handler_t *self = (void *)_self;
+
+    h2o_mimemap_on_context_dispose(self->mimemap, ctx);
 }
 
 static void on_dispose(h2o_handler_t *_self)
@@ -685,6 +720,8 @@ h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real
         (void *)h2o_create_handler(pathconf, offsetof(h2o_file_handler_t, index_files[0]) + sizeof(self->index_files[0]) * (i + 1));
 
     /* setup callbacks */
+    self->super.on_context_init = on_context_init;
+    self->super.on_context_dispose = on_context_dispose;
     self->super.dispose = on_dispose;
     self->super.on_req = on_req;
 

@@ -79,6 +79,7 @@ static void test_build_request(void)
     conn->req.scheme = &H2O_URL_SCHEME_HTTP;
     conn->req.authority = h2o_iovec_init(H2O_STRLIT("localhost"));
     conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
+    conn->req.path_normalized = conn->req.path;
     conn->req.query_at = SIZE_MAX;
     conn->req.version = 0x101;
     conn->req.hostconf = *ctx.globalconf->hosts;
@@ -93,7 +94,8 @@ static void test_build_request(void)
                                                                        "\x00\x01\0\0\0\0\0\0")));
     vec_index = 1;
     ok(check_params(vecs.entries, &vec_index, 0x1234,
-                    H2O_STRLIT("\x09\x01PATH_INFO/"                      /* */
+                    H2O_STRLIT("\x0b\x00SCRIPT_NAME"                     /* */
+                               "\x09\x01PATH_INFO/"                      /* */
                                "\x0c\x00QUERY_STRING"                    /* */
                                "\x0e\x03REQUEST_METHODGET"               /* */
                                "\x0b\x01REQUEST_URI/"                    /* */
@@ -101,7 +103,6 @@ static void test_build_request(void)
                                "\x0b\x05SERVER_PORT65535"                /* */
                                "\x0f\x08SERVER_PROTOCOLHTTP/1.1"         /* */
                                "\x0f\x10SERVER_SOFTWAREh2o/1.2.1-alpha1" /* */
-                               "\x0b\x00SCRIPT_NAME"                     /* */
                                "\x0b\x07HTTP_COOKIEfoo=bar"              /* */
                                "\x0f\x3fHTTP_USER_AGENTMozilla/5.0 (X11; Linux) KHTML/4.9.1 (like Gecko) Konqueror/4.9" /* */)));
     ok(h2o_memis(vecs.entries[vec_index].base, vecs.entries[vec_index].len, H2O_STRLIT("\x01\x05\x12\x34\x00\x00\x00\x00")));
@@ -118,6 +119,7 @@ static void test_build_request(void)
     ok(check_params(vecs.entries, &vec_index, 0x1234,
                     H2O_STRLIT("\x0e\x03"
                                "CONTENT_LENGTH126"                       /* */
+                               "\x0b\x00SCRIPT_NAME"                     /* */
                                "\x09\x01PATH_INFO/"                      /* */
                                "\x0c\x00QUERY_STRING"                    /* */
                                "\x0e\x03REQUEST_METHODGET"               /* */
@@ -126,7 +128,6 @@ static void test_build_request(void)
                                "\x0b\x05SERVER_PORT65535"                /* */
                                "\x0f\x08SERVER_PROTOCOLHTTP/1.1"         /* */
                                "\x0f\x10SERVER_SOFTWAREh2o/1.2.1-alpha1" /* */
-                               "\x0b\x00SCRIPT_NAME"                     /* */
                                "\x0b\x07HTTP_COOKIEfoo=bar"              /* */
                                "\x0f\x3fHTTP_USER_AGENTMozilla/5.0 (X11; Linux) KHTML/4.9.1 (like Gecko) Konqueror/4.9" /* */)));
     ok(h2o_memis(vecs.entries[vec_index].base, vecs.entries[vec_index].len, H2O_STRLIT("\x01\x05\x12\x34\x00\x40\x00\x00")));

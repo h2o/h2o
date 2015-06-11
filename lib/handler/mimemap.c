@@ -66,6 +66,17 @@ h2o_mimemap_type_t *h2o_mimemap_create_extension_type(const char *mime)
     return type;
 }
 
+h2o_mimemap_type_t *h2o_mimemap_create_dynamic_type(h2o_globalconf_t *globalconf)
+{
+    h2o_mimemap_type_t *type = h2o_mem_alloc_shared(NULL, sizeof(*type), NULL);
+
+    type->type = H2O_MIMEMAP_TYPE_DYNAMIC;
+    memset(&type->data.dynamic, 0, sizeof(type->data.dynamic));
+    h2o_config_init_pathconf(&type->data.dynamic.pathconf, globalconf, (void *)h2o_config_dispose_pathconf);
+
+    return type;
+}
+
 h2o_mimemap_t *h2o_mimemap_create()
 {
     h2o_mimemap_t *mimemap = h2o_mem_alloc_shared(NULL, sizeof(*mimemap), on_dispose);
@@ -105,6 +116,44 @@ h2o_mimemap_t *h2o_mimemap_clone(h2o_mimemap_t *src)
     h2o_mem_addref_shared(dst->default_type);
 
     return dst;
+}
+
+void h2o_mimemap_on_context_init(h2o_mimemap_t *mimemap, h2o_context_t *ctx)
+{
+    const char *ext;
+    h2o_mimemap_type_t *type;
+
+    kh_foreach(mimemap->table, ext, type, {
+        switch (type->type) {
+        case H2O_MIMEMAP_TYPE_DYNAMIC:
+            if (!type->data.dynamic._context_inited) {
+                type->data.dynamic._context_inited = 1;
+                h2o_context_init_pathconf_context(ctx, &type->data.dynamic.pathconf);
+            }
+            break;
+        case H2O_MIMEMAP_TYPE_MIMETYPE:
+            break;
+        }
+    });
+}
+
+void h2o_mimemap_on_context_dispose(h2o_mimemap_t *mimemap, h2o_context_t *ctx)
+{
+    const char *ext;
+    h2o_mimemap_type_t *type;
+
+    kh_foreach(mimemap->table, ext, type, {
+        switch (type->type) {
+        case H2O_MIMEMAP_TYPE_DYNAMIC:
+            if (!type->data.dynamic._context_disposed) {
+                type->data.dynamic._context_disposed = 1;
+                h2o_context_dispose_pathconf_context(ctx, &type->data.dynamic.pathconf);
+            }
+            break;
+        case H2O_MIMEMAP_TYPE_MIMETYPE:
+            break;
+        }
+    });
 }
 
 void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, h2o_mimemap_type_t *type, int incref)

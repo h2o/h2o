@@ -51,7 +51,7 @@ static int setup_configurators(h2o_configurator_context_t *ctx, int is_enter, yo
     return 0;
 }
 
-static int apply_commands(h2o_configurator_context_t *ctx, int flags_mask, yoml_t *node)
+int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *node, int flags_mask, const char **ignore_commands)
 {
     struct {
         h2o_configurator_command_t *cmd;
@@ -77,6 +77,12 @@ static int apply_commands(h2o_configurator_context_t *ctx, int flags_mask, yoml_
         if (key->type != YOML_TYPE_SCALAR) {
             h2o_configurator_errprintf(NULL, key, "command must be a string");
             return -1;
+        }
+        if (ignore_commands != NULL) {
+            size_t i;
+            for (i = 0; ignore_commands[i] != NULL; ++i)
+                if (strcmp(ignore_commands[i], key->data.scalar) == 0)
+                    goto SkipCommand;
         }
         if ((cmd = h2o_configurator_get_command(ctx->globalconf, key->data.scalar)) == NULL) {
             h2o_configurator_errprintf(NULL, key, "unknown command: %s", key->data.scalar);
@@ -122,6 +128,8 @@ static int apply_commands(h2o_configurator_context_t *ctx, int flags_mask, yoml_
             if (cmd->cb(cmd, ctx, value) != 0)
                 return -1;
         }
+    SkipCommand:
+        ;
     }
     for (i = 0; i != num_deferred; ++i) {
         if (deferred[i].cmd->cb(deferred[i].cmd, ctx, deferred[i].value) != 0)
@@ -165,7 +173,7 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
         yoml_t *key = node->data.mapping.elements[i].key;
         yoml_t *value = node->data.mapping.elements[i].value;
         ctx->pathconf = h2o_config_register_path(ctx->hostconf, key->data.scalar);
-        if (apply_commands(ctx, H2O_CONFIGURATOR_FLAG_PATH, value) != 0)
+        if (h2o_configurator_apply_commands(ctx, value, H2O_CONFIGURATOR_FLAG_PATH, NULL) != 0)
             return -1;
         ctx->pathconf = NULL;
     }
@@ -196,7 +204,7 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
             return -1;
         }
         ctx->hostconf = h2o_config_register_host(ctx->globalconf, hostname, port);
-        if (apply_commands(ctx, H2O_CONFIGURATOR_FLAG_HOST, value) != 0)
+        if (h2o_configurator_apply_commands(ctx, value, H2O_CONFIGURATOR_FLAG_HOST, NULL) != 0)
             return -1;
         if (yoml_get(value, "paths") == NULL) {
             h2o_configurator_errprintf(NULL, value, "mandatory configuration directive `paths` is missing");
@@ -363,7 +371,7 @@ int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node)
 {
     h2o_configurator_context_t ctx = {config};
 
-    if (apply_commands(&ctx, H2O_CONFIGURATOR_FLAG_GLOBAL, node) != 0)
+    if (h2o_configurator_apply_commands(&ctx, node, H2O_CONFIGURATOR_FLAG_GLOBAL, NULL) != 0)
         return -1;
     if (config->hosts[0] == NULL) {
         h2o_configurator_errprintf(NULL, node, "mandatory configuration directive `hosts` is missing");

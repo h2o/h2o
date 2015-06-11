@@ -99,7 +99,7 @@ typedef struct st_h2o_token_t {
  */
 typedef struct st_h2o_handler_t {
     size_t _config_slot;
-    void *(*on_context_init)(struct st_h2o_handler_t *self, h2o_context_t *ctx);
+    void (*on_context_init)(struct st_h2o_handler_t *self, h2o_context_t *ctx);
     void (*on_context_dispose)(struct st_h2o_handler_t *self, h2o_context_t *ctx);
     void (*dispose)(struct st_h2o_handler_t *self);
     int (*on_req)(struct st_h2o_handler_t *self, h2o_req_t *req);
@@ -111,7 +111,7 @@ typedef struct st_h2o_handler_t {
  */
 typedef struct st_h2o_filter_t {
     size_t _config_slot;
-    void *(*on_context_init)(struct st_h2o_filter_t *self, h2o_context_t *ctx);
+    void (*on_context_init)(struct st_h2o_filter_t *self, h2o_context_t *ctx);
     void (*on_context_dispose)(struct st_h2o_filter_t *self, h2o_context_t *ctx);
     void (*dispose)(struct st_h2o_filter_t *self);
     void (*on_setup_ostream)(struct st_h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot);
@@ -123,7 +123,7 @@ typedef struct st_h2o_filter_t {
  */
 typedef struct st_h2o_logger_t {
     size_t _config_slot;
-    void *(*on_context_init)(struct st_h2o_logger_t *self, h2o_context_t *ctx);
+    void (*on_context_init)(struct st_h2o_logger_t *self, h2o_context_t *ctx);
     void (*on_context_dispose)(struct st_h2o_logger_t *self, h2o_context_t *ctx);
     void (*dispose)(struct st_h2o_logger_t *self);
     void (*log_access)(struct st_h2o_logger_t *self, h2o_req_t *req);
@@ -152,7 +152,7 @@ typedef struct st_h2o_pathconf_t {
      */
     h2o_globalconf_t *global;
     /**
-     * pathname in lower case (has "/" appended at last (unless it is the fallback path), base is NUL terminated)
+     * pathname in lower case with "/" appended at last and NULL terminated (or is {NULL,0} if is fallback or extension-level)
      */
     h2o_iovec_t path;
     /**
@@ -278,10 +278,14 @@ struct st_h2o_globalconf_t {
 };
 
 typedef struct st_h2o_mimemap_type_t {
-    enum { H2O_MIMEMAP_TYPE_MIMETYPE = 0, H2O_MIMEMAP_TYPE_PATHCONF = 1 } type;
+    enum { H2O_MIMEMAP_TYPE_MIMETYPE = 0, H2O_MIMEMAP_TYPE_DYNAMIC = 1 } type;
     union {
         h2o_iovec_t mimetype;
-        h2o_pathconf_t pathconf;
+        struct {
+            h2o_pathconf_t pathconf;
+            int _context_inited : 1;
+            int _context_disposed : 1;
+        } dynamic;
     } data;
 } h2o_mimemap_type_t;
 
@@ -503,6 +507,14 @@ typedef struct st_h2o_req_overrides_t {
 } h2o_req_overrides_t;
 
 /**
+ * additional information for extension-based dynamic content
+ */
+typedef struct st_h2o_filereq_t {
+    size_t url_path_len;
+    h2o_iovec_t local_path;
+} h2o_filereq_t;
+
+/**
  * a HTTP request
  */
 struct st_h2o_req_t {
@@ -567,6 +579,10 @@ struct st_h2o_req_t {
      * normalized path of the processing request (i.e. no "." or "..", no query)
      */
     h2o_iovec_t path_normalized;
+    /**
+     * additional information (becomes available for extension-based dynamic content)
+     */
+    h2o_filereq_t *filereq;
     /**
      * overrides (maybe NULL)
      */
@@ -782,6 +798,15 @@ static void h2o_proceed_response(h2o_req_t *req);
 /* config */
 
 /**
+ * initializes pathconf
+ * @param path path to serve, or NULL if fallback or extension-level
+ */
+void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, const char *path);
+/**
+ *
+ */
+void h2o_config_dispose_pathconf(h2o_pathconf_t *pathconf);
+/**
  * initializes the global configuration
  */
 void h2o_config_init(h2o_globalconf_t *config);
@@ -825,6 +850,14 @@ void h2o_context_dispose(h2o_context_t *context);
  */
 void h2o_context_request_shutdown(h2o_context_t *context);
 /**
+ *
+ */
+void h2o_context_init_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pathconf);
+/**
+ *
+ */
+void h2o_context_dispose_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pathconf);
+/**
  * returns current timestamp
  * @param ctx the context
  * @param pool memory pool
@@ -832,9 +865,13 @@ void h2o_context_request_shutdown(h2o_context_t *context);
  */
 void h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts);
 /**
- * returns per-module context set by the on_context_init callback
+ * returns per-module context set
  */
 static void *h2o_context_get_handler_context(h2o_context_t *ctx, h2o_handler_t *handler);
+/**
+ * sets per-module context
+ */
+static void h2o_context_set_handler_context(h2o_context_t *ctx, h2o_handler_t *handler, void *handler_ctx);
 /**
  * returns per-module context set by the on_context_init callback
  */
@@ -892,6 +929,10 @@ void h2o__proxy_process_request(h2o_req_t *req);
  */
 h2o_mimemap_type_t *h2o_mimemap_create_extension_type(const char *ext);
 /**
+ *
+ */
+h2o_mimemap_type_t *h2o_mimemap_create_dynamic_type(h2o_globalconf_t *globalconf);
+/**
  * initializes the mimemap (the returned chunk is refcounted)
  */
 h2o_mimemap_t *h2o_mimemap_create(void);
@@ -899,6 +940,14 @@ h2o_mimemap_t *h2o_mimemap_create(void);
  * clones a mimemap
  */
 h2o_mimemap_t *h2o_mimemap_clone(h2o_mimemap_t *src);
+/**
+ *
+ */
+void h2o_mimemap_on_context_init(h2o_mimemap_t *mimemap, h2o_context_t *ctx);
+/**
+ *
+ */
+void h2o_mimemap_on_context_dispose(h2o_mimemap_t *mimemap, h2o_context_t *ctx);
 /**
  * sets the default mime-type
  */
@@ -1129,6 +1178,11 @@ inline void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostre
 inline void *h2o_context_get_handler_context(h2o_context_t *ctx, h2o_handler_t *handler)
 {
     return ctx->_module_configs[handler->_config_slot];
+}
+
+inline void h2o_context_set_handler_context(h2o_context_t *ctx, h2o_handler_t *handler, void *handler_ctx)
+{
+    ctx->_module_configs[handler->_config_slot] = handler_ctx;
 }
 
 inline void *h2o_context_get_filter_context(h2o_context_t *ctx, h2o_filter_t *filter)

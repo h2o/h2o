@@ -66,7 +66,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     return 0;
 }
 
-static void *on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
+static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 {
     struct rp_handler_t *self = (void *)_self;
 
@@ -76,13 +76,15 @@ static void *on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 
     /* setup a specific client context if io timeout is different */
     if (ctx->globalconf->proxy.io_timeout == self->config.io_timeout)
-        return NULL;
+        return;
+
     h2o_http1client_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*ctx) + sizeof(*client_ctx->io_timeout));
     client_ctx->loop = ctx->loop;
     client_ctx->getaddr_receiver = &ctx->receivers.hostinfo_getaddr;
     client_ctx->io_timeout = (void *)(client_ctx + 1);
     h2o_timeout_init(client_ctx->loop, client_ctx->io_timeout, self->config.io_timeout);
-    return client_ctx;
+
+    h2o_context_set_handler_context(ctx, &self->super, client_ctx);
 }
 
 static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
