@@ -298,34 +298,23 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
                                                                   H2O_CONFIGURATOR_FLAG_DEFERRED,
                                     on_config_dir);
     h2o_configurator_define_command(&self->super, "file.index",
-                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
-                                        H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
-                                    on_config_index);
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE, on_config_index);
     h2o_configurator_define_command(&self->super, "file.mime.settypes",
-                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
-                                        H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
                                     on_config_mime_settypes);
     h2o_configurator_define_command(&self->super, "file.mime.addtypes",
-                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
-                                        H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
                                     on_config_mime_addtypes);
     h2o_configurator_define_command(&self->super, "file.mime.removetypes",
-                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
-                                        H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
                                     on_config_mime_removetypes);
     h2o_configurator_define_command(&self->super, "file.mime.setdefaulttype",
-                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
-                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_mime_setdefaulttype);
-    h2o_configurator_define_command(&self->super, "file.etag", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
-                                                                   H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_etag);
+    h2o_configurator_define_command(&self->super, "file.etag",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_etag);
     h2o_configurator_define_command(&self->super, "file.send-gzip",
-                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
-                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_send_gzip);
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_send_gzip);
     h2o_configurator_define_command(&self->super, "file.dirlisting",
-                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
-                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_dir_listing);
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_dir_listing);
 }

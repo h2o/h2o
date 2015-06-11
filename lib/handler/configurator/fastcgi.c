@@ -145,11 +145,8 @@ void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf)
 
     h2o_configurator_define_command(&c->super, "fastcgi.connect", H2O_CONFIGURATOR_FLAG_PATH, on_config_connect);
     h2o_configurator_define_command(&c->super, "fastcgi.timeout.io",
-                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
-                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_timeout_io);
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_timeout_io);
     h2o_configurator_define_command(&c->super, "fastcgi.timeout.keepalive",
-                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
-                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_timeout_keepalive);
 }

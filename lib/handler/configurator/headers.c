@@ -158,9 +158,7 @@ void h2o_headers_register_configurator(h2o_globalconf_t *conf)
     c->super.enter = on_config_enter;
     c->super.exit = on_config_exit;
 #define DEFINE_CMD(name, cb)                                                                                                       \
-    h2o_configurator_define_command(&c->super, name, H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |                   \
-                                                         H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,         \
-                                    cb)
+    h2o_configurator_define_command(&c->super, name, H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, cb)
     DEFINE_CMD("header.add", on_config_header_add);
     DEFINE_CMD("header.append", on_config_header_append);
     DEFINE_CMD("header.merge", on_config_header_merge);
