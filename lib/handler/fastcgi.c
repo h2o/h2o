@@ -204,17 +204,20 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs)
         append_pair(&req->pool, vecs, H2O_STRLIT("PATH_INFO"), req->path.base, req->path.len);
         append_pair(&req->pool, vecs, H2O_STRLIT("QUERY_STRING"), NULL, 0);
     }
-    /* REMOTE_ADDR & REMOTE_PORT */
-    if (req->conn->peername.addr != NULL) {
+    { /* REMOTE_ADDR & REMOTE_PORT */
+        struct sockaddr_storage ss;
+        socklen_t sslen;
         char buf[NI_MAXHOST];
-        size_t l = h2o_socket_getnumerichost(req->conn->peername.addr, req->conn->peername.len, buf);
-        if (l != SIZE_MAX)
-            append_pair(&req->pool, vecs, H2O_STRLIT("REMOTE_ADDR"), buf, l);
-        int32_t port = h2o_socket_getport(req->conn->peername.addr);
-        if (port != -1) {
-            char buf[6];
-            int l = sprintf(buf, "%" PRIu16, (uint16_t)port);
-            append_pair(&req->pool, vecs, H2O_STRLIT("REMOTE_PORT"), buf, (size_t)l);
+        if ((sslen = req->conn->get_peername(req->conn, (void *)&ss)) != 0) {
+            size_t l = h2o_socket_getnumerichost((void *)&ss, sslen, buf);
+            if (l != SIZE_MAX)
+                append_pair(&req->pool, vecs, H2O_STRLIT("REMOTE_ADDR"), buf, l);
+            int32_t port = h2o_socket_getport((void *)&ss);
+            if (port != -1) {
+                char buf[6];
+                int l = sprintf(buf, "%" PRIu16, (uint16_t)port);
+                append_pair(&req->pool, vecs, H2O_STRLIT("REMOTE_PORT"), buf, (size_t)l);
+            }
         }
     }
     /* REQUEST_METHOD */

@@ -121,7 +121,7 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_
     uv_write(&sock->_wreq, sock->uv.stream, (uv_buf_t *)bufs, (int)bufcnt, on_do_write_complete);
 }
 
-static struct st_h2o_uv_socket_t *create_socket(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen)
+static struct st_h2o_uv_socket_t *create_socket(h2o_loop_t *loop)
 {
     uv_tcp_t *tcp = h2o_mem_alloc(sizeof(*tcp));
 
@@ -129,7 +129,7 @@ static struct st_h2o_uv_socket_t *create_socket(h2o_loop_t *loop, struct sockadd
         free(tcp);
         return NULL;
     }
-    return (void *)h2o_uv_socket_create((void *)tcp, addr, addrlen, (void *)free);
+    return (void *)h2o_uv_socket_create((void *)tcp, (void *)free);
 }
 
 int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info)
@@ -146,13 +146,12 @@ int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info)
      */
     if ((info->fd = dup(fd)) == -1)
         return -1;
-    info->peername = sock->super.peername;
     return 0;
 }
 
 h2o_socket_t *do_import(h2o_loop_t *loop, h2o_socket_export_t *info)
 {
-    struct st_h2o_uv_socket_t *sock = create_socket(loop, (void *)&info->peername.addr, info->peername.len);
+    struct st_h2o_uv_socket_t *sock = create_socket(loop);
 
     if (sock == NULL)
         return NULL;
@@ -164,24 +163,12 @@ h2o_socket_t *do_import(h2o_loop_t *loop, h2o_socket_export_t *info)
     return &sock->super;
 }
 
-h2o_socket_t *h2o_uv_socket_create(uv_stream_t *stream, struct sockaddr *addr, socklen_t addrlen, uv_close_cb close_cb)
+h2o_socket_t *h2o_uv_socket_create(uv_stream_t *stream, uv_close_cb close_cb)
 {
     struct st_h2o_uv_socket_t *sock = h2o_mem_alloc(sizeof(*sock));
 
     memset(sock, 0, sizeof(*sock));
     h2o_buffer_init(&sock->super.input, &h2o_socket_buffer_prototype);
-    if (addr != NULL) {
-        memcpy(&sock->super.peername.addr, addr, addrlen);
-        sock->super.peername.len = addrlen;
-    } else {
-        int addrlen = sizeof(sock->super.peername.addr);
-        if (uv_tcp_getpeername((uv_tcp_t *)stream, (void *)&sock->super.peername.addr, &addrlen) == 0) {
-            sock->super.peername.len = addrlen;
-        } else {
-            memset(&sock->super.peername.addr, 0, sizeof(sock->super.peername.addr));
-            sock->super.peername.len = 0;
-        }
-    }
     sock->uv.stream = stream;
     sock->uv.close_cb = close_cb;
     stream->data = sock;
@@ -204,7 +191,7 @@ h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *_sock)
 
 h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)
 {
-    struct st_h2o_uv_socket_t *sock = create_socket(loop, addr, addrlen);
+    struct st_h2o_uv_socket_t *sock = create_socket(loop);
 
     if (sock == NULL)
         return NULL;
@@ -214,6 +201,24 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
     }
     sock->super._cb.write = cb;
     return &sock->super;
+}
+
+socklen_t h2o_socket_getsockname(h2o_socket_t *_sock, struct sockaddr *sa)
+{
+    struct st_h2o_uv_socket_t *sock = (void *)_sock;
+    int len = sizeof(struct sockaddr_storage);
+    if (uv_tcp_getsockname((void *)sock->uv.stream, sa, &len) != 0)
+        return 0;
+    return (socklen_t)len;
+}
+
+socklen_t h2o_socket_getpeername(h2o_socket_t *_sock, struct sockaddr *sa)
+{
+    struct st_h2o_uv_socket_t *sock = (void *)_sock;
+    int len = sizeof(struct sockaddr_storage);
+    if (uv_tcp_getpeername((void *)sock->uv.stream, sa, &len) != 0)
+        return 0;
+    return (socklen_t)len;
 }
 
 static void on_timeout(uv_timer_t *timer)

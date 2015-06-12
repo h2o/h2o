@@ -94,6 +94,8 @@ static void test_build_request(void)
     ok(check_params(vecs.entries, &vec_index, 0x1234,
                     H2O_STRLIT("\x09\x01PATH_INFO/"                      /* */
                                "\x0c\x00QUERY_STRING"                    /* */
+                               "\xb\x09REMOTE_ADDR127.0.0.1"             /* */
+                               "\xb\x05REMOTE_PORT55555"                 /* */
                                "\x0e\x03REQUEST_METHODGET"               /* */
                                "\x0b\x01REQUEST_URI/"                    /* */
                                "\x0b\x07SERVER_NAMEdefault"              /* */
@@ -119,6 +121,8 @@ static void test_build_request(void)
                                "CONTENT_LENGTH126"                       /* */
                                "\x09\x01PATH_INFO/"                      /* */
                                "\x0c\x00QUERY_STRING"                    /* */
+                               "\xb\x09REMOTE_ADDR127.0.0.1"             /* */
+                               "\xb\x05REMOTE_PORT55555"                 /* */
                                "\x0e\x03REQUEST_METHODGET"               /* */
                                "\x0b\x01REQUEST_URI/"                    /* */
                                "\x0b\x07SERVER_NAMEdefault"              /* */

@@ -458,12 +458,13 @@ struct st_h2o_conn_t {
      */
     h2o_hostconf_t **hosts;
     /**
-     * peername (peername.addr == NULL if not available)
+     * getsockname (return size of the obtained address, or 0 if failed)
      */
-    struct {
-        struct sockaddr *addr;
-        socklen_t len;
-    } peername;
+    socklen_t (*get_sockname)(h2o_conn_t *conn, struct sockaddr *sa);
+    /**
+     * getpeername (return size of the obtained address, or 0 if failed)
+     */
+    socklen_t (*get_peername)(h2o_conn_t *conn, struct sockaddr *sa);
 };
 
 typedef struct st_h2o_req_overrides_t {
