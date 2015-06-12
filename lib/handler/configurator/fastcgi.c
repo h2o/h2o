@@ -45,6 +45,23 @@ static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_conf
     return h2o_configurator_scanf(cmd, node, "%" PRIu64, &self->vars->keepalive_timeout);
 }
 
+static int on_config_document_root(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct fastcgi_configurator_t *self = (void *)cmd->configurator;
+
+    if (node->data.scalar[0] == '\0') {
+        /* unset */
+        self->vars->document_root = NULL;
+    } else if (node->data.scalar[0] == '/') {
+        /* set */
+        self->vars->document_root = node->data.scalar;
+    } else {
+        h2o_configurator_errprintf(cmd, node, "value does not start from `/`");
+        return -1;
+    }
+    return 0;
+}
+
 static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct fastcgi_configurator_t *self = (void *)cmd->configurator;
@@ -151,4 +168,7 @@ void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "fastcgi.timeout.keepalive",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_timeout_keepalive);
+    h2o_configurator_define_command(&c->super, "fastcgi.document_root",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_document_root);
 }

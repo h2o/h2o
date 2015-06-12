@@ -81,13 +81,16 @@ struct st_fcgi_generator_t {
     h2o_timeout_entry_t timeout;
 };
 
+struct st_fcgi_config_t {
+    uint64_t io_timeout;
+    uint64_t keepalive_timeout; /* 0 to disable keep-alive */
+    h2o_iovec_t document_root;  /* .base == NULL if not set */
+};
+
 struct st_h2o_fastcgi_handler_t {
     h2o_handler_t super;
     h2o_socketpool_t sockpool;
-    struct {
-        uint64_t io_timeout;
-        uint64_t keepalive_timeout; /* 0 to disable keep-alive */
-    } config;
+    struct st_fcgi_config_t config;
 };
 
 static void encode_uint16(void *_p, unsigned v)
@@ -207,27 +210,39 @@ static void append_address_info(h2o_req_t *req, iovec_vector_t *vecs, const char
     }
 }
 
-static void append_params(h2o_req_t *req, iovec_vector_t *vecs)
+static void append_params(h2o_req_t *req, iovec_vector_t *vecs, struct st_fcgi_config_t *config)
 {
+    h2o_iovec_t path_info = {};
+
     /* CONTENT_LENGTH */
     if (req->entity.base != NULL) {
         char buf[32];
         int l = sprintf(buf, "%zu", req->entity.len);
         append_pair(&req->pool, vecs, H2O_STRLIT("CONTENT_LENGTH"), buf, (size_t)l);
     }
-    /* TODO: PATH_TRANSLATED */
     /* SCRIPT_FILENAME, SCRIPT_NAME, PATH_INFO */
     if (req->filereq != NULL) {
         h2o_filereq_t *filereq = req->filereq;
         append_pair(&req->pool, vecs, H2O_STRLIT("SCRIPT_FILENAME"), filereq->local_path.base, filereq->local_path.len);
         append_pair(&req->pool, vecs, H2O_STRLIT("SCRIPT_NAME"), req->path_normalized.base, filereq->url_path_len);
-        if (req->path_normalized.len != filereq->url_path_len) {
-            append_pair(&req->pool, vecs, H2O_STRLIT("PATH_INFO"), req->path_normalized.base + filereq->url_path_len,
-                        req->path_normalized.len - filereq->url_path_len);
-        }
+        if (req->path_normalized.len != filereq->url_path_len)
+            path_info =
+                h2o_iovec_init(req->path_normalized.base + filereq->url_path_len, req->path_normalized.len - filereq->url_path_len);
     } else {
         append_pair(&req->pool, vecs, H2O_STRLIT("SCRIPT_NAME"), NULL, 0);
+        path_info = req->path_normalized;
+    }
+    if (path_info.base != NULL)
         append_pair(&req->pool, vecs, H2O_STRLIT("PATH_INFO"), req->path_normalized.base, req->path_normalized.len);
+    /* DOCUMENT_ROOT and PATH_TRANSLATED */
+    if (config->document_root.base != NULL) {
+        append_pair(&req->pool, vecs, H2O_STRLIT("DOCUMENT_ROOT"), config->document_root.base, config->document_root.len);
+        if (path_info.base != NULL) {
+            append_pair(&req->pool, vecs, H2O_STRLIT("PATH_TRANSLATED"), NULL, config->document_root.len + path_info.len);
+            char *dst_end = vecs->entries[vecs->size - 1].base + vecs->entries[vecs->size - 1].len;
+            memcpy(dst_end - path_info.len, path_info.base, path_info.len);
+            memcpy(dst_end - path_info.len - config->document_root.len, config->document_root.base, config->document_root.len);
+        }
     }
     /* QUERY_STRING (and adjust PATH_INFO) */
     if (req->query_at != SIZE_MAX) {
@@ -311,18 +326,20 @@ static void annotate_params(h2o_mem_pool_t *pool, iovec_vector_t *vecs, unsigned
     }
 }
 
-static void build_request(h2o_req_t *req, iovec_vector_t *vecs, unsigned request_id, size_t max_record_size, int keepalive)
+static void build_request(h2o_req_t *req, iovec_vector_t *vecs, unsigned request_id, size_t max_record_size,
+                          struct st_fcgi_config_t *config)
 {
     *vecs = (iovec_vector_t){};
 
     /* first entry is FCGI_BEGIN_REQUEST */
     h2o_vector_reserve(&req->pool, (void *)vecs, sizeof(vecs->entries[0]), 5 /* we send at least 5 iovecs */);
-    vecs->entries[0] = create_begin_request(&req->pool, request_id, FCGI_RESPONDER, keepalive ? FCGI_KEEP_CONN : 0);
+    vecs->entries[0] =
+        create_begin_request(&req->pool, request_id, FCGI_RESPONDER, config->keepalive_timeout != 0 ? FCGI_KEEP_CONN : 0);
     /* second entry is reserved for FCGI_PARAMS header */
     vecs->entries[1] = h2o_iovec_init(NULL, APPEND_BLOCKSIZE); /* dummy value set to prevent params being appended to the entry */
     vecs->size = 2;
     /* accumulate the params data, and annotate them with FCGI_PARAM headers */
-    append_params(req, vecs);
+    append_params(req, vecs, config);
     annotate_params(&req->pool, vecs, request_id, max_record_size);
     /* setup FCGI_STDIN headers */
     if (req->entity.len != 0) {
@@ -663,7 +680,7 @@ static void on_connect(h2o_socket_t *sock, const char *errstr, void *data)
     generator->sock = sock;
     sock->data = generator;
 
-    build_request(generator->req, &vecs, 1, 65535, generator->ctx->handler->config.keepalive_timeout != 0);
+    build_request(generator->req, &vecs, 1, 65535, &generator->ctx->handler->config);
 
     /* start sending the response */
     h2o_socket_write(generator->sock, vecs.entries, vecs.size, on_send_complete);
@@ -752,6 +769,7 @@ static void on_handler_dispose(h2o_handler_t *_handler)
     h2o_fastcgi_handler_t *handler = (void *)_handler;
 
     h2o_socketpool_dispose(&handler->sockpool);
+    free(handler->config.document_root.base);
     free(handler);
 }
 
@@ -765,6 +783,8 @@ static h2o_fastcgi_handler_t *register_common(h2o_pathconf_t *pathconf, h2o_fast
     handler->super.on_req = on_req;
     handler->config.io_timeout = vars->io_timeout;
     handler->config.keepalive_timeout = vars->keepalive_timeout;
+    if (vars->document_root != NULL)
+        handler->config.document_root = h2o_strdup(NULL, vars->document_root, SIZE_MAX);
 
     return handler;
 }

@@ -1018,6 +1018,7 @@ typedef struct st_h2o_fastcgi_handler_t h2o_fastcgi_handler_t;
 typedef struct st_h2o_fastcgi_config_vars_t {
     uint64_t io_timeout;
     uint64_t keepalive_timeout;
+    const char *document_root;
 } h2o_fastcgi_config_vars_t;
 
 /**

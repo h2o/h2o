@@ -72,6 +72,7 @@ static int check_params(h2o_iovec_t *vecs, size_t *index, uint16_t request_id, c
 static void test_build_request(void)
 {
     h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
+    struct st_fcgi_config_t config = {5000, 0, {}};
     iovec_vector_t vecs;
     size_t vec_index;
 
@@ -89,7 +90,7 @@ static void test_build_request(void)
                    H2O_STRLIT("Mozilla/5.0 (X11; Linux) KHTML/4.9.1 (like Gecko) Konqueror/4.9"));
 
     /* build with max_record_size=65535 */
-    build_request(&conn->req, &vecs, 0x1234, 65535, 0);
+    build_request(&conn->req, &vecs, 0x1234, 65535, &config);
     ok(h2o_memis(vecs.entries[0].base, vecs.entries[0].len, H2O_STRLIT("\x01\x01\x12\x34\x00\x08\x00\x00"
                                                                        "\x00\x01\0\0\0\0\0\0")));
     vec_index = 1;
@@ -112,18 +113,22 @@ static void test_build_request(void)
     ++vec_index;
     ok(vec_index == vecs.size);
 
-    /* build with max_record_size=64, and content */
+    /* build with max_record_size=64, DOCUMENT_ROOT, and content */
+    config.document_root = h2o_iovec_init(H2O_STRLIT("/var/www/htdocs"));
     conn->req.entity = h2o_iovec_init(H2O_STRLIT("The above copyright notice and this permission notice shall be included in all "
                                                  "copies or substantial portions of the Software."));
-    build_request(&conn->req, &vecs, 0x1234, 64, 0);
+    build_request(&conn->req, &vecs, 0x1234, 64, &config);
     ok(h2o_memis(vecs.entries[0].base, vecs.entries[0].len, H2O_STRLIT("\x01\x01\x12\x34\x00\x08\x00\x00"
                                                                        "\x00\x01\0\0\0\0\0\0")));
     vec_index = 1;
     ok(check_params(vecs.entries, &vec_index, 0x1234,
                     H2O_STRLIT("\x0e\x03"
-                               "CONTENT_LENGTH126"                       /* */
-                               "\x0b\x00SCRIPT_NAME"                     /* */
-                               "\x09\x01PATH_INFO/"                      /* */
+                               "CONTENT_LENGTH126"   /* */
+                               "\x0b\x00SCRIPT_NAME" /* */
+                               "\x09\x01PATH_INFO/"  /* */
+                               "\x0d\x0f"
+                               "DOCUMENT_ROOT/var/www/htdocs"            /* */
+                               "\x0f\x10PATH_TRANSLATED/var/www/htdocs/" /* */
                                "\x0c\x00QUERY_STRING"                    /* */
                                "\x0b\x09REMOTE_ADDR127.0.0.1"            /* */
                                "\x0b\x05REMOTE_PORT55555"                /* */
