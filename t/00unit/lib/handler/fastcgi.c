@@ -94,10 +94,13 @@ static void test_build_request(void)
     ok(check_params(vecs.entries, &vec_index, 0x1234,
                     H2O_STRLIT("\x09\x01PATH_INFO/"                      /* */
                                "\x0c\x00QUERY_STRING"                    /* */
+                               "\x0b\x09REMOTE_ADDR127.0.0.1"            /* */
+                               "\x0b\x05REMOTE_PORT55555"                /* */
                                "\x0e\x03REQUEST_METHODGET"               /* */
                                "\x0b\x01REQUEST_URI/"                    /* */
+                               "\x0b\x09SERVER_ADDR127.0.0.1"            /* */
+                               "\x0b\x02SERVER_PORT80"                   /* */
                                "\x0b\x07SERVER_NAMEdefault"              /* */
-                               "\x0b\x05SERVER_PORT65535"                /* */
                                "\x0f\x08SERVER_PROTOCOLHTTP/1.1"         /* */
                                "\x0f\x10SERVER_SOFTWAREh2o/1.2.1-alpha1" /* */
                                "\x0b\x00SCRIPT_NAME"                     /* */
@@ -119,10 +122,13 @@ static void test_build_request(void)
                                "CONTENT_LENGTH126"                       /* */
                                "\x09\x01PATH_INFO/"                      /* */
                                "\x0c\x00QUERY_STRING"                    /* */
+                               "\x0b\x09REMOTE_ADDR127.0.0.1"            /* */
+                               "\x0b\x05REMOTE_PORT55555"                /* */
                                "\x0e\x03REQUEST_METHODGET"               /* */
                                "\x0b\x01REQUEST_URI/"                    /* */
+                               "\x0b\x09SERVER_ADDR127.0.0.1"            /* */
+                               "\x0b\x02SERVER_PORT80"                   /* */
                                "\x0b\x07SERVER_NAMEdefault"              /* */
-                               "\x0b\x05SERVER_PORT65535"                /* */
                                "\x0f\x08SERVER_PROTOCOLHTTP/1.1"         /* */
                                "\x0f\x10SERVER_SOFTWAREh2o/1.2.1-alpha1" /* */
                                "\x0b\x00SCRIPT_NAME"                     /* */

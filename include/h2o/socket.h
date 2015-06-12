@@ -84,13 +84,10 @@ struct st_h2o_socket_t {
         h2o_socket_cb read;
         h2o_socket_cb write;
     } _cb;
-    /* zero-filled in case of invalid address */
-    h2o_socket_peername_t peername;
 };
 
 typedef struct st_h2o_socket_export_t {
     int fd;
-    h2o_socket_peername_t peername;
     struct st_h2o_socket_ssl_t *ssl;
     h2o_buffer_t *input;
 } h2o_socket_export_t;
@@ -153,6 +150,14 @@ static int h2o_socket_is_writing(h2o_socket_t *sock);
  * returns a boolean value indicating whether if the socket is being polled for read
  */
 static int h2o_socket_is_reading(h2o_socket_t *sock);
+/**
+ * returns the length of the local address obtained (or 0 if failed)
+ */
+socklen_t h2o_socket_getsockname(h2o_socket_t *sock, struct sockaddr *sa);
+/**
+ * returns the length of the remote address obtained (or 0 if failed)
+ */
+socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa);
 /**
  * compares socket addresses
  */

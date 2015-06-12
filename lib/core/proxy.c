@@ -87,11 +87,13 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive)
     h2o_iovec_t buf;
     size_t offset = 0, remote_addr_len = SIZE_MAX;
     char remote_addr[NI_MAXHOST];
+    struct sockaddr_storage ss;
+    socklen_t sslen;
     h2o_iovec_t cookie_buf = {}, xff_buf = {}, via_buf = {};
 
     /* for x-f-f */
-    if (req->conn->peername.addr != NULL)
-        remote_addr_len = h2o_socket_getnumerichost(req->conn->peername.addr, req->conn->peername.len, remote_addr);
+    if ((sslen = req->conn->get_peername(req->conn, (void *)&ss)) != 0)
+        remote_addr_len = h2o_socket_getnumerichost((void *)&ss, sslen, remote_addr);
 
     /* build response */
     buf.len = req->method.len + req->path.len + req->authority.len + 512;

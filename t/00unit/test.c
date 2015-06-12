@@ -38,6 +38,24 @@ static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *i
         h2o_proceed_response(&conn->req);
 }
 
+static socklen_t get_sockname(h2o_conn_t *conn, struct sockaddr *sa)
+{
+    struct sockaddr_in *sin = (void *)sa;
+    sin->sin_family = AF_INET;
+    sin->sin_addr.s_addr = htonl(0x7f000001);
+    sin->sin_port = htons(80);
+    return sizeof(*sin);
+}
+
+static socklen_t get_peername(h2o_conn_t *conn, struct sockaddr *sa)
+{
+    struct sockaddr_in *sin = (void *)sa;
+    sin->sin_family = AF_INET;
+    sin->sin_addr.s_addr = htonl(0x7f000001);
+    sin->sin_port = htons(55555);
+    return sizeof(*sin);
+}
+
 h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx, h2o_hostconf_t **hosts)
 {
     h2o_loopback_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
@@ -45,6 +63,8 @@ h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx, h2o_hostconf_t **ho
     memset(conn, 0, offsetof(struct st_h2o_loopback_conn_t, req));
     conn->super.ctx = ctx;
     conn->super.hosts = hosts;
+    conn->super.get_sockname = get_sockname;
+    conn->super.get_peername = get_peername;
     h2o_init_request(&conn->req, &conn->super, NULL);
     h2o_buffer_init(&conn->body, &h2o_socket_buffer_prototype);
     conn->req._ostr_top = &conn->_ostr_final;
