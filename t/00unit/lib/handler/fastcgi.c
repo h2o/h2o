@@ -107,6 +107,7 @@ static void test_build_request(void)
                                "\x0b\x07SERVER_NAMEdefault"              /* */
                                "\x0f\x08SERVER_PROTOCOLHTTP/1.1"         /* */
                                "\x0f\x10SERVER_SOFTWAREh2o/1.2.1-alpha1" /* */
+                               "\x09\x09HTTP_HOSTlocalhost"              /* */
                                "\x0b\x07HTTP_COOKIEfoo=bar"              /* */
                                "\x0f\x3fHTTP_USER_AGENTMozilla/5.0 (X11; Linux) KHTML/4.9.1 (like Gecko) Konqueror/4.9" /* */)));
     ok(h2o_memis(vecs.entries[vec_index].base, vecs.entries[vec_index].len, H2O_STRLIT("\x01\x05\x12\x34\x00\x00\x00\x00")));
@@ -139,6 +140,7 @@ static void test_build_request(void)
                                "\x0b\x07SERVER_NAMEdefault"              /* */
                                "\x0f\x08SERVER_PROTOCOLHTTP/1.1"         /* */
                                "\x0f\x10SERVER_SOFTWAREh2o/1.2.1-alpha1" /* */
+                               "\x09\x09HTTP_HOSTlocalhost"              /* */
                                "\x0b\x07HTTP_COOKIEfoo=bar"              /* */
                                "\x0f\x3fHTTP_USER_AGENTMozilla/5.0 (X11; Linux) KHTML/4.9.1 (like Gecko) Konqueror/4.9" /* */)));
     ok(h2o_memis(vecs.entries[vec_index].base, vecs.entries[vec_index].len, H2O_STRLIT("\x01\x05\x12\x34\x00\x40\x00\x00")));
