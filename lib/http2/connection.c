@@ -1013,8 +1013,19 @@ static void emit_writereq(h2o_timeout_entry_t *entry)
     do_emit_writereq(conn);
 }
 
-static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, struct sockaddr *addr,
-                                     socklen_t addrlen)
+static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
+{
+    h2o_http2_conn_t *conn = (void *)_conn;
+    return h2o_socket_getsockname(conn->sock, sa);
+}
+
+static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
+{
+    h2o_http2_conn_t *conn = (void *)_conn;
+    return h2o_socket_getpeername(conn->sock, sa);
+}
+
+static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock)
 {
     h2o_http2_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
@@ -1022,8 +1033,8 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     memset(conn, 0, sizeof(*conn));
     conn->super.ctx = ctx;
     conn->super.hosts = hosts;
-    conn->super.peername.addr = addr;
-    conn->super.peername.len = addrlen;
+    conn->super.get_sockname = get_sockname;
+    conn->super.get_peername = get_peername;
     conn->sock = sock;
     conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
     conn->streams = kh_init(h2o_http2_stream_t);
@@ -1091,7 +1102,7 @@ void h2o_http2_conn_push_path(h2o_http2_conn_t *conn, h2o_iovec_t path, h2o_http
 
 void h2o_http2_accept(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock)
 {
-    h2o_http2_conn_t *conn = create_conn(ctx, hosts, sock, (void *)&sock->peername.addr, sock->peername.len);
+    h2o_http2_conn_t *conn = create_conn(ctx, hosts, sock);
     sock->data = conn;
     h2o_socket_read_start(conn->sock, on_read);
     update_idle_timeout(conn);
@@ -1102,7 +1113,7 @@ void h2o_http2_accept(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *
 int h2o_http2_handle_upgrade(h2o_req_t *req)
 {
     h2o_http2_conn_t *http2conn =
-        create_conn(req->conn->ctx, req->conn->hosts, NULL, req->conn->peername.addr, req->conn->peername.len);
+        create_conn(req->conn->ctx, req->conn->hosts, NULL);
     h2o_http2_stream_t *stream;
     ssize_t connection_index, settings_index;
     h2o_iovec_t settings_decoded;

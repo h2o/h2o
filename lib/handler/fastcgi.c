@@ -186,6 +186,27 @@ static void *append_pair(h2o_mem_pool_t *pool, iovec_vector_t *blocks, const cha
     return name_buf;
 }
 
+static void append_address_info(h2o_req_t *req, iovec_vector_t *vecs, const char *addrlabel, size_t addrlabel_len,
+                                const char *portlabel, size_t portlabel_len, socklen_t (*cb)(h2o_conn_t *conn, struct sockaddr *))
+{
+    struct sockaddr_storage ss;
+    socklen_t sslen;
+    char buf[NI_MAXHOST];
+
+    if ((sslen = cb(req->conn, (void *)&ss)) == 0)
+        return;
+
+    size_t l = h2o_socket_getnumerichost((void *)&ss, sslen, buf);
+    if (l != SIZE_MAX)
+        append_pair(&req->pool, vecs, addrlabel, addrlabel_len, buf, l);
+    int32_t port = h2o_socket_getport((void *)&ss);
+    if (port != -1) {
+        char buf[6];
+        int l = sprintf(buf, "%" PRIu16, (uint16_t)port);
+        append_pair(&req->pool, vecs, portlabel, portlabel_len, buf, (size_t)l);
+    }
+}
+
 static void append_params(h2o_req_t *req, iovec_vector_t *vecs)
 {
     /* CONTENT_LENGTH */
@@ -216,29 +237,15 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs)
         append_pair(&req->pool, vecs, H2O_STRLIT("QUERY_STRING"), NULL, 0);
     }
     /* REMOTE_ADDR & REMOTE_PORT */
-    if (req->conn->peername.addr != NULL) {
-        char buf[NI_MAXHOST];
-        size_t l = h2o_socket_getnumerichost(req->conn->peername.addr, req->conn->peername.len, buf);
-        if (l != SIZE_MAX)
-            append_pair(&req->pool, vecs, H2O_STRLIT("REMOTE_ADDR"), buf, l);
-        int32_t port = h2o_socket_getport(req->conn->peername.addr);
-        if (port != -1) {
-            char buf[6];
-            int l = sprintf(buf, "%" PRIu16, (uint16_t)port);
-            append_pair(&req->pool, vecs, H2O_STRLIT("REMOTE_PORT"), buf, (size_t)l);
-        }
-    }
+    append_address_info(req, vecs, H2O_STRLIT("REMOTE_ADDR"), H2O_STRLIT("REMOTE_PORT"), req->conn->get_peername);
     /* REQUEST_METHOD */
     append_pair(&req->pool, vecs, H2O_STRLIT("REQUEST_METHOD"), req->method.base, req->method.len);
     /* REQUEST_URI */
     append_pair(&req->pool, vecs, H2O_STRLIT("REQUEST_URI"), req->path.base, req->path.len);
+    /* SERVER_ADDR & SERVER_PORT */
+    append_address_info(req, vecs, H2O_STRLIT("SERVER_ADDR"), H2O_STRLIT("SERVER_PORT"), req->conn->get_sockname);
     /* SERVER_NAME */
     append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_NAME"), req->hostconf->authority.host.base, req->hostconf->authority.host.len);
-    { /* SERVER_PORT */
-        char buf[6];
-        int l = sprintf(buf, "%" PRIu16, req->hostconf->authority.port);
-        append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_PORT"), buf, (size_t)l);
-    }
     { /* SERVER_PROTOCOL */
         char buf[sizeof("HTTP/1.1") - 1];
         size_t l = h2o_stringify_protocol_version(buf, req->version);

@@ -270,10 +270,12 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             RESERVE(sizeof("HTTP/1.1"));
             pos += h2o_stringify_protocol_version(pos, req->version);
             break;
-        case ELEMENT_TYPE_REMOTE_ADDR: /* %h */
-            if (req->conn->peername.addr != NULL) {
+        case ELEMENT_TYPE_REMOTE_ADDR: /* %h */ {
+            struct sockaddr_storage ss;
+            socklen_t sslen;
+            if ((sslen = req->conn->get_peername(req->conn, (void *)&ss)) != 0) {
                 RESERVE(NI_MAXHOST);
-                size_t l = h2o_socket_getnumerichost(req->conn->peername.addr, req->conn->peername.len, pos);
+                size_t l = h2o_socket_getnumerichost((void *)&ss, sslen, pos);
                 if (l != SIZE_MAX)
                     pos += l;
                 else
@@ -282,7 +284,7 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
                 RESERVE(1);
                 *pos++ = '-';
             }
-            break;
+        } break;
         case ELEMENT_TYPE_METHOD: /* %m */
             RESERVE(req->input.method.len * 4);
             pos = append_unsafe_string(pos, req->input.method.base, req->input.method.len);
