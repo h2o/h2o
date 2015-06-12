@@ -503,6 +503,40 @@ static int delegate_dynamic_request(h2o_req_t *req, size_t url_path_len, const c
     return handler->on_req(handler, req);
 }
 
+static int try_dynamic_request(h2o_file_handler_t *self, h2o_req_t *req, char *rpath, size_t rpath_len)
+{
+    /* we have full local path in {rpath,rpath_len}, and need to split it into name and path_info */
+    struct stat st;
+    size_t slash_at = self->real_path.len;
+
+    while (1) {
+        /* find the next slash (or return -1 if failed) */
+        for (++slash_at;; ++slash_at) {
+            if (slash_at >= rpath_len)
+                return -1;
+            if (rpath[slash_at] == '/')
+                break;
+        }
+        /* change the slash to '\0', and check if the file exists */
+        rpath[slash_at] = '\0';
+        if (stat(rpath, &st) != 0)
+            return -1;
+        if (!S_ISDIR(st.st_mode))
+            break;
+        /* restore slash, and continue the search */
+        rpath[slash_at] = '/';
+    }
+
+    /* file found! */
+    h2o_mimemap_type_t *mime_type = h2o_mimemap_get_type(self->mimemap, h2o_get_filext(rpath, slash_at));
+    switch (mime_type->type) {
+    case H2O_MIMEMAP_TYPE_MIMETYPE:
+        return -1;
+    case H2O_MIMEMAP_TYPE_DYNAMIC:
+        return delegate_dynamic_request(req, req->pathconf->path.len + slash_at - self->real_path.len, rpath, slash_at, mime_type);
+    }
+}
+
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     h2o_file_handler_t *self = (void *)_self;
@@ -569,12 +603,17 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         }
     }
     /* failed to open */
-    if (errno == ENOENT) {
-        h2o_send_error(req, 404, "File Not Found", "file not found", 0);
-    } else if (errno == ENFILE || errno == EMFILE) {
+
+    if (errno == ENFILE || errno == EMFILE) {
         h2o_send_error(req, 503, "Service Unavailable", "please try again later", 0);
     } else {
-        h2o_send_error(req, 403, "Access Forbidden", "access forbidden", 0);
+        if (h2o_mimemap_has_dynamic_type(self->mimemap) && try_dynamic_request(self, req, rpath, rpath_len) == 0)
+            return 0;
+        if (errno == ENOENT) {
+            h2o_send_error(req, 404, "File Not Found", "file not found", 0);
+        } else {
+            h2o_send_error(req, 403, "Access Forbidden", "access forbidden", 0);
+        }
     }
     return 0;
 

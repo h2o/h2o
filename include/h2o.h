@@ -950,6 +950,10 @@ void h2o_mimemap_on_context_init(h2o_mimemap_t *mimemap, h2o_context_t *ctx);
  */
 void h2o_mimemap_on_context_dispose(h2o_mimemap_t *mimemap, h2o_context_t *ctx);
 /**
+ * returns if the map contains a dynamic type
+ */
+int h2o_mimemap_has_dynamic_type(h2o_mimemap_t *mimemap);
+/**
  * sets the default mime-type
  */
 void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, h2o_mimemap_type_t *type, int incref);
