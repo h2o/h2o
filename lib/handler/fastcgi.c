@@ -269,6 +269,8 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, struct st_fcgi_c
     /* SERVER_SOFTWARE */
     append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_SOFTWARE"), req->conn->ctx->globalconf->server_name.base,
                 req->conn->ctx->globalconf->server_name.len);
+    /* HTTP_HOST */
+    append_pair(&req->pool, vecs, H2O_STRLIT("HTTP_HOST"), req->authority.base, req->authority.len);
     { /* headers */
         const h2o_header_t *h = req->headers.entries, *h_end = h + req->headers.size;
         for (; h != h_end; ++h) {
