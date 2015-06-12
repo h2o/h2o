@@ -443,7 +443,7 @@ static void test_range_req(void)
         h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-0-10, 9-, -10"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 416);
-        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain; charset=utf-8"));
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes */1000"));
         ok(conn->body->size == strlen("requested range not satisfiable"));
         ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("requested range not satisfiable")));
@@ -456,7 +456,7 @@ static void test_range_req(void)
         h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=0-10-12, 9-, -10"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 416);
-        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain; charset=utf-8"));
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes */1000"));
         ok(conn->body->size == strlen("requested range not satisfiable"));
         ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("requested range not satisfiable")));
@@ -469,7 +469,7 @@ static void test_range_req(void)
         h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytfasdf"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 416);
-        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain; charset=utf-8"));
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes */1000"));
         ok(conn->body->size == strlen("requested range not satisfiable"));
         ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("requested range not satisfiable")));
@@ -482,7 +482,7 @@ static void test_range_req(void)
         h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-0"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 416);
-        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain; charset=utf-8"));
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes */1000"));
         ok(conn->body->size == strlen("requested range not satisfiable"));
         ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("requested range not satisfiable")));
@@ -495,7 +495,7 @@ static void test_range_req(void)
         h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=1000-1001"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 416);
-        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain; charset=utf-8"));
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes */1000"));
         ok(conn->body->size == strlen("requested range not satisfiable"));
         ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("requested range not satisfiable")));
@@ -508,7 +508,7 @@ static void test_range_req(void)
         h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=900-100"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 416);
-        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
+        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain; charset=utf-8"));
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes */1000"));
         ok(conn->body->size == strlen("requested range not satisfiable"));
         ok(h2o_memis(conn->body->bytes, conn->body->size, H2O_STRLIT("requested range not satisfiable")));

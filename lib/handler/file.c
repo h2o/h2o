@@ -609,13 +609,10 @@ Opened:
         if (range_infos == NULL) {
             h2o_iovec_t content_range;
             content_range.base = h2o_mem_alloc_pool(&req->pool, 32);
-            content_range.len = sprintf(content_range.base, "bytes */%zd", generator->bytesleft);
+            content_range.len = sprintf(content_range.base, "bytes */%zu", generator->bytesleft);
             h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_RANGE, content_range.base, content_range.len);
-            req->res.status = 416;
-            req->res.reason = "Requested Range Not Satisfiable";
-            req->res.content_length = strlen("requested range not satisfiable");
-            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
-            h2o_send_inline(req, "requested range not satisfiable", req->res.content_length);
+            h2o_send_error(req, 416, "Request Range Not Satisfiable", "requested range not satisfiable",
+                           H2O_SEND_ERROR_KEEP_HEADERS);
             goto Close;
         }
         generator->ranged.range_count = range_count;
