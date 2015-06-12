@@ -484,10 +484,29 @@ static void gen_rand_string(h2o_iovec_t *s)
     s->base[s->len] = 0;
 }
 
+static int delegate_dynamic_request(h2o_req_t *req, size_t url_path_len, const char *local_path, size_t local_path_len,
+                                    h2o_mimemap_type_t *mime_type)
+{
+    h2o_filereq_t *filereq;
+    h2o_handler_t *handler;
+
+    assert(mime_type->data.dynamic.pathconf.handlers.size == 1);
+
+    filereq = h2o_mem_alloc_pool(&req->pool, sizeof(*filereq));
+    filereq->url_path_len = url_path_len;
+    filereq->local_path = h2o_iovec_init(local_path, local_path_len);
+
+    req->pathconf = &mime_type->data.dynamic.pathconf;
+    req->filereq = filereq;
+
+    handler = mime_type->data.dynamic.pathconf.handlers.entries[0];
+    return handler->on_req(handler, req);
+}
+
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     h2o_file_handler_t *self = (void *)_self;
-    h2o_iovec_t mime_type;
+    h2o_mimemap_type_t *mime_type;
     char *rpath;
     size_t rpath_len, req_path_prefix;
     struct st_h2o_sendfile_generator_t *generator = NULL;
@@ -574,6 +593,13 @@ Opened:
 
     /* obtain mime type */
     mime_type = h2o_mimemap_get_type(self->mimemap, h2o_get_filext(rpath, rpath_len));
+    switch (mime_type->type) {
+    case H2O_MIMEMAP_TYPE_MIMETYPE:
+        break;
+    case H2O_MIMEMAP_TYPE_DYNAMIC:
+        do_close(&generator->super, req);
+        return delegate_dynamic_request(req, req->path_normalized.len, rpath, rpath_len, mime_type);
+    }
 
     /* check if range request */
     if ((range_header_index = h2o_find_header(&req->headers, H2O_TOKEN_RANGE, SIZE_MAX)) != -1) {
@@ -585,13 +611,12 @@ Opened:
             content_range.base = h2o_mem_alloc_pool(&req->pool, 32);
             content_range.len = sprintf(content_range.base, "bytes */%zd", generator->bytesleft);
             h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_RANGE, content_range.base, content_range.len);
-            do_close(&generator->super, req);
             req->res.status = 416;
             req->res.reason = "Requested Range Not Satisfiable";
             req->res.content_length = strlen("requested range not satisfiable");
             h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
             h2o_send_inline(req, "requested range not satisfiable", req->res.content_length);
-            return 0;
+            goto Close;
         }
         generator->ranged.range_count = range_count;
         generator->ranged.range_infos = range_infos;
@@ -602,7 +627,7 @@ Opened:
         if (range_count == 1)
             generator->bytesleft = range_infos[1];
         else {
-            generator->ranged.mimetype = h2o_strdup(&req->pool, mime_type.base, mime_type.len);
+            generator->ranged.mimetype = h2o_strdup(&req->pool, mime_type->data.mimetype.base, mime_type->data.mimetype.len);
             size_t final_content_len = 0, size_tmp = 0, size_fixed_each_part, i;
             generator->ranged.boundary.base = h2o_mem_alloc_pool(&req->pool, BOUNDARY_SIZE + 1);
             generator->ranged.boundary.len = BOUNDARY_SIZE;
@@ -612,7 +637,7 @@ Opened:
                 i /= 10;
                 size_tmp++;
             }
-            size_fixed_each_part = FIXED_PART_SIZE + mime_type.len + size_tmp;
+            size_fixed_each_part = FIXED_PART_SIZE + mime_type->data.mimetype.len + size_tmp;
             for (i = 0; i < range_count; i++) {
                 size_tmp = *range_infos++;
                 if (size_tmp == 0)
@@ -637,20 +662,35 @@ Opened:
                                  (sizeof("\r\n") - 1);
             generator->bytesleft = final_content_len;
         }
-        do_send_file(generator, req, 206, "Partial Content", mime_type, is_get);
+        do_send_file(generator, req, 206, "Partial Content", mime_type->data.mimetype, is_get);
         return 0;
     }
 
     /* return file */
-    do_send_file(generator, req, 200, "OK", mime_type, is_get);
+    do_send_file(generator, req, 200, "OK", mime_type->data.mimetype, is_get);
     return 0;
 
 NotModified:
     req->res.status = 304;
     req->res.reason = "Not Modified";
     h2o_send_inline(req, NULL, 0);
+Close:
     do_close(&generator->super, req);
     return 0;
+}
+
+static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
+{
+    h2o_file_handler_t *self = (void *)_self;
+
+    h2o_mimemap_on_context_init(self->mimemap, ctx);
+}
+
+static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
+{
+    h2o_file_handler_t *self = (void *)_self;
+
+    h2o_mimemap_on_context_dispose(self->mimemap, ctx);
 }
 
 static void on_dispose(h2o_handler_t *_self)
@@ -680,6 +720,8 @@ h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real
         (void *)h2o_create_handler(pathconf, offsetof(h2o_file_handler_t, index_files[0]) + sizeof(self->index_files[0]) * (i + 1));
 
     /* setup callbacks */
+    self->super.on_context_init = on_context_init;
+    self->super.on_context_dispose = on_context_dispose;
     self->super.dispose = on_dispose;
     self->super.on_req = on_req;
 

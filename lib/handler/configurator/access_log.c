@@ -124,7 +124,5 @@ void h2o_access_log_register_configurator(h2o_globalconf_t *conf)
     self->super.exit = on_config_exit;
     self->handles = self->_handles_stack;
 
-    h2o_configurator_define_command(&self->super, "access-log",
-                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH,
-                                    on_config);
+    h2o_configurator_define_command(&self->super, "access-log", H2O_CONFIGURATOR_FLAG_ALL_LEVELS, on_config);
 }

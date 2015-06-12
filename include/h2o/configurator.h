@@ -28,13 +28,16 @@ enum {
     H2O_CONFIGURATOR_FLAG_GLOBAL = 0x1,
     H2O_CONFIGURATOR_FLAG_HOST = 0x2,
     H2O_CONFIGURATOR_FLAG_PATH = 0x4,
+    H2O_CONFIGURATOR_FLAG_EXTENSION = 0x8,
+    H2O_CONFIGURATOR_FLAG_ALL_LEVELS =
+        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXTENSION,
     H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR = 0x100,
     H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE = 0x200,
     H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING = 0x400,
     H2O_CONFIGURATOR_FLAG_DEFERRED = 0x1000
 };
 
-#define H2O_CONFIGURATOR_NUM_LEVELS 3
+#define H2O_CONFIGURATOR_NUM_LEVELS 4
 
 typedef struct h2o_configurator_context_t {
     h2o_globalconf_t *globalconf;
@@ -107,6 +110,10 @@ h2o_configurator_command_t *h2o_configurator_get_command(h2o_globalconf_t *conf,
  * @return 0 if successful, -1 if not
  */
 int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node);
+/**
+ *
+ */
+int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *node, int flags_mask, const char **ignore_commands);
 /**
  * emits configuration error
  */

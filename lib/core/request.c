@@ -100,6 +100,7 @@ static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
     size_t i;
     h2o_handler_t **handler, **end;
 
+    req->hostconf = hostconf;
     req->pathconf = &hostconf->fallback_path;
 
     /* setup pathconf, or redirect to "path/" */
@@ -344,6 +345,7 @@ void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *
 {
     if (req->pathconf == NULL) {
         h2o_hostconf_t *hostconf = setup_before_processing(req);
+        req->hostconf = hostconf;
         req->pathconf = &hostconf->fallback_path;
     }
 
@@ -397,7 +399,6 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
     static h2o_generator_t generator = {NULL, NULL};
     static const h2o_iovec_t body_prefix = {H2O_STRLIT("<!DOCTYPE html><TITLE>Moved</TITLE><P>The document has moved <A HREF=\"")};
     static const h2o_iovec_t body_suffix = {H2O_STRLIT("\">here</A>")};
-
 
     /* build and emit the response header */
     req->res.status = status;

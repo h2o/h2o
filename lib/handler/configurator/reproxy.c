@@ -76,7 +76,6 @@ void h2o_reproxy_register_configurator(h2o_globalconf_t *conf)
     c->super.exit = on_config_exit;
 
     /* reproxy: ON | OFF */
-    h2o_configurator_define_command(&c->super, "reproxy", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
-                                                              H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+    h2o_configurator_define_command(&c->super, "reproxy", H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_reproxy);
 }
