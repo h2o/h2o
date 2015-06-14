@@ -81,10 +81,11 @@ static void on_timeout(h2o_timeout_entry_t *timeout_entry)
     h2o_timeout_link(pool->_interval_cb.loop, &pool->_interval_cb.timeout, &pool->_interval_cb.entry);
 }
 
-static void common_init(h2o_socketpool_t *pool, size_t capacity)
+static void common_init(h2o_socketpool_t *pool, h2o_socketpool_type_t type, size_t capacity)
 {
     memset(pool, 0, sizeof(*pool));
 
+    pool->type = type;
     pool->capacity = capacity;
     pool->timeout = UINT64_MAX;
 
@@ -96,7 +97,7 @@ void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa,
 {
     assert(salen <= sizeof(pool->peer.sockaddr.bytes));
 
-    common_init(pool, capacity);
+    common_init(pool, H2O_SOCKETPOOL_TYPE_SOCKADDR, capacity);
     memcpy(&pool->peer.sockaddr.bytes, sa, salen);
     pool->peer.sockaddr.len = salen;
 }
@@ -112,11 +113,10 @@ void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, u
         return;
     }
 
-    common_init(pool, capacity);
+    common_init(pool, H2O_SOCKETPOOL_TYPE_NAMED, capacity);
     pool->peer.named.host = h2o_strdup(NULL, host.base, host.len);
     pool->peer.named.port.base = h2o_mem_alloc(sizeof("65535"));
     pool->peer.named.port.len = sprintf(pool->peer.named.port.base, "%u", (unsigned)port);
-    pool->peer.is_named = 1;
 }
 
 void h2o_socketpool_dispose(h2o_socketpool_t *pool)
@@ -134,9 +134,13 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
         h2o_timeout_unlink(&pool->_interval_cb.entry);
         h2o_timeout_dispose(pool->_interval_cb.loop, &pool->_interval_cb.timeout);
     }
-    if (pool->peer.is_named) {
+    switch (pool->type) {
+    case H2O_SOCKETPOOL_TYPE_NAMED:
         free(pool->peer.named.host.base);
         free(pool->peer.named.port.base);
+        break;
+    case H2O_SOCKETPOOL_TYPE_SOCKADDR:
+        break;
     }
 }
 
@@ -248,13 +252,16 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     if (_req != NULL)
         *_req = req;
 
-    if (pool->peer.is_named) {
+    switch (pool->type) {
+    case H2O_SOCKETPOOL_TYPE_NAMED:
         /* resolve the name, and connect */
         req->getaddr_req = h2o_hostinfo_getaddr(getaddr_receiver, pool->peer.named.host, pool->peer.named.port, AF_UNSPEC,
                                                 SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, req);
-    } else {
+        break;
+    case H2O_SOCKETPOOL_TYPE_SOCKADDR:
         /* connect (using sockaddr_in) */
         start_connect(req, (void *)&pool->peer.sockaddr.bytes, pool->peer.sockaddr.len);
+        break;
     }
 }
 
