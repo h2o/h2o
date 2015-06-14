@@ -130,7 +130,8 @@ pid_t h2o_spawnp(const char *cmd, char **argv, const int *mapped_fds)
         }
         execvp(cmd, argv);
         errnum = errno;
-        write(pipefds[1], &errnum, sizeof(errnum));
+        if (write(pipefds[1], &errnum, sizeof(errnum)) == -1)
+            perror("write failed");
         _exit(EX_SOFTWARE);
     }
 
