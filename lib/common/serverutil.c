@@ -124,8 +124,7 @@ pid_t h2o_spawnp(const char *cmd, char **argv, const int *mapped_fds, int cloexe
             for (; *mapped_fds != -1; mapped_fds += 2) {
                 if (mapped_fds[1] != -1)
                     dup2(mapped_fds[0], mapped_fds[1]);
-                else
-                    close(mapped_fds[0]);
+                close(mapped_fds[0]);
             }
         }
         execvp(cmd, argv);
@@ -174,8 +173,11 @@ Error:
     extern char **environ;
     posix_spawn_file_actions_init(&file_actions);
     if (mapped_fds != NULL) {
-        for (; *mapped_fds != -1; mapped_fds += 2)
-            posix_spawn_file_actions_adddup2(&file_actions, mapped_fds[0], mapped_fds[1]);
+        for (; *mapped_fds != -1; mapped_fds += 2) {
+            if (mapped_fds[1] != -1)
+                posix_spawn_file_actions_adddup2(&file_actions, mapped_fds[0], mapped_fds[1]);
+            posix_spawn_file_actions_addclose(&file_actions, mapped_fds[0]);
+        }
     }
     if (!cloexec_mutex_is_locked)
         pthread_mutex_lock(&cloexec_mutex);
