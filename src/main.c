@@ -50,6 +50,7 @@
 #ifdef __linux__
 #include <execinfo.h>
 #endif
+#include "cloexec.h"
 #include "yoml-parser.h"
 #include "h2o.h"
 #include "h2o/configurator.h"
@@ -1110,7 +1111,7 @@ static int popen_annotate_backtrace_symbols(void)
         2, 1, /* STDOUT of the spawned process in connected to STDERR of h2o */
         -1
     };
-    if (h2o_spawnp(cmd_fullpath, argv, mapped_fds) == -1) {
+    if (h2o_spawnp(cmd_fullpath, argv, mapped_fds, 0) == -1) {
         /* silently ignore error */
         close(pipefds[0]);
         close(pipefds[1]);

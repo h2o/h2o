@@ -106,6 +106,7 @@ SET(CMAKE_C_FLAGS "-O2 -g -Wall -Wno-unused-function ${CMAKE_C_FLAGS} -DH2O_ROOT
 
 INCLUDE_DIRECTORIES(
     include
+    deps/cloexec
     deps/klib
     deps/picohttpparser
     deps/picotest
@@ -124,6 +125,7 @@ SET(LIBYAML_SOURCE_FILES
 SET_SOURCE_FILES_PROPERTIES(${LIBYAML_SOURCE_FILES} PROPERTIES COMPILE_FLAGS "-Wno-unused-value -Wno-unused-but-set-variable")
 
 SET(LIB_SOURCE_FILES
+    deps/cloexec/cloexec.c
     deps/picohttpparser/picohttpparser.c
 
     lib/common/hostinfo.c
