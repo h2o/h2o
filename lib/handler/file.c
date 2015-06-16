@@ -494,7 +494,7 @@ static int delegate_dynamic_request(h2o_req_t *req, size_t url_path_len, const c
 
     filereq = h2o_mem_alloc_pool(&req->pool, sizeof(*filereq));
     filereq->url_path_len = url_path_len;
-    filereq->local_path = h2o_iovec_init(local_path, local_path_len);
+    filereq->local_path = h2o_strdup(&req->pool, local_path, local_path_len);
 
     req->pathconf = &mime_type->data.dynamic.pathconf;
     req->filereq = filereq;
