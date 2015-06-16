@@ -938,7 +938,9 @@ static int on_config_listen_enter(h2o_configurator_t *_configurator, h2o_configu
 
 static int on_config_listen_exit(h2o_configurator_t *_configurator, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    if (ctx->hostconf == NULL) {
+    if (ctx->pathconf != NULL) {
+        /* skip */
+    } else if (ctx->hostconf == NULL) {
         /* at global level: bind all hostconfs to the global-level listeners */
         size_t i;
         for (i = 0; i != conf.num_listeners; ++i) {

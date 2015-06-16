@@ -91,7 +91,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 {
     struct proxy_configurator_t *self = (void *)_self;
 
-    if (ctx->hostconf == NULL) {
+    if (ctx->pathconf == NULL && ctx->hostconf == NULL) {
         /* is global conf */
         ctx->globalconf->proxy.io_timeout = self->vars->io_timeout;
     }
