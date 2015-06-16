@@ -95,21 +95,22 @@ static void test_build_request(void)
                                                                        "\x00\x01\0\0\0\0\0\0")));
     vec_index = 1;
     ok(check_params(vecs.entries, &vec_index, 0x1234,
-                    H2O_STRLIT("\x0b\x00SCRIPT_NAME"                     /* */
-                               "\x09\x01PATH_INFO/"                      /* */
-                               "\x0c\x00QUERY_STRING"                    /* */
-                               "\x0b\x09REMOTE_ADDR127.0.0.1"            /* */
-                               "\x0b\x05REMOTE_PORT55555"                /* */
-                               "\x0e\x03REQUEST_METHODGET"               /* */
-                               "\x0b\x01REQUEST_URI/"                    /* */
-                               "\x0b\x09SERVER_ADDR127.0.0.1"            /* */
-                               "\x0b\x02SERVER_PORT80"                   /* */
-                               "\x0b\x07SERVER_NAMEdefault"              /* */
-                               "\x0f\x08SERVER_PROTOCOLHTTP/1.1"         /* */
-                               "\x0f\x10SERVER_SOFTWAREh2o/1.2.1-alpha1" /* */
-                               "\x09\x09HTTP_HOSTlocalhost"              /* */
-                               "\x0b\x07HTTP_COOKIEfoo=bar"              /* */
-                               "\x0f\x3fHTTP_USER_AGENTMozilla/5.0 (X11; Linux) KHTML/4.9.1 (like Gecko) Konqueror/4.9" /* */)));
+                    H2O_STRLIT("\x0b\x00SCRIPT_NAME"                                                                    /* */
+                               "\x09\x01PATH_INFO/"                                                                     /* */
+                               "\x0c\x00QUERY_STRING"                                                                   /* */
+                               "\x0b\x09REMOTE_ADDR127.0.0.1"                                                           /* */
+                               "\x0b\x05REMOTE_PORT55555"                                                               /* */
+                               "\x0e\x03REQUEST_METHODGET"                                                              /* */
+                               "\x0b\x01REQUEST_URI/"                                                                   /* */
+                               "\x0b\x09SERVER_ADDR127.0.0.1"                                                           /* */
+                               "\x0b\x02SERVER_PORT80"                                                                  /* */
+                               "\x0b\x07SERVER_NAMEdefault"                                                             /* */
+                               "\x0f\x08SERVER_PROTOCOLHTTP/1.1"                                                        /* */
+                               "\x0f\x10SERVER_SOFTWAREh2o/1.2.1-alpha1"                                                /* */
+                               "\x09\x09HTTP_HOSTlocalhost"                                                             /* */
+                               "\x0f\x3fHTTP_USER_AGENTMozilla/5.0 (X11; Linux) KHTML/4.9.1 (like Gecko) Konqueror/4.9" /* */
+                               "\x0b\x07HTTP_COOKIEfoo=bar"                                                             /* */
+                               )));
     ok(h2o_memis(vecs.entries[vec_index].base, vecs.entries[vec_index].len, H2O_STRLIT("\x01\x05\x12\x34\x00\x00\x00\x00")));
     ++vec_index;
     ok(vec_index == vecs.size);
@@ -128,21 +129,22 @@ static void test_build_request(void)
                                "\x0b\x00SCRIPT_NAME" /* */
                                "\x09\x01PATH_INFO/"  /* */
                                "\x0d\x0f"
-                               "DOCUMENT_ROOT/var/www/htdocs"            /* */
-                               "\x0f\x10PATH_TRANSLATED/var/www/htdocs/" /* */
-                               "\x0c\x00QUERY_STRING"                    /* */
-                               "\x0b\x09REMOTE_ADDR127.0.0.1"            /* */
-                               "\x0b\x05REMOTE_PORT55555"                /* */
-                               "\x0e\x03REQUEST_METHODGET"               /* */
-                               "\x0b\x01REQUEST_URI/"                    /* */
-                               "\x0b\x09SERVER_ADDR127.0.0.1"            /* */
-                               "\x0b\x02SERVER_PORT80"                   /* */
-                               "\x0b\x07SERVER_NAMEdefault"              /* */
-                               "\x0f\x08SERVER_PROTOCOLHTTP/1.1"         /* */
-                               "\x0f\x10SERVER_SOFTWAREh2o/1.2.1-alpha1" /* */
-                               "\x09\x09HTTP_HOSTlocalhost"              /* */
-                               "\x0b\x07HTTP_COOKIEfoo=bar"              /* */
-                               "\x0f\x3fHTTP_USER_AGENTMozilla/5.0 (X11; Linux) KHTML/4.9.1 (like Gecko) Konqueror/4.9" /* */)));
+                               "DOCUMENT_ROOT/var/www/htdocs"                                                           /* */
+                               "\x0f\x10PATH_TRANSLATED/var/www/htdocs/"                                                /* */
+                               "\x0c\x00QUERY_STRING"                                                                   /* */
+                               "\x0b\x09REMOTE_ADDR127.0.0.1"                                                           /* */
+                               "\x0b\x05REMOTE_PORT55555"                                                               /* */
+                               "\x0e\x03REQUEST_METHODGET"                                                              /* */
+                               "\x0b\x01REQUEST_URI/"                                                                   /* */
+                               "\x0b\x09SERVER_ADDR127.0.0.1"                                                           /* */
+                               "\x0b\x02SERVER_PORT80"                                                                  /* */
+                               "\x0b\x07SERVER_NAMEdefault"                                                             /* */
+                               "\x0f\x08SERVER_PROTOCOLHTTP/1.1"                                                        /* */
+                               "\x0f\x10SERVER_SOFTWAREh2o/1.2.1-alpha1"                                                /* */
+                               "\x09\x09HTTP_HOSTlocalhost"                                                             /* */
+                               "\x0f\x3fHTTP_USER_AGENTMozilla/5.0 (X11; Linux) KHTML/4.9.1 (like Gecko) Konqueror/4.9" /* */
+                               "\x0b\x07HTTP_COOKIEfoo=bar"                                                             /* */
+                               )));
     ok(h2o_memis(vecs.entries[vec_index].base, vecs.entries[vec_index].len, H2O_STRLIT("\x01\x05\x12\x34\x00\x40\x00\x00")));
     ++vec_index;
     ok(h2o_memis(vecs.entries[vec_index].base, vecs.entries[vec_index].len,
