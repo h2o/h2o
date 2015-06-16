@@ -283,8 +283,6 @@ typedef struct st_h2o_mimemap_type_t {
         h2o_iovec_t mimetype;
         struct {
             h2o_pathconf_t pathconf;
-            int _context_inited : 1;
-            int _context_disposed : 1;
         } dynamic;
     } data;
 } h2o_mimemap_type_t;
@@ -367,6 +365,8 @@ struct st_h2o_context_t {
         struct timeval tv_at;
         h2o_timestamp_string_t *value;
     } _timestamp_cache;
+
+    H2O_VECTOR(h2o_pathconf_t*) _pathconfs_inited;
 };
 
 /**
