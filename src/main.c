@@ -161,32 +161,6 @@ static void set_cloexec(int fd)
     }
 }
 
-static char *get_cmd_path(const char *cmd)
-{
-    char *root, *cmd_fullpath;
-
-    /* just return the cmd (being strdup'ed) in case we do not need to prefix the value */
-    if (cmd[0] == '/' || strchr(cmd, '/') == NULL)
-        goto ReturnOrig;
-
-    /* obtain root */
-    if ((root = getenv("H2O_ROOT")) == NULL) {
-#ifdef H2O_ROOT
-        root = H2O_ROOT;
-#endif
-        if (root == NULL)
-            goto ReturnOrig;
-    }
-
-    /* build full-path and return */
-    cmd_fullpath = h2o_mem_alloc(strlen(root) + strlen(cmd) + 2);
-    sprintf(cmd_fullpath, "%s/%s", root, cmd);
-    return cmd_fullpath;
-
-ReturnOrig:
-    return h2o_strdup(NULL, cmd, SIZE_MAX).base;
-}
-
 static int on_openssl_print_errors(const char *str, size_t len, void *fp)
 {
     fwrite(str, 1, len, fp);
@@ -283,7 +257,7 @@ static void update_ocsp_stapling(struct listener_ssl_config_t *ssl_conf, h2o_buf
 
 static int get_ocsp_response(const char *cert_fn, const char *cmd, h2o_buffer_t **resp)
 {
-    char *cmd_fullpath = get_cmd_path(cmd), *argv[] = {cmd_fullpath, (char *)cert_fn, NULL};
+    char *cmd_fullpath = h2o_configurator_get_cmd_path(cmd), *argv[] = {cmd_fullpath, (char *)cert_fn, NULL};
     int child_status, ret;
 
     if (h2o_read_command(cmd_fullpath, argv, resp, &child_status) != 0) {
@@ -1092,7 +1066,7 @@ static void on_sigterm(int signo)
 #ifdef __linux__
 static int popen_annotate_backtrace_symbols(void)
 {
-    char *cmd_fullpath = get_cmd_path("share/h2o/annotate-backtrace-symbols"), *argv[] = {cmd_fullpath, NULL};
+    char *cmd_fullpath = h2o_configurator_get_cmd_path("share/h2o/annotate-backtrace-symbols"), *argv[] = {cmd_fullpath, NULL};
     int pipefds[2];
 
      /* create pipe */
@@ -1305,7 +1279,7 @@ static char **build_server_starter_argv(const char *h2o_cmd, const char *config_
     size_t i;
 
     h2o_vector_reserve(NULL, (void *)&args, sizeof(args.entries[0]), 1);
-    args.entries[args.size++] = get_cmd_path("share/h2o/start_server");
+    args.entries[args.size++] = h2o_configurator_get_cmd_path("share/h2o/start_server");
 
     /* error-log and pid-file are the directives that are handled by server-starter */
     if (conf.pid_file != NULL) {
