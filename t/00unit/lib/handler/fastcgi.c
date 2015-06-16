@@ -115,8 +115,9 @@ static void test_build_request(void)
     ++vec_index;
     ok(vec_index == vecs.size);
 
-    /* build with max_record_size=64, DOCUMENT_ROOT, and content */
+    /* build with max_record_size=64, DOCUMENT_ROOT, additional cookie, and content */
     config.document_root = h2o_iovec_init(H2O_STRLIT("/var/www/htdocs"));
+    h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_COOKIE, H2O_STRLIT("hoge=fuga"));
     conn->req.entity = h2o_iovec_init(H2O_STRLIT("The above copyright notice and this permission notice shall be included in all "
                                                  "copies or substantial portions of the Software."));
     build_request(&conn->req, &vecs, 0x1234, 64, &config);
@@ -143,7 +144,7 @@ static void test_build_request(void)
                                "\x0f\x10SERVER_SOFTWAREh2o/1.2.1-alpha1"                                                /* */
                                "\x09\x09HTTP_HOSTlocalhost"                                                             /* */
                                "\x0f\x3fHTTP_USER_AGENTMozilla/5.0 (X11; Linux) KHTML/4.9.1 (like Gecko) Konqueror/4.9" /* */
-                               "\x0b\x07HTTP_COOKIEfoo=bar"                                                             /* */
+                               "\x0b\x11HTTP_COOKIEfoo=bar;hoge=fuga"                                                   /* */
                                )));
     ok(h2o_memis(vecs.entries[vec_index].base, vecs.entries[vec_index].len, H2O_STRLIT("\x01\x05\x12\x34\x00\x40\x00\x00")));
     ++vec_index;
