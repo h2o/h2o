@@ -298,6 +298,7 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
                     memcpy(dst, h->value.base, h->value.len);
                     dst += h->value.len;
                     *dst++ = ';';
+                    cookie_length -= h->value.len + 1;
                 }
             }
             memcpy(dst, h->value.base, h->value.len);
