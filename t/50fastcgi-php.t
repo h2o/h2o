@@ -27,7 +27,7 @@ EOT
 my $resp = `curl --silent http://127.0.0.1:$server->{port}/index.txt`;
 is $resp, "hello\n", 'ordinary file';
 
-my $resp = `curl --silent http://127.0.0.1:$server->{port}/hello.php`;
+$resp = `curl --silent http://127.0.0.1:$server->{port}/hello.php`;
 is $resp, 'hello world', 'php';
 
 done_testing();
