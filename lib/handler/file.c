@@ -537,6 +537,12 @@ static int try_dynamic_request(h2o_file_handler_t *self, h2o_req_t *req, char *r
     }
 }
 
+static void send_method_not_allowed(h2o_req_t *req)
+{
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ALLOW, H2O_STRLIT("GET, HEAD"));
+    h2o_send_error(req, 405, "Method Not Allowed", "method not allowed", H2O_SEND_ERROR_KEEP_HEADERS);
+}
+
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     h2o_file_handler_t *self = (void *)_self;
@@ -546,17 +552,16 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     struct st_h2o_sendfile_generator_t *generator = NULL;
     size_t if_modified_since_header_index, if_none_match_header_index;
     size_t range_header_index;
-    int is_dir, is_get;
+    int is_dir;
+    enum { METHOD_IS_GET, METHOD_IS_HEAD, METHOD_IS_OTHER } method_type;
 
     /* only accept GET and HEAD */
     if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))) {
-        is_get = 1;
+        method_type = METHOD_IS_GET;
     } else if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"))) {
-        is_get = 0;
+        method_type = METHOD_IS_HEAD;
     } else {
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ALLOW, H2O_STRLIT("GET, HEAD"));
-        h2o_send_error(req, 405, "Method Not Allowed", "method not allowed", H2O_SEND_ERROR_KEEP_HEADERS);
-        return 0;
+        method_type = METHOD_IS_OTHER;
     }
 
     /* build path (still unterminated at the end of the block) */
@@ -589,7 +594,11 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         }
         if (index_file->base == NULL && (self->flags & H2O_FILE_FLAG_DIR_LISTING) != 0) {
             rpath[rpath_len] = '\0';
-            if (send_dir_listing(req, rpath, rpath_len, is_get) == 0)
+            if (method_type == METHOD_IS_OTHER) {
+                send_method_not_allowed(req);
+                return 0;
+            }
+            if (send_dir_listing(req, rpath, rpath_len, method_type == METHOD_IS_GET) == 0)
                 return 0;
         }
     } else {
@@ -638,6 +647,13 @@ Opened:
     case H2O_MIMEMAP_TYPE_DYNAMIC:
         do_close(&generator->super, req);
         return delegate_dynamic_request(req, req->path_normalized.len, rpath, rpath_len, mime_type);
+    }
+
+    /* only allow GET or POST for static files */
+    if (method_type == METHOD_IS_OTHER) {
+        do_close(&generator->super, req);
+        send_method_not_allowed(req);
+        return 0;
     }
 
     /* check if range request */
@@ -698,12 +714,12 @@ Opened:
                                  (sizeof("\r\n") - 1);
             generator->bytesleft = final_content_len;
         }
-        do_send_file(generator, req, 206, "Partial Content", mime_type->data.mimetype, is_get);
+        do_send_file(generator, req, 206, "Partial Content", mime_type->data.mimetype, method_type == METHOD_IS_GET);
         return 0;
     }
 
     /* return file */
-    do_send_file(generator, req, 200, "OK", mime_type->data.mimetype, is_get);
+    do_send_file(generator, req, 200, "OK", mime_type->data.mimetype, method_type == METHOD_IS_GET);
     return 0;
 
 NotModified:
