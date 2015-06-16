@@ -64,7 +64,7 @@ subtest "http1(https)" => sub {
 
 subtest "http2" => sub {
     plan skip_all => "curl does not support HTTP/2"
-        if `curl --version` !~ /^Features:.*\sHTTP2(?:\s|$)/m;
+        unless curl_supports_http2();
     doit("https", $server->{tls_port}, "--http2");
 };
 

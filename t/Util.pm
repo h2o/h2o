@@ -11,7 +11,7 @@ use Test::More;
 use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir exec_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate);
+our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir exec_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
@@ -174,6 +174,10 @@ sub openssl_can_negotiate {
         or die "cannot parse OpenSSL version: $openssl_ver";
     $openssl_ver = $1 * 10000 + $2 * 100 + $3;
     return $openssl_ver >= 10001;
+}
+
+sub curl_supports_http2 {
+    return !! (`curl --version` =~ /^Features:.*\sHTTP2(?:\s|$)/m);
 }
 
 1;
