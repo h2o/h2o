@@ -267,9 +267,13 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
     append_pair(&req->pool, vecs, H2O_STRLIT("HTTP_HOST"), req->authority.base, req->authority.len);
     { /* headers */
         const h2o_header_t *h = req->headers.entries, *h_end = h + req->headers.size;
+        size_t cookie_length = 0;
         for (; h != h_end; ++h) {
             if (h->name == &H2O_TOKEN_CONTENT_TYPE->buf) {
                 append_pair(&req->pool, vecs, H2O_STRLIT("CONTENT_TYPE"), h->value.base, h->value.len);
+            } else if (h->name == &H2O_TOKEN_COOKIE->buf) {
+                /* accumulate the length of the cookie, together with the separator */
+                cookie_length += h->value.len + 1;
             } else {
                 char *dst = append_pair(&req->pool, vecs, NULL, h->name->len + sizeof("HTTP_") - 1, h->value.base, h->value.len);
                 const char *src = h->name->base, *src_end = src + h->name->len;
@@ -281,6 +285,22 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
                 for (; src != src_end; ++src)
                     *dst++ = *src == '-' ? '_' : h2o_toupper(*src);
             }
+        }
+        if (cookie_length != 0) {
+            /* emit the cookie merged */
+            cookie_length -= 1;
+            append_pair(&req->pool, vecs, H2O_STRLIT("HTTP_COOKIE"), NULL, cookie_length);
+            char *dst = vecs->entries[vecs->size - 1].base + vecs->entries[vecs->size - 1].len - cookie_length;
+            for (h = req->headers.entries; ; ++h) {
+                if (h->name == &H2O_TOKEN_COOKIE->buf) {
+                    if (cookie_length == h->value.len)
+                        break;
+                    memcpy(dst, h->value.base, h->value.len);
+                    dst += h->value.len;
+                    *dst++ = ';';
+                }
+            }
+            memcpy(dst, h->value.base, h->value.len);
         }
     }
 }

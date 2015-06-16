@@ -71,6 +71,14 @@ EOT
             };
             $doit->('http', $server->{port});
         };
+        subtest 'cookie-merge' => sub {
+            plan skip_all => "curl does not support HTTP/2"
+                unless curl_supports_http2();
+            plan skip_all => "cowardly skipping to avoid https://github.com/plack/Plack/pull/511; unless PLACK_ENV=deployment is set"
+                unless $ENV{PLACK_ENV} && $ENV{PLACK_ENV} eq 'deployment';
+            my $content = `curl --http2 --silent --show-error --insecure -H "cookie:a=b;c=d" https://127.0.0.1:$server->{tls_port}/echo-headers`;
+            like $content, qr/^cookie: a=b;\s*c=d$/mi;
+        };
         delete $server->{guard};
     };
 }
