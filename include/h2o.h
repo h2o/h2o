@@ -1021,8 +1021,12 @@ typedef struct st_h2o_fastcgi_handler_t h2o_fastcgi_handler_t;
 
 typedef struct st_h2o_fastcgi_config_vars_t {
     uint64_t io_timeout;
-    uint64_t keepalive_timeout;
-    const char *document_root;
+    uint64_t keepalive_timeout; /* 0 to disable */
+    h2o_iovec_t document_root;  /* .base=NULL if not set */
+    struct {
+        void (*dispose)(h2o_fastcgi_handler_t *handler, void *data);
+        void *data;
+    } callbacks;
 } h2o_fastcgi_config_vars_t;
 
 /**
@@ -1035,6 +1039,10 @@ h2o_fastcgi_handler_t *h2o_fastcgi_register_by_hostport(h2o_pathconf_t *pathconf
  */
 h2o_fastcgi_handler_t *h2o_fastcgi_register_by_address(h2o_pathconf_t *pathconf, struct sockaddr *sa, socklen_t salen,
                                                        h2o_fastcgi_config_vars_t *vars);
+/**
+ * registers the fastcgi handler to the context
+ */
+h2o_fastcgi_handler_t *h2o_fastcgi_register_by_spawnproc(h2o_pathconf_t *pathconf, char **argv, h2o_fastcgi_config_vars_t *vars);
 /**
  * registers the configurator
  */

@@ -81,16 +81,10 @@ struct st_fcgi_generator_t {
     h2o_timeout_entry_t timeout;
 };
 
-struct st_fcgi_config_t {
-    uint64_t io_timeout;
-    uint64_t keepalive_timeout; /* 0 to disable keep-alive */
-    h2o_iovec_t document_root;  /* .base == NULL if not set */
-};
-
 struct st_h2o_fastcgi_handler_t {
     h2o_handler_t super;
     h2o_socketpool_t sockpool;
-    struct st_fcgi_config_t config;
+    h2o_fastcgi_config_vars_t config;
 };
 
 static void encode_uint16(void *_p, unsigned v)
@@ -210,7 +204,7 @@ static void append_address_info(h2o_req_t *req, iovec_vector_t *vecs, const char
     }
 }
 
-static void append_params(h2o_req_t *req, iovec_vector_t *vecs, struct st_fcgi_config_t *config)
+static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_config_vars_t *config)
 {
     h2o_iovec_t path_info = {};
 
@@ -329,7 +323,7 @@ static void annotate_params(h2o_mem_pool_t *pool, iovec_vector_t *vecs, unsigned
 }
 
 static void build_request(h2o_req_t *req, iovec_vector_t *vecs, unsigned request_id, size_t max_record_size,
-                          struct st_fcgi_config_t *config)
+                          h2o_fastcgi_config_vars_t *config)
 {
     *vecs = (iovec_vector_t){};
 
@@ -770,6 +764,9 @@ static void on_handler_dispose(h2o_handler_t *_handler)
 {
     h2o_fastcgi_handler_t *handler = (void *)_handler;
 
+    if (handler->config.callbacks.dispose != NULL)
+        handler->config.callbacks.dispose(handler, handler->config.callbacks.data);
+
     h2o_socketpool_dispose(&handler->sockpool);
     free(handler->config.document_root.base);
     free(handler);
@@ -783,10 +780,9 @@ static h2o_fastcgi_handler_t *register_common(h2o_pathconf_t *pathconf, h2o_fast
     handler->super.on_context_dispose = on_context_dispose;
     handler->super.dispose = on_handler_dispose;
     handler->super.on_req = on_req;
-    handler->config.io_timeout = vars->io_timeout;
-    handler->config.keepalive_timeout = vars->keepalive_timeout;
-    if (vars->document_root != NULL)
-        handler->config.document_root = h2o_strdup(NULL, vars->document_root, SIZE_MAX);
+    handler->config = *vars;
+    if (vars->document_root.base != NULL)
+        handler->config.document_root = h2o_strdup(NULL, vars->document_root.base, vars->document_root.len);
 
     return handler;
 }

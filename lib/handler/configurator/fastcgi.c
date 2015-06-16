@@ -20,12 +20,17 @@
  * IN THE SOFTWARE.
  */
 #include <arpa/inet.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <inttypes.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <stdlib.h>
+#include <sys/stat.h>
 #include <sys/un.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
+#include "h2o/serverutil.h"
 
 struct fastcgi_configurator_t {
     h2o_configurator_t super;
@@ -51,10 +56,10 @@ static int on_config_document_root(h2o_configurator_command_t *cmd, h2o_configur
 
     if (node->data.scalar[0] == '\0') {
         /* unset */
-        self->vars->document_root = NULL;
+        self->vars->document_root = h2o_iovec_init(NULL, 0);
     } else if (node->data.scalar[0] == '/') {
         /* set */
-        self->vars->document_root = node->data.scalar;
+        self->vars->document_root = h2o_iovec_init(node->data.scalar, strlen(node->data.scalar));
     } else {
         h2o_configurator_errprintf(cmd, node, "value does not start from `/`");
         return -1;
@@ -130,6 +135,100 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
     return 0;
 }
 
+static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const char *dirname, char **argv,
+                            struct sockaddr_un *sun)
+{
+    int listen_fd, pipe_fds[2] = {-1, -1};
+
+    /* build socket path */
+    sun->sun_family = AF_UNIX;
+    strcpy(sun->sun_path, dirname);
+    strcat(sun->sun_path, "/_");
+
+    /* create socket */
+    if ((listen_fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+        h2o_configurator_errprintf(cmd, node, "socket(2) failed: %s", strerror(errno));
+        goto Error;
+    }
+    if (bind(listen_fd, (void *)sun, sizeof(*sun)) != 0) {
+        h2o_configurator_errprintf(cmd, node, "bind(2) failed: %s", strerror(errno));
+        goto Error;
+    }
+    if (listen(listen_fd, SOMAXCONN) != 0) {
+        h2o_configurator_errprintf(cmd, node, "listen(2) failed: %s", strerror(errno));
+        goto Error;
+    }
+
+    /* create pipe which is used to notify the termination of the server */
+    if (pipe(pipe_fds) != 0) {
+        h2o_configurator_errprintf(cmd, node, "pipe(2) failed: %s", strerror(errno));
+        pipe_fds[0] = -1;
+        pipe_fds[1] = -1;
+        goto Error;
+    }
+    fcntl(pipe_fds[1], F_SETFD, FD_CLOEXEC);
+
+    /* spawn */
+    int mapped_fds[] = {listen_fd, 0,   /* listen_fd to 0 */
+                        pipe_fds[0], 5, /* pipe_fds[0] to 5 */
+                        -1};
+    pid_t pid = h2o_spawnp(argv[0], argv, mapped_fds, 0);
+    if (pid == -1)
+        goto Error;
+
+    close(listen_fd);
+    listen_fd = -1;
+    close(pipe_fds[0]);
+    pipe_fds[0] = -1;
+
+    return pipe_fds[1];
+
+Error:
+    if (pipe_fds[0] != -1)
+        close(pipe_fds[0]);
+    if (pipe_fds[1] )
+        close(pipe_fds[1]);
+    if (listen_fd != -1)
+        close(listen_fd);
+    unlink(sun->sun_path);
+    return -1;
+}
+
+void spawnproc_on_dispose(h2o_fastcgi_handler_t *handler, void *data)
+{
+    int pipe_fd = (int)((char *)data - (char *)NULL);
+    close(pipe_fd);
+}
+
+static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct fastcgi_configurator_t *self = (void *)cmd->configurator;
+    char dirname[] = "/tmp/h2o.fcgisock.XXXXXX";
+    char *argv[] = {"share/h2o/kill-on-close", "--rm", dirname, "--", "/bin/sh", "-c", node->data.scalar, NULL};
+    int spawner_fd;
+    struct sockaddr_un sun = {};
+    h2o_fastcgi_config_vars_t config_vars;
+
+    /* create temporary directory */
+    if (mkdtemp(dirname) == NULL) {
+        h2o_configurator_errprintf(cmd, node, "mkdtemp(3) failed to create temporary directory:%s:%s", dirname, strerror(errno));
+        return -1;
+    }
+
+    /* launch spawnfcgi command */
+    if ((spawner_fd = create_spawnproc(cmd, node, dirname, argv, &sun)) == -1) {
+        unlink(dirname);
+        return -1;
+    }
+
+    config_vars = *self->vars;
+    config_vars.callbacks.dispose = spawnproc_on_dispose;
+    config_vars.callbacks.data = (char *)NULL + spawner_fd;
+    h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sun, sizeof(sun), &config_vars);
+
+    return 0;
+}
+
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct fastcgi_configurator_t *self = (void *)_self;
@@ -163,6 +262,10 @@ void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "fastcgi.connect",
                                     H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXTENSION | H2O_CONFIGURATOR_FLAG_DEFERRED,
                                     on_config_connect);
+    h2o_configurator_define_command(&c->super, "fastcgi.spawn",
+                                    H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXTENSION | H2O_CONFIGURATOR_FLAG_DEFERRED
+                                        | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_spawn);
     h2o_configurator_define_command(&c->super, "fastcgi.timeout.io",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_timeout_io);
     h2o_configurator_define_command(&c->super, "fastcgi.timeout.keepalive",
