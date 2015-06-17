@@ -642,7 +642,8 @@ static void on_read(h2o_socket_t *sock, int status)
             break;
         case FCGI_STDERR:
             if (header.contentLength != 0)
-                write(2, sock->input->bytes + FCGI_RECORD_HEADER_SIZE, header.contentLength);
+                h2o_req_log_error(generator->req, MODULE_NAME, "%.*s", (int)header.contentLength,
+                                  sock->input->bytes + FCGI_RECORD_HEADER_SIZE);
             h2o_buffer_consume(&sock->input, recsize);
             break;
         case FCGI_END_REQUEST:
