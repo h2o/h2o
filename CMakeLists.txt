@@ -106,6 +106,7 @@ SET(CMAKE_C_FLAGS "-O2 -g -Wall -Wno-unused-function ${CMAKE_C_FLAGS} -DH2O_ROOT
 
 INCLUDE_DIRECTORIES(
     include
+    deps/cloexec
     deps/klib
     deps/picohttpparser
     deps/picotest
@@ -124,6 +125,7 @@ SET(LIBYAML_SOURCE_FILES
 SET_SOURCE_FILES_PROPERTIES(${LIBYAML_SOURCE_FILES} PROPERTIES COMPILE_FLAGS "-Wno-unused-value -Wno-unused-but-set-variable")
 
 SET(LIB_SOURCE_FILES
+    deps/cloexec/cloexec.c
     deps/picohttpparser/picohttpparser.c
 
     lib/common/hostinfo.c
@@ -298,7 +300,7 @@ ELSE (LIBUV_FOUND)
   SET_TARGET_PROPERTIES(libh2o PROPERTIES EXCLUDE_FROM_ALL 1)
 ENDIF (LIBUV_FOUND)
 
-INSTALL(PROGRAMS share/h2o/annotate-backtrace-symbols share/h2o/fetch-ocsp-response share/h2o/start_server DESTINATION share/h2o)
+INSTALL(PROGRAMS share/h2o/annotate-backtrace-symbols share/h2o/fetch-ocsp-response share/h2o/kill-on-close share/h2o/start_server DESTINATION share/h2o)
 INSTALL(DIRECTORY doc/ DESTINATION share/doc/h2o PATTERN "Makefile" EXCLUDE PATTERN "README.md" EXCLUDE)
 
 # tests

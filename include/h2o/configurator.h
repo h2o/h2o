@@ -137,6 +137,10 @@ int h2o_configurator_scanf(h2o_configurator_command_t *cmd, yoml_t *node, const 
  * @return index of the matched string within the given list, or -1 if none of them matched
  */
 ssize_t h2o_configurator_get_one_of(h2o_configurator_command_t *cmd, yoml_t *node, const char *candidates);
+/**
+ * returns the absolute paths of supplementary commands
+ */
+char *h2o_configurator_get_cmd_path(const char *cmd);
 
 void h2o_configurator__init_core(h2o_globalconf_t *conf);
 void h2o_configurator__dispose_configurators(h2o_globalconf_t *conf);

@@ -494,13 +494,53 @@ static int delegate_dynamic_request(h2o_req_t *req, size_t url_path_len, const c
 
     filereq = h2o_mem_alloc_pool(&req->pool, sizeof(*filereq));
     filereq->url_path_len = url_path_len;
-    filereq->local_path = h2o_iovec_init(local_path, local_path_len);
+    filereq->local_path = h2o_strdup(&req->pool, local_path, local_path_len);
 
     req->pathconf = &mime_type->data.dynamic.pathconf;
     req->filereq = filereq;
 
     handler = mime_type->data.dynamic.pathconf.handlers.entries[0];
     return handler->on_req(handler, req);
+}
+
+static int try_dynamic_request(h2o_file_handler_t *self, h2o_req_t *req, char *rpath, size_t rpath_len)
+{
+    /* we have full local path in {rpath,rpath_len}, and need to split it into name and path_info */
+    struct stat st;
+    size_t slash_at = self->real_path.len;
+
+    while (1) {
+        /* find the next slash (or return -1 if failed) */
+        for (++slash_at;; ++slash_at) {
+            if (slash_at >= rpath_len)
+                return -1;
+            if (rpath[slash_at] == '/')
+                break;
+        }
+        /* change the slash to '\0', and check if the file exists */
+        rpath[slash_at] = '\0';
+        if (stat(rpath, &st) != 0)
+            return -1;
+        if (!S_ISDIR(st.st_mode))
+            break;
+        /* restore slash, and continue the search */
+        rpath[slash_at] = '/';
+    }
+
+    /* file found! */
+    h2o_mimemap_type_t *mime_type = h2o_mimemap_get_type(self->mimemap, h2o_get_filext(rpath, slash_at));
+    switch (mime_type->type) {
+    case H2O_MIMEMAP_TYPE_MIMETYPE:
+        return -1;
+    case H2O_MIMEMAP_TYPE_DYNAMIC:
+        return delegate_dynamic_request(req, req->pathconf->path.len + slash_at - self->real_path.len, rpath, slash_at, mime_type);
+    }
+}
+
+static void send_method_not_allowed(h2o_req_t *req)
+{
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ALLOW, H2O_STRLIT("GET, HEAD"));
+    h2o_send_error(req, 405, "Method Not Allowed", "method not allowed", H2O_SEND_ERROR_KEEP_HEADERS);
 }
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
@@ -512,17 +552,16 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     struct st_h2o_sendfile_generator_t *generator = NULL;
     size_t if_modified_since_header_index, if_none_match_header_index;
     size_t range_header_index;
-    int is_dir, is_get;
+    int is_dir;
+    enum { METHOD_IS_GET, METHOD_IS_HEAD, METHOD_IS_OTHER } method_type;
 
     /* only accept GET and HEAD */
     if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))) {
-        is_get = 1;
+        method_type = METHOD_IS_GET;
     } else if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"))) {
-        is_get = 0;
+        method_type = METHOD_IS_HEAD;
     } else {
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ALLOW, H2O_STRLIT("GET, HEAD"));
-        h2o_send_error(req, 405, "Method Not Allowed", "method not allowed", H2O_SEND_ERROR_KEEP_HEADERS);
-        return 0;
+        method_type = METHOD_IS_OTHER;
     }
 
     /* build path (still unterminated at the end of the block) */
@@ -555,7 +594,11 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         }
         if (index_file->base == NULL && (self->flags & H2O_FILE_FLAG_DIR_LISTING) != 0) {
             rpath[rpath_len] = '\0';
-            if (send_dir_listing(req, rpath, rpath_len, is_get) == 0)
+            if (method_type == METHOD_IS_OTHER) {
+                send_method_not_allowed(req);
+                return 0;
+            }
+            if (send_dir_listing(req, rpath, rpath_len, method_type == METHOD_IS_GET) == 0)
                 return 0;
         }
     } else {
@@ -569,12 +612,17 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         }
     }
     /* failed to open */
-    if (errno == ENOENT) {
-        h2o_send_error(req, 404, "File Not Found", "file not found", 0);
-    } else if (errno == ENFILE || errno == EMFILE) {
+
+    if (errno == ENFILE || errno == EMFILE) {
         h2o_send_error(req, 503, "Service Unavailable", "please try again later", 0);
     } else {
-        h2o_send_error(req, 403, "Access Forbidden", "access forbidden", 0);
+        if (h2o_mimemap_has_dynamic_type(self->mimemap) && try_dynamic_request(self, req, rpath, rpath_len) == 0)
+            return 0;
+        if (errno == ENOENT) {
+            h2o_send_error(req, 404, "File Not Found", "file not found", 0);
+        } else {
+            h2o_send_error(req, 403, "Access Forbidden", "access forbidden", 0);
+        }
     }
     return 0;
 
@@ -599,6 +647,13 @@ Opened:
     case H2O_MIMEMAP_TYPE_DYNAMIC:
         do_close(&generator->super, req);
         return delegate_dynamic_request(req, req->path_normalized.len, rpath, rpath_len, mime_type);
+    }
+
+    /* only allow GET or POST for static files */
+    if (method_type == METHOD_IS_OTHER) {
+        do_close(&generator->super, req);
+        send_method_not_allowed(req);
+        return 0;
     }
 
     /* check if range request */
@@ -659,12 +714,12 @@ Opened:
                                  (sizeof("\r\n") - 1);
             generator->bytesleft = final_content_len;
         }
-        do_send_file(generator, req, 206, "Partial Content", mime_type->data.mimetype, is_get);
+        do_send_file(generator, req, 206, "Partial Content", mime_type->data.mimetype, method_type == METHOD_IS_GET);
         return 0;
     }
 
     /* return file */
-    do_send_file(generator, req, 200, "OK", mime_type->data.mimetype, is_get);
+    do_send_file(generator, req, 200, "OK", mime_type->data.mimetype, method_type == METHOD_IS_GET);
     return 0;
 
 NotModified:

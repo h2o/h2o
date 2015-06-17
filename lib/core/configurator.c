@@ -442,3 +442,29 @@ Error:
     h2o_configurator_errprintf(cmd, node, "argument must be one of: %s", candidates);
     return -1;
 }
+
+char *h2o_configurator_get_cmd_path(const char *cmd)
+{
+    char *root, *cmd_fullpath;
+
+    /* just return the cmd (being strdup'ed) in case we do not need to prefix the value */
+    if (cmd[0] == '/' || strchr(cmd, '/') == NULL)
+        goto ReturnOrig;
+
+    /* obtain root */
+    if ((root = getenv("H2O_ROOT")) == NULL) {
+#ifdef H2O_ROOT
+        root = H2O_ROOT;
+#endif
+        if (root == NULL)
+            goto ReturnOrig;
+    }
+
+    /* build full-path and return */
+    cmd_fullpath = h2o_mem_alloc(strlen(root) + strlen(cmd) + 2);
+    sprintf(cmd_fullpath, "%s/%s", root, cmd);
+    return cmd_fullpath;
+
+ReturnOrig:
+    return h2o_strdup(NULL, cmd, SIZE_MAX).base;
+}
