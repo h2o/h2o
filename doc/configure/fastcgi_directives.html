@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<base href="../" />
+
+<!-- oktavia -->
+<link rel="stylesheet" href="assets/searchstyle.css" type="text/css" />
+<script src="search/jquery-1.9.1.min.js"></script>
+<script src="search/oktavia-jquery-ui.js"></script>
+<script src="search/oktavia-english-search.js"></script>
+<!-- /oktavia -->
+
+<link rel="stylesheet" href="assets/style.css" type="text/css" />
+
+<title>FastCGI Directives - Configure - H2O</title>
+</head>
+<body>
+<div id="body">
+<div id="top">
+
+<h1><a href="index.html">H2O</a></h1>
+the optimized HTTP/1.x, HTTP/2 server
+
+<!-- oktavia -->
+<form id="searchform">
+<input class="search" type="search" name="search" id="search" results="5" value="" placeholder="Search" />
+<div id="searchresult_box">
+<div id="close_search_box">&times;</div>
+<div id="searchresult_summary"></div>
+<div id="searchresult"></div>
+<div id="searchresult_nav"></div>
+<span class="pr">Powered by <a href="https://github.com/shibukawa/oktavia">Oktavia</a></span>
+</div>
+</form>
+<!-- /oktavia -->
+
+</div>
+
+<table id="menu">
+<tr>
+<td><a href="index.html">Top</a></td>
+<td><a href="install.html">Install</a></td>
+<td class="selected">Configure</td>
+<td><a href="faq.html">FAQ</a></td>
+<td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
+<td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
+</tr>
+</table>
+
+<div id="main">
+
+<h2>
+<a href="configure.html">Configure</a> &gt;
+FastCGI Directives
+</h2>
+
+
+<p>
+This document describes the configuration directives of the FastCGI handler.
+</p>
+<p>
+The configuration directives of the FastCGI handler can be categorized into two groups.
+<code>Fastcgi.connect</code> and <code>fastcgi.spawn</code> define the address (or the process) to which the requests should be sent.
+Other directives customize how the connections to the FastCGI processes should be maintained.
+</p>
+
+<h3 id="fastcgi.connect" class="directive-title"><a href="configure/fastcgi_directives.html#fastcgi.connect"><code>"fastcgi.connect"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+The directive specifies the address at where the FastCGI daemon is running.
+</p>
+
+<p>
+If the argument is a scalar, the value is considered as the path to a unix socket.
+Following properties are recognized if the argument is a mapping.
+<dl>
+<dt><code>host</code>
+<dd>name (or IP address) of the server running the FastCGI daemon (ignored if <code>type</code> is <code>unix</code>)
+<dt><code>port</code>
+<dd>TCP port number or path to the unix socket
+<dt><code>type</code>
+<dd>either <code>tcp</code> (default) or <code>unix</code>
+</dl>
+</p>
+<div class="example">
+<div class="caption">Example. Map <code>/app</code> to FastCGI daemon listening to <code>/tmp/fcgi.sock</code></div>
+<pre><code>hosts:
+    &quot;example.com:80&quot;:
+        paths:
+            &quot;/app&quot;:
+                fastcgi.connect: /tmp/fcgi.sock
+</code></pre>
+</div>
+
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>path, extension</dd>
+</dl>
+
+<h3 id="fastcgi.spawn" class="directive-title"><a href="configure/fastcgi_directives.html#fastcgi.spawn"><code>"fastcgi.spawn"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+The directive specifies the command to start the FastCGI process manager.
+</p>
+
+<p>
+In contrast to <code>fastcgi.connect</code> that connects to a FastCGI server running externally, this directive launches a FastCGI process manager under the control of H2O, and terminates it when H2O quits.
+The argument is a <code>/bin/sh -c</code> expression to be executed when H2O boots up.
+The HTTP server records the process id of the expression, and sends <code>SIGTERM</code> to the id when it exits.
+</p>
+<div class="example">
+<div class="caption">Example. Map <code>.php</code> files to 10 worker processes of <code>/usr/local/bin/php-cgi</code></div>
+<pre><code>file.custom-handler:
+    extension:     .php
+    fastcgi.spawn: &quot;PHP_FCGI_CHILDREN=10 exec /usr/local/bin/php-cgi&quot;
+</code></pre>
+</div>
+
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>path, extension</dd>
+</dl>
+
+<h3 id="fastcgi.timeout.io" class="directive-title"><a href="configure/fastcgi_directives.html#fastcgi.timeout.io"><code>"fastcgi.timeout.io"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Sets the I/O timeout of connections to the FastCGI process in milliseconds.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extension</dd>
+<dt>Default:</dt>
+<dd><code><pre>fastcgi.timeout.io: 30000</pre></code>
+</dl>
+
+
+<h3 id="fastcgi.timeout.keepalive" class="directive-title"><a href="configure/fastcgi_directives.html#fastcgi.timeout.keepalive"><code>"fastcgi.timeout.keepalive"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Sets the keepl-alive timeout for idle connections in milliseconds.
+</p>
+
+<p>
+FastCGI connections will not be persistent if the value is set to zero (default).
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extension</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.timeout.keepalive: 0</pre></code>
+</dl>
+
+<h3 id="fastcgi.send-delegated-uri" class="directive-title"><a href="configure/fastcgi_directives.html#fastcgi.send-delegated-uri"><code>"fastcgi.send-delegated-uri"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Send the modified <code>HTTP_HOST</code> and <code>REQUEST_URI</code> being rewritten in case of internal redirect.
+</p>
+
+<p>
+In H2O, it is possible to perform internal redirects (a.k.a. delegations or URL rewrites) using <a href="configure/redirect_directives.html">the <code>redirect</code> directive</a> or <a href="configure/reproxy_directives.html">by returning <code>X-Reproxy-URL</code> headers</a> from web applications.
+The directive specifies whether to send the original values to the FastCGI process (default), or if the rewritten values should be sent.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extension</dd>
+<dt>Default:</dt>
+<dd><code><pre>fastcgi.send-delegated-uri: OFF</pre></code>
+</dl>
+
+
+
+
+</div>
+<div id="footer">
+<p>
+Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+</p>
+</div>
+</body>
+</html>
