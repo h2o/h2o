@@ -66,7 +66,7 @@ extern "C" {
 #define H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2 1
 #define H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS 10
 #define H2O_DEFAULT_HTTP2_IDLE_TIMEOUT (H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS * 1000)
-#define H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS 5
+#define H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS 30
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT (H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS * 1000)
 
 typedef struct st_h2o_conn_t h2o_conn_t;
@@ -1017,7 +1017,7 @@ void h2o_expires_register_configurator(h2o_globalconf_t *conf);
 
 typedef struct st_h2o_fastcgi_handler_t h2o_fastcgi_handler_t;
 
-#define H2O_DEFAULT_FASTCGI_IO_TIMEOUT 5000
+#define H2O_DEFAULT_FASTCGI_IO_TIMEOUT 30000
 
 typedef struct st_h2o_fastcgi_config_vars_t {
     uint64_t io_timeout;
