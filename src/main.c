@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2014,2015 DeNA Co., Ltd., Kazuho Oku, Tatsuhiko Kubo,
  *                         Domingo Alvarez Duarte, Nick Desaulniers,
- *                         Jeff Marison
+ *                         Jeff Marrison
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to

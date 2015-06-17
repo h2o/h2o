@@ -1,5 +1,7 @@
 /*
- * Copyright (c) 2014,2015 DeNA Co., Ltd., Domingo Alvarez Duarte, Tatsuhiko Kubo, Nick Desaulniers, Marc Hoersken
+ * Copyright (c) 2014,2015 DeNA Co., Ltd., Kazuho Oku, Domingo Alvarez Duarte,
+ *                         Tatsuhiko Kubo, Nick Desaulniers, Marc Hoersken,
+ *                         Justin Zhu
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
