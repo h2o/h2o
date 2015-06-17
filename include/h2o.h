@@ -1023,6 +1023,7 @@ typedef struct st_h2o_fastcgi_config_vars_t {
     uint64_t io_timeout;
     uint64_t keepalive_timeout; /* 0 to disable */
     h2o_iovec_t document_root;  /* .base=NULL if not set */
+    int send_delegated_uri;     /* whether to send the rewritten HTTP_HOST & REQUEST_URI by delegation, or the original */
     struct {
         void (*dispose)(h2o_fastcgi_handler_t *handler, void *data);
         void *data;
@@ -1134,10 +1135,11 @@ typedef struct st_h2o_redirect_handler_t h2o_redirect_handler_t;
 /**
  * registers the redirect handler to the context
  * @param pathconf
+ * @param internal whether if the redirect is internal or external
  * @param status status code to be sent (e.g. 301, 303, 308, ...)
  * @param prefix prefix of the destitation URL
  */
-h2o_redirect_handler_t *h2o_redirect_register(h2o_pathconf_t *pathconf, int status, const char *prefix);
+h2o_redirect_handler_t *h2o_redirect_register(h2o_pathconf_t *pathconf, int internal, int status, const char *prefix);
 /**
  * registers the configurator
  */

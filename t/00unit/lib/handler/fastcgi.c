@@ -76,10 +76,10 @@ static void test_build_request(void)
     iovec_vector_t vecs;
     size_t vec_index;
 
-    conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
-    conn->req.scheme = &H2O_URL_SCHEME_HTTP;
-    conn->req.authority = h2o_iovec_init(H2O_STRLIT("localhost"));
-    conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
+    conn->req.input.method = conn->req.method = h2o_iovec_init(H2O_STRLIT("GET"));
+    conn->req.input.scheme = conn->req.scheme = &H2O_URL_SCHEME_HTTP;
+    conn->req.input.authority = conn->req.authority = h2o_iovec_init(H2O_STRLIT("localhost"));
+    conn->req.input.path = conn->req.path = h2o_iovec_init(H2O_STRLIT("/"));
     conn->req.path_normalized = conn->req.path;
     conn->req.query_at = SIZE_MAX;
     conn->req.version = 0x101;
@@ -101,13 +101,13 @@ static void test_build_request(void)
                                "\x0b\x09REMOTE_ADDR127.0.0.1"                                                           /* */
                                "\x0b\x05REMOTE_PORT55555"                                                               /* */
                                "\x0e\x03REQUEST_METHODGET"                                                              /* */
+                               "\x09\x09HTTP_HOSTlocalhost"                                                             /* */
                                "\x0b\x01REQUEST_URI/"                                                                   /* */
                                "\x0b\x09SERVER_ADDR127.0.0.1"                                                           /* */
                                "\x0b\x02SERVER_PORT80"                                                                  /* */
                                "\x0b\x07SERVER_NAMEdefault"                                                             /* */
                                "\x0f\x08SERVER_PROTOCOLHTTP/1.1"                                                        /* */
                                "\x0f\x10SERVER_SOFTWAREh2o/1.2.1-alpha1"                                                /* */
-                               "\x09\x09HTTP_HOSTlocalhost"                                                             /* */
                                "\x0f\x3fHTTP_USER_AGENTMozilla/5.0 (X11; Linux) KHTML/4.9.1 (like Gecko) Konqueror/4.9" /* */
                                "\x0b\x07HTTP_COOKIEfoo=bar"                                                             /* */
                                )));
@@ -136,13 +136,13 @@ static void test_build_request(void)
                                "\x0b\x09REMOTE_ADDR127.0.0.1"                                                           /* */
                                "\x0b\x05REMOTE_PORT55555"                                                               /* */
                                "\x0e\x03REQUEST_METHODGET"                                                              /* */
+                               "\x09\x09HTTP_HOSTlocalhost"                                                             /* */
                                "\x0b\x01REQUEST_URI/"                                                                   /* */
                                "\x0b\x09SERVER_ADDR127.0.0.1"                                                           /* */
                                "\x0b\x02SERVER_PORT80"                                                                  /* */
                                "\x0b\x07SERVER_NAMEdefault"                                                             /* */
                                "\x0f\x08SERVER_PROTOCOLHTTP/1.1"                                                        /* */
                                "\x0f\x10SERVER_SOFTWAREh2o/1.2.1-alpha1"                                                /* */
-                               "\x09\x09HTTP_HOSTlocalhost"                                                             /* */
                                "\x0f\x3fHTTP_USER_AGENTMozilla/5.0 (X11; Linux) KHTML/4.9.1 (like Gecko) Konqueror/4.9" /* */
                                "\x0b\x11HTTP_COOKIEfoo=bar;hoge=fuga"                                                   /* */
                                )));
