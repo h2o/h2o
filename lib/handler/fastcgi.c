@@ -227,7 +227,7 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
         path_info = req->path_normalized;
     }
     if (path_info.base != NULL)
-        append_pair(&req->pool, vecs, H2O_STRLIT("PATH_INFO"), req->path_normalized.base, req->path_normalized.len);
+        append_pair(&req->pool, vecs, H2O_STRLIT("PATH_INFO"), path_info.base, path_info.len);
     /* DOCUMENT_ROOT and PATH_TRANSLATED */
     if (config->document_root.base != NULL) {
         append_pair(&req->pool, vecs, H2O_STRLIT("DOCUMENT_ROOT"), config->document_root.base, config->document_root.len);
