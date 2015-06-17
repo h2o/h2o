@@ -253,6 +253,21 @@ Default is none.
 
 <?
 $ctx->{directive}->(
+    name   => "tcp-fastopen",
+    levels => [ qw(global) ],
+    desc   => q{Size of the queue used for TCP Fast Open.},
+)->(sub {
+?>
+<p>
+<a href="https://en.wikipedia.org/wiki/TCP_Fast_Open">TCP Fast Open</a> is an extension to the TCP/IP protocol that reduces the time spent for establishing a connection.
+On Linux that support the feature, the default value is <code>4,096</code>.
+On other platforms the default value is <code>0</code> (disabled).
+</p>
+? })
+
+
+<?
+$ctx->{directive}->(
     name   => "user",
     levels => [ qw(global) ],
     desc   => q{Username under which the server should handle incoming requests.},

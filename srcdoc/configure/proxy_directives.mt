@@ -32,7 +32,7 @@ $ctx->{directive}->(
 $ctx->{directive}->(
     name    => "proxy.timeout.io",
     levels  => [ qw(global host path) ],
-    default => q{proxy.timeout.io: 5000},
+    default => q{proxy.timeout.io: 30000},
     desc    => q{Sets the upstream I/O timeout in milliseconds.},
 )->(sub {});
 ?>

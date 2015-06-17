@@ -7,6 +7,23 @@ This document describes the configuration directives of the file handler.
 
 <?
 $ctx->{directive}->(
+    name    => "file.custom-handler",
+    levels  => [ qw(global host path) ],
+    desc    => q{The directive maps extensions to a custom handler (e.g. FastCGI).},
+)->(sub {
+?>
+<?= $ctx->{example}->('Serving files under different paths', <<'EOT')
+paths:
+    "/":
+        file.dir: /path/to/doc-root
+    "/icons":
+        file.dir: /path/to/icons-dir
+EOT
+?>
+? })
+
+<?
+$ctx->{directive}->(
     name    => "file.dir",
     levels  => [ qw(path) ],
     desc    => q{The directive specifies the directory under which should be served for the corresponding path.},

@@ -434,6 +434,7 @@
 		10FCC13D1B2E4A4500F13674 /* cloexec.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cloexec.h; sourceTree = "<group>"; };
 		10FCC1411B2FCC6B00F13674 /* kill-on-close */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = "kill-on-close"; sourceTree = "<group>"; };
 		10FCC1421B300A6800F13674 /* 50fastcgi-php.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50fastcgi-php.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		10FCC1431B31408B00F13674 /* fastcgi_directives.mt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = fastcgi_directives.mt; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -701,6 +702,7 @@
 				10583C021AEF8C7D004A3AD6 /* http2_directives.mt */,
 				10583C031AF1D7D5004A3AD6 /* access_log_directives.mt */,
 				10583C041AF1F315004A3AD6 /* expires_directives.mt */,
+				10FCC1431B31408B00F13674 /* fastcgi_directives.mt */,
 				10583C051AF1F893004A3AD6 /* file_directives.mt */,
 				10583C061AF20BE5004A3AD6 /* headers_directives.mt */,
 				10583C071AF21539004A3AD6 /* proxy_directives.mt */,
