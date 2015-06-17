@@ -55,4 +55,12 @@ To stop the server, send <code>SIGTERM</code> to the server.
 EOT
 ?>
 
+<h3>Next Step</h3>
+
+<p>
+Now that you know how to start and stop the server, the next step is to learn the <a href="configure.html">configuration directives and their structure</a>, or see <a href="https://github.com/h2o/h2o/wiki#configuration-examples">the configuration examples</a>.
+</p>
+
+</p>
+
 ? })
