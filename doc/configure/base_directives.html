@@ -384,6 +384,27 @@ Default is none.
 <dd>global</dd>
 </dl>
 
+<h3 id="tcp-fastopen" class="directive-title"><a href="configure/base_directives.html#tcp-fastopen"><code>"tcp-fastopen"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Size of the queue used for TCP Fast Open.
+</p>
+
+<p>
+<a href="https://en.wikipedia.org/wiki/TCP_Fast_Open">TCP Fast Open</a> is an extension to the TCP/IP protocol that reduces the time spent for establishing a connection.
+On Linux that support the feature, the default value is <code>4,096</code>.
+On other platforms the default value is <code>0</code> (disabled).
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+</dl>
+
+
 <h3 id="user" class="directive-title"><a href="configure/base_directives.html#user"><code>"user"</code></a></h3>
 
 <dl class="directive-desc">
