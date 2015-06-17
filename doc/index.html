@@ -76,21 +76,19 @@ Written in C, can also be <a href="faq.html#libh2o">used as a library</a>.
 </ul>
 </li>
 <li>WebSocket<sup><a href="#note_2" id="#cite_2" title="only usable at library level">2</sup></a></sup></li>
+<li>TCP Fast Open
 <li>TLS
 <ul>
-<li>uses OpenSSL or LibreSSL</li>
-<li>forward secrecy</li>
-<li>AEAD ciphers including chacha20-poly1305; the cipher preferred by Google Chrome for Android<sup><a href="#note_3" id="#cite_3" title="ref: Do the ChaCha: better mobile performance with cryptography">3</sup></a></sup></li>
-<li>OCSP stapling<sup><a href="#note_4" id="#cite_4" title="automatically enabled">4</sup></a></sup></li>
-<li>session resumption and session tickets<sup><a href="#note_5" id="#cite_5" title="internal memory is used as the storage">5</sup></a></sup></li>
+<li>forward secrecy, session resumption and session tickets<sup><a href="#note_3" id="#cite_3" title="internal memory is used as the storage">3</sup></a></sup></li>
+<li>AEAD ciphers including chacha20-poly1305; the cipher preferred by Google Chrome for Android<sup><a href="#note_4" id="#cite_4" title="ref: Do the ChaCha: better mobile performance with cryptography">4</sup></a></sup></li>
+<li>OCSP stapling<sup><a href="#note_5" id="#cite_5" title="automatically enabled">5</sup></a></sup></li>
 </ul>
 </li>
 <li>static file serving
 <ul>
-<li>conditional GET using last-modified / etag</li>
-<li>directory listing</li>
-<li>mime-type configuration</li>
-<li>range requests</li>
+<li>conditional GETs and range requests
+<li>directory listing
+<li>mime-type configuration
 </ul>
 </li>
 <li>FastCGI
@@ -101,13 +99,13 @@ Written in C, can also be <a href="faq.html#libh2o">used as a library</a>.
 <li>reverse proxy
 <ul>
 <li>HTTP/1.x only<sup><a href="#note_6" id="#cite_6" title="HTTPS is not supported">6</sup></a></sup></li>
-<li>persistent upstream connection</li>
-<li>request delegation using <code>X-Reproxy-URL</code> header
+<li>persistent upstream connection with hostname lookups</li>
 </ul>
 </li>
 <li>URL rewriting
 <ul>
 <li>delegation-based (no need to use regular expressions)
+<li>recognizes <code>X-Reproxy-URL</code> header sent by web applications
 </ul>
 <li>access-logging
 <ul>
@@ -177,9 +175,9 @@ The scores (requests/second.core) were recorded on Ubuntu 14.04 (x86-64) / VMwar
 <ol>
 <li id="note_1">also supports draft 14 and 16 for compatibility</li>
 <li id="note_2">only usable at library level</li>
-<li id="note_3">ref: <a href="https://blog.cloudflare.com/do-the-chacha-better-mobile-performance-with-cryptography/">Do the ChaCha: better mobile performance with cryptography</a></li>
-<li id="note_4">automatically enabled</li>
-<li id="note_5">internal memory is used as the storage</li>
+<li id="note_3">internal memory is used as the storage</li>
+<li id="note_4">ref: <a href="https://blog.cloudflare.com/do-the-chacha-better-mobile-performance-with-cryptography/">Do the ChaCha: better mobile performance with cryptography</a></li>
+<li id="note_5">automatically enabled</li>
 <li id="note_6">HTTPS is not supported</li>
 <li id="note_7">benchmark details are explained in <a href="http://blog.kazuhooku.com/2015/06/http2-and-h2o-improves-user-experience.html">HTTP/2 (and H2O) improves user experience over HTTP/1.1 or SPDY</a></li>
 <li id="note_8">for reverse-proxy tests, another H2O process running on the same host was used as the upstream server</li>

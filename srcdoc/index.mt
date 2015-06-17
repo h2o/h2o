@@ -26,21 +26,19 @@ Written in C, can also be <a href="faq.html#libh2o">used as a library</a>.
 </ul>
 </li>
 <li>WebSocket<?= $note->("only usable at library level") ?></li>
+<li>TCP Fast Open
 <li>TLS
 <ul>
-<li>uses OpenSSL or LibreSSL</li>
-<li>forward secrecy</li>
+<li>forward secrecy, session resumption and session tickets<?= $note->("internal memory is used as the storage") ?></li>
 <li>AEAD ciphers including chacha20-poly1305; the cipher preferred by Google Chrome for Android<?= $note->(q{ref: <a href="https://blog.cloudflare.com/do-the-chacha-better-mobile-performance-with-cryptography/">Do the ChaCha: better mobile performance with cryptography</a>}) ?></li>
 <li>OCSP stapling<?= $note->("automatically enabled") ?></li>
-<li>session resumption and session tickets<?= $note->("internal memory is used as the storage") ?></li>
 </ul>
 </li>
 <li>static file serving
 <ul>
-<li>conditional GET using last-modified / etag</li>
-<li>directory listing</li>
-<li>mime-type configuration</li>
-<li>range requests</li>
+<li>conditional GETs and range requests
+<li>directory listing
+<li>mime-type configuration
 </ul>
 </li>
 <li>FastCGI
@@ -51,13 +49,13 @@ Written in C, can also be <a href="faq.html#libh2o">used as a library</a>.
 <li>reverse proxy
 <ul>
 <li>HTTP/1.x only<?= $note->("HTTPS is not supported") ?></li>
-<li>persistent upstream connection</li>
-<li>request delegation using <code>X-Reproxy-URL</code> header
+<li>persistent upstream connection with hostname lookups</li>
 </ul>
 </li>
 <li>URL rewriting
 <ul>
 <li>delegation-based (no need to use regular expressions)
+<li>recognizes <code>X-Reproxy-URL</code> header sent by web applications
 </ul>
 <li>access-logging
 <ul>
