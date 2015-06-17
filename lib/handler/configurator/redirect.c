@@ -26,6 +26,7 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
 {
     const char *dest;
     int status = 302; /* default is temporary redirect */
+    int internal = 0; /* default is external redirect */
     yoml_t *t;
 
     switch (node->type) {
@@ -52,13 +53,17 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
             h2o_configurator_errprintf(cmd, t, "value of property `status` should be within 300 to 399");
             return -1;
         }
+        if ((t = yoml_get(node, "internal")) != NULL) {
+            if ((internal = (int)h2o_configurator_get_one_of(cmd, t, "NO,YES")) == -1)
+                return -1;
+        }
         break;
     default:
         h2o_configurator_errprintf(cmd, node, "value must be a string or a mapping");
         return -1;
     }
 
-    h2o_redirect_register(ctx->pathconf, status, dest);
+    h2o_redirect_register(ctx->pathconf, internal, status, dest);
 
     return 0;
 }
@@ -67,5 +72,5 @@ void h2o_redirect_register_configurator(h2o_globalconf_t *conf)
 {
     h2o_configurator_t *c = h2o_configurator_create(conf, sizeof(*c));
 
-    h2o_configurator_define_command(c, "redirect", H2O_CONFIGURATOR_FLAG_PATH, on_config);
+    h2o_configurator_define_command(c, "redirect", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED, on_config);
 }

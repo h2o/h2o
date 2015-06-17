@@ -53,6 +53,15 @@ static uint16_t h2o_url_get_port(const h2o_url_t *url);
  */
 h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t len, size_t *query_at);
 /**
+ * initializes URL object given scheme, authority, and path
+ * @param the output
+ * @param scheme scheme
+ * @param authority
+ * @param path
+ * @return 0 if successful
+ */
+static int h2o_url_init(h2o_url_t *url, const h2o_url_scheme_t *scheme, h2o_iovec_t authority, h2o_iovec_t path);
+/**
  * parses absolute URL (either http or https)
  */
 int h2o_url_parse(const char *url, size_t url_len, h2o_url_t *result);
@@ -83,6 +92,16 @@ static h2o_iovec_t h2o_url_stringify(h2o_mem_pool_t *pool, const h2o_url_t *url)
 void h2o_url_copy(h2o_mem_pool_t *pool, h2o_url_t *dest, const h2o_url_t *src);
 
 /* inline definitions */
+
+inline int h2o_url_init(h2o_url_t *url, const h2o_url_scheme_t *scheme, h2o_iovec_t authority, h2o_iovec_t path)
+{
+    if (h2o_url_parse_hostport(authority.base, authority.len, &url->host, &url->_port) != authority.base + authority.len)
+        return -1;
+    url->scheme = scheme;
+    url->authority = authority;
+    url->path = path;
+    return 0;
+}
 
 inline uint16_t h2o_url_get_port(const h2o_url_t *url)
 {
