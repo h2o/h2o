@@ -1,6 +1,8 @@
 Revision history for H2O.
 
-1.3.0 TBD
+1.3.1 TBD
+
+1.3.0 2015-06-17 21:53:00+0000
 	- [core] enable TCP fast-open #356 (Tatsuhiko Kubo)
 	- [core] improve virtual-host lookup logic #293 #296 (Kazuho Oku)
 	- [core] fix content being mis-sent for HEAD requests #300 #302 (Kazuho Oku)
