@@ -740,10 +740,8 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, cons
     /* set TCP_FASTOPEN; when tfo_queues is zero TFO is always disabled */
     if (conf.tfo_queues > 0) {
 #ifdef TCP_FASTOPEN
-        if (setsockopt(fd, IPPROTO_TCP, TCP_FASTOPEN, (const void *)&conf.tfo_queues, sizeof(conf.tfo_queues)) != 0) {
-            fprintf(stderr, "failed to set TCP_FASTOPEN:%s\n", strerror(errno));
-            goto Error;
-        }
+        if (setsockopt(fd, IPPROTO_TCP, TCP_FASTOPEN, (const void *)&conf.tfo_queues, sizeof(conf.tfo_queues)) != 0)
+            fprintf(stderr, "[warning] failed to set TCP_FASTOPEN:%s\n", strerror(errno));
 #else
         assert(!"conf.tfo_queues not zero on platform without TCP_FASTOPEN");
 #endif
