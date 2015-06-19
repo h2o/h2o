@@ -12,12 +12,14 @@ $ctx->{directive}->(
     desc    => q{The directive maps extensions to a custom handler (e.g. FastCGI).},
 )->(sub {
 ?>
-<?= $ctx->{example}->('Serving files under different paths', <<'EOT')
-paths:
-    "/":
-        file.dir: /path/to/doc-root
-    "/icons":
-        file.dir: /path/to/icons-dir
+<p>
+The directive accepts a mapping containing configuration directives that can be used at the <code>extension</code> level, together with a property named <code>extension</code> specifying a extension (starting with <code>.</code>) or a sequence of extensions to which the directives should be applied.
+Only one handler must exist within the directives.
+</p>
+<?= $ctx->{example}->('Mapping PHP files to FastCGI', <<'EOT')
+file.custom-handler:
+  extension: .php
+  fastcgi.connect: /tmp/fcgi.sock
 EOT
 ?>
 ? })
