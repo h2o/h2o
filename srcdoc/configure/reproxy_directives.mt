@@ -8,7 +8,7 @@ This document describes the configuration directives of the reproxy handler.
 <?
 $ctx->{directive}->(
     name    => "reproxy",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     default => q{reproxy: OFF},
     desc    => <<'EOT',
 A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if the server should recognize the <code>X-Reproxy-URL</code> header sent from <a href="configure/proxy_directives.html#proxy.reverse.url">upstream servers</a>.

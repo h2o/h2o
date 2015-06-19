@@ -8,7 +8,7 @@ This document describes the configuration directives of the access_log handler.
 <?
 $ctx->{directive}->(
     name    => "access-log",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     desc    => q{The directive sets the path and optionally the format of the access log.},
 )->(sub {
 ?>
