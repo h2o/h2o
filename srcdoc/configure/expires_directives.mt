@@ -8,7 +8,7 @@ This document describes the configuration directives of the expires handler.
 <?
 $ctx->{directive}->(
     name    => "expires",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     desc    => <<'EOT',
 An optional directive for setting the <code>Cache-Control: max-age=</code> header.
 EOT

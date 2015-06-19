@@ -8,7 +8,7 @@ This document describes the configuration directives of the headers handler.
 <?
 $ctx->{directive}->(
     name    => "header.add",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     desc    => q{Adds a new header line to the response headers, regardless if a header with the same name already exists.},
 )->(sub {
 ?>
@@ -21,7 +21,7 @@ $ctx->{directive}->(
 <?
 $ctx->{directive}->(
     name    => "header.append",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     desc    => <<'EOT',
 Adds a new header line, or appends the value to the existing header with the same name, separated by <code>,</code>.
 EOT
@@ -31,7 +31,7 @@ EOT
 <?
 $ctx->{directive}->(
     name => "header.merge",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     desc    => <<'EOT',
 Adds a new header line, or merges the value to the existing header of comma-separated values.
 EOT
@@ -49,7 +49,7 @@ EOT
 <?
 $ctx->{directive}->(
     name => "header.set",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     desc    => q{Sets a header line, removing headers with the same name if exists.},
 )->(sub {
 ?>
@@ -62,7 +62,7 @@ EOT
 <?
 $ctx->{directive}->(
     name => "header.setifempty",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     desc    => <<'EOT',
 Sets a header line when and only when a header with the same name does not already exist.
 EOT
@@ -70,7 +70,7 @@ EOT
 
 $ctx->{directive}->(
     name => "header.setifempty",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     desc    => <<'EOT',
 Sets a header line when and only when a header with the same name does not already exist.
 EOT
@@ -80,7 +80,7 @@ EOT
 <?
 $ctx->{directive}->(
     name => "header.unset",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     desc    => q{Removes headers with given name.},
 )->(sub {
 ?>

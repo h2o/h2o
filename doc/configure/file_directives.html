@@ -69,13 +69,15 @@ This document describes the configuration directives of the file handler.
 The directive maps extensions to a custom handler (e.g. FastCGI).
 </p>
 
+<p>
+The directive accepts a mapping containing configuration directives that can be used at the <code>extension</code> level, together with a property named <code>extension</code> specifying a extension (starting with <code>.</code>) or a sequence of extensions to which the directives should be applied.
+Only one handler must exist within the directives.
+</p>
 <div class="example">
-<div class="caption">Example. Serving files under different paths</div>
-<pre><code>paths:
-    &quot;/&quot;:
-        file.dir: /path/to/doc-root
-    &quot;/icons&quot;:
-        file.dir: /path/to/icons-dir
+<div class="caption">Example. Mapping PHP files to FastCGI</div>
+<pre><code>file.custom-handler:
+  extension: .php
+  fastcgi.connect: /tmp/fcgi.sock
 </code></pre>
 </div>
 
