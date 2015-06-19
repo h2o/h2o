@@ -1,6 +1,6 @@
 Revision history for H2O.
 
-1.3.1 TBD
+1.3.1 2015-06-19 03:35:00+0000
 	- [core] do not refuse to start-up when failing to enable TCP Fast Open #368 (Kazuho Oku)
 	- [fastcgi] fix server start-up issues when using `fastcgi.spawn` #367 (Kazuho Oku)
 	- [SSL] support OCSP stapling using `openssl ocsp` command built from LibreSSL in addition to OpenSSL #366 (Tatsuhiro Tsujikawa)
