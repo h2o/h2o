@@ -53,21 +53,22 @@ static int setup_configurators(h2o_configurator_context_t *ctx, int is_enter, yo
 
 int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *node, int flags_mask, const char **ignore_commands)
 {
-    struct {
+    struct st_cmd_value_t {
         h2o_configurator_command_t *cmd;
         yoml_t *value;
-    } *deferred;
-    size_t num_deferred = 0, i;
+    };
+    H2O_VECTOR(struct st_cmd_value_t) deferred = {}, semi_deferred = {};
+    size_t i;
+    int ret = -1;
 
     if (node->type != YOML_TYPE_MAPPING) {
         h2o_configurator_errprintf(NULL, node, "node must be a MAPPING");
-        return -1;
+        goto Exit;
     }
-    deferred = alloca(sizeof(*deferred) * node->data.mapping.size);
 
     /* call on_enter of every configurator */
     if (setup_configurators(ctx, 1, node) != 0)
-        return -1;
+        goto Exit;
 
     /* handle the configuration commands */
     for (i = 0; i != node->data.mapping.size; ++i) {
@@ -76,7 +77,7 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
         /* obtain the target command */
         if (key->type != YOML_TYPE_SCALAR) {
             h2o_configurator_errprintf(NULL, key, "command must be a string");
-            return -1;
+            goto Exit;
         }
         if (ignore_commands != NULL) {
             size_t i;
@@ -86,11 +87,11 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
         }
         if ((cmd = h2o_configurator_get_command(ctx->globalconf, key->data.scalar)) == NULL) {
             h2o_configurator_errprintf(NULL, key, "unknown command: %s", key->data.scalar);
-            return -1;
+            goto Exit;
         }
         if ((cmd->flags & flags_mask) == 0) {
             h2o_configurator_errprintf(cmd, key, "the command cannot be used at this level");
-            return -1;
+            goto Exit;
         }
         /* check value type */
         if ((cmd->flags & (H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE |
@@ -99,19 +100,19 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
             case YOML_TYPE_SCALAR:
                 if ((cmd->flags & H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR) == 0) {
                     h2o_configurator_errprintf(cmd, value, "argument cannot be a scalar");
-                    return -1;
+                    goto Exit;
                 }
                 break;
             case YOML_TYPE_SEQUENCE:
                 if ((cmd->flags & H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE) == 0) {
                     h2o_configurator_errprintf(cmd, value, "argument cannot be a sequence");
-                    return -1;
+                    goto Exit;
                 }
                 break;
             case YOML_TYPE_MAPPING:
                 if ((cmd->flags & H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING) == 0) {
                     h2o_configurator_errprintf(cmd, value, "argument cannot be a mapping");
-                    return -1;
+                    goto Exit;
                 }
                 break;
             default:
@@ -120,10 +121,12 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
             }
         }
         /* handle the command (or keep it for later execution) */
-        if ((cmd->flags & H2O_CONFIGURATOR_FLAG_DEFERRED) != 0) {
-            deferred[num_deferred].cmd = cmd;
-            deferred[num_deferred].value = value;
-            ++num_deferred;
+        if ((cmd->flags & H2O_CONFIGURATOR_FLAG_SEMI_DEFERRED) != 0) {
+            h2o_vector_reserve(NULL, (void *)&semi_deferred, sizeof(semi_deferred.entries[0]), semi_deferred.size + 1);
+            semi_deferred.entries[semi_deferred.size++] = (struct st_cmd_value_t){cmd, value};
+        } else if ((cmd->flags & H2O_CONFIGURATOR_FLAG_DEFERRED) != 0) {
+            h2o_vector_reserve(NULL, (void *)&deferred, sizeof(deferred.entries[0]), deferred.size + 1);
+            deferred.entries[deferred.size++] = (struct st_cmd_value_t){cmd, value};
         } else {
             if (cmd->cb(cmd, ctx, value) != 0)
                 return -1;
@@ -131,16 +134,26 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
     SkipCommand:
         ;
     }
-    for (i = 0; i != num_deferred; ++i) {
-        if (deferred[i].cmd->cb(deferred[i].cmd, ctx, deferred[i].value) != 0)
-            return -1;
+    for (i = 0; i != semi_deferred.size; ++i) {
+        struct st_cmd_value_t *pair = semi_deferred.entries + i;
+        if (pair->cmd->cb(pair->cmd, ctx, pair->value) != 0)
+            goto Exit;
+    }
+    for (i = 0; i != deferred.size; ++i) {
+        struct st_cmd_value_t *pair = deferred.entries + i;
+        if (pair->cmd->cb(pair->cmd, ctx, pair->value) != 0)
+            goto Exit;
     }
 
     /* call on_enter of every configurator */
     if (setup_configurators(ctx, 0, node) != 0)
-        return -1;
+        goto Exit;
 
-    return 0;
+    ret = 0;
+Exit:
+    free(deferred.entries);
+    free(semi_deferred.entries);
+    return ret;
 }
 
 static int sort_from_longer_paths(const yoml_mapping_element_t *x, const yoml_mapping_element_t *y)

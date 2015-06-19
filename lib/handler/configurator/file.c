@@ -383,7 +383,7 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
                                     on_config_mime_setdefaulttype);
     h2o_configurator_define_command(&self->super, "file.custom-handler",
                                     (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
-                                        H2O_CONFIGURATOR_FLAG_DEFERRED,
+                                        H2O_CONFIGURATOR_FLAG_SEMI_DEFERRED,
                                     on_config_custom_handler);
     h2o_configurator_define_command(&self->super, "file.etag",
                                     (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
