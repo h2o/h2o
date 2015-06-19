@@ -184,8 +184,10 @@ static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const
                         pipe_fds[0], 5, /* pipe_fds[0] to 5 */
                         -1};
     pid_t pid = h2o_spawnp(argv[0], argv, mapped_fds, 0);
-    if (pid == -1)
+    if (pid == -1) {
+        fprintf(stderr, "[lib/handler/fastcgi.c] failed to launch helper program %s:%s\n", argv[0], strerror(errno));
         goto Error;
+    }
 
     close(listen_fd);
     listen_fd = -1;
@@ -215,21 +217,23 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
 {
     struct fastcgi_configurator_t *self = (void *)cmd->configurator;
     char dirname[] = "/tmp/h2o.fcgisock.XXXXXX";
-    char *argv[] = {"share/h2o/kill-on-close", "--rm", dirname, "--", "/bin/sh", "-c", node->data.scalar, NULL};
+    char *argv[] = {h2o_configurator_get_cmd_path("share/h2o/kill-on-close"), "--rm", dirname, "--", "/bin/sh", "-c",
+                    node->data.scalar, NULL};
     int spawner_fd;
     struct sockaddr_un sun = {};
     h2o_fastcgi_config_vars_t config_vars;
+    int ret = -1;
 
     /* create temporary directory */
     if (mkdtemp(dirname) == NULL) {
         h2o_configurator_errprintf(cmd, node, "mkdtemp(3) failed to create temporary directory:%s:%s", dirname, strerror(errno));
-        return -1;
+        dirname[0] = '\0';
+        goto Exit;
     }
 
     /* launch spawnfcgi command */
     if ((spawner_fd = create_spawnproc(cmd, node, dirname, argv, &sun)) == -1) {
-        unlink(dirname);
-        return -1;
+        goto Exit;
     }
 
     config_vars = *self->vars;
@@ -237,7 +241,12 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
     config_vars.callbacks.data = (char *)NULL + spawner_fd;
     h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sun, sizeof(sun), &config_vars);
 
-    return 0;
+    ret = 0;
+Exit:
+    if (dirname[0] != '\0')
+        unlink(dirname);
+    free(argv[0]);
+    return ret;
 }
 
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
