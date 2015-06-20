@@ -47,7 +47,8 @@
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
-#ifdef __linux__
+#if defined(__GLIBC__) || defined(__UCLIBC__)
+#define H2O_USE_EXECINFO
 #include <execinfo.h>
 #endif
 #include "cloexec.h"
@@ -1063,7 +1064,7 @@ static void on_sigterm(int signo)
     notify_all_threads();
 }
 
-#ifdef __linux__
+#ifdef H2O_USE_EXECINFO
 static int popen_annotate_backtrace_symbols(void)
 {
     char *cmd_fullpath = h2o_configurator_get_cmd_path("share/h2o/annotate-backtrace-symbols"), *argv[] = {cmd_fullpath, NULL};
@@ -1116,7 +1117,7 @@ static void setup_signal_handlers(void)
 {
     h2o_set_signal_handler(SIGTERM, on_sigterm);
     h2o_set_signal_handler(SIGPIPE, SIG_IGN);
-#ifdef __linux__
+#ifdef H2O_USE_EXECINFO
     if ((backtrace_symbols_to_fd = popen_annotate_backtrace_symbols()) == -1)
         backtrace_symbols_to_fd = 2;
     h2o_set_signal_handler(SIGABRT, on_sigfatal);
