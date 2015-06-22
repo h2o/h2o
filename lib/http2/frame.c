@@ -211,7 +211,7 @@ int h2o_http2_decode_priority_payload(h2o_http2_priority_t *payload, const h2o_h
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
     if (frame->length != 5) {
-        *err_desc = "invaild PRIORITY frame";
+        *err_desc = "invalid PRIORITY frame";
         return H2O_HTTP2_ERROR_FRAME_SIZE;
     }
 
@@ -282,7 +282,7 @@ int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *pa
     payload->window_size_increment = h2o_http2_decode32u(frame->payload) & 0x7fffffff;
     if (payload->window_size_increment == 0) {
         *err_is_stream_level = frame->stream_id != 0;
-        *err_desc = "invaild WINDOW_UPDATE frame";
+        *err_desc = "invalid WINDOW_UPDATE frame";
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
