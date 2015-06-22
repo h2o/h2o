@@ -58,6 +58,11 @@
 #include "h2o/http2.h"
 #include "h2o/serverutil.h"
 
+#ifdef H2O_USE_MRUBY
+#include "h2o/mruby.h"
+#endif
+
+
 /* simply use a large value, and let the kernel clip it to the internal max */
 #define H2O_SOMAXCONN (65535)
 
@@ -1383,6 +1388,9 @@ static void setup_configurators(void)
     h2o_proxy_register_configurator(&conf.globalconf);
     h2o_reproxy_register_configurator(&conf.globalconf);
     h2o_redirect_register_configurator(&conf.globalconf);
+#ifdef H2O_USE_MRUBY
+    h2o_mruby_register_configurator(&conf.globalconf);
+#endif
 }
 
 int main(int argc, char **argv)
