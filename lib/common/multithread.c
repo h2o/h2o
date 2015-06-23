@@ -174,3 +174,12 @@ void h2o_multithread_send_message(h2o_multithread_receiver_t *receiver, h2o_mult
 #endif
     }
 }
+
+void h2o_multithread_create_thread(pthread_t *tid, const pthread_attr_t *attr, void *(*func)(void *), void *arg)
+{
+    int err;
+    if ((err = pthread_create(tid, attr, func, arg)) != 0) {
+        fprintf(stderr, "pthread_create error: %s\n", strerror(err));
+        abort();
+    }
+}
