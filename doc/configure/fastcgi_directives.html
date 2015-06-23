@@ -92,7 +92,9 @@ Following properties are recognized if the argument is a mapping.
     &quot;example.com:80&quot;:
         paths:
             &quot;/app&quot;:
-                fastcgi.connect: /tmp/fcgi.sock
+                fastcgi.connect:
+                    port: /tmp/fcgi.sock
+                    type: unix
 </code></pre>
 </div>
 

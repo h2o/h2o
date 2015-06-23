@@ -34,7 +34,9 @@ hosts:
     "example.com:80":
         paths:
             "/app":
-                fastcgi.connect: /tmp/fcgi.sock
+                fastcgi.connect:
+                    port: /tmp/fcgi.sock
+                    type: unix
 EOT
 ?>
 ? })
