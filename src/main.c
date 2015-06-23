@@ -606,12 +606,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                                                 : "share/h2o/fetch-ocsp-response";
         if (ocsp_update_interval != 0) {
             switch (conf.run_mode) {
-            case RUN_MODE_WORKER: {
+            case RUN_MODE_WORKER:
                 ssl_config->ocsp_stapling.interval =
                     ocsp_update_interval; /* is also used as a flag for indicating if the updater thread was spawned */
                 ssl_config->ocsp_stapling.max_failures = ocsp_max_failures;
                 h2o_multithread_create_thread(&ssl_config->ocsp_stapling.updater_tid, NULL, ocsp_updater_thread, ssl_config);
-            } break;
+                break;
             case RUN_MODE_MASTER:
             case RUN_MODE_DAEMON:
                 /* nothing to do */
