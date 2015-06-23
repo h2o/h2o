@@ -134,7 +134,7 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
         /* tcp socket */
         uint16_t port;
         if (sscanf(servname, "%" SCNu16, &port) != 1) {
-            h2o_configurator_errprintf(cmd, node, "invaild port number:%s", servname);
+            h2o_configurator_errprintf(cmd, node, "invalid port number:%s", servname);
             return -1;
         }
         h2o_fastcgi_register_by_hostport(ctx->pathconf, hostname, port, self->vars);
