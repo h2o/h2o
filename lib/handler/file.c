@@ -34,6 +34,10 @@
 
 #include "h2o.h"
 
+#ifdef _WIN32
+#define O_CLOEXEC 0
+#endif
+
 #define MAX_BUF_SIZE 65000
 #define BOUNDARY_SIZE 20
 #define FIXED_PART_SIZE (sizeof("\r\n--") - 1 + BOUNDARY_SIZE + sizeof("\r\nContent-Range: bytes=-/\r\nContent-Type: \r\n\r\n") - 1)
