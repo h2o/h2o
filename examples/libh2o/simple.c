@@ -21,11 +21,15 @@
  */
 #include <errno.h>
 #include <limits.h>
-#include <netinet/in.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#ifdef _WIN32
+#include <winsock2.h>
+#else
+#include <netinet/in.h>
 #include <sys/socket.h>
+#endif
 #include <sys/stat.h>
 #include "h2o.h"
 #include "h2o/http1.h"
@@ -215,7 +219,12 @@ int main(int argc, char **argv)
 {
     h2o_hostconf_t *hostconf;
 
+#ifdef _WIN32
+    WSADATA wsaData;
+    WSAStartup(MAKEWORD(2, 0), &wsaData);
+#else
     signal(SIGPIPE, SIG_IGN);
+#endif
 
     h2o_config_init(&config);
     hostconf = h2o_config_register_host(&config, h2o_iovec_init(H2O_STRLIT("default")), 65535);

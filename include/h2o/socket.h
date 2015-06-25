@@ -27,7 +27,11 @@ extern "C" {
 #endif
 
 #include <stdint.h>
-#include <sys/socket.h>
+#ifdef _WIN32
+# include <ws2tcpip.h>
+#else
+# include <sys/socket.h>
+#endif
 #include <openssl/ssl.h>
 #include "h2o/memory.h"
 

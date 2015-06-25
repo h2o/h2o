@@ -19,11 +19,21 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <sys/types.h>
+#ifdef _WIN32
+# include <ws2tcpip.h>
+# ifndef AI_ADDRCONFIG
+#  define AI_ADDRCONFIG 0
+# endif
+# ifndef AI_NUMERICSERV
+#  define AI_NUMERICSERV 8
+# endif
+#else
+# include <arpa/inet.h>
+# include <netdb.h>
+# include <netinet/in.h>
+# include <sys/socket.h>
+# include <sys/types.h>
+#endif
 #include "picohttpparser.h"
 #include "h2o/string_.h"
 #include "h2o/hostinfo.h"

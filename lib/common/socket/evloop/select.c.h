@@ -20,7 +20,9 @@
  * IN THE SOFTWARE.
  */
 #include <stdio.h>
+#ifndef _WIN32
 #include <sys/select.h>
+#endif
 
 #if 0
 #define DEBUG_LOG(...) fprintf(stderr, __VA_ARGS__)

@@ -21,34 +21,51 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
 #include <inttypes.h>
 #include <limits.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <pthread.h>
-#include <pwd.h>
 #include <signal.h>
-#include <spawn.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <sys/resource.h>
 #include <sys/stat.h>
-#include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <sys/un.h>
-#include <sys/wait.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #ifdef __GLIBC__
 #include <execinfo.h>
+#endif
+#ifdef _WIN32
+# include <winsock2.h>
+# ifndef AI_ADDRCONFIG
+#  define AI_ADDRCONFIG 0
+# endif
+# ifndef AI_NUMERICSERV
+#  define AI_NUMERICSERV 8
+# endif
+# include <stdlib.h>
+# define WEXITSTATUS(val) ((val) & 255)
+# define WIFEXITED(val)   (((val) & 0xC0000000) == 0)
+# define WIFSIGNALED(val) (((val) & 0xC0000000) != 0)
+# define WTERMSIG(val)    ((val > 0xC0000200) ? val - 0xC0000200 : val)
+# define WIFSTOPPED(val)  (0)
+# define WSTOPSIG(var)    (0)
+#else
+# include <arpa/inet.h>
+# include <netdb.h>
+# include <netinet/in.h>
+# include <netinet/tcp.h>
+# include <pwd.h>
+# include <spawn.h>
+# include <sys/resource.h>
+# include <sys/socket.h>
+# include <sys/wait.h>
+# include <sys/un.h>
 #endif
 #include "cloexec.h"
 #include "yoml-parser.h"
@@ -155,10 +172,12 @@ static struct {
 
 static void set_cloexec(int fd)
 {
+#ifndef _WIN32
     if (fcntl(fd, F_SETFD, FD_CLOEXEC) == -1) {
         perror("failed to set FD_CLOEXEC");
         abort();
     }
+#endif
 }
 
 static int on_openssl_print_errors(const char *str, size_t len, void *fp)
@@ -682,6 +701,7 @@ Found:
     return conf.server_starter.fds[i];
 }
 
+#ifndef _WIN32
 static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, struct sockaddr_un *sun)
 {
     struct stat st;
@@ -708,6 +728,7 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
 
     return fd;
 }
+#endif
 
 static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain,
                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
@@ -718,13 +739,21 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, cons
         goto Error;
     set_cloexec(fd);
     { /* set reuseaddr */
+#ifdef _WIN32
+        char flag = 1;
+#else
         int flag = 1;
+#endif
         if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag)) != 0)
             goto Error;
     }
 #ifdef TCP_DEFER_ACCEPT
     { /* set TCP_DEFER_ACCEPT */
+#ifdef _WIN32
+        char flag = 1;
+#else
         int flag = 1;
+#endif
         if (setsockopt(fd, IPPROTO_TCP, TCP_DEFER_ACCEPT, &flag, sizeof(flag)) != 0)
             goto Error;
     }
@@ -732,7 +761,11 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, cons
 #ifdef IPV6_V6ONLY
     /* set IPv6only */
     if (domain == AF_INET6) {
+#ifdef _WIN32
+        char flag = 1;
+#else
         int flag = 1;
+#endif
         if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &flag, sizeof(flag)) != 0)
             goto Error;
     }
@@ -765,6 +798,12 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 {
     const char *hostname = NULL, *servname = NULL, *type = "tcp";
     yoml_t *ssl_node = NULL;
+
+#ifdef _WIN32
+    hostname = "127.0.0.1";
+    WSADATA wsaData;
+    WSAStartup(MAKEWORD(2, 0), &wsaData);
+#endif
 
     /* fetch servname (and hostname) */
     switch (node->type) {
@@ -804,6 +843,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         return -1;
     }
 
+#ifndef _WIN32
     if (strcmp(type, "unix") == 0) {
 
         /* unix socket */
@@ -844,7 +884,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         if (listener->hosts != NULL && ctx->hostconf != NULL)
             h2o_append_to_null_terminated_list((void *)&listener->hosts, ctx->hostconf);
 
-    } else if (strcmp(type, "tcp") == 0) {
+    } else
+#endif
+
+    if (strcmp(type, "tcp") == 0) {
 
         /* TCP socket */
         struct addrinfo hints, *res, *ai;
@@ -934,6 +977,7 @@ static int on_config_listen_exit(h2o_configurator_t *_configurator, h2o_configur
     return 0;
 }
 
+#ifndef _WIN32
 static int setup_running_user(const char *login)
 {
     struct passwd *passwdbuf = h2o_mem_alloc(sizeof(*passwdbuf));
@@ -969,6 +1013,7 @@ static int on_config_user(h2o_configurator_command_t *cmd, h2o_configurator_cont
 
     return 0;
 }
+#endif
 
 static int on_config_pid_file(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
@@ -1115,7 +1160,10 @@ static void on_sigfatal(int signo)
 static void setup_signal_handlers(void)
 {
     h2o_set_signal_handler(SIGTERM, on_sigterm);
+#ifndef _WIN32
     h2o_set_signal_handler(SIGPIPE, SIG_IGN);
+#endif
+
 #ifdef __GLIBC__
     if ((backtrace_symbols_to_fd = popen_annotate_backtrace_symbols()) == -1)
         backtrace_symbols_to_fd = 2;
@@ -1320,11 +1368,13 @@ static char **build_server_starter_argv(const char *h2o_cmd, const char *config_
                 sprintf(newarg, "--port=%s:%s", host, serv);
             }
         } break;
+#ifndef _WIN32
         case AF_UNIX: {
             struct sockaddr_un *sun = (void *)&conf.listeners[i]->addr;
             newarg = h2o_mem_alloc(sizeof("--path=") + strlen(sun->sun_path));
             sprintf(newarg, "--path=%s", sun->sun_path);
         } break;
+#endif
         }
         h2o_vector_reserve(NULL, (void *)&args, sizeof(args.entries[0]), args.size + 1);
         args.entries[args.size++] = newarg;
@@ -1343,7 +1393,13 @@ static char **build_server_starter_argv(const char *h2o_cmd, const char *config_
 static int run_using_server_starter(const char *h2o_cmd, const char *config_file)
 {
     char **args = build_server_starter_argv(h2o_cmd, config_file);
+
+#ifndef _WIN32
     setenv("H2O_VIA_MASTER", "", 1);
+#else
+    putenv("H2O_VIA_MASTER=1");
+#endif
+
     execvp(args[0], args);
     fprintf(stderr, "failed to spawn %s:%s\n", args[0], strerror(errno));
     return EX_CONFIG;
@@ -1362,8 +1418,10 @@ static void setup_configurators(void)
 
     {
         h2o_configurator_t *c = h2o_configurator_create(&conf.globalconf, sizeof(*c));
+#ifndef _WIN32
         h2o_configurator_define_command(c, "user", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_user);
+#endif
         h2o_configurator_define_command(c, "pid-file", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_pid_file);
         h2o_configurator_define_command(c, "error-log", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
@@ -1516,7 +1574,11 @@ int main(int argc, char **argv)
         }
     }
 
+#ifndef _WIN32
     unsetenv("SERVER_STARTER_PORT");
+#else
+    putenv("SERVER_STARTER_PORT=");
+#endif
 
     /* handle run_mode == MASTER|TEST */
     switch (conf.run_mode) {
@@ -1541,6 +1603,7 @@ int main(int argc, char **argv)
         conf.error_log = NULL;
     }
 
+#ifndef _WIN32
     { /* raise RLIMIT_NOFILE */
         struct rlimit limit;
         if (getrlimit(RLIMIT_NOFILE, &limit) == 0) {
@@ -1554,6 +1617,7 @@ int main(int argc, char **argv)
             }
         }
     }
+#endif
 
     setup_signal_handlers();
 
@@ -1563,6 +1627,7 @@ int main(int argc, char **argv)
             return EX_CONFIG;
     }
 
+#ifndef _WIN32
     /* setuid */
     if (conf.running_user != NULL) {
         if (h2o_setuidgid(conf.running_user) != 0) {
@@ -1580,6 +1645,7 @@ int main(int argc, char **argv)
             }
         }
     }
+#endif
 
     /* pid file must be written after setuid, since we need to remove it  */
     if (conf.pid_file != NULL) {
@@ -1594,6 +1660,7 @@ int main(int argc, char **argv)
 
     /* all setup should be complete by now */
 
+#ifndef _WIN32
     /* replace STDIN to an closed pipe */
     {
         int fds[2];
@@ -1605,6 +1672,7 @@ int main(int argc, char **argv)
         dup2(fds[0], 0);
         close(fds[0]);
     }
+#endif
 
     /* redirect STDOUT and STDERR to error_log (if specified) */
     if (error_log_fd != -1) {

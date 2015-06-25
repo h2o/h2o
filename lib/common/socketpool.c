@@ -20,11 +20,21 @@
  * IN THE SOFTWARE.
  */
 #include <assert.h>
+#ifdef _WIN32
+# include <ws2tcpip.h>
+# ifndef AI_ADDRCONFIG
+#  define AI_ADDRCONFIG 0
+# endif
+# ifndef AI_NUMERICSERV
+#  define AI_NUMERICSERV 8
+# endif
+#else
 #include <netdb.h>
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
+#endif
 #include "h2o/hostinfo.h"
 #include "h2o/linklist.h"
 #include "h2o/socketpool.h"
