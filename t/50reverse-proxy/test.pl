@@ -1,9 +1,18 @@
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
+use Getopt::Long;
 use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
 use t::Util;
+
+my ($h2o_keepalive, $starlet_keepalive, $starlet_force_chunked);
+
+GetOptions(
+    "h2o-keepalive=i"         => \$h2o_keepalive,
+    "starlet-keepalive=i"     => \$starlet_keepalive,
+    "starlet-force-chunked=i" => \$starlet_force_chunked,
+) or exit(1);
 
 plan skip_all => 'plackup not found'
     unless prog_exists('plackup');
@@ -20,13 +29,6 @@ my $huge_file_size = 50 * 1024 * 1024; # should be larger than the mmap_backend 
 my $huge_file = create_data_file($huge_file_size);
 my $huge_file_md5 = md5_file($huge_file);
 
-$0 =~ /-([0-9]+)\.t$/
-    or die "failed to determine mode from \$0";
-my $mode = $1;
-
-my $h2o_keepalive = $mode & 1 ? 1 : 0;
-my $starlet_keepalive = $mode & 2 ? 1 : 0;
-my $starlet_force_chunked = $mode & 4 ? 1 : 0;
 my $upstream_port = empty_port();
 
 local $ENV{FORCE_CHUNKED} = $starlet_force_chunked;
