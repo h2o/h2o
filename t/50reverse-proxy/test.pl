@@ -29,11 +29,11 @@ my $huge_file_size = 50 * 1024 * 1024; # should be larger than the mmap_backend 
 my $huge_file = create_data_file($huge_file_size);
 my $huge_file_md5 = md5_file($huge_file);
 
-my $upstream_port = empty_port();
+my $upstream = "127.0.0.1:@{[empty_port()]}";
 
 my $guard = do {
     local $ENV{FORCE_CHUNKED} = $starlet_force_chunked;
-    my @args = (qw(plackup -MPlack::App::File -s Starlet --keepalive-timeout 100 --access-log /dev/null -p), $upstream_port);
+    my @args = (qw(plackup -MPlack::App::File -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen), $upstream);
     if ($starlet_keepalive) {
         push @args, "--max-keepalive-reqs=100";
     }
@@ -41,7 +41,9 @@ my $guard = do {
     spawn_server(
         argv     => \@args,
         is_ready =>  sub {
-            check_port($upstream_port);
+            $upstream =~ /:([0-9]+)$/s
+                or die "failed to extract port number";
+            check_port($1);
         },
     );
 };
@@ -51,7 +53,7 @@ hosts:
   default:
     paths:
       /:
-        proxy.reverse.url: http://127.0.0.1:$upstream_port
+        proxy.reverse.url: http://$upstream
       /files:
         file.dir: @{[ DOC_ROOT ]}
 @{[ $h2o_keepalive ? "" : "        proxy.timeout.keepalive: 0" ]}
@@ -87,30 +89,30 @@ subtest 'curl' => sub {
         is length($content), $huge_file_size, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, size)";
         is md5_hex($content), $huge_file_md5, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, md5)";
         subtest 'rewrite-redirect' => sub {
-            $content = `curl --silent --insecure --dump-header /dev/stdout --max-redirs 0 "$proto://127.0.0.1:$port/?resp:status=302&resp:location=http://127.0.0.1:$upstream_port/abc"`;
+            $content = `curl --silent --insecure --dump-header /dev/stdout --max-redirs 0 "$proto://127.0.0.1:$port/?resp:status=302&resp:location=http://$upstream/abc"`;
             like $content, qr{HTTP/1\.1 302 }m;
             like $content, qr{^location: $proto://127.0.0.1:$port/abc\r$}m;
         };
         subtest "x-reproxy-url ($proto)" => sub {
             for my $file (sort keys %files) {
-                my $content = `curl --silent --show-error --insecure "$proto://127.0.0.1:$port/404?resp:status=200&resp:x-reproxy-url=http://127.0.0.1:$upstream_port/$file"`;
+                my $content = `curl --silent --show-error --insecure "$proto://127.0.0.1:$port/404?resp:status=200&resp:x-reproxy-url=http://$upstream/$file"`;
                 is length($content), $files{$file}->{size}, "$file (size)";
                 is md5_hex($content), $files{$file}->{md5}, "$file (md5)";
             }
-            my $content = `curl --silent --show-error --insecure "$proto://127.0.0.1:$port/streaming-body?resp:status=200&resp:x-reproxy-url=http://127.0.0.1:$upstream_port/index.txt"`;
+            my $content = `curl --silent --show-error --insecure "$proto://127.0.0.1:$port/streaming-body?resp:status=200&resp:x-reproxy-url=http://$upstream/index.txt"`;
             is $content, "hello\n", "streaming-body";
-            $content = `curl --silent --dump-header /dev/stderr --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=https://127.0.0.1:$upstream_port/index.txt" 2>&1 > /dev/null`;
+            $content = `curl --silent --dump-header /dev/stderr --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=https://$upstream/index.txt" 2>&1 > /dev/null`;
             like $content, qr{^HTTP/1\.1 502 }m, "cannot handle x-reproxy-url pointing to HTTPS";
             $content = `curl --silent --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=https://default/files/index.txt"`;
             is length($content), $files{"index.txt"}->{size}, "to file handler (size)";
             is md5_hex($content), $files{"index.txt"}->{md5}, "to file handler (md5)";
-            $content = `curl --silent --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://127.0.0.1:$upstream_port/?resp:status=302%26resp:location=index.txt"`;
+            $content = `curl --silent --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://$upstream/?resp:status=302%26resp:location=index.txt"`;
             is length($content), $files{"index.txt"}->{size}, "reproxy & internal redirect to upstream (size)";
             is md5_hex($content), $files{"index.txt"}->{md5}, "reproxy & internal redirect to upstream (md5)";
-            $content = `curl --silent --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://127.0.0.1:$upstream_port/?resp:status=302%26resp:location=https://default/files/index.txt"`;
+            $content = `curl --silent --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://$upstream/?resp:status=302%26resp:location=https://default/files/index.txt"`;
             is length($content), $files{"index.txt"}->{size}, "reproxy & internal redirect to file (size)";
             is md5_hex($content), $files{"index.txt"}->{md5}, "reproxy & internal redirect to file (md5)";
-            $content = `curl --silent --dump-header /dev/stderr --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://127.0.0.1:$upstream_port/?resp:status=302%26resp:location=https://127.0.0.1:$upstream_port/index.txt" 2>&1 > /dev/null`;
+            $content = `curl --silent --dump-header /dev/stderr --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://$upstream/?resp:status=302%26resp:location=https://$upstream/index.txt" 2>&1 > /dev/null`;
             like $content, qr{^HTTP/1\.1 502 }m, "cannot handle internal redirect via location: to https";
             $content = `curl --silent --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://default/files"`;
             is length($content), $files{"index.txt"}->{size}, "redirect handled internally after delegation (size)";
@@ -159,24 +161,24 @@ subtest 'nghttp' => sub {
         };
         subtest "x-reproxy-url ($proto)" => sub {
             for my $file (sort keys %files) {
-                my $content = `nghttp $opt "$proto://127.0.0.1:$port/404?resp:status=200&resp:x-reproxy-url=http://127.0.0.1:$upstream_port/$file"`;
+                my $content = `nghttp $opt "$proto://127.0.0.1:$port/404?resp:status=200&resp:x-reproxy-url=http://$upstream/$file"`;
                 is length($content), $files{$file}->{size}, "$file (size)";
                 is md5_hex($content), $files{$file}->{md5}, "$file (md5)";
             }
-            my $content = `nghttp $opt "$proto://127.0.0.1:$port/streaming-body?resp:status=200&resp:x-reproxy-url=http://127.0.0.1:$upstream_port/index.txt"`;
+            my $content = `nghttp $opt "$proto://127.0.0.1:$port/streaming-body?resp:status=200&resp:x-reproxy-url=http://$upstream/index.txt"`;
             is $content, "hello\n", "streaming-body";
-            $content = `nghttp -v $opt "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=https://127.0.0.1:$upstream_port/index.txt"`;
+            $content = `nghttp -v $opt "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=https://$upstream/index.txt"`;
             like $content, qr/ :status: 502$/m, "cannot handle x-reproxy-url pointing to HTTPS";
             $content = `nghttp $opt "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=https://default/files/index.txt"`;
             is length($content), $files{"index.txt"}->{size}, "to file handler (size)";
             is md5_hex($content), $files{"index.txt"}->{md5}, "to file handler (md5)";
-            $content = `nghttp $opt "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://127.0.0.1:$upstream_port/?resp:status=302%26resp:location=index.txt"`;
+            $content = `nghttp $opt "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://$upstream/?resp:status=302%26resp:location=index.txt"`;
             is length($content), $files{"index.txt"}->{size}, "reproxy & internal redirect to upstream (size)";
             is md5_hex($content), $files{"index.txt"}->{md5}, "reproxy & internal redirect to upstream (md5)";
-            $content = `nghttp $opt "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://127.0.0.1:$upstream_port/?resp:status=302%26resp:location=https://default/files/index.txt"`;
+            $content = `nghttp $opt "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://$upstream/?resp:status=302%26resp:location=https://default/files/index.txt"`;
             is length($content), $files{"index.txt"}->{size}, "reproxy & internal redirect to file (size)";
             is md5_hex($content), $files{"index.txt"}->{md5}, "reproxy & internal redirect to file (md5)";
-            $content = `nghttp -v $opt "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://127.0.0.1:$upstream_port/?resp:status=302%26resp:location=https://127.0.0.1:$upstream_port/index.txt"`;
+            $content = `nghttp -v $opt "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://$upstream/?resp:status=302%26resp:location=https://$upstream/index.txt"`;
             like $content, qr/ :status: 502$/m, "cannot handle internal redirect via location: to https";
             $content = `nghttp -v $opt "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://default/files"`;
             unlike $content, qr/ :status: 3/, "once delegated, redirects of the file handler should be handled internally";
