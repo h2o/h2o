@@ -19,6 +19,9 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/un.h>
 #include "h2o/memory.h"
 #include "h2o/string_.h"
 #include "h2o/url.h"
@@ -341,3 +344,23 @@ void h2o_url_copy(h2o_mem_pool_t *pool, h2o_url_t *dest, const h2o_url_t *src)
     dest->path = h2o_strdup(pool, src->path.base, src->path.len);
     dest->_port = src->_port;
 }
+
+const char *h2o_url_host_to_sun(h2o_iovec_t host, struct sockaddr_un *sun)
+{
+#define PREFIX "unix:"
+
+    if (host.len < sizeof(PREFIX) - 1 || memcmp(host.base, PREFIX, sizeof(PREFIX) - 1) != 0)
+        return h2o_url_host_to_sun_err_is_not_unix_socket;
+
+    if (host.len - sizeof(PREFIX) - 1 >= sizeof(sun->sun_path))
+        return "unix-domain socket path is too long";
+
+    memset(sun, 0, sizeof(*sun));
+    sun->sun_family = AF_UNIX;
+    memcpy(sun->sun_path, host.base + sizeof(PREFIX) - 1, host.len - (sizeof(PREFIX) - 1));
+    return NULL;
+
+#undef PREFIX
+}
+
+const char *h2o_url_host_to_sun_err_is_not_unix_socket = "supplied name does not look like an unix-domain socket";

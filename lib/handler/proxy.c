@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <sys/un.h>
 #include "h2o.h"
 #include "h2o/socketpool.h"
 
@@ -120,11 +121,18 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
     self->super.on_context_dispose = on_context_dispose;
     self->super.dispose = on_handler_dispose;
     self->super.on_req = on_req;
-    h2o_url_copy(NULL, &self->upstream, upstream);
     if (config->keepalive_timeout != 0) {
         self->sockpool = h2o_mem_alloc(sizeof(*self->sockpool));
-        h2o_socketpool_init_by_hostport(self->sockpool, self->upstream.host, h2o_url_get_port(&self->upstream),
-                                        SIZE_MAX /* FIXME */);
+        struct sockaddr_un sun;
+        const char *to_sun_err;
+        if ((to_sun_err = h2o_url_host_to_sun(upstream->host, &sun)) == h2o_url_host_to_sun_err_is_not_unix_socket) {
+            h2o_socketpool_init_by_hostport(self->sockpool, upstream->host, h2o_url_get_port(upstream), SIZE_MAX /* FIXME */);
+        } else {
+            assert(to_sun_err == NULL);
+            h2o_socketpool_init_by_address(self->sockpool, (void *)&sun, sizeof(sun), SIZE_MAX /* FIXME */);
+        }
     }
+    h2o_url_copy(NULL, &self->upstream, upstream);
+    h2o_strtolower(self->upstream.host.base, self->upstream.host.len);
     self->config = *config;
 }
