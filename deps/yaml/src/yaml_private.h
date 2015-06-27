@@ -1,8 +1,8 @@
 
 #define YAML_VERSION_MAJOR 0
 #define YAML_VERSION_MINOR 1
-#define YAML_VERSION_PATCH 5
-#define YAML_VERSION_STRING "0.1.5"
+#define YAML_VERSION_PATCH 6
+#define YAML_VERSION_STRING "0.1.6"
 
 #include <yaml.h>
 
@@ -144,9 +144,12 @@ yaml_string_join(
      (string).start = (string).pointer = (string).end = 0)
 
 #define STRING_EXTEND(context,string)                                           \
-    (((string).pointer+5 < (string).end)                                        \
+    ((((string).pointer+5 < (string).end)                                       \
         || yaml_string_extend(&(string).start,                                  \
-            &(string).pointer, &(string).end))
+            &(string).pointer, &(string).end)) ?                                \
+         1 :                                                                    \
+        ((context)->error = YAML_MEMORY_ERROR,                                  \
+         0))
 
 #define CLEAR(context,string)                                                   \
     ((string).pointer = (string).start,                                         \
