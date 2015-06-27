@@ -22,6 +22,9 @@
 #ifndef h2o__time_h
 #define h2o__time_h
 
+#ifndef _WIN32
+#define _timezone localt.tm_gmtoff
+#endif
 #include <time.h>
 
 #ifdef __cplusplus
