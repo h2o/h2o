@@ -19,11 +19,58 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+
+#include <stdlib.h>
+#ifdef _WIN32
+
+struct iovec {
+   char *buf;
+   unsigned long len;
+};
+
+static ssize_t
+writev(SOCKET fd, const struct iovec *iov, int iovcnt) {
+    DWORD sent = 0;
+    h2o_iovec_t* psend = (h2o_iovec_t*) iov;
+    LPWSABUF pbuf = alloca(sizeof(WSABUF) * iovcnt);
+    int i;
+    for (i = 0; i < iovcnt; ++i) {
+        pbuf[i].len = psend[i].len;
+        pbuf[i].buf = psend[i].base;
+        sent += pbuf[i].len;
+    }
+    if (WSASend(fd, pbuf, iovcnt, NULL, 0, NULL, NULL) == 0)
+        return (ssize_t) sent;
+    return -1;
+}
+
+# undef  socket_error
+# undef  read_socket
+# undef  close_socket
+# undef  EINTR
+# define EINTR        WSAEINTR
+# undef  EWOULDBLOCK
+# define EWOULDBLOCK  WSAEWOULDBLOCK
+# undef  EAGAIN
+# define EAGAIN       WSAEWOULDBLOCK
+# undef  EINPROGRESS
+# define EINPROGRESS  WSAEINPROGRESS
+
+# define socket_error WSAGetLastError()
+# define read_socket(f, d, s) recv(f, d, s, 0)
+# define close_socket(f) closesocket(f)
+
+#else
+
+# define socket_error errno
+# define read_socket(f, d, s) read(fd, d, s)
+# define close_socket(f) close(f)
+
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
+#endif
 #include <unistd.h>
 #include "cloexec.h"
 #include "h2o/linklist.h"
@@ -114,10 +161,10 @@ static int on_read_core(int fd, h2o_buffer_t **input)
             /* memory allocation failed */
             return -1;
         }
-        while ((rret = read(fd, buf.base, buf.len)) == -1 && errno == EINTR)
+        while ((rret = read_socket(fd, buf.base, buf.len)) == -1 && socket_error == EINTR)
             ;
         if (rret == -1) {
-            if (errno == EAGAIN)
+            if (socket_error == EAGAIN)
                 break;
             else
                 return -1;
@@ -156,10 +203,10 @@ static int write_core(int fd, h2o_iovec_t **bufs, size_t *bufcnt)
             iovcnt = IOV_MAX;
             if (*bufcnt < iovcnt)
                 iovcnt = (int)*bufcnt;
-            while ((wret = writev(fd, (struct iovec *)*bufs, iovcnt)) == -1 && errno == EINTR)
+            while ((wret = writev(fd, (struct iovec *)*bufs, iovcnt)) == -1 && socket_error == EINTR)
                 ;
             if (wret == -1) {
-                if (errno != EAGAIN)
+                if (socket_error != EAGAIN)
                     return -1;
                 break;
             }
@@ -243,7 +290,7 @@ void do_dispose_socket(h2o_socket_t *_sock)
     evloop_do_on_socket_close(sock);
     wreq_free_buffer_if_allocated(sock);
     if (sock->fd != -1) {
-        close(sock->fd);
+        close_socket(sock->fd);
         sock->fd = -1;
     }
     sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED;
@@ -358,7 +405,12 @@ struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, struct 
 {
     struct st_h2o_evloop_socket_t *sock;
 
+#ifdef _WIN32
+    u_long nonblock = 1;
+    ioctlsocket(fd, FIONBIO, &nonblock);
+#else
     fcntl(fd, F_SETFL, O_NONBLOCK);
+#endif
 
     sock = h2o_mem_alloc(sizeof(*sock));
     memset(sock, 0, sizeof(*sock));
@@ -381,14 +433,23 @@ struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, struct 
 static struct st_h2o_evloop_socket_t *create_socket_set_nodelay(h2o_evloop_t *loop, int fd, struct sockaddr *addr,
                                                                 socklen_t addrlen, int flags)
 {
+#ifdef _WIN32
+    char on = 1;
+#else
     int on = 1;
+#endif
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
     return create_socket(loop, fd, addr, addrlen, flags);
 }
 
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, struct sockaddr *addr, socklen_t addrlen, int flags)
 {
+#ifdef _WIN32
+    u_long nonblock = 1;
+    ioctlsocket(fd, FIONBIO, &nonblock);
+#else
     fcntl(fd, F_SETFL, O_NONBLOCK);
+#endif
     return &create_socket(loop, fd, addr, addrlen, flags)->super;
 }
 
@@ -405,7 +466,13 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
 #else
     if ((fd = cloexec_accept(listener->fd, (void *)&addr, &addrlen)) == -1)
         return NULL;
+
+# ifdef _WIN32
+    u_long nonblock = 1;
+    ioctlsocket(fd, FIONBIO, &nonblock);
+# else
     fcntl(fd, F_SETFL, O_NONBLOCK);
+# endif
 #endif
 
     return &create_socket_set_nodelay(listener->loop, fd, (void *)&addr, addrlen, 0)->super;
@@ -418,9 +485,16 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
 
     if ((fd = cloexec_socket(addr->sa_family, SOCK_STREAM, 0)) == -1)
         return NULL;
+
+#ifdef _WIN32
+    u_long nonblock = 1;
+    ioctlsocket(fd, FIONBIO, &nonblock);
+#else
     fcntl(fd, F_SETFL, O_NONBLOCK);
-    if (!(connect(fd, addr, addrlen) == 0 || errno == EINPROGRESS)) {
-        close(fd);
+#endif
+
+    if (!(connect(fd, addr, addrlen) == 0 || socket_error == EINPROGRESS)) {
+        close_socket(fd);
         return NULL;
     }
 
@@ -475,7 +549,11 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
     }
 
     if (sock->super._cb.write != NULL && sock->_wreq.cnt == 0) {
+#ifdef _WIN32
+        char status;
+#else
         int status;
+#endif
         if ((sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0) {
             socklen_t l = sizeof(status);
             getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &status, &l);

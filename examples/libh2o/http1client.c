@@ -141,6 +141,12 @@ h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr
 
 int main(int argc, char **argv)
 {
+
+#ifdef _WIN32
+    WSADATA wsaData;
+    WSAStartup(MAKEWORD(2, 0), &wsaData);
+#endif
+
     h2o_multithread_queue_t *queue;
     h2o_multithread_receiver_t getaddr_receiver;
     h2o_timeout_t io_timeout;

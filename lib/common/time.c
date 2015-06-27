@@ -139,7 +139,7 @@ void h2o_time2str_log(char *buf, time_t time)
 {
     struct tm localt;
     localtime_r(&time, &localt);
-    int gmt_off = (int)(localt.tm_gmtoff / 60);
+    int gmt_off = (int)(_timezone / 60);
     int gmt_sign;
 
     if (gmt_off >= 0) {

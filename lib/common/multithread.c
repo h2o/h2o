@@ -87,11 +87,16 @@ static void init_async(h2o_multithread_queue_t *queue, h2o_loop_t *loop)
 {
     int fds[2];
 
+#ifndef _WIN32
     if (cloexec_pipe(fds) != 0) {
         perror("pipe");
         abort();
     }
     fcntl(fds[1], F_SETFL, O_NONBLOCK);
+#else
+    u_long nonblock = 1;
+    ioctlsocket(fds[1], FIONBIO, &nonblock);
+#endif
     queue->async.write = fds[1];
     queue->async.read = h2o_evloop_socket_create(loop, fds[0], NULL, 0, 0);
     queue->async.read->data = queue;

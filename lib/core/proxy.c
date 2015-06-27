@@ -19,10 +19,12 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
+#ifndef _WIN32
+#include <netdb.h>
 #include <sys/socket.h>
+#endif
 #include "picohttpparser.h"
 #include "h2o.h"
 #include "h2o/http1client.h"

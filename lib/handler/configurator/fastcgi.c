@@ -19,15 +19,17 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#ifndef _WIN32
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/un.h>
+#endif
 #include "h2o.h"
 #include "h2o/configurator.h"
 #include "h2o/serverutil.h"
@@ -120,6 +122,7 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
         return -1;
     }
 
+#ifndef _WIN32
     if (strcmp(type, "unix") == 0) {
         /* unix socket */
         struct sockaddr_un sun = {};
@@ -130,7 +133,10 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
         sun.sun_family = AF_UNIX;
         strcpy(sun.sun_path, servname);
         h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sun, sizeof(sun), self->vars);
-    } else if (strcmp(type, "tcp") == 0) {
+    } else
+#endif
+
+    if (strcmp(type, "tcp") == 0) {
         /* tcp socket */
         uint16_t port;
         if (sscanf(servname, "%" SCNu16, &port) != 1) {
@@ -146,6 +152,7 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
     return 0;
 }
 
+#ifndef _WIN32
 static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const char *dirname, char **argv,
                             struct sockaddr_un *sun)
 {
@@ -206,6 +213,7 @@ Error:
     unlink(sun->sun_path);
     return -1;
 }
+#endif
 
 void spawnproc_on_dispose(h2o_fastcgi_handler_t *handler, void *data)
 {
@@ -213,6 +221,7 @@ void spawnproc_on_dispose(h2o_fastcgi_handler_t *handler, void *data)
     close(pipe_fd);
 }
 
+#ifndef _WIN32
 static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct fastcgi_configurator_t *self = (void *)cmd->configurator;
@@ -248,6 +257,7 @@ Exit:
     free(argv[0]);
     return ret;
 }
+#endif
 
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
@@ -282,10 +292,12 @@ void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "fastcgi.connect",
                                     H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXTENSION | H2O_CONFIGURATOR_FLAG_DEFERRED,
                                     on_config_connect);
+#ifndef _WIN32
     h2o_configurator_define_command(&c->super, "fastcgi.spawn",
                                     H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXTENSION | H2O_CONFIGURATOR_FLAG_DEFERRED
                                         | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_spawn);
+#endif
     h2o_configurator_define_command(&c->super, "fastcgi.timeout.io",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_timeout_io);
     h2o_configurator_define_command(&c->super, "fastcgi.timeout.keepalive",
