@@ -132,6 +132,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         req->conn->ctx, &handler->super);
     mrb_state *mrb = handler_ctx->mrb;
     mrb_value result;
+    mrb_int ai;
 
     if (mrb == NULL || handler_ctx->h2o_mruby_handler_code->proc == NULL) {
         fprintf(stderr, "%s: mruby core got unexpected error\n", MODULE_NAME);
@@ -140,6 +141,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         return 0;
     }
 
+    ai = mrb_gc_arena_save(mrb);
     result = mrb_run(mrb, handler_ctx->h2o_mruby_handler_code->proc,
         mrb_top_self(mrb));
 
@@ -155,6 +157,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         h2o_send_error(req, 200, "h2o_mruby dayo", mrb_str_to_cstr(mrb, result),
             0);
     }
+    mrb_gc_arena_restore(mrb, ai);
 
     return 0;
 }
