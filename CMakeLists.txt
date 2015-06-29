@@ -50,6 +50,7 @@ ENDIF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.2"))
 
 OPTION(WITH_BUNDLED_SSL "whether or not to use the bundled libressl" ${WITH_BUNDLED_SSL_DEFAULT})
 OPTION(BUILD_SHARED_LIBS "whether to build a shared library" OFF)
+OPTION(WITH_MRUBY "whether or not to build with mruby support" OFF)
 
 IF (WITH_BUNDLED_SSL)
     SET(BUNDLED_SSL_INCLUDE_DIR "${CMAKE_BINARY_DIR}/libressl-build/include")
@@ -176,6 +177,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/proxy.c
     lib/handler/redirect.c
     lib/handler/reproxy.c
+    lib/handler/mruby.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/expires.c
     lib/handler/configurator/fastcgi.c
@@ -184,6 +186,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
     lib/handler/configurator/reproxy.c
+    lib/handler/configurator/mruby.c
 
     lib/http1.c
 
@@ -192,10 +195,6 @@ SET(LIB_SOURCE_FILES
     lib/http2/hpack.c
     lib/http2/scheduler.c
     lib/http2/stream.c)
-
-SET(LIB_MRUBY_SOURCE_FILES
-    lib/handler/mruby.c
-    lib/handler/configurator/mruby.c)
 
 SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}
@@ -290,28 +289,6 @@ IF (OPENSSL_FOUND)
     TARGET_LINK_LIBRARIES(examples-websocket ${OPENSSL_LIBRARIES})
 ENDIF (OPENSSL_FOUND)
 
-# build h2o_mruby
-ADD_EXECUTABLE(h2o_mruby
-    ${LIB_SOURCE_FILES}
-    ${LIBYAML_SOURCE_FILES}
-    ${LIB_MRUBY_SOURCE_FILES}
-    src/main.c)
-SET_TARGET_PROPERTIES(h2o_mruby PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_MRUBY=1")
-IF (WITH_BUNDLED_SSL)
-    PREPEND_INCLUDE_DIRECTORY(h2o_mruby ${BUNDLED_SSL_INCLUDE_DIR})
-    TARGET_LINK_LIBRARIES(h2o_mruby ${BUNDLED_SSL_LIBRARIES})
-    ADD_DEPENDENCIES(h2o_mruby bundled-ssl)
-ELSE (WITH_BUNDLED_SSL)
-    IF (OPENSSL_FOUND)
-        PREPEND_INCLUDE_DIRECTORY(h2o_mruby ${OPENSSL_INCLUDE_DIR})
-        TARGET_LINK_LIBRARIES(h2o_mruby ${OPENSSL_LIBRARIES})
-    ENDIF (OPENSSL_FOUND)
-ENDIF (WITH_BUNDLED_SSL)
-IF (APPLE)
-    TARGET_LINK_LIBRARIES(h2o_mruby ${EXTRA_LIBRARIES} ${MRUBY_LIBRARIES} "m")
-ELSE (APPLE)
-    TARGET_LINK_LIBRARIES(h2o_mruby ${EXTRA_LIBRARIES} ${MRUBY_LIBRARIES} "m" "rt")
-ENDIF (APPLE)
 
 # directly links to libh2o using evloop
 ADD_EXECUTABLE(h2o
@@ -331,11 +308,16 @@ ELSE (WITH_BUNDLED_SSL)
 ENDIF (WITH_BUNDLED_SSL)
 TARGET_LINK_LIBRARIES(h2o ${EXTRA_LIBRARIES})
 
-INSTALL(TARGETS h2o
-    RUNTIME DESTINATION bin
-    LIBRARY DESTINATION lib)
+IF (WITH_MRUBY)
+    ADD_DEFINITIONS("-DH2O_USE_MRUBY=1")
+    IF (APPLE)
+        TARGET_LINK_LIBRARIES(h2o ${MRUBY_LIBRARIES} "m")
+    ELSE (APPLE)
+        TARGET_LINK_LIBRARIES(h2o ${MRUBY_LIBRARIES} "m" "rt")
+    ENDIF (APPLE)
+ENDIF (WITH_MRUBY)
 
-INSTALL(TARGETS h2o_mruby
+INSTALL(TARGETS h2o
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib)
 

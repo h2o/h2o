@@ -19,6 +19,9 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+
+#ifdef H2O_USE_MRUBY
+
 #include "h2o.h"
 #include "h2o/mruby.h"
 #include <mruby.h>
@@ -176,3 +179,6 @@ h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf,
 
     return handler;
 }
+
+#endif /* H2O_USE_MRUBY */
+
