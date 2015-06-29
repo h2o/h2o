@@ -24,10 +24,12 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/un.h>
 #include "picohttpparser.h"
 #include "h2o/string_.h"
 #include "h2o/hostinfo.h"
 #include "h2o/http1client.h"
+#include "h2o/url.h"
 
 struct st_h2o_http1client_private_t {
     h2o_http1client_t super;
@@ -435,13 +437,26 @@ void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1c
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);
 
-    /* directly call connect(2) if `host` is an IP address */
-    struct sockaddr_in sin = {};
-    if (h2o_hostinfo_aton(host, &sin.sin_addr) == 0) {
-        sin.sin_family = AF_INET;
-        sin.sin_port = htons(port);
-        start_connect(client, (void *)&sin, sizeof(sin));
-        return;
+    { /* directly call connect(2) if `host` is an IP address */
+        struct sockaddr_in sin = {};
+        if (h2o_hostinfo_aton(host, &sin.sin_addr) == 0) {
+            sin.sin_family = AF_INET;
+            sin.sin_port = htons(port);
+            start_connect(client, (void *)&sin, sizeof(sin));
+            return;
+        }
+    }
+    { /* directly call connect(2) if `host` refers to an UNIX-domain socket */
+        struct sockaddr_un sun;
+        const char *to_sun_err;
+        if ((to_sun_err = h2o_url_host_to_sun(host, &sun)) != h2o_url_host_to_sun_err_is_not_unix_socket) {
+            if (to_sun_err != NULL) {
+                on_connect_error(client, to_sun_err);
+                return;
+            }
+            start_connect(client, (void *)&sun, sizeof(sun));
+            return;
+        }
     }
     /* resolve destination and then connect */
     client->_getaddr_req =
