@@ -4,10 +4,6 @@
 #include "h2o.h"
 #include <mruby.h>
 
-#define MODULE_NAME "h2o_mruby"
-#define MODULE_VERSION "0.0.1"
-#define MODULE_DESCRIPTION MODULE_NAME "/" MODULE_VERSION
-
 struct st_h2o_mruby_config_vars_t {
     h2o_iovec_t mruby_handler_path;
 };

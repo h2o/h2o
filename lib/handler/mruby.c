@@ -31,6 +31,10 @@
 
 #include <errno.h>
 
+#define MODULE_NAME "h2o_mruby"
+#define MODULE_VERSION "0.0.1"
+#define MODULE_DESCRIPTION MODULE_NAME "/" MODULE_VERSION
+
 enum code_type {
     H2O_MRUBY_STRING,
     H2O_MRUBY_FILE
