@@ -50,6 +50,7 @@ ENDIF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.2"))
 
 OPTION(WITH_BUNDLED_SSL "whether or not to use the bundled libressl" ${WITH_BUNDLED_SSL_DEFAULT})
 OPTION(BUILD_SHARED_LIBS "whether to build a shared library" OFF)
+OPTION(WITH_MRUBY "whether or not to build with mruby support" OFF)
 
 IF (WITH_BUNDLED_SSL)
     SET(BUNDLED_SSL_INCLUDE_DIR "${CMAKE_BINARY_DIR}/libressl-build/include")
@@ -101,6 +102,23 @@ ENDIF (NOT WSLAY_FOUND)
 IF (NOT WSLAY_FOUND)
     SET(WSLAY_LIBRARIES -lwslay)
 ENDIF (NOT WSLAY_FOUND)
+
+IF (PKG_CONFIG_FOUND)
+    PKG_CHECK_MODULES(MRUBY libmruby)
+    IF (MRUBY_FOUND)
+        INCLUDE_DIRECTORIES(${MRUBY_INCLUDE_DIRS})
+        LINK_DIRECTORIES(${MRUBY_LIBRARY_DIRS})
+    ENDIF (MRUBY_FOUND)
+ENDIF (PKG_CONFIG_FOUND)
+IF (NOT MRUBY_FOUND)
+    FIND_PACKAGE(Mruby)
+    IF (MRUBY_FOUND)
+        INCLUDE_DIRECTORIES(${MRUBY_INCLUDE_DIR})
+    ENDIF (MRUBY_FOUND)
+ENDIF (NOT MRUBY_FOUND)
+IF (NOT MRUBY_FOUND)
+    SET(MRUBY_LIBRARIES -lmruby)
+ENDIF (NOT MRUBY_FOUND)
 
 SET(CMAKE_C_FLAGS "-O2 -g -Wall -Wno-unused-function ${CMAKE_C_FLAGS} -DH2O_ROOT=\"\\\"${CMAKE_INSTALL_PREFIX}\\\"\"")
 
@@ -159,6 +177,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/proxy.c
     lib/handler/redirect.c
     lib/handler/reproxy.c
+    lib/handler/mruby.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/expires.c
     lib/handler/configurator/fastcgi.c
@@ -167,6 +186,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
     lib/handler/configurator/reproxy.c
+    lib/handler/configurator/mruby.c
 
     lib/http1.c
 
@@ -269,6 +289,7 @@ IF (OPENSSL_FOUND)
     TARGET_LINK_LIBRARIES(examples-websocket ${OPENSSL_LIBRARIES})
 ENDIF (OPENSSL_FOUND)
 
+
 # directly links to libh2o using evloop
 ADD_EXECUTABLE(h2o
     ${LIB_SOURCE_FILES}
@@ -285,6 +306,14 @@ ELSE (WITH_BUNDLED_SSL)
         TARGET_LINK_LIBRARIES(h2o ${OPENSSL_LIBRARIES})
     ENDIF (OPENSSL_FOUND)
 ENDIF (WITH_BUNDLED_SSL)
+IF (WITH_MRUBY)
+    ADD_DEFINITIONS("-DH2O_USE_MRUBY=1")
+    IF (APPLE)
+        SET(EXTRA_LIBRARIES ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS} ${MRUBY_LIBRARIES} "m")
+    ELSE (APPLE)
+        SET(EXTRA_LIBRARIES ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS} ${MRUBY_LIBRARIES} "m" "rt")
+    ENDIF (APPLE)
+ENDIF (WITH_MRUBY)
 TARGET_LINK_LIBRARIES(h2o ${EXTRA_LIBRARIES})
 
 INSTALL(TARGETS h2o
