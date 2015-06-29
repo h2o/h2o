@@ -21,12 +21,6 @@
  */
 #ifdef _WIN32
 # include <ws2tcpip.h>
-# ifndef AI_ADDRCONFIG
-#  define AI_ADDRCONFIG 0
-# endif
-# ifndef AI_NUMERICSERV
-#  define AI_NUMERICSERV 8
-# endif
 #else
 # include <arpa/inet.h>
 # include <netdb.h>

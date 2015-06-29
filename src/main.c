@@ -42,12 +42,6 @@
 #endif
 #ifdef _WIN32
 # include <winsock2.h>
-# ifndef AI_ADDRCONFIG
-#  define AI_ADDRCONFIG 0
-# endif
-# ifndef AI_NUMERICSERV
-#  define AI_NUMERICSERV 8
-# endif
 # include <stdlib.h>
 # define WEXITSTATUS(val) ((val) & 255)
 # define WIFEXITED(val)   (((val) & 0xC0000000) == 0)
@@ -55,6 +49,7 @@
 # define WTERMSIG(val)    ((val > 0xC0000200) ? val - 0xC0000200 : val)
 # define WIFSTOPPED(val)  (0)
 # define WSTOPSIG(var)    (0)
+# define sockopt_value_cast const char*
 #else
 # include <arpa/inet.h>
 # include <netdb.h>
@@ -66,6 +61,7 @@
 # include <sys/socket.h>
 # include <sys/wait.h>
 # include <sys/un.h>
+# define sockopt_value_cast const void*
 #endif
 #include "cloexec.h"
 #include "yoml-parser.h"
@@ -739,21 +735,13 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, cons
         goto Error;
     set_cloexec(fd);
     { /* set reuseaddr */
-#ifdef _WIN32
-        char flag = 1;
-#else
-        int flag = 1;
-#endif
+        sockopt_value flag = 1;
         if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag)) != 0)
             goto Error;
     }
 #ifdef TCP_DEFER_ACCEPT
     { /* set TCP_DEFER_ACCEPT */
-#ifdef _WIN32
-        char flag = 1;
-#else
-        int flag = 1;
-#endif
+        sockopt_value flag = 1;
         if (setsockopt(fd, IPPROTO_TCP, TCP_DEFER_ACCEPT, &flag, sizeof(flag)) != 0)
             goto Error;
     }
@@ -761,11 +749,7 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, cons
 #ifdef IPV6_V6ONLY
     /* set IPv6only */
     if (domain == AF_INET6) {
-#ifdef _WIN32
-        char flag = 1;
-#else
-        int flag = 1;
-#endif
+        sockopt_value flag = 1;
         if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &flag, sizeof(flag)) != 0)
             goto Error;
     }
@@ -773,7 +757,7 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, cons
     /* set TCP_FASTOPEN; when tfo_queues is zero TFO is always disabled */
     if (conf.tfo_queues > 0) {
 #ifdef TCP_FASTOPEN
-        if (setsockopt(fd, IPPROTO_TCP, TCP_FASTOPEN, (const void *)&conf.tfo_queues, sizeof(conf.tfo_queues)) != 0)
+        if (setsockopt(fd, IPPROTO_TCP, TCP_FASTOPEN, (sockopt_value_cast)&conf.tfo_queues, sizeof(conf.tfo_queues)) != 0)
             fprintf(stderr, "[warning] failed to set TCP_FASTOPEN:%s\n", strerror(errno));
 #else
         assert(!"conf.tfo_queues not zero on platform without TCP_FASTOPEN");
@@ -801,8 +785,6 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 
 #ifdef _WIN32
     hostname = "127.0.0.1";
-    WSADATA wsaData;
-    WSAStartup(MAKEWORD(2, 0), &wsaData);
 #endif
 
     /* fetch servname (and hostname) */
@@ -1447,6 +1429,11 @@ int main(int argc, char **argv)
 {
     const char *cmd = argv[0], *opt_config_file = "h2o.conf";
     int error_log_fd = -1;
+
+#ifdef _WIN32
+    WSADATA wsaData;
+    WSAStartup(MAKEWORD(2, 0), &wsaData);
+#endif
 
     conf.num_threads = h2o_numproc();
     conf.tfo_queues = H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE;

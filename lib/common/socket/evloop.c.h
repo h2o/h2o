@@ -22,14 +22,8 @@
 
 #include <stdlib.h>
 #ifdef _WIN32
-
-struct iovec {
-   char *buf;
-   unsigned long len;
-};
-
 static ssize_t
-writev(SOCKET fd, const struct iovec *iov, int iovcnt) {
+writev_socket(SOCKET fd, void *iov, int iovcnt) {
     DWORD sent = 0;
     h2o_iovec_t* psend = (h2o_iovec_t*) iov;
     LPWSABUF pbuf = alloca(sizeof(WSABUF) * iovcnt);
@@ -43,7 +37,6 @@ writev(SOCKET fd, const struct iovec *iov, int iovcnt) {
         return (ssize_t) sent;
     return -1;
 }
-
 # undef  socket_error
 # undef  read_socket
 # undef  close_socket
@@ -55,17 +48,14 @@ writev(SOCKET fd, const struct iovec *iov, int iovcnt) {
 # define EAGAIN       WSAEWOULDBLOCK
 # undef  EINPROGRESS
 # define EINPROGRESS  WSAEINPROGRESS
-
 # define socket_error WSAGetLastError()
 # define read_socket(f, d, s) recv(f, d, s, 0)
 # define close_socket(f) closesocket(f)
-
 #else
-
+# define writev_socket(fd, iov, iovcnt) writev((fd), (void *)(iov), iovcnt)
 # define socket_error errno
 # define read_socket(f, d, s) read(fd, d, s)
 # define close_socket(f) close(f)
-
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
@@ -74,6 +64,7 @@ writev(SOCKET fd, const struct iovec *iov, int iovcnt) {
 #include <unistd.h>
 #include "cloexec.h"
 #include "h2o/linklist.h"
+#include "h2o/socket.h"
 
 struct st_h2o_evloop_socket_t {
     h2o_socket_t super;
@@ -203,7 +194,7 @@ static int write_core(int fd, h2o_iovec_t **bufs, size_t *bufcnt)
             iovcnt = IOV_MAX;
             if (*bufcnt < iovcnt)
                 iovcnt = (int)*bufcnt;
-            while ((wret = writev(fd, (struct iovec *)*bufs, iovcnt)) == -1 && socket_error == EINTR)
+            while ((wret = writev_socket(fd, (struct iovec *)*bufs, iovcnt)) == -1 && socket_error == EINTR)
                 ;
             if (wret == -1) {
                 if (socket_error != EAGAIN)
@@ -433,11 +424,7 @@ struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, struct 
 static struct st_h2o_evloop_socket_t *create_socket_set_nodelay(h2o_evloop_t *loop, int fd, struct sockaddr *addr,
                                                                 socklen_t addrlen, int flags)
 {
-#ifdef _WIN32
-    char on = 1;
-#else
-    int on = 1;
-#endif
+    sockopt_value on = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
     return create_socket(loop, fd, addr, addrlen, flags);
 }

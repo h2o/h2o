@@ -56,6 +56,12 @@ extern "C" {
 
 #define H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE 4096
 
+#ifdef _WIN32
+typedef char sockopt_value;
+#else
+typedef  int sockopt_value;
+#endif
+
 typedef struct st_h2o_socket_t h2o_socket_t;
 
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, int err);
@@ -209,6 +215,28 @@ inline int h2o_socket_is_reading(h2o_socket_t *sock)
 {
     return sock->_cb.read != NULL;
 }
+
+// We could look at possibly adding fcntl to mingw-w64 ?
+#ifdef _WIN32
+// the values do not matter
+#define F_SETFD  2
+#define O_NONBLOCK 0x4000
+
+static inline int fcntl(int s, int cmd, long arg)
+{
+    u_long nonblock = 0;
+
+    if (arg && O_NONBLOCK)
+      nonblock = 1;
+    else
+      return -1;
+
+    if (cmd == F_SETFD)
+      ioctlsocket(s, FIONBIO, &nonblock);
+
+    return s != SOCKET_ERROR ? s : -1;
+}
+#endif
 
 #ifdef __cplusplus
 }
