@@ -32,6 +32,6 @@ before_script:
   - (cd nghttp2-0.7.5 && ./configure --prefix=/usr --disable-threads --enable-app && make && sudo make install)
 
 script:
-  - cmake .
+  - cmake -DWITH_MRUBY=ON .
   - make all
   - make check
