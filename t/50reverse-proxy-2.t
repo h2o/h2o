@@ -1,5 +1,4 @@
-exec(
-    $^X,
-    qw(t/50reverse-proxy/test.pl --h2o-keepalive=0 --starlet-keepalive=1 --starlet-force-chunked=0),
-);
+$0 =~ /-([0-9]+)\.t$/s
+    or die "failed to extract mode";
+exec $^X, "t/50reverse-proxy/test.pl", "--mode=$1";
 die "failed to invoke $^X t/50reverse-proxy/test.pl:$!";

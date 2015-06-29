@@ -8,9 +8,16 @@ use Test::More;
 use URI::Escape;
 use t::Util;
 
-my ($h2o_keepalive, $starlet_keepalive, $starlet_force_chunked, $unix_socket);
+my ($aggregated_mode, $h2o_keepalive, $starlet_keepalive, $starlet_force_chunked, $unix_socket);
 
 GetOptions(
+    "mode=i"                  => sub {
+        (undef, my $m) = @_;
+        $h2o_keepalive = ($m & 1) != 0;
+        $starlet_keepalive = ($m & 2) != 0;
+        $starlet_force_chunked = ($m & 4) != 0;
+        $unix_socket = ($m & 8) != 0;
+    },
     "h2o-keepalive=i"         => \$h2o_keepalive,
     "starlet-keepalive=i"     => \$starlet_keepalive,
     "starlet-force-chunked=i" => \$starlet_force_chunked,
