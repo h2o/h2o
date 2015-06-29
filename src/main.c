@@ -686,26 +686,26 @@ Found:
     return conf.server_starter.fds[i];
 }
 
-static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, struct sockaddr_un *sun)
+static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, struct sockaddr_un *sa)
 {
     struct stat st;
     int fd;
 
     /* remove existing socket file as suggested in #45 */
-    if (lstat(sun->sun_path, &st) == 0) {
+    if (lstat(sa->sun_path, &st) == 0) {
         if (S_ISSOCK(st.st_mode)) {
-            unlink(sun->sun_path);
+            unlink(sa->sun_path);
         } else {
-            h2o_configurator_errprintf(cmd, node, "path:%s already exists and is not an unix socket.", sun->sun_path);
+            h2o_configurator_errprintf(cmd, node, "path:%s already exists and is not an unix socket.", sa->sun_path);
             return -1;
         }
     }
     /* add new listener */
-    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1 || bind(fd, (void *)sun, sizeof(*sun)) != 0 ||
+    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1 || bind(fd, (void *)sa, sizeof(*sa)) != 0 ||
         listen(fd, H2O_SOMAXCONN) != 0) {
         if (fd != -1)
             close(fd);
-        h2o_configurator_errprintf(NULL, node, "failed to listen to socket:%s: %s", sun->sun_path, strerror(errno));
+        h2o_configurator_errprintf(NULL, node, "failed to listen to socket:%s: %s", sa->sun_path, strerror(errno));
         return -1;
     }
     set_cloexec(fd);
@@ -811,36 +811,36 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     if (strcmp(type, "unix") == 0) {
 
         /* unix socket */
-        struct sockaddr_un sun;
+        struct sockaddr_un sa;
         int listener_is_new;
         struct listener_config_t *listener;
         /* build sockaddr */
-        if (strlen(servname) >= sizeof(sun.sun_path)) {
+        if (strlen(servname) >= sizeof(sa.sun_path)) {
             h2o_configurator_errprintf(cmd, node, "path:%s is too long as a unix socket name", servname);
             return -1;
         }
-        sun.sun_family = AF_UNIX;
-        strcpy(sun.sun_path, servname);
+        sa.sun_family = AF_UNIX;
+        strcpy(sa.sun_path, servname);
         /* find existing listener or create a new one */
         listener_is_new = 0;
-        if ((listener = find_listener((void *)&sun, sizeof(sun))) == NULL) {
+        if ((listener = find_listener((void *)&sa, sizeof(sa))) == NULL) {
             int fd = -1;
             switch (conf.run_mode) {
             case RUN_MODE_WORKER:
                 if (conf.server_starter.fds != NULL) {
-                    if ((fd = find_listener_from_server_starter((void *)&sun)) == -1) {
-                        h2o_configurator_errprintf(cmd, node, "unix socket:%s is not being bound to the server\n", sun.sun_path);
+                    if ((fd = find_listener_from_server_starter((void *)&sa)) == -1) {
+                        h2o_configurator_errprintf(cmd, node, "unix socket:%s is not being bound to the server\n", sa.sun_path);
                         return -1;
                     }
                 } else {
-                    if ((fd = open_unix_listener(cmd, node, &sun)) == -1)
+                    if ((fd = open_unix_listener(cmd, node, &sa)) == -1)
                         return -1;
                 }
                 break;
             default:
                 break;
             }
-            listener = add_listener(fd, (struct sockaddr *)&sun, sizeof(sun), ctx->hostconf == NULL);
+            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL);
             listener_is_new = 1;
         }
         if (listener_setup_ssl(cmd, ctx, node, ssl_node, listener, listener_is_new) != 0)
@@ -1323,9 +1323,9 @@ static char **build_server_starter_argv(const char *h2o_cmd, const char *config_
             }
         } break;
         case AF_UNIX: {
-            struct sockaddr_un *sun = (void *)&conf.listeners[i]->addr;
-            newarg = h2o_mem_alloc(sizeof("--path=") + strlen(sun->sun_path));
-            sprintf(newarg, "--path=%s", sun->sun_path);
+            struct sockaddr_un *sa = (void *)&conf.listeners[i]->addr;
+            newarg = h2o_mem_alloc(sizeof("--path=") + strlen(sa->sun_path));
+            sprintf(newarg, "--path=%s", sa->sun_path);
         } break;
         }
         h2o_vector_reserve(NULL, (void *)&args, sizeof(args.entries[0]), args.size + 1);
