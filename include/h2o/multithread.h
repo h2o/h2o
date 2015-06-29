@@ -75,5 +75,9 @@ void h2o_multithread_send_message(h2o_multithread_receiver_t *receiver, h2o_mult
  * sends a request
  */
 void h2o_multithread_send_request(h2o_multithread_receiver_t *receiver, h2o_multithread_request_t *req);
+/**
+ * create a thread
+ */
+void h2o_multithread_create_thread(pthread_t *tid, const pthread_attr_t *attr, void *(*func)(void *), void *arg);
 
 #endif

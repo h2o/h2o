@@ -590,7 +590,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 ssl_config->ocsp_stapling.interval =
                     ocsp_update_interval; /* is also used as a flag for indicating if the updater thread was spawned */
                 ssl_config->ocsp_stapling.max_failures = ocsp_max_failures;
-                pthread_create(&ssl_config->ocsp_stapling.updater_tid, NULL, ocsp_updater_thread, ssl_config);
+                h2o_multithread_create_thread(&ssl_config->ocsp_stapling.updater_tid, NULL, ocsp_updater_thread, ssl_config);
                 break;
             case RUN_MODE_MASTER:
             case RUN_MODE_DAEMON:
@@ -1633,7 +1633,7 @@ int main(int argc, char **argv)
     size_t i;
     for (i = 1; i != conf.num_threads; ++i) {
         pthread_t tid;
-        pthread_create(&tid, NULL, run_loop, (void *)i);
+        h2o_multithread_create_thread(&tid, NULL, run_loop, (void *)i);
     }
 
     /* this thread becomes the first thread */

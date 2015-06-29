@@ -19,7 +19,10 @@ Only one handler must exist within the directives.
 <?= $ctx->{example}->('Mapping PHP files to FastCGI', <<'EOT')
 file.custom-handler:
   extension: .php
-  fastcgi.connect: /tmp/fcgi.sock
+  fastcgi.connect:
+    port: /tmp/fcgi.sock
+    type: unix
+
 EOT
 ?>
 ? })
