@@ -180,6 +180,11 @@ h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf,
     handler->super.dispose = on_handler_dispose;
     handler->super.on_req = on_req;
     handler->config = *vars;
+    if (vars->mruby_handler_path.base != NULL) {
+         handler->config.mruby_handler_path = h2o_strdup(NULL,
+             vars->mruby_handler_path.base, vars->mruby_handler_path.len);
+    }
+
 
     return handler;
 }

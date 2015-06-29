@@ -41,8 +41,7 @@ static int on_config_mruby_handler_path(h2o_configurator_command_t *cmd,
     if (node->data.scalar[0] == '\0') {
         self->vars->mruby_handler_path = h2o_iovec_init(NULL, 0);
     } else {
-        self->vars->mruby_handler_path = h2o_strdup(NULL, node->data.scalar,
-            strlen(node->data.scalar));
+        self->vars->mruby_handler_path = h2o_iovec_init(node->data.scalar, strlen(node->data.scalar));
         h2o_mruby_register(ctx->pathconf, self->vars);
     }
     return 0;
