@@ -22,6 +22,7 @@
 #ifndef h2o__url_h
 #define h2o__url_h
 
+#include <sys/un.h>
 #include "h2o/memory.h"
 
 typedef struct st_h2o_url_scheme_t {
