@@ -448,9 +448,9 @@ int32_t h2o_socket_getport(struct sockaddr *sa)
 {
     switch (sa->sa_family) {
     case AF_INET:
-        return htons(((struct sockaddr_in*)sa)->sin_port);
+        return htons(((struct sockaddr_in *)sa)->sin_port);
     case AF_INET6:
-        return htons(((struct sockaddr_in6*)sa)->sin6_port);
+        return htons(((struct sockaddr_in6 *)sa)->sin6_port);
     default:
         return -1;
     }
@@ -548,7 +548,7 @@ static int on_alpn_select(SSL *ssl, const unsigned char **out, unsigned char *ou
     const h2o_iovec_t *protocols = _protocols;
     size_t i;
 
-    for (i = 0; protocols[i].len !=0; ++i) {
+    for (i = 0; protocols[i].len != 0; ++i) {
         const unsigned char *in = _in, *in_end = in + inlen;
         while (in != in_end) {
             size_t cand_len = *in++;

@@ -56,7 +56,8 @@ static void check(const h2o_url_scheme_t *scheme, const char *host, const char *
     ok(index != SIZE_MAX);
 
     if (index != SIZE_MAX) {
-        ok(h2o_memis(conn->req.res.headers.entries[index].value.base, conn->req.res.headers.entries[index].value.len, expected, strlen(expected)));
+        ok(h2o_memis(conn->req.res.headers.entries[index].value.base, conn->req.res.headers.entries[index].value.len, expected,
+                     strlen(expected)));
     }
 
     h2o_loopback_destroy(conn);

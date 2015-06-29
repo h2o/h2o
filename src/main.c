@@ -62,7 +62,6 @@
 #include "h2o/mruby.h"
 #endif
 
-
 /* simply use a large value, and let the kernel clip it to the internal max */
 #define H2O_SOMAXCONN (65535)
 
@@ -1074,7 +1073,7 @@ static int popen_annotate_backtrace_symbols(void)
     char *cmd_fullpath = h2o_configurator_get_cmd_path("share/h2o/annotate-backtrace-symbols"), *argv[] = {cmd_fullpath, NULL};
     int pipefds[2];
 
-     /* create pipe */
+    /* create pipe */
     if (pipe(pipefds) != 0) {
         perror("pipe failed");
         return -1;
@@ -1084,12 +1083,10 @@ static int popen_annotate_backtrace_symbols(void)
         return -1;
     }
     /* spawn the logger */
-    int mapped_fds[] = {
-        pipefds[0], 0, /* output of the pipe is connected to STDIN of the spawned process */
-        pipefds[0], -1, /* close pipefds[0] before exec */
-        2, 1, /* STDOUT of the spawned process in connected to STDERR of h2o */
-        -1
-    };
+    int mapped_fds[] = {pipefds[0], 0,  /* output of the pipe is connected to STDIN of the spawned process */
+                        pipefds[0], -1, /* close pipefds[0] before exec */
+                        2,          1,  /* STDOUT of the spawned process in connected to STDERR of h2o */
+                        -1};
     if (h2o_spawnp(cmd_fullpath, argv, mapped_fds, 0) == -1) {
         /* silently ignore error */
         close(pipefds[0]);

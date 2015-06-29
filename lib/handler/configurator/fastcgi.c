@@ -199,7 +199,7 @@ static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const
 Error:
     if (pipe_fds[0] != -1)
         close(pipe_fds[0]);
-    if (pipe_fds[1] )
+    if (pipe_fds[1])
         close(pipe_fds[1]);
     if (listen_fd != -1)
         close(listen_fd);
@@ -283,8 +283,8 @@ void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf)
                                     H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXTENSION | H2O_CONFIGURATOR_FLAG_DEFERRED,
                                     on_config_connect);
     h2o_configurator_define_command(&c->super, "fastcgi.spawn",
-                                    H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXTENSION | H2O_CONFIGURATOR_FLAG_DEFERRED
-                                        | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXTENSION | H2O_CONFIGURATOR_FLAG_DEFERRED |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_spawn);
     h2o_configurator_define_command(&c->super, "fastcgi.timeout.io",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_timeout_io);

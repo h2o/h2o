@@ -30,18 +30,18 @@ static void test_on_alpn_select(void)
     unsigned char outlen;
     int ret;
 
-    ret = on_alpn_select(NULL, &out, &outlen, (const unsigned char*)H2O_STRLIT("\3foo"), (void *)protocols);
+    ret = on_alpn_select(NULL, &out, &outlen, (const unsigned char *)H2O_STRLIT("\3foo"), (void *)protocols);
     ok(ret == SSL_TLSEXT_ERR_NOACK);
 
-    ret = on_alpn_select(NULL, &out, &outlen, (const unsigned char*)H2O_STRLIT("\2h2"), (void *)protocols);
+    ret = on_alpn_select(NULL, &out, &outlen, (const unsigned char *)H2O_STRLIT("\2h2"), (void *)protocols);
     ok(ret == SSL_TLSEXT_ERR_OK);
     ok(h2o_memis(out, outlen, H2O_STRLIT("h2")));
 
-    ret = on_alpn_select(NULL, &out, &outlen, (const unsigned char*)H2O_STRLIT("\5h2-14\5h2-16\2h2"), (void *)protocols);
+    ret = on_alpn_select(NULL, &out, &outlen, (const unsigned char *)H2O_STRLIT("\5h2-14\5h2-16\2h2"), (void *)protocols);
     ok(ret == SSL_TLSEXT_ERR_OK);
     ok(h2o_memis(out, outlen, H2O_STRLIT("h2")));
 
-    ret = on_alpn_select(NULL, &out, &outlen, (const unsigned char*)H2O_STRLIT("\5h2-14\5h2-16"), (void *)protocols);
+    ret = on_alpn_select(NULL, &out, &outlen, (const unsigned char *)H2O_STRLIT("\5h2-14\5h2-16"), (void *)protocols);
     ok(ret == SSL_TLSEXT_ERR_OK);
     ok(h2o_memis(out, outlen, H2O_STRLIT("h2-16")));
 }

@@ -1112,8 +1112,7 @@ void h2o_http2_accept(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *
 
 int h2o_http2_handle_upgrade(h2o_req_t *req)
 {
-    h2o_http2_conn_t *http2conn =
-        create_conn(req->conn->ctx, req->conn->hosts, NULL);
+    h2o_http2_conn_t *http2conn = create_conn(req->conn->ctx, req->conn->hosts, NULL);
     h2o_http2_stream_t *stream;
     ssize_t connection_index, settings_index;
     h2o_iovec_t settings_decoded;
