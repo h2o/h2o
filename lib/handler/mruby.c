@@ -35,10 +35,7 @@
 #define MODULE_VERSION "0.0.1"
 #define MODULE_DESCRIPTION MODULE_NAME "/" MODULE_VERSION
 
-enum code_type {
-    H2O_MRUBY_STRING,
-    H2O_MRUBY_FILE
-};
+enum code_type { H2O_MRUBY_STRING, H2O_MRUBY_FILE };
 
 struct st_h2o_mruby_code_t {
     h2o_iovec_t *path;
@@ -60,16 +57,14 @@ struct st_h2o_mruby_context_t {
 
 typedef struct st_h2o_mruby_context_t h2o_mruby_context_t;
 
-static void h2o_mruby_compile_code(mrb_state *mrb, h2o_iovec_t *path,
-    h2o_mruby_code_t *code)
+static void h2o_mruby_compile_code(mrb_state *mrb, h2o_iovec_t *path, h2o_mruby_code_t *code)
 {
-    struct mrb_parser_state* p;
+    struct mrb_parser_state *p;
     FILE *fp;
 
     if ((fp = fopen(path->base, "r")) == NULL) {
         code->proc = NULL;
-        fprintf(stderr, "%s: failed to open mruby script: %s(%s)\n",
-            MODULE_NAME, path->base, strerror(errno));
+        fprintf(stderr, "%s: failed to open mruby script: %s(%s)\n", MODULE_NAME, path->base, strerror(errno));
         return;
     }
 
@@ -79,8 +74,7 @@ static void h2o_mruby_compile_code(mrb_state *mrb, h2o_iovec_t *path,
     if ((p = mrb_parse_file(mrb, fp, code->ctx)) == NULL) {
         code->proc = NULL;
         fclose(fp);
-        fprintf(stderr, "%s: failed to mrb_parse_file: %s\n",
-            MODULE_NAME, path->base);
+        fprintf(stderr, "%s: failed to mrb_parse_file: %s\n", MODULE_NAME, path->base);
         return;
     }
     code->proc = mrb_generate_code(mrb, p);
@@ -98,12 +92,10 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
 
     /* ctx has a mrb_state per thread */
     handler_ctx->mrb = mrb_open();
-    handler_ctx->h2o_mruby_handler_code = h2o_mem_alloc(sizeof(
-          *handler_ctx->h2o_mruby_handler_code));
+    handler_ctx->h2o_mruby_handler_code = h2o_mem_alloc(sizeof(*handler_ctx->h2o_mruby_handler_code));
 
     if (handler_ctx->mrb) {
-        h2o_mruby_compile_code(handler_ctx->mrb, &handler->config.mruby_handler_path,
-            handler_ctx->h2o_mruby_handler_code);
+        h2o_mruby_compile_code(handler_ctx->mrb, &handler->config.mruby_handler_path, handler_ctx->h2o_mruby_handler_code);
     } else {
         fprintf(stderr, "%s: failed to mrb_open\n", MODULE_NAME);
     }
@@ -113,8 +105,7 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
 static void on_context_dispose(h2o_handler_t *_handler, h2o_context_t *ctx)
 {
     h2o_mruby_handler_t *handler = (void *)_handler;
-    h2o_mruby_context_t *handler_ctx = h2o_context_get_handler_context(ctx,
-        &handler->super);
+    h2o_mruby_context_t *handler_ctx = h2o_context_get_handler_context(ctx, &handler->super);
 
     if (handler_ctx == NULL)
         return;
@@ -135,45 +126,37 @@ static void on_handler_dispose(h2o_handler_t *_handler)
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 {
     h2o_mruby_handler_t *handler = (void *)_handler;
-    h2o_mruby_context_t *handler_ctx = h2o_context_get_handler_context(
-        req->conn->ctx, &handler->super);
+    h2o_mruby_context_t *handler_ctx = h2o_context_get_handler_context(req->conn->ctx, &handler->super);
     mrb_state *mrb = handler_ctx->mrb;
     mrb_value result;
     mrb_int ai;
 
     if (mrb == NULL || handler_ctx->h2o_mruby_handler_code->proc == NULL) {
         fprintf(stderr, "%s: mruby core got unexpected error\n", MODULE_NAME);
-        h2o_send_error(req, 500, "Internal Server Error",
-            "Internal Server Error", 0);
+        h2o_send_error(req, 500, "Internal Server Error", "Internal Server Error", 0);
         return 0;
     }
 
     ai = mrb_gc_arena_save(mrb);
-    result = mrb_run(mrb, handler_ctx->h2o_mruby_handler_code->proc,
-        mrb_top_self(mrb));
+    result = mrb_run(mrb, handler_ctx->h2o_mruby_handler_code->proc, mrb_top_self(mrb));
 
     if (mrb->exc) {
         mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
         struct RString *error = mrb_str_ptr(obj);
-        fprintf(stderr, "%s: mruby raised: %s\n", MODULE_NAME,
-            error->as.heap.ptr);
+        fprintf(stderr, "%s: mruby raised: %s\n", MODULE_NAME, error->as.heap.ptr);
         mrb->exc = 0;
-        h2o_send_error(req, 500, "Internal Server Error",
-            "Internal Server Error", 0);
+        h2o_send_error(req, 500, "Internal Server Error", "Internal Server Error", 0);
     } else {
-        h2o_send_error(req, 200, "h2o_mruby dayo", mrb_str_to_cstr(mrb, result),
-            0);
+        h2o_send_error(req, 200, "h2o_mruby dayo", mrb_str_to_cstr(mrb, result), 0);
     }
     mrb_gc_arena_restore(mrb, ai);
 
     return 0;
 }
 
-h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf,
-    h2o_mruby_config_vars_t *vars)
+h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_config_vars_t *vars)
 {
-    h2o_mruby_handler_t *handler = (void *)h2o_create_handler(pathconf,
-        sizeof(*handler));
+    h2o_mruby_handler_t *handler = (void *)h2o_create_handler(pathconf, sizeof(*handler));
 
     handler->super.on_context_init = on_context_init;
     handler->super.on_context_dispose = on_context_dispose;
@@ -181,13 +164,10 @@ h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf,
     handler->super.on_req = on_req;
     handler->config = *vars;
     if (vars->mruby_handler_path.base != NULL) {
-         handler->config.mruby_handler_path = h2o_strdup(NULL,
-             vars->mruby_handler_path.base, vars->mruby_handler_path.len);
+        handler->config.mruby_handler_path = h2o_strdup(NULL, vars->mruby_handler_path.base, vars->mruby_handler_path.len);
     }
-
 
     return handler;
 }
 
 #endif /* H2O_USE_MRUBY */
-

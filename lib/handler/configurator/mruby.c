@@ -33,8 +33,7 @@ struct mruby_configurator_t {
     h2o_mruby_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
-static int on_config_mruby_handler_path(h2o_configurator_command_t *cmd,
-    h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_mruby_handler_path(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct mruby_configurator_t *self = (void *)cmd->configurator;
 
@@ -47,8 +46,7 @@ static int on_config_mruby_handler_path(h2o_configurator_command_t *cmd,
     return 0;
 }
 
-static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
-    *ctx, yoml_t *node)
+static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct mruby_configurator_t *self = (void *)_self;
 
@@ -57,8 +55,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
     return 0;
 }
 
-static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t
-    *ctx, yoml_t *node)
+static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct mruby_configurator_t *self = (void *)_self;
 
@@ -68,8 +65,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t
 
 void h2o_mruby_register_configurator(h2o_globalconf_t *conf)
 {
-    struct mruby_configurator_t *c = (void *)h2o_configurator_create(conf,
-        sizeof(*c));
+    struct mruby_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
 
     c->vars = c->_vars_stack;
     c->super.enter = on_config_enter;
@@ -77,8 +73,7 @@ void h2o_mruby_register_configurator(h2o_globalconf_t *conf)
 
     /* set mruby script path */
     h2o_configurator_define_command(&c->super, "mruby.handler_path",
-        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-        on_config_mruby_handler_path);
+                                    H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_mruby_handler_path);
 }
 
 #endif /* H2O_USE_MRUBY */

@@ -1,5 +1,5 @@
-#ifndef H20_MRUBY_H                                                              
-#define H20_MRUBY_H                                                              
+#ifndef H20_MRUBY_H
+#define H20_MRUBY_H
 
 #include "h2o.h"
 #include <mruby.h>
@@ -22,6 +22,5 @@ h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_conf
 
 /* handler/configurator/mruby.c */
 void h2o_mruby_register_configurator(h2o_globalconf_t *conf);
-
 
 #endif
