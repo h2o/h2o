@@ -109,7 +109,7 @@ static inline yoml_t *yoml__parse_mapping(yaml_parser_t *parser, yaml_event_t *e
     return map;
 }
 
-inline yoml_t *yoml__parse_node(yaml_parser_t *parser, yaml_event_type_t *unhandled, const char *filename)
+static yoml_t *yoml__parse_node(yaml_parser_t *parser, yaml_event_type_t *unhandled, const char *filename)
 {
     yoml_t *node;
     yaml_event_t event;
