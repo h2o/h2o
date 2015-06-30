@@ -345,19 +345,19 @@ void h2o_url_copy(h2o_mem_pool_t *pool, h2o_url_t *dest, const h2o_url_t *src)
     dest->_port = src->_port;
 }
 
-const char *h2o_url_host_to_sun(h2o_iovec_t host, struct sockaddr_un *sun)
+const char *h2o_url_host_to_sun(h2o_iovec_t host, struct sockaddr_un *sa)
 {
 #define PREFIX "unix:"
 
     if (host.len < sizeof(PREFIX) - 1 || memcmp(host.base, PREFIX, sizeof(PREFIX) - 1) != 0)
         return h2o_url_host_to_sun_err_is_not_unix_socket;
 
-    if (host.len - sizeof(PREFIX) - 1 >= sizeof(sun->sun_path))
+    if (host.len - sizeof(PREFIX) - 1 >= sizeof(sa->sun_path))
         return "unix-domain socket path is too long";
 
-    memset(sun, 0, sizeof(*sun));
-    sun->sun_family = AF_UNIX;
-    memcpy(sun->sun_path, host.base + sizeof(PREFIX) - 1, host.len - (sizeof(PREFIX) - 1));
+    memset(sa, 0, sizeof(*sa));
+    sa->sun_family = AF_UNIX;
+    memcpy(sa->sun_path, host.base + sizeof(PREFIX) - 1, host.len - (sizeof(PREFIX) - 1));
     return NULL;
 
 #undef PREFIX

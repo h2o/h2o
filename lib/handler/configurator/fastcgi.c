@@ -122,14 +122,14 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
 
     if (strcmp(type, "unix") == 0) {
         /* unix socket */
-        struct sockaddr_un sun = {};
-        if (strlen(servname) >= sizeof(sun.sun_path)) {
+        struct sockaddr_un sa = {};
+        if (strlen(servname) >= sizeof(sa.sun_path)) {
             h2o_configurator_errprintf(cmd, node, "path:%s is too long as a unix socket name", servname);
             return -1;
         }
-        sun.sun_family = AF_UNIX;
-        strcpy(sun.sun_path, servname);
-        h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sun, sizeof(sun), self->vars);
+        sa.sun_family = AF_UNIX;
+        strcpy(sa.sun_path, servname);
+        h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sa, sizeof(sa), self->vars);
     } else if (strcmp(type, "tcp") == 0) {
         /* tcp socket */
         uint16_t port;
@@ -147,21 +147,21 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
 }
 
 static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const char *dirname, char **argv,
-                            struct sockaddr_un *sun)
+                            struct sockaddr_un *sa)
 {
     int listen_fd, pipe_fds[2] = {-1, -1};
 
     /* build socket path */
-    sun->sun_family = AF_UNIX;
-    strcpy(sun->sun_path, dirname);
-    strcat(sun->sun_path, "/_");
+    sa->sun_family = AF_UNIX;
+    strcpy(sa->sun_path, dirname);
+    strcat(sa->sun_path, "/_");
 
     /* create socket */
     if ((listen_fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
         h2o_configurator_errprintf(cmd, node, "socket(2) failed: %s", strerror(errno));
         goto Error;
     }
-    if (bind(listen_fd, (void *)sun, sizeof(*sun)) != 0) {
+    if (bind(listen_fd, (void *)sa, sizeof(*sa)) != 0) {
         h2o_configurator_errprintf(cmd, node, "bind(2) failed: %s", strerror(errno));
         goto Error;
     }
@@ -203,7 +203,7 @@ Error:
         close(pipe_fds[1]);
     if (listen_fd != -1)
         close(listen_fd);
-    unlink(sun->sun_path);
+    unlink(sa->sun_path);
     return -1;
 }
 
@@ -220,7 +220,7 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
     char *argv[] = {h2o_configurator_get_cmd_path("share/h2o/kill-on-close"), "--rm", dirname, "--", "/bin/sh", "-c",
                     node->data.scalar, NULL};
     int spawner_fd;
-    struct sockaddr_un sun = {};
+    struct sockaddr_un sa = {};
     h2o_fastcgi_config_vars_t config_vars;
     int ret = -1;
 
@@ -232,14 +232,14 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
     }
 
     /* launch spawnfcgi command */
-    if ((spawner_fd = create_spawnproc(cmd, node, dirname, argv, &sun)) == -1) {
+    if ((spawner_fd = create_spawnproc(cmd, node, dirname, argv, &sa)) == -1) {
         goto Exit;
     }
 
     config_vars = *self->vars;
     config_vars.callbacks.dispose = spawnproc_on_dispose;
     config_vars.callbacks.data = (char *)NULL + spawner_fd;
-    h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sun, sizeof(sun), &config_vars);
+    h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sa, sizeof(sa), &config_vars);
 
     ret = 0;
 Exit:

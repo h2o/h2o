@@ -187,7 +187,7 @@ void h2o_buffer__do_free(h2o_buffer_t *buffer)
         h2o_mem_free_recycle(&buffer->_prototype->allocator, buffer);
     } else if (buffer->_fd != -1) {
         close(buffer->_fd);
-        munmap(buffer, topagesize(buffer->capacity));
+        munmap((void *)buffer, topagesize(buffer->capacity));
     } else {
         free(buffer);
     }
@@ -243,7 +243,7 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                     perror("failed to resize temporary file");
                     goto MapError;
                 }
-                if ((newp = mmap(NULL, new_allocsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)) == MAP_FAILED) {
+                if ((newp = (void *)mmap(NULL, new_allocsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)) == MAP_FAILED) {
                     perror("mmap failed");
                     goto MapError;
                 }
@@ -260,7 +260,7 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                 } else {
                     /* munmap */
                     size_t offset = inbuf->bytes - inbuf->_buf;
-                    munmap(inbuf, topagesize(inbuf->capacity));
+                    munmap((void *)inbuf, topagesize(inbuf->capacity));
                     *_inbuf = inbuf = newp;
                     inbuf->capacity = new_capacity;
                     inbuf->bytes = newp->_buf + offset;

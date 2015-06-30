@@ -447,14 +447,14 @@ void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1c
         }
     }
     { /* directly call connect(2) if `host` refers to an UNIX-domain socket */
-        struct sockaddr_un sun;
-        const char *to_sun_err;
-        if ((to_sun_err = h2o_url_host_to_sun(host, &sun)) != h2o_url_host_to_sun_err_is_not_unix_socket) {
-            if (to_sun_err != NULL) {
-                on_connect_error(client, to_sun_err);
+        struct sockaddr_un sa;
+        const char *to_sa_err;
+        if ((to_sa_err = h2o_url_host_to_sun(host, &sa)) != h2o_url_host_to_sun_err_is_not_unix_socket) {
+            if (to_sa_err != NULL) {
+                on_connect_error(client, to_sa_err);
                 return;
             }
-            start_connect(client, (void *)&sun, sizeof(sun));
+            start_connect(client, (void *)&sa, sizeof(sa));
             return;
         }
     }

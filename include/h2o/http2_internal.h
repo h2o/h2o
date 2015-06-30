@@ -280,6 +280,30 @@ static uint8_t *h2o_http2_encode32u(uint8_t *dst, uint32_t value);
 
 /* inline definitions */
 
+inline void h2o_http2_window_init(h2o_http2_window_t *window, const h2o_http2_settings_t *peer_settings)
+{
+    window->_avail = peer_settings->initial_window_size;
+}
+
+inline int h2o_http2_window_update(h2o_http2_window_t *window, ssize_t delta)
+{
+    size_t v = window->_avail + delta;
+    if (v > INT32_MAX)
+        return -1;
+    window->_avail = v;
+    return 0;
+}
+
+inline ssize_t h2o_http2_window_get_window(h2o_http2_window_t *window)
+{
+    return window->_avail;
+}
+
+inline void h2o_http2_window_consume_window(h2o_http2_window_t *window, size_t bytes)
+{
+    window->_avail -= bytes;
+}
+
 inline h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uint32_t stream_id)
 {
     khiter_t iter = kh_get(h2o_http2_stream_t, conn->streams, stream_id);
@@ -373,30 +397,6 @@ inline void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_htt
 inline int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream)
 {
     return stream->_data.size != 0;
-}
-
-inline void h2o_http2_window_init(h2o_http2_window_t *window, const h2o_http2_settings_t *peer_settings)
-{
-    window->_avail = peer_settings->initial_window_size;
-}
-
-inline int h2o_http2_window_update(h2o_http2_window_t *window, ssize_t delta)
-{
-    size_t v = window->_avail + delta;
-    if (v > INT32_MAX)
-        return -1;
-    window->_avail = v;
-    return 0;
-}
-
-inline ssize_t h2o_http2_window_get_window(h2o_http2_window_t *window)
-{
-    return window->_avail;
-}
-
-inline void h2o_http2_window_consume_window(h2o_http2_window_t *window, size_t bytes)
-{
-    window->_avail -= bytes;
 }
 
 inline uint16_t h2o_http2_decode16u(const uint8_t *src)
