@@ -95,7 +95,7 @@ struct listener_config_t {
     struct sockaddr_storage addr;
     socklen_t addrlen;
     h2o_hostconf_t **hosts;
-    H2O_VECTOR(struct listener_ssl_config_t) ssl;
+    H2O_VECTOR(struct listener_ssl_config_t *) ssl;
 };
 
 struct listener_ctx_t {
@@ -229,7 +229,7 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
     if (name != NULL) {
         size_t i, j, name_len = strlen(name);
         for (i = 0; i != listener->ssl.size; ++i) {
-            struct listener_ssl_config_t *ssl_config = listener->ssl.entries + i;
+            struct listener_ssl_config_t *ssl_config = listener->ssl.entries[i];
             for (j = 0; j != ssl_config->hostnames.size; ++j) {
                 if (h2o_lcstris(name, name_len, ssl_config->hostnames.entries[j].base, ssl_config->hostnames.entries[j].len)) {
                     ctx_index = i;
@@ -242,8 +242,8 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
         ;
     }
 
-    if (SSL_get_SSL_CTX(ssl) != listener->ssl.entries[ctx_index].ctx)
-        SSL_set_SSL_CTX(ssl, listener->ssl.entries[ctx_index].ctx);
+    if (SSL_get_SSL_CTX(ssl) != listener->ssl.entries[ctx_index]->ctx)
+        SSL_set_SSL_CTX(ssl, listener->ssl.entries[ctx_index]->ctx);
 
     return SSL_TLSEXT_ERR_OK;
 }
@@ -497,7 +497,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     if (ctx->hostconf != NULL) {
         size_t i;
         for (i = 0; i != listener->ssl.size; ++i) {
-            struct listener_ssl_config_t *ssl_config = listener->ssl.entries + i;
+            struct listener_ssl_config_t *ssl_config = listener->ssl.entries[i];
             if (strcmp(ssl_config->certificate_file, certificate_file->data.scalar) == 0) {
                 listener_setup_ssl_add_host(ssl_config, ctx->hostconf->authority.hostport);
                 return 0;
@@ -560,15 +560,15 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
     /* set SNI callback to the first SSL context, when and only when it should be used */
     if (listener->ssl.size == 1) {
-        SSL_CTX_set_tlsext_servername_callback(listener->ssl.entries[0].ctx, on_sni_callback);
-        SSL_CTX_set_tlsext_servername_arg(listener->ssl.entries[0].ctx, listener);
+        SSL_CTX_set_tlsext_servername_callback(listener->ssl.entries[0]->ctx, on_sni_callback);
+        SSL_CTX_set_tlsext_servername_arg(listener->ssl.entries[0]->ctx, listener);
     }
 
     { /* create a new entry in the SSL context list */
-        struct listener_ssl_config_t *ssl_config;
-        h2o_vector_reserve(NULL, (void *)&listener->ssl, sizeof(listener->ssl.entries[0]), listener->ssl.size + 1);
-        ssl_config = listener->ssl.entries + listener->ssl.size++;
+        struct listener_ssl_config_t *ssl_config = h2o_mem_alloc(sizeof(*ssl_config));
         memset(ssl_config, 0, sizeof(*ssl_config));
+        h2o_vector_reserve(NULL, (void *)&listener->ssl, sizeof(listener->ssl.entries[0]), listener->ssl.size + 1);
+        listener->ssl.entries[listener->ssl.size++] = ssl_config;
         if (ctx->hostconf != NULL) {
             listener_setup_ssl_add_host(ssl_config, ctx->hostconf->authority.hostport);
         }
@@ -1234,9 +1234,9 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             set_cloexec(fd);
         }
         listeners[i] = (struct listener_ctx_t){
-            &conf.threads[thread_index].ctx,                                             /* ctx */
-            listener_config->hosts,                                                      /* hosts */
-            listener_config->ssl.size != 0 ? listener_config->ssl.entries[0].ctx : NULL, /* ssl_ctx */
+            &conf.threads[thread_index].ctx,                                              /* ctx */
+            listener_config->hosts,                                                       /* hosts */
+            listener_config->ssl.size != 0 ? listener_config->ssl.entries[0]->ctx : NULL, /* ssl_ctx */
             h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, (struct sockaddr *)&listener_config->addr,
                                      listener_config->addrlen, H2O_SOCKET_FLAG_DONT_READ) /* sock */
         };
