@@ -380,9 +380,11 @@ h2o_configurator_command_t *h2o_configurator_get_command(h2o_globalconf_t *conf,
     return NULL;
 }
 
-int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node)
+int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node, int dry_run)
 {
-    h2o_configurator_context_t ctx = {config};
+    h2o_configurator_context_t ctx = {};
+    ctx.globalconf = config;
+    ctx.dry_run = dry_run;
 
     if (h2o_configurator_apply_commands(&ctx, node, H2O_CONFIGURATOR_FLAG_GLOBAL, NULL) != 0)
         return -1;
