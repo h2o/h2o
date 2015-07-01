@@ -146,8 +146,7 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
     return 0;
 }
 
-static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const char *dirname, char **argv,
-                            struct sockaddr_un *sa)
+static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const char *dirname, char **argv, struct sockaddr_un *sa)
 {
     int listen_fd, pipe_fds[2] = {-1, -1};
 
@@ -224,16 +223,23 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
     h2o_fastcgi_config_vars_t config_vars;
     int ret = -1;
 
-    /* create temporary directory */
-    if (mkdtemp(dirname) == NULL) {
-        h2o_configurator_errprintf(cmd, node, "mkdtemp(3) failed to create temporary directory:%s:%s", dirname, strerror(errno));
+    if (ctx->dry_run) {
         dirname[0] = '\0';
-        goto Exit;
-    }
-
-    /* launch spawnfcgi command */
-    if ((spawner_fd = create_spawnproc(cmd, node, dirname, argv, &sa)) == -1) {
-        goto Exit;
+        spawner_fd = -1;
+        sa.sun_family = AF_UNIX;
+        strcpy(sa.sun_path, "/dry-run.nonexistent");
+    } else {
+        /* create temporary directory */
+        if (mkdtemp(dirname) == NULL) {
+            h2o_configurator_errprintf(cmd, node, "mkdtemp(3) failed to create temporary directory:%s:%s", dirname,
+                                       strerror(errno));
+            dirname[0] = '\0';
+            goto Exit;
+        }
+        /* launch spawnfcgi command */
+        if ((spawner_fd = create_spawnproc(cmd, node, dirname, argv, &sa)) == -1) {
+            goto Exit;
+        }
     }
 
     config_vars = *self->vars;

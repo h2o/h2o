@@ -141,20 +141,20 @@ static struct {
         char _unused2[32];
     } state;
 } conf = {
-    {},   /* globalconf */
-    0,    /* dry-run */
-    {},   /* server_starter */
-    NULL, /* listeners */
-    0,    /* num_listeners */
-    NULL, /* running_user */
-    NULL, /* pid_file */
-    NULL, /* error_log */
-    1024, /* max_connections */
-    0,    /* initialized in main() */
-    0,    /* initialized in main() */
-    NULL, /* thread_ids */
-    0,    /* shutdown_requested */
-    {},   /* state */
+    {},              /* globalconf */
+    RUN_MODE_WORKER, /* dry-run */
+    {},              /* server_starter */
+    NULL,            /* listeners */
+    0,               /* num_listeners */
+    NULL,            /* running_user */
+    NULL,            /* pid_file */
+    NULL,            /* error_log */
+    1024,            /* max_connections */
+    0,               /* initialized in main() */
+    0,               /* initialized in main() */
+    NULL,            /* thread_ids */
+    0,               /* shutdown_requested */
+    {},              /* state */
 };
 
 static void set_cloexec(int fd)
@@ -701,8 +701,7 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
         }
     }
     /* add new listener */
-    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1 || bind(fd, (void *)sa, sizeof(*sa)) != 0 ||
-        listen(fd, H2O_SOMAXCONN) != 0) {
+    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1 || bind(fd, (void *)sa, sizeof(*sa)) != 0 || listen(fd, H2O_SOMAXCONN) != 0) {
         if (fd != -1)
             close(fd);
         h2o_configurator_errprintf(NULL, node, "failed to listen to socket:%s: %s", sa->sun_path, strerror(errno));
@@ -1500,7 +1499,7 @@ int main(int argc, char **argv)
         yoml_t *yoml;
         if ((yoml = load_config(opt_config_file)) == NULL)
             exit(EX_CONFIG);
-        if (h2o_configurator_apply(&conf.globalconf, yoml) != 0)
+        if (h2o_configurator_apply(&conf.globalconf, yoml, conf.run_mode != RUN_MODE_WORKER) != 0)
             exit(EX_CONFIG);
         yoml_free(yoml);
     }
