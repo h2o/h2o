@@ -64,7 +64,7 @@ static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock);
 static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock);
 static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
 
-#if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_KQUEUE
+#if H2O_USE_POLL || H2O_USE_EPOLL || H2O_USE_KQUEUE
 /* explicitly specified */
 #else
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
@@ -72,12 +72,12 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
 #elif defined(__linux)
 #define H2O_USE_EPOLL 1
 #else
-#define H2O_USE_SELECT 1
+#define H2O_USE_POLL 1
 #endif
 #endif
 
-#if H2O_USE_SELECT
-#include "evloop/select.c.h"
+#if H2O_USE_POLL
+#include "evloop/poll.c.h"
 #elif H2O_USE_EPOLL
 #include "evloop/epoll.c.h"
 #elif H2O_USE_KQUEUE
