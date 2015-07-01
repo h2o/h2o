@@ -44,6 +44,7 @@ typedef struct h2o_configurator_context_t {
     h2o_globalconf_t *globalconf;
     h2o_hostconf_t *hostconf;
     h2o_pathconf_t *pathconf;
+    int dry_run;
 } h2o_configurator_context_t;
 
 typedef int (*h2o_configurator_dispose_cb)(h2o_configurator_t *configurator);
@@ -110,7 +111,7 @@ h2o_configurator_command_t *h2o_configurator_get_command(h2o_globalconf_t *conf,
  * applies the configuration to the context
  * @return 0 if successful, -1 if not
  */
-int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node);
+int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node, int dry_run);
 /**
  *
  */

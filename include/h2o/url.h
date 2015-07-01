@@ -22,6 +22,7 @@
 #ifndef h2o__url_h
 #define h2o__url_h
 
+#include <sys/un.h>
 #include "h2o/memory.h"
 
 typedef struct st_h2o_url_scheme_t {
@@ -90,6 +91,11 @@ static h2o_iovec_t h2o_url_stringify(h2o_mem_pool_t *pool, const h2o_url_t *url)
  * copies a URL object (null-terminates all the string elements)
  */
 void h2o_url_copy(h2o_mem_pool_t *pool, h2o_url_t *dest, const h2o_url_t *src);
+/**
+ * extracts sockaddr_un from host and returns NULL (or returns an error string if failed)
+ */
+const char *h2o_url_host_to_sun(h2o_iovec_t host, struct sockaddr_un *sa);
+extern const char *h2o_url_host_to_sun_err_is_not_unix_socket;
 
 /* inline definitions */
 

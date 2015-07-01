@@ -366,7 +366,7 @@ struct st_h2o_context_t {
         h2o_timestamp_string_t *value;
     } _timestamp_cache;
 
-    H2O_VECTOR(h2o_pathconf_t*) _pathconfs_inited;
+    H2O_VECTOR(h2o_pathconf_t *) _pathconfs_inited;
 };
 
 /**

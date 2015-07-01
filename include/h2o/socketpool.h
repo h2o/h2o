@@ -34,10 +34,7 @@ extern "C" {
 #include "h2o/socket.h"
 #include "h2o/timeout.h"
 
-typedef enum en_h2o_socketpool_type_t {
-    H2O_SOCKETPOOL_TYPE_NAMED,
-    H2O_SOCKETPOOL_TYPE_SOCKADDR
-} h2o_socketpool_type_t;
+typedef enum en_h2o_socketpool_type_t { H2O_SOCKETPOOL_TYPE_NAMED, H2O_SOCKETPOOL_TYPE_SOCKADDR } h2o_socketpool_type_t;
 
 typedef struct st_h2o_socketpool_t {
 

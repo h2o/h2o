@@ -22,6 +22,9 @@
 #ifndef h2o__memory_h
 #define h2o__memory_h
 
+#ifdef __sun__
+#include <alloca.h>
+#endif
 #include <assert.h>
 #include <stddef.h>
 #include <stdio.h>

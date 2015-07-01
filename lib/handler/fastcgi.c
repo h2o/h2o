@@ -295,7 +295,7 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
             cookie_length -= 1;
             append_pair(&req->pool, vecs, H2O_STRLIT("HTTP_COOKIE"), NULL, cookie_length);
             char *dst = vecs->entries[vecs->size - 1].base + vecs->entries[vecs->size - 1].len - cookie_length;
-            for (h = req->headers.entries; ; ++h) {
+            for (h = req->headers.entries;; ++h) {
                 if (h->name == &H2O_TOKEN_COOKIE->buf) {
                     if (cookie_length == h->value.len)
                         break;
