@@ -32,10 +32,8 @@
 static void on_ssl_handshake_complete(h2o_socket_t *sock, int status)
 {
     const h2o_iovec_t *ident;
-    h2o_context_t *ctx = sock->data;
-    h2o_hostconf_t **hosts = sock->data2;
+    h2o_accept_ctx_t *ctx = sock->data;
     sock->data = NULL;
-    sock->data2 = NULL;
 
     h2o_iovec_t proto;
     if (status != 0) {
@@ -50,19 +48,148 @@ static void on_ssl_handshake_complete(h2o_socket_t *sock, int status)
         }
     }
     /* connect as http1 */
-    h2o_http1_accept(ctx, hosts, sock);
+    h2o_http1_accept(ctx, sock);
     return;
 
 Is_Http2:
     /* connect as http2 */
-    h2o_http2_accept(ctx, hosts, sock);
+    h2o_http2_accept(ctx, sock);
 }
 
-void h2o_accept_ssl(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, SSL_CTX *ssl_ctx)
+static void accept_ssl_or_http1(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
+{
+    if (ctx->ssl_ctx != NULL)
+        h2o_socket_ssl_server_handshake(sock, ctx->ssl_ctx, on_ssl_handshake_complete);
+    else
+        h2o_http1_accept(ctx, sock);
+}
+
+static ssize_t parse_proxy_line(char *src, size_t len, struct sockaddr *sa, socklen_t *salen)
+{
+#define CHECK_EOF() if (p == end) return -2
+#define EXPECT_CHAR(ch) \
+    do { \
+        CHECK_EOF(); \
+        if (*p++ != ch) \
+            return -1; \
+    } while (0)
+#define SKIP_TO_WS() \
+    do { \
+        do { \
+            CHECK_EOF(); \
+        } while (*p++ != ' '); \
+        --p; \
+    } while (0)
+
+    char *p = src, *end = p + len;
+    void *addr;
+    in_port_t *port;
+
+    /* "PROXY "*/
+    EXPECT_CHAR('P');
+    EXPECT_CHAR('R');
+    EXPECT_CHAR('O');
+    EXPECT_CHAR('X');
+    EXPECT_CHAR('Y');
+    EXPECT_CHAR(' ');
+
+    /* "TCP[46] " */
+    CHECK_EOF();
+    if (*p++ != 'T') {
+        *salen = 0; /* indicate that no data has been obtained */
+        goto SkipToEOL;
+    }
+    EXPECT_CHAR('C');
+    EXPECT_CHAR('P');
+    CHECK_EOF();
+    switch (*p++) {
+    case '4':
+        *salen = sizeof(struct sockaddr_in);
+        *((struct sockaddr_in*)sa) = (struct sockaddr_in){};
+        sa->sa_family = AF_INET;
+        addr = &((struct sockaddr_in*)sa)->sin_addr;
+        port = &((struct sockaddr_in*)sa)->sin_port;
+        break;
+    case '6':
+        *salen = sizeof(struct sockaddr_in6);
+        *((struct sockaddr_in6*)sa) = (struct sockaddr_in6){};
+        sa->sa_family = AF_INET6;
+        addr = &((struct sockaddr_in6*)sa)->sin6_addr;
+        port = &((struct sockaddr_in6*)sa)->sin6_port;
+        break;
+    default:
+        return -1;
+    }
+    EXPECT_CHAR(' ');
+
+    /* parse peer address */
+    char *addr_start = p;
+    SKIP_TO_WS();
+    *p = '\0';
+    if (inet_pton(sa->sa_family, addr_start, addr) != 1)
+        return -1;
+    *p++ = ' ';
+
+    /* skip local address */
+    SKIP_TO_WS();
+    ++p;
+
+    /* parse peer port */
+    char *port_start = p;
+    SKIP_TO_WS();
+    *p = '\0';
+    unsigned short usval;
+    if (sscanf(port_start, "%hu", &usval) != 1)
+        return -1;
+    *port = htons(usval);
+    *p++ = ' ';
+
+SkipToEOL:
+    do {
+        CHECK_EOF();
+    } while (*p++ != '\r');
+    CHECK_EOF();
+    if (*p++ != '\n')
+        return -2;
+    return p - src;
+
+#undef CHECK_EOF
+#undef EXPECT_CHAR
+#undef SKIP_TO_WS
+}
+
+static void on_read_proxy_line(h2o_socket_t *sock, int status)
+{
+    if (status != 0) {
+        h2o_socket_close(sock);
+        return;
+    }
+
+    struct sockaddr_storage addr;
+    socklen_t addrlen;
+    ssize_t r = parse_proxy_line(sock->input->bytes, sock->input->size, (void *)&addr, &addrlen);
+    switch (r) {
+    case -1: /* error, just pass the input to the next handler */
+        break;
+    case -2: /* incomplete */
+        return;
+    default:
+        h2o_buffer_consume(&sock->input, r);
+        if (addrlen != 0)
+            h2o_socket_setpeername(sock, (void *)&addr, addrlen);
+        break;
+    }
+
+    accept_ssl_or_http1(sock->data, sock);
+}
+
+void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
 {
     sock->data = ctx;
-    sock->data2 = hosts;
-    h2o_socket_ssl_server_handshake(sock, ssl_ctx, on_ssl_handshake_complete);
+    if (ctx->expect_proxy_line)
+        h2o_socket_read_start(sock, on_read_proxy_line);
+    else
+        accept_ssl_or_http1(ctx, sock);
 }
 
 size_t h2o_stringify_protocol_version(char *dst, int version)

@@ -1100,9 +1100,9 @@ void h2o_http2_conn_push_path(h2o_http2_conn_t *conn, h2o_iovec_t path, h2o_http
     execute_or_enqueue_request(conn, stream);
 }
 
-void h2o_http2_accept(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock)
+void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
 {
-    h2o_http2_conn_t *conn = create_conn(ctx, hosts, sock);
+    h2o_http2_conn_t *conn = create_conn(ctx->ctx, ctx->hosts, sock);
     sock->data = conn;
     h2o_socket_read_start(conn->sock, on_read);
     update_idle_timeout(conn);

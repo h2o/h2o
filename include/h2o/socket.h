@@ -62,17 +62,16 @@ typedef void (*h2o_socket_cb)(h2o_socket_t *sock, int err);
 #include "socket/evloop.h"
 #endif
 
-typedef struct st_h2o_socket_peername_t {
-    struct sockaddr_storage addr;
+struct st_h2o_socket_peername_t {
     socklen_t len;
-} h2o_socket_peername_t;
+    struct sockaddr addr;
+};
 
 /**
  * abstraction layer for sockets (SSL vs. TCP)
  */
 struct st_h2o_socket_t {
     void *data;
-    void *data2;
     struct st_h2o_socket_ssl_t *ssl;
     h2o_buffer_t *input;
     size_t bytes_read;
@@ -84,6 +83,7 @@ struct st_h2o_socket_t {
         h2o_socket_cb read;
         h2o_socket_cb write;
     } _cb;
+    struct st_h2o_socket_peername_t *_peername;
 };
 
 typedef struct st_h2o_socket_export_t {
@@ -158,6 +158,10 @@ socklen_t h2o_socket_getsockname(h2o_socket_t *sock, struct sockaddr *sa);
  * returns the length of the remote address obtained (or 0 if failed)
  */
 socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa);
+/**
+ * sets the remote address (used for overriding the value)
+ */
+void h2o_socket_setpeername(h2o_socket_t *sock, struct sockaddr *sa, socklen_t len);
 /**
  * compares socket addresses
  */

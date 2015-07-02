@@ -212,7 +212,7 @@ socklen_t h2o_socket_getsockname(h2o_socket_t *_sock, struct sockaddr *sa)
     return (socklen_t)len;
 }
 
-socklen_t h2o_socket_getpeername(h2o_socket_t *_sock, struct sockaddr *sa)
+socklen_t get_peername_uncached(h2o_socket_t *_sock, struct sockaddr *sa)
 {
     struct st_h2o_uv_socket_t *sock = (void *)_sock;
     int len = sizeof(struct sockaddr_storage);

@@ -93,7 +93,7 @@ static void init_async(h2o_multithread_queue_t *queue, h2o_loop_t *loop)
     }
     fcntl(fds[1], F_SETFL, O_NONBLOCK);
     queue->async.write = fds[1];
-    queue->async.read = h2o_evloop_socket_create(loop, fds[0], NULL, 0, 0);
+    queue->async.read = h2o_evloop_socket_create(loop, fds[0], 0);
     queue->async.read->data = queue;
     h2o_socket_read_start(queue->async.read, on_read);
 }

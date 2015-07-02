@@ -43,13 +43,6 @@ struct st_h2o_evloop_socket_t {
     } _wreq;
     struct st_h2o_evloop_socket_t *_next_pending;
     struct st_h2o_evloop_socket_t *_next_statechanged;
-    struct {
-        union {
-            struct sockaddr addr;
-            struct sockaddr_storage ss;
-        };
-        socklen_t len;
-    } peername;
 };
 
 static void link_to_pending(struct st_h2o_evloop_socket_t *sock);
@@ -319,17 +312,7 @@ int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info)
 
 h2o_socket_t *do_import(h2o_loop_t *loop, h2o_socket_export_t *info)
 {
-    struct sockaddr_storage ss;
-    socklen_t sslen = sizeof(ss);
-    struct sockaddr *sa;
-
-    if (getpeername(info->fd, (void *)&ss, &sslen) == 0) {
-        sa = (void *)&ss;
-    } else {
-        sa = NULL;
-        sslen = 0;
-    }
-    return h2o_evloop_socket_create(loop, info->fd, sa, sslen, 0);
+    return h2o_evloop_socket_create(loop, info->fd, 0);
 }
 
 h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *_sock)
@@ -347,14 +330,16 @@ socklen_t h2o_socket_getsockname(h2o_socket_t *_sock, struct sockaddr *sa)
     return len;
 }
 
-socklen_t h2o_socket_getpeername(h2o_socket_t *_sock, struct sockaddr *sa)
+socklen_t get_peername_uncached(h2o_socket_t *_sock, struct sockaddr *sa)
 {
     struct st_h2o_evloop_socket_t *sock = (void *)_sock;
-    memcpy(sa, &sock->peername.addr, sock->peername.len);
-    return sock->peername.len;
+    socklen_t len = sizeof(struct sockaddr_storage);
+    if (getpeername(sock->fd, sa, &len) != 0)
+        return 0;
+    return len;
 }
 
-struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, struct sockaddr *addr, socklen_t addrlen, int flags)
+struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, int flags)
 {
     struct st_h2o_evloop_socket_t *sock;
 
@@ -363,9 +348,6 @@ struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, struct 
     sock = h2o_mem_alloc(sizeof(*sock));
     memset(sock, 0, sizeof(*sock));
     h2o_buffer_init(&sock->super.input, &h2o_socket_buffer_prototype);
-    assert(addrlen < sizeof(sock->peername.ss));
-    memcpy(&sock->peername.addr, addr, addrlen);
-    sock->peername.len = addrlen;
     sock->loop = loop;
     sock->fd = fd;
     sock->_flags = flags;
@@ -378,37 +360,34 @@ struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, struct 
     return sock;
 }
 
-static struct st_h2o_evloop_socket_t *create_socket_set_nodelay(h2o_evloop_t *loop, int fd, struct sockaddr *addr,
-                                                                socklen_t addrlen, int flags)
+static struct st_h2o_evloop_socket_t *create_socket_set_nodelay(h2o_evloop_t *loop, int fd, int flags)
 {
     int on = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
-    return create_socket(loop, fd, addr, addrlen, flags);
+    return create_socket(loop, fd, flags);
 }
 
-h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, struct sockaddr *addr, socklen_t addrlen, int flags)
+h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags)
 {
     fcntl(fd, F_SETFL, O_NONBLOCK);
-    return &create_socket(loop, fd, addr, addrlen, flags)->super;
+    return &create_socket(loop, fd, flags)->super;
 }
 
 h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
 {
     struct st_h2o_evloop_socket_t *listener = (struct st_h2o_evloop_socket_t *)_listener;
-    struct sockaddr_storage addr;
-    socklen_t addrlen = sizeof(addr);
     int fd;
 
 #ifdef __linux__
-    if ((fd = accept4(listener->fd, (void *)&addr, &addrlen, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
+    if ((fd = accept4(listener->fd, NULL, NULL, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
         return NULL;
 #else
-    if ((fd = cloexec_accept(listener->fd, (void *)&addr, &addrlen)) == -1)
+    if ((fd = cloexec_accept(listener->fd, NULL, NULL)) == -1)
         return NULL;
     fcntl(fd, F_SETFL, O_NONBLOCK);
 #endif
 
-    return &create_socket_set_nodelay(listener->loop, fd, (void *)&addr, addrlen, 0)->super;
+    return &create_socket_set_nodelay(listener->loop, fd, 0)->super;
 }
 
 h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)
@@ -424,7 +403,7 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
         return NULL;
     }
 
-    sock = create_socket_set_nodelay(loop, fd, addr, addrlen, H2O_SOCKET_FLAG_IS_CONNECTING);
+    sock = create_socket_set_nodelay(loop, fd, H2O_SOCKET_FLAG_IS_CONNECTING);
     sock->super._cb.write = cb;
     link_to_statechanged(sock);
     return &sock->super;

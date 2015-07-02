@@ -54,7 +54,7 @@ static int on_req(h2o_handler_t *self, h2o_req_t *req)
 
 static h2o_globalconf_t config;
 static h2o_context_t ctx;
-static SSL_CTX *ssl_ctx;
+static h2o_accept_ctx_t accept_ctx;
 
 static void on_connect(uv_stream_t *server, int status)
 {
@@ -72,10 +72,7 @@ static void on_connect(uv_stream_t *server, int status)
     }
 
     sock = h2o_uv_socket_create((uv_stream_t *)conn, (uv_close_cb)free);
-    if (ssl_ctx != NULL)
-        h2o_accept_ssl(&ctx, ctx.globalconf->hosts, sock, ssl_ctx);
-    else
-        h2o_http1_accept(&ctx, ctx.globalconf->hosts, sock);
+    h2o_accept(&accept_ctx, sock);
 }
 
 static int setup_ssl(const char *cert_file, const char *key_file)
@@ -84,15 +81,15 @@ static int setup_ssl(const char *cert_file, const char *key_file)
     SSL_library_init();
     OpenSSL_add_all_algorithms();
 
-    ssl_ctx = SSL_CTX_new(SSLv23_server_method());
-    SSL_CTX_set_options(ssl_ctx, SSL_OP_NO_SSLv2);
+    accept_ctx.ssl_ctx = SSL_CTX_new(SSLv23_server_method());
+    SSL_CTX_set_options(accept_ctx.ssl_ctx, SSL_OP_NO_SSLv2);
 
     /* load certificate and private key */
-    if (SSL_CTX_use_certificate_file(ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
+    if (SSL_CTX_use_certificate_file(accept_ctx.ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
         fprintf(stderr, "an error occurred while trying to load server certificate file:%s\n", cert_file);
         return -1;
     }
-    if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file, SSL_FILETYPE_PEM) != 1) {
+    if (SSL_CTX_use_PrivateKey_file(accept_ctx.ssl_ctx, key_file, SSL_FILETYPE_PEM) != 1) {
         fprintf(stderr, "an error occurred while trying to load private key file:%s\n", key_file);
         return -1;
     }
@@ -135,6 +132,9 @@ int main(int argc, char **argv)
     if (setup_ssl("server.crt", "server.key") != 0)
         goto Error;
     */
+
+    accept_ctx.ctx = &ctx;
+    accept_ctx.hosts = config.hosts;
 
     return uv_run(loop, UV_RUN_DEFAULT);
 

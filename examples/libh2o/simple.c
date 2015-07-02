@@ -87,7 +87,7 @@ static int post_test(h2o_handler_t *self, h2o_req_t *req)
 
 static h2o_globalconf_t config;
 static h2o_context_t ctx;
-static SSL_CTX *ssl_ctx;
+static h2o_accept_ctx_t accept_ctx;
 
 #if H2O_USE_LIBUV
 
@@ -108,10 +108,7 @@ static void on_accept(uv_stream_t *listener, int status)
     }
 
     sock = h2o_uv_socket_create((uv_stream_t *)conn, (uv_close_cb)free);
-    if (ssl_ctx != NULL)
-        h2o_accept_ssl(&ctx, ctx.globalconf->hosts, sock, ssl_ctx);
-    else
-        h2o_http1_accept(&ctx, ctx.globalconf->hosts, sock);
+    h2o_accept(&accept_ctx, sock);
 }
 
 static int create_listener(void)
@@ -187,25 +184,25 @@ static int setup_ssl(const char *cert_file, const char *key_file)
     SSL_library_init();
     OpenSSL_add_all_algorithms();
 
-    ssl_ctx = SSL_CTX_new(SSLv23_server_method());
-    SSL_CTX_set_options(ssl_ctx, SSL_OP_NO_SSLv2);
+    accept_ctx.ssl_ctx = SSL_CTX_new(SSLv23_server_method());
+    SSL_CTX_set_options(accept_ctx.ssl_ctx, SSL_OP_NO_SSLv2);
 
     /* load certificate and private key */
-    if (SSL_CTX_use_certificate_file(ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
+    if (SSL_CTX_use_certificate_file(accept_ctx.ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
         fprintf(stderr, "an error occurred while trying to load server certificate file:%s\n", cert_file);
         return -1;
     }
-    if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file, SSL_FILETYPE_PEM) != 1) {
+    if (SSL_CTX_use_PrivateKey_file(accept_ctx.ssl_ctx, key_file, SSL_FILETYPE_PEM) != 1) {
         fprintf(stderr, "an error occurred while trying to load private key file:%s\n", key_file);
         return -1;
     }
 
 /* setup protocol negotiation methods */
 #if H2O_USE_NPN
-    h2o_ssl_register_npn_protocols(ssl_ctx, h2o_http2_npn_protocols);
+    h2o_ssl_register_npn_protocols(accept_ctx.ssl_ctx, h2o_http2_npn_protocols);
 #endif
 #if H2O_USE_ALPN
-    h2o_ssl_register_alpn_protocols(ssl_ctx, h2o_http2_alpn_protocols);
+    h2o_ssl_register_alpn_protocols(accept_ctx.ssl_ctx, h2o_http2_alpn_protocols);
 #endif
 
     return 0;
@@ -240,6 +237,9 @@ int main(int argc, char **argv)
 
     /* disabled by default: uncomment the line below to enable access logging */
     /* h2o_access_log_register(&config.default_host, "/dev/stdout", NULL); */
+
+    accept_ctx.ctx = &ctx;
+    accept_ctx.hosts = config.hosts;
 
     if (create_listener() != 0) {
         fprintf(stderr, "failed to listen to 127.0.0.1:7890:%s\n", strerror(errno));
