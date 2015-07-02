@@ -96,6 +96,7 @@ struct listener_config_t {
     socklen_t addrlen;
     h2o_hostconf_t **hosts;
     H2O_VECTOR(struct listener_ssl_config_t *) ssl;
+    int proxy_protocol;
 };
 
 struct listener_ctx_t {
@@ -638,7 +639,7 @@ static struct listener_config_t *find_listener(struct sockaddr *addr, socklen_t 
     return NULL;
 }
 
-static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global)
+static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol)
 {
     struct listener_config_t *listener = h2o_mem_alloc(sizeof(*listener));
 
@@ -652,6 +653,8 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
         listener->hosts[0] = NULL;
     }
     memset(&listener->ssl, 0, sizeof(listener->ssl));
+    listener->proxy_protocol = proxy_protocol;
+
     conf.listeners = h2o_mem_realloc(conf.listeners, sizeof(*conf.listeners) * (conf.num_listeners + 1));
     conf.listeners[conf.num_listeners++] = listener;
 
@@ -766,6 +769,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 {
     const char *hostname = NULL, *servname = NULL, *type = "tcp";
     yoml_t *ssl_node = NULL;
+    int proxy_protocol = 0;
 
     /* fetch servname (and hostname) */
     switch (node->type) {
@@ -799,6 +803,20 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         }
         if ((t = yoml_get(node, "ssl")) != NULL)
             ssl_node = t;
+        if ((t = yoml_get(node, "proxy-protocol")) != NULL) {
+            if (t->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, node, "`proxy-protocol` must be a string");
+                return -1;
+            }
+            if (strcasecmp(t->data.scalar, "ON") == 0) {
+                proxy_protocol = 1;
+            } else if (strcasecmp(t->data.scalar, "OFF") == 0) {
+                proxy_protocol = 0;
+            } else {
+                h2o_configurator_errprintf(cmd, node, "value of `proxy-protocol` must be either of: ON,OFF");
+                return -1;
+            }
+        }
     } break;
     default:
         h2o_configurator_errprintf(cmd, node, "value must be a string or a mapping (with keys: `port` and optionally `host`)");
@@ -837,8 +855,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             default:
                 break;
             }
-            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL);
+            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol);
             listener_is_new = 1;
+        } else if (listener->proxy_protocol != proxy_protocol) {
+            goto ProxyConflict;
         }
         if (listener_setup_ssl(cmd, ctx, node, ssl_node, listener, listener_is_new) != 0)
             return -1;
@@ -885,8 +905,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 default:
                     break;
                 }
-                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL);
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol);
                 listener_is_new = 1;
+            } else if (listener->proxy_protocol != proxy_protocol) {
+                goto ProxyConflict;
             }
             if (listener_setup_ssl(cmd, ctx, node, ssl_node, listener, listener_is_new) != 0)
                 return -1;
@@ -903,6 +925,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     }
 
     return 0;
+
+ProxyConflict:
+    h2o_configurator_errprintf(cmd, node, "`proxy-protocol` cannot be turned %s, already defined as opposite", proxy_protocol ? "on" : "off");
+    return -1;
 }
 
 static int on_config_listen_enter(h2o_configurator_t *_configurator, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -1232,6 +1258,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         listeners[i].accept_ctx.hosts = listener_config->hosts;
         listeners[i].accept_ctx.ssl_ctx = listener_config->ssl.size != 0 ? listener_config->ssl.entries[0]->ctx : NULL;
         listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
+        listeners[i].accept_ctx.expect_proxy_line = listener_config->proxy_protocol;
         listeners[i].sock->data = listeners + i;
     }
     /* and start listening */

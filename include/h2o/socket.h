@@ -159,6 +159,10 @@ socklen_t h2o_socket_getsockname(h2o_socket_t *sock, struct sockaddr *sa);
  */
 socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa);
 /**
+ * sets the remote address (used for overriding the value)
+ */
+void h2o_socket_setpeername(h2o_socket_t *sock, struct sockaddr *sa, socklen_t len);
+/**
  * compares socket addresses
  */
 int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y);

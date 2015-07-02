@@ -652,6 +652,7 @@ typedef struct st_h2o_accept_ctx_t {
     h2o_context_t *ctx;
     h2o_hostconf_t **hosts;
     SSL_CTX *ssl_ctx;
+    int expect_proxy_line;
 } h2o_accept_ctx_t;
 
 /* token */

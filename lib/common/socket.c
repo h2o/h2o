@@ -401,6 +401,15 @@ void h2o_socket_read_stop(h2o_socket_t *sock)
     do_read_stop(sock);
 }
 
+void h2o_socket_setpeername(h2o_socket_t *sock, struct sockaddr *sa, socklen_t len)
+{
+    if (sock->_peername != NULL)
+        free(sock->_peername);
+    sock->_peername = h2o_mem_alloc(offsetof(struct st_h2o_socket_peername_t, addr) + len);
+    sock->_peername->len = len;
+    memcpy(&sock->_peername->addr, sa, len);
+}
+
 socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa)
 {
     /* return cached, if exists */
@@ -408,12 +417,9 @@ socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa)
         memcpy(sa, &sock->_peername->addr, sock->_peername->len);
         return sock->_peername->len;
     }
-
     /* call, copy to cache, and return */
     socklen_t len = get_peername_uncached(sock, sa);
-    sock->_peername = h2o_mem_alloc(offsetof(struct st_h2o_socket_peername_t, addr) + len);
-    sock->_peername->len = len;
-    memcpy(&sock->_peername->addr, sa, len);
+    h2o_socket_setpeername(sock, sa, len);
     return len;
 }
 
@@ -532,7 +538,15 @@ void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, h2o_s
 
     sock->ssl = h2o_mem_alloc(sizeof(*sock->ssl));
     memset(sock->ssl, 0, offsetof(struct st_h2o_socket_ssl_t, output.pool));
+
+    /* setup the buffers; sock->input should be empty, sock->ssl->input.encrypted should contain the initial input, if any */
     h2o_buffer_init(&sock->ssl->input.encrypted, &h2o_socket_buffer_prototype);
+    if (sock->input->size != 0) {
+        h2o_buffer_t *tmp = sock->input;
+        sock->input = sock->ssl->input.encrypted;
+        sock->ssl->input.encrypted = tmp;
+    }
+
     h2o_mem_init_pool(&sock->ssl->output.pool);
     bio = BIO_new(&bio_methods);
     bio->ptr = sock;
