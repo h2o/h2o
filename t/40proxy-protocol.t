@@ -66,7 +66,7 @@ sub fetch_ssl {
         SSL_startHandshake => 0,
     ) or die "failed to connect to host:$!";
     $conn->write($pre);
-    IO::Socket::SSL->start_SSL($conn)
+    IO::Socket::SSL->start_SSL($conn, SSL_verify_mode => 0)
         or die $SSL_ERROR;
     $conn->write($req);
     $conn->read(my $buf, 1048576);
