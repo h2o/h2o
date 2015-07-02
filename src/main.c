@@ -99,9 +99,7 @@ struct listener_config_t {
 };
 
 struct listener_ctx_t {
-    h2o_context_t *ctx;
-    h2o_hostconf_t **hosts;
-    SSL_CTX *ssl_ctx;
+    h2o_accept_ctx_t accept_ctx;
     h2o_socket_t *sock;
 };
 
@@ -1170,12 +1168,9 @@ static void on_accept(h2o_socket_t *listener, int status)
         num_connections(1);
 
         sock->on_close.cb = on_socketclose;
-        sock->on_close.data = ctx->ctx;
+        sock->on_close.data = ctx->accept_ctx.ctx;
 
-        if (ctx->ssl_ctx != NULL)
-            h2o_accept_ssl(ctx->ctx, ctx->hosts, sock, ctx->ssl_ctx);
-        else
-            h2o_http1_accept(ctx->ctx, ctx->hosts, sock);
+        h2o_accept(&ctx->accept_ctx, sock);
 
     } while (--num_accepts != 0);
 }
@@ -1233,13 +1228,12 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             }
             set_cloexec(fd);
         }
-        listeners[i] = (struct listener_ctx_t){
-            &conf.threads[thread_index].ctx,                                              /* ctx */
-            listener_config->hosts,                                                       /* hosts */
-            listener_config->ssl.size != 0 ? listener_config->ssl.entries[0]->ctx : NULL, /* ssl_ctx */
+        listeners[i].accept_ctx.ctx = &conf.threads[thread_index].ctx;
+        listeners[i].accept_ctx.hosts = listener_config->hosts;
+        listeners[i].accept_ctx.ssl_ctx = listener_config->ssl.size != 0 ? listener_config->ssl.entries[0]->ctx : NULL;
+        listeners[i].sock =
             h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, (struct sockaddr *)&listener_config->addr,
-                                     listener_config->addrlen, H2O_SOCKET_FLAG_DONT_READ) /* sock */
-        };
+                                     listener_config->addrlen, H2O_SOCKET_FLAG_DONT_READ);
         listeners[i].sock->data = listeners + i;
     }
     /* and start listening */

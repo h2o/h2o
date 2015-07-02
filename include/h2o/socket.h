@@ -72,7 +72,6 @@ typedef struct st_h2o_socket_peername_t {
  */
 struct st_h2o_socket_t {
     void *data;
-    void *data2;
     struct st_h2o_socket_ssl_t *ssl;
     h2o_buffer_t *input;
     size_t bytes_read;

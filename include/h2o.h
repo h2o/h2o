@@ -648,6 +648,12 @@ struct st_h2o_req_t {
     h2o_mem_pool_t pool;
 };
 
+typedef struct st_h2o_accept_ctx_t {
+    h2o_context_t *ctx;
+    h2o_hostconf_t **hosts;
+    SSL_CTX *ssl_ctx;
+} h2o_accept_ctx_t;
+
 /* token */
 
 extern h2o_token_t h2o__tokens[H2O_MAX_TOKENS];
@@ -713,9 +719,9 @@ ssize_t h2o_delete_header(h2o_headers_t *headers, ssize_t cursor);
 /* util */
 
 /**
- * accepts a SSL connection
+ * accepts a connection
  */
-void h2o_accept_ssl(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, SSL_CTX *ssl_ctx);
+void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock);
 /**
  * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")
  */

@@ -32,10 +32,8 @@
 static void on_ssl_handshake_complete(h2o_socket_t *sock, int status)
 {
     const h2o_iovec_t *ident;
-    h2o_context_t *ctx = sock->data;
-    h2o_hostconf_t **hosts = sock->data2;
+    h2o_accept_ctx_t *ctx = sock->data;
     sock->data = NULL;
-    sock->data2 = NULL;
 
     h2o_iovec_t proto;
     if (status != 0) {
@@ -50,19 +48,22 @@ static void on_ssl_handshake_complete(h2o_socket_t *sock, int status)
         }
     }
     /* connect as http1 */
-    h2o_http1_accept(ctx, hosts, sock);
+    h2o_http1_accept(ctx, sock);
     return;
 
 Is_Http2:
     /* connect as http2 */
-    h2o_http2_accept(ctx, hosts, sock);
+    h2o_http2_accept(ctx, sock);
 }
 
-void h2o_accept_ssl(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, SSL_CTX *ssl_ctx)
+void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
 {
-    sock->data = ctx;
-    sock->data2 = hosts;
-    h2o_socket_ssl_server_handshake(sock, ssl_ctx, on_ssl_handshake_complete);
+    if (ctx->ssl_ctx != NULL) {
+        sock->data = ctx;
+        h2o_socket_ssl_server_handshake(sock, ctx->ssl_ctx, on_ssl_handshake_complete);
+    } else {
+        h2o_http1_accept(ctx, sock);
+    }
 }
 
 size_t h2o_stringify_protocol_version(char *dst, int version)

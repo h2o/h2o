@@ -431,14 +431,13 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             /* should check up to the first octet that phr_parse_request returns an error */
             static const h2o_iovec_t HTTP2_SIG = {H2O_STRLIT("PRI * HTTP/2")};
             if (conn->sock->input->size >= HTTP2_SIG.len && memcmp(conn->sock->input->bytes, HTTP2_SIG.base, HTTP2_SIG.len) == 0) {
-                h2o_context_t *ctx = conn->super.ctx;
-                h2o_hostconf_t **hosts = conn->super.hosts;
+                h2o_accept_ctx_t accept_ctx = {conn->super.ctx, conn->super.hosts};
                 h2o_socket_t *sock = conn->sock;
                 /* destruct the connection after detatching the socket */
                 conn->sock = NULL;
                 close_connection(conn);
                 /* and accept as http2 connection */
-                h2o_http2_accept(ctx, hosts, sock);
+                h2o_http2_accept(&accept_ctx, sock);
                 return;
             }
         }
@@ -688,7 +687,7 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
     return h2o_socket_getpeername(conn->sock, sa);
 }
 
-void h2o_http1_accept(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock)
+void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
 {
     struct st_h2o_http1_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
@@ -696,8 +695,8 @@ void h2o_http1_accept(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *
     memset(conn, 0, offsetof(struct st_h2o_http1_conn_t, req));
 
     /* init properties that need to be non-zero */
-    conn->super.ctx = ctx;
-    conn->super.hosts = hosts;
+    conn->super.ctx = ctx->ctx;
+    conn->super.hosts = ctx->hosts;
     conn->super.get_sockname = get_sockname;
     conn->super.get_peername = get_peername;
     conn->sock = sock;
