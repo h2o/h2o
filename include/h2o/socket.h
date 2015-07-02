@@ -62,10 +62,10 @@ typedef void (*h2o_socket_cb)(h2o_socket_t *sock, int err);
 #include "socket/evloop.h"
 #endif
 
-typedef struct st_h2o_socket_peername_t {
-    struct sockaddr_storage addr;
+struct st_h2o_socket_peername_t {
     socklen_t len;
-} h2o_socket_peername_t;
+    struct sockaddr addr;
+};
 
 /**
  * abstraction layer for sockets (SSL vs. TCP)
@@ -83,6 +83,7 @@ struct st_h2o_socket_t {
         h2o_socket_cb read;
         h2o_socket_cb write;
     } _cb;
+    struct st_h2o_socket_peername_t *_peername;
 };
 
 typedef struct st_h2o_socket_export_t {

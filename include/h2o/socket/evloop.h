@@ -49,7 +49,7 @@ struct st_h2o_timeout_backend_properties_t {
     char _dummy; /* sizeof(empty_struct) differs bet. C (GCC extension) and C++ */
 };
 
-h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, struct sockaddr *addr, socklen_t addrlen, int flags);
+h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags);
 h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *listener);
 
 h2o_evloop_t *h2o_evloop_create(void);

@@ -1231,9 +1231,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         listeners[i].accept_ctx.ctx = &conf.threads[thread_index].ctx;
         listeners[i].accept_ctx.hosts = listener_config->hosts;
         listeners[i].accept_ctx.ssl_ctx = listener_config->ssl.size != 0 ? listener_config->ssl.entries[0]->ctx : NULL;
-        listeners[i].sock =
-            h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, (struct sockaddr *)&listener_config->addr,
-                                     listener_config->addrlen, H2O_SOCKET_FLAG_DONT_READ);
+        listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
         listeners[i].sock->data = listeners + i;
     }
     /* and start listening */
