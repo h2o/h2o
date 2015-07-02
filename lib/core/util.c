@@ -64,7 +64,7 @@ static void accept_ssl_or_http1(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
         h2o_http1_accept(ctx, sock);
 }
 
-static ssize_t parse_proxy_line(char *src, size_t len, struct sockaddr *sa)
+static ssize_t parse_proxy_line(char *src, size_t len, struct sockaddr *sa, socklen_t *salen)
 {
 #define CHECK_EOF() if (p == end) return -2
 #define EXPECT_CHAR(ch) \
@@ -96,7 +96,7 @@ static ssize_t parse_proxy_line(char *src, size_t len, struct sockaddr *sa)
     /* "TCP[46] " */
     CHECK_EOF();
     if (*p++ != 'T') {
-        sa->sa_len = 0; /* indicate that no data has been obtained */
+        *salen = 0; /* indicate that no data has been obtained */
         goto SkipToEOL;
     }
     EXPECT_CHAR('C');
@@ -104,14 +104,16 @@ static ssize_t parse_proxy_line(char *src, size_t len, struct sockaddr *sa)
     CHECK_EOF();
     switch (*p++) {
     case '4':
+        *salen = sizeof(struct sockaddr_in);
+        *((struct sockaddr_in*)sa) = (struct sockaddr_in){};
         sa->sa_family = AF_INET;
-        sa->sa_len = sizeof(struct sockaddr_in);
         addr = &((struct sockaddr_in*)sa)->sin_addr;
         port = &((struct sockaddr_in*)sa)->sin_port;
         break;
     case '6':
+        *salen = sizeof(struct sockaddr_in6);
+        *((struct sockaddr_in6*)sa) = (struct sockaddr_in6){};
         sa->sa_family = AF_INET6;
-        sa->sa_len = sizeof(struct sockaddr_in6);
         addr = &((struct sockaddr_in6*)sa)->sin6_addr;
         port = &((struct sockaddr_in6*)sa)->sin6_port;
         break;
@@ -164,7 +166,8 @@ static void on_read_proxy_line(h2o_socket_t *sock, int status)
     }
 
     struct sockaddr_storage addr;
-    ssize_t r = parse_proxy_line(sock->input->bytes, sock->input->size, (void *)&addr);
+    socklen_t addrlen;
+    ssize_t r = parse_proxy_line(sock->input->bytes, sock->input->size, (void *)&addr, &addrlen);
     switch (r) {
     case -1: /* error, just pass the input to the next handler */
         break;
@@ -172,8 +175,8 @@ static void on_read_proxy_line(h2o_socket_t *sock, int status)
         return;
     default:
         h2o_buffer_consume(&sock->input, r);
-        if (addr.ss_len != 0)
-            h2o_socket_setpeername(sock, (void *)&addr, addr.ss_len);
+        if (addrlen != 0)
+            h2o_socket_setpeername(sock, (void *)&addr, addrlen);
         break;
     }
 
