@@ -178,6 +178,8 @@ SET(LIB_SOURCE_FILES
     lib/handler/redirect.c
     lib/handler/reproxy.c
     lib/handler/mruby.c
+    lib/handler/mruby/init.c
+    lib/handler/mruby/class/core.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/expires.c
     lib/handler/configurator/fastcgi.c

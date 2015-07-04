@@ -35,6 +35,8 @@
 #define MODULE_VERSION "0.0.1"
 #define MODULE_DESCRIPTION MODULE_NAME "/" MODULE_VERSION
 
+void h2o_mrb_class_init(mrb_state *mrb);
+
 enum code_type { H2O_MRUBY_STRING, H2O_MRUBY_FILE };
 
 struct st_h2o_mruby_code_t {
@@ -92,6 +94,7 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
 
     /* ctx has a mrb_state per thread */
     handler_ctx->mrb = mrb_open();
+    h2o_mrb_class_init(handler_ctx->mrb);
     handler_ctx->h2o_mruby_handler_code = h2o_mem_alloc(sizeof(*handler_ctx->h2o_mruby_handler_code));
 
     if (handler_ctx->mrb) {
