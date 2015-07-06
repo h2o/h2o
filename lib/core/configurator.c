@@ -51,6 +51,17 @@ static int setup_configurators(h2o_configurator_context_t *ctx, int is_enter, yo
     return 0;
 }
 
+static int config_timeout(h2o_configurator_command_t *cmd, yoml_t *node, uint64_t *slot)
+{
+    unsigned timeout_in_secs;
+
+    if (h2o_configurator_scanf(cmd, node, "%u", &timeout_in_secs) != 0)
+        return -1;
+
+    *slot = timeout_in_secs * 1000;
+    return 0;
+}
+
 int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *node, int flags_mask, const char **ignore_commands)
 {
     struct st_cmd_value_t {
@@ -239,15 +250,14 @@ static int on_config_max_delegations(h2o_configurator_command_t *cmd, h2o_config
     return h2o_configurator_scanf(cmd, node, "%u", &ctx->globalconf->max_delegations);
 }
 
+static int on_config_handshake_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return config_timeout(cmd, node, &ctx->globalconf->handshake_timeout);
+}
+
 static int on_config_http1_request_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    unsigned timeout_in_secs;
-
-    if (h2o_configurator_scanf(cmd, node, "%u", &timeout_in_secs) != 0)
-        return -1;
-
-    ctx->globalconf->http1.req_timeout = timeout_in_secs * 1000;
-    return 0;
+    return config_timeout(cmd, node, &ctx->globalconf->http1.req_timeout);
 }
 
 static int on_config_http1_upgrade_to_http2(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -261,13 +271,7 @@ static int on_config_http1_upgrade_to_http2(h2o_configurator_command_t *cmd, h2o
 
 static int on_config_http2_idle_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    unsigned timeout_in_secs;
-
-    if (h2o_configurator_scanf(cmd, node, "%u", &timeout_in_secs) != 0)
-        return -1;
-
-    ctx->globalconf->http2.idle_timeout = timeout_in_secs * 1000;
-    return 0;
+    return config_timeout(cmd, node, &ctx->globalconf->http2.idle_timeout);
 }
 
 static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
@@ -308,6 +312,8 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                         on_config_limit_request_body);
         h2o_configurator_define_command(c, "max-delegations", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_max_delegations);
+        h2o_configurator_define_command(c, "handshake-timeout", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_handshake_timeout);
         h2o_configurator_define_command(c, "http1-request-timeout",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http1_request_timeout);

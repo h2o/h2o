@@ -61,6 +61,8 @@ extern "C" {
 
 #define H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE (1024 * 1024 * 1024)
 #define H2O_DEFAULT_MAX_DELEGATIONS 5
+#define H2O_DEFAULT_HANDSHAKE_TIMEOUT_IN_SECS 10
+#define H2O_DEFAULT_HANDSHAKE_TIMEOUT (H2O_DEFAULT_HANDSHAKE_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_HTTP1_REQ_TIMEOUT_IN_SECS 10
 #define H2O_DEFAULT_HTTP1_REQ_TIMEOUT (H2O_DEFAULT_HTTP1_REQ_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2 1
@@ -227,6 +229,11 @@ struct st_h2o_globalconf_t {
      */
     unsigned max_delegations;
 
+    /**
+     * SSL handshake timeout
+     */
+    uint64_t handshake_timeout;
+
     struct {
         /**
          * request timeout (in milliseconds)
@@ -321,6 +328,11 @@ struct st_h2o_context_t {
      * flag indicating if shutdown has been requested
      */
     int shutdown_requested;
+
+    /**
+     * SSL handshake timeout
+     */
+    h2o_timeout_t handshake_timeout;
 
     struct {
         /**
