@@ -16,6 +16,7 @@ sub spawn_h2o {
     open my $fh, ">", "$tempdir/h2o.conf"
         or die "failed to create file:$tempdir/h2o.conf:$!";
     print $fh <<"EOT";
+handshake-timeout: 3
 hosts:
   default:
     access-log:
@@ -84,6 +85,19 @@ sub last_log {
     $last;
 }
 
+sub test_timeout {
+    local $@;
+    my $gotsig = 0;
+    local $SIG{ALRM} = sub {
+        $gotsig = 1;
+        die "gotsig";
+    };
+    alarm(5);
+    eval { fetch("") };
+    alarm(0);
+    ok ! $gotsig;
+}
+
 subtest "http" => sub {
     my $guard = spawn_h2o(1, 0);
     subtest "with proxy" => sub {
@@ -95,6 +109,9 @@ subtest "http" => sub {
         my $resp = fetch("GET / HTTP/1.0\r\n\r\n");
         like $resp, qr{^HTTP/1.1 200 OK\r\n}s;
         is last_log(), "127.0.0.1";
+    };
+    subtest "timeout" => sub {
+        test_timeout();
     };
 };
 
@@ -110,6 +127,9 @@ subtest "https" => sub {
         like $resp, qr{^HTTP/1.1 200 OK\r\n}s;
         is last_log(), "127.0.0.1";
     };
+    subtest "timeout" => sub {
+        test_timeout();
+    };
 };
 
 subtest "off" => sub {
@@ -122,6 +142,12 @@ subtest "off" => sub {
         my $resp = fetch("GET / HTTP/1.0\r\n\r\n");
         like $resp, qr{^HTTP/1.1 200 OK\r\n}s;
     };
+};
+
+subtest "https handshake timeout" => sub {
+    # timeout test for PROXY:OFF over HTTPS is implemented here since it is easier to do so
+    my $guard = spawn_h2o(0, 1);
+    test_timeout();
 };
 
 done_testing;
