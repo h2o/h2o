@@ -927,7 +927,8 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     return 0;
 
 ProxyConflict:
-    h2o_configurator_errprintf(cmd, node, "`proxy-protocol` cannot be turned %s, already defined as opposite", proxy_protocol ? "on" : "off");
+    h2o_configurator_errprintf(cmd, node, "`proxy-protocol` cannot be turned %s, already defined as opposite",
+                               proxy_protocol ? "on" : "off");
     return -1;
 }
 

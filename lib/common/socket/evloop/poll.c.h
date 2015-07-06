@@ -144,8 +144,7 @@ static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock)
 
     if (sock->fd >= loop->socks.size) {
         h2o_vector_reserve(NULL, (void *)&loop->socks, sizeof(loop->socks.entries[0]), sock->fd + 1);
-        memset(loop->socks.entries + loop->socks.size, 0,
-               (sock->fd + 1 - loop->socks.size) * sizeof(loop->socks.entries[0]));
+        memset(loop->socks.entries + loop->socks.size, 0, (sock->fd + 1 - loop->socks.size) * sizeof(loop->socks.entries[0]));
         loop->socks.size = sock->fd + 1;
     }
 

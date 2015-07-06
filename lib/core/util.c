@@ -66,19 +66,21 @@ static void accept_ssl_or_http1(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
 
 static ssize_t parse_proxy_line(char *src, size_t len, struct sockaddr *sa, socklen_t *salen)
 {
-#define CHECK_EOF() if (p == end) return -2
-#define EXPECT_CHAR(ch) \
-    do { \
-        CHECK_EOF(); \
-        if (*p++ != ch) \
-            return -1; \
+#define CHECK_EOF()                                                                                                                \
+    if (p == end)                                                                                                                  \
+    return -2
+#define EXPECT_CHAR(ch)                                                                                                            \
+    do {                                                                                                                           \
+        CHECK_EOF();                                                                                                               \
+        if (*p++ != ch)                                                                                                            \
+            return -1;                                                                                                             \
     } while (0)
-#define SKIP_TO_WS() \
-    do { \
-        do { \
-            CHECK_EOF(); \
-        } while (*p++ != ' '); \
-        --p; \
+#define SKIP_TO_WS()                                                                                                               \
+    do {                                                                                                                           \
+        do {                                                                                                                       \
+            CHECK_EOF();                                                                                                           \
+        } while (*p++ != ' ');                                                                                                     \
+        --p;                                                                                                                       \
     } while (0)
 
     char *p = src, *end = p + len;
@@ -105,17 +107,17 @@ static ssize_t parse_proxy_line(char *src, size_t len, struct sockaddr *sa, sock
     switch (*p++) {
     case '4':
         *salen = sizeof(struct sockaddr_in);
-        *((struct sockaddr_in*)sa) = (struct sockaddr_in){};
+        *((struct sockaddr_in *)sa) = (struct sockaddr_in){};
         sa->sa_family = AF_INET;
-        addr = &((struct sockaddr_in*)sa)->sin_addr;
-        port = &((struct sockaddr_in*)sa)->sin_port;
+        addr = &((struct sockaddr_in *)sa)->sin_addr;
+        port = &((struct sockaddr_in *)sa)->sin_port;
         break;
     case '6':
         *salen = sizeof(struct sockaddr_in6);
-        *((struct sockaddr_in6*)sa) = (struct sockaddr_in6){};
+        *((struct sockaddr_in6 *)sa) = (struct sockaddr_in6){};
         sa->sa_family = AF_INET6;
-        addr = &((struct sockaddr_in6*)sa)->sin6_addr;
-        port = &((struct sockaddr_in6*)sa)->sin6_port;
+        addr = &((struct sockaddr_in6 *)sa)->sin6_addr;
+        port = &((struct sockaddr_in6 *)sa)->sin6_port;
         break;
     default:
         return -1;
