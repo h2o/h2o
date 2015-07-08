@@ -250,6 +250,13 @@ static void shutdown_ssl(h2o_socket_t *sock, int status)
     if (status != 0)
         goto Close;
 
+    if (sock->_cb.write != NULL) {
+        /* note: libuv calls the write callback after the socket is closed by uv_close (with status set to 0 if the write succeeded)
+         */
+        sock->_cb.write = NULL;
+        goto Close;
+    }
+
     if ((ret = SSL_shutdown(sock->ssl->ssl)) == -1) {
         goto Close;
     }
