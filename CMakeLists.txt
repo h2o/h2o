@@ -51,6 +51,7 @@ ENDIF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.2"))
 OPTION(WITH_BUNDLED_SSL "whether or not to use the bundled libressl" ${WITH_BUNDLED_SSL_DEFAULT})
 OPTION(BUILD_SHARED_LIBS "whether to build a shared library" OFF)
 OPTION(WITH_MRUBY "whether or not to build with mruby support" OFF)
+OPTION(WITH_MEMCACHED "whether or not use build with memcached support" OFF)
 
 IF (WITH_BUNDLED_SSL)
     SET(BUNDLED_SSL_INCLUDE_DIR "${CMAKE_BINARY_DIR}/libressl-build/include")
@@ -120,6 +121,14 @@ IF (NOT MRUBY_FOUND)
     SET(MRUBY_LIBRARIES -lmruby)
 ENDIF (NOT MRUBY_FOUND)
 
+IF (PKG_CONFIG_FOUND)
+    PKG_CHECK_MODULES(MEMCACHED libmemcached)
+    IF (MEMCACHED_FOUND)
+        INCLUDE_DIRECTORIES(${MEMCACHED_INCLUDE_DIRS})
+        LINK_DIRECTORIES(${MEMCACHED_LIBRARY_DIRS})
+    ENDIF (MEMCACHED_FOUND)
+ENDIF (PKG_CONFIG_FOUND)
+
 SET(CMAKE_C_FLAGS "-O2 -g -Wall -Wno-unused-function ${CMAKE_C_FLAGS} -DH2O_ROOT=\"\\\"${CMAKE_INSTALL_PREFIX}\\\"\"")
 
 INCLUDE_DIRECTORIES(
@@ -130,6 +139,7 @@ INCLUDE_DIRECTORIES(
     deps/picotest
     deps/yaml/include
     deps/yoml)
+SET(EXTRA_LIBRARIES ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
 
 SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/api.c
@@ -195,6 +205,11 @@ SET(LIB_SOURCE_FILES
     lib/http2/hpack.c
     lib/http2/scheduler.c
     lib/http2/stream.c)
+IF (WITH_MEMCACHED)
+    LIST(APPEND LIB_SOURCE_FILES lib/common/libmemcached.c)
+    ADD_DEFINITIONS("-DH2O_USE_MEMCACHED=1")
+    SET(EXTRA_LIBRARIES "memcached" ${EXTRA_LIBRARIES})
+ENDIF (WITH_MEMCACHED)
 
 SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}
@@ -236,8 +251,6 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/handler/redirect.c
     lib/http2/hpack.c
     lib/http2/scheduler.c)
-
-SET(EXTRA_LIBRARIES ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
 
 ADD_LIBRARY(libh2o ${LIB_SOURCE_FILES})
 ADD_LIBRARY(libh2o-evloop ${LIB_SOURCE_FILES})

@@ -183,6 +183,11 @@ static int setup_ssl(const char *cert_file, const char *key_file)
     accept_ctx.ssl_ctx = SSL_CTX_new(SSLv23_server_method());
     SSL_CTX_set_options(accept_ctx.ssl_ctx, SSL_OP_NO_SSLv2);
 
+#if H2O_USE_MEMCACHED
+    h2o_accept_setup_async_ssl_resumption(h2o_libmemcached_create_context("--SERVER=127.0.0.1 --BINARY-PROTOCOL", 1), 86400);
+    h2o_socket_ssl_async_resumption_setup_ctx(accept_ctx.ssl_ctx);
+#endif
+
     /* load certificate and private key */
     if (SSL_CTX_use_certificate_file(accept_ctx.ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
         fprintf(stderr, "an error occurred while trying to load server certificate file:%s\n", cert_file);

@@ -37,6 +37,7 @@ extern "C" {
 #include <unistd.h>
 #include <openssl/ssl.h>
 #include "h2o/hostinfo.h"
+#include "h2o/libmemcached.h"
 #include "h2o/linklist.h"
 #include "h2o/http1client.h"
 #include "h2o/memory.h"
@@ -323,7 +324,9 @@ struct st_h2o_context_t {
      */
     struct {
         h2o_multithread_receiver_t hostinfo_getaddr;
+#if H2O_USE_MEMCACHED
         h2o_multithread_receiver_t libmemcached;
+#endif
     } receivers;
     /**
      * flag indicating if shutdown has been requested
@@ -736,6 +739,10 @@ ssize_t h2o_delete_header(h2o_headers_t *headers, ssize_t cursor);
  * accepts a connection
  */
 void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock);
+/**
+ * setups accept context for async SSL resumption
+ */
+void h2o_accept_setup_async_ssl_resumption(h2o_libmemcached_context_t *ctx, unsigned expiration);
 /**
  * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")
  */
