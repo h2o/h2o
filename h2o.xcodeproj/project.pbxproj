@@ -264,8 +264,8 @@
 		105534EA1A42A87E00627ECB /* _templates.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = _templates.c.h; sourceTree = "<group>"; };
 		105534EC1A42AD5E00627ECB /* templates.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = templates.c.h; sourceTree = "<group>"; };
 		105534EE1A440FC800627ECB /* config.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = config.c; sourceTree = "<group>"; };
-		105534F21A460EF600627ECB /* 00unit.evloop.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = 00unit.evloop.t; sourceTree = "<group>"; };
-		105534F31A460EF600627ECB /* 00unit.libuv.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = 00unit.libuv.t; sourceTree = "<group>"; };
+		105534F21A460EF600627ECB /* 00unit.evloop.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = 00unit.evloop.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		105534F31A460EF600627ECB /* 00unit.libuv.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = 00unit.libuv.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534F41A460EF600627ECB /* 10http1client.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 10http1client.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534F51A460EF600627ECB /* 40protocol.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 40protocol.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534F61A460EF600627ECB /* 50file-config.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50file-config.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1511,6 +1511,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-luv",
@@ -1565,6 +1566,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lwslay",
 					"-lnettle",
 					"-lssl",
@@ -1644,6 +1646,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-luv",
@@ -1690,6 +1693,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lwslay",
 					"-lnettle",
 					"-lssl",
@@ -1879,6 +1883,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lwslay",
 					"-lnettle",
 					"-lssl",
@@ -1902,6 +1907,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lwslay",
 					"-lnettle",
 					"-lssl",
@@ -1931,6 +1937,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 				);
@@ -1957,6 +1964,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 				);
