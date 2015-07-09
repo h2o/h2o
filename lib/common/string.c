@@ -174,7 +174,7 @@ h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t l
     char remaining_input[4];
 
     decoded.len = len * 3 / 4;
-    decoded.base = h2o_mem_alloc_pool(pool, decoded.len + 1);
+    decoded.base = pool != NULL ? h2o_mem_alloc_pool(pool, decoded.len + 1) : h2o_mem_alloc(decoded.len + 1);
     dst = (uint8_t *)decoded.base;
 
     while (len >= 4) {
@@ -221,7 +221,7 @@ Error:
     return h2o_iovec_init(NULL, 0);
 }
 
-void h2o_base64_encode(char *dst, const void *_src, size_t len, int url_encoded)
+size_t h2o_base64_encode(char *_dst, const void *_src, size_t len, int url_encoded)
 {
     static const char *MAP = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                              "abcdefghijklmnopqrstuvwxyz"
@@ -230,6 +230,7 @@ void h2o_base64_encode(char *dst, const void *_src, size_t len, int url_encoded)
                                          "abcdefghijklmnopqrstuvwxyz"
                                          "0123456789-_";
 
+    char *dst = _dst;
     const uint8_t *src = _src;
     const char *map = url_encoded ? MAP_URL_ENCODED : MAP;
     uint32_t quad;
@@ -260,6 +261,7 @@ void h2o_base64_encode(char *dst, const void *_src, size_t len, int url_encoded)
     }
 
     *dst = '\0';
+    return dst - _dst;
 }
 
 const char *h2o_get_filext(const char *path, size_t len)

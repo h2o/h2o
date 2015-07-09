@@ -80,18 +80,20 @@ static void async_resumption_get(h2o_socket_t *sock, h2o_iovec_t session_id)
 {
     struct st_h2o_accept_data_t *data = sock->data;
 
-    data->async_resumption_get_req = h2o_libmemcached_get(async_resumption_context.memc, data->ctx->libmemcached_receiver,
-                                                          session_id, async_resumption_on_get, data);
+    data->async_resumption_get_req =
+        h2o_libmemcached_get(async_resumption_context.memc, data->ctx->libmemcached_receiver, session_id, async_resumption_on_get,
+                             data, H2O_LIBMEMCACHED_ENCODE_KEY | H2O_LIBMEMCACHED_ENCODE_VALUE);
 }
 
 static void async_resumption_new(h2o_iovec_t session_id, h2o_iovec_t session_data)
 {
-    h2o_libmemcached_set(async_resumption_context.memc, session_id, session_data, time(NULL) + async_resumption_context.expiration);
+    h2o_libmemcached_set(async_resumption_context.memc, session_id, session_data, time(NULL) + async_resumption_context.expiration,
+                         H2O_LIBMEMCACHED_ENCODE_KEY | H2O_LIBMEMCACHED_ENCODE_VALUE);
 }
 
 static void async_resumption_remove(h2o_iovec_t session_id)
 {
-    h2o_libmemcached_delete(async_resumption_context.memc, session_id);
+    h2o_libmemcached_delete(async_resumption_context.memc, session_id, H2O_LIBMEMCACHED_ENCODE_KEY);
 }
 
 void h2o_accept_setup_async_ssl_resumption(h2o_libmemcached_context_t *memc, unsigned expiration)

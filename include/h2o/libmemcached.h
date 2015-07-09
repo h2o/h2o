@@ -27,6 +27,9 @@
 #include "h2o/memory.h"
 #include "h2o/multithread.h"
 
+#define H2O_LIBMEMCACHED_ENCODE_KEY 0x1
+#define H2O_LIBMEMCACHED_ENCODE_VALUE 0x2
+
 typedef struct st_h2o_libmemcached_context_t h2o_libmemcached_context_t;
 typedef struct st_h2o_libmemcached_req_t h2o_libmemcached_req_t;
 typedef void (*h2o_libmemcached_get_cb)(h2o_iovec_t value, void *cb_data);
@@ -36,12 +39,12 @@ h2o_libmemcached_context_t *h2o_libmemcached_create_context(const char *config, 
 void h2o_libmemcached_receiver(h2o_multithread_receiver_t *receiver, h2o_linklist_t *messages);
 
 h2o_libmemcached_req_t *h2o_libmemcached_get(h2o_libmemcached_context_t *ctx, h2o_multithread_receiver_t *receiver, h2o_iovec_t key,
-                                             h2o_libmemcached_get_cb cb, void *cb_data);
+                                             h2o_libmemcached_get_cb cb, void *cb_data, int flags);
 
 void h2o_libmemcached_cancel_get(h2o_libmemcached_context_t *ctx, h2o_libmemcached_req_t *req);
 
-void h2o_libmemcached_set(h2o_libmemcached_context_t *ctx, h2o_iovec_t key, h2o_iovec_t value, time_t expiration);
+void h2o_libmemcached_set(h2o_libmemcached_context_t *ctx, h2o_iovec_t key, h2o_iovec_t value, time_t expiration, int flags);
 
-void h2o_libmemcached_delete(h2o_libmemcached_context_t *ctx, h2o_iovec_t key);
+void h2o_libmemcached_delete(h2o_libmemcached_context_t *ctx, h2o_iovec_t key, int flags);
 
 #endif

@@ -22,6 +22,7 @@
 #include <libmemcached/memcached.h>
 #include "h2o/linklist.h"
 #include "h2o/libmemcached.h"
+#include "h2o/string_.h"
 
 struct st_h2o_libmemcached_context_t {
     pthread_mutex_t mutex;
@@ -46,6 +47,7 @@ struct st_h2o_libmemcached_req_t {
             h2o_multithread_message_t message;
             h2o_libmemcached_get_cb cb;
             void *cb_data;
+            int value_is_encoded;
             h2o_iovec_t value;
         } get;
         struct {
@@ -59,14 +61,19 @@ struct st_h2o_libmemcached_req_t {
     } key;
 };
 
-static h2o_libmemcached_req_t *create_req(enum en_h2o_libmemcached_req_type_t type, h2o_iovec_t key)
+static h2o_libmemcached_req_t *create_req(enum en_h2o_libmemcached_req_type_t type, h2o_iovec_t key, int encode_key)
 {
-    h2o_libmemcached_req_t *req = h2o_mem_alloc(offsetof(h2o_libmemcached_req_t, key.base) + key.len);
+    h2o_libmemcached_req_t *req =
+        h2o_mem_alloc(offsetof(h2o_libmemcached_req_t, key.base) + (encode_key ? key.len * 4 / 3 + 2 : key.len));
     req->type = type;
     req->pending = (h2o_linklist_t){};
     memset(&req->data, 0, sizeof(req->data));
-    req->key.len = key.len;
-    memcpy(req->key.base, key.base, key.len);
+    if (encode_key) {
+        req->key.len = h2o_base64_encode(req->key.base, key.base, key.len, 1);
+    } else {
+        req->key.len = key.len;
+        memcpy(req->key.base, key.base, key.len);
+    }
     return req;
 }
 
@@ -156,19 +163,26 @@ void h2o_libmemcached_receiver(h2o_multithread_receiver_t *receiver, h2o_linklis
         h2o_libmemcached_req_t *req = H2O_STRUCT_FROM_MEMBER(h2o_libmemcached_req_t, data.get.message.link, messages->next);
         h2o_linklist_unlink(&req->data.get.message.link);
         assert(req->type == REQ_TYPE_GET);
-        if (req->data.get.cb != NULL)
+        if (req->data.get.cb != NULL) {
+            if (req->data.get.value_is_encoded && req->data.get.value.len != 0) {
+                h2o_iovec_t decoded = h2o_decode_base64url(NULL, req->data.get.value.base, req->data.get.value.len);
+                free(req->data.get.value.base);
+                req->data.get.value = decoded;
+            }
             req->data.get.cb(req->data.get.value, req->data.get.cb_data);
+        }
         free_req(req);
     }
 }
 
 h2o_libmemcached_req_t *h2o_libmemcached_get(h2o_libmemcached_context_t *ctx, h2o_multithread_receiver_t *receiver, h2o_iovec_t key,
-                                             h2o_libmemcached_get_cb cb, void *cb_data)
+                                             h2o_libmemcached_get_cb cb, void *cb_data, int flags)
 {
-    h2o_libmemcached_req_t *req = create_req(REQ_TYPE_GET, key);
+    h2o_libmemcached_req_t *req = create_req(REQ_TYPE_GET, key, (flags & H2O_LIBMEMCACHED_ENCODE_KEY) != 0);
     req->data.get.receiver = receiver;
     req->data.get.cb = cb;
     req->data.get.cb_data = cb_data;
+    req->data.get.value_is_encoded = (flags & H2O_LIBMEMCACHED_ENCODE_VALUE) != 0;
     dispatch(ctx, req);
     return req;
 }
@@ -189,18 +203,23 @@ void h2o_libmemcached_cancel_get(h2o_libmemcached_context_t *ctx, h2o_libmemcach
         free_req(req);
 }
 
-void h2o_libmemcached_set(h2o_libmemcached_context_t *ctx, h2o_iovec_t key, h2o_iovec_t value, time_t expiration)
+void h2o_libmemcached_set(h2o_libmemcached_context_t *ctx, h2o_iovec_t key, h2o_iovec_t value, time_t expiration, int flags)
 {
-    h2o_libmemcached_req_t *req = create_req(REQ_TYPE_SET, key);
-    req->data.set.value = h2o_iovec_init(h2o_mem_alloc(value.len), value.len);
-    memcpy(req->data.set.value.base, value.base, value.len);
+    h2o_libmemcached_req_t *req = create_req(REQ_TYPE_SET, key, (flags & H2O_LIBMEMCACHED_ENCODE_KEY) != 0);
+    if ((flags & H2O_LIBMEMCACHED_ENCODE_VALUE) != 0) {
+        req->data.set.value.base = h2o_mem_alloc(value.len * 4 / 3 + 2);
+        req->data.set.value.len = h2o_base64_encode(req->data.set.value.base, value.base, value.len, 1);
+    } else {
+        req->data.set.value = h2o_iovec_init(h2o_mem_alloc(value.len), value.len);
+        memcpy(req->data.set.value.base, value.base, value.len);
+    }
     req->data.set.expiration = expiration;
     dispatch(ctx, req);
 }
 
-void h2o_libmemcached_delete(h2o_libmemcached_context_t *ctx, h2o_iovec_t key)
+void h2o_libmemcached_delete(h2o_libmemcached_context_t *ctx, h2o_iovec_t key, int flags)
 {
-    h2o_libmemcached_req_t *req = create_req(REQ_TYPE_DELETE, key);
+    h2o_libmemcached_req_t *req = create_req(REQ_TYPE_DELETE, key, (flags & H2O_LIBMEMCACHED_ENCODE_KEY) != 0);
     dispatch(ctx, req);
 }
 
