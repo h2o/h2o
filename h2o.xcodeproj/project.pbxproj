@@ -371,6 +371,7 @@
 		108867741AD9069900987967 /* defaults.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = defaults.c.h; sourceTree = "<group>"; };
 		10A3D3D01B4CDBC700327CF9 /* libmemcached.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = libmemcached.h; sourceTree = "<group>"; };
 		10A3D3D11B4CDBDC00327CF9 /* libmemcached.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = libmemcached.c; sourceTree = "<group>"; };
+		10A3D3D61B4F1E3200327CF9 /* 50mruby.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50mruby.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10A60DE91B0D87FE006E38EC /* annotate-backtrace-symbols */ = {isa = PBXFileReference; lastKnownFileType = text; path = "annotate-backtrace-symbols"; sourceTree = "<group>"; };
 		10AA2E931A80A592004322AC /* time_.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = time_.h; sourceTree = "<group>"; };
 		10AA2E951A80A612004322AC /* time.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = time.c; sourceTree = "<group>"; };
@@ -1013,6 +1014,7 @@
 				100AE41A1B27D74800CE18BB /* 50file-range.t */,
 				1058C87F1AA42568008D6180 /* 50headers.t */,
 				105534F71A460F2E00627ECB /* 50mimemap.t */,
+				10A3D3D61B4F1E3200327CF9 /* 50mruby.t */,
 				105534F81A460F2E00627ECB /* 50post-size-limit.t */,
 				10AA2EA81A8DAFD4004322AC /* 50redirect.t */,
 				108215061AAD41A000D27E66 /* 50reverse-proxy */,

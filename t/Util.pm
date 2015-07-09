@@ -11,13 +11,22 @@ use Test::More;
 use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir exec_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2);
+our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
 
 sub bindir {
     $ENV{BINARY_DIR} || '.';
+}
+
+sub server_features {
+    open my $fh, "-|", bindir() . "/h2o", "--version"
+        or die "failed to invoke: h2o --version:$!";
+    <$fh>; # skip h2o version
+    +{
+        map { chomp($_); split /:/, $_, 2 } <$fh>
+    };
 }
 
 sub exec_unittest {
