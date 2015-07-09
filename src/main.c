@@ -1526,6 +1526,13 @@ int main(int argc, char **argv)
                 break;
             case 'v':
                 printf("h2o version " H2O_VERSION "\n");
+                printf("OpenSSL: %s\n", SSLeay_version(SSLEAY_VERSION));
+#if H2O_USE_MRUBY
+                printf("mruby: YES\n"); /* TODO determine the way to obtain the version of mruby (that is being linked dynamically) */
+#endif
+#if H2O_USE_MEMCACHED
+                printf("memcached: YES\n"); /* ditto */
+#endif
                 exit(0);
             case 'h':
                 printf("h2o version " H2O_VERSION "\n"
