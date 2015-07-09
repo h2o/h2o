@@ -33,9 +33,7 @@ struct st_h2o_accept_data_t {
     h2o_accept_ctx_t *ctx;
     h2o_socket_t *sock;
     h2o_timeout_entry_t timeout;
-#if H2O_USE_MEMCACHED
     h2o_libmemcached_req_t *async_resumption_get_req;
-#endif
 };
 
 static void on_accept_timeout(h2o_timeout_entry_t *entry);
@@ -49,9 +47,7 @@ static struct st_h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2
     data->timeout = (h2o_timeout_entry_t){};
     data->timeout.cb = on_accept_timeout;
     h2o_timeout_link(ctx->ctx->loop, &ctx->ctx->handshake_timeout, &data->timeout);
-#if H2O_USE_MEMCACHED
     data->async_resumption_get_req = NULL;
-#endif
 
     sock->data = data;
     return data;
@@ -60,9 +56,7 @@ static struct st_h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2
 static h2o_accept_ctx_t *free_accept_data(struct st_h2o_accept_data_t *data)
 {
     h2o_accept_ctx_t *ctx = data->ctx;
-#if H2O_USE_MEMCACHED
     assert(data->async_resumption_get_req == NULL);
-#endif
     h2o_timeout_unlink(&data->timeout);
     free(data);
     return ctx;
@@ -86,7 +80,7 @@ static void async_resumption_get(h2o_socket_t *sock, h2o_iovec_t session_id)
 {
     struct st_h2o_accept_data_t *data = sock->data;
 
-    data->async_resumption_get_req = h2o_libmemcached_get(async_resumption_context.memc, &data->ctx->ctx->receivers.libmemcached,
+    data->async_resumption_get_req = h2o_libmemcached_get(async_resumption_context.memc, data->ctx->libmemcached_receiver,
                                                           session_id, async_resumption_on_get, data);
 }
 

@@ -87,6 +87,7 @@ static int post_test(h2o_handler_t *self, h2o_req_t *req)
 
 static h2o_globalconf_t config;
 static h2o_context_t ctx;
+static h2o_multithread_receiver_t libmemcached_receiver;
 static h2o_accept_ctx_t accept_ctx;
 
 #if H2O_USE_LIBUV
@@ -184,6 +185,7 @@ static int setup_ssl(const char *cert_file, const char *key_file)
     SSL_CTX_set_options(accept_ctx.ssl_ctx, SSL_OP_NO_SSLv2);
 
 #if H2O_USE_MEMCACHED
+    accept_ctx.libmemcached_receiver = &libmemcached_receiver;
     h2o_accept_setup_async_ssl_resumption(h2o_libmemcached_create_context("--SERVER=127.0.0.1 --BINARY-PROTOCOL", 1), 86400);
     h2o_socket_ssl_async_resumption_setup_ctx(accept_ctx.ssl_ctx);
 #endif
@@ -228,6 +230,9 @@ int main(int argc, char **argv)
     h2o_context_init(&ctx, &loop, &config);
 #else
     h2o_context_init(&ctx, h2o_evloop_create(), &config);
+#endif
+#if H2O_USE_MEMCACHED
+    h2o_multithread_register_receiver(ctx.queue, &libmemcached_receiver, h2o_libmemcached_receiver);
 #endif
 
     /* disabled by default: uncomment the block below to use HTTPS instead of HTTP */

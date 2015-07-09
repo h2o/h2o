@@ -324,9 +324,6 @@ struct st_h2o_context_t {
      */
     struct {
         h2o_multithread_receiver_t hostinfo_getaddr;
-#if H2O_USE_MEMCACHED
-        h2o_multithread_receiver_t libmemcached;
-#endif
     } receivers;
     /**
      * flag indicating if shutdown has been requested
@@ -669,6 +666,7 @@ typedef struct st_h2o_accept_ctx_t {
     h2o_hostconf_t **hosts;
     SSL_CTX *ssl_ctx;
     int expect_proxy_line;
+    h2o_multithread_receiver_t *libmemcached_receiver;
 } h2o_accept_ctx_t;
 
 /* token */
