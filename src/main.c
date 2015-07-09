@@ -127,10 +127,19 @@ static struct {
     int max_connections;
     size_t num_threads;
     int tfo_queues;
+#if H2O_USE_MEMCACHED
+    struct {
+        char *config;
+        size_t max_threads;
+    } memcached_session_resumption;
+#endif
     struct {
         pthread_t tid;
         h2o_context_t ctx;
         h2o_multithread_receiver_t server_notifications;
+#if H2O_USE_MEMCACHED
+        h2o_multithread_receiver_t libmemcached;
+#endif
     } *threads;
     volatile sig_atomic_t shutdown_requested;
     struct {
@@ -151,9 +160,12 @@ static struct {
     1024,            /* max_connections */
     0,               /* initialized in main() */
     0,               /* initialized in main() */
-    NULL,            /* thread_ids */
-    0,               /* shutdown_requested */
-    {},              /* state */
+#if H2O_USE_MEMCACHED
+    {}, /* memcached_session_resumption */
+#endif
+    NULL, /* thread_ids */
+    0,    /* shutdown_requested */
+    {},   /* state */
 };
 
 static void set_cloexec(int fd)
@@ -1020,18 +1032,50 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
     if (h2o_configurator_scanf(cmd, node, "%zu", &conf.num_threads) != 0)
         return -1;
     if (conf.num_threads == 0) {
-        h2o_configurator_errprintf(cmd, node, "num-threads should be >=1");
+        h2o_configurator_errprintf(cmd, node, "num-threads must be >=1");
         return -1;
     }
     return 0;
 }
+
+#if H2O_USE_MEMCACHED
+
+static int on_config_memcached_session_resumption(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    conf.memcached_session_resumption.config = h2o_strdup(NULL, node->data.scalar, SIZE_MAX).base;
+    return 0;
+}
+
+static int on_config_memcached_session_resumption_max_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
+                                                              yoml_t *node)
+{
+    if (h2o_configurator_scanf(cmd, node, "%zu", &conf.memcached_session_resumption.max_threads) != 0)
+        return -1;
+    if (conf.memcached_session_resumption.max_threads == 0) {
+        h2o_configurator_errprintf(cmd, node, "memcached-session-resumption-max-threads must be >=1");
+        return -1;
+    }
+    return 0;
+}
+
+#else
+
+static int on_config_memcached_session_resumption(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    h2o_configurator_errprintf(cmd, node, "the server has been build without support for libmemcached");
+    return -1;
+}
+
+#define on_config_memcached_session_resumption_max_threads on_config_memcached_session_resumption
+
+#endif
 
 static int on_config_num_name_resolution_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     if (h2o_configurator_scanf(cmd, node, "%zu", &h2o_hostinfo_max_threads) != 0)
         return -1;
     if (h2o_hostinfo_max_threads == 0) {
-        h2o_configurator_errprintf(cmd, node, "num-name-resolution-threads should be >=1");
+        h2o_configurator_errprintf(cmd, node, "num-name-resolution-threads must be >=1");
         return -1;
     }
     return 0;
@@ -1239,6 +1283,10 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     h2o_context_init(&conf.threads[thread_index].ctx, h2o_evloop_create(), &conf.globalconf);
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].server_notifications,
                                       on_server_notification);
+#if H2O_USE_MEMCACHED
+    h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].libmemcached,
+                                      h2o_libmemcached_receiver);
+#endif
     conf.threads[thread_index].tid = pthread_self();
 
     /* setup listeners */
@@ -1255,11 +1303,16 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             }
             set_cloexec(fd);
         }
+        memset(listeners + i, 0, sizeof(listeners[i]));
         listeners[i].accept_ctx.ctx = &conf.threads[thread_index].ctx;
         listeners[i].accept_ctx.hosts = listener_config->hosts;
-        listeners[i].accept_ctx.ssl_ctx = listener_config->ssl.size != 0 ? listener_config->ssl.entries[0]->ctx : NULL;
-        listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
+        if (listener_config->ssl.size != 0)
+            listeners[i].accept_ctx.ssl_ctx = listener_config->ssl.entries[0]->ctx;
         listeners[i].accept_ctx.expect_proxy_line = listener_config->proxy_protocol;
+#if H2O_USE_MEMCACHED
+        listeners[i].accept_ctx.libmemcached_receiver = &conf.threads[thread_index].libmemcached;
+#endif
+        listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
         listeners[i].sock->data = listeners + i;
     }
     /* and start listening */
@@ -1394,6 +1447,14 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
                                         on_config_num_name_resolution_threads);
         h2o_configurator_define_command(c, "tcp-fastopen", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_tcp_fastopen);
+#if H2O_USE_MEMCACHED
+        h2o_configurator_define_command(c, "memcached-session-resumption",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_memcached_session_resumption);
+        h2o_configurator_define_command(c, "memcached-session-resumption-max-threads",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_memcached_session_resumption_max_threads);
+#endif
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
@@ -1416,6 +1477,9 @@ int main(int argc, char **argv)
 
     conf.num_threads = h2o_numproc();
     conf.tfo_queues = H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE;
+#if H2O_USE_MEMCACHED
+    conf.memcached_session_resumption.max_threads = conf.num_threads;
+#endif
     h2o_hostinfo_max_threads = H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS;
     setup_configurators();
 
@@ -1539,6 +1603,18 @@ int main(int argc, char **argv)
             return EX_CONFIG;
         }
     }
+
+#if H2O_USE_MEMCACHED
+    if (conf.memcached_session_resumption.config != NULL) {
+        h2o_libmemcached_context_t *memc_ctx = h2o_libmemcached_create_context(conf.memcached_session_resumption.config,
+                                                                               conf.memcached_session_resumption.max_threads);
+        h2o_accept_setup_async_ssl_resumption(memc_ctx, 86400);
+        size_t i;
+        for (i = 0; i != conf.num_threads; ++i)
+            if (conf.listeners[i]->ssl.size != 0)
+                h2o_socket_ssl_async_resumption_setup_ctx(conf.listeners[i]->ssl.entries[0]->ctx);
+    }
+#endif
 
     unsetenv("SERVER_STARTER_PORT");
 
