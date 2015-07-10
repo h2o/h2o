@@ -7,7 +7,7 @@ before_install:
   # upgrade g++ and libstdc++ to build nghttp2
   - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
   - sudo apt-get -qq update
-  - sudo apt-get install -qq g++-4.8 libmemcached-dev libstdc++-4.8-dev memcached php5-cgi
+  - sudo apt-get install -qq g++-4.8 libstdc++-4.8-dev memcached php5-cgi
   - if [ "$CXX" = "g++" ]; then export CXX="g++-4.8"; fi
   - $CXX --version
   # for speed, pre-install deps installed in `before_script` section as ubuntu packages
@@ -24,12 +24,15 @@ before_script:
   - misc/install-perl-module.pl Net::EmptyPort
   - misc/install-perl-module.pl Scope::Guard
   - misc/install-perl-module.pl Starlet
+  # install libmemcached>=1.0.0
+  - curl -L https://launchpad.net/libmemcached/1.0/1.0.18/+download/libmemcached-1.0.18.tar.gz | tar xzf -
+  - (cd libmemcached-1.0.18 && ./configure --prefix=/usr && make -j 4 && sudo make install)
   # install the `ab` command (a.k.a. ApacheBench; optionally required for running some of the tests)
   - sudo apt-get install -qq apache2-utils
   # install nghttp2 with `--enable-app` (optionally required for running HTTP/2 tests)
   - sudo apt-get install -qq libev-dev
   - curl -L http://github.com/tatsuhiro-t/nghttp2/releases/download/v0.7.5/nghttp2-0.7.5.tar.gz | tar xzf -
-  - (cd nghttp2-0.7.5 && ./configure --prefix=/usr --disable-threads --enable-app && make && sudo make install)
+  - (cd nghttp2-0.7.5 && ./configure --prefix=/usr --disable-threads --enable-app && make -j 4 && sudo make install)
 
 script:
   - cmake -DWITH_MRUBY=ON -DWITH_MEMCACHED=ON .
