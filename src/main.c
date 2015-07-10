@@ -1617,7 +1617,7 @@ int main(int argc, char **argv)
                                                                                conf.memcached_session_resumption.max_threads);
         h2o_accept_setup_async_ssl_resumption(memc_ctx, 86400);
         size_t i;
-        for (i = 0; i != conf.num_threads; ++i)
+        for (i = 0; i != conf.num_listeners; ++i)
             if (conf.listeners[i]->ssl.size != 0)
                 h2o_socket_ssl_async_resumption_setup_ctx(conf.listeners[i]->ssl.entries[0]->ctx);
     }
