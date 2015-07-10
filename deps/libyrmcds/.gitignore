@@ -1,0 +1,12 @@
+# C/C++
+*.[oa]
+
+# Editors
+*~
+.*.swp
+
+# misc
+yc
+yc-cnt
+html
+lz4
