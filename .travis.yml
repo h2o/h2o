@@ -7,7 +7,7 @@ before_install:
   # upgrade g++ and libstdc++ to build nghttp2
   - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
   - sudo apt-get -qq update
-  - sudo apt-get install -qq g++-4.8 libstdc++-4.8-dev php5-cgi
+  - sudo apt-get install -qq g++-4.8 libmemcached-dev libstdc++-4.8-dev memcached php5-cgi
   - if [ "$CXX" = "g++" ]; then export CXX="g++-4.8"; fi
   - $CXX --version
   # for speed, pre-install deps installed in `before_script` section as ubuntu packages
@@ -32,6 +32,6 @@ before_script:
   - (cd nghttp2-0.7.5 && ./configure --prefix=/usr --disable-threads --enable-app && make && sudo make install)
 
 script:
-  - cmake -DWITH_MRUBY=ON .
+  - cmake -DWITH_MRUBY=ON -DWITH_MEMCACHED=ON .
   - make all
   - make check
