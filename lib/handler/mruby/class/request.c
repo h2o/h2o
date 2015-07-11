@@ -22,23 +22,37 @@
 
 #ifdef H2O_USE_MRUBY
 
-#include <mruby.h>
-#include <mruby/compile.h>
+#include "h2o.h"
+#include "h2o/mruby.h"
 
-#define GC_ARENA_RESTORE mrb_gc_arena_restore(mrb, 0);
+#include "mruby.h"
+#include "mruby/string.h"
+#include "mruby/data.h"
+#include "mruby/class.h"
 
-void h2o_mrb_core_class_init(mrb_state *mrb, struct RClass *class);
-void h2o_mrb_request_class_init(mrb_state *mrb, struct RClass *class);
-
-void h2o_mrb_class_init(mrb_state *mrb)
+static mrb_value h2o_mrb_req_init(mrb_state *mrb, mrb_value self)
 {
-  struct RClass *class;
+  return self;
+}
 
-  class = mrb_define_class(mrb, "H2O", mrb->object_class);
+static mrb_value h2o_mrb_req_log_error(mrb_state *mrb, mrb_value self)
+{
+  h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
+  mrb_value log;
 
-  h2o_mrb_core_class_init(mrb, class); GC_ARENA_RESTORE;
-  h2o_mrb_request_class_init(mrb, class); GC_ARENA_RESTORE;
+  mrb_get_args(mrb, "o", &log);
+  h2o_req_log_error(mruby_ctx->req, H2O_MRUBY_MODULE_NAME, "%.*s", RSTRING_LEN(log), RSTRING_PTR(log));
 
+  return log;
+}
+
+void h2o_mrb_request_class_init(mrb_state *mrb, struct RClass *class)
+{
+  struct RClass *class_request;
+  class_request = mrb_define_class_under(mrb, class, "Request", mrb->object_class);
+
+  mrb_define_method(mrb, class_request, "initialize", h2o_mrb_req_init, MRB_ARGS_NONE());
+  mrb_define_method(mrb, class_request, "log_error", h2o_mrb_req_log_error, MRB_ARGS_REQ(1));
 }
 
 #endif /* H2O_USE_MRUBY */
