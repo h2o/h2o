@@ -30,7 +30,9 @@ done_testing;
 sub spawn_and_connect {
     my ($opts, $expected) = @_;
     my $server = spawn_h2o(<< "EOT");
-memcached-session-resumption: "127.0.0.1:$memc_port"
+memcached-session-resumption:
+  host: 127.0.0.1
+  port: $memc_port
 hosts:
   default:
     paths:

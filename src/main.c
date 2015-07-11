@@ -157,7 +157,7 @@ static struct {
     1024,            /* max_connections */
     0,               /* initialized in main() */
     0,               /* initialized in main() */
-    {NULL, 0, 1},    /* memcached_session_resumption */
+    {},              /* memcached_session_resumption */
     NULL,            /* thread_ids */
     0,               /* shutdown_requested */
     {},              /* state */
@@ -1035,29 +1035,48 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
 
 static int on_config_memcached_session_resumption(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    h2o_iovec_t host;
-    uint16_t port;
+    const char *host = NULL;
+    uint16_t port = 11211;
+    size_t num_threads = 1;
+    size_t index;
 
-    const char *end = h2o_url_parse_hostport(node->data.scalar, strlen(node->data.scalar), &host, &port);
-    if (end == NULL || *end != '\0') {
-        h2o_configurator_errprintf(cmd, node, "argument must be either of: `host` or `host:port`");
+    for (index = 0; index != node->data.mapping.size; ++index) {
+        yoml_t *key = node->data.mapping.elements[index].key;
+        yoml_t *value = node->data.mapping.elements[index].value;
+        if (key->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, key, "attribute must be a string");
+            return -1;
+        }
+        if (strcmp(key->data.scalar, "host") == 0) {
+            if (value->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, value, "`host` must be a string");
+                return -1;
+            }
+            host = value->data.scalar;
+        } else if (strcmp(key->data.scalar, "port") == 0) {
+            if (!(value->type == YOML_TYPE_SCALAR && sscanf(value->data.scalar, "%" SCNu16, &port) == 1)) {
+                h2o_configurator_errprintf(cmd, value, "`port` must be a number");
+                return -1;
+            }
+        } else if (strcmp(key->data.scalar, "num-threads") == 0) {
+            if (!(value->type == YOML_TYPE_SCALAR && sscanf(value->data.scalar, "%zu", &num_threads) == 1 && num_threads != 0)) {
+                h2o_configurator_errprintf(cmd, value, "`num-threads` must be a positive number");
+                return -1;
+            }
+        } else {
+            h2o_configurator_errprintf(cmd, key, "unknown attribute: %s", key->data.scalar);
+            return -1;
+        }
+    }
+    if (host == NULL) {
+        h2o_configurator_errprintf(cmd, node, "mandatory attribute `host` is missing");
         return -1;
     }
 
-    conf.memcached_session_resumption.host = h2o_strdup(NULL, host.base, host.len).base;
-    conf.memcached_session_resumption.port = port == 65535 ? 11211 : port;
-    return 0;
-}
+    conf.memcached_session_resumption.host = h2o_strdup(NULL, host, SIZE_MAX).base;
+    conf.memcached_session_resumption.port = port;
+    conf.memcached_session_resumption.num_threads = num_threads;
 
-static int on_config_memcached_session_resumption_num_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
-                                                              yoml_t *node)
-{
-    if (h2o_configurator_scanf(cmd, node, "%zu", &conf.memcached_session_resumption.num_threads) != 0)
-        return -1;
-    if (conf.memcached_session_resumption.num_threads == 0) {
-        h2o_configurator_errprintf(cmd, node, "memcached-session-resumption-num-threads must be >=1");
-        return -1;
-    }
     return 0;
 }
 
@@ -1435,11 +1454,8 @@ static void setup_configurators(void)
                                         on_config_num_name_resolution_threads);
         h2o_configurator_define_command(c, "tcp-fastopen", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_tcp_fastopen);
         h2o_configurator_define_command(c, "memcached-session-resumption",
-                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
                                         on_config_memcached_session_resumption);
-        h2o_configurator_define_command(c, "memcached-session-resumption-num-threads",
-                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                        on_config_memcached_session_resumption_num_threads);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
