@@ -94,12 +94,12 @@
 		10A3D3D31B4CDF1200327CF9 /* memcached.h in Headers */ = {isa = PBXBuildFile; fileRef = 10A3D3D01B4CDBC700327CF9 /* memcached.h */; };
 		10A3D3D91B4F786E00327CF9 /* mruby.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3D81B4F786E00327CF9 /* mruby.c */; };
 		10A3D3DB1B4F787700327CF9 /* mruby.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3DA1B4F787700327CF9 /* mruby.c */; };
-		10A3D3F11B4FAAEC00327CF9 /* close.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3ED1B4FAAEC00327CF9 /* close.c */; };
-		10A3D3F21B4FAAEC00327CF9 /* connect.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3EE1B4FAAEC00327CF9 /* connect.c */; };
-		10A3D4001B4FAAF500327CF9 /* recv.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3F61B4FAAF500327CF9 /* recv.c */; };
-		10A3D4011B4FAAF500327CF9 /* send.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3F71B4FAAF500327CF9 /* send.c */; };
-		10A3D4031B4FAAF500327CF9 /* socket.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3F91B4FAAF500327CF9 /* socket.c */; };
-		10A3D4041B4FAAF500327CF9 /* strerror.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3FA1B4FAAF500327CF9 /* strerror.c */; };
+		10A3D4081B50DAB700327CF9 /* close.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3ED1B4FAAEC00327CF9 /* close.c */; };
+		10A3D4091B50DAB700327CF9 /* connect.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3EE1B4FAAEC00327CF9 /* connect.c */; };
+		10A3D40A1B50DAB700327CF9 /* recv.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3F61B4FAAF500327CF9 /* recv.c */; };
+		10A3D40B1B50DAB700327CF9 /* send.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3F71B4FAAF500327CF9 /* send.c */; };
+		10A3D40C1B50DAB700327CF9 /* socket.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3F91B4FAAF500327CF9 /* socket.c */; };
+		10A3D40D1B50DAB700327CF9 /* strerror.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3FA1B4FAAF500327CF9 /* strerror.c */; };
 		10AA2E941A80A592004322AC /* time_.h in Headers */ = {isa = PBXBuildFile; fileRef = 10AA2E931A80A592004322AC /* time_.h */; };
 		10AA2E961A80A612004322AC /* time.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2E951A80A612004322AC /* time.c */; };
 		10AA2E991A81F68A004322AC /* time.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2E981A81F68A004322AC /* time.c */; };
@@ -986,14 +986,14 @@
 		10A3D3DC1B4FAA5900327CF9 /* libyrmcds */ = {
 			isa = PBXGroup;
 			children = (
+				10A3D3F41B4FAAF500327CF9 /* portability.h */,
+				10A3D3FE1B4FAAF500327CF9 /* yrmcds.h */,
 				10A3D3ED1B4FAAEC00327CF9 /* close.c */,
 				10A3D3EE1B4FAAEC00327CF9 /* connect.c */,
-				10A3D3F41B4FAAF500327CF9 /* portability.h */,
 				10A3D3F61B4FAAF500327CF9 /* recv.c */,
 				10A3D3F71B4FAAF500327CF9 /* send.c */,
 				10A3D3F91B4FAAF500327CF9 /* socket.c */,
 				10A3D3FA1B4FAAF500327CF9 /* strerror.c */,
-				10A3D3FE1B4FAAF500327CF9 /* yrmcds.h */,
 			);
 			path = libyrmcds;
 			sourceTree = "<group>";
@@ -1313,6 +1313,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				107923C719A3217300C52AD6 /* hpack.c in Sources */,
+				10A3D40A1B50DAB700327CF9 /* recv.c in Sources */,
 				101788B219B561AA0084C6D8 /* socket.c in Sources */,
 				10D0905519F102C70043D458 /* http1client.c in Sources */,
 				107923D219A3217300C52AD6 /* token.c in Sources */,
@@ -1329,6 +1330,7 @@
 				10583BF11AE5A37B004A3AD6 /* Makefile in Sources */,
 				107923CD19A3217300C52AD6 /* memory.c in Sources */,
 				107923CC19A3217300C52AD6 /* context.c in Sources */,
+				10A3D40C1B50DAB700327CF9 /* socket.c in Sources */,
 				10AA2EC21AA0402E004322AC /* reproxy.c in Sources */,
 				107923C519A3217300C52AD6 /* http1.c in Sources */,
 				10AA2EA71A8DA93C004322AC /* redirect.c in Sources */,
@@ -1351,17 +1353,21 @@
 				107923CF19A3217300C52AD6 /* request.c in Sources */,
 				10BCF2FF1B1A892F0076939D /* fastcgi.c in Sources */,
 				104B9A531A5FC7C4009EEE64 /* expires.c in Sources */,
+				10A3D40D1B50DAB700327CF9 /* strerror.c in Sources */,
 				107923CB19A3217300C52AD6 /* frame.c in Sources */,
 				104B9A491A5F9638009EEE64 /* headers.c in Sources */,
 				107923C219A3217300C52AD6 /* chunked.c in Sources */,
+				10A3D4081B50DAB700327CF9 /* close.c in Sources */,
 				105534EF1A440FC800627ECB /* config.c in Sources */,
 				10E299581A67E68500701AA6 /* scheduler.c in Sources */,
 				107923D319A3217300C52AD6 /* util.c in Sources */,
 				105534CA1A3BB46900627ECB /* string.c in Sources */,
 				10583BF21AE5A37B004A3AD6 /* README.md in Sources */,
 				10BCF2FD1B168CAE0076939D /* fastcgi.c in Sources */,
+				10A3D40B1B50DAB700327CF9 /* send.c in Sources */,
 				10FCC13E1B2E4A4500F13674 /* cloexec.c in Sources */,
 				105534DF1A3C7B9800627ECB /* proxy.c in Sources */,
+				10A3D4091B50DAB700327CF9 /* connect.c in Sources */,
 				105534DD1A3C7AA900627ECB /* file.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1439,17 +1445,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				10A3D3F21B4FAAEC00327CF9 /* connect.c in Sources */,
-				10A3D4031B4FAAF500327CF9 /* socket.c in Sources */,
 				10756E2C1AC126420009BF57 /* emitter.c in Sources */,
 				10756E2A1AC126420009BF57 /* api.c in Sources */,
-				10A3D3F11B4FAAEC00327CF9 /* close.c in Sources */,
 				10756E2B1AC126420009BF57 /* dumper.c in Sources */,
 				10756E2D1AC126420009BF57 /* loader.c in Sources */,
-				10A3D4041B4FAAF500327CF9 /* strerror.c in Sources */,
 				10756E361AC1264D0009BF57 /* writer.c in Sources */,
-				10A3D4001B4FAAF500327CF9 /* recv.c in Sources */,
-				10A3D4011B4FAAF500327CF9 /* send.c in Sources */,
 				10756E351AC1264D0009BF57 /* scanner.c in Sources */,
 				10756E331AC1264D0009BF57 /* parser.c in Sources */,
 				10F417D619C190F800B6E31A /* main.c in Sources */,
