@@ -32,13 +32,14 @@ void h2o_mrb_request_class_init(mrb_state *mrb, struct RClass *class);
 
 void h2o_mrb_class_init(mrb_state *mrb)
 {
-  struct RClass *class;
+    struct RClass *class;
 
-  class = mrb_define_class(mrb, "H2O", mrb->object_class);
+    class = mrb_define_class(mrb, "H2O", mrb->object_class);
 
-  h2o_mrb_core_class_init(mrb, class); GC_ARENA_RESTORE;
-  h2o_mrb_request_class_init(mrb, class); GC_ARENA_RESTORE;
-
+    h2o_mrb_core_class_init(mrb, class);
+    GC_ARENA_RESTORE;
+    h2o_mrb_request_class_init(mrb, class);
+    GC_ARENA_RESTORE;
 }
 
 #endif /* H2O_USE_MRUBY */
