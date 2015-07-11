@@ -132,6 +132,7 @@ static struct {
         uint16_t port;
         size_t num_threads;
         char *prefix;
+        unsigned timeout;
     } memcached_session_resumption;
     struct {
         pthread_t tid;
@@ -1039,6 +1040,7 @@ static int on_config_memcached_session_resumption(h2o_configurator_command_t *cm
     const char *host = NULL, *prefix = ":h2o:ssl-resumption:";
     uint16_t port = 11211;
     size_t num_threads = 1;
+    unsigned timeout = 3600;
     size_t index;
 
     for (index = 0; index != node->data.mapping.size; ++index) {
@@ -1070,6 +1072,11 @@ static int on_config_memcached_session_resumption(h2o_configurator_command_t *cm
                 return -1;
             }
             prefix = value->data.scalar;
+        } else if (strcmp(key->data.scalar, "timeout") == 0) {
+            if (!(value->type == YOML_TYPE_SCALAR && sscanf(value->data.scalar, "%u", &timeout) == 1 && timeout != 0)) {
+                h2o_configurator_errprintf(cmd, value, "`timeout` must be a positive number (in seconds)");
+                return -1;
+            }
         } else {
             h2o_configurator_errprintf(cmd, key, "unknown attribute: %s", key->data.scalar);
             return -1;
@@ -1083,7 +1090,8 @@ static int on_config_memcached_session_resumption(h2o_configurator_command_t *cm
     conf.memcached_session_resumption.host = h2o_strdup(NULL, host, SIZE_MAX).base;
     conf.memcached_session_resumption.port = port;
     conf.memcached_session_resumption.num_threads = num_threads;
-    conf.memcached_session_resumption.prefix = prefix;
+    conf.memcached_session_resumption.prefix = h2o_strdup(NULL, prefix, SIZE_MAX).base;
+    conf.memcached_session_resumption.timeout = timeout;
 
     return 0;
 }
@@ -1696,7 +1704,7 @@ int main(int argc, char **argv)
         h2o_memcached_context_t *memc_ctx =
             h2o_memcached_create_context(conf.memcached_session_resumption.host, conf.memcached_session_resumption.port,
                                          conf.memcached_session_resumption.num_threads, conf.memcached_session_resumption.prefix);
-        h2o_accept_setup_async_ssl_resumption(memc_ctx, 86400);
+        h2o_accept_setup_async_ssl_resumption(memc_ctx, conf.memcached_session_resumption.timeout);
         size_t i;
         for (i = 0; i != conf.num_listeners; ++i)
             if (conf.listeners[i]->ssl.size != 0)
