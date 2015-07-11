@@ -33,7 +33,7 @@ typedef struct st_h2o_memcached_context_t h2o_memcached_context_t;
 typedef struct st_h2o_memcached_req_t h2o_memcached_req_t;
 typedef void (*h2o_memcached_get_cb)(h2o_iovec_t value, void *cb_data);
 
-h2o_memcached_context_t *h2o_memcached_create_context(const char *host, uint16_t port, size_t num_threads);
+h2o_memcached_context_t *h2o_memcached_create_context(const char *host, uint16_t port, size_t num_threads, const char *prefix);
 
 void h2o_memcached_receiver(h2o_multithread_receiver_t *receiver, h2o_linklist_t *messages);
 

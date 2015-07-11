@@ -32,8 +32,9 @@ struct st_h2o_memcached_context_t {
     pthread_cond_t cond;
     h2o_linklist_t pending;
     size_t num_threads_connected;
+    char *host;
     uint16_t port;
-    char host[1];
+    h2o_iovec_t prefix;
 };
 
 struct st_h2o_memcached_conn_t {
@@ -71,19 +72,23 @@ struct st_h2o_memcached_req_t {
     } key;
 };
 
-static h2o_memcached_req_t *create_req(enum en_h2o_memcached_req_type_t type, h2o_iovec_t key, int encode_key)
+static h2o_memcached_req_t *create_req(h2o_memcached_context_t *ctx, enum en_h2o_memcached_req_type_t type, h2o_iovec_t key,
+                                       int encode_key)
 {
-    h2o_memcached_req_t *req =
-        h2o_mem_alloc(offsetof(h2o_memcached_req_t, key.base) + (encode_key ? (key.len + 2) / 3 * 4 + 1 : key.len));
+    h2o_memcached_req_t *req = h2o_mem_alloc(offsetof(h2o_memcached_req_t, key.base) + ctx->prefix.len +
+                                             (encode_key ? (key.len + 2) / 3 * 4 + 1 : key.len));
     req->type = type;
     req->pending = (h2o_linklist_t){};
     req->inflight = (h2o_linklist_t){};
     memset(&req->data, 0, sizeof(req->data));
+    if (ctx->prefix.len != 0)
+        memcpy(req->key.base, ctx->prefix.base, ctx->prefix.len);
+    req->key.len = ctx->prefix.len;
     if (encode_key) {
-        req->key.len = h2o_base64_encode(req->key.base, key.base, key.len, 1);
+        req->key.len += h2o_base64_encode(req->key.base + req->key.len, key.base, key.len, 1);
     } else {
-        req->key.len = key.len;
-        memcpy(req->key.base, key.base, key.len);
+        memcpy(req->key.base + req->key.len, key.base, key.len);
+        req->key.len += key.len;
     }
     return req;
 }
@@ -321,7 +326,7 @@ void h2o_memcached_receiver(h2o_multithread_receiver_t *receiver, h2o_linklist_t
 h2o_memcached_req_t *h2o_memcached_get(h2o_memcached_context_t *ctx, h2o_multithread_receiver_t *receiver, h2o_iovec_t key,
                                        h2o_memcached_get_cb cb, void *cb_data, int flags)
 {
-    h2o_memcached_req_t *req = create_req(REQ_TYPE_GET, key, (flags & H2O_MEMCACHED_ENCODE_KEY) != 0);
+    h2o_memcached_req_t *req = create_req(ctx, REQ_TYPE_GET, key, (flags & H2O_MEMCACHED_ENCODE_KEY) != 0);
     req->data.get.receiver = receiver;
     req->data.get.cb = cb;
     req->data.get.cb_data = cb_data;
@@ -348,7 +353,7 @@ void h2o_memcached_cancel_get(h2o_memcached_context_t *ctx, h2o_memcached_req_t 
 
 void h2o_memcached_set(h2o_memcached_context_t *ctx, h2o_iovec_t key, h2o_iovec_t value, uint32_t expiration, int flags)
 {
-    h2o_memcached_req_t *req = create_req(REQ_TYPE_SET, key, (flags & H2O_MEMCACHED_ENCODE_KEY) != 0);
+    h2o_memcached_req_t *req = create_req(ctx, REQ_TYPE_SET, key, (flags & H2O_MEMCACHED_ENCODE_KEY) != 0);
     if ((flags & H2O_MEMCACHED_ENCODE_VALUE) != 0) {
         req->data.set.value.base = h2o_mem_alloc((value.len + 2) / 3 * 4 + 1);
         req->data.set.value.len = h2o_base64_encode(req->data.set.value.base, value.base, value.len, 1);
@@ -362,20 +367,21 @@ void h2o_memcached_set(h2o_memcached_context_t *ctx, h2o_iovec_t key, h2o_iovec_
 
 void h2o_memcached_delete(h2o_memcached_context_t *ctx, h2o_iovec_t key, int flags)
 {
-    h2o_memcached_req_t *req = create_req(REQ_TYPE_DELETE, key, (flags & H2O_MEMCACHED_ENCODE_KEY) != 0);
+    h2o_memcached_req_t *req = create_req(ctx, REQ_TYPE_DELETE, key, (flags & H2O_MEMCACHED_ENCODE_KEY) != 0);
     dispatch(ctx, req);
 }
 
-h2o_memcached_context_t *h2o_memcached_create_context(const char *host, uint16_t port, size_t num_threads)
+h2o_memcached_context_t *h2o_memcached_create_context(const char *host, uint16_t port, size_t num_threads, const char *prefix)
 {
-    h2o_memcached_context_t *ctx = h2o_mem_alloc(offsetof(h2o_memcached_context_t, host) + strlen(host) + 1);
+    h2o_memcached_context_t *ctx = h2o_mem_alloc(sizeof(*ctx));
 
     pthread_mutex_init(&ctx->mutex, NULL);
     pthread_cond_init(&ctx->cond, NULL);
     h2o_linklist_init_anchor(&ctx->pending);
     ctx->num_threads_connected = 0;
+    ctx->host = h2o_strdup(NULL, host, SIZE_MAX).base;
     ctx->port = port;
-    strcpy(ctx->host, host);
+    ctx->prefix = h2o_strdup(NULL, prefix, SIZE_MAX);
 
     { /* start the threads */
         pthread_t tid;

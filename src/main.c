@@ -131,6 +131,7 @@ static struct {
         char *host;
         uint16_t port;
         size_t num_threads;
+        char *prefix;
     } memcached_session_resumption;
     struct {
         pthread_t tid;
@@ -1035,7 +1036,7 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
 
 static int on_config_memcached_session_resumption(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    const char *host = NULL;
+    const char *host = NULL, *prefix = ":h2o:ssl-resumption:";
     uint16_t port = 11211;
     size_t num_threads = 1;
     size_t index;
@@ -1063,6 +1064,12 @@ static int on_config_memcached_session_resumption(h2o_configurator_command_t *cm
                 h2o_configurator_errprintf(cmd, value, "`num-threads` must be a positive number");
                 return -1;
             }
+        } else if (strcmp(key->data.scalar, "prefix") == 0) {
+            if (value->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, value, "`prefix` must be a string");
+                return -1;
+            }
+            prefix = value->data.scalar;
         } else {
             h2o_configurator_errprintf(cmd, key, "unknown attribute: %s", key->data.scalar);
             return -1;
@@ -1076,6 +1083,7 @@ static int on_config_memcached_session_resumption(h2o_configurator_command_t *cm
     conf.memcached_session_resumption.host = h2o_strdup(NULL, host, SIZE_MAX).base;
     conf.memcached_session_resumption.port = port;
     conf.memcached_session_resumption.num_threads = num_threads;
+    conf.memcached_session_resumption.prefix = prefix;
 
     return 0;
 }
@@ -1687,7 +1695,7 @@ int main(int argc, char **argv)
     if (conf.memcached_session_resumption.host != NULL) {
         h2o_memcached_context_t *memc_ctx =
             h2o_memcached_create_context(conf.memcached_session_resumption.host, conf.memcached_session_resumption.port,
-                                         conf.memcached_session_resumption.num_threads);
+                                         conf.memcached_session_resumption.num_threads, conf.memcached_session_resumption.prefix);
         h2o_accept_setup_async_ssl_resumption(memc_ctx, 86400);
         size_t i;
         for (i = 0; i != conf.num_listeners; ++i)
