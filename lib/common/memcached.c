@@ -74,7 +74,7 @@ struct st_h2o_memcached_req_t {
 static h2o_memcached_req_t *create_req(enum en_h2o_memcached_req_type_t type, h2o_iovec_t key, int encode_key)
 {
     h2o_memcached_req_t *req =
-        h2o_mem_alloc(offsetof(h2o_memcached_req_t, key.base) + (encode_key ? key.len * 4 / 3 + 2 : key.len));
+        h2o_mem_alloc(offsetof(h2o_memcached_req_t, key.base) + (encode_key ? (key.len + 2) / 3 * 4 + 1 : key.len));
     req->type = type;
     req->pending = (h2o_linklist_t){};
     req->inflight = (h2o_linklist_t){};
@@ -350,7 +350,7 @@ void h2o_memcached_set(h2o_memcached_context_t *ctx, h2o_iovec_t key, h2o_iovec_
 {
     h2o_memcached_req_t *req = create_req(REQ_TYPE_SET, key, (flags & H2O_MEMCACHED_ENCODE_KEY) != 0);
     if ((flags & H2O_MEMCACHED_ENCODE_VALUE) != 0) {
-        req->data.set.value.base = h2o_mem_alloc(value.len * 4 / 3 + 2);
+        req->data.set.value.base = h2o_mem_alloc((value.len + 2) / 3 * 4 + 1);
         req->data.set.value.len = h2o_base64_encode(req->data.set.value.base, value.base, value.len, 1);
     } else {
         req->data.set.value = h2o_iovec_init(h2o_mem_alloc(value.len), value.len);
