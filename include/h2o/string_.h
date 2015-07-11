@@ -78,9 +78,9 @@ size_t h2o_strtosizefwd(char **s, size_t len);
 */
 h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t len);
 /**
- * base64 encoder
+ * base64 encoder (note: the function emits trailing '\0')
  */
-void h2o_base64_encode(char *dst, const void *src, size_t len, int url_encoded);
+size_t h2o_base64_encode(char *dst, const void *src, size_t len, int url_encoded);
 /**
  * returns the extension portion of path
  */

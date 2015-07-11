@@ -128,9 +128,17 @@ static struct {
     size_t num_threads;
     int tfo_queues;
     struct {
+        char *host;
+        uint16_t port;
+        size_t num_threads;
+        char *prefix;
+        unsigned timeout;
+    } memcached_session_resumption;
+    struct {
         pthread_t tid;
         h2o_context_t ctx;
         h2o_multithread_receiver_t server_notifications;
+        h2o_multithread_receiver_t memcached;
     } *threads;
     volatile sig_atomic_t shutdown_requested;
     struct {
@@ -151,6 +159,7 @@ static struct {
     1024,            /* max_connections */
     0,               /* initialized in main() */
     0,               /* initialized in main() */
+    {},              /* memcached_session_resumption */
     NULL,            /* thread_ids */
     0,               /* shutdown_requested */
     {},              /* state */
@@ -1020,9 +1029,70 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
     if (h2o_configurator_scanf(cmd, node, "%zu", &conf.num_threads) != 0)
         return -1;
     if (conf.num_threads == 0) {
-        h2o_configurator_errprintf(cmd, node, "num-threads should be >=1");
+        h2o_configurator_errprintf(cmd, node, "num-threads must be >=1");
         return -1;
     }
+    return 0;
+}
+
+static int on_config_memcached_session_resumption(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    const char *host = NULL, *prefix = ":h2o:ssl-resumption:";
+    uint16_t port = 11211;
+    size_t num_threads = 1;
+    unsigned timeout = 3600;
+    size_t index;
+
+    for (index = 0; index != node->data.mapping.size; ++index) {
+        yoml_t *key = node->data.mapping.elements[index].key;
+        yoml_t *value = node->data.mapping.elements[index].value;
+        if (key->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, key, "attribute must be a string");
+            return -1;
+        }
+        if (strcmp(key->data.scalar, "host") == 0) {
+            if (value->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, value, "`host` must be a string");
+                return -1;
+            }
+            host = value->data.scalar;
+        } else if (strcmp(key->data.scalar, "port") == 0) {
+            if (!(value->type == YOML_TYPE_SCALAR && sscanf(value->data.scalar, "%" SCNu16, &port) == 1)) {
+                h2o_configurator_errprintf(cmd, value, "`port` must be a number");
+                return -1;
+            }
+        } else if (strcmp(key->data.scalar, "num-threads") == 0) {
+            if (!(value->type == YOML_TYPE_SCALAR && sscanf(value->data.scalar, "%zu", &num_threads) == 1 && num_threads != 0)) {
+                h2o_configurator_errprintf(cmd, value, "`num-threads` must be a positive number");
+                return -1;
+            }
+        } else if (strcmp(key->data.scalar, "prefix") == 0) {
+            if (value->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, value, "`prefix` must be a string");
+                return -1;
+            }
+            prefix = value->data.scalar;
+        } else if (strcmp(key->data.scalar, "timeout") == 0) {
+            if (!(value->type == YOML_TYPE_SCALAR && sscanf(value->data.scalar, "%u", &timeout) == 1 && timeout != 0)) {
+                h2o_configurator_errprintf(cmd, value, "`timeout` must be a positive number (in seconds)");
+                return -1;
+            }
+        } else {
+            h2o_configurator_errprintf(cmd, key, "unknown attribute: %s", key->data.scalar);
+            return -1;
+        }
+    }
+    if (host == NULL) {
+        h2o_configurator_errprintf(cmd, node, "mandatory attribute `host` is missing");
+        return -1;
+    }
+
+    conf.memcached_session_resumption.host = h2o_strdup(NULL, host, SIZE_MAX).base;
+    conf.memcached_session_resumption.port = port;
+    conf.memcached_session_resumption.num_threads = num_threads;
+    conf.memcached_session_resumption.prefix = h2o_strdup(NULL, prefix, SIZE_MAX).base;
+    conf.memcached_session_resumption.timeout = timeout;
+
     return 0;
 }
 
@@ -1031,7 +1101,7 @@ static int on_config_num_name_resolution_threads(h2o_configurator_command_t *cmd
     if (h2o_configurator_scanf(cmd, node, "%zu", &h2o_hostinfo_max_threads) != 0)
         return -1;
     if (h2o_hostinfo_max_threads == 0) {
-        h2o_configurator_errprintf(cmd, node, "num-name-resolution-threads should be >=1");
+        h2o_configurator_errprintf(cmd, node, "num-name-resolution-threads must be >=1");
         return -1;
     }
     return 0;
@@ -1239,6 +1309,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     h2o_context_init(&conf.threads[thread_index].ctx, h2o_evloop_create(), &conf.globalconf);
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].server_notifications,
                                       on_server_notification);
+    h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].memcached,
+                                      h2o_memcached_receiver);
     conf.threads[thread_index].tid = pthread_self();
 
     /* setup listeners */
@@ -1255,11 +1327,14 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             }
             set_cloexec(fd);
         }
+        memset(listeners + i, 0, sizeof(listeners[i]));
         listeners[i].accept_ctx.ctx = &conf.threads[thread_index].ctx;
         listeners[i].accept_ctx.hosts = listener_config->hosts;
-        listeners[i].accept_ctx.ssl_ctx = listener_config->ssl.size != 0 ? listener_config->ssl.entries[0]->ctx : NULL;
-        listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
+        if (listener_config->ssl.size != 0)
+            listeners[i].accept_ctx.ssl_ctx = listener_config->ssl.entries[0]->ctx;
         listeners[i].accept_ctx.expect_proxy_line = listener_config->proxy_protocol;
+        listeners[i].accept_ctx.libmemcached_receiver = &conf.threads[thread_index].memcached;
+        listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
         listeners[i].sock->data = listeners + i;
     }
     /* and start listening */
@@ -1394,6 +1469,9 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
                                         on_config_num_name_resolution_threads);
         h2o_configurator_define_command(c, "tcp-fastopen", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_tcp_fastopen);
+        h2o_configurator_define_command(c, "memcached-session-resumption",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
+                                        on_config_memcached_session_resumption);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
@@ -1462,6 +1540,11 @@ int main(int argc, char **argv)
                 break;
             case 'v':
                 printf("h2o version " H2O_VERSION "\n");
+                printf("OpenSSL: %s\n", SSLeay_version(SSLEAY_VERSION));
+#if H2O_USE_MRUBY
+                printf(
+                    "mruby: YES\n"); /* TODO determine the way to obtain the version of mruby (that is being linked dynamically) */
+#endif
                 exit(0);
             case 'h':
                 printf("h2o version " H2O_VERSION "\n"
@@ -1614,6 +1697,18 @@ int main(int argc, char **argv)
         }
         fprintf(fp, "%d\n", (int)getpid());
         fclose(fp);
+    }
+
+    /* start memcached client threads for session resumption, and adjust the SSL contexts */
+    if (conf.memcached_session_resumption.host != NULL) {
+        h2o_memcached_context_t *memc_ctx =
+            h2o_memcached_create_context(conf.memcached_session_resumption.host, conf.memcached_session_resumption.port,
+                                         conf.memcached_session_resumption.num_threads, conf.memcached_session_resumption.prefix);
+        h2o_accept_setup_async_ssl_resumption(memc_ctx, conf.memcached_session_resumption.timeout);
+        size_t i;
+        for (i = 0; i != conf.num_listeners; ++i)
+            if (conf.listeners[i]->ssl.size != 0)
+                h2o_socket_ssl_async_resumption_setup_ctx(conf.listeners[i]->ssl.entries[0]->ctx);
     }
 
     /* all setup should be complete by now */

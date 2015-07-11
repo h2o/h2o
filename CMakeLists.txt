@@ -135,6 +135,7 @@ SET(CMAKE_C_FLAGS "-O2 -g -Wall -Wno-unused-function ${CMAKE_C_FLAGS} -DH2O_ROOT
 INCLUDE_DIRECTORIES(
     include
     deps/cloexec
+    deps/libyrmcds
     deps/klib
     deps/picohttpparser
     deps/picotest
@@ -154,10 +155,17 @@ SET_SOURCE_FILES_PROPERTIES(${LIBYAML_SOURCE_FILES} PROPERTIES COMPILE_FLAGS "-W
 
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
+    deps/libyrmcds/close.c
+    deps/libyrmcds/connect.c
+    deps/libyrmcds/recv.c
+    deps/libyrmcds/send.c
+    deps/libyrmcds/socket.c
+    deps/libyrmcds/strerror.c
     deps/picohttpparser/picohttpparser.c
 
     lib/common/hostinfo.c
     lib/common/http1client.c
+    lib/common/memcached.c
     lib/common/memory.c
     lib/common/multithread.c
     lib/common/serverutil.c

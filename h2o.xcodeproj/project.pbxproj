@@ -90,6 +90,16 @@
 		1079245119A3266700C52AD6 /* token.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BF19A3217300C52AD6 /* token.c */; };
 		1079245419A32C0800C52AD6 /* token_table.h in Headers */ = {isa = PBXBuildFile; fileRef = 1079245319A32C0800C52AD6 /* token_table.h */; };
 		108867751AD9069900987967 /* defaults.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 108867741AD9069900987967 /* defaults.c.h */; };
+		10A3D3D21B4CDBDC00327CF9 /* memcached.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3D11B4CDBDC00327CF9 /* memcached.c */; };
+		10A3D3D31B4CDF1200327CF9 /* memcached.h in Headers */ = {isa = PBXBuildFile; fileRef = 10A3D3D01B4CDBC700327CF9 /* memcached.h */; };
+		10A3D3D91B4F786E00327CF9 /* mruby.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3D81B4F786E00327CF9 /* mruby.c */; };
+		10A3D3DB1B4F787700327CF9 /* mruby.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3DA1B4F787700327CF9 /* mruby.c */; };
+		10A3D4081B50DAB700327CF9 /* close.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3ED1B4FAAEC00327CF9 /* close.c */; };
+		10A3D4091B50DAB700327CF9 /* connect.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3EE1B4FAAEC00327CF9 /* connect.c */; };
+		10A3D40A1B50DAB700327CF9 /* recv.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3F61B4FAAF500327CF9 /* recv.c */; };
+		10A3D40B1B50DAB700327CF9 /* send.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3F71B4FAAF500327CF9 /* send.c */; };
+		10A3D40C1B50DAB700327CF9 /* socket.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3F91B4FAAF500327CF9 /* socket.c */; };
+		10A3D40D1B50DAB700327CF9 /* strerror.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3FA1B4FAAF500327CF9 /* strerror.c */; };
 		10AA2E941A80A592004322AC /* time_.h in Headers */ = {isa = PBXBuildFile; fileRef = 10AA2E931A80A592004322AC /* time_.h */; };
 		10AA2E961A80A612004322AC /* time.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2E951A80A612004322AC /* time.c */; };
 		10AA2E991A81F68A004322AC /* time.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2E981A81F68A004322AC /* time.c */; };
@@ -262,8 +272,8 @@
 		105534EA1A42A87E00627ECB /* _templates.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = _templates.c.h; sourceTree = "<group>"; };
 		105534EC1A42AD5E00627ECB /* templates.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = templates.c.h; sourceTree = "<group>"; };
 		105534EE1A440FC800627ECB /* config.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = config.c; sourceTree = "<group>"; };
-		105534F21A460EF600627ECB /* 00unit.evloop.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = 00unit.evloop.t; sourceTree = "<group>"; };
-		105534F31A460EF600627ECB /* 00unit.libuv.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = 00unit.libuv.t; sourceTree = "<group>"; };
+		105534F21A460EF600627ECB /* 00unit.evloop.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = 00unit.evloop.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		105534F31A460EF600627ECB /* 00unit.libuv.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = 00unit.libuv.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534F41A460EF600627ECB /* 10http1client.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 10http1client.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534F51A460EF600627ECB /* 40protocol.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 40protocol.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534F61A460EF600627ECB /* 50file-config.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50file-config.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -367,6 +377,20 @@
 		1082150D1AB26F4700D27E66 /* FindLibYAML.cmake */ = {isa = PBXFileReference; lastKnownFileType = text; path = FindLibYAML.cmake; sourceTree = "<group>"; };
 		1082150E1AB26F4700D27E66 /* FindLibUV.cmake */ = {isa = PBXFileReference; lastKnownFileType = text; path = FindLibUV.cmake; sourceTree = "<group>"; };
 		108867741AD9069900987967 /* defaults.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = defaults.c.h; sourceTree = "<group>"; };
+		10A3D3D01B4CDBC700327CF9 /* memcached.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = memcached.h; sourceTree = "<group>"; };
+		10A3D3D11B4CDBDC00327CF9 /* memcached.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = memcached.c; sourceTree = "<group>"; };
+		10A3D3D61B4F1E3200327CF9 /* 50mruby.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50mruby.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		10A3D3D71B4F4D0900327CF9 /* 40memcached-session-resumption.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40memcached-session-resumption.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		10A3D3D81B4F786E00327CF9 /* mruby.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = mruby.c; sourceTree = "<group>"; };
+		10A3D3DA1B4F787700327CF9 /* mruby.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = mruby.c; sourceTree = "<group>"; };
+		10A3D3ED1B4FAAEC00327CF9 /* close.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = close.c; sourceTree = "<group>"; };
+		10A3D3EE1B4FAAEC00327CF9 /* connect.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = connect.c; sourceTree = "<group>"; };
+		10A3D3F41B4FAAF500327CF9 /* portability.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = portability.h; sourceTree = "<group>"; };
+		10A3D3F61B4FAAF500327CF9 /* recv.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = recv.c; sourceTree = "<group>"; };
+		10A3D3F71B4FAAF500327CF9 /* send.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = send.c; sourceTree = "<group>"; };
+		10A3D3F91B4FAAF500327CF9 /* socket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = socket.c; sourceTree = "<group>"; };
+		10A3D3FA1B4FAAF500327CF9 /* strerror.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = strerror.c; sourceTree = "<group>"; };
+		10A3D3FE1B4FAAF500327CF9 /* yrmcds.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = yrmcds.h; sourceTree = "<group>"; };
 		10A60DE91B0D87FE006E38EC /* annotate-backtrace-symbols */ = {isa = PBXFileReference; lastKnownFileType = text; path = "annotate-backtrace-symbols"; sourceTree = "<group>"; };
 		10AA2E931A80A592004322AC /* time_.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = time_.h; sourceTree = "<group>"; };
 		10AA2E951A80A612004322AC /* time.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = time.c; sourceTree = "<group>"; };
@@ -514,6 +538,7 @@
 			children = (
 				1058C8891AA6E5E3008D6180 /* hostinfo.c */,
 				10D0905419F102C70043D458 /* http1client.c */,
+				10A3D3D11B4CDBDC00327CF9 /* memcached.c */,
 				107923BA19A3217300C52AD6 /* memory.c */,
 				10AA2EAB1A8DE0AE004322AC /* multithread.c */,
 				104B9A241A4A4FEE009EEE64 /* serverutil.c */,
@@ -541,6 +566,7 @@
 				10AA2EBD1AA019D8004322AC /* headers.c */,
 				107923BB19A3217300C52AD6 /* mimemap.c */,
 				108867731AD9061100987967 /* mimemap */,
+				10A3D3D81B4F786E00327CF9 /* mruby.c */,
 				10D0907219F633B00043D458 /* proxy.c */,
 				10AA2EA41A8D9999004322AC /* redirect.c */,
 				10AA2EC31AA0403A004322AC /* reproxy.c */,
@@ -639,6 +665,7 @@
 				10BCF2FE1B1A892F0076939D /* fastcgi.c */,
 				105534DC1A3C7AA900627ECB /* file.c */,
 				10AA2EBF1AA019FC004322AC /* headers.c */,
+				10A3D3DA1B4F787700327CF9 /* mruby.c */,
 				105534DE1A3C7B9800627ECB /* proxy.c */,
 				10AA2EA61A8DA93C004322AC /* redirect.c */,
 				10AA2EC11AA0402E004322AC /* reproxy.c */,
@@ -817,6 +844,7 @@
 			children = (
 				10FCC13B1B2E4A2C00F13674 /* cloexec */,
 				1079231F19A3210D00C52AD6 /* klib */,
+				10A3D3DC1B4FAA5900327CF9 /* libyrmcds */,
 				1079235619A3210D00C52AD6 /* picohttpparser */,
 				10F417FB19C2D2B400B6E31A /* picotest */,
 				10756E221AC125E00009BF57 /* yaml */,
@@ -861,6 +889,7 @@
 				107923A119A3215F00C52AD6 /* http2.h */,
 				10AA2EB61A970EFC004322AC /* http2_internal.h */,
 				10AA2EB81A971280004322AC /* http2_scheduler.h */,
+				10A3D3D01B4CDBC700327CF9 /* memcached.h */,
 				10D0904219F0BA780043D458 /* linklist.h */,
 				10D0903919F0A51C0043D458 /* memory.h */,
 				10AA2EA91A8DDC57004322AC /* multithread.h */,
@@ -954,6 +983,21 @@
 			path = mimemap;
 			sourceTree = "<group>";
 		};
+		10A3D3DC1B4FAA5900327CF9 /* libyrmcds */ = {
+			isa = PBXGroup;
+			children = (
+				10A3D3F41B4FAAF500327CF9 /* portability.h */,
+				10A3D3FE1B4FAAF500327CF9 /* yrmcds.h */,
+				10A3D3ED1B4FAAEC00327CF9 /* close.c */,
+				10A3D3EE1B4FAAEC00327CF9 /* connect.c */,
+				10A3D3F61B4FAAF500327CF9 /* recv.c */,
+				10A3D3F71B4FAAF500327CF9 /* send.c */,
+				10A3D3F91B4FAAF500327CF9 /* socket.c */,
+				10A3D3FA1B4FAAF500327CF9 /* strerror.c */,
+			);
+			path = libyrmcds;
+			sourceTree = "<group>";
+		};
 		10AA2EC51AA0557A004322AC /* assets */ = {
 			isa = PBXGroup;
 			children = (
@@ -991,6 +1035,7 @@
 				104B9A331A59E594009EEE64 /* 01cxx-compile.t */,
 				105534F41A460EF600627ECB /* 10http1client.t */,
 				104B9A301A58F55E009EEE64 /* 40max-connections.t */,
+				10A3D3D71B4F4D0900327CF9 /* 40memcached-session-resumption.t */,
 				10F198EB1A7ED2CC00F4585E /* 40pathconf-redirect.t */,
 				105534F51A460EF600627ECB /* 40protocol.t */,
 				1070E1641B451D43001CCAFA /* 40proxy-protocol.t */,
@@ -1007,6 +1052,7 @@
 				100AE41A1B27D74800CE18BB /* 50file-range.t */,
 				1058C87F1AA42568008D6180 /* 50headers.t */,
 				105534F71A460F2E00627ECB /* 50mimemap.t */,
+				10A3D3D61B4F1E3200327CF9 /* 50mruby.t */,
 				105534F81A460F2E00627ECB /* 50post-size-limit.t */,
 				10AA2EA81A8DAFD4004322AC /* 50redirect.t */,
 				108215061AAD41A000D27E66 /* 50reverse-proxy */,
@@ -1081,6 +1127,7 @@
 				1058C8881AA6DE4B008D6180 /* hostinfo.h in Headers */,
 				10AA2E941A80A592004322AC /* time_.h in Headers */,
 				107923A519A3215F00C52AD6 /* http1.h in Headers */,
+				10A3D3D31B4CDF1200327CF9 /* memcached.h in Headers */,
 				10D0905719F102DA0043D458 /* http1client.h in Headers */,
 				10D0903A19F0A51C0043D458 /* memory.h in Headers */,
 				104B9A2D1A4BE029009EEE64 /* version.h in Headers */,
@@ -1266,6 +1313,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				107923C719A3217300C52AD6 /* hpack.c in Sources */,
+				10A3D40A1B50DAB700327CF9 /* recv.c in Sources */,
 				101788B219B561AA0084C6D8 /* socket.c in Sources */,
 				10D0905519F102C70043D458 /* http1client.c in Sources */,
 				107923D219A3217300C52AD6 /* token.c in Sources */,
@@ -1282,6 +1330,7 @@
 				10583BF11AE5A37B004A3AD6 /* Makefile in Sources */,
 				107923CD19A3217300C52AD6 /* memory.c in Sources */,
 				107923CC19A3217300C52AD6 /* context.c in Sources */,
+				10A3D40C1B50DAB700327CF9 /* socket.c in Sources */,
 				10AA2EC21AA0402E004322AC /* reproxy.c in Sources */,
 				107923C519A3217300C52AD6 /* http1.c in Sources */,
 				10AA2EA71A8DA93C004322AC /* redirect.c in Sources */,
@@ -1290,6 +1339,7 @@
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
 				10AA2EC41AA0403A004322AC /* reproxy.c in Sources */,
 				10AA2EAC1A8DE0AE004322AC /* multithread.c in Sources */,
+				10A3D3D91B4F786E00327CF9 /* mruby.c in Sources */,
 				1065E6F919BEBAC600686E72 /* timeout.c in Sources */,
 				10F4180519CA75C500B6E31A /* configurator.c in Sources */,
 				104B9A461A5F608A009EEE64 /* serverutil.c in Sources */,
@@ -1297,21 +1347,27 @@
 				10AA2EA51A8D9999004322AC /* redirect.c in Sources */,
 				101B670C19ADD3380084A351 /* access_log.c in Sources */,
 				10BA72AA19AAD6300059392A /* stream.c in Sources */,
+				10A3D3DB1B4F787700327CF9 /* mruby.c in Sources */,
 				10D0907319F633B00043D458 /* proxy.c in Sources */,
+				10A3D3D21B4CDBDC00327CF9 /* memcached.c in Sources */,
 				107923CF19A3217300C52AD6 /* request.c in Sources */,
 				10BCF2FF1B1A892F0076939D /* fastcgi.c in Sources */,
 				104B9A531A5FC7C4009EEE64 /* expires.c in Sources */,
+				10A3D40D1B50DAB700327CF9 /* strerror.c in Sources */,
 				107923CB19A3217300C52AD6 /* frame.c in Sources */,
 				104B9A491A5F9638009EEE64 /* headers.c in Sources */,
 				107923C219A3217300C52AD6 /* chunked.c in Sources */,
+				10A3D4081B50DAB700327CF9 /* close.c in Sources */,
 				105534EF1A440FC800627ECB /* config.c in Sources */,
 				10E299581A67E68500701AA6 /* scheduler.c in Sources */,
 				107923D319A3217300C52AD6 /* util.c in Sources */,
 				105534CA1A3BB46900627ECB /* string.c in Sources */,
 				10583BF21AE5A37B004A3AD6 /* README.md in Sources */,
 				10BCF2FD1B168CAE0076939D /* fastcgi.c in Sources */,
+				10A3D40B1B50DAB700327CF9 /* send.c in Sources */,
 				10FCC13E1B2E4A4500F13674 /* cloexec.c in Sources */,
 				105534DF1A3C7B9800627ECB /* proxy.c in Sources */,
+				10A3D4091B50DAB700327CF9 /* connect.c in Sources */,
 				105534DD1A3C7AA900627ECB /* file.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1502,6 +1558,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-luv",
@@ -1529,6 +1586,7 @@
 				);
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-luv",
@@ -1555,6 +1613,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lwslay",
 					"-lnettle",
 					"-lssl",
@@ -1587,6 +1646,7 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;
@@ -1630,6 +1690,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-luv",
@@ -1653,6 +1714,7 @@
 				);
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-luv",
@@ -1675,6 +1737,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lwslay",
 					"-lnettle",
 					"-lssl",
@@ -1747,7 +1810,10 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
-				GCC_PREPROCESSOR_DEFINITIONS = "H2O_USE_LIBUV=0";
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"H2O_USE_LIBUV=0",
+					"$(inherited)",
+				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;
@@ -1810,6 +1876,7 @@
 				);
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 				);
@@ -1832,6 +1899,7 @@
 				);
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 				);
@@ -1857,6 +1925,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lwslay",
 					"-lnettle",
 					"-lssl",
@@ -1880,6 +1949,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lwslay",
 					"-lnettle",
 					"-lssl",
@@ -1909,6 +1979,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 				);
@@ -1935,6 +2006,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 				);
@@ -2158,6 +2230,7 @@
 				);
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 				);
@@ -2185,6 +2258,7 @@
 				);
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-luv",
@@ -2209,6 +2283,7 @@
 				);
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 				);
@@ -2232,6 +2307,7 @@
 				);
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
+					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-luv",

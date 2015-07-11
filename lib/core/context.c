@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <sys/time.h>
 #include "h2o.h"
+#include "h2o/memcached.h"
 
 void h2o_context_init_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pathconf)
 {

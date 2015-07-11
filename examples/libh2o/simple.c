@@ -30,6 +30,10 @@
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
+#include "h2o/memcached.h"
+
+#define USE_HTTPS 0
+#define USE_MEMCACHED 0
 
 static h2o_pathconf_t *register_handler(h2o_hostconf_t *hostconf, const char *path, int (*on_req)(h2o_handler_t *, h2o_req_t *))
 {
@@ -87,6 +91,7 @@ static int post_test(h2o_handler_t *self, h2o_req_t *req)
 
 static h2o_globalconf_t config;
 static h2o_context_t ctx;
+static h2o_multithread_receiver_t libmemcached_receiver;
 static h2o_accept_ctx_t accept_ctx;
 
 #if H2O_USE_LIBUV
@@ -183,6 +188,12 @@ static int setup_ssl(const char *cert_file, const char *key_file)
     accept_ctx.ssl_ctx = SSL_CTX_new(SSLv23_server_method());
     SSL_CTX_set_options(accept_ctx.ssl_ctx, SSL_OP_NO_SSLv2);
 
+    if (USE_MEMCACHED) {
+        accept_ctx.libmemcached_receiver = &libmemcached_receiver;
+        h2o_accept_setup_async_ssl_resumption(h2o_memcached_create_context("127.0.0.1", 11211, 1, "h2o:ssl-resumption:"), 86400);
+        h2o_socket_ssl_async_resumption_setup_ctx(accept_ctx.ssl_ctx);
+    }
+
     /* load certificate and private key */
     if (SSL_CTX_use_certificate_file(accept_ctx.ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
         fprintf(stderr, "an error occurred while trying to load server certificate file:%s\n", cert_file);
@@ -224,12 +235,11 @@ int main(int argc, char **argv)
 #else
     h2o_context_init(&ctx, h2o_evloop_create(), &config);
 #endif
+    if (USE_MEMCACHED)
+        h2o_multithread_register_receiver(ctx.queue, &libmemcached_receiver, h2o_memcached_receiver);
 
-    /* disabled by default: uncomment the block below to use HTTPS instead of HTTP */
-    /*
-    if (setup_ssl("server.crt", "server.key") != 0)
+    if (USE_HTTPS && setup_ssl("examples/h2o/server.crt", "examples/h2o/server.key") != 0)
         goto Error;
-    */
 
     /* disabled by default: uncomment the line below to enable access logging */
     /* h2o_access_log_register(&config.default_host, "/dev/stdout", NULL); */
