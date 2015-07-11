@@ -534,6 +534,8 @@ static SSL_SESSION *on_async_resumption_get(SSL *ssl, unsigned char *data, int l
 static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
 {
     h2o_iovec_t data;
+    const unsigned char *id;
+    unsigned id_len;
     unsigned char *p;
 
     /* build data */
@@ -542,8 +544,8 @@ static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
     p = (void *)data.base;
     i2d_SSL_SESSION(session, &p);
 
-    h2o_iovec_t session_id = h2o_iovec_init(session->session_id, session->session_id_length);
-    resumption_new(session_id, data);
+    id = SSL_SESSION_get_id(session, &id_len);
+    resumption_new(h2o_iovec_init(id, id_len), data);
     return 0;
 }
 

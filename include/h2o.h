@@ -37,7 +37,7 @@ extern "C" {
 #include <unistd.h>
 #include <openssl/ssl.h>
 #include "h2o/hostinfo.h"
-#include "h2o/libmemcached.h"
+#include "h2o/memcached.h"
 #include "h2o/linklist.h"
 #include "h2o/http1client.h"
 #include "h2o/memory.h"
@@ -740,7 +740,7 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock);
 /**
  * setups accept context for async SSL resumption
  */
-void h2o_accept_setup_async_ssl_resumption(h2o_libmemcached_context_t *ctx, unsigned expiration);
+void h2o_accept_setup_async_ssl_resumption(h2o_memcached_context_t *ctx, unsigned expiration);
 /**
  * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")
  */
