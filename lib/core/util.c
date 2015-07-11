@@ -33,7 +33,7 @@ struct st_h2o_accept_data_t {
     h2o_accept_ctx_t *ctx;
     h2o_socket_t *sock;
     h2o_timeout_entry_t timeout;
-    h2o_libmemcached_req_t *async_resumption_get_req;
+    h2o_memcached_req_t *async_resumption_get_req;
 };
 
 static void on_accept_timeout(h2o_timeout_entry_t *entry);
@@ -62,10 +62,8 @@ static h2o_accept_ctx_t *free_accept_data(struct st_h2o_accept_data_t *data)
     return ctx;
 }
 
-#if H2O_USE_MEMCACHED
-
 static struct {
-    h2o_libmemcached_context_t *memc;
+    h2o_memcached_context_t *memc;
     unsigned expiration;
 } async_resumption_context;
 
@@ -81,40 +79,37 @@ static void async_resumption_get(h2o_socket_t *sock, h2o_iovec_t session_id)
     struct st_h2o_accept_data_t *data = sock->data;
 
     data->async_resumption_get_req =
-        h2o_libmemcached_get(async_resumption_context.memc, data->ctx->libmemcached_receiver, session_id, async_resumption_on_get,
-                             data, H2O_LIBMEMCACHED_ENCODE_KEY | H2O_LIBMEMCACHED_ENCODE_VALUE);
+        h2o_memcached_get(async_resumption_context.memc, data->ctx->libmemcached_receiver, session_id, async_resumption_on_get,
+                          data, H2O_MEMCACHED_ENCODE_KEY | H2O_MEMCACHED_ENCODE_VALUE);
 }
 
 static void async_resumption_new(h2o_iovec_t session_id, h2o_iovec_t session_data)
 {
-    h2o_libmemcached_set(async_resumption_context.memc, session_id, session_data, time(NULL) + async_resumption_context.expiration,
-                         H2O_LIBMEMCACHED_ENCODE_KEY | H2O_LIBMEMCACHED_ENCODE_VALUE);
+    h2o_memcached_set(async_resumption_context.memc, session_id, session_data,
+                      (uint32_t)time(NULL) + async_resumption_context.expiration,
+                      H2O_MEMCACHED_ENCODE_KEY | H2O_MEMCACHED_ENCODE_VALUE);
 }
 
 static void async_resumption_remove(h2o_iovec_t session_id)
 {
-    h2o_libmemcached_delete(async_resumption_context.memc, session_id, H2O_LIBMEMCACHED_ENCODE_KEY);
+    h2o_memcached_delete(async_resumption_context.memc, session_id, H2O_MEMCACHED_ENCODE_KEY);
 }
 
-void h2o_accept_setup_async_ssl_resumption(h2o_libmemcached_context_t *memc, unsigned expiration)
+void h2o_accept_setup_async_ssl_resumption(h2o_memcached_context_t *memc, unsigned expiration)
 {
     async_resumption_context.memc = memc;
     async_resumption_context.expiration = expiration;
     h2o_socket_ssl_async_resumption_init(async_resumption_get, async_resumption_new, async_resumption_remove);
 }
 
-#endif
-
 void on_accept_timeout(h2o_timeout_entry_t *entry)
 {
     /* TODO log */
     struct st_h2o_accept_data_t *data = H2O_STRUCT_FROM_MEMBER(struct st_h2o_accept_data_t, timeout, entry);
-#if H2O_USE_MEMCACHED
     if (data->async_resumption_get_req != NULL) {
-        h2o_libmemcached_cancel_get(async_resumption_context.memc, data->async_resumption_get_req);
+        h2o_memcached_cancel_get(async_resumption_context.memc, data->async_resumption_get_req);
         data->async_resumption_get_req = NULL;
     }
-#endif
     h2o_socket_t *sock = data->sock;
     free_accept_data(data);
     h2o_socket_close(sock);

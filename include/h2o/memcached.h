@@ -19,32 +19,31 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__libmemcached_h
-#define h2o__libmemcached_h
+#ifndef h2o__memcached_h
+#define h2o__memcached_h
 
 #include <pthread.h>
-#include <time.h>
 #include "h2o/memory.h"
 #include "h2o/multithread.h"
 
-#define H2O_LIBMEMCACHED_ENCODE_KEY 0x1
-#define H2O_LIBMEMCACHED_ENCODE_VALUE 0x2
+#define H2O_MEMCACHED_ENCODE_KEY 0x1
+#define H2O_MEMCACHED_ENCODE_VALUE 0x2
 
-typedef struct st_h2o_libmemcached_context_t h2o_libmemcached_context_t;
-typedef struct st_h2o_libmemcached_req_t h2o_libmemcached_req_t;
-typedef void (*h2o_libmemcached_get_cb)(h2o_iovec_t value, void *cb_data);
+typedef struct st_h2o_memcached_context_t h2o_memcached_context_t;
+typedef struct st_h2o_memcached_req_t h2o_memcached_req_t;
+typedef void (*h2o_memcached_get_cb)(h2o_iovec_t value, void *cb_data);
 
-h2o_libmemcached_context_t *h2o_libmemcached_create_context(const char *config, size_t max_threads);
+h2o_memcached_context_t *h2o_memcached_create_context(const char *host, uint16_t port, size_t num_threads);
 
-void h2o_libmemcached_receiver(h2o_multithread_receiver_t *receiver, h2o_linklist_t *messages);
+void h2o_memcached_receiver(h2o_multithread_receiver_t *receiver, h2o_linklist_t *messages);
 
-h2o_libmemcached_req_t *h2o_libmemcached_get(h2o_libmemcached_context_t *ctx, h2o_multithread_receiver_t *receiver, h2o_iovec_t key,
-                                             h2o_libmemcached_get_cb cb, void *cb_data, int flags);
+h2o_memcached_req_t *h2o_memcached_get(h2o_memcached_context_t *ctx, h2o_multithread_receiver_t *receiver, h2o_iovec_t key,
+                                       h2o_memcached_get_cb cb, void *cb_data, int flags);
 
-void h2o_libmemcached_cancel_get(h2o_libmemcached_context_t *ctx, h2o_libmemcached_req_t *req);
+void h2o_memcached_cancel_get(h2o_memcached_context_t *ctx, h2o_memcached_req_t *req);
 
-void h2o_libmemcached_set(h2o_libmemcached_context_t *ctx, h2o_iovec_t key, h2o_iovec_t value, time_t expiration, int flags);
+void h2o_memcached_set(h2o_memcached_context_t *ctx, h2o_iovec_t key, h2o_iovec_t value, uint32_t expiration, int flags);
 
-void h2o_libmemcached_delete(h2o_libmemcached_context_t *ctx, h2o_iovec_t key, int flags);
+void h2o_memcached_delete(h2o_memcached_context_t *ctx, h2o_iovec_t key, int flags);
 
 #endif
