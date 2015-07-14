@@ -78,7 +78,7 @@ builder {
                 'content-type' => 'text/plain',
             ],
             [
-                join "\n", map { my $n = lc substr $_, 5; $n =~ tr/_/-/; "$n: $env->{$_}" } sort grep { /^HTTP_/ } keys %$env,
+                join "\n", map { my $n = lc $_; $n=~ s/^http_//; $n =~ tr/_/-/; "$n: $env->{$_}" } sort grep { /^(HTTP_|HTTPS$)/ } keys %$env,
             ]
         ];
     };
