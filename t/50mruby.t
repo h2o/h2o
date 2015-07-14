@@ -17,14 +17,20 @@ hosts:
     paths:
       /:
         file.dir: examples/doc_root
-        mruby.handler_path: examples/h2o_mruby/hello.rb
 $extra_conf
 EOT
     return `curl --silent /dev/stderr http://127.0.0.1:$server->{port}/ 2>&1`;
 }
 
 
-my $resp = fetch('');
+my $resp = fetch(<< 'EOT');
+        mruby.handler_path: examples/h2o_mruby/hello.rb
+EOT
 is $resp, "hello from h2o_mruby\n", "resoponse body from mruby";
+
+$resp = fetch(<< 'EOT');
+        mruby.handler_path: t/50mruby/max_header.rb
+EOT
+is $resp, "100", "H2O.max_headers method";
 
 done_testing();
