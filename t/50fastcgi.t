@@ -66,10 +66,18 @@ EOT
             # send header that exceeds the max. length fcgi record (the size of the response also exceeds the record size, and uses chunked encoding)
             my $doit = sub {
                 my ($proto, $port) = @_;
-                my $content = `curl --silent --show-error --insecure -H foo:@{["0123456789"x7000]} $proto://127.0.0.1:$port/echo-headers`;
-                like $content, qr/^foo: (0123456789){7000,7000}$/mi;
+                subtest $proto => sub {
+                    my $content = `curl --silent --show-error --insecure -H foo:@{["0123456789"x7000]} $proto://127.0.0.1:$port/echo-headers`;
+                    like $content, qr/^foo: (0123456789){7000,7000}$/mi;
+                    if ($proto eq 'https') {
+                        like $content, qr/^https: on$/m;
+                    } else {
+                        unlike $content, qr/^https: on$/m;
+                    }
+                };
             };
             $doit->('http', $server->{port});
+            $doit->('https', $server->{tls_port});
         };
         subtest 'cookie-merge' => sub {
             plan skip_all => "curl does not support HTTP/2"

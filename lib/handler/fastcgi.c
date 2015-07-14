@@ -269,6 +269,9 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
     /* SERVER_SOFTWARE */
     append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_SOFTWARE"), req->conn->ctx->globalconf->server_name.base,
                 req->conn->ctx->globalconf->server_name.len);
+    /* set HTTPS: on if necessary */
+    if (req->scheme == &H2O_URL_SCHEME_HTTPS)
+        append_pair(&req->pool, vecs, H2O_STRLIT("HTTPS"), H2O_STRLIT("on"));
     { /* headers */
         const h2o_header_t *h = req->headers.entries, *h_end = h + req->headers.size;
         size_t cookie_length = 0;
