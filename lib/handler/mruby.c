@@ -153,7 +153,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         mrb->exc = 0;
         h2o_send_error(req, 500, "Internal Server Error", "Internal Server Error", 0);
     } else {
-        h2o_send_error(req, 200, "h2o_mruby dayo", mrb_str_to_cstr(mrb, result), 0);
+        h2o_send_error(req, 200, "OK", mrb_str_to_cstr(mrb, result), 0);
     }
     mrb_gc_arena_restore(mrb, ai);
 
