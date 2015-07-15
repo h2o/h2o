@@ -52,6 +52,8 @@ struct st_h2o_mem_pool_shared_ref_t {
     struct st_h2o_mem_pool_shared_entry_t *entry;
 };
 
+void *(*h2o_mem__set_secure)(void *, int, size_t) = memset;
+
 static __thread h2o_mem_recycle_t mempool_allocator = {16};
 
 void h2o_fatal(const char *msg)
