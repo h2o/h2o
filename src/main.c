@@ -1189,6 +1189,54 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
     return 0;
 }
 
+static int on_config_session_ticket(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    yoml_t *t;
+
+    if ((t = yoml_get(node, "mode")) == NULL) {
+        h2o_configurator_errprintf(cmd, node, "mandatory argument `mode` is missing");
+        return -1;
+    }
+
+    if (t->type == YOML_TYPE_SCALAR) {
+
+        if (strcasecmp(t->data.scalar, "off") == 0) {
+
+            /* mode: off */
+            memset(&conf.session_ticket, 0, sizeof(conf.session_ticket));
+            return 0;
+
+        } else if (strcasecmp(t->data.scalar, "internal") == 0) {
+
+            /* mode: internal takes three arguments: cipher, hash, duration */
+            init_openssl();
+            if ((t = yoml_get(node, "cipher")) != NULL) {
+                if (t->type != YOML_TYPE_SCALAR || (conf.session_ticket.cipher = EVP_get_cipherbyname(t->data.scalar)) == NULL) {
+                    h2o_configurator_errprintf(cmd, t, "unknown cipher algorithm");
+                    return -1;
+                }
+            }
+            if ((t = yoml_get(node, "hash")) != NULL) {
+                if (t->type != YOML_TYPE_SCALAR || (conf.session_ticket.md = EVP_get_digestbyname(t->data.scalar)) == NULL) {
+                    h2o_configurator_errprintf(cmd, t, "unknown hash algorithm");
+                    return -1;
+                }
+            }
+            if ((t = yoml_get(node, "lifetime")) != NULL) {
+                if (t->type != YOML_TYPE_SCALAR || sscanf(t->data.scalar, "%u", &conf.session_ticket.lifetime) != 1 ||
+                    conf.session_ticket.lifetime == 0) {
+                    h2o_configurator_errprintf(cmd, t, "`liftime` must be a positive number (in seconds)");
+                    return -1;
+                }
+            }
+            return 0;
+        }
+    }
+
+    h2o_configurator_errprintf(cmd, t, "`type` must be one of: `internal`, `off`");
+    return -1;
+}
+
 static int on_config_memcached_session_resumption(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     const char *host = NULL, *prefix = ":h2o:ssl-resumption:";
@@ -1623,6 +1671,8 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
                                         on_config_num_name_resolution_threads);
         h2o_configurator_define_command(c, "tcp-fastopen", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_tcp_fastopen);
+        h2o_configurator_define_command(c, "session-ticket", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
+                                        on_config_session_ticket);
         h2o_configurator_define_command(c, "memcached-session-resumption",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
                                         on_config_memcached_session_resumption);
@@ -1891,6 +1941,14 @@ int main(int argc, char **argv)
             pthread_attr_init(&attr);
             pthread_attr_setdetachstate(&attr, 1);
             h2o_multithread_create_thread(&tid, &attr, session_ticket_updater_main, NULL);
+        }
+    } else {
+        size_t i, j;
+        for (i = 0; i != conf.num_listeners; ++i) {
+            for (j = 0; j != conf.listeners[i]->ssl.size; ++j) {
+                SSL_CTX *ctx = conf.listeners[i]->ssl.entries[j]->ctx;
+                SSL_CTX_set_options(ctx, SSL_CTX_get_options(ctx) | SSL_OP_NO_TICKET);
+            }
         }
     }
 #endif
