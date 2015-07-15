@@ -46,6 +46,8 @@
 #include <sys/wait.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
+#include <openssl/evp.h>
+#include <openssl/rand.h>
 #include <openssl/ssl.h>
 #ifdef __GLIBC__
 #include <execinfo.h>
@@ -70,7 +72,14 @@
 #else
 #define H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE 0
 #endif
+
 #define H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS 32
+
+#if defined(SSL_CTRL_SET_TLSEXT_TICKET_KEY_CB) && !defined(OPENSSL_NO_TLSEXT)
+#define H2O_USE_SESSION_TICKETS 1
+#else
+#define H2O_USE_SESSION_TICKETS 0
+#endif
 
 struct listener_ssl_config_t {
     H2O_VECTOR(h2o_iovec_t) hostnames;
@@ -128,6 +137,11 @@ static struct {
     size_t num_threads;
     int tfo_queues;
     struct {
+        const EVP_CIPHER *cipher;
+        const EVP_MD *md;
+        unsigned lifetime;
+    } session_ticket;
+    struct {
         char *host;
         uint16_t port;
         size_t num_threads;
@@ -159,6 +173,7 @@ static struct {
     1024,            /* max_connections */
     0,               /* initialized in main() */
     0,               /* initialized in main() */
+    {},              /* session_tickets (initialized in main()) */
     {},              /* memcached_session_resumption */
     NULL,            /* thread_ids */
     0,               /* shutdown_requested */
@@ -255,6 +270,145 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
 
     return SSL_TLSEXT_ERR_OK;
 }
+
+#if H2O_USE_SESSION_TICKETS
+
+struct st_session_ticket_t {
+    unsigned char name[16];
+    struct {
+        const EVP_CIPHER *cipher;
+        unsigned char *key;
+    } cipher;
+    struct {
+        const EVP_MD *md;
+        unsigned char *key;
+    } hmac;
+    time_t created;
+    time_t expires;
+};
+
+static struct {
+    pthread_rwlock_t rwlock;
+    H2O_VECTOR(struct st_session_ticket_t *) tickets; /* sorted from newer to older */
+} session_tickets = {
+    PTHREAD_RWLOCK_INITIALIZER, /* rwlock (FIXME need to favor writer over readers explicitly, the default of Linux is known to be
+                                   the otherwise) */
+    {}                          /* tickets */
+};
+
+static int session_ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx,
+                                       int enc)
+{
+    int ret;
+    pthread_rwlock_rdlock(&session_tickets.rwlock);
+
+    if (enc) {
+        if (session_tickets.tickets.size == 0) {
+            ret = -1;
+            goto Exit;
+        }
+        struct st_session_ticket_t *ticket = session_tickets.tickets.entries[0];
+        memcpy(key_name, ticket->name, sizeof(ticket->name));
+        RAND_pseudo_bytes(iv, EVP_MAX_IV_LENGTH);
+        EVP_EncryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, NULL);
+        HMAC_Init_ex(hctx, ticket->hmac.key, ticket->hmac.md->block_size, ticket->hmac.md, NULL);
+        ret = 1;
+    } else {
+        struct st_session_ticket_t *ticket;
+        size_t i;
+        for (i = 0; i != session_tickets.tickets.size; ++i) {
+            ticket = session_tickets.tickets.entries[i];
+            if (memcmp(ticket->name, key_name, sizeof(ticket->name)) == 0)
+                goto Found;
+        }
+        /* not found */
+        ret = 0;
+        goto Exit;
+    Found:
+        EVP_DecryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, NULL);
+        HMAC_Init_ex(hctx, ticket->hmac.key, ticket->hmac.md->block_size, ticket->hmac.md, NULL);
+        ret = i == 0 ? 1 : 2; /* request renew if the key is not the newest one */
+    }
+
+Exit:
+    pthread_rwlock_unlock(&session_tickets.rwlock);
+    return ret;
+}
+
+struct st_session_ticket_t *session_ticket_new(const EVP_CIPHER *cipher, const EVP_MD *md, time_t now, int lifetime)
+{
+    struct st_session_ticket_t *ticket = h2o_mem_alloc(sizeof(*ticket) + cipher->key_len + md->block_size);
+
+    RAND_pseudo_bytes(ticket->name, sizeof(ticket->name));
+    ticket->cipher.cipher = cipher;
+    ticket->cipher.key = (unsigned char *)ticket + sizeof(*ticket);
+    RAND_pseudo_bytes(ticket->cipher.key, cipher->key_len);
+    ticket->hmac.md = md;
+    ticket->hmac.key = ticket->cipher.key + cipher->key_len;
+    RAND_pseudo_bytes(ticket->hmac.key, md->block_size);
+    ticket->created = now;
+    ticket->expires = now + lifetime;
+
+    return ticket;
+}
+
+void session_ticket_free(struct st_session_ticket_t *ticket)
+{
+    h2o_mem_set_secure(ticket, 0, sizeof(*ticket) + ticket->cipher.cipher->key_len + ticket->hmac.md->block_size);
+    free(ticket);
+}
+
+static void *session_ticket_updater_main(void *unused)
+{
+    while (1) {
+        time_t newest_created = 0, oldest_expires = INT32_MAX, now = time(NULL);
+
+        /* obtain modification times */
+        pthread_rwlock_rdlock(&session_tickets.rwlock);
+        if (session_tickets.tickets.size != 0) {
+            newest_created = session_tickets.tickets.entries[0]->created;
+            oldest_expires = session_tickets.tickets.entries[session_tickets.tickets.size - 1]->expires;
+        }
+        pthread_rwlock_unlock(&session_tickets.rwlock);
+
+        /* insert new entry if necessary */
+        if (newest_created + conf.session_ticket.lifetime / 4 <= now) {
+            struct st_session_ticket_t *new_ticket =
+                session_ticket_new(conf.session_ticket.cipher, conf.session_ticket.md, now, conf.session_ticket.lifetime);
+            pthread_rwlock_wrlock(&session_tickets.rwlock);
+            h2o_vector_reserve(NULL, (void *)&session_tickets.tickets, sizeof(session_tickets.tickets.entries[0]),
+                               session_tickets.tickets.size + 1);
+            memmove(session_tickets.tickets.entries + 1, session_tickets.tickets.entries,
+                    sizeof(session_tickets.tickets.entries[0]) * session_tickets.tickets.size);
+            session_tickets.tickets.entries[0] = new_ticket;
+            ++session_tickets.tickets.size;
+            pthread_rwlock_unlock(&session_tickets.rwlock);
+        }
+
+        /* free expired entries if necessary */
+        if (oldest_expires <= now) {
+            while (1) {
+                struct st_session_ticket_t *expiring_ticket = NULL;
+                pthread_rwlock_wrlock(&session_tickets.rwlock);
+                if (session_tickets.tickets.size != 0 &&
+                    session_tickets.tickets.entries[session_tickets.tickets.size - 1]->expires < now) {
+                    expiring_ticket = session_tickets.tickets.entries[session_tickets.tickets.size - 1];
+                    session_tickets.tickets.entries[session_tickets.tickets.size - 1] = NULL;
+                    --session_tickets.tickets.size;
+                }
+                pthread_rwlock_unlock(&session_tickets.rwlock);
+                if (expiring_ticket == NULL)
+                    break;
+                session_ticket_free(expiring_ticket);
+            }
+        }
+
+        /* sleep for certain amount of time */
+        sleep(120 - (rand() >> 16) % 7);
+    }
+}
+
+#endif
 
 #ifndef OPENSSL_NO_OCSP
 
@@ -1494,6 +1648,15 @@ int main(int argc, char **argv)
 
     conf.num_threads = h2o_numproc();
     conf.tfo_queues = H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE;
+
+#if H2O_USE_SESSION_TICKETS
+    /* to protect the secret >>>2030 we need AES-256 (http://www.keylength.com/en/4/), sha1 is used only during the communication
+     * and can be short */
+    conf.session_ticket.cipher = EVP_aes_256_cbc();
+    conf.session_ticket.md = EVP_sha1();
+    conf.session_ticket.lifetime = 3600; /* 1 hour */
+#endif
+
     h2o_hostinfo_max_threads = H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS;
     setup_configurators();
 
@@ -1710,6 +1873,27 @@ int main(int argc, char **argv)
             if (conf.listeners[i]->ssl.size != 0)
                 h2o_socket_ssl_async_resumption_setup_ctx(conf.listeners[i]->ssl.entries[0]->ctx);
     }
+
+#if H2O_USE_SESSION_TICKETS
+    /* start session ticket updater thread */
+    if (conf.session_ticket.cipher != NULL) {
+        size_t i, j;
+        int sslfound = 0;
+        for (i = 0; i != conf.num_listeners; ++i) {
+            for (j = 0; j != conf.listeners[i]->ssl.size; ++j) {
+                SSL_CTX_set_tlsext_ticket_key_cb(conf.listeners[i]->ssl.entries[j]->ctx, session_ticket_key_callback);
+                sslfound = 1;
+            }
+        }
+        if (sslfound) {
+            pthread_t tid;
+            pthread_attr_t attr;
+            pthread_attr_init(&attr);
+            pthread_attr_setdetachstate(&attr, 1);
+            h2o_multithread_create_thread(&tid, &attr, session_ticket_updater_main, NULL);
+        }
+    }
+#endif
 
     /* all setup should be complete by now */
 
