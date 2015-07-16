@@ -314,6 +314,8 @@ ENDIF (OPENSSL_FOUND)
 ADD_EXECUTABLE(h2o
     ${LIB_SOURCE_FILES}
     ${LIBYAML_SOURCE_FILES}
+    src/ssl-session-resumption.c
+    src/ssl-session-ticket.c
     src/main.c)
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
 IF (WITH_BUNDLED_SSL)

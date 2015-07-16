@@ -100,6 +100,8 @@
 		10A3D40B1B50DAB700327CF9 /* send.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3F71B4FAAF500327CF9 /* send.c */; };
 		10A3D40C1B50DAB700327CF9 /* socket.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3F91B4FAAF500327CF9 /* socket.c */; };
 		10A3D40D1B50DAB700327CF9 /* strerror.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3FA1B4FAAF500327CF9 /* strerror.c */; };
+		10A3D4101B584C0D00327CF9 /* ssl-session-resumption.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D40F1B584C0D00327CF9 /* ssl-session-resumption.c */; };
+		10A3D4131B584C3800327CF9 /* ssl-session-ticket.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D4111B584C3800327CF9 /* ssl-session-ticket.c */; };
 		10AA2E941A80A592004322AC /* time_.h in Headers */ = {isa = PBXBuildFile; fileRef = 10AA2E931A80A592004322AC /* time_.h */; };
 		10AA2E961A80A612004322AC /* time.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2E951A80A612004322AC /* time.c */; };
 		10AA2E991A81F68A004322AC /* time.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2E981A81F68A004322AC /* time.c */; };
@@ -391,6 +393,9 @@
 		10A3D3F91B4FAAF500327CF9 /* socket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = socket.c; sourceTree = "<group>"; };
 		10A3D3FA1B4FAAF500327CF9 /* strerror.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = strerror.c; sourceTree = "<group>"; };
 		10A3D3FE1B4FAAF500327CF9 /* yrmcds.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = yrmcds.h; sourceTree = "<group>"; };
+		10A3D40E1B584BEC00327CF9 /* standalone.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = standalone.h; sourceTree = "<group>"; };
+		10A3D40F1B584C0D00327CF9 /* ssl-session-resumption.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "ssl-session-resumption.c"; sourceTree = "<group>"; };
+		10A3D4111B584C3800327CF9 /* ssl-session-ticket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "ssl-session-ticket.c"; sourceTree = "<group>"; };
 		10A60DE91B0D87FE006E38EC /* annotate-backtrace-symbols */ = {isa = PBXFileReference; lastKnownFileType = text; path = "annotate-backtrace-symbols"; sourceTree = "<group>"; };
 		10AA2E931A80A592004322AC /* time_.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = time_.h; sourceTree = "<group>"; };
 		10AA2E951A80A612004322AC /* time.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = time.c; sourceTree = "<group>"; };
@@ -1072,7 +1077,10 @@
 		10F417D419C190DD00B6E31A /* src */ = {
 			isa = PBXGroup;
 			children = (
+				10A3D40E1B584BEC00327CF9 /* standalone.h */,
 				10F417D519C190F800B6E31A /* main.c */,
+				10A3D40F1B584C0D00327CF9 /* ssl-session-resumption.c */,
+				10A3D4111B584C3800327CF9 /* ssl-session-ticket.c */,
 			);
 			path = src;
 			sourceTree = "<group>";
@@ -1446,8 +1454,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				10756E2C1AC126420009BF57 /* emitter.c in Sources */,
+				10A3D4101B584C0D00327CF9 /* ssl-session-resumption.c in Sources */,
 				10756E2A1AC126420009BF57 /* api.c in Sources */,
 				10756E2B1AC126420009BF57 /* dumper.c in Sources */,
+				10A3D4131B584C3800327CF9 /* ssl-session-ticket.c in Sources */,
 				10756E2D1AC126420009BF57 /* loader.c in Sources */,
 				10756E361AC1264D0009BF57 /* writer.c in Sources */,
 				10756E351AC1264D0009BF57 /* scanner.c in Sources */,
