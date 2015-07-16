@@ -154,12 +154,15 @@ static struct {
         } conf;
     } session_ticket;
     struct {
-        char *host;
-        uint16_t port;
-        size_t num_threads;
-        char *prefix;
-        unsigned timeout;
-    } memcached_session_resumption;
+        void (*setup)(void);
+        struct {
+            char *host;
+            uint16_t port;
+            size_t num_threads;
+            char *prefix;
+            unsigned timeout;
+        } memcached;
+    } session_resumption;
     struct {
         pthread_t tid;
         h2o_context_t ctx;
@@ -1413,7 +1416,7 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
     return 0;
 }
 
-static int on_config_session_ticket(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_ssl_session_ticket(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     yoml_t *t;
 
@@ -1475,69 +1478,119 @@ static int on_config_session_ticket(h2o_configurator_command_t *cmd, h2o_configu
         }
     }
 
-    h2o_configurator_errprintf(cmd, t, "`type` must be one of: `internal`, `off`");
+    h2o_configurator_errprintf(cmd, t, "`mode` must be one of: `internal`, `off`");
     return -1;
 }
 
-static int on_config_memcached_session_resumption(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static void setup_session_resumption_disable(void)
 {
-    const char *host = NULL, *prefix = ":h2o:ssl-resumption:";
-    uint16_t port = 11211;
-    size_t num_threads = 1;
-    unsigned timeout = 3600;
-    size_t index;
-
-    for (index = 0; index != node->data.mapping.size; ++index) {
-        yoml_t *key = node->data.mapping.elements[index].key;
-        yoml_t *value = node->data.mapping.elements[index].value;
-        if (key->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, key, "attribute must be a string");
-            return -1;
-        }
-        if (strcmp(key->data.scalar, "host") == 0) {
-            if (value->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, value, "`host` must be a string");
-                return -1;
-            }
-            host = value->data.scalar;
-        } else if (strcmp(key->data.scalar, "port") == 0) {
-            if (!(value->type == YOML_TYPE_SCALAR && sscanf(value->data.scalar, "%" SCNu16, &port) == 1)) {
-                h2o_configurator_errprintf(cmd, value, "`port` must be a number");
-                return -1;
-            }
-        } else if (strcmp(key->data.scalar, "num-threads") == 0) {
-            if (!(value->type == YOML_TYPE_SCALAR && sscanf(value->data.scalar, "%zu", &num_threads) == 1 && num_threads != 0)) {
-                h2o_configurator_errprintf(cmd, value, "`num-threads` must be a positive number");
-                return -1;
-            }
-        } else if (strcmp(key->data.scalar, "prefix") == 0) {
-            if (value->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, value, "`prefix` must be a string");
-                return -1;
-            }
-            prefix = value->data.scalar;
-        } else if (strcmp(key->data.scalar, "timeout") == 0) {
-            if (!(value->type == YOML_TYPE_SCALAR && sscanf(value->data.scalar, "%u", &timeout) == 1 && timeout != 0)) {
-                h2o_configurator_errprintf(cmd, value, "`timeout` must be a positive number (in seconds)");
-                return -1;
-            }
-        } else {
-            h2o_configurator_errprintf(cmd, key, "unknown attribute: %s", key->data.scalar);
-            return -1;
+    size_t i, j;
+    for (i = 0; i != conf.num_listeners; ++i) {
+        for (j = 0; j != conf.listeners[i]->ssl.size; ++j) {
+            SSL_CTX *ctx = conf.listeners[i]->ssl.entries[j]->ctx;
+            SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_OFF);
         }
     }
-    if (host == NULL) {
-        h2o_configurator_errprintf(cmd, node, "mandatory attribute `host` is missing");
+}
+
+static void setup_session_resumption_memcached(void)
+{
+    h2o_memcached_context_t *memc_ctx =
+        h2o_memcached_create_context(conf.session_resumption.memcached.host, conf.session_resumption.memcached.port,
+                                     conf.session_resumption.memcached.num_threads, conf.session_resumption.memcached.prefix);
+    h2o_accept_setup_async_ssl_resumption(memc_ctx, conf.session_resumption.memcached.timeout);
+    size_t i;
+    for (i = 0; i != conf.num_listeners; ++i)
+        if (conf.listeners[i]->ssl.size != 0)
+            h2o_socket_ssl_async_resumption_setup_ctx(conf.listeners[i]->ssl.entries[0]->ctx);
+}
+
+static int on_config_ssl_session_resumption(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    yoml_t *mode;
+
+    if ((mode = yoml_get(node, "mode")) == NULL) {
+        h2o_configurator_errprintf(cmd, mode, "mandatory attribute `mode` is missing");
         return -1;
     }
 
-    conf.memcached_session_resumption.host = h2o_strdup(NULL, host, SIZE_MAX).base;
-    conf.memcached_session_resumption.port = port;
-    conf.memcached_session_resumption.num_threads = num_threads;
-    conf.memcached_session_resumption.prefix = h2o_strdup(NULL, prefix, SIZE_MAX).base;
-    conf.memcached_session_resumption.timeout = timeout;
+    if (mode->type == YOML_TYPE_SCALAR) {
 
-    return 0;
+        if (strcmp(mode->data.scalar, "off") == 0) {
+
+            conf.session_resumption.setup = setup_session_resumption_disable;
+            return 0;
+
+        } else if (strcmp(mode->data.scalar, "internal") == 0) {
+
+            conf.session_resumption.setup = NULL;
+            return 0;
+
+        } else if (strcmp(mode->data.scalar, "memcached") == 0) {
+
+            const char *host = NULL, *prefix = ":h2o:ssl-resumption:";
+            uint16_t port = 11211;
+            size_t num_threads = 1;
+            unsigned timeout = 3600;
+            size_t index;
+            for (index = 0; index != node->data.mapping.size; ++index) {
+                yoml_t *key = node->data.mapping.elements[index].key;
+                yoml_t *value = node->data.mapping.elements[index].value;
+                if (value == mode)
+                    continue;
+                if (key->type != YOML_TYPE_SCALAR) {
+                    h2o_configurator_errprintf(cmd, key, "attribute must be a string");
+                    return -1;
+                }
+                if (strcmp(key->data.scalar, "host") == 0) {
+                    if (value->type != YOML_TYPE_SCALAR) {
+                        h2o_configurator_errprintf(cmd, value, "`host` must be a string");
+                        return -1;
+                    }
+                    host = value->data.scalar;
+                } else if (strcmp(key->data.scalar, "port") == 0) {
+                    if (!(value->type == YOML_TYPE_SCALAR && sscanf(value->data.scalar, "%" SCNu16, &port) == 1)) {
+                        h2o_configurator_errprintf(cmd, value, "`port` must be a number");
+                        return -1;
+                    }
+                } else if (strcmp(key->data.scalar, "num-threads") == 0) {
+                    if (!(value->type == YOML_TYPE_SCALAR && sscanf(value->data.scalar, "%zu", &num_threads) == 1 &&
+                          num_threads != 0)) {
+                        h2o_configurator_errprintf(cmd, value, "`num-threads` must be a positive number");
+                        return -1;
+                    }
+                } else if (strcmp(key->data.scalar, "prefix") == 0) {
+                    if (value->type != YOML_TYPE_SCALAR) {
+                        h2o_configurator_errprintf(cmd, value, "`prefix` must be a string");
+                        return -1;
+                    }
+                    prefix = value->data.scalar;
+                } else if (strcmp(key->data.scalar, "timeout") == 0) {
+                    if (!(value->type == YOML_TYPE_SCALAR && sscanf(value->data.scalar, "%u", &timeout) == 1 && timeout != 0)) {
+                        h2o_configurator_errprintf(cmd, value, "`timeout` must be a positive number (in seconds)");
+                        return -1;
+                    }
+                } else {
+                    h2o_configurator_errprintf(cmd, key, "unknown attribute: %s", key->data.scalar);
+                    return -1;
+                }
+            }
+            if (host == NULL) {
+                h2o_configurator_errprintf(cmd, node, "mandatory attribute `host` is missing");
+                return -1;
+            }
+            conf.session_resumption.setup = setup_session_resumption_memcached;
+            conf.session_resumption.memcached.host = h2o_strdup(NULL, host, SIZE_MAX).base;
+            conf.session_resumption.memcached.port = port;
+            conf.session_resumption.memcached.num_threads = num_threads;
+            conf.session_resumption.memcached.prefix = h2o_strdup(NULL, prefix, SIZE_MAX).base;
+            conf.session_resumption.memcached.timeout = timeout;
+            return 0;
+        }
+    }
+
+    h2o_configurator_errprintf(cmd, mode, "`mode` must be one of: `off`, `internal`, `memached`");
+    return -1;
 }
 
 static int on_config_num_name_resolution_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -1913,11 +1966,12 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
                                         on_config_num_name_resolution_threads);
         h2o_configurator_define_command(c, "tcp-fastopen", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_tcp_fastopen);
-        h2o_configurator_define_command(c, "session-ticket", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
-                                        on_config_session_ticket);
-        h2o_configurator_define_command(c, "memcached-session-resumption",
+        h2o_configurator_define_command(c, "ssl-session-ticket",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
-                                        on_config_memcached_session_resumption);
+                                        on_config_ssl_session_ticket);
+        h2o_configurator_define_command(c, "ssl-session-resumption",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
+                                        on_config_ssl_session_resumption);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
@@ -2151,16 +2205,8 @@ int main(int argc, char **argv)
     }
 
     /* start memcached client threads for session resumption, and adjust the SSL contexts */
-    if (conf.memcached_session_resumption.host != NULL) {
-        h2o_memcached_context_t *memc_ctx =
-            h2o_memcached_create_context(conf.memcached_session_resumption.host, conf.memcached_session_resumption.port,
-                                         conf.memcached_session_resumption.num_threads, conf.memcached_session_resumption.prefix);
-        h2o_accept_setup_async_ssl_resumption(memc_ctx, conf.memcached_session_resumption.timeout);
-        size_t i;
-        for (i = 0; i != conf.num_listeners; ++i)
-            if (conf.listeners[i]->ssl.size != 0)
-                h2o_socket_ssl_async_resumption_setup_ctx(conf.listeners[i]->ssl.entries[0]->ctx);
-    }
+    if (conf.session_resumption.setup != NULL)
+        conf.session_resumption.setup();
 
 #if H2O_USE_SESSION_TICKETS
     /* start session ticket updater thread */
