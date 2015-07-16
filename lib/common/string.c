@@ -277,7 +277,7 @@ static int decode_hex(int ch)
 
 int h2o_hex_decode(void *_dst, const char *src, size_t src_len)
 {
-    unsigned char *dst;
+    unsigned char *dst = _dst;
 
     if (src_len % 2 != 0)
         return -1;
@@ -285,7 +285,7 @@ int h2o_hex_decode(void *_dst, const char *src, size_t src_len)
         int hi, lo;
         if ((hi = decode_hex(*src++)) == -1 || (lo = decode_hex(*src++)) == -1)
             return -1;
-        *dst = (hi << 4) | lo;
+        *dst++ = (hi << 4) | lo;
     }
     return 0;
 }
@@ -297,6 +297,7 @@ void h2o_hex_encode(char *dst, const void *_src, size_t src_len)
         *dst++ = "0123456789abcdef"[*src >> 4];
         *dst++ = "0123456789abcdef"[*src & 0xf];
     }
+    *dst = '\0';
 }
 
 const char *h2o_get_filext(const char *path, size_t len)
