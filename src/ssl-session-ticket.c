@@ -387,8 +387,6 @@ static void *session_ticket_file_updater(void *_conf)
     }
 }
 
-#endif
-
 static void init_internal_defaults(void)
 {
     /* to protect the secret >>>2030 we need AES-256 (http://www.keylength.com/en/4/), sha1 is used only during the communication
@@ -399,26 +397,29 @@ static void init_internal_defaults(void)
     conf.vars.internal.lifetime = 3600; /* 1 hour */
 }
 
+#endif
+
 int ssl_session_ticket_on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    yoml_t *t;
+    yoml_t *mode;
 
-    if ((t = yoml_get(node, "mode")) == NULL) {
+    if ((mode = yoml_get(node, "mode")) == NULL) {
         h2o_configurator_errprintf(cmd, node, "mandatory attribute `mode` is missing");
         return -1;
     }
 
-    if (t->type == YOML_TYPE_SCALAR) {
-
-        if (strcasecmp(t->data.scalar, "off") == 0) {
+    if (mode->type == YOML_TYPE_SCALAR) {
+        if (strcasecmp(mode->data.scalar, "off") == 0) {
 
             /* mode: off */
             conf.update_thread = NULL;
             return 0;
 
-        } else if (strcasecmp(t->data.scalar, "internal") == 0) {
+        } else if (strcasecmp(mode->data.scalar, "internal") == 0) {
 
-            /* mode: internal takes three arguments: cipher, hash, duration */
+/* mode: internal takes three arguments: cipher, hash, duration */
+#if H2O_USE_SESSION_TICKETS
+            yoml_t *t;
             init_internal_defaults();
             if ((t = yoml_get(node, "cipher")) != NULL) {
                 if (t->type != YOML_TYPE_SCALAR || (conf.vars.internal.cipher = EVP_get_cipherbyname(t->data.scalar)) == NULL) {
@@ -440,10 +441,14 @@ int ssl_session_ticket_on_config(h2o_configurator_command_t *cmd, h2o_configurat
                 }
             }
             return 0;
+#else
+            goto NoSessionTickets;
+#endif
+        } else if (strcasecmp(mode->data.scalar, "file") == 0) {
 
-        } else if (strcasecmp(t->data.scalar, "file") == 0) {
-
-            /* mode: file reads the contents of the file and uses it as the session ticket secret */
+/* mode: file reads the contents of the file and uses it as the session ticket secret */
+#if H2O_USE_SESSION_TICKETS
+            yoml_t *t;
             if ((t = yoml_get(node, "file")) == NULL) {
                 h2o_configurator_errprintf(cmd, node, "mandatory attribute `file` is missing");
                 return -1;
@@ -455,11 +460,21 @@ int ssl_session_ticket_on_config(h2o_configurator_command_t *cmd, h2o_configurat
             conf.update_thread = session_ticket_file_updater;
             conf.vars.file.filename = h2o_strdup(NULL, t->data.scalar, SIZE_MAX).base;
             return 0;
+#else
+            goto NoSessionTickets;
+#endif
         }
     }
 
-    h2o_configurator_errprintf(cmd, t, "`mode` must be one of: `internal`, `off`");
+    h2o_configurator_errprintf(cmd, mode, "`mode` must be one of: `internal`, `off`");
     return -1;
+#if !H2O_USE_SESSION_TICKETS
+NoSessionTickets:
+    h2o_configurator_errprintf(cmd, mode,
+                               "`disabled` is the only mode supported (the server is built without support for ticket-based session"
+                               "resumption)");
+    return -1;
+#endif
 }
 
 void ssl_session_ticket_init(void)
