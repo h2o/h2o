@@ -76,18 +76,36 @@ static struct {
     {}                          /* tickets */
 };
 
-static int ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx,
-                                       int enc)
+static struct st_session_ticket_t *find_ticket_for_encryption(session_ticket_vector_t *tickets, uint64_t now)
+{
+    size_t i;
+
+    for (i = 0; i != tickets->size; ++i) {
+        struct st_session_ticket_t *ticket = tickets->entries[i];
+        if (ticket->not_before <= now) {
+            if (now <= ticket->not_after) {
+                return ticket;
+            } else {
+                return NULL;
+            }
+        }
+    }
+    return NULL;
+}
+
+static int ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx, int enc)
 {
     int ret;
     pthread_rwlock_rdlock(&session_tickets.rwlock);
 
     if (enc) {
-        if (session_tickets.tickets.size == 0) {
+        struct st_session_ticket_t *ticket = find_ticket_for_encryption(&session_tickets.tickets, time(NULL));
+        if (ticket == NULL) {
+            /* FIXME generate random key and use it; that is the only way to continue the handshake (OpenSSL does not handle ret ==
+             * 0 as specified in the man pages) */
             ret = -1;
             goto Exit;
         }
-        struct st_session_ticket_t *ticket = session_tickets.tickets.entries[0];
         memcpy(key_name, ticket->name, sizeof(ticket->name));
         RAND_pseudo_bytes(iv, EVP_MAX_IV_LENGTH);
         EVP_EncryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, NULL);
@@ -116,7 +134,7 @@ Exit:
 }
 
 struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EVP_MD *md, uint64_t not_before, uint64_t not_after,
-                                               int fill_in)
+                                       int fill_in)
 {
     struct st_session_ticket_t *ticket = h2o_mem_alloc(sizeof(*ticket) + cipher->key_len + md->block_size);
 
