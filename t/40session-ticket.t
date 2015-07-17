@@ -10,15 +10,15 @@ plan skip_all => "could not find openssl"
 
 my $tempdir = tempdir(CLEANUP => 1);
 
-spawn_and_connect("file", "-sess_out $tempdir/session", "New");
-spawn_and_connect("file", "-sess_in $tempdir/session -sess_out $tempdir/session", "Reused");
-spawn_and_connect("file", "-sess_in $tempdir/session -sess_out $tempdir/session", "Reused");
-spawn_and_connect("off", "-sess_in $tempdir/session -sess_out $tempdir/session", "New");
+spawn_and_connect("file", "New");
+spawn_and_connect("file", "Reused");
+spawn_and_connect("file", "Reused");
+spawn_and_connect("off", "New");
 
 done_testing;
 
 sub spawn_and_connect {
-    my ($mode, $cmd_opts, $expected) = @_;
+    my ($mode, $expected) = @_;
     my $server = spawn_h2o(<< "EOT");
 ssl-session-resumption:
   mode: off
@@ -32,6 +32,7 @@ hosts:
         file.dir: @{[ DOC_ROOT ]}
 EOT
     my $lines = do {
+        my $cmd_opts = (-e "$tempdir/session" ? "-sess_in $tempdir/session" : "") . " -sess_out $tempdir/session";
         open my $fh, "-|", "openssl s_client $cmd_opts -connect 127.0.0.1:$server->{tls_port} 2>&1 < /dev/null"
             or die "failed to open pipe:$!";
         local $/;
