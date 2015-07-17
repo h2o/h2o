@@ -20,9 +20,9 @@
  * IN THE SOFTWARE.
  */
 #include "../test.h"
-#include "../../../src/ssl-session-ticket.c"
+#include "../../../src/ssl.c"
 
-void test_src__ssl_session_ticket_c(void)
+void test_src__ssl_c(void)
 {
     int ret = load_file("t/assets/session_tickets.yaml");
     ok(ret == 0);

@@ -218,8 +218,6 @@ SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}
     ${LIBYAML_SOURCE_FILES}
     deps/picotest/picotest.c
-    src/ssl.c
-    src/ssl-session-resumption.c
     t/00unit/test.c
     t/00unit/lib/common/hostinfo.c
     t/00unit/lib/common/multithread.c
@@ -238,7 +236,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/handler/redirect.c
     t/00unit/lib/http2/hpack.c
     t/00unit/lib/http2/scheduler.c
-    t/00unit/src/ssl-session-ticket.c
+    t/00unit/src/ssl.c
     t/00unit/issues/293.c)
 LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/hostinfo.c
@@ -319,8 +317,6 @@ ADD_EXECUTABLE(h2o
     ${LIB_SOURCE_FILES}
     ${LIBYAML_SOURCE_FILES}
     src/ssl.c
-    src/ssl-session-resumption.c
-    src/ssl-session-ticket.c
     src/main.c)
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
 IF (WITH_BUNDLED_SSL)

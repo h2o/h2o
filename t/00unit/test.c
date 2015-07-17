@@ -188,7 +188,7 @@ int main(int argc, char **argv)
     }
 
     { /* src tests */
-        subtest("src/ssl-session-ticket.c", test_src__ssl_session_ticket_c);
+        subtest("src/ssl.c", test_src__ssl_c);
     }
 
     return done_testing();

@@ -89,7 +89,7 @@
 		1079244E19A3266700C52AD6 /* request.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BC19A3217300C52AD6 /* request.c */; };
 		1079245119A3266700C52AD6 /* token.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BF19A3217300C52AD6 /* token.c */; };
 		1079245419A32C0800C52AD6 /* token_table.h in Headers */ = {isa = PBXBuildFile; fileRef = 1079245319A32C0800C52AD6 /* token_table.h */; };
-		107D4D441B588021004A9B21 /* ssl-session-ticket.c in Sources */ = {isa = PBXBuildFile; fileRef = 107D4D431B588021004A9B21 /* ssl-session-ticket.c */; };
+		107D4D441B588021004A9B21 /* ssl.c in Sources */ = {isa = PBXBuildFile; fileRef = 107D4D431B588021004A9B21 /* ssl.c */; };
 		107D4D451B5880BC004A9B21 /* api.c in Sources */ = {isa = PBXBuildFile; fileRef = 10756E261AC126420009BF57 /* api.c */; };
 		107D4D461B5880BC004A9B21 /* dumper.c in Sources */ = {isa = PBXBuildFile; fileRef = 10756E271AC126420009BF57 /* dumper.c */; };
 		107D4D471B5880BC004A9B21 /* emitter.c in Sources */ = {isa = PBXBuildFile; fileRef = 10756E281AC126420009BF57 /* emitter.c */; };
@@ -98,7 +98,6 @@
 		107D4D4A1B5880BC004A9B21 /* reader.c in Sources */ = {isa = PBXBuildFile; fileRef = 10756E2F1AC1264D0009BF57 /* reader.c */; };
 		107D4D4B1B5880BC004A9B21 /* scanner.c in Sources */ = {isa = PBXBuildFile; fileRef = 10756E301AC1264D0009BF57 /* scanner.c */; };
 		107D4D4C1B5880BC004A9B21 /* writer.c in Sources */ = {isa = PBXBuildFile; fileRef = 10756E311AC1264D0009BF57 /* writer.c */; };
-		107D4D4E1B58970D004A9B21 /* ssl.c in Sources */ = {isa = PBXBuildFile; fileRef = 107D4D4D1B58970D004A9B21 /* ssl.c */; };
 		107D4D4F1B58970D004A9B21 /* ssl.c in Sources */ = {isa = PBXBuildFile; fileRef = 107D4D4D1B58970D004A9B21 /* ssl.c */; };
 		108867751AD9069900987967 /* defaults.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 108867741AD9069900987967 /* defaults.c.h */; };
 		10A3D3D21B4CDBDC00327CF9 /* memcached.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3D11B4CDBDC00327CF9 /* memcached.c */; };
@@ -111,8 +110,6 @@
 		10A3D40B1B50DAB700327CF9 /* send.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3F71B4FAAF500327CF9 /* send.c */; };
 		10A3D40C1B50DAB700327CF9 /* socket.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3F91B4FAAF500327CF9 /* socket.c */; };
 		10A3D40D1B50DAB700327CF9 /* strerror.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3FA1B4FAAF500327CF9 /* strerror.c */; };
-		10A3D4101B584C0D00327CF9 /* ssl-session-resumption.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D40F1B584C0D00327CF9 /* ssl-session-resumption.c */; };
-		10A3D4131B584C3800327CF9 /* ssl-session-ticket.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D4111B584C3800327CF9 /* ssl-session-ticket.c */; };
 		10AA2E941A80A592004322AC /* time_.h in Headers */ = {isa = PBXBuildFile; fileRef = 10AA2E931A80A592004322AC /* time_.h */; };
 		10AA2E961A80A612004322AC /* time.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2E951A80A612004322AC /* time.c */; };
 		10AA2E991A81F68A004322AC /* time.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2E981A81F68A004322AC /* time.c */; };
@@ -382,7 +379,7 @@
 		1079241319A324B400C52AD6 /* websocket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = websocket.c; sourceTree = "<group>"; };
 		1079243519A3260E00C52AD6 /* unittest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = unittest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1079245319A32C0800C52AD6 /* token_table.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = token_table.h; sourceTree = "<group>"; };
-		107D4D431B588021004A9B21 /* ssl-session-ticket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "ssl-session-ticket.c"; sourceTree = "<group>"; };
+		107D4D431B588021004A9B21 /* ssl.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ssl.c; sourceTree = "<group>"; };
 		107D4D4D1B58970D004A9B21 /* ssl.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ssl.c; sourceTree = "<group>"; };
 		107D4D501B58B342004A9B21 /* 40session-ticket.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40session-ticket.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		108214FE1AAD34DD00D27E66 /* 50reverse-proxy-0.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-0.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -408,8 +405,6 @@
 		10A3D3FA1B4FAAF500327CF9 /* strerror.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = strerror.c; sourceTree = "<group>"; };
 		10A3D3FE1B4FAAF500327CF9 /* yrmcds.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = yrmcds.h; sourceTree = "<group>"; };
 		10A3D40E1B584BEC00327CF9 /* standalone.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = standalone.h; sourceTree = "<group>"; };
-		10A3D40F1B584C0D00327CF9 /* ssl-session-resumption.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "ssl-session-resumption.c"; sourceTree = "<group>"; };
-		10A3D4111B584C3800327CF9 /* ssl-session-ticket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "ssl-session-ticket.c"; sourceTree = "<group>"; };
 		10A60DE91B0D87FE006E38EC /* annotate-backtrace-symbols */ = {isa = PBXFileReference; lastKnownFileType = text; path = "annotate-backtrace-symbols"; sourceTree = "<group>"; };
 		10AA2E931A80A592004322AC /* time_.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = time_.h; sourceTree = "<group>"; };
 		10AA2E951A80A612004322AC /* time.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = time.c; sourceTree = "<group>"; };
@@ -980,7 +975,7 @@
 		107D4D421B587ED6004A9B21 /* src */ = {
 			isa = PBXGroup;
 			children = (
-				107D4D431B588021004A9B21 /* ssl-session-ticket.c */,
+				107D4D431B588021004A9B21 /* ssl.c */,
 			);
 			path = src;
 			sourceTree = "<group>";
@@ -1104,8 +1099,6 @@
 				10A3D40E1B584BEC00327CF9 /* standalone.h */,
 				10F417D519C190F800B6E31A /* main.c */,
 				107D4D4D1B58970D004A9B21 /* ssl.c */,
-				10A3D40F1B584C0D00327CF9 /* ssl-session-resumption.c */,
-				10A3D4111B584C3800327CF9 /* ssl-session-ticket.c */,
 			);
 			path = src;
 			sourceTree = "<group>";
@@ -1425,7 +1418,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				107D4D441B588021004A9B21 /* ssl-session-ticket.c in Sources */,
+				107D4D441B588021004A9B21 /* ssl.c in Sources */,
 				1079244A19A3266700C52AD6 /* frame.c in Sources */,
 				1079244B19A3266700C52AD6 /* context.c in Sources */,
 				1079244C19A3266700C52AD6 /* memory.c in Sources */,
@@ -1449,7 +1442,6 @@
 				1079245119A3266700C52AD6 /* token.c in Sources */,
 				1079244419A3265C00C52AD6 /* chunked.c in Sources */,
 				107D4D491B5880BC004A9B21 /* parser.c in Sources */,
-				107D4D4E1B58970D004A9B21 /* ssl.c in Sources */,
 				104B9A481A5F9472009EEE64 /* headers.c in Sources */,
 				107D4D4C1B5880BC004A9B21 /* writer.c in Sources */,
 				10E2995A1A68D03100701AA6 /* scheduler.c in Sources */,
@@ -1490,10 +1482,8 @@
 			files = (
 				107D4D4F1B58970D004A9B21 /* ssl.c in Sources */,
 				10756E2C1AC126420009BF57 /* emitter.c in Sources */,
-				10A3D4101B584C0D00327CF9 /* ssl-session-resumption.c in Sources */,
 				10756E2A1AC126420009BF57 /* api.c in Sources */,
 				10756E2B1AC126420009BF57 /* dumper.c in Sources */,
-				10A3D4131B584C3800327CF9 /* ssl-session-ticket.c in Sources */,
 				10756E2D1AC126420009BF57 /* loader.c in Sources */,
 				10756E361AC1264D0009BF57 /* writer.c in Sources */,
 				10756E351AC1264D0009BF57 /* scanner.c in Sources */,

@@ -31,9 +31,11 @@ sub spawn_and_connect {
     my ($opts, $expected) = @_;
     my $server = spawn_h2o(<< "EOT");
 ssl-session-resumption:
-  mode: memcached
-  host: 127.0.0.1
-  port: $memc_port
+  mode: cache
+  cache-store: memcached
+  memcached:
+    host: 127.0.0.1
+    port: $memc_port
 hosts:
   default:
     paths:

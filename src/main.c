@@ -1364,9 +1364,6 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
                                         on_config_num_name_resolution_threads);
         h2o_configurator_define_command(c, "tcp-fastopen", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_tcp_fastopen);
-        h2o_configurator_define_command(c, "ssl-session-ticket",
-                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
-                                        ssl_session_ticket_on_config);
         h2o_configurator_define_command(c, "ssl-session-resumption",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
                                         ssl_session_resumption_on_config);
@@ -1396,7 +1393,6 @@ int main(int argc, char **argv)
     h2o_hostinfo_max_threads = H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS;
 
     init_openssl();
-    ssl_session_ticket_init();
     setup_configurators();
 
     { /* parse options */
@@ -1611,8 +1607,7 @@ int main(int argc, char **argv)
                 ssl_contexts.entries[ssl_contexts.size++] = conf.listeners[i]->ssl.entries[j]->ctx;
             }
         }
-        ssl_session_resumption_setup(ssl_contexts.entries, ssl_contexts.size);
-        ssl_session_ticket_setup(ssl_contexts.entries, ssl_contexts.size);
+        ssl_setup_session_resumption(ssl_contexts.entries, ssl_contexts.size);
         free(ssl_contexts.entries);
     }
 

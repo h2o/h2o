@@ -31,12 +31,7 @@
 #endif
 
 void init_openssl(void);
-
+void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts);
 int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node);
-void ssl_session_resumption_setup(SSL_CTX **contexts, size_t num_contexts);
-
-int ssl_session_ticket_on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node);
-void ssl_session_ticket_init(void);
-void ssl_session_ticket_setup(SSL_CTX **context, size_t num_contexts);
 
 #endif
