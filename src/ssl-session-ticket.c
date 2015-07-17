@@ -76,63 +76,6 @@ static struct {
     {}                          /* tickets */
 };
 
-static struct st_session_ticket_t *find_ticket_for_encryption(session_ticket_vector_t *tickets, uint64_t now)
-{
-    size_t i;
-
-    for (i = 0; i != tickets->size; ++i) {
-        struct st_session_ticket_t *ticket = tickets->entries[i];
-        if (ticket->not_before <= now) {
-            if (now <= ticket->not_after) {
-                return ticket;
-            } else {
-                return NULL;
-            }
-        }
-    }
-    return NULL;
-}
-
-static int ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx, int enc)
-{
-    int ret;
-    pthread_rwlock_rdlock(&session_tickets.rwlock);
-
-    if (enc) {
-        struct st_session_ticket_t *ticket = find_ticket_for_encryption(&session_tickets.tickets, time(NULL));
-        if (ticket == NULL) {
-            /* FIXME generate random key and use it; that is the only way to continue the handshake (OpenSSL does not handle ret ==
-             * 0 as specified in the man pages) */
-            ret = -1;
-            goto Exit;
-        }
-        memcpy(key_name, ticket->name, sizeof(ticket->name));
-        RAND_pseudo_bytes(iv, EVP_MAX_IV_LENGTH);
-        EVP_EncryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, NULL);
-        HMAC_Init_ex(hctx, ticket->hmac.key, ticket->hmac.md->block_size, ticket->hmac.md, NULL);
-        ret = 1;
-    } else {
-        struct st_session_ticket_t *ticket;
-        size_t i;
-        for (i = 0; i != session_tickets.tickets.size; ++i) {
-            ticket = session_tickets.tickets.entries[i];
-            if (memcmp(ticket->name, key_name, sizeof(ticket->name)) == 0)
-                goto Found;
-        }
-        /* not found */
-        ret = 0;
-        goto Exit;
-    Found:
-        EVP_DecryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, NULL);
-        HMAC_Init_ex(hctx, ticket->hmac.key, ticket->hmac.md->block_size, ticket->hmac.md, NULL);
-        ret = i == 0 ? 1 : 2; /* request renew if the key is not the newest one */
-    }
-
-Exit:
-    pthread_rwlock_unlock(&session_tickets.rwlock);
-    return ret;
-}
-
 struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EVP_MD *md, uint64_t not_before, uint64_t not_after,
                                        int fill_in)
 {
@@ -175,6 +118,65 @@ static void free_tickets(session_ticket_vector_t *tickets)
         free_ticket(tickets->entries[i]);
     free(tickets->entries);
     memset(tickets, 0, sizeof(*tickets));
+}
+
+static struct st_session_ticket_t *find_ticket_for_encryption(session_ticket_vector_t *tickets, uint64_t now)
+{
+    size_t i;
+
+    for (i = 0; i != tickets->size; ++i) {
+        struct st_session_ticket_t *ticket = tickets->entries[i];
+        if (ticket->not_before <= now) {
+            if (now <= ticket->not_after) {
+                return ticket;
+            } else {
+                return NULL;
+            }
+        }
+    }
+    return NULL;
+}
+
+static int ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx, int enc)
+{
+    int ret;
+    pthread_rwlock_rdlock(&session_tickets.rwlock);
+
+    if (enc) {
+        RAND_pseudo_bytes(iv, EVP_MAX_IV_LENGTH);
+        struct st_session_ticket_t *ticket = find_ticket_for_encryption(&session_tickets.tickets, time(NULL)), *temp_ticket = NULL;
+        if (ticket != NULL) {
+        } else {
+            /* create a dummy ticket and use (this is the only way to continue the handshake; contrary to the man pages, OpenSSL
+             * crashes if we return zero */
+            ticket = temp_ticket = new_ticket(EVP_aes_256_cbc(), EVP_sha256(), 0, UINT64_MAX, 1);
+        }
+        memcpy(key_name, ticket->name, sizeof(ticket->name));
+        EVP_EncryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, NULL);
+        HMAC_Init_ex(hctx, ticket->hmac.key, ticket->hmac.md->block_size, ticket->hmac.md, NULL);
+        if (temp_ticket != NULL)
+            free_ticket(ticket);
+        ret = 1;
+    } else {
+        struct st_session_ticket_t *ticket;
+        size_t i;
+        for (i = 0; i != session_tickets.tickets.size; ++i) {
+            ticket = session_tickets.tickets.entries[i];
+            if (memcmp(ticket->name, key_name, sizeof(ticket->name)) == 0)
+                goto Found;
+        }
+        /* not found */
+        ret = 0;
+        goto Exit;
+    Found:
+        EVP_DecryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, NULL);
+        HMAC_Init_ex(hctx, ticket->hmac.key, ticket->hmac.md->block_size, ticket->hmac.md, NULL);
+        ret = i == 0 ? 1 : 2; /* request renew if the key is not the newest one */
+    }
+
+Exit:
+    pthread_rwlock_unlock(&session_tickets.rwlock);
+    return ret;
 }
 
 static void *internal_updater(void *_conf)
