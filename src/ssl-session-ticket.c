@@ -76,7 +76,7 @@ static struct {
     {}                          /* tickets */
 };
 
-static int session_ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx,
+static int ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx,
                                        int enc)
 {
     int ret;
@@ -115,7 +115,7 @@ Exit:
     return ret;
 }
 
-struct st_session_ticket_t *session_ticket_new(const EVP_CIPHER *cipher, const EVP_MD *md, uint64_t not_before, uint64_t not_after,
+struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EVP_MD *md, uint64_t not_before, uint64_t not_after,
                                                int fill_in)
 {
     struct st_session_ticket_t *ticket = h2o_mem_alloc(sizeof(*ticket) + cipher->key_len + md->block_size);
@@ -135,13 +135,13 @@ struct st_session_ticket_t *session_ticket_new(const EVP_CIPHER *cipher, const E
     return ticket;
 }
 
-static void session_ticket_free(struct st_session_ticket_t *ticket)
+static void free_ticket(struct st_session_ticket_t *ticket)
 {
     h2o_mem_set_secure(ticket, 0, sizeof(*ticket) + ticket->cipher.cipher->key_len + ticket->hmac.md->block_size);
     free(ticket);
 }
 
-static int session_ticket_sort_compare(const void *_x, const void *_y)
+static int ticket_sort_compare(const void *_x, const void *_y)
 {
     struct st_session_ticket_t *x = *(void **)_x, *y = *(void **)_y;
 
@@ -150,16 +150,16 @@ static int session_ticket_sort_compare(const void *_x, const void *_y)
     return memcmp(x->name, y->name, sizeof(x->name));
 }
 
-static void session_ticket_free_vector(session_ticket_vector_t *tickets)
+static void free_tickets(session_ticket_vector_t *tickets)
 {
     size_t i;
     for (i = 0; i != tickets->size; ++i)
-        session_ticket_free(tickets->entries[i]);
+        free_ticket(tickets->entries[i]);
     free(tickets->entries);
     memset(tickets, 0, sizeof(*tickets));
 }
 
-static void *session_ticket_internal_updater(void *_conf)
+static void *internal_updater(void *_conf)
 {
     struct st_session_ticket_internal_updater_conf_t *conf = _conf;
 
@@ -176,13 +176,13 @@ static void *session_ticket_internal_updater(void *_conf)
 
         /* insert new entry if necessary */
         if (newest_not_before + conf->lifetime / 4 <= now) {
-            struct st_session_ticket_t *new_ticket = session_ticket_new(conf->cipher, conf->md, now, now + conf->lifetime - 1, 1);
+            struct st_session_ticket_t *ticket = new_ticket(conf->cipher, conf->md, now, now + conf->lifetime - 1, 1);
             pthread_rwlock_wrlock(&session_tickets.rwlock);
             h2o_vector_reserve(NULL, (void *)&session_tickets.tickets, sizeof(session_tickets.tickets.entries[0]),
                                session_tickets.tickets.size + 1);
             memmove(session_tickets.tickets.entries + 1, session_tickets.tickets.entries,
                     sizeof(session_tickets.tickets.entries[0]) * session_tickets.tickets.size);
-            session_tickets.tickets.entries[0] = new_ticket;
+            session_tickets.tickets.entries[0] = ticket;
             ++session_tickets.tickets.size;
             pthread_rwlock_unlock(&session_tickets.rwlock);
         }
@@ -201,7 +201,7 @@ static void *session_ticket_internal_updater(void *_conf)
                 pthread_rwlock_unlock(&session_tickets.rwlock);
                 if (expiring_ticket == NULL)
                     break;
-                session_ticket_free(expiring_ticket);
+                free_ticket(expiring_ticket);
             }
         }
 
@@ -210,7 +210,7 @@ static void *session_ticket_internal_updater(void *_conf)
     }
 }
 
-static struct st_session_ticket_t *session_ticket_parse_element(yoml_t *element, char *errstr)
+static struct st_session_ticket_t *parse_element(yoml_t *element, char *errstr)
 {
     yoml_t *t;
     struct st_session_ticket_t *ticket;
@@ -293,14 +293,14 @@ static struct st_session_ticket_t *session_ticket_parse_element(yoml_t *element,
 
 #undef FETCH
 
-    ticket = session_ticket_new(cipher, hash, not_before, not_after, 0);
+    ticket = new_ticket(cipher, hash, not_before, not_after, 0);
     memcpy(ticket->name, name, sizeof(ticket->name));
     memcpy(ticket->cipher.key, key, cipher->key_len);
     memcpy(ticket->hmac.key, key + cipher->key_len, hash->block_size);
     return ticket;
 }
 
-static int session_ticket_file_updater_load_file(struct st_session_ticket_file_updater_conf_t *conf)
+static int load_file(const char *fn)
 {
 #define ERR_PREFIX "failed to load session ticket secrets from file:%s:"
 
@@ -314,37 +314,37 @@ static int session_ticket_file_updater_load_file(struct st_session_ticket_file_u
     yaml_parser_initialize(&parser);
 
     /* load yaml */
-    if ((fp = fopen(conf->filename, "rb")) == NULL) {
+    if ((fp = fopen(fn, "rb")) == NULL) {
         char errbuf[256];
         strerror_r(errno, errbuf, sizeof(errbuf));
-        fprintf(stderr, ERR_PREFIX "%s\n", conf->filename, errbuf);
+        fprintf(stderr, ERR_PREFIX "%s\n", fn, errbuf);
         goto Exit;
     }
     yaml_parser_set_input_file(&parser, fp);
-    if ((yoml = yoml_parse_document(&parser, NULL, conf->filename)) == NULL) {
-        fprintf(stderr, ERR_PREFIX "parse error at line %d:%s\n", conf->filename, (int)parser.problem_mark.line, parser.problem);
+    if ((yoml = yoml_parse_document(&parser, NULL, fn)) == NULL) {
+        fprintf(stderr, ERR_PREFIX "parse error at line %d:%s\n", fn, (int)parser.problem_mark.line, parser.problem);
         goto Exit;
     }
     /* parse the data */
     if (yoml->type != YOML_TYPE_SEQUENCE) {
-        fprintf(stderr, ERR_PREFIX "root element is not a sequence\n", conf->filename);
+        fprintf(stderr, ERR_PREFIX "root element is not a sequence\n", fn);
         goto Exit;
     }
     for (i = 0; i != yoml->data.sequence.size; ++i) {
         char errbuf[256];
-        struct st_session_ticket_t *ticket = session_ticket_parse_element(yoml->data.sequence.elements[i], errbuf);
+        struct st_session_ticket_t *ticket = parse_element(yoml->data.sequence.elements[i], errbuf);
         if (ticket == NULL) {
-            fprintf(stderr, ERR_PREFIX "at element index %zu:%s\n", conf->filename, i, errbuf);
+            fprintf(stderr, ERR_PREFIX "at element index %zu:%s\n", fn, i, errbuf);
             goto Exit;
         }
         h2o_vector_reserve(NULL, (void *)&tickets, sizeof(tickets.entries[0]), tickets.size + 1);
         tickets.entries[tickets.size++] = ticket;
     }
     /* sort the ticket entries being read */
-    qsort(tickets.entries, tickets.size, sizeof(tickets.entries[0]), session_ticket_sort_compare);
+    qsort(tickets.entries, tickets.size, sizeof(tickets.entries[0]), ticket_sort_compare);
     /* replace the ticket list */
     pthread_rwlock_wrlock(&session_tickets.rwlock);
-    session_ticket_free_vector(&session_tickets.tickets);
+    free_tickets(&session_tickets.tickets);
     session_tickets.tickets = tickets;
     pthread_rwlock_unlock(&session_tickets.rwlock);
     tickets = (session_ticket_vector_t){};
@@ -357,13 +357,13 @@ Exit:
     yaml_parser_delete(&parser);
     if (yoml != NULL)
         yoml_free(yoml);
-    session_ticket_free_vector(&tickets);
+    free_tickets(&tickets);
     return ret;
 
 #undef ERR_PREFIX
 }
 
-static void *session_ticket_file_updater(void *_conf)
+static void *file_updater(void *_conf)
 {
     struct st_session_ticket_file_updater_conf_t *conf = _conf;
     time_t last_mtime = 1; /* file is loaded if mtime changes, 0 is used to indicate that the file was missing */
@@ -380,7 +380,7 @@ static void *session_ticket_file_updater(void *_conf)
         } else if (last_mtime != st.st_mtime) {
             /* (re)load */
             last_mtime = st.st_mtime;
-            if (session_ticket_file_updater_load_file(conf) == 0)
+            if (load_file(conf->filename) == 0)
                 fprintf(stderr, "session ticket secrets have been (re)loaded\n");
         }
         sleep(10);
@@ -391,7 +391,7 @@ static void init_internal_defaults(void)
 {
     /* to protect the secret >>>2030 we need AES-256 (http://www.keylength.com/en/4/), sha1 is used only during the communication
      * and can be short */
-    conf.update_thread = session_ticket_internal_updater;
+    conf.update_thread = internal_updater;
     conf.vars.internal.cipher = EVP_aes_256_cbc();
     conf.vars.internal.md = EVP_sha1();
     conf.vars.internal.lifetime = 3600; /* 1 hour */
@@ -457,7 +457,7 @@ int ssl_session_ticket_on_config(h2o_configurator_command_t *cmd, h2o_configurat
                 h2o_configurator_errprintf(cmd, node, "`file` must be a string");
                 return -1;
             }
-            conf.update_thread = session_ticket_file_updater;
+            conf.update_thread = file_updater;
             conf.vars.file.filename = h2o_strdup(NULL, t->data.scalar, SIZE_MAX).base;
             return 0;
 #else
@@ -500,7 +500,7 @@ void ssl_session_ticket_setup(SSL_CTX **contexts, size_t num_contexts)
         pthread_attr_setdetachstate(&attr, 1);
         h2o_multithread_create_thread(&tid, &attr, conf.update_thread, &conf.vars);
         for (i = 0; i != num_contexts; ++i)
-            SSL_CTX_set_tlsext_ticket_key_cb(contexts[i], session_ticket_key_callback);
+            SSL_CTX_set_tlsext_ticket_key_cb(contexts[i], ticket_key_callback);
     } else {
         for (i = 0; i != num_contexts; ++i)
             SSL_CTX_set_options(contexts[i], SSL_CTX_get_options(contexts[i]) | SSL_OP_NO_TICKET);

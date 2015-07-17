@@ -172,38 +172,6 @@ static int on_openssl_print_errors(const char *str, size_t len, void *fp)
     return (int)len;
 }
 
-static unsigned long openssl_thread_id_callback(void)
-{
-    return (unsigned long)pthread_self();
-}
-
-static pthread_mutex_t *openssl_thread_locks;
-
-static void openssl_thread_lock_callback(int mode, int n, const char *file, int line)
-{
-    if ((mode & CRYPTO_LOCK) != 0) {
-        pthread_mutex_lock(openssl_thread_locks + n);
-    } else if ((mode & CRYPTO_UNLOCK) != 0) {
-        pthread_mutex_unlock(openssl_thread_locks + n);
-    } else {
-        assert(!"unexpected mode");
-    }
-}
-
-static void init_openssl(void)
-{
-    int nlocks = CRYPTO_num_locks(), i;
-    openssl_thread_locks = h2o_mem_alloc(sizeof(*openssl_thread_locks) * nlocks);
-    for (i = 0; i != nlocks; ++i)
-        pthread_mutex_init(openssl_thread_locks + i, NULL);
-    CRYPTO_set_locking_callback(openssl_thread_lock_callback);
-    CRYPTO_set_id_callback(openssl_thread_id_callback);
-    /* TODO [OpenSSL] set dynlock callbacks for better performance */
-    SSL_load_error_strings();
-    SSL_library_init();
-    OpenSSL_add_all_algorithms();
-}
-
 static void setup_ecc_key(SSL_CTX *ssl_ctx)
 {
     int nid = NID_X9_62_prime256v1;

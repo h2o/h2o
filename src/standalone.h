@@ -30,6 +30,8 @@
 #define H2O_USE_SESSION_TICKETS 0
 #endif
 
+void init_openssl(void);
+
 int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node);
 void ssl_session_resumption_setup(SSL_CTX **contexts, size_t num_contexts);
 
