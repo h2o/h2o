@@ -7,6 +7,8 @@ use t::Util;
 
 plan skip_all => "could not find openssl"
     unless prog_exists("openssl");
+plan skip_all => "openssl 1.0.2 or above is required"
+    unless `openssl version` =~ /^OpenSSL 1\.(?:0\.[2-9][^0-9]|[1-9])/s;
 
 my $tempdir = tempdir(CLEANUP => 1);
 
