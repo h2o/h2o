@@ -407,11 +407,11 @@ static void *file_updater(void *_conf)
 
 static void init_internal_defaults(void)
 {
-    /* to protect the secret >>>2030 we need AES-256 (http://www.keylength.com/en/4/), sha1 is used only during the communication
-     * and can be short */
     conf.update_thread = internal_updater;
+    /* to protect the secret >>>2030 we need AES-256 (http://www.keylength.com/en/4/) */
     conf.vars.internal.cipher = EVP_aes_256_cbc();
-    conf.vars.internal.md = EVP_sha1();
+    /* integrity checks are only necessary at the time of handshake, and sha256 (recommended by RFC 5077) is sufficient */
+    conf.vars.internal.md = EVP_sha256();
     conf.vars.internal.lifetime = 3600; /* 1 hour */
 }
 
