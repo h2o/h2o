@@ -12,21 +12,31 @@ plan skip_all => "openssl 1.0.2 or above is required"
 
 my $tempdir = tempdir(CLEANUP => 1);
 
-spawn_and_connect("file", "New");
-spawn_and_connect("file", "Reused");
-spawn_and_connect("file", "Reused");
-spawn_and_connect("off", "New");
+my $tickets_file = ASSETS_DIR . "/session_tickets.yaml";
+
+subtest "reuse" => sub {
+    spawn_and_connect("file", $tickets_file, "New");
+    spawn_and_connect("file", $tickets_file, "Reused");
+    spawn_and_connect("file", $tickets_file, "Reused");
+    spawn_and_connect("off", "/dev/null", "New");
+};
+
+subtest "missing tickets" => sub {
+    spawn_and_connect("file", $tickets_file, "New");
+    spawn_and_connect("file", $tickets_file, "Reused");
+    spawn_and_connect("file", "/dev/null", "New");
+};
 
 done_testing;
 
 sub spawn_and_connect {
-    my ($mode, $expected) = @_;
+    my ($mode, $tickets_file, $expected) = @_;
     my $server = spawn_h2o(<< "EOT");
 ssl-session-resumption:
   mode: off
 ssl-session-ticket:
   mode: $mode
-  file: @{[ ASSETS_DIR ]}/session_tickets.yaml
+  file: $tickets_file
 hosts:
   default:
     paths:
