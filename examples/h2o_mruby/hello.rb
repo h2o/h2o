@@ -11,7 +11,11 @@ m =  "from h2o_mruby"
 ua = r.headers_in["User-Agent"].to_s
 host = r.headers_in["Accept"].to_s
 
-msg = h + " " + m + " from " + ua + ":" + host
+r.headers_out["Hoge"] = "fuga"
+hoge = r.headers_out["Hoge"]
+
+msg = h + " " + m + " from " + ua + ":" + host + " " + hoge
+
 
 r.log_error msg
 
