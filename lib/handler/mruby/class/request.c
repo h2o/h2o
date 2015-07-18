@@ -29,6 +29,8 @@
 #include "mruby/string.h"
 #include "mruby/data.h"
 #include "mruby/class.h"
+#include <mruby/variable.h>
+
 
 static mrb_value h2o_mrb_req_init(mrb_state *mrb, mrb_value self)
 {
@@ -46,13 +48,59 @@ static mrb_value h2o_mrb_req_log_error(mrb_state *mrb, mrb_value self)
     return log;
 }
 
+static mrb_value h2o_mrb_get_class_obj(mrb_state *mrb, mrb_value self, char *obj_id, char *class_name)
+{
+  mrb_value obj;
+  struct RClass *obj_class, *h2o_class;
+
+  obj = mrb_iv_get(mrb, self, mrb_intern_cstr(mrb, obj_id));
+  if (mrb_nil_p(obj)) {
+    h2o_class = mrb_class_get(mrb, "H2O");
+    obj_class = (struct RClass*)mrb_class_ptr(mrb_const_get(mrb, mrb_obj_value(h2o_class), mrb_intern_cstr(mrb, class_name)));
+    obj = mrb_obj_new(mrb, obj_class, 0, NULL);
+    mrb_iv_set(mrb, self, mrb_intern_cstr(mrb, obj_id), obj);
+  }
+  return obj;
+}
+
+static mrb_value h2o_mrb_headers_in_obj(mrb_state *mrb, mrb_value self)
+{
+    return h2o_mrb_get_class_obj(mrb, self, "headers_in_obj", "Headers_in");
+}
+
+static mrb_value h2o_mrb_get_request_headers_in(mrb_state *mrb, mrb_value self) 
+{
+  h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
+  mrb_value key;
+  ssize_t index;
+  h2o_header_t *h;
+
+  mrb_get_args(mrb, "o", &key);
+  key = mrb_funcall(mrb, key, "downcase", 0);
+
+  index = h2o_find_header_by_str(&mruby_ctx->req->headers, RSTRING_PTR(key), RSTRING_LEN(key), -1);
+  if (index == -1)
+    return mrb_nil_value();
+
+  h = mruby_ctx->req->headers.entries + index;
+
+  return mrb_str_new(mrb, h->value.base, h->value.len);
+}
+
 void h2o_mrb_request_class_init(mrb_state *mrb, struct RClass *class)
 {
     struct RClass *class_request;
+    struct RClass *class_headers_in;
+
     class_request = mrb_define_class_under(mrb, class, "Request", mrb->object_class);
 
     mrb_define_method(mrb, class_request, "initialize", h2o_mrb_req_init, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "log_error", h2o_mrb_req_log_error, MRB_ARGS_REQ(1));
+    mrb_define_method(mrb, class_request, "headers_in", h2o_mrb_headers_in_obj, MRB_ARGS_NONE());
+
+    /* request haeder class */
+    class_headers_in = mrb_define_class_under(mrb, class, "Headers_in", mrb->object_class);
+    mrb_define_method(mrb, class_headers_in, "[]", h2o_mrb_get_request_headers_in, MRB_ARGS_REQ(1));
 }
 
 #endif /* H2O_USE_MRUBY */
