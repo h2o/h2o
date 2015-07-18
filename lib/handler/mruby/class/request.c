@@ -92,6 +92,19 @@ static mrb_value h2o_mrb_get_request_headers_in(mrb_state *mrb, mrb_value self)
   return mrb_str_new(mrb, h->value.base, h->value.len);
 }
 
+static mrb_value h2o_mrb_set_request_headers_in(mrb_state *mrb, mrb_value self) 
+{
+  h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
+  mrb_value key, val;
+
+  mrb_get_args(mrb, "oo", &key, &val);
+  key = mrb_funcall(mrb, key, "downcase", 0);
+
+  h2o_set_header_by_str(&mruby_ctx->req->pool, &mruby_ctx->req->headers, RSTRING_PTR(key), RSTRING_LEN(key), 0, RSTRING_PTR(val), RSTRING_LEN(val), 1);
+
+  return key;
+}
+
 static mrb_value h2o_mrb_get_request_headers_out(mrb_state *mrb, mrb_value self) 
 {
   h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
@@ -140,6 +153,7 @@ void h2o_mrb_request_class_init(mrb_state *mrb, struct RClass *class)
     /* request haeder class */
     class_headers_in = mrb_define_class_under(mrb, class, "Headers_in", mrb->object_class);
     mrb_define_method(mrb, class_headers_in, "[]", h2o_mrb_get_request_headers_in, MRB_ARGS_REQ(1));
+    mrb_define_method(mrb, class_headers_in, "[]=", h2o_mrb_set_request_headers_in, MRB_ARGS_REQ(2));
 
     /* response haeder class */
     class_headers_out = mrb_define_class_under(mrb, class, "Headers_out", mrb->object_class);
