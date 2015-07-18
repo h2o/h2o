@@ -152,6 +152,10 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         fprintf(stderr, "%s: mruby raised: %s\n", H2O_MRUBY_MODULE_NAME, error->as.heap.ptr);
         mrb->exc = 0;
         h2o_send_error(req, 500, "Internal Server Error", "Internal Server Error", 0);
+    } else if (mrb_nil_p(result)) {
+        /* decline to send response for next handler when return value is nil */
+        mrb_gc_arena_restore(mrb, ai);
+        return -1;
     } else {
         h2o_send_error(req, 200, "OK", mrb_str_to_cstr(mrb, result), 0);
     }
