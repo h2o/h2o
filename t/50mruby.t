@@ -19,7 +19,7 @@ hosts:
         file.dir: examples/doc_root
 $extra_conf
 EOT
-    return `curl --silent /dev/stderr http://127.0.0.1:$server->{port}/ 2>&1`;
+    return `curl --silent /dev/stderr -H User-Agent:h2o_mruby_test http://127.0.0.1:$server->{port}/ 2>&1`;
 }
 
 
@@ -32,5 +32,10 @@ $resp = fetch(<< 'EOT');
         mruby.handler_path: t/50mruby/max_header.rb
 EOT
 is $resp, "100", "H2O.max_headers method";
+
+$resp = fetch(<< 'EOT');
+        mruby.handler_path: t/50mruby/headers_in.rb
+EOT
+is $resp, "new-h2o_mruby_test", "H2O::Request#headers_in test";
 
 done_testing();
