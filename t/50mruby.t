@@ -22,6 +22,18 @@ EOT
     return `curl --silent /dev/stderr -H User-Agent:h2o_mruby_test http://127.0.0.1:$server->{port}/ 2>&1`;
 }
 
+sub fetch_header {
+    my $extra_conf = shift;
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        file.dir: examples/doc_root
+$extra_conf
+EOT
+    return `curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/ 2>&1`;
+}
 
 my $resp = fetch(<< 'EOT');
         mruby.handler_path: t/50mruby/hello.rb
@@ -37,5 +49,10 @@ $resp = fetch(<< 'EOT');
         mruby.handler_path: t/50mruby/headers_in.rb
 EOT
 is $resp, "new-h2o_mruby_test", "H2O::Request#headers_in test";
+
+$resp = fetch_header(<< 'EOT');
+        mruby.handler_path: t/50mruby/headers_out.rb
+EOT
+like $resp, qr/^new-header:.*\Wh2o-mruby\W/im, "H2O::Response#headers_out test";
 
 done_testing();
