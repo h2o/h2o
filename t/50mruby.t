@@ -24,7 +24,7 @@ EOT
 
 
 my $resp = fetch(<< 'EOT');
-        mruby.handler_path: examples/h2o_mruby/hello.rb
+        mruby.handler_path: t/50mruby/hello.rb
 EOT
 is $resp, "hello from h2o_mruby\n", "resoponse body from mruby";
 
