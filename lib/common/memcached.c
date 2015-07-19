@@ -99,9 +99,11 @@ static void free_req(h2o_memcached_req_t *req)
     switch (req->type) {
     case REQ_TYPE_GET:
         assert(!h2o_linklist_is_linked(&req->data.get.message.link));
+        h2o_mem_set_secure(req->data.get.value.base, 0, req->data.get.value.len);
         free(req->data.get.value.base);
         break;
     case REQ_TYPE_SET:
+        h2o_mem_set_secure(req->data.get.value.base, 0, req->data.set.value.len);
         free(req->data.set.value.base);
         break;
     case REQ_TYPE_DELETE:
@@ -314,6 +316,7 @@ void h2o_memcached_receiver(h2o_multithread_receiver_t *receiver, h2o_linklist_t
         if (req->data.get.cb != NULL) {
             if (req->data.get.value_is_encoded && req->data.get.value.len != 0) {
                 h2o_iovec_t decoded = h2o_decode_base64url(NULL, req->data.get.value.base, req->data.get.value.len);
+                h2o_mem_set_secure(req->data.get.value.base, 0, req->data.get.value.len);
                 free(req->data.get.value.base);
                 req->data.get.value = decoded;
             }
