@@ -29,11 +29,13 @@
 #include <openssl/rand.h>
 #include <openssl/ssl.h>
 #include "yoml-parser.h"
+#include "yrmcds.h"
+#include "h2o/file.h"
 #include "h2o.h"
 #include "h2o/configurator.h"
 #include "standalone.h"
 
-struct st_session_ticket_internal_updater_conf_t {
+struct st_session_ticket_generating_updater_conf_t {
     const EVP_CIPHER *cipher;
     const EVP_MD *md;
     unsigned lifetime;
@@ -51,7 +53,7 @@ static struct {
     struct {
         void *(*update_thread)(void *conf);
         union {
-            struct st_session_ticket_internal_updater_conf_t internal;
+            struct st_session_ticket_generating_updater_conf_t generating;
             struct st_session_ticket_file_updater_conf_t file;
         } vars;
     } ticket;
@@ -225,7 +227,7 @@ Exit:
 
 static void *ticket_internal_updater(void *_conf)
 {
-    struct st_session_ticket_internal_updater_conf_t *conf = _conf;
+    struct st_session_ticket_generating_updater_conf_t *conf = _conf;
 
     while (1) {
         uint64_t newest_not_before = 0, oldest_not_after = UINT64_MAX, now = time(NULL);
@@ -274,7 +276,25 @@ static void *ticket_internal_updater(void *_conf)
     }
 }
 
-static struct st_session_ticket_t *parse_element(yoml_t *element, char *errstr)
+static int serialize_ticket_entry(char *buf, size_t bufsz, struct st_session_ticket_t *ticket)
+{
+    char *name_buf = alloca(sizeof(ticket->name) * 2 + 1);
+    h2o_hex_encode(name_buf, ticket->name, sizeof(ticket->name));
+    char *key_buf = alloca((ticket->cipher.cipher->key_len + ticket->hmac.md->block_size) * 2 + 1);
+    h2o_hex_encode(key_buf, ticket->cipher.key, ticket->cipher.cipher->key_len);
+    h2o_hex_encode(key_buf + (ticket->cipher.cipher->key_len) * 2, ticket->hmac.key, ticket->hmac.md->block_size);
+
+    return snprintf(buf, bufsz, "- name: %s\n"
+                                "  cipher: %s\n"
+                                "  hash: %s\n"
+                                "  key: %s\n"
+                                "  not_before: %" PRIu64 "\n"
+                                "  not_after: %" PRIu64 "\n",
+                    name_buf, OBJ_nid2sn(EVP_CIPHER_type(ticket->cipher.cipher)), OBJ_nid2sn(EVP_MD_type(ticket->hmac.md)), key_buf,
+                    ticket->not_before, ticket->not_after);
+}
+
+static struct st_session_ticket_t *parse_ticket_entry(yoml_t *element, char *errstr)
 {
     yoml_t *t;
     struct st_session_ticket_t *ticket;
@@ -364,70 +384,198 @@ static struct st_session_ticket_t *parse_element(yoml_t *element, char *errstr)
     return ticket;
 }
 
-static int load_file(const char *fn)
+static int parse_tickets(session_ticket_vector_t *tickets, const void *src, size_t len, char *errstr)
+{
+    yaml_parser_t parser;
+    yoml_t *doc;
+    size_t i;
+
+    *tickets = (session_ticket_vector_t){};
+    yaml_parser_initialize(&parser);
+
+    yaml_parser_set_input_string(&parser, src, len);
+    if ((doc = yoml_parse_document(&parser, NULL, NULL)) == NULL) {
+        sprintf(errstr, "parse error at line %d:%s\n", (int)parser.problem_mark.line, parser.problem);
+        goto Error;
+    }
+    if (doc->type != YOML_TYPE_SEQUENCE) {
+        strcpy(errstr, "root element is not a sequence");
+        goto Error;
+    }
+    for (i = 0; i != doc->data.sequence.size; ++i) {
+        char errbuf[256];
+        struct st_session_ticket_t *ticket = parse_ticket_entry(doc->data.sequence.elements[i], errbuf);
+        if (ticket == NULL) {
+            sprintf(errstr, "at element index %zu:%s\n", i, errbuf);
+            goto Error;
+        }
+        h2o_vector_reserve(NULL, (void *)tickets, sizeof(tickets->entries[0]), tickets->size + 1);
+        tickets->entries[tickets->size++] = ticket;
+    }
+
+    yaml_parser_delete(&parser);
+    return 0;
+Error:
+    yaml_parser_delete(&parser);
+    free_tickets(tickets);
+    return -1;
+}
+
+static h2o_iovec_t serialize_tickets(session_ticket_vector_t *tickets)
+{
+    h2o_iovec_t data = {h2o_mem_alloc(tickets->size * 1024 + 1), 0};
+    size_t i;
+
+    for (i = 0; i != tickets->size; ++i) {
+        struct st_session_ticket_t *ticket = tickets->entries[i];
+        size_t l = serialize_ticket_entry(data.base + data.len, 1024, ticket);
+        if (l > 1024) {
+            fprintf(stderr, "[src/ssl.c] %s:internal buffer overflow\n", __func__);
+            goto Error;
+        }
+        data.len += l;
+    }
+
+    return data;
+Error:
+    free(data.base);
+    return (h2o_iovec_t){};
+}
+
+static int ticket_memcached_update_tickets(yrmcds *conn, h2o_iovec_t key, time_t now)
+{
+    yrmcds_response resp;
+    yrmcds_error err;
+    uint32_t serial;
+    session_ticket_vector_t tickets = {};
+    h2o_iovec_t tickets_serialized = {};
+    int retry = 0;
+    char errbuf[256];
+
+    /* retrieve tickets on memcached */
+    if ((err = yrmcds_get(conn, key.base, key.len, 0, &serial)) != 0) {
+        fprintf(stderr, "[lib/ssl.c] %s:yrmcds_get failed:%s\n", __func__, yrmcds_strerror(err));
+        goto Exit;
+    }
+    if ((err = yrmcds_recv(conn, &resp)) != 0) {
+        fprintf(stderr, "[lib/ssl.c] %s:yrmcds_recv failed:%s\n", __func__, yrmcds_strerror(err));
+        goto Exit;
+    }
+    if (resp.serial != serial) {
+        fprintf(stderr, "[lib/ssl.c] %s:unexpected response\n", __func__);
+        goto Exit;
+    }
+    if (resp.status == YRMCDS_STATUS_OK && parse_tickets(&tickets, resp.data, resp.data_len, errbuf) != 0) {
+        fprintf(stderr, "[lib/ssl.c] %s:failed to parse response:%s\n", __func__, errbuf);
+        goto Exit;
+    }
+    qsort(tickets.entries, tickets.size, sizeof(tickets.entries[0]), ticket_sort_compare);
+
+    /* update and return immediately (requesting re-run), if necessary */
+    int has_valid_ticket = find_ticket_for_encryption(&tickets, now) != NULL;
+    if (!has_valid_ticket || (tickets.entries[0]->not_before + conf.ticket.vars.generating.lifetime / 4 < now)) {
+        /* create new entry */
+        uint64_t not_before = has_valid_ticket ? now + 60 : now;
+        struct st_session_ticket_t *ticket = new_ticket(conf.ticket.vars.generating.cipher, conf.ticket.vars.generating.md,
+                                                        not_before, not_before + conf.ticket.vars.generating.lifetime, 1);
+        h2o_vector_reserve(NULL, (void *)&tickets, sizeof(tickets.entries[0]), tickets.size + 1);
+        memmove(tickets.entries + 1, tickets.entries, sizeof(tickets.entries[0]) * tickets.size);
+        ++tickets.size;
+        tickets.entries[0] = ticket;
+        /* serialize */
+        tickets_serialized = serialize_tickets(&tickets);
+        if (resp.status == YRMCDS_STATUS_NOTFOUND) {
+            if ((err = yrmcds_add(conn, key.base, key.len, tickets_serialized.base, tickets_serialized.len, 0,
+                                  conf.ticket.vars.generating.lifetime, 0, 0, &serial)) != 0) {
+                fprintf(stderr, "[lib/ssl.c] %s:yrmcds_add failed:%s\n", __func__, yrmcds_strerror(err));
+                goto Exit;
+            }
+        } else {
+            if ((err = yrmcds_set(conn, key.base, key.len, tickets_serialized.base, tickets_serialized.len, 0,
+                                  conf.ticket.vars.generating.lifetime, resp.cas_unique, 0, &serial)) != 0) {
+                fprintf(stderr, "[lib/ssl.c] %s:yrmcds_set failed:%s\n", __func__, yrmcds_strerror(err));
+                goto Exit;
+            }
+        }
+        if ((err = yrmcds_recv(conn, &resp)) != 0) {
+            fprintf(stderr, "[lib/ssl.c] %s:yrmcds_recv failed:%s\n", __func__, yrmcds_strerror(err));
+            goto Exit;
+        }
+        retry = 1;
+        goto Exit;
+    }
+
+    /* store the results */
+    pthread_rwlock_wrlock(&session_tickets.rwlock);
+    h2o_mem_swap(&session_tickets.tickets, &tickets, sizeof(tickets));
+    pthread_rwlock_unlock(&session_tickets.rwlock);
+
+Exit:
+    free_tickets(&tickets);
+    return retry;
+}
+
+static void *ticket_memcached_updater(void *_conf)
+{
+    while (1) {
+        /* connect */
+        yrmcds conn;
+        yrmcds_error err;
+        size_t failcnt;
+        for (failcnt = 0; (err = yrmcds_connect(&conn, conf.memcached.host, conf.memcached.port)) != YRMCDS_OK; ++failcnt) {
+            if (failcnt == 0)
+                fprintf(stderr, "[src/ssl.c] failed to connect to memcached at %s:%" PRIu16 ", %s\n", conf.memcached.host,
+                        conf.memcached.port, yrmcds_strerror(err));
+            sleep(10);
+        }
+        /* connected */
+        while (ticket_memcached_update_tickets(&conn, h2o_iovec_init(H2O_STRLIT("h2o:session-tickets")), time(NULL)))
+            ;
+        /* disconnect */
+        yrmcds_close(&conn);
+        sleep(60);
+    }
+}
+
+static int load_tickets_file(const char *fn)
 {
 #define ERR_PREFIX "failed to load session ticket secrets from file:%s:"
 
-    yoml_t *yoml = NULL;
-    FILE *fp;
-    yaml_parser_t parser;
+    h2o_iovec_t data = {};
     session_ticket_vector_t tickets = {};
-    size_t i;
+    char errbuf[256];
     int ret = -1;
 
-    yaml_parser_initialize(&parser);
-
     /* load yaml */
-    if ((fp = fopen(fn, "rb")) == NULL) {
+    data = h2o_file_read(fn);
+    if (data.base == NULL) {
         char errbuf[256];
         strerror_r(errno, errbuf, sizeof(errbuf));
         fprintf(stderr, ERR_PREFIX "%s\n", fn, errbuf);
         goto Exit;
     }
-    yaml_parser_set_input_file(&parser, fp);
-    if ((yoml = yoml_parse_document(&parser, NULL, fn)) == NULL) {
-        fprintf(stderr, ERR_PREFIX "parse error at line %d:%s\n", fn, (int)parser.problem_mark.line, parser.problem);
-        goto Exit;
-    }
     /* parse the data */
-    if (yoml->type != YOML_TYPE_SEQUENCE) {
-        fprintf(stderr, ERR_PREFIX "root element is not a sequence\n", fn);
+    if (parse_tickets(&tickets, data.base, data.len, errbuf) != 0) {
+        fprintf(stderr, ERR_PREFIX "%s\n", fn, errbuf);
         goto Exit;
-    }
-    for (i = 0; i != yoml->data.sequence.size; ++i) {
-        char errbuf[256];
-        struct st_session_ticket_t *ticket = parse_element(yoml->data.sequence.elements[i], errbuf);
-        if (ticket == NULL) {
-            fprintf(stderr, ERR_PREFIX "at element index %zu:%s\n", fn, i, errbuf);
-            goto Exit;
-        }
-        h2o_vector_reserve(NULL, (void *)&tickets, sizeof(tickets.entries[0]), tickets.size + 1);
-        tickets.entries[tickets.size++] = ticket;
     }
     /* sort the ticket entries being read */
     qsort(tickets.entries, tickets.size, sizeof(tickets.entries[0]), ticket_sort_compare);
     /* replace the ticket list */
     pthread_rwlock_wrlock(&session_tickets.rwlock);
-    free_tickets(&session_tickets.tickets);
-    session_tickets.tickets = tickets;
+    h2o_mem_swap(&session_tickets.tickets, &tickets, sizeof(tickets));
     pthread_rwlock_unlock(&session_tickets.rwlock);
-    tickets = (session_ticket_vector_t){};
 
     ret = 0;
-
 Exit:
-    if (fp != NULL)
-        fclose(fp);
-    yaml_parser_delete(&parser);
-    if (yoml != NULL)
-        yoml_free(yoml);
+    free(data.base);
     free_tickets(&tickets);
     return ret;
 
 #undef ERR_PREFIX
 }
 
-static void *file_updater(void *_conf)
+static void *ticket_file_updater(void *_conf)
 {
     struct st_session_ticket_file_updater_conf_t *conf = _conf;
     time_t last_mtime = 1; /* file is loaded if mtime changes, 0 is used to indicate that the file was missing */
@@ -444,21 +592,21 @@ static void *file_updater(void *_conf)
         } else if (last_mtime != st.st_mtime) {
             /* (re)load */
             last_mtime = st.st_mtime;
-            if (load_file(conf->filename) == 0)
+            if (load_tickets_file(conf->filename) == 0)
                 fprintf(stderr, "session ticket secrets have been (re)loaded\n");
         }
         sleep(10);
     }
 }
 
-static void ticket_init_internal_defaults(void)
+static void ticket_init_defaults(void)
 {
     conf.ticket.update_thread = ticket_internal_updater;
     /* to protect the secret >>>2030 we need AES-256 (http://www.keylength.com/en/4/) */
-    conf.ticket.vars.internal.cipher = EVP_aes_256_cbc();
+    conf.ticket.vars.generating.cipher = EVP_aes_256_cbc();
     /* integrity checks are only necessary at the time of handshake, and sha256 (recommended by RFC 5077) is sufficient */
-    conf.ticket.vars.internal.md = EVP_sha256();
-    conf.ticket.vars.internal.lifetime = 3600; /* 1 hour */
+    conf.ticket.vars.generating.md = EVP_sha256();
+    conf.ticket.vars.generating.lifetime = 3600; /* 1 hour */
 }
 
 #endif
@@ -467,6 +615,10 @@ static int conf_uses_memcached(void)
 {
     if (conf.cache.setup == setup_cache_memcached)
         return 1;
+#if H2O_USE_SESSION_TICKETS
+    if (conf.ticket.update_thread == ticket_memcached_updater)
+        return 1;
+#endif
     return 0;
 }
 
@@ -493,7 +645,7 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
 #endif
         } else if (strcasecmp(t->data.scalar, "cache") == 0) {
             modes = MODE_CACHE;
-        } else  if (strcasecmp(t->data.scalar, "ticket") == 0) {
+        } else if (strcasecmp(t->data.scalar, "ticket") == 0) {
             modes = MODE_TICKET;
         }
     }
@@ -520,7 +672,8 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
             }
         }
         if ((t = yoml_get(node, "cache-lifetime")) != NULL) {
-            if (!(t->type == YOML_TYPE_SCALAR && sscanf(t->data.scalar, "%u", &conf.cache.lifetime) == 1 && conf.cache.lifetime != 0)) {
+            if (!(t->type == YOML_TYPE_SCALAR && sscanf(t->data.scalar, "%u", &conf.cache.lifetime) == 1 &&
+                  conf.cache.lifetime != 0)) {
                 h2o_configurator_errprintf(cmd, t, "value of `cache-lifetime must be a positive number");
                 return -1;
             }
@@ -533,14 +686,17 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
 
     if ((modes & MODE_TICKET) != 0) {
 #if H2O_USE_SESSION_TICKETS
-        ticket_init_internal_defaults();
+        ticket_init_defaults();
         if ((t = yoml_get(node, "ticket-store")) != NULL) {
             if (t->type == YOML_TYPE_SCALAR) {
                 if (strcasecmp(t->data.scalar, "internal") == 0) {
                     /* ok, preserve the defaults */
                     t = NULL;
                 } else if (strcasecmp(t->data.scalar, "file") == 0) {
-                    conf.ticket.update_thread = file_updater;
+                    conf.ticket.update_thread = ticket_file_updater;
+                    t = NULL;
+                } else if (strcasecmp(t->data.scalar, "memcached") == 0) {
+                    conf.ticket.update_thread = ticket_memcached_updater;
                     t = NULL;
                 }
             }
@@ -549,30 +705,30 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
                 return -1;
             }
         }
-        if (conf.ticket.update_thread == ticket_internal_updater) {
-            /* internal updater takes three arguments: cipher, hash, duration */
-            ticket_init_internal_defaults();
+        if (conf.ticket.update_thread == ticket_internal_updater || conf.ticket.update_thread == ticket_memcached_updater) {
+            /* generating updater takes three arguments: cipher, hash, duration */
             if ((t = yoml_get(node, "ticket-cipher")) != NULL) {
                 if (t->type != YOML_TYPE_SCALAR ||
-                    (conf.ticket.vars.internal.cipher = EVP_get_cipherbyname(t->data.scalar)) == NULL) {
+                    (conf.ticket.vars.generating.cipher = EVP_get_cipherbyname(t->data.scalar)) == NULL) {
                     h2o_configurator_errprintf(cmd, t, "unknown cipher algorithm");
                     return -1;
                 }
             }
             if ((t = yoml_get(node, "ticket-hash")) != NULL) {
-                if (t->type != YOML_TYPE_SCALAR || (conf.ticket.vars.internal.md = EVP_get_digestbyname(t->data.scalar)) == NULL) {
+                if (t->type != YOML_TYPE_SCALAR ||
+                    (conf.ticket.vars.generating.md = EVP_get_digestbyname(t->data.scalar)) == NULL) {
                     h2o_configurator_errprintf(cmd, t, "unknown hash algorithm");
                     return -1;
                 }
             }
             if ((t = yoml_get(node, "ticket-lifetime")) != NULL) {
-                if (t->type != YOML_TYPE_SCALAR || sscanf(t->data.scalar, "%u", &conf.ticket.vars.internal.lifetime) != 1 ||
-                    conf.ticket.vars.internal.lifetime == 0) {
+                if (t->type != YOML_TYPE_SCALAR || sscanf(t->data.scalar, "%u", &conf.ticket.vars.generating.lifetime) != 1 ||
+                    conf.ticket.vars.generating.lifetime == 0) {
                     h2o_configurator_errprintf(cmd, t, "`liftime` must be a positive number (in seconds)");
                     return -1;
                 }
             }
-        } else if (conf.ticket.update_thread == file_updater) {
+        } else if (conf.ticket.update_thread == ticket_file_updater) {
             /* file updater reads the contents of the file and uses it as the session ticket secret */
             if ((t = yoml_get(node, "file")) == NULL) {
                 h2o_configurator_errprintf(cmd, node, "mandatory attribute `file` is missing");
@@ -585,7 +741,8 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
             conf.ticket.vars.file.filename = h2o_strdup(NULL, t->data.scalar, SIZE_MAX).base;
         }
 #else
-        h2o_configurator_errprintf(cmd, mode, "ticket-based session resumption cannot be used, the server is built without support for the feature");
+        h2o_configurator_errprintf(
+            cmd, mode, "ticket-based session resumption cannot be used, the server is built without support for the feature");
         return -1;
 #endif
     }
@@ -710,6 +867,6 @@ void init_openssl(void)
 
     cache_init_defaults();
 #if H2O_USE_SESSION_TICKETS
-    ticket_init_internal_defaults();
+    ticket_init_defaults();
 #endif
 }
