@@ -57,6 +57,8 @@ static mrb_value h2o_mrb_return(mrb_state *mrb, mrb_value self)
 
 void h2o_mrb_core_class_init(mrb_state *mrb, struct RClass *class)
 {
+    mrb_define_const(mrb, class, "DECLINED", mrb_fixnum_value(-1));
+
     mrb_define_class_method(mrb, class, "max_headers", h2o_mrb_max_headers, MRB_ARGS_NONE());
     mrb_define_class_method(mrb, class, "return", h2o_mrb_return, MRB_ARGS_REQ(3));
 }
