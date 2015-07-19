@@ -264,6 +264,42 @@ size_t h2o_base64_encode(char *_dst, const void *_src, size_t len, int url_encod
     return dst - _dst;
 }
 
+static int decode_hex(int ch)
+{
+    if ('0' <= ch && ch <= '9')
+        return ch - '0';
+    if ('A' <= ch && ch <= 'F')
+        return ch - 'A' + 0xa;
+    if ('a' <= ch && ch <= 'f')
+        return ch - 'a' + 0xa;
+    return -1;
+}
+
+int h2o_hex_decode(void *_dst, const char *src, size_t src_len)
+{
+    unsigned char *dst = _dst;
+
+    if (src_len % 2 != 0)
+        return -1;
+    for (; src_len != 0; src_len -= 2) {
+        int hi, lo;
+        if ((hi = decode_hex(*src++)) == -1 || (lo = decode_hex(*src++)) == -1)
+            return -1;
+        *dst++ = (hi << 4) | lo;
+    }
+    return 0;
+}
+
+void h2o_hex_encode(char *dst, const void *_src, size_t src_len)
+{
+    const unsigned char *src = _src, *src_end = src + src_len;
+    for (; src != src_end; ++src) {
+        *dst++ = "0123456789abcdef"[*src >> 4];
+        *dst++ = "0123456789abcdef"[*src & 0xf];
+    }
+    *dst = '\0';
+}
+
 const char *h2o_get_filext(const char *path, size_t len)
 {
     const char *p = path + len;

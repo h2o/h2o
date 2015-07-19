@@ -146,6 +146,8 @@ struct st_h2o_buffer_prototype_t {
 
 typedef H2O_VECTOR(void) h2o_vector_t;
 
+extern void *(*h2o_mem__set_secure)(void *, int, size_t);
+
 /**
  * prints an error message and aborts
  */
@@ -258,6 +260,16 @@ void h2o_vector__expand(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t eleme
 static int h2o_memis(const void *target, size_t target_len, const void *test, size_t test_len);
 
 /**
+ * secure memset
+ */
+static void h2o_mem_set_secure(void *b, int c, size_t len);
+
+/**
+ * swaps contents of memory
+ */
+void h2o_mem_swap(void *x, void *y, size_t len);
+
+/**
  * emits hexdump of given buffer to fp
  */
 void h2o_dump_memory(FILE *fp, const char *buf, size_t len);
@@ -359,6 +371,11 @@ inline int h2o_memis(const void *_target, size_t target_len, const void *_test, 
     if (target[0] != test[0])
         return 0;
     return memcmp(target + 1, test + 1, test_len - 1) == 0;
+}
+
+inline void h2o_mem_set_secure(void *b, int c, size_t len)
+{
+    h2o_mem__set_secure(b, c, len);
 }
 
 #ifdef __cplusplus

@@ -52,6 +52,8 @@ struct st_h2o_mem_pool_shared_ref_t {
     struct st_h2o_mem_pool_shared_entry_t *entry;
 };
 
+void *(*h2o_mem__set_secure)(void *, int, size_t) = memset;
+
 static __thread h2o_mem_recycle_t mempool_allocator = {16};
 
 void h2o_fatal(const char *msg)
@@ -321,6 +323,20 @@ void h2o_vector__expand(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t eleme
         new_entries = h2o_mem_realloc(vector->entries, element_size * vector->capacity);
     }
     vector->entries = new_entries;
+}
+
+void h2o_mem_swap(void *_x, void *_y, size_t len)
+{
+    char *x = _x, *y = _y;
+    char buf[256];
+
+    while (len != 0) {
+        size_t blocksz = len < sizeof(buf) ? len : sizeof(buf);
+        memcpy(buf, x, blocksz);
+        memcpy(x, y, blocksz);
+        memcpy(y, buf, blocksz);
+        len -= blocksz;
+    }
 }
 
 void h2o_dump_memory(FILE *fp, const char *buf, size_t len)

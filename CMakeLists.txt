@@ -163,6 +163,7 @@ SET(LIB_SOURCE_FILES
     deps/libyrmcds/strerror.c
     deps/picohttpparser/picohttpparser.c
 
+    lib/common/file.c
     lib/common/hostinfo.c
     lib/common/http1client.c
     lib/common/memcached.c
@@ -219,6 +220,7 @@ SET(LIB_SOURCE_FILES
 
 SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}
+    ${LIBYAML_SOURCE_FILES}
     deps/picotest/picotest.c
     t/00unit/test.c
     t/00unit/lib/common/hostinfo.c
@@ -238,6 +240,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/handler/redirect.c
     t/00unit/lib/http2/hpack.c
     t/00unit/lib/http2/scheduler.c
+    t/00unit/src/ssl.c
     t/00unit/issues/293.c)
 LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/hostinfo.c
@@ -317,6 +320,7 @@ ENDIF (OPENSSL_FOUND)
 ADD_EXECUTABLE(h2o
     ${LIB_SOURCE_FILES}
     ${LIBYAML_SOURCE_FILES}
+    src/ssl.c
     src/main.c)
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
 IF (WITH_BUNDLED_SSL)
