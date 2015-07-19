@@ -13,35 +13,83 @@ plan skip_all => "could not find openssl"
 my $tempdir = tempdir(CLEANUP => 1);
 
 subtest "internal" => sub {
-    spawn_with("ticket", "internal", "unused", sub {
+    spawn_with(<< "EOT",
+  mode: ticket
+EOT
+    sub {
         is test(), "New";
         test(); # openssl 0.9.8 seems to return "New" (maybe because in the first run we did not specify -sess_in)
         is test(), "Reused";
         is test(), "Reused";
     });
-    spawn_with("ticket", "internal", "unused", sub {
+    spawn_with(<< "EOT",
+  mode: ticket
+EOT
+    sub {
         is test(), "New";
     });
 };
 
 subtest "file" => sub {
     my $tickets_file = "t/40session-ticket/forever_ticket.yaml";
-    spawn_with("ticket", "file", $tickets_file, sub {
+    spawn_with(<< "EOT",
+  mode: ticket
+  ticket-store: file
+  file: $tickets_file
+EOT
+    sub {
         is test(), "New";
         is test(), "Reused";
         is test(), "Reused";
     });
-    spawn_with("ticket", "file", $tickets_file, sub {
+    spawn_with(<< "EOT",
+  mode: ticket
+  ticket-store: file
+  file: $tickets_file
+EOT
+    sub {
         is test(), "Reused";
     });
 };
 
 subtest "no-tickets-in-file" => sub {
     my $tickets_file = "t/40session-ticket/nonexistent";
-    spawn_with("ticket", "file", $tickets_file, sub {
+    spawn_with(<< "EOT",
+  mode: ticket
+  ticket-store: file
+  file: $tickets_file
+EOT
+    sub {
         is test(), "New";
         is test(), "New";
         is test(), "New";
+    });
+};
+
+subtest "memcached" => sub {
+    plan skip_all => "memcached not found"
+        unless prog_exists("memcached");
+    my $memc_port = empty_port();
+    my $memc_guard = spawn_server(
+        argv     => [ qw(memcached -l 127.0.0.1 -p), $memc_port ],
+        is_ready => sub {
+            check_port($memc_port);
+        },
+    );
+    my $conf =<< "EOT";
+  mode: ticket
+  ticket-store: memcached
+  memcached:
+    host: 127.0.0.1
+    port: $memc_port
+EOT
+    spawn_with($conf, sub {
+        is test(), "New";
+        is test(), "Reused";
+        is test(), "Reused";
+    });
+    spawn_with($conf, sub {
+        is test(), "Reused";
     });
 };
 
@@ -50,12 +98,10 @@ done_testing;
 my $server;
 
 sub spawn_with {
-    my ($mode, $store, $tickets_file, $cb) = @_;
+    my ($opts, $cb) = @_;
     $server = spawn_h2o(<< "EOT");
 ssl-session-resumption:
-  mode: $mode
-  ticket-store: $store
-  file: $tickets_file
+$opts
 hosts:
   default:
     paths:
