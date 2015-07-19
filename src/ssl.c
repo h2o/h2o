@@ -38,7 +38,6 @@
 struct st_session_ticket_generating_updater_conf_t {
     const EVP_CIPHER *cipher;
     const EVP_MD *md;
-    unsigned lifetime;
 };
 
 struct st_session_ticket_file_updater_conf_t {
@@ -48,7 +47,6 @@ struct st_session_ticket_file_updater_conf_t {
 static struct {
     struct {
         void (*setup)(SSL_CTX **contexts, size_t num_contexts);
-        unsigned lifetime;
     } cache;
     struct {
         void *(*update_thread)(void *conf);
@@ -57,6 +55,7 @@ static struct {
             struct st_session_ticket_file_updater_conf_t file;
         } vars;
     } ticket;
+    unsigned lifetime;
     struct {
         char *host;
         uint16_t port;
@@ -85,15 +84,15 @@ static void setup_cache_internal(SSL_CTX **contexts, size_t num_contexts)
 {
     size_t i;
     for (i = 0; i != num_contexts; ++i)
-        SSL_CTX_set_timeout(contexts[i], conf.cache.lifetime);
+        SSL_CTX_set_timeout(contexts[i], conf.lifetime);
 }
 
 static void setup_cache_memcached(SSL_CTX **contexts, size_t num_contexts)
 {
-    h2o_accept_setup_async_ssl_resumption(memc_ctx, conf.cache.lifetime);
+    h2o_accept_setup_async_ssl_resumption(memc_ctx, conf.lifetime);
     size_t i;
     for (i = 0; i != num_contexts; ++i) {
-        SSL_CTX_set_timeout(contexts[i], conf.cache.lifetime);
+        SSL_CTX_set_timeout(contexts[i], conf.lifetime);
         h2o_socket_ssl_async_resumption_setup_ctx(contexts[i]);
     }
 }
@@ -101,7 +100,6 @@ static void setup_cache_memcached(SSL_CTX **contexts, size_t num_contexts)
 static void cache_init_defaults(void)
 {
     conf.cache.setup = setup_cache_internal;
-    conf.cache.lifetime = 3600; /* 1 hour */
 }
 
 #if H2O_USE_SESSION_TICKETS
@@ -234,10 +232,8 @@ Exit:
     return ret;
 }
 
-static void *ticket_internal_updater(void *_conf)
+static void *ticket_internal_updater(void *unused)
 {
-    struct st_session_ticket_generating_updater_conf_t *conf = _conf;
-
     while (1) {
         uint64_t newest_not_before = 0, oldest_not_after = UINT64_MAX, now = time(NULL);
 
@@ -250,8 +246,9 @@ static void *ticket_internal_updater(void *_conf)
         pthread_rwlock_unlock(&session_tickets.rwlock);
 
         /* insert new entry if necessary */
-        if (newest_not_before + conf->lifetime / 4 <= now) {
-            struct st_session_ticket_t *ticket = new_ticket(conf->cipher, conf->md, now, now + conf->lifetime - 1, 1);
+        if (newest_not_before + conf.lifetime / 4 <= now) {
+            struct st_session_ticket_t *ticket =
+                new_ticket(conf.ticket.vars.generating.cipher, conf.ticket.vars.generating.md, now, now + conf.lifetime - 1, 1);
             pthread_rwlock_wrlock(&session_tickets.rwlock);
             h2o_vector_reserve(NULL, (void *)&session_tickets.tickets, sizeof(session_tickets.tickets.entries[0]),
                                session_tickets.tickets.size + 1);
@@ -482,11 +479,11 @@ static int ticket_memcached_update_tickets(yrmcds *conn, h2o_iovec_t key, time_t
 
     /* update and return immediately (requesting re-run), if necessary */
     int has_valid_ticket = find_ticket_for_encryption(&tickets, now) != NULL;
-    if (!has_valid_ticket || (tickets.entries[0]->not_before + conf.ticket.vars.generating.lifetime / 4 < now)) {
+    if (!has_valid_ticket || (tickets.entries[0]->not_before + conf.lifetime / 4 < now)) {
         /* create new entry */
         uint64_t not_before = has_valid_ticket ? now + 60 : now;
         struct st_session_ticket_t *ticket = new_ticket(conf.ticket.vars.generating.cipher, conf.ticket.vars.generating.md,
-                                                        not_before, not_before + conf.ticket.vars.generating.lifetime, 1);
+                                                        not_before, not_before + conf.lifetime, 1);
         h2o_vector_reserve(NULL, (void *)&tickets, sizeof(tickets.entries[0]), tickets.size + 1);
         memmove(tickets.entries + 1, tickets.entries, sizeof(tickets.entries[0]) * tickets.size);
         ++tickets.size;
@@ -494,14 +491,14 @@ static int ticket_memcached_update_tickets(yrmcds *conn, h2o_iovec_t key, time_t
         /* serialize */
         tickets_serialized = serialize_tickets(&tickets);
         if (resp.status == YRMCDS_STATUS_NOTFOUND) {
-            if ((err = yrmcds_add(conn, key.base, key.len, tickets_serialized.base, tickets_serialized.len, 0,
-                                  conf.ticket.vars.generating.lifetime, 0, 0, &serial)) != 0) {
+            if ((err = yrmcds_add(conn, key.base, key.len, tickets_serialized.base, tickets_serialized.len, 0, conf.lifetime, 0, 0,
+                                  &serial)) != 0) {
                 fprintf(stderr, "[lib/ssl.c] %s:yrmcds_add failed:%s\n", __func__, yrmcds_strerror(err));
                 goto Exit;
             }
         } else {
-            if ((err = yrmcds_set(conn, key.base, key.len, tickets_serialized.base, tickets_serialized.len, 0,
-                                  conf.ticket.vars.generating.lifetime, resp.cas_unique, 0, &serial)) != 0) {
+            if ((err = yrmcds_set(conn, key.base, key.len, tickets_serialized.base, tickets_serialized.len, 0, conf.lifetime,
+                                  resp.cas_unique, 0, &serial)) != 0) {
                 fprintf(stderr, "[lib/ssl.c] %s:yrmcds_set failed:%s\n", __func__, yrmcds_strerror(err));
                 goto Exit;
             }
@@ -524,7 +521,7 @@ Exit:
     return retry;
 }
 
-static void *ticket_memcached_updater(void *_conf)
+static void *ticket_memcached_updater(void *unused)
 {
     while (1) {
         /* connect */
@@ -584,24 +581,23 @@ Exit:
 #undef ERR_PREFIX
 }
 
-static void *ticket_file_updater(void *_conf)
+static void *ticket_file_updater(void *unused)
 {
-    struct st_session_ticket_file_updater_conf_t *conf = _conf;
     time_t last_mtime = 1; /* file is loaded if mtime changes, 0 is used to indicate that the file was missing */
 
     while (1) {
         struct stat st;
-        if (stat(conf->filename, &st) != 0) {
+        if (stat(conf.ticket.vars.file.filename, &st) != 0) {
             if (last_mtime != 0) {
                 char errbuf[256];
                 strerror_r(errno, errbuf, sizeof(errbuf));
-                fprintf(stderr, "cannot load session ticket secrets from file:%s:%s\n", conf->filename, errbuf);
+                fprintf(stderr, "cannot load session ticket secrets from file:%s:%s\n", conf.ticket.vars.file.filename, errbuf);
             }
             last_mtime = 0;
         } else if (last_mtime != st.st_mtime) {
             /* (re)load */
             last_mtime = st.st_mtime;
-            if (load_tickets_file(conf->filename) == 0)
+            if (load_tickets_file(conf.ticket.vars.file.filename) == 0)
                 fprintf(stderr, "session ticket secrets have been (re)loaded\n");
         }
         sleep(10);
@@ -615,7 +611,6 @@ static void ticket_init_defaults(void)
     conf.ticket.vars.generating.cipher = EVP_aes_256_cbc();
     /* integrity checks are only necessary at the time of handshake, and sha256 (recommended by RFC 5077) is sufficient */
     conf.ticket.vars.generating.md = EVP_sha256();
-    conf.ticket.vars.generating.lifetime = 3600; /* 1 hour */
 }
 
 #endif
@@ -680,13 +675,6 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
                 return -1;
             }
         }
-        if ((t = yoml_get(node, "cache-lifetime")) != NULL) {
-            if (!(t->type == YOML_TYPE_SCALAR && sscanf(t->data.scalar, "%u", &conf.cache.lifetime) == 1 &&
-                  conf.cache.lifetime != 0)) {
-                h2o_configurator_errprintf(cmd, t, "value of `cache-lifetime must be a positive number");
-                return -1;
-            }
-        }
     } else {
         conf.cache.setup = setup_cache_disable;
     }
@@ -725,13 +713,6 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
                 if (t->type != YOML_TYPE_SCALAR ||
                     (conf.ticket.vars.generating.md = EVP_get_digestbyname(t->data.scalar)) == NULL) {
                     h2o_configurator_errprintf(cmd, t, "unknown hash algorithm");
-                    return -1;
-                }
-            }
-            if ((t = yoml_get(node, "ticket-lifetime")) != NULL) {
-                if (t->type != YOML_TYPE_SCALAR || sscanf(t->data.scalar, "%u", &conf.ticket.vars.generating.lifetime) != 1 ||
-                    conf.ticket.vars.generating.lifetime == 0) {
-                    h2o_configurator_errprintf(cmd, t, "`liftime` must be a positive number (in seconds)");
                     return -1;
                 }
             }
@@ -804,8 +785,15 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
     }
 
     if (conf_uses_memcached() && conf.memcached.host == NULL) {
-        h2o_configurator_errprintf(cmd, node, "configuration of the memcached is missing");
+        h2o_configurator_errprintf(cmd, node, "configuration of memcached is missing");
         return -1;
+    }
+
+    if ((t = yoml_get(node, "lifetime")) != NULL) {
+        if (!(t->type == YOML_TYPE_SCALAR && sscanf(t->data.scalar, "%u", &conf.lifetime) == 1 && conf.lifetime != 0)) {
+            h2o_configurator_errprintf(cmd, t, "value of `lifetime` must be a positive number");
+            return -1;
+        }
     }
 
     return 0;
@@ -829,7 +817,7 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts)
         pthread_attr_t attr;
         pthread_attr_init(&attr);
         pthread_attr_setdetachstate(&attr, 1);
-        h2o_multithread_create_thread(&tid, &attr, conf.ticket.update_thread, &conf.ticket.vars);
+        h2o_multithread_create_thread(&tid, &attr, conf.ticket.update_thread, NULL);
         size_t i;
         for (i = 0; i != num_contexts; ++i)
             SSL_CTX_set_tlsext_ticket_key_cb(contexts[i], ticket_key_callback);
@@ -876,4 +864,5 @@ void init_openssl(void)
 #if H2O_USE_SESSION_TICKETS
     ticket_init_defaults();
 #endif
+    conf.lifetime = 3600; /* default value for session timeout is 1 hour */
 }
