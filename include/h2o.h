@@ -1046,6 +1046,20 @@ void h2o_expires_register(h2o_pathconf_t *pathconf, h2o_expires_args_t *args);
  */
 void h2o_expires_register_configurator(h2o_globalconf_t *conf);
 
+/* lib/fail.c */
+
+typedef struct st_h2o_fail_handler_t h2o_fail_handler_t;
+
+/**
+ * registers the fail handler to the context
+ * @param status status code to be sent (e.g. 403, 404, 500, ...)
+ */
+h2o_fail_handler_t *h2o_fail_register(h2o_pathconf_t *pathconf, int status);
+/**
+ * registers the configurator
+ */
+void h2o_fail_register_configurator(h2o_globalconf_t *conf);
+
 /* lib/fastcgi.c */
 
 typedef struct st_h2o_fastcgi_handler_t h2o_fastcgi_handler_t;

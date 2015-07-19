@@ -191,6 +191,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/access_log.c
     lib/handler/chunked.c
     lib/handler/expires.c
+    lib/handler/fail.c
     lib/handler/fastcgi.c
     lib/handler/file.c
     lib/handler/headers.c
@@ -200,6 +201,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/reproxy.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/expires.c
+    lib/handler/configurator/fail.c
     lib/handler/configurator/fastcgi.c
     lib/handler/configurator/file.c
     lib/handler/configurator/headers.c
