@@ -19,12 +19,24 @@ hosts:
         file.dir: examples/doc_root
 $extra_conf
 EOT
-    return `curl --silent /dev/stderr http://127.0.0.1:$server->{port}/ 2>&1`;
+    return `curl --silent /dev/stderr -H User-Agent:h2o_mruby_test http://127.0.0.1:$server->{port}/ 2>&1`;
 }
 
+sub fetch_header {
+    my $extra_conf = shift;
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        file.dir: examples/doc_root
+$extra_conf
+EOT
+    return `curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/ 2>&1`;
+}
 
 my $resp = fetch(<< 'EOT');
-        mruby.handler_path: examples/h2o_mruby/hello.rb
+        mruby.handler_path: t/50mruby/hello.rb
 EOT
 is $resp, "hello from h2o_mruby\n", "resoponse body from mruby";
 
@@ -32,5 +44,15 @@ $resp = fetch(<< 'EOT');
         mruby.handler_path: t/50mruby/max_header.rb
 EOT
 is $resp, "100", "H2O.max_headers method";
+
+$resp = fetch(<< 'EOT');
+        mruby.handler_path: t/50mruby/headers_in.rb
+EOT
+is $resp, "new-h2o_mruby_test", "H2O::Request#headers_in test";
+
+$resp = fetch_header(<< 'EOT');
+        mruby.handler_path: t/50mruby/headers_out.rb
+EOT
+like $resp, qr/^new-header:.*\Wh2o-mruby\W/im, "H2O::Response#headers_out test";
 
 done_testing();
