@@ -265,6 +265,11 @@ static int h2o_memis(const void *target, size_t target_len, const void *test, si
 static void h2o_mem_set_secure(void *b, int c, size_t len);
 
 /**
+ * swaps contents of memory
+ */
+void h2o_mem_swap(void *x, void *y, size_t len);
+
+/**
  * emits hexdump of given buffer to fp
  */
 void h2o_dump_memory(FILE *fp, const char *buf, size_t len);
