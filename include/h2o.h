@@ -903,6 +903,10 @@ static void h2o_context_set_handler_context(h2o_context_t *ctx, h2o_handler_t *h
  */
 static void *h2o_context_get_filter_context(h2o_context_t *ctx, h2o_filter_t *filter);
 /**
+ * sets per-module filter context
+ */
+static void h2o_context_set_filter_context(h2o_context_t *ctx, h2o_filter_t *filter, void *filter_ctx);
+/**
  * returns per-module context set by the on_context_init callback
  */
 static void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *logger);
@@ -1229,6 +1233,11 @@ inline void h2o_context_set_handler_context(h2o_context_t *ctx, h2o_handler_t *h
 inline void *h2o_context_get_filter_context(h2o_context_t *ctx, h2o_filter_t *filter)
 {
     return ctx->_module_configs[filter->_config_slot];
+}
+
+inline void h2o_context_set_filter_context(h2o_context_t *ctx, h2o_filter_t *filter, void *filter_ctx)
+{
+    ctx->_module_configs[filter->_config_slot] = filter_ctx;
 }
 
 inline void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *logger)
