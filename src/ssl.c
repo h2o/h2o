@@ -67,12 +67,6 @@ static struct {
 
 static h2o_memcached_context_t *memc_ctx;
 
-static void cache_init_defaults(void)
-{
-    conf.cache.setup = NULL;
-    conf.cache.lifetime = 3600; /* 1 hour */
-}
-
 static void spawn_memcached_clients(void)
 {
     assert(conf.memcached.host != NULL);
@@ -87,12 +81,27 @@ static void setup_cache_disable(SSL_CTX **contexts, size_t num_contexts)
         SSL_CTX_set_session_cache_mode(contexts[i], SSL_SESS_CACHE_OFF);
 }
 
+static void setup_cache_internal(SSL_CTX **contexts, size_t num_contexts)
+{
+    size_t i;
+    for (i = 0; i != num_contexts; ++i)
+        SSL_CTX_set_timeout(contexts[i], conf.cache.lifetime);
+}
+
 static void setup_cache_memcached(SSL_CTX **contexts, size_t num_contexts)
 {
     h2o_accept_setup_async_ssl_resumption(memc_ctx, conf.cache.lifetime);
     size_t i;
-    for (i = 0; i != num_contexts; ++i)
+    for (i = 0; i != num_contexts; ++i) {
+        SSL_CTX_set_timeout(contexts[i], conf.cache.lifetime);
         h2o_socket_ssl_async_resumption_setup_ctx(contexts[i]);
+    }
+}
+
+static void cache_init_defaults(void)
+{
+    conf.cache.setup = setup_cache_internal;
+    conf.cache.lifetime = 3600; /* 1 hour */
 }
 
 #if H2O_USE_SESSION_TICKETS
@@ -677,8 +686,6 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
                 h2o_configurator_errprintf(cmd, t, "value of `cache-lifetime must be a positive number");
                 return -1;
             }
-            if (conf.cache.setup != setup_cache_memcached)
-                h2o_configurator_errprintf(cmd, t, "[Warning] cache-lifetime has no effect for the `internal` cache-store");
         }
     } else {
         conf.cache.setup = setup_cache_disable;
