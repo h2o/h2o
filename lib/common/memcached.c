@@ -235,7 +235,7 @@ static void reader_main(h2o_memcached_context_t *ctx)
     /* receive data until an error occurs */
     while (1) {
         if ((err = yrmcds_recv(&conn.yrmcds, &resp)) != YRMCDS_OK) {
-            fprintf(stderr, "[lib/common/memcached.c] failed to receive response; %s\n", yrmcds_strerror(err));
+            fprintf(stderr, "[lib/common/memcached.c] yrmcds_recv:%s\n", yrmcds_strerror(err));
             break;
         }
         h2o_memcached_req_t *req = pop_inflight(&conn, resp.serial);
