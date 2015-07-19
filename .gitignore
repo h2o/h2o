@@ -6,6 +6,7 @@
 CMakeCache.txt
 CMakeFiles/
 Makefile
+*.gch
 build/
 cmake_install.cmake
 xcuserdata
