@@ -47,6 +47,12 @@ struct st_session_ticket_file_updater_conf_t {
 static struct {
     struct {
         void (*setup)(SSL_CTX **contexts, size_t num_contexts);
+        union {
+            struct {
+                size_t num_threads;
+                char *prefix;
+            } memcached;
+        } vars;
     } cache;
     struct {
         void *(*update_thread)(void *conf);
@@ -59,19 +65,8 @@ static struct {
     struct {
         char *host;
         uint16_t port;
-        size_t num_threads;
-        char *prefix;
     } memcached;
 } conf;
-
-static h2o_memcached_context_t *memc_ctx;
-
-static void spawn_memcached_clients(void)
-{
-    assert(conf.memcached.host != NULL);
-    memc_ctx =
-        h2o_memcached_create_context(conf.memcached.host, conf.memcached.port, conf.memcached.num_threads, conf.memcached.prefix);
-}
 
 static void setup_cache_disable(SSL_CTX **contexts, size_t num_contexts)
 {
@@ -89,6 +84,8 @@ static void setup_cache_internal(SSL_CTX **contexts, size_t num_contexts)
 
 static void setup_cache_memcached(SSL_CTX **contexts, size_t num_contexts)
 {
+    h2o_memcached_context_t *memc_ctx = h2o_memcached_create_context(
+        conf.memcached.host, conf.memcached.port, conf.cache.vars.memcached.num_threads, conf.cache.vars.memcached.prefix);
     h2o_accept_setup_async_ssl_resumption(memc_ctx, conf.lifetime);
     size_t i;
     for (i = 0; i != num_contexts; ++i) {
@@ -615,17 +612,6 @@ static void ticket_init_defaults(void)
 
 #endif
 
-static int conf_uses_memcached(void)
-{
-    if (conf.cache.setup == setup_cache_memcached)
-        return 1;
-#if H2O_USE_SESSION_TICKETS
-    if (conf.ticket.update_thread == ticket_memcached_updater)
-        return 1;
-#endif
-    return 0;
-}
-
 int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     enum {
@@ -673,6 +659,24 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
             if (t != NULL) {
                 h2o_configurator_errprintf(cmd, t, "value of `cache-store` must be one of: internal | memcached");
                 return -1;
+            }
+        }
+        if (conf.cache.setup == setup_cache_memcached) {
+            conf.cache.vars.memcached.num_threads = 1;
+            conf.cache.vars.memcached.prefix = "h2o:ssl-session-cache:";
+            if ((t = yoml_get(node, "cache-memcached-num-threads")) != NULL) {
+                if (!(t->type == YOML_TYPE_SCALAR && sscanf(t->data.scalar, "%zu", &conf.cache.vars.memcached.num_threads) == 1 &&
+                      conf.cache.vars.memcached.num_threads != 0)) {
+                    h2o_configurator_errprintf(cmd, t, "`cache-memcached-num-threads` must be a positive number");
+                    return -1;
+                }
+            }
+            if ((t = yoml_get(node, "cache-memcached-prefix")) != NULL) {
+                if (t->type != YOML_TYPE_SCALAR) {
+                    h2o_configurator_errprintf(cmd, t, "`cache-memcached-prefix` must be a string");
+                    return -1;
+                }
+                conf.cache.vars.memcached.prefix = h2o_strdup(NULL, t->data.scalar, SIZE_MAX).base;
             }
         }
     } else {
@@ -738,8 +742,6 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
     if ((t = yoml_get(node, "memcached")) != NULL) {
         conf.memcached.host = NULL;
         conf.memcached.port = 11211;
-        conf.memcached.num_threads = 1;
-        conf.memcached.prefix = ":h2o:ssl-resumption:";
         size_t index;
         for (index = 0; index != t->data.mapping.size; ++index) {
             yoml_t *key = t->data.mapping.elements[index].key;
@@ -761,18 +763,6 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
                     h2o_configurator_errprintf(cmd, value, "`port` must be a number");
                     return -1;
                 }
-            } else if (strcmp(key->data.scalar, "num-threads") == 0) {
-                if (!(value->type == YOML_TYPE_SCALAR && sscanf(value->data.scalar, "%zu", &conf.memcached.num_threads) == 1 &&
-                      conf.memcached.num_threads != 0)) {
-                    h2o_configurator_errprintf(cmd, value, "`num-threads` must be a positive number");
-                    return -1;
-                }
-            } else if (strcmp(key->data.scalar, "prefix") == 0) {
-                if (value->type != YOML_TYPE_SCALAR) {
-                    h2o_configurator_errprintf(cmd, value, "`prefix` must be a string");
-                    return -1;
-                }
-                conf.memcached.prefix = h2o_strdup(NULL, value->data.scalar, SIZE_MAX).base;
             } else {
                 h2o_configurator_errprintf(cmd, key, "unknown attribute: %s", key->data.scalar);
                 return -1;
@@ -784,7 +774,11 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
         }
     }
 
-    if (conf_uses_memcached() && conf.memcached.host == NULL) {
+    if (conf.memcached.host == NULL && (conf.cache.setup == setup_cache_memcached
+#if H2O_USE_SESSION_TICKETS
+                                        || conf.ticket.update_thread == ticket_memcached_updater
+#endif
+                                        )) {
         h2o_configurator_errprintf(cmd, node, "configuration of memcached is missing");
         return -1;
     }
@@ -801,9 +795,6 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
 
 void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts)
 {
-    if (conf_uses_memcached())
-        spawn_memcached_clients();
-
     if (conf.cache.setup != NULL)
         conf.cache.setup(contexts, num_contexts);
 
