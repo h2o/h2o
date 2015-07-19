@@ -35,7 +35,7 @@ subtest "file" => sub {
     spawn_with(<< "EOT",
   mode: ticket
   ticket-store: file
-  file: $tickets_file
+  ticket-file: $tickets_file
 EOT
     sub {
         is test(), "New";
@@ -45,7 +45,7 @@ EOT
     spawn_with(<< "EOT",
   mode: ticket
   ticket-store: file
-  file: $tickets_file
+  ticket-file: $tickets_file
 EOT
     sub {
         is test(), "Reused";
@@ -57,7 +57,7 @@ subtest "no-tickets-in-file" => sub {
     spawn_with(<< "EOT",
   mode: ticket
   ticket-store: file
-  file: $tickets_file
+  ticket-file: $tickets_file
 EOT
     sub {
         is test(), "New";

@@ -730,7 +730,7 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
             }
         } else if (conf.ticket.update_thread == ticket_file_updater) {
             /* file updater reads the contents of the file and uses it as the session ticket secret */
-            if ((t = yoml_get(node, "file")) == NULL) {
+            if ((t = yoml_get(node, "ticket-file")) == NULL) {
                 h2o_configurator_errprintf(cmd, node, "mandatory attribute `file` is missing");
                 return -1;
             }
