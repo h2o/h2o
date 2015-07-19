@@ -22,9 +22,11 @@
 #include "../test.h"
 #include "../../../src/ssl.c"
 
-void test_src__ssl_c(void)
+const uint64_t UTC2000 = (365 * 30 + 7) * 86400;
+
+static void test_load_tickets_file(void)
 {
-    int ret = load_file("t/assets/session_tickets.yaml");
+    int ret = load_tickets_file("t/assets/session_tickets.yaml");
     ok(ret == 0);
     if (ret != 0)
         return;
@@ -81,4 +83,114 @@ void test_src__ssl_c(void)
 Exit:
     pthread_rwlock_unlock(&session_tickets.rwlock);
     ;
+}
+
+static void test_serialize_tickets(void)
+{
+    session_ticket_vector_t orig = {}, parsed = {};
+    h2o_iovec_t serialized;
+    char errstr[256];
+    int ret;
+    size_t i;
+
+    h2o_vector_reserve(NULL, (void *)&orig, sizeof(orig.entries[0]), orig.size + 2);
+    orig.entries[orig.size++] = new_ticket(EVP_aes_256_cbc(), EVP_sha256(), UTC2000, UTC2000 + 3600, 1);
+    orig.entries[orig.size++] = new_ticket(EVP_aes_256_cbc(), EVP_sha256(), UTC2000 + 600, UTC2000 + 4200, 1);
+
+    serialized = serialize_tickets(&orig);
+    ok(serialized.base != NULL);
+
+    ret = parse_tickets(&parsed, serialized.base, serialized.len, errstr);
+    ok(ret == 0);
+
+    ok(parsed.size == orig.size);
+    for (i = 0; i != parsed.size; ++i) {
+#define OK_VALUE(n) ok(parsed.entries[i]->n == orig.entries[i]->n)
+#define OK_MEMCMP(n, s) ok(memcmp(parsed.entries[i]->n, orig.entries[i]->n, (s)) == 0)
+        OK_MEMCMP(name, sizeof(parsed.entries[i]->name));
+        OK_VALUE(cipher.cipher);
+        OK_MEMCMP(cipher.key, parsed.entries[i]->cipher.cipher->key_len);
+        OK_VALUE(hmac.md);
+        OK_MEMCMP(hmac.key, parsed.entries[i]->hmac.md->block_size);
+        OK_VALUE(not_before);
+        OK_VALUE(not_after);
+#undef OK_VALUE
+#undef OK_MEMCMP
+    }
+
+    free_tickets(&orig);
+    free_tickets(&parsed);
+    free(serialized.base);
+}
+
+static void test_memcached_ticket_update(void)
+{
+#define TEST_KEY "h2o:session-ticket-test"
+
+    const char *memc_port_str;
+    uint16_t memc_port;
+    yrmcds conn;
+    yrmcds_response resp;
+    yrmcds_error err;
+
+    /* obtain port number (or skip) */
+    if ((memc_port_str = getenv("MEMCACHED_PORT")) == NULL) {
+        printf("MEMCACHED_PORT is not defined; skipping tests\n");
+        return;
+    }
+    if (sscanf(memc_port_str, "%" SCNu16, &memc_port) != 1) {
+        fprintf(stderr, "failed to parse the value of MEMCACHED_PORT\n");
+        ok(0);
+        return;
+    }
+    /* connect */
+    err = yrmcds_connect(&conn, "127.0.0.1", memc_port);
+    ok(err == YRMCDS_OK);
+    if (err != YRMCDS_OK)
+        return;
+    /* delete test key */
+    err = yrmcds_remove(&conn, H2O_STRLIT(TEST_KEY), 0, NULL);
+    ok(err == YRMCDS_OK);
+    if (err != YRMCDS_OK)
+        return;
+    err = yrmcds_recv(&conn, &resp);
+    ok(err == YRMCDS_OK);
+    if (err != YRMCDS_OK)
+        return;
+
+    /* set a new entry that immediately becomes active */
+    int retry = ticket_memcached_update_tickets(&conn, h2o_iovec_init(H2O_STRLIT(TEST_KEY)), UTC2000);
+    ok(retry == 1); /* first attempt should return a retry, since valid ticket does not exist */
+    retry = ticket_memcached_update_tickets(&conn, h2o_iovec_init(H2O_STRLIT(TEST_KEY)), UTC2000 + 1);
+    ok(retry == 0);
+    ok(session_tickets.tickets.size == 1);
+    ok(session_tickets.tickets.entries[0]->not_before == UTC2000);
+
+    /* continue using existing one */
+    retry = ticket_memcached_update_tickets(&conn, h2o_iovec_init(H2O_STRLIT(TEST_KEY)),
+                                            UTC2000 + conf.ticket.vars.generating.lifetime / 8);
+    ok(retry == 0);
+    ok(session_tickets.tickets.size == 1);
+    ok(session_tickets.tickets.entries[0]->not_before == UTC2000);
+
+    /* schedule a new entry */
+    retry = ticket_memcached_update_tickets(&conn, h2o_iovec_init(H2O_STRLIT(TEST_KEY)),
+                                            UTC2000 + conf.ticket.vars.generating.lifetime / 2);
+    ok(retry == 1);
+    retry = ticket_memcached_update_tickets(&conn, h2o_iovec_init(H2O_STRLIT(TEST_KEY)),
+                                            UTC2000 + conf.ticket.vars.generating.lifetime / 2);
+    ok(retry == 0);
+    ok(session_tickets.tickets.size == 2);
+    ok(session_tickets.tickets.entries[0]->not_before > UTC2000 + conf.ticket.vars.generating.lifetime / 2);
+    ok(session_tickets.tickets.entries[1]->not_before == UTC2000);
+
+    /* disconnect */
+    yrmcds_close(&conn);
+}
+
+void test_src__ssl_c(void)
+{
+    subtest("load-tickets-file", test_load_tickets_file);
+    subtest("serialize-tickets", test_serialize_tickets);
+    subtest("memcached-ticket-update", test_memcached_ticket_update);
 }

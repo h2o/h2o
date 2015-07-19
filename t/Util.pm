@@ -34,6 +34,32 @@ sub exec_unittest {
     my $fn = bindir() . "/t-00unit-$base.t";
     plan skip_all => "unit test:$base does not exist"
         if ! -e $fn;
+
+    if (prog_exists("memcached")) {
+        my $port = empty_port();
+        pipe my $rfh, my $wfh
+            or die "pipe failed:$!";
+        my $pid = fork;
+        die "fork failed:$!"
+            unless defined $pid;
+        if ($pid == 0) {
+            # child process
+            close $wfh;
+            POSIX::dup2($rfh->fileno, 5)
+                or die "dup2 failed:$!";
+            exec qw(share/h2o/kill-on-close -- memcached -l 127.0.0.1 -p), $port;
+            exit 1;
+        }
+        close $rfh;
+        POSIX::dup($wfh->fileno)
+            or die "dup failed:$!";
+        sleep 1;
+        if (waitpid($pid, WNOHANG) == $pid) {
+            die "failed to launch memcached";
+        }
+        $ENV{MEMCACHED_PORT} = $port;
+    }
+
     exec $fn;
     die "failed to exec $fn:$!";
 }
