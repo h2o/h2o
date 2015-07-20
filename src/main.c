@@ -1028,7 +1028,7 @@ static yoml_t *load_config(const char *fn)
     yaml_parser_initialize(&parser);
     yaml_parser_set_input_file(&parser, fp);
 
-    yoml = yoml_parse_document(&parser, NULL, fn);
+    yoml = yoml_parse_document(&parser, NULL, NULL, fn);
 
     if (yoml == NULL)
         fprintf(stderr, "failed to parse configuration file:%s:line %d:%s\n", fn, (int)parser.problem_mark.line, parser.problem);
@@ -1502,7 +1502,7 @@ int main(int argc, char **argv)
             exit(EX_CONFIG);
         if (h2o_configurator_apply(&conf.globalconf, yoml, conf.run_mode != RUN_MODE_WORKER) != 0)
             exit(EX_CONFIG);
-        yoml_free(yoml);
+        yoml_free(yoml, NULL);
     }
 
     /* check if all the fds passed in by server::starter were bound */
