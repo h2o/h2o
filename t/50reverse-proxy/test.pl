@@ -29,6 +29,8 @@ plan skip_all => 'plackup not found'
 
 plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
+plan skip_all => 'skipping unix-socket tests, requires Starlet >= 0.25'
+    if $unix_socket && `perl -MStarlet -e 'print \$Starlet::VERSION'` < 0.25;
 
 my %files = map { do {
     my $fn = DOC_ROOT . "/$_";
