@@ -58,6 +58,10 @@ static struct {
         void *(*update_thread)(void *conf);
         union {
             struct st_session_ticket_generating_updater_conf_t generating;
+            struct {
+                struct st_session_ticket_generating_updater_conf_t generating; /* at same address as conf.ticket.vars.generating */
+                h2o_iovec_t prefix;
+            } memcached;
             struct st_session_ticket_file_updater_conf_t file;
         } vars;
     } ticket;
@@ -532,7 +536,7 @@ static void *ticket_memcached_updater(void *unused)
             sleep(10);
         }
         /* connected */
-        while (ticket_memcached_update_tickets(&conn, h2o_iovec_init(H2O_STRLIT("h2o:session-tickets")), time(NULL)))
+        while (ticket_memcached_update_tickets(&conn, conf.ticket.vars.memcached.prefix, time(NULL)))
             ;
         /* disconnect */
         yrmcds_close(&conn);
@@ -705,7 +709,7 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
             }
         }
         if (conf.ticket.update_thread == ticket_internal_updater || conf.ticket.update_thread == ticket_memcached_updater) {
-            /* generating updater takes three arguments: cipher, hash, duration */
+            /* generating updater takes two arguments: cipher, hash */
             if ((t = yoml_get(node, "ticket-cipher")) != NULL) {
                 if (t->type != YOML_TYPE_SCALAR ||
                     (conf.ticket.vars.generating.cipher = EVP_get_cipherbyname(t->data.scalar)) == NULL) {
@@ -718,6 +722,16 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
                     (conf.ticket.vars.generating.md = EVP_get_digestbyname(t->data.scalar)) == NULL) {
                     h2o_configurator_errprintf(cmd, t, "unknown hash algorithm");
                     return -1;
+                }
+            }
+            if (conf.ticket.update_thread == ticket_memcached_updater) {
+                conf.ticket.vars.memcached.prefix = h2o_iovec_init(H2O_STRLIT("h2o:ssl-session-ticket:"));
+                if ((t = yoml_get(node, "ticket-memcached-prefix")) != NULL) {
+                    if (t->type != YOML_TYPE_SCALAR) {
+                        h2o_configurator_errprintf(cmd, t, "`ticket-memcached-prefix` must be a string");
+                        return -1;
+                    }
+                    conf.ticket.vars.memcached.prefix = h2o_strdup(NULL, t->data.scalar, SIZE_MAX);
                 }
             }
         } else if (conf.ticket.update_thread == ticket_file_updater) {
