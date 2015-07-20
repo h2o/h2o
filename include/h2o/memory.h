@@ -262,7 +262,7 @@ static int h2o_memis(const void *target, size_t target_len, const void *test, si
 /**
  * secure memset
  */
-static void h2o_mem_set_secure(void *b, int c, size_t len);
+static void *h2o_mem_set_secure(void *b, int c, size_t len);
 
 /**
  * swaps contents of memory
@@ -373,9 +373,9 @@ inline int h2o_memis(const void *_target, size_t target_len, const void *_test, 
     return memcmp(target + 1, test + 1, test_len - 1) == 0;
 }
 
-inline void h2o_mem_set_secure(void *b, int c, size_t len)
+inline void *h2o_mem_set_secure(void *b, int c, size_t len)
 {
-    h2o_mem__set_secure(b, c, len);
+    return h2o_mem__set_secure(b, c, len);
 }
 
 #ifdef __cplusplus

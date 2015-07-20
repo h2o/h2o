@@ -401,7 +401,7 @@ static int parse_tickets(session_ticket_vector_t *tickets, const void *src, size
     yaml_parser_initialize(&parser);
 
     yaml_parser_set_input_string(&parser, src, len);
-    if ((doc = yoml_parse_document(&parser, NULL, NULL)) == NULL) {
+    if ((doc = yoml_parse_document(&parser, NULL, h2o_mem_set_secure, NULL)) == NULL) {
         sprintf(errstr, "parse error at line %d:%s\n", (int)parser.problem_mark.line, parser.problem);
         goto Error;
     }
@@ -420,9 +420,12 @@ static int parse_tickets(session_ticket_vector_t *tickets, const void *src, size
         tickets->entries[tickets->size++] = ticket;
     }
 
+    yoml_free(doc, h2o_mem_set_secure);
     yaml_parser_delete(&parser);
     return 0;
 Error:
+    if (doc != NULL)
+        yoml_free(doc, h2o_mem_set_secure);
     yaml_parser_delete(&parser);
     free_tickets(tickets);
     return -1;
@@ -472,9 +475,13 @@ static int ticket_memcached_update_tickets(yrmcds *conn, h2o_iovec_t key, time_t
         fprintf(stderr, "[lib/ssl.c] %s:unexpected response\n", __func__);
         goto Exit;
     }
-    if (resp.status == YRMCDS_STATUS_OK && parse_tickets(&tickets, resp.data, resp.data_len, errbuf) != 0) {
-        fprintf(stderr, "[lib/ssl.c] %s:failed to parse response:%s\n", __func__, errbuf);
-        goto Exit;
+    if (resp.status == YRMCDS_STATUS_OK) {
+        int r = parse_tickets(&tickets, resp.data, resp.data_len, errbuf);
+        h2o_mem_set_secure((void *)resp.data, 0, resp.data_len);
+        if (r != 0) {
+            fprintf(stderr, "[lib/ssl.c] %s:failed to parse response:%s\n", __func__, errbuf);
+            goto Exit;
+        }
     }
     qsort(tickets.entries, tickets.size, sizeof(tickets.entries[0]), ticket_sort_compare);
 

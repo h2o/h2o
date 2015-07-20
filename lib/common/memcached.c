@@ -248,6 +248,7 @@ static void reader_main(h2o_memcached_context_t *ctx)
         if (resp.status == YRMCDS_STATUS_OK) {
             req->data.get.value = h2o_iovec_init(h2o_mem_alloc(resp.data_len), resp.data_len);
             memcpy(req->data.get.value.base, resp.data, resp.data_len);
+            h2o_mem_set_secure((void *)resp.data, 0, resp.data_len);
         }
         h2o_multithread_send_message(req->data.get.receiver, &req->data.get.message);
     }
