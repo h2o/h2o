@@ -23,6 +23,7 @@ typedef struct st_h2o_mruby_handler_t h2o_mruby_handler_t;
 
 struct st_h2o_mruby_internal_context_t {
     h2o_req_t *req;
+    int is_last;
 };
 
 typedef struct st_h2o_mruby_internal_context_t h2o_mruby_internal_context_t;

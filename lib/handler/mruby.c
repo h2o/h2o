@@ -142,6 +142,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     /* create mruby internal context into mrb state */
     mruby_ctx = h2o_mem_alloc_pool(&req->pool, sizeof(h2o_mruby_internal_context_t));
     mruby_ctx->req = req;
+    mruby_ctx->is_last = -1;
     mrb->ud = (void *)mruby_ctx;
 
     result = mrb_run(mrb, handler_ctx->h2o_mruby_handler_code->proc, mrb_top_self(mrb));
@@ -151,15 +152,28 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         struct RString *error = mrb_str_ptr(obj);
         fprintf(stderr, "%s: mruby raised: %s\n", H2O_MRUBY_MODULE_NAME, error->as.heap.ptr);
         mrb->exc = 0;
+        mrb_gc_arena_restore(mrb, ai);
         h2o_send_error(req, 500, "Internal Server Error", "Internal Server Error", 0);
     } else if (mrb_nil_p(result)) {
-        /* decline to send response for next handler when return value is nil */
         mrb_gc_arena_restore(mrb, ai);
+        if (mruby_ctx->is_last == 1) {
+            /* ran H2O.return method with http status code(1xx - 5xx) */
+            return 0;
+        }
+        /* decline to send response for next handler when return value is nil */
         return -1;
     } else {
-        h2o_send_error(req, 200, "OK", mrb_str_to_cstr(mrb, result), 0);
+        mrb_gc_arena_restore(mrb, ai);
+        if (mruby_ctx->is_last == 1) {
+            /* ran H2O.return method with http status code(1xx - 5xx) */
+            return 0;
+        } else if (mruby_ctx->is_last == 0) {
+            /* ran H2O.return method with declined status(-1) */
+            return -1;
+        } else {
+            h2o_send_error(req, 200, "OK", mrb_str_to_cstr(mrb, result), 0);
+        }
     }
-    mrb_gc_arena_restore(mrb, ai);
 
     return 0;
 }
