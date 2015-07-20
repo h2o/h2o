@@ -34,4 +34,10 @@ h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_conf
 /* handler/configurator/mruby.c */
 void h2o_mruby_register_configurator(h2o_globalconf_t *conf);
 
+static mrb_value h2o_mrb_str_new(mrb_state *mrb, h2o_iovec_t *str);
+
+inline mrb_value h2o_mrb_str_new(mrb_state *mrb, h2o_iovec_t *str)
+{
+    return mrb_str_new(mrb, str->base, str->len);
+}
 #endif
