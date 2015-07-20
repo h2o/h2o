@@ -472,9 +472,13 @@ static int ticket_memcached_update_tickets(yrmcds *conn, h2o_iovec_t key, time_t
         fprintf(stderr, "[lib/ssl.c] %s:unexpected response\n", __func__);
         goto Exit;
     }
-    if (resp.status == YRMCDS_STATUS_OK && parse_tickets(&tickets, resp.data, resp.data_len, errbuf) != 0) {
-        fprintf(stderr, "[lib/ssl.c] %s:failed to parse response:%s\n", __func__, errbuf);
-        goto Exit;
+    if (resp.status == YRMCDS_STATUS_OK) {
+        int r = parse_tickets(&tickets, resp.data, resp.data_len, errbuf);
+        h2o_mem_set_secure((void *)resp.data, 0, resp.data_len);
+        if (r != 0) {
+            fprintf(stderr, "[lib/ssl.c] %s:failed to parse response:%s\n", __func__, errbuf);
+            goto Exit;
+        }
     }
     qsort(tickets.entries, tickets.size, sizeof(tickets.entries[0]), ticket_sort_compare);
 
