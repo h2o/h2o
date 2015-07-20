@@ -152,29 +152,34 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         struct RString *error = mrb_str_ptr(obj);
         fprintf(stderr, "%s: mruby raised: %s\n", H2O_MRUBY_MODULE_NAME, error->as.heap.ptr);
         mrb->exc = 0;
-        mrb_gc_arena_restore(mrb, ai);
         h2o_send_error(req, 500, "Internal Server Error", "Internal Server Error", 0);
+        goto OK;
     } else if (mrb_nil_p(result)) {
-        mrb_gc_arena_restore(mrb, ai);
         if (mruby_ctx->is_last == 1) {
             /* ran H2O.return method with http status code(1xx - 5xx) */
-            return 0;
+            goto OK;
         }
         /* decline to send response for next handler when return value is nil */
-        return -1;
+        goto DECLINED;
     } else {
-        mrb_gc_arena_restore(mrb, ai);
         if (mruby_ctx->is_last == 1) {
             /* ran H2O.return method with http status code(1xx - 5xx) */
-            return 0;
+            goto OK;
         } else if (mruby_ctx->is_last == 0) {
             /* ran H2O.return method with declined status(-1) */
-            return -1;
+            goto DECLINED;
         } else {
             h2o_send_error(req, 200, "OK", mrb_str_to_cstr(mrb, result), 0);
+            goto OK;
         }
     }
 
+DECLINED:
+    mrb_gc_arena_restore(mrb, ai);
+    return -1;
+
+OK:
+    mrb_gc_arena_restore(mrb, ai);
     return 0;
 }
 
