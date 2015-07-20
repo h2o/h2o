@@ -1,5 +1,18 @@
 Revision history for H2O.
 
+1.4.0 TBD
+	- [core] add support for the PROXY protocol #386 #389 (Kazuho Oku)
+	- [fastcgi] pass `HTTPS: on` to FastCGI application if the scheme is HTTPS #379 (Kazuho Oku)
+	- [mruby] introduce experimental mruby handler #378 #387 #399 #402 #404 (Ryosuke Matsumoto)
+	- [proxy] support application server listening to unix-domain socket #383 (Kazuho Oku)
+	- [SSL] implement session cache using memcached #391 #395 (Kazuho Oku)
+	- [SSL] session ticket with automatic rollover, file-based and memcached-based sharing #395 #400 (Kazuho Oku)
+	- [SSL] fix server crash during startup if more than 4 certificates are used #375 (Kazuho Oku)
+	- [misc] support for musl (C runtime running on Linux other than glibc) #374 (Bennett Goble)
+	- [misc] support for OpenIndiana (and other Solaris-based OS) #384 (Kazuho Oku)
+	- [misc] replace select-based backend with poll #385 (Kazuho Oku)
+	- [misc] update libyaml to 0.1.6 #379 (Martell Malone)
+
 1.3.1 2015-06-19 03:35:00+0000
 	- [core] do not refuse to start-up when failing to enable TCP Fast Open #368 (Kazuho Oku)
 	- [fastcgi] fix server start-up issues when using `fastcgi.spawn` #367 (Kazuho Oku)

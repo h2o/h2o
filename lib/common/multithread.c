@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 DeNA Co., Ltd., Kazuho Oku
+ * Copyright (c) 2015 DeNA Co., Ltd., Kazuho Oku, Tatsuhiko Kubo
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
