@@ -11,8 +11,9 @@ m =  "from h2o_mruby"
 ua = r.headers_in["User-Agent"].to_s
 new_ua = r.headers_in["User-Agent"] = "new-#{ua}-h2o_mruby"
 uri = r.uri
+host = r.hostname
 
-msg = "#{h} #{m}. User-Agent:#{ua} New User-Agent:#{new_ua} path:#{uri}"
+msg = "#{h} #{m}. User-Agent:#{ua} New User-Agent:#{new_ua} path:#{uri} host:#{host}"
 
 r.log_error msg
 
