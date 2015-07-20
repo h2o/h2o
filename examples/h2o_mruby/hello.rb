@@ -9,16 +9,11 @@ h = "hello"
 m =  "from h2o_mruby"
 
 ua = r.headers_in["User-Agent"].to_s
-accept = r.headers_in["Accept"].to_s
 new_ua = r.headers_in["User-Agent"] = "new-#{ua}-h2o_mruby"
+uri = r.uri
 
-r.headers_out["Hoge"] = "fuga"
-hoge = r.headers_out["Hoge"]
-
-msg = h + " " + m + " from " + ua + ":" + new_ua + " " + accept + " " + hoge
-
+msg = "#{h} #{m}. User-Agent:#{ua} New User-Agent:#{new_ua} path:#{uri}"
 
 r.log_error msg
 
-msg + "\n"
-
+H2O.return 200, "OK", msg + "\n"
