@@ -72,6 +72,33 @@ static struct {
     } memcached;
 } conf;
 
+static void *cache_cleanup_thread(void *_contexts)
+{
+    SSL_CTX **contexts = _contexts;
+
+    while (1) {
+        size_t i;
+        for (i = 0; contexts[i] != NULL; ++i)
+            SSL_CTX_flush_sessions(contexts[i], time(NULL));
+        sleep(conf.lifetime / 4);
+    }
+}
+
+static void spawn_cache_cleanup_thread(SSL_CTX **_contexts, size_t num_contexts)
+{
+    /* copy the list of contexts */
+    SSL_CTX **contexts = malloc(sizeof(*contexts) * (num_contexts + 1));
+    memcpy(contexts, _contexts, sizeof(*contexts) * num_contexts);
+    contexts[num_contexts] = NULL;
+
+    /* launch the thread */
+    pthread_t tid;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, 1);
+    h2o_multithread_create_thread(&tid, &attr, cache_cleanup_thread, contexts);
+}
+
 static void setup_cache_disable(SSL_CTX **contexts, size_t num_contexts)
 {
     size_t i;
@@ -82,8 +109,11 @@ static void setup_cache_disable(SSL_CTX **contexts, size_t num_contexts)
 static void setup_cache_internal(SSL_CTX **contexts, size_t num_contexts)
 {
     size_t i;
-    for (i = 0; i != num_contexts; ++i)
+    for (i = 0; i != num_contexts; ++i) {
+        SSL_CTX_set_session_cache_mode(contexts[i], SSL_SESS_CACHE_SERVER | SSL_SESS_CACHE_NO_AUTO_CLEAR);
         SSL_CTX_set_timeout(contexts[i], conf.lifetime);
+    }
+    spawn_cache_cleanup_thread(contexts, num_contexts);
 }
 
 static void setup_cache_memcached(SSL_CTX **contexts, size_t num_contexts)
@@ -93,9 +123,11 @@ static void setup_cache_memcached(SSL_CTX **contexts, size_t num_contexts)
     h2o_accept_setup_async_ssl_resumption(memc_ctx, conf.lifetime);
     size_t i;
     for (i = 0; i != num_contexts; ++i) {
+        SSL_CTX_set_session_cache_mode(contexts[i], SSL_SESS_CACHE_SERVER | SSL_SESS_CACHE_NO_AUTO_CLEAR);
         SSL_CTX_set_timeout(contexts[i], conf.lifetime);
         h2o_socket_ssl_async_resumption_setup_ctx(contexts[i]);
     }
+    spawn_cache_cleanup_thread(contexts, num_contexts);
 }
 
 static void cache_init_defaults(void)
