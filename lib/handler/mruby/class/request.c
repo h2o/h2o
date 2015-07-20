@@ -68,6 +68,17 @@ static mrb_value h2o_mrb_req_method(mrb_state *mrb, mrb_value self)
     return h2o_mrb_str_new(mrb, &mruby_ctx->req->input.method);
 }
 
+static mrb_value h2o_mrb_req_query(mrb_state *mrb, mrb_value self)
+{
+    h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
+    h2o_iovec_t *path = &mruby_ctx->req->input.path;
+    size_t offset = mruby_ctx->req->input.query_at;
+    if (offset == SIZE_MAX)
+      return mrb_nil_value();
+
+    return mrb_str_new(mrb, path->base + offset, path->len - offset);
+}
+
 static mrb_value h2o_mrb_get_class_obj(mrb_state *mrb, mrb_value self, char *obj_id, char *class_name)
 {
     mrb_value obj;
@@ -174,6 +185,7 @@ void h2o_mrb_request_class_init(mrb_state *mrb, struct RClass *class)
     mrb_define_method(mrb, class_request, "hostname", h2o_mrb_req_authority, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "authority", h2o_mrb_req_authority, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "method", h2o_mrb_req_method, MRB_ARGS_NONE());
+    mrb_define_method(mrb, class_request, "query", h2o_mrb_req_query, MRB_ARGS_NONE());
 
     mrb_define_method(mrb, class_request, "headers_in", h2o_mrb_headers_in_obj, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "headers_out", h2o_mrb_headers_out_obj, MRB_ARGS_NONE());
