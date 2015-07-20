@@ -420,9 +420,12 @@ static int parse_tickets(session_ticket_vector_t *tickets, const void *src, size
         tickets->entries[tickets->size++] = ticket;
     }
 
+    yoml_free(doc, h2o_mem_set_secure);
     yaml_parser_delete(&parser);
     return 0;
 Error:
+    if (doc != NULL)
+        yoml_free(doc, h2o_mem_set_secure);
     yaml_parser_delete(&parser);
     free_tickets(tickets);
     return -1;
