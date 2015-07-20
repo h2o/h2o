@@ -238,7 +238,7 @@ static int ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char 
             ticket = temp_ticket = new_ticket(EVP_aes_256_cbc(), EVP_sha256(), 0, UINT64_MAX, 1);
         }
         memcpy(key_name, ticket->name, sizeof(ticket->name));
-        EVP_EncryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, NULL);
+        EVP_EncryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, iv);
         HMAC_Init_ex(hctx, ticket->hmac.key, ticket->hmac.md->block_size, ticket->hmac.md, NULL);
         if (temp_ticket != NULL)
             free_ticket(ticket);
@@ -255,7 +255,7 @@ static int ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char 
         ret = 0;
         goto Exit;
     Found:
-        EVP_DecryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, NULL);
+        EVP_DecryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, iv);
         HMAC_Init_ex(hctx, ticket->hmac.key, ticket->hmac.md->block_size, ticket->hmac.md, NULL);
         ret = i == 0 ? 1 : 2; /* request renew if the key is not the newest one */
     }
