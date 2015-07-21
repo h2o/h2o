@@ -1569,21 +1569,18 @@ int main(int argc, char **argv)
     }
 
     /* setuid */
-    if (conf.running_user != NULL) {
-        if (h2o_setuidgid(conf.running_user) != 0) {
-            fprintf(stderr, "failed to change the running user (are you sure you are running as root?)\n");
-            return EX_OSERR;
+    if (conf.running_user == NULL && getuid() == 0) {
+        if (setup_running_user("nobody") == 0) {
+            fprintf(stderr, "cowardly switching to nobody; please use the `user` directive to set the running user\n");
+        } else {
+            fprintf(stderr, "refusing to run as root (and failed to switch to `nobody`); you can use the `user` directive to "
+                            "set the running user\n");
+            return EX_CONFIG;
         }
-    } else {
-        if (getuid() == 0) {
-            if (setup_running_user("nobody") == 0) {
-                fprintf(stderr, "cowardly switching to nobody; please use the `user` directive to set the running user\n");
-            } else {
-                fprintf(stderr, "refusing to run as root (and failed to switch to `nobody`); you can use the `user` directive to "
-                                "set the running user\n");
-                return EX_CONFIG;
-            }
-        }
+    }
+    if (conf.running_user != NULL && h2o_setuidgid(conf.running_user) != 0) {
+        fprintf(stderr, "failed to change the running user (are you sure you are running as root?)\n");
+        return EX_OSERR;
     }
 
     /* pid file must be written after setuid, since we need to remove it  */
