@@ -1028,7 +1028,7 @@ static yoml_t *load_config(const char *fn)
     yaml_parser_initialize(&parser);
     yaml_parser_set_input_file(&parser, fp);
 
-    yoml = yoml_parse_document(&parser, NULL, fn);
+    yoml = yoml_parse_document(&parser, NULL, NULL, fn);
 
     if (yoml == NULL)
         fprintf(stderr, "failed to parse configuration file:%s:line %d:%s\n", fn, (int)parser.problem_mark.line, parser.problem);
@@ -1502,7 +1502,7 @@ int main(int argc, char **argv)
             exit(EX_CONFIG);
         if (h2o_configurator_apply(&conf.globalconf, yoml, conf.run_mode != RUN_MODE_WORKER) != 0)
             exit(EX_CONFIG);
-        yoml_free(yoml);
+        yoml_free(yoml, NULL);
     }
 
     /* check if all the fds passed in by server::starter were bound */
@@ -1569,21 +1569,18 @@ int main(int argc, char **argv)
     }
 
     /* setuid */
-    if (conf.running_user != NULL) {
-        if (h2o_setuidgid(conf.running_user) != 0) {
-            fprintf(stderr, "failed to change the running user (are you sure you are running as root?)\n");
-            return EX_OSERR;
+    if (conf.running_user == NULL && getuid() == 0) {
+        if (setup_running_user("nobody") == 0) {
+            fprintf(stderr, "cowardly switching to nobody; please use the `user` directive to set the running user\n");
+        } else {
+            fprintf(stderr, "refusing to run as root (and failed to switch to `nobody`); you can use the `user` directive to "
+                            "set the running user\n");
+            return EX_CONFIG;
         }
-    } else {
-        if (getuid() == 0) {
-            if (setup_running_user("nobody") == 0) {
-                fprintf(stderr, "cowardly switching to nobody; please use the `user` directive to set the running user\n");
-            } else {
-                fprintf(stderr, "refusing to run as root (and failed to switch to `nobody`); you can use the `user` directive to "
-                                "set the running user\n");
-                return EX_CONFIG;
-            }
-        }
+    }
+    if (conf.running_user != NULL && h2o_setuidgid(conf.running_user) != 0) {
+        fprintf(stderr, "failed to change the running user (are you sure you are running as root?)\n");
+        return EX_OSERR;
     }
 
     /* pid file must be written after setuid, since we need to remove it  */

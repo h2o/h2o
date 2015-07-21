@@ -19,17 +19,13 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-
-#ifdef H2O_USE_MRUBY
-
-#include "h2o.h"
-#include "h2o/mruby.h"
+#include <errno.h>
 #include <mruby.h>
 #include <mruby/proc.h>
 #include <mruby/compile.h>
 #include <mruby/string.h>
-
-#include <errno.h>
+#include "h2o.h"
+#include "h2o/mruby.h"
 
 void h2o_mrb_class_init(mrb_state *mrb);
 
@@ -142,6 +138,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     /* create mruby internal context into mrb state */
     mruby_ctx = h2o_mem_alloc_pool(&req->pool, sizeof(h2o_mruby_internal_context_t));
     mruby_ctx->req = req;
+    mruby_ctx->is_last = -1;
     mrb->ud = (void *)mruby_ctx;
 
     result = mrb_run(mrb, handler_ctx->h2o_mruby_handler_code->proc, mrb_top_self(mrb));
@@ -152,15 +149,33 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         fprintf(stderr, "%s: mruby raised: %s\n", H2O_MRUBY_MODULE_NAME, error->as.heap.ptr);
         mrb->exc = 0;
         h2o_send_error(req, 500, "Internal Server Error", "Internal Server Error", 0);
+        goto OK;
     } else if (mrb_nil_p(result)) {
+        if (mruby_ctx->is_last == 1) {
+            /* ran H2O.return method with http status code(1xx - 5xx) */
+            goto OK;
+        }
         /* decline to send response for next handler when return value is nil */
-        mrb_gc_arena_restore(mrb, ai);
-        return -1;
+        goto DECLINED;
     } else {
-        h2o_send_error(req, 200, "OK", mrb_str_to_cstr(mrb, result), 0);
+        if (mruby_ctx->is_last == 1) {
+            /* ran H2O.return method with http status code(1xx - 5xx) */
+            goto OK;
+        } else if (mruby_ctx->is_last == 0) {
+            /* ran H2O.return method with declined status(-1) */
+            goto DECLINED;
+        } else {
+            h2o_send_error(req, 200, "OK", mrb_str_to_cstr(mrb, result), 0);
+            goto OK;
+        }
     }
-    mrb_gc_arena_restore(mrb, ai);
 
+DECLINED:
+    mrb_gc_arena_restore(mrb, ai);
+    return -1;
+
+OK:
+    mrb_gc_arena_restore(mrb, ai);
     return 0;
 }
 
@@ -179,5 +194,3 @@ h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_conf
 
     return handler;
 }
-
-#endif /* H2O_USE_MRUBY */

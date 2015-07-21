@@ -99,9 +99,11 @@ static void free_req(h2o_memcached_req_t *req)
     switch (req->type) {
     case REQ_TYPE_GET:
         assert(!h2o_linklist_is_linked(&req->data.get.message.link));
+        h2o_mem_set_secure(req->data.get.value.base, 0, req->data.get.value.len);
         free(req->data.get.value.base);
         break;
     case REQ_TYPE_SET:
+        h2o_mem_set_secure(req->data.get.value.base, 0, req->data.set.value.len);
         free(req->data.set.value.base);
         break;
     case REQ_TYPE_DELETE:
@@ -235,7 +237,7 @@ static void reader_main(h2o_memcached_context_t *ctx)
     /* receive data until an error occurs */
     while (1) {
         if ((err = yrmcds_recv(&conn.yrmcds, &resp)) != YRMCDS_OK) {
-            fprintf(stderr, "[lib/common/memcached.c] failed to receive response; %s\n", yrmcds_strerror(err));
+            fprintf(stderr, "[lib/common/memcached.c] yrmcds_recv:%s\n", yrmcds_strerror(err));
             break;
         }
         h2o_memcached_req_t *req = pop_inflight(&conn, resp.serial);
@@ -246,6 +248,7 @@ static void reader_main(h2o_memcached_context_t *ctx)
         if (resp.status == YRMCDS_STATUS_OK) {
             req->data.get.value = h2o_iovec_init(h2o_mem_alloc(resp.data_len), resp.data_len);
             memcpy(req->data.get.value.base, resp.data, resp.data_len);
+            h2o_mem_set_secure((void *)resp.data, 0, resp.data_len);
         }
         h2o_multithread_send_message(req->data.get.receiver, &req->data.get.message);
     }
@@ -314,6 +317,7 @@ void h2o_memcached_receiver(h2o_multithread_receiver_t *receiver, h2o_linklist_t
         if (req->data.get.cb != NULL) {
             if (req->data.get.value_is_encoded && req->data.get.value.len != 0) {
                 h2o_iovec_t decoded = h2o_decode_base64url(NULL, req->data.get.value.base, req->data.get.value.len);
+                h2o_mem_set_secure(req->data.get.value.base, 0, req->data.get.value.len);
                 free(req->data.get.value.base);
                 req->data.get.value = decoded;
             }

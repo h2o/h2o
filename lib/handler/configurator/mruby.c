@@ -19,9 +19,6 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-
-#ifdef H2O_USE_MRUBY
-
 #include <inttypes.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
@@ -75,5 +72,3 @@ void h2o_mruby_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "mruby.handler_path",
                                     H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_mruby_handler_path);
 }
-
-#endif /* H2O_USE_MRUBY */

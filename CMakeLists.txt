@@ -1,4 +1,4 @@
-# Copyright (c) 2014,2015 DeNA Co., Ltd., Kazuho Oku, Brian Stanback, Laurentiu Nicola
+# Copyright (c) 2014,2015 DeNA Co., Ltd., Kazuho Oku, Brian Stanback, Laurentiu Nicola, Masanori Ogino, Ryosuke Matsumoto
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to
@@ -29,8 +29,8 @@ ENDFUNCTION (PREPEND_INCLUDE_DIRECTORY)
 PROJECT(h2o C)
 
 SET(VERSION_MAJOR "1")
-SET(VERSION_MINOR "3")
-SET(VERSION_PATCH "2")
+SET(VERSION_MINOR "4")
+SET(VERSION_PATCH "0")
 SET(VERSION_PRERELEASE "-alpha1")
 SET(VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}${VERSION_PRERELEASE}")
 SET(LIBRARY_VERSION_MAJOR "0")
@@ -126,9 +126,11 @@ IF (NOT MRUBY_FOUND)
         INCLUDE_DIRECTORIES(${MRUBY_INCLUDE_DIR})
     ENDIF (MRUBY_FOUND)
 ENDIF (NOT MRUBY_FOUND)
-IF (NOT MRUBY_FOUND)
-    SET(MRUBY_LIBRARIES -lmruby)
-ENDIF (NOT MRUBY_FOUND)
+IF (WITH_MRUBY)
+    IF (NOT MRUBY_FOUND)
+        MESSAGE(FATAL "-DWITH_MRUBY=ON was set, but could not find libmruby")
+    ENDIF (NOT MRUBY_FOUND)
+ENDIF (WITH_MRUBY)
 
 SET(CMAKE_C_FLAGS "-O2 -g -Wall -Wno-unused-function ${CMAKE_C_FLAGS} -lz -DH2O_ROOT=\"\\\"${CMAKE_INSTALL_PREFIX}\\\"\"")
 
@@ -197,10 +199,6 @@ SET(LIB_SOURCE_FILES
     lib/handler/proxy.c
     lib/handler/redirect.c
     lib/handler/reproxy.c
-    lib/handler/mruby.c
-    lib/handler/mruby/init.c
-    lib/handler/mruby/class/core.c
-    lib/handler/mruby/class/request.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/expires.c
     lib/handler/configurator/fastcgi.c
@@ -209,7 +207,6 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
     lib/handler/configurator/reproxy.c
-    lib/handler/configurator/mruby.c
 
     lib/http1.c
 
@@ -263,6 +260,17 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/http2/scheduler.c)
 
 SET(EXTRA_LIBRARIES ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
+
+IF (WITH_MRUBY)
+    ADD_DEFINITIONS("-DH2O_USE_MRUBY=1")
+    LIST(APPEND LIB_SOURCE_FILES
+        lib/handler/mruby.c
+        lib/handler/mruby/init.c
+        lib/handler/mruby/class/core.c
+        lib/handler/mruby/class/request.c
+        lib/handler/configurator/mruby.c)
+    LIST(INSERT EXTRA_LIBRARIES 0 ${MRUBY_LIBRARIES} "m")
+ENDIF (WITH_MRUBY)
 
 ADD_LIBRARY(libh2o ${LIB_SOURCE_FILES})
 ADD_LIBRARY(libh2o-evloop ${LIB_SOURCE_FILES})
@@ -334,14 +342,6 @@ ELSE (WITH_BUNDLED_SSL)
         TARGET_LINK_LIBRARIES(h2o ${OPENSSL_LIBRARIES})
     ENDIF (OPENSSL_FOUND)
 ENDIF (WITH_BUNDLED_SSL)
-IF (WITH_MRUBY)
-    ADD_DEFINITIONS("-DH2O_USE_MRUBY=1")
-    IF (APPLE)
-        SET(EXTRA_LIBRARIES ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS} ${MRUBY_LIBRARIES} "m")
-    ELSE (APPLE)
-        SET(EXTRA_LIBRARIES ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS} ${MRUBY_LIBRARIES} "m" "rt")
-    ENDIF (APPLE)
-ENDIF (WITH_MRUBY)
 TARGET_LINK_LIBRARIES(h2o ${EXTRA_LIBRARIES})
 
 INSTALL(TARGETS h2o

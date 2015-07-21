@@ -690,11 +690,7 @@ void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx)
     SSL_CTX_sess_set_get_cb(ctx, on_async_resumption_get);
     SSL_CTX_sess_set_new_cb(ctx, on_async_resumption_new);
     SSL_CTX_sess_set_remove_cb(ctx, on_async_resumption_remove);
-/* internal cache is kept enabled in order to reduce the number of queries sent to memcached (as well as to reduce the latency for
- * doing so) */
-#if 0
-    SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_SERVER | SSL_SESS_CACHE_NO_INTERNAL);
-#endif
+    /* if necessary, it is the responsibility of the caller to disable the internal cache */
 }
 
 h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)
