@@ -19,9 +19,6 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-
-#ifdef H2O_USE_MRUBY
-
 #include <mruby.h>
 #include <mruby/compile.h>
 
@@ -41,5 +38,3 @@ void h2o_mrb_class_init(mrb_state *mrb)
     h2o_mrb_request_class_init(mrb, class);
     GC_ARENA_RESTORE;
 }
-
-#endif /* H2O_USE_MRUBY */

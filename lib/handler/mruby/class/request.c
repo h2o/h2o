@@ -19,17 +19,13 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-
-#ifdef H2O_USE_MRUBY
-
+#include <mruby.h>
+#include <mruby/string.h>
+#include <mruby/data.h>
+#include <mruby/class.h>
+#include <mruby/variable.h>
 #include "h2o.h"
 #include "h2o/mruby.h"
-
-#include "mruby.h"
-#include "mruby/string.h"
-#include "mruby/data.h"
-#include "mruby/class.h"
-#include <mruby/variable.h>
 
 static mrb_value h2o_mrb_req_init(mrb_state *mrb, mrb_value self)
 {
@@ -86,7 +82,7 @@ static mrb_value h2o_mrb_req_query(mrb_state *mrb, mrb_value self)
     h2o_iovec_t *path = &mruby_ctx->req->input.path;
     size_t offset = mruby_ctx->req->input.query_at;
     if (offset == SIZE_MAX)
-      return mrb_nil_value();
+        return mrb_nil_value();
 
     return mrb_str_new(mrb, path->base + offset, path->len - offset);
 }
@@ -212,5 +208,3 @@ void h2o_mrb_request_class_init(mrb_state *mrb, struct RClass *class)
     mrb_define_method(mrb, class_headers_out, "[]", h2o_mrb_get_request_headers_out, MRB_ARGS_REQ(1));
     mrb_define_method(mrb, class_headers_out, "[]=", h2o_mrb_set_request_headers_out, MRB_ARGS_REQ(2));
 }
-
-#endif /* H2O_USE_MRUBY */
