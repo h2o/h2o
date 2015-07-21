@@ -265,51 +265,42 @@ Exit:
     return ret;
 }
 
+static int update_tickets(session_ticket_vector_t *tickets, uint64_t now)
+{
+    int altered = 0, has_valid_ticket;
+
+    /* remove old entries */
+    while (tickets->size != 0) {
+        struct st_session_ticket_t *oldest = tickets->entries[tickets->size - 1];
+        if (now <= oldest->not_after)
+            break;
+        tickets->entries[--tickets->size] = NULL;
+        free_ticket(oldest);
+        altered = 1;
+    }
+
+    /* create new entry if necessary */
+    has_valid_ticket = find_ticket_for_encryption(tickets, now) != NULL;
+    if (!has_valid_ticket || (tickets->entries[0]->not_before + conf.lifetime / 4 < now)) {
+        uint64_t not_before = has_valid_ticket ? now + 60 : now;
+        struct st_session_ticket_t *ticket = new_ticket(conf.ticket.vars.generating.cipher, conf.ticket.vars.generating.md,
+                                                        not_before, not_before + conf.lifetime - 1, 1);
+        h2o_vector_reserve(NULL, (void *)tickets, sizeof(tickets->entries[0]), tickets->size + 1);
+        memmove(tickets->entries + 1, tickets->entries, sizeof(tickets->entries[0]) * tickets->size);
+        ++tickets->size;
+        tickets->entries[0] = ticket;
+        altered = 1;
+    }
+
+    return altered;
+}
+
 static void *ticket_internal_updater(void *unused)
 {
     while (1) {
-        uint64_t newest_not_before = 0, oldest_not_after = UINT64_MAX, now = time(NULL);
-
-        /* obtain modification times */
-        pthread_rwlock_rdlock(&session_tickets.rwlock);
-        if (session_tickets.tickets.size != 0) {
-            newest_not_before = session_tickets.tickets.entries[0]->not_before;
-            oldest_not_after = session_tickets.tickets.entries[session_tickets.tickets.size - 1]->not_after;
-        }
+        pthread_rwlock_wrlock(&session_tickets.rwlock);
+        update_tickets(&session_tickets.tickets, time(NULL));
         pthread_rwlock_unlock(&session_tickets.rwlock);
-
-        /* insert new entry if necessary */
-        if (newest_not_before + conf.lifetime / 4 <= now) {
-            struct st_session_ticket_t *ticket =
-                new_ticket(conf.ticket.vars.generating.cipher, conf.ticket.vars.generating.md, now, now + conf.lifetime - 1, 1);
-            pthread_rwlock_wrlock(&session_tickets.rwlock);
-            h2o_vector_reserve(NULL, (void *)&session_tickets.tickets, sizeof(session_tickets.tickets.entries[0]),
-                               session_tickets.tickets.size + 1);
-            memmove(session_tickets.tickets.entries + 1, session_tickets.tickets.entries,
-                    sizeof(session_tickets.tickets.entries[0]) * session_tickets.tickets.size);
-            session_tickets.tickets.entries[0] = ticket;
-            ++session_tickets.tickets.size;
-            pthread_rwlock_unlock(&session_tickets.rwlock);
-        }
-
-        /* free expired entries if necessary */
-        if (oldest_not_after < now) {
-            while (1) {
-                struct st_session_ticket_t *expiring_ticket = NULL;
-                pthread_rwlock_wrlock(&session_tickets.rwlock);
-                if (session_tickets.tickets.size != 0 &&
-                    session_tickets.tickets.entries[session_tickets.tickets.size - 1]->not_after < now) {
-                    expiring_ticket = session_tickets.tickets.entries[session_tickets.tickets.size - 1];
-                    session_tickets.tickets.entries[session_tickets.tickets.size - 1] = NULL;
-                    --session_tickets.tickets.size;
-                }
-                pthread_rwlock_unlock(&session_tickets.rwlock);
-                if (expiring_ticket == NULL)
-                    break;
-                free_ticket(expiring_ticket);
-            }
-        }
-
         /* sleep for certain amount of time */
         sleep(120 - (rand() >> 16) % 7);
     }
@@ -517,18 +508,8 @@ static int ticket_memcached_update_tickets(yrmcds *conn, h2o_iovec_t key, time_t
     }
     qsort(tickets.entries, tickets.size, sizeof(tickets.entries[0]), ticket_sort_compare);
 
-    /* update and return immediately (requesting re-run), if necessary */
-    int has_valid_ticket = find_ticket_for_encryption(&tickets, now) != NULL;
-    if (!has_valid_ticket || (tickets.entries[0]->not_before + conf.lifetime / 4 < now)) {
-        /* create new entry */
-        uint64_t not_before = has_valid_ticket ? now + 60 : now;
-        struct st_session_ticket_t *ticket = new_ticket(conf.ticket.vars.generating.cipher, conf.ticket.vars.generating.md,
-                                                        not_before, not_before + conf.lifetime, 1);
-        h2o_vector_reserve(NULL, (void *)&tickets, sizeof(tickets.entries[0]), tickets.size + 1);
-        memmove(tickets.entries + 1, tickets.entries, sizeof(tickets.entries[0]) * tickets.size);
-        ++tickets.size;
-        tickets.entries[0] = ticket;
-        /* serialize */
+    /* if we need to update the tickets, atomically update the value in memcached, and request refetch to the caller */
+    if (update_tickets(&tickets, now) != 0) {
         tickets_serialized = serialize_tickets(&tickets);
         if (resp.status == YRMCDS_STATUS_NOTFOUND) {
             if ((err = yrmcds_add(conn, key.base, key.len, tickets_serialized.base, tickets_serialized.len, 0, conf.lifetime, 0, 0,
