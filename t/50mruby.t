@@ -101,8 +101,14 @@ is $resp, "/index.html?a=1", "H2O::Request#uri test";
 
 ($resp, $port) = fetch(<< 'EOT');
         file.dir: t/50mruby/
+        mruby.handler_path: t/50mruby/authority.rb
+EOT
+is $resp, "127.0.0.1:$port", "H2O::Request#authority test";
+
+($resp, $port) = fetch(<< 'EOT');
+        file.dir: t/50mruby/
         mruby.handler_path: t/50mruby/hostname.rb
 EOT
-is $resp, "127.0.0.1:$port", "H2O::Request#hostname test";
+is $resp, "127.0.0.1", "H2O::Request#hostname test";
 
 done_testing();
