@@ -268,7 +268,7 @@ IF (WITH_MRUBY)
         lib/handler/mruby/class/core.c
         lib/handler/mruby/class/request.c
         lib/handler/configurator/mruby.c)
-    LIST(INSERT EXTRA_LIBRARIES 0 ${MRUBY_LIBRARIES})
+    LIST(INSERT EXTRA_LIBRARIES 0 ${MRUBY_LIBRARIES} "m")
 ENDIF (WITH_MRUBY)
 
 ADD_LIBRARY(libh2o ${LIB_SOURCE_FILES})
