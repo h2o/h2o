@@ -82,7 +82,7 @@ static mrb_value h2o_mrb_req_query(mrb_state *mrb, mrb_value self)
     h2o_iovec_t *path = &mruby_ctx->req->input.path;
     size_t offset = mruby_ctx->req->input.query_at;
     if (offset == SIZE_MAX)
-      return mrb_nil_value();
+        return mrb_nil_value();
 
     return mrb_str_new(mrb, path->base + offset, path->len - offset);
 }
