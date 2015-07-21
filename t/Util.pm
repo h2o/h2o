@@ -47,7 +47,7 @@ sub exec_unittest {
             close $wfh;
             POSIX::dup2($rfh->fileno, 5)
                 or die "dup2 failed:$!";
-            exec qw(share/h2o/kill-on-close -- memcached -l 127.0.0.1 -p), $port;
+            exec bindir() . "/kill-on-close", qw(-- memcached -l 127.0.0.1 -p), $port;
             exit 1;
         }
         close $rfh;
