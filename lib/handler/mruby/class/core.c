@@ -19,14 +19,10 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-
-#ifdef H2O_USE_MRUBY
-
+#include <mruby.h>
+#include <mruby/string.h>
 #include "h2o.h"
 #include "h2o/mruby.h"
-
-#include "mruby.h"
-#include "mruby/string.h"
 
 static mrb_value h2o_mrb_max_headers(mrb_state *mrb, mrb_value self)
 {
@@ -62,5 +58,3 @@ void h2o_mrb_core_class_init(mrb_state *mrb, struct RClass *class)
     mrb_define_class_method(mrb, class, "max_headers", h2o_mrb_max_headers, MRB_ARGS_NONE());
     mrb_define_class_method(mrb, class, "return", h2o_mrb_return, MRB_ARGS_REQ(3));
 }
-
-#endif /* H2O_USE_MRUBY */
