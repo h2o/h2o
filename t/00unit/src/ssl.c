@@ -181,6 +181,15 @@ static void test_memcached_ticket_update(void)
     ok(session_tickets.tickets.entries[0]->not_before > UTC2000 + conf.lifetime / 2);
     ok(session_tickets.tickets.entries[1]->not_before == UTC2000);
 
+    /* old entry gets removed when expired, and new entry is scheduled */
+    retry = ticket_memcached_update_tickets(&conn, h2o_iovec_init(H2O_STRLIT(TEST_KEY)), UTC2000 + conf.lifetime);
+    ok(retry == 1);
+    retry = ticket_memcached_update_tickets(&conn, h2o_iovec_init(H2O_STRLIT(TEST_KEY)), UTC2000 + conf.lifetime);
+    ok(retry == 0);
+    ok(session_tickets.tickets.size == 2);
+    ok(session_tickets.tickets.entries[0]->not_before > UTC2000 + conf.lifetime);
+    ok(session_tickets.tickets.entries[1]->not_before > UTC2000 + conf.lifetime / 2);
+
     /* disconnect */
     yrmcds_close(&conn);
 }
