@@ -130,7 +130,7 @@ IF (NOT MRUBY_FOUND)
     SET(MRUBY_LIBRARIES -lmruby)
 ENDIF (NOT MRUBY_FOUND)
 
-SET(CMAKE_C_FLAGS "-O2 -g -Wall -Wno-unused-function ${CMAKE_C_FLAGS} -DH2O_ROOT=\"\\\"${CMAKE_INSTALL_PREFIX}\\\"\"")
+SET(CMAKE_C_FLAGS "-O2 -g -Wall -Wno-unused-function ${CMAKE_C_FLAGS} -lz -DH2O_ROOT=\"\\\"${CMAKE_INSTALL_PREFIX}\\\"\"")
 
 INCLUDE_DIRECTORIES(
     include
@@ -191,6 +191,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/expires.c
     lib/handler/fastcgi.c
     lib/handler/file.c
+    lib/handler/gzip.c
     lib/handler/headers.c
     lib/handler/mimemap.c
     lib/handler/proxy.c
