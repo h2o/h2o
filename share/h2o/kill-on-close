@@ -1,0 +1,7 @@
+#! /bin/sh
+exec perl -x $0 "$@"
+#! perl
+
+my $path = ($ENV{BINARY_DIR} || '.') . '/kill-on-close';
+exec $path, @ARGV;
+die "failed to exec $path:$!";

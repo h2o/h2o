@@ -387,6 +387,7 @@
 		107D4D521B5B2412004A9B21 /* file.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = file.h; sourceTree = "<group>"; };
 		107D4D541B5B30EE004A9B21 /* file.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = file.c; sourceTree = "<group>"; };
 		107D4D581B5E2182004A9B21 /* kill-on-close.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "kill-on-close.c"; sourceTree = "<group>"; };
+		107D4D5A1B5EBADB004A9B21 /* kill-on-close */ = {isa = PBXFileReference; lastKnownFileType = text; path = "kill-on-close"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		108214FE1AAD34DD00D27E66 /* 50reverse-proxy-0.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-0.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		108215071AAD41CE00D27E66 /* test.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; name = test.pl; path = "50reverse-proxy/test.pl"; sourceTree = "<group>"; };
 		108215081AB14B1100D27E66 /* 40server-push.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40server-push.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -546,6 +547,7 @@
 			children = (
 				10A60DE91B0D87FE006E38EC /* annotate-backtrace-symbols */,
 				104B9A401A5CD69B009EEE64 /* fetch-ocsp-response */,
+				107D4D5A1B5EBADB004A9B21 /* kill-on-close */,
 			);
 			path = h2o;
 			sourceTree = "<group>";
