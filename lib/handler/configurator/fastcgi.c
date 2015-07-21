@@ -216,7 +216,7 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
 {
     struct fastcgi_configurator_t *self = (void *)cmd->configurator;
     char dirname[] = "/tmp/h2o.fcgisock.XXXXXX";
-    char *argv[] = {h2o_configurator_get_cmd_path("share/h2o/kill-on-close"), "--rm", dirname, "--", "/bin/sh", "-c",
+    char *argv[] = {h2o_configurator_get_cmd_path("share/h2o/kill-on-close"), "-r", dirname, "--", "/bin/sh", "-c",
                     node->data.scalar, NULL};
     int spawner_fd;
     struct sockaddr_un sa = {};
