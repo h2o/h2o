@@ -146,7 +146,8 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
     return 0;
 }
 
-static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const char *dirname, char **argv, struct sockaddr_un *sa)
+static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const char *dirname, const char **argv,
+                            struct sockaddr_un *sa)
 {
     int listen_fd, pipe_fds[2] = {-1, -1};
 
@@ -215,13 +216,59 @@ void spawnproc_on_dispose(h2o_fastcgi_handler_t *handler, void *data)
 static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct fastcgi_configurator_t *self = (void *)cmd->configurator;
+    const char *spawn_user = NULL, *spawn_cmd;
     char dirname[] = "/tmp/h2o.fcgisock.XXXXXX";
-    char *argv[] = {h2o_configurator_get_cmd_path("share/h2o/kill-on-close"), "--rm", dirname, "--", "/bin/sh", "-c",
-                    node->data.scalar, NULL};
+    const char *argv[10];
     int spawner_fd;
     struct sockaddr_un sa = {};
     h2o_fastcgi_config_vars_t config_vars;
     int ret = -1;
+
+    switch (node->type) {
+    case YOML_TYPE_SCALAR:
+        spawn_user = ctx->globalconf->user;
+        spawn_cmd = node->data.scalar;
+        break;
+    case YOML_TYPE_MAPPING: {
+        yoml_t *t;
+        if ((t = yoml_get(node, "command")) == NULL) {
+            h2o_configurator_errprintf(cmd, node, "mandatory attribute `command` does not exist");
+            return -1;
+        }
+        if (t->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, node, "attribute `command` must be scalar");
+            return -1;
+        }
+        spawn_cmd = t->data.scalar;
+        if ((t = yoml_get(node, "user")) != NULL) {
+            if (t->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, node, "attribute `user` must be scalar");
+                return -1;
+            }
+            spawn_user = t->data.scalar;
+        }
+    } break;
+    default:
+        h2o_configurator_errprintf(cmd, node, "argument must be scalar or mapping");
+        return -1;
+    }
+
+    { /* build args */
+        size_t i = 0;
+        argv[i++] = h2o_configurator_get_cmd_path("share/h2o/kill-on-close");
+        argv[i++] = "--rm";
+        argv[i++] = dirname;
+        argv[i++] = "--";
+        if (spawn_user != NULL) {
+            argv[i++] = h2o_configurator_get_cmd_path("share/h2o/setuidgid");
+            argv[i++] = spawn_user;
+        }
+        argv[i++] = "/bin/sh";
+        argv[i++] = "-c";
+        argv[i++] = spawn_cmd;
+        argv[i++] = NULL;
+        assert(i <= sizeof(argv) / sizeof(argv[0]));
+    }
 
     if (ctx->dry_run) {
         dirname[0] = '\0';
@@ -289,8 +336,7 @@ void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf)
                                     H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXTENSION | H2O_CONFIGURATOR_FLAG_DEFERRED,
                                     on_config_connect);
     h2o_configurator_define_command(&c->super, "fastcgi.spawn",
-                                    H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXTENSION | H2O_CONFIGURATOR_FLAG_DEFERRED |
-                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXTENSION | H2O_CONFIGURATOR_FLAG_DEFERRED,
                                     on_config_spawn);
     h2o_configurator_define_command(&c->super, "fastcgi.timeout.io",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_timeout_io);

@@ -114,7 +114,7 @@ size_t h2o_server_starter_get_fds(int **_fds)
     return fds.size;
 }
 
-pid_t h2o_spawnp(const char *cmd, char **argv, const int *mapped_fds, int cloexec_mutex_is_locked)
+pid_t h2o_spawnp(const char *cmd, const char **argv, const int *mapped_fds, int cloexec_mutex_is_locked)
 {
 #if defined(__linux__)
 
