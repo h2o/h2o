@@ -174,9 +174,9 @@ struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EVP_MD *m
     ticket->not_before = not_before;
     ticket->not_after = not_after;
     if (fill_in) {
-        RAND_pseudo_bytes(ticket->name, sizeof(ticket->name));
-        RAND_pseudo_bytes(ticket->cipher.key, ticket->cipher.cipher->key_len);
-        RAND_pseudo_bytes(ticket->hmac.key, ticket->hmac.md->block_size);
+        RAND_bytes(ticket->name, sizeof(ticket->name));
+        RAND_bytes(ticket->cipher.key, ticket->cipher.cipher->key_len);
+        RAND_bytes(ticket->hmac.key, ticket->hmac.md->block_size);
     }
 
     return ticket;
@@ -229,7 +229,7 @@ static int ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char 
     pthread_rwlock_rdlock(&session_tickets.rwlock);
 
     if (enc) {
-        RAND_pseudo_bytes(iv, EVP_MAX_IV_LENGTH);
+        RAND_bytes(iv, EVP_MAX_IV_LENGTH);
         struct st_session_ticket_t *ticket = find_ticket_for_encryption(&session_tickets.tickets, time(NULL)), *temp_ticket = NULL;
         if (ticket != NULL) {
         } else {
