@@ -1,5 +1,8 @@
 Revision history for H2O.
 
+1.4.1 2015-07-22 11:55:00+0000
+	- [core] respect the value of the `user` configuration directive (was always switching to `nobody`) #416 (Kazuho Oku)
+
 1.4.0 2015-07-22 09:41:00+0000
 	- [core] add support for the PROXY protocol #386 #389 (Kazuho Oku)
 	- [core] drop privileges if run as root without `user` directive #410 (Kazuho Oku)
