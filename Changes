@@ -1,6 +1,6 @@
 Revision history for H2O.
 
-1.4.0 TBD
+1.4.0 2015-07-22 09:41:00+0000
 	- [core] add support for the PROXY protocol #386 #389 (Kazuho Oku)
 	- [core] drop privileges if run as root without `user` directive #410 (Kazuho Oku)
 	- [fastcgi] pass `HTTPS: on` to FastCGI application if the scheme is HTTPS #379 (Kazuho Oku)
