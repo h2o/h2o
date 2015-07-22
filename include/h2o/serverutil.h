@@ -23,7 +23,6 @@
 #define h2o__server_starter_h
 
 #include <stddef.h>
-#include <pwd.h>
 
 /* taken from sysexits.h */
 #ifndef EX_SOFTWARE
@@ -47,7 +46,7 @@ void h2o_set_signal_handler(int signo, void (*cb)(int signo));
 /**
  * equiv. to setuidgid of djb
  */
-int h2o_setuidgid(struct passwd *passwd);
+int h2o_setuidgid(const char *user);
 
 /**
  * return a list of fds passed in from Server::Starter, or 0 if Server::Starter was not used.  -1 on error

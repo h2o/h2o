@@ -229,6 +229,10 @@ struct st_h2o_globalconf_t {
      * maximum count for delegations
      */
     unsigned max_delegations;
+    /**
+     * setuid user (or NULL)
+     */
+    char *user;
 
     /**
      * SSL handshake timeout
