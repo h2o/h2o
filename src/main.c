@@ -936,7 +936,7 @@ static int on_config_user(h2o_configurator_command_t *cmd, h2o_configurator_cont
         }
         return -1;
     }
-
+    ctx->globalconf->user = h2o_strdup(NULL, node->data.scalar, SIZE_MAX).base;
     return 0;
 }
 
