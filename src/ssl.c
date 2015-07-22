@@ -72,7 +72,7 @@ static struct {
     } memcached;
 } conf;
 
-static void *cache_cleanup_thread(void *_contexts)
+H2O_NORETURN static void *cache_cleanup_thread(void *_contexts)
 {
     SSL_CTX **contexts = _contexts;
 
@@ -295,7 +295,7 @@ static int update_tickets(session_ticket_vector_t *tickets, uint64_t now)
     return altered;
 }
 
-static void *ticket_internal_updater(void *unused)
+H2O_NORETURN static void *ticket_internal_updater(void *unused)
 {
     while (1) {
         pthread_rwlock_wrlock(&session_tickets.rwlock);
@@ -542,7 +542,7 @@ Exit:
     return retry;
 }
 
-static void *ticket_memcached_updater(void *unused)
+H2O_NORETURN static void *ticket_memcached_updater(void *unused)
 {
     while (1) {
         /* connect */
@@ -602,7 +602,7 @@ Exit:
 #undef ERR_PREFIX
 }
 
-static void *ticket_file_updater(void *unused)
+H2O_NORETURN static void *ticket_file_updater(void *unused)
 {
     time_t last_mtime = 1; /* file is loaded if mtime changes, 0 is used to indicate that the file was missing */
 
