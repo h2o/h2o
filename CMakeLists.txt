@@ -347,6 +347,9 @@ INSTALL(TARGETS h2o
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib)
 
+ADD_EXECUTABLE(setuidgid src/setuidgid.c)
+INSTALL(TARGETS setuidgid RUNTIME DESTINATION share/h2o)
+
 INSTALL(DIRECTORY include/ DESTINATION include FILES_MATCHING PATTERN "*.h")
 INSTALL(TARGETS libh2o-evloop DESTINATION lib)
 # only install libh2o if libuv is found
