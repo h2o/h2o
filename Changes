@@ -2,7 +2,9 @@ Revision history for H2O.
 
 1.4.0 TBD
 	- [core] add support for the PROXY protocol #386 #389 (Kazuho Oku)
+	- [core] drop privileges if run as root without `user` directive #410 (Kazuho Oku)
 	- [fastcgi] pass `HTTPS: on` to FastCGI application if the scheme is HTTPS #379 (Kazuho Oku)
+	- [fastcgi] drop privileges of the fastcgi process spawned by `fastcgi.spawn` #414 (Kazuho Oku)
 	- [mruby] introduce experimental mruby handler #378 #387 #399 #402 #404 (Ryosuke Matsumoto)
 	- [proxy] support application server listening to unix-domain socket #383 (Kazuho Oku)
 	- [SSL] implement session cache using memcached #391 #395 (Kazuho Oku)
