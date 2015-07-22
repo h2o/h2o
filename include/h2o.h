@@ -1021,6 +1021,11 @@ void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
  */
 void h2o_chunked_register(h2o_pathconf_t *pathconf);
 
+/**
+ * registers the gzip encoding output filter (added by default, for now)
+ */
+void h2o_gzip_register(h2o_pathconf_t *pathconf);
+
 /* lib/expires.c */
 
 enum { H2O_EXPIRES_MODE_ABSOLUTE, H2O_EXPIRES_MODE_MAX_AGE };

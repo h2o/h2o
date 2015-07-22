@@ -56,6 +56,9 @@ void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *global
 {
     memset(pathconf, 0, sizeof(*pathconf));
     pathconf->global = globalconf;
+    /* I figured out that the calling sequence of filter's set up function is reverse of the sequence
+     * below. I think this can be written on documentation of development guide (if exists :-P)
+     */
     h2o_gzip_register(pathconf);
     h2o_chunked_register(pathconf);
     if (path != NULL)
