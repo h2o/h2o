@@ -254,9 +254,9 @@ number of consecutive OCSP queriy failures before stopping to send OCSP stapling
 Default is 3.
 </dd>
 </dl>
-<h4>PROXY attribute</h4>
+<h4 id="listen-proxy-protocol">The Proxy-Protocol Attribute</h4>
 <p>
-This boolean attribute (i.e. the value of the attribute must be either <code>ON</code> or <code>OFF</code>) specifies if the server should recognize the information passed via <a href="http://www.haproxy.org/download/1.5/doc/proxy-protocol.txt">"the PROXY protocol</a> in the incoming connections.
+The <code>proxy-protocol</code> attribute (i.e. the value of the attribute must be either <code>ON</code> or <code>OFF</code>) specifies if the server should recognize the information passed via <a href="http://www.haproxy.org/download/1.5/doc/proxy-protocol.txt">"the PROXY protocol</a> in the incoming connections.
 The protocol is used by L4 gateways such as <a href="http://aws.amazon.com/jp/elasticloadbalancing/">AWS Elastic Load Balancing</a> to send peer address to the servers behind the gateways.
 </p>
 <p>
@@ -463,7 +463,7 @@ ssl-session-resumption:
 </code></pre>
 </div>
 
-<h4>Defining the Methods Used</h4>
+<h4 id="ssl-session-resumption-methods">Defining the Methods Used</h4>
 <p>
 The <code>method</code> attribute defines which methods should be used for resuming the TLS sessions.
 The value can be either of: <code>off</code>, <code>cache</code>, <code>ticket</code>, <code>all</code>.
@@ -476,7 +476,7 @@ If set to <code>all</code>, both session-based and ticket-based resumptions will
 For each method, additional attributes can be used to customize their behaviors.
 Attributes that modify the behavior of the disabled method are ignored.
 </p>
-<h4>Attributes for Cache-based Resumption</h4>
+<h4 id="ssl-session-resumption-cache-based">Attributes for Cache-based Resumption</h4>
 <p>
 Following attributes are recognized if the cache-based session resumption is enabled.
 Note that <code>memcached</code> attribute must be defined as well in case the <code>memcached</code> cache-store is used.
@@ -497,7 +497,7 @@ for the <code>memcached</code> store specifies the key prefix used to store the 
 Default is <code>h2o:ssl-session-cache:</code>.
 </dd>
 </dl>
-<h4>Attributes for Ticket-based Resumption</h4>
+<h4 id="ssl-session-resumption-ticket-based">Attributes for Ticket-based Resumption</h4>
 <p>
 Ticket-based session resumption uses master secret(s) to encrypt the keys used for encrypting the data transmitted over TLS connections.
 To achieve <a href="https://en.wikipedia.org/wiki/Forward_secrecy" target="_blank">forward-secrecy</a> (i.e. protect past communications from being decrypted in case a master secret gets obtained by a third party), it is essential to periodically change the secret and remove the old ones.
@@ -535,15 +535,21 @@ for the <code>memcached</code> store specifies the key-name used to store the se
 Default is <code>h2o:ssl-session-ticket:</code>.
 </dd>
 </dl>
-<h4>The Lifetime Attribute</h4>
+<h4 id="ssl-session-resumption-other">Other Attributes</h4>
 <p>
-The <code>lifetime</code> attribute defines the lifetime of a TLS session; when it expires the session cache entry is purged, and establishing a new connection will require a full TLS handshake.
+Following attributes are common to cache-based and ticket-based session resumption.
+</p>
+<dl>
+<dt>lifetime:</dt>
+<dd>
+defines the lifetime of a TLS session; when it expires the session cache entry is purged, and establishing a new connection will require a full TLS handshake.
 Default value is <code>3600</code> (in seconds).
-</p>
-<h4>The Memcached Attribute</h4>
-<p>
-The <code>memcached</code> attribute specifies the location of memcached used by the <code>memcached</code> stores.  The value must be a mapping with <code>host</code> attribute specifying the address of the memcached server, and optionally a <code>port</code> attribute specifying the port number (default is <code>11211</code>).
-</p>
+</dd>
+<dt>memcached:</dt>
+<dd>
+specifies the location of memcached used by the <code>memcached</code> stores.
+The value must be a mapping with <code>host</code> attribute specifying the address of the memcached server, and optionally a <code>port</code> attribute specifying the port number (default is <code>11211</code>).
+</dd>
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
