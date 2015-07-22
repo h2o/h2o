@@ -29,7 +29,7 @@ Written in C, can also be <a href="faq.html#libh2o">used as a library</a>.
 <li>TCP Fast Open
 <li>TLS
 <ul>
-<li>forward secrecy, session resumption and session tickets<?= $note->("internal memory is used as the storage") ?></li>
+<li>forward secrecy, session resumption and session tickets (both sharable using Memcached)<?= $note->(q{ref: <a href="http://blog.kazuhooku.com/2015/07/h2o-version-140-released-with.html">H2O version 1.4.0 released with outstanding support for forward secrecy and load balancing (and the experimental mruby handler) </a>}) ?></li>
 <li>AEAD ciphers including chacha20-poly1305; the cipher preferred by Google Chrome for Android<?= $note->(q{ref: <a href="https://blog.cloudflare.com/do-the-chacha-better-mobile-performance-with-cryptography/">Do the ChaCha: better mobile performance with cryptography</a>}) ?></li>
 <li>OCSP stapling<?= $note->("automatically enabled") ?></li>
 </ul>
