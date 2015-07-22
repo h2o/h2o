@@ -386,10 +386,10 @@ Default is <code>sha-256</code>.
 </dd>
 <dt>ticket-file:</dt>
 <dd>for the <code>file</code> store specifies the file in which the secrets are stored</dd>
-<dt>ticket-memcached-prefix:</dt>
+<dt>ticket-memcached-key:</dt>
 <dd>
-for the <code>memcached</code> store specifies the key-name used to store the secrets on memcached.
-Default is <code>h2o:ssl-session-ticket:</code>.
+for the <code>memcached</code> store specifies the key used to store the secrets on memcached.
+Default is <code>h2o:ssl-session-ticket</code>.
 </dd>
 </dl>
 <h4 id="ssl-session-resumption-other">Other Attributes</h4>
