@@ -157,9 +157,14 @@ static struct {
     pthread_rwlock_t rwlock;
     session_ticket_vector_t tickets; /* sorted from newer to older */
 } session_tickets = {
-    PTHREAD_RWLOCK_INITIALIZER, /* rwlock (FIXME need to favor writer over readers explicitly, the default of Linux is known to be
-                                   the otherwise) */
-    {}                          /* tickets */
+/* we need writer-preferred lock, but on linux PTHREAD_RWLOCK_INITIALIZER is reader-preferred */
+#ifdef PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP
+    PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP
+#else
+    PTHREAD_RWLOCK_INITIALIZER
+#endif
+    ,
+    {} /* tickets */
 };
 
 struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EVP_MD *md, uint64_t not_before, uint64_t not_after,
