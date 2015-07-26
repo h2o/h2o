@@ -122,7 +122,6 @@ static struct {
     } server_starter;
     struct listener_config_t **listeners;
     size_t num_listeners;
-    struct passwd *running_user; /* NULL if not set */
     char *pid_file;
     char *error_log;
     int max_connections;
@@ -147,7 +146,6 @@ static struct {
     {},              /* server_starter */
     NULL,            /* listeners */
     0,               /* num_listeners */
-    NULL,            /* running_user */
     NULL,            /* pid_file */
     NULL,            /* error_log */
     1024,            /* max_connections */
@@ -927,39 +925,18 @@ static int on_config_listen_exit(h2o_configurator_t *_configurator, h2o_configur
     return 0;
 }
 
-static int setup_running_user(const char *login)
-{
-    struct passwd *passwdbuf = h2o_mem_alloc(sizeof(*passwdbuf));
-    char *buf;
-    size_t bufsz = 4096;
-
-Redo:
-    buf = h2o_mem_alloc(bufsz);
-    if (getpwnam_r(login, passwdbuf, buf, bufsz, &conf.running_user) != 0) {
-        if (errno == ERANGE
-#ifdef __APPLE__
-            || errno == EINVAL /* OS X 10.9.5 returns EINVAL if bufsz == 16 */
-#endif
-            ) {
-            free(buf);
-            bufsz *= 2;
-            goto Redo;
-        }
-        perror("getpwnam_r");
-    }
-    if (conf.running_user == NULL)
-        return -1;
-
-    return 0;
-}
-
 static int on_config_user(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    if (setup_running_user(node->data.scalar) != 0) {
-        h2o_configurator_errprintf(cmd, node, "user:%s does not exist", node->data.scalar);
+    errno = 0;
+    if (getpwnam(node->data.scalar) == NULL) {
+        if (errno == 0) {
+            h2o_configurator_errprintf(cmd, node, "user:%s does not exist", node->data.scalar);
+        } else {
+            perror("getpwnam");
+        }
         return -1;
     }
-
+    ctx->globalconf->user = h2o_strdup(NULL, node->data.scalar, SIZE_MAX).base;
     return 0;
 }
 
@@ -1344,6 +1321,10 @@ static void setup_configurators(void)
 {
     h2o_config_init(&conf.globalconf);
 
+    /* let the default setuid user be "nobody", if run as root */
+    if (getuid() == 0 && getpwnam("nobody") != NULL)
+        conf.globalconf.user = "nobody";
+
     {
         h2o_configurator_t *c = h2o_configurator_create(&conf.globalconf, sizeof(*c));
         c->enter = on_config_listen_enter;
@@ -1569,18 +1550,17 @@ int main(int argc, char **argv)
     }
 
     /* setuid */
-    if (conf.running_user == NULL && getuid() == 0) {
-        if (setup_running_user("nobody") == 0) {
-            fprintf(stderr, "cowardly switching to nobody; please use the `user` directive to set the running user\n");
-        } else {
-            fprintf(stderr, "refusing to run as root (and failed to switch to `nobody`); you can use the `user` directive to "
-                            "set the running user\n");
+    if (conf.globalconf.user != NULL) {
+        if (h2o_setuidgid(conf.globalconf.user) != 0) {
+            fprintf(stderr, "failed to change the running user (are you sure you are running as root?)\n");
+            return EX_OSERR;
+        }
+    } else {
+        if (getuid() == 0) {
+            fprintf(stderr, "refusing to run as root (and failed to switch to `nobody`); you can use the `user` directive to set "
+                            "the running user\n");
             return EX_CONFIG;
         }
-    }
-    if (conf.running_user != NULL && h2o_setuidgid(conf.running_user) != 0) {
-        fprintf(stderr, "failed to change the running user (are you sure you are running as root?)\n");
-        return EX_OSERR;
     }
 
     /* pid file must be written after setuid, since we need to remove it  */

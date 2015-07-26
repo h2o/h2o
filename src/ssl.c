@@ -60,7 +60,7 @@ static struct {
             struct st_session_ticket_generating_updater_conf_t generating;
             struct {
                 struct st_session_ticket_generating_updater_conf_t generating; /* at same address as conf.ticket.vars.generating */
-                h2o_iovec_t prefix;
+                h2o_iovec_t key;
             } memcached;
             struct st_session_ticket_file_updater_conf_t file;
         } vars;
@@ -72,7 +72,7 @@ static struct {
     } memcached;
 } conf;
 
-static void *cache_cleanup_thread(void *_contexts)
+H2O_NORETURN static void *cache_cleanup_thread(void *_contexts)
 {
     SSL_CTX **contexts = _contexts;
 
@@ -174,9 +174,9 @@ struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EVP_MD *m
     ticket->not_before = not_before;
     ticket->not_after = not_after;
     if (fill_in) {
-        RAND_pseudo_bytes(ticket->name, sizeof(ticket->name));
-        RAND_pseudo_bytes(ticket->cipher.key, ticket->cipher.cipher->key_len);
-        RAND_pseudo_bytes(ticket->hmac.key, ticket->hmac.md->block_size);
+        RAND_bytes(ticket->name, sizeof(ticket->name));
+        RAND_bytes(ticket->cipher.key, ticket->cipher.cipher->key_len);
+        RAND_bytes(ticket->hmac.key, ticket->hmac.md->block_size);
     }
 
     return ticket;
@@ -229,7 +229,7 @@ static int ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char 
     pthread_rwlock_rdlock(&session_tickets.rwlock);
 
     if (enc) {
-        RAND_pseudo_bytes(iv, EVP_MAX_IV_LENGTH);
+        RAND_bytes(iv, EVP_MAX_IV_LENGTH);
         struct st_session_ticket_t *ticket = find_ticket_for_encryption(&session_tickets.tickets, time(NULL)), *temp_ticket = NULL;
         if (ticket != NULL) {
         } else {
@@ -295,7 +295,7 @@ static int update_tickets(session_ticket_vector_t *tickets, uint64_t now)
     return altered;
 }
 
-static void *ticket_internal_updater(void *unused)
+H2O_NORETURN static void *ticket_internal_updater(void *unused)
 {
     while (1) {
         pthread_rwlock_wrlock(&session_tickets.rwlock);
@@ -542,7 +542,7 @@ Exit:
     return retry;
 }
 
-static void *ticket_memcached_updater(void *unused)
+H2O_NORETURN static void *ticket_memcached_updater(void *unused)
 {
     while (1) {
         /* connect */
@@ -556,7 +556,7 @@ static void *ticket_memcached_updater(void *unused)
             sleep(10);
         }
         /* connected */
-        while (ticket_memcached_update_tickets(&conn, conf.ticket.vars.memcached.prefix, time(NULL)))
+        while (ticket_memcached_update_tickets(&conn, conf.ticket.vars.memcached.key, time(NULL)))
             ;
         /* disconnect */
         yrmcds_close(&conn);
@@ -602,7 +602,7 @@ Exit:
 #undef ERR_PREFIX
 }
 
-static void *ticket_file_updater(void *unused)
+H2O_NORETURN static void *ticket_file_updater(void *unused)
 {
     time_t last_mtime = 1; /* file is loaded if mtime changes, 0 is used to indicate that the file was missing */
 
@@ -745,13 +745,13 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
                 }
             }
             if (conf.ticket.update_thread == ticket_memcached_updater) {
-                conf.ticket.vars.memcached.prefix = h2o_iovec_init(H2O_STRLIT("h2o:ssl-session-ticket:"));
+                conf.ticket.vars.memcached.key = h2o_iovec_init(H2O_STRLIT("h2o:ssl-session-key"));
                 if ((t = yoml_get(node, "ticket-memcached-prefix")) != NULL) {
                     if (t->type != YOML_TYPE_SCALAR) {
-                        h2o_configurator_errprintf(cmd, t, "`ticket-memcached-prefix` must be a string");
+                        h2o_configurator_errprintf(cmd, t, "`ticket-memcached-key` must be a string");
                         return -1;
                     }
-                    conf.ticket.vars.memcached.prefix = h2o_strdup(NULL, t->data.scalar, SIZE_MAX);
+                    conf.ticket.vars.memcached.key = h2o_strdup(NULL, t->data.scalar, SIZE_MAX);
                 }
             }
         } else if (conf.ticket.update_thread == ticket_file_updater) {

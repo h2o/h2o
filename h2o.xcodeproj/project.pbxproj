@@ -104,8 +104,6 @@
 		108867751AD9069900987967 /* defaults.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 108867741AD9069900987967 /* defaults.c.h */; };
 		10A3D3D21B4CDBDC00327CF9 /* memcached.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3D11B4CDBDC00327CF9 /* memcached.c */; };
 		10A3D3D31B4CDF1200327CF9 /* memcached.h in Headers */ = {isa = PBXBuildFile; fileRef = 10A3D3D01B4CDBC700327CF9 /* memcached.h */; };
-		10A3D3D91B4F786E00327CF9 /* mruby.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3D81B4F786E00327CF9 /* mruby.c */; };
-		10A3D3DB1B4F787700327CF9 /* mruby.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3DA1B4F787700327CF9 /* mruby.c */; };
 		10A3D4081B50DAB700327CF9 /* close.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3ED1B4FAAEC00327CF9 /* close.c */; };
 		10A3D4091B50DAB700327CF9 /* connect.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3EE1B4FAAEC00327CF9 /* connect.c */; };
 		10A3D40A1B50DAB700327CF9 /* recv.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3F61B4FAAF500327CF9 /* recv.c */; };
@@ -386,6 +384,7 @@
 		107D4D501B58B342004A9B21 /* 40session-ticket.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40session-ticket.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		107D4D521B5B2412004A9B21 /* file.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = file.h; sourceTree = "<group>"; };
 		107D4D541B5B30EE004A9B21 /* file.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = file.c; sourceTree = "<group>"; };
+		107D4D5D1B5F143B004A9B21 /* setuidgid.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = setuidgid.c; sourceTree = "<group>"; };
 		108214FE1AAD34DD00D27E66 /* 50reverse-proxy-0.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-0.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		108215071AAD41CE00D27E66 /* test.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; name = test.pl; path = "50reverse-proxy/test.pl"; sourceTree = "<group>"; };
 		108215081AB14B1100D27E66 /* 40server-push.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40server-push.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -398,8 +397,6 @@
 		10A3D3D11B4CDBDC00327CF9 /* memcached.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = memcached.c; sourceTree = "<group>"; };
 		10A3D3D61B4F1E3200327CF9 /* 50mruby.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50mruby.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10A3D3D71B4F4D0900327CF9 /* 40memcached-session-resumption.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40memcached-session-resumption.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
-		10A3D3D81B4F786E00327CF9 /* mruby.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = mruby.c; sourceTree = "<group>"; };
-		10A3D3DA1B4F787700327CF9 /* mruby.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = mruby.c; sourceTree = "<group>"; };
 		10A3D3ED1B4FAAEC00327CF9 /* close.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = close.c; sourceTree = "<group>"; };
 		10A3D3EE1B4FAAEC00327CF9 /* connect.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = connect.c; sourceTree = "<group>"; };
 		10A3D3F41B4FAAF500327CF9 /* portability.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = portability.h; sourceTree = "<group>"; };
@@ -585,7 +582,6 @@
 				10AA2EBD1AA019D8004322AC /* headers.c */,
 				107923BB19A3217300C52AD6 /* mimemap.c */,
 				108867731AD9061100987967 /* mimemap */,
-				10A3D3D81B4F786E00327CF9 /* mruby.c */,
 				10D0907219F633B00043D458 /* proxy.c */,
 				10AA2EA41A8D9999004322AC /* redirect.c */,
 				10AA2EC31AA0403A004322AC /* reproxy.c */,
@@ -685,7 +681,6 @@
 				10BCF2FE1B1A892F0076939D /* fastcgi.c */,
 				105534DC1A3C7AA900627ECB /* file.c */,
 				10AA2EBF1AA019FC004322AC /* headers.c */,
-				10A3D3DA1B4F787700327CF9 /* mruby.c */,
 				105534DE1A3C7B9800627ECB /* proxy.c */,
 				10AA2EA61A8DA93C004322AC /* redirect.c */,
 				10AA2EC11AA0402E004322AC /* reproxy.c */,
@@ -1105,6 +1100,7 @@
 				10A3D40E1B584BEC00327CF9 /* standalone.h */,
 				10F417D519C190F800B6E31A /* main.c */,
 				107D4D4D1B58970D004A9B21 /* ssl.c */,
+				107D4D5D1B5F143B004A9B21 /* setuidgid.c */,
 			);
 			path = src;
 			sourceTree = "<group>";
@@ -1372,7 +1368,6 @@
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
 				10AA2EC41AA0403A004322AC /* reproxy.c in Sources */,
 				10AA2EAC1A8DE0AE004322AC /* multithread.c in Sources */,
-				10A3D3D91B4F786E00327CF9 /* mruby.c in Sources */,
 				1065E6F919BEBAC600686E72 /* timeout.c in Sources */,
 				10F4180519CA75C500B6E31A /* configurator.c in Sources */,
 				104B9A461A5F608A009EEE64 /* serverutil.c in Sources */,
@@ -1381,7 +1376,6 @@
 				101B670C19ADD3380084A351 /* access_log.c in Sources */,
 				10BA72AA19AAD6300059392A /* stream.c in Sources */,
 				107D4D551B5B30EE004A9B21 /* file.c in Sources */,
-				10A3D3DB1B4F787700327CF9 /* mruby.c in Sources */,
 				10D0907319F633B00043D458 /* proxy.c in Sources */,
 				10A3D3D21B4CDBDC00327CF9 /* memcached.c in Sources */,
 				107923CF19A3217300C52AD6 /* request.c in Sources */,

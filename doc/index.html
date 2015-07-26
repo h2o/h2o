@@ -79,7 +79,7 @@ Written in C, can also be <a href="faq.html#libh2o">used as a library</a>.
 <li>TCP Fast Open
 <li>TLS
 <ul>
-<li>forward secrecy, session resumption and session tickets<sup><a href="#note_3" id="#cite_3" title="internal memory is used as the storage">3</sup></a></sup></li>
+<li>forward secrecy, session resumption and session tickets (both sharable using Memcached)<sup><a href="#note_3" id="#cite_3" title="ref: H2O version 1.4.0 released with outstanding support for forward secrecy and load balancing (and the experimental mruby handler) ">3</sup></a></sup></li>
 <li>AEAD ciphers including chacha20-poly1305; the cipher preferred by Google Chrome for Android<sup><a href="#note_4" id="#cite_4" title="ref: Do the ChaCha: better mobile performance with cryptography">4</sup></a></sup></li>
 <li>OCSP stapling<sup><a href="#note_5" id="#cite_5" title="automatically enabled">5</sup></a></sup></li>
 </ul>
@@ -175,7 +175,7 @@ The scores (requests/second.core) were recorded on Ubuntu 14.04 (x86-64) / VMwar
 <ol>
 <li id="note_1">also supports draft 14 and 16 for compatibility</li>
 <li id="note_2">only usable at library level</li>
-<li id="note_3">internal memory is used as the storage</li>
+<li id="note_3">ref: <a href="http://blog.kazuhooku.com/2015/07/h2o-version-140-released-with.html">H2O version 1.4.0 released with outstanding support for forward secrecy and load balancing (and the experimental mruby handler) </a></li>
 <li id="note_4">ref: <a href="https://blog.cloudflare.com/do-the-chacha-better-mobile-performance-with-cryptography/">Do the ChaCha: better mobile performance with cryptography</a></li>
 <li id="note_5">automatically enabled</li>
 <li id="note_6">HTTPS is not supported</li>

@@ -59,6 +59,18 @@ file.custom-handler:
     fastcgi.spawn: "PHP_FCGI_CHILDREN=10 exec /usr/local/bin/php-cgi"
 EOT
 ?>
+<p>
+As of version 1.4.0, the spawned process is run under the privileges of user specified by the <a href="configure/base_directives.html#user"><code>user</code></a> directive (in version 1.3.x, the FastCGI process was spawned under the privileges that spawned the H2O standalone server).
+It is possible to specify a different user for running the FastCGI process, by providing a mapping that contains an attribute named <code>user</code> together with an attribute named <code>command</code>.
+</p>
+<?= $ctx->{example}->('Running FastCGI processes under user <code>fastcgi</code>', <<'EOT');
+file.custom-handler:
+    extension:     .php
+    fastcgi.spawn:
+        command: "PHP_FCGI_CHILDREN=10 exec /usr/local/bin/php-cgi"
+        user:    fastcgi
+EOT
+?>
 ? })
 
 <?

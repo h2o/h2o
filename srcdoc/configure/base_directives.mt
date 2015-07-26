@@ -93,9 +93,18 @@ listen:
   port: 443
   ssl:
     key-file: /path/to/key-file
-    certificate-file: /path/to/key-file
+    certificate-file: /path/to/certificate-file
+
+# accept HTTPS on port 443 (using PROXY protocol)
+listen:
+  port: 443
+  ssl:
+    key-file: /path/to/key-file
+    certificate-file: /path/to/certificate-file
+  proxy-protocol: ON
 EOT
 ?>
+<h4 id="listen-configuration-levels">Configuration Levels</h4>
 <p>
 The directive can be used either at global-level or at host-level.
 At least one <code>listen</code> directive must exist at the global level, or every <i>host</i>-level configuration must have at least one <code>listen</code> directive.
@@ -130,8 +139,9 @@ hosts:
         file.dir: /path/to/doc-root_of_www_example_jp
 EOT
 ?>
+<h4 id="listen-ssl">SSL Attribute</h4>
 <p>
-The <code style="font-weight: bold;">ssl</code> entry recognizes the following attributes.
+The <code style="font-weight: bold;">ssl</code> attribute must be defined as a mapping, and recognizes the following attributes.
 </p>
 <dl>
 <dt>certificate-file:</dt>
@@ -161,12 +171,24 @@ Use of the file is recommended for servers using Diffie-Hellman key agreement.
 interval for updating the OCSP stapling data (in seconds), or set to zero to disable OCSP stapling.
 Default is <code>14400</code> (4 hours).
 </dd>
-<dt>ocsp-max-failures</dt>
+<dt>ocsp-max-failures:</dt>
 <dd>
 number of consecutive OCSP queriy failures before stopping to send OCSP stapling data to the client.
 Default is 3.
 </dd>
 </dl>
+<h4 id="listen-proxy-protocol">The Proxy-Protocol Attribute</h4>
+<p>
+The <code>proxy-protocol</code> attribute (i.e. the value of the attribute must be either <code>ON</code> or <code>OFF</code>) specifies if the server should recognize the information passed via <a href="http://www.haproxy.org/download/1.5/doc/proxy-protocol.txt">"the PROXY protocol</a> in the incoming connections.
+The protocol is used by L4 gateways such as <a href="http://aws.amazon.com/jp/elasticloadbalancing/">AWS Elastic Load Balancing</a> to send peer address to the servers behind the gateways.
+</p>
+<p>
+When set to <code>ON</code>, H2O standalone server tries to parse the first octets of the incoming connections as defined in version 1 of the specification, and if successful, passes the addresses obtained from the protocol to the web applications and the logging handlers.
+If the first octets do not accord with the specification, it is considered as the start of the SSL handshake or as the beginning of an HTTP request depending on whether if the <code>ssl</code> attribute has been used.
+</p>
+<p>
+Default is <code>OFF</code>.
+</p>
 ? })
 
 <?
@@ -265,6 +287,127 @@ On other platforms the default value is <code>0</code> (disabled).
 </p>
 ? })
 
+<?
+$ctx->{directive}->(
+    name   => "ssl-session-resumption",
+    levels => [ qw(global) ],
+    desc   => q{Configures cache-based and ticket-based session resumption.},
+)->(sub {
+?>
+<p>
+To reduce the latency introduced by the TLS (SSL) handshake, two methods to resume a previous encrypted session are defined by the Internet Engineering Task Force.
+H2O supports both of the methods: cache-based session resumption (defined in <a href="https://tools.ietf.org/html/rfc5246">RFC 5246</a>) and ticket-based session resumption (defined in <a href="https://tools.ietf.org/html/rfc5077">RFC 5077</a>).
+</p>
+<?= $ctx->{example}->('Various session-resumption configurations', <<'EOT');
+# use both methods (storing data on internal memory)
+ssl-session-resumption:
+    mode: all
+
+# use both methods (storing data on memcached running at 192.168.0.4:11211)
+ssl-session-resumption:
+    mode: all
+    cache-store: memcached
+    ticket-store: memcached
+    cache-memcached-num-threads: 8
+    memcached:
+        host: 192.168.0.4
+        port: 11211
+
+# use ticket-based resumption only (with secrets used for encrypting the tickets stored in a file)
+ssl-session-resumption:
+    mode: ticket
+    ticket-store: file
+    ticket-file: /path/to/ticket-secrets.yaml
+EOT
+?>
+<h4 id="ssl-session-resumption-methods">Defining the Methods Used</h4>
+<p>
+The <code>mode</code> attribute defines which methods should be used for resuming the TLS sessions.
+The value can be either of: <code>off</code>, <code>cache</code>, <code>ticket</code>, <code>all</code>.
+</p>
+<p>
+If set to <code>off</code>, session resumption will be disabled, and all TLS connections will be established via full handshakes.
+If set to <code>all</code>, both session-based and ticket-based resumptions will be used, with the preference given to the ticket-based resumption for clients supporting both the methods.
+</p>
+<p>
+For each method, additional attributes can be used to customize their behaviors.
+Attributes that modify the behavior of the disabled method are ignored.
+</p>
+<h4 id="ssl-session-resumption-cache-based">Attributes for Cache-based Resumption</h4>
+<p>
+Following attributes are recognized if the cache-based session resumption is enabled.
+Note that <code>memcached</code> attribute must be defined as well in case the <code>memcached</code> cache-store is used.
+</p>
+<dl>
+<dt>cache-store:</dt>
+<dd>
+defines where the cache should be stored, must be one of: <code>internal</code>, <code>memcached</code>.
+Default is <code>internal</code>.
+</dd>
+<dt>cache-memcached-num-threads:</dt>
+<dd>defines the maximum number of threads used for communicating with the memcached server.
+Default is <code>1</code>.
+</dd>
+<dt>cache-memcached-prefix:</dt>
+<dd>
+for the <code>memcached</code> store specifies the key prefix used to store the secrets on memcached.
+Default is <code>h2o:ssl-session-cache:</code>.
+</dd>
+</dl>
+<h4 id="ssl-session-resumption-ticket-based">Attributes for Ticket-based Resumption</h4>
+<p>
+Ticket-based session resumption uses master secret(s) to encrypt the keys used for encrypting the data transmitted over TLS connections.
+To achieve <a href="https://en.wikipedia.org/wiki/Forward_secrecy" target="_blank">forward-secrecy</a> (i.e. protect past communications from being decrypted in case a master secret gets obtained by a third party), it is essential to periodically change the secret and remove the old ones.
+</p>
+<p>
+Among the three types of stores supported for ticket-based session remusption, the <code>internal</code> store and <code>memcached</code> store implement automatic roll-over of the secrets.
+A new master secret is created every 1/4 of the session lifetime (defined by the <code>lifetime</code> attribute), and they expire (and gets removed) after 5/4 of the session lifetime elapse.
+</p>
+<p>
+For the <code>file</code> store, it is the responsibility of the web-site administrator to periodically update the secrets.  H2O monitors the file and reloads the secrets when the file is altered.
+</p>
+<p>
+Following attributes are recognized if the ticket-based resumption is enabled.
+</p>
+<dl>
+<dt>ticket-store:</dt>
+<dd>defines where the secrets for ticket-based resumption should be / is stored, must be one of: <code>internal</code>, <code>file</code>, <code>memcached</code>.
+Default is <code>internal</code>.
+<dt>ticket-cipher:</dt>
+<dd>
+for stores that implement automatic roll-over, specifies the cipher used for encrypting the tickets.
+The value must be one recognizable by <code>EVP_get_cipherbyname</code>.
+Default is <code>aes-256-cbc</code>.
+<dt>ticket-hash:</dt>
+<dd>
+for stores that implement automatic roll-over, specifies the cipher used for digitally-signing the tickets.
+The value must be one recognizable by <code>EVP_get_digestbyname</code>.
+Default is <code>sha-256</code>.
+</dd>
+<dt>ticket-file:</dt>
+<dd>for the <code>file</code> store specifies the file in which the secrets are stored</dd>
+<dt>ticket-memcached-key:</dt>
+<dd>
+for the <code>memcached</code> store specifies the key used to store the secrets on memcached.
+Default is <code>h2o:ssl-session-ticket</code>.
+</dd>
+</dl>
+<h4 id="ssl-session-resumption-other">Other Attributes</h4>
+<p>
+Following attributes are common to cache-based and ticket-based session resumption.
+</p>
+<dl>
+<dt>lifetime:</dt>
+<dd>
+defines the lifetime of a TLS session; when it expires the session cache entry is purged, and establishing a new connection will require a full TLS handshake.
+Default value is <code>3600</code> (in seconds).
+</dd>
+<dt>memcached:</dt>
+<dd>
+specifies the location of memcached used by the <code>memcached</code> stores.
+The value must be a mapping with <code>host</code> attribute specifying the address of the memcached server, and optionally a <code>port</code> attribute specifying the port number (default is <code>11211</code>).
+</dd>
+? })
 
 <?
 $ctx->{directive}->(

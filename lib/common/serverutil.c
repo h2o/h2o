@@ -23,6 +23,7 @@
 #include <fcntl.h>
 #include <grp.h>
 #include <pthread.h>
+#include <pwd.h>
 #include <signal.h>
 #include <spawn.h>
 #include <stdint.h>
@@ -50,18 +51,30 @@ void h2o_set_signal_handler(int signo, void (*cb)(int signo))
     sigaction(signo, &action, NULL);
 }
 
-int h2o_setuidgid(struct passwd *passwd)
+int h2o_setuidgid(const char *user)
 {
-    if (setgid(passwd->pw_gid) != 0) {
-        fprintf(stderr, "setgid(%d) failed:%s\n", (int)passwd->pw_gid, strerror(errno));
+    struct passwd pwbuf, *pw;
+    char buf[65536]; /* should be large enough */
+
+    errno = 0;
+    if (getpwnam_r(user, &pwbuf, buf, sizeof(buf), &pw) != 0) {
+        perror("getpwnam_r");
         return -1;
     }
-    if (initgroups(passwd->pw_name, passwd->pw_gid) != 0) {
-        fprintf(stderr, "initgroups(%s, %d) failed:%s\n", passwd->pw_name, (int)passwd->pw_gid, strerror(errno));
+    if (pw == NULL) {
+        fprintf(stderr, "unknown user:%s\n", user);
         return -1;
     }
-    if (setuid(passwd->pw_uid) != 0) {
-        fprintf(stderr, "setuid(%d) failed:%s\n", (int)passwd->pw_uid, strerror(errno));
+    if (setgid(pw->pw_gid) != 0) {
+        fprintf(stderr, "setgid(%d) failed:%s\n", (int)pw->pw_gid, strerror(errno));
+        return -1;
+    }
+    if (initgroups(pw->pw_name, pw->pw_gid) != 0) {
+        fprintf(stderr, "initgroups(%s, %d) failed:%s\n", pw->pw_name, (int)pw->pw_gid, strerror(errno));
+        return -1;
+    }
+    if (setuid(pw->pw_uid) != 0) {
+        fprintf(stderr, "setuid(%d) failed:%s\n", (int)pw->pw_uid, strerror(errno));
         return -1;
     }
 
@@ -101,7 +114,7 @@ size_t h2o_server_starter_get_fds(int **_fds)
     return fds.size;
 }
 
-pid_t h2o_spawnp(const char *cmd, char **argv, const int *mapped_fds, int cloexec_mutex_is_locked)
+pid_t h2o_spawnp(const char *cmd, const char **argv, const int *mapped_fds, int cloexec_mutex_is_locked)
 {
 #if defined(__linux__)
 
