@@ -105,6 +105,12 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     gzip_encoder_t *encoder;
     size_t header_index;
 
+    /* do nothing if HTTP version is lower than 1.1 */
+    if (req->version < 0x101)
+        goto Next;
+    /* do nothing if response has prohibited gzip compression */
+    if (req->gzip_is_prohibited)
+        goto Next;
     /* RFC 2616 4.4 states that the following status codes (and response to a HEAD method) should not include message body */
     if ((100 <= req->res.status && req->res.status <= 199) || req->res.status == 204 || req->res.status == 304)
         goto Next;
