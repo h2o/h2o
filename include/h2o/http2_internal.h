@@ -223,6 +223,7 @@ struct st_h2o_http2_conn_t {
         h2o_http2_window_t window;
     } _write;
     H2O_VECTOR(unsigned) _cached_ids; /* unsorted list of cached object ids */
+    int _cached_ids_updated;
 };
 
 int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t *src, size_t len, const char **err_desc);

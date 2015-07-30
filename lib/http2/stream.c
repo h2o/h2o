@@ -197,6 +197,39 @@ Exit:
     return bufs;
 }
 
+static int is_guesscache_asset(h2o_req_t *req)
+{
+    if (req->path.len >= sizeof("/assets/css/") -1 && memcmp(req->path.base, H2O_STRLIT("/assets/css/")) == 0)
+        return 1;
+#if 0
+    if (req->path.len >= sizeof("/js/") - 1 && memcmp(req->path.base, H2O_STRLIT("/js/")) == 0)
+        return 1;
+#endif
+    return 0;
+}
+
+static unsigned get_guesscache_key(h2o_req_t *req)
+{
+    ssize_t etag_index;
+
+    if ((etag_index = h2o_find_header(&req->res.headers, H2O_TOKEN_ETAG, -1)) == -1)
+        return 0;
+
+    h2o_iovec_t etag = req->res.headers.entries[etag_index].value;
+    SHA_CTX ctx;
+    SHA1_Init(&ctx);
+    SHA1_Update(&ctx, req->path_normalized.base, req->path_normalized.len);
+    SHA1_Update(&ctx, etag.base, etag.len);
+
+    union {
+        unsigned key;
+        unsigned char bytes[20];
+    } md;
+    SHA1_Final(md.bytes, &ctx);
+
+    return md.key;
+}
+
 static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     h2o_timestamp_t ts;
@@ -211,38 +244,41 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
             h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_refs.link);
             return -1;
         }
+        /* check cache state and cancel if necessary */
+        if (is_guesscache_asset(&stream->req)) {
+            unsigned key = get_guesscache_key(&stream->req);
+            if (key != 0 && h2o_http2_guesscache_is_cached(conn, key)) {
+                fprintf(stderr, "cancelling push:%.*s\n", (int)stream->req.path.len, stream->req.path.base);
+                h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
+                h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_refs.link);
+                return -1;
+            }
+        }
         /* send the push_promise frame */
+        fprintf(stderr, "pushing: %.*s\n", (int)stream->req.path.len, stream->req.path.base);
         h2o_hpack_flatten_request(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
                                   conn->peer_settings.max_frame_size, &stream->req, stream->push.parent_stream_id);
         h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-pushed"), 0, H2O_STRLIT("1"));
     }
 
-    if (stream->req.path_normalized.len >= sizeof("/") - 1 &&
-        memcmp(stream->req.path_normalized.base, H2O_STRLIT("/")) == 0) {
-        ssize_t etag_index;
-        if ((etag_index = h2o_find_header(&stream->req.res.headers, H2O_TOKEN_ETAG, -1)) != -1) {
-            h2o_iovec_t etag = stream->req.res.headers.entries[etag_index].value;
-            SHA_CTX ctx;
-            SHA1_Init(&ctx);
-            SHA1_Update(&ctx, stream->req.path_normalized.base, stream->req.path_normalized.len);
-            SHA1_Update(&ctx, etag.base, etag.len);
-            union {
-                unsigned key;
-                unsigned char bytes[20];
-            } md;
-            SHA1_Final(md.bytes, &ctx);
-            if (!h2o_http2_guesscache_is_cached(conn, md.key)) {
-                h2o_http2_guesscache_set_cached(conn, md.key);
-                char *cookie = h2o_mem_alloc_pool(&stream->req.pool, 200);
-                strcpy(cookie, H2O_HTTP2_GUESSCACHE_COOKIE_NAME "=");
-                size_t cookie_len = sizeof(H2O_HTTP2_GUESSCACHE_COOKIE_NAME "=") - 1;
-                cookie_len += h2o_http2_guesscache_serialize_keys(conn, cookie + cookie_len, 200 - cookie_len);
-                strcpy(cookie + cookie_len, "; Path=/");
-                cookie_len += strlen(cookie + cookie_len);
-                h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, cookie, cookie_len);
-                fprintf(stderr, "sending cookie:%.*s\n", (int)cookie_len, cookie);
-            }
-        }
+    if (is_guesscache_asset(&stream->req)) {
+        unsigned key = get_guesscache_key(&stream->req);
+//        fprintf(stderr, "marking:%.*s\n", (int)stream->req.path.len, stream->req.path.base);
+        if (key != 0 && !h2o_http2_guesscache_is_cached(conn, key))
+            h2o_http2_guesscache_set_cached(conn, key);
+    }
+
+    if (conn->_cached_ids.size != 0 && conn->_cached_ids_updated) {
+        char *cookie = h2o_mem_alloc_pool(&stream->req.pool, 200);
+        strcpy(cookie, H2O_HTTP2_GUESSCACHE_COOKIE_NAME "=");
+        size_t cookie_len = sizeof(H2O_HTTP2_GUESSCACHE_COOKIE_NAME "=") - 1;
+        cookie_len += h2o_http2_guesscache_serialize_keys(conn, cookie + cookie_len, 200 - cookie_len);
+        strcpy(cookie + cookie_len, "; Path=/");
+        cookie_len += strlen(cookie + cookie_len);
+        h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, cookie, cookie_len);
+//        fprintf(stderr, "req:%.*s, sending cookie:%.*s\n", (int)stream->req.path.len, stream->req.path.base, (int)cookie_len, cookie);
+    } else {
+//        fprintf(stderr, "req:%.*s, no cache updates\n", (int)stream->req.path.len, stream->req.path.base);
     }
 
     /* FIXME the function may return error, check it! */

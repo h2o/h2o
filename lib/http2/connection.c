@@ -93,6 +93,7 @@ void h2o_http2_guesscache_set_cached(h2o_http2_conn_t *conn, unsigned key)
         return;
     h2o_vector_reserve(NULL, (void *)&conn->_cached_ids, sizeof(conn->_cached_ids.entries[0]), conn->_cached_ids.size + 1);
     conn->_cached_ids.entries[conn->_cached_ids.size++] = key & H2O_HTTP2_GUESSCACHE_KEY_MASK;
+    conn->_cached_ids_updated = 1;
 }
 
 void h2o_http2_guesscache_parse_keys(h2o_http2_conn_t *conn, const char *value, size_t value_len)

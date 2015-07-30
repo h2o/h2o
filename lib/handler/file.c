@@ -720,7 +720,7 @@ Opened:
         return 0;
     }
 
-    if (req->path.len == 1) {
+    if (req->path.len == 1 || (req->path.len >= 2 && memcmp(req->path.base, "/?", 2) == 0)) {
         /* is request to "/", set pushs */
         h2o_vector_reserve(NULL, (void *)&req->http2_push_paths, sizeof(req->http2_push_paths.entries[0]),
                            req->http2_push_paths.size + 13);
@@ -729,6 +729,7 @@ Opened:
         req->http2_push_paths.entries[req->http2_push_paths.size++] = h2o_iovec_init(H2O_STRLIT("/assets/css/font-awesome.css"));
         req->http2_push_paths.entries[req->http2_push_paths.size++] = h2o_iovec_init(H2O_STRLIT("/assets/css/header.css"));
         req->http2_push_paths.entries[req->http2_push_paths.size++] = h2o_iovec_init(H2O_STRLIT("/assets/css/main.css"));
+#if 0
         req->http2_push_paths.entries[req->http2_push_paths.size++] = h2o_iovec_init(H2O_STRLIT("/js/jquery-1.11.0.js"));
         req->http2_push_paths.entries[req->http2_push_paths.size++] = h2o_iovec_init(H2O_STRLIT("/js/jquery-ui.min.js"));
         req->http2_push_paths.entries[req->http2_push_paths.size++] = h2o_iovec_init(H2O_STRLIT("/js/bootstrap.min.js"));
@@ -737,6 +738,8 @@ Opened:
         req->http2_push_paths.entries[req->http2_push_paths.size++] = h2o_iovec_init(H2O_STRLIT("/js/jquery.shapeshift.js"));
         req->http2_push_paths.entries[req->http2_push_paths.size++] = h2o_iovec_init(H2O_STRLIT("/js/homepage.js"));
         req->http2_push_paths.entries[req->http2_push_paths.size++] = h2o_iovec_init(H2O_STRLIT("/js/profiler.js"));
+#endif
+
     }
 
     /* return file */
