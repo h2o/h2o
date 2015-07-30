@@ -21,6 +21,7 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include "golombset.h"
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
@@ -75,6 +76,65 @@ static int do_emit_writereq(h2o_http2_conn_t *conn);
 static void on_read(h2o_socket_t *sock, int status);
 
 const h2o_protocol_callbacks_t H2O_HTTP2_CALLBACKS = {initiate_graceful_shutdown};
+
+int h2o_http2_guesscache_is_cached(h2o_http2_conn_t* conn, unsigned key)
+{
+    key = key & H2O_HTTP2_GUESSCACHE_KEY_MASK;
+    size_t i;
+    for (i = 0; i != conn->_cached_ids.size; ++i)
+        if (conn->_cached_ids.entries[i] == key)
+            return 1;
+    return 0;
+}
+
+void h2o_http2_guesscache_set_cached(h2o_http2_conn_t *conn, unsigned key)
+{
+    if (h2o_http2_guesscache_is_cached(conn, key))
+        return;
+    h2o_vector_reserve(NULL, (void *)&conn->_cached_ids, sizeof(conn->_cached_ids.entries[0]), conn->_cached_ids.size + 1);
+    conn->_cached_ids.entries[conn->_cached_ids.size++] = key & H2O_HTTP2_GUESSCACHE_KEY_MASK;
+}
+
+void h2o_http2_guesscache_parse_keys(h2o_http2_conn_t *conn, const char *value, size_t value_len)
+{
+    h2o_iovec_t decoded = h2o_decode_base64url(NULL, value, value_len);
+    if (decoded.base == NULL)
+        goto Exit;
+
+    h2o_vector_reserve(NULL, (void *)&conn->_cached_ids, sizeof(conn->_cached_ids.entries[0]), 100);
+    size_t num_keys = 100;
+    if (golombset_decode(6, decoded.base, decoded.len, conn->_cached_ids.entries, &num_keys) != 0)
+        goto Exit;
+    conn->_cached_ids.size = num_keys;
+
+Exit:
+    free(decoded.base);
+}
+
+static int cmp_unsigned(const void *_x, const void *_y)
+{
+    const unsigned *x = _x, *y = _y;
+    if (*x < *y)
+        return -1;
+    else if (*x > *y)
+        return 1;
+    return 0;
+}
+
+size_t h2o_http2_guesscache_serialize_keys(h2o_http2_conn_t *conn, char *buf, size_t bufsz)
+{
+    if (conn->_cached_ids.size == 0)
+        return 0;
+    qsort(conn->_cached_ids.entries, conn->_cached_ids.size, sizeof(conn->_cached_ids.entries[0]), cmp_unsigned);
+
+    char binbuf[128];
+    size_t binsize = sizeof(binbuf);
+    if (golombset_encode(6, conn->_cached_ids.entries, conn->_cached_ids.size, binbuf, &binsize) != 0)
+        return 0;
+
+    /* FIXME check buffer overrun */
+    return h2o_base64_encode(buf, binbuf, binsize, 1);
+}
 
 static int is_idle_stream_id(h2o_http2_conn_t *conn, uint32_t stream_id)
 {
@@ -361,6 +421,20 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         goto SendRSTStream;
     }
 #undef EXPECTED_MAP
+
+    /* extract the client-side cache state */
+    if (conn->_cached_ids.size == 0) {
+        size_t header_index = -1;
+        while ((header_index = h2o_find_header(&stream->req.headers, H2O_TOKEN_COOKIE, header_index)) != -1) {
+            h2o_header_t *header = stream->req.headers.entries + header_index;
+            if (header->value.len > sizeof(H2O_HTTP2_GUESSCACHE_COOKIE_NAME "=") - 1 &&
+                memcmp(header->value.base, H2O_STRLIT(H2O_HTTP2_GUESSCACHE_COOKIE_NAME "=")) == 0) {
+                h2o_http2_guesscache_parse_keys(conn, header->value.base + sizeof(H2O_HTTP2_GUESSCACHE_COOKIE_NAME "=") - 1,
+                                                header->value.len - (sizeof(H2O_HTTP2_GUESSCACHE_COOKIE_NAME "=") - 1));
+                break;
+            }
+        }
+    }
 
     /* handle the request */
     if (conn->num_streams.open_pull > H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams) {

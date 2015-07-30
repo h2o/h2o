@@ -222,6 +222,7 @@ struct st_h2o_http2_conn_t {
         h2o_timeout_entry_t timeout_entry;
         h2o_http2_window_t window;
     } _write;
+    H2O_VECTOR(unsigned) _cached_ids; /* unsorted list of cached object ids */
 };
 
 int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t *src, size_t len, const char **err_desc);
@@ -277,6 +278,13 @@ static uint32_t h2o_http2_decode24u(const uint8_t *src);
 static uint32_t h2o_http2_decode32u(const uint8_t *src);
 static uint8_t *h2o_http2_encode24u(uint8_t *dst, uint32_t value);
 static uint8_t *h2o_http2_encode32u(uint8_t *dst, uint32_t value);
+
+#define H2O_HTTP2_GUESSCACHE_COOKIE_NAME "_h2o_cid"
+#define H2O_HTTP2_GUESSCACHE_KEY_MASK 8191
+int h2o_http2_guesscache_is_cached(h2o_http2_conn_t* conn, unsigned key);
+void h2o_http2_guesscache_set_cached(h2o_http2_conn_t *conn, unsigned key);
+void h2o_http2_guesscache_parse_keys(h2o_http2_conn_t *conn, const char *value, size_t value_len);
+size_t h2o_http2_guesscache_serialize_keys(h2o_http2_conn_t *conn, char *buf, size_t bufsz);
 
 /* inline definitions */
 

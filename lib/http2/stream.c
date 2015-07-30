@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <openssl/sha.h>
 #include "h2o.h"
 #include "h2o/http2.h"
 #include "h2o/http2_internal.h"
@@ -211,6 +212,31 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
             return -1;
         }
         h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-pushed"), 0, H2O_STRLIT("1"));
+    }
+
+    if (stream->req.path_normalized.len >= sizeof("/") - 1 &&
+        memcmp(stream->req.path_normalized.base, H2O_STRLIT("/")) == 0) {
+        ssize_t etag_index;
+        if ((etag_index = h2o_find_header(&stream->req.res.headers, H2O_TOKEN_ETAG, -1)) != -1) {
+            h2o_iovec_t etag = stream->req.res.headers.entries[etag_index].value;
+            SHA_CTX ctx;
+            SHA1_Init(&ctx);
+            SHA1_Update(&ctx, stream->req.path_normalized.base, stream->req.path_normalized.len);
+            SHA1_Update(&ctx, etag.base, etag.len);
+            union {
+                unsigned key;
+                unsigned char bytes[20];
+            } md;
+            SHA1_Final(md.bytes, &ctx);
+            if (!h2o_http2_guesscache_is_cached(conn, md.key)) {
+                h2o_http2_guesscache_set_cached(conn, md.key);
+                char *cookie = h2o_mem_alloc_pool(&stream->req.pool, 140);
+                strcpy(cookie, H2O_HTTP2_GUESSCACHE_COOKIE_NAME "=");
+                size_t cookie_len = sizeof(H2O_HTTP2_GUESSCACHE_COOKIE_NAME "=") - 1;
+                cookie_len += h2o_http2_guesscache_serialize_keys(conn, cookie + cookie_len, 140 - cookie_len);
+                h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, cookie, cookie_len);
+            }
+        }
     }
 
     /* FIXME the function may return error, check it! */
