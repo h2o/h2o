@@ -1167,10 +1167,6 @@ void h2o_http2_conn_push_path(h2o_http2_conn_t *conn, h2o_iovec_t path, h2o_http
         }
     }
 
-    /* send the push_promise frame */
-    h2o_hpack_flatten_request(&conn->_write.buf, &conn->_output_header_table, stream->stream_id, conn->peer_settings.max_frame_size,
-                              &stream->req, stream->push.parent_stream_id);
-
     execute_or_enqueue_request(conn, stream);
 }
 

@@ -211,6 +211,9 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
             h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_refs.link);
             return -1;
         }
+        /* send the push_promise frame */
+        h2o_hpack_flatten_request(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
+                                  conn->peer_settings.max_frame_size, &stream->req, stream->push.parent_stream_id);
         h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-pushed"), 0, H2O_STRLIT("1"));
     }
 
@@ -230,11 +233,14 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
             SHA1_Final(md.bytes, &ctx);
             if (!h2o_http2_guesscache_is_cached(conn, md.key)) {
                 h2o_http2_guesscache_set_cached(conn, md.key);
-                char *cookie = h2o_mem_alloc_pool(&stream->req.pool, 140);
+                char *cookie = h2o_mem_alloc_pool(&stream->req.pool, 200);
                 strcpy(cookie, H2O_HTTP2_GUESSCACHE_COOKIE_NAME "=");
                 size_t cookie_len = sizeof(H2O_HTTP2_GUESSCACHE_COOKIE_NAME "=") - 1;
-                cookie_len += h2o_http2_guesscache_serialize_keys(conn, cookie + cookie_len, 140 - cookie_len);
+                cookie_len += h2o_http2_guesscache_serialize_keys(conn, cookie + cookie_len, 200 - cookie_len);
+                strcpy(cookie + cookie_len, "; Path=/");
+                cookie_len += strlen(cookie + cookie_len);
                 h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, cookie, cookie_len);
+                fprintf(stderr, "sending cookie:%.*s\n", (int)cookie_len, cookie);
             }
         }
     }
