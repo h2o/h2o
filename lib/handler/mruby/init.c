@@ -26,6 +26,7 @@
 
 void h2o_mrb_core_class_init(mrb_state *mrb, struct RClass *class);
 void h2o_mrb_request_class_init(mrb_state *mrb, struct RClass *class);
+void h2o_mrb_conn_class_init(mrb_state *mrb, struct RClass *class);
 
 void h2o_mrb_class_init(mrb_state *mrb)
 {
@@ -36,5 +37,7 @@ void h2o_mrb_class_init(mrb_state *mrb)
     h2o_mrb_core_class_init(mrb, class);
     GC_ARENA_RESTORE;
     h2o_mrb_request_class_init(mrb, class);
+    GC_ARENA_RESTORE;
+    h2o_mrb_conn_class_init(mrb, class);
     GC_ARENA_RESTORE;
 }
