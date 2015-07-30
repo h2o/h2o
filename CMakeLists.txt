@@ -137,6 +137,7 @@ SET(CMAKE_C_FLAGS "-O2 -g -Wall -Wno-unused-function ${CMAKE_C_FLAGS} -DH2O_ROOT
 INCLUDE_DIRECTORIES(
     include
     deps/cloexec
+    deps/golombset
     deps/libyrmcds
     deps/klib
     deps/picohttpparser
