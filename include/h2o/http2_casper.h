@@ -37,9 +37,14 @@ h2o_http2_casper_t *h2o_http2_casper_create(unsigned capacity_bits, unsigned rem
  */
 void h2o_http2_casper_destroy(h2o_http2_casper_t *casper);
 /**
+ * returns the number of keys stored
+ */
+size_t h2o_http2_casper_num_entries(h2o_http2_casper_t *casper);
+/**
  * checks if a key is (was) marked as cached at the moment the fuction is invoked
  */
-int h2o_http2_casper_lookup(h2o_http2_casper_t *casper, const char *path, size_t path_len, const char *etag, size_t etag_len, int set);
+int h2o_http2_casper_lookup(h2o_http2_casper_t *casper, const char *path, size_t path_len, const char *etag, size_t etag_len,
+                            int set);
 /**
  * consumes the `Cookie` headers in requests and updates the structure
  */
