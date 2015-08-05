@@ -39,9 +39,9 @@ struct st_golombset_decode_t {
 static int golombset_encode_bit(struct st_golombset_encode_t *ctx, int bit)
 {
     if (ctx->dst_shift == 0) {
-        if (ctx->dst == ctx->dst_max)
+        if (++ctx->dst == ctx->dst_max)
             return -1;
-        *++ctx->dst = 0xff;
+        *ctx->dst = 0xff;
         ctx->dst_shift = 8;
     }
     --ctx->dst_shift;
