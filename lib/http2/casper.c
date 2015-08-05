@@ -27,6 +27,12 @@
 #define COOKIE_NAME "h2o_casper"
 #define COOKIE_ATTRIBUTES "; Path=/; Expires=Tue, 01 Jan 2030 00:00:00 GMT"
 
+struct st_h2o_http2_casper_t {
+    H2O_VECTOR(unsigned) keys;
+    unsigned capacity_bits;
+    unsigned remainder_bits;
+};
+
 static unsigned calc_key(h2o_http2_casper_t *casper, const char *path, size_t path_len, const char *etag, size_t etag_len)
 {
     SHA_CTX ctx;
@@ -42,6 +48,24 @@ static unsigned calc_key(h2o_http2_casper_t *casper, const char *path, size_t pa
 
     return md.key & ((1 << casper->capacity_bits) - 1);
 }
+
+h2o_http2_casper_t *h2o_http2_casper_create(unsigned capacity_bits, unsigned remainder_bits)
+{
+    h2o_http2_casper_t *casper = h2o_mem_alloc(sizeof(*casper));
+
+    memset(&casper->keys, 0, sizeof(casper->keys));
+    casper->capacity_bits = capacity_bits;
+    casper->remainder_bits = remainder_bits;
+
+    return casper;
+}
+
+void h2o_http2_casper_destroy(h2o_http2_casper_t *casper)
+{
+    free(casper->keys.entries);
+    free(casper);
+}
+
 
 int h2o_http2_casper_lookup(h2o_http2_casper_t *casper, const char *path, size_t path_len, const char *etag, size_t etag_len,
                             int set)
