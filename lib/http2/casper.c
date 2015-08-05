@@ -88,7 +88,7 @@ int h2o_http2_casper_lookup(h2o_http2_casper_t *casper, const char *path, size_t
 
     /* we need to set a new value */
     h2o_vector_reserve(NULL, (void *)&casper->keys, sizeof(casper->keys.entries[0]), casper->keys.size + 1);
-    memmove(casper->keys.entries + i + 1, casper->keys.entries + i, casper->keys.size - i);
+    memmove(casper->keys.entries + i + 1, casper->keys.entries + i, (casper->keys.size - i) * sizeof(casper->keys.entries[0]));
     ++casper->keys.size;
     casper->keys.entries[i] = key;
     return 0;
