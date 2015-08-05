@@ -210,6 +210,7 @@ SET(LIB_SOURCE_FILES
 
     lib/http1.c
 
+    lib/http2/casper.c
     lib/http2/connection.c
     lib/http2/frame.c
     lib/http2/hpack.c
@@ -236,6 +237,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/handler/headers.c
     t/00unit/lib/handler/mimemap.c
     t/00unit/lib/handler/redirect.c
+    t/00unit/lib/http2/casper.c
     t/00unit/lib/http2/hpack.c
     t/00unit/lib/http2/scheduler.c
     t/00unit/src/ssl.c
@@ -256,6 +258,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/handler/headers.c
     lib/handler/mimemap.c
     lib/handler/redirect.c
+    lib/http2/casper.c
     lib/http2/hpack.c
     lib/http2/scheduler.c)
 
