@@ -307,7 +307,7 @@ static int update_stream_output_window(h2o_http2_stream_t *stream, ssize_t delta
     return 0;
 }
 
-static int is_blocking_asset(const char *path, size_t pathlen)
+int h2o_http2_is_blocking_asset(h2o_context_t *ctx, const char *path, size_t pathlen)
 {
     size_t i;
 
@@ -348,7 +348,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     if (conn->num_streams.open_priority == 0 && conn->super.ctx->globalconf->http2.reprioritize_blocking_assets &&
         h2o_http2_scheduler_get_parent(&stream->_refs.scheduler) == &conn->scheduler &&
         h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("GET")) &&
-        is_blocking_asset(stream->req.input.path.base, stream->req.input.path.len)) {
+        h2o_http2_is_blocking_asset(conn->super.ctx, stream->req.input.path.base, stream->req.input.path.len)) {
         h2o_http2_scheduler_rebind(&stream->_refs.scheduler, &conn->scheduler, 257, 0);
     }
 
