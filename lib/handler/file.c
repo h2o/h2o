@@ -165,6 +165,7 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
         vec[1].len = sprintf(vec[1].base, "\r\n--%s--\r\n", self->ranged.boundary.base);
         vecarrsize = 2;
         is_finished = 1;
+        do_close(&self->super, req);
     } else {
         vecarrsize = 1;
         is_finished = 0;
