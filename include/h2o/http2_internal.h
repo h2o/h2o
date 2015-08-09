@@ -166,6 +166,7 @@ struct st_h2o_http2_stream_t {
         _num_streams_open_slot; /* points http2_conn_t::num_streams::open_(priority|push|pull) in which the stream is counted */
     struct {
         uint32_t parent_stream_id;
+        int promise_sent : 1;
     } push;
     /* references governed by connection.c for handling various things */
     struct {
@@ -267,6 +268,7 @@ void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 static int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream);
 void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
+static void h2o_http2_stream_send_push_promise(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 
 /* misc */
 static void h2o_http2_window_init(h2o_http2_window_t *window, const h2o_http2_settings_t *peer_settings);
@@ -405,6 +407,14 @@ inline void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_htt
 inline int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream)
 {
     return stream->_data.size != 0;
+}
+
+inline void h2o_http2_stream_send_push_promise(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+{
+    assert(!stream->push.promise_sent);
+    h2o_hpack_flatten_request(&conn->_write.buf, &conn->_output_header_table, stream->stream_id, conn->peer_settings.max_frame_size,
+                              &stream->req, stream->push.parent_stream_id);
+    stream->push.promise_sent = 1;
 }
 
 inline uint16_t h2o_http2_decode16u(const uint8_t *src)

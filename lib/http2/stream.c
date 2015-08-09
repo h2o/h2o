@@ -226,8 +226,8 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 
     if (h2o_http2_stream_is_push(stream->stream_id)) {
         /* for push, send the push promise */
-        h2o_hpack_flatten_request(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
-                                  conn->peer_settings.max_frame_size, &stream->req, stream->push.parent_stream_id);
+        if (!stream->push.promise_sent)
+            h2o_http2_stream_send_push_promise(conn, stream);
     } else {
         /* for pull, push things requested, as well as send the casper cookie if modified */
         size_t i;
@@ -252,6 +252,10 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 CancelPush:
     h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
     h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_refs.link);
+    if (stream->push.promise_sent) {
+        h2o_http2_encode_rst_stream_frame(&conn->_write.buf, stream->stream_id, H2O_HTTP2_ERROR_INTERNAL);
+        h2o_http2_conn_request_write(conn);
+    }
     return -1;
 }
 

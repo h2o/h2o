@@ -1105,6 +1105,11 @@ void h2o_http2_conn_push_path(h2o_http2_conn_t *conn, h2o_iovec_t path, h2o_http
     }
 
     execute_or_enqueue_request(conn, stream);
+
+    /* send push-promise ASAP (before the parent stream gets closed), even if execute_or_enqueue_request did not trigger the
+     * invocation of send_headers */
+    if (!stream->push.promise_sent)
+        h2o_http2_stream_send_push_promise(conn, stream);
 }
 
 void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
