@@ -539,6 +539,8 @@ static int try_dynamic_request(h2o_file_handler_t *self, h2o_req_t *req, char *r
     case H2O_MIMEMAP_TYPE_DYNAMIC:
         return delegate_dynamic_request(req, req->pathconf->path.len + slash_at - self->real_path.len, rpath, slash_at, mime_type);
     }
+    fprintf(stderr, "unknown h2o_miemmap_type_t::type (%d)\n", (int)mime_type->type);
+    abort();
 }
 
 static void send_method_not_allowed(h2o_req_t *req)
