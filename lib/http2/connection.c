@@ -148,12 +148,14 @@ static void update_idle_timeout(h2o_http2_conn_t *conn)
     }
 }
 
+static int can_run_requests(h2o_http2_conn_t *conn)
+{
+    return conn->num_streams.responding < conn->super.ctx->globalconf->http2.max_concurrent_requests_per_connection;
+}
+
 static void run_pending_requests(h2o_http2_conn_t *conn)
 {
-    conn->_is_dispatching_pending_reqs = 1;
-
-    while (!h2o_linklist_is_empty(&conn->_pending_reqs) &&
-           conn->num_streams.responding < conn->super.ctx->globalconf->http2.max_concurrent_requests_per_connection) {
+    while (!h2o_linklist_is_empty(&conn->_pending_reqs) && can_run_requests(conn)) {
         /* fetch and detach a pending stream */
         h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.link, conn->_pending_reqs.next);
         h2o_linklist_unlink(&stream->_refs.link);
@@ -163,8 +165,6 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
             conn->pull_stream_ids.max_processed = stream->stream_id;
         h2o_process_request(&stream->req);
     }
-
-    conn->_is_dispatching_pending_reqs = 0;
 }
 
 static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
@@ -182,9 +182,6 @@ static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_
 
     /* TODO schedule the pending reqs using the scheduler */
     h2o_linklist_insert(&conn->_pending_reqs, &stream->_refs.link);
-
-    if (conn->_is_dispatching_pending_reqs)
-        return;
 
     run_pending_requests(conn);
     update_idle_timeout(conn);
@@ -260,6 +257,8 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     h2o_http2_scheduler_dispose(&conn->scheduler);
     assert(h2o_linklist_is_empty(&conn->_write.streams_to_proceed));
     assert(!h2o_timeout_is_linked(&conn->_write.timeout_entry));
+    if (conn->casper != NULL)
+        h2o_http2_casper_destroy(conn->casper);
     h2o_linklist_unlink(&conn->_conns);
 
     h2o_socket_close(conn->sock);
@@ -361,6 +360,16 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         goto SendRSTStream;
     }
 #undef EXPECTED_MAP
+
+    { /* extract the client-side cache fingerprint */
+        size_t header_index = -1;
+        while ((header_index = h2o_find_header(&stream->req.headers, H2O_TOKEN_COOKIE, header_index)) != -1) {
+            if (conn->casper == NULL)
+                h2o_http2_conn_init_casper(conn);
+            h2o_header_t *header = stream->req.headers.entries + header_index;
+            h2o_http2_casper_consume_cookie(conn->casper, header->value.base, header->value.len);
+        }
+    }
 
     /* handle the request */
     if (conn->num_streams.open_pull > H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams) {
@@ -1063,6 +1072,8 @@ void h2o_http2_conn_push_path(h2o_http2_conn_t *conn, h2o_iovec_t path, h2o_http
         return;
     if (conn->push_stream_ids.max_open >= 0x7ffffff0)
         return;
+    if (!can_run_requests(conn))
+        return;
 
     /* open the stream with heighest weight (TODO find a better way to determine the weight) */
     conn->push_stream_ids.max_open += 2;
@@ -1092,10 +1103,6 @@ void h2o_http2_conn_push_path(h2o_http2_conn_t *conn, h2o_iovec_t path, h2o_http
             }
         }
     }
-
-    /* send the push_promise frame */
-    h2o_hpack_flatten_request(&conn->_write.buf, &conn->_output_header_table, stream->stream_id, conn->peer_settings.max_frame_size,
-                              &stream->req, stream->push.parent_stream_id);
 
     execute_or_enqueue_request(conn, stream);
 }

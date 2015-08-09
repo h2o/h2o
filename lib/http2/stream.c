@@ -202,24 +202,45 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 
     h2o_get_timestamp(conn->super.ctx, &stream->req.pool, &ts);
 
-    /* special care for server-pushed responses */
+    /* cancel push with an error response */
     if (h2o_http2_stream_is_push(stream->stream_id)) {
-        if (400 <= stream->req.res.status) {
-            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
-            h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_refs.link);
-            return -1;
-        }
+        if (400 <= stream->req.res.status)
+            goto CancelPush;
         h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-pushed"), 0, H2O_STRLIT("1"));
     }
 
-    /* if we have things to push, then trigger the pushes, and update the cache-aware push flags */
-    if (stream->req.http2_push_paths.size != 0) {
+    size_t casper_entries = conn->casper != NULL ? h2o_http2_casper_num_entries(conn->casper) : 0;
+
+    /* update casper if necessary */
+    if (h2o_http2_is_blocking_asset(conn->super.ctx, stream->req.path.base, stream->req.path.len)) {
+        if (conn->casper == NULL)
+            h2o_http2_conn_init_casper(conn);
+        ssize_t etag_index = h2o_find_header(&stream->req.headers, H2O_TOKEN_ETAG, -1);
+        h2o_iovec_t etag = etag_index != -1 ? stream->req.headers.entries[etag_index].value : (h2o_iovec_t){};
+        if (h2o_http2_casper_lookup(conn->casper, stream->req.path.base, stream->req.path.len, etag.base, etag.len, 1)) {
+            /* cancel if the pushed resource is already marked as cached */
+            if (h2o_http2_stream_is_push(stream->stream_id))
+                goto CancelPush;
+        }
+    }
+
+    if (h2o_http2_stream_is_push(stream->stream_id)) {
+        /* for push, send the push promise */
+        h2o_hpack_flatten_request(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
+                                  conn->peer_settings.max_frame_size, &stream->req, stream->push.parent_stream_id);
+    } else {
+        /* for pull, push things requested, as well as send the casper cookie if modified */
         size_t i;
         for (i = 0; i != stream->req.http2_push_paths.size; ++i)
             h2o_http2_conn_push_path(conn, stream->req.http2_push_paths.entries[i], stream);
+        if (conn->casper != NULL && casper_entries != h2o_http2_casper_num_entries(conn->casper)) {
+            /* send casper cookie if it has been altered (due to the stream itself or by some of the pushes) */
+            h2o_iovec_t cookie = h2o_http2_casper_build_cookie(conn->casper, &stream->req.pool);
+            h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, cookie.base, cookie.len);
+        }
     }
 
-    /* FIXME the function may return error, check it! */
+    /* send HEADERS, as well as start sending body */
     h2o_hpack_flatten_response(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
                                conn->peer_settings.max_frame_size, &stream->req.res, &ts,
                                &conn->super.ctx->globalconf->server_name);
@@ -227,6 +248,11 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY);
 
     return 0;
+
+CancelPush:
+    h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
+    h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_refs.link);
+    return -1;
 }
 
 void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb)
