@@ -170,6 +170,8 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
         is_finished = 0;
     }
     h2o_send(req, vec, vecarrsize, is_finished);
+    if (is_finished)
+        do_close(&self->super, req);
     return;
 
 Error:
