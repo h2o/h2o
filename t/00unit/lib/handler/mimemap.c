@@ -44,25 +44,35 @@ void test_lib__handler__mimemap_c()
 
     /* set and overwrite */
     h2o_mimemap_set_type(mimemap, "foo", h2o_mimemap_create_extension_type("example/foo"), 0);
-    ok(is_mimetype(h2o_mimemap_get_type(mimemap, "foo"), "example/foo"));
+    ok(is_mimetype(h2o_mimemap_get_type_by_extension(mimemap, "foo"), "example/foo"));
+    ok(h2o_mimemap_get_type_by_extension(mimemap, "foo") ==
+       h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(H2O_STRLIT("example/foo"))));
     h2o_mimemap_set_type(mimemap, "foo", h2o_mimemap_create_extension_type("example/overwritten"), 0);
-    ok(is_mimetype(h2o_mimemap_get_type(mimemap, "foo"), "example/overwritten"));
+    ok(is_mimetype(h2o_mimemap_get_type_by_extension(mimemap, "foo"), "example/overwritten"));
+    ok(h2o_mimemap_get_type_by_extension(mimemap, "foo") ==
+       h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(H2O_STRLIT("example/overwritten"))));
+    ok(h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(H2O_STRLIT("example/foo"))) ==
+       h2o_mimemap_get_default_type(mimemap));
 
     /* clone and release */
     mimemap2 = h2o_mimemap_clone(mimemap);
     ok(is_mimetype(h2o_mimemap_get_default_type(mimemap2), "text/plain"));
-    ok(is_mimetype(h2o_mimemap_get_type(mimemap2, "foo"), "example/overwritten"));
+    ok(is_mimetype(h2o_mimemap_get_type_by_extension(mimemap2, "foo"), "example/overwritten"));
+    ok(h2o_mimemap_get_type_by_extension(mimemap, "foo") ==
+       h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(H2O_STRLIT("example/overwritten"))));
     h2o_mem_release_shared(mimemap2);
 
     /* check original */
     ok(is_mimetype(h2o_mimemap_get_default_type(mimemap), "text/plain"));
-    ok(is_mimetype(h2o_mimemap_get_type(mimemap, "foo"), "example/overwritten"));
+    ok(is_mimetype(h2o_mimemap_get_type_by_extension(mimemap, "foo"), "example/overwritten"));
 
     /* remove */
     h2o_mimemap_remove_type(mimemap, "foo");
-    ok(is_mimetype(h2o_mimemap_get_type(mimemap, "foo"), "text/plain"));
+    ok(is_mimetype(h2o_mimemap_get_type_by_extension(mimemap, "foo"), "text/plain"));
+    ok(h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(H2O_STRLIT("example/overwritten"))) ==
+       h2o_mimemap_get_default_type(mimemap));
     h2o_mimemap_remove_type(mimemap, "foo");
-    ok(is_mimetype(h2o_mimemap_get_type(mimemap, "foo"), "text/plain"));
+    ok(is_mimetype(h2o_mimemap_get_type_by_extension(mimemap, "foo"), "text/plain"));
 
     h2o_mem_release_shared(mimemap);
 }

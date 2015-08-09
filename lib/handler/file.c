@@ -532,7 +532,7 @@ static int try_dynamic_request(h2o_file_handler_t *self, h2o_req_t *req, char *r
     }
 
     /* file found! */
-    h2o_mimemap_type_t *mime_type = h2o_mimemap_get_type(self->mimemap, h2o_get_filext(rpath, slash_at));
+    h2o_mimemap_type_t *mime_type = h2o_mimemap_get_type_by_extension(self->mimemap, h2o_get_filext(rpath, slash_at));
     switch (mime_type->type) {
     case H2O_MIMEMAP_TYPE_MIMETYPE:
         return -1;
@@ -646,7 +646,7 @@ Opened:
     }
 
     /* obtain mime type */
-    mime_type = h2o_mimemap_get_type(self->mimemap, h2o_get_filext(rpath, rpath_len));
+    mime_type = h2o_mimemap_get_type_by_extension(self->mimemap, h2o_get_filext(rpath, rpath_len));
     switch (mime_type->type) {
     case H2O_MIMEMAP_TYPE_MIMETYPE:
         break;
