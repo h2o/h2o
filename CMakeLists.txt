@@ -132,7 +132,12 @@ IF (WITH_MRUBY)
     ENDIF (NOT MRUBY_FOUND)
 ENDIF (WITH_MRUBY)
 
-SET(CMAKE_C_FLAGS "-O2 -g -Wall -Wno-unused-function ${CMAKE_C_FLAGS} -DH2O_ROOT=\"\\\"${CMAKE_INSTALL_PREFIX}\\\"\"")
+SET(CC_WARNING_FLAGS "-Wall -Wno-unused-value -Wno-unused-function")
+IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
+    SET(CC_WARNING_FLAGS "${CC_WARNING_FLAGS} -Wno-unused-but-set-variable")
+ENDIF ()
+
+SET(CMAKE_C_FLAGS "-O2 -g ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS} -DH2O_ROOT=\"\\\"${CMAKE_INSTALL_PREFIX}\\\"\"")
 
 INCLUDE_DIRECTORIES(
     include
@@ -153,7 +158,6 @@ SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/reader.c
     deps/yaml/src/scanner.c
     deps/yaml/src/writer.c)
-SET_SOURCE_FILES_PROPERTIES(${LIBYAML_SOURCE_FILES} PROPERTIES COMPILE_FLAGS "-Wno-unused-value -Wno-unused-but-set-variable")
 
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
