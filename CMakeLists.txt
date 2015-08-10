@@ -245,6 +245,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/core/util.c
     t/00unit/lib/handler/fastcgi.c
     t/00unit/lib/handler/file.c
+    t/00unit/lib/handler/gzip.c
     t/00unit/lib/handler/headers.c
     t/00unit/lib/handler/mimemap.c
     t/00unit/lib/handler/redirect.c
@@ -265,6 +266,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/core/util.c
     lib/handler/fastcgi.c
     lib/handler/file.c
+    lib/handler/gzip.c
     lib/handler/headers.c
     lib/handler/mimemap.c
     lib/handler/redirect.c

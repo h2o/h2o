@@ -4,16 +4,17 @@
 #include <zlib.h>
 #include "h2o.h"
 
-#define GZIP_ENCODING 16
-#define DEFAULT_WBITS 15
-#define DEFAULT_MEMLEVEL 8
+#ifndef BUF_SIZE
 #define BUF_SIZE 8192
+#endif
+#define WINDOW_BITS 31
+
+typedef H2O_VECTOR(h2o_iovec_t) iovec_vector_t;
 
 typedef struct st_gzip_encoder_t {
     h2o_ostream_t super;
     z_stream zstream;
-    int started;
-    H2O_VECTOR(h2o_iovec_t) bufs;
+    iovec_vector_t bufs;
 } gzip_encoder_t;
 
 static void *gzip_encoder_alloc(void *opaque, unsigned int items, unsigned int size)
@@ -26,75 +27,80 @@ static void gzip_encoder_free(void *opaque, void *address)
     free(address);
 }
 
+static void expand_buf(h2o_mem_pool_t *pool, iovec_vector_t *bufs)
+{
+    h2o_vector_reserve(pool, (void *)bufs, sizeof(bufs->entries[0]), bufs->size + 1);
+    bufs->entries[bufs->size++] = h2o_iovec_init(h2o_mem_alloc_pool(pool, BUF_SIZE), 0);
+}
+
+static size_t compress_chunk(h2o_mem_pool_t *pool, z_stream *zs, const void *src, size_t len, int flush, iovec_vector_t *bufs,
+                             size_t bufindex)
+{
+    int ret;
+
+    zs->next_in = (void *)src;
+    zs->avail_in = (unsigned)len;
+
+    /* man says: If deflate returns with avail_out == 0, this function must be called again with the same value of the flush
+     * parameter and more output space (updated avail_out), until the flush is complete (deflate returns with non-zero avail_out).
+     */
+    do {
+        /* expand buffer (note: in case of Z_SYNC_FLUSH we need to supply at least 6 bytes of output buffer) */
+        if (bufs->entries[bufindex].len + 32 > BUF_SIZE) {
+            ++bufindex;
+            if (bufindex == bufs->size)
+                expand_buf(pool, bufs);
+            bufs->entries[bufindex].len = 0;
+        }
+        zs->next_out = (void *)bufs->entries[bufindex].base + bufs->entries[bufindex].len;
+        zs->avail_out = (unsigned)(BUF_SIZE - bufs->entries[bufindex].len);
+        ret = deflate(zs, flush);
+        assert(ret == Z_OK || ret == Z_STREAM_END);
+        bufs->entries[bufindex].len = BUF_SIZE - zs->avail_out;
+    } while (zs->avail_out == 0 && ret != Z_STREAM_END);
+
+    return bufindex;
+}
+
 static void send_gzip(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
 {
     gzip_encoder_t *self = (void *)_self;
+    size_t outbufindex;
 
-    size_t in_total, i, outbuf_count = 1;
-
-    /* calc in data total size */
-    in_total = 0;
-    for (i = 0; i != inbufcnt; ++i)
-        in_total += inbufs[i].len;
-
-    if (self->started == 0) {
-        /* Initialization */
-        int ret = deflateInit2(&self->zstream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, DEFAULT_WBITS + GZIP_ENCODING, DEFAULT_MEMLEVEL,
-                               Z_DEFAULT_STRATEGY);
-
-        assert(ret == Z_OK);
-
-        h2o_vector_reserve(&req->pool, (h2o_vector_t *)&self->bufs, sizeof(h2o_iovec_t), self->bufs.capacity + 1);
-        self->bufs.entries[0].base = h2o_mem_alloc_pool(&req->pool, BUF_SIZE);
-        self->bufs.entries[0].len = BUF_SIZE;
-        self->bufs.size = 1;
-
-        self->started = 1;
+    /* initialize deflate (Z_BEST_SPEED for on-the-fly compression, memlevel set to 8 as suggested by the manual) */
+    if (self->bufs.size == 0) {
+        deflateInit2(&self->zstream, Z_BEST_SPEED, Z_DEFLATED, WINDOW_BITS, 8, Z_DEFAULT_STRATEGY);
+        expand_buf(&req->pool, &self->bufs);
     }
 
-    // At most (in_total / BUF_SIZE + 1) + 1 buffers for next level
-    h2o_iovec_t *outbufs = alloca(in_total / BUF_SIZE + 2);
-
-    /* set first out buffer for output data from zlib */
-    self->zstream.next_out = (unsigned char *)self->bufs.entries[0].base;
-    self->zstream.avail_out = self->bufs.entries[0].len;
-    outbufs[0] = self->bufs.entries[0];
-
-    for (i = 0; i != inbufcnt; ++i) {
-        int ret, flush;
-
-        self->zstream.next_in = (unsigned char *)inbufs[i].base;
-        self->zstream.avail_in = inbufs[i].len;
-
-        if (i == inbufcnt - 1) {
-            flush = is_final ? Z_FINISH : Z_SYNC_FLUSH;
-        } else {
-            flush = Z_NO_FLUSH;
-        }
-
-        while (1) {
-            ret = deflate(&self->zstream, flush);
-            assert(ret == Z_OK || ret == Z_STREAM_END);
-            if (ret == Z_OK && self->zstream.avail_out == 0) {
-                if (self->bufs.size == outbuf_count) {
-                    if (self->bufs.size == self->bufs.capacity) {
-                        h2o_vector_reserve(&req->pool, (h2o_vector_t *)&self->bufs, sizeof(h2o_iovec_t), self->bufs.capacity + 1);
-                    }
-                    self->bufs.entries[self->bufs.size].base = h2o_mem_alloc_pool(&req->pool, BUF_SIZE);
-                    self->bufs.entries[self->bufs.size].len = BUF_SIZE;
-                    self->bufs.size++;
-                }
-                outbufs[outbuf_count - 1].len = BUF_SIZE;
-                outbufs[outbuf_count] = self->bufs.entries[outbuf_count];
-                self->zstream.next_out = (unsigned char *)outbufs[outbuf_count].base;
-                self->zstream.avail_out = outbufs[outbuf_count].len;
-                outbuf_count++;
-            } else
-                break;
-        }
+    /* compress */
+    outbufindex = 0;
+    self->bufs.entries[0].len = 0;
+    if (inbufcnt != 0) {
+        size_t i;
+        for (i = 0; i != inbufcnt - 1; ++i)
+            if (inbufs[i].len != 0)
+                outbufindex =
+                    compress_chunk(&req->pool, &self->zstream, inbufs[i].base, inbufs[i].len, Z_NO_FLUSH, &self->bufs, outbufindex);
+        outbufindex = compress_chunk(&req->pool, &self->zstream, inbufs[i].base, inbufs[i].len, is_final ? Z_FINISH : Z_SYNC_FLUSH,
+                                     &self->bufs, outbufindex);
+    } else {
+        outbufindex = compress_chunk(&req->pool, &self->zstream, "", 0, Z_FINISH, &self->bufs, outbufindex);
     }
-    outbufs[outbuf_count - 1].len = BUF_SIZE - self->zstream.avail_out;
-    h2o_ostream_send_next(&self->super, req, outbufs, outbuf_count, is_final);
+
+    /* destroy deflate */
+    if (is_final)
+        deflateEnd(&self->zstream);
+
+    h2o_ostream_send_next(&self->super, req, self->bufs.entries, outbufindex + 1, is_final);
+}
+
+static void stop_gzip(h2o_ostream_t *_self, h2o_req_t *req)
+{
+    gzip_encoder_t *self = (void *)_self;
+
+    if (self->bufs.size != 0)
+        deflateEnd(&self->zstream);
 }
 
 static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
@@ -130,6 +136,7 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     /* setup filter */
     encoder = (void *)h2o_add_ostream(req, sizeof(gzip_encoder_t), slot);
     encoder->super.do_send = send_gzip;
+    encoder->super.stop = stop_gzip;
     slot = &encoder->super.next;
 
     encoder->bufs.capacity = 0;
@@ -137,7 +144,6 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     encoder->zstream.zalloc = gzip_encoder_alloc;
     encoder->zstream.zfree = gzip_encoder_free;
     encoder->zstream.opaque = encoder;
-    encoder->started = 0;
 
 Next:
     h2o_setup_next_ostream(self, req, slot);
