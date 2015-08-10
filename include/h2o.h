@@ -302,10 +302,32 @@ struct st_h2o_globalconf_t {
     size_t _num_config_slots;
 };
 
+/**
+ * holds various attributes related to the mime-type
+ */
+typedef struct st_h2o_mime_attributes_t {
+    /**
+     * whether if the content can be compressed by using gzip
+     */
+    char is_compressible;
+    /**
+     * how the resource should be prioritized
+     */
+    enum { H2O_MIME_ATTRIBUTE_PRIORITY_NORMAL = 0, H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST } priority;
+} h2o_mime_attributes_t;
+
+extern h2o_mime_attributes_t h2o_mime_attributes_as_is;
+
+/**
+ * represents either a mime-type (and associated info), or contains pathinfo in case of a dynamic type (e.g. .php files)
+ */
 typedef struct st_h2o_mimemap_type_t {
     enum { H2O_MIMEMAP_TYPE_MIMETYPE = 0, H2O_MIMEMAP_TYPE_DYNAMIC = 1 } type;
     union {
-        h2o_iovec_t mimetype;
+        struct {
+            h2o_iovec_t mimetype;
+            h2o_mime_attributes_t attr;
+        };
         struct {
             h2o_pathconf_t pathconf;
         } dynamic;
@@ -482,6 +504,10 @@ typedef struct st_h2o_res_t {
      * list of response headers
      */
     h2o_headers_t headers;
+    /**
+     * mime-related attributes (may be NULL)
+     */
+    h2o_mime_attributes_t *mime_attr;
 } h2o_res_t;
 
 /**

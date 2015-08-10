@@ -41,6 +41,8 @@ static inline int mimemap_type_equals(h2o_mimemap_type_t *x, h2o_mimemap_type_t 
 
 KHASH_INIT(typeset, h2o_mimemap_type_t *, char, 0, hash_mimemap_type, mimemap_type_equals)
 
+h2o_mime_attributes_t h2o_mime_attributes_as_is = {};
+
 struct st_h2o_mimemap_t {
     khash_t(extmap) * extmap;
     khash_t(typeset) * typeset; /* refs point to the entries in extmap */
@@ -113,13 +115,29 @@ static void rebuild_typeset(h2o_mimemap_t *mimemap)
 
 static h2o_mimemap_type_t *create_extension_type(const char *mime)
 {
-    size_t mimelen = strlen(mime);
-    h2o_mimemap_type_t *type = h2o_mem_alloc_shared(NULL, sizeof(*type) + mimelen + 1, NULL);
+    h2o_mimemap_type_t *type = h2o_mem_alloc_shared(NULL, sizeof(*type) + strlen(mime) + 1, NULL);
+
+    memset(type, 0, sizeof(*type));
 
     type->type = H2O_MIMEMAP_TYPE_MIMETYPE;
+
+    /* normalize-copy type->data.mimetype */
     type->data.mimetype.base = (char *)type + sizeof(*type);
-    type->data.mimetype.len = mimelen;
-    memcpy(type->data.mimetype.base, mime, mimelen + 1);
+    for (; mime[type->data.mimetype.len] != '\0' && mime[type->data.mimetype.len] != ';'; ++type->data.mimetype.len)
+        type->data.mimetype.base[type->data.mimetype.len] = h2o_tolower(mime[type->data.mimetype.len]);
+    for (; mime[type->data.mimetype.len] != '\0'; ++type->data.mimetype.len)
+        type->data.mimetype.base[type->data.mimetype.len] = mime[type->data.mimetype.len];
+    type->data.mimetype.base[type->data.mimetype.len] = '\0';
+
+    /* make a rough guess on whether the type is compressible or not */
+    if (strncmp(type->data.mimetype.base, H2O_STRLIT("text/")) == 0 || strstr(type->data.mimetype.base, "+xml") == 0)
+        type->data.attr.is_compressible = 1;
+
+    /* make a rough guess on whether the type is blocking asset or not */
+    if (strcmp(type->data.mimetype.base, "text/css") == 0 || strcmp(type->data.mimetype.base, "application/ecmascript") == 0 ||
+        strcmp(type->data.mimetype.base, "application/javascript") == 0 ||
+        strcmp(type->data.mimetype.base, "text/ecmascript") == 0 || strcmp(type->data.mimetype.base, "text/javascript") == 0)
+        type->data.attr.priority = H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
 
     return type;
 }
