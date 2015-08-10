@@ -32,7 +32,9 @@ static h2o_hostconf_t *create_hostconf(h2o_globalconf_t *globalconf)
 {
     h2o_hostconf_t *hostconf = h2o_mem_alloc(sizeof(*hostconf));
     *hostconf = (h2o_hostconf_t){globalconf};
-    h2o_config_init_pathconf(&hostconf->fallback_path, globalconf, NULL);
+    h2o_config_init_pathconf(&hostconf->fallback_path, globalconf, NULL, NULL);
+    hostconf->mimemap = globalconf->mimemap;
+    h2o_mem_addref_shared(hostconf->mimemap);
     return hostconf;
 }
 
@@ -48,11 +50,12 @@ static void destroy_hostconf(h2o_hostconf_t *hostconf)
         h2o_config_dispose_pathconf(pathconf);
     }
     h2o_config_dispose_pathconf(&hostconf->fallback_path);
+    h2o_mem_release_shared(hostconf->mimemap);
 
     free(hostconf);
 }
 
-void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, const char *path)
+void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, const char *path, h2o_mimemap_t *mimemap)
 {
     memset(pathconf, 0, sizeof(*pathconf));
     pathconf->global = globalconf;
@@ -63,6 +66,10 @@ void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *global
     h2o_chunked_register(pathconf);
     if (path != NULL)
         pathconf->path = h2o_strdup_slashed(NULL, path, SIZE_MAX);
+    if (mimemap != NULL) {
+        h2o_mem_addref_shared(mimemap);
+        pathconf->mimemap = mimemap;
+    }
 }
 
 void h2o_config_dispose_pathconf(h2o_pathconf_t *pathconf)
@@ -78,12 +85,13 @@ void h2o_config_dispose_pathconf(h2o_pathconf_t *pathconf)
         }                                                                                                                          \
         free(list.entries);                                                                                                        \
     } while (0)
-
     DESTROY_LIST(h2o_handler_t, pathconf->handlers);
     DESTROY_LIST(h2o_filter_t, pathconf->filters);
     DESTROY_LIST(h2o_logger_t, pathconf->loggers);
-
 #undef DESTROY_LIST
+
+    if (pathconf->mimemap != NULL)
+        h2o_mem_release_shared(pathconf->mimemap);
 }
 
 void h2o_config_init(h2o_globalconf_t *config)
@@ -104,6 +112,7 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->http2.max_concurrent_requests_per_connection = H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams;
     config->http2.max_streams_for_priority = 16;
     config->http2.callbacks = H2O_HTTP2_CALLBACKS;
+    config->mimemap = h2o_mimemap_create();
 
     h2o_configurator__init_core(config);
 }
@@ -115,7 +124,7 @@ h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *p
     h2o_vector_reserve(NULL, (void *)&hostconf->paths, sizeof(hostconf->paths.entries[0]), hostconf->paths.size + 1);
     pathconf = hostconf->paths.entries + hostconf->paths.size++;
 
-    h2o_config_init_pathconf(pathconf, hostconf->global, pathname);
+    h2o_config_init_pathconf(pathconf, hostconf->global, pathname, hostconf->mimemap);
 
     return pathconf;
 }
