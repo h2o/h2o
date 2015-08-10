@@ -124,13 +124,18 @@ static h2o_mimemap_type_t *create_extension_type(const char *mime)
     return type;
 }
 
+static void dispose_dynamic_type(h2o_mimemap_type_t *type)
+{
+    h2o_config_dispose_pathconf(&type->data.dynamic.pathconf);
+}
+
 static h2o_mimemap_type_t *create_dynamic_type(h2o_globalconf_t *globalconf)
 {
-    h2o_mimemap_type_t *type = h2o_mem_alloc_shared(NULL, sizeof(*type), NULL);
+    h2o_mimemap_type_t *type = h2o_mem_alloc_shared(NULL, sizeof(*type), (void *)dispose_dynamic_type);
 
     type->type = H2O_MIMEMAP_TYPE_DYNAMIC;
     memset(&type->data.dynamic, 0, sizeof(type->data.dynamic));
-    h2o_config_init_pathconf(&type->data.dynamic.pathconf, globalconf, (void *)h2o_config_dispose_pathconf);
+    h2o_config_init_pathconf(&type->data.dynamic.pathconf, globalconf, NULL, NULL);
 
     return type;
 }

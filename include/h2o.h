@@ -170,6 +170,10 @@ typedef struct st_h2o_pathconf_t {
      * list of loggers (h2o_logger_t)
      */
     H2O_VECTOR(h2o_logger_t *) loggers;
+    /**
+     * mimemap
+     */
+    h2o_mimemap_t *mimemap;
 } h2o_pathconf_t;
 
 struct st_h2o_hostconf_t {
@@ -202,6 +206,10 @@ struct st_h2o_hostconf_t {
      * catch-all path configuration
      */
     h2o_pathconf_t fallback_path;
+    /**
+     * mimemap
+     */
+    h2o_mimemap_t *mimemap;
 };
 
 typedef struct st_h2o_protocol_callbacks_t {
@@ -285,6 +293,11 @@ struct st_h2o_globalconf_t {
          */
         uint64_t io_timeout;
     } proxy;
+
+    /**
+     * mimemap
+     */
+    h2o_mimemap_t *mimemap;
 
     size_t _num_config_slots;
 };
@@ -830,8 +843,9 @@ static void h2o_proceed_response(h2o_req_t *req);
 /**
  * initializes pathconf
  * @param path path to serve, or NULL if fallback or extension-level
+ * @param mimemap mimemap to use, or NULL if fallback or extension-level
  */
-void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, const char *path);
+void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, const char *path, h2o_mimemap_t *mimemap);
 /**
  *
  */
