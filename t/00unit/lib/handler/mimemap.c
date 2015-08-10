@@ -37,22 +37,21 @@ void test_lib__handler__mimemap_c()
     {
         char buf[sizeof("text/plain")];
         strcpy(buf, "text/plain");
-        h2o_mimemap_set_default_type(mimemap, h2o_mimemap_create_extension_type(buf), 0);
+        h2o_mimemap_set_default_type(mimemap, buf);
         memset(buf, 0, sizeof(buf));
     }
     ok(is_mimetype(h2o_mimemap_get_default_type(mimemap), "text/plain"));
 
     /* set and overwrite */
-    h2o_mimemap_set_type(mimemap, "foo", h2o_mimemap_create_extension_type("example/foo"), 0);
+    h2o_mimemap_define_mimetype(mimemap, "foo", "example/foo");
     ok(is_mimetype(h2o_mimemap_get_type_by_extension(mimemap, "foo"), "example/foo"));
     ok(h2o_mimemap_get_type_by_extension(mimemap, "foo") ==
        h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(H2O_STRLIT("example/foo"))));
-    h2o_mimemap_set_type(mimemap, "foo", h2o_mimemap_create_extension_type("example/overwritten"), 0);
+    h2o_mimemap_define_mimetype(mimemap, "foo", "example/overwritten");
     ok(is_mimetype(h2o_mimemap_get_type_by_extension(mimemap, "foo"), "example/overwritten"));
     ok(h2o_mimemap_get_type_by_extension(mimemap, "foo") ==
        h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(H2O_STRLIT("example/overwritten"))));
-    ok(h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(H2O_STRLIT("example/foo"))) ==
-       h2o_mimemap_get_default_type(mimemap));
+    ok(h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(H2O_STRLIT("example/foo"))) == NULL);
 
     /* clone and release */
     mimemap2 = h2o_mimemap_clone(mimemap);
@@ -69,8 +68,7 @@ void test_lib__handler__mimemap_c()
     /* remove */
     h2o_mimemap_remove_type(mimemap, "foo");
     ok(is_mimetype(h2o_mimemap_get_type_by_extension(mimemap, "foo"), "text/plain"));
-    ok(h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(H2O_STRLIT("example/overwritten"))) ==
-       h2o_mimemap_get_default_type(mimemap));
+    ok(h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(H2O_STRLIT("example/overwritten"))) == NULL);
     h2o_mimemap_remove_type(mimemap, "foo");
     ok(is_mimetype(h2o_mimemap_get_type_by_extension(mimemap, "foo"), "text/plain"));
 

@@ -959,14 +959,6 @@ void h2o__proxy_process_request(h2o_req_t *req);
 /* mime mapper */
 
 /**
- *
- */
-h2o_mimemap_type_t *h2o_mimemap_create_extension_type(const char *ext);
-/**
- *
- */
-h2o_mimemap_type_t *h2o_mimemap_create_dynamic_type(h2o_globalconf_t *globalconf);
-/**
  * initializes the mimemap (the returned chunk is refcounted)
  */
 h2o_mimemap_t *h2o_mimemap_create(void);
@@ -989,11 +981,15 @@ int h2o_mimemap_has_dynamic_type(h2o_mimemap_t *mimemap);
 /**
  * sets the default mime-type
  */
-void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, h2o_mimemap_type_t *type, int incref);
+void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, const char *mime);
 /**
  * adds a mime-type mapping
  */
-void h2o_mimemap_set_type(h2o_mimemap_t *mimemap, const char *ext, h2o_mimemap_type_t *type, int incref);
+void h2o_mimemap_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const char *mime);
+/**
+ * adds a mime-type mapping
+ */
+h2o_mimemap_type_t *h2o_mimemap_define_dynamic(h2o_mimemap_t *mimemap, const char **exts, h2o_globalconf_t *globalconf);
 /**
  * removes a mime-type mapping
  */
