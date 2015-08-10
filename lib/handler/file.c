@@ -726,10 +726,6 @@ Opened:
         return 0;
     }
 
-    /* prohibit gzip compression if gzip is disabled. */
-    if ((self->flags & H2O_FILE_FLAG_SEND_GZIP) == 0)
-        req->gzip_is_prohibited = 1;
-
     /* return file */
     do_send_file(generator, req, 200, "OK", mime_type->data.mimetype, &mime_type->data.attr, method_type == METHOD_IS_GET);
     return 0;

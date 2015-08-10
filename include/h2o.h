@@ -685,11 +685,6 @@ struct st_h2o_req_t {
      * For delegated responses, redirect responses would be handled internally.
      */
     char res_is_delegated;
-    /**
-     * whether or not gzip compression is prohibited in the response.
-     * If the handler has disabled gzip compression, gzip filter should respect it.
-     */
-    char gzip_is_prohibited;
 
     /**
      * absolute paths to be pushed (using HTTP/2 server push)

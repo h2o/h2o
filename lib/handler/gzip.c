@@ -29,9 +29,9 @@ static void gzip_encoder_free(void *opaque, void *address)
 static void send_gzip(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
 {
     gzip_encoder_t *self = (void *)_self;
-    
+
     size_t in_total, i, outbuf_count = 1;
-    
+
     /* calc in data total size */
     in_total = 0;
     for (i = 0; i != inbufcnt; ++i)
@@ -39,13 +39,12 @@ static void send_gzip(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs,
 
     if (self->started == 0) {
         /* Initialization */
-        int ret = deflateInit2(&self->zstream, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
-                               DEFAULT_WBITS + GZIP_ENCODING, DEFAULT_MEMLEVEL, Z_DEFAULT_STRATEGY);
+        int ret = deflateInit2(&self->zstream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, DEFAULT_WBITS + GZIP_ENCODING, DEFAULT_MEMLEVEL,
+                               Z_DEFAULT_STRATEGY);
 
         assert(ret == Z_OK);
 
-        h2o_vector_reserve(&req->pool, (h2o_vector_t*)&self->bufs, sizeof(h2o_iovec_t),
-                           self->bufs.capacity + 1);
+        h2o_vector_reserve(&req->pool, (h2o_vector_t *)&self->bufs, sizeof(h2o_iovec_t), self->bufs.capacity + 1);
         self->bufs.entries[0].base = h2o_mem_alloc_pool(&req->pool, BUF_SIZE);
         self->bufs.entries[0].len = BUF_SIZE;
         self->bufs.size = 1;
@@ -57,16 +56,16 @@ static void send_gzip(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs,
     h2o_iovec_t *outbufs = alloca(in_total / BUF_SIZE + 2);
 
     /* set first out buffer for output data from zlib */
-    self->zstream.next_out = (unsigned char *) self->bufs.entries[0].base;
+    self->zstream.next_out = (unsigned char *)self->bufs.entries[0].base;
     self->zstream.avail_out = self->bufs.entries[0].len;
     outbufs[0] = self->bufs.entries[0];
 
     for (i = 0; i != inbufcnt; ++i) {
         int ret, flush;
 
-        self->zstream.next_in = (unsigned char*) inbufs[i].base;
+        self->zstream.next_in = (unsigned char *)inbufs[i].base;
         self->zstream.avail_in = inbufs[i].len;
-        
+
         if (i == inbufcnt - 1) {
             flush = is_final ? Z_FINISH : Z_SYNC_FLUSH;
         } else {
@@ -79,8 +78,7 @@ static void send_gzip(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs,
             if (ret == Z_OK && self->zstream.avail_out == 0) {
                 if (self->bufs.size == outbuf_count) {
                     if (self->bufs.size == self->bufs.capacity) {
-                        h2o_vector_reserve(&req->pool, (h2o_vector_t*)&self->bufs, sizeof(h2o_iovec_t),
-                                           self->bufs.capacity + 1);
+                        h2o_vector_reserve(&req->pool, (h2o_vector_t *)&self->bufs, sizeof(h2o_iovec_t), self->bufs.capacity + 1);
                     }
                     self->bufs.entries[self->bufs.size].base = h2o_mem_alloc_pool(&req->pool, BUF_SIZE);
                     self->bufs.entries[self->bufs.size].len = BUF_SIZE;
@@ -94,7 +92,6 @@ static void send_gzip(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs,
             } else
                 break;
         }
-
     }
     outbufs[outbuf_count - 1].len = BUF_SIZE - self->zstream.avail_out;
     h2o_ostream_send_next(&self->super, req, outbufs, outbuf_count, is_final);
@@ -103,61 +100,30 @@ static void send_gzip(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs,
 static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
 {
     gzip_encoder_t *encoder;
-    size_t header_index;
 
-    /* do nothing if HTTP version is lower than 1.1 */
     if (req->version < 0x101)
         goto Next;
-    /* do nothing if response has prohibited gzip compression */
-    if (req->gzip_is_prohibited)
+    if (req->res.status != 200)
         goto Next;
-    /* RFC 2616 4.4 states that the following status codes (and response to a HEAD method) should not include message body */
-    if ((100 <= req->res.status && req->res.status <= 199) || req->res.status == 204 || req->res.status == 304)
+    if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")))
         goto Next;
-    else if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")))
+    if (req->res.mime_attr == NULL || !req->res.mime_attr->is_compressible)
         goto Next;
-    /* we cannot handle certain responses (like 101 switching protocols) */
-    if (req->res.status != 200) {
-        req->http1_is_persistent = 0;
-        goto Next;
+    { /* skip if no accept-encoding is set */
+        ssize_t index = h2o_find_header(&req->headers, H2O_TOKEN_ACCEPT_ENCODING, -1);
+        if (index == -1)
+            goto Next;
+        if (!h2o_contains_token(req->headers.entries[index].value.base, req->headers.entries[index].value.len, H2O_STRLIT("gzip"),
+                                ','))
+            goto Next;
     }
-    /* skip if no accept-encoding is set */
-    if ((header_index = h2o_find_header(&req->headers, H2O_TOKEN_ACCEPT_ENCODING, -1)) == -1)
-        goto Next;
-    if (!h2o_contains_token(req->headers.entries[header_index].value.base,
-                            req->headers.entries[header_index].value.len, H2O_STRLIT("gzip"), ','))
-        goto Next;
     /* skip if content-encoding header is being set */
     if (h2o_find_header(&req->res.headers, H2O_TOKEN_CONTENT_ENCODING, -1) != -1)
         goto Next;
 
-    /* 
-     * NOTE: I think there should be some test on MIME type, since we have no need to enable gzip on
-     *       those multimedia files or something like that. Maybe we can have a conf for this.
-     */
-    header_index = h2o_find_header(&req->res.headers, H2O_TOKEN_CONTENT_TYPE, -1);
-    assert(header_index != -1);
-    if (h2o_contains_token(req->res.headers.entries[header_index].value.base,
-                           req->res.headers.entries[header_index].value.len, H2O_STRLIT("audio"), '/'))
-        goto Next;
-    if (h2o_contains_token(req->res.headers.entries[header_index].value.base,
-                           req->res.headers.entries[header_index].value.len, H2O_STRLIT("image"), '/'))
-        goto Next;
-    if (h2o_contains_token(req->res.headers.entries[header_index].value.base,
-                           req->res.headers.entries[header_index].value.len, H2O_STRLIT("video"), '/'))
-        goto Next;
-    if (h2o_contains_token(req->res.headers.entries[header_index].value.base,
-                           req->res.headers.entries[header_index].value.len, H2O_STRLIT("gzip"), '/'))
-        goto Next;
-    if (h2o_contains_token(req->res.headers.entries[header_index].value.base,
-                           req->res.headers.entries[header_index].value.len, H2O_STRLIT("zip"), '/'))
-        goto Next;
-    if (h2o_contains_token(req->res.headers.entries[header_index].value.base,
-                           req->res.headers.entries[header_index].value.len, H2O_STRLIT("zlib"), '/'))
-        goto Next;
-
-    /* set content-encoding header */
+    /* set content-encoding and vary */
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_ENCODING, H2O_STRLIT("gzip"));
+    h2o_add_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
 
     req->res.content_length = SIZE_MAX;
 
