@@ -15,7 +15,7 @@ host = r.hostname
 method = r.method
 query = r.query
 
-msg = "#{h} #{m}. User-Agent:#{ua} New User-Agent:#{new_ua} path:#{uri} host:#{host} method:#{method} query:#{query}"
+msg = "#{h} #{m}. User-Agent:#{ua} New User-Agent:#{new_ua} path:#{uri} host:#{host} method:#{method} query:#{query} remote_ip:#{H2O::Connection.new.remote_ip}"
 
 r.log_error msg
 

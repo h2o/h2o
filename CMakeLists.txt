@@ -31,7 +31,7 @@ PROJECT(h2o C)
 SET(VERSION_MAJOR "1")
 SET(VERSION_MINOR "4")
 SET(VERSION_PATCH "2")
-SET(VERSION_PRERELEASE "-alpha1")
+SET(VERSION_PRERELEASE "")
 SET(VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}${VERSION_PRERELEASE}")
 SET(LIBRARY_VERSION_MAJOR "0")
 SET(LIBRARY_VERSION_MINOR "9")
@@ -136,7 +136,16 @@ IF (ZLIB_FOUND)
     INCLUDE_DIRECTORIES(${ZLIB_INCLUDE_DIRS})
     LINK_DIRECTORIES(${ZLIB_LIBRARY_DIRS})
 ENDIF (ZLIB_FOUND)
-SET(CMAKE_C_FLAGS "-O2 -g -Wall -Wno-unused-function ${CMAKE_C_FLAGS} -DH2O_ROOT=\"\\\"${CMAKE_INSTALL_PREFIX}\\\"\"")
+
+SET(CC_WARNING_FLAGS "-Wall -Wno-unused-value -Wno-unused-function")
+IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
+    SET(CC_WARNING_FLAGS "${CC_WARNING_FLAGS} -Wno-unused-but-set-variable")
+    IF (NOT ("${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "4.5"))
+        SET(CC_WARNING_FLAGS "${CC_WARNING_FLAGS} -Wno-unused-result")
+    ENDIF ()
+ENDIF ()
+
+SET(CMAKE_C_FLAGS "-O2 -g ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS} -DH2O_ROOT=\"\\\"${CMAKE_INSTALL_PREFIX}\\\"\"")
 
 INCLUDE_DIRECTORIES(
     include
@@ -157,7 +166,6 @@ SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/reader.c
     deps/yaml/src/scanner.c
     deps/yaml/src/writer.c)
-SET_SOURCE_FILES_PROPERTIES(${LIBYAML_SOURCE_FILES} PROPERTIES COMPILE_FLAGS "-Wno-unused-value -Wno-unused-but-set-variable")
 
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
@@ -272,6 +280,7 @@ IF (WITH_MRUBY)
         lib/handler/mruby/init.c
         lib/handler/mruby/class/core.c
         lib/handler/mruby/class/request.c
+        lib/handler/mruby/class/connection.c
         lib/handler/configurator/mruby.c)
     LIST(INSERT EXTRA_LIBRARIES 0 ${MRUBY_LIBRARIES} "m")
 ENDIF (WITH_MRUBY)
@@ -289,6 +298,9 @@ SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES
 IF (OPENSSL_FOUND)
     PREPEND_INCLUDE_DIRECTORY(libh2o ${OPENSSL_INCLUDE_DIR})
     PREPEND_INCLUDE_DIRECTORY(libh2o-evloop ${OPENSSL_INCLUDE_DIR})
+ELSE (OPENSSL_FOUND)
+    SET_TARGET_PROPERTIES(libh2o PROPERTIES EXCLUDE_FROM_ALL 1)
+    SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES EXCLUDE_FROM_ALL 1)
 ENDIF (OPENSSL_FOUND)
 
 ADD_CUSTOM_TARGET(lib-examples DEPENDS examples-http1client examples-simple examples-socket-client)

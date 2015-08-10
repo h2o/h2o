@@ -1,5 +1,10 @@
 Revision history for H2O.
 
+1.4.2 2015-07-28 08:02:00+0000
+	- [fastcgi] do not concatenate the headers (ex. Set-Cookie) sent by a FastCGI app #427 (Kazuho Oku)
+	- [ssl] for guarding session ticket secret use writer-preferred locks on Linux as well #423 (Kazuho Oku)
+	- [misc] suppress compiler warnings #415 (Syohei YOSHIDA)
+
 1.4.1 2015-07-22 11:55:00+0000
 	- [core] respect the value of the `user` configuration directive (was always switching to `nobody`) #416 (Kazuho Oku)
 

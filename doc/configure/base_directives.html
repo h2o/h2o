@@ -443,11 +443,11 @@ H2O supports both of the methods: cache-based session resumption (defined in <a 
 <div class="caption">Example. Various session-resumption configurations</div>
 <pre><code># use both methods (storing data on internal memory)
 ssl-session-resumption:
-    method: all
+    mode: all
 
 # use both methods (storing data on memcached running at 192.168.0.4:11211)
 ssl-session-resumption:
-    method: all
+    mode: all
     cache-store: memcached
     ticket-store: memcached
     cache-memcached-num-threads: 8
@@ -457,7 +457,7 @@ ssl-session-resumption:
 
 # use ticket-based resumption only (with secrets used for encrypting the tickets stored in a file)
 ssl-session-resumption:
-    method: ticket
+    mode: ticket
     ticket-store: file
     ticket-file: /path/to/ticket-secrets.yaml
 </code></pre>
@@ -465,7 +465,7 @@ ssl-session-resumption:
 
 <h4 id="ssl-session-resumption-methods">Defining the Methods Used</h4>
 <p>
-The <code>method</code> attribute defines which methods should be used for resuming the TLS sessions.
+The <code>mode</code> attribute defines which methods should be used for resuming the TLS sessions.
 The value can be either of: <code>off</code>, <code>cache</code>, <code>ticket</code>, <code>all</code>.
 </p>
 <p>

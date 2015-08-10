@@ -509,8 +509,8 @@ static int fill_headers(h2o_req_t *req, struct phr_header *headers, size_t num_h
                 RFC suggests abs-path-style Location headers should trigger an internal redirection, but is that how the web servers
                 work?
                  */
-                h2o_add_header_token(&req->pool, &req->res.headers, token,
-                                     h2o_strdup(&req->pool, headers[i].value, headers[i].value_len).base, headers[i].value_len);
+                h2o_add_header(&req->pool, &req->res.headers, token,
+                               h2o_strdup(&req->pool, headers[i].value, headers[i].value_len).base, headers[i].value_len);
             }
         } else if (h2o_memis(headers[i].name, headers[i].name_len, H2O_STRLIT("status"))) {
             h2o_iovec_t value = h2o_iovec_init(headers[i].value, headers[i].value_len);
