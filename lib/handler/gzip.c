@@ -133,7 +133,9 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
         goto Next;
     if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")))
         goto Next;
-    if (req->res.mime_attr == NULL || !req->res.mime_attr->is_compressible)
+    if (req->res.mime_attr == NULL)
+        h2o_req_fill_mime_attributes(req);
+    if (!req->res.mime_attr->is_compressible)
         goto Next;
     /* 100 is a rough estimate */
     if (req->res.content_length <= 100)

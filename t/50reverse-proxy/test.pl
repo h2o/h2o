@@ -56,7 +56,7 @@ my $upstream = $unix_socket_file ? "[unix:$unix_socket_file]" : "127.0.0.1:@{[em
 
 my $guard = do {
     local $ENV{FORCE_CHUNKED} = $starlet_force_chunked;
-    my @args = (qw(plackup -MPlack::App::File -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen), $unix_socket_file || $upstream);
+    my @args = (qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen), $unix_socket_file || $upstream);
     if ($starlet_keepalive) {
         push @args, "--max-keepalive-reqs=100";
     }
@@ -81,6 +81,9 @@ hosts:
     paths:
       /:
         proxy.reverse.url: http://$upstream
+      /gzip:
+        proxy.reverse.url: http://$upstream
+        gzip: ON
       /files:
         file.dir: @{[ DOC_ROOT ]}
 @{[ $h2o_keepalive ? "" : "        proxy.timeout.keepalive: 0" ]}
@@ -157,6 +160,10 @@ subtest 'curl' => sub {
         subtest 'issues/266' => sub {
             my $resp = `curl --dump-header /dev/stderr --silent --insecure -H 'cookie: a=@{['x' x 4000]}' $proto://127.0.0.1:$port/index.txt 2>&1 > /dev/null`;
             like $resp, qr{^HTTP/1\.1 200 }m;
+        };
+        subtest 'gzip' => sub {
+            my $resp = `curl --silent --insecure -H Accept-Encoding:gzip $proto://127.0.0.1:$port/gzip/alice.txt | gzip -cd`;
+            is md5_hex($resp), md5_file("@{[DOC_ROOT]}/alice.txt");
         };
     };
     $doit->('http', $port);
