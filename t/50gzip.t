@@ -38,6 +38,12 @@ my $doit = sub {
     is md5_hex($resp), $expected, "off with accept-encoding";
     $resp = $fetch_gunzip->("/on", "-H accept-encoding:gzip");
     is md5_hex($resp), $expected, "on with accept-encoding";
+    $resp = $fetch_gunzip->("/on", "-H 'accept-encoding:gzip, deflate'");
+    is md5_hex($resp), $expected, "on with accept-encoding: gzip,deflate";
+    $resp = $fetch_gunzip->("/on", "-H 'accept-encoding:deflate, gzip'");
+    is md5_hex($resp), $expected, "on with accept-encoding: deflate, gzip";
+    $resp = $fetch_orig->("/on", "-H accept-encoding:deflate");
+    is md5_hex($resp), $expected, "on with accept-encoding, deflate only";
 
     $resp = run_prog("curl --silent --insecure -H accept-encoding:gzip $proto://127.0.0.1:$port/on/halfdome.jpg");
     is md5_hex($resp), md5_file("@{[DOC_ROOT]}/halfdome.jpg"), "image not compressed";
