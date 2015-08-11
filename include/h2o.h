@@ -863,6 +863,10 @@ void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, h2o_iovec_t *buf
  * called by the connection layer to request additional data to the generator
  */
 static void h2o_proceed_response(h2o_req_t *req);
+/**
+ * if NULL, supplements h2o_req_t::mime_attr
+ */
+void h2o_req_fill_mime_attributes(h2o_req_t *req);
 
 /* config */
 
