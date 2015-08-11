@@ -348,7 +348,27 @@ h2o_mimemap_type_t *h2o_mimemap_get_type_by_extension(h2o_mimemap_t *mimemap, co
 
 h2o_mimemap_type_t *h2o_mimemap_get_type_by_mimetype(h2o_mimemap_t *mimemap, h2o_iovec_t mime)
 {
-    h2o_mimemap_type_t key = {H2O_MIMEMAP_TYPE_MIMETYPE, {mime}};
-    khiter_t iter = kh_get(typeset, mimemap->typeset, &key);
-    return iter != kh_end(mimemap->typeset) ? kh_key(mimemap->typeset, iter) : NULL;
+    h2o_mimemap_type_t key = {H2O_MIMEMAP_TYPE_MIMETYPE};
+    khiter_t iter;
+
+    /* exact match */
+    key.data.mimetype = mime;
+    if ((iter = kh_get(typeset, mimemap->typeset, &key)) != kh_end(mimemap->typeset))
+        return kh_key(mimemap->typeset, iter);
+
+    /* determine the end of the type */
+    size_t type_end_at = 0;
+    for (; type_end_at != mime.len; ++type_end_at)
+        if (mime.base[type_end_at] == ';' || mime.base[type_end_at] == ' ')
+            goto HasAttributes;
+    /* no attributes */
+    return NULL;
+
+HasAttributes:
+    /* perform search without attributes */
+    key.data.mimetype.len = type_end_at;
+    if ((iter = kh_get(typeset, mimemap->typeset, &key)) != kh_end(mimemap->typeset))
+        return kh_key(mimemap->typeset, iter);
+
+    return NULL;
 }
