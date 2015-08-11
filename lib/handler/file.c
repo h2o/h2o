@@ -269,7 +269,7 @@ Opened:
 }
 
 static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *req, int status, const char *reason,
-                         h2o_iovec_t mime_type, int is_get)
+                         h2o_iovec_t mime_type, h2o_mime_attributes_t *mime_attr, int is_get)
 {
     /* link the request */
     self->req = req;
@@ -278,6 +278,7 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     req->res.status = status;
     req->res.reason = reason;
     req->res.content_length = self->bytesleft;
+    req->res.mime_attr = mime_attr;
 
     if (self->ranged.range_count > 1) {
         mime_type.base = h2o_mem_alloc_pool(&req->pool, 52);
@@ -348,7 +349,7 @@ int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *pa
     if ((self = create_generator(req, path, strlen(path), &is_dir, flags)) == NULL)
         return -1;
     /* note: is_dir is not handled */
-    do_send_file(self, req, status, reason, mime_type, 1);
+    do_send_file(self, req, status, reason, mime_type, NULL, 1);
     return 0;
 }
 
@@ -532,7 +533,7 @@ static int try_dynamic_request(h2o_file_handler_t *self, h2o_req_t *req, char *r
     }
 
     /* file found! */
-    h2o_mimemap_type_t *mime_type = h2o_mimemap_get_type(self->mimemap, h2o_get_filext(rpath, slash_at));
+    h2o_mimemap_type_t *mime_type = h2o_mimemap_get_type_by_extension(self->mimemap, h2o_get_filext(rpath, slash_at));
     switch (mime_type->type) {
     case H2O_MIMEMAP_TYPE_MIMETYPE:
         return -1;
@@ -646,7 +647,7 @@ Opened:
     }
 
     /* obtain mime type */
-    mime_type = h2o_mimemap_get_type(self->mimemap, h2o_get_filext(rpath, rpath_len));
+    mime_type = h2o_mimemap_get_type_by_extension(self->mimemap, h2o_get_filext(rpath, rpath_len));
     switch (mime_type->type) {
     case H2O_MIMEMAP_TYPE_MIMETYPE:
         break;
@@ -720,12 +721,13 @@ Opened:
                                  (sizeof("\r\n") - 1);
             generator->bytesleft = final_content_len;
         }
-        do_send_file(generator, req, 206, "Partial Content", mime_type->data.mimetype, method_type == METHOD_IS_GET);
+        do_send_file(generator, req, 206, "Partial Content", mime_type->data.mimetype, &h2o_mime_attributes_as_is,
+                     method_type == METHOD_IS_GET);
         return 0;
     }
 
     /* return file */
-    do_send_file(generator, req, 200, "OK", mime_type->data.mimetype, method_type == METHOD_IS_GET);
+    do_send_file(generator, req, 200, "OK", mime_type->data.mimetype, &mime_type->data.attr, method_type == METHOD_IS_GET);
     return 0;
 
 NotModified:
