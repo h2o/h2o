@@ -325,7 +325,7 @@ void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *
     ostream->next->do_send(ostream->next, req, bufs, bufcnt, is_final);
 }
 
-void h2o_req_fill_mime_attributes(h2o_req_t *req, h2o_mimemap_t *mimemap)
+void h2o_req_fill_mime_attributes(h2o_req_t *req)
 {
     ssize_t content_type_index;
     h2o_mimemap_type_t *mime;
@@ -334,7 +334,8 @@ void h2o_req_fill_mime_attributes(h2o_req_t *req, h2o_mimemap_t *mimemap)
         return;
 
     if ((content_type_index = h2o_find_header(&req->res.headers, H2O_TOKEN_CONTENT_TYPE, -1)) != -1 &&
-        (mime = h2o_mimemap_get_type_by_mimetype(mimemap, req->res.headers.entries[content_type_index].value)) != NULL)
+        (mime = h2o_mimemap_get_type_by_mimetype(req->pathconf->mimemap, req->res.headers.entries[content_type_index].value)) !=
+         NULL)
         req->res.mime_attr = &mime->data.attr;
     else
         req->res.mime_attr = &h2o_mime_attributes_as_is;

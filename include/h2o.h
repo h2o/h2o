@@ -866,7 +866,7 @@ static void h2o_proceed_response(h2o_req_t *req);
 /**
  * if NULL, supplements h2o_req_t::mime_attr
  */
-void h2o_req_fill_mime_attributes(h2o_req_t *req, h2o_mimemap_t *mimemap);
+void h2o_req_fill_mime_attributes(h2o_req_t *req);
 
 /* config */
 
