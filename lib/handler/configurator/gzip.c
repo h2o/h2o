@@ -40,7 +40,7 @@ static int on_config_gzip(h2o_configurator_command_t *cmd, h2o_configurator_cont
     return 0;
 }
 
-static int on_enter(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_enter(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct gzip_configurator_t *self = (void *)configurator;
 
@@ -49,7 +49,7 @@ static int on_enter(h2o_configurator_t *configurator, h2o_configurator_context_t
     return 0;
 }
 
-static int on_exit(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_exit(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct gzip_configurator_t *self = (void *)configurator;
 
@@ -64,8 +64,8 @@ void h2o_gzip_register_configurator(h2o_globalconf_t *conf)
 {
     struct gzip_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
 
-    c->super.enter = on_enter;
-    c->super.exit = on_exit;
+    c->super.enter = on_config_enter;
+    c->super.exit = on_config_exit;
     h2o_configurator_define_command(&c->super, "gzip", H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_gzip);
     c->vars = c->_vars_stack;
