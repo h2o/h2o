@@ -1069,6 +1069,10 @@ void h2o_chunked_register(h2o_pathconf_t *pathconf);
  * registers the gzip encoding output filter (added by default, for now)
  */
 void h2o_gzip_register(h2o_pathconf_t *pathconf);
+/**
+ *
+ */
+void h2o_gzip_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/expires.c */
 

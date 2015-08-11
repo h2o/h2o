@@ -215,6 +215,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/expires.c
     lib/handler/configurator/fastcgi.c
     lib/handler/configurator/file.c
+    lib/handler/configurator/gzip.c
     lib/handler/configurator/headers.c
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
