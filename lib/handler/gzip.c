@@ -135,8 +135,8 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
         goto Next;
     if (req->res.mime_attr == NULL || !req->res.mime_attr->is_compressible)
         goto Next;
-    /* gziped file with some data will be at least 23 bytes */
-    if (req->res.content_length <= 23)
+    /* 100 is a rough estimate */
+    if (req->res.content_length <= 100)
         goto Next;
     { /* skip if no accept-encoding is set */
         ssize_t index = h2o_find_header(&req->headers, H2O_TOKEN_ACCEPT_ENCODING, -1);
