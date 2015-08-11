@@ -20,6 +20,7 @@
  * IN THE SOFTWARE.
  */
 #include <assert.h>
+#include <string.h>
 #include "khash.h"
 #include "h2o.h"
 
@@ -133,7 +134,8 @@ static h2o_mimemap_type_t *create_extension_type(const char *mime)
     type->data.mimetype.len = i;
 
     /* make a rough guess on whether the type is compressible or not */
-    if (strncmp(type->data.mimetype.base, "text/", 5) == 0 || strnstr(type->data.mimetype.base, "+xml", type_end_at) != NULL)
+    if (strncmp(type->data.mimetype.base, "text/", 5) == 0 ||
+        h2o_strstr(type->data.mimetype.base, type_end_at, H2O_STRLIT("+xml")) != SIZE_MAX)
         type->data.attr.is_compressible = 1;
 
     /* make a rough guess on whether the type is blocking asset or not */
