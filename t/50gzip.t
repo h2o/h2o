@@ -45,6 +45,9 @@ my $doit = sub {
     $resp = $fetch_orig->("/on", "-H accept-encoding:deflate");
     is md5_hex($resp), $expected, "on with accept-encoding, deflate only";
 
+    $resp = run_prog("curl --silent --insecure -H accept-encoding:gzip $proto://127.0.0.1:$port/on/index.txt");
+    is md5_hex($resp), md5_file("@{[DOC_ROOT]}/index.txt"), "tiny file not compressed";
+
     $resp = run_prog("curl --silent --insecure -H accept-encoding:gzip $proto://127.0.0.1:$port/on/halfdome.jpg");
     is md5_hex($resp), md5_file("@{[DOC_ROOT]}/halfdome.jpg"), "image not compressed";
 };
