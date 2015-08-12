@@ -196,35 +196,91 @@ Exit:
     return bufs;
 }
 
+static int is_blocking_asset(h2o_req_t *req)
+{
+    if (req->res.mime_attr == NULL)
+        h2o_req_fill_mime_attributes(req);
+    return req->res.mime_attr->priority == H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
+}
+
 static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     h2o_timestamp_t ts;
-    size_t i;
+    size_t num_casper_entries_before_push = 0;
 
     h2o_get_timestamp(conn->super.ctx, &stream->req.pool, &ts);
 
-    /* special care for server-pushed responses */
+    /* cancel push with an error response */
     if (h2o_http2_stream_is_push(stream->stream_id)) {
-        if (400 <= stream->req.res.status) {
-            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
-            h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_refs.link);
-            return -1;
-        }
+        if (400 <= stream->req.res.status)
+            goto CancelPush;
         h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-pushed"), 0, H2O_STRLIT("1"));
     }
 
-    /* FIXME the function may return error, check it! */
+    if (stream->req.hostconf->http2.casper.capacity_bits != 0) {
+        /* extract the client-side cache fingerprint */
+        if (conn->casper == NULL)
+            h2o_http2_conn_init_casper(conn, stream->req.hostconf->http2.casper.capacity_bits);
+        size_t header_index = -1;
+        while ((header_index = h2o_find_header(&stream->req.headers, H2O_TOKEN_COOKIE, header_index)) != -1) {
+            h2o_header_t *header = stream->req.headers.entries + header_index;
+            h2o_http2_casper_consume_cookie(conn->casper, header->value.base, header->value.len);
+        }
+        num_casper_entries_before_push = h2o_http2_casper_num_entries(conn->casper);
+        /* update casper if necessary */
+        if (stream->req.hostconf->http2.casper.track_all_types || is_blocking_asset(&stream->req)) {
+            ssize_t etag_index = h2o_find_header(&stream->req.headers, H2O_TOKEN_ETAG, -1);
+            h2o_iovec_t etag = etag_index != -1 ? stream->req.headers.entries[etag_index].value : (h2o_iovec_t){};
+            if (h2o_http2_casper_lookup(conn->casper, stream->req.path.base, stream->req.path.len, etag.base, etag.len, 1)) {
+                /* cancel if the pushed resource is already marked as cached */
+                if (h2o_http2_stream_is_push(stream->stream_id))
+                    goto CancelPush;
+            }
+        }
+    }
+
+    if (h2o_http2_stream_is_push(stream->stream_id)) {
+        /* for push, send the push promise */
+        if (!stream->push.promise_sent)
+            h2o_http2_stream_send_push_promise(conn, stream);
+        /* send ASAP if it is a blocking asset (even in case of Firefox we can't wait 1RTT for it to reprioritize the asset) */
+        if (is_blocking_asset(&stream->req))
+            h2o_http2_scheduler_rebind(&stream->_refs.scheduler, &conn->scheduler, 257, 0);
+    } else {
+        /* for pull, push things requested, as well as send the casper cookie if modified */
+        size_t i;
+        for (i = 0; i != stream->req.http2_push_paths.size; ++i)
+            h2o_http2_conn_push_path(conn, stream->req.http2_push_paths.entries[i], stream);
+        /* send casper cookie if it has been altered (due to the __stream itself__ or by some of the pushes) */
+        if (conn->casper != NULL && num_casper_entries_before_push != h2o_http2_casper_num_entries(conn->casper)) {
+            h2o_iovec_t cookie = h2o_http2_casper_build_cookie(conn->casper, &stream->req.pool);
+            h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, cookie.base, cookie.len);
+        }
+        /* raise the priority of asset files that block rendering to highest if the user-agent is _not_ using dependency-based
+         * prioritization (e.g. that of Firefox)
+         */
+        if (conn->num_streams.open_priority == 0 && stream->req.hostconf->http2.reprioritize_blocking_assets &&
+            h2o_http2_scheduler_get_parent(&stream->_refs.scheduler) == &conn->scheduler && is_blocking_asset(&stream->req))
+            h2o_http2_scheduler_rebind(&stream->_refs.scheduler, &conn->scheduler, 257, 0);
+    }
+
+    /* send HEADERS, as well as start sending body */
     h2o_hpack_flatten_response(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
                                conn->peer_settings.max_frame_size, &stream->req.res, &ts,
                                &conn->super.ctx->globalconf->server_name);
     h2o_http2_conn_request_write(conn);
     h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY);
 
-    /* push URLs */
-    for (i = 0; i != stream->req.http2_push_paths.size; ++i)
-        h2o_http2_conn_push_path(conn, stream->req.http2_push_paths.entries[i], stream);
-
     return 0;
+
+CancelPush:
+    h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
+    h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_refs.link);
+    if (stream->push.promise_sent) {
+        h2o_http2_encode_rst_stream_frame(&conn->_write.buf, stream->stream_id, H2O_HTTP2_ERROR_INTERNAL);
+        h2o_http2_conn_request_write(conn);
+    }
+    return -1;
 }
 
 void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb)

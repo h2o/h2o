@@ -163,6 +163,7 @@ int main(int argc, char **argv)
         subtest("lib/handler/mimemap.c", test_lib__handler__mimemap_c);
         subtest("lib/http2/hpack.c", test_lib__http2__hpack);
         subtest("lib/http2/scheduler.c", test_lib__http2__scheduler);
+        subtest("lib/http2/casper.c", test_lib__http2__casper);
     }
 
     { /* tests that use the run loop */
