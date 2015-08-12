@@ -210,6 +210,15 @@ struct st_h2o_hostconf_t {
      * mimemap
      */
     h2o_mimemap_t *mimemap;
+    /**
+     * http2
+     */
+    struct {
+        /**
+         * size of the casper capacity (0 if disabled)
+         */
+        unsigned casper_capacity_bits;
+    } http2;
 };
 
 typedef struct st_h2o_protocol_callbacks_t {

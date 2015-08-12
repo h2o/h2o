@@ -199,6 +199,7 @@ Exit:
 static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     h2o_timestamp_t ts;
+    size_t num_casper_entries_before_push = 0;
 
     h2o_get_timestamp(conn->super.ctx, &stream->req.pool, &ts);
 
@@ -209,18 +210,25 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-pushed"), 0, H2O_STRLIT("1"));
     }
 
-    size_t casper_entries = conn->casper != NULL ? h2o_http2_casper_num_entries(conn->casper) : 0;
-
-    /* update casper if necessary */
-    if (h2o_http2_is_blocking_asset(conn->super.ctx, stream->req.path.base, stream->req.path.len)) {
+    if (stream->req.hostconf->http2.casper_capacity_bits != 0) {
+        /* extract the client-side cache fingerprint */
         if (conn->casper == NULL)
-            h2o_http2_conn_init_casper(conn);
-        ssize_t etag_index = h2o_find_header(&stream->req.headers, H2O_TOKEN_ETAG, -1);
-        h2o_iovec_t etag = etag_index != -1 ? stream->req.headers.entries[etag_index].value : (h2o_iovec_t){};
-        if (h2o_http2_casper_lookup(conn->casper, stream->req.path.base, stream->req.path.len, etag.base, etag.len, 1)) {
-            /* cancel if the pushed resource is already marked as cached */
-            if (h2o_http2_stream_is_push(stream->stream_id))
-                goto CancelPush;
+            h2o_http2_conn_init_casper(conn, stream->req.hostconf->http2.casper_capacity_bits);
+        size_t header_index = -1;
+        while ((header_index = h2o_find_header(&stream->req.headers, H2O_TOKEN_COOKIE, header_index)) != -1) {
+            h2o_header_t *header = stream->req.headers.entries + header_index;
+            h2o_http2_casper_consume_cookie(conn->casper, header->value.base, header->value.len);
+        }
+        num_casper_entries_before_push = h2o_http2_casper_num_entries(conn->casper);
+        /* update casper if necessary */
+        if (h2o_http2_is_blocking_asset(conn->super.ctx, stream->req.path.base, stream->req.path.len)) {
+            ssize_t etag_index = h2o_find_header(&stream->req.headers, H2O_TOKEN_ETAG, -1);
+            h2o_iovec_t etag = etag_index != -1 ? stream->req.headers.entries[etag_index].value : (h2o_iovec_t){};
+            if (h2o_http2_casper_lookup(conn->casper, stream->req.path.base, stream->req.path.len, etag.base, etag.len, 1)) {
+                /* cancel if the pushed resource is already marked as cached */
+                if (h2o_http2_stream_is_push(stream->stream_id))
+                    goto CancelPush;
+            }
         }
     }
 
@@ -233,8 +241,8 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         size_t i;
         for (i = 0; i != stream->req.http2_push_paths.size; ++i)
             h2o_http2_conn_push_path(conn, stream->req.http2_push_paths.entries[i], stream);
-        if (conn->casper != NULL && casper_entries != h2o_http2_casper_num_entries(conn->casper)) {
-            /* send casper cookie if it has been altered (due to the stream itself or by some of the pushes) */
+        /* send casper cookie if it has been altered (due to the __stream itself__ or by some of the pushes) */
+        if (conn->casper != NULL && num_casper_entries_before_push != h2o_http2_casper_num_entries(conn->casper)) {
             h2o_iovec_t cookie = h2o_http2_casper_build_cookie(conn->casper, &stream->req.pool);
             h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, cookie.base, cookie.len);
         }

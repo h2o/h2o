@@ -361,16 +361,6 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     }
 #undef EXPECTED_MAP
 
-    { /* extract the client-side cache fingerprint */
-        size_t header_index = -1;
-        while ((header_index = h2o_find_header(&stream->req.headers, H2O_TOKEN_COOKIE, header_index)) != -1) {
-            if (conn->casper == NULL)
-                h2o_http2_conn_init_casper(conn);
-            h2o_header_t *header = stream->req.headers.entries + header_index;
-            h2o_http2_casper_consume_cookie(conn->casper, header->value.base, header->value.len);
-        }
-    }
-
     /* handle the request */
     if (conn->num_streams.open_pull > H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams) {
         ret = H2O_HTTP2_ERROR_REFUSED_STREAM;

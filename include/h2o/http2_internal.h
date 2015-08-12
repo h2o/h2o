@@ -254,7 +254,7 @@ void h2o_http2_conn_push_path(h2o_http2_conn_t *conn, h2o_iovec_t path, h2o_http
 void h2o_http2_conn_request_write(h2o_http2_conn_t *conn);
 void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 static ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn);
-static void h2o_http2_conn_init_casper(h2o_http2_conn_t *conn);
+static void h2o_http2_conn_init_casper(h2o_http2_conn_t *conn, unsigned capacity_bits);
 
 /* stream */
 static int h2o_http2_stream_is_push(uint32_t stream_id);
@@ -335,10 +335,10 @@ inline ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn)
     return ret;
 }
 
-inline void h2o_http2_conn_init_casper(h2o_http2_conn_t *conn)
+inline void h2o_http2_conn_init_casper(h2o_http2_conn_t *conn, unsigned capacity_bits)
 {
     assert(conn->casper == NULL);
-    conn->casper = h2o_http2_casper_create(13, 6);
+    conn->casper = h2o_http2_casper_create(capacity_bits, 6);
 }
 
 inline void h2o_http2_stream_update_open_slot(h2o_http2_stream_t *stream, uint32_t *slot)
