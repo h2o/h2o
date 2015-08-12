@@ -28,7 +28,7 @@
 struct st_core_config_vars_t {
     struct {
         int reprioritize_blocking_assets;
-        unsigned casper_capacity_bits;
+        h2o_casper_conf_t casper;
     } http2;
 };
 
@@ -53,7 +53,7 @@ static int on_core_exit(h2o_configurator_t *_self, h2o_configurator_context_t *c
     if (ctx->hostconf != NULL && ctx->pathconf == NULL) {
         /* exitting from host-level configuration */
         ctx->hostconf->http2.reprioritize_blocking_assets = self->vars->http2.reprioritize_blocking_assets;
-        ctx->hostconf->http2.casper_capacity_bits = self->vars->http2.casper_capacity_bits;
+        ctx->hostconf->http2.casper = self->vars->http2.casper;
     }
 
     --self->vars;
@@ -334,30 +334,46 @@ static int on_config_http2_reprioritize_blocking_assets(h2o_configurator_command
 
 static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
+    static const h2o_casper_conf_t defaults = {
+        13, /* casper_bits: default (2^13 ~= 100 assets * 1/0.01 collision probability) */
+        0 /* track blocking assets only */
+    };
+
     struct st_core_configurator_t *self = (void *)cmd->configurator;
 
     switch (node->type) {
     case YOML_TYPE_SCALAR:
         if (strcasecmp(node->data.scalar, "OFF") == 0) {
-            self->vars->http2.casper_capacity_bits = 0;
+            self->vars->http2.casper = (h2o_casper_conf_t){};
         } else if (strcasecmp(node->data.scalar, "ON") == 0) {
-            self->vars->http2.casper_capacity_bits = 13; /* default (2^13 ~= 100 assets * 1/0.01 collision probability) */
+            self->vars->http2.casper = defaults;
         }
         break;
     case YOML_TYPE_MAPPING: {
+        /* set to default */
+        self->vars->http2.casper = defaults;
+        /* override the attributes defined */
         yoml_t *t;
-        if ((t = yoml_get(node, "capacity-bits")) == NULL) {
-            h2o_configurator_errprintf(cmd, node, "mandatory attribute `capacity-bits` is not defined");
-            return -1;
+        if ((t = yoml_get(node, "capacity-bits")) != NULL) {
+            if (!(t->type == YOML_TYPE_SCALAR && sscanf(t->data.scalar, "%u", &self->vars->http2.casper.capacity_bits) == 0 &&
+                  self->vars->http2.casper.capacity_bits < 16)) {
+                h2o_configurator_errprintf(cmd, t, "value of `capacity-bits` must be an integer between 0 to 15");
+                return -1;
+            }
         }
-        if (!(t->type == YOML_TYPE_SCALAR && sscanf(t->data.scalar, "%u", &self->vars->http2.casper_capacity_bits) == 0 &&
-              self->vars->http2.casper_capacity_bits < 16)) {
-            h2o_configurator_errprintf(cmd, t, "value of `capacity-bits` must be an integer between 0 to 15");
-            return -1;
+        if ((t = yoml_get(node, "tracking-types")) != NULL) {
+            if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "blocking-assets") == 0) {
+                self->vars->http2.casper.track_all_types = 0;
+            } else if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "all") == 0) {
+                self->vars->http2.casper.track_all_types = 1;
+            } else {
+                h2o_configurator_errprintf(cmd, t, "value of `tracking-types` must be either of: `blocking-assets` or `all`");
+                return -1;
+            }
         }
     } break;
     default:
-        h2o_configurator_errprintf(cmd, node, "value must be `OFF`,`ON` or a mapping containing `capacity-bits`");
+        h2o_configurator_errprintf(cmd, node, "value must be `OFF`,`ON` or a mapping containing the necessary attributes");
         return -1;
     }
 

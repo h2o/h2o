@@ -149,6 +149,17 @@ typedef struct st_h2o_timestamp_t {
     h2o_timestamp_string_t *str;
 } h2o_timestamp_t;
 
+typedef struct st_h2o_casper_conf_t {
+    /**
+     * capacity bits (0 to disable casper)
+     */
+    unsigned capacity_bits;
+    /**
+     * whether if all type of files should be tracked (or only the blocking assets)
+     */
+    int track_all_types;
+} h2o_casper_conf_t;
+
 typedef struct st_h2o_pathconf_t {
     /**
      * globalconf to which the pathconf belongs
@@ -220,9 +231,9 @@ struct st_h2o_hostconf_t {
          */
         int reprioritize_blocking_assets;
         /**
-         * size of the casper capacity (0 if disabled)
+         * casper settings
          */
-        unsigned casper_capacity_bits;
+        h2o_casper_conf_t casper;
     } http2;
 };
 
