@@ -196,6 +196,13 @@ Exit:
     return bufs;
 }
 
+static int is_blocking_asset(h2o_req_t *req)
+{
+    if (req->res.mime_attr == NULL)
+        h2o_req_fill_mime_attributes(req);
+    return req->res.mime_attr->priority == H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
+}
+
 static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     h2o_timestamp_t ts;
@@ -221,7 +228,7 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         }
         num_casper_entries_before_push = h2o_http2_casper_num_entries(conn->casper);
         /* update casper if necessary */
-        if (h2o_http2_is_blocking_asset(conn->super.ctx, stream->req.path.base, stream->req.path.len)) {
+        if (is_blocking_asset(&stream->req)) {
             ssize_t etag_index = h2o_find_header(&stream->req.headers, H2O_TOKEN_ETAG, -1);
             h2o_iovec_t etag = etag_index != -1 ? stream->req.headers.entries[etag_index].value : (h2o_iovec_t){};
             if (h2o_http2_casper_lookup(conn->casper, stream->req.path.base, stream->req.path.len, etag.base, etag.len, 1)) {
@@ -236,6 +243,9 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         /* for push, send the push promise */
         if (!stream->push.promise_sent)
             h2o_http2_stream_send_push_promise(conn, stream);
+        /* send ASAP if it is a blocking asset (even in case of Firefox we can't wait 1RTT for it to reprioritize the asset) */
+        if (is_blocking_asset(&stream->req))
+            h2o_http2_scheduler_rebind(&stream->_refs.scheduler, &conn->scheduler, 257, 0);
     } else {
         /* for pull, push things requested, as well as send the casper cookie if modified */
         size_t i;
@@ -246,6 +256,12 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
             h2o_iovec_t cookie = h2o_http2_casper_build_cookie(conn->casper, &stream->req.pool);
             h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, cookie.base, cookie.len);
         }
+        /* raise the priority of asset files that block rendering to highest if the user-agent is _not_ using dependency-based
+         * prioritization (e.g. that of Firefox)
+         */
+        if (conn->num_streams.open_priority == 0 && conn->super.ctx->globalconf->http2.reprioritize_blocking_assets &&
+            h2o_http2_scheduler_get_parent(&stream->_refs.scheduler) == &conn->scheduler && is_blocking_asset(&stream->req))
+            h2o_http2_scheduler_rebind(&stream->_refs.scheduler, &conn->scheduler, 257, 0);
     }
 
     /* send HEADERS, as well as start sending body */

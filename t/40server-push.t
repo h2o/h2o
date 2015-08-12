@@ -36,8 +36,11 @@ EOT
 sub doit {
     my ($proto, $opts, $port) = @_;
 
-    my $resp = `nghttp $opts -n --stat '$proto://127.0.0.1:$port/index.txt?resp:link=</assets/index.txt>\%3b\%20rel=preload'`;
-    like $resp, qr{\nresponseEnd\s.*\s/assets/index\.txt\n.*\s/index\.txt\?}is, 'should receive pushed content from file hanlder before the main response';
+    my $resp = `nghttp $opts -n --stat '$proto://127.0.0.1:$port/index.txt?resp:link=</assets/index.js>\%3b\%20rel=preload'`;
+    like $resp, qr{\nresponseEnd\s.*\s/assets/index\.js\n.*\s/index\.txt\?}is, 'should receive pushed blocking asset from file handler before the main response';
+
+    $resp = `nghttp $opts -n --stat '$proto://127.0.0.1:$port/index.txt?resp:link=</assets/index.txt>\%3b\%20rel=preload'`;
+    like $resp, qr{\nresponseEnd\s.*\s/index\.txt\?.*?\n.*\s/assets/index\.txt\n}is, 'should receive pushed non-blocking asset from file handler after the main response';
 
     $resp = `nghttp $opts -n --stat '$proto://127.0.0.1:$port/index.txt?resp:link=</index.txt.gz>\%3b\%20rel=preload'`;
     like $resp, qr{\nresponseEnd\s.*\s/index\.txt\?.*\s/index\.txt.gz\n}is, 'pushed content on upstream would arrive after the main content';
