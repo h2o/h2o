@@ -27,6 +27,7 @@
 
 struct st_core_config_vars_t {
     struct {
+        int reprioritize_blocking_assets;
         unsigned casper_capacity_bits;
     } http2;
 };
@@ -51,6 +52,7 @@ static int on_core_exit(h2o_configurator_t *_self, h2o_configurator_context_t *c
 
     if (ctx->hostconf != NULL && ctx->pathconf == NULL) {
         /* exitting from host-level configuration */
+        ctx->hostconf->http2.reprioritize_blocking_assets = self->vars->http2.reprioritize_blocking_assets;
         ctx->hostconf->http2.casper_capacity_bits = self->vars->http2.casper_capacity_bits;
     }
 
@@ -320,10 +322,13 @@ static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurat
 static int on_config_http2_reprioritize_blocking_assets(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
                                                         yoml_t *node)
 {
-    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
-    if (ret == -1)
+    struct st_core_configurator_t *self = (void *)cmd->configurator;
+    ssize_t on;
+
+    if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
         return -1;
-    ctx->globalconf->http2.reprioritize_blocking_assets = (int)ret;
+    self->vars->http2.reprioritize_blocking_assets = (int)on;
+
     return 0;
 }
 
@@ -586,7 +591,8 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_max_concurrent_requests_per_connection);
         h2o_configurator_define_command(&c->super, "http2-reprioritize-blocking-assets",
-                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
+                                            H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_reprioritize_blocking_assets);
         h2o_configurator_define_command(&c->super, "http2-casper", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST,
                                         on_config_http2_casper);

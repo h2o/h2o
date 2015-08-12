@@ -215,6 +215,11 @@ struct st_h2o_hostconf_t {
      */
     struct {
         /**
+         * whether if blocking assets being pulled should be given highest priority in case of clients that do not implement
+         * dependency-based prioritization
+         */
+        int reprioritize_blocking_assets;
+        /**
          * size of the casper capacity (0 if disabled)
          */
         unsigned casper_capacity_bits;
@@ -286,10 +291,6 @@ struct st_h2o_globalconf_t {
          * maximum nuber of streams (per connection) to be allowed in IDLE / CLOSED state (used for tracking dependencies).
          */
         size_t max_streams_for_priority;
-        /**
-         * a boolean value indicating whether or not to raise priority of blocking asset files
-         */
-        int reprioritize_blocking_assets;
         /**
          * list of callbacks
          */

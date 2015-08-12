@@ -259,7 +259,7 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         /* raise the priority of asset files that block rendering to highest if the user-agent is _not_ using dependency-based
          * prioritization (e.g. that of Firefox)
          */
-        if (conn->num_streams.open_priority == 0 && conn->super.ctx->globalconf->http2.reprioritize_blocking_assets &&
+        if (conn->num_streams.open_priority == 0 && stream->req.hostconf->http2.reprioritize_blocking_assets &&
             h2o_http2_scheduler_get_parent(&stream->_refs.scheduler) == &conn->scheduler && is_blocking_asset(&stream->req))
             h2o_http2_scheduler_rebind(&stream->_refs.scheduler, &conn->scheduler, 257, 0);
     }
