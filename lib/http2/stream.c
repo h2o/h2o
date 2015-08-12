@@ -279,6 +279,8 @@ CancelPush:
     if (stream->push.promise_sent) {
         h2o_http2_encode_rst_stream_frame(&conn->_write.buf, stream->stream_id, H2O_HTTP2_ERROR_INTERNAL);
         h2o_http2_conn_request_write(conn);
+    } else {
+        stream->req.was_cancelled = 1;
     }
     return -1;
 }

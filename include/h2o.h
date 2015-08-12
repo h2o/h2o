@@ -700,12 +700,16 @@ struct st_h2o_req_t {
      * whether or not the connection is persistent.
      * Applications should set this flag to zero in case the connection cannot be kept keep-alive (due to an error etc.)
      */
-    char http1_is_persistent;
+    char http1_is_persistent : 1;
     /**
      * whether if the response has been delegated (i.e. reproxied).
      * For delegated responses, redirect responses would be handled internally.
      */
-    char res_is_delegated;
+    char res_is_delegated : 1;
+    /**
+     * set when a server-initiated request (e.g. HTTP2 server push) was cancelled before being sent
+     */
+    char was_cancelled : 1;
 
     /**
      * absolute paths to be pushed (using HTTP/2 server push)
