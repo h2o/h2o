@@ -563,7 +563,11 @@ static int handle_priority_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
     }
 
     if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) != NULL) {
-        if ((ret = set_priority(conn, stream, &payload, 1, err_desc)) != 0)
+        /* ignore priority changes to pushed streams with weight=257, since that is where we are trying to be smarter than the web
+         * browsers
+         */
+        if (h2o_http2_scheduler_get_weight(&stream->_refs.scheduler) != 257 &&
+            (ret = set_priority(conn, stream, &payload, 1, err_desc)) != 0)
             return ret;
     } else {
         if ((ret = open_stream(conn, frame->stream_id, &stream, err_desc)) != 0)
