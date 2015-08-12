@@ -20,13 +20,33 @@
  * IN THE SOFTWARE.
  */
 #include <assert.h>
+#include <string.h>
 #include "khash.h"
 #include "h2o.h"
 
-KHASH_MAP_INIT_STR(exttable, h2o_mimemap_type_t *)
+KHASH_MAP_INIT_STR(extmap, h2o_mimemap_type_t *)
+
+static inline khint_t hash_mimemap_type(h2o_mimemap_type_t *mimetype)
+{
+    khint_t h = 0;
+    size_t i;
+    for (i = 0; i != mimetype->data.mimetype.len; ++i)
+        h = (h << 5) - h + (khint_t)mimetype->data.mimetype.base[i];
+    return h;
+}
+
+static inline int mimemap_type_equals(h2o_mimemap_type_t *x, h2o_mimemap_type_t *y)
+{
+    return h2o_memis(x->data.mimetype.base, x->data.mimetype.len, y->data.mimetype.base, y->data.mimetype.len);
+}
+
+KHASH_INIT(typeset, h2o_mimemap_type_t *, char, 0, hash_mimemap_type, mimemap_type_equals)
+
+h2o_mime_attributes_t h2o_mime_attributes_as_is = {};
 
 struct st_h2o_mimemap_t {
-    khash_t(exttable) * table;
+    khash_t(extmap) * extmap;
+    khash_t(typeset) * typeset; /* refs point to the entries in extmap */
     h2o_mimemap_type_t *default_type;
     size_t num_dynamic;
 };
@@ -46,11 +66,12 @@ static void on_dispose(void *_mimemap)
     const char *ext;
     h2o_mimemap_type_t *type;
 
-    kh_foreach(mimemap->table, ext, type, {
+    kh_destroy(typeset, mimemap->typeset);
+    kh_foreach(mimemap->extmap, ext, type, {
         h2o_mem_release_shared((char *)ext);
         h2o_mem_release_shared(type);
     });
-    kh_destroy(exttable, mimemap->table);
+    kh_destroy(extmap, mimemap->extmap);
     h2o_mem_release_shared(mimemap->default_type);
 }
 
@@ -76,26 +97,70 @@ static void on_link(h2o_mimemap_t *mimemap, h2o_mimemap_type_t *type)
     }
 }
 
-h2o_mimemap_type_t *h2o_mimemap_create_extension_type(const char *mime)
+static void rebuild_typeset(h2o_mimemap_t *mimemap)
 {
-    size_t mimelen = strlen(mime);
-    h2o_mimemap_type_t *type = h2o_mem_alloc_shared(NULL, sizeof(*type) + mimelen + 1, NULL);
+    kh_clear(typeset, mimemap->typeset);
+
+    const char *ext;
+    h2o_mimemap_type_t *mime;
+    kh_foreach(mimemap->extmap, ext, mime, {
+        if (mime->type == H2O_MIMEMAP_TYPE_MIMETYPE) {
+            khiter_t iter = kh_get(typeset, mimemap->typeset, mime);
+            if (iter == kh_end(mimemap->typeset)) {
+                int r;
+                kh_put(typeset, mimemap->typeset, mime, &r);
+            }
+        }
+    });
+}
+
+static h2o_mimemap_type_t *create_extension_type(const char *mime)
+{
+    h2o_mimemap_type_t *type = h2o_mem_alloc_shared(NULL, sizeof(*type) + strlen(mime) + 1, NULL);
+    size_t i, type_end_at;
+
+    memset(type, 0, sizeof(*type));
 
     type->type = H2O_MIMEMAP_TYPE_MIMETYPE;
+
+    /* normalize-copy type->data.mimetype */
     type->data.mimetype.base = (char *)type + sizeof(*type);
-    type->data.mimetype.len = mimelen;
-    memcpy(type->data.mimetype.base, mime, mimelen + 1);
+    for (i = 0; mime[i] != '\0' && mime[i] != ';'; ++i)
+        type->data.mimetype.base[i] = h2o_tolower(mime[i]);
+    type_end_at = i;
+    for (; mime[i] != '\0'; ++i)
+        type->data.mimetype.base[i] = mime[i];
+    type->data.mimetype.base[i] = '\0';
+    type->data.mimetype.len = i;
+
+    /* make a rough guess on whether the type is compressible or not */
+    if (strncmp(type->data.mimetype.base, "text/", 5) == 0 ||
+        h2o_strstr(type->data.mimetype.base, type_end_at, H2O_STRLIT("+xml")) != SIZE_MAX)
+        type->data.attr.is_compressible = 1;
+
+    /* make a rough guess on whether the type is blocking asset or not */
+    if (h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("text/css")) ||
+        h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("application/ecmascript")) ||
+        h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("application/javascript")) ||
+        h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("text/ecmascript")) ||
+        h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("text/javascript")))
+        type->data.attr.priority = H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
 
     return type;
 }
 
-h2o_mimemap_type_t *h2o_mimemap_create_dynamic_type(h2o_globalconf_t *globalconf)
+static void dispose_dynamic_type(h2o_mimemap_type_t *type)
 {
-    h2o_mimemap_type_t *type = h2o_mem_alloc_shared(NULL, sizeof(*type), NULL);
+    h2o_config_dispose_pathconf(&type->data.dynamic.pathconf);
+}
+
+static h2o_mimemap_type_t *create_dynamic_type(h2o_globalconf_t *globalconf)
+{
+    h2o_mimemap_type_t *type = h2o_mem_alloc_shared(NULL, sizeof(*type), (void *)dispose_dynamic_type);
 
     type->type = H2O_MIMEMAP_TYPE_DYNAMIC;
     memset(&type->data.dynamic, 0, sizeof(type->data.dynamic));
-    h2o_config_init_pathconf(&type->data.dynamic.pathconf, globalconf, (void *)h2o_config_dispose_pathconf);
+    h2o_config_init_pathconf(&type->data.dynamic.pathconf, globalconf, NULL, NULL);
 
     return type;
 }
@@ -104,8 +169,9 @@ h2o_mimemap_t *h2o_mimemap_create()
 {
     h2o_mimemap_t *mimemap = h2o_mem_alloc_shared(NULL, sizeof(*mimemap), on_dispose);
 
-    mimemap->table = kh_init(exttable);
-    mimemap->default_type = h2o_mimemap_create_extension_type("application/octet-stream");
+    mimemap->extmap = kh_init(extmap);
+    mimemap->typeset = kh_init(typeset);
+    mimemap->default_type = create_extension_type("application/octet-stream");
     mimemap->num_dynamic = 0;
     on_link(mimemap, mimemap->default_type);
 
@@ -117,8 +183,9 @@ h2o_mimemap_t *h2o_mimemap_create()
             NULL};
         const char **p;
         for (p = default_types; *p != NULL; p += 2)
-            h2o_mimemap_set_type(mimemap, p[0], h2o_mimemap_create_extension_type(p[1]), 0);
+            h2o_mimemap_define_mimetype(mimemap, p[0], p[1]);
     }
+    rebuild_typeset(mimemap);
 
     return mimemap;
 }
@@ -129,11 +196,12 @@ h2o_mimemap_t *h2o_mimemap_clone(h2o_mimemap_t *src)
     const char *ext;
     h2o_mimemap_type_t *type;
 
-    dst->table = kh_init(exttable);
-    kh_foreach(src->table, ext, type, {
+    dst->extmap = kh_init(extmap);
+    dst->typeset = kh_init(typeset);
+    kh_foreach(src->extmap, ext, type, {
         int r;
-        khiter_t iter = kh_put(exttable, dst->table, ext, &r);
-        kh_val(dst->table, iter) = type;
+        khiter_t iter = kh_put(extmap, dst->extmap, ext, &r);
+        kh_val(dst->extmap, iter) = type;
         h2o_mem_addref_shared((char *)ext);
         h2o_mem_addref_shared(type);
         on_link(dst, type);
@@ -141,6 +209,7 @@ h2o_mimemap_t *h2o_mimemap_clone(h2o_mimemap_t *src)
     dst->default_type = src->default_type;
     h2o_mem_addref_shared(dst->default_type);
     on_link(dst, dst->default_type);
+    rebuild_typeset(dst);
 
     return dst;
 }
@@ -150,7 +219,7 @@ void h2o_mimemap_on_context_init(h2o_mimemap_t *mimemap, h2o_context_t *ctx)
     const char *ext;
     h2o_mimemap_type_t *type;
 
-    kh_foreach(mimemap->table, ext, type, {
+    kh_foreach(mimemap->extmap, ext, type, {
         switch (type->type) {
         case H2O_MIMEMAP_TYPE_DYNAMIC:
             h2o_context_init_pathconf_context(ctx, &type->data.dynamic.pathconf);
@@ -166,7 +235,7 @@ void h2o_mimemap_on_context_dispose(h2o_mimemap_t *mimemap, h2o_context_t *ctx)
     const char *ext;
     h2o_mimemap_type_t *type;
 
-    kh_foreach(mimemap->table, ext, type, {
+    kh_foreach(mimemap->extmap, ext, type, {
         switch (type->type) {
         case H2O_MIMEMAP_TYPE_DYNAMIC:
             h2o_context_dispose_pathconf_context(ctx, &type->data.dynamic.pathconf);
@@ -182,45 +251,83 @@ int h2o_mimemap_has_dynamic_type(h2o_mimemap_t *mimemap)
     return mimemap->num_dynamic != 0;
 }
 
-void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, h2o_mimemap_type_t *type, int incref)
+void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, const char *mime)
 {
+    h2o_mimemap_type_t *new_type;
+
+    /* obtain or create new type */
+    if ((new_type = h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(mime, strlen(mime)))) != NULL) {
+        h2o_mem_addref_shared(new_type);
+    } else {
+        new_type = create_extension_type(mime);
+    }
+
+    /* unlink the old one */
     on_unlink(mimemap, mimemap->default_type);
     h2o_mem_release_shared(mimemap->default_type);
 
-    mimemap->default_type = type;
-    on_link(mimemap, type);
-    if (incref)
-        h2o_mem_addref_shared(type);
+    /* update */
+    mimemap->default_type = new_type;
+    on_link(mimemap, new_type);
+    rebuild_typeset(mimemap);
 }
 
-void h2o_mimemap_set_type(h2o_mimemap_t *mimemap, const char *ext, h2o_mimemap_type_t *type, int incref)
+static void set_type(h2o_mimemap_t *mimemap, const char *ext, h2o_mimemap_type_t *type)
 {
-    khiter_t iter = kh_get(exttable, mimemap->table, ext);
-    if (iter != kh_end(mimemap->table)) {
-        h2o_mimemap_type_t *oldtype = kh_val(mimemap->table, iter);
+    /* obtain key, and remove the old value */
+    khiter_t iter = kh_get(extmap, mimemap->extmap, ext);
+    if (iter != kh_end(mimemap->extmap)) {
+        h2o_mimemap_type_t *oldtype = kh_val(mimemap->extmap, iter);
         on_unlink(mimemap, oldtype);
         h2o_mem_release_shared(oldtype);
     } else {
         int ret;
-        iter = kh_put(exttable, mimemap->table, dupref(ext).base, &ret);
-        assert(iter != kh_end(mimemap->table));
+        iter = kh_put(extmap, mimemap->extmap, dupref(ext).base, &ret);
+        assert(iter != kh_end(mimemap->extmap));
     }
-    kh_val(mimemap->table, iter) = type;
+
+    /* update */
+    h2o_mem_addref_shared(type);
+    kh_val(mimemap->extmap, iter) = type;
     on_link(mimemap, type);
-    if (incref)
-        h2o_mem_addref_shared(type);
+    rebuild_typeset(mimemap);
+}
+
+void h2o_mimemap_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const char *mime)
+{
+    h2o_mimemap_type_t *new_type;
+
+    if ((new_type = h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(mime, strlen(mime)))) != NULL) {
+        h2o_mem_addref_shared(new_type);
+    } else {
+        new_type = create_extension_type(mime);
+    }
+    set_type(mimemap, ext, new_type);
+    h2o_mem_release_shared(new_type);
+}
+
+h2o_mimemap_type_t *h2o_mimemap_define_dynamic(h2o_mimemap_t *mimemap, const char **exts, h2o_globalconf_t *globalconf)
+{
+    h2o_mimemap_type_t *new_type = create_dynamic_type(globalconf);
+    size_t i;
+
+    for (i = 0; exts[i] != NULL; ++i)
+        set_type(mimemap, exts[i], new_type);
+    h2o_mem_release_shared(new_type);
+    return new_type;
 }
 
 void h2o_mimemap_remove_type(h2o_mimemap_t *mimemap, const char *ext)
 {
-    khiter_t iter = kh_get(exttable, mimemap->table, ext);
-    if (iter != kh_end(mimemap->table)) {
-        const char *key = kh_key(mimemap->table, iter);
-        h2o_mimemap_type_t *type = kh_val(mimemap->table, iter);
+    khiter_t iter = kh_get(extmap, mimemap->extmap, ext);
+    if (iter != kh_end(mimemap->extmap)) {
+        const char *key = kh_key(mimemap->extmap, iter);
+        h2o_mimemap_type_t *type = kh_val(mimemap->extmap, iter);
         on_unlink(mimemap, type);
         h2o_mem_release_shared(type);
-        kh_del(exttable, mimemap->table, iter);
+        kh_del(extmap, mimemap->extmap, iter);
         h2o_mem_release_shared((char *)key);
+        rebuild_typeset(mimemap);
     }
 }
 
@@ -229,12 +336,39 @@ h2o_mimemap_type_t *h2o_mimemap_get_default_type(h2o_mimemap_t *mimemap)
     return mimemap->default_type;
 }
 
-h2o_mimemap_type_t *h2o_mimemap_get_type(h2o_mimemap_t *mimemap, const char *ext)
+h2o_mimemap_type_t *h2o_mimemap_get_type_by_extension(h2o_mimemap_t *mimemap, const char *ext)
 {
     if (ext != NULL) {
-        khiter_t iter = kh_get(exttable, mimemap->table, ext);
-        if (iter != kh_end(mimemap->table))
-            return kh_val(mimemap->table, iter);
+        khiter_t iter = kh_get(extmap, mimemap->extmap, ext);
+        if (iter != kh_end(mimemap->extmap))
+            return kh_val(mimemap->extmap, iter);
     }
     return mimemap->default_type;
+}
+
+h2o_mimemap_type_t *h2o_mimemap_get_type_by_mimetype(h2o_mimemap_t *mimemap, h2o_iovec_t mime)
+{
+    h2o_mimemap_type_t key = {H2O_MIMEMAP_TYPE_MIMETYPE};
+    khiter_t iter;
+
+    /* exact match */
+    key.data.mimetype = mime;
+    if ((iter = kh_get(typeset, mimemap->typeset, &key)) != kh_end(mimemap->typeset))
+        return kh_key(mimemap->typeset, iter);
+
+    /* determine the end of the type */
+    size_t type_end_at = 0;
+    for (; type_end_at != mime.len; ++type_end_at)
+        if (mime.base[type_end_at] == ';' || mime.base[type_end_at] == ' ')
+            goto HasAttributes;
+    /* no attributes */
+    return NULL;
+
+HasAttributes:
+    /* perform search without attributes */
+    key.data.mimetype.len = type_end_at;
+    if ((iter = kh_get(typeset, mimemap->typeset, &key)) != kh_end(mimemap->typeset))
+        return kh_key(mimemap->typeset, iter);
+
+    return NULL;
 }

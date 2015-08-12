@@ -111,4 +111,10 @@ is $resp, "127.0.0.1:$port", "H2O::Request#authority test";
 EOT
 is $resp, "127.0.0.1", "H2O::Request#hostname test";
 
+($resp, $port) = fetch(<< 'EOT');
+        file.dir: t/50mruby/
+        mruby.handler_path: t/50mruby/remote_ip.rb
+EOT
+is $resp, "127.0.0.1", "H2O::Connection#remote_ip test";
+
 done_testing();

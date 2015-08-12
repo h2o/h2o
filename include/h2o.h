@@ -170,6 +170,10 @@ typedef struct st_h2o_pathconf_t {
      * list of loggers (h2o_logger_t)
      */
     H2O_VECTOR(h2o_logger_t *) loggers;
+    /**
+     * mimemap
+     */
+    h2o_mimemap_t *mimemap;
 } h2o_pathconf_t;
 
 struct st_h2o_hostconf_t {
@@ -202,6 +206,10 @@ struct st_h2o_hostconf_t {
      * catch-all path configuration
      */
     h2o_pathconf_t fallback_path;
+    /**
+     * mimemap
+     */
+    h2o_mimemap_t *mimemap;
 };
 
 typedef struct st_h2o_protocol_callbacks_t {
@@ -286,13 +294,40 @@ struct st_h2o_globalconf_t {
         uint64_t io_timeout;
     } proxy;
 
+    /**
+     * mimemap
+     */
+    h2o_mimemap_t *mimemap;
+
     size_t _num_config_slots;
 };
 
+/**
+ * holds various attributes related to the mime-type
+ */
+typedef struct st_h2o_mime_attributes_t {
+    /**
+     * whether if the content can be compressed by using gzip
+     */
+    char is_compressible;
+    /**
+     * how the resource should be prioritized
+     */
+    enum { H2O_MIME_ATTRIBUTE_PRIORITY_NORMAL = 0, H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST } priority;
+} h2o_mime_attributes_t;
+
+extern h2o_mime_attributes_t h2o_mime_attributes_as_is;
+
+/**
+ * represents either a mime-type (and associated info), or contains pathinfo in case of a dynamic type (e.g. .php files)
+ */
 typedef struct st_h2o_mimemap_type_t {
     enum { H2O_MIMEMAP_TYPE_MIMETYPE = 0, H2O_MIMEMAP_TYPE_DYNAMIC = 1 } type;
     union {
-        h2o_iovec_t mimetype;
+        struct {
+            h2o_iovec_t mimetype;
+            h2o_mime_attributes_t attr;
+        };
         struct {
             h2o_pathconf_t pathconf;
         } dynamic;
@@ -469,6 +504,10 @@ typedef struct st_h2o_res_t {
      * list of response headers
      */
     h2o_headers_t headers;
+    /**
+     * mime-related attributes (may be NULL)
+     */
+    h2o_mime_attributes_t *mime_attr;
 } h2o_res_t;
 
 /**
@@ -824,14 +863,19 @@ void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, h2o_iovec_t *buf
  * called by the connection layer to request additional data to the generator
  */
 static void h2o_proceed_response(h2o_req_t *req);
+/**
+ * if NULL, supplements h2o_req_t::mime_attr
+ */
+void h2o_req_fill_mime_attributes(h2o_req_t *req);
 
 /* config */
 
 /**
  * initializes pathconf
  * @param path path to serve, or NULL if fallback or extension-level
+ * @param mimemap mimemap to use, or NULL if fallback or extension-level
  */
-void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, const char *path);
+void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, const char *path, h2o_mimemap_t *mimemap);
 /**
  *
  */
@@ -959,14 +1003,6 @@ void h2o__proxy_process_request(h2o_req_t *req);
 /* mime mapper */
 
 /**
- *
- */
-h2o_mimemap_type_t *h2o_mimemap_create_extension_type(const char *ext);
-/**
- *
- */
-h2o_mimemap_type_t *h2o_mimemap_create_dynamic_type(h2o_globalconf_t *globalconf);
-/**
  * initializes the mimemap (the returned chunk is refcounted)
  */
 h2o_mimemap_t *h2o_mimemap_create(void);
@@ -989,11 +1025,15 @@ int h2o_mimemap_has_dynamic_type(h2o_mimemap_t *mimemap);
 /**
  * sets the default mime-type
  */
-void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, h2o_mimemap_type_t *type, int incref);
+void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, const char *mime);
 /**
  * adds a mime-type mapping
  */
-void h2o_mimemap_set_type(h2o_mimemap_t *mimemap, const char *ext, h2o_mimemap_type_t *type, int incref);
+void h2o_mimemap_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const char *mime);
+/**
+ * adds a mime-type mapping
+ */
+h2o_mimemap_type_t *h2o_mimemap_define_dynamic(h2o_mimemap_t *mimemap, const char **exts, h2o_globalconf_t *globalconf);
 /**
  * removes a mime-type mapping
  */
@@ -1005,7 +1045,11 @@ h2o_mimemap_type_t *h2o_mimemap_get_default_type(h2o_mimemap_t *mimemap);
 /**
  * returns the mime-type corresponding to given extension
  */
-h2o_mimemap_type_t *h2o_mimemap_get_type(h2o_mimemap_t *mimemap, const char *ext);
+h2o_mimemap_type_t *h2o_mimemap_get_type_by_extension(h2o_mimemap_t *mimemap, const char *ext);
+/**
+ * returns the mime-type corresponding to given mimetype
+ */
+h2o_mimemap_type_t *h2o_mimemap_get_type_by_mimetype(h2o_mimemap_t *mimemap, h2o_iovec_t mime);
 
 /* various handlers */
 

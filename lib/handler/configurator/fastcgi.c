@@ -146,7 +146,7 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
     return 0;
 }
 
-static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const char *dirname, const char **argv,
+static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const char *dirname, char *const *argv,
                             struct sockaddr_un *sa)
 {
     int listen_fd, pipe_fds[2] = {-1, -1};
@@ -216,9 +216,9 @@ void spawnproc_on_dispose(h2o_fastcgi_handler_t *handler, void *data)
 static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct fastcgi_configurator_t *self = (void *)cmd->configurator;
-    const char *spawn_user = NULL, *spawn_cmd;
+    char *spawn_user = NULL, *spawn_cmd;
     char dirname[] = "/tmp/h2o.fcgisock.XXXXXX";
-    const char *argv[10];
+    char *argv[10];
     int spawner_fd;
     struct sockaddr_un sa = {};
     h2o_fastcgi_config_vars_t config_vars;
