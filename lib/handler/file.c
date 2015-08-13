@@ -268,6 +268,18 @@ Opened:
     return self;
 }
 
+static void add_headers_unconditional(struct st_h2o_sendfile_generator_t *self, h2o_req_t *req)
+{
+    /* RFC 7232 4.1: The server generating a 304 response MUST generate any of the following header fields that would have been sent
+     * in a 200 (OK) response to the same request: Cache-Control, Content-Location, Date, ETag, Expires, and Vary (snip) a sender
+     * SHOULD NOT generate representation metadata other than the above listed fields unless said metadata exists for the purpose of
+     * guiding cache updates. */
+    if (self->etag_len != 0)
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ETAG, self->etag_buf, self->etag_len);
+    if (self->send_vary)
+        h2o_add_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
+}
+
 static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *req, int status, const char *reason,
                          h2o_iovec_t mime_type, h2o_mime_attributes_t *mime_attr, int is_get)
 {
@@ -286,10 +298,7 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     }
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, mime_type.base, mime_type.len);
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LAST_MODIFIED, self->last_modified.buf, H2O_TIMESTR_RFC1123_LEN);
-    if (self->etag_len != 0)
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ETAG, self->etag_buf, self->etag_len);
-    if (self->send_vary)
-        h2o_add_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
+    add_headers_unconditional(self, req);
     if (self->is_gzip)
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_ENCODING, H2O_STRLIT("gzip"));
     if (self->ranged.range_count == 0)
@@ -733,6 +742,7 @@ Opened:
 NotModified:
     req->res.status = 304;
     req->res.reason = "Not Modified";
+    add_headers_unconditional(generator, req);
     h2o_send_inline(req, NULL, 0);
 Close:
     do_close(&generator->super, req);
