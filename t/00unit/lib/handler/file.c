@@ -292,6 +292,7 @@ static void test_if_modified_since(void)
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 304);
         ok(conn->body->size == 0);
+        ok(h2o_find_header(&conn->req.res.headers, H2O_TOKEN_ETAG, -1) != -1);
         h2o_loopback_destroy(conn);
     }
 
@@ -315,6 +316,7 @@ static void test_if_modified_since(void)
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 304);
         ok(conn->body->size == 0);
+        ok(h2o_find_header(&conn->req.res.headers, H2O_TOKEN_ETAG, -1) != -1);
         h2o_loopback_destroy(conn);
     }
 }
