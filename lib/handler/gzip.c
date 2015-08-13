@@ -126,6 +126,7 @@ static void stop_gzip(h2o_ostream_t *_self, h2o_req_t *req)
 static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
 {
     gzip_encoder_t *encoder;
+    ssize_t i;
 
     if (req->version < 0x101)
         goto Next;
@@ -140,20 +141,30 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     /* 100 is a rough estimate */
     if (req->res.content_length <= 100)
         goto Next;
-    { /* skip if no accept-encoding is set */
-        ssize_t index = h2o_find_header(&req->headers, H2O_TOKEN_ACCEPT_ENCODING, -1);
-        if (index == -1)
+    /* skip if no accept-encoding is set */
+    if ((i = h2o_find_header(&req->headers, H2O_TOKEN_ACCEPT_ENCODING, -1)) == -1)
             goto Next;
-        if (!h2o_contains_token(req->headers.entries[index].value.base, req->headers.entries[index].value.len, H2O_STRLIT("gzip"),
-                                ','))
-            goto Next;
+    if (!h2o_contains_token(req->headers.entries[i].value.base, req->headers.entries[i].value.len, H2O_STRLIT("gzip"),
+                            ','))
+        goto Next;
+
+    /* skip if content-encoding header is being set (as well as obtain the location of accept-ranges */
+    size_t content_encoding_header_index = -1, accept_ranges_header_index = -1;
+    for (i = 0; i != req->res.headers.size; ++i) {
+        if (req->res.headers.entries[i].name == &H2O_TOKEN_CONTENT_ENCODING->buf)
+            content_encoding_header_index = i;
+        else if (req->res.headers.entries[i].name == &H2O_TOKEN_ACCEPT_RANGES->buf)
+            accept_ranges_header_index = i;
+        else
+            continue;
     }
-    /* skip if content-encoding header is being set */
-    if (h2o_find_header(&req->res.headers, H2O_TOKEN_CONTENT_ENCODING, -1) != -1)
+    if (content_encoding_header_index != -1)
         goto Next;
 
     /* adjust the response headers */
     req->res.content_length = SIZE_MAX;
+    if (accept_ranges_header_index != -1)
+        h2o_delete_header(&req->res.headers, accept_ranges_header_index);
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_ENCODING, H2O_STRLIT("gzip"));
     h2o_add_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
 
