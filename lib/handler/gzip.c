@@ -163,10 +163,13 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
 
     /* adjust the response headers */
     req->res.content_length = SIZE_MAX;
-    if (accept_ranges_header_index != -1)
-        h2o_delete_header(&req->res.headers, accept_ranges_header_index);
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_ENCODING, H2O_STRLIT("gzip"));
     h2o_add_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
+    if (accept_ranges_header_index != -1) {
+        req->res.headers.entries[accept_ranges_header_index].value = h2o_iovec_init(H2O_STRLIT("none"));
+    } else {
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ACCEPT_RANGES, H2O_STRLIT("none"));
+    }
 
     /* setup filter */
     encoder = (void *)h2o_add_ostream(req, sizeof(gzip_encoder_t), slot);
