@@ -277,58 +277,6 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     return 0;
 }
 
-/**
- * extracts path to be pushed from link header (or returns {NULL,0} if none)
- */
-static h2o_iovec_t extract_pushpath_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
-                                                     const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
-                                                     h2o_iovec_t *base_path)
-{
-    h2o_iovec_t url;
-    h2o_url_t parsed, resolved;
-
-    { /* extract URL value from: Link: </pushed.css>; rel=preload */
-        h2o_iovec_t iter = h2o_iovec_init(value, value_len), token_value;
-        const char *token;
-        size_t token_len;
-        /* first element should be <URL> */
-        if ((token = h2o_next_token(&iter, ';', &token_len, NULL)) == NULL)
-            goto None;
-        if (!(token_len >= 2 && token[0] == '<' && token[token_len - 1] == '>'))
-            goto None;
-        url = h2o_iovec_init(token + 1, token_len - 2);
-        /* find rel=preload */
-        while ((token = h2o_next_token(&iter, ';', &token_len, &token_value)) != NULL) {
-            if (h2o_lcstris(token, token_len, H2O_STRLIT("rel")) &&
-                h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload")))
-                break;
-        }
-        if (token == NULL)
-            goto None;
-    }
-
-    /* check the authority, and extract absolute path */
-    if (h2o_url_parse_relative(url.base, url.len, &parsed) != 0)
-        goto None;
-
-    /* return the URL found in Link header, if it is an absolute path-only URL */
-    if (parsed.scheme == NULL && parsed.authority.base == NULL && url.len != 0 && url.base[0] == '/')
-        return url;
-
-    /* check scheme and authority if given URL contains either of the two */
-    h2o_url_t base = {base_scheme, *base_authority, {}, *base_path, 65535};
-    h2o_url_resolve(pool, &base, &parsed, &resolved);
-    if (base.scheme != resolved.scheme)
-        goto None;
-    if (parsed.authority.base != NULL &&
-        !h2o_lcstris(base.authority.base, base.authority.len, resolved.authority.base, resolved.authority.len))
-        goto None;
-    return resolved.path;
-
-None:
-    return (h2o_iovec_t){};
-}
-
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
                                        h2o_iovec_t msg, struct phr_header *headers, size_t num_headers)
 {
@@ -377,8 +325,8 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 }
                 goto AddHeaderDuped;
             } else if (token == H2O_TOKEN_LINK && req->version >= 0x200 && !req->res_is_delegated) {
-                h2o_iovec_t path = extract_pushpath_from_link_header(&req->pool, headers[i].value, headers[i].value_len,
-                                                                     req->input.scheme, &req->input.authority, &req->path);
+                h2o_iovec_t path = h2o_extract_push_path_from_link_header(&req->pool, headers[i].value, headers[i].value_len,
+                                                                          req->input.scheme, &req->input.authority, &req->path);
                 if (path.base != NULL) {
                     h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->http2_push_paths, sizeof(req->http2_push_paths.entries[0]),
                                        req->http2_push_paths.size + 1);

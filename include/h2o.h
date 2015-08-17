@@ -809,6 +809,12 @@ void h2o_accept_setup_async_ssl_resumption(h2o_memcached_context_t *ctx, unsigne
  * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")
  */
 size_t h2o_stringify_protocol_version(char *dst, int version);
+/**
+ * extracts path to be pushed from `Link: rel=prelead` header (or returns {NULL,0} if none)
+ */
+h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
+                                                   const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
+                                                   h2o_iovec_t *base_path);
 
 /* request */
 
