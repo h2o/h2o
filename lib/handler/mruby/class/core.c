@@ -44,7 +44,7 @@ static mrb_value h2o_mrb_return(mrb_state *mrb, mrb_value self)
         if (reason == NULL || body == NULL)
             mrb_raise(mrb, E_ARGUMENT_ERROR, "need both reason and body with status code");
         /* send response using h2o_send_error */
-        h2o_send_error(mruby_ctx->req, status, reason, body, 0);
+        h2o_send_error(mruby_ctx->req, status, reason, body, H2O_SEND_ERROR_KEEP_HEADERS);
         mruby_ctx->is_last = 1;
     }
 
