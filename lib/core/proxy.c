@@ -280,7 +280,9 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
 /**
  * extracts path to be pushed from link header (or returns {NULL,0} if none)
  */
-static h2o_iovec_t extract_pushpath_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len, h2o_url_t *base)
+static h2o_iovec_t extract_pushpath_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
+                                                     const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
+                                                     h2o_iovec_t *base_path)
 {
     h2o_iovec_t url;
     h2o_url_t parsed, resolved;
@@ -308,13 +310,21 @@ static h2o_iovec_t extract_pushpath_from_link_header(h2o_mem_pool_t *pool, const
     /* check the authority, and extract absolute path */
     if (h2o_url_parse_relative(url.base, url.len, &parsed) != 0)
         goto None;
-    h2o_url_resolve(pool, base, &parsed, &resolved);
-    if (!(base->scheme == resolved.scheme &&
-          (parsed.authority.base == NULL ||
-           h2o_lcstris(base->authority.base, base->authority.len, resolved.authority.base, resolved.authority.len))))
-        goto None;
 
+    /* return the URL found in Link header, if it is an absolute path-only URL */
+    if (parsed.scheme == NULL && parsed.authority.base == NULL && url.len != 0 && url.base[0] == '/')
+        return url;
+
+    /* check scheme and authority if given URL contains either of the two */
+    h2o_url_t base = {base_scheme, *base_authority, {}, *base_path, 65535};
+    h2o_url_resolve(pool, &base, &parsed, &resolved);
+    if (base.scheme != resolved.scheme)
+        goto None;
+    if (parsed.authority.base != NULL &&
+        !h2o_lcstris(base.authority.base, base.authority.len, resolved.authority.base, resolved.authority.len))
+        goto None;
     return resolved.path;
+
 None:
     return (h2o_iovec_t){};
 }
@@ -325,7 +335,6 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
     size_t i;
-    h2o_url_t url_parsed = {};
 
     if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
         self->client = NULL;
@@ -368,26 +377,12 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 }
                 goto AddHeaderDuped;
             } else if (token == H2O_TOKEN_LINK && req->version >= 0x200 && !req->res_is_delegated) {
-                if (url_parsed.scheme == NULL) {
-                    if (h2o_url_parse_hostport(req->input.authority.base, req->input.authority.len, &url_parsed.host,
-                                               &url_parsed._port) != NULL) {
-                        url_parsed = (h2o_url_t){
-                            req->input.scheme,    /* scheme */
-                            req->input.authority, /* authority */
-                            {},                   /* host */
-                            req->path_normalized, /* path */
-                            65535                 /* port */
-                        };
-                    }
-                }
-                if (url_parsed.scheme != NULL) {
-                    h2o_iovec_t path =
-                        extract_pushpath_from_link_header(&req->pool, headers[i].value, headers[i].value_len, &url_parsed);
-                    if (path.base != NULL) {
-                        h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->http2_push_paths,
-                                           sizeof(req->http2_push_paths.entries[0]), req->http2_push_paths.size + 1);
-                        req->http2_push_paths.entries[req->http2_push_paths.size++] = path;
-                    }
+                h2o_iovec_t path = extract_pushpath_from_link_header(&req->pool, headers[i].value, headers[i].value_len,
+                                                                     req->input.scheme, &req->input.authority, &req->path);
+                if (path.base != NULL) {
+                    h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->http2_push_paths, sizeof(req->http2_push_paths.entries[0]),
+                                       req->http2_push_paths.size + 1);
+                    req->http2_push_paths.entries[req->http2_push_paths.size++] = path;
                 }
             }
         /* default behaviour, transfer the header downstream */
