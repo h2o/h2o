@@ -1,5 +1,8 @@
 Revision history for H2O.
 
+1.4.4 2015-08-17 21:45:00+0000
+	- [misc] fix install error of libh2o-evloop in case development files of OpenSSL cannot be found #443 (Kazuho Oku)
+
 1.4.3 2015-08-17 01:25:00+0000
 	- [fastcgi] change ownership of domain socket when `fastcgi.spawn` command is used #433 (Masaki TAGAWA)
 	- [fastcgi] kill fastcgi processes spawned by `fastcgi.spawn` command when standalone server receives SIGINT #444 (Kazuho Oku)
