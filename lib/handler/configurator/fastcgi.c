@@ -248,6 +248,7 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
             return -1;
         }
         spawn_cmd = t->data.scalar;
+        spawn_user = ctx->globalconf->user;
         if ((t = yoml_get(node, "user")) != NULL) {
             if (t->type != YOML_TYPE_SCALAR) {
                 h2o_configurator_errprintf(cmd, node, "attribute `user` must be scalar");
