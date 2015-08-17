@@ -1016,6 +1016,10 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
  */
 void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str, size_t url_len);
 /**
+ * registers push path (if necessary) by parsing a Link header
+ */
+void h2o_register_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len);
+/**
  * logs an error
  */
 void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...) __attribute__((format(printf, 3, 4)));

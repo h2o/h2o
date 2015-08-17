@@ -324,14 +324,8 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                         goto AddHeader;
                 }
                 goto AddHeaderDuped;
-            } else if (token == H2O_TOKEN_LINK && req->version >= 0x200 && !req->res_is_delegated) {
-                h2o_iovec_t path = h2o_extract_push_path_from_link_header(&req->pool, headers[i].value, headers[i].value_len,
-                                                                          req->input.scheme, &req->input.authority, &req->path);
-                if (path.base != NULL) {
-                    h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->http2_push_paths, sizeof(req->http2_push_paths.entries[0]),
-                                       req->http2_push_paths.size + 1);
-                    req->http2_push_paths.entries[req->http2_push_paths.size++] = path;
-                }
+            } else if (token == H2O_TOKEN_LINK) {
+                h2o_register_push_path_in_link_header(req, headers[i].value, headers[i].value_len);
             }
         /* default behaviour, transfer the header downstream */
         AddHeaderDuped:
