@@ -46,9 +46,11 @@ if ($pid == 0) {
     die "failed to exec $ARGV[0]:$!";
 }
 
+$SIG{INT} = sub {};
+
 while (1) {
     my $r = sysread $wait_fh, my $buf, 1;
-    last if $r == 0 || ($r == -1 && $! != EINTR);
+    last if !defined($r) || $r == 0 || ($r == -1 && $! != EINTR);
 }
 
 kill 'TERM', $pid;
