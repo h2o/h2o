@@ -511,6 +511,8 @@ static int fill_headers(h2o_req_t *req, struct phr_header *headers, size_t num_h
                  */
                 h2o_add_header(&req->pool, &req->res.headers, token,
                                h2o_strdup(&req->pool, headers[i].value, headers[i].value_len).base, headers[i].value_len);
+                if (token == H2O_TOKEN_LINK)
+                    h2o_register_push_path_in_link_header(req, headers[i].value, headers[i].value_len);
             }
         } else if (h2o_memis(headers[i].name, headers[i].name_len, H2O_STRLIT("status"))) {
             h2o_iovec_t value = h2o_iovec_init(headers[i].value, headers[i].value_len);
