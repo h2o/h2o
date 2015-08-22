@@ -94,9 +94,14 @@ my $resp = run_openssl(
 );
 print STDERR $resp;
 
+# OpenSSL 1.0.2 still returns exit code 0 even if ocsp responder
+# returned error status (e.g., trylater(3))
+index($resp, "Responder Error:") == -1 or die "responder returned error\n";
+
 # verify the response
 print STDERR "verifying the response signature\n";
 my $success;
+my $verifyout;
 for my $args (
     # try from exotic options
     "-VAfile $issuer_fn",                               # for comodo
@@ -104,13 +109,22 @@ for my $args (
     "-CAfile $issuer_fn",                               # for OpenSSL <= 1.0.1
 ) {
     if (system("$openssl_cmd ocsp -respin $tempdir/resp.der $args > $tempdir/verify.out 2>&1") == 0) {
+        # OpenSSL <= 1.0.1, openssl ocsp still returns exit code 0
+        # even if verification was failed.  So check the error message
+        # in stderr output.
+        $verifyout = read_file("$tempdir/verify.out");
+        if (index($verifyout, "Response Verify Failure") != -1) {
+            print STDERR $verifyout;
+            print STDERR "try next verify argument options\n";
+            next;
+        }
         print STDERR "verify OK (used: $args)\n";
         $success = 1;
         last;
     }
 }
 if (! $success) {
-    print STDERR read_file("$tempdir/verify.out");
+    print STDERR $verifyout;
     tempfail("failed to verify the response\n");
 }
 
