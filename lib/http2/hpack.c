@@ -606,6 +606,45 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
     return dst;
 }
 
+static uint8_t *encode_method(h2o_hpack_header_table_t *header_table, uint8_t *dst, h2o_iovec_t value)
+{
+    if (h2o_memis(value.base, value.len, H2O_STRLIT("GET"))) {
+        *dst++ = 0x82;
+        return dst;
+    }
+    if (h2o_memis(value.base, value.len, H2O_STRLIT("POST"))) {
+        *dst++ = 0x83;
+        return dst;
+    }
+    return encode_header(header_table, dst, &H2O_TOKEN_METHOD->buf, &value);
+}
+
+static uint8_t *encode_scheme(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_url_scheme_t *scheme)
+{
+    if (scheme == &H2O_URL_SCHEME_HTTPS) {
+        *dst++ = 0x87;
+        return dst;
+    }
+    if (scheme == &H2O_URL_SCHEME_HTTP) {
+        *dst++ = 0x86;
+        return dst;
+    }
+    return encode_header(header_table, dst, &H2O_TOKEN_SCHEME->buf, &scheme->name);
+}
+
+static uint8_t *encode_path(h2o_hpack_header_table_t *header_table, uint8_t *dst, h2o_iovec_t value)
+{
+    if (h2o_memis(value.base, value.len, H2O_STRLIT("/"))) {
+        *dst++ = 0x84;
+        return dst;
+    }
+    if (h2o_memis(value.base, value.len, H2O_STRLIT("/index.html"))) {
+        *dst++ = 0x85;
+        return dst;
+    }
+    return encode_header(header_table, dst, &H2O_TOKEN_PATH->buf, &value);
+}
+
 static uint8_t *encode_literal_header_without_indexing(uint8_t *dst, const h2o_iovec_t *name, const h2o_iovec_t *value)
 {
     /* literal header field without indexing / never indexed */
@@ -688,10 +727,10 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
     *dst++ = (uint8_t)(stream_id << 16);
     *dst++ = (uint8_t)(stream_id << 8);
     *dst++ = (uint8_t)stream_id;
-    dst = encode_header(header_table, dst, &H2O_TOKEN_METHOD->buf, &req->input.method);
-    dst = encode_header(header_table, dst, &H2O_TOKEN_SCHEME->buf, &req->input.scheme->name);
+    dst = encode_method(header_table, dst, req->input.method);
+    dst = encode_scheme(header_table, dst, req->input.scheme);
     dst = encode_header(header_table, dst, &H2O_TOKEN_AUTHORITY->buf, &req->input.authority);
-    dst = encode_header(header_table, dst, &H2O_TOKEN_PATH->buf, &req->input.path);
+    dst = encode_path(header_table, dst, req->input.path);
     dst = flatten_headers(dst, header_table, req->headers.entries, req->headers.size);
     (*buf)->size = (char *)dst - (*buf)->bytes;
 
