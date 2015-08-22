@@ -18,6 +18,7 @@ EOT
 ?>
 <p>
 At the moment, only HTTP is supported.
+If you want load balancing multiple backends, replace 127.0.0.1 with hostname witch returns IP addresses via DNS or /etc/hosts.
 </p>
 ? })
 
