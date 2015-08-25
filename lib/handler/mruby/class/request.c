@@ -200,7 +200,7 @@ static mrb_value h2o_mrb_req_reprocess_request(mrb_state *mrb, mrb_value self)
     overrides->location_rewrite.path_prefix = mruby_ctx->req->pathconf->path;
 
     /* request reprocess */
-    h2o_reprocess_request(mruby_ctx->req, mruby_ctx->req->method, parsed.scheme, parsed.authority,
+    h2o_reprocess_request_deferred(mruby_ctx->req, mruby_ctx->req->method, parsed.scheme, parsed.authority,
                           h2o_concat(&mruby_ctx->req->pool, parsed.path,
                                      h2o_iovec_init(mruby_ctx->req->path.base + mruby_ctx->req->pathconf->path.len,
                                                     mruby_ctx->req->path.len - mruby_ctx->req->pathconf->path.len)),
