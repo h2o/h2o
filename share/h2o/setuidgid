@@ -1,0 +1,5 @@
+#!/bin/sh
+# wrapper script for running tests
+exec ${BINARY_DIR}/setuidgid "$@"
+echo "failed to invoke setuidgid (BINARY_DIR=${BINARY_DIR})" >&2
+exit 111

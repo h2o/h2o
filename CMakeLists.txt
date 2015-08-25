@@ -29,9 +29,9 @@ ENDFUNCTION (PREPEND_INCLUDE_DIRECTORY)
 PROJECT(h2o C)
 
 SET(VERSION_MAJOR "1")
-SET(VERSION_MINOR "4")
-SET(VERSION_PATCH "2")
-SET(VERSION_PRERELEASE "")
+SET(VERSION_MINOR "5")
+SET(VERSION_PATCH "0")
+SET(VERSION_PRERELEASE "alpha-1")
 SET(VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}${VERSION_PRERELEASE}")
 SET(LIBRARY_VERSION_MAJOR "0")
 SET(LIBRARY_VERSION_MINOR "9")
@@ -150,6 +150,7 @@ SET(CMAKE_C_FLAGS "-O2 -g ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS} -DH2O_ROOT=\"\\\"
 INCLUDE_DIRECTORIES(
     include
     deps/cloexec
+    deps/golombset
     deps/libyrmcds
     deps/klib
     deps/picohttpparser
@@ -223,6 +224,7 @@ SET(LIB_SOURCE_FILES
 
     lib/http1.c
 
+    lib/http2/casper.c
     lib/http2/connection.c
     lib/http2/frame.c
     lib/http2/hpack.c
@@ -250,6 +252,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/handler/headers.c
     t/00unit/lib/handler/mimemap.c
     t/00unit/lib/handler/redirect.c
+    t/00unit/lib/http2/casper.c
     t/00unit/lib/http2/hpack.c
     t/00unit/lib/http2/scheduler.c
     t/00unit/src/ssl.c
@@ -271,6 +274,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/handler/headers.c
     lib/handler/mimemap.c
     lib/handler/redirect.c
+    lib/http2/casper.c
     lib/http2/hpack.c
     lib/http2/scheduler.c)
 
@@ -301,6 +305,12 @@ SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES
 IF (OPENSSL_FOUND)
     PREPEND_INCLUDE_DIRECTORY(libh2o ${OPENSSL_INCLUDE_DIR})
     PREPEND_INCLUDE_DIRECTORY(libh2o-evloop ${OPENSSL_INCLUDE_DIR})
+    IF (LIBUV_FOUND)
+        INSTALL(TARGETS libh2o DESTINATION lib)
+    ELSE (LIBUV_FOUND)
+        SET_TARGET_PROPERTIES(libh2o PROPERTIES EXCLUDE_FROM_ALL 1)
+    ENDIF (LIBUV_FOUND)
+    INSTALL(TARGETS libh2o-evloop DESTINATION lib)
 ELSE (OPENSSL_FOUND)
     SET_TARGET_PROPERTIES(libh2o PROPERTIES EXCLUDE_FROM_ALL 1)
     SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES EXCLUDE_FROM_ALL 1)
@@ -375,13 +385,6 @@ ADD_EXECUTABLE(setuidgid src/setuidgid.c)
 INSTALL(TARGETS setuidgid RUNTIME DESTINATION share/h2o)
 
 INSTALL(DIRECTORY include/ DESTINATION include FILES_MATCHING PATTERN "*.h")
-INSTALL(TARGETS libh2o-evloop DESTINATION lib)
-# only install libh2o if libuv is found
-IF (LIBUV_FOUND)
-  INSTALL(TARGETS libh2o DESTINATION lib)
-ELSE (LIBUV_FOUND)
-  SET_TARGET_PROPERTIES(libh2o PROPERTIES EXCLUDE_FROM_ALL 1)
-ENDIF (LIBUV_FOUND)
 
 INSTALL(PROGRAMS share/h2o/annotate-backtrace-symbols share/h2o/fetch-ocsp-response share/h2o/kill-on-close share/h2o/start_server DESTINATION share/h2o)
 INSTALL(DIRECTORY doc/ DESTINATION share/doc/h2o PATTERN "Makefile" EXCLUDE PATTERN "README.md" EXCLUDE)
@@ -419,6 +422,9 @@ ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_BINARY_DIR} prove -v t
 IF (LIBUV_FOUND)
     ADD_DEPENDENCIES(check t-00unit-libuv.t lib-examples)
 ENDIF (LIBUV_FOUND)
+
+ADD_CUSTOM_TARGET(check-as-root env H2O_ROOT=. BINARY_DIR=${CMAKE_BINARY_DIR} prove -v t/90root-*.t
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # environment-specific tweaks
 IF (APPLE)

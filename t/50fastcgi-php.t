@@ -30,4 +30,16 @@ is $resp, "hello\n", 'ordinary file';
 $resp = `curl --silent http://127.0.0.1:$server->{port}/hello.php`;
 is $resp, 'hello world', 'php';
 
+subtest 'server-push' => sub {
+    plan skip_all => 'nghttp not found'
+        unless prog_exists('nghttp');
+    my $doit = sub {
+        my ($proto, $port) = @_;
+        my $resp = `nghttp -n --stat '$proto://127.0.0.1:$port/hello.php?link=<index.js>\%3b\%20rel=preload'`;
+        like $resp, qr{\nresponseEnd\s.*\s/index\.js\n.*\s/hello\.php\?}is, $proto;
+    };
+    $doit->('http', $server->{port});
+    $doit->('https', $server->{tls_port});
+};
+
 done_testing();

@@ -148,12 +148,14 @@ static void update_idle_timeout(h2o_http2_conn_t *conn)
     }
 }
 
+static int can_run_requests(h2o_http2_conn_t *conn)
+{
+    return conn->num_streams.responding < conn->super.ctx->globalconf->http2.max_concurrent_requests_per_connection;
+}
+
 static void run_pending_requests(h2o_http2_conn_t *conn)
 {
-    conn->_is_dispatching_pending_reqs = 1;
-
-    while (!h2o_linklist_is_empty(&conn->_pending_reqs) &&
-           conn->num_streams.responding < conn->super.ctx->globalconf->http2.max_concurrent_requests_per_connection) {
+    while (!h2o_linklist_is_empty(&conn->_pending_reqs) && can_run_requests(conn)) {
         /* fetch and detach a pending stream */
         h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.link, conn->_pending_reqs.next);
         h2o_linklist_unlink(&stream->_refs.link);
@@ -163,8 +165,6 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
             conn->pull_stream_ids.max_processed = stream->stream_id;
         h2o_process_request(&stream->req);
     }
-
-    conn->_is_dispatching_pending_reqs = 0;
 }
 
 static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
@@ -182,9 +182,6 @@ static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_
 
     /* TODO schedule the pending reqs using the scheduler */
     h2o_linklist_insert(&conn->_pending_reqs, &stream->_refs.link);
-
-    if (conn->_is_dispatching_pending_reqs)
-        return;
 
     run_pending_requests(conn);
     update_idle_timeout(conn);
@@ -260,6 +257,8 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     h2o_http2_scheduler_dispose(&conn->scheduler);
     assert(h2o_linklist_is_empty(&conn->_write.streams_to_proceed));
     assert(!h2o_timeout_is_linked(&conn->_write.timeout_entry));
+    if (conn->casper != NULL)
+        h2o_http2_casper_destroy(conn->casper);
     h2o_linklist_unlink(&conn->_conns);
 
     h2o_socket_close(conn->sock);
@@ -307,30 +306,6 @@ static int update_stream_output_window(h2o_http2_stream_t *stream, ssize_t delta
     return 0;
 }
 
-static int is_blocking_asset(const char *path, size_t pathlen)
-{
-    size_t i;
-
-    /* move pathlen to '?' */
-    for (i = 0; i != pathlen; ++i) {
-        if (path[i] == '?') {
-            pathlen = i;
-            break;
-        }
-    }
-
-    /* check if end of path is either ".js" or ".css" */
-    if (pathlen < 3)
-        return 0;
-    if (memcmp(path + pathlen - 3, ".js", 3) == 0)
-        return 1;
-    if (pathlen < 4)
-        return 0;
-    if (memcmp(path + pathlen - 4, ".css", 4) == 0)
-        return 1;
-    return 0;
-}
-
 static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const uint8_t *src, size_t len,
                                    const char **err_desc)
 {
@@ -341,16 +316,6 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     if ((ret = h2o_hpack_parse_headers(&stream->req, &conn->_input_header_table, src, len, &header_exists_map,
                                        &stream->_expected_content_length, err_desc)) != 0)
         return ret;
-
-    /* raise the priority of asset files that block rendering to highest if the user-agent is not using sophisticated prioritization
-     * logic (e.g. that of Firefox)
-     */
-    if (conn->num_streams.open_priority == 0 && conn->super.ctx->globalconf->http2.reprioritize_blocking_assets &&
-        h2o_http2_scheduler_get_parent(&stream->_refs.scheduler) == &conn->scheduler &&
-        h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("GET")) &&
-        is_blocking_asset(stream->req.input.path.base, stream->req.input.path.len)) {
-        h2o_http2_scheduler_rebind(&stream->_refs.scheduler, &conn->scheduler, 257, 0);
-    }
 
     conn->_read_expect = expect_default;
 
@@ -598,7 +563,11 @@ static int handle_priority_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
     }
 
     if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) != NULL) {
-        if ((ret = set_priority(conn, stream, &payload, 1, err_desc)) != 0)
+        /* ignore priority changes to pushed streams with weight=257, since that is where we are trying to be smarter than the web
+         * browsers
+         */
+        if (h2o_http2_scheduler_get_weight(&stream->_refs.scheduler) != 257 &&
+            (ret = set_priority(conn, stream, &payload, 1, err_desc)) != 0)
             return ret;
     } else {
         if ((ret = open_stream(conn, frame->stream_id, &stream, err_desc)) != 0)
@@ -1063,11 +1032,13 @@ void h2o_http2_conn_push_path(h2o_http2_conn_t *conn, h2o_iovec_t path, h2o_http
         return;
     if (conn->push_stream_ids.max_open >= 0x7ffffff0)
         return;
+    if (!can_run_requests(conn))
+        return;
 
-    /* open the stream with heighest weight (TODO find a better way to determine the weight) */
+    /* open the stream */
     conn->push_stream_ids.max_open += 2;
     stream = h2o_http2_stream_open(conn, conn->push_stream_ids.max_open, NULL, src_stream->stream_id);
-    h2o_http2_scheduler_open(&stream->_refs.scheduler, &conn->scheduler, 257, 0);
+    h2o_http2_scheduler_open(&stream->_refs.scheduler, &src_stream->_refs.scheduler.node, 16, 0);
     h2o_http2_stream_prepare_for_request(conn, stream);
 
     /* setup request */
@@ -1093,11 +1064,12 @@ void h2o_http2_conn_push_path(h2o_http2_conn_t *conn, h2o_iovec_t path, h2o_http
         }
     }
 
-    /* send the push_promise frame */
-    h2o_hpack_flatten_request(&conn->_write.buf, &conn->_output_header_table, stream->stream_id, conn->peer_settings.max_frame_size,
-                              &stream->req, stream->push.parent_stream_id);
-
     execute_or_enqueue_request(conn, stream);
+
+    /* send push-promise ASAP (before the parent stream gets closed), even if execute_or_enqueue_request did not trigger the
+     * invocation of send_headers */
+    if (!stream->push.promise_sent)
+        h2o_http2_stream_send_push_promise(conn, stream);
 }
 
 void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)

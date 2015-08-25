@@ -25,6 +25,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include "khash.h"
+#include "h2o/http2_casper.h"
 #include "h2o/http2_scheduler.h"
 
 typedef struct st_h2o_http2_conn_t h2o_http2_conn_t;
@@ -165,6 +166,7 @@ struct st_h2o_http2_stream_t {
         _num_streams_open_slot; /* points http2_conn_t::num_streams::open_(priority|push|pull) in which the stream is counted */
     struct {
         uint32_t parent_stream_id;
+        int promise_sent : 1;
     } push;
     /* references governed by connection.c for handling various things */
     struct {
@@ -213,7 +215,6 @@ struct st_h2o_http2_conn_t {
     h2o_http2_window_t _input_window;
     h2o_hpack_header_table_t _output_header_table;
     h2o_linklist_t _pending_reqs; /* list of h2o_http2_stream_t that contain pending requests */
-    int _is_dispatching_pending_reqs;
     h2o_timeout_entry_t _timeout_entry;
     struct {
         h2o_buffer_t *buf;
@@ -222,6 +223,7 @@ struct st_h2o_http2_conn_t {
         h2o_timeout_entry_t timeout_entry;
         h2o_http2_window_t window;
     } _write;
+    h2o_http2_casper_t *casper;
 };
 
 int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t *src, size_t len, const char **err_desc);
@@ -252,6 +254,7 @@ void h2o_http2_conn_push_path(h2o_http2_conn_t *conn, h2o_iovec_t path, h2o_http
 void h2o_http2_conn_request_write(h2o_http2_conn_t *conn);
 void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 static ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn);
+static void h2o_http2_conn_init_casper(h2o_http2_conn_t *conn, unsigned capacity_bits);
 
 /* stream */
 static int h2o_http2_stream_is_push(uint32_t stream_id);
@@ -265,6 +268,7 @@ void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 static int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream);
 void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
+static void h2o_http2_stream_send_push_promise(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 
 /* misc */
 static void h2o_http2_window_init(h2o_http2_window_t *window, const h2o_http2_settings_t *peer_settings);
@@ -329,6 +333,12 @@ inline ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn)
     if (winsz < ret)
         ret = winsz;
     return ret;
+}
+
+inline void h2o_http2_conn_init_casper(h2o_http2_conn_t *conn, unsigned capacity_bits)
+{
+    assert(conn->casper == NULL);
+    conn->casper = h2o_http2_casper_create(capacity_bits, 6);
 }
 
 inline void h2o_http2_stream_update_open_slot(h2o_http2_stream_t *stream, uint32_t *slot)
@@ -397,6 +407,14 @@ inline void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_htt
 inline int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream)
 {
     return stream->_data.size != 0;
+}
+
+inline void h2o_http2_stream_send_push_promise(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+{
+    assert(!stream->push.promise_sent);
+    h2o_hpack_flatten_request(&conn->_write.buf, &conn->_output_header_table, stream->stream_id, conn->peer_settings.max_frame_size,
+                              &stream->req, stream->push.parent_stream_id);
+    stream->push.promise_sent = 1;
 }
 
 inline uint16_t h2o_http2_decode16u(const uint8_t *src)

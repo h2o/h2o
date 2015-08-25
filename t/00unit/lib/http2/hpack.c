@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <stdarg.h>
 #include "../../test.h"
 #include "../../../../lib/http2/hpack.c"
 
@@ -106,7 +107,7 @@ static void check_flatten(h2o_hpack_header_table_t *header_table, h2o_res_t *res
     h2o_buffer_dispose(&buf);
 }
 
-void test_lib__http2__hpack(void)
+static void test_hpack(void)
 {
     h2o_mem_pool_t pool;
     const char *err_desc;
@@ -306,4 +307,112 @@ void test_lib__http2__hpack(void)
     }
 
     h2o_mem_clear_pool(&pool);
+}
+
+static void parse_and_compare_request(h2o_hpack_header_table_t *ht, const char *promise_base, size_t promise_len,
+                                      h2o_iovec_t expected_method, const h2o_url_scheme_t *expected_scheme,
+                                      h2o_iovec_t expected_authority, h2o_iovec_t expected_path, ...)
+{
+    h2o_req_t req = {};
+    h2o_mem_init_pool(&req.pool);
+
+    int pseudo_header_exists_map = 0;
+    size_t content_length = SIZE_MAX;
+    const char *err_desc;
+    int r = h2o_hpack_parse_headers(&req, ht, (void *)(promise_base + 13), promise_len - 13, &pseudo_header_exists_map,
+                                    &content_length, &err_desc);
+    ok(r == 0);
+    ok(h2o_memis(req.input.method.base, req.input.method.len, expected_method.base, expected_method.len));
+    ok(req.input.scheme == expected_scheme);
+    ok(h2o_memis(req.input.authority.base, req.input.authority.len, expected_authority.base, expected_authority.len));
+    ok(h2o_memis(req.input.path.base, req.input.path.len, expected_path.base, expected_path.len));
+
+    va_list args;
+    va_start(args, expected_path);
+    size_t i;
+    for (i = 0; i != req.headers.size; ++i) {
+        h2o_iovec_t expected_name = va_arg(args, h2o_iovec_t);
+        if (expected_name.base == NULL)
+            break;
+        h2o_iovec_t expected_value = va_arg(args, h2o_iovec_t);
+        ok(h2o_memis(req.headers.entries[i].name->base, req.headers.entries[i].name->len, expected_name.base, expected_name.len));
+        ok(h2o_memis(req.headers.entries[i].value.base, req.headers.entries[i].value.len, expected_value.base, expected_value.len));
+    }
+    ok(i == req.headers.size);
+    va_end(args);
+
+    h2o_mem_clear_pool(&req.pool);
+}
+
+static void test_hpack_push(void)
+{
+    const static h2o_iovec_t method = {H2O_STRLIT("GET")}, authority = {H2O_STRLIT("example.com")},
+                             user_agent = {
+                                 H2O_STRLIT("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:40.0) Gecko/20100101 Firefox/40.0")},
+                             accept_root = {H2O_STRLIT("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")},
+                             accept_images = {H2O_STRLIT("image/png,image/*;q=0.8,*/*;q=0.5")},
+                             accept_language = {H2O_STRLIT("ja,en-US;q=0.7,en;q=0.3")},
+                             accept_encoding = {H2O_STRLIT("gzip, deflate")}, referer = {H2O_STRLIT("https://example.com/")};
+
+    h2o_hpack_header_table_t encode_table = {}, decode_table = {};
+    encode_table.hpack_capacity = decode_table.hpack_capacity = 4096;
+    h2o_req_t req = {};
+    h2o_mem_init_pool(&req.pool);
+    h2o_buffer_t *buf;
+    h2o_buffer_init(&buf, &h2o_socket_buffer_prototype);
+
+    /* setup first request */
+    req.input.method = method;
+    req.input.scheme = &H2O_URL_SCHEME_HTTPS;
+    req.input.authority = authority;
+    req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
+    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_USER_AGENT, user_agent.base, user_agent.len);
+    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT, accept_root.base, accept_root.len);
+    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT_LANGUAGE, accept_language.base, accept_language.len);
+    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT_ENCODING, accept_encoding.base, accept_encoding.len);
+
+    /* serialize, deserialize, and compare */
+    h2o_hpack_flatten_request(&buf, &encode_table, 0, 16384, &req, 0);
+    parse_and_compare_request(&decode_table, buf->bytes, buf->size, method, &H2O_URL_SCHEME_HTTPS, authority,
+                              h2o_iovec_init(H2O_STRLIT("/")), H2O_TOKEN_USER_AGENT->buf, user_agent, H2O_TOKEN_ACCEPT->buf,
+                              accept_root, H2O_TOKEN_ACCEPT_LANGUAGE->buf, accept_language, H2O_TOKEN_ACCEPT_ENCODING->buf,
+                              accept_encoding, (h2o_iovec_t){});
+    h2o_buffer_consume(&buf, buf->size);
+
+    /* setup second request */
+    req.input.path = h2o_iovec_init(H2O_STRLIT("/banner.jpg"));
+    req.headers = (h2o_headers_t){};
+    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_USER_AGENT, user_agent.base, user_agent.len);
+    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT, accept_images.base, accept_images.len);
+    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT_LANGUAGE, accept_language.base, accept_language.len);
+    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT_ENCODING, accept_encoding.base, accept_encoding.len);
+    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_REFERER, referer.base, referer.len);
+
+    /* serialize, deserialize, and compare */
+    h2o_hpack_flatten_request(&buf, &encode_table, 0, 16384, &req, 0);
+    parse_and_compare_request(&decode_table, buf->bytes, buf->size, method, &H2O_URL_SCHEME_HTTPS, authority,
+                              h2o_iovec_init(H2O_STRLIT("/banner.jpg")), H2O_TOKEN_USER_AGENT->buf, user_agent,
+                              H2O_TOKEN_ACCEPT->buf, accept_images, H2O_TOKEN_ACCEPT_LANGUAGE->buf, accept_language,
+                              H2O_TOKEN_ACCEPT_ENCODING->buf, accept_encoding, H2O_TOKEN_REFERER->buf, referer, (h2o_iovec_t){});
+    h2o_buffer_consume(&buf, buf->size);
+
+    /* setup third request (headers are the same) */
+    req.input.path = h2o_iovec_init(H2O_STRLIT("/icon.png"));
+
+    /* serialize, deserialize, and compare */
+    h2o_hpack_flatten_request(&buf, &encode_table, 0, 16384, &req, 0);
+    parse_and_compare_request(&decode_table, buf->bytes, buf->size, method, &H2O_URL_SCHEME_HTTPS, authority,
+                              h2o_iovec_init(H2O_STRLIT("/icon.png")), H2O_TOKEN_USER_AGENT->buf, user_agent, H2O_TOKEN_ACCEPT->buf,
+                              accept_images, H2O_TOKEN_ACCEPT_LANGUAGE->buf, accept_language, H2O_TOKEN_ACCEPT_ENCODING->buf,
+                              accept_encoding, H2O_TOKEN_REFERER->buf, referer, (h2o_iovec_t){});
+    h2o_buffer_consume(&buf, buf->size);
+
+    h2o_buffer_dispose(&buf);
+    h2o_mem_clear_pool(&req.pool);
+}
+
+void test_lib__http2__hpack(void)
+{
+    subtest("hpack", test_hpack);
+    subtest("hpack-push", test_hpack_push);
 }

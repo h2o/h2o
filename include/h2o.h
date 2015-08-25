@@ -149,6 +149,17 @@ typedef struct st_h2o_timestamp_t {
     h2o_timestamp_string_t *str;
 } h2o_timestamp_t;
 
+typedef struct st_h2o_casper_conf_t {
+    /**
+     * capacity bits (0 to disable casper)
+     */
+    unsigned capacity_bits;
+    /**
+     * whether if all type of files should be tracked (or only the blocking assets)
+     */
+    int track_all_types;
+} h2o_casper_conf_t;
+
 typedef struct st_h2o_pathconf_t {
     /**
      * globalconf to which the pathconf belongs
@@ -210,6 +221,20 @@ struct st_h2o_hostconf_t {
      * mimemap
      */
     h2o_mimemap_t *mimemap;
+    /**
+     * http2
+     */
+    struct {
+        /**
+         * whether if blocking assets being pulled should be given highest priority in case of clients that do not implement
+         * dependency-based prioritization
+         */
+        int reprioritize_blocking_assets;
+        /**
+         * casper settings
+         */
+        h2o_casper_conf_t casper;
+    } http2;
 };
 
 typedef struct st_h2o_protocol_callbacks_t {
@@ -277,10 +302,6 @@ struct st_h2o_globalconf_t {
          * maximum nuber of streams (per connection) to be allowed in IDLE / CLOSED state (used for tracking dependencies).
          */
         size_t max_streams_for_priority;
-        /**
-         * a boolean value indicating whether or not to raise priority of blocking asset files
-         */
-        int reprioritize_blocking_assets;
         /**
          * list of callbacks
          */
@@ -788,6 +809,12 @@ void h2o_accept_setup_async_ssl_resumption(h2o_memcached_context_t *ctx, unsigne
  * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")
  */
 size_t h2o_stringify_protocol_version(char *dst, int version);
+/**
+ * extracts path to be pushed from `Link: rel=prelead` header (or returns {NULL,0} if none)
+ */
+h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
+                                                   const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
+                                                   h2o_iovec_t *base_path);
 
 /* request */
 
@@ -988,6 +1015,10 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
  * handles redirect internally
  */
 void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str, size_t url_len);
+/**
+ * registers push path (if necessary) by parsing a Link header
+ */
+void h2o_register_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len);
 /**
  * logs an error
  */

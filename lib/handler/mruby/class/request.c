@@ -178,6 +178,38 @@ static mrb_value h2o_mrb_set_request_headers_out(mrb_state *mrb, mrb_value self)
     return key;
 }
 
+static mrb_value h2o_mrb_req_reprocess_request(mrb_state *mrb, mrb_value self)
+{
+    h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
+    char *upstream;
+    h2o_url_t parsed;
+    h2o_req_overrides_t *overrides = h2o_mem_alloc_pool(&mruby_ctx->req->pool, sizeof(*overrides));
+
+    mrb_get_args(mrb, "z", &upstream);
+
+    if (h2o_url_parse(upstream, SIZE_MAX, &parsed) != 0) {
+        mrb_raise(mrb, E_ARGUMENT_ERROR, "failed to parse URL");
+    }
+    if (parsed.scheme != &H2O_URL_SCHEME_HTTP) {
+        mrb_raise(mrb, E_ARGUMENT_ERROR, "only HTTP URLs are supported");
+    }
+
+    /* setup overrides */
+    *overrides = (h2o_req_overrides_t){};
+    overrides->location_rewrite.match = &parsed;
+    overrides->location_rewrite.path_prefix = mruby_ctx->req->pathconf->path;
+
+    /* request reprocess */
+    h2o_reprocess_request_deferred(mruby_ctx->req, mruby_ctx->req->method, parsed.scheme, parsed.authority,
+                                   h2o_concat(&mruby_ctx->req->pool, parsed.path,
+                                              h2o_iovec_init(mruby_ctx->req->path.base + mruby_ctx->req->pathconf->path.len,
+                                                             mruby_ctx->req->path.len - mruby_ctx->req->pathconf->path.len)),
+                                   NULL, 0);
+    mruby_ctx->is_last = 1;
+
+    return mrb_nil_value();
+}
+
 void h2o_mrb_request_class_init(mrb_state *mrb, struct RClass *class)
 {
     struct RClass *class_request;
@@ -194,6 +226,7 @@ void h2o_mrb_request_class_init(mrb_state *mrb, struct RClass *class)
     mrb_define_method(mrb, class_request, "authority", h2o_mrb_req_authority, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "method", h2o_mrb_req_method, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "query", h2o_mrb_req_query, MRB_ARGS_NONE());
+    mrb_define_method(mrb, class_request, "reprocess_request", h2o_mrb_req_reprocess_request, MRB_ARGS_REQ(1));
 
     mrb_define_method(mrb, class_request, "headers_in", h2o_mrb_headers_in_obj, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "headers_out", h2o_mrb_headers_out_obj, MRB_ARGS_NONE());
