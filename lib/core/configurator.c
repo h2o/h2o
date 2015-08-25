@@ -336,7 +336,7 @@ static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configura
 {
     static const h2o_casper_conf_t defaults = {
         13, /* casper_bits: default (2^13 ~= 100 assets * 1/0.01 collision probability) */
-        0 /* track blocking assets only */
+        0   /* track blocking assets only */
     };
 
     struct st_core_configurator_t *self = (void *)cmd->configurator;
