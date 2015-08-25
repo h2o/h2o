@@ -1351,7 +1351,7 @@ static inline h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_b
 
     if (db->buf->size == 0) {
         if ((*receiving)->size == 0)
-            return (h2o_iovec_t){};
+            return h2o_iovec_init(NULL, 0);
         /* swap buffers */
         h2o_buffer_t *t = db->buf;
         db->buf = *receiving;
