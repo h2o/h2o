@@ -23,6 +23,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
 #include "h2o/http1.h"
@@ -187,7 +188,9 @@ h2o_filter_t *h2o_create_filter(h2o_pathconf_t *conf, size_t sz)
     filter->_config_slot = conf->global->_num_config_slots++;
 
     h2o_vector_reserve(NULL, (void *)&conf->filters, sizeof(conf->filters.entries[0]), conf->filters.size + 1);
-    conf->filters.entries[conf->filters.size++] = filter;
+    memmove(conf->filters.entries + 1, conf->filters.entries, conf->filters.size * sizeof(conf->filters.entries[0]));
+    conf->filters.entries[0] = filter;
+    ++conf->filters.size;
 
     return filter;
 }

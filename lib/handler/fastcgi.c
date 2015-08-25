@@ -75,7 +75,7 @@ struct st_fcgi_generator_t {
     int sent_headers;
     size_t leftsize; /* remaining amount of the content to receive (or SIZE_MAX if unknown) */
     struct {
-        h2o_buffer_t *inflight;
+        h2o_doublebuffer_t sending;
         h2o_buffer_t *receiving;
     } resp;
     h2o_timeout_entry_t timeout;
@@ -406,8 +406,8 @@ static void close_generator(struct st_fcgi_generator_t *generator)
         h2o_socket_close(generator->sock);
         generator->sock = NULL;
     }
-    if (generator->resp.inflight != NULL)
-        h2o_buffer_dispose(&generator->resp.inflight);
+    if (generator->resp.sending.buf != NULL)
+        h2o_doublebuffer_dispose(&generator->resp.sending);
     if (generator->resp.receiving != NULL)
         h2o_buffer_dispose(&generator->resp.receiving);
 }
@@ -418,30 +418,15 @@ static void do_send(struct st_fcgi_generator_t *generator)
     size_t veccnt;
     int is_final;
 
-    assert(generator->resp.inflight->size == 0);
-
-    /* just return if nothing to send */
-    if (generator->sock != NULL && generator->resp.receiving->bytes == 0)
-        return;
-
-    { /* swap the buffers */
-        h2o_buffer_t *t = generator->resp.inflight;
-        generator->resp.inflight = generator->resp.receiving;
-        generator->resp.receiving = t;
-    }
-
-    /* send */
-    if (generator->resp.inflight->size != 0) {
-        vecs[0] = h2o_iovec_init(generator->resp.inflight->bytes, generator->resp.inflight->size);
-        veccnt = 1;
-    } else {
-        veccnt = 0;
-    }
-    if (generator->sock == NULL) {
+    vecs[0] = h2o_doublebuffer_prepare(&generator->resp.sending, &generator->resp.receiving, generator->req->preferred_chunk_size);
+    veccnt = vecs[0].len != 0 ? 1 : 0;
+    if (generator->sock == NULL && vecs[0].len == generator->resp.sending.buf->size && generator->resp.receiving->size == 0) {
         is_final = 1;
         if (!(generator->leftsize == 0 || generator->leftsize == SIZE_MAX))
             generator->req->http1_is_persistent = 0;
     } else {
+        if (veccnt == 0)
+            return;
         is_final = 0;
     }
     h2o_send(generator->req, vecs, veccnt, is_final);
@@ -458,7 +443,7 @@ static void send_eos_and_close(struct st_fcgi_generator_t *generator, int can_ke
     if (h2o_timeout_is_linked(&generator->timeout))
         h2o_timeout_unlink(&generator->timeout);
 
-    if (generator->resp.inflight->size == 0)
+    if (generator->resp.sending.bytes_inflight == 0)
         do_send(generator);
 }
 
@@ -669,7 +654,7 @@ static void on_read(h2o_socket_t *sock, int status)
     }
 
     /* send data if necessary */
-    if (generator->sent_headers && generator->resp.inflight->size == 0)
+    if (generator->sent_headers && generator->resp.sending.bytes_inflight == 0)
         do_send(generator);
 
     set_timeout(generator, &generator->ctx->io_timeout, on_rw_timeout);
@@ -722,7 +707,7 @@ static void do_proceed(h2o_generator_t *_generator, h2o_req_t *req)
 {
     struct st_fcgi_generator_t *generator = (void *)_generator;
 
-    h2o_buffer_consume(&generator->resp.inflight, generator->resp.inflight->size);
+    h2o_doublebuffer_consume(&generator->resp.sending);
     do_send(generator);
 }
 
@@ -752,7 +737,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     generator->req = req;
     generator->sock = NULL;
     generator->sent_headers = 0;
-    h2o_buffer_init(&generator->resp.inflight, &h2o_socket_buffer_prototype);
+    h2o_doublebuffer_init(&generator->resp.sending, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&generator->resp.receiving, &h2o_socket_buffer_prototype);
     generator->timeout = (h2o_timeout_entry_t){};
 

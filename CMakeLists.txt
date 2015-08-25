@@ -44,6 +44,7 @@ FIND_PACKAGE(PkgConfig)
 FIND_PACKAGE(Threads REQUIRED)
 
 FIND_PACKAGE(OpenSSL)
+FIND_PACKAGE(ZLIB REQUIRED)
 
 SET(WITH_BUNDLED_SSL_DEFAULT "ON")
 IF ((NOT UNIX) OR CYGWIN)
@@ -131,6 +132,10 @@ IF (WITH_MRUBY)
         MESSAGE(FATAL "-DWITH_MRUBY=ON was set, but could not find libmruby")
     ENDIF (NOT MRUBY_FOUND)
 ENDIF (WITH_MRUBY)
+IF (ZLIB_FOUND)
+    INCLUDE_DIRECTORIES(${ZLIB_INCLUDE_DIRS})
+    LINK_DIRECTORIES(${ZLIB_LIBRARY_DIRS})
+ENDIF (ZLIB_FOUND)
 
 SET(CC_WARNING_FLAGS "-Wall -Wno-unused-value -Wno-unused-function")
 IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
@@ -201,6 +206,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/expires.c
     lib/handler/fastcgi.c
     lib/handler/file.c
+    lib/handler/gzip.c
     lib/handler/headers.c
     lib/handler/mimemap.c
     lib/handler/proxy.c
@@ -210,6 +216,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/expires.c
     lib/handler/configurator/fastcgi.c
     lib/handler/configurator/file.c
+    lib/handler/configurator/gzip.c
     lib/handler/configurator/headers.c
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
@@ -241,6 +248,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/core/util.c
     t/00unit/lib/handler/fastcgi.c
     t/00unit/lib/handler/file.c
+    t/00unit/lib/handler/gzip.c
     t/00unit/lib/handler/headers.c
     t/00unit/lib/handler/mimemap.c
     t/00unit/lib/handler/redirect.c
@@ -262,6 +270,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/core/util.c
     lib/handler/fastcgi.c
     lib/handler/file.c
+    lib/handler/gzip.c
     lib/handler/headers.c
     lib/handler/mimemap.c
     lib/handler/redirect.c
@@ -282,6 +291,10 @@ IF (WITH_MRUBY)
         lib/handler/configurator/mruby.c)
     LIST(INSERT EXTRA_LIBRARIES 0 ${MRUBY_LIBRARIES} "m")
 ENDIF (WITH_MRUBY)
+
+IF (ZLIB_FOUND)
+    LIST(INSERT EXTRA_LIBRARIES 0 ${ZLIB_LIBRARIES})
+ENDIF (ZLIB_FOUND)
 
 ADD_LIBRARY(libh2o ${LIB_SOURCE_FILES})
 ADD_LIBRARY(libh2o-evloop ${LIB_SOURCE_FILES})

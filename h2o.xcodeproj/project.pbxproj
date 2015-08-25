@@ -44,6 +44,9 @@
 		1065E70C19BF664300686E72 /* evloop.h in Headers */ = {isa = PBXBuildFile; fileRef = 1065E70419BF145700686E72 /* evloop.h */; };
 		1065E70D19BF6D4600686E72 /* uv-binding.h in Headers */ = {isa = PBXBuildFile; fileRef = 1065E70619BF14E500686E72 /* uv-binding.h */; };
 		1065E70E19BF6D9400686E72 /* uv-binding.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 1065E70719BF17FE00686E72 /* uv-binding.c.h */; };
+		1070866C1B787D06002B8F18 /* gzip.c in Sources */ = {isa = PBXBuildFile; fileRef = 1070866B1B787D06002B8F18 /* gzip.c */; };
+		107086701B7925D5002B8F18 /* gzip.c in Sources */ = {isa = PBXBuildFile; fileRef = 1070866F1B7925D5002B8F18 /* gzip.c */; };
+		107086721B798488002B8F18 /* gzip.c in Sources */ = {isa = PBXBuildFile; fileRef = 107086711B798487002B8F18 /* gzip.c */; };
 		1070866A1B70A00F002B8F18 /* casper.c in Sources */ = {isa = PBXBuildFile; fileRef = 107086691B70A00F002B8F18 /* casper.c */; };
 		1070E1631B4508B0001CCAFA /* util.c in Sources */ = {isa = PBXBuildFile; fileRef = 1070E1621B4508B0001CCAFA /* util.c */; };
 		10756E2A1AC126420009BF57 /* api.c in Sources */ = {isa = PBXBuildFile; fileRef = 10756E261AC126420009BF57 /* api.c */; };
@@ -338,6 +341,10 @@
 		1065E70419BF145700686E72 /* evloop.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = evloop.h; sourceTree = "<group>"; };
 		1065E70619BF14E500686E72 /* uv-binding.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "uv-binding.h"; sourceTree = "<group>"; };
 		1065E70719BF17FE00686E72 /* uv-binding.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "uv-binding.c.h"; sourceTree = "<group>"; };
+		1070866B1B787D06002B8F18 /* gzip.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = gzip.c; sourceTree = "<group>"; };
+		1070866F1B7925D5002B8F18 /* gzip.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = gzip.c; sourceTree = "<group>"; };
+		107086711B798487002B8F18 /* gzip.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = gzip.c; sourceTree = "<group>"; };
+		107086741B79A08D002B8F18 /* 50gzip.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50gzip.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		107086691B70A00F002B8F18 /* casper.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = casper.c; sourceTree = "<group>"; };
 		1070E15C1B438E8F001CCAFA /* poll.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = poll.c.h; sourceTree = "<group>"; };
 		1070E1621B4508B0001CCAFA /* util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = util.c; sourceTree = "<group>"; };
@@ -588,6 +595,7 @@
 				10BCF2FC1B168CAE0076939D /* fastcgi.c */,
 				107923AF19A3217300C52AD6 /* file.c */,
 				105534E91A42A83700627ECB /* file */,
+				1070866B1B787D06002B8F18 /* gzip.c */,
 				10AA2EBD1AA019D8004322AC /* headers.c */,
 				107923BB19A3217300C52AD6 /* mimemap.c */,
 				108867731AD9061100987967 /* mimemap */,
@@ -643,6 +651,7 @@
 			children = (
 				10BCF3001B214C460076939D /* fastcgi.c */,
 				105534BD1A3B8F7700627ECB /* file.c */,
+				1070866F1B7925D5002B8F18 /* gzip.c */,
 				105534C21A3B917000627ECB /* mimemap.c */,
 				1058C87C1AA41789008D6180 /* headers.c */,
 				10F9F2641AF4795D0056F26B /* redirect.c */,
@@ -690,6 +699,7 @@
 				104B9A521A5FC7C4009EEE64 /* expires.c */,
 				10BCF2FE1B1A892F0076939D /* fastcgi.c */,
 				105534DC1A3C7AA900627ECB /* file.c */,
+				107086711B798487002B8F18 /* gzip.c */,
 				10AA2EBF1AA019FC004322AC /* headers.c */,
 				105534DE1A3C7B9800627ECB /* proxy.c */,
 				10AA2EA61A8DA93C004322AC /* redirect.c */,
@@ -1088,6 +1098,7 @@
 				10FCC1421B300A6800F13674 /* 50fastcgi-php.t */,
 				105534F61A460EF600627ECB /* 50file-config.t */,
 				100AE41A1B27D74800CE18BB /* 50file-range.t */,
+				107086741B79A08D002B8F18 /* 50gzip.t */,
 				1058C87F1AA42568008D6180 /* 50headers.t */,
 				105534F71A460F2E00627ECB /* 50mimemap.t */,
 				10A3D3D61B4F1E3200327CF9 /* 50mruby.t */,
@@ -1404,6 +1415,8 @@
 				10D0907319F633B00043D458 /* proxy.c in Sources */,
 				10A3D3D21B4CDBDC00327CF9 /* memcached.c in Sources */,
 				107923CF19A3217300C52AD6 /* request.c in Sources */,
+				1070866C1B787D06002B8F18 /* gzip.c in Sources */,
+				107086721B798488002B8F18 /* gzip.c in Sources */,
 				10BCF2FF1B1A892F0076939D /* fastcgi.c in Sources */,
 				104B9A531A5FC7C4009EEE64 /* expires.c in Sources */,
 				10A3D40D1B50DAB700327CF9 /* strerror.c in Sources */,
@@ -1471,6 +1484,7 @@
 				1070866A1B70A00F002B8F18 /* casper.c in Sources */,
 				107D4D491B5880BC004A9B21 /* parser.c in Sources */,
 				104B9A481A5F9472009EEE64 /* headers.c in Sources */,
+				107086701B7925D5002B8F18 /* gzip.c in Sources */,
 				107D4D4C1B5880BC004A9B21 /* writer.c in Sources */,
 				10E2995A1A68D03100701AA6 /* scheduler.c in Sources */,
 				103BAB361B130666000694F4 /* socket.c in Sources */,
@@ -1626,6 +1640,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lz",
 				);
 				PRODUCT_NAME = unittest;
 			};
@@ -1654,6 +1669,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lz",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -1683,6 +1699,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lz",
 				);
 				PRODUCT_NAME = websocket;
 			};
@@ -1758,6 +1775,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lz",
 				);
 				PRODUCT_NAME = unittest;
 			};
@@ -1782,6 +1800,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lz",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -1807,6 +1826,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lz",
 				);
 				PRODUCT_NAME = websocket;
 			};
@@ -1943,6 +1963,7 @@
 					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
+					"-lz",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -1966,6 +1987,7 @@
 					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
+					"-lz",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -1994,6 +2016,7 @@
 					"-lnettle",
 					"-lssl",
 					"-lcrypto",
+					"-lz",
 				);
 				PRODUCT_NAME = websocket;
 			};
@@ -2018,6 +2041,7 @@
 					"-lnettle",
 					"-lssl",
 					"-lcrypto",
+					"-lz",
 				);
 				PRODUCT_NAME = websocket;
 			};
@@ -2046,6 +2070,7 @@
 					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
+					"-lz",
 				);
 				PRODUCT_NAME = unittest;
 			};
@@ -2073,6 +2098,7 @@
 					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
+					"-lz",
 				);
 				PRODUCT_NAME = unittest;
 			};
@@ -2099,6 +2125,7 @@
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
+					"-lz",
 				);
 				PRODUCT_NAME = "examples-socket-server";
 			};
@@ -2126,6 +2153,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lz",
 				);
 				PRODUCT_NAME = "examples-socket-server";
 			};
@@ -2148,6 +2176,7 @@
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
+					"-lz",
 				);
 				PRODUCT_NAME = "examples-socket-server";
 			};
@@ -2171,6 +2200,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lz",
 				);
 				PRODUCT_NAME = "examples-socket-server";
 			};
@@ -2197,6 +2227,7 @@
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
+					"-lz",
 				);
 				PRODUCT_NAME = "examples-http1client";
 			};
@@ -2224,6 +2255,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lz",
 				);
 				PRODUCT_NAME = "examples-http1client";
 			};
@@ -2246,6 +2278,7 @@
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
+					"-lz",
 				);
 				PRODUCT_NAME = "examples-http1client";
 			};
@@ -2269,6 +2302,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lz",
 				);
 				PRODUCT_NAME = "examples-http1client";
 			};
@@ -2297,6 +2331,7 @@
 					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
+					"-lz",
 				);
 				PRODUCT_NAME = h2o;
 			};
@@ -2326,6 +2361,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lz",
 				);
 				PRODUCT_NAME = h2o;
 			};
@@ -2350,6 +2386,7 @@
 					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
+					"-lz",
 				);
 				PRODUCT_NAME = h2o;
 			};
@@ -2375,6 +2412,7 @@
 					"-lssl",
 					"-lcrypto",
 					"-luv",
+					"-lz",
 				);
 				PRODUCT_NAME = h2o;
 			};

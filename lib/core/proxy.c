@@ -36,7 +36,7 @@ struct rp_generator_t {
         int is_head;
     } up_req;
     h2o_buffer_t *last_content_before_send;
-    h2o_buffer_t *buf_sending;
+    h2o_doublebuffer_t sending;
 };
 
 static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, size_t location_len, h2o_url_t *match,
@@ -229,33 +229,35 @@ static void do_close(h2o_generator_t *generator, h2o_req_t *req)
     }
 }
 
-static void swap_buffer(h2o_buffer_t **x, h2o_buffer_t **y)
-{
-    h2o_buffer_t *t = *x;
-    *x = *y;
-    *y = t;
-}
-
 static void do_send(struct rp_generator_t *self)
 {
-    assert(self->buf_sending->size == 0);
+    h2o_iovec_t vecs[1];
+    size_t veccnt;
+    int is_eos;
 
-    swap_buffer(&self->buf_sending, self->client != NULL ? &self->client->sock->input : &self->last_content_before_send);
+    assert(self->sending.bytes_inflight == 0);
 
-    if (self->buf_sending->size != 0) {
-        h2o_iovec_t buf = h2o_iovec_init(self->buf_sending->bytes, self->buf_sending->size);
-        h2o_send(self->src_req, &buf, 1, self->client == NULL);
-    } else if (self->client == NULL) {
-        h2o_send(self->src_req, NULL, 0, 1);
+    vecs[0] = h2o_doublebuffer_prepare(&self->sending,
+                                       self->client != NULL ? &self->client->sock->input : &self->last_content_before_send,
+                                       self->src_req->preferred_chunk_size);
+
+    if (self->client == NULL && vecs[0].len == self->sending.buf->size && self->last_content_before_send->size == 0) {
+        veccnt = vecs[0].len != 0 ? 1 : 0;
+        is_eos = 1;
+    } else {
+        if (vecs[0].len == 0)
+            return;
+        veccnt = 1;
+        is_eos = 0;
     }
+    h2o_send(self->src_req, vecs, veccnt, is_eos);
 }
 
 static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
 {
     struct rp_generator_t *self = (void *)generator;
 
-    h2o_buffer_consume(&self->buf_sending, self->buf_sending->size);
-
+    h2o_doublebuffer_consume(&self->sending);
     do_send(self);
 }
 
@@ -271,7 +273,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
         h2o_buffer_init(&self->client->sock->input, &h2o_socket_buffer_prototype);
         self->client = NULL;
     }
-    if (self->buf_sending->size == 0)
+    if (self->sending.bytes_inflight == 0)
         do_send(self);
 
     return 0;
@@ -380,7 +382,7 @@ static void on_generator_dispose(void *_self)
         self->client = NULL;
     }
     h2o_buffer_dispose(&self->last_content_before_send);
-    h2o_buffer_dispose(&self->buf_sending);
+    h2o_doublebuffer_dispose(&self->sending);
 }
 
 static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, int keepalive)
@@ -394,7 +396,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, int keepalive)
     self->up_req.bufs[1] = req->entity;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
-    h2o_buffer_init(&self->buf_sending, &h2o_socket_buffer_prototype);
+    h2o_doublebuffer_init(&self->sending, &h2o_socket_buffer_prototype);
 
     return self;
 }

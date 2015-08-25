@@ -60,6 +60,7 @@ void test_lib__core__proxy_c(void);
 void test_lib__core__util_c(void);
 void test_lib__handler__fastcgi_c(void);
 void test_lib__handler__file_c(void);
+void test_lib__handler__gzip_c(void);
 void test_lib__handler__headers_c(void);
 void test_lib__handler__mimemap_c(void);
 void test_lib__handler__redirect_c(void);
