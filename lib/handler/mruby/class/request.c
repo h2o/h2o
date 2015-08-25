@@ -135,11 +135,17 @@ static mrb_value h2o_mrb_set_request_headers_in(mrb_state *mrb, mrb_value self)
 {
     h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
     mrb_value key, val;
+    char *key_cstr, *val_cstr;
 
     mrb_get_args(mrb, "oo", &key, &val);
     key = mrb_funcall(mrb, key, "downcase", 0);
 
-    h2o_set_header_by_str(&mruby_ctx->req->pool, &mruby_ctx->req->headers, RSTRING_PTR(key), RSTRING_LEN(key), 0, RSTRING_PTR(val),
+    key_cstr = h2o_mem_alloc_pool(&mruby_ctx->req->pool, RSTRING_LEN(key));
+    val_cstr = h2o_mem_alloc_pool(&mruby_ctx->req->pool, RSTRING_LEN(val));
+    memcpy(key_cstr, RSTRING_PTR(key), RSTRING_LEN(key));
+    memcpy(val_cstr, RSTRING_PTR(val), RSTRING_LEN(val));
+
+    h2o_set_header_by_str(&mruby_ctx->req->pool, &mruby_ctx->req->headers, key_cstr, RSTRING_LEN(key), 0, val_cstr,
                           RSTRING_LEN(val), 1);
 
     return key;
@@ -168,12 +174,18 @@ static mrb_value h2o_mrb_set_request_headers_out(mrb_state *mrb, mrb_value self)
 {
     h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
     mrb_value key, val;
+    char *key_cstr, *val_cstr;
 
     mrb_get_args(mrb, "oo", &key, &val);
     key = mrb_funcall(mrb, key, "downcase", 0);
 
-    h2o_set_header_by_str(&mruby_ctx->req->pool, &mruby_ctx->req->res.headers, RSTRING_PTR(key), RSTRING_LEN(key), 0,
-                          RSTRING_PTR(val), RSTRING_LEN(val), 1);
+    key_cstr = h2o_mem_alloc_pool(&mruby_ctx->req->pool, RSTRING_LEN(key));
+    val_cstr = h2o_mem_alloc_pool(&mruby_ctx->req->pool, RSTRING_LEN(val));
+    memcpy(key_cstr, RSTRING_PTR(key), RSTRING_LEN(key));
+    memcpy(val_cstr, RSTRING_PTR(val), RSTRING_LEN(val));
+
+    h2o_set_header_by_str(&mruby_ctx->req->pool, &mruby_ctx->req->res.headers, key_cstr, RSTRING_LEN(key), 0, val_cstr,
+                          RSTRING_LEN(val), 1);
 
     return key;
 }
