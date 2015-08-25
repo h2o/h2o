@@ -178,7 +178,7 @@ static mrb_value h2o_mrb_set_request_headers_out(mrb_state *mrb, mrb_value self)
     return key;
 }
 
-static mrb_value h2o_mrb_req_reverse_proxy(mrb_state *mrb, mrb_value self)
+static mrb_value h2o_mrb_req_reprocess_request(mrb_state *mrb, mrb_value self)
 {
     h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
     char *upstream;
@@ -226,7 +226,7 @@ void h2o_mrb_request_class_init(mrb_state *mrb, struct RClass *class)
     mrb_define_method(mrb, class_request, "authority", h2o_mrb_req_authority, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "method", h2o_mrb_req_method, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "query", h2o_mrb_req_query, MRB_ARGS_NONE());
-    mrb_define_method(mrb, class_request, "reverse_proxy", h2o_mrb_req_reverse_proxy, MRB_ARGS_REQ(1));
+    mrb_define_method(mrb, class_request, "reprocess_request", h2o_mrb_req_reprocess_request, MRB_ARGS_REQ(1));
 
     mrb_define_method(mrb, class_request, "headers_in", h2o_mrb_headers_in_obj, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "headers_out", h2o_mrb_headers_out_obj, MRB_ARGS_NONE());

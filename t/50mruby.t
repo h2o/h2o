@@ -121,6 +121,6 @@ $resp = fetch_uri(<< 'EOT', 'proxy.html');
         file.dir: t/50mruby/
         mruby.handler_path: t/50mruby/reverse_proxy.rb
 EOT
-is $resp, "I'm proxy.html\n", "H2O::Request#reverse_proxy test";
+is $resp, "I'm proxy.html\n", "H2O::Request#reprocess_request test";
 
 done_testing();
