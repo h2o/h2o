@@ -25,7 +25,7 @@
 #include <mruby/class.h>
 #include <mruby/variable.h>
 #include "h2o.h"
-#include "h2o/mruby.h"
+#include "h2o/mruby_.h"
 
 static mrb_value h2o_mrb_conn_init(mrb_state *mrb, mrb_value self)
 {

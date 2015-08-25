@@ -22,7 +22,7 @@
 #include <mruby.h>
 #include <mruby/string.h>
 #include "h2o.h"
-#include "h2o/mruby.h"
+#include "h2o/mruby_.h"
 
 static mrb_value h2o_mrb_max_headers(mrb_state *mrb, mrb_value self)
 {

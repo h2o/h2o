@@ -25,7 +25,7 @@
 #include <mruby/compile.h>
 #include <mruby/string.h>
 #include "h2o.h"
-#include "h2o/mruby.h"
+#include "h2o/mruby_.h"
 
 void h2o_mrb_class_init(mrb_state *mrb);
 

@@ -22,7 +22,7 @@
 #include <inttypes.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
-#include "h2o/mruby.h"
+#include "h2o/mruby_.h"
 
 struct mruby_configurator_t {
     h2o_configurator_t super;

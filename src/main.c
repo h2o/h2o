@@ -58,7 +58,7 @@
 #include "h2o/http2.h"
 #include "h2o/serverutil.h"
 #ifdef H2O_USE_MRUBY
-#include "h2o/mruby.h"
+#include "h2o/mruby_.h"
 #endif
 #include "standalone.h"
 
