@@ -716,6 +716,11 @@ struct st_h2o_req_t {
      */
     h2o_iovec_t upgrade;
 
+    /**
+     * preferred chunk size by the ostream
+     */
+    size_t preferred_chunk_size;
+
     /* internal structure */
     h2o_generator_t *_generator;
     h2o_ostream_t *_ostr_top;

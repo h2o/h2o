@@ -238,7 +238,8 @@ static void do_send(struct rp_generator_t *self)
     assert(self->sending.bytes_inflight == 0);
 
     vecs[0] = h2o_doublebuffer_prepare(&self->sending,
-                                       self->client != NULL ? &self->client->sock->input : &self->last_content_before_send, 65536);
+                                       self->client != NULL ? &self->client->sock->input : &self->last_content_before_send,
+                                       self->src_req->preferred_chunk_size);
 
     if (self->client == NULL && vecs[0].len == self->sending.buf->size && self->last_content_before_send->size == 0) {
         veccnt = vecs[0].len != 0 ? 1 : 0;

@@ -418,7 +418,7 @@ static void do_send(struct st_fcgi_generator_t *generator)
     size_t veccnt;
     int is_final;
 
-    vecs[0] = h2o_doublebuffer_prepare(&generator->resp.sending, &generator->resp.receiving, 65536);
+    vecs[0] = h2o_doublebuffer_prepare(&generator->resp.sending, &generator->resp.receiving, generator->req->preferred_chunk_size);
     veccnt = vecs[0].len != 0 ? 1 : 0;
     if (generator->sock == NULL && vecs[0].len == generator->resp.sending.buf->size && generator->resp.receiving->size == 0) {
         is_final = 1;

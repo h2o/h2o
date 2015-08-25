@@ -164,6 +164,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
     req->conn = conn;
     req->_timeout_entry.cb = deferred_proceed_cb;
     req->res.content_length = SIZE_MAX;
+    req->preferred_chunk_size = SIZE_MAX;
 
     if (src != NULL) {
 #define COPY(buf)                                                                                                                  \
