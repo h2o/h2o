@@ -733,6 +733,16 @@ typedef struct st_h2o_accept_ctx_t {
     h2o_multithread_receiver_t *libmemcached_receiver;
 } h2o_accept_ctx_t;
 
+typedef struct st_h2o_doublebuffer_t {
+    h2o_buffer_t *buf;
+    size_t bytes_inflight;
+} h2o_doublebuffer_t;
+
+static void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype);
+static void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db);
+static h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t **receiving, size_t max_bytes);
+static void h2o_doublebuffer_consume(h2o_doublebuffer_t *db);
+
 /* token */
 
 extern h2o_token_t h2o__tokens[H2O_MAX_TOKENS];
@@ -1322,6 +1332,41 @@ inline void h2o_context_set_filter_context(h2o_context_t *ctx, h2o_filter_t *fil
 inline void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *logger)
 {
     return ctx->_module_configs[logger->_config_slot];
+}
+
+static inline void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype)
+{
+    h2o_buffer_init(&db->buf, prototype);
+    db->bytes_inflight = 0;
+}
+
+static inline void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db)
+{
+    h2o_buffer_dispose(&db->buf);
+}
+
+static inline h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t **receiving, size_t max_bytes)
+{
+    assert(db->bytes_inflight == 0);
+
+    if (db->buf->size == 0) {
+        if ((*receiving)->size == 0)
+            return (h2o_iovec_t){};
+        /* swap buffers */
+        h2o_buffer_t *t = db->buf;
+        db->buf = *receiving;
+        *receiving = t;
+    }
+    if ((db->bytes_inflight = db->buf->size) > max_bytes)
+        db->bytes_inflight = max_bytes;
+    return h2o_iovec_init(db->buf->bytes, db->bytes_inflight);
+}
+
+static inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
+{
+    assert(db->bytes_inflight != 0);
+    h2o_buffer_consume(&db->buf, db->bytes_inflight);
+    db->bytes_inflight = 0;
 }
 
 #ifdef __cplusplus
