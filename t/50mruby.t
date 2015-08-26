@@ -153,4 +153,24 @@ $resp = fetch_uri(<< 'EOT', 'proxy.html');
 EOT
 is $resp, "I'm proxy.html\n", "H2O::Request#reprocess_request test";
 
+subtest "server-push" => sub {
+    plan skip_all => 'nghttp not found'
+        unless prog_exists('nghttp');
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          r = H2O::Request.new
+          if r.uri == "/index.txt"
+            r.http2_push_paths << "/index.js"
+          end
+          H2O.return H2O::DECLINED
+        file.dir: t/assets/doc_root
+EOT
+    my $resp = `nghttp -n --stat https://127.0.0.1:$server->{tls_port}/index.txt`;
+    like $resp, qr{\nresponseEnd\s.*\s/index\.js\n.*\s/index\.txt}is, "receives index.js then /index.txt";
+};
+
 done_testing();
