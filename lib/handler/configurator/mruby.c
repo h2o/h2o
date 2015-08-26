@@ -48,6 +48,28 @@ static int compile_test(h2o_mruby_config_vars_t *config, char *errbuf)
     return ok;
 }
 
+static int on_config_mruby_handler(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct mruby_configurator_t *self = (void *)cmd->configurator;
+
+    /* set source */
+    self->vars->source = h2o_strdup(NULL, node->data.scalar, SIZE_MAX);
+    self->vars->path = node->filename;
+    self->vars->lineno = (int)node->line;
+
+    /* check if there is any error in source */
+    char errbuf[256];
+    if (!compile_test(self->vars, errbuf)) {
+        h2o_configurator_errprintf(cmd, node, "ruby compile error:%s", errbuf);
+        return -1;
+    }
+
+    /* register */
+    h2o_mruby_register(ctx->pathconf, self->vars);
+
+    return 0;
+}
+
 static int on_config_mruby_handler_path(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct mruby_configurator_t *self = (void *)cmd->configurator;
@@ -125,7 +147,8 @@ void h2o_mruby_register_configurator(h2o_globalconf_t *conf)
     c->super.enter = on_config_enter;
     c->super.exit = on_config_exit;
 
-    /* set mruby script path */
+    h2o_configurator_define_command(&c->super, "mruby.handler", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_mruby_handler);
     h2o_configurator_define_command(&c->super, "mruby.handler_path",
                                     H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_mruby_handler_path);
 }
