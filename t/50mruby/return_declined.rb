@@ -1,1 +1,0 @@
-H2O.return H2O::DECLINED
