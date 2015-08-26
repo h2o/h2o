@@ -19,7 +19,10 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <errno.h>
 #include <inttypes.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
 #include "h2o/mruby_.h"
@@ -30,17 +33,67 @@ struct mruby_configurator_t {
     h2o_mruby_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
+static int compile_test(h2o_mruby_config_vars_t *config, char *errbuf)
+{
+    mrb_state *mrb;
+    int ok;
+
+    if ((mrb = mrb_open()) == NULL) {
+        fprintf(stderr, "%s: no memory\n", H2O_MRUBY_MODULE_VERSION);
+        abort();
+    }
+    ok = h2o_mruby_compile_code(mrb, config, errbuf) != NULL;
+    mrb_close(mrb);
+
+    return ok;
+}
+
 static int on_config_mruby_handler_path(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct mruby_configurator_t *self = (void *)cmd->configurator;
+    FILE *fp = NULL;
+    h2o_iovec_t buf = {};
+    int ret = -1;
 
-    if (node->data.scalar[0] == '\0') {
-        self->vars->mruby_handler_path = h2o_iovec_init(NULL, 0);
-    } else {
-        self->vars->mruby_handler_path = h2o_iovec_init(node->data.scalar, strlen(node->data.scalar));
-        h2o_mruby_register(ctx->pathconf, self->vars);
+    /* open and read file */
+    if ((fp = fopen(node->data.scalar, "rt")) == NULL) {
+        h2o_configurator_errprintf(cmd, node, "failed to open file: %s:%s", node->data.scalar, strerror(errno));
+        goto Exit;
     }
-    return 0;
+    while (!feof(fp)) {
+        buf.base = h2o_mem_realloc(buf.base, buf.len + 65536);
+        buf.len += fread(buf.base, 1, 65536, fp);
+        if (ferror(fp)) {
+            h2o_configurator_errprintf(cmd, node, "I/O error occurred while reading file:%s:%s", node->data.scalar,
+                                       strerror(errno));
+            goto Exit;
+        }
+    }
+
+    /* set source */
+    self->vars->source = buf;
+    buf.base = NULL;
+    self->vars->path = node->data.scalar; /* the value is retained until the end of the configuration phase */
+    self->vars->lineno = 0;
+
+    /* check if there is any error in source */
+    char errbuf[256];
+    if (!compile_test(self->vars, errbuf)) {
+        h2o_configurator_errprintf(cmd, node, "failed to compile file:%s:%s", node->data.scalar, errbuf);
+        goto Exit;
+    }
+
+    /* register */
+    h2o_mruby_register(ctx->pathconf, self->vars);
+
+    ret = 0;
+
+Exit:
+    if (fp != NULL)
+        fclose(fp);
+    if (buf.base != NULL)
+        free(buf.base);
+    return ret;
 }
 
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -55,6 +108,10 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
 static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct mruby_configurator_t *self = (void *)_self;
+
+    /* free if the to-be-exitted frame level contains a different source */
+    if (self->vars[-1].source.base != self->vars[-1].source.base)
+        free(self->vars->source.base);
 
     --self->vars;
     return 0;
