@@ -112,6 +112,11 @@ static mrb_value h2o_mrb_headers_out_obj(mrb_state *mrb, mrb_value self)
     return h2o_mrb_get_class_obj(mrb, self, "headers_out_obj", "Headers_out");
 }
 
+static mrb_value h2o_mrb_http2_push_paths_obj(mrb_state *mrb, mrb_value self)
+{
+    return h2o_mrb_get_class_obj(mrb, self, "http2_push_paths_obj", "Http2_push_paths");
+}
+
 static mrb_value h2o_mrb_get_request_headers_in(mrb_state *mrb, mrb_value self)
 {
     h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
@@ -222,11 +227,27 @@ static mrb_value h2o_mrb_req_reprocess_request(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
+static mrb_value h2o_mrb_push_http2_push_paths(mrb_state *mrb, mrb_value self)
+{
+    h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
+    char *s;
+    mrb_int len;
+
+    mrb_get_args(mrb, "s", &s, &len);
+
+    h2o_vector_reserve(&mruby_ctx->req->pool, (void *)&mruby_ctx->req->http2_push_paths,
+                       sizeof(mruby_ctx->req->http2_push_paths.entries[0]), mruby_ctx->req->http2_push_paths.size + 1);
+    mruby_ctx->req->http2_push_paths.entries[mruby_ctx->req->http2_push_paths.size++] = h2o_strdup(&mruby_ctx->req->pool, s, len);
+
+    return self;
+}
+
 void h2o_mrb_request_class_init(mrb_state *mrb, struct RClass *class)
 {
     struct RClass *class_request;
     struct RClass *class_headers_in;
     struct RClass *class_headers_out;
+    struct RClass *class_http2_push_paths;
 
     class_request = mrb_define_class_under(mrb, class, "Request", mrb->object_class);
 
@@ -242,14 +263,19 @@ void h2o_mrb_request_class_init(mrb_state *mrb, struct RClass *class)
 
     mrb_define_method(mrb, class_request, "headers_in", h2o_mrb_headers_in_obj, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "headers_out", h2o_mrb_headers_out_obj, MRB_ARGS_NONE());
+    mrb_define_method(mrb, class_request, "http2_push_paths", h2o_mrb_http2_push_paths_obj, MRB_ARGS_NONE());
 
-    /* request haeder class */
+    /* request header class */
     class_headers_in = mrb_define_class_under(mrb, class, "Headers_in", mrb->object_class);
     mrb_define_method(mrb, class_headers_in, "[]", h2o_mrb_get_request_headers_in, MRB_ARGS_REQ(1));
     mrb_define_method(mrb, class_headers_in, "[]=", h2o_mrb_set_request_headers_in, MRB_ARGS_REQ(2));
 
-    /* response haeder class */
+    /* response header class */
     class_headers_out = mrb_define_class_under(mrb, class, "Headers_out", mrb->object_class);
     mrb_define_method(mrb, class_headers_out, "[]", h2o_mrb_get_request_headers_out, MRB_ARGS_REQ(1));
     mrb_define_method(mrb, class_headers_out, "[]=", h2o_mrb_set_request_headers_out, MRB_ARGS_REQ(2));
+
+    /* http2_push_paths (TODO: define other methods so that it would act like an array) */
+    class_http2_push_paths = mrb_define_class_under(mrb, class, "Http2_push_paths", mrb->object_class);
+    mrb_define_method(mrb, class_http2_push_paths, "<<", h2o_mrb_push_http2_push_paths, MRB_ARGS_REQ(1));
 }
