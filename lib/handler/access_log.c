@@ -138,6 +138,7 @@ static struct log_element_t *compile_log_format(const char *fmt, size_t *_num_el
                     goto Error;
                 }
                 pt = quote_end + 2;
+                continue;
             } else {
                 unsigned type = NUM_ELEMENT_TYPES;
                 switch (*pt++) {
