@@ -62,4 +62,23 @@ subtest 'ltsv-related' => sub {
     );
 };
 
+subtest 'header-termination (issue 462)' => sub {
+    doit(
+        sub {
+            my $server = shift;
+            system("curl --user-agent foobar/1 --silent http://127.0.0.1:$server->{port} > /dev/null");
+        },
+        '%{user-agent}i',
+        qr{^foobar/1$},
+    );
+    doit(
+        sub {
+            my $server = shift;
+            system("curl --user-agent foobar/1 --silent http://127.0.0.1:$server->{port} > /dev/null");
+        },
+        '%{content-type}o',
+        qr{^text/plain$},
+    );
+};
+
 done_testing;
