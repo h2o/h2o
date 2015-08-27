@@ -248,13 +248,15 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
             h2o_http2_scheduler_rebind(&stream->_refs.scheduler, &conn->scheduler, 257, 0);
     } else {
         /* for pull, push things requested, as well as send the casper cookie if modified */
-        size_t i;
-        for (i = 0; i != stream->req.http2_push_paths.size; ++i)
-            h2o_http2_conn_push_path(conn, stream->req.http2_push_paths.entries[i], stream);
-        /* send casper cookie if it has been altered (due to the __stream itself__ or by some of the pushes) */
-        if (conn->casper != NULL && num_casper_entries_before_push != h2o_http2_casper_num_entries(conn->casper)) {
-            h2o_iovec_t cookie = h2o_http2_casper_build_cookie(conn->casper, &stream->req.pool);
-            h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, cookie.base, cookie.len);
+        if (conn->peer_settings.enable_push) {
+            size_t i;
+            for (i = 0; i != stream->req.http2_push_paths.size; ++i)
+                h2o_http2_conn_push_path(conn, stream->req.http2_push_paths.entries[i], stream);
+            /* send casper cookie if it has been altered (due to the __stream itself__ or by some of the pushes) */
+            if (conn->casper != NULL && num_casper_entries_before_push != h2o_http2_casper_num_entries(conn->casper)) {
+                h2o_iovec_t cookie = h2o_http2_casper_build_cookie(conn->casper, &stream->req.pool);
+                h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, cookie.base, cookie.len);
+            }
         }
         /* raise the priority of asset files that block rendering to highest if the user-agent is _not_ using dependency-based
          * prioritization (e.g. that of Firefox)
