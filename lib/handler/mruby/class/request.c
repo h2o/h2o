@@ -200,7 +200,6 @@ static mrb_value h2o_mrb_req_reprocess_request(mrb_state *mrb, mrb_value self)
     h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
     char *upstream;
     h2o_url_t parsed;
-    h2o_req_overrides_t *overrides = h2o_mem_alloc_pool(&mruby_ctx->req->pool, sizeof(*overrides));
 
     mrb_get_args(mrb, "z", &upstream);
 
@@ -210,11 +209,6 @@ static mrb_value h2o_mrb_req_reprocess_request(mrb_state *mrb, mrb_value self)
     if (parsed.scheme != &H2O_URL_SCHEME_HTTP) {
         mrb_raise(mrb, E_ARGUMENT_ERROR, "only HTTP URLs are supported");
     }
-
-    /* setup overrides */
-    *overrides = (h2o_req_overrides_t){};
-    overrides->location_rewrite.match = &parsed;
-    overrides->location_rewrite.path_prefix = mruby_ctx->req->pathconf->path;
 
     /* request reprocess */
     h2o_reprocess_request_deferred(mruby_ctx->req, mruby_ctx->req->method, parsed.scheme, parsed.authority,
