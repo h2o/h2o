@@ -47,7 +47,7 @@ const h2o_http2_priority_t h2o_http2_default_priority = {
 
 const h2o_http2_settings_t H2O_HTTP2_SETTINGS_HOST = {
     4096,   /* header_table_size */
-    1,      /* enable_push */
+    0,      /* enable_push (clients are never allowed to initiate server push; RFC 7540 Section 8.2) */
     100,    /* max_concurrent_streams */
     262144, /* initial_window_size */
     16384   /* max_frame_size */
