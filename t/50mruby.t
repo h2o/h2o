@@ -164,4 +164,22 @@ EOT
     like $resp, qr{\nresponseEnd\s.*\s/index\.js\n.*\s/index\.txt}is, "receives index.js then /index.txt";
 };
 
+subtest "infinite-reprocess" => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        return << "EOT";
+hosts:
+  "127.0.0.1:$port":
+    paths:
+      /:
+        mruby.handler: |
+          r = H2O::Request.new
+          r.reprocess_request "http://127.0.0.1:$port/"
+EOT
+    });
+    my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    like $stderr, qr{^HTTP\/1.1 502 }s, "502 response";
+    like $stdout, qr{too many internal reprocesses}, "reason";
+};
+
 done_testing();
