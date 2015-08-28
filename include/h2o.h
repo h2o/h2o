@@ -690,6 +690,10 @@ struct st_h2o_req_t {
      */
     size_t bytes_sent;
     /**
+     * counts the number of times the request has been reprocessed (excluding delegation)
+     */
+    unsigned num_reprocessed;
+    /**
      * counts the number of times the request has been delegated
      */
     unsigned num_delegated;
