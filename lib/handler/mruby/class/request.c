@@ -198,12 +198,13 @@ static mrb_value h2o_mrb_set_request_headers_out(mrb_state *mrb, mrb_value self)
 static mrb_value h2o_mrb_req_reprocess_request(mrb_state *mrb, mrb_value self)
 {
     h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
-    char *upstream;
+    char *s;
+    mrb_int len;
     h2o_url_t parsed;
 
-    mrb_get_args(mrb, "z", &upstream);
+    mrb_get_args(mrb, "s", &s, &len);
 
-    if (h2o_url_parse(upstream, SIZE_MAX, &parsed) != 0) {
+    if (h2o_url_parse(s, (size_t)len, &parsed) != 0) {
         mrb_raise(mrb, E_ARGUMENT_ERROR, "failed to parse URL");
     }
     if (parsed.scheme != &H2O_URL_SCHEME_HTTP) {
