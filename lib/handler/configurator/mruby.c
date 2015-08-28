@@ -70,7 +70,7 @@ static int on_config_mruby_handler(h2o_configurator_command_t *cmd, h2o_configur
     return 0;
 }
 
-static int on_config_mruby_handler_path(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_mruby_handler_file(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct mruby_configurator_t *self = (void *)cmd->configurator;
     FILE *fp = NULL;
@@ -118,6 +118,12 @@ Exit:
     return ret;
 }
 
+static int on_config_mruby_handler_path(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    h2o_configurator_errprintf(cmd, node, "the command has been removed; see https://github.com/h2o/h2o/pull/467");
+    return -1;
+}
+
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct mruby_configurator_t *self = (void *)_self;
@@ -147,8 +153,12 @@ void h2o_mruby_register_configurator(h2o_globalconf_t *conf)
     c->super.enter = on_config_enter;
     c->super.exit = on_config_exit;
 
-    h2o_configurator_define_command(&c->super, "mruby.handler", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+    h2o_configurator_define_command(&c->super, "mruby.handler", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED |
+                                                                    H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_mruby_handler);
-    h2o_configurator_define_command(&c->super, "mruby.handler_path",
-                                    H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_mruby_handler_path);
+    h2o_configurator_define_command(&c->super, "mruby.handler-file", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED |
+                                                                         H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_mruby_handler_file);
+    h2o_configurator_define_command(&c->super, "mruby.handler_path", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED,
+                                    on_config_mruby_handler_path);
 }
