@@ -69,6 +69,13 @@ static mrb_value h2o_mrb_req_authority(mrb_state *mrb, mrb_value self)
     return h2o_mrb_str_new(mrb, &mruby_ctx->req->authority);
 }
 
+static mrb_value h2o_mrb_req_scheme(mrb_state *mrb, mrb_value self)
+{
+    h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
+
+    return h2o_mrb_str_new(mrb, &mruby_ctx->req->scheme->name);
+}
+
 static mrb_value h2o_mrb_req_method(mrb_state *mrb, mrb_value self)
 {
     h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
@@ -251,6 +258,7 @@ void h2o_mrb_request_class_init(mrb_state *mrb, struct RClass *class)
     mrb_define_method(mrb, class_request, "path", h2o_mrb_req_uri, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "hostname", h2o_mrb_req_hostname, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "authority", h2o_mrb_req_authority, MRB_ARGS_NONE());
+    mrb_define_method(mrb, class_request, "scheme", h2o_mrb_req_scheme, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "method", h2o_mrb_req_method, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "query", h2o_mrb_req_query, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "reprocess_request", h2o_mrb_req_reprocess_request, MRB_ARGS_REQ(1));

@@ -129,6 +129,12 @@ is $resp, "127.0.0.1", "H2O::Request#hostname test";
 
 ($resp, $port) = fetch(<< 'EOT');
         mruby.handler: |
+          H2O::Request.new.scheme
+EOT
+is $resp, "http", "H2O::Request#scheme test";
+
+($resp, $port) = fetch(<< 'EOT');
+        mruby.handler: |
           H2O::Connection.new.remote_ip
 EOT
 is $resp, "127.0.0.1", "H2O::Connection#remote_ip test";
