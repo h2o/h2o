@@ -129,20 +129,73 @@ is $resp, "127.0.0.1", "H2O::Request#hostname test";
 
 ($resp, $port) = fetch(<< 'EOT');
         mruby.handler: |
+          H2O::Request.new.scheme
+EOT
+is $resp, "http", "H2O::Request#scheme test";
+
+($resp, $port) = fetch(<< 'EOT');
+        mruby.handler: |
           H2O::Connection.new.remote_ip
 EOT
 is $resp, "127.0.0.1", "H2O::Connection#remote_ip test";
 
-$resp = fetch_uri(<< 'EOT', 'proxy.html');
+subtest "reprocess_request" => sub {
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
         mruby.handler: |
           r = H2O::Request.new
-          url = "http://#{r.authority}/"
-          if r.uri == "/proxy.html"
-            r.reprocess_request "#{url}/proxy/"
-          end
-        file.dir: t/50mruby/
+          r.reprocess_request "/dest#{r.path}"
+      /scheme-abs-path:
+        mruby.handler: |
+          r = H2O::Request.new
+          r.reprocess_request "http:/dest#{r.path[16..-1]}"
+      /dest/rel:
+        mruby.handler: |
+          r = H2O::Request.new
+          r.reprocess_request "..#{r.path[9..-1]}"
+      /dest:
+        mruby.handler: |
+          r = H2O::Request.new
+          "#{r.scheme}://#{r.authority}#{r.path}"
+      /abs:
+        mruby.handler: |
+          r = H2O::Request.new
+          r.reprocess_request "https://vhost#{r.path[4..-1]}"
+  vhost:
+    paths:
+      /:
+        mruby.handler: |
+          r = H2O::Request.new
+          "#{r.scheme}://#{r.authority}#{r.path}"
 EOT
-is $resp, "I'm proxy.html\n", "H2O::Request#reprocess_request test";
+    subtest "abs-path" => sub {
+        my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        is $stdout, "http://default/dest/";
+        ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/hoge");
+        is $stdout, "http://default/dest/hoge";
+    };
+    subtest "scheme-abs-path" => sub {
+        my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/scheme-abs-path/");
+        is $stdout, "http://default/dest/";
+        ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/scheme-abs-path/hoge");
+        is $stdout, "http://default/dest/hoge";
+    };
+    subtest "rel-path" => sub {
+        my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/dest/rel/");
+        is $stdout, "http://default/dest/";
+        ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/dest/rel/hoge");
+        is $stdout, "http://default/dest/hoge";
+    };
+    subtest "abs" => sub {
+        my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/abs/");
+        is $stdout, "https://vhost/";
+        ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/abs/hoge");
+        is $stdout, "https://vhost/hoge";
+    };
+};
 
 subtest "server-push" => sub {
     plan skip_all => 'nghttp not found'
@@ -162,6 +215,24 @@ hosts:
 EOT
     my $resp = `nghttp -n --stat https://127.0.0.1:$server->{tls_port}/index.txt`;
     like $resp, qr{\nresponseEnd\s.*\s/index\.js\n.*\s/index\.txt}is, "receives index.js then /index.txt";
+};
+
+subtest "infinite-reprocess" => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        return << "EOT";
+hosts:
+  "127.0.0.1:$port":
+    paths:
+      /:
+        mruby.handler: |
+          r = H2O::Request.new
+          r.reprocess_request "http://127.0.0.1:$port/"
+EOT
+    });
+    my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    like $stderr, qr{^HTTP\/1.1 502 }s, "502 response";
+    like $stdout, qr{too many internal reprocesses}, "reason";
 };
 
 done_testing();

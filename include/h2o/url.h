@@ -76,7 +76,7 @@ int h2o_url_parse_relative(const char *url, size_t url_len, h2o_url_t *result);
  */
 const char *h2o_url_parse_hostport(const char *s, size_t len, h2o_iovec_t *host, uint16_t *port);
 /**
- * resolves the URL
+ * resolves the URL (stored to `dest` as well as returning the stringified representation (always allocated using pool)
  */
 h2o_iovec_t h2o_url_resolve(h2o_mem_pool_t *pool, const h2o_url_t *base, const h2o_url_t *relative, h2o_url_t *dest);
 /**

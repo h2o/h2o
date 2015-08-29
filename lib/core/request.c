@@ -238,14 +238,21 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
     req->bytes_sent = 0;
     memset(&req->http2_push_paths, 0, sizeof(req->http2_push_paths));
 
-    /* check the delegation counter */
-    if (is_delegated) {
+    /* check the delegation (or reprocess) counter */
+    if (req->res_is_delegated) {
         if (req->num_delegated == req->conn->ctx->globalconf->max_delegations) {
             /* TODO log */
-            h2o_send_error(req, 502, "Gateway Error", "too many internal redirections", 0);
+            h2o_send_error(req, 502, "Gateway Error", "too many internal delegations", 0);
             return;
         }
         ++req->num_delegated;
+    } else {
+        if (req->num_reprocessed >= 5) {
+            /* TODO log */
+            h2o_send_error(req, 502, "Gateway Error", "too many internal reprocesses", 0);
+            return;
+        }
+        ++req->num_reprocessed;
     }
 
     /* handle the response using the handlers, if hostconf exists */

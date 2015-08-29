@@ -47,7 +47,7 @@ static mrb_value h2o_mrb_req_uri(mrb_state *mrb, mrb_value self)
 {
     h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
 
-    return h2o_mrb_str_new(mrb, &mruby_ctx->req->input.path);
+    return h2o_mrb_str_new(mrb, &mruby_ctx->req->path);
 }
 
 static mrb_value h2o_mrb_req_hostname(mrb_state *mrb, mrb_value self)
@@ -56,7 +56,7 @@ static mrb_value h2o_mrb_req_hostname(mrb_state *mrb, mrb_value self)
     h2o_iovec_t hostname;
     uint16_t port;
 
-    if (h2o_url_parse_hostport(mruby_ctx->req->input.authority.base, mruby_ctx->req->input.authority.len, &hostname, &port) == NULL)
+    if (h2o_url_parse_hostport(mruby_ctx->req->authority.base, mruby_ctx->req->authority.len, &hostname, &port) == NULL)
         return mrb_nil_value();
 
     return h2o_mrb_str_new(mrb, &hostname);
@@ -66,21 +66,28 @@ static mrb_value h2o_mrb_req_authority(mrb_state *mrb, mrb_value self)
 {
     h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
 
-    return h2o_mrb_str_new(mrb, &mruby_ctx->req->input.authority);
+    return h2o_mrb_str_new(mrb, &mruby_ctx->req->authority);
+}
+
+static mrb_value h2o_mrb_req_scheme(mrb_state *mrb, mrb_value self)
+{
+    h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
+
+    return h2o_mrb_str_new(mrb, &mruby_ctx->req->scheme->name);
 }
 
 static mrb_value h2o_mrb_req_method(mrb_state *mrb, mrb_value self)
 {
     h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
 
-    return h2o_mrb_str_new(mrb, &mruby_ctx->req->input.method);
+    return h2o_mrb_str_new(mrb, &mruby_ctx->req->method);
 }
 
 static mrb_value h2o_mrb_req_query(mrb_state *mrb, mrb_value self)
 {
     h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
-    h2o_iovec_t *path = &mruby_ctx->req->input.path;
-    size_t offset = mruby_ctx->req->input.query_at;
+    h2o_iovec_t *path = &mruby_ctx->req->path;
+    size_t offset = mruby_ctx->req->query_at;
     if (offset == SIZE_MAX)
         return mrb_nil_value();
 
@@ -198,30 +205,25 @@ static mrb_value h2o_mrb_set_request_headers_out(mrb_state *mrb, mrb_value self)
 static mrb_value h2o_mrb_req_reprocess_request(mrb_state *mrb, mrb_value self)
 {
     h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
-    char *upstream;
-    h2o_url_t parsed;
-    h2o_req_overrides_t *overrides = h2o_mem_alloc_pool(&mruby_ctx->req->pool, sizeof(*overrides));
+    char *s;
+    mrb_int len;
+    h2o_url_t parsed, base, resolved;
 
-    mrb_get_args(mrb, "z", &upstream);
+    mrb_get_args(mrb, "s", &s, &len);
 
-    if (h2o_url_parse(upstream, SIZE_MAX, &parsed) != 0) {
+    /* resolve the input URL:
+     * * uses `hostconf->authority.hostport` as part of base to prevent relative-path internal redirect generating a TCP connection
+     * * h2o_url_resolve always copies the memory (so the values will be preserved after mruby GC)
+     */
+    if (h2o_url_parse_relative(s, (size_t)len, &parsed) != 0)
         mrb_raise(mrb, E_ARGUMENT_ERROR, "failed to parse URL");
-    }
-    if (parsed.scheme != &H2O_URL_SCHEME_HTTP) {
-        mrb_raise(mrb, E_ARGUMENT_ERROR, "only HTTP URLs are supported");
-    }
-
-    /* setup overrides */
-    *overrides = (h2o_req_overrides_t){};
-    overrides->location_rewrite.match = &parsed;
-    overrides->location_rewrite.path_prefix = mruby_ctx->req->pathconf->path;
+    h2o_req_t *req = mruby_ctx->req;
+    if (h2o_url_init(&base, req->scheme, req->hostconf->authority.hostport, req->pathconf->path) != 0)
+        mrb_raise(mrb, E_RUNTIME_ERROR, "failed to parse current authority");
+    h2o_url_resolve(&req->pool, &base, &parsed, &resolved);
 
     /* request reprocess */
-    h2o_reprocess_request_deferred(mruby_ctx->req, mruby_ctx->req->method, parsed.scheme, parsed.authority,
-                                   h2o_concat(&mruby_ctx->req->pool, parsed.path,
-                                              h2o_iovec_init(mruby_ctx->req->path.base + mruby_ctx->req->pathconf->path.len,
-                                                             mruby_ctx->req->path.len - mruby_ctx->req->pathconf->path.len)),
-                                   NULL, 0);
+    h2o_reprocess_request_deferred(req, req->method, resolved.scheme, resolved.authority, resolved.path, NULL, 0);
     mruby_ctx->is_last = 1;
 
     return mrb_nil_value();
@@ -257,6 +259,7 @@ void h2o_mrb_request_class_init(mrb_state *mrb, struct RClass *class)
     mrb_define_method(mrb, class_request, "path", h2o_mrb_req_uri, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "hostname", h2o_mrb_req_hostname, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "authority", h2o_mrb_req_authority, MRB_ARGS_NONE());
+    mrb_define_method(mrb, class_request, "scheme", h2o_mrb_req_scheme, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "method", h2o_mrb_req_method, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "query", h2o_mrb_req_query, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "reprocess_request", h2o_mrb_req_reprocess_request, MRB_ARGS_REQ(1));
