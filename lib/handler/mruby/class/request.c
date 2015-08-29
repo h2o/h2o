@@ -205,24 +205,25 @@ static mrb_value h2o_mrb_set_request_headers_out(mrb_state *mrb, mrb_value self)
 static mrb_value h2o_mrb_req_reprocess_request(mrb_state *mrb, mrb_value self)
 {
     h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
-    char *upstream;
-    h2o_url_t parsed;
+    char *s;
+    mrb_int len;
+    h2o_url_t parsed, base, resolved;
 
-    mrb_get_args(mrb, "z", &upstream);
+    mrb_get_args(mrb, "s", &s, &len);
 
-    if (h2o_url_parse(upstream, SIZE_MAX, &parsed) != 0) {
+    /* resolve the input URL:
+     * * uses `hostconf->authority.hostport` as part of base to prevent relative-path internal redirect generating a TCP connection
+     * * h2o_url_resolve always copies the memory (so the values will be preserved after mruby GC)
+     */
+    if (h2o_url_parse_relative(s, (size_t)len, &parsed) != 0)
         mrb_raise(mrb, E_ARGUMENT_ERROR, "failed to parse URL");
-    }
-    if (parsed.scheme != &H2O_URL_SCHEME_HTTP) {
-        mrb_raise(mrb, E_ARGUMENT_ERROR, "only HTTP URLs are supported");
-    }
+    h2o_req_t *req = mruby_ctx->req;
+    if (h2o_url_init(&base, req->scheme, req->hostconf->authority.hostport, req->pathconf->path) != 0)
+        mrb_raise(mrb, E_RUNTIME_ERROR, "failed to parse current authority");
+    h2o_url_resolve(&req->pool, &base, &parsed, &resolved);
 
     /* request reprocess */
-    h2o_reprocess_request_deferred(mruby_ctx->req, mruby_ctx->req->method, parsed.scheme, parsed.authority,
-                                   h2o_concat(&mruby_ctx->req->pool, parsed.path,
-                                              h2o_iovec_init(mruby_ctx->req->path.base + mruby_ctx->req->pathconf->path.len,
-                                                             mruby_ctx->req->path.len - mruby_ctx->req->pathconf->path.len)),
-                                   NULL, 0);
+    h2o_reprocess_request_deferred(req, req->method, resolved.scheme, resolved.authority, resolved.path, NULL, 0);
     mruby_ctx->is_last = 1;
 
     return mrb_nil_value();
