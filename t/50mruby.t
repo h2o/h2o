@@ -96,6 +96,12 @@ hosts:
           r = H2O::Request.new
           r.status = 401
           r.status
+      /reason:
+        mruby.handler: |
+          r = H2O::Request.new
+          prev = r.reason
+          r.reason = "mruby_dayo"
+          prev + ":#{r.reason}"
 EOT
     my $fetch = sub {
         my $path = shift;
@@ -143,7 +149,16 @@ EOT
     is [$fetch->("/scheme/")]->[1], "http", "scheme";
     is [$fetch->("/remote_ip/")]->[1], "127.0.0.1", "remote_ip";
     is [$fetch->("/status/")]->[1], "0", "status";
-    is [$fetch->("/status/set-and-get/")]->[1], "401", "status";
+    subtest "status-set-and-get" => sub {
+        ($headers, $body) = $fetch->("/status/set-and-get/");
+        like $headers, qr{^HTTP/1\.1 401 OK\r\n}is;
+        is $body, "401"
+    };
+    subtest "reason" => sub {
+        ($headers, $body) = $fetch->("/reason/");
+        like $headers, qr{^HTTP/1\.1 200 mruby_dayo\r\n}is;
+        ok $body, "OK:mruby_dayo";
+    };
 };
 
 subtest "reprocess_request" => sub {
