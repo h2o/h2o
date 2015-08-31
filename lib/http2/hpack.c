@@ -30,6 +30,8 @@
 #define HEADER_TABLE_OFFSET 62
 #define HEADER_TABLE_ENTRY_SIZE_OFFSET 32
 #define STATUS_HEADER_MAX_SIZE 5
+#define CONTENT_LENGTH_HEADER_MAX_SIZE                                                                                             \
+    (3 + sizeof("18446744073709551615") - 1) /* uses Literal Header Field without Indexing (RFC7541 6.2.2) */
 
 struct st_h2o_hpack_static_table_entry_t {
     const h2o_token_t *name;
@@ -363,6 +365,24 @@ static uint8_t *encode_status(uint8_t *dst, int status)
         dst += 3;
         break;
     }
+
+    return dst;
+}
+
+static uint8_t *encode_content_length(uint8_t *dst, size_t value)
+{
+    char buf[32], *p = buf + sizeof(buf);
+    size_t l;
+
+    do {
+        *--p = '0' + value % 10;
+    } while ((value /= 10) != 0);
+    l = buf + sizeof(buf) - p;
+    *dst++ = 0x0f;
+    *dst++ = 0x0d;
+    *dst++ = (uint8_t)l;
+    memcpy(dst, p, l);
+    dst += l;
 
     return dst;
 }
@@ -739,7 +759,8 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
 }
 
 void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
-                                size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t *ts, const h2o_iovec_t *server_name)
+                                size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t *ts, const h2o_iovec_t *server_name,
+                                size_t content_length)
 {
     size_t capacity = calc_headers_capacity(res->headers.entries, res->headers.size);
     capacity += H2O_HTTP2_FRAME_HEADER_SIZE; /* for the first header */
@@ -748,6 +769,8 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
     capacity += 2 + H2O_TIMESTR_RFC1123_LEN; /* for Date: */
     capacity += 5 + server_name->len;        /* for Server: */
 #endif
+    if (content_length != SIZE_MAX)
+        capacity += CONTENT_LENGTH_HEADER_MAX_SIZE; /* for content-length: UINT64_MAX (with huffman compression applied) */
 
     size_t start_at = (*buf)->size;
     uint8_t *dst = (void *)h2o_buffer_reserve(buf, capacity).base + H2O_HTTP2_FRAME_HEADER_SIZE; /* skip frame header */
@@ -763,6 +786,8 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
     size_t i;
     for (i = 0; i != res->headers.size; ++i)
         dst = encode_header(header_table, dst, res->headers.entries[i].name, &res->headers.entries[i].value);
+    if (content_length != SIZE_MAX)
+        dst = encode_content_length(dst, content_length);
     (*buf)->size = (char *)dst - (*buf)->bytes;
 
     /* setup the frame headers */
