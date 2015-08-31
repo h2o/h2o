@@ -94,6 +94,27 @@ static mrb_value h2o_mrb_req_query(mrb_state *mrb, mrb_value self)
     return mrb_str_new(mrb, path->base + offset, path->len - offset);
 }
 
+static mrb_value h2o_mrb_req_get_status(mrb_state *mrb, mrb_value self)
+{
+    h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
+
+    return mrb_fixnum_value(mruby_ctx->req->res.status);
+}
+
+static mrb_value h2o_mrb_req_set_status(mrb_state *mrb, mrb_value self)
+{
+    h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
+    mrb_int status;
+
+    if (mruby_ctx->state != H2O_MRUBY_STATE_UNDETERMINED)
+        mrb_raise(mrb, E_RUNTIME_ERROR, "response already sent");
+
+    mrb_get_args(mrb, "i", &status);
+    mruby_ctx->req->res.status = status;
+
+    return mrb_fixnum_value(status);
+}
+
 static mrb_value h2o_mrb_get_class_obj(mrb_state *mrb, mrb_value self, char *obj_id, char *class_name)
 {
     mrb_value obj;
@@ -240,7 +261,6 @@ static mrb_value h2o_mrb_req_send_file(mrb_state *mrb, mrb_value self)
     h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
     char *fn;
     int status;
-    const char *reason;
     h2o_iovec_t content_type;
     int content_type_header_removed = 0;
 
@@ -252,8 +272,6 @@ static mrb_value h2o_mrb_req_send_file(mrb_state *mrb, mrb_value self)
     /* determine status and reason to be used */
     if ((status = mruby_ctx->req->res.status) == 0)
         status = 200;
-    if ((reason = mruby_ctx->req->res.reason) == NULL)
-        reason = "OK";
 
     { /* determine content-type (removing existing header, since it is added by h2o_file_send) */
         ssize_t header_index;
@@ -272,7 +290,7 @@ static mrb_value h2o_mrb_req_send_file(mrb_state *mrb, mrb_value self)
         }
     }
 
-    if (h2o_file_send(mruby_ctx->req, status, reason, fn, content_type, H2O_FILE_FLAG_SEND_GZIP) == 0) {
+    if (h2o_file_send(mruby_ctx->req, status, mruby_ctx->req->res.reason, fn, content_type, H2O_FILE_FLAG_SEND_GZIP) == 0) {
         /* succeeded, return true */
         mruby_ctx->state = H2O_MRUBY_STATE_RESPONSE_SENT;
         return mrb_true_value();
@@ -321,6 +339,8 @@ void h2o_mrb_request_class_init(mrb_state *mrb, struct RClass *class)
     mrb_define_method(mrb, class_request, "scheme", h2o_mrb_req_scheme, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "method", h2o_mrb_req_method, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "query", h2o_mrb_req_query, MRB_ARGS_NONE());
+    mrb_define_method(mrb, class_request, "status", h2o_mrb_req_get_status, MRB_ARGS_NONE());
+    mrb_define_method(mrb, class_request, "status=", h2o_mrb_req_set_status, MRB_ARGS_REQ(1));
     mrb_define_method(mrb, class_request, "reprocess_request", h2o_mrb_req_reprocess_request, MRB_ARGS_REQ(1));
     mrb_define_method(mrb, class_request, "send_file", h2o_mrb_req_send_file, MRB_ARGS_REQ(1));
 

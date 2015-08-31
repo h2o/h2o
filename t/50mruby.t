@@ -79,6 +79,14 @@ hosts:
       /remote_ip:
         mruby.handler: |
           H2O::Connection.new.remote_ip
+      /status:
+        mruby.handler: |
+          H2O::Request.new.status
+      /status/set-and-get:
+        mruby.handler: |
+          r = H2O::Request.new
+          r.status = 401
+          r.status
 EOT
     my $fetch = sub {
         my $path = shift;
@@ -113,6 +121,8 @@ EOT
     is [$fetch->("/hostname/")]->[1], "127.0.0.1", "hostname";
     is [$fetch->("/scheme/")]->[1], "http", "scheme";
     is [$fetch->("/remote_ip/")]->[1], "127.0.0.1", "remote_ip";
+    is [$fetch->("/status/")]->[1], "0", "status";
+    is [$fetch->("/status/set-and-get/")]->[1], "401", "status";
 };
 
 subtest "reprocess_request" => sub {
@@ -225,6 +235,11 @@ hosts:
           r = H2O::Request.new
           r.headers_out["content-type"] = "text/plain"
           r.send_file("t/50mruby/index.html")
+      /404:
+        mruby.handler: |
+          r = H2O::Request.new
+          r.status = 404
+          r.send_file("t/50mruby/index.html")
 EOT
     my $fetch = sub {
         my $path = shift;
@@ -240,6 +255,12 @@ EOT
         my ($headers, $body) = $fetch->("/explicit-content-type/");
         like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
         like $headers, qr{^content-type: text/plain\r$}im;
+        is md5_hex($body), md5_file("t/50mruby/index.html");
+    };
+    subtest "404-page" => sub {
+        my ($headers, $body) = $fetch->("/404/");
+        like $headers, qr{^HTTP/1\.1 404 OK\r\n}is;
+        like $headers, qr{^content-type: text/html\r$}im;
         is md5_hex($body), md5_file("t/50mruby/index.html");
     };
 };
