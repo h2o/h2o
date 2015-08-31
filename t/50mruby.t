@@ -1,5 +1,6 @@
 use strict;
 use warnings;
+use Digest::MD5 qw(md5_hex);
 use Test::More;
 use t::Util;
 
@@ -9,135 +10,110 @@ plan skip_all => 'mruby support is off'
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
 
-sub fetch {
-    my $extra_conf = shift;
-    my $server = spawn_h2o(<< "EOT");
+subtest "handler-file" => sub {
+    my $server = spawn_h2o(<< 'EOT');
 hosts:
   default:
     paths:
       /:
-$extra_conf
-EOT
-    return (`curl --silent /dev/stderr -H User-Agent:h2o_mruby_test http://127.0.0.1:$server->{port}/ 2>&1`, $server->{port});
-}
-
-sub fetch_header {
-    my $extra_conf = shift;
-    my $server = spawn_h2o(<< "EOT");
-hosts:
-  default:
-    paths:
-      /:
-$extra_conf
-EOT
-    return `curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/ 2>&1`;
-}
-
-sub fetch_uri {
-    my ($extra_conf, $uri) = @_;
-    my $server = spawn_h2o(<< "EOT");
-hosts:
-  default:
-    paths:
-      /:
-$extra_conf
-EOT
-    return `curl --silent /dev/stderr http://127.0.0.1:$server->{port}/$uri 2>&1`;
-}
-
-my ($resp, $port) = fetch(<< 'EOT');
         mruby.handler-file: t/50mruby/hello.rb
 EOT
-is $resp, "hello from h2o_mruby\n", "resoponse body from mruby (separate)";
+    my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    is $body, "hello from h2o_mruby\n";
+    like $headers, qr{^HTTP/1\.1 200 OK\r\n}s;
+    like $headers, qr{^content-type: text/plain; charset=utf-8\r$}im;
+};
 
-($resp, $port) = fetch(<< 'EOT');
+subtest "basic" => sub {
+    my $server = spawn_h2o(<< 'EOT');
+hosts:
+  default:
+    paths:
+      /inline:
         mruby.handler: |
           h = "hello"
           m =  "from h2o_mruby"
           h + " " + m + "\n"
-EOT
-is $resp,"hello from h2o_mruby\n", "response body from mruby (inline)";
-
-($resp, $port) = fetch(<< 'EOT');
+      /max-headers:
         mruby.handler: |
           H2O.max_headers.to_s
-EOT
-is $resp, "100", "H2O.max_headers method";
-
-($resp, $port) = fetch(<< 'EOT');
+      /headers-in:
         mruby.handler: |
           r = H2O::Request.new
           ua = r.headers_in["User-Agent"]
           r.headers_in["User-Agent"] = "new-#{ua}"
           r.headers_in["User-Agent"]
-EOT
-is $resp, "new-h2o_mruby_test", "H2O::Request#headers_in test";
-
-$resp = fetch_header(<< 'EOT');
+      /headers-out:
         mruby.handler: |
           r = H2O::Request.new
           r.headers_out["new-header"] = "h2o-mruby"
           # pass to next handler
           nil
         file.dir: examples/doc_root
-EOT
-like $resp, qr/^new-header:.*\Wh2o-mruby\W/im, "H2O::Response#headers_out test";
-
-($resp, $port) = fetch(<< 'EOT');
+      /return-404:
         mruby.handler: |
           H2O.return 404, "not found", "not found"
         file.dir: examples/doc_root
-EOT
-is $resp, "not found", "H2O.return with status code test";
-
-($resp, $port)= fetch(<< 'EOT');
+      /fallthru:
         mruby.handler: |
           H2O.return H2O::DECLINED
         file.dir: t/50mruby/
-EOT
-is $resp, "I'm index.html\n", "H2O.return with declined code test";
-
-($resp, $port) = fetch(<< 'EOT');
+      /method:
         mruby.handler: |
           H2O::Request.new.method
-EOT
-is $resp, "GET", "H2O::Request#method test";
-
-$resp = fetch_uri(<< 'EOT', 'index.html?a=1');
+      /query:
         mruby.handler: |
           H2O::Request.new.query
-EOT
-is $resp, "?a=1", "H2O::Request#query test";
-
-$resp = fetch_uri(<< 'EOT', 'index.html?a=1');
+      /uri:
         mruby.handler: |
           H2O::Request.new.uri
-EOT
-is $resp, "/index.html?a=1", "H2O::Request#uri test";
-
-($resp, $port) = fetch(<< 'EOT');
+      /authority:
         mruby.handler: |
           H2O::Request.new.authority
-EOT
-is $resp, "127.0.0.1:$port", "H2O::Request#authority test";
-
-($resp, $port) = fetch(<< 'EOT');
+      /hostname:
         mruby.handler: |
           H2O::Request.new.hostname
-EOT
-is $resp, "127.0.0.1", "H2O::Request#hostname test";
-
-($resp, $port) = fetch(<< 'EOT');
+      /scheme:
         mruby.handler: |
           H2O::Request.new.scheme
-EOT
-is $resp, "http", "H2O::Request#scheme test";
-
-($resp, $port) = fetch(<< 'EOT');
+      /remote_ip:
         mruby.handler: |
           H2O::Connection.new.remote_ip
 EOT
-is $resp, "127.0.0.1", "H2O::Connection#remote_ip test";
+    my $fetch = sub {
+        my $path = shift;
+        run_prog("curl --silent -A h2o_mruby_test --dump-header /dev/stderr http://127.0.0.1:$server->{port}$path");
+    };
+    my ($headers, $body) = $fetch->("/inline/");
+    is $body, "hello from h2o_mruby\n", "inline";
+    ($headers, $body) = $fetch->("/max-headers/");
+    is $body, "100", "max_headers";
+    ($headers, $body) = $fetch->("/headers-in/");
+    is $body, "new-h2o_mruby_test", "headers_in";
+    subtest "headers-out" => sub {
+        ($headers, $body) = $fetch->("/headers-out/");
+        like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
+        like $headers, qr{^new-header: h2o-mruby\r$}im;
+        is md5_hex($body), md5_file("examples/doc_root/index.html");
+    };
+    subtest "return-404" => sub {
+        ($headers, $body) = $fetch->("/return-404/");
+        like $headers, qr{^HTTP/1\.1 404 not found\r\n}is;
+        is $body, "not found";
+    };
+    subtest "fallthru" => sub {
+        ($headers, $body) = $fetch->("/fallthru/");
+        like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
+        is md5_hex($body), md5_file("t/50mruby/index.html");
+    };
+    is [$fetch->("/method/")]->[1], "GET", "method";
+    is [$fetch->("/query/?a=1")]->[1], "?a=1", "method";
+    is [$fetch->("/uri/?a=1")]->[1], "/uri/?a=1", "uri";
+    is [$fetch->("/authority/")]->[1], "127.0.0.1:$server->{port}", "authority";
+    is [$fetch->("/hostname/")]->[1], "127.0.0.1", "hostname";
+    is [$fetch->("/scheme/")]->[1], "http", "scheme";
+    is [$fetch->("/remote_ip/")]->[1], "127.0.0.1", "remote_ip";
+};
 
 subtest "reprocess_request" => sub {
     my $server = spawn_h2o(<< "EOT");
