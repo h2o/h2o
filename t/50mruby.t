@@ -58,6 +58,15 @@ hosts:
         mruby.handler: |
           H2O.return H2O::DECLINED
         file.dir: t/50mruby/
+      /send/basic:
+        mruby.handler: |
+          H2O::Request.new.send "hello world"
+      /send/custom:
+        mruby.handler: |
+          r = H2O::Request.new
+          r.status = 401
+          r.headers_out["content-type"] = "application/octet-stream"
+          r.send "hello world"
       /method:
         mruby.handler: |
           H2O::Request.new.method
@@ -79,6 +88,20 @@ hosts:
       /remote_ip:
         mruby.handler: |
           H2O::Connection.new.remote_ip
+      /status:
+        mruby.handler: |
+          H2O::Request.new.status
+      /status/set-and-get:
+        mruby.handler: |
+          r = H2O::Request.new
+          r.status = 401
+          r.status
+      /reason:
+        mruby.handler: |
+          r = H2O::Request.new
+          prev = r.reason
+          r.reason = "mruby_dayo"
+          prev + ":#{r.reason}"
 EOT
     my $fetch = sub {
         my $path = shift;
@@ -106,6 +129,18 @@ EOT
         like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
         is md5_hex($body), md5_file("t/50mruby/index.html");
     };
+    subtest "send-basic" => sub {
+        ($headers, $body) = $fetch->("/send/basic/");
+        like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
+        like $headers, qr{^content-type: text/plain; charset=utf-8\r}im;
+        is $body, "hello world";
+    };
+    subtest "send-custom" => sub {
+        ($headers, $body) = $fetch->("/send/custom/");
+        like $headers, qr{^HTTP/1\.1 401 OK\r\n}is;
+        like $headers, qr{^content-type: application/octet-stream\r}im;
+        is $body, "hello world";
+    };
     is [$fetch->("/method/")]->[1], "GET", "method";
     is [$fetch->("/query/?a=1")]->[1], "?a=1", "method";
     is [$fetch->("/uri/?a=1")]->[1], "/uri/?a=1", "uri";
@@ -113,6 +148,17 @@ EOT
     is [$fetch->("/hostname/")]->[1], "127.0.0.1", "hostname";
     is [$fetch->("/scheme/")]->[1], "http", "scheme";
     is [$fetch->("/remote_ip/")]->[1], "127.0.0.1", "remote_ip";
+    is [$fetch->("/status/")]->[1], "0", "status";
+    subtest "status-set-and-get" => sub {
+        ($headers, $body) = $fetch->("/status/set-and-get/");
+        like $headers, qr{^HTTP/1\.1 401 OK\r\n}is;
+        is $body, "401"
+    };
+    subtest "reason" => sub {
+        ($headers, $body) = $fetch->("/reason/");
+        like $headers, qr{^HTTP/1\.1 200 mruby_dayo\r\n}is;
+        ok $body, "OK:mruby_dayo";
+    };
 };
 
 subtest "reprocess_request" => sub {
@@ -209,6 +255,63 @@ EOT
     my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
     like $stderr, qr{^HTTP\/1.1 502 }s, "502 response";
     like $stdout, qr{too many internal reprocesses}, "reason";
+};
+
+subtest "send-file" => sub {
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /auto-content-type:
+        mruby.handler: |
+          r = H2O::Request.new
+          r.send_file("t/50mruby/index.html")
+      /explicit-content-type:
+        mruby.handler: |
+          r = H2O::Request.new
+          r.headers_out["content-type"] = "text/plain"
+          r.send_file("t/50mruby/index.html")
+      /404:
+        mruby.handler: |
+          r = H2O::Request.new
+          r.status = 404
+          r.send_file("t/50mruby/index.html")
+      /nonexistent:
+        mruby.handler: |
+          r = H2O::Request.new
+          if !r.send_file("t/50mruby/nonexistent")
+            r.status = 404
+            "never mind!!!"
+          end
+EOT
+    my $fetch = sub {
+        my $path = shift;
+        run_prog("curl --silent -A h2o_mruby_test --dump-header /dev/stderr http://127.0.0.1:$server->{port}$path");
+    };
+    subtest "auto-content-type" => sub {
+        my ($headers, $body) = $fetch->("/auto-content-type/");
+        like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
+        like $headers, qr{^content-type: text/html\r$}im;
+        is md5_hex($body), md5_file("t/50mruby/index.html");
+    };
+    subtest "explicit-content-type" => sub {
+        my ($headers, $body) = $fetch->("/explicit-content-type/");
+        like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
+        like $headers, qr{^content-type: text/plain\r$}im;
+        is md5_hex($body), md5_file("t/50mruby/index.html");
+    };
+    subtest "404-page" => sub {
+        my ($headers, $body) = $fetch->("/404/");
+        like $headers, qr{^HTTP/1\.1 404 OK\r\n}is;
+        like $headers, qr{^content-type: text/html\r$}im;
+        is md5_hex($body), md5_file("t/50mruby/index.html");
+    };
+    subtest "nonexistent" => sub {
+        my ($headers, $body) = $fetch->("/nonexistent/");
+        like $headers, qr{^HTTP/1\.1 404 OK\r\n}is;
+        like $headers, qr{^content-type: text/plain; charset=utf-8\r$}im;
+        is $body, "never mind!!!";
+    };
 };
 
 done_testing();

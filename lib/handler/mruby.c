@@ -29,8 +29,6 @@
 #include "h2o.h"
 #include "h2o/mruby_.h"
 
-void h2o_mrb_class_init(mrb_state *mrb);
-
 struct st_h2o_mruby_context_t {
     h2o_mruby_handler_t *handler;
     mrb_state *mrb;
@@ -157,21 +155,25 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         }
     } else if (!mrb_nil_p(result)) {
         if (mruby_ctx->state == H2O_MRUBY_STATE_UNDETERMINED) {
-            /* convert to string */
+            /* convert to string and send */
             result = mrb_str_to_str(mrb, result);
-            if (req->res.status == 0) {
-                req->res.status = 200;
-                req->res.reason = "OK";
-            }
-            if (h2o_find_header(&req->res.headers, H2O_TOKEN_CONTENT_TYPE, -1) == -1)
-                h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT(H2O_MRUBY_DEFAULT_CONTENT_TYPE));
-            h2o_send_inline(req, h2o_strdup(&req->pool, RSTRING_PTR(result), RSTRING_LEN(result)).base, RSTRING_LEN(result));
+            h2o_mruby_fixup_and_send(req, h2o_strdup(&req->pool, RSTRING_PTR(result), RSTRING_LEN(result)).base,
+                                     RSTRING_LEN(result));
             mruby_ctx->state = H2O_MRUBY_STATE_RESPONSE_SENT;
         }
     }
 
     mrb_gc_arena_restore(mrb, ai);
     return mruby_ctx->state == H2O_MRUBY_STATE_RESPONSE_SENT ? 0 : -1;
+}
+
+void h2o_mruby_fixup_and_send(h2o_req_t *req, const char *body, size_t len)
+{
+    if (req->res.status == 0)
+        req->res.status = 200;
+    if (h2o_find_header(&req->res.headers, H2O_TOKEN_CONTENT_TYPE, -1) == -1)
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT(H2O_MRUBY_DEFAULT_CONTENT_TYPE));
+    h2o_send_inline(req, body, len);
 }
 
 h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_config_vars_t *vars)

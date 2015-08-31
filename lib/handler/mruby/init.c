@@ -21,12 +21,9 @@
  */
 #include <mruby.h>
 #include <mruby/compile.h>
+#include "h2o/mruby_.h"
 
 #define GC_ARENA_RESTORE mrb_gc_arena_restore(mrb, 0);
-
-void h2o_mrb_core_class_init(mrb_state *mrb, struct RClass *class);
-void h2o_mrb_request_class_init(mrb_state *mrb, struct RClass *class);
-void h2o_mrb_conn_class_init(mrb_state *mrb, struct RClass *class);
 
 void h2o_mrb_class_init(mrb_state *mrb)
 {
