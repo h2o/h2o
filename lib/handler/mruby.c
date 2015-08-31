@@ -140,8 +140,9 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     /* create mruby internal context into mrb state */
     mruby_ctx = h2o_mem_alloc_pool(&req->pool, sizeof(h2o_mruby_internal_context_t));
     mruby_ctx->req = req;
-    mruby_ctx->is_last = -1;
+    mruby_ctx->state = H2O_MRUBY_STATE_UNDETERMINED;
     mrb->ud = (void *)mruby_ctx;
+    req->res.status = 0;
 
     result = mrb_run(mrb, handler_ctx->proc, mrb_top_self(mrb));
 
@@ -150,35 +151,27 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         struct RString *error = mrb_str_ptr(obj);
         fprintf(stderr, "%s: mruby raised: %s\n", H2O_MRUBY_MODULE_NAME, error->as.heap.ptr);
         mrb->exc = 0;
-        h2o_send_error(req, 500, "Internal Server Error", "Internal Server Error", 0);
-        goto OK;
-    } else if (mrb_nil_p(result)) {
-        if (mruby_ctx->is_last == 1) {
-            /* ran H2O.return method with http status code(1xx - 5xx) */
-            goto OK;
+        if (mruby_ctx->state == H2O_MRUBY_STATE_UNDETERMINED) {
+            h2o_send_error(req, 500, "Internal Server Error", "Internal Server Error", 0);
+            mruby_ctx->state = H2O_MRUBY_STATE_RESPONSE_SENT;
         }
-        /* decline to send response for next handler when return value is nil */
-        goto DECLINED;
-    } else {
-        if (mruby_ctx->is_last == 1) {
-            /* ran H2O.return method with http status code(1xx - 5xx) */
-            goto OK;
-        } else if (mruby_ctx->is_last == 0) {
-            /* ran H2O.return method with declined status(-1) */
-            goto DECLINED;
-        } else {
-            h2o_send_error(req, 200, "OK", mrb_str_to_cstr(mrb, result), 0);
-            goto OK;
+    } else if (!mrb_nil_p(result)) {
+        if (mruby_ctx->state == H2O_MRUBY_STATE_UNDETERMINED) {
+            /* convert to string */
+            result = mrb_str_to_str(mrb, result);
+            if (req->res.status == 0) {
+                req->res.status = 200;
+                req->res.reason = "OK";
+            }
+            if (h2o_find_header(&req->res.headers, H2O_TOKEN_CONTENT_TYPE, -1) == -1)
+                h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT(H2O_MRUBY_DEFAULT_CONTENT_TYPE));
+            h2o_send_inline(req, h2o_strdup(&req->pool, RSTRING_PTR(result), RSTRING_LEN(result)).base, RSTRING_LEN(result));
+            mruby_ctx->state = H2O_MRUBY_STATE_RESPONSE_SENT;
         }
     }
 
-DECLINED:
     mrb_gc_arena_restore(mrb, ai);
-    return -1;
-
-OK:
-    mrb_gc_arena_restore(mrb, ai);
-    return 0;
+    return mruby_ctx->state == H2O_MRUBY_STATE_RESPONSE_SENT ? 0 : -1;
 }
 
 h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_config_vars_t *vars)
