@@ -77,7 +77,8 @@ size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len);
 void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
                                size_t max_frame_size, h2o_req_t *req, uint32_t parent_stream_id);
 void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
-                                size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t *ts, const h2o_iovec_t *server_name);
+                                size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t *ts, const h2o_iovec_t *server_name,
+                                size_t content_length);
 
 /* frames */
 
