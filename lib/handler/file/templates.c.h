@@ -26,10 +26,22 @@
 
 static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t path_normalized, DIR *dp)
 {
+    H2O_VECTOR(char *)files = {};
+
+    { /* build list of files */
+        struct dirent dent, *dentp;
+        int ret;
+        while ((ret = readdir_r(dp, &dent, &dentp)) == 0 && dentp != NULL) {
+            if (strcmp(dent.d_name, ".") == 0 || strcmp(dent.d_name, "..") == 0)
+                continue;
+            h2o_vector_reserve(NULL, (void *)&files, sizeof(files.entries[0]), files.size + 1);
+            files.entries[files.size++] = h2o_strdup(NULL, dent.d_name, SIZE_MAX).base;
+        }
+        qsort(files.entries, files.size, sizeof(files.entries[0]), (void *)strcmp);
+    }
+
     h2o_buffer_t *_;
     h2o_iovec_t path_normalized_escaped = h2o_htmlescape(pool, path_normalized.base, path_normalized.len);
-    struct dirent dent, *dentp;
-    int ret;
 
     h2o_buffer_init(&_, &h2o_socket_buffer_prototype);
 
@@ -74,11 +86,9 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
         _->size += _s.len;
     }
 
-    while ((ret = readdir_r(dp, &dent, &dentp)) == 0 && dentp != NULL) {
-        h2o_iovec_t fn_escaped;
-        if (strcmp(dent.d_name, ".") == 0 || strcmp(dent.d_name, "..") == 0)
-            continue;
-        fn_escaped = h2o_htmlescape(pool, dent.d_name, strlen(dent.d_name));
+    size_t i;
+    for (i = 0; i != files.size; ++i) {
+        h2o_iovec_t fn_escaped = h2o_htmlescape(pool, files.entries[i], strlen(files.entries[i]));
         {
             h2o_iovec_t _s = (h2o_iovec_init(H2O_STRLIT("<LI><A HREF=\"")));
             if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
@@ -119,7 +129,9 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
             memcpy(_->bytes + _->size, _s.base, _s.len);
             _->size += _s.len;
         }
+        free(files.entries[i]);
     }
 
+    free(files.entries);
     return _;
 }
