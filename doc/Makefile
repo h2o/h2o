@@ -11,6 +11,7 @@ OUTPUT=\
     configure/http2_directives.html \
     configure/access_log_directives.html \
     configure/expires_directives.html \
+	configure/fail_directives.html \
     configure/fastcgi_directives.html \
     configure/file_directives.html \
     configure/headers_directives.html \
