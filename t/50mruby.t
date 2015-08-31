@@ -211,4 +211,37 @@ EOT
     like $stdout, qr{too many internal reprocesses}, "reason";
 };
 
+subtest "send-file" => sub {
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /auto-content-type:
+        mruby.handler: |
+          r = H2O::Request.new
+          r.send_file("t/50mruby/index.html")
+      /explicit-content-type:
+        mruby.handler: |
+          r = H2O::Request.new
+          r.headers_out["content-type"] = "text/plain"
+          r.send_file("t/50mruby/index.html")
+EOT
+    my $fetch = sub {
+        my $path = shift;
+        run_prog("curl --silent -A h2o_mruby_test --dump-header /dev/stderr http://127.0.0.1:$server->{port}$path");
+    };
+    subtest "auto-content-type" => sub {
+        my ($headers, $body) = $fetch->("/auto-content-type/");
+        like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
+        like $headers, qr{^content-type: text/html\r$}im;
+        is md5_hex($body), md5_file("t/50mruby/index.html");
+    };
+    subtest "explicit-content-type" => sub {
+        my ($headers, $body) = $fetch->("/explicit-content-type/");
+        like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
+        like $headers, qr{^content-type: text/plain\r$}im;
+        is md5_hex($body), md5_file("t/50mruby/index.html");
+    };
+};
+
 done_testing();

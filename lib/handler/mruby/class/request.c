@@ -235,6 +235,56 @@ static mrb_value h2o_mrb_req_reprocess_request(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
+static mrb_value h2o_mrb_req_send_file(mrb_state *mrb, mrb_value self)
+{
+    h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
+    char *fn;
+    int status;
+    const char *reason;
+    h2o_iovec_t content_type;
+    int content_type_header_removed = 0;
+
+    if (mruby_ctx->state != H2O_MRUBY_STATE_UNDETERMINED)
+        mrb_raise(mrb, E_RUNTIME_ERROR, "response already sent");
+
+    mrb_get_args(mrb, "z", &fn);
+
+    /* determine status and reason to be used */
+    if ((status = mruby_ctx->req->res.status) == 0)
+        status = 200;
+    if ((reason = mruby_ctx->req->res.reason) == NULL)
+        reason = "OK";
+
+    { /* determine content-type (removing existing header, since it is added by h2o_file_send) */
+        ssize_t header_index;
+        if ((header_index = h2o_find_header(&mruby_ctx->req->res.headers, H2O_TOKEN_CONTENT_TYPE, -1)) != -1) {
+            content_type = mruby_ctx->req->res.headers.entries[header_index].value;
+            h2o_delete_header(&mruby_ctx->req->res.headers, header_index);
+            content_type_header_removed = 1;
+        } else {
+            const char *ext = h2o_get_filext(fn, strlen(fn));
+            h2o_mimemap_type_t *m = h2o_mimemap_get_type_by_extension(mruby_ctx->req->pathconf->mimemap, ext);
+            if (m == NULL || m->type != H2O_MIMEMAP_TYPE_MIMETYPE) {
+                m = h2o_mimemap_get_default_type(mruby_ctx->req->pathconf->mimemap);
+                assert(m->type == H2O_MIMEMAP_TYPE_MIMETYPE);
+            }
+            content_type = m->data.mimetype;
+        }
+    }
+
+    if (h2o_file_send(mruby_ctx->req, status, reason, fn, content_type, H2O_FILE_FLAG_SEND_GZIP) == 0) {
+        /* succeeded, return true */
+        mruby_ctx->state = H2O_MRUBY_STATE_RESPONSE_SENT;
+        return mrb_true_value();
+    } else {
+        /* failed, restore content-type header and return false */
+        if (content_type_header_removed)
+            h2o_add_header(&mruby_ctx->req->pool, &mruby_ctx->req->res.headers, H2O_TOKEN_CONTENT_TYPE, content_type.base,
+                           content_type.len);
+        return mrb_false_value();
+    }
+}
+
 static mrb_value h2o_mrb_push_http2_push_paths(mrb_state *mrb, mrb_value self)
 {
     h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
@@ -272,6 +322,7 @@ void h2o_mrb_request_class_init(mrb_state *mrb, struct RClass *class)
     mrb_define_method(mrb, class_request, "method", h2o_mrb_req_method, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "query", h2o_mrb_req_query, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "reprocess_request", h2o_mrb_req_reprocess_request, MRB_ARGS_REQ(1));
+    mrb_define_method(mrb, class_request, "send_file", h2o_mrb_req_send_file, MRB_ARGS_REQ(1));
 
     mrb_define_method(mrb, class_request, "headers_in", h2o_mrb_headers_in_obj, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "headers_out", h2o_mrb_headers_out_obj, MRB_ARGS_NONE());
