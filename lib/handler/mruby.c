@@ -29,8 +29,6 @@
 #include "h2o.h"
 #include "h2o/mruby_.h"
 
-void h2o_mrb_class_init(mrb_state *mrb);
-
 struct st_h2o_mruby_context_t {
     h2o_mruby_handler_t *handler;
     mrb_state *mrb;
