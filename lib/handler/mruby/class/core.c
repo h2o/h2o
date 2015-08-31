@@ -31,21 +31,30 @@ static mrb_value h2o_mrb_max_headers(mrb_state *mrb, mrb_value self)
 
 static mrb_value h2o_mrb_return(mrb_state *mrb, mrb_value self)
 {
+    h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
     mrb_int status;
     const char *reason, *body;
-    h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
+    mrb_int reason_len, body_len;
+
+    if (mruby_ctx->state != H2O_MRUBY_STATE_UNDETERMINED)
+        mrb_raise(mrb, E_RUNTIME_ERROR, "response already sent");
 
     reason = body = NULL;
-    mrb_get_args(mrb, "i|zz", &status, &reason, &body);
+    mrb_get_args(mrb, "i|ss", &status, &reason, &reason_len, &body, &body_len);
     if (status == -1) {
         /* pass to next handler */
-        mruby_ctx->is_last = 0;
+        mruby_ctx->state = H2O_MRUBY_STATE_FALLTHRU;
     } else {
         if (reason == NULL || body == NULL)
             mrb_raise(mrb, E_ARGUMENT_ERROR, "need both reason and body with status code");
-        /* send response using h2o_send_error */
-        h2o_send_error(mruby_ctx->req, status, reason, body, H2O_SEND_ERROR_KEEP_HEADERS);
-        mruby_ctx->is_last = 1;
+        /* send response */
+        h2o_req_t *req = mruby_ctx->req;
+        req->res.status = status;
+        req->res.reason = h2o_strdup(&mruby_ctx->req->pool, reason, reason_len).base;
+        if (h2o_find_header(&req->res.headers, H2O_TOKEN_CONTENT_TYPE, -1) == -1)
+            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT(H2O_MRUBY_DEFAULT_CONTENT_TYPE));
+        h2o_send_inline(req, body, body_len);
+        mruby_ctx->state = H2O_MRUBY_STATE_RESPONSE_SENT;
     }
 
     return mrb_fixnum_value(status);

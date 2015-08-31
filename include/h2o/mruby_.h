@@ -10,6 +10,8 @@
 #define H2O_MRUBY_MODULE_VERSION "0.0.1"
 #define H2O_MRUBY_MODULE_DESCRIPTION H2O_MRUBY_MODULE_NAME "/" H2O_MRUBY_MODULE_VERSION
 
+#define H2O_MRUBY_DEFAULT_CONTENT_TYPE "text/plain; charset=utf-8"
+
 struct st_h2o_mruby_config_vars_t {
     h2o_iovec_t source;
     char *path;
@@ -27,7 +29,11 @@ typedef struct st_h2o_mruby_handler_t h2o_mruby_handler_t;
 
 struct st_h2o_mruby_internal_context_t {
     h2o_req_t *req;
-    int is_last;
+    enum {
+        H2O_MRUBY_STATE_UNDETERMINED,
+        H2O_MRUBY_STATE_FALLTHRU,
+        H2O_MRUBY_STATE_RESPONSE_SENT
+    } state;
 };
 
 typedef struct st_h2o_mruby_internal_context_t h2o_mruby_internal_context_t;

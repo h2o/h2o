@@ -188,6 +188,9 @@ static mrb_value h2o_mrb_set_request_headers_out(mrb_state *mrb, mrb_value self)
     mrb_value key, val;
     char *key_cstr, *val_cstr;
 
+    if (mruby_ctx->state != H2O_MRUBY_STATE_UNDETERMINED)
+        mrb_raise(mrb, E_RUNTIME_ERROR, "response already sent");
+
     mrb_get_args(mrb, "oo", &key, &val);
     key = mrb_funcall(mrb, key, "downcase", 0);
 
@@ -209,6 +212,9 @@ static mrb_value h2o_mrb_req_reprocess_request(mrb_state *mrb, mrb_value self)
     mrb_int len;
     h2o_url_t parsed, base, resolved;
 
+    if (mruby_ctx->state != H2O_MRUBY_STATE_UNDETERMINED)
+        mrb_raise(mrb, E_RUNTIME_ERROR, "response already sent");
+
     mrb_get_args(mrb, "s", &s, &len);
 
     /* resolve the input URL:
@@ -224,7 +230,7 @@ static mrb_value h2o_mrb_req_reprocess_request(mrb_state *mrb, mrb_value self)
 
     /* request reprocess */
     h2o_reprocess_request_deferred(req, req->method, resolved.scheme, resolved.authority, resolved.path, NULL, 0);
-    mruby_ctx->is_last = 1;
+    mruby_ctx->state = H2O_MRUBY_STATE_RESPONSE_SENT;
 
     return mrb_nil_value();
 }
@@ -234,6 +240,9 @@ static mrb_value h2o_mrb_push_http2_push_paths(mrb_state *mrb, mrb_value self)
     h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
     char *s;
     mrb_int len;
+
+    if (mruby_ctx->state != H2O_MRUBY_STATE_UNDETERMINED)
+        mrb_raise(mrb, E_RUNTIME_ERROR, "response already sent");
 
     mrb_get_args(mrb, "s", &s, &len);
 
