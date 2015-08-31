@@ -256,6 +256,22 @@ static mrb_value h2o_mrb_req_reprocess_request(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
+static mrb_value h2o_mrb_req_send(mrb_state *mrb, mrb_value self)
+{
+    h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
+    char *s;
+    mrb_int len;
+
+    if (mruby_ctx->state != H2O_MRUBY_STATE_UNDETERMINED)
+        mrb_raise(mrb, E_RUNTIME_ERROR, "response already sent");
+
+    mrb_get_args(mrb, "s", &s, &len);
+
+    h2o_mruby_fixup_and_send(mruby_ctx->req, h2o_strdup(&mruby_ctx->req->pool, s, len).base, len);
+    mruby_ctx->state = H2O_MRUBY_STATE_RESPONSE_SENT;
+    return mrb_nil_value();
+}
+
 static mrb_value h2o_mrb_req_send_file(mrb_state *mrb, mrb_value self)
 {
     h2o_mruby_internal_context_t *mruby_ctx = (h2o_mruby_internal_context_t *)mrb->ud;
@@ -342,6 +358,7 @@ void h2o_mrb_request_class_init(mrb_state *mrb, struct RClass *class)
     mrb_define_method(mrb, class_request, "status", h2o_mrb_req_get_status, MRB_ARGS_NONE());
     mrb_define_method(mrb, class_request, "status=", h2o_mrb_req_set_status, MRB_ARGS_REQ(1));
     mrb_define_method(mrb, class_request, "reprocess_request", h2o_mrb_req_reprocess_request, MRB_ARGS_REQ(1));
+    mrb_define_method(mrb, class_request, "send", h2o_mrb_req_send, MRB_ARGS_REQ(1));
     mrb_define_method(mrb, class_request, "send_file", h2o_mrb_req_send_file, MRB_ARGS_REQ(1));
 
     mrb_define_method(mrb, class_request, "headers_in", h2o_mrb_headers_in_obj, MRB_ARGS_NONE());

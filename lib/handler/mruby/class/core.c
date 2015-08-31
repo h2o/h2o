@@ -45,15 +45,13 @@ static mrb_value h2o_mrb_return(mrb_state *mrb, mrb_value self)
         /* pass to next handler */
         mruby_ctx->state = H2O_MRUBY_STATE_FALLTHRU;
     } else {
-        if (reason == NULL || body == NULL)
+        if (reason == NULL || reason_len == 0 || body == NULL)
             mrb_raise(mrb, E_ARGUMENT_ERROR, "need both reason and body with status code");
         /* send response */
         h2o_req_t *req = mruby_ctx->req;
         req->res.status = status;
         req->res.reason = h2o_strdup(&mruby_ctx->req->pool, reason, reason_len).base;
-        if (h2o_find_header(&req->res.headers, H2O_TOKEN_CONTENT_TYPE, -1) == -1)
-            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT(H2O_MRUBY_DEFAULT_CONTENT_TYPE));
-        h2o_send_inline(req, body, body_len);
+        h2o_mruby_fixup_and_send(req, h2o_strdup(&req->pool, body, body_len).base, body_len);
         mruby_ctx->state = H2O_MRUBY_STATE_RESPONSE_SENT;
     }
 

@@ -58,6 +58,15 @@ hosts:
         mruby.handler: |
           H2O.return H2O::DECLINED
         file.dir: t/50mruby/
+      /send/basic:
+        mruby.handler: |
+          H2O::Request.new.send "hello world"
+      /send/custom:
+        mruby.handler: |
+          r = H2O::Request.new
+          r.status = 401
+          r.headers_out["content-type"] = "application/octet-stream"
+          r.send "hello world"
       /method:
         mruby.handler: |
           H2O::Request.new.method
@@ -113,6 +122,18 @@ EOT
         ($headers, $body) = $fetch->("/fallthru/");
         like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
         is md5_hex($body), md5_file("t/50mruby/index.html");
+    };
+    subtest "send-basic" => sub {
+        ($headers, $body) = $fetch->("/send/basic/");
+        like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
+        like $headers, qr{^content-type: text/plain; charset=utf-8\r}im;
+        is $body, "hello world";
+    };
+    subtest "send-custom" => sub {
+        ($headers, $body) = $fetch->("/send/custom/");
+        like $headers, qr{^HTTP/1\.1 401 OK\r\n}is;
+        like $headers, qr{^content-type: application/octet-stream\r}im;
+        is $body, "hello world";
     };
     is [$fetch->("/method/")]->[1], "GET", "method";
     is [$fetch->("/query/?a=1")]->[1], "?a=1", "method";
