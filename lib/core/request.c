@@ -163,6 +163,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
     /* init properties that should be initialized to non-zero */
     req->conn = conn;
     req->_timeout_entry.cb = deferred_proceed_cb;
+    req->res.reason = "OK"; /* default to "OK" regardless of the status value, it's not important after all (never sent in HTTP2) */
     req->res.content_length = SIZE_MAX;
     req->preferred_chunk_size = SIZE_MAX;
 
@@ -234,6 +235,7 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
 
     /* reset the response */
     req->res = (h2o_res_t){0, NULL, SIZE_MAX, {}};
+    req->res.reason = "OK";
     req->_ostr_init_index = 0;
     req->bytes_sent = 0;
     memset(&req->http2_push_paths, 0, sizeof(req->http2_push_paths));
