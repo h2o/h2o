@@ -240,6 +240,13 @@ hosts:
           r = H2O::Request.new
           r.status = 404
           r.send_file("t/50mruby/index.html")
+      /nonexistent:
+        mruby.handler: |
+          r = H2O::Request.new
+          if !r.send_file("t/50mruby/nonexistent")
+            r.status = 404
+            "never mind!!!"
+          end
 EOT
     my $fetch = sub {
         my $path = shift;
@@ -262,6 +269,12 @@ EOT
         like $headers, qr{^HTTP/1\.1 404 OK\r\n}is;
         like $headers, qr{^content-type: text/html\r$}im;
         is md5_hex($body), md5_file("t/50mruby/index.html");
+    };
+    subtest "nonexistent" => sub {
+        my ($headers, $body) = $fetch->("/nonexistent/");
+        like $headers, qr{^HTTP/1\.1 404 OK\r\n}is;
+        like $headers, qr{^content-type: text/plain; charset=utf-8\r$}im;
+        is $body, "never mind!!!";
     };
 };
 
