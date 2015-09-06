@@ -77,8 +77,12 @@ assert("OnigRegexp#source", '15.2.15.7.8') do
   reg.source == str
 end
 
-assert('OnigRegexp#options') do
-  assert_equal OnigRegexp::MULTILINE, OnigRegexp.new(".*", OnigRegexp::MULTILINE).options
+assert('OnigRegexp#options (no options)') do
+  assert_equal OnigRegexp::ASCII_RANGE | OnigRegexp::POSIX_BRACKET_ALL_RANGE | OnigRegexp::WORD_BOUND_ALL_RANGE, OnigRegexp.new(".*").options
+end
+
+assert('OnigRegexp#options (multiline)') do
+  assert_equal OnigRegexp::MULTILINE | OnigRegexp::ASCII_RANGE | OnigRegexp::POSIX_BRACKET_ALL_RANGE | OnigRegexp::WORD_BOUND_ALL_RANGE, OnigRegexp.new(".*", OnigRegexp::MULTILINE).options
 end
 
 # Extended patterns.
