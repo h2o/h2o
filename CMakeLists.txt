@@ -360,7 +360,8 @@ IF (WITH_MRUBY)
     # note: the paths need to be determined before libmruby.flags.mak is generated
     TARGET_LINK_LIBRARIES(h2o
         "${CMAKE_BINARY_DIR}/mruby/host/lib/libmruby.a"
-        "${CMAKE_BINARY_DIR}/mruby/host/mrbgems/mruby-onig-regexp/onig-5.9.5/.libs/libonig.a")
+        "${CMAKE_BINARY_DIR}/mruby/host/mrbgems/mruby-onig-regexp/onig-5.9.5/.libs/libonig.a"
+        "m")
     ADD_DEPENDENCIES(h2o mruby)
 ENDIF (WITH_MRUBY)
 TARGET_LINK_LIBRARIES(h2o ${EXTRA_LIBRARIES})
