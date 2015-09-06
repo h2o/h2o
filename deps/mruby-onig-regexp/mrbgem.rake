@@ -24,22 +24,14 @@ MRuby::Gem::Specification.new('mruby-onig-regexp') do |spec|
   file header do |t|
     FileUtils.mkdir_p oniguruma_dir
 
-    _pp 'getting', "onig-#{version}"
+    _pp 'extracting', "onig-#{version}"
     begin
       FileUtils.mkdir_p build_dir
       Dir.chdir(build_dir) do
-        File.open("onig-#{version}.tar.gz", 'wb') do |f|
-          open("http://www.geocities.jp/kosako3/oniguruma/archive/onig-#{version}.tar.gz", "accept-encoding" => "none") do |io|
-            f.write io.read
-          end
-        end
-
-        _pp 'extracting', "onig-#{version}"
-        `gzip -dc onig-#{version}.tar.gz | tar x`
+        `gzip -dc #{dir}/onig-#{version}.tar.gz | tar x`
         raise IOError unless $?.exitstatus
       end
     rescue IOError
-      File.delete "onig-#{version}.tar.gz"
       exit(-1)
     end
   end
