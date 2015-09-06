@@ -262,20 +262,6 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
 
 SET(EXTRA_LIBRARIES ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
 
-IF (WITH_MRUBY)
-    ADD_CUSTOM_TARGET(mruby MRUBY_CONFIG=../../misc/mruby_config.rb MRUBY_BUILD_DIR=${CMAKE_BINARY_DIR}/mruby make
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/mruby)
-    ADD_DEFINITIONS("-DH2O_USE_MRUBY=1")
-    LIST(APPEND LIB_SOURCE_FILES
-        lib/handler/mruby.c
-        lib/handler/mruby/init.c
-        lib/handler/mruby/class/core.c
-        lib/handler/mruby/class/request.c
-        lib/handler/mruby/class/connection.c
-        lib/handler/configurator/mruby.c)
-    LIST(INSERT EXTRA_LIBRARIES 0 ${MRUBY_LIBRARIES} "m")
-ENDIF (WITH_MRUBY)
-
 IF (ZLIB_FOUND)
     LIST(INSERT EXTRA_LIBRARIES 0 ${ZLIB_LIBRARIES})
 ENDIF (ZLIB_FOUND)
@@ -342,13 +328,23 @@ IF (OPENSSL_FOUND)
 ENDIF (OPENSSL_FOUND)
 
 
-# directly links to libh2o using evloop
-ADD_EXECUTABLE(h2o
-    ${LIB_SOURCE_FILES}
-    ${LIBYAML_SOURCE_FILES}
-    src/ssl.c
-    src/main.c)
-SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
+# standalone server directly links to libh2o using evloop
+SET(STANDALONE_SOURCE_FILES ${LIB_SOURCE_FILES} ${LIBYAML_SOURCE_FILES} src/ssl.c src/main.c)
+SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
+IF (WITH_MRUBY)
+    ADD_CUSTOM_TARGET(mruby MRUBY_CONFIG=../../misc/mruby_config.rb MRUBY_BUILD_DIR=${CMAKE_BINARY_DIR}/mruby make
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/mruby)
+    LIST(APPEND STANDALONE_SOURCE_FILES
+        lib/handler/mruby.c
+        lib/handler/mruby/init.c
+        lib/handler/mruby/class/core.c
+        lib/handler/mruby/class/request.c
+        lib/handler/mruby/class/connection.c
+        lib/handler/configurator/mruby.c)
+    LIST(APPEND STANDALONE_COMPILE_FLAGS ${STANDALONE_COMPILE_FLAGS} "-DWITH_MRUBY=1")
+ENDIF (WITH_MRUBY)
+ADD_EXECUTABLE(h2o ${STANDALONE_SOURCE_FILES})
+SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS ${STANDALONE_COMPILE_FLAGS})
 IF (WITH_BUNDLED_SSL)
     PREPEND_INCLUDE_DIRECTORY(h2o ${BUNDLED_SSL_INCLUDE_DIR})
     TARGET_LINK_LIBRARIES(h2o ${BUNDLED_SSL_LIBRARIES})
@@ -359,6 +355,14 @@ ELSE (WITH_BUNDLED_SSL)
         TARGET_LINK_LIBRARIES(h2o ${OPENSSL_LIBRARIES})
     ENDIF (OPENSSL_FOUND)
 ENDIF (WITH_BUNDLED_SSL)
+IF (WITH_MRUBY)
+    PREPEND_INCLUDE_DIRECTORY(h2o "${CMAKE_BINARY_DIR}/mruby/host/include")
+    # note: the paths need to be determined before libmruby.flags.mak is generated
+    TARGET_LINK_LIBRARIES(h2o
+        "${CMAKE_BINARY_DIR}/mruby/host/lib/libmruby.a"
+        "${CMAKE_BINARY_DIR}/mruby/host/mrbgems/mruby-onig-regexp/onig-5.9.5/.libs/libonig.a")
+    ADD_DEPENDENCIES(h2o mruby)
+ENDIF (WITH_MRUBY)
 TARGET_LINK_LIBRARIES(h2o ${EXTRA_LIBRARIES})
 
 INSTALL(TARGETS h2o
