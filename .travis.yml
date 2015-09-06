@@ -17,9 +17,6 @@ before_script:
   # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
   - curl -L https://github.com/joyent/libuv/archive/v1.0.0.tar.gz | tar xzf -
   - (cd libuv-1.0.0 && ./autogen.sh && ./configure --prefix=/usr && make && sudo make install)
-  # install mruby >= 1.1.0 (optionally required for building h2o_mruby)
-  - curl -L https://github.com/mruby/mruby/archive/1.1.0.tar.gz | tar xzf -
-  - (cd mruby-1.1.0 && make && sudo cp build/host/lib/libmruby.a build/host/lib/libmruby_core.a /usr/lib/. && sudo cp -r include/* /usr/include/.)
   # install perl modules (mandatory for testing)
   - misc/install-perl-module.pl Net::EmptyPort
   - misc/install-perl-module.pl Scope::Guard
