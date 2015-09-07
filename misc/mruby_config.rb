@@ -12,8 +12,11 @@ MRuby::Build.new do |conf|
 
   enable_debug
 
-  # Use mrbgems
-  conf.gem '../deps/mruby-onig-regexp'
+  # use mrbgems
+  Dir.glob("../mruby-*/mrbgem.rake") do |x|
+    g = File.basename File.dirname x
+    conf.gem "../deps/#{g}"
+  end
 
   # include all the core GEMs
   conf.gembox 'full-core'
