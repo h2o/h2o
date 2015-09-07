@@ -15,6 +15,6 @@ MRuby::Build.new do |conf|
   # Use mrbgems
   conf.gem '../deps/mruby-onig-regexp'
 
-  # include the default GEMs
-  conf.gembox 'default'
+  # include all the core GEMs
+  conf.gembox 'full-core'
 end
