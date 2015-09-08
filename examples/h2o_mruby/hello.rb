@@ -1,7 +1,7 @@
 # paths:
 #   /:
 #     file.dir: examples/doc_root
-#     mruby.handler_path: /path/to/hello.rb
+#     mruby.handler-file: /path/to/hello.rb
 
 r = H2O::Request.new
 
