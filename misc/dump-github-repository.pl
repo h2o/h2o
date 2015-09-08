@@ -15,7 +15,7 @@ mkdir("$dest")
     or $! == Errno::EEXIST or die "failed to (re)create directory:$dest:$!";
 run("curl --silent --show-error --location $repo/archive/$commit.tar.gz | (cd $dest && tar x --strip-components 1 -zf -)") == 0
     or die "failed to extract $repo/archive/$commit.tar.gz to $dest";
-run("git add `find $dest -type f`") == 0
+run("git add -f `find $dest -type f`") == 0
     or die "failed to add files under $dest";
 run("git commit -m 'extract $repo @ $commit at $dest' $dest") == 0
     or die "failed to commit";
