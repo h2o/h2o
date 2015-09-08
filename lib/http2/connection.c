@@ -1066,7 +1066,7 @@ void h2o_http2_conn_push_path(h2o_http2_conn_t *conn, h2o_iovec_t path, h2o_http
 
     /* send push-promise ASAP (before the parent stream gets closed), even if execute_or_enqueue_request did not trigger the
      * invocation of send_headers */
-    if (!stream->push.promise_sent)
+    if (!stream->push.promise_sent && stream->state != H2O_HTTP2_STREAM_STATE_END_STREAM)
         h2o_http2_stream_send_push_promise(conn, stream);
 }
 
