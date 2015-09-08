@@ -1,5 +1,7 @@
 # mruby-onig-regexp
 
+[![Build Status](https://travis-ci.org/mattn/mruby-onig-regexp.svg)](https://travis-ci.org/mattn/mruby-onig-regexp)
+
 ## install by mrbgems
 ```ruby
 MRuby::Build.new do |conf|
