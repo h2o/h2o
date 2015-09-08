@@ -340,7 +340,7 @@ h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const c
 
     /* return the URL found in Link header, if it is an absolute path-only URL */
     if (parsed.scheme == NULL && parsed.authority.base == NULL && url.len != 0 && url.base[0] == '/')
-        return url;
+        return h2o_strdup(pool, url.base, url.len);
 
     /* check scheme and authority if given URL contains either of the two */
     h2o_url_t base = {base_scheme, *base_authority, {}, *base_path, 65535};
