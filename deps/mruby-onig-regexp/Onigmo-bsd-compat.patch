@@ -1,0 +1,26 @@
+diff --git Makefile.am Makefile.am
+index 07cf35f..1acf663 100644
+--- Makefile.am
++++ Makefile.am
+@@ -65,7 +65,7 @@ do_subst = sed                                          \
+       -e 's,[@]includedir[@],$(includedir),g'
+ 
+ oniguruma.pc: $(srcdir)/oniguruma.pc.in Makefile
+-	$(do_subst) < $(<) > $(@)
++	$(do_subst) < $(srcdir)/oniguruma.pc.in > $(@)
+ 
+ pkgconfigdir   = $(libdir)/pkgconfig
+ pkgconfig_DATA = oniguruma.pc
+diff --git Makefile.in Makefile.in
+index 5849df9..d4e4c0e 100644
+--- Makefile.in
++++ Makefile.in
+@@ -1428,7 +1428,7 @@ uninstall-am: uninstall-binSCRIPTS uninstall-includeHEADERS \
+ onig-config: onig-config.in
+ 
+ oniguruma.pc: $(srcdir)/oniguruma.pc.in Makefile
+-	$(do_subst) < $(<) > $(@)
++	$(do_subst) < $(srcdir)/oniguruma.pc.in > $(@)
+ 
+ dll:
+ 	$(CXX) -shared -Wl,--output-def,libonig.def -o libonig.dll *.o \
