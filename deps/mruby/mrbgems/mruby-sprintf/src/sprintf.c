@@ -73,7 +73,7 @@ mrb_fix2binstr(mrb_state *mrb, mrb_value x, int base)
 {
   char buf[64], *b = buf + sizeof buf;
   mrb_int num = mrb_fixnum(x);
-  unsigned long val = (unsigned long)num;
+  uint64_t val = (uint64_t)num;
   char d;
 
   if (base != 2) {

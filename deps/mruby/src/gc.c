@@ -498,7 +498,12 @@ gc_mark_children(mrb_state *mrb, struct RBasic *obj)
   mrb_gc_mark(mrb, (struct RBasic*)obj->c);
   switch (obj->tt) {
   case MRB_TT_ICLASS:
-    mrb_gc_mark(mrb, (struct RBasic*)((struct RClass*)obj)->super);
+    {
+      struct RClass *c = (struct RClass*)obj;
+      if (MRB_FLAG_TEST(c, MRB_FLAG_IS_ORIGIN))
+        mrb_gc_mark_mt(mrb, c);
+      mrb_gc_mark(mrb, (struct RBasic*)((struct RClass*)obj)->super);
+    }
     break;
 
   case MRB_TT_CLASS:
@@ -624,7 +629,10 @@ obj_free(mrb_state *mrb, struct RBasic *obj)
     mrb_gc_free_mt(mrb, (struct RClass*)obj);
     mrb_gc_free_iv(mrb, (struct RObject*)obj);
     break;
-
+  case MRB_TT_ICLASS:
+    if (MRB_FLAG_TEST(obj, MRB_FLAG_IS_ORIGIN))
+      mrb_gc_free_mt(mrb, (struct RClass*)obj);
+    break;
   case MRB_TT_ENV:
     {
       struct REnv *e = (struct REnv*)obj;

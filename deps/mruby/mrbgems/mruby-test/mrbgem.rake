@@ -1,13 +1,46 @@
-MRuby.each_target do
-  gem_table = gems.generate_gem_table self
+MRuby::Gem::Specification.new('mruby-test') do |spec|
+  spec.license = 'MIT'
+  spec.author  = 'mruby developers'
+  spec.summary = 'mruby test'
 
-  gems.each do |g|
+  build.bins << 'mrbtest'
+  spec.add_dependency('mruby-compiler', :core => 'mruby-compiler')
+
+  clib = "#{build_dir}/mrbtest.c"
+  mlib = clib.ext(exts.object)
+  mrbs = Dir.glob("#{MRUBY_ROOT}/test/t/*.rb")
+  exec = exefile("#{build.build_dir}/bin/mrbtest")
+
+  libmruby = libfile("#{build.build_dir}/lib/libmruby")
+  libmruby_core = libfile("#{build.build_dir}/lib/libmruby_core")
+
+  mrbtest_lib = libfile("#{build_dir}/mrbtest")
+  mrbtest_objs = []
+
+  driver_obj = objfile("#{build_dir}/driver")
+  driver = "#{spec.dir}/driver.c"
+
+  assert_c = "#{build_dir}/assert.c"
+  assert_rb = "#{MRUBY_ROOT}/test/assert.rb"
+  assert_lib = assert_c.ext(exts.object)
+  mrbtest_objs << assert_lib
+
+  file assert_lib => assert_c
+  file assert_c => [build.mrbcfile, assert_rb] do |t|
+    open(t.name, 'w') do |f|
+      mrbc.run f, assert_rb, 'mrbtest_assert_irep'
+    end
+  end
+
+  gem_table = build.gems.generate_gem_table build
+
+  build.gems.each do |g|
     test_rbobj = g.test_rbireps.ext(exts.object)
     g.test_objs << test_rbobj
-    dep_list = gems.tsort_dependencies(g.test_dependencies, gem_table).select(&:generate_functions)
+    dep_list = build.gems.tsort_dependencies(g.test_dependencies, gem_table).select(&:generate_functions)
 
     file test_rbobj => g.test_rbireps
-    file g.test_rbireps => [g.test_rbfiles].flatten + [File.join(g.dir, 'mrbgem.rake'), g.build.mrbcfile, __FILE__, "#{MRUBY_ROOT}/tasks/mrbgem_spec.rake"] do |t|
+    file g.test_rbireps => [g.test_rbfiles].flatten + [File.join(g.dir, 'mrbgem.rake'), g.build.mrbcfile, "#{MRUBY_ROOT}/tasks/mrbgem_spec.rake"] do |t|
       FileUtils.mkdir_p File.dirname(t.name)
       open(t.name, 'w') do |f|
         g.print_gem_test_header(f)
@@ -89,6 +122,53 @@ MRuby.each_target do
         end
         f.puts %Q[}]
       end
+    end
+  end
+
+  build.gems.each do |v|
+    mrbtest_objs.concat v.test_objs
+  end
+
+  file mrbtest_lib => mrbtest_objs do |t|
+    build.archiver.run t.name, t.prerequisites
+  end
+
+  unless build.build_mrbtest_lib_only?
+    file exec => [driver_obj, mlib, mrbtest_lib, libmruby_core, libmruby] do |t|
+      gem_flags = build.gems.map { |g| g.linker.flags }
+      gem_flags_before_libraries = build.gems.map { |g| g.linker.flags_before_libraries }
+      gem_flags_after_libraries = build.gems.map { |g| g.linker.flags_after_libraries }
+      gem_libraries = build.gems.map { |g| g.linker.libraries }
+      gem_library_paths = build.gems.map { |g| g.linker.library_paths }
+      build.linker.run t.name, t.prerequisites, gem_libraries, gem_library_paths, gem_flags, gem_flags_before_libraries
+    end
+  end
+
+  init = "#{spec.dir}/init_mrbtest.c"
+  file mlib => clib
+  file clib => [build.mrbcfile, init] do |t|
+    _pp "GEN", "*.rb", "#{clib.relative_path}"
+    FileUtils.mkdir_p File.dirname(clib)
+    open(clib, 'w') do |f|
+      f.puts %Q[/*]
+      f.puts %Q[ * This file contains a list of all]
+      f.puts %Q[ * test functions.]
+      f.puts %Q[ *]
+      f.puts %Q[ * IMPORTANT:]
+      f.puts %Q[ *   This file was generated!]
+      f.puts %Q[ *   All manual changes will get lost.]
+      f.puts %Q[ */]
+      f.puts %Q[]
+      f.puts IO.read(init)
+      mrbc.run f, mrbs, 'mrbtest_irep'
+      build.gems.each do |g|
+        f.puts %Q[void GENERATED_TMP_mrb_#{g.funcname}_gem_test(mrb_state *mrb);]
+      end
+      f.puts %Q[void mrbgemtest_init(mrb_state* mrb) {]
+      build.gems.each do |g|
+        f.puts %Q[    GENERATED_TMP_mrb_#{g.funcname}_gem_test(mrb);]
+      end
+      f.puts %Q[}]
     end
   end
 end

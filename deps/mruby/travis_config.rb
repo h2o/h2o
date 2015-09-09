@@ -22,6 +22,7 @@ MRuby::Build.new do |conf|
     c.defines += %w(MRB_GC_FIXED_ARENA)
   end
   conf.enable_bintest
+  conf.enable_test
 end
 
 MRuby::Build.new('cxx_abi') do |conf|
@@ -33,6 +34,7 @@ MRuby::Build.new('cxx_abi') do |conf|
     c.defines += %w(MRB_GC_FIXED_ARENA)
   end
   conf.enable_bintest
+  conf.enable_test
 
   enable_cxx_abi
 

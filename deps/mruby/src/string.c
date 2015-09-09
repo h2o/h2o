@@ -1863,7 +1863,7 @@ mrb_cstr_to_inum(mrb_state *mrb, const char *str, int base, int badcheck)
   const char *p;
   char sign = 1;
   int c, uscore;
-  unsigned long n = 0;
+  uint64_t n = 0;
   mrb_int val;
 
 #define conv_digit(c) \
@@ -1983,9 +1983,9 @@ mrb_cstr_to_inum(mrb_state *mrb, const char *str, int base, int badcheck)
     }
     n *= base;
     n += c;
-  }
-  if (n > MRB_INT_MAX) {
-    mrb_raisef(mrb, E_ARGUMENT_ERROR, "string (%S) too big for integer", mrb_str_new_cstr(mrb, str));
+    if (n > MRB_INT_MAX) {
+      mrb_raisef(mrb, E_ARGUMENT_ERROR, "string (%S) too big for integer", mrb_str_new_cstr(mrb, str));
+    }
   }
   val = n;
   if (badcheck) {
@@ -2385,10 +2385,10 @@ mrb_str_cat_str(mrb_state *mrb, mrb_value str, mrb_value str2)
 }
 
 MRB_API mrb_value
-mrb_str_append(mrb_state *mrb, mrb_value str, mrb_value str2)
+mrb_str_append(mrb_state *mrb, mrb_value str1, mrb_value str2)
 {
   str2 = mrb_str_to_str(mrb, str2);
-  return mrb_str_cat_str(mrb, str, str2);
+  return mrb_str_cat_str(mrb, str1, str2);
 }
 
 #define CHAR_ESC_LEN 13 /* sizeof(\x{ hex of 32bit unsigned int } \0) */

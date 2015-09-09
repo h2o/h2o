@@ -76,7 +76,7 @@ prepare_singleton_class(mrb_state *mrb, struct RBasic *o)
 
   if (o->c->tt == MRB_TT_SCLASS) return;
   sc = (struct RClass*)mrb_obj_alloc(mrb, MRB_TT_SCLASS, mrb->class_class);
-  sc->mt = 0;
+  sc->mt = kh_init(mt, mrb);
   sc->iv = 0;
   if (o->tt == MRB_TT_CLASS) {
     c = (struct RClass*)o;
@@ -188,12 +188,20 @@ mrb_define_module_under(mrb_state *mrb, struct RClass *outer, const char *name)
 }
 
 static struct RClass*
+find_origin(struct RClass *c)
+{
+  MRB_CLASS_ORIGIN(c);
+  return c;
+}
+
+static struct RClass*
 define_class(mrb_state *mrb, mrb_sym name, struct RClass *super, struct RClass *outer)
 {
   struct RClass * c;
 
   if (mrb_const_defined_at(mrb, mrb_obj_value(outer), name)) {
     c = class_from_sym(mrb, outer, name);
+    MRB_CLASS_ORIGIN(c);
     if (super && mrb_class_real(c->super) != super) {
       mrb_raisef(mrb, E_TYPE_ERROR, "superclass mismatch for Class %S (%S not %S)",
                  mrb_sym2str(mrb, name),
@@ -323,8 +331,10 @@ mrb_define_class_under(mrb_state *mrb, struct RClass *outer, const char *name, s
 MRB_API void
 mrb_define_method_raw(mrb_state *mrb, struct RClass *c, mrb_sym mid, struct RProc *p)
 {
-  khash_t(mt) *h = c->mt;
+  khash_t(mt) *h;
   khiter_t k;
+  MRB_CLASS_ORIGIN(c);
+  h = c->mt;
 
   if (!h) h = c->mt = kh_init(mt, mrb);
   k = kh_put(mt, mrb, h, mid);
@@ -817,47 +827,130 @@ boot_defclass(mrb_state *mrb, struct RClass *super)
   return c;
 }
 
-MRB_API void
-mrb_include_module(mrb_state *mrb, struct RClass *c, struct RClass *m)
+static void
+boot_initmod(mrb_state *mrb, struct RClass *mod)
 {
-  struct RClass *ins_pos;
+  mod->mt = kh_init(mt, mrb);
+}
 
-  ins_pos = c;
+static struct RClass*
+include_class_new(mrb_state *mrb, struct RClass *m, struct RClass *super)
+{
+  struct RClass *ic = (struct RClass*)mrb_obj_alloc(mrb, MRB_TT_ICLASS, mrb->class_class);
+  if (m->tt == MRB_TT_ICLASS) {
+    m = m->c;
+  }
+  MRB_CLASS_ORIGIN(m);
+  ic->iv = m->iv;
+  ic->mt = m->mt;
+  ic->super = super;
+  if (m->tt == MRB_TT_ICLASS) {
+    ic->c = m->c;
+  } else {
+    ic->c = m;
+  }
+  return ic;
+}
+
+static int
+include_module_at(mrb_state *mrb, struct RClass *c, struct RClass *ins_pos, struct RClass *m, int search_super)
+{
+  struct RClass *p, *ic;
+  void *klass_mt = find_origin(c)->mt;
+
   while (m) {
-    struct RClass *p = c, *ic;
     int superclass_seen = 0;
 
-    if (c->mt && c->mt == m->mt) {
-      mrb_raise(mrb, E_ARGUMENT_ERROR, "cyclic include detected");
-    }
-    while (p) {
-      if (c != p && p->tt == MRB_TT_CLASS) {
-        superclass_seen = 1;
-      }
-      else if (p->mt == m->mt) {
-        if (p->tt == MRB_TT_ICLASS && !superclass_seen) {
-          ins_pos = p;
+    if (m->flags & MRB_FLAG_IS_PREPENDED)
+      goto skip;
+
+    if (klass_mt && klass_mt == m->mt)
+      return -1;
+
+    p = c->super;
+    while(p) {
+      if (p->tt == MRB_TT_ICLASS) {
+        if (p->mt == m->mt) {
+          if (!superclass_seen) {
+            ins_pos = p; // move insert point
+          }
+          goto skip;
         }
-        goto skip;
+      } else if (p->tt == MRB_TT_CLASS) {
+        if (!search_super) break;
+        superclass_seen = 1;
       }
       p = p->super;
     }
-    ic = (struct RClass*)mrb_obj_alloc(mrb, MRB_TT_ICLASS, mrb->class_class);
-    if (m->tt == MRB_TT_ICLASS) {
-      ic->c = m->c;
-    }
-    else {
-      ic->c = m;
-    }
-    ic->mt = m->mt;
-    ic->iv = m->iv;
-    ic->super = ins_pos->super;
+
+    ic = include_class_new(mrb, m, ins_pos->super);
     ins_pos->super = ic;
-    mrb_field_write_barrier(mrb, (struct RBasic*)ins_pos, (struct RBasic*)ic);
+    mrb_field_write_barrier(mrb, (struct RBasic*)ins_pos, (struct RBasic*)ins_pos->super);
     ins_pos = ic;
   skip:
     m = m->super;
   }
+  return 0;
+}
+
+MRB_API void
+mrb_include_module(mrb_state *mrb, struct RClass *c, struct RClass *m)
+{
+  int changed = include_module_at(mrb, c, find_origin(c), m, 1);
+  if (changed < 0) {
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "cyclic include detected");
+  }
+}
+
+MRB_API void
+mrb_prepend_module(mrb_state *mrb, struct RClass *c, struct RClass *m)
+{
+  struct RClass *origin;
+  int changed = 0;
+
+  if (!(c->flags & MRB_FLAG_IS_PREPENDED)) {
+    origin = (struct RClass*)mrb_obj_alloc(mrb, MRB_TT_ICLASS, c);
+    origin->flags |= MRB_FLAG_IS_ORIGIN;
+    origin->super = c->super;
+    c->super = origin;
+    origin->mt = c->mt;
+    c->mt = kh_init(mt, mrb);
+    mrb_field_write_barrier(mrb, (struct RBasic*)c, (struct RBasic*)origin);
+    c->flags |= MRB_FLAG_IS_PREPENDED;
+  }
+  changed = include_module_at(mrb, c, c, m, 0);
+  if (changed < 0) {
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "cyclic prepend detected");
+  }
+}
+
+static mrb_value
+mrb_mod_prepend_features(mrb_state *mrb, mrb_value mod)
+{
+  mrb_value klass;
+
+  mrb_check_type(mrb, mod, MRB_TT_MODULE);
+  mrb_get_args(mrb, "C", &klass);
+  mrb_prepend_module(mrb, mrb_class_ptr(klass), mrb_class_ptr(mod));
+  return mod;
+}
+
+static mrb_value
+mrb_mod_prepend(mrb_state *mrb, mrb_value klass)
+{
+  mrb_value *argv;
+  mrb_int argc, i;
+
+  mrb_get_args(mrb, "*", &argv, &argc);
+  for (i=0; i<argc; i++) {
+    mrb_check_type(mrb, argv[i], MRB_TT_MODULE);
+  }
+  while (argc--) {
+    mrb_funcall(mrb, argv[argc], "prepend_features", 1, klass);
+    mrb_funcall(mrb, argv[argc], "prepended", 1, klass);
+  }
+
+  return klass;
 }
 
 static mrb_value
@@ -931,15 +1024,12 @@ mrb_mod_ancestors(mrb_state *mrb, mrb_value self)
 {
   mrb_value result;
   struct RClass *c = mrb_class_ptr(self);
-
   result = mrb_ary_new(mrb);
-  mrb_ary_push(mrb, result, mrb_obj_value(c));
-  c = c->super;
   while (c) {
     if (c->tt == MRB_TT_ICLASS) {
       mrb_ary_push(mrb, result, mrb_obj_value(c->c));
     }
-    else if (c->tt != MRB_TT_SCLASS) {
+    else if (!(c->flags & MRB_FLAG_IS_PREPENDED)) {
       mrb_ary_push(mrb, result, mrb_obj_value(c));
     }
     c = c->super;
@@ -964,11 +1054,15 @@ mrb_mod_included_modules(mrb_state *mrb, mrb_value self)
 {
   mrb_value result;
   struct RClass *c = mrb_class_ptr(self);
+  struct RClass *origin = c;
 
+  MRB_CLASS_ORIGIN(origin);
   result = mrb_ary_new(mrb);
   while (c) {
-    if (c->tt == MRB_TT_ICLASS) {
-      mrb_ary_push(mrb, result, mrb_obj_value(c->c));
+    if (c != origin && c->tt == MRB_TT_ICLASS) {
+      if (c->c->tt == MRB_TT_MODULE) {
+        mrb_ary_push(mrb, result, mrb_obj_value(c->c));
+      }
     }
     c = c->super;
   }
@@ -980,10 +1074,11 @@ static mrb_value
 mrb_mod_initialize(mrb_state *mrb, mrb_value mod)
 {
   mrb_value b;
-
-  mrb_get_args(mrb, "&", &b);
+  struct RClass *m = mrb_class_ptr(mod);
+  boot_initmod(mrb, m); // bootstrap a newly initialized module
+  mrb_get_args(mrb, "|&", &b);
   if (!mrb_nil_p(b)) {
-    mrb_yield_with_class(mrb, b, 1, &mod, mod, mrb_class_ptr(mod));
+    mrb_yield_with_class(mrb, b, 1, &mod, mod, m);
   }
   return mod;
 }
@@ -1300,9 +1395,9 @@ mrb_class_superclass(mrb_state *mrb, mrb_value klass)
   struct RClass *c;
 
   c = mrb_class_ptr(klass);
-  c = c->super;
+  c = find_origin(c)->super;
   while (c && c->tt == MRB_TT_ICLASS) {
-    c = c->super;
+    c = find_origin(c)->super;
   }
   if (!c) return mrb_nil_value();
   return mrb_obj_value(c);
@@ -1540,8 +1635,7 @@ MRB_API struct RClass*
 mrb_module_new(mrb_state *mrb)
 {
   struct RClass *m = (struct RClass*)mrb_obj_alloc(mrb, MRB_TT_MODULE, mrb->module_class);
-  m->mt = kh_init(mt, mrb);
-
+  boot_initmod(mrb, m);
   return m;
 }
 
@@ -1900,13 +1994,14 @@ static void
 remove_method(mrb_state *mrb, mrb_value mod, mrb_sym mid)
 {
   struct RClass *c = mrb_class_ptr(mod);
-  khash_t(mt) *h = c->mt;
+  khash_t(mt) *h = find_origin(c)->mt;
   khiter_t k;
 
   if (h) {
     k = kh_get(mt, mrb, h, mid);
     if (k != kh_end(h)) {
       kh_del(mt, mrb, h, k);
+      mrb_funcall(mrb, mod, "method_removed", 1, mrb_symbol_value(mid));
       return;
     }
   }
@@ -2140,6 +2235,9 @@ mrb_init_class(mrb_state *mrb)
   mrb_define_method(mrb, mod, "class_variable_set",      mrb_mod_cvar_set,         MRB_ARGS_REQ(2)); /* 15.2.2.4.18 */
   mrb_define_method(mrb, mod, "extend_object",           mrb_mod_extend_object,    MRB_ARGS_REQ(1)); /* 15.2.2.4.25 */
   mrb_define_method(mrb, mod, "extended",                mrb_bob_init,             MRB_ARGS_REQ(1)); /* 15.2.2.4.26 */
+  mrb_define_method(mrb, mod, "prepend",                 mrb_mod_prepend,          MRB_ARGS_ANY());
+  mrb_define_method(mrb, mod, "prepended",               mrb_bob_init,             MRB_ARGS_REQ(1));
+  mrb_define_method(mrb, mod, "prepend_features",        mrb_mod_prepend_features, MRB_ARGS_REQ(1));
   mrb_define_method(mrb, mod, "include",                 mrb_mod_include,          MRB_ARGS_ANY());  /* 15.2.2.4.27 */
   mrb_define_method(mrb, mod, "include?",                mrb_mod_include_p,        MRB_ARGS_REQ(1)); /* 15.2.2.4.28 */
   mrb_define_method(mrb, mod, "append_features",         mrb_mod_append_features,  MRB_ARGS_REQ(1)); /* 15.2.2.4.10 */
@@ -2156,6 +2254,7 @@ mrb_init_class(mrb_state *mrb)
   mrb_define_method(mrb, mod, "public",                  mrb_mod_dummy_visibility, MRB_ARGS_ANY());  /* 15.2.2.4.38 */
   mrb_define_method(mrb, mod, "remove_class_variable",   mrb_mod_remove_cvar,      MRB_ARGS_REQ(1)); /* 15.2.2.4.39 */
   mrb_define_method(mrb, mod, "remove_method",           mrb_mod_remove_method,    MRB_ARGS_ANY());  /* 15.2.2.4.41 */
+  mrb_define_method(mrb, mod, "method_removed",          mrb_bob_init,             MRB_ARGS_REQ(1));
   mrb_define_method(mrb, mod, "attr_reader",             mrb_mod_attr_reader,      MRB_ARGS_ANY());  /* 15.2.2.4.13 */
   mrb_define_method(mrb, mod, "attr_writer",             mrb_mod_attr_writer,      MRB_ARGS_ANY());  /* 15.2.2.4.14 */
   mrb_define_method(mrb, mod, "to_s",                    mrb_mod_to_s,             MRB_ARGS_NONE());

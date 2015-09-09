@@ -14,6 +14,8 @@
   struct RClass *c;\
   struct RBasic *gcnext
 
+#define MRB_FLAG_TEST(obj, flag) ((obj)->flags & flag)
+
 /* white: 011, black: 100, gray: 000 */
 #define MRB_GC_GRAY 0
 #define MRB_GC_WHITE_A 1

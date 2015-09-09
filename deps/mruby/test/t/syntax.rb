@@ -1,6 +1,6 @@
 assert('__FILE__') do
-  file = __FILE__
-  assert_true 'test/t/syntax.rb' == file || 'test\t\syntax.rb' == file
+  file = __FILE__.split('test/')[1]
+  assert_true 't/syntax.rb' == file || 't\syntax.rb' == file
 end
 
 assert('__LINE__') do
