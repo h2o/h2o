@@ -57,7 +57,7 @@ extern "C" {
 #endif
 
 #ifndef H2O_MAX_TOKENS
-#define H2O_MAX_TOKENS 10240
+#define H2O_MAX_TOKENS 100
 #endif
 
 #define H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE (1024 * 1024 * 1024)

@@ -80,7 +80,7 @@ EOT
         like $body, qr{"HTTP_HOST":"127.0.0.1:$server->{port}"}, "HTTP_HOST";
         like $body, qr{"SERVER_ADDR":"127.0.0.1"}, "REMOTE_ADDR";
         like $body, qr{"SERVER_PORT":"[0-9]+"}, "REMOTE_PORT";
-        like $body, qr{"HTTP_USER_AGENT":"h2o_mruby_test"}, "USER_AGENT";
+        like $body, qr{"HTTP_USER_AGENT":"h2o_mruby_test"}, "HTTP_USER_AGENT";
         like $body, qr{"rack.url_scheme":"http"}, "url_scheme";
         like $body, qr{"server.name":"h2o"}, "server.name";
     };

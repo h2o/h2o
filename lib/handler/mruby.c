@@ -34,12 +34,42 @@
 
 #define STATUS_FALLTHRU 399
 
+enum {
+    LIT_REQUEST_METHOD = H2O_MAX_TOKENS,
+    LIT_SCRIPT_NAME,
+    LIT_PATH_INFO,
+    LIT_QUERY_STRING,
+    LIT_SERVER_NAME,
+    LIT_SERVER_ADDR,
+    LIT_SERVER_PORT,
+    LIT_CONTENT_LENGTH,
+    LIT_REMOTE_ADDR,
+    LIT_REMOTE_PORT,
+    LIT_RACK_URL_SCHEME,
+    LIT_RACK_MULTITHREAD,
+    LIT_RACK_MULTIPROCESS,
+    LIT_RACK_RUN_ONCE,
+    LIT_RACK_HIJACK_,
+    LIT_SERVER__NAME,
+    LIT_SERVER__NAME_VALUE,
+    LIT_SERVER_VERSION,
+    LIT_SERVER_VERSION_VALUE,
+    NUM_LITERALS
+};
+
 typedef struct st_h2o_mruby_context_t {
     h2o_mruby_handler_t *handler;
     mrb_state *mrb;
     /* TODO: add other hook code */
     mrb_value proc;
+    mrb_value literals;
 } h2o_mruby_context_t;
+
+#ifdef RSTR_SET_FROZEN_FLAG
+#define FREEZE_STRING(v) RSTR_SET_FROZEN_FLAG(mrb_str_ptr(v))
+#else
+#define FREEZE_STRING(v)
+#endif
 
 mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config, char *errbuf)
 {
@@ -95,6 +125,87 @@ Exit:
     return result;
 }
 
+static h2o_iovec_t convert_header_name_to_env(h2o_mem_pool_t *pool, const char *name, size_t len)
+{
+#define KEY_PREFIX "HTTP_"
+#define KEY_PREFIX_LEN (sizeof(KEY_PREFIX) - 1)
+
+    h2o_iovec_t ret;
+
+    ret.len = len + KEY_PREFIX_LEN;
+    ret.base = h2o_mem_alloc_pool(pool, ret.len);
+
+    memcpy(ret.base, KEY_PREFIX, KEY_PREFIX_LEN);
+
+    char *d = ret.base + KEY_PREFIX_LEN;
+    for (; len != 0; ++name, --len)
+        *d++ = *name == '-' ? '_' : h2o_toupper(*name);
+
+    return ret;
+
+#undef KEY_PREFIX
+#undef KEY_PREFIX_LEN
+}
+
+static mrb_value build_literals(mrb_state *mrb)
+{
+    mrb_value ary = mrb_ary_new_capa(mrb, NUM_LITERALS);
+    mrb_int i;
+
+    mrb_int arena = mrb_gc_arena_save(mrb);
+
+    {
+        h2o_mem_pool_t pool;
+        h2o_mem_init_pool(&pool);
+        for (i = 0; i != H2O_MAX_TOKENS; ++i) {
+            const h2o_token_t *token = h2o__tokens + i;
+            mrb_value lit = mrb_nil_value();
+            if (token == H2O_TOKEN_CONTENT_TYPE) {
+                lit = mrb_str_new_lit(mrb, "CONTENT_TYPE");
+            } else if (token->buf.len != 0) {
+                h2o_iovec_t n = convert_header_name_to_env(&pool, token->buf.base, token->buf.len);
+                lit = mrb_str_new(mrb, n.base, n.len);
+            }
+            if (mrb_string_p(lit)) {
+                FREEZE_STRING(lit);
+                mrb_ary_set(mrb, ary, i, lit);
+            }
+            mrb_gc_arena_restore(mrb, arena);
+        }
+        h2o_mem_clear_pool(&pool);
+    }
+
+#define SET_LITERAL(idx, str) \
+    do { \
+        mrb_value lit = mrb_str_new_lit(mrb, str); \
+        FREEZE_STRING(lit); \
+        mrb_ary_set(mrb, ary, idx, lit); \
+        mrb_gc_arena_restore(mrb, arena); \
+    } while (0)
+    SET_LITERAL(LIT_REQUEST_METHOD, "REQUEST_METHOD");
+    SET_LITERAL(LIT_SCRIPT_NAME, "SCRIPT_NAME");
+    SET_LITERAL(LIT_PATH_INFO, "PATH_INFO");
+    SET_LITERAL(LIT_QUERY_STRING, "QUERY_STRING");
+    SET_LITERAL(LIT_SERVER_NAME, "SERVER_NAME");
+    SET_LITERAL(LIT_SERVER_ADDR, "SERVER_ADDR");
+    SET_LITERAL(LIT_SERVER_PORT, "SERVER_PORT");
+    SET_LITERAL(LIT_CONTENT_LENGTH, "CONTENT_LENGTH");
+    SET_LITERAL(LIT_REMOTE_ADDR, "REMOTE_ADDR");
+    SET_LITERAL(LIT_REMOTE_PORT, "REMOTE_PORT");
+    SET_LITERAL(LIT_RACK_URL_SCHEME, "rack.url_scheme");
+    SET_LITERAL(LIT_RACK_MULTITHREAD, "rack.multithread");
+    SET_LITERAL(LIT_RACK_MULTIPROCESS, "rack.multiprocess");
+    SET_LITERAL(LIT_RACK_RUN_ONCE, "rack.run_once");
+    SET_LITERAL(LIT_RACK_HIJACK_, "rack.hijack?");
+    SET_LITERAL(LIT_SERVER__NAME, "server.name");
+    SET_LITERAL(LIT_SERVER__NAME_VALUE, "h2o");
+    SET_LITERAL(LIT_SERVER_VERSION, "server.version");
+    SET_LITERAL(LIT_SERVER_VERSION_VALUE, H2O_VERSION);
+#undef SET_LITERAL
+
+    return ary;
+}
+
 static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
 {
     h2o_mruby_handler_t *handler = (void *)_handler;
@@ -107,11 +218,14 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
         fprintf(stderr, "%s: no memory\n", H2O_MRUBY_MODULE_NAME);
         abort();
     }
+
     /* compile code (must be done for each thread) */
     int arena = mrb_gc_arena_save(handler_ctx->mrb);
     handler_ctx->proc = h2o_mruby_compile_code(handler_ctx->mrb, &handler->config, NULL);
     mrb_gc_arena_restore(handler_ctx->mrb, arena);
     mrb_gc_protect(handler_ctx->mrb, handler_ctx->proc);
+
+    handler_ctx->literals = build_literals(handler_ctx->mrb);
 
     h2o_context_set_handler_context(ctx, &handler->super, handler_ctx);
 }
@@ -167,44 +281,44 @@ static void stringify_address(h2o_conn_t *conn, socklen_t (*cb)(h2o_conn_t *conn
     }
 }
 
-static mrb_value build_env(h2o_req_t *req, mrb_state *mrb)
+static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value literals)
 {
     mrb_value env = mrb_hash_new_capa(mrb, 16);
     mrb_int arena = mrb_gc_arena_save(mrb);
 
     /* environment */
-    mrb_hash_set(mrb, env, mrb_str_new_lit(mrb, "REQUEST_METHOD"), mrb_str_new(mrb, req->method.base, req->method.len));
+    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_REQUEST_METHOD), mrb_str_new(mrb, req->method.base, req->method.len));
     size_t confpath_len_wo_slash = req->pathconf->path.len - 1;
-    mrb_hash_set(mrb, env, mrb_str_new_lit(mrb, "SCRIPT_NAME"), mrb_str_new(mrb, req->pathconf->path.base, confpath_len_wo_slash));
-    mrb_hash_set(mrb, env, mrb_str_new_lit(mrb, "PATH_INFO"), mrb_str_new(mrb, req->path_normalized.base + confpath_len_wo_slash,
+    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_SCRIPT_NAME), mrb_str_new(mrb, req->pathconf->path.base, confpath_len_wo_slash));
+    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_PATH_INFO), mrb_str_new(mrb, req->path_normalized.base + confpath_len_wo_slash,
                                                                           req->path_normalized.len - confpath_len_wo_slash));
-    mrb_hash_set(mrb, env, mrb_str_new_lit(mrb, "QUERY_STRING"),
+    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_QUERY_STRING),
                  req->query_at != SIZE_MAX
                      ? mrb_str_new(mrb, req->path.base + req->query_at + 1, req->path.len - (req->query_at + 1))
                      : mrb_str_new_lit(mrb, ""));
-    mrb_hash_set(mrb, env, mrb_str_new_lit(mrb, "SERVER_NAME"),
+    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_SERVER_NAME),
                  mrb_str_new(mrb, req->hostconf->authority.host.base, req->hostconf->authority.host.len));
     {
         mrb_value h, p;
         stringify_address(req->conn, req->conn->get_sockname, mrb, &h, &p);
         if (!mrb_nil_p(h))
-            mrb_hash_set(mrb, env, mrb_str_new_lit(mrb, "SERVER_ADDR"), h);
+            mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_SERVER_ADDR), h);
         if (!mrb_nil_p(p))
-            mrb_hash_set(mrb, env, mrb_str_new_lit(mrb, "SERVER_PORT"), p);
+            mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_SERVER_PORT), p);
     }
-    mrb_hash_set(mrb, env, mrb_str_new_lit(mrb, "HTTP_HOST"), mrb_str_new(mrb, req->authority.base, req->authority.len));
+    mrb_hash_set(mrb, env, mrb_ary_entry(literals, H2O_TOKEN_HOST - h2o__tokens), mrb_str_new(mrb, req->authority.base, req->authority.len));
     if (req->entity.base != NULL) {
         char buf[32];
         int l = sprintf(buf, "%zu", req->entity.len);
-        mrb_hash_set(mrb, env, mrb_str_new_lit(mrb, "CONTENT_LENGTH"), mrb_str_new(mrb, buf, l));
+        mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_CONTENT_LENGTH), mrb_str_new(mrb, buf, l));
     }
     {
         mrb_value h, p;
         stringify_address(req->conn, req->conn->get_peername, mrb, &h, &p);
         if (!mrb_nil_p(h))
-            mrb_hash_set(mrb, env, mrb_str_new_lit(mrb, "REMOTE_ADDR"), h);
+            mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_REMOTE_ADDR), h);
         if (!mrb_nil_p(p))
-            mrb_hash_set(mrb, env, mrb_str_new_lit(mrb, "REMOTE_PORT"), p);
+            mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_REMOTE_PORT), p);
     }
     mrb_gc_arena_restore(mrb, arena);
 
@@ -212,45 +326,31 @@ static mrb_value build_env(h2o_req_t *req, mrb_state *mrb)
     size_t i = 0;
     for (i = 0; i != req->headers.size; ++i) {
         const h2o_header_t *header = req->headers.entries + i;
-        if (header->name == &H2O_TOKEN_CONTENT_TYPE->buf) {
-            mrb_hash_set(mrb, env, mrb_str_new_lit(mrb, "CONTENT_TYPE"), mrb_str_new(mrb, header->value.base, header->value.len));
+        mrb_value n;
+        if (h2o_iovec_is_token(header->name)) {
+            const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, header->name);
+            n = mrb_ary_entry(literals, (mrb_int)(token - h2o__tokens));
         } else {
-#define KEY_PREFIX "HTTP_"
-#define KEY_PREFIX_LEN (sizeof(KEY_PREFIX) - 1)
-            char *keybuf, keybuf_short[256];
-            if (header->name->len <= sizeof(keybuf_short) - KEY_PREFIX_LEN) {
-                keybuf = keybuf_short;
-            } else {
-                keybuf = h2o_mem_alloc(header->name->len + KEY_PREFIX_LEN);
-            }
-            memcpy(keybuf, KEY_PREFIX, KEY_PREFIX_LEN);
-            char *d = keybuf + KEY_PREFIX_LEN, *end = d + header->name->len;
-            const char *s = header->name->base;
-            for (; d != end; ++d, ++s)
-                *d = *s == '-' ? '_' : h2o_toupper(*s);
-            mrb_hash_set(mrb, env, mrb_str_new(mrb, keybuf, header->name->len + KEY_PREFIX_LEN),
-                         mrb_str_new(mrb, header->value.base, header->value.len));
-            if (keybuf != keybuf_short)
-                free(keybuf);
-#undef KEY_PREFIX
-#undef KEY_PREFIX_LEN
+            h2o_iovec_t vec = convert_header_name_to_env(&req->pool, header->name->base, header->name->len);
+            n = mrb_str_new(mrb, vec.base, vec.len);
         }
+        mrb_hash_set(mrb, env, n, mrb_str_new(mrb, header->value.base, header->value.len));
         mrb_gc_arena_restore(mrb, arena);
     }
 
     /* rack.* */
     /* TBD rack.version? */
-    mrb_hash_set(mrb, env, mrb_str_new_lit(mrb, "rack.url_scheme"),
+    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_RACK_URL_SCHEME),
                  mrb_str_new(mrb, req->scheme->name.base, req->scheme->name.len));
     /* we are using shared-none architecture, and therefore declare ourselves as multiprocess */
-    mrb_hash_set(mrb, env, mrb_str_new_lit(mrb, "rack.multithread"), mrb_false_value());
-    mrb_hash_set(mrb, env, mrb_str_new_lit(mrb, "rack.multiprocess"), mrb_true_value());
-    mrb_hash_set(mrb, env, mrb_str_new_lit(mrb, "rack.run_once"), mrb_false_value());
-    mrb_hash_set(mrb, env, mrb_str_new_lit(mrb, "rack.hijack?"), mrb_false_value());
+    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_RACK_MULTITHREAD), mrb_false_value());
+    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_RACK_MULTIPROCESS), mrb_true_value());
+    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_RACK_RUN_ONCE), mrb_false_value());
+    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_RACK_HIJACK_), mrb_false_value());
 
     /* server name */
-    mrb_hash_set(mrb, env, mrb_str_new_lit(mrb, "server.name"), mrb_str_new_lit(mrb, "h2o"));
-    mrb_hash_set(mrb, env, mrb_str_new_lit(mrb, "server.version"), mrb_str_new_lit(mrb, H2O_VERSION));
+    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_SERVER__NAME), mrb_ary_entry(literals, LIT_SERVER__NAME_VALUE));
+    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_SERVER_VERSION), mrb_ary_entry(literals, LIT_SERVER_VERSION_VALUE));
 
     return env;
 }
@@ -360,7 +460,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     h2o_iovec_t content;
 
     /* call rack handler */
-    mrb_value env = build_env(req, mrb);
+    mrb_value env = build_env(req, mrb, handler_ctx->literals);
     mrb_value resp = mrb_funcall_argv(mrb, handler_ctx->proc, mrb_intern_lit(mrb, "call"), 1, &env);
     if (mrb->exc != NULL) {
         report_exception(req, mrb);
