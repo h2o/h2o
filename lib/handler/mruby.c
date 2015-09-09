@@ -46,6 +46,7 @@ mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config
     mrbc_context *cxt;
     struct mrb_parser_state *parser;
     struct RProc *proc = NULL;
+    mrb_value result = mrb_nil_value();
 
     /* parse */
     if ((cxt = mrbc_context_new(mrb)) == NULL) {
@@ -75,8 +76,8 @@ mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config
         abort();
     }
 
-    mrb_value result = mrb_run(mrb, proc, mrb_top_self(mrb));
-    if (mrb->exc) {
+    result = mrb_run(mrb, proc, mrb_top_self(mrb));
+    if (mrb->exc != NULL) {
         mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
         struct RString *error = mrb_str_ptr(obj);
         snprintf(errbuf, 256, "%s", error->as.heap.ptr);
@@ -140,7 +141,7 @@ static void report_exception(h2o_req_t *req, mrb_state *mrb)
 {
     mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
     struct RString *error = mrb_str_ptr(obj);
-    h2o_req_log_error(req, H2O_MRUBY_MODULE_NAME, "%s: mruby raised: %s\n", H2O_MRUBY_MODULE_NAME, error->as.heap.ptr);
+    h2o_req_log_error(req, H2O_MRUBY_MODULE_NAME, "mruby raised: %s\n", error->as.heap.ptr);
     mrb->exc = NULL;
 }
 
