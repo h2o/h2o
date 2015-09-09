@@ -54,7 +54,7 @@ module MRuby
         end
         @linker = LinkerConfig.new([], [], [], [])
 
-        @rbfiles = Dir.glob("#{dir}/mrblib/*.rb").sort
+        @rbfiles = Dir.glob("#{dir}/mrblib/**/*.rb").sort
         @objs = Dir.glob("#{dir}/src/*.{c,cpp,cxx,cc,m,asm,s,S}").map do |f|
           objfile(f.relative_path_from(@dir).to_s.pathmap("#{build_dir}/%X"))
         end
@@ -62,7 +62,7 @@ module MRuby
         @generate_functions = !(@rbfiles.empty? && @objs.empty?)
         @objs << objfile("#{build_dir}/gem_init") if @generate_functions
 
-        @test_rbfiles = Dir.glob("#{dir}/test/*.rb")
+        @test_rbfiles = Dir.glob("#{dir}/test/**/*.rb")
         @test_objs = Dir.glob("#{dir}/test/*.{c,cpp,cxx,cc,m,asm,s,S}").map do |f|
           objfile(f.relative_path_from(dir).to_s.pathmap("#{build_dir}/%X"))
         end

@@ -108,6 +108,16 @@ MRuby::Build.new('host-debug') do |conf|
   # conf.enable_bintest
 end
 
+MRuby::Build.new('test') do |conf|
+  toolchain :gcc
+
+  enable_debug
+  conf.enable_bintest
+  conf.enable_test
+
+  conf.gembox 'default'
+end
+
 # Define cross build settings
 # MRuby::CrossBuild.new('32bit') do |conf|
 #   toolchain :gcc

@@ -26,9 +26,6 @@ load "#{MRUBY_ROOT}/mrblib/mrblib.rake"
 load "#{MRUBY_ROOT}/tasks/mrbgems.rake"
 load "#{MRUBY_ROOT}/tasks/libmruby.rake"
 
-load "#{MRUBY_ROOT}/tasks/mrbgems_test.rake"
-load "#{MRUBY_ROOT}/test/mrbtest.rake"
-
 load "#{MRUBY_ROOT}/tasks/benchmark.rake"
 
 ##############################
@@ -117,9 +114,9 @@ task :all => depfiles do
 end
 
 desc "run all mruby tests"
-task :test => ["all"] + MRuby.targets.values.map { |t| t.build_mrbtest_lib_only? ? t.libfile("#{t.build_dir}/test/mrbtest") : t.exefile("#{t.build_dir}/test/mrbtest") } do
+task :test => ["all"] do
   MRuby.each_target do
-    run_test unless build_mrbtest_lib_only?
+    run_test if test_enabled?
   end
 end
 

@@ -206,6 +206,7 @@ MRB_API struct RClass *mrb_define_class(mrb_state *, const char*, struct RClass*
 MRB_API struct RClass *mrb_define_module(mrb_state *, const char*);
 MRB_API mrb_value mrb_singleton_class(mrb_state*, mrb_value);
 MRB_API void mrb_include_module(mrb_state*, struct RClass*, struct RClass*);
+MRB_API void mrb_prepend_module(mrb_state*, struct RClass*, struct RClass*);
 
 MRB_API void mrb_define_method(mrb_state*, struct RClass*, const char*, mrb_func_t, mrb_aspec);
 MRB_API void mrb_define_class_method(mrb_state *, struct RClass *, const char *, mrb_func_t, mrb_aspec);

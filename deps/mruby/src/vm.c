@@ -1486,9 +1486,6 @@ RETRY_TRY_BLOCK:
           if (ci->ridx == 0) goto L_STOP;
           goto L_RESCUE;
         }
-        while (eidx > ci[-1].eidx) {
-          ecall(mrb, --eidx);
-        }
         while (ci[0].ridx == ci[-1].ridx) {
           cipop(mrb);
           ci = mrb->c->ci;

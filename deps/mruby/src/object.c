@@ -487,6 +487,7 @@ mrb_obj_is_kind_of(mrb_state *mrb, mrb_value obj, struct RClass *c)
       mrb_raise(mrb, E_TYPE_ERROR, "class or module required");
   }
 
+  MRB_CLASS_ORIGIN(c);
   while (cl) {
     if (cl == c || cl->mt == c->mt)
       return TRUE;
