@@ -223,8 +223,10 @@ static mrb_value build_env(h2o_req_t *req, mrb_state *mrb)
                 keybuf = h2o_mem_alloc(header->name->len + KEY_PREFIX_LEN);
             }
             memcpy(keybuf, KEY_PREFIX, KEY_PREFIX_LEN);
-            memcpy(keybuf + KEY_PREFIX_LEN, header->name->base, header->name->len);
-            h2o_strtolower(keybuf + KEY_PREFIX_LEN, header->name->len);
+            char *d = keybuf + KEY_PREFIX_LEN, *end = d + header->name->len;
+            const char *s = header->name->base;
+            for (; d != end; ++d, ++s)
+                *d = *s == '-' ? '_' : h2o_toupper(*s);
             mrb_hash_set(mrb, env, mrb_str_new(mrb, keybuf, header->name->len + KEY_PREFIX_LEN),
                          mrb_str_new(mrb, header->value.base, header->value.len));
             if (keybuf != keybuf_short)
