@@ -1203,14 +1203,8 @@ int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *pa
  * @param virtual_path
  * @param real_path
  * @param index_files optional NULL-terminated list of of filenames to be considered as the "directory-index"
- * @param mimemap the mimemap (h2o_mimemap_create is called internally if the argument is NULL)
  */
-h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real_path, const char **index_files,
-                                      h2o_mimemap_t *mimemap, int flags);
-/**
- * returns the associated mimemap
- */
-h2o_mimemap_t *h2o_file_get_mimemap(h2o_file_handler_t *handler);
+h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real_path, const char **index_files, int flags);
 /**
  * registers the configurator
  */

@@ -37,7 +37,7 @@ static int on_config_dir(h2o_configurator_command_t *cmd, h2o_configurator_conte
 {
     struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
 
-    h2o_file_register(ctx->pathconf, node->data.scalar, self->vars->index_files, *ctx->mimemap, self->vars->flags);
+    h2o_file_register(ctx->pathconf, node->data.scalar, self->vars->index_files, self->vars->flags);
     return 0;
 }
 

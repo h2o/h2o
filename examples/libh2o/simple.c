@@ -226,7 +226,7 @@ int main(int argc, char **argv)
     register_handler(hostconf, "/post-test", post_test);
     register_handler(hostconf, "/chunked-test", chunked_test);
     h2o_reproxy_register(register_handler(hostconf, "/reproxy-test", reproxy_test));
-    h2o_file_register(h2o_config_register_path(hostconf, "/"), "examples/doc_root", NULL, NULL, 0);
+    h2o_file_register(h2o_config_register_path(hostconf, "/"), "examples/doc_root", NULL, 0);
 
 #if H2O_USE_LIBUV
     uv_loop_t loop;

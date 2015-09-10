@@ -31,7 +31,7 @@ static void register_authority(h2o_globalconf_t *globalconf, h2o_iovec_t host, u
 
     h2o_hostconf_t *hostconf = h2o_config_register_host(globalconf, host, port);
     h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, "/");
-    h2o_file_register(pathconf, "t/00unit/assets", NULL, NULL, 0);
+    h2o_file_register(pathconf, "t/00unit/assets", NULL, 0);
 
     char *authority = h2o_mem_alloc(host.len + sizeof(":65535"));
     sprintf(authority, "%.*s:%" PRIu16, (int)host.len, host.base, port);

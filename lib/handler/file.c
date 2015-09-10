@@ -65,7 +65,6 @@ struct st_h2o_sendfile_generator_t {
 struct st_h2o_file_handler_t {
     h2o_handler_t super;
     h2o_iovec_t real_path; /* has "/" appended at last */
-    h2o_mimemap_t *mimemap;
     int flags;
     size_t max_index_file_len;
     h2o_iovec_t index_files[1];
@@ -542,7 +541,7 @@ static int try_dynamic_request(h2o_file_handler_t *self, h2o_req_t *req, char *r
     }
 
     /* file found! */
-    h2o_mimemap_type_t *mime_type = h2o_mimemap_get_type_by_extension(self->mimemap, h2o_get_filext(rpath, slash_at));
+    h2o_mimemap_type_t *mime_type = h2o_mimemap_get_type_by_extension(req->pathconf->mimemap, h2o_get_filext(rpath, slash_at));
     switch (mime_type->type) {
     case H2O_MIMEMAP_TYPE_MIMETYPE:
         return -1;
@@ -632,7 +631,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     if (errno == ENFILE || errno == EMFILE) {
         h2o_send_error(req, 503, "Service Unavailable", "please try again later", 0);
     } else {
-        if (h2o_mimemap_has_dynamic_type(self->mimemap) && try_dynamic_request(self, req, rpath, rpath_len) == 0)
+        if (h2o_mimemap_has_dynamic_type(req->pathconf->mimemap) && try_dynamic_request(self, req, rpath, rpath_len) == 0)
             return 0;
         if (errno == ENOENT) {
             return -1;
@@ -656,7 +655,7 @@ Opened:
     }
 
     /* obtain mime type */
-    mime_type = h2o_mimemap_get_type_by_extension(self->mimemap, h2o_get_filext(rpath, rpath_len));
+    mime_type = h2o_mimemap_get_type_by_extension(req->pathconf->mimemap, h2o_get_filext(rpath, rpath_len));
     switch (mime_type->type) {
     case H2O_MIMEMAP_TYPE_MIMETYPE:
         break;
@@ -749,33 +748,17 @@ Close:
     return 0;
 }
 
-static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
-{
-    h2o_file_handler_t *self = (void *)_self;
-
-    h2o_mimemap_on_context_init(self->mimemap, ctx);
-}
-
-static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
-{
-    h2o_file_handler_t *self = (void *)_self;
-
-    h2o_mimemap_on_context_dispose(self->mimemap, ctx);
-}
-
 static void on_dispose(h2o_handler_t *_self)
 {
     h2o_file_handler_t *self = (void *)_self;
     size_t i;
 
     free(self->real_path.base);
-    h2o_mem_release_shared(self->mimemap);
     for (i = 0; self->index_files[i].base != NULL; ++i)
         free(self->index_files[i].base);
 }
 
-h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real_path, const char **index_files,
-                                      h2o_mimemap_t *mimemap, int flags)
+h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real_path, const char **index_files, int flags)
 {
     h2o_file_handler_t *self;
     size_t i;
@@ -790,19 +773,11 @@ h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real
         (void *)h2o_create_handler(pathconf, offsetof(h2o_file_handler_t, index_files[0]) + sizeof(self->index_files[0]) * (i + 1));
 
     /* setup callbacks */
-    self->super.on_context_init = on_context_init;
-    self->super.on_context_dispose = on_context_dispose;
     self->super.dispose = on_dispose;
     self->super.on_req = on_req;
 
     /* setup attributes */
     self->real_path = h2o_strdup_slashed(NULL, real_path, SIZE_MAX);
-    if (mimemap != NULL) {
-        h2o_mem_addref_shared(mimemap);
-        self->mimemap = mimemap;
-    } else {
-        self->mimemap = h2o_mimemap_create();
-    }
     self->flags = flags;
     for (i = 0; index_files[i] != NULL; ++i) {
         self->index_files[i] = h2o_strdup(NULL, index_files[i], SIZE_MAX);
@@ -811,9 +786,4 @@ h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real
     }
 
     return self;
-}
-
-h2o_mimemap_t *h2o_file_get_mimemap(h2o_file_handler_t *handler)
-{
-    return handler->mimemap;
 }
