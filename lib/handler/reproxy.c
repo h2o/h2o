@@ -30,6 +30,7 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
 {
     h2o_url_t xru_parsed;
     size_t xru_index = h2o_find_header(&req->res.headers, H2O_TOKEN_X_REPROXY_URL, -1);
+    h2o_iovec_t method;
 
     /* skip if not x-reproxy-url */
     if (xru_index == -1)
@@ -41,8 +42,17 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
         goto Next;
 
     /* schedule the reprocessing */
-    h2o_reprocess_request_deferred(req, h2o_iovec_init(H2O_STRLIT("GET")), xru_parsed.scheme, xru_parsed.authority, xru_parsed.path,
-                                   NULL, 1);
+    switch (req->res.status) {
+    case 307:
+    case 308:
+        method = req->method;
+        break;
+    default:
+        method = h2o_iovec_init(H2O_STRLIT("GET"));
+        req->entity = (h2o_iovec_t){};
+        break;
+    }
+    h2o_reprocess_request_deferred(req, method, xru_parsed.scheme, xru_parsed.authority, xru_parsed.path, NULL, 1);
 
     /* setup filter (that swallows the response until the timeout gets fired) */
     h2o_ostream_t *ostream = h2o_add_ostream(req, sizeof(*ostream), slot);
