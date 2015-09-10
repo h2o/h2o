@@ -203,6 +203,19 @@ static int is_blocking_asset(h2o_req_t *req)
     return req->res.mime_attr->priority == H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
 }
 
+static int can_push(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+{
+    if (!conn->peer_settings.enable_push)
+        return 0;
+    /* always allow push if casper is disabled */
+    if (stream->req.hostconf->http2.casper.capacity_bits != 0)
+        return 1;
+    /* if casper is enabled, don't push if proxy is used */
+    if (h2o_find_header(&stream->req.headers, H2O_TOKEN_X_FORWARDED_FOR, -1) != -1)
+        return 0;
+    return 1;
+}
+
 static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     h2o_timestamp_t ts;
@@ -248,7 +261,7 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
             h2o_http2_scheduler_rebind(&stream->_refs.scheduler, &conn->scheduler, 257, 0);
     } else {
         /* for pull, push things requested, as well as send the casper cookie if modified */
-        if (conn->peer_settings.enable_push) {
+        if (stream->req.http2_push_paths.size != 0 && can_push(conn, stream)) {
             size_t i;
             for (i = 0; i != stream->req.http2_push_paths.size; ++i)
                 h2o_http2_conn_push_path(conn, stream->req.http2_push_paths.entries[i], stream);
