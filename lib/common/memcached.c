@@ -103,7 +103,7 @@ static void free_req(h2o_memcached_req_t *req)
         free(req->data.get.value.base);
         break;
     case REQ_TYPE_SET:
-        h2o_mem_set_secure(req->data.get.value.base, 0, req->data.set.value.len);
+        h2o_mem_set_secure(req->data.set.value.base, 0, req->data.set.value.len);
         free(req->data.set.value.base);
         break;
     case REQ_TYPE_DELETE:
