@@ -106,6 +106,7 @@
 		107D4D531B5B2412004A9B21 /* file.h in Headers */ = {isa = PBXBuildFile; fileRef = 107D4D521B5B2412004A9B21 /* file.h */; };
 		107D4D551B5B30EE004A9B21 /* file.c in Sources */ = {isa = PBXBuildFile; fileRef = 107D4D541B5B30EE004A9B21 /* file.c */; };
 		108867751AD9069900987967 /* defaults.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 108867741AD9069900987967 /* defaults.c.h */; };
+		108DD0861BA22E46004167DC /* mruby.c in Sources */ = {isa = PBXBuildFile; fileRef = 10B38A651B8D345D007DC191 /* mruby.c */; };
 		10A3D3D21B4CDBDC00327CF9 /* memcached.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3D11B4CDBDC00327CF9 /* memcached.c */; };
 		10A3D3D31B4CDF1200327CF9 /* memcached.h in Headers */ = {isa = PBXBuildFile; fileRef = 10A3D3D01B4CDBC700327CF9 /* memcached.h */; };
 		10A3D4081B50DAB700327CF9 /* close.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3ED1B4FAAEC00327CF9 /* close.c */; };
@@ -133,7 +134,6 @@
 		10AA2EC41AA0403A004322AC /* reproxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EC31AA0403A004322AC /* reproxy.c */; };
 		10AAAC631B6C7A7D004487C3 /* http2_casper.h in Headers */ = {isa = PBXBuildFile; fileRef = 10AAAC621B6C7A7D004487C3 /* http2_casper.h */; };
 		10AAAC651B6C9275004487C3 /* casper.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AAAC641B6C9275004487C3 /* casper.c */; };
-		10B38A661B8D345D007DC191 /* mruby.c in Sources */ = {isa = PBXBuildFile; fileRef = 10B38A651B8D345D007DC191 /* mruby.c */; };
 		10B38A721B8D34BB007DC191 /* mruby_.h in Headers */ = {isa = PBXBuildFile; fileRef = 10B38A711B8D34BB007DC191 /* mruby_.h */; };
 		10B38A741B8D3544007DC191 /* mruby.c in Sources */ = {isa = PBXBuildFile; fileRef = 10B38A731B8D3544007DC191 /* mruby.c */; };
 		10BA72AA19AAD6300059392A /* stream.c in Sources */ = {isa = PBXBuildFile; fileRef = 10BA72A919AAD6300059392A /* stream.c */; };
@@ -1403,7 +1403,6 @@
 				1058C87E1AA41A1F008D6180 /* headers.c in Sources */,
 				10AA2E961A80A612004322AC /* time.c in Sources */,
 				107923C319A3217300C52AD6 /* file.c in Sources */,
-				10B38A661B8D345D007DC191 /* mruby.c in Sources */,
 				10583BF11AE5A37B004A3AD6 /* Makefile in Sources */,
 				107923CD19A3217300C52AD6 /* memory.c in Sources */,
 				107923CC19A3217300C52AD6 /* context.c in Sources */,
@@ -1544,6 +1543,7 @@
 				10756E361AC1264D0009BF57 /* writer.c in Sources */,
 				10756E351AC1264D0009BF57 /* scanner.c in Sources */,
 				10756E331AC1264D0009BF57 /* parser.c in Sources */,
+				108DD0861BA22E46004167DC /* mruby.c in Sources */,
 				10F417D619C190F800B6E31A /* main.c in Sources */,
 				10756E341AC1264D0009BF57 /* reader.c in Sources */,
 			);
@@ -2338,12 +2338,14 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					deps/mruby/include,
 					"/usr/local/openssl-1.0.2/include",
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/lib",
+					build/osx/mruby/host/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -2368,12 +2370,14 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					deps/mruby/include,
 					"/usr/local/openssl-1.0.2/include",
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/lib",
+					build/osx/mruby/host/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -2394,12 +2398,14 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					deps/mruby/include,
 					"/usr/local/openssl-1.0.2/include",
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/lib",
+					build/osx/mruby/host/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -2419,12 +2425,14 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					deps/mruby/include,
 					"/usr/local/openssl-1.0.2/include",
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/lib",
+					build/osx/mruby/host/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";

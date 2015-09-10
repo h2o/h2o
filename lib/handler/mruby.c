@@ -65,11 +65,7 @@ typedef struct st_h2o_mruby_context_t {
     mrb_value literals;
 } h2o_mruby_context_t;
 
-#ifdef RSTR_SET_FROZEN_FLAG
 #define FREEZE_STRING(v) RSTR_SET_FROZEN_FLAG(mrb_str_ptr(v))
-#else
-#define FREEZE_STRING(v)
-#endif
 
 mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config, char *errbuf)
 {
