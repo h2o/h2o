@@ -374,7 +374,7 @@ static int parse_rack_headers(h2o_req_t *req, mrb_state *mrb, mrb_value hash)
                 return -1;
             }
         }
-        /* convert key to string */
+        /* convert key to lowercase string */
         if (!mrb_string_p(k)) {
             k = mrb_str_to_str(mrb, k);
             if (mrb->exc != NULL) {
@@ -382,13 +382,15 @@ static int parse_rack_headers(h2o_req_t *req, mrb_state *mrb, mrb_value hash)
                 return -1;
             }
         }
+        h2o_iovec_t lcname = h2o_strdup(&req->pool, RSTRING_PTR(k), RSTRING_LEN(k));
+        h2o_strtolower(lcname.base, lcname.len);
         /* register */
-        if (h2o_lcstris(RSTRING_PTR(k), RSTRING_LEN(k), H2O_STRLIT("link")) &&
+        if (h2o_memis(lcname.base, lcname.len, H2O_STRLIT("link")) &&
             h2o_register_push_path_in_link_header(req, RSTRING_PTR(v), RSTRING_LEN(v))) {
             /* do not send the link header that is going to be pushed */
         } else {
             h2o_iovec_t vdup = h2o_strdup(&req->pool, RSTRING_PTR(v), RSTRING_LEN(v));
-            h2o_add_header_by_str(&req->pool, &req->res.headers, RSTRING_PTR(k), RSTRING_LEN(k), 1, vdup.base, vdup.len);
+            h2o_add_header_by_str(&req->pool, &req->res.headers, lcname.base, lcname.len, 1, vdup.base, vdup.len);
         }
     }
 
