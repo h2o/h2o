@@ -78,8 +78,9 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, 1, 0, 0, 0, 0},
                              {{H2O_STRLIT("vary")}, 59, 0, 0, 0, 0},
                              {{H2O_STRLIT("via")}, 60, 0, 0, 0, 0},
                              {{H2O_STRLIT("www-authenticate")}, 61, 0, 0, 0, 0},
+                             {{H2O_STRLIT("x-forwarded-for")}, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("x-reproxy-url")}, 0, 0, 0, 0, 0}};
-size_t h2o__num_tokens = 58;
+size_t h2o__num_tokens = 59;
 
 const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
 {
@@ -307,6 +308,10 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
         case 'g':
             if (memcmp(name, "accept-encodin", 14) == 0)
                 return H2O_TOKEN_ACCEPT_ENCODING;
+            break;
+        case 'r':
+            if (memcmp(name, "x-forwarded-fo", 14) == 0)
+                return H2O_TOKEN_X_FORWARDED_FOR;
             break;
         }
         break;

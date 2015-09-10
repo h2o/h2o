@@ -162,14 +162,13 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive)
                 } else if (token == H2O_TOKEN_VIA) {
                     via_buf = build_request_merge_headers(&req->pool, via_buf, h->value, ',');
                     continue;
+                } else if (token == H2O_TOKEN_X_FORWARDED_FOR) {
+                    xff_buf = build_request_merge_headers(&req->pool, xff_buf, h->value, ',');
+                    continue;
                 }
             }
             if (h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-proto")))
                 continue;
-            if (h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-for"))) {
-                xff_buf = build_request_merge_headers(&req->pool, xff_buf, h->value, ',');
-                continue;
-            }
             RESERVE(h->name->len + h->value.len + 2);
             APPEND(h->name->base, h->name->len);
             buf.base[offset++] = ':';
