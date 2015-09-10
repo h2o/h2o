@@ -146,7 +146,6 @@ EOT
 };
 
 subtest "server-push" => sub {
-    plan skip_all => "temporary disable";
     plan skip_all => 'nghttp not found'
         unless prog_exists('nghttp');
     my $server = spawn_h2o(<< "EOT");
@@ -155,11 +154,13 @@ hosts:
     paths:
       /:
         mruby.handler: |
-          r = H2O::Request.new
-          if r.uri == "/index.txt"
-            r.http2_push_paths << "/index.js"
+          Proc.new do |env|
+            push_paths = []
+            if env["PATH_INFO"] == "/index.txt"
+              push_paths << "/index.js"
+            end
+            [399, push_paths.empty? ? {} : {"link" => push_paths.map{|p| "<#{p}>; rel=preload"}.join()}, []]
           end
-          H2O.return H2O::DECLINED
         file.dir: t/assets/doc_root
 EOT
     my $resp = `nghttp -n --stat https://127.0.0.1:$server->{tls_port}/index.txt`;

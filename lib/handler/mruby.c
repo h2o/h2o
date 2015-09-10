@@ -380,8 +380,12 @@ static int parse_rack_headers(h2o_req_t *req, mrb_state *mrb, mrb_value hash)
             }
         }
         /* register */
-        h2o_iovec_t vdup = h2o_strdup(&req->pool, RSTRING_PTR(v), RSTRING_LEN(v));
-        h2o_add_header_by_str(&req->pool, &req->res.headers, RSTRING_PTR(k), RSTRING_LEN(k), 1, vdup.base, vdup.len);
+        if (h2o_lcstris(RSTRING_PTR(k), RSTRING_LEN(k), H2O_STRLIT("link")) && h2o_register_push_path_in_link_header(req, RSTRING_PTR(v), RSTRING_LEN(v))) {
+            /* do not send the link header that is going to be pushed */
+        } else {
+            h2o_iovec_t vdup = h2o_strdup(&req->pool, RSTRING_PTR(v), RSTRING_LEN(v));
+            h2o_add_header_by_str(&req->pool, &req->res.headers, RSTRING_PTR(k), RSTRING_LEN(k), 1, vdup.base, vdup.len);
+        }
     }
 
     return 0;
