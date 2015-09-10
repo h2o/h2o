@@ -467,19 +467,23 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     h2o_mruby_handler_t *handler = (void *)_handler;
     h2o_mruby_context_t *handler_ctx = h2o_context_get_handler_context(req->conn->ctx, &handler->super);
     mrb_state *mrb = handler_ctx->mrb;
+    mrb_int arena = mrb_gc_arena_save(mrb);
     h2o_iovec_t content;
 
-    /* call rack handler */
-    mrb_value env = build_env(req, mrb, handler_ctx->literals);
-    mrb_value resp = mrb_funcall_argv(mrb, handler_ctx->proc, mrb_intern_lit(mrb, "call"), 1, &env);
-    if (mrb->exc != NULL) {
-        report_exception(req, mrb);
-        goto SendInternalError;
+    {
+        /* call rack handler */
+        mrb_value env = build_env(req, mrb, handler_ctx->literals);
+        mrb_value resp = mrb_funcall_argv(mrb, handler_ctx->proc, mrb_intern_lit(mrb, "call"), 1, &env);
+        if (mrb->exc != NULL) {
+            report_exception(req, mrb);
+            goto SendInternalError;
+        }
+        /* parse the resposne */
+        if (parse_rack_response(req, mrb, resp, &content) != 0)
+            goto SendInternalError;
     }
 
-    /* parse the resposne */
-    if (parse_rack_response(req, mrb, resp, &content) != 0)
-        goto SendInternalError;
+    mrb_gc_arena_restore(mrb, arena);
 
     /* fall through or send the response */
     if (req->res.status == STATUS_FALLTHRU)
@@ -488,6 +492,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     return 0;
 
 SendInternalError:
+    mrb_gc_arena_restore(mrb, arena);
     h2o_send_error(req, 500, "Internal Server Error", "Internal Server Error", 0);
     return 0;
 }
