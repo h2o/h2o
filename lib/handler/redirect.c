@@ -68,6 +68,7 @@ static void redirect_internally(h2o_redirect_handler_t *self, h2o_req_t *req, h2
         break;
     default:
         method = h2o_iovec_init(H2O_STRLIT("GET"));
+        req->entity = (h2o_iovec_t){};
         break;
     }
 
