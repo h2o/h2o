@@ -175,12 +175,12 @@ static mrb_value build_literals(mrb_state *mrb)
         h2o_mem_clear_pool(&pool);
     }
 
-#define SET_LITERAL(idx, str) \
-    do { \
-        mrb_value lit = mrb_str_new_lit(mrb, str); \
-        FREEZE_STRING(lit); \
-        mrb_ary_set(mrb, ary, idx, lit); \
-        mrb_gc_arena_restore(mrb, arena); \
+#define SET_LITERAL(idx, str)                                                                                                      \
+    do {                                                                                                                           \
+        mrb_value lit = mrb_str_new_lit(mrb, str);                                                                                 \
+        FREEZE_STRING(lit);                                                                                                        \
+        mrb_ary_set(mrb, ary, idx, lit);                                                                                           \
+        mrb_gc_arena_restore(mrb, arena);                                                                                          \
     } while (0)
     SET_LITERAL(LIT_REQUEST_METHOD, "REQUEST_METHOD");
     SET_LITERAL(LIT_SCRIPT_NAME, "SCRIPT_NAME");
@@ -289,9 +289,11 @@ static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value literals)
     /* environment */
     mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_REQUEST_METHOD), mrb_str_new(mrb, req->method.base, req->method.len));
     size_t confpath_len_wo_slash = req->pathconf->path.len - 1;
-    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_SCRIPT_NAME), mrb_str_new(mrb, req->pathconf->path.base, confpath_len_wo_slash));
-    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_PATH_INFO), mrb_str_new(mrb, req->path_normalized.base + confpath_len_wo_slash,
-                                                                          req->path_normalized.len - confpath_len_wo_slash));
+    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_SCRIPT_NAME),
+                 mrb_str_new(mrb, req->pathconf->path.base, confpath_len_wo_slash));
+    mrb_hash_set(
+        mrb, env, mrb_ary_entry(literals, LIT_PATH_INFO),
+        mrb_str_new(mrb, req->path_normalized.base + confpath_len_wo_slash, req->path_normalized.len - confpath_len_wo_slash));
     mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_QUERY_STRING),
                  req->query_at != SIZE_MAX
                      ? mrb_str_new(mrb, req->path.base + req->query_at + 1, req->path.len - (req->query_at + 1))
@@ -306,7 +308,8 @@ static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value literals)
         if (!mrb_nil_p(p))
             mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_SERVER_PORT), p);
     }
-    mrb_hash_set(mrb, env, mrb_ary_entry(literals, H2O_TOKEN_HOST - h2o__tokens), mrb_str_new(mrb, req->authority.base, req->authority.len));
+    mrb_hash_set(mrb, env, mrb_ary_entry(literals, H2O_TOKEN_HOST - h2o__tokens),
+                 mrb_str_new(mrb, req->authority.base, req->authority.len));
     if (req->entity.base != NULL) {
         char buf[32];
         int l = sprintf(buf, "%zu", req->entity.len);
@@ -380,7 +383,8 @@ static int parse_rack_headers(h2o_req_t *req, mrb_state *mrb, mrb_value hash)
             }
         }
         /* register */
-        if (h2o_lcstris(RSTRING_PTR(k), RSTRING_LEN(k), H2O_STRLIT("link")) && h2o_register_push_path_in_link_header(req, RSTRING_PTR(v), RSTRING_LEN(v))) {
+        if (h2o_lcstris(RSTRING_PTR(k), RSTRING_LEN(k), H2O_STRLIT("link")) &&
+            h2o_register_push_path_in_link_header(req, RSTRING_PTR(v), RSTRING_LEN(v))) {
             /* do not send the link header that is going to be pushed */
         } else {
             h2o_iovec_t vdup = h2o_strdup(&req->pool, RSTRING_PTR(v), RSTRING_LEN(v));
