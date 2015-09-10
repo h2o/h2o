@@ -87,62 +87,26 @@ EOT
 };
 
 subtest "reprocess_request" => sub {
-    plan skip_all => "temporary disable";
     my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
+    reproxy: ON
     paths:
       /:
         mruby.handler: |
-          r = H2O::Request.new
-          r.reprocess_request "/dest#{r.path}"
-      /scheme-abs-path:
-        mruby.handler: |
-          r = H2O::Request.new
-          r.reprocess_request "http:/dest#{r.path[16..-1]}"
-      /dest/rel:
-        mruby.handler: |
-          r = H2O::Request.new
-          r.reprocess_request "..#{r.path[9..-1]}"
+          Proc.new do |env|
+            [200, {"x-reproxy-url" => "http://default/dest#{env["PATH_INFO"]}"}, ["should never see this"]]
+          end
       /dest:
         mruby.handler: |
-          r = H2O::Request.new
-          "#{r.scheme}://#{r.authority}#{r.path}"
-      /abs:
-        mruby.handler: |
-          r = H2O::Request.new
-          r.reprocess_request "https://vhost#{r.path[4..-1]}"
-  vhost:
-    paths:
-      /:
-        mruby.handler: |
-          r = H2O::Request.new
-          "#{r.scheme}://#{r.authority}#{r.path}"
+          Proc.new do |env|
+            [200, {}, ["#{env["SCRIPT_NAME"]}#{env["PATH_INFO"]}"]]
+          end
 EOT
-    subtest "abs-path" => sub {
-        my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
-        is $stdout, "http://default/dest/";
-        ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/hoge");
-        is $stdout, "http://default/dest/hoge";
-    };
-    subtest "scheme-abs-path" => sub {
-        my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/scheme-abs-path/");
-        is $stdout, "http://default/dest/";
-        ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/scheme-abs-path/hoge");
-        is $stdout, "http://default/dest/hoge";
-    };
-    subtest "rel-path" => sub {
-        my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/dest/rel/");
-        is $stdout, "http://default/dest/";
-        ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/dest/rel/hoge");
-        is $stdout, "http://default/dest/hoge";
-    };
-    subtest "abs" => sub {
-        my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/abs/");
-        is $stdout, "https://vhost/";
-        ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/abs/hoge");
-        is $stdout, "https://vhost/hoge";
-    };
+    my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    is $stdout, "/dest/";
+    ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/hoge");
+    is $stdout, "/dest/hoge";
 };
 
 subtest "server-push" => sub {
