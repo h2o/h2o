@@ -485,17 +485,18 @@ void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str,
     h2o_reprocess_request_deferred(req, method, url.scheme, url.authority, url.path, authority_changed ? req->overrides : NULL, 1);
 }
 
-void h2o_register_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len)
+int h2o_register_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len)
 {
     if (req->version < 0x200 || req->res_is_delegated)
-        return;
+        return -1;
 
     h2o_iovec_t path =
         h2o_extract_push_path_from_link_header(&req->pool, value, value_len, req->input.scheme, &req->input.authority, &req->path);
     if (path.base == NULL)
-        return;
+        return -1;
 
     h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->http2_push_paths, sizeof(req->http2_push_paths.entries[0]),
                        req->http2_push_paths.size + 1);
     req->http2_push_paths.entries[req->http2_push_paths.size++] = path;
+    return 0;
 }

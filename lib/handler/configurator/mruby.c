@@ -36,13 +36,12 @@ struct mruby_configurator_t {
 static int compile_test(h2o_mruby_config_vars_t *config, char *errbuf)
 {
     mrb_state *mrb;
-    int ok;
 
     if ((mrb = mrb_open()) == NULL) {
         fprintf(stderr, "%s: no memory\n", H2O_MRUBY_MODULE_VERSION);
         abort();
     }
-    ok = h2o_mruby_compile_code(mrb, config, errbuf) != NULL;
+    int ok = !mrb_nil_p(h2o_mruby_compile_code(mrb, config, errbuf));
     mrb_close(mrb);
 
     return ok;

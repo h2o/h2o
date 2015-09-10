@@ -324,10 +324,6 @@ IF (WITH_MRUBY)
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/mruby)
     LIST(APPEND STANDALONE_SOURCE_FILES
         lib/handler/mruby.c
-        lib/handler/mruby/init.c
-        lib/handler/mruby/class/core.c
-        lib/handler/mruby/class/request.c
-        lib/handler/mruby/class/connection.c
         lib/handler/configurator/mruby.c)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_MRUBY=1")
 ENDIF (WITH_MRUBY)

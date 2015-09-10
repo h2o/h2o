@@ -134,10 +134,6 @@
 		10AAAC631B6C7A7D004487C3 /* http2_casper.h in Headers */ = {isa = PBXBuildFile; fileRef = 10AAAC621B6C7A7D004487C3 /* http2_casper.h */; };
 		10AAAC651B6C9275004487C3 /* casper.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AAAC641B6C9275004487C3 /* casper.c */; };
 		10B38A661B8D345D007DC191 /* mruby.c in Sources */ = {isa = PBXBuildFile; fileRef = 10B38A651B8D345D007DC191 /* mruby.c */; };
-		10B38A6A1B8D3489007DC191 /* init.c in Sources */ = {isa = PBXBuildFile; fileRef = 10B38A691B8D3489007DC191 /* init.c */; };
-		10B38A6E1B8D3491007DC191 /* request.c in Sources */ = {isa = PBXBuildFile; fileRef = 10B38A6B1B8D3491007DC191 /* request.c */; };
-		10B38A6F1B8D3491007DC191 /* core.c in Sources */ = {isa = PBXBuildFile; fileRef = 10B38A6C1B8D3491007DC191 /* core.c */; };
-		10B38A701B8D3491007DC191 /* connection.c in Sources */ = {isa = PBXBuildFile; fileRef = 10B38A6D1B8D3491007DC191 /* connection.c */; };
 		10B38A721B8D34BB007DC191 /* mruby_.h in Headers */ = {isa = PBXBuildFile; fileRef = 10B38A711B8D34BB007DC191 /* mruby_.h */; };
 		10B38A741B8D3544007DC191 /* mruby.c in Sources */ = {isa = PBXBuildFile; fileRef = 10B38A731B8D3544007DC191 /* mruby.c */; };
 		10BA72AA19AAD6300059392A /* stream.c in Sources */ = {isa = PBXBuildFile; fileRef = 10BA72A919AAD6300059392A /* stream.c */; };
@@ -453,10 +449,6 @@
 		10AAAC621B6C7A7D004487C3 /* http2_casper.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = http2_casper.h; sourceTree = "<group>"; };
 		10AAAC641B6C9275004487C3 /* casper.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = casper.c; sourceTree = "<group>"; };
 		10B38A651B8D345D007DC191 /* mruby.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = mruby.c; sourceTree = "<group>"; };
-		10B38A691B8D3489007DC191 /* init.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = init.c; sourceTree = "<group>"; };
-		10B38A6B1B8D3491007DC191 /* request.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = request.c; sourceTree = "<group>"; };
-		10B38A6C1B8D3491007DC191 /* core.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = core.c; sourceTree = "<group>"; };
-		10B38A6D1B8D3491007DC191 /* connection.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = connection.c; sourceTree = "<group>"; };
 		10B38A711B8D34BB007DC191 /* mruby_.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = mruby_.h; sourceTree = "<group>"; };
 		10B38A731B8D3544007DC191 /* mruby.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = mruby.c; sourceTree = "<group>"; };
 		10BA72A919AAD6300059392A /* stream.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = stream.c; sourceTree = "<group>"; };
@@ -615,7 +607,6 @@
 				107923BB19A3217300C52AD6 /* mimemap.c */,
 				108867731AD9061100987967 /* mimemap */,
 				10B38A651B8D345D007DC191 /* mruby.c */,
-				10B38A671B8D3465007DC191 /* mruby */,
 				10D0907219F633B00043D458 /* proxy.c */,
 				10AA2EA41A8D9999004322AC /* redirect.c */,
 				10AA2EC31AA0403A004322AC /* reproxy.c */,
@@ -1073,25 +1064,6 @@
 			path = assets;
 			sourceTree = "<group>";
 		};
-		10B38A671B8D3465007DC191 /* mruby */ = {
-			isa = PBXGroup;
-			children = (
-				10B38A681B8D3479007DC191 /* class */,
-				10B38A691B8D3489007DC191 /* init.c */,
-			);
-			path = mruby;
-			sourceTree = "<group>";
-		};
-		10B38A681B8D3479007DC191 /* class */ = {
-			isa = PBXGroup;
-			children = (
-				10B38A6B1B8D3491007DC191 /* request.c */,
-				10B38A6C1B8D3491007DC191 /* core.c */,
-				10B38A6D1B8D3491007DC191 /* connection.c */,
-			);
-			path = class;
-			sourceTree = "<group>";
-		};
 		10BF213E1A087CDF008F7129 /* libh2o */ = {
 			isa = PBXGroup;
 			children = (
@@ -1429,7 +1401,6 @@
 				107923CE19A3217300C52AD6 /* mimemap.c in Sources */,
 				107923C619A3217300C52AD6 /* connection.c in Sources */,
 				1058C87E1AA41A1F008D6180 /* headers.c in Sources */,
-				10B38A701B8D3491007DC191 /* connection.c in Sources */,
 				10AA2E961A80A612004322AC /* time.c in Sources */,
 				107923C319A3217300C52AD6 /* file.c in Sources */,
 				10B38A661B8D345D007DC191 /* mruby.c in Sources */,
@@ -1463,21 +1434,18 @@
 				10BCF2FF1B1A892F0076939D /* fastcgi.c in Sources */,
 				104B9A531A5FC7C4009EEE64 /* expires.c in Sources */,
 				10A3D40D1B50DAB700327CF9 /* strerror.c in Sources */,
-				10B38A6E1B8D3491007DC191 /* request.c in Sources */,
 				107923CB19A3217300C52AD6 /* frame.c in Sources */,
 				104B9A491A5F9638009EEE64 /* headers.c in Sources */,
 				107923C219A3217300C52AD6 /* chunked.c in Sources */,
 				10A3D4081B50DAB700327CF9 /* close.c in Sources */,
 				105534EF1A440FC800627ECB /* config.c in Sources */,
 				10E299581A67E68500701AA6 /* scheduler.c in Sources */,
-				10B38A6A1B8D3489007DC191 /* init.c in Sources */,
 				107923D319A3217300C52AD6 /* util.c in Sources */,
 				105534CA1A3BB46900627ECB /* string.c in Sources */,
 				10583BF21AE5A37B004A3AD6 /* README.md in Sources */,
 				10BCF2FD1B168CAE0076939D /* fastcgi.c in Sources */,
 				10A3D40B1B50DAB700327CF9 /* send.c in Sources */,
 				10FCC13E1B2E4A4500F13674 /* cloexec.c in Sources */,
-				10B38A6F1B8D3491007DC191 /* core.c in Sources */,
 				105534DF1A3C7B9800627ECB /* proxy.c in Sources */,
 				10A3D4091B50DAB700327CF9 /* connect.c in Sources */,
 				105534DD1A3C7AA900627ECB /* file.c in Sources */,
