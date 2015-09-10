@@ -217,3 +217,4 @@ __DATA__
 0 1 0 1 0 http2-settings
 0 1 0 1 0 te
 0 1 0 0 0 keep-alive
+0 0 0 0 0 x-forwarded-for
