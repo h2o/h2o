@@ -8,7 +8,7 @@ use t::Util;
 
 my $port = empty_port();
 
-# spawn server that only accepts RC4-MD5
+# spawn server that only accepts AES128-SHA
 my ($conffh, $conffn) = tempfile(UNLINK => 1);
 print $conffh <<"EOT";
 listen:
@@ -17,7 +17,7 @@ listen:
   ssl:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
-    cipher-suite: RC4-MD5
+    cipher-suite: AES128-SHA
 hosts:
   default:
     paths:
@@ -31,8 +31,8 @@ my ($guard, $pid) = spawn_server(
     },
 );
 
-# connect to the server with RC4-SHA1 as the first choice, and check that RC4-MD5 was selected
-my $log = `openssl s_client -cipher RC4-SHA:RC4-MD5 -host 127.0.0.1 -port $port < /dev/null 2>&1`;
-like $log, qr/^\s*Cipher\s*:\s*RC4-MD5\s*$/m;
+# connect to the server with AES256-SHA as the first choice, and check that AES128-SHA was selected
+my $log = `openssl s_client -cipher AES256-SHA:AES128-SHA -host 127.0.0.1 -port $port < /dev/null 2>&1`;
+like $log, qr/^\s*Cipher\s*:\s*AES128-SHA\s*$/m;
 
 done_testing;
