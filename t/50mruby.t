@@ -97,16 +97,29 @@ hosts:
           Proc.new do |env|
             [200, {"x-reproxy-url" => "http://default/dest#{env["PATH_INFO"]}"}, ["should never see this"]]
           end
+      /307:
+        mruby.handler: |
+          Proc.new do |env|
+            [307, {"x-reproxy-url" => "http://default/dest#{env["PATH_INFO"]}"}, ["should never see this"]]
+          end
       /dest:
         mruby.handler: |
           Proc.new do |env|
-            [200, {}, ["#{env["SCRIPT_NAME"]}#{env["PATH_INFO"]}"]]
+            [200, {}, ["#{env["SCRIPT_NAME"]}#{env["PATH_INFO"]};#{env["CONTENT_LENGTH"]}"]]
           end
 EOT
     my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
-    is $stdout, "/dest/";
+    is $stdout, "/dest/;";
     ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/hoge");
-    is $stdout, "/dest/hoge";
+    is $stdout, "/dest/hoge;";
+    subtest "preserve-method" => sub {
+        ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/307/");
+        is $stdout, "/dest/;";
+        ($stderr, $stdout) = run_prog("curl --data hello --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/307/");
+        is $stdout, "/dest/;5";
+        ($stderr, $stdout) = run_prog("curl --data hello --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        is $stdout, "/dest/;";
+    };
 };
 
 subtest "server-push" => sub {
