@@ -54,7 +54,8 @@ enum {
     LIT_SERVER__NAME_VALUE,
     LIT_SERVER_VERSION,
     LIT_SERVER_VERSION_VALUE,
-    NUM_LITERALS
+    PROC_EACH_TO_ARRAY,
+    NUM_CONSTANTS
 };
 
 typedef struct st_h2o_mruby_context_t {
@@ -62,7 +63,10 @@ typedef struct st_h2o_mruby_context_t {
     mrb_state *mrb;
     /* TODO: add other hook code */
     mrb_value proc;
-    mrb_value literals;
+    mrb_value constants;
+    struct {
+        mrb_sym call;
+    } symbols;
 } h2o_mruby_context_t;
 
 #define FREEZE_STRING(v) RSTR_SET_FROZEN_FLAG(mrb_str_ptr(v))
@@ -143,9 +147,9 @@ static h2o_iovec_t convert_header_name_to_env(h2o_mem_pool_t *pool, const char *
 #undef KEY_PREFIX_LEN
 }
 
-static mrb_value build_literals(mrb_state *mrb)
+static mrb_value build_constants(mrb_state *mrb)
 {
-    mrb_value ary = mrb_ary_new_capa(mrb, NUM_LITERALS);
+    mrb_value ary = mrb_ary_new_capa(mrb, NUM_CONSTANTS);
     mrb_int i;
 
     mrb_int arena = mrb_gc_arena_save(mrb);
@@ -199,6 +203,10 @@ static mrb_value build_literals(mrb_state *mrb)
     SET_LITERAL(LIT_SERVER_VERSION_VALUE, H2O_VERSION);
 #undef SET_LITERAL
 
+    mrb_ary_set(mrb, ary, PROC_EACH_TO_ARRAY,
+                mrb_funcall(mrb, mrb_top_self(mrb), "eval", 1,
+                            mrb_str_new_lit(mrb, "Proc.new do |o| a = []; o.each do |x| a << x; end; a; end")));
+
     return ary;
 }
 
@@ -221,7 +229,8 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
     mrb_gc_arena_restore(handler_ctx->mrb, arena);
     mrb_gc_protect(handler_ctx->mrb, handler_ctx->proc);
 
-    handler_ctx->literals = build_literals(handler_ctx->mrb);
+    handler_ctx->constants = build_constants(handler_ctx->mrb);
+    handler_ctx->symbols.call = mrb_intern_lit(handler_ctx->mrb, "call");
 
     h2o_context_set_handler_context(ctx, &handler->super, handler_ctx);
 }
@@ -277,47 +286,47 @@ static void stringify_address(h2o_conn_t *conn, socklen_t (*cb)(h2o_conn_t *conn
     }
 }
 
-static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value literals)
+static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value constants)
 {
     mrb_value env = mrb_hash_new_capa(mrb, 16);
     mrb_int arena = mrb_gc_arena_save(mrb);
 
     /* environment */
-    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_REQUEST_METHOD), mrb_str_new(mrb, req->method.base, req->method.len));
+    mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_REQUEST_METHOD), mrb_str_new(mrb, req->method.base, req->method.len));
     size_t confpath_len_wo_slash = req->pathconf->path.len - 1;
-    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_SCRIPT_NAME),
+    mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_SCRIPT_NAME),
                  mrb_str_new(mrb, req->pathconf->path.base, confpath_len_wo_slash));
     mrb_hash_set(
-        mrb, env, mrb_ary_entry(literals, LIT_PATH_INFO),
+        mrb, env, mrb_ary_entry(constants, LIT_PATH_INFO),
         mrb_str_new(mrb, req->path_normalized.base + confpath_len_wo_slash, req->path_normalized.len - confpath_len_wo_slash));
-    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_QUERY_STRING),
+    mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_QUERY_STRING),
                  req->query_at != SIZE_MAX
                      ? mrb_str_new(mrb, req->path.base + req->query_at + 1, req->path.len - (req->query_at + 1))
                      : mrb_str_new_lit(mrb, ""));
-    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_SERVER_NAME),
+    mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_SERVER_NAME),
                  mrb_str_new(mrb, req->hostconf->authority.host.base, req->hostconf->authority.host.len));
     {
         mrb_value h, p;
         stringify_address(req->conn, req->conn->get_sockname, mrb, &h, &p);
         if (!mrb_nil_p(h))
-            mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_SERVER_ADDR), h);
+            mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_SERVER_ADDR), h);
         if (!mrb_nil_p(p))
-            mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_SERVER_PORT), p);
+            mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_SERVER_PORT), p);
     }
-    mrb_hash_set(mrb, env, mrb_ary_entry(literals, H2O_TOKEN_HOST - h2o__tokens),
+    mrb_hash_set(mrb, env, mrb_ary_entry(constants, H2O_TOKEN_HOST - h2o__tokens),
                  mrb_str_new(mrb, req->authority.base, req->authority.len));
     if (req->entity.base != NULL) {
         char buf[32];
         int l = sprintf(buf, "%zu", req->entity.len);
-        mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_CONTENT_LENGTH), mrb_str_new(mrb, buf, l));
+        mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_CONTENT_LENGTH), mrb_str_new(mrb, buf, l));
     }
     {
         mrb_value h, p;
         stringify_address(req->conn, req->conn->get_peername, mrb, &h, &p);
         if (!mrb_nil_p(h))
-            mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_REMOTE_ADDR), h);
+            mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_REMOTE_ADDR), h);
         if (!mrb_nil_p(p))
-            mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_REMOTE_PORT), p);
+            mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_REMOTE_PORT), p);
     }
     mrb_gc_arena_restore(mrb, arena);
 
@@ -328,7 +337,7 @@ static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value literals)
         mrb_value n;
         if (h2o_iovec_is_token(header->name)) {
             const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, header->name);
-            n = mrb_ary_entry(literals, (mrb_int)(token - h2o__tokens));
+            n = mrb_ary_entry(constants, (mrb_int)(token - h2o__tokens));
         } else {
             h2o_iovec_t vec = convert_header_name_to_env(&req->pool, header->name->base, header->name->len);
             n = mrb_str_new(mrb, vec.base, vec.len);
@@ -339,17 +348,17 @@ static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value literals)
 
     /* rack.* */
     /* TBD rack.version? */
-    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_RACK_URL_SCHEME),
+    mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_RACK_URL_SCHEME),
                  mrb_str_new(mrb, req->scheme->name.base, req->scheme->name.len));
     /* we are using shared-none architecture, and therefore declare ourselves as multiprocess */
-    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_RACK_MULTITHREAD), mrb_false_value());
-    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_RACK_MULTIPROCESS), mrb_true_value());
-    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_RACK_RUN_ONCE), mrb_false_value());
-    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_RACK_HIJACK_), mrb_false_value());
+    mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_RACK_MULTITHREAD), mrb_false_value());
+    mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_RACK_MULTIPROCESS), mrb_true_value());
+    mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_RACK_RUN_ONCE), mrb_false_value());
+    mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_RACK_HIJACK_), mrb_false_value());
 
     /* server name */
-    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_SERVER__NAME), mrb_ary_entry(literals, LIT_SERVER__NAME_VALUE));
-    mrb_hash_set(mrb, env, mrb_ary_entry(literals, LIT_SERVER_VERSION), mrb_ary_entry(literals, LIT_SERVER_VERSION_VALUE));
+    mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_SERVER__NAME), mrb_ary_entry(constants, LIT_SERVER__NAME_VALUE));
+    mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_SERVER_VERSION), mrb_ary_entry(constants, LIT_SERVER_VERSION_VALUE));
 
     return env;
 }
@@ -393,8 +402,10 @@ static int parse_rack_headers(h2o_req_t *req, mrb_state *mrb, mrb_value hash)
     return 0;
 }
 
-static int parse_rack_response(h2o_req_t *req, mrb_state *mrb, mrb_value resp, h2o_iovec_t *content)
+static int parse_rack_response(h2o_req_t *req, h2o_mruby_context_t *handler_ctx, mrb_value resp, h2o_iovec_t *content)
 {
+    mrb_state *mrb = handler_ctx->mrb;
+
     if (!mrb_array_p(resp)) {
         h2o_req_log_error(req, H2O_MRUBY_MODULE_NAME, "handler did not return an array");
         return -1;
@@ -427,8 +438,14 @@ static int parse_rack_response(h2o_req_t *req, mrb_state *mrb, mrb_value resp, h
     { /* convert response to string */
         mrb_value body = mrb_ary_entry(resp, 2);
         if (!mrb_array_p(body)) {
-            h2o_req_log_error(req, H2O_MRUBY_MODULE_NAME, "3rd element of the array returned by the handler is not an array");
-            return -1;
+            /* convert to array by calling #each */
+            body = mrb_funcall_argv(mrb, mrb_ary_entry(handler_ctx->constants, PROC_EACH_TO_ARRAY), handler_ctx->symbols.call, 1,
+                                    &body);
+            if (mrb->exc != NULL) {
+                report_exception(req, mrb);
+                return -1;
+            }
+            assert(mrb_array_p(body));
         }
         mrb_int i, len = mrb_ary_len(mrb, body);
         /* calculate the length of the output, while at the same time converting the elements of the output array to string */
@@ -462,24 +479,23 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 {
     h2o_mruby_handler_t *handler = (void *)_handler;
     h2o_mruby_context_t *handler_ctx = h2o_context_get_handler_context(req->conn->ctx, &handler->super);
-    mrb_state *mrb = handler_ctx->mrb;
-    mrb_int arena = mrb_gc_arena_save(mrb);
+    mrb_int arena = mrb_gc_arena_save(handler_ctx->mrb);
     h2o_iovec_t content;
 
     {
         /* call rack handler */
-        mrb_value env = build_env(req, mrb, handler_ctx->literals);
-        mrb_value resp = mrb_funcall_argv(mrb, handler_ctx->proc, mrb_intern_lit(mrb, "call"), 1, &env);
-        if (mrb->exc != NULL) {
-            report_exception(req, mrb);
+        mrb_value env = build_env(req, handler_ctx->mrb, handler_ctx->constants);
+        mrb_value resp = mrb_funcall_argv(handler_ctx->mrb, handler_ctx->proc, handler_ctx->symbols.call, 1, &env);
+        if (handler_ctx->mrb->exc != NULL) {
+            report_exception(req, handler_ctx->mrb);
             goto SendInternalError;
         }
         /* parse the resposne */
-        if (parse_rack_response(req, mrb, resp, &content) != 0)
+        if (parse_rack_response(req, handler_ctx, resp, &content) != 0)
             goto SendInternalError;
     }
 
-    mrb_gc_arena_restore(mrb, arena);
+    mrb_gc_arena_restore(handler_ctx->mrb, arena);
 
     /* fall through or send the response */
     if (req->res.status == STATUS_FALLTHRU)
@@ -488,7 +504,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     return 0;
 
 SendInternalError:
-    mrb_gc_arena_restore(mrb, arena);
+    mrb_gc_arena_restore(handler_ctx->mrb, arena);
     h2o_send_error(req, 500, "Internal Server Error", "Internal Server Error", 0);
     return 0;
 }
