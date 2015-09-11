@@ -431,10 +431,48 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
                 h2o_mimemap_define_mimetype(mimemap, ext_node->data.scalar + 1, key->data.scalar, NULL);
             }
             break;
+        case YOML_TYPE_MAPPING: {
+            yoml_t *t;
+            h2o_mime_attributes_t attr;
+            h2o_mimemap_get_default_attributes(key->data.scalar, &attr);
+            if ((t = yoml_get(value, "is_compressible")) != NULL) {
+                if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "YES") == 0) {
+                    attr.is_compressible = 1;
+                } else if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "NO") == 0) {
+                    attr.is_compressible = 0;
+                } else {
+                    h2o_configurator_errprintf(cmd, t, "`is_compressible` attribute must be either of: `YES` or `NO`");
+                    return -1;
+                }
+            }
+            if ((t = yoml_get(value, "priority")) != NULL) {
+                if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "normal") == 0) {
+                    attr.priority = H2O_MIME_ATTRIBUTE_PRIORITY_NORMAL;
+                } else if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "highest") == 0) {
+                    attr.priority = H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
+                } else {
+                    h2o_configurator_errprintf(cmd, t, "`priority` attribute must be either of: `normal` or `highest`");
+                    return -1;
+                }
+            }
+            if ((t = yoml_get(value, "extensions")) == NULL) {
+                h2o_configurator_errprintf(cmd, value, "cannot find mandatory attribute `extensions`");
+                return -1;
+            }
+            if (t->type != YOML_TYPE_SEQUENCE) {
+                h2o_configurator_errprintf(cmd, t, "`extensions` attribute must be a sequence of scalars");
+                return -1;
+            }
+            for (j = 0; j != t->data.sequence.size; ++j) {
+                yoml_t *ext_node = t->data.sequence.elements[j];
+                if (assert_is_extension(cmd, ext_node) != 0)
+                    return -1;
+                h2o_mimemap_define_mimetype(mimemap, ext_node->data.scalar + 1, key->data.scalar, &attr);
+            }
+        } break;
         default:
-            h2o_configurator_errprintf(cmd, value,
-                                       "only scalar or sequence of scalar is permitted at the value part of the argument");
-            return -1;
+            fprintf(stderr, "logic flaw at %s:%d\n", __FILE__, __LINE__);
+            abort();
         }
     }
 
