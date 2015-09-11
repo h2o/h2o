@@ -1,10 +1,27 @@
 Revision history for H2O.
 
+1.5.0-beta1 TBD
+	- [core] introduce `is_compressible` and `priority` attributes to MIME map #436 #496 (Kazuho Oku)
+	- [access-log] fix bug that emitted unnecessary NUL char in certain conditions #462 #463 (Kazuho Oku)
+	- [fastcgi] support for http2 server-push using `link: rel=preload` header #446 (Kazuho Oku)
+	- [file] send `etag` and `vary` headers on 304 response #439 (Kazuho Oku)
+	- [file] sort directory listing #412 #474 (Kazuho Oku)
+	- [gzip] introduce support for on-the-fly gzip #413 #457 (Justin Zhu)
+	- [http2] introduce cookie-based implementation of cache-aware server-push #421 #432 (Kazuho Oku)
+	- [http2] improve HPACK compression ratio of server-push #450 (Kazuho Oku)
+	- [http2] never push if client requested not to #464 (Kazuho Oku)
+	- [http2] send `content-length` if possible #472 (Kazuho Oku)
+	- [mruby] production-level support using Rack-based interface #467 #475 #489 (Kazuho Oku)
+	- [reproxy] support delegation using relative URL #468 (Kazuho Oku)
+	- [reproxy] preserve method if status is 307 or 308 #491 (Kazuho Oku)
+	- [ssl] improved error handling of `openssl ocsp` command #449 #454 (Tatsuhiro Tsujikawa)
+	- [ssl] use libressl on ARM as well #485 (Kazuho Oku)
+
 1.4.4 2015-08-17 21:45:00+0000
 	- [misc] fix install error of libh2o-evloop in case development files of OpenSSL cannot be found #443 (Kazuho Oku)
 
 1.4.3 2015-08-17 01:25:00+0000
-	- [fastcgi] change ownership of domain socket when `fastcgi.spawn` command is used #433 (Masaki TAGAWA)
+	- [fastcgi] change ownership of domain socket when `fastcgi.spawn` command is used #443 (Masaki TAGAWA)
 	- [fastcgi] kill fastcgi processes spawned by `fastcgi.spawn` command when standalone server receives SIGINT #444 (Kazuho Oku)
 	- [file] fix file descriptor leak on multi-range request #434 (Justin Zhu)
 	- [ssl] update libressl to 2.2.2 #440 (Kazuho Oku)
