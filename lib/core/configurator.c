@@ -421,14 +421,14 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
         case YOML_TYPE_SCALAR:
             if (assert_is_extension(cmd, value) != 0)
                 return -1;
-            h2o_mimemap_define_mimetype(mimemap, value->data.scalar + 1, key->data.scalar);
+            h2o_mimemap_define_mimetype(mimemap, value->data.scalar + 1, key->data.scalar, NULL);
             break;
         case YOML_TYPE_SEQUENCE:
             for (j = 0; j != value->data.sequence.size; ++j) {
                 yoml_t *ext_node = value->data.sequence.elements[j];
                 if (assert_is_extension(cmd, ext_node) != 0)
                     return -1;
-                h2o_mimemap_define_mimetype(mimemap, ext_node->data.scalar + 1, key->data.scalar);
+                h2o_mimemap_define_mimetype(mimemap, ext_node->data.scalar + 1, key->data.scalar, NULL);
             }
             break;
         default:
@@ -445,7 +445,7 @@ static int on_config_mime_settypes(h2o_configurator_command_t *cmd, h2o_configur
 {
     h2o_mimemap_t *newmap = h2o_mimemap_create();
 
-    h2o_mimemap_set_default_type(newmap, h2o_mimemap_get_default_type(*ctx->mimemap)->data.mimetype.base);
+    h2o_mimemap_set_default_type(newmap, h2o_mimemap_get_default_type(*ctx->mimemap)->data.mimetype.base, NULL);
     if (set_mimetypes(cmd, newmap, node) != 0) {
         h2o_mem_release_shared(newmap);
         return -1;
@@ -494,7 +494,7 @@ static int on_config_mime_setdefaulttype(h2o_configurator_command_t *cmd, h2o_co
         return -1;
 
     clone_mimemap_if_clean(ctx);
-    h2o_mimemap_set_default_type(*ctx->mimemap, node->data.scalar);
+    h2o_mimemap_set_default_type(*ctx->mimemap, node->data.scalar, NULL);
 
     return 0;
 }

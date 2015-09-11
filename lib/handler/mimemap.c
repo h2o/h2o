@@ -114,7 +114,7 @@ static void rebuild_typeset(h2o_mimemap_t *mimemap)
     });
 }
 
-static h2o_mimemap_type_t *create_extension_type(const char *mime)
+static h2o_mimemap_type_t *create_extension_type(const char *mime, h2o_mime_attributes_t *attr)
 {
     h2o_mimemap_type_t *type = h2o_mem_alloc_shared(NULL, sizeof(*type) + strlen(mime) + 1, NULL);
     size_t i, type_end_at;
@@ -133,18 +133,20 @@ static h2o_mimemap_type_t *create_extension_type(const char *mime)
     type->data.mimetype.base[i] = '\0';
     type->data.mimetype.len = i;
 
-    /* make a rough guess on whether the type is compressible or not */
-    if (strncmp(type->data.mimetype.base, "text/", 5) == 0 ||
-        h2o_strstr(type->data.mimetype.base, type_end_at, H2O_STRLIT("+xml")) != SIZE_MAX)
-        type->data.attr.is_compressible = 1;
-
-    /* make a rough guess on whether the type is blocking asset or not */
-    if (h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("text/css")) ||
-        h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("application/ecmascript")) ||
-        h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("application/javascript")) ||
-        h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("text/ecmascript")) ||
-        h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("text/javascript")))
-        type->data.attr.priority = H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
+    if (attr != NULL) {
+        type->data.attr = *attr;
+    } else {
+        /* make rough guesses */
+        if (strncmp(type->data.mimetype.base, "text/", 5) == 0 ||
+            h2o_strstr(type->data.mimetype.base, type_end_at, H2O_STRLIT("+xml")) != SIZE_MAX)
+            type->data.attr.is_compressible = 1;
+        if (h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("text/css")) ||
+            h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("application/ecmascript")) ||
+            h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("application/javascript")) ||
+            h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("text/ecmascript")) ||
+            h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("text/javascript")))
+            type->data.attr.priority = H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
+    }
 
     return type;
 }
@@ -171,7 +173,7 @@ h2o_mimemap_t *h2o_mimemap_create()
 
     mimemap->extmap = kh_init(extmap);
     mimemap->typeset = kh_init(typeset);
-    mimemap->default_type = create_extension_type("application/octet-stream");
+    mimemap->default_type = create_extension_type("application/octet-stream", NULL);
     mimemap->num_dynamic = 0;
     on_link(mimemap, mimemap->default_type);
 
@@ -183,7 +185,7 @@ h2o_mimemap_t *h2o_mimemap_create()
             NULL};
         const char **p;
         for (p = default_types; *p != NULL; p += 2)
-            h2o_mimemap_define_mimetype(mimemap, p[0], p[1]);
+            h2o_mimemap_define_mimetype(mimemap, p[0], p[1], NULL);
     }
     rebuild_typeset(mimemap);
 
@@ -251,15 +253,16 @@ int h2o_mimemap_has_dynamic_type(h2o_mimemap_t *mimemap)
     return mimemap->num_dynamic != 0;
 }
 
-void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, const char *mime)
+void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, const char *mime, h2o_mime_attributes_t *attr)
 {
     h2o_mimemap_type_t *new_type;
 
     /* obtain or create new type */
-    if ((new_type = h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(mime, strlen(mime)))) != NULL) {
+    if ((new_type = h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(mime, strlen(mime)))) != NULL &&
+        (attr == NULL || memcmp(&new_type->data.attr, attr, sizeof(*attr)) == 0)) {
         h2o_mem_addref_shared(new_type);
     } else {
-        new_type = create_extension_type(mime);
+        new_type = create_extension_type(mime, attr);
     }
 
     /* unlink the old one */
@@ -293,14 +296,15 @@ static void set_type(h2o_mimemap_t *mimemap, const char *ext, h2o_mimemap_type_t
     rebuild_typeset(mimemap);
 }
 
-void h2o_mimemap_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const char *mime)
+void h2o_mimemap_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const char *mime, h2o_mime_attributes_t *attr)
 {
     h2o_mimemap_type_t *new_type;
 
-    if ((new_type = h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(mime, strlen(mime)))) != NULL) {
+    if ((new_type = h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(mime, strlen(mime)))) != NULL &&
+        (attr == NULL || memcmp(&new_type->data.attr, attr, sizeof(*attr)) == 0)) {
         h2o_mem_addref_shared(new_type);
     } else {
-        new_type = create_extension_type(mime);
+        new_type = create_extension_type(mime, attr);
     }
     set_type(mimemap, ext, new_type);
     h2o_mem_release_shared(new_type);
