@@ -16,6 +16,13 @@ hosts:
       /on:
         file.dir: @{[DOC_ROOT]}
         gzip: ON
+      /off-by-mime:
+        file.dir: @{[DOC_ROOT]}
+        gzip: ON
+        file.mime.settypes:
+          text/plain:
+            extensions: [".txt"]
+            is_compressible: NO
 EOT
 
 my $doit = sub {
@@ -44,6 +51,9 @@ my $doit = sub {
     is md5_hex($resp), $expected, "on with accept-encoding: deflate, gzip";
     $resp = $fetch_orig->("/on", "-H accept-encoding:deflate");
     is md5_hex($resp), $expected, "on with accept-encoding, deflate only";
+
+    $resp = $fetch_orig->("/off-by-mime", "-H accept-encoding:gzip");
+    is md5_hex($resp), $expected, "off due to is_compressible:NO";
 
     $resp = run_prog("curl --silent --insecure -H accept-encoding:gzip $proto://127.0.0.1:$port/on/index.txt");
     is md5_hex($resp), md5_file("@{[DOC_ROOT]}/index.txt"), "tiny file not compressed";

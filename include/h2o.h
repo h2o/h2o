@@ -1075,11 +1075,11 @@ int h2o_mimemap_has_dynamic_type(h2o_mimemap_t *mimemap);
 /**
  * sets the default mime-type
  */
-void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, const char *mime);
+void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, const char *mime, h2o_mime_attributes_t *attr);
 /**
  * adds a mime-type mapping
  */
-void h2o_mimemap_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const char *mime);
+void h2o_mimemap_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const char *mime, h2o_mime_attributes_t *attr);
 /**
  * adds a mime-type mapping
  */
@@ -1100,6 +1100,10 @@ h2o_mimemap_type_t *h2o_mimemap_get_type_by_extension(h2o_mimemap_t *mimemap, co
  * returns the mime-type corresponding to given mimetype
  */
 h2o_mimemap_type_t *h2o_mimemap_get_type_by_mimetype(h2o_mimemap_t *mimemap, h2o_iovec_t mime);
+/**
+ * returns the default mime attributes given a mime type
+ */
+void h2o_mimemap_get_default_attributes(const char *mime, h2o_mime_attributes_t *attr);
 
 /* various handlers */
 

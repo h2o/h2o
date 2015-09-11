@@ -22,6 +22,13 @@
 #include "../../test.h"
 #include "../../../../lib/common/string.c"
 
+static void test_strstr(void)
+{
+    ok(h2o_strstr("abcd", 4, "bc", 2) == 1);
+    ok(h2o_strstr("abcd", 3, "bc", 2) == 1);
+    ok(h2o_strstr("abcd", 2, "bc", 2) == -1);
+}
+
 static void test_stripws(void)
 {
     h2o_iovec_t t;
@@ -169,6 +176,7 @@ static void test_htmlescape(void)
 
 void test_lib__common__string_c(void)
 {
+    subtest("strstr", test_strstr);
     subtest("stripws", test_stripws);
     subtest("next_token", test_next_token);
     subtest("next_token2", test_next_token2);
