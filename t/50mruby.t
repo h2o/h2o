@@ -51,6 +51,11 @@ hosts:
           Proc.new do |env|
             [200, {}, [JSON.generate(env)]]
           end
+      /headers-each:
+        mruby.handler: |
+          Proc.new do |env|
+            [200, [["content-type", "text/plain"], ["hello", "world"]], []]
+          end
 EOT
     my $fetch = sub {
         my $path = shift;
@@ -83,6 +88,11 @@ EOT
         like $body, qr{"HTTP_USER_AGENT":"h2o_mruby_test"}, "HTTP_USER_AGENT";
         like $body, qr{"rack.url_scheme":"http"}, "url_scheme";
         like $body, qr{"server.name":"h2o"}, "server.name";
+    };
+    subtest "headers-each" => sub {
+        ($headers, $body) = $fetch->("/headers-each/");
+        like $headers, qr{^content-type: text/plain\r$}mi;
+        like $headers, qr{^hello: world\r$}mi;
     };
 };
 
@@ -165,61 +175,19 @@ EOT
 };
 
 subtest "send-file" => sub {
-    plan skip_all => "temporary disable";
     my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
     paths:
-      /auto-content-type:
+      /:
         mruby.handler: |
-          r = H2O::Request.new
-          r.send_file("t/50mruby/index.html")
-      /explicit-content-type:
-        mruby.handler: |
-          r = H2O::Request.new
-          r.headers_out["content-type"] = "text/plain"
-          r.send_file("t/50mruby/index.html")
-      /404:
-        mruby.handler: |
-          r = H2O::Request.new
-          r.status = 404
-          r.send_file("t/50mruby/index.html")
-      /nonexistent:
-        mruby.handler: |
-          r = H2O::Request.new
-          if !r.send_file("t/50mruby/nonexistent")
-            r.status = 404
-            "never mind!!!"
+          Proc.new do |env|
+            [200,{}, File::open("t/50mruby/index.html")]
           end
 EOT
-    my $fetch = sub {
-        my $path = shift;
-        run_prog("curl --silent -A h2o_mruby_test --dump-header /dev/stderr http://127.0.0.1:$server->{port}$path");
-    };
-    subtest "auto-content-type" => sub {
-        my ($headers, $body) = $fetch->("/auto-content-type/");
-        like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
-        like $headers, qr{^content-type: text/html\r$}im;
-        is md5_hex($body), md5_file("t/50mruby/index.html");
-    };
-    subtest "explicit-content-type" => sub {
-        my ($headers, $body) = $fetch->("/explicit-content-type/");
-        like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
-        like $headers, qr{^content-type: text/plain\r$}im;
-        is md5_hex($body), md5_file("t/50mruby/index.html");
-    };
-    subtest "404-page" => sub {
-        my ($headers, $body) = $fetch->("/404/");
-        like $headers, qr{^HTTP/1\.1 404 OK\r\n}is;
-        like $headers, qr{^content-type: text/html\r$}im;
-        is md5_hex($body), md5_file("t/50mruby/index.html");
-    };
-    subtest "nonexistent" => sub {
-        my ($headers, $body) = $fetch->("/nonexistent/");
-        like $headers, qr{^HTTP/1\.1 404 OK\r\n}is;
-        like $headers, qr{^content-type: text/plain; charset=utf-8\r$}im;
-        is $body, "never mind!!!";
-    };
+    my ($headers, $body) = run_prog("curl --silent -A h2o_mruby_test --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
+    is md5_hex($body), md5_file("t/50mruby/index.html");
 };
 
 done_testing();
