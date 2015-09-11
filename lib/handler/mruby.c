@@ -387,13 +387,22 @@ static int parse_rack_header(h2o_req_t *req, mrb_state *mrb, mrb_value name, mrb
         }
     }
 
-    /* register */
-    if (h2o_memis(lcname.base, lcname.len, H2O_STRLIT("link")) &&
-        h2o_register_push_path_in_link_header(req, RSTRING_PTR(value), RSTRING_LEN(value))) {
-        /* do not send the link header that is going to be pushed */
-    } else {
-        h2o_iovec_t vdup = h2o_strdup(&req->pool, RSTRING_PTR(value), RSTRING_LEN(value));
-        h2o_add_header_by_str(&req->pool, &req->res.headers, lcname.base, lcname.len, 1, vdup.base, vdup.len);
+    /* register the header, splitting the values with '\n' */
+    const char *vstart = RSTRING_PTR(value), *vend = vstart + RSTRING_LEN(value), *eol;
+    while (1) {
+        for (eol = vstart; eol != vend; ++eol)
+            if (*eol == '\n')
+                break;
+        if (h2o_memis(lcname.base, lcname.len, H2O_STRLIT("link")) &&
+            h2o_register_push_path_in_link_header(req, vstart, eol - vstart)) {
+            /* do not send the link header that is going to be pushed */
+        } else {
+            h2o_iovec_t vdup = h2o_strdup(&req->pool, vstart, eol - vstart);
+            h2o_add_header_by_str(&req->pool, &req->res.headers, lcname.base, lcname.len, 1, vdup.base, vdup.len);
+        }
+        if (eol == vend)
+            break;
+        vstart = eol + 1;
     }
 
     return 0;

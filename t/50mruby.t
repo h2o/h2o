@@ -51,6 +51,11 @@ hosts:
           Proc.new do |env|
             [200, {}, [JSON.generate(env)]]
           end
+      /headers:
+        mruby.handler: |
+          Proc.new do |env|
+            [200, {"foo" => "123\n456", "bar" => "baz"}, []]
+          end
       /headers-each:
         mruby.handler: |
           Proc.new do |env|
@@ -88,6 +93,12 @@ EOT
         like $body, qr{"HTTP_USER_AGENT":"h2o_mruby_test"}, "HTTP_USER_AGENT";
         like $body, qr{"rack.url_scheme":"http"}, "url_scheme";
         like $body, qr{"server.name":"h2o"}, "server.name";
+    };
+    subtest "headers" => sub {
+        ($headers, $body) = $fetch->("/headers/");
+        like $headers, qr{^foo: 123\r$}mi;
+        like $headers, qr{^foo: 456\r$}mi;
+        like $headers, qr{^bar: baz\r$}mi;
     };
     subtest "headers-each" => sub {
         ($headers, $body) = $fetch->("/headers-each/");
