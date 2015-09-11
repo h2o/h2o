@@ -365,40 +365,35 @@ static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value constants)
     return env;
 }
 
-static int parse_rack_headers(h2o_req_t *req, mrb_state *mrb, mrb_value hash)
+static int parse_rack_header(h2o_req_t *req, mrb_state *mrb, mrb_value name, mrb_value value)
 {
-    mrb_value keys = mrb_hash_keys(mrb, hash);
-    mrb_int i, len = mrb_ary_len(mrb, keys);
+    /* convert name to lowercase string */
+    if (!mrb_string_p(name)) {
+        name = mrb_str_to_str(mrb, name);
+        if (mrb->exc != NULL) {
+            report_exception(req, mrb);
+            return -1;
+        }
+    }
+    h2o_iovec_t lcname = h2o_strdup(&req->pool, RSTRING_PTR(name), RSTRING_LEN(name));
+    h2o_strtolower(lcname.base, lcname.len);
 
-    for (i = 0; i != len; ++i) {
-        mrb_value k = mrb_ary_entry(keys, i);
-        /* convert to value to string */
-        mrb_value v = mrb_hash_get(mrb, hash, k);
-        if (!mrb_string_p(v)) {
-            v = mrb_str_to_str(mrb, v);
-            if (mrb->exc != NULL) {
-                report_exception(req, mrb);
-                return -1;
-            }
+    /* convert value to string */
+    if (!mrb_string_p(value)) {
+        value = mrb_str_to_str(mrb, value);
+        if (mrb->exc != NULL) {
+            report_exception(req, mrb);
+            return -1;
         }
-        /* convert key to lowercase string */
-        if (!mrb_string_p(k)) {
-            k = mrb_str_to_str(mrb, k);
-            if (mrb->exc != NULL) {
-                report_exception(req, mrb);
-                return -1;
-            }
-        }
-        h2o_iovec_t lcname = h2o_strdup(&req->pool, RSTRING_PTR(k), RSTRING_LEN(k));
-        h2o_strtolower(lcname.base, lcname.len);
-        /* register */
-        if (h2o_memis(lcname.base, lcname.len, H2O_STRLIT("link")) &&
-            h2o_register_push_path_in_link_header(req, RSTRING_PTR(v), RSTRING_LEN(v))) {
-            /* do not send the link header that is going to be pushed */
-        } else {
-            h2o_iovec_t vdup = h2o_strdup(&req->pool, RSTRING_PTR(v), RSTRING_LEN(v));
-            h2o_add_header_by_str(&req->pool, &req->res.headers, lcname.base, lcname.len, 1, vdup.base, vdup.len);
-        }
+    }
+
+    /* register */
+    if (h2o_memis(lcname.base, lcname.len, H2O_STRLIT("link")) &&
+        h2o_register_push_path_in_link_header(req, RSTRING_PTR(value), RSTRING_LEN(value))) {
+        /* do not send the link header that is going to be pushed */
+    } else {
+        h2o_iovec_t vdup = h2o_strdup(&req->pool, RSTRING_PTR(value), RSTRING_LEN(value));
+        h2o_add_header_by_str(&req->pool, &req->res.headers, lcname.base, lcname.len, 1, vdup.base, vdup.len);
     }
 
     return 0;
@@ -428,13 +423,35 @@ static int parse_rack_response(h2o_req_t *req, h2o_mruby_context_t *handler_ctx,
     }
 
     { /* fetch and set the headers */
-        mrb_value hash = mrb_ary_entry(resp, 1);
-        if (!mrb_hash_p(hash)) {
-            h2o_req_log_error(req, H2O_MRUBY_MODULE_NAME, "2nd element of the array returned by the handler is not a hash");
-            return -1;
+        mrb_value headers = mrb_ary_entry(resp, 1);
+        if (mrb_hash_p(headers)) {
+            mrb_value keys = mrb_hash_keys(mrb, headers);
+            mrb_int i, len = mrb_ary_len(mrb, keys);
+            for (i = 0; i != len; ++i) {
+                mrb_value k = mrb_ary_entry(keys, i);
+                mrb_value v = mrb_hash_get(mrb, headers, k);
+                if (parse_rack_header(req, mrb, k, v) != 0)
+                    return -1;
+            }
+        } else {
+            headers = mrb_funcall_argv(mrb, mrb_ary_entry(handler_ctx->constants, PROC_EACH_TO_ARRAY),
+                                       handler_ctx->symbols.sym_call, 1, &headers);
+            if (mrb->exc != NULL) {
+                report_exception(req, mrb);
+                return -1;
+            }
+            assert(mrb_array_p(headers));
+            mrb_int i, len = mrb_ary_len(mrb, headers);
+            for (i = 0; i != len; ++i) {
+                mrb_value pair = mrb_ary_entry(headers, i);
+                if (!mrb_array_p(pair)) {
+                    h2o_req_log_error(req, H2O_MRUBY_MODULE_NAME, "headers#each did not return an array");
+                    return -1;
+                }
+                if (parse_rack_header(req, mrb, mrb_ary_entry(pair, 0), mrb_ary_entry(pair, 1)) != 0)
+                    return -1;
+            }
         }
-        if (parse_rack_headers(req, mrb, hash) != 0)
-            return -1;
     }
 
     { /* convert response to string */

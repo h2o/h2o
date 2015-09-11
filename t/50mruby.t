@@ -51,6 +51,11 @@ hosts:
           Proc.new do |env|
             [200, {}, [JSON.generate(env)]]
           end
+      /headers-each:
+        mruby.handler: |
+          Proc.new do |env|
+            [200, [["content-type", "text/plain"], ["hello", "world"]], []]
+          end
 EOT
     my $fetch = sub {
         my $path = shift;
@@ -83,6 +88,11 @@ EOT
         like $body, qr{"HTTP_USER_AGENT":"h2o_mruby_test"}, "HTTP_USER_AGENT";
         like $body, qr{"rack.url_scheme":"http"}, "url_scheme";
         like $body, qr{"server.name":"h2o"}, "server.name";
+    };
+    subtest "headers-each" => sub {
+        ($headers, $body) = $fetch->("/headers-each/");
+        like $headers, qr{^content-type: text/plain\r$}mi;
+        like $headers, qr{^hello: world\r$}mi;
     };
 };
 
