@@ -340,7 +340,7 @@ size_t h2o_strstr(const char *haysack, size_t haysack_len, const char *needle, s
 {
     /* TODO optimize */
     if (haysack_len >= needle_len) {
-        size_t off, max = haysack_len - needle_len;
+        size_t off, max = haysack_len - needle_len + 1;
         if (needle_len == 0)
             return 0;
         for (off = 0; off != max; ++off)
