@@ -65,7 +65,8 @@ typedef struct st_h2o_mruby_context_t {
     mrb_value proc;
     mrb_value constants;
     struct {
-        mrb_sym call;
+        mrb_sym sym_call;
+        mrb_sym sym_close;
     } symbols;
 } h2o_mruby_context_t;
 
@@ -230,7 +231,8 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
     mrb_gc_protect(handler_ctx->mrb, handler_ctx->proc);
 
     handler_ctx->constants = build_constants(handler_ctx->mrb);
-    handler_ctx->symbols.call = mrb_intern_lit(handler_ctx->mrb, "call");
+    handler_ctx->symbols.sym_call = mrb_intern_lit(handler_ctx->mrb, "call");
+    handler_ctx->symbols.sym_close = mrb_intern_lit(handler_ctx->mrb, "close");
 
     h2o_context_set_handler_context(ctx, &handler->super, handler_ctx);
 }
@@ -439,13 +441,21 @@ static int parse_rack_response(h2o_req_t *req, h2o_mruby_context_t *handler_ctx,
         mrb_value body = mrb_ary_entry(resp, 2);
         if (!mrb_array_p(body)) {
             /* convert to array by calling #each */
-            body = mrb_funcall_argv(mrb, mrb_ary_entry(handler_ctx->constants, PROC_EACH_TO_ARRAY), handler_ctx->symbols.call, 1,
-                                    &body);
+            mrb_value body_array = mrb_funcall_argv(mrb, mrb_ary_entry(handler_ctx->constants, PROC_EACH_TO_ARRAY),
+                                                    handler_ctx->symbols.sym_call, 1, &body);
             if (mrb->exc != NULL) {
                 report_exception(req, mrb);
                 return -1;
             }
-            assert(mrb_array_p(body));
+            assert(mrb_array_p(body_array));
+            if (mrb_respond_to(mrb, body, handler_ctx->symbols.sym_close)) {
+                mrb_funcall_argv(mrb, body, handler_ctx->symbols.sym_close, 0, NULL);
+                if (mrb->exc != NULL) {
+                    report_exception(req, mrb);
+                    return -1;
+                }
+            }
+            body = body_array;
         }
         mrb_int i, len = mrb_ary_len(mrb, body);
         /* calculate the length of the output, while at the same time converting the elements of the output array to string */
@@ -485,7 +495,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     {
         /* call rack handler */
         mrb_value env = build_env(req, handler_ctx->mrb, handler_ctx->constants);
-        mrb_value resp = mrb_funcall_argv(handler_ctx->mrb, handler_ctx->proc, handler_ctx->symbols.call, 1, &env);
+        mrb_value resp = mrb_funcall_argv(handler_ctx->mrb, handler_ctx->proc, handler_ctx->symbols.sym_call, 1, &env);
         if (handler_ctx->mrb->exc != NULL) {
             report_exception(req, handler_ctx->mrb);
             goto SendInternalError;
