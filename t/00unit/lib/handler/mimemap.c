@@ -22,6 +22,39 @@
 #include "../../test.h"
 #include "../../../../lib/handler/mimemap.c"
 
+static void test_default_attributes(void)
+{
+    h2o_mime_attributes_t attr;
+
+    h2o_mimemap_get_default_attributes("text/plain", &attr);
+    ok(attr.is_compressible);
+    ok(attr.priority == H2O_MIME_ATTRIBUTE_PRIORITY_NORMAL);
+
+    h2o_mimemap_get_default_attributes("text/plain; charset=utf-8", &attr);
+    ok(attr.is_compressible);
+    ok(attr.priority == H2O_MIME_ATTRIBUTE_PRIORITY_NORMAL);
+
+    h2o_mimemap_get_default_attributes("application/xhtml+xml", &attr);
+    ok(attr.is_compressible);
+    ok(attr.priority == H2O_MIME_ATTRIBUTE_PRIORITY_NORMAL);
+
+    h2o_mimemap_get_default_attributes("application/xhtml+xml; charset=utf-8", &attr);
+    ok(attr.is_compressible);
+    ok(attr.priority == H2O_MIME_ATTRIBUTE_PRIORITY_NORMAL);
+
+    h2o_mimemap_get_default_attributes("text/css", &attr);
+    ok(attr.is_compressible);
+    ok(attr.priority == H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST);
+
+    h2o_mimemap_get_default_attributes("text/css; charset=utf-8", &attr);
+    ok(attr.is_compressible);
+    ok(attr.priority == H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST);
+
+    h2o_mimemap_get_default_attributes("application/octet-stream", &attr);
+    ok(!attr.is_compressible);
+    ok(attr.priority == H2O_MIME_ATTRIBUTE_PRIORITY_NORMAL);
+}
+
 static int is_mimetype(h2o_mimemap_type_t *type, const char *expected)
 {
     return type->type == H2O_MIMEMAP_TYPE_MIMETYPE && type->data.mimetype.len == strlen(expected) &&
@@ -31,6 +64,8 @@ static int is_mimetype(h2o_mimemap_type_t *type, const char *expected)
 void test_lib__handler__mimemap_c()
 {
     h2o_mimemap_t *mimemap = h2o_mimemap_create(), *mimemap2;
+
+    subtest("default-attributes", test_default_attributes);
 
     /* default and set default */
     ok(is_mimetype(h2o_mimemap_get_default_type(mimemap), "application/octet-stream"));

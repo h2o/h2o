@@ -20,6 +20,7 @@
  * IN THE SOFTWARE.
  */
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 #include "khash.h"
 #include "h2o.h"
@@ -117,7 +118,7 @@ static void rebuild_typeset(h2o_mimemap_t *mimemap)
 static h2o_mimemap_type_t *create_extension_type(const char *mime, h2o_mime_attributes_t *attr)
 {
     h2o_mimemap_type_t *type = h2o_mem_alloc_shared(NULL, sizeof(*type) + strlen(mime) + 1, NULL);
-    size_t i, type_end_at;
+    size_t i;
 
     memset(type, 0, sizeof(*type));
 
@@ -127,7 +128,6 @@ static h2o_mimemap_type_t *create_extension_type(const char *mime, h2o_mime_attr
     type->data.mimetype.base = (char *)type + sizeof(*type);
     for (i = 0; mime[i] != '\0' && mime[i] != ';'; ++i)
         type->data.mimetype.base[i] = h2o_tolower(mime[i]);
-    type_end_at = i;
     for (; mime[i] != '\0'; ++i)
         type->data.mimetype.base[i] = mime[i];
     type->data.mimetype.base[i] = '\0';
@@ -136,16 +136,7 @@ static h2o_mimemap_type_t *create_extension_type(const char *mime, h2o_mime_attr
     if (attr != NULL) {
         type->data.attr = *attr;
     } else {
-        /* make rough guesses */
-        if (strncmp(type->data.mimetype.base, "text/", 5) == 0 ||
-            h2o_strstr(type->data.mimetype.base, type_end_at, H2O_STRLIT("+xml")) != SIZE_MAX)
-            type->data.attr.is_compressible = 1;
-        if (h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("text/css")) ||
-            h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("application/ecmascript")) ||
-            h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("application/javascript")) ||
-            h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("text/ecmascript")) ||
-            h2o_memis(type->data.mimetype.base, type_end_at, H2O_STRLIT("text/javascript")))
-            type->data.attr.priority = H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
+        h2o_mimemap_get_default_attributes(mime, &type->data.attr);
     }
 
     return type;
@@ -375,4 +366,27 @@ HasAttributes:
         return kh_key(mimemap->typeset, iter);
 
     return NULL;
+}
+
+void h2o_mimemap_get_default_attributes(const char *_mime, h2o_mime_attributes_t *attr)
+{
+    char *mime = alloca(strlen(_mime) + 1);
+    strcpy(mime, _mime);
+
+    const char *type_end_at;
+
+    if ((type_end_at = strchr(mime, ';')) == NULL)
+        type_end_at = mime + strlen(mime);
+
+    *attr = (h2o_mime_attributes_t){};
+
+    if (strncmp(mime, "text/", 5) == 0 ||
+        h2o_strstr(mime, type_end_at - mime, H2O_STRLIT("+xml")) != SIZE_MAX)
+        attr->is_compressible = 1;
+    if (h2o_memis(mime, type_end_at - mime, H2O_STRLIT("text/css")) ||
+        h2o_memis(mime, type_end_at - mime, H2O_STRLIT("application/ecmascript")) ||
+        h2o_memis(mime, type_end_at - mime, H2O_STRLIT("application/javascript")) ||
+        h2o_memis(mime, type_end_at - mime, H2O_STRLIT("text/ecmascript")) ||
+        h2o_memis(mime, type_end_at - mime, H2O_STRLIT("text/javascript")))
+        attr->priority = H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
 }
