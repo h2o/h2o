@@ -15,7 +15,13 @@ MRuby::Build.new do |conf|
   # use mrbgems
   Dir.glob("../mruby-*/mrbgem.rake") do |x|
     g = File.basename File.dirname x
-    conf.gem "../deps/#{g}"
+    if g == 'mruby-onig-regexp'
+      conf.gem "../deps/#{g}" do |c|
+        c.bundle_onigmo
+      end
+    else
+      conf.gem "../deps/#{g}"
+    end
   end
 
   # include all the core GEMs
