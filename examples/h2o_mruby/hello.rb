@@ -3,20 +3,29 @@
 #     file.dir: examples/doc_root
 #     mruby.handler-file: /path/to/hello.rb
 
-r = H2O::Request.new
+class HelloApp
+  def call(env)
+    h = "hello"
+    m = "from h2o_mruby"
 
-h = "hello"
-m =  "from h2o_mruby"
+    ua = env["HTTP_USER_AGENT"]
+    new_ua = "new-#{ua}-h2o_mruby"
+    path = env["PATH_INFO"]
+    host = env["HTTP_HOST"]
+    method = env["REQUEST_METHOD"]
+    query = env["QUERY_STRING"]
 
-ua = r.headers_in["User-Agent"].to_s
-new_ua = r.headers_in["User-Agent"] = "new-#{ua}-h2o_mruby"
-uri = r.uri
-host = r.hostname
-method = r.method
-query = r.query
+    msg = "#{h} #{m}. User-Agent:#{ua} New User-Agent:#{new_ua} path:#{path} host:#{host} method:#{method} query:#{query}"
 
-msg = "#{h} #{m}. User-Agent:#{ua} New User-Agent:#{new_ua} path:#{uri} host:#{host} method:#{method} query:#{query} remote_ip:#{H2O::Connection.new.remote_ip}"
+    [200,
+     {
+       "content-type" => "text/plain; charset=utf-8",
+       "user-agent" => new_ua,
+     },
+     ["#{msg}\n"]
+    ]
 
-r.log_error msg
+  end
+end
 
-H2O.return 200, "OK", msg + "\n"
+HelloApp.new
