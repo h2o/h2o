@@ -130,7 +130,7 @@ int h2o_time_parse_rfc1123(const char *s, size_t len, struct tm *tm)
         return -1;
     }
 #undef MAP
-#undef PACK4
+#undef PACK3
 
     return 0;
 }
