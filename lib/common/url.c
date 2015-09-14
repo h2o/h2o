@@ -40,58 +40,94 @@ static int decode_hex(int ch)
     return -1;
 }
 
-static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *path, size_t len, size_t *query_at)
+static h2o_iovec_t decode_urlencoded(h2o_mem_pool_t *pool, const char *s, size_t len)
 {
-    const char *src = path, *src_end = path + len;
-    char *dst;
+    size_t i;
     h2o_iovec_t ret;
-
-    *query_at = SIZE_MAX;
+    char *dst;
 
     dst = ret.base = h2o_mem_alloc_pool(pool, len + 1);
-    if (len == 0 || path[0] != '/')
-        *dst++ = '/';
-    while (src != src_end) {
-        if (*src == '?') {
-            *query_at = src - path;
-            break;
+
+    /* decode %xx */
+    for (i = 0; i + 3 < len;) {
+        int hi, lo;
+        if (s[i] == '%' && (hi = decode_hex(s[i + 1])) != -1 && (lo = decode_hex(s[i + 2])) != -1) {
+            *dst++ = (hi << 4) | lo;
+            i += 3;
+        } else {
+            *dst++ = s[i++];
         }
-        if ((src_end - src == 3 && memcmp(src, H2O_STRLIT("/..")) == 0) ||
-            (src_end - src > 3 && memcmp(src, H2O_STRLIT("/../")) == 0)) {
-            /* go back the previous "/" */
-            if (ret.base < dst)
-                --dst;
-            for (; ret.base < dst && *dst != '/'; --dst)
-                ;
-            src += 3;
-            if (src == src_end)
-                *dst++ = '/';
-            goto Next;
-        }
-        if ((src_end - src == 2 && memcmp(src, H2O_STRLIT("/.")) == 0) ||
-            (src_end - src > 2 && memcmp(src, H2O_STRLIT("/./")) == 0)) {
-            src += 2;
-            if (src == src_end)
-                *dst++ = '/';
-            goto Next;
-        }
-        if (src_end - src >= 3 && *src == '%') {
-            int hi, lo;
-            if ((hi = decode_hex(src[1])) != -1 && (lo = decode_hex(src[2])) != -1) {
-                *dst++ = (hi << 4) | lo;
-                src += 3;
-                goto Next;
-            }
-        }
-        *dst++ = *src++;
-    Next:
-        ;
     }
-    if (dst == ret.base)
-        *dst++ = '/';
+    while (i != len)
+        *dst++ = s[i++];
+    *dst = '\0';
+
+    ret.len = dst - ret.base;
+    return ret;
+}
+
+static h2o_iovec_t rewrite_special_paths(h2o_mem_pool_t *pool, const char *src, size_t len)
+{
+    h2o_iovec_t ret;
+    const char *src_end = src + len;
+    char *dst;
+
+    if (src == src_end)
+        return h2o_iovec_init("/", 1);
+
+    dst = ret.base = h2o_mem_alloc_pool(pool, len + 1);
+
+    /* assertion hereafter: ret.base[0] is always '/' */
+    *dst++ = '/';
+    if (src[0] == '/')
+        ++src;
+
+    /* split by '/' and handle, at the same time combining repeating '/'s to one */
+    while (1) {
+        const char *part_start = src;
+        for (; src != src_end; ++src)
+            if (*src == '/')
+                break;
+        size_t part_len = src - part_start;
+        if (part_len == 1 && part_start[0] == '.')
+            continue;
+        if (part_len == 2 && memcmp(part_start, "..", 2) == 0) {
+            /* if we can go back one level, do it */
+            if (ret.base != dst - 1) {
+                for (--dst; dst[-1] != '/'; --dst)
+                    ;
+            }
+            continue;
+        }
+        if (part_len != 0) {
+            memcpy(dst, part_start, part_len);
+            dst += part_len;
+        }
+        if (src == src_end)
+            break;
+        assert(*src == '/');
+        if (dst[-1] != '/')
+            *dst++ = '/';
+        ++src;
+    }
     ret.len = dst - ret.base;
 
     return ret;
+}
+
+static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *path, size_t len, size_t *query_at)
+{
+    { /* locate '?', and set len to the end of input path */
+        const char *q = memchr(path, '?', len);
+        if (q != NULL) {
+            len = *query_at = q - path;
+        } else {
+            *query_at = SIZE_MAX;
+        }
+    }
+
+    h2o_iovec_t decoded = decode_urlencoded(pool, path, len);
+    return rewrite_special_paths(pool, decoded.base, decoded.len);
 }
 
 h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t len, size_t *query_at)
@@ -126,7 +162,20 @@ Return:
     return ret;
 
 Rewrite:
-    return rebuild_path(pool, path, len, query_at);
+    ret = rebuild_path(pool, path, len, query_at);
+    if (ret.len == 0)
+        goto RewriteError;
+    if (ret.base[0] != '/')
+        goto RewriteError;
+    if (h2o_strstr(ret.base, ret.len, H2O_STRLIT("/../")) != SIZE_MAX)
+        goto RewriteError;
+    if (ret.len >= 3 && memcmp(ret.base + ret.len - 3, "/..", 3) == 0)
+        goto RewriteError;
+    return ret;
+RewriteError:
+    fprintf(stderr, "failed to normalize path: `%.*s` => `%.*s`\n", (int)len, path, (int)ret.len, ret.base);
+    ret = h2o_iovec_init("/", 1);
+    return ret;
 }
 
 static const char *parse_scheme(const char *s, const char *end, const h2o_url_scheme_t **scheme)
