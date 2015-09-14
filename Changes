@@ -1,5 +1,8 @@
 Revision history for H2O.
 
+1.4.5 2015-09-14 13:46:00+0000
+	- [file] fix directory traversal vulnerability (JVN#65602714)
+
 1.4.4 2015-08-17 21:45:00+0000
 	- [misc] fix install error of libh2o-evloop in case development files of OpenSSL cannot be found #443 (Kazuho Oku)
 
