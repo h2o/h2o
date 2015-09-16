@@ -12,7 +12,7 @@ Written in C, can also be <a href="faq.html#libh2o">used as a library</a>.
 <h3>News</h3>
 
 <ul>
-<li><a href="vulnerabilities.html">Security Advisory</a>: one security fix (Sep 16 2015)</li>
+<li><b><a href="vulnerabilities.html">Security Advisory</a>: one security fix</b> (Sep 16 2015)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v1.5.0-beta2">1.5.0-beta2</a> is now available, including bug and security fixes (Sep 16 2015)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v1.4.5">version 1.4.5</a> is now available, including a security fix (Sep 16 2015)</li>
 </ul>

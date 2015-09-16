@@ -77,7 +77,10 @@ Only one handler must exist within the directives.
 <div class="caption">Example. Mapping PHP files to FastCGI</div>
 <pre><code>file.custom-handler:
   extension: .php
-  fastcgi.connect: /tmp/fcgi.sock
+  fastcgi.connect:
+    port: /tmp/fcgi.sock
+    type: unix
+
 </code></pre>
 </div>
 
