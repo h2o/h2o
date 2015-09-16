@@ -20,6 +20,9 @@ H2O <a href="https://github.com/h2o/h2o/releases/tag/v1.4.5">version 1.4.5</a> a
 <p>
 Users are advised to upgrade their servers immediately.
 </p>
+<p>
+The vulnerability was reported by: Yusuke OSUMI.
+</p>
 
 <div>
 <p>
@@ -33,6 +36,9 @@ H2O（バージョン1.4.4以前および1.5.0-beta1以前）のURL正規化処�
 </p>
 <p>
 ユーザの皆様におかれましては、直ちに最新版にアップグレードしていただきますようご案内申し上げます。
+</p>
+<p>
+本脆弱性は大角 祐介氏によって報告されました。この場を借りて氏に御礼申し上げます。
 </p>
 </div>
 
