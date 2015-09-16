@@ -23,6 +23,9 @@ Users are advised to upgrade their servers immediately.
 <p>
 The vulnerability was reported by: Yusuke OSUMI.
 </p>
+<p>
+EDIT. FreeBSD port has been <a href="http://portsmon.freebsd.org/portoverview.py?category=www&portname=h2o">updated to 1.4.5</a>.
+</p>
 
 <div>
 <p>
