@@ -1,6 +1,11 @@
 Revision history for H2O.
 
-1.5.0-beta1 TBD
+1.5.0-beta2 2015-09-16 07:00:00+0000
+	- [serurity fix][file] fix directory traversal (CVE-2015-5638) (Kazuho Oku)
+	- [mruby] fix build failure when oniguruma is already installed #501 #506 (Kazuho Oku)
+	- [mruby] update sample mruby app to use rack-based API #498 (Masayoshi Takahashi)
+
+1.5.0-beta1 2015-09-11 06:15:49+0000
 	- [core] introduce `is_compressible` and `priority` attributes to MIME map #436 #496 (Kazuho Oku)
 	- [access-log] fix bug that emitted unnecessary NUL char in certain conditions #462 #463 (Kazuho Oku)
 	- [fastcgi] support for http2 server-push using `link: rel=preload` header #446 (Kazuho Oku)
