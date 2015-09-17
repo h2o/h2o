@@ -147,13 +147,13 @@ static void dispose_dynamic_type(h2o_mimemap_type_t *type)
     h2o_config_dispose_pathconf(&type->data.dynamic.pathconf);
 }
 
-static h2o_mimemap_type_t *create_dynamic_type(h2o_globalconf_t *globalconf)
+static h2o_mimemap_type_t *create_dynamic_type(h2o_globalconf_t *globalconf, h2o_mimemap_t *mimemap)
 {
     h2o_mimemap_type_t *type = h2o_mem_alloc_shared(NULL, sizeof(*type), (void *)dispose_dynamic_type);
 
     type->type = H2O_MIMEMAP_TYPE_DYNAMIC;
     memset(&type->data.dynamic, 0, sizeof(type->data.dynamic));
-    h2o_config_init_pathconf(&type->data.dynamic.pathconf, globalconf, NULL, NULL);
+    h2o_config_init_pathconf(&type->data.dynamic.pathconf, globalconf, NULL, mimemap);
 
     return type;
 }
@@ -303,7 +303,7 @@ void h2o_mimemap_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const 
 
 h2o_mimemap_type_t *h2o_mimemap_define_dynamic(h2o_mimemap_t *mimemap, const char **exts, h2o_globalconf_t *globalconf)
 {
-    h2o_mimemap_type_t *new_type = create_dynamic_type(globalconf);
+    h2o_mimemap_type_t *new_type = create_dynamic_type(globalconf, mimemap);
     size_t i;
 
     for (i = 0; exts[i] != NULL; ++i)
