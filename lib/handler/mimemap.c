@@ -303,6 +303,9 @@ void h2o_mimemap_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const 
 
 h2o_mimemap_type_t *h2o_mimemap_define_dynamic(h2o_mimemap_t *mimemap, const char **exts, h2o_globalconf_t *globalconf)
 {
+    /* FIXME: fix memory leak introduced by this a cyclic link (mimemap -> new_type -> mimemap)
+     * note also that we may want to update the reference from the dynamic type to the mimemap as we clone the mimemap,
+     * but doing so naively would cause unnecessary copies of fastcgi.spawns... */
     h2o_mimemap_type_t *new_type = create_dynamic_type(globalconf, mimemap);
     size_t i;
 
