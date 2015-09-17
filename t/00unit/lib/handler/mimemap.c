@@ -61,7 +61,7 @@ static int is_mimetype(h2o_mimemap_type_t *type, const char *expected)
            memcmp(type->data.mimetype.base, expected, type->data.mimetype.len) == 0;
 }
 
-void test_lib__handler__mimemap_c()
+static void test_basic()
 {
     h2o_mimemap_t *mimemap = h2o_mimemap_create(), *mimemap2;
 
@@ -108,4 +108,19 @@ void test_lib__handler__mimemap_c()
     ok(is_mimetype(h2o_mimemap_get_type_by_extension(mimemap, "foo"), "text/plain"));
 
     h2o_mem_release_shared(mimemap);
+}
+
+static void test_dynamic()
+{
+    h2o_mimemap_t *mimemap = h2o_mimemap_create();
+    const char *exts[] = {".php", NULL};
+    h2o_globalconf_t global = {};
+    h2o_mimemap_define_dynamic(mimemap, exts, &global);
+    h2o_mem_release_shared(mimemap);
+}
+
+void test_lib__handler__mimemap_c()
+{
+    subtest("basic", test_basic);
+    subtest("dynamic", test_dynamic);
 }
