@@ -1,5 +1,8 @@
 Revision history for H2O.
 
+1.5.0-beta3 2015-09-18 03:44:00+0000
+	- [http2] fix crash when `http2-reprioritize-blocking-assets`, `file.custom-handler` are used together #511 #514 (Kazuho Oku)
+
 1.5.0-beta2 2015-09-16 07:00:00+0000
 	- [serurity fix][file] fix directory traversal (CVE-2015-5638) (Kazuho Oku)
 	- [mruby] fix build failure when oniguruma is already installed #501 #506 (Kazuho Oku)
