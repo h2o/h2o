@@ -29,6 +29,7 @@
 #include <mruby/compile.h>
 #include <mruby/hash.h>
 #include <mruby/string.h>
+#include <mruby/variable.h>
 #include "h2o.h"
 #include "h2o/mruby_.h"
 
@@ -50,6 +51,7 @@ enum {
     LIT_RACK_MULTIPROCESS,
     LIT_RACK_RUN_ONCE,
     LIT_RACK_HIJACK_,
+    LIT_RACK_ERRORS,
     LIT_SERVER__NAME,
     LIT_SERVER__NAME_VALUE,
     LIT_SERVER_VERSION,
@@ -198,6 +200,7 @@ static mrb_value build_constants(mrb_state *mrb)
     SET_LITERAL(LIT_RACK_MULTIPROCESS, "rack.multiprocess");
     SET_LITERAL(LIT_RACK_RUN_ONCE, "rack.run_once");
     SET_LITERAL(LIT_RACK_HIJACK_, "rack.hijack?");
+    SET_LITERAL(LIT_RACK_ERRORS, "rack.errors");
     SET_LITERAL(LIT_SERVER__NAME, "server.name");
     SET_LITERAL(LIT_SERVER__NAME_VALUE, "h2o");
     SET_LITERAL(LIT_SERVER_VERSION, "server.version");
@@ -357,6 +360,7 @@ static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value constants)
     mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_RACK_MULTIPROCESS), mrb_true_value());
     mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_RACK_RUN_ONCE), mrb_false_value());
     mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_RACK_HIJACK_), mrb_false_value());
+    mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_RACK_ERRORS), mrb_gv_get(mrb, mrb_intern_lit(mrb, "$stderr")));
 
     /* server name */
     mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_SERVER__NAME), mrb_ary_entry(constants, LIT_SERVER__NAME_VALUE));
