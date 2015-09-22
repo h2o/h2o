@@ -52,10 +52,8 @@ enum {
     LIT_RACK_RUN_ONCE,
     LIT_RACK_HIJACK_,
     LIT_RACK_ERRORS,
-    LIT_SERVER__NAME,
-    LIT_SERVER__NAME_VALUE,
-    LIT_SERVER_VERSION,
-    LIT_SERVER_VERSION_VALUE,
+    LIT_SERVER_SOFTWARE,
+    LIT_SERVER_SOFTWARE_VALUE,
     PROC_EACH_TO_ARRAY,
     NUM_CONSTANTS
 };
@@ -150,7 +148,7 @@ static h2o_iovec_t convert_header_name_to_env(h2o_mem_pool_t *pool, const char *
 #undef KEY_PREFIX_LEN
 }
 
-static mrb_value build_constants(mrb_state *mrb)
+static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t server_name_len)
 {
     mrb_value ary = mrb_ary_new_capa(mrb, NUM_CONSTANTS);
     mrb_int i;
@@ -178,13 +176,15 @@ static mrb_value build_constants(mrb_state *mrb)
         h2o_mem_clear_pool(&pool);
     }
 
-#define SET_LITERAL(idx, str)                                                                                                      \
+#define SET_STRING(idx, value)                                                                                                     \
     do {                                                                                                                           \
-        mrb_value lit = mrb_str_new_lit(mrb, str);                                                                                 \
+        mrb_value lit = (value);                                                                                                   \
         FREEZE_STRING(lit);                                                                                                        \
         mrb_ary_set(mrb, ary, idx, lit);                                                                                           \
         mrb_gc_arena_restore(mrb, arena);                                                                                          \
     } while (0)
+#define SET_LITERAL(idx, str) SET_STRING(idx, mrb_str_new_lit(mrb, str))
+
     SET_LITERAL(LIT_REQUEST_METHOD, "REQUEST_METHOD");
     SET_LITERAL(LIT_SCRIPT_NAME, "SCRIPT_NAME");
     SET_LITERAL(LIT_PATH_INFO, "PATH_INFO");
@@ -201,11 +201,11 @@ static mrb_value build_constants(mrb_state *mrb)
     SET_LITERAL(LIT_RACK_RUN_ONCE, "rack.run_once");
     SET_LITERAL(LIT_RACK_HIJACK_, "rack.hijack?");
     SET_LITERAL(LIT_RACK_ERRORS, "rack.errors");
-    SET_LITERAL(LIT_SERVER__NAME, "server.name");
-    SET_LITERAL(LIT_SERVER__NAME_VALUE, "h2o");
-    SET_LITERAL(LIT_SERVER_VERSION, "server.version");
-    SET_LITERAL(LIT_SERVER_VERSION_VALUE, H2O_VERSION);
+    SET_LITERAL(LIT_SERVER_SOFTWARE, "SERVER_SOFTWARE");
+    SET_STRING(LIT_SERVER_SOFTWARE_VALUE, mrb_str_new(mrb, server_name, server_name_len));
+
 #undef SET_LITERAL
+#undef SET_STRING
 
     mrb_ary_set(mrb, ary, PROC_EACH_TO_ARRAY,
                 mrb_funcall(mrb, mrb_top_self(mrb), "eval", 1,
@@ -233,7 +233,7 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
     mrb_gc_arena_restore(handler_ctx->mrb, arena);
     mrb_gc_protect(handler_ctx->mrb, handler_ctx->proc);
 
-    handler_ctx->constants = build_constants(handler_ctx->mrb);
+    handler_ctx->constants = build_constants(handler_ctx->mrb, ctx->globalconf->server_name.base, ctx->globalconf->server_name.len);
     handler_ctx->symbols.sym_call = mrb_intern_lit(handler_ctx->mrb, "call");
     handler_ctx->symbols.sym_close = mrb_intern_lit(handler_ctx->mrb, "close");
 
@@ -363,8 +363,7 @@ static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value constants)
     mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_RACK_ERRORS), mrb_gv_get(mrb, mrb_intern_lit(mrb, "$stderr")));
 
     /* server name */
-    mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_SERVER__NAME), mrb_ary_entry(constants, LIT_SERVER__NAME_VALUE));
-    mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_SERVER_VERSION), mrb_ary_entry(constants, LIT_SERVER_VERSION_VALUE));
+    mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_SERVER_SOFTWARE), mrb_ary_entry(constants, LIT_SERVER_SOFTWARE_VALUE));
 
     return env;
 }
