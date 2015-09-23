@@ -18,7 +18,6 @@ OUTPUT=\
     configure/redirect_directives.html \
     configure/reproxy_directives.html \
     faq.html \
-    vulnerabilities.html \
 
 %.html: %.mt
 	../misc/makedoc.pl $< $@

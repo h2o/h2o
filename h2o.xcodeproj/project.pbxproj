@@ -261,7 +261,6 @@
 
 /* Begin PBXFileReference section */
 		100AE41A1B27D74800CE18BB /* 50file-range.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50file-range.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
-		101175D31BA938D60086D8EA /* vulnerabilities.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = vulnerabilities.mt; sourceTree = "<group>"; };
 		101788B119B561AA0084C6D8 /* socket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = socket.c; sourceTree = "<group>"; };
 		101B670B19ADD3380084A351 /* access_log.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = access_log.c; sourceTree = "<group>"; };
 		103BAB351B130666000694F4 /* socket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = socket.c; sourceTree = "<group>"; };
@@ -733,7 +732,6 @@
 		10583BDB1AE5A1E3004A3AD6 /* srcdoc */ = {
 			isa = PBXGroup;
 			children = (
-				101175D31BA938D60086D8EA /* vulnerabilities.mt */,
 				10583BF31AE764A7004A3AD6 /* configure */,
 				10583BE11AE5A22D004A3AD6 /* configure.mt */,
 				10583BE21AE5A22D004A3AD6 /* faq.mt */,
