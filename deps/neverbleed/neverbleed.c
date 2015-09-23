@@ -36,7 +36,6 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
-#include <uuid/uuid.h>
 #include <openssl/rand.h>
 #include <openssl/ssl.h>
 #ifdef __linux__
