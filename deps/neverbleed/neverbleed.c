@@ -638,7 +638,7 @@ static int setuid_stub(struct expbuf_t *buf)
 __attribute__((noreturn))
 static void *daemon_close_notify_thread(void *_close_notify_fd)
 {
-    int close_notify_fd = (int)_close_notify_fd;
+    int close_notify_fd = (int)((char *)_close_notify_fd - (char *)NULL);
     char b;
     ssize_t r;
 
@@ -654,7 +654,7 @@ Redo:
 
 static void *daemon_conn_thread(void *_sock_fd)
 {
-    int sock_fd = (int)_sock_fd;
+    int sock_fd = (int)((char *)_sock_fd - (char *)NULL);
     struct expbuf_t buf = {};
     unsigned char auth_token[NEVERBLEED_AUTH_TOKEN_SIZE];
 
@@ -723,13 +723,13 @@ static void daemon_main(int listen_fd, int close_notify_fd, const char *tempdir)
     pthread_attr_init(&thattr);
     pthread_attr_setdetachstate(&thattr, 1);
 
-    if (pthread_create(&tid, &thattr, daemon_close_notify_thread, (void *)close_notify_fd) != 0)
+    if (pthread_create(&tid, &thattr, daemon_close_notify_thread, (char *)NULL + close_notify_fd) != 0)
         dief("pthread_create failed");
 
     while (1) {
         while ((sock_fd = accept(listen_fd, NULL, NULL)) == -1)
             ;
-        if (pthread_create(&tid, &thattr, daemon_conn_thread, (void *)sock_fd) != 0)
+        if (pthread_create(&tid, &thattr, daemon_conn_thread, (char *)NULL + sock_fd) != 0)
             dief("pthread_create failed");
     }
 }
@@ -753,7 +753,7 @@ static RSA_METHOD rsa_method = {
 
 int neverbleed_init(neverbleed_t *nb, char *errbuf)
 {
-    int pipe_fds[2] = {-1, -1}, listen_fd;
+    int pipe_fds[2] = {-1, -1}, listen_fd = -1;
     char *tempdir = NULL;
 
     const RSA_METHOD *default_method = RSA_PKCS1_SSLeay();
