@@ -133,6 +133,7 @@ INCLUDE_DIRECTORIES(
     deps/golombset
     deps/libyrmcds
     deps/klib
+    deps/neverbleed
     deps/picohttpparser
     deps/picotest
     deps/yaml/include
@@ -312,7 +313,7 @@ SET_TARGET_PROPERTIES(examples-websocket PROPERTIES
 TARGET_LINK_LIBRARIES(examples-websocket libh2o ${LIBUV_LIBRARIES} ${WSLAY_LIBRARIES} ${EXTRA_LIBRARIES})
 
 # standalone server directly links to libh2o using evloop
-SET(STANDALONE_SOURCE_FILES ${LIB_SOURCE_FILES} ${LIBYAML_SOURCE_FILES} src/ssl.c src/main.c)
+SET(STANDALONE_SOURCE_FILES ${LIB_SOURCE_FILES} ${LIBYAML_SOURCE_FILES} deps/neverbleed/neverbleed.c src/ssl.c src/main.c)
 SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
 IF (WITH_MRUBY)
     IF (${CMAKE_C_COMPILER_ID} STREQUAL "Clang")

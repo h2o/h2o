@@ -52,6 +52,7 @@
 #endif
 #include "cloexec.h"
 #include "yoml-parser.h"
+#include "neverbleed.h"
 #include "h2o.h"
 #include "h2o/configurator.h"
 #include "h2o/http1.h"
@@ -155,6 +156,8 @@ static struct {
     0,               /* shutdown_requested */
     {},              /* state */
 };
+
+static neverbleed_t *neverbleed = NULL;
 
 static void set_cloexec(int fd)
 {
@@ -354,6 +357,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     long ssl_options = SSL_OP_ALL;
     uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
     unsigned ocsp_max_failures = 3;              /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
+    int use_neverbleed = 0;                      /* disabled by default (for the time being) */
 
     if (!listener_is_new) {
         if (listener->ssl.size != 0 && ssl_node == NULL) {
@@ -406,6 +410,18 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                     ssl_options |= SSL_OP_CIPHER_SERVER_PREFERENCE;
                 } else {
                     h2o_configurator_errprintf(cmd, value, "property of `cipher-preference` must be either of: `client`, `server`");
+                    return -1;
+                }
+                continue;
+            }
+            if (strcmp(key->data.scalar, "neverbleed") == 0) {
+                if (value->type == YOML_TYPE_SCALAR && strcasecmp(value->data.scalar, "ON") == 0) {
+                    /* no need to enable neverbleed for daemon / master */
+                    use_neverbleed = 1;
+                } else if (value->type == YOML_TYPE_SCALAR && strcasecmp(value->data.scalar, "OFF") == 0) {
+                    use_neverbleed = 0;
+                } else {
+                    h2o_configurator_errprintf(cmd, value, "property of `neverbleed` must be either of: `ON`, `OFF");
                     return -1;
                 }
                 continue;
@@ -483,10 +499,36 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         ERR_print_errors_cb(on_openssl_print_errors, stderr);
         goto Error;
     }
-    if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file->data.scalar, SSL_FILETYPE_PEM) != 1) {
-        h2o_configurator_errprintf(cmd, key_file, "failed to load private key file:%s\n", key_file->data.scalar);
-        ERR_print_errors_cb(on_openssl_print_errors, stderr);
-        goto Error;
+    if (use_neverbleed) {
+        /* disable neverbleed in case the process is not going to serve requests */
+        switch (conf.run_mode) {
+        case RUN_MODE_DAEMON:
+        case RUN_MODE_MASTER:
+            use_neverbleed = 0;
+            break;
+        default:
+            break;
+        }
+    }
+    if (use_neverbleed) {
+        char errbuf[NEVERBLEED_ERRBUF_SIZE];
+        if (neverbleed == NULL) {
+            neverbleed = h2o_mem_alloc(sizeof(*neverbleed));
+            if (neverbleed_init(neverbleed, errbuf) != 0) {
+                fprintf(stderr, "%s\n", errbuf);
+                abort();
+            }
+        }
+        if (neverbleed_load_private_key_file(neverbleed, ssl_ctx, key_file->data.scalar, errbuf) != 1) {
+            h2o_configurator_errprintf(cmd, key_file, "failed to load private key file:%s:%s\n", key_file->data.scalar, errbuf);
+            goto Error;
+        }
+    } else {
+        if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file->data.scalar, SSL_FILETYPE_PEM) != 1) {
+            h2o_configurator_errprintf(cmd, key_file, "failed to load private key file:%s\n", key_file->data.scalar);
+            ERR_print_errors_cb(on_openssl_print_errors, stderr);
+            goto Error;
+        }
     }
     if (cipher_suite != NULL && SSL_CTX_set_cipher_list(ssl_ctx, cipher_suite->data.scalar) != 1) {
         h2o_configurator_errprintf(cmd, cipher_suite, "failed to setup SSL cipher suite\n");
