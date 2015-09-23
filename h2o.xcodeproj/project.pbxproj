@@ -168,6 +168,7 @@
 		10FCC13E1B2E4A4500F13674 /* cloexec.c in Sources */ = {isa = PBXBuildFile; fileRef = 10FCC13C1B2E4A4500F13674 /* cloexec.c */; };
 		10FCC13F1B2E4A4500F13674 /* cloexec.h in Headers */ = {isa = PBXBuildFile; fileRef = 10FCC13D1B2E4A4500F13674 /* cloexec.h */; };
 		10FCC1401B2E59E600F13674 /* cloexec.c in Sources */ = {isa = PBXBuildFile; fileRef = 10FCC13C1B2E4A4500F13674 /* cloexec.c */; };
+		10FFEE0A1BB23A8C0087AD75 /* neverbleed.c in Sources */ = {isa = PBXBuildFile; fileRef = 10FFEE081BB23A8C0087AD75 /* neverbleed.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -493,6 +494,8 @@
 		10FCC1411B2FCC6B00F13674 /* kill-on-close */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = "kill-on-close"; sourceTree = "<group>"; };
 		10FCC1421B300A6800F13674 /* 50fastcgi-php.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50fastcgi-php.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10FCC1431B31408B00F13674 /* fastcgi_directives.mt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = fastcgi_directives.mt; sourceTree = "<group>"; };
+		10FFEE081BB23A8C0087AD75 /* neverbleed.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = neverbleed.c; sourceTree = "<group>"; };
+		10FFEE091BB23A8C0087AD75 /* neverbleed.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = neverbleed.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -892,6 +895,7 @@
 				10F4197E1B64E6C300BEAEAC /* golombset */,
 				1079231F19A3210D00C52AD6 /* klib */,
 				10A3D3DC1B4FAA5900327CF9 /* libyrmcds */,
+				10FFEE071BB23A730087AD75 /* neverbleed */,
 				1079235619A3210D00C52AD6 /* picohttpparser */,
 				10F417FB19C2D2B400B6E31A /* picotest */,
 				10756E221AC125E00009BF57 /* yaml */,
@@ -1176,6 +1180,15 @@
 				10FCC13D1B2E4A4500F13674 /* cloexec.h */,
 			);
 			path = cloexec;
+			sourceTree = "<group>";
+		};
+		10FFEE071BB23A730087AD75 /* neverbleed */ = {
+			isa = PBXGroup;
+			children = (
+				10FFEE081BB23A8C0087AD75 /* neverbleed.c */,
+				10FFEE091BB23A8C0087AD75 /* neverbleed.h */,
+			);
+			path = neverbleed;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -1542,6 +1555,7 @@
 				10756E2A1AC126420009BF57 /* api.c in Sources */,
 				10756E2B1AC126420009BF57 /* dumper.c in Sources */,
 				10756E2D1AC126420009BF57 /* loader.c in Sources */,
+				10FFEE0A1BB23A8C0087AD75 /* neverbleed.c in Sources */,
 				10756E361AC1264D0009BF57 /* writer.c in Sources */,
 				10756E351AC1264D0009BF57 /* scanner.c in Sources */,
 				10756E331AC1264D0009BF57 /* parser.c in Sources */,
