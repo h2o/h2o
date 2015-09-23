@@ -189,10 +189,42 @@ The directive modifies the MIME mappings by adding the specified MIME type mappi
 <p>
 The default mappings is hard-coded in <a href="https://github.com/h2o/h2o/blob/master/lib/handler/mimemap/defaults.c.h">lib/handler/mimemap/defaults.c.h</a>.
 </p>
+<p>
+It is also possible to set certain attributes for a MIME type.
+The example below maps <code>.css</code> files to <code>text/css</code> type, seting <code>is_compressible</code> flag to <code>ON</code> and <code>priority</code> to highest.
+</p>
+
+<div class="example">
+<div class="caption">Example. Setting MIME attributes</div>
+<pre><code>file.mime.settypes:
+    &quot;text/css&quot;:
+         extensions: [&quot;.css&quot;]
+         is_compressible: yes
+         priority: highest
+</code></pre>
+</div>
+
+
+<p>
+Following attributes are recognized.
+</p>
+
+<table>
+<tr><th>Attribute<th>Possible Values<th>Description
+<tr><td><code>is_compressible</code><td><code>ON</code>, <code>OFF</code><td>if content is compressible
+<tr><td><code>priority</code><td><code>highest<code>, <code>normal</code><td>send priority of the content
+</table>
+
+<p>
+</p>
+
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global, host, path</dd>
+<dt>See also:</dt>
+<dd><a href="configure/gzip_directives.html#gzip"><code>gzip</code></a>, <a href="configure/http2_directives.html#http2-reprioritize-blocking-assets"><code>http2-reprioritize-blocking-assets</code></a>
+</pre></code>
 </dl>
 
 <h3 id="file.mime.removetypes" class="directive-title"><a href="configure/file_directives.html#file.mime.removetypes"><code>"file.mime.removetypes"</code></a></h3>
@@ -275,6 +307,9 @@ If set to <code>ON</code>, the handler looks for a file with <code>.gz</code> ap
 <dd>global, host, path</dd>
 <dt>Default:</dt>
 <dd><code><pre>file.send-gzip: OFF</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/gzip_directives.html#gzip"><code>gzip</code></a>
+</pre></code>
 </dl>
 
 

@@ -16,4 +16,8 @@
 <dt>Default:</dt>
 <dd><code><pre><?= $args->{default} ?></pre></code>
 ? }
+? if ($args->{see_also}) {
+<dt>See also:</dt>
+<dd><?= $args->{see_also} ?></pre></code>
+? }
 </dl>

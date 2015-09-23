@@ -17,6 +17,8 @@ EOT
 ?>
 <p>
 If H2O recognizes the header, it fetches the contents of the resource specified by the header, and sends the contents as the response to the client.
+If the status code associated with the <code>X-Reproxy-URL</code> header is 307 or 308, then the method of the original request is used to obtain the specified resource.
+Otherwise, the request method is chnaged to <code>GET</code>.
 </p>
 <p>
 For example, an upstream server may send an URL pointing to a large image using the <code>X-Reproxy-URL</code> header stored on a distributed file system, and let H2O fetch and return the content to the client, instead of fetching the image by itself.
