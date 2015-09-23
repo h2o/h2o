@@ -18,7 +18,7 @@ When <code><a href="configure/file_directives.html#file.dir">file.dir</a></code>
 H2O <a href="https://github.com/h2o/h2o/releases/tag/v1.4.5">version 1.4.5</a> and <a href="https://github.com/h2o/h2o/releases/tag/v1.5.0-beta2">version 1.5.0-beta2</a> have been released to address this vulnerability.
 </p>
 <p>
-Users are advised to upgrade their servers immediately.
+Users are advised to upgrade their servers immediately (the fixed version is now available as FreeBSD Port / Homebrew as well).
 </p>
 <p>
 The vulnerability was reported by: Yusuke OSUMI.
