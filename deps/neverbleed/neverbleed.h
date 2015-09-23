@@ -49,9 +49,9 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf);
  */
 int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char *fn, char *errbuf);
 /**
- * setuid
+ * setuidgid
  */
-int neverbleed_setuid(neverbleed_t *nb, uid_t uid);
+int neverbleed_setuidgid(neverbleed_t *nb, const char *user);
 
 #ifdef __cplusplus
 }

@@ -23,8 +23,10 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <grp.h>
 #include <limits.h>
 #include <pthread.h>
+#include <pwd.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -34,8 +36,12 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
+#include <uuid/uuid.h>
 #include <openssl/rand.h>
 #include <openssl/ssl.h>
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
 #include "neverbleed.h"
 
 struct expbuf_t {
@@ -211,13 +217,10 @@ static int expbuf_write(struct expbuf_t *buf, int fd)
     for (vecindex = 0; vecindex != sizeof(vecs) / sizeof(vecs[0]);) {
         while ((r = writev(fd, vecs + vecindex, sizeof(vecs) / sizeof(vecs[0]) - vecindex)) == -1 && errno == EINTR)
             ;
-        if (r == -1) {
+        if (r == -1)
             return -1;
-        } else if (r == 0) {
-            errno = 0;
-            return -1;
-        }
-        while (r >= vecs[vecindex].iov_len) {
+        assert(r != 0);
+        while (r != 0 && r >= vecs[vecindex].iov_len) {
             r -= vecs[vecindex].iov_len;
             ++vecindex;
         }
@@ -594,14 +597,14 @@ Respond:
     return 0;
 }
 
-int neverbleed_setuid(neverbleed_t *nb, uid_t uid)
+int neverbleed_setuidgid(neverbleed_t *nb, const char *user)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
     struct expbuf_t buf = {};
     size_t ret;
 
-    expbuf_push_str(&buf, "setuid");
-    expbuf_push_num(&buf, uid);
+    expbuf_push_str(&buf, "setuidgid");
+    expbuf_push_str(&buf, user);
     if (expbuf_write(&buf, thdata->fd) != 0)
         dief(errno != 0 ? "write error" : "connection closed by daemon");
     expbuf_dispose(&buf);
@@ -617,21 +620,45 @@ int neverbleed_setuid(neverbleed_t *nb, uid_t uid)
     return (int)ret;
 }
 
-static int setuid_stub(struct expbuf_t *buf)
+static int setuidgid_stub(struct expbuf_t *buf)
 {
-    size_t uid;
-    int ret;
+    const char *user;
+    struct passwd pwbuf, *pw;
+    char pwstrbuf[65536]; /* should be large enough */
+    int ret = -1;
 
-    if (expbuf_shift_num(buf, &uid) != 0) {
+    if ((user = expbuf_shift_str(buf)) == NULL) {
         errno = 0;
         warnf("%s: failed to parse request", __FUNCTION__);
         return -1;
     }
-    ret = setuid((uid_t)uid);
+
+    errno = 0;
+    if (getpwnam_r(user, &pwbuf, pwstrbuf, sizeof(pwstrbuf), &pw) != 0) {
+        warnf("%s: getpwnam_r failed", __FUNCTION__);
+        goto Respond;
+    }
+    if (pw == NULL) {
+        warnf("%s: failed to obtain information of user:%s", __FUNCTION__, user);
+        goto Respond;
+    }
+    if (setgid(pw->pw_gid) != 0) {
+        warnf("%s: setgid(%d) failed", __FUNCTION__, (int)pw->pw_gid);
+        goto Respond;
+    }
+    if (initgroups(pw->pw_name, pw->pw_gid) != 0) {
+        warnf("%s: initgroups(%s, %d) failed", __FUNCTION__, pw->pw_name, (int)pw->pw_gid);
+        goto Respond;
+    }
+    if (setuid(pw->pw_uid) != 0) {
+        warnf("%s: setuid(%d) failed\n", __FUNCTION__, (int)pw->pw_uid);
+        goto Respond;
+    }
+    ret = 0;
+
+Respond:
     expbuf_dispose(buf);
-
     expbuf_push_num(buf, ret);
-
     return 0;
 }
 
@@ -692,8 +719,8 @@ static void *daemon_conn_thread(void *_sock_fd)
         } else if (strcmp(cmd, "load_key") == 0) {
             if (load_key_stub(&buf) != 0)
                 break;
-        } else if (strcmp(cmd, "setuid") == 0) {
-            if (setuid_stub(&buf) != 0)
+        } else if (strcmp(cmd, "setuidgid") == 0) {
+            if (setuidgid_stub(&buf) != 0)
                 break;
         } else {
             warnf("unknown command:%s", cmd);
@@ -797,6 +824,9 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
         goto Fail;
     case 0:
         close(pipe_fds[1]);
+#ifdef __linux__
+        prctl(PR_SET_DUMPABLE, 0, 0, 0, 0);
+#endif
         memcpy(daemon_auth_token, nb->auth_token, NEVERBLEED_AUTH_TOKEN_SIZE);
         daemon_main(listen_fd, pipe_fds[0], tempdir);
         break;
