@@ -746,6 +746,15 @@ static void daemon_main(int listen_fd, int close_notify_fd, const char *tempdir)
     pthread_attr_t thattr;
     int sock_fd;
 
+    { /* close all descriptors (except STDIN, STDOUT, STRERR, listen_fd, close_notify_fd) */
+        int fd = (int)sysconf(_SC_OPEN_MAX) - 1;
+        for (; fd > 2; --fd) {
+            if (fd == listen_fd || fd == close_notify_fd)
+                continue;
+            close(fd);
+        }
+    }
+
     pthread_attr_init(&thattr);
     pthread_attr_setdetachstate(&thattr, 1);
 

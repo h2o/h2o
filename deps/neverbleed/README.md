@@ -3,7 +3,7 @@ Neverbleed
 
 Neverbleed is an [OpenSSL engine](https://www.openssl.org/docs/manmaster/crypto/engine.html) that runs RSA private key operations in an isolated process, thereby minimizing the risk of private key leak in case of vulnerability such as [Heartbleed](http://heartbleed.com/).
 
-The engine can be used together with existing versions of OpenSSL or LibreSSL, with minimal changes to the server source code.
+The engine is known to work together with existing versions of OpenSSL or LibreSSL, with minimal changes to the server source code.
 
 FAQ
 ---
@@ -25,7 +25,7 @@ In other words, separating private key operations only to an isolated process in
 
 ### Q. Is there any HTTP server that uses Neverbleed?
 
-Neverbleed is developed as part of the [H2O](https://h2o.examp1e.net/) HTTP2 server, is going to be included in its 1.5 release.
+Neverbleed is used by [H2O](https://h2o.examp1e.net/) HTTP2 server since version [1.5.0-beta4](https://github.com/h2o/h2o/releases/tag/v1.5.0-beta4).
 
 How-to
 ------
@@ -67,4 +67,4 @@ the privilege separation engine will be used for all the incoming TLS connection
   }
 ```
 
-Also, `neverbleed_setuid` function can be used to drop the privileges of the daemon process once it completes loading all the private keys.
+Also, `neverbleed_setuidgid` function can be used to drop the privileges of the daemon process once it completes loading all the private keys.
