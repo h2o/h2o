@@ -13,7 +13,7 @@ FAQ
 Virtually none.
 
 Generally speaking, private key operations are much more heavier than the overhead of inter-process communication.
-On my Linux VM running on Core i7 @ 2.4GHz (MacBook Pro 15" Late 2013), OpenSSL 1.0.2 without privilege separation processes 319.56 TLS handshakes per second, whereas OpenSSL with privilege separation processes 316.72 handshakes per second (note: RSA key length: 2,048 bits, selected cipher-suite: ECDHE-RSA-AES128-GCM-SHA256).
+On my Linux VM running on Core i7 @ 2.4GHz (MacBook Pro 15" Late 2013), OpenSSL 1.0.2 without privilege separation processes 319.56 full TLS handshakes per second, whereas OpenSSL with privilege separation processes 316.72 handshakes per second (note: RSA key length: 2,048 bits, selected cipher-suite: ECDHE-RSA-AES128-GCM-SHA256).
 
 ### Q. Why does the library only protect the private keys?
 
