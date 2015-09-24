@@ -97,6 +97,22 @@ __attribute__((format(printf, 1, 2), noreturn)) static void dief(const char *fmt
     abort();
 }
 
+static char *dirname(const char *path)
+{
+    const char *last_slash = strrchr(path, '/');
+    char *ret;
+
+    if (last_slash == NULL) {
+        errno = 0;
+        dief("dirname: no slash in given path:%s", path);
+    }
+    if ((ret = malloc(last_slash + 1 - path)) == NULL)
+        dief("no memory");
+    memcpy(ret, path, last_slash - path);
+    ret[last_slash - path] = '\0';
+    return ret;
+}
+
 static void set_cloexec(int fd)
 {
     if (fcntl(fd, F_SETFD, O_CLOEXEC) == -1)
@@ -266,6 +282,7 @@ static void unlink_dir(const char *path)
         closedir(dp);
     }
     unlink(path);
+    rmdir(path);
 }
 
 void dispose_thread_data(void *_thdata)
@@ -663,15 +680,13 @@ static int setuidgid_stub(struct expbuf_t *buf)
     }
 
     if (change_socket_ownership) {
-        char *fn = strdup(daemon_vars.nb->sun_.sun_path);
-        if (fn == NULL)
-            dief("no memory");
-        if (chown(fn, pw->pw_uid, pw->pw_gid) != 0)
-            dief("chown failed");
-        /* change the dir ownership as well */
-        *strrchr(fn, '/') = '\0';
-        if (chown(fn, pw->pw_uid, pw->pw_gid) != 0)
-            dief("chown failed");
+        char *dir;
+        if (chown(daemon_vars.nb->sun_.sun_path, pw->pw_uid, pw->pw_gid) != 0)
+            dief("chown failed for:%s", daemon_vars.nb->sun_.sun_path);
+        dir = dirname(daemon_vars.nb->sun_.sun_path);
+        if (chown(dir, pw->pw_uid, pw->pw_gid) != 0)
+            dief("chown failed for:%s", dir);
+        free(dir);
     }
 
     /* setuidgid */
@@ -708,6 +723,10 @@ Redo:
     if (r > 0)
         goto Redo;
     /* close or error */
+
+    /* unlink the temporary directory and socket file */
+    unlink_dir(dirname(daemon_vars.nb->sun_.sun_path));
+
     _exit(0);
 }
 
