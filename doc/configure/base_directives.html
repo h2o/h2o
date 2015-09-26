@@ -253,6 +253,10 @@ Default is <code>14400</code> (4 hours).
 number of consecutive OCSP queriy failures before stopping to send OCSP stapling data to the client.
 Default is 3.
 </dd>
+<dt>neverbleed:</dt>
+<dd>
+when set to <code>ON</code>, this experimental property isolates RSA private key operations to an islotated process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
+Default is OFF.
 </dl>
 <h4 id="listen-proxy-protocol">The Proxy-Protocol Attribute</h4>
 <p>
