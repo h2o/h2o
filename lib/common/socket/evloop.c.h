@@ -28,6 +28,16 @@
 #include "cloexec.h"
 #include "h2o/linklist.h"
 
+#if !defined(H2O_USE_ACCEPT4)
+#ifdef __linux__
+#define H2O_USE_ACCEPT4 1
+#elif __FreeBSD__ >= 10
+#define H2O_USE_ACCEPT4 1
+#else
+#define H2O_USE_ACCEPT4 0
+#endif
+#endif
+
 struct st_h2o_evloop_socket_t {
     h2o_socket_t super;
     int fd;
@@ -378,7 +388,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     struct st_h2o_evloop_socket_t *listener = (struct st_h2o_evloop_socket_t *)_listener;
     int fd;
 
-#ifdef __linux__
+#if H2O_USE_ACCEPT4
     if ((fd = accept4(listener->fd, NULL, NULL, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
         return NULL;
 #else
