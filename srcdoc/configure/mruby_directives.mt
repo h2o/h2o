@@ -2,10 +2,6 @@
 ? $_mt->wrapper_file("wrapper.mt", "Configure", "Mruby Directives")->(sub {
 
 <p>
-This document describes the configuration directives of the mruby handler.
-</p>
-
-<p>
 <a href="https://github.com/mruby/mruby">mruby</a> is a lightweight implemenation of the Ruby programming language.
 With H2O, users can implement their own request handling logic using mruby, either to generate responses or to fix-up the request / response.
 </p>
@@ -104,6 +100,10 @@ paths:
       end
 EOT
 ?>
+
+<p>
+The following are the configuration directives of the mruby handler.
+</p>
 
 <?
 $ctx->{directive}->(
