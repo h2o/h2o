@@ -216,6 +216,9 @@ Following attributes are recognized.
 </table>
 
 <p>
+The <code>priority</code> attribute affects how the HTTP/2 protocol implementation handles the request.
+For detail, please refer to the HTTP/2 directives listed in the <i>see also</i> section below.
+By default, mime-types for CSS and JavaScript files are the only ones that are given <code>highest</code> priority.
 </p>
 
 
@@ -223,7 +226,9 @@ Following attributes are recognized.
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global, host, path</dd>
 <dt>See also:</dt>
-<dd><a href="configure/gzip_directives.html#gzip"><code>gzip</code></a>, <a href="configure/http2_directives.html#http2-reprioritize-blocking-assets"><code>http2-reprioritize-blocking-assets</code></a>
+<dd><a href="configure/gzip_directives.html#gzip"><code>gzip</code></a>,
+<a href="configure/http2_directives.html#http2-casper"><code>http2-casper</code></a>,
+<a href="configure/http2_directives.html#http2-reprioritize-blocking-assets"><code>http2-reprioritize-blocking-assets</code></a>
 </pre></code>
 </dl>
 

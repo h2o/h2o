@@ -82,7 +82,9 @@ $ctx->{directive}->(
     name     => "file.mime.addtypes",
     levels   => [ qw(global host path) ],
     see_also => render_mt(<<'EOT'),
-<a href="configure/gzip_directives.html#gzip"><code>gzip</code></a>, <a href="configure/http2_directives.html#http2-reprioritize-blocking-assets"><code>http2-reprioritize-blocking-assets</code></a>
+<a href="configure/gzip_directives.html#gzip"><code>gzip</code></a>,
+<a href="configure/http2_directives.html#http2-casper"><code>http2-casper</code></a>,
+<a href="configure/http2_directives.html#http2-reprioritize-blocking-assets"><code>http2-reprioritize-blocking-assets</code></a>
 EOT
     desc     => q{The directive modifies the MIME mappings by adding the specified MIME type mappings.},
 )->(sub {
@@ -121,6 +123,9 @@ Following attributes are recognized.
 </table>
 
 <p>
+The <code>priority</code> attribute affects how the HTTP/2 protocol implementation handles the request.
+For detail, please refer to the HTTP/2 directives listed in the <i>see also</i> section below.
+By default, mime-types for CSS and JavaScript files are the only ones that are given <code>highest</code> priority.
 </p>
 
 ? })
