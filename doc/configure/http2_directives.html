@@ -61,12 +61,12 @@ H2O provides one of the world's most sophisticated HTTP/2 protocol implementatio
 <ul>
 <li>HTTP/2 prioritization
 <ul>
-<li>proportionally distributes the bandwidth as defined in the <a href="https://httpwg.github.io/specs/rfc7540.html">HTTP/2 specification</a>, for both weight and tree-based dependencies
+<li>proportionally distributes the bandwidth as defined in the <a href="https://httpwg.github.io/specs/rfc7540.html">HTTP/2 specification</a>, for both weight and dependency-based prioritization
 <li>mime-type based override for client-based prioritization for even better performance
 </ul>
 <li>server-push
 <ul>
-<li>recognizes the <code>Link: rel=preload</code> header set by the reverse proxy, fastcgi handler, mruby handler
+<li>recognizes the <code>Link: rel=preload</code> header set by the <a href="configure/proxy_directives.html">proxy</a>, <a href="configure/fastcgi_directives.html">fastcgi</a>, <a href="configure/mruby_directives.html">mruby</a> handlers
 <li>tracks the state of web browser cache, and cancels the push if the client is known to be in possession of the resource
 </ul>
 </ul>
