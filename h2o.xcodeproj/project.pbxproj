@@ -263,6 +263,7 @@
 		100AE41A1B27D74800CE18BB /* 50file-range.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50file-range.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		101788B119B561AA0084C6D8 /* socket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = socket.c; sourceTree = "<group>"; };
 		101B670B19ADD3380084A351 /* access_log.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = access_log.c; sourceTree = "<group>"; };
+		1039A20A1BB89531005D3B8F /* mruby_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = mruby_directives.mt; sourceTree = "<group>"; };
 		103BAB351B130666000694F4 /* socket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = socket.c; sourceTree = "<group>"; };
 		104960151B9D3F9100FF136D /* dump-github-repository.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; path = "dump-github-repository.pl"; sourceTree = "<group>"; };
 		104B9A221A47BBA1009EEE64 /* 40unix-socket.t */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "40unix-socket.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -777,6 +778,7 @@
 				10583C051AF1F893004A3AD6 /* file_directives.mt */,
 				1063FE901BB291300064D9C7 /* gzip_directives.mt */,
 				10583C061AF20BE5004A3AD6 /* headers_directives.mt */,
+				1039A20A1BB89531005D3B8F /* mruby_directives.mt */,
 				10583C071AF21539004A3AD6 /* proxy_directives.mt */,
 				10583C081AF2188E004A3AD6 /* redirect_directives.mt */,
 				10583C091AF2D302004A3AD6 /* reproxy_directives.mt */,
