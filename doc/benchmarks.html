@@ -54,34 +54,36 @@ Benchmarks
 </h2>
 
 
-<h3>First-paint Time Benchmark</h3>
+<h3 id="download-timings">Download Timings Benchmark</h3>
 
 <div>
 <p>
-First-paint time (time spent until the web browser starts rendering the new page) is an important metric in web-site performance.
-The metric is becoming even more important as access from mobile networks become the majority, due to its latency and narrow bandwidth.
+Providing quick response to user is more important than anything else in web performance tuning.
+According to a research conducted by Microsoft, 500msec slowdown in Bing causes their revenue go down by 1.2%<sup><a href="#note_1" id="#cite_1" title="Velocity and the Bottom Line - O&#39;Reilly Radar">1</sup></a></sup>.
 </p>
 <p>
-The chart below compares the first-paint times of different web browsers / HTTP servers on network with latency of 100 milliseconds (typical for 4G mobile network).
-H2O reduces the time by a large margin, by fully implementing the prioritization logic defined by HTTP/2 and with tweaks to adjust the behavior of the web browsers<sup><a href="#note_1" id="#cite_1" title="benchmark details are explained in HTTP/2 (and H2O) improves user experience over HTTP/1.1 or SPDY">1</sup></a></sup>.
+The chart below compares the first-paint times and download completion times of different web browsers / HTTP servers on a simulated network of 8Mbps bandwidth with 100ms latency, which is typcial for today's mobile networks<sup><a href="#note_2" id="#cite_2" title="a fork of http2rulez.com was used as the target website; bandwidth and latency were induced to local network using qdisc, specifically by running tc qdisc replace dev eth1 root handle 1:0 tbf rate 8192kbit burst 2048 latency 100ms; sudo tc qdisc add dev eth1 parent 1:1 netem delay 100ms, and sysctl -w net.ipv4.tcp_no_metrics_save=1.">2</sup></a></sup>.
 </p>
 <div align="center">
-<a href="assets/firstpaintbench.png" target="_blank"><img src="assets/firstpaintbench.png" width="400"></a>
+<a href="assets/8mbps100msec-nginx195-h2o150.png" target="_blank"><img src="assets/8mbps100msec-nginx195-h2o150.png" width="400"></a>
 </div>
+<p>
+It is clear in the case of this benchmark that the visitors of the web site would be more satisfied, if H2O was used as the HTTP server.
+</p>
 </div>
 
-<h3>Remote Benchmark</h3>
+<h3 id="remote">Remote Benchmark</h3>
 
 <div>
 <p>
-Below chart shows the scores recorded on Amazon EC2 running two c3.8xlarge instances (server and client) on a single network placement<sup><a href="#note_2" id="#cite_2" title="for reverse-proxy tests, another H2O process running on the same host was used as the upstream server">2</sup></a></sup>.
+Below chart shows the scores recorded on Amazon EC2 running two c3.8xlarge instances (server and client) on a single network placement<sup><a href="#note_3" id="#cite_3" title="for reverse-proxy tests, another H2O process running on the same host was used as the upstream server">3</sup></a></sup>.
 </p>
 <div align="center">
 <a href="assets/remotebench.png" target="_blank"><img src="assets/remotebench.png" width="400"></a>
 </div>
 </div>
 
-<h3>Local Benchmarks</h3>
+<h3 id="local">Local Benchmarks</h3>
 
 <div>
 <p>
@@ -89,14 +91,14 @@ The scores (requests/second.core) were recorded on Ubuntu 14.04 (x86-64) / VMwar
 </p>
 
 <table>
-<caption>HTTP/1.1<sup><a href="#note_3" id="#cite_3" title="used command: wrk -c 500 -d 30 -t 1; configuration file of nginx is here">3</sup></a></sup></caption>
+<caption>HTTP/1.1<sup><a href="#note_4" id="#cite_4" title="used command: wrk -c 500 -d 30 -t 1; configuration file of nginx is here">4</sup></a></sup></caption>
 <tr><th>Server \ size of content<th>6 bytes<th>4,096 bytes
 <tr><td>h2o/0.9.0<td align="right">75,483<td align="right">59,673
 <tr><td><a href="http://nginx.org/">nginx</a>/1.7.9<td align="right">37,289<td align="right">43,988
 </table>
 
 <table>
-<caption>HTTP/2<sup><a href="#note_4" id="#cite_4" title="used command: h2load -c 500 -m 100 -n 2000000; configuration file of h2o is here">4</sup></a></sup></caption>
+<caption>HTTP/2<sup><a href="#note_5" id="#cite_5" title="used command: h2load -c 500 -m 100 -n 2000000; configuration file of h2o is here">5</sup></a></sup></caption>
 <tr><th>Server \ size of content<th>6 bytes<th>4,096 bytes
 <tr><td>h2o/0.9.0<td align="right">272,300<td align="right">116,022
 <tr><td>tiny-nghttpd (<a href="https://github.com/tatsuhiro-t/nghttp2/">nghttpd</a>@ab1dd11)<td align="right">198,018<td align="right">93,868
@@ -110,10 +112,11 @@ The scores (requests/second.core) were recorded on Ubuntu 14.04 (x86-64) / VMwar
 <div class="notes">
 <h3>Notes:</h3>
 <ol>
-<li id="note_1">benchmark details are explained in <a href="http://blog.kazuhooku.com/2015/06/http2-and-h2o-improves-user-experience.html">HTTP/2 (and H2O) improves user experience over HTTP/1.1 or SPDY</a></li>
-<li id="note_2">for reverse-proxy tests, another H2O process running on the same host was used as the upstream server</li>
-<li id="note_3">used command: <code><a href="https://github.com/wg/wrk">wrk</a> -c 500 -d 30 -t 1</code>; configuration file of nginx is <a href="https://gist.github.com/kazuho/c9c12021567e3ab83809">here</a></li>
-<li id="note_4">used command: <code><a href="https://github.com/tatsuhiro-t/nghttp2/">h2load</a> -c 500 -m 100 -n 2000000</code>; configuration file of h2o is <a href="https://gist.github.com/kazuho/5966cafb40e4473a62f8">here</a></li>
+<li id="note_1"><a href="http://radar.oreilly.com/2009/07/velocity-making-your-site-fast.html">Velocity and the Bottom Line - O'Reilly Radar</a></li>
+<li id="note_2"><a href="https://github.com/kazuho/http2rulez.com">a fork of http2rulez.com</a> was used as the target website; bandwidth and latency were induced to local network using <a href="http://linux-ip.net/articles/Traffic-Control-HOWTO/components.html">qdisc</a>, specifically by running <code>tc qdisc replace dev eth1 root handle 1:0 tbf rate 8192kbit burst 2048 latency 100ms; sudo tc qdisc add dev eth1 parent 1:1 netem delay 100ms</code>, and <code>sysctl -w net.ipv4.tcp_no_metrics_save=1</code>.</li>
+<li id="note_3">for reverse-proxy tests, another H2O process running on the same host was used as the upstream server</li>
+<li id="note_4">used command: <code><a href="https://github.com/wg/wrk">wrk</a> -c 500 -d 30 -t 1</code>; configuration file of nginx is <a href="https://gist.github.com/kazuho/c9c12021567e3ab83809">here</a></li>
+<li id="note_5">used command: <code><a href="https://github.com/tatsuhiro-t/nghttp2/">h2load</a> -c 500 -m 100 -n 2000000</code>; configuration file of h2o is <a href="https://gist.github.com/kazuho/5966cafb40e4473a62f8">here</a></li>
 </ol>
 </div>
 

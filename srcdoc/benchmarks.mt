@@ -2,23 +2,25 @@
 ? my $ctx = $main::context;
 ? $_mt->wrapper_file("wrapper.mt", "Benchmarks")->(sub {
 
-<h3>First-paint Time Benchmark</h3>
+<h3 id="download-timings">Download Timings Benchmark</h3>
 
 <div>
 <p>
-First-paint time (time spent until the web browser starts rendering the new page) is an important metric in web-site performance.
-The metric is becoming even more important as access from mobile networks become the majority, due to its latency and narrow bandwidth.
+Providing quick response to user is more important than anything else in web performance tuning.
+According to a research conducted by Microsoft, 500msec slowdown in Bing causes their revenue go down by 1.2%<?= $note->(q{<a href="http://radar.oreilly.com/2009/07/velocity-making-your-site-fast.html">Velocity and the Bottom Line - O'Reilly Radar</a>}) ?>.
 </p>
 <p>
-The chart below compares the first-paint times of different web browsers / HTTP servers on network with latency of 100 milliseconds (typical for 4G mobile network).
-H2O reduces the time by a large margin, by fully implementing the prioritization logic defined by HTTP/2 and with tweaks to adjust the behavior of the web browsers<?= $note->(q{benchmark details are explained in <a href="http://blog.kazuhooku.com/2015/06/http2-and-h2o-improves-user-experience.html">HTTP/2 (and H2O) improves user experience over HTTP/1.1 or SPDY</a>}) ?>.
+The chart below compares the first-paint times and download completion times of different web browsers / HTTP servers on a simulated network of 8Mbps bandwidth with 100ms latency, which is typcial for today's mobile networks<?= $note->(q{<a href="https://github.com/kazuho/http2rulez.com">a fork of http2rulez.com</a> was used as the target website; bandwidth and latency were induced to local network using <a href="http://linux-ip.net/articles/Traffic-Control-HOWTO/components.html">qdisc</a>, specifically by running <code>tc qdisc replace dev eth1 root handle 1:0 tbf rate 8192kbit burst 2048 latency 100ms; sudo tc qdisc add dev eth1 parent 1:1 netem delay 100ms</code>, and <code>sysctl -w net.ipv4.tcp_no_metrics_save=1</code>.}) ?>.
 </p>
 <div align="center">
-<a href="assets/firstpaintbench.png" target="_blank"><img src="assets/firstpaintbench.png" width="400"></a>
+<a href="assets/8mbps100msec-nginx195-h2o150.png" target="_blank"><img src="assets/8mbps100msec-nginx195-h2o150.png" width="400"></a>
 </div>
+<p>
+It is clear in the case of this benchmark that the visitors of the web site would be more satisfied, if H2O was used as the HTTP server.
+</p>
 </div>
 
-<h3>Remote Benchmark</h3>
+<h3 id="remote">Remote Benchmark</h3>
 
 <div>
 <p>
@@ -29,7 +31,7 @@ Below chart shows the scores recorded on Amazon EC2 running two c3.8xlarge insta
 </div>
 </div>
 
-<h3>Local Benchmarks</h3>
+<h3 id="local">Local Benchmarks</h3>
 
 <div>
 <p>

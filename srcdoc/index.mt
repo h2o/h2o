@@ -7,8 +7,8 @@ H2O is a new generation HTTP server <b>providing quicker response to users</b> w
 The server takes full advantage of HTTP/2 features including prioritized content serving and server push, promising outstanding experience to the visitors of your web site.
 <div align="center">
 <a href="assets/8mbps100msec-nginx195-h2o150.png" target="_blank"><img src="assets/8mbps100msec-nginx195-h2o150.png" width="400"></a>
-<?= $note->(q{benchmark details to be added soon}) ?>
 </div>
+Explanation and other benchmark numbers can be found in the <a href="benchmarks.html">benchmarks</a> page.
 <p>
 
 </p>
@@ -40,11 +40,5 @@ The server takes full advantage of HTTP/2 features including prioritized content
 <li><a href="configure/mruby_directives.html">scriptable using mruby</a> (Rack-based)
 <li>graceful restart and self-upgrade
 </ul>
-
-<h3>More Benchmarks</h3>
-
-<div>
-More benchmark numbers can be found <a href="benchmarks.html">here</a>.
-</div>
 
 ? })
