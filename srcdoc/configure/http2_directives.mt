@@ -98,7 +98,7 @@ The value cannot exceed 256.
 $ctx->{directive}->(
     name    => "http2-reprioritize-blocking-assets",
     levels  => [ qw(global) ],
-    default => 'http2-reprioritize-blocking-assets: OFF',
+    default => 'http2-reprioritize-blocking-assets: ON',
     see_also => render_mt(<<'EOT'),
 <a href="configure/file_directives.html#file.mime.addtypes"><code>file.mime.addtypes</code></a>,
 <a href="http://blog.kazuhooku.com/2015/06/http2-and-h2o-improves-user-experience.html">HTTP/2 (and H2O) improves user experience over HTTP/1.1 or SPDY</a>
@@ -111,7 +111,7 @@ EOT
 <p>
 To maximize the user-perceived reponsiveness of a web page, it is essential for the web server to send blocking assets (i.e. CSS and JavaScript files in <code>&lt;HEAD&gt;</code>) before any other files such as images.
 HTTP/2 provides a way for web browsers to specify such priorities to the web server.
-However, as of Sep. 2015, all major web browsers except Mozilla Firefox fail to take advantage of the feature.
+However, as of Sep. 2015, no major web browsers except Mozilla Firefox take advantage of the feature.
 </p>
 <p>
 This option, when enabled, works as a workaround for such web browsers, thereby improving experience of users using the web browsers.
