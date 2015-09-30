@@ -16,7 +16,7 @@ Below is a simple configuration that returns <i>hello world</i>.
 <?= $ctx->{example}->('Hello-world in mruby', <<'EOT')
 paths:
   "/":
-    mruby-handler: |
+    mruby.handler: |
       Proc.new do |env|
         [200, {'content-type' => 'text/plain'}, ["Hello world\n"]]
       end
@@ -46,7 +46,7 @@ The example below restricts access to requests from <code>192.168.</code> privat
 <?= $ctx->{example}->('Restricting access to 192.168.', <<'EOT')
 paths:
   "/":
-    mruby-handler: |
+    mruby.handler: |
       lambda do |env|
         if /^192\.168\./.match(req["REMOTE_ADDR"])
           return [399, {}, []]
@@ -65,7 +65,7 @@ When enabled using the <a href="configure/reproxy_directives.html#reproxy"><code
 <?= $ctx->{example}->('Pushing asset files', <<'EOT')
 paths:
   "/":
-    mruby-handler: |
+    mruby.handler: |
       lambda do |env|
         if /\/user\/([^/]+)/.match(env["PATH_INFO"])
           return [307, {"x-reproxy-url" => "/user.php?user=$1"}, []]
@@ -88,7 +88,7 @@ For example, the handlers can be used to set <code>Link: rel=preload</code> head
 <?= $ctx->{example}->('Pushing asset files', <<'EOT')
 paths:
   "/":
-    mruby-handler: |
+    mruby.handler: |
       Proc.new do |env|
         push_paths = []
         # push css and js when request is to dir root or HTML
@@ -119,7 +119,7 @@ EOT
 ?>
 
 <?= $ctx->{example}->('Hello-world in mruby', <<'EOT')
-mruby-handler: |
+mruby.handler: |
   Proc.new do |env|
     [200, {'content-type' => 'text/plain'}, ["Hello world\n"]]
   end
@@ -145,7 +145,7 @@ EOT
 ?>
 
 <?= $ctx->{example}->('Hello-world in mruby', <<'EOT')
-mruby-handler-file: /path/to/my-mruby-handler.rb
+mruby.handler-file: /path/to/my-mruby-handler.rb
 EOT
 ?>
 

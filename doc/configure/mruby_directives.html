@@ -72,7 +72,7 @@ Below is a simple configuration that returns <i>hello world</i>.
 <div class="caption">Example. Hello-world in mruby</div>
 <pre><code>paths:
   &quot;/&quot;:
-    mruby-handler: |
+    mruby.handler: |
       Proc.new do |env|
         [200, {&#39;content-type&#39; =&gt; &#39;text/plain&#39;}, [&quot;Hello world\n&quot;]]
       end
@@ -104,7 +104,7 @@ The example below restricts access to requests from <code>192.168.</code> privat
 <div class="caption">Example. Restricting access to 192.168.</div>
 <pre><code>paths:
   &quot;/&quot;:
-    mruby-handler: |
+    mruby.handler: |
       lambda do |env|
         if /^192\.168\./.match(req[&quot;REMOTE_ADDR&quot;])
           return [399, {}, []]
@@ -125,7 +125,7 @@ When enabled using the <a href="configure/reproxy_directives.html#reproxy"><code
 <div class="caption">Example. Pushing asset files</div>
 <pre><code>paths:
   &quot;/&quot;:
-    mruby-handler: |
+    mruby.handler: |
       lambda do |env|
         if /\/user\/([^/]+)/.match(env[&quot;PATH_INFO&quot;])
           return [307, {&quot;x-reproxy-url&quot; =&gt; &quot;/user.php?user=$1&quot;}, []]
@@ -150,7 +150,7 @@ For example, the handlers can be used to set <code>Link: rel=preload</code> head
 <div class="caption">Example. Pushing asset files</div>
 <pre><code>paths:
   &quot;/&quot;:
-    mruby-handler: |
+    mruby.handler: |
       Proc.new do |env|
         push_paths = []
         # push css and js when request is to dir root or HTML
@@ -181,7 +181,7 @@ Upon start-up evaluates given mruby expression, and uses the returned mruby obje
 
 <div class="example">
 <div class="caption">Example. Hello-world in mruby</div>
-<pre><code>mruby-handler: |
+<pre><code>mruby.handler: |
   Proc.new do |env|
     [200, {&#39;content-type&#39; =&gt; &#39;text/plain&#39;}, [&quot;Hello world\n&quot;]]
   end
@@ -214,7 +214,7 @@ Upon start-up evaluates given mruby file, and uses the returned mruby object to 
 
 <div class="example">
 <div class="caption">Example. Hello-world in mruby</div>
-<pre><code>mruby-handler-file: /path/to/my-mruby-handler.rb
+<pre><code>mruby.handler-file: /path/to/my-mruby-handler.rb
 </code></pre>
 </div>
 
@@ -240,5 +240,13 @@ Note that the provided expression is evaluated more than once (typically for eve
 Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
 </p>
 </div>
+<script type="text/javascript">
+(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+    (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+    m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+    })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+ga('create', 'UA-19422636-3', 'auto');
+ga('send', 'pageview');
+</script>
 </body>
 </html>
