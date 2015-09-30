@@ -183,7 +183,7 @@ A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if the server sh
 <p>
 To maximize the user-perceived reponsiveness of a web page, it is essential for the web server to send blocking assets (i.e. CSS and JavaScript files in <code>&lt;HEAD&gt;</code>) before any other files such as images.
 HTTP/2 provides a way for web browsers to specify such priorities to the web server.
-However, as of Sep. 2015, all major web browsers except Mozilla Firefox fail to take advantage of the feature.
+However, as of Sep. 2015, no major web browsers except Mozilla Firefox take advantage of the feature.
 </p>
 <p>
 This option, when enabled, works as a workaround for such web browsers, thereby improving experience of users using the web browsers.
@@ -200,7 +200,7 @@ Technically speaking, it does the following:
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
 <dt>Default:</dt>
-<dd><code><pre>http2-reprioritize-blocking-assets: OFF</pre></code>
+<dd><code><pre>http2-reprioritize-blocking-assets: ON</pre></code>
 <dt>See also:</dt>
 <dd><a href="configure/file_directives.html#file.mime.addtypes"><code>file.mime.addtypes</code></a>,
 <a href="http://blog.kazuhooku.com/2015/06/http2-and-h2o-improves-user-experience.html">HTTP/2 (and H2O) improves user experience over HTTP/1.1 or SPDY</a>
