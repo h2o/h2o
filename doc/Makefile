@@ -2,6 +2,7 @@ VPATH=../srcdoc
 OUTPUT=\
     index.html \
     install.html \
+    benchmarks.html \
     configure.html \
     configure/quick_start.html \
     configure/command_options.html \

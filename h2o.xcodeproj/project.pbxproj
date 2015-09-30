@@ -283,6 +283,7 @@
 		104B9A521A5FC7C4009EEE64 /* expires.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = expires.c; sourceTree = "<group>"; };
 		104B9A541A60773E009EEE64 /* 50expires.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50expires.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		104C65021A6DF36B000AC190 /* 50reverse-proxy-config.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-config.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		1054DF471BBBB038008347C9 /* benchmarks.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = benchmarks.mt; sourceTree = "<group>"; };
 		105534BD1A3B8F7700627ECB /* file.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = file.c; sourceTree = "<group>"; };
 		105534C01A3B911300627ECB /* hpack.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpack.c; sourceTree = "<group>"; };
 		105534C21A3B917000627ECB /* mimemap.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = mimemap.c; sourceTree = "<group>"; };
@@ -735,6 +736,7 @@
 			isa = PBXGroup;
 			children = (
 				10583BF31AE764A7004A3AD6 /* configure */,
+				1054DF471BBBB038008347C9 /* benchmarks.mt */,
 				10583BE11AE5A22D004A3AD6 /* configure.mt */,
 				10583BE21AE5A22D004A3AD6 /* faq.mt */,
 				10583BE31AE5A22D004A3AD6 /* index.mt */,

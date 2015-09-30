@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+<!-- oktavia -->
+<link rel="stylesheet" href="assets/searchstyle.css" type="text/css" />
+<script src="search/jquery-1.9.1.min.js"></script>
+<script src="search/oktavia-jquery-ui.js"></script>
+<script src="search/oktavia-english-search.js"></script>
+<!-- /oktavia -->
+
+<link rel="stylesheet" href="assets/style.css" type="text/css" />
+
+<title>Benchmarks - H2O</title>
+</head>
+<body>
+<div id="body">
+<div id="top">
+
+<h1><a href="index.html">H2O</a></h1>
+the optimized HTTP/1.x, HTTP/2 server
+
+<!-- oktavia -->
+<form id="searchform">
+<input class="search" type="search" name="search" id="search" results="5" value="" placeholder="Search" />
+<div id="searchresult_box">
+<div id="close_search_box">&times;</div>
+<div id="searchresult_summary"></div>
+<div id="searchresult"></div>
+<div id="searchresult_nav"></div>
+<span class="pr">Powered by <a href="https://github.com/shibukawa/oktavia">Oktavia</a></span>
+</div>
+</form>
+<!-- /oktavia -->
+
+</div>
+
+<table id="menu">
+<tr>
+<td><a href="index.html">Top</a></td>
+<td><a href="install.html">Install</a></td>
+<td><a href="configure.html">Configure</a></td>
+<td><a href="faq.html">FAQ</a></td>
+<td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
+<td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
+</tr>
+</table>
+
+<div id="main">
+
+<h2>
+Benchmarks
+</h2>
+
+
+<h3>First-paint Time Benchmark</h3>
+
+<div>
+<p>
+First-paint time (time spent until the web browser starts rendering the new page) is an important metric in web-site performance.
+The metric is becoming even more important as access from mobile networks become the majority, due to its latency and narrow bandwidth.
+</p>
+<p>
+The chart below compares the first-paint times of different web browsers / HTTP servers on network with latency of 100 milliseconds (typical for 4G mobile network).
+H2O reduces the time by a large margin, by fully implementing the prioritization logic defined by HTTP/2 and with tweaks to adjust the behavior of the web browsers<sup><a href="#note_1" id="#cite_1" title="benchmark details are explained in HTTP/2 (and H2O) improves user experience over HTTP/1.1 or SPDY">1</sup></a></sup>.
+</p>
+<div align="center">
+<a href="assets/firstpaintbench.png" target="_blank"><img src="assets/firstpaintbench.png" width="400"></a>
+</div>
+</div>
+
+<h3>Remote Benchmark</h3>
+
+<div>
+<p>
+Below chart shows the scores recorded on Amazon EC2 running two c3.8xlarge instances (server and client) on a single network placement<sup><a href="#note_2" id="#cite_2" title="for reverse-proxy tests, another H2O process running on the same host was used as the upstream server">2</sup></a></sup>.
+</p>
+<div align="center">
+<a href="assets/remotebench.png" target="_blank"><img src="assets/remotebench.png" width="400"></a>
+</div>
+</div>
+
+<h3>Local Benchmarks</h3>
+
+<div>
+<p>
+The scores (requests/second.core) were recorded on Ubuntu 14.04 (x86-64) / VMware Fusion 7.1.0 / OS X 10.9.5 / MacBook Pro 15" Early 2013.
+</p>
+
+<table>
+<caption>HTTP/1.1<sup><a href="#note_3" id="#cite_3" title="used command: wrk -c 500 -d 30 -t 1; configuration file of nginx is here">3</sup></a></sup></caption>
+<tr><th>Server \ size of content<th>6 bytes<th>4,096 bytes
+<tr><td>h2o/0.9.0<td align="right">75,483<td align="right">59,673
+<tr><td><a href="http://nginx.org/">nginx</a>/1.7.9<td align="right">37,289<td align="right">43,988
+</table>
+
+<table>
+<caption>HTTP/2<sup><a href="#note_4" id="#cite_4" title="used command: h2load -c 500 -m 100 -n 2000000; configuration file of h2o is here">4</sup></a></sup></caption>
+<tr><th>Server \ size of content<th>6 bytes<th>4,096 bytes
+<tr><td>h2o/0.9.0<td align="right">272,300<td align="right">116,022
+<tr><td>tiny-nghttpd (<a href="https://github.com/tatsuhiro-t/nghttp2/">nghttpd</a>@ab1dd11)<td align="right">198,018<td align="right">93,868
+<tr><td><a href="https://github.com/matsumoto-r/trusterd">trusterd</a>@cff8e15<td align="right">167,306<td align="right">67,600
+</table>
+
+</div>
+
+
+
+<div class="notes">
+<h3>Notes:</h3>
+<ol>
+<li id="note_1">benchmark details are explained in <a href="http://blog.kazuhooku.com/2015/06/http2-and-h2o-improves-user-experience.html">HTTP/2 (and H2O) improves user experience over HTTP/1.1 or SPDY</a></li>
+<li id="note_2">for reverse-proxy tests, another H2O process running on the same host was used as the upstream server</li>
+<li id="note_3">used command: <code><a href="https://github.com/wg/wrk">wrk</a> -c 500 -d 30 -t 1</code>; configuration file of nginx is <a href="https://gist.github.com/kazuho/c9c12021567e3ab83809">here</a></li>
+<li id="note_4">used command: <code><a href="https://github.com/tatsuhiro-t/nghttp2/">h2load</a> -c 500 -m 100 -n 2000000</code>; configuration file of h2o is <a href="https://gist.github.com/kazuho/5966cafb40e4473a62f8">here</a></li>
+</ol>
+</div>
+
+</div>
+<div id="footer">
+<p>
+Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+</p>
+</div>
+</body>
+</html>
