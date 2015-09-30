@@ -1,5 +1,9 @@
 Revision history for H2O.
 
+1.5.0 2015-09-30 06:39:00+0000
+	- [http2] enable `http2-reprioritize-blocking-assets` by default #528 (Kazuho Oku)
+	- [ssl] fix issues with neverbleed #520 (Kazuho Oku)
+
 1.5.0-beta4 2015-09-23 03:36:00+0000
 	- [mruby] provide `env['rack.errors']`, `env['SERVER_SOFTWARE']` #517 #519 (Masayoshi Takahashi, Kazuho Oku)
 	- [ssl] add support for neverbleed - the OpenSSL / LibreSSL privilege separation engine #520 (Kazuho Oku)
