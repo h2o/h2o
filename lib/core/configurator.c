@@ -623,6 +623,7 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         c->super.enter = on_core_enter;
         c->super.exit = on_core_exit;
         c->vars = c->_vars_stack;
+        c->vars->http2.reprioritize_blocking_assets = 1; /* defaults to ON */
         h2o_configurator_define_command(&c->super, "limit-request-body",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_limit_request_body);

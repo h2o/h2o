@@ -17,7 +17,9 @@
 <li><a href="configure/expires_directives.html">Expires</a>
 <li><a href="configure/fastcgi_directives.html">FastCGI</a>
 <li><a href="configure/file_directives.html">File</a>
+<li><a href="configure/gzip_directives.html">Gzip</a>
 <li><a href="configure/headers_directives.html">Headers</a>
+<li><a href="configure/mruby_directives.html">Mruby</a>
 <li><a href="configure/proxy_directives.html">Proxy</a>
 <li><a href="configure/redirect_directives.html">Redirect</a>
 <li><a href="configure/reproxy_directives.html">Reproxy</a>

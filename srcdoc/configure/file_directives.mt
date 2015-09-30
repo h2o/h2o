@@ -79,9 +79,14 @@ The sequence of filenames afer search from left to right, and the first file tha
 
 <?
 $ctx->{directive}->(
-    name    => "file.mime.addtypes",
-    levels  => [ qw(global host path) ],
-    desc    => q{The directive modifies the MIME mappings by adding the specified MIME type mappings.},
+    name     => "file.mime.addtypes",
+    levels   => [ qw(global host path) ],
+    see_also => render_mt(<<'EOT'),
+<a href="configure/gzip_directives.html#gzip"><code>gzip</code></a>,
+<a href="configure/http2_directives.html#http2-casper"><code>http2-casper</code></a>,
+<a href="configure/http2_directives.html#http2-reprioritize-blocking-assets"><code>http2-reprioritize-blocking-assets</code></a>
+EOT
+    desc     => q{The directive modifies the MIME mappings by adding the specified MIME type mappings.},
 )->(sub {
 ?>
 <?= $ctx->{example}->('Adding MIME mappings', <<'EOT')
@@ -93,6 +98,36 @@ EOT
 <p>
 The default mappings is hard-coded in <a href="https://github.com/h2o/h2o/blob/master/lib/handler/mimemap/defaults.c.h">lib/handler/mimemap/defaults.c.h</a>.
 </p>
+<p>
+It is also possible to set certain attributes for a MIME type.
+The example below maps <code>.css</code> files to <code>text/css</code> type, seting <code>is_compressible</code> flag to <code>ON</code> and <code>priority</code> to highest.
+</p>
+
+<?= $ctx->{example}->('Setting MIME attributes', <<'EOT')
+file.mime.settypes:
+    "text/css":
+         extensions: [".css"]
+         is_compressible: yes
+         priority: highest
+EOT
+?>
+
+<p>
+Following attributes are recognized.
+</p>
+
+<table>
+<tr><th>Attribute<th>Possible Values<th>Description
+<tr><td><code>is_compressible</code><td><code>ON</code>, <code>OFF</code><td>if content is compressible
+<tr><td><code>priority</code><td><code>highest<code>, <code>normal</code><td>send priority of the content
+</table>
+
+<p>
+The <code>priority</code> attribute affects how the HTTP/2 protocol implementation handles the request.
+For detail, please refer to the HTTP/2 directives listed in the <i>see also</i> section below.
+By default, mime-types for CSS and JavaScript files are the only ones that are given <code>highest</code> priority.
+</p>
+
 ? })
 
 <?
@@ -134,9 +169,12 @@ EOT
 
 <?
 $ctx->{directive}->(
-    name    => "file.send-gzip",
-    levels  => [ qw(global host path) ],
-    default => q{file.send-gzip: OFF},
+    name     => "file.send-gzip",
+    levels   => [ qw(global host path) ],
+    default  => q{file.send-gzip: OFF},
+    see_also => render_mt(<<'EOT'),
+<a href="configure/gzip_directives.html#gzip"><code>gzip</code></a>
+EOT
     desc    => <<'EOT',
 A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not so send <code>.gz</code> variants if possible.
 EOT

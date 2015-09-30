@@ -35,6 +35,7 @@ extern "C" {
 
 typedef struct st_neverbleed_t {
     ENGINE *engine;
+    pid_t daemon_pid;
     struct sockaddr_un sun_;
     pthread_key_t thread_key;
     unsigned char auth_token[NEVERBLEED_AUTH_TOKEN_SIZE];
@@ -49,9 +50,9 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf);
  */
 int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char *fn, char *errbuf);
 /**
- * setuidgid
+ * setuidgid (also changes the file permissions so that `user` can connect to the daemon, if change_socket_ownership is non-zero)
  */
-int neverbleed_setuidgid(neverbleed_t *nb, const char *user);
+int neverbleed_setuidgid(neverbleed_t *nb, const char *user, int change_socket_ownership);
 
 #ifdef __cplusplus
 }

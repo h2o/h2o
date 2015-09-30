@@ -176,7 +176,14 @@ Default is <code>14400</code> (4 hours).
 number of consecutive OCSP queriy failures before stopping to send OCSP stapling data to the client.
 Default is 3.
 </dd>
+<dt>neverbleed:</dt>
+<dd>
+when set to <code>ON</code>, this experimental property isolates RSA private key operations to an islotated process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
+Default is OFF.
 </dl>
+<p>
+<a href="configure/base_directives.html#ssl-session-resumption"><code>ssl-session-resumption</code></a> directive is provided for tuning parameters related to session resumption and session tickets.
+</p>
 <h4 id="listen-proxy-protocol">The Proxy-Protocol Attribute</h4>
 <p>
 The <code>proxy-protocol</code> attribute (i.e. the value of the attribute must be either <code>ON</code> or <code>OFF</code>) specifies if the server should recognize the information passed via <a href="http://www.haproxy.org/download/1.5/doc/proxy-protocol.txt">"the PROXY protocol</a> in the incoming connections.

@@ -56,6 +56,7 @@ struct st_neverbleed_rsa_exdata_t {
 };
 
 struct st_neverbleed_thread_data_t {
+    pid_t self_pid;
     int fd;
 };
 
@@ -76,8 +77,7 @@ static void warnvf(const char *fmt, va_list args)
     fputc('\n', stderr);
 }
 
-__attribute__((format(printf, 1, 2)))
-static void warnf(const char *fmt, ...)
+__attribute__((format(printf, 1, 2))) static void warnf(const char *fmt, ...)
 {
     va_list args;
 
@@ -86,8 +86,7 @@ static void warnf(const char *fmt, ...)
     va_end(args);
 }
 
-__attribute__((format(printf, 1, 2), noreturn))
-static void dief(const char *fmt, ...)
+__attribute__((format(printf, 1, 2), noreturn)) static void dief(const char *fmt, ...)
 {
     va_list args;
 
@@ -96,6 +95,28 @@ static void dief(const char *fmt, ...)
     va_end(args);
 
     abort();
+}
+
+static char *dirname(const char *path)
+{
+    const char *last_slash = strrchr(path, '/');
+    char *ret;
+
+    if (last_slash == NULL) {
+        errno = 0;
+        dief("dirname: no slash in given path:%s", path);
+    }
+    if ((ret = malloc(last_slash + 1 - path)) == NULL)
+        dief("no memory");
+    memcpy(ret, path, last_slash - path);
+    ret[last_slash - path] = '\0';
+    return ret;
+}
+
+static void set_cloexec(int fd)
+{
+    if (fcntl(fd, F_SETFD, O_CLOEXEC) == -1)
+        dief("failed to set O_CLOEXEC to fd %d", fd);
 }
 
 static int read_nbytes(int fd, void *p, size_t sz)
@@ -261,6 +282,7 @@ static void unlink_dir(const char *path)
         closedir(dp);
     }
     unlink(path);
+    rmdir(path);
 }
 
 void dispose_thread_data(void *_thdata)
@@ -274,15 +296,28 @@ void dispose_thread_data(void *_thdata)
 struct st_neverbleed_thread_data_t *get_thread_data(neverbleed_t *nb)
 {
     struct st_neverbleed_thread_data_t *thdata;
+    pid_t self_pid = getpid();
     ssize_t r;
 
-    if ((thdata = pthread_getspecific(nb->thread_key)) != NULL)
-        return thdata;
+    if ((thdata = pthread_getspecific(nb->thread_key)) != NULL) {
+        if (thdata->self_pid == self_pid)
+            return thdata;
+        /* we have been forked! */
+        close(thdata->fd);
+    } else {
+        if ((thdata = malloc(sizeof(*thdata))) == NULL)
+            dief("malloc failed");
+    }
 
-    if ((thdata = malloc(sizeof(*thdata))) == NULL)
-        dief("malloc failed");
+    thdata->self_pid = self_pid;
+#ifdef SOCK_CLOEXEC
+    if ((thdata->fd = socket(PF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0)) == -1)
+        dief("socket(2) failed");
+#else
     if ((thdata->fd = socket(PF_UNIX, SOCK_STREAM, 0)) == -1)
         dief("socket(2) failed");
+    set_cloexec(thdata->fd);
+#endif
     while (connect(thdata->fd, (void *)&nb->sun_, sizeof(nb->sun_)) != 0)
         if (errno != EINTR)
             dief("failed to connect to privsep daemon");
@@ -307,22 +342,21 @@ static void get_privsep_data(const RSA *rsa, struct st_neverbleed_rsa_exdata_t *
 }
 
 static struct {
-    pthread_mutex_t lock;
-    size_t size;
-    RSA **keys;
-} daemon_rsa_keys = {
-    PTHREAD_MUTEX_INITIALIZER
-};
-
-static unsigned char daemon_auth_token[NEVERBLEED_AUTH_TOKEN_SIZE];
+    struct {
+        pthread_mutex_t lock;
+        size_t size;
+        RSA **keys;
+    } keys;
+    neverbleed_t *nb;
+} daemon_vars = {{PTHREAD_MUTEX_INITIALIZER}};
 
 static RSA *daemon_get_rsa(size_t key_index)
 {
     RSA *rsa;
 
-    pthread_mutex_lock(&daemon_rsa_keys.lock);
-    rsa = daemon_rsa_keys.keys[key_index];
-    pthread_mutex_unlock(&daemon_rsa_keys.lock);
+    pthread_mutex_lock(&daemon_vars.keys.lock);
+    rsa = daemon_vars.keys.keys[key_index];
+    pthread_mutex_unlock(&daemon_vars.keys.lock);
 
     return rsa;
 }
@@ -331,13 +365,14 @@ static size_t daemon_set_rsa(RSA *rsa)
 {
     size_t index;
 
-    pthread_mutex_lock(&daemon_rsa_keys.lock);
-    if ((daemon_rsa_keys.keys = realloc(daemon_rsa_keys.keys, sizeof(*daemon_rsa_keys.keys) * (daemon_rsa_keys.size + 1))) == NULL)
+    pthread_mutex_lock(&daemon_vars.keys.lock);
+    if ((daemon_vars.keys.keys = realloc(daemon_vars.keys.keys, sizeof(*daemon_vars.keys.keys) * (daemon_vars.keys.size + 1))) ==
+        NULL)
         dief("no memory");
-    index = daemon_rsa_keys.size++;
-    daemon_rsa_keys.keys[index] = rsa;
+    index = daemon_vars.keys.size++;
+    daemon_vars.keys.keys[index] = rsa;
     RSA_up_ref(rsa);
-    pthread_mutex_unlock(&daemon_rsa_keys.lock);
+    pthread_mutex_unlock(&daemon_vars.keys.lock);
 
     return index;
 }
@@ -596,7 +631,7 @@ Respond:
     return 0;
 }
 
-int neverbleed_setuidgid(neverbleed_t *nb, const char *user)
+int neverbleed_setuidgid(neverbleed_t *nb, const char *user, int change_socket_ownership)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
     struct expbuf_t buf = {};
@@ -604,6 +639,7 @@ int neverbleed_setuidgid(neverbleed_t *nb, const char *user)
 
     expbuf_push_str(&buf, "setuidgid");
     expbuf_push_str(&buf, user);
+    expbuf_push_num(&buf, change_socket_ownership);
     if (expbuf_write(&buf, thdata->fd) != 0)
         dief(errno != 0 ? "write error" : "connection closed by daemon");
     expbuf_dispose(&buf);
@@ -622,11 +658,12 @@ int neverbleed_setuidgid(neverbleed_t *nb, const char *user)
 static int setuidgid_stub(struct expbuf_t *buf)
 {
     const char *user;
+    size_t change_socket_ownership;
     struct passwd pwbuf, *pw;
     char pwstrbuf[65536]; /* should be large enough */
     int ret = -1;
 
-    if ((user = expbuf_shift_str(buf)) == NULL) {
+    if ((user = expbuf_shift_str(buf)) == NULL || expbuf_shift_num(buf, &change_socket_ownership) != 0) {
         errno = 0;
         warnf("%s: failed to parse request", __FUNCTION__);
         return -1;
@@ -641,6 +678,18 @@ static int setuidgid_stub(struct expbuf_t *buf)
         warnf("%s: failed to obtain information of user:%s", __FUNCTION__, user);
         goto Respond;
     }
+
+    if (change_socket_ownership) {
+        char *dir;
+        if (chown(daemon_vars.nb->sun_.sun_path, pw->pw_uid, pw->pw_gid) != 0)
+            dief("chown failed for:%s", daemon_vars.nb->sun_.sun_path);
+        dir = dirname(daemon_vars.nb->sun_.sun_path);
+        if (chown(dir, pw->pw_uid, pw->pw_gid) != 0)
+            dief("chown failed for:%s", dir);
+        free(dir);
+    }
+
+    /* setuidgid */
     if (setgid(pw->pw_gid) != 0) {
         warnf("%s: setgid(%d) failed", __FUNCTION__, (int)pw->pw_gid);
         goto Respond;
@@ -661,8 +710,7 @@ Respond:
     return 0;
 }
 
-__attribute__((noreturn))
-static void *daemon_close_notify_thread(void *_close_notify_fd)
+__attribute__((noreturn)) static void *daemon_close_notify_thread(void *_close_notify_fd)
 {
     int close_notify_fd = (int)((char *)_close_notify_fd - (char *)NULL);
     char b;
@@ -675,6 +723,10 @@ Redo:
     if (r > 0)
         goto Redo;
     /* close or error */
+
+    /* unlink the temporary directory and socket file */
+    unlink_dir(dirname(daemon_vars.nb->sun_.sun_path));
+
     _exit(0);
 }
 
@@ -689,7 +741,7 @@ static void *daemon_conn_thread(void *_sock_fd)
         warnf("failed to receive authencication token from client");
         goto Exit;
     }
-    if (memcmp(auth_token, daemon_auth_token, NEVERBLEED_AUTH_TOKEN_SIZE) != 0) {
+    if (memcmp(auth_token, daemon_vars.nb->auth_token, NEVERBLEED_AUTH_TOKEN_SIZE) != 0) {
         warnf("client authentication failed");
         goto Exit;
     }
@@ -739,8 +791,7 @@ Exit:
     return NULL;
 }
 
-__attribute__((noreturn))
-static void daemon_main(int listen_fd, int close_notify_fd, const char *tempdir)
+__attribute__((noreturn)) static void daemon_main(int listen_fd, int close_notify_fd, const char *tempdir)
 {
     pthread_t tid;
     pthread_attr_t thattr;
@@ -770,20 +821,20 @@ static void daemon_main(int listen_fd, int close_notify_fd, const char *tempdir)
 }
 
 static RSA_METHOD rsa_method = {
-    "privsep RSA method",
-    NULL, /* rsa_pub_enc */
-    NULL, /* rsa_pub_dec */
-    priv_enc_proxy, /* rsa_priv_enc */
-    priv_dec_proxy, /* rsa_priv_dec */
-    NULL, /* rsa_mod_exp */
-    NULL, /* bn_mod_exp */
-    NULL, /* init */
-    NULL, /* finish */
-    RSA_FLAG_SIGN_VER, /* flags */
-    NULL, /* app data */
-    sign_proxy, /* rsa_sign */
-    NULL, /* rsa_verify */
-    NULL /* rsa_keygen */
+    "privsep RSA method", /* name */
+    NULL,                 /* rsa_pub_enc */
+    NULL,                 /* rsa_pub_dec */
+    priv_enc_proxy,       /* rsa_priv_enc */
+    priv_dec_proxy,       /* rsa_priv_dec */
+    NULL,                 /* rsa_mod_exp */
+    NULL,                 /* bn_mod_exp */
+    NULL,                 /* init */
+    NULL,                 /* finish */
+    RSA_FLAG_SIGN_VER,    /* flags */
+    NULL,                 /* app data */
+    sign_proxy,           /* rsa_sign */
+    NULL,                 /* rsa_verify */
+    NULL                  /* rsa_keygen */
 };
 
 int neverbleed_init(neverbleed_t *nb, char *errbuf)
@@ -801,7 +852,7 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
         snprintf(errbuf, NEVERBLEED_ERRBUF_SIZE, "pipe(2) failed:%s", strerror(errno));
         goto Fail;
     }
-    fcntl(pipe_fds[1], F_SETFD, O_CLOEXEC);
+    set_cloexec(pipe_fds[1]);
     if ((tempdir = strdup("/tmp/openssl-privsep.XXXXXX")) == NULL) {
         snprintf(errbuf, NEVERBLEED_ERRBUF_SIZE, "no memory");
         goto Fail;
@@ -826,7 +877,8 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
         snprintf(errbuf, NEVERBLEED_ERRBUF_SIZE, "listen(2) failed:%s", strerror(errno));
         goto Fail;
     }
-    switch (fork()) {
+    nb->daemon_pid = fork();
+    switch (nb->daemon_pid) {
     case -1:
         snprintf(errbuf, NEVERBLEED_ERRBUF_SIZE, "fork(2) failed:%s", strerror(errno));
         goto Fail;
@@ -835,7 +887,7 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
 #ifdef __linux__
         prctl(PR_SET_DUMPABLE, 0, 0, 0, 0);
 #endif
-        memcpy(daemon_auth_token, nb->auth_token, NEVERBLEED_AUTH_TOKEN_SIZE);
+        daemon_vars.nb = nb;
         daemon_main(listen_fd, pipe_fds[0], tempdir);
         break;
     default:
@@ -847,10 +899,8 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
     pipe_fds[0] = -1;
 
     /* setup engine */
-    if ((nb->engine = ENGINE_new()) == NULL ||
-        !ENGINE_set_id(nb->engine, "neverbleed") ||
-        !ENGINE_set_name(nb->engine, "privilege separation software engine") ||
-        !ENGINE_set_RSA(nb->engine, &rsa_method)) {
+    if ((nb->engine = ENGINE_new()) == NULL || !ENGINE_set_id(nb->engine, "neverbleed") ||
+        !ENGINE_set_name(nb->engine, "privilege separation software engine") || !ENGINE_set_RSA(nb->engine, &rsa_method)) {
         snprintf(errbuf, NEVERBLEED_ERRBUF_SIZE, "failed to initialize the OpenSSL engine");
         goto Fail;
     }
