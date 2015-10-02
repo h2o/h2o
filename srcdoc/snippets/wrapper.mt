@@ -23,7 +23,7 @@ my $create_tab = sub {
 ? my $base = "../" x (scalar(split '/', $main::context->{filename}) - 1);
 ? if ($base ne '') {
 <base href="<?= $base ?>" />
-<!--[if IE]><script type="text/javascript">
+<!--[if lte IE 9]><script type="text/javascript">
     // Fix for IE ignoring relative base tags.
     (function() {
         var baseTag = document.getElementsByTagName('base')[0];
