@@ -26,6 +26,7 @@ struct st_h2o_http2_scheduler_queue_t {
     uint64_t bits;
     size_t offset;
     h2o_linklist_t anchors[64];
+    h2o_linklist_t anchor257;
 };
 
 static void queue_init(h2o_http2_scheduler_queue_t *queue)
@@ -35,6 +36,7 @@ static void queue_init(h2o_http2_scheduler_queue_t *queue)
     queue->offset = 0;
     for (i = 0; i != sizeof(queue->anchors) / sizeof(queue->anchors[0]); ++i)
         h2o_linklist_init_anchor(queue->anchors + i);
+    h2o_linklist_init_anchor(&queue->anchor257);
 }
 
 static int queue_is_empty(h2o_http2_scheduler_queue_t *queue)
@@ -70,16 +72,23 @@ static void queue_set(h2o_http2_scheduler_queue_t *queue, h2o_http2_scheduler_qu
         16128,   0};
 
     assert(!h2o_linklist_is_linked(&node->_link));
-    assert(1 <= weight);
-    assert(weight <= 257);
 
-    size_t offset = OFFSET_TABLE[weight - 1] + node->_deficit;
-    node->_deficit = offset % 65536;
-    offset = offset / 65536;
+    if (weight > 256) {
 
-    queue->bits |= 1ULL << (sizeof(queue->bits) * 8 - 1 - offset);
-    h2o_linklist_insert(queue->anchors + (queue->offset + offset) % (sizeof(queue->anchors) / sizeof(queue->anchors[0])),
-                        &node->_link);
+        h2o_linklist_insert(&queue->anchor257, &node->_link);
+
+    } else {
+
+        assert(1 <= weight);
+
+        size_t offset = OFFSET_TABLE[weight - 1] + node->_deficit;
+        node->_deficit = offset % 65536;
+        offset = offset / 65536;
+
+        queue->bits |= 1ULL << (sizeof(queue->bits) * 8 - 1 - offset);
+        h2o_linklist_insert(queue->anchors + (queue->offset + offset) % (sizeof(queue->anchors) / sizeof(queue->anchors[0])),
+                            &node->_link);
+    }
 }
 
 static void queue_unset(h2o_http2_scheduler_queue_node_t *node)
@@ -90,6 +99,13 @@ static void queue_unset(h2o_http2_scheduler_queue_node_t *node)
 
 static h2o_http2_scheduler_queue_node_t *queue_pop(h2o_http2_scheduler_queue_t *queue)
 {
+    if (!h2o_linklist_is_empty(&queue->anchor257)) {
+        h2o_http2_scheduler_queue_node_t *node =
+            H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_queue_node_t, _link, queue->anchor257.next);
+        h2o_linklist_unlink(&node->_link);
+        return node;
+    }
+
     while (queue->bits != 0) {
         int zeroes = __builtin_clzll(queue->bits);
         queue->bits <<= zeroes;
