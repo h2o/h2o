@@ -383,8 +383,7 @@ void h2o_mimemap_get_default_attributes(const char *_mime, h2o_mime_attributes_t
 
     *attr = (h2o_mime_attributes_t){};
 
-    if (strncmp(mime, "text/", 5) == 0 ||
-        h2o_strstr(mime, type_end_at - mime, H2O_STRLIT("+xml")) != SIZE_MAX)
+    if (strncmp(mime, "text/", 5) == 0 || h2o_strstr(mime, type_end_at - mime, H2O_STRLIT("+xml")) != SIZE_MAX)
         attr->is_compressible = 1;
     if (h2o_memis(mime, type_end_at - mime, H2O_STRLIT("text/css")) ||
         h2o_memis(mime, type_end_at - mime, H2O_STRLIT("application/ecmascript")) ||
