@@ -24,6 +24,13 @@
  *   picotemplate.pl --conf=misc/picotemplate-conf.pl lib/file/_templates.c.h
  */
 
+static int cmpstrptr(const void *_x, const void *_y)
+{
+    const char *x = *(const char **)_x;
+    const char *y = *(const char **)_y;
+    return strcmp(x, y);
+}
+
 static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t path_normalized, DIR *dp)
 {
     H2O_VECTOR(char *)files = {};
@@ -37,7 +44,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
             h2o_vector_reserve(NULL, (void *)&files, sizeof(files.entries[0]), files.size + 1);
             files.entries[files.size++] = h2o_strdup(NULL, dent.d_name, SIZE_MAX).base;
         }
-        qsort(files.entries, files.size, sizeof(files.entries[0]), (void *)strcmp);
+        qsort(files.entries, files.size, sizeof(files.entries[0]), cmpstrptr);
     }
 
     h2o_buffer_t *_;
