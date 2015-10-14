@@ -426,24 +426,26 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
     static const h2o_iovec_t body_prefix = {H2O_STRLIT("<!DOCTYPE html><TITLE>Moved</TITLE><P>The document has moved <A HREF=\"")};
     static const h2o_iovec_t body_suffix = {H2O_STRLIT("\">here</A>")};
 
-    /* build and emit the response header */
+    /* build and send response */
+    h2o_iovec_t bufs[3];
+    size_t bufcnt;
+    if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD"))) {
+	req->res.content_length = SIZE_MAX;
+	bufcnt = 0;
+    } else {
+        bufs[0] = body_prefix;
+        bufs[1] = h2o_htmlescape(&req->pool, url, url_len);
+        bufs[2] = body_suffix;
+	bufcnt = 3;
+	req->res.content_length = body_prefix.len + bufs[1].len + body_suffix.len;
+    }
     req->res.status = status;
     req->res.reason = reason;
     req->res.headers = (h2o_headers_t){};
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LOCATION, url, url_len);
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/html; charset=utf-8"));
     h2o_start_response(req, &generator);
-
-    /* build and send response */
-    if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD"))) {
-        h2o_send(req, NULL, 0, 1);
-    } else {
-        h2o_iovec_t bufs[3];
-        bufs[0] = body_prefix;
-        bufs[1] = h2o_htmlescape(&req->pool, url, url_len);
-        bufs[2] = body_suffix;
-        h2o_send(req, bufs, 3, 1);
-    }
+    h2o_send(req, bufs, bufcnt, 1);
 }
 
 void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str, size_t url_len)
