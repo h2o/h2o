@@ -360,14 +360,11 @@ INSTALL(TARGETS h2o
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib)
 
-ADD_EXECUTABLE(setuidgid src/setuidgid.c)
-INSTALL(TARGETS setuidgid RUNTIME DESTINATION share/h2o)
-
 IF (NOT WITHOUT_LIBS)
     INSTALL(DIRECTORY include/ DESTINATION include FILES_MATCHING PATTERN "*.h")
 ENDIF ()
 
-INSTALL(PROGRAMS share/h2o/annotate-backtrace-symbols share/h2o/fetch-ocsp-response share/h2o/kill-on-close share/h2o/start_server DESTINATION share/h2o)
+INSTALL(PROGRAMS share/h2o/annotate-backtrace-symbols share/h2o/fetch-ocsp-response share/h2o/kill-on-close share/h2o/setuidgid share/h2o/start_server DESTINATION share/h2o)
 INSTALL(DIRECTORY doc/ DESTINATION share/doc/h2o PATTERN "Makefile" EXCLUDE PATTERN "README.md" EXCLUDE)
 
 # tests
