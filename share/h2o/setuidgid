@@ -32,7 +32,10 @@ setgid($groups[0])
     or die "setgid failed:$!";
 
 # setgroups
+$! = 0;
 $) = join " ", $groups[0], @groups;
+die "setgroups failed:$!"
+    if $!;
 
 # setuid
 setuid($uid)
