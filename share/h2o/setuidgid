@@ -22,7 +22,7 @@ setgrent;
 while (my @e = getgrent) {
     if ($e[3] && grep { $_ eq $username } split /\s+/, $e[3]) {
         push @groups, $e[2]
-           unless grep { $_ == $e[2] } @groups;
+            unless grep { $_ == $e[2] } @groups;
     }
 }
 endgrent;
