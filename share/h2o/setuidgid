@@ -1,5 +1,43 @@
-#!/bin/sh
-# wrapper script for running tests
-exec ${BINARY_DIR}/setuidgid "$@"
-echo "failed to invoke setuidgid (BINARY_DIR=${BINARY_DIR})" >&2
-exit 111
+#! /bin/sh
+exec perl -x $0 "$@"
+#! perl
+
+use strict;
+use warnings;
+use POSIX qw(setuid setgid);
+
+die "usage: share/h2o/setuidgid username child\n"
+    unless @ARGV >= 2;
+my $username = shift @ARGV;
+
+# get user entry
+my ($uid, @groups) = do {
+    my @e = getpwnam($username)
+        or die "unknown user: $username\n";
+    +($e[2], $e[3]);
+};
+
+# add supp. groups to @groups
+setgrent;
+while (my @e = getgrent) {
+    if ($e[3] && grep { $_ eq $username } split /\s+/, $e[3]) {
+        push @groups, $e[2]
+           unless grep { $_ == $e[2] } @groups;
+    }
+}
+endgrent;
+
+# setgid
+setgid($groups[0])
+    or die "setgid failed:$!";
+
+# setgroups
+$) = join " ", $groups[0], @groups;
+
+# setuid
+setuid($uid)
+    or die "setuid failed:$!";
+
+# exec
+exec @ARGV
+    or die "failed to exec: $ARGV[0]:$!";
