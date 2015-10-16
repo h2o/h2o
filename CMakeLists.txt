@@ -31,7 +31,7 @@ SET(VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}${VERSION_PRERELE
 SET(LIBRARY_VERSION_MAJOR "0")
 SET(LIBRARY_VERSION_MINOR "9")
 SET(LIBRARY_VERSION_PATCH "15")
-CONFIGURE_FILE(${CMAKE_SOURCE_DIR}/version.h.in ${CMAKE_SOURCE_DIR}/include/h2o/version.h)
+CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h)
 
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
@@ -63,10 +63,10 @@ ENDIF ()
 OPTION(WITH_MRUBY "whether or not to build with mruby support" ${WITH_MRUBY_DEFAULT})
 
 IF (WITH_BUNDLED_SSL)
-    SET(BUNDLED_SSL_INCLUDE_DIR "${CMAKE_BINARY_DIR}/libressl-build/include")
-    SET(BUNDLED_SSL_LIBRARIES "${CMAKE_BINARY_DIR}/libressl-build/lib/libssl.a" "${CMAKE_BINARY_DIR}/libressl-build/lib/libcrypto.a")
-    ADD_CUSTOM_TARGET(bundled-ssl make -f ${CMAKE_SOURCE_DIR}/misc/libressl.mk SOURCE_DIR=${CMAKE_SOURCE_DIR}/misc
-        WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+    SET(BUNDLED_SSL_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/include")
+    SET(BUNDLED_SSL_LIBRARIES "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/lib/libssl.a" "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/lib/libcrypto.a")
+    ADD_CUSTOM_TARGET(bundled-ssl make -f ${CMAKE_CURRENT_SOURCE_DIR}/misc/libressl.mk SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/misc
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 ELSE (WITH_BUNDLED_SSL)
     IF (NOT OPENSSL_FOUND)
         IF ((NOT UNIX) OR CYGWIN)
@@ -326,8 +326,8 @@ IF (WITH_MRUBY)
     ELSE ()
         SET(MRUBY_TOOLCHAIN "gcc")
     ENDIF ()
-    ADD_CUSTOM_TARGET(mruby MRUBY_TOOLCHAIN=${MRUBY_TOOLCHAIN} MRUBY_CONFIG=${CMAKE_SOURCE_DIR}/misc/mruby_config.rb MRUBY_BUILD_DIR=${CMAKE_BINARY_DIR}/mruby ruby minirake
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/mruby)
+    ADD_CUSTOM_TARGET(mruby MRUBY_TOOLCHAIN=${MRUBY_TOOLCHAIN} MRUBY_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/misc/mruby_config.rb MRUBY_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby ruby minirake
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby)
     LIST(APPEND STANDALONE_SOURCE_FILES
         lib/handler/mruby.c
         lib/handler/configurator/mruby.c)
@@ -346,11 +346,11 @@ ELSE (WITH_BUNDLED_SSL)
     ENDIF (OPENSSL_FOUND)
 ENDIF (WITH_BUNDLED_SSL)
 IF (WITH_MRUBY)
-    TARGET_INCLUDE_DIRECTORIES(h2o BEFORE PRIVATE ${CMAKE_SOURCE_DIR}/deps/mruby/include)
+    TARGET_INCLUDE_DIRECTORIES(h2o BEFORE PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby/include)
     # note: the paths need to be determined before libmruby.flags.mak is generated
     TARGET_LINK_LIBRARIES(h2o
-        "${CMAKE_BINARY_DIR}/mruby/host/lib/libmruby.a"
-        "${CMAKE_BINARY_DIR}/mruby/host/mrbgems/mruby-onig-regexp/Onigmo-Onigmo-5.15.0/.libs/libonig.a"
+        "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/lib/libmruby.a"
+        "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/mrbgems/mruby-onig-regexp/Onigmo-Onigmo-5.15.0/.libs/libonig.a"
         "m")
     ADD_DEPENDENCIES(h2o mruby)
 ENDIF (WITH_MRUBY)
@@ -394,15 +394,15 @@ ELSE (WITH_BUNDLED_SSL)
     ENDIF (OPENSSL_FOUND)
 ENDIF (WITH_BUNDLED_SSL)
 
-ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_BINARY_DIR} prove -v t/*.t
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -v t/*.t
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS h2o t-00unit-evloop.t)
 IF (LIBUV_FOUND)
     ADD_DEPENDENCIES(check t-00unit-libuv.t lib-examples)
 ENDIF (LIBUV_FOUND)
 
-ADD_CUSTOM_TARGET(check-as-root env H2O_ROOT=. BINARY_DIR=${CMAKE_BINARY_DIR} prove -v t/90root-*.t
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+ADD_CUSTOM_TARGET(check-as-root env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -v t/90root-*.t
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 # environment-specific tweaks
 IF (APPLE)
