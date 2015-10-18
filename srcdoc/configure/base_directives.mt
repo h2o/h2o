@@ -229,7 +229,7 @@ $ctx->{directive}->(
 )->(sub {
 ?>
 <p>
-Default is unlimited.
+Default is 1073741824 (1GB).
 </p>
 ? })
 
