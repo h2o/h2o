@@ -47,6 +47,24 @@ static void test_stripws(void)
     ok(h2o_memis(t.base, t.len, H2O_STRLIT("")));
 }
 
+static void test_get_filext(void)
+{
+    const char *ext;
+
+    ext = h2o_get_filext(H2O_STRLIT("/abc.txt"));
+    ok(strcmp(ext, "txt") == 0);
+    ext = h2o_get_filext(H2O_STRLIT("/abc.txt.gz"));
+    ok(strcmp(ext, "gz") == 0);
+    ext = h2o_get_filext(H2O_STRLIT("/abc."));
+    ok(strcmp(ext, "") == 0);
+    ext = h2o_get_filext(H2O_STRLIT("/abc"));
+    ok(ext == NULL);
+    ext = h2o_get_filext(H2O_STRLIT("/abc.def/abc"));
+    ok(ext == NULL);
+    ext = h2o_get_filext(H2O_STRLIT("/abc.def/"));
+    ok(ext == NULL);
+}
+
 static void test_next_token(void)
 {
     h2o_iovec_t iter;
@@ -178,6 +196,7 @@ void test_lib__common__string_c(void)
 {
     subtest("strstr", test_strstr);
     subtest("stripws", test_stripws);
+    subtest("get_filext", test_get_filext);
     subtest("next_token", test_next_token);
     subtest("next_token2", test_next_token2);
     subtest("decode_base64", test_decode_base64);
