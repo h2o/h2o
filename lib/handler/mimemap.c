@@ -334,10 +334,15 @@ h2o_mimemap_type_t *h2o_mimemap_get_default_type(h2o_mimemap_t *mimemap)
     return mimemap->default_type;
 }
 
-h2o_mimemap_type_t *h2o_mimemap_get_type_by_extension(h2o_mimemap_t *mimemap, const char *ext)
+h2o_mimemap_type_t *h2o_mimemap_get_type_by_extension(h2o_mimemap_t *mimemap, h2o_iovec_t ext)
 {
-    if (ext != NULL) {
-        khiter_t iter = kh_get(extmap, mimemap->extmap, ext);
+    char lcbuf[256];
+
+    if (0 < ext.len && ext.len < sizeof(lcbuf)) {
+	memcpy(lcbuf, ext.base, ext.len);
+	h2o_strtolower(lcbuf, ext.len);
+	lcbuf[ext.len] = '\0';
+        khiter_t iter = kh_get(extmap, mimemap->extmap, lcbuf);
         if (iter != kh_end(mimemap->extmap))
             return kh_val(mimemap->extmap, iter);
     }
