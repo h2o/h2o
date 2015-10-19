@@ -80,6 +80,7 @@ static void test_basic()
     /* set and overwrite */
     h2o_mimemap_define_mimetype(mimemap, "foo", "example/foo", NULL);
     ok(is_mimetype(h2o_mimemap_get_type_by_extension(mimemap, h2o_iovec_init(H2O_STRLIT("foo"))), "example/foo"));
+    ok(is_mimetype(h2o_mimemap_get_type_by_extension(mimemap, h2o_iovec_init(H2O_STRLIT("FOO"))), "example/foo"));
     ok(h2o_mimemap_get_type_by_extension(mimemap, h2o_iovec_init(H2O_STRLIT("foo"))) ==
        h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(H2O_STRLIT("example/foo"))));
     h2o_mimemap_define_mimetype(mimemap, "foo", "example/overwritten", NULL);
