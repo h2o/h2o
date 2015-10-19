@@ -96,7 +96,7 @@ void h2o_hex_encode(char *dst, const void *src, size_t src_len);
 /**
  * returns the extension portion of path
  */
-const char *h2o_get_filext(const char *path, size_t len);
+h2o_iovec_t h2o_get_filext(const char *path, size_t len);
 /**
  * returns a vector with surrounding WS stripped
  */

@@ -49,20 +49,20 @@ static void test_stripws(void)
 
 static void test_get_filext(void)
 {
-    const char *ext;
+    h2o_iovec_t ext;
 
     ext = h2o_get_filext(H2O_STRLIT("/abc.txt"));
-    ok(strcmp(ext, "txt") == 0);
+    ok(h2o_memis(ext.base, ext.len, H2O_STRLIT("txt")));
     ext = h2o_get_filext(H2O_STRLIT("/abc.txt.gz"));
-    ok(strcmp(ext, "gz") == 0);
+    ok(h2o_memis(ext.base, ext.len, H2O_STRLIT("gz")));
     ext = h2o_get_filext(H2O_STRLIT("/abc."));
-    ok(strcmp(ext, "") == 0);
+    ok(h2o_memis(ext.base, ext.len, H2O_STRLIT("")));
     ext = h2o_get_filext(H2O_STRLIT("/abc"));
-    ok(ext == NULL);
+    ok(ext.base == NULL);
     ext = h2o_get_filext(H2O_STRLIT("/abc.def/abc"));
-    ok(ext == NULL);
+    ok(ext.base == NULL);
     ext = h2o_get_filext(H2O_STRLIT("/abc.def/"));
-    ok(ext == NULL);
+    ok(ext.base == NULL);
 }
 
 static void test_next_token(void)
