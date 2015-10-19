@@ -300,18 +300,18 @@ void h2o_hex_encode(char *dst, const void *_src, size_t src_len)
     *dst = '\0';
 }
 
-const char *h2o_get_filext(const char *path, size_t len)
+h2o_iovec_t h2o_get_filext(const char *path, size_t len)
 {
-    const char *p = path + len;
+    const char *end = path + len, *p = end;
 
     while (--p != path) {
         if (*p == '.') {
-            return p + 1;
+            return h2o_iovec_init(p + 1, end - (p + 1));
         } else if (*p == '/') {
             break;
         }
     }
-    return NULL;
+    return h2o_iovec_init(NULL, 0);
 }
 
 static int is_ws(int ch)
