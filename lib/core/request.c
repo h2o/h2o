@@ -430,14 +430,14 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
     h2o_iovec_t bufs[3];
     size_t bufcnt;
     if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD"))) {
-	req->res.content_length = SIZE_MAX;
-	bufcnt = 0;
+        req->res.content_length = SIZE_MAX;
+        bufcnt = 0;
     } else {
         bufs[0] = body_prefix;
         bufs[1] = h2o_htmlescape(&req->pool, url, url_len);
         bufs[2] = body_suffix;
-	bufcnt = 3;
-	req->res.content_length = body_prefix.len + bufs[1].len + body_suffix.len;
+        bufcnt = 3;
+        req->res.content_length = body_prefix.len + bufs[1].len + body_suffix.len;
     }
     req->res.status = status;
     req->res.reason = reason;
