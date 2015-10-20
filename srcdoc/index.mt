@@ -14,7 +14,7 @@ Explanation and other benchmark numbers can be found in the <a href="benchmarks.
 </p>
 </div>
 
-<h3>Key Features</h3>
+<h3 id="key-features">Key Features</h3>
 
 <ul>
 <li>HTTP/1.0, HTTP/1.1
@@ -41,14 +41,15 @@ Explanation and other benchmark numbers can be found in the <a href="benchmarks.
 <li>graceful restart and self-upgrade
 </ul>
 
-<h3>News</h3>
+<h3 id="news">News</h3>
 
 <ul>
+<li>Version <a href="https://github.com/h2o/h2o/releases/tag/v1.5.1">1.5.1</a> is now avaibale with bug fixes (Oct 20 2015)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v1.5.0">1.5.0</a> is now avaibale with new features (Sep 30 2015)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v1.4.5">version 1.4.5</a> is now available, including a security fix (Sep 16 2015)</li>
 </ul>
 
-<h3>Security Issues</h3>
+<h3 id="security-issues">Security Issues</h3>
 
 <ul>
 <li><b><a href="vulnerabilities.html">Security Advisory</a>: one security fix</b> (Sep 16 2015)</li>
