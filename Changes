@@ -1,5 +1,8 @@
 Revision history for H2O.
 
+1.5.2 2015-10-20 06:49:00+0000
+	- [http2] fix stall when only reprioritized streams are being transferred #564 (Kazuho Oku)
+
 1.5.1 2015-10-20 01:13:00+0000
 	- [file] fixed directory listing not alphabetically sorted #412 #474 #539 (Kazuho Oku)
 	- [file] mime-type lookup should be case-insensitive #561 (Kazuho Oku)
