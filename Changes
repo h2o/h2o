@@ -1,5 +1,16 @@
 Revision history for H2O.
 
+1.5.1 2015-10-20 01:13:00+0000
+	- [file] fixed directory listing not alphabetically sorted #412 #474 #539 (Kazuho Oku)
+	- [file] mime-type lookup should be case-insensitive #561 (Kazuho Oku)
+	- [file] fix corrupt links in directory listing #562 (Kazuho Oku)
+	- [http1] preserve HTTP connection after redirect #552 (Kazuho Oku)
+	- [http2] fixed reprioritized streams (to highest) sometimes being interleaved with lower priority streams #550 (Kazuho Oku)
+	- [libh2o] add `-DWITHOUT_LIBS=ON` configuration option #551 (Kazuho Oku)
+	- [libh2o] adjustments to build libh2o in a subdirectory #556 (Futur Solo)
+	- [misc] rewrite setuidgid helper program in Perl #553 (Kazuho Oku)
+	- [misc] fix doc issues #530 #547 #549 (Masaki TAGAWA, Kazuho Oku, Kazu Yamamoto)
+
 1.5.0 2015-09-30 06:39:00+0000
 	- [http2] enable `http2-reprioritize-blocking-assets` by default #528 (Kazuho Oku)
 	- [ssl] fix issues with neverbleed #520 (Kazuho Oku)
