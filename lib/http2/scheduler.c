@@ -41,7 +41,7 @@ static void queue_init(h2o_http2_scheduler_queue_t *queue)
 
 static int queue_is_empty(h2o_http2_scheduler_queue_t *queue)
 {
-    return queue->bits == 0;
+    return queue->bits == 0 && h2o_linklist_is_empty(&queue->anchor257);
 }
 
 static void queue_set(h2o_http2_scheduler_queue_t *queue, h2o_http2_scheduler_queue_node_t *node, uint16_t weight)
