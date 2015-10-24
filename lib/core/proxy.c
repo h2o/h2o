@@ -89,7 +89,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive)
     char remote_addr[NI_MAXHOST];
     struct sockaddr_storage ss;
     socklen_t sslen;
-    h2o_iovec_t cookie_buf = {}, xff_buf = {}, via_buf = {};
+    h2o_iovec_t cookie_buf = {}, xff_buf = {}, via_buf = {}, on_vec = {"on", 2};
 
     /* for x-f-f */
     if ((sslen = req->conn->get_peername(req->conn, (void *)&ss)) != 0)
@@ -186,6 +186,11 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive)
     FLATTEN_PREFIXED_VALUE("x-forwarded-proto: ", req->input.scheme->name, 0);
     buf.base[offset++] = '\r';
     buf.base[offset++] = '\n';
+    if (memcmp(req->input.scheme->name.base, "https", 5) == 0) {
+        FLATTEN_PREFIXED_VALUE("x-forwarded-ssl: ", on_vec, 0);
+        buf.base[offset++] = '\r';
+        buf.base[offset++] = '\n';
+    }
     if (remote_addr_len != SIZE_MAX) {
         FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, remote_addr_len);
         APPEND(remote_addr, remote_addr_len);
