@@ -615,7 +615,7 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
             } else {
                 entry->name = alloc_buf(NULL, name->len);
                 entry->name->base[name->len] = '\0';
-                memcpy(entry->name->base, name, name->len);
+                memcpy(entry->name->base, name->base, name->len);
             }
             entry->value = alloc_buf(NULL, value->len);
             entry->value->base[value->len] = '\0';
