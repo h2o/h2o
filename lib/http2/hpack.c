@@ -560,6 +560,7 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
                               const h2o_iovec_t *value)
 {
     int static_table_name_index, name_is_token = h2o_iovec_is_token(name);
+    int name_match_index = 0;
 
     /* try to send as indexed */
     {
@@ -574,8 +575,11 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
                     goto Next;
             }
             /* name matched! */
+            if (name_match_index == 0)
+                /* first matched index is the smallest one */
+                name_match_index = (uint32_t)(header_table->num_entries - n + HEADER_TABLE_OFFSET);
             if (!h2o_memis(value->base, value->len, entry->value->base, entry->value->len))
-                continue;
+                goto Next;
             /* name and value matched! */
             *dst = 0x80;
             dst = encode_int(dst, (uint32_t)(header_table->num_entries - n + HEADER_TABLE_OFFSET), 7);
@@ -590,14 +594,16 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
     if (h2o_iovec_is_token(name)) {
         const h2o_token_t *name_token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
         static_table_name_index = name_token->http2_static_table_name_index;
+        /* static table index is always smaller than dynamic table */
+        name_match_index = static_table_name_index;
     } else {
         static_table_name_index = 0;
     }
 
-    if (static_table_name_index != 0) {
+    if (name_match_index != 0) {
         /* literal header field with indexing (indexed name) */
         *dst = 0x40;
-        dst = encode_int(dst, static_table_name_index, 6);
+        dst = encode_int(dst, name_match_index, 6);
     } else {
         /* literal header field with indexing (new name) */
         *dst++ = 0x40;
