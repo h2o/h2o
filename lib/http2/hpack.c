@@ -575,7 +575,7 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
             }
             /* name matched! */
             if (!h2o_memis(value->base, value->len, entry->value->base, entry->value->len))
-                continue;
+                goto Next;
             /* name and value matched! */
             *dst = 0x80;
             dst = encode_int(dst, (uint32_t)(header_table->num_entries - n + HEADER_TABLE_OFFSET), 7);
@@ -615,7 +615,7 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
             } else {
                 entry->name = alloc_buf(NULL, name->len);
                 entry->name->base[name->len] = '\0';
-                memcpy(entry->name->base, name, name->len);
+                memcpy(entry->name->base, name->base, name->len);
             }
             entry->value = alloc_buf(NULL, value->len);
             entry->value->base[value->len] = '\0';
