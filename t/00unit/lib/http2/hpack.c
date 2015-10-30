@@ -411,8 +411,50 @@ static void test_hpack_push(void)
     h2o_mem_clear_pool(&req.pool);
 }
 
+static void test_hpack_dynamic_table(void)
+{
+    h2o_hpack_header_table_t header_table;
+    uint8_t encoded[256], *p;
+    h2o_iovec_t n, v;
+
+    memset(&header_table, 0, sizeof(header_table));
+    header_table.hpack_capacity = 4096;
+
+    p = encoded;
+    /* expected: literal header with incremental indexing (name not indexed) */
+    n = h2o_iovec_init(H2O_STRLIT("x-name"));
+    v = h2o_iovec_init(H2O_STRLIT("v1"));
+    p = encode_header(&header_table, p, &n, &v);
+    /* expected: literal header with incremental indexing (name indexed) */
+    v = h2o_iovec_init(H2O_STRLIT("v2"));
+    p = encode_header(&header_table, p, &n, &v);
+    /* expected: literal header with incremental indexing (name indexed, referring to the name associated with v2) */
+    v = h2o_iovec_init(H2O_STRLIT("v3"));
+    p = encode_header(&header_table, p, &n, &v);
+    /* expected: indexed header field */
+    v = h2o_iovec_init(H2O_STRLIT("v1"));
+    p = encode_header(&header_table, p, &n, &v);
+
+    const h2o_iovec_t expected = h2o_iovec_init(
+        H2O_STRLIT("\x40\x85"             /* literal header with incremental indexing (name not indexed, 5 bytes, huffman coded) */
+                   "\xf2\xb5\x43\xa4\xbf" /* "x-name" */
+                   "\x02"                 /* value not compressed, 2 bytes */
+                   "v1"                   /* "v1" */
+                   "\x7e"                 /* literal header with incremental indexing (name indexed) */
+                   "\x02"                 /* value not compressed, 2 bytes */
+                   "v2"                   /* "v2" */
+                   "\x7e"                 /* literal header with incremental indexing (name indexed, referring to the last entry) */
+                   "\x02"                 /* value not compressed, 2 bytes */
+                   "v3"                   /* "v3" */
+                   "\xc0"                 /* indexed header field */
+                   ));
+    ok(p - encoded == expected.len);
+    ok(memcmp(encoded, expected.base, expected.len) == 0);
+}
+
 void test_lib__http2__hpack(void)
 {
     subtest("hpack", test_hpack);
     subtest("hpack-push", test_hpack_push);
+    subtest("hpack-dynamic-table", test_hpack_dynamic_table);
 }
