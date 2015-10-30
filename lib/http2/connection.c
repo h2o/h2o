@@ -404,7 +404,10 @@ static int open_stream(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_http2_str
 {
     if (conn->num_streams.open_priority >= conn->super.ctx->globalconf->http2.max_streams_for_priority) {
         *err_desc = "too many streams in idle/closed state";
-        return H2O_HTTP2_ERROR_INTERNAL; /* FIXME? */
+        /* RFC 7540 10.5: An endpoint MAY treat activity that is suspicious as a connection error (Section 5.4.1) of type
+         * ENHANCE_YOUR_CALM.
+         */
+        return H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM;
     }
     *stream = h2o_http2_stream_open(conn, stream_id, NULL, 0);
     return 0;
