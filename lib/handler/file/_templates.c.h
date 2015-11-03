@@ -31,35 +31,6 @@ static int cmpstrptr(const void *_x, const void *_y)
     return strcmp(x, y);
 }
 
-static h2o_iovec_t escape_uri(h2o_mem_pool_t *pool, const char *s, size_t l)
-{
-    h2o_iovec_t encoded = h2o_iovec_init(h2o_mem_alloc_pool(pool, l * 3 + 1), 0);
-    size_t i;
-
-    /* RFC 3986:
-        path-noscheme = segment-nz-nc *( "/" segment )
-        segment-nz-nc = 1*( unreserved / pct-encoded / sub-delims / "@" )
-        unreserved  = ALPHA / DIGIT / "-" / "." / "_" / "~"
-        sub-delims    = "!" / "$" / "&" / "'" / "(" / ")"
-                     / "*" / "+" / "," / ";" / "="
-    */
-    for (i = 0; i != l; ++i) {
-        int ch = s[i];
-        if (ch >= 0x80 || ('A' <= ch && ch <= 'Z') || ('a' <= ch && ch <= 'z') || ('0' <= ch && ch <= '9') || ch == '-' ||
-            ch == '.' || ch == '_' || ch == '~' || ch == '!' || ch == '$' || ch == '&' || ch == '\'' || ch == '(' || ch == ')' ||
-            ch == '*' || ch == '+' || ch == ',' || ch == ';' || ch == '=') {
-            encoded.base[encoded.len++] = ch;
-        } else {
-            encoded.base[encoded.len++] = '%';
-            encoded.base[encoded.len++] = "0123456789abcdef"[(ch >> 4) & 0xf];
-            encoded.base[encoded.len++] = "0123456789abcdef"[ch & 0xf];
-        }
-    }
-    encoded.base[encoded.len] = '\0';
-
-    return encoded;
-}
-
 static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t path_normalized, DIR* dp)
 {
     H2O_VECTOR(char *) files = {};
@@ -89,7 +60,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
 
     size_t i;
     for (i = 0; i != files.size; ++i) {
-        h2o_iovec_t link_escaped = escape_uri(pool, files.entries[i], strlen(files.entries[i]));
+        h2o_iovec_t link_escaped = h2o_uri_escape(pool, files.entries[i], strlen(files.entries[i]));
         link_escaped = h2o_htmlescape(pool, link_escaped.base, link_escaped.len);
         h2o_iovec_t label_escaped = h2o_htmlescape(pool, files.entries[i], strlen(files.entries[i]));
 ?<LI><A HREF="<?= link_escaped ?>"><?= label_escaped ?></A>
