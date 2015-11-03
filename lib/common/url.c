@@ -49,7 +49,7 @@ static h2o_iovec_t decode_urlencoded(h2o_mem_pool_t *pool, const char *s, size_t
     dst = ret.base = h2o_mem_alloc_pool(pool, len + 1);
 
     /* decode %xx */
-    for (i = 0; i + 3 < len;) {
+    for (i = 0; i + 3 <= len;) {
         int hi, lo;
         if (s[i] == '%' && (hi = decode_hex(s[i + 1])) != -1 && (lo = decode_hex(s[i + 2])) != -1) {
             *dst++ = (hi << 4) | lo;
