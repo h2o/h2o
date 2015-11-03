@@ -300,7 +300,7 @@ void h2o_hex_encode(char *dst, const void *_src, size_t src_len)
     *dst = '\0';
 }
 
-h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l)
+h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l, const char *preserve_chars)
 {
     h2o_iovec_t encoded;
     size_t i, capacity = l * 3 + 1;
@@ -319,7 +319,8 @@ h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l)
         int ch = s[i];
         if (ch >= 0x80 || ('A' <= ch && ch <= 'Z') || ('a' <= ch && ch <= 'z') || ('0' <= ch && ch <= '9') || ch == '-' ||
             ch == '.' || ch == '_' || ch == '~' || ch == '!' || ch == '$' || ch == '&' || ch == '\'' || ch == '(' || ch == ')' ||
-            ch == '*' || ch == '+' || ch == ',' || ch == ';' || ch == '=') {
+            ch == '*' || ch == '+' || ch == ',' || ch == ';' || ch == '=' ||
+            (preserve_chars != NULL && strchr(preserve_chars, ch) != NULL)) {
             encoded.base[encoded.len++] = ch;
         } else {
             encoded.base[encoded.len++] = '%';

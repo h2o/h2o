@@ -96,7 +96,7 @@ void h2o_hex_encode(char *dst, const void *src, size_t src_len);
 /**
  * URI-ecsapes given string (as defined in RFC 3986)
  */
-h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l);
+h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l, const char *preserve_chars);
 /**
  * returns the extension portion of path
  */
