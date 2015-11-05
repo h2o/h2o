@@ -238,7 +238,6 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
     req->res.reason = "OK";
     req->_ostr_init_index = 0;
     req->bytes_sent = 0;
-    memset(&req->http2_push_paths, 0, sizeof(req->http2_push_paths));
 
     /* check the delegation (or reprocess) counter */
     if (req->res_is_delegated) {
