@@ -28,17 +28,6 @@
 
 static const h2o_iovec_t CONNECTION_PREFACE = {H2O_STRLIT("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")};
 
-/* h2-14 and h2-16 are kept for backwards compatibility, as they are often used */
-static const h2o_iovec_t alpn_protocols[] = {{H2O_STRLIT("h2")}, {H2O_STRLIT("h2-16")}, {H2O_STRLIT("h2-14")}, {NULL, 0}};
-const h2o_iovec_t *h2o_http2_alpn_protocols = alpn_protocols;
-/* npn defs should match the definition of alpn_protocols */
-const char *h2o_http2_npn_protocols = "\x02"
-                                      "h2"
-                                      "\x05"
-                                      "h2-16"
-                                      "\x05"
-                                      "h2-14";
-
 const h2o_http2_priority_t h2o_http2_default_priority = {
     0, /* exclusive */
     0, /* dependency */
@@ -400,35 +389,26 @@ static void update_input_window(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_
     }
 }
 
-static int open_stream(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_http2_stream_t **stream, const char **err_desc)
-{
-    if (conn->num_streams.open_priority >= conn->super.ctx->globalconf->http2.max_streams_for_priority) {
-        *err_desc = "too many streams in idle/closed state";
-        return H2O_HTTP2_ERROR_INTERNAL; /* FIXME? */
-    }
-    *stream = h2o_http2_stream_open(conn, stream_id, NULL, 0);
-    return 0;
-}
-
-static int set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const h2o_http2_priority_t *priority,
-                        int scheduler_is_open, const char **err_desc)
+static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const h2o_http2_priority_t *priority,
+                         int scheduler_is_open)
 {
     h2o_http2_scheduler_node_t *parent_sched;
-
-    /* cannot depend on itself */
-    if (stream->stream_id == priority->dependency)
-        return H2O_HTTP2_ERROR_PROTOCOL;
 
     /* determine the parent */
     if (priority->dependency != 0) {
         h2o_http2_stream_t *parent_stream = h2o_http2_conn_get_stream(conn, priority->dependency);
-        if (parent_stream == NULL) {
-            int ret = open_stream(conn, priority->dependency, &parent_stream, err_desc);
-            if (ret != 0)
-                return ret;
-            set_priority(conn, parent_stream, &h2o_http2_default_priority, 0, err_desc); /* guaranteed to succeed */
+        if (parent_stream != NULL) {
+            parent_sched = &parent_stream->_refs.scheduler.node;
+        } else {
+            /* A dependency on a stream that is not currently in the tree - such as a stream in the "idle" state - results in that
+             * stream being given a default priority. (RFC 7540 5.3.1)
+             * It is possible for a stream to become closed while prioritization information that creates a dependency on that
+             * stream is in transit. If a stream identified in a dependency has no associated priority information, then the
+             * dependent stream is instead assigned a default priority. (RFC 7540 5.3.4)
+             */
+            parent_sched = &conn->scheduler;
+            priority = &h2o_http2_default_priority;
         }
-        parent_sched = &parent_stream->_refs.scheduler.node;
     } else {
         parent_sched = &conn->scheduler;
     }
@@ -439,8 +419,6 @@ static int set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, cons
     } else {
         h2o_http2_scheduler_rebind(&stream->_refs.scheduler, parent_sched, priority->weight, priority->exclusive);
     }
-
-    return 0;
 }
 
 static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, const char **err_desc)
@@ -509,6 +487,10 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
         *err_desc = "invalid stream id in HEADERS frame";
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
+    if (frame->stream_id == payload.priority.dependency) {
+        *err_desc = "stream cannot depend on itself";
+        return H2O_HTTP2_ERROR_PROTOCOL;
+    }
 
     if (conn->state >= H2O_HTTP2_CONN_STATE_HALF_CLOSED)
         return 0;
@@ -519,13 +501,10 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
     /* open or determine the stream and prepare */
     if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) != NULL) {
         if ((frame->flags & H2O_HTTP2_FRAME_FLAG_PRIORITY) != 0)
-            if ((ret = set_priority(conn, stream, &payload.priority, 1, err_desc)) != 0)
-                return ret;
+            set_priority(conn, stream, &payload.priority, 1);
     } else {
-        if ((ret = open_stream(conn, frame->stream_id, &stream, err_desc)) != 0)
-            return ret;
-        if ((ret = set_priority(conn, stream, &payload.priority, 0, err_desc)) != 0)
-            return ret;
+        stream = h2o_http2_stream_open(conn, frame->stream_id, NULL, 0);
+        set_priority(conn, stream, &payload.priority, 0);
     }
     h2o_http2_stream_prepare_for_request(conn, stream);
 
@@ -564,14 +543,18 @@ static int handle_priority_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
         /* ignore priority changes to pushed streams with weight=257, since that is where we are trying to be smarter than the web
          * browsers
          */
-        if (h2o_http2_scheduler_get_weight(&stream->_refs.scheduler) != 257 &&
-            (ret = set_priority(conn, stream, &payload, 1, err_desc)) != 0)
-            return ret;
+        if (h2o_http2_scheduler_get_weight(&stream->_refs.scheduler) != 257)
+            set_priority(conn, stream, &payload, 1);
     } else {
-        if ((ret = open_stream(conn, frame->stream_id, &stream, err_desc)) != 0)
-            return ret;
-        if ((ret = set_priority(conn, stream, &payload, 0, err_desc)) != 0)
-            return ret;
+        if (conn->num_streams.open_priority >= conn->super.ctx->globalconf->http2.max_streams_for_priority) {
+            *err_desc = "too many streams in idle/closed state";
+            /* RFC 7540 10.5: An endpoint MAY treat activity that is suspicious as a connection error (Section 5.4.1) of type
+             * ENHANCE_YOUR_CALM.
+             */
+            return H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM;
+        }
+        stream = h2o_http2_stream_open(conn, frame->stream_id, NULL, 0);
+        set_priority(conn, stream, &payload, 0);
     }
 
     return 0;

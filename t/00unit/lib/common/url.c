@@ -94,6 +94,11 @@ static void test_normalize_path(void)
     ok(memcmp(b.base, H2O_STRLIT("/a%6")) == 0);
     ok(q == 4);
 
+    b = h2o_url_normalize_path(&pool, H2O_STRLIT("/%25"), &q);
+    ok(b.len == 2);
+    ok(memcmp(b.base, H2O_STRLIT("/%")) == 0);
+    ok(q == SIZE_MAX);
+
     h2o_mem_clear_pool(&pool);
 }
 

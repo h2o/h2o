@@ -1,5 +1,14 @@
 Revision history for H2O.
 
+1.5.3 2015-11-06 04:30:00+0000
+	- [core] decode url-encoded character at the end of path #567 (Kazuho Oku)
+	- [access-log] fix startup failure on OSX when configured to emit to pipe #580 (Kazuho Oku)
+	- [http2] fix memory / state corruption in HPACK encoder #571 (Tatsuhiro Tsujikawa, Kazuho Oku)
+	- [http2] improve HPACK compression ratio #573 (Tatsuhiro Tsujikawa, Kazuho Oku)
+	- [http2] fix behavior when HEADERS frame specifies a stream not open as a dependency #575 (Kazuho Oku)
+	- [proxy] do not reset HTTP2 push paths when request is delegated to proxy #579 (Kazuho Oku)
+	- [ssl] include "http/1.1" in ALPN / NPN protocol selection list #578 (Kazuho Oku)
+
 1.5.2 2015-10-20 06:49:00+0000
 	- [http2] fix stall when only reprioritized streams are being transferred #564 (Kazuho Oku)
 

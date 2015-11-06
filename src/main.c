@@ -556,10 +556,10 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
 /* setup protocol negotiation methods */
 #if H2O_USE_NPN
-    h2o_ssl_register_npn_protocols(ssl_ctx, h2o_http2_npn_protocols);
+    h2o_ssl_register_npn_protocols(ssl_ctx, h2o_npn_protocols);
 #endif
 #if H2O_USE_ALPN
-    h2o_ssl_register_alpn_protocols(ssl_ctx, h2o_http2_alpn_protocols);
+    h2o_ssl_register_alpn_protocols(ssl_ctx, h2o_alpn_protocols);
 #endif
 
     /* set SNI callback to the first SSL context, when and only when it should be used */
@@ -1092,7 +1092,6 @@ static int popen_annotate_backtrace_symbols(void)
     }
     /* spawn the logger */
     int mapped_fds[] = {pipefds[0], 0,  /* output of the pipe is connected to STDIN of the spawned process */
-                        pipefds[0], -1, /* close pipefds[0] before exec */
                         2,          1,  /* STDOUT of the spawned process in connected to STDERR of h2o */
                         -1};
     if (h2o_spawnp(cmd_fullpath, argv, mapped_fds, 0) == -1) {

@@ -559,7 +559,7 @@ Exit:
 static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_iovec_t *name,
                               const h2o_iovec_t *value)
 {
-    int static_table_name_index, name_is_token = h2o_iovec_is_token(name);
+    int name_index = 0, name_is_token = h2o_iovec_is_token(name);
 
     /* try to send as indexed */
     {
@@ -572,10 +572,12 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
             } else {
                 if (!h2o_memis(name->base, name->len, entry->name->base, entry->name->len))
                     goto Next;
+                if (name_index == 0)
+                    name_index = (int)(header_table->num_entries - n + HEADER_TABLE_OFFSET);
             }
             /* name matched! */
             if (!h2o_memis(value->base, value->len, entry->value->base, entry->value->len))
-                continue;
+                goto Next;
             /* name and value matched! */
             *dst = 0x80;
             dst = encode_int(dst, (uint32_t)(header_table->num_entries - n + HEADER_TABLE_OFFSET), 7);
@@ -587,17 +589,15 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
         }
     }
 
-    if (h2o_iovec_is_token(name)) {
+    if (name_is_token) {
         const h2o_token_t *name_token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
-        static_table_name_index = name_token->http2_static_table_name_index;
-    } else {
-        static_table_name_index = 0;
+        name_index = name_token->http2_static_table_name_index;
     }
 
-    if (static_table_name_index != 0) {
+    if (name_index != 0) {
         /* literal header field with indexing (indexed name) */
         *dst = 0x40;
-        dst = encode_int(dst, static_table_name_index, 6);
+        dst = encode_int(dst, name_index, 6);
     } else {
         /* literal header field with indexing (new name) */
         *dst++ = 0x40;
@@ -610,12 +610,12 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
         struct st_h2o_hpack_header_table_entry_t *entry =
             header_table_add(header_table, name->len + value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET, 32);
         if (entry != NULL) {
-            if (static_table_name_index != 0) {
-                entry->name = (h2o_iovec_t *)h2o_hpack_static_table[static_table_name_index - 1].name;
+            if (name_is_token) {
+                entry->name = (h2o_iovec_t *)h2o_hpack_static_table[name_index - 1].name;
             } else {
                 entry->name = alloc_buf(NULL, name->len);
                 entry->name->base[name->len] = '\0';
-                memcpy(entry->name->base, name, name->len);
+                memcpy(entry->name->base, name->base, name->len);
             }
             entry->value = alloc_buf(NULL, value->len);
             entry->value->base[value->len] = '\0';

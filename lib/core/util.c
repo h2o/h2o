@@ -355,3 +355,17 @@ h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const c
 None:
     return (h2o_iovec_t){};
 }
+
+/* h2-14 and h2-16 are kept for backwards compatibility, as they are often used */
+#define H2O_HTTP2_ALPN_PROTOCOLS_CORE {H2O_STRLIT("h2")},{H2O_STRLIT("h2-16")},{H2O_STRLIT("h2-14")}
+#define H2O_HTTP2_NPN_PROTOCOLS_CORE "\x02" "h2" "\x05" "h2-16" "\x05" "h2-14"
+
+static const h2o_iovec_t http2_alpn_protocols[] = {H2O_HTTP2_ALPN_PROTOCOLS_CORE, {}};
+const h2o_iovec_t *h2o_http2_alpn_protocols = http2_alpn_protocols;
+
+static const h2o_iovec_t alpn_protocols[] = {H2O_HTTP2_ALPN_PROTOCOLS_CORE, {H2O_STRLIT("http/1.1")}, {}};
+const h2o_iovec_t *h2o_alpn_protocols = alpn_protocols;
+
+const char *h2o_http2_npn_protocols = H2O_HTTP2_NPN_PROTOCOLS_CORE;
+const char *h2o_npn_protocols = H2O_HTTP2_NPN_PROTOCOLS_CORE "\x08"
+                                                             "http/1.1";
