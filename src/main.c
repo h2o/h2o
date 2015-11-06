@@ -1092,7 +1092,6 @@ static int popen_annotate_backtrace_symbols(void)
     }
     /* spawn the logger */
     int mapped_fds[] = {pipefds[0], 0,  /* output of the pipe is connected to STDIN of the spawned process */
-                        pipefds[0], -1, /* close pipefds[0] before exec */
                         2,          1,  /* STDOUT of the spawned process in connected to STDERR of h2o */
                         -1};
     if (h2o_spawnp(cmd_fullpath, argv, mapped_fds, 0) == -1) {
