@@ -26,6 +26,7 @@
 #include "picohttpparser.h"
 #include "h2o.h"
 #include "h2o/http1client.h"
+#include "h2o/websocket_proxy.h"
 
 struct rp_generator_t {
     h2o_generator_t super;
@@ -37,6 +38,7 @@ struct rp_generator_t {
     } up_req;
     h2o_buffer_t *last_content_before_send;
     h2o_doublebuffer_t sending;
+    int is_websocket_handshake;
 };
 
 static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, size_t location_len, h2o_url_t *match,
@@ -82,7 +84,7 @@ static h2o_iovec_t build_request_merge_headers(h2o_mem_pool_t *pool, h2o_iovec_t
     return merged;
 }
 
-static h2o_iovec_t build_request(h2o_req_t *req, int keepalive)
+static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket_handshake)
 {
     h2o_iovec_t buf;
     size_t offset = 0, remote_addr_len = SIZE_MAX;
@@ -134,7 +136,9 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive)
     buf.base[offset++] = ' ';
     APPEND(req->path.base, req->path.len);
     APPEND_STRLIT(" HTTP/1.1\r\nconnection: ");
-    if (keepalive) {
+    if (is_websocket_handshake) {
+        APPEND_STRLIT("upgrade\r\nupgrade: websocket\r\nhost: ");
+    } else if (keepalive) {
         APPEND_STRLIT("keep-alive\r\nhost: ");
     } else {
         APPEND_STRLIT("close\r\nhost: ");
@@ -183,28 +187,31 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive)
         buf.base[offset++] = '\r';
         buf.base[offset++] = '\n';
     }
-    FLATTEN_PREFIXED_VALUE("x-forwarded-proto: ", req->input.scheme->name, 0);
-    buf.base[offset++] = '\r';
-    buf.base[offset++] = '\n';
-    if (remote_addr_len != SIZE_MAX) {
-        FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, remote_addr_len);
-        APPEND(remote_addr, remote_addr_len);
-    } else {
-        FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, 0);
+    if (!is_websocket_handshake) {
+        FLATTEN_PREFIXED_VALUE("x-forwarded-proto: ", req->input.scheme->name, 0);
+        buf.base[offset++] = '\r';
+        buf.base[offset++] = '\n';
+        if (remote_addr_len != SIZE_MAX) {
+            FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, remote_addr_len);
+            APPEND(remote_addr, remote_addr_len);
+        } else {
+            FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, 0);
+        }
+        buf.base[offset++] = '\r';
+        buf.base[offset++] = '\n';
+        FLATTEN_PREFIXED_VALUE("via: ", via_buf, sizeof("1.1 ") - 1 + req->input.authority.len);
+        if (req->version < 0x200) {
+            buf.base[offset++] = '1';
+            buf.base[offset++] = '.';
+            buf.base[offset++] = '0' + (0x100 <= req->version && req->version <= 0x109 ? req->version - 0x100 : 0);
+        } else {
+            buf.base[offset++] = '2';
+        }
+        buf.base[offset++] = ' ';
+        APPEND(req->input.authority.base, req->input.authority.len);
+        APPEND_STRLIT("\r\n");
     }
-    buf.base[offset++] = '\r';
-    buf.base[offset++] = '\n';
-    FLATTEN_PREFIXED_VALUE("via: ", via_buf, sizeof("1.1 ") - 1 + req->input.authority.len);
-    if (req->version < 0x200) {
-        buf.base[offset++] = '1';
-        buf.base[offset++] = '.';
-        buf.base[offset++] = '0' + (0x100 <= req->version && req->version <= 0x109 ? req->version - 0x100 : 0);
-    } else {
-        buf.base[offset++] = '2';
-    }
-    buf.base[offset++] = ' ';
-    APPEND(req->input.authority.base, req->input.authority.len);
-    APPEND_STRLIT("\r\n\r\n");
+    APPEND_STRLIT("\r\n");
 
 #undef RESERVE
 #undef APPEND
@@ -342,6 +349,12 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
         }
     }
 
+    if (self->is_websocket_handshake && req->res.status == 101) {
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, H2O_STRLIT("websocket"));
+        h2o_websocket_proxy_hs_success(req, h2o_http1client_steal_socket(self->client));
+        self->client = NULL;
+        return NULL;
+    }
     /* declare the start of the response */
     h2o_start_response(req, &self->super);
 
@@ -391,7 +404,14 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, int keepalive)
     self->super.proceed = do_proceed;
     self->super.stop = do_close;
     self->src_req = req;
-    self->up_req.bufs[0] = build_request(req, keepalive);
+    if (req->upgrade.base != NULL && req->upgrade.len == sizeof("websocket") - 1 &&
+        h2o_lcstris(req->upgrade.base, sizeof("websocket") - 1, H2O_STRLIT("websocket"))) {
+        self->is_websocket_handshake = 1;
+        self->up_req.bufs[0] = build_request(req, keepalive, 1);
+    } else {
+        self->is_websocket_handshake = 0;
+        self->up_req.bufs[0] = build_request(req, keepalive, 0);
+    }
     self->up_req.bufs[1] = req->entity;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
