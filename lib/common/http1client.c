@@ -51,7 +51,6 @@ struct st_h2o_http1client_private_t {
             size_t bytes_decoded_in_buf;
         } chunked;
     } _body_decoder;
-    int _socket_is_stealed;
 };
 
 static void close_client(struct st_h2o_http1client_private_t *client)
@@ -60,20 +59,18 @@ static void close_client(struct st_h2o_http1client_private_t *client)
         h2o_hostinfo_getaddr_cancel(client->_getaddr_req);
         client->_getaddr_req = NULL;
     }
-    if (!client->_socket_is_stealed) { /* we should not close socket when it is stealed */
-        if (client->super.sock != NULL) {
-            if (client->super.sockpool.pool != NULL && client->_can_keepalive) {
-                /* we do not send pipelined requests, and thus can trash all the received input at the end of the request */
-                h2o_buffer_consume(&client->super.sock->input, client->super.sock->input->size);
-                h2o_socketpool_return(client->super.sockpool.pool, client->super.sock);
-            } else {
-                h2o_socket_close(client->super.sock);
-            }
+    if (client->super.sock != NULL) {
+        if (client->super.sockpool.pool != NULL && client->_can_keepalive) {
+            /* we do not send pipelined requests, and thus can trash all the received input at the end of the request */
+            h2o_buffer_consume(&client->super.sock->input, client->super.sock->input->size);
+            h2o_socketpool_return(client->super.sockpool.pool, client->super.sock);
         } else {
-            if (client->super.sockpool.connect_req != NULL) {
-                h2o_socketpool_cancel_connect(client->super.sockpool.connect_req);
-                client->super.sockpool.connect_req = NULL;
-            }
+            h2o_socket_close(client->super.sock);
+        }
+    } else {
+        if (client->super.sockpool.connect_req != NULL) {
+            h2o_socketpool_cancel_connect(client->super.sockpool.connect_req);
+            client->super.sockpool.connect_req = NULL;
         }
     }
     if (h2o_timeout_is_linked(&client->_timeout))
@@ -422,7 +419,6 @@ static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_c
         *_client = &client->super;
     client->super.data = data;
     client->_cb.on_connect = cb;
-    client->_socket_is_stealed = 0;
     /* caller needs to setup _cb, timeout.cb, sock, and sock->data */
 
     return client;
@@ -489,7 +485,8 @@ void h2o_http1client_cancel(h2o_http1client_t *_client)
 h2o_socket_t *h2o_http1client_steal_socket(h2o_http1client_t *_client)
 {
     struct st_h2o_http1client_private_t *client = (void *)_client;
-    client->_socket_is_stealed = 1;
-    h2o_socket_read_stop(client->super.sock);
-    return client->super.sock;
+    h2o_socket_t *sock = client->super.sock;
+    h2o_socket_read_stop(sock);
+    client->super.sock = NULL;
+    return sock;
 }

@@ -112,6 +112,8 @@ static void on_upgrade_complete(void *_socket_info, h2o_socket_t *sock, size_t r
 
 void h2o_websocket_proxy_hs_success(h2o_req_t *req, h2o_socket_t *sock)
 {
+    assert(req);
+    assert(sock);
     struct st_h2o_websocket_proxy_info_t *socket_info = h2o_mem_alloc(sizeof(*socket_info));
     socket_info->proxy_socket = sock;
     h2o_http1_upgrade(req, NULL, 0, on_upgrade_complete, socket_info);
