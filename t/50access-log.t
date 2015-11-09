@@ -34,6 +34,8 @@ EOT
     };
 
     for (my $i = 0; $i != @expected; ++$i) {
+        $expected[$i] = $expected[$i]->($server)
+            if ref $expected[$i] eq 'CODE';
         like $log[$i], $expected[$i];
     }
 }
@@ -46,6 +48,17 @@ subtest "custom-log" => sub {
         },
         '%h %l %u %t \"%r\" %s %b \"%{Referer}i\" \"%{User-agent}i\"',
         qr{^127\.0\.0\.1 - - \[[0-9]{2}/[A-Z][a-z]{2}/20[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2} [+\-][0-9]{4}\] "GET / HTTP/1\.1" 200 6 "http://example.com/" "curl/.*"$},
+    );
+};
+
+subtest "more-fields" => sub {
+    doit(
+        sub {
+            my $server = shift;
+            system("curl --silent http://127.0.0.1:$server->{port}/ > /dev/null");
+        },
+        '\"%A:%p\"',
+        sub { my $server = shift; qr{^\"127\.0\.0\.1:$server->{port}\"$} },
     );
 };
 
