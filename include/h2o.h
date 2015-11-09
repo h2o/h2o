@@ -998,7 +998,8 @@ void h2o_context_dispose_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pa
  * @param ts buffer to store the timestamp (optional)
  * @return current time in UTC
  */
-struct timeval *h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts);
+static struct timeval *h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts);
+void h2o_context_update_timestamp_cache(h2o_context_t *ctx);
 /**
  * returns per-module context set
  */
@@ -1344,6 +1345,23 @@ inline void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostre
         next = req->pathconf->filters.entries[++req->_ostr_init_index];
         next->on_setup_ostream(next, req, slot);
     }
+}
+
+inline struct timeval *h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts)
+{
+    uint64_t now = h2o_now(ctx->loop);
+
+    if (ctx->_timestamp_cache.uv_now_at != now) {
+        h2o_context_update_timestamp_cache(ctx);
+    }
+
+    if (ts != NULL) {
+        ts->at = ctx->_timestamp_cache.tv_at;
+        h2o_mem_link_shared(pool, ctx->_timestamp_cache.value);
+        ts->str = ctx->_timestamp_cache.value;
+    }
+
+    return &ctx->_timestamp_cache.tv_at;
 }
 
 inline void *h2o_context_get_handler_context(h2o_context_t *ctx, h2o_handler_t *handler)
