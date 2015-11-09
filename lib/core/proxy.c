@@ -25,8 +25,9 @@
 #include <sys/socket.h>
 #include "picohttpparser.h"
 #include "h2o.h"
+#include "h2o/http1.h"
 #include "h2o/http1client.h"
-#include "h2o/websocket_proxy.h"
+#include "h2o/tunnel.h"
 
 struct rp_generator_t {
     h2o_generator_t super;
@@ -187,31 +188,28 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
         buf.base[offset++] = '\r';
         buf.base[offset++] = '\n';
     }
-    if (!is_websocket_handshake) {
-        FLATTEN_PREFIXED_VALUE("x-forwarded-proto: ", req->input.scheme->name, 0);
-        buf.base[offset++] = '\r';
-        buf.base[offset++] = '\n';
-        if (remote_addr_len != SIZE_MAX) {
-            FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, remote_addr_len);
-            APPEND(remote_addr, remote_addr_len);
-        } else {
-            FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, 0);
-        }
-        buf.base[offset++] = '\r';
-        buf.base[offset++] = '\n';
-        FLATTEN_PREFIXED_VALUE("via: ", via_buf, sizeof("1.1 ") - 1 + req->input.authority.len);
-        if (req->version < 0x200) {
-            buf.base[offset++] = '1';
-            buf.base[offset++] = '.';
-            buf.base[offset++] = '0' + (0x100 <= req->version && req->version <= 0x109 ? req->version - 0x100 : 0);
-        } else {
-            buf.base[offset++] = '2';
-        }
-        buf.base[offset++] = ' ';
-        APPEND(req->input.authority.base, req->input.authority.len);
-        APPEND_STRLIT("\r\n");
+    FLATTEN_PREFIXED_VALUE("x-forwarded-proto: ", req->input.scheme->name, 0);
+    buf.base[offset++] = '\r';
+    buf.base[offset++] = '\n';
+    if (remote_addr_len != SIZE_MAX) {
+        FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, remote_addr_len);
+        APPEND(remote_addr, remote_addr_len);
+    } else {
+        FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, 0);
     }
-    APPEND_STRLIT("\r\n");
+    buf.base[offset++] = '\r';
+    buf.base[offset++] = '\n';
+    FLATTEN_PREFIXED_VALUE("via: ", via_buf, sizeof("1.1 ") - 1 + req->input.authority.len);
+    if (req->version < 0x200) {
+        buf.base[offset++] = '1';
+        buf.base[offset++] = '.';
+        buf.base[offset++] = '0' + (0x100 <= req->version && req->version <= 0x109 ? req->version - 0x100 : 0);
+    } else {
+        buf.base[offset++] = '2';
+    }
+    buf.base[offset++] = ' ';
+    APPEND(req->input.authority.base, req->input.authority.len);
+    APPEND_STRLIT("\r\n\r\n");
 
 #undef RESERVE
 #undef APPEND
@@ -265,6 +263,19 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
 
     h2o_doublebuffer_consume(&self->sending);
     do_send(self);
+}
+
+static void on_websocket_upgrade_complete(void *_proxy_sock, h2o_socket_t *sock, size_t reqsize)
+{
+    h2o_socket_t *proxy_sock = _proxy_sock;
+    h2o_tunnel_establish(sock, proxy_sock);
+}
+
+static inline void on_websocket_upgrade(struct rp_generator_t *self)
+{
+    h2o_req_t *req = self->src_req;
+    h2o_socket_t *sock = h2o_http1client_steal_socket(self->client);
+    h2o_http1_upgrade(req, NULL, 0, on_websocket_upgrade_complete, sock);
 }
 
 static int on_body(h2o_http1client_t *client, const char *errstr)
@@ -351,7 +362,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 
     if (self->is_websocket_handshake && req->res.status == 101) {
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, H2O_STRLIT("websocket"));
-        h2o_websocket_proxy_hs_success(req, h2o_http1client_steal_socket(self->client));
+        on_websocket_upgrade(self);
         self->client = NULL;
         return NULL;
     }

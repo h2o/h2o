@@ -206,7 +206,7 @@ SET(LIB_SOURCE_FILES
 
     lib/http1.c
 
-    lib/websocket_proxy.c
+    lib/tunnel.c
 
     lib/http2/casper.c
     lib/http2/connection.c
