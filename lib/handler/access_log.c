@@ -21,6 +21,7 @@
  */
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <spawn.h>
@@ -35,11 +36,13 @@
 
 enum {
     ELEMENT_TYPE_EMPTY,             /* empty element (with suffix only) */
+    ELEMENT_TYPE_LOCAL_ADDR,        /* %A */
     ELEMENT_TYPE_BYTES_SENT,        /* %b */
     ELEMENT_TYPE_PROTOCOL,          /* %H */
     ELEMENT_TYPE_REMOTE_ADDR,       /* %h */
     ELEMENT_TYPE_LOGNAME,           /* %l */
     ELEMENT_TYPE_METHOD,            /* %m */
+    ELEMENT_TYPE_LOCAL_PORT,        /* %p */
     ELEMENT_TYPE_QUERY,             /* %q */
     ELEMENT_TYPE_REQUEST_LINE,      /* %r */
     ELEMENT_TYPE_STATUS,            /* %s */
@@ -146,11 +149,13 @@ static struct log_element_t *compile_log_format(const char *fmt, size_t *_num_el
     case ch:                                                                                                                       \
         type = ty;                                                                                                                 \
         break
+                    TYPE_MAP('A', ELEMENT_TYPE_LOCAL_ADDR);
                     TYPE_MAP('b', ELEMENT_TYPE_BYTES_SENT);
                     TYPE_MAP('H', ELEMENT_TYPE_PROTOCOL);
                     TYPE_MAP('h', ELEMENT_TYPE_REMOTE_ADDR);
                     TYPE_MAP('l', ELEMENT_TYPE_LOGNAME);
                     TYPE_MAP('m', ELEMENT_TYPE_METHOD);
+                    TYPE_MAP('p', ELEMENT_TYPE_LOCAL_PORT);
                     TYPE_MAP('q', ELEMENT_TYPE_QUERY);
                     TYPE_MAP('r', ELEMENT_TYPE_REQUEST_LINE);
                     TYPE_MAP('s', ELEMENT_TYPE_STATUS);
@@ -213,6 +218,43 @@ static char *append_unsafe_string(char *pos, const char *src, size_t len)
     return pos;
 }
 
+static char *append_addr(char *pos, socklen_t (*cb)(h2o_conn_t *conn, struct sockaddr *sa), h2o_conn_t *conn)
+{
+    struct sockaddr_storage ss;
+    socklen_t sslen;
+
+    if ((sslen = cb(conn, (void *)&ss)) == 0)
+        goto Fail;
+    size_t l = h2o_socket_getnumerichost((void *)&ss, sslen, pos);
+    if (l == SIZE_MAX)
+        goto Fail;
+    pos += l;
+    return pos;
+
+Fail:
+    *pos++ = '-';
+    return pos;
+}
+
+static char *append_port(char *pos, socklen_t (*cb)(h2o_conn_t *conn, struct sockaddr *sa), h2o_conn_t *conn)
+{
+    struct sockaddr_storage ss;
+    socklen_t sslen;
+
+    if ((sslen = cb(conn, (void *)&ss)) == 0)
+        goto Fail;
+    int32_t port = h2o_socket_getport((void *)&ss);
+    if (port == -1)
+        goto Fail;
+    pos += sprintf(pos, "%" PRIu16, (uint16_t)port);
+    return pos;
+
+Fail:
+    *pos++ = '-';
+    return pos;
+}
+
+
 static char *expand_line_buf(char *line, size_t cur_size, size_t required)
 {
     size_t new_size = cur_size;
@@ -263,6 +305,10 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
         case ELEMENT_TYPE_EMPTY:
             RESERVE(0);
             break;
+        case ELEMENT_TYPE_LOCAL_ADDR: /* %A */
+            RESERVE(NI_MAXHOST);
+            pos = append_addr(pos, req->conn->get_sockname, req->conn);
+            break;
         case ELEMENT_TYPE_BYTES_SENT: /* %b */
             RESERVE(sizeof("18446744073709551615") - 1);
             pos += sprintf(pos, "%llu", (unsigned long long)req->bytes_sent);
@@ -271,24 +317,17 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             RESERVE(sizeof("HTTP/1.1"));
             pos += h2o_stringify_protocol_version(pos, req->version);
             break;
-        case ELEMENT_TYPE_REMOTE_ADDR: /* %h */ {
-            struct sockaddr_storage ss;
-            socklen_t sslen;
-            if ((sslen = req->conn->get_peername(req->conn, (void *)&ss)) != 0) {
-                RESERVE(NI_MAXHOST);
-                size_t l = h2o_socket_getnumerichost((void *)&ss, sslen, pos);
-                if (l != SIZE_MAX)
-                    pos += l;
-                else
-                    *pos++ = '-';
-            } else {
-                RESERVE(1);
-                *pos++ = '-';
-            }
-        } break;
+        case ELEMENT_TYPE_REMOTE_ADDR: /* %h */
+            RESERVE(NI_MAXHOST);
+            pos = append_addr(pos, req->conn->get_peername, req->conn);
+            break;
         case ELEMENT_TYPE_METHOD: /* %m */
             RESERVE(req->input.method.len * 4);
             pos = append_unsafe_string(pos, req->input.method.base, req->input.method.len);
+            break;
+        case ELEMENT_TYPE_LOCAL_PORT: /* %p */
+            RESERVE(sizeof("65535") - 1);
+            pos = append_port(pos, req->conn->get_sockname, req->conn);
             break;
         case ELEMENT_TYPE_QUERY: /* %q */
             if (req->input.query_at != SIZE_MAX) {
