@@ -70,8 +70,8 @@ subtest 'ltsv-related' => sub {
             system("curl --silent http://127.0.0.1:$server->{port}/query?abc=d > /dev/null");
         },
         '%m::%U%q::%H::%V::%v',
-        qr{^GET::http://127\.0\.0\.1:[0-9]+/::HTTP/1\.1::127\.0\.0\.1:[0-9]+::default$},
-        qr{^GET::http://127\.0\.0\.1:[0-9]+/query\?abc=d::HTTP/1\.1::127\.0\.0\.1:[0-9]+::default$},
+        qr{^GET::/::HTTP/1\.1::127\.0\.0\.1:[0-9]+::default$},
+        qr{^GET::/query\?abc=d::HTTP/1\.1::127\.0\.0\.1:[0-9]+::default$},
     );
 };
 
