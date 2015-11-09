@@ -35,11 +35,11 @@ const h2o_http2_priority_t h2o_http2_default_priority = {
 };
 
 const h2o_http2_settings_t H2O_HTTP2_SETTINGS_HOST = {
-    4096,   /* header_table_size */
-    0,      /* enable_push (clients are never allowed to initiate server push; RFC 7540 Section 8.2) */
-    100,    /* max_concurrent_streams */
-    262144, /* initial_window_size */
-    16384   /* max_frame_size */
+    4096,     /* header_table_size */
+    0,        /* enable_push (clients are never allowed to initiate server push; RFC 7540 Section 8.2) */
+    100,      /* max_concurrent_streams */
+    16777216, /* initial_window_size */
+    16384     /* max_frame_size */
 };
 
 static const h2o_iovec_t SETTINGS_HOST_BIN = {H2O_STRLIT("\x00\x00\x0c"     /* frame size */
@@ -49,7 +49,7 @@ static const h2o_iovec_t SETTINGS_HOST_BIN = {H2O_STRLIT("\x00\x00\x0c"     /* f
                                                          "\x00\x03"
                                                          "\x00\x00\x00\x64" /* max_concurrent_streams = 100 */
                                                          "\x00\x04"
-                                                         "\x00\x04\x00\x00" /* initial_window_size = 262144 */
+                                                         "\x01\x00\x00\x00" /* initial_window_size = 16777216 */
                                                          )};
 
 static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
