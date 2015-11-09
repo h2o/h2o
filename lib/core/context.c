@@ -162,7 +162,7 @@ void h2o_context_request_shutdown(h2o_context_t *ctx)
         ctx->globalconf->http2.callbacks.request_shutdown(ctx);
 }
 
-void h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts)
+struct timeval *h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts)
 {
     uint64_t now = h2o_now(ctx->loop);
     struct tm gmt;
@@ -182,7 +182,11 @@ void h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t
         }
     }
 
-    ts->at = ctx->_timestamp_cache.tv_at;
-    h2o_mem_link_shared(pool, ctx->_timestamp_cache.value);
-    ts->str = ctx->_timestamp_cache.value;
+    if (ts != NULL) {
+        ts->at = ctx->_timestamp_cache.tv_at;
+        h2o_mem_link_shared(pool, ctx->_timestamp_cache.value);
+        ts->str = ctx->_timestamp_cache.value;
+    }
+
+    return &ctx->_timestamp_cache.tv_at;
 }

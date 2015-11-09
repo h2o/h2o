@@ -682,6 +682,15 @@ struct st_h2o_req_t {
      */
     h2o_timestamp_t processed_at;
     /**
+     * additional timestamps
+     */
+    struct {
+        struct timeval request_begin_at;
+        struct timeval request_body_begin_at;
+        struct timeval response_start_at;
+        struct timeval response_end_at;
+    } timestamps;
+    /**
      * the response
      */
     h2o_res_t res;
@@ -985,10 +994,11 @@ void h2o_context_dispose_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pa
 /**
  * returns current timestamp
  * @param ctx the context
- * @param pool memory pool
- * @param ts buffer to store the timestamp
+ * @param pool memory pool (used when ts != NULL)
+ * @param ts buffer to store the timestamp (optional)
+ * @return current time in UTC
  */
-void h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts);
+struct timeval *h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts);
 /**
  * returns per-module context set
  */

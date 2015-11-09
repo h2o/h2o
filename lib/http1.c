@@ -384,6 +384,10 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
     ssize_t entity_body_header_index;
     h2o_iovec_t expect;
 
+    /* need to set request_begin_at here for keep-alive connection */
+    if (conn->req.timestamps.request_begin_at.tv_sec == 0)
+        conn->req.timestamps.request_begin_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
+
     reqlen = phr_parse_request(conn->sock->input->bytes, inreqlen, (const char **)&conn->req.input.method.base,
                                &conn->req.input.method.len, (const char **)&conn->req.input.path.base, &conn->req.input.path.len,
                                &minor_version, headers, &num_headers, conn->_prevreqlen);
@@ -393,6 +397,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
     default: // parse complete
         conn->_reqsize = reqlen;
         if ((entity_body_header_index = fixup_request(conn, headers, num_headers, minor_version, &expect)) != -1) {
+            conn->req.timestamps.request_body_begin_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
             if (expect.base != NULL) {
                 if (!h2o_lcstris(expect.base, expect.len, H2O_STRLIT("100-continue"))) {
                     set_timeout(conn, NULL, NULL);
@@ -503,6 +508,8 @@ static void on_send_complete(h2o_socket_t *sock, int status)
     struct st_h2o_http1_conn_t *conn = sock->data;
 
     assert(conn->req._ostr_top == &conn->_ostr_final.super);
+
+    conn->req.timestamps.response_end_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
 
     if (!conn->req.http1_is_persistent) {
         /* TODO use lingering close */
@@ -626,6 +633,8 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
     assert(conn->req._ostr_top == &conn->_ostr_final.super);
     assert(!conn->_ostr_final.sent_headers);
 
+    conn->req.timestamps.response_start_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
+
     /* register the pull callback */
     conn->_ostr_final.pull.cb = cb;
 
@@ -657,6 +666,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
     assert(self == &conn->_ostr_final);
 
     if (!self->sent_headers) {
+        conn->req.timestamps.response_start_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
         /* build headers and send */
         const char *connection = req->http1_is_persistent ? "keep-alive" : "close";
         bufs[bufcnt].base = h2o_mem_alloc_pool(
@@ -703,6 +713,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
     sock->data = conn;
 
     init_request(conn, 0);
+    conn->req.timestamps.request_begin_at = *h2o_get_timestamp(ctx->ctx, NULL, NULL);
     reqread_start(conn);
 }
 
