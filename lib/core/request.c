@@ -184,6 +184,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
         req->headers.size = src->headers.size;
         req->entity = src->entity;
         req->http1_is_persistent = src->http1_is_persistent;
+        req->timestamps = src->timestamps;
         if (src->upgrade.base != NULL) {
             COPY(upgrade);
         } else {

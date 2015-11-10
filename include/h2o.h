@@ -544,6 +544,10 @@ struct st_h2o_conn_t {
      */
     h2o_hostconf_t **hosts;
     /**
+     * time when the connection was established
+     */
+    struct timeval connected_at;
+    /**
      * getsockname (return size of the obtained address, or 0 if failed)
      */
     socklen_t (*get_sockname)(h2o_conn_t *conn, struct sockaddr *sa);
@@ -681,6 +685,15 @@ struct st_h2o_req_t {
      * timestamp when the request was processed
      */
     h2o_timestamp_t processed_at;
+    /**
+     * additional timestamps
+     */
+    struct {
+        struct timeval request_begin_at;
+        struct timeval request_body_begin_at;
+        struct timeval response_start_at;
+        struct timeval response_end_at;
+    } timestamps;
     /**
      * the response
      */
@@ -985,10 +998,12 @@ void h2o_context_dispose_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pa
 /**
  * returns current timestamp
  * @param ctx the context
- * @param pool memory pool
- * @param ts buffer to store the timestamp
+ * @param pool memory pool (used when ts != NULL)
+ * @param ts buffer to store the timestamp (optional)
+ * @return current time in UTC
  */
-void h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts);
+static struct timeval *h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts);
+void h2o_context_update_timestamp_cache(h2o_context_t *ctx);
 /**
  * returns per-module context set
  */
@@ -1334,6 +1349,23 @@ inline void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostre
         next = req->pathconf->filters.entries[++req->_ostr_init_index];
         next->on_setup_ostream(next, req, slot);
     }
+}
+
+inline struct timeval *h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts)
+{
+    uint64_t now = h2o_now(ctx->loop);
+
+    if (ctx->_timestamp_cache.uv_now_at != now) {
+        h2o_context_update_timestamp_cache(ctx);
+    }
+
+    if (ts != NULL) {
+        ts->at = ctx->_timestamp_cache.tv_at;
+        h2o_mem_link_shared(pool, ctx->_timestamp_cache.value);
+        ts->str = ctx->_timestamp_cache.value;
+    }
+
+    return &ctx->_timestamp_cache.tv_at;
 }
 
 inline void *h2o_context_get_handler_context(h2o_context_t *ctx, h2o_handler_t *handler)
