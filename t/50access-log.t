@@ -51,6 +51,28 @@ subtest "custom-log" => sub {
     );
 };
 
+subtest "strftime" => sub {
+    doit(
+        sub {
+            my $server = shift;
+            system("curl --silent http://127.0.0.1:$server->{port}/ > /dev/null");
+        },
+        '%{%Y-%m-%dT%H:%M:%S}t',
+        qr{^20[0-9]{2}-(?:0[0-9]|1[12])-(?:[012][0-9]|3[01])T[0-9]{2}:[0-9]{2}:[0-9]{2}$},
+    );
+};
+
+subtest "strftime-special" => sub {
+    doit(
+        sub {
+            my $server = shift;
+            system("curl --silent http://127.0.0.1:$server->{port}/ > /dev/null");
+        },
+        '%{msec_frac}t::%{usec_frac}t::%{sec}t::%{msec}t::%{usec}t',
+        qr{^([0-9]{3})::(\1[0-9]{3})::([0-9]+)::\3\1::\3\2$},
+    );
+};
+
 subtest "more-fields" => sub {
     doit(
         sub {
