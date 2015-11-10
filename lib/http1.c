@@ -715,7 +715,6 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     sock->data = conn;
 
     init_request(conn, 0);
-    conn->req.timestamps.request_begin_at = *h2o_get_timestamp(ctx->ctx, NULL, NULL);
     reqread_start(conn);
 }
 
