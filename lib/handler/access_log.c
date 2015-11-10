@@ -35,34 +35,40 @@
 #define LOG_ALLOCA_SIZE 4096
 
 enum {
-    ELEMENT_TYPE_EMPTY,               /* empty element (with suffix only) */
-    ELEMENT_TYPE_LOCAL_ADDR,          /* %A */
-    ELEMENT_TYPE_BYTES_SENT,          /* %b */
-    ELEMENT_TYPE_PROTOCOL,            /* %H */
-    ELEMENT_TYPE_REMOTE_ADDR,         /* %h */
-    ELEMENT_TYPE_LOGNAME,             /* %l */
-    ELEMENT_TYPE_METHOD,              /* %m */
-    ELEMENT_TYPE_LOCAL_PORT,          /* %p */
-    ELEMENT_TYPE_QUERY,               /* %q */
-    ELEMENT_TYPE_REQUEST_LINE,        /* %r */
-    ELEMENT_TYPE_STATUS,              /* %s */
-    ELEMENT_TYPE_TIMESTAMP,           /* %t */
-    ELEMENT_TYPE_URL_PATH,            /* %U */
-    ELEMENT_TYPE_REMOTE_USER,         /* %u */
-    ELEMENT_TYPE_AUTHORITY,           /* %V */
-    ELEMENT_TYPE_HOSTCONF,            /* %v */
-    ELEMENT_TYPE_IN_HEADER_TOKEN,     /* %{data.header_token}i */
-    ELEMENT_TYPE_IN_HEADER_STRING,    /* %{data.name}i */
-    ELEMENT_TYPE_OUT_HEADER_TOKEN,    /* %{data.header_token}o */
-    ELEMENT_TYPE_OUT_HEADER_STRING,   /* %{data.name}o */
-    ELEMENT_TYPE_EXTENDED_VAR,        /* %{data.name}x */
-    ELEMENT_TYPE_CONNECT_TIME,        /* %{connect-time}x */
-    ELEMENT_TYPE_REQUEST_HEADER_TIME, /* %{request-header-time}x */
-    ELEMENT_TYPE_REQUEST_BODY_TIME,   /* %{request-body-time}x */
-    ELEMENT_TYPE_REQUEST_TOTAL_TIME,  /* %{request-total-time}x */
-    ELEMENT_TYPE_PROCESS_TIME,        /* %{process-time}x */
-    ELEMENT_TYPE_RESPONSE_TIME,       /* %{response-total-time}x */
-    ELEMENT_TYPE_DURATION,            /* %{duration}x */
+    ELEMENT_TYPE_EMPTY,                      /* empty element (with suffix only) */
+    ELEMENT_TYPE_LOCAL_ADDR,                 /* %A */
+    ELEMENT_TYPE_BYTES_SENT,                 /* %b */
+    ELEMENT_TYPE_PROTOCOL,                   /* %H */
+    ELEMENT_TYPE_REMOTE_ADDR,                /* %h */
+    ELEMENT_TYPE_LOGNAME,                    /* %l */
+    ELEMENT_TYPE_METHOD,                     /* %m */
+    ELEMENT_TYPE_LOCAL_PORT,                 /* %p */
+    ELEMENT_TYPE_QUERY,                      /* %q */
+    ELEMENT_TYPE_REQUEST_LINE,               /* %r */
+    ELEMENT_TYPE_STATUS,                     /* %s */
+    ELEMENT_TYPE_TIMESTAMP,                  /* %t */
+    ELEMENT_TYPE_TIMESTAMP_STRFTIME,         /* %{...}t */
+    ELEMENT_TYPE_TIMESTAMP_SEC_SINCE_EPOCH,  /* %{sec}t */
+    ELEMENT_TYPE_TIMESTAMP_MSEC_SINCE_EPOCH, /* %{msec}t */
+    ELEMENT_TYPE_TIMESTAMP_USEC_SINCE_EPOCH, /* %{usec}t */
+    ELEMENT_TYPE_TIMESTAMP_MSEC_FRAC,        /* %{msec_frac}t */
+    ELEMENT_TYPE_TIMESTAMP_USEC_FRAC,        /* %{usec_frac}t */
+    ELEMENT_TYPE_URL_PATH,                   /* %U */
+    ELEMENT_TYPE_REMOTE_USER,                /* %u */
+    ELEMENT_TYPE_AUTHORITY,                  /* %V */
+    ELEMENT_TYPE_HOSTCONF,                   /* %v */
+    ELEMENT_TYPE_IN_HEADER_TOKEN,            /* %{data.header_token}i */
+    ELEMENT_TYPE_IN_HEADER_STRING,           /* %{data.name}i */
+    ELEMENT_TYPE_OUT_HEADER_TOKEN,           /* %{data.header_token}o */
+    ELEMENT_TYPE_OUT_HEADER_STRING,          /* %{data.name}o */
+    ELEMENT_TYPE_EXTENDED_VAR,               /* %{data.name}x */
+    ELEMENT_TYPE_CONNECT_TIME,               /* %{connect-time}x */
+    ELEMENT_TYPE_REQUEST_HEADER_TIME,        /* %{request-header-time}x */
+    ELEMENT_TYPE_REQUEST_BODY_TIME,          /* %{request-body-time}x */
+    ELEMENT_TYPE_REQUEST_TOTAL_TIME,         /* %{request-total-time}x */
+    ELEMENT_TYPE_PROCESS_TIME,               /* %{process-time}x */
+    ELEMENT_TYPE_RESPONSE_TIME,              /* %{response-total-time}x */
+    ELEMENT_TYPE_DURATION,                   /* %{duration}x */
     NUM_ELEMENT_TYPES
 };
 
@@ -135,6 +141,23 @@ static struct log_element_t *compile_log_format(const char *fmt, size_t *_num_el
                         elements[num_elements - 1].data.name = name;
                     }
                 } break;
+                case 't':
+                    if (h2o_memis(pt, quote_end - pt, H2O_STRLIT("sec"))) {
+                        NEW_ELEMENT(ELEMENT_TYPE_TIMESTAMP_SEC_SINCE_EPOCH);
+                    } else if (h2o_memis(pt, quote_end - pt, H2O_STRLIT("msec"))) {
+                        NEW_ELEMENT(ELEMENT_TYPE_TIMESTAMP_MSEC_SINCE_EPOCH);
+                    } else if (h2o_memis(pt, quote_end - pt, H2O_STRLIT("usec"))) {
+                        NEW_ELEMENT(ELEMENT_TYPE_TIMESTAMP_USEC_SINCE_EPOCH);
+                    } else if (h2o_memis(pt, quote_end - pt, H2O_STRLIT("msec_frac"))) {
+                        NEW_ELEMENT(ELEMENT_TYPE_TIMESTAMP_MSEC_FRAC);
+                    } else if (h2o_memis(pt, quote_end - pt, H2O_STRLIT("usec_frac"))) {
+                        NEW_ELEMENT(ELEMENT_TYPE_TIMESTAMP_USEC_FRAC);
+                    } else {
+                        h2o_iovec_t name = h2o_strdup(NULL, pt, quote_end - pt);
+                        NEW_ELEMENT(ELEMENT_TYPE_TIMESTAMP_STRFTIME);
+                        elements[num_elements - 1].data.name = name;
+                    }
+                    break;
                 case 'x':
                     if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT("connect-time"))) {
                         NEW_ELEMENT(ELEMENT_TYPE_CONNECT_TIME);
@@ -333,6 +356,7 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
     h2o_access_log_filehandle_t *fh = self->fh;
     char *line, *pos, *line_end;
     size_t element_index;
+    struct tm localt = {};
 
     /* note: LOG_ALLOCA_SIZE should be much greater than NI_MAXHOST to avoid unnecessary reallocations */
     line = alloca(LOG_ALLOCA_SIZE);
@@ -405,8 +429,40 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             pos = append_safe_string(pos, req->processed_at.str->log, H2O_TIMESTR_LOG_LEN);
             *pos++ = ']';
             break;
-        case ELEMENT_TYPE_URL_PATH: /* %U */
-        {
+        case ELEMENT_TYPE_TIMESTAMP_STRFTIME: /* %{...}t */ {
+            size_t bufsz, len;
+            if (localt.tm_year == 0)
+                localtime_r(&req->processed_at.at.tv_sec, &localt);
+            for (bufsz = 128;; bufsz *= 2) {
+                RESERVE(bufsz);
+                if ((len = strftime(pos, bufsz, element->data.name.base, &localt)) != 0)
+                    break;
+            }
+            pos += len;
+        } break;
+        case ELEMENT_TYPE_TIMESTAMP_SEC_SINCE_EPOCH: /* %{sec}t */
+            RESERVE(sizeof("4294967295") - 1);
+            pos += sprintf(pos, "%" PRIu32, (uint32_t)req->processed_at.at.tv_sec);
+            break;
+        case ELEMENT_TYPE_TIMESTAMP_MSEC_SINCE_EPOCH: /* %{msec}t */
+            RESERVE(sizeof("18446744073709551615") - 1);
+            pos += sprintf(pos, "%" PRIu64,
+                           (uint64_t)req->processed_at.at.tv_sec * 1000 + (uint64_t)req->processed_at.at.tv_usec / 1000);
+            break;
+        case ELEMENT_TYPE_TIMESTAMP_USEC_SINCE_EPOCH: /* %{usec}t */
+            RESERVE(sizeof("18446744073709551615") - 1);
+            pos +=
+                sprintf(pos, "%" PRIu64, (uint64_t)req->processed_at.at.tv_sec * 1000000 + (uint64_t)req->processed_at.at.tv_usec);
+            break;
+        case ELEMENT_TYPE_TIMESTAMP_MSEC_FRAC: /* %{msec_frac}t */
+            RESERVE(3);
+            pos += sprintf(pos, "%03u", (unsigned)(req->processed_at.at.tv_usec / 1000));
+            break;
+        case ELEMENT_TYPE_TIMESTAMP_USEC_FRAC: /* %{usec_frac}t */
+            RESERVE(6);
+            pos += sprintf(pos, "%06u", (unsigned)req->processed_at.at.tv_usec);
+            break;
+        case ELEMENT_TYPE_URL_PATH: /* %U */ {
             size_t path_len = req->input.query_at == SIZE_MAX ? req->input.path.len : req->input.query_at;
             RESERVE(path_len * 4);
             pos = append_unsafe_string(pos, req->input.path.base, path_len);
@@ -420,8 +476,8 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             pos = append_unsafe_string(pos, req->hostconf->authority.hostport.base, req->hostconf->authority.hostport.len);
             break;
 
-        case ELEMENT_TYPE_LOGNAME:     /* %l */
-        case ELEMENT_TYPE_REMOTE_USER: /* %u */
+        case ELEMENT_TYPE_LOGNAME:      /* %l */
+        case ELEMENT_TYPE_REMOTE_USER:  /* %u */
         case ELEMENT_TYPE_EXTENDED_VAR: /* %{...}x */
             RESERVE(1);
             *pos++ = '-';
