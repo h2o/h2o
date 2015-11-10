@@ -133,7 +133,7 @@ static void process_request(struct st_h2o_http1_conn_t *conn)
         (conn->req.upgrade.len == 3 ||
          (conn->req.upgrade.len == 6 && (memcmp(conn->req.upgrade.base + 3, H2O_STRLIT("-14")) == 0 ||
                                          memcmp(conn->req.upgrade.base + 3, H2O_STRLIT("-16")) == 0)))) {
-        if (h2o_http2_handle_upgrade(&conn->req) == 0) {
+        if (h2o_http2_handle_upgrade(&conn->req, conn->super.connected_at) == 0) {
             return;
         }
     }
@@ -438,11 +438,12 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             if (conn->sock->input->size >= HTTP2_SIG.len && memcmp(conn->sock->input->bytes, HTTP2_SIG.base, HTTP2_SIG.len) == 0) {
                 h2o_accept_ctx_t accept_ctx = {conn->super.ctx, conn->super.hosts};
                 h2o_socket_t *sock = conn->sock;
+                struct timeval connected_at = conn->super.connected_at;
                 /* destruct the connection after detatching the socket */
                 conn->sock = NULL;
                 close_connection(conn);
                 /* and accept as http2 connection */
-                h2o_http2_accept(&accept_ctx, sock);
+                h2o_http2_accept(&accept_ctx, sock, connected_at);
                 return;
             }
         }
@@ -697,7 +698,7 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
     return h2o_socket_getpeername(conn->sock, sa);
 }
 
-void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
+void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
     struct st_h2o_http1_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
@@ -707,6 +708,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
     /* init properties that need to be non-zero */
     conn->super.ctx = ctx->ctx;
     conn->super.hosts = ctx->hosts;
+    conn->super.connected_at = connected_at;
     conn->super.get_sockname = get_sockname;
     conn->super.get_peername = get_peername;
     conn->sock = sock;

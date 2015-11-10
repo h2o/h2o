@@ -544,6 +544,10 @@ struct st_h2o_conn_t {
      */
     h2o_hostconf_t **hosts;
     /**
+     * time when the connection was established
+     */
+    struct timeval connected_at;
+    /**
      * getsockname (return size of the obtained address, or 0 if failed)
      */
     socklen_t (*get_sockname)(h2o_conn_t *conn, struct sockaddr *sa);

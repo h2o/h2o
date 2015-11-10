@@ -975,7 +975,7 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
     return h2o_socket_getpeername(conn->sock, sa);
 }
 
-static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock)
+static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, struct timeval connected_at)
 {
     h2o_http2_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
@@ -983,6 +983,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     memset(conn, 0, sizeof(*conn));
     conn->super.ctx = ctx;
     conn->super.hosts = hosts;
+    conn->super.connected_at = connected_at;
     conn->super.get_sockname = get_sockname;
     conn->super.get_peername = get_peername;
     conn->sock = sock;
@@ -1053,9 +1054,9 @@ void h2o_http2_conn_push_path(h2o_http2_conn_t *conn, h2o_iovec_t path, h2o_http
         h2o_http2_stream_send_push_promise(conn, stream);
 }
 
-void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
+void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
-    h2o_http2_conn_t *conn = create_conn(ctx->ctx, ctx->hosts, sock);
+    h2o_http2_conn_t *conn = create_conn(ctx->ctx, ctx->hosts, sock, connected_at);
     sock->data = conn;
     h2o_socket_read_start(conn->sock, on_read);
     update_idle_timeout(conn);
@@ -1063,9 +1064,9 @@ void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
         on_read(sock, 0);
 }
 
-int h2o_http2_handle_upgrade(h2o_req_t *req)
+int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
 {
-    h2o_http2_conn_t *http2conn = create_conn(req->conn->ctx, req->conn->hosts, NULL);
+    h2o_http2_conn_t *http2conn = create_conn(req->conn->ctx, req->conn->hosts, NULL, connected_at);
     h2o_http2_stream_t *stream;
     ssize_t connection_index, settings_index;
     h2o_iovec_t settings_decoded;

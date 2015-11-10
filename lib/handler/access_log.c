@@ -56,6 +56,7 @@ enum {
     ELEMENT_TYPE_OUT_HEADER_TOKEN,    /* %{data.header_token}o */
     ELEMENT_TYPE_OUT_HEADER_STRING,   /* %{data.name}o */
     ELEMENT_TYPE_EXTENDED_VAR,        /* %{data.name}x */
+    ELEMENT_TYPE_CONNECT_TIME,        /* %{connect-time}x */
     ELEMENT_TYPE_REQUEST_HEADER_TIME, /* %{request-header-time}x */
     ELEMENT_TYPE_REQUEST_BODY_TIME,   /* %{request-body-time}x */
     ELEMENT_TYPE_REQUEST_TOTAL_TIME,  /* %{request-total-time}x */
@@ -135,7 +136,9 @@ static struct log_element_t *compile_log_format(const char *fmt, size_t *_num_el
                     }
                 } break;
                 case 'x':
-                    if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT("request-total-time"))) {
+                    if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT("connect-time"))) {
+                        NEW_ELEMENT(ELEMENT_TYPE_CONNECT_TIME);
+                    } else if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT("request-total-time"))) {
                         NEW_ELEMENT(ELEMENT_TYPE_REQUEST_TOTAL_TIME);
                     } else if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT("request-header-time"))) {
                         NEW_ELEMENT(ELEMENT_TYPE_REQUEST_HEADER_TIME);
@@ -453,6 +456,11 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
                         h2o_find_header_by_str(&req->res.headers, element->data.name.base, element->data.name.len, SIZE_MAX));
             break;
 #undef EMIT_HEADER
+
+        case ELEMENT_TYPE_CONNECT_TIME:
+            RESERVE(DURATION_MAX_LEN);
+            pos = append_duration(pos, &req->conn->connected_at, &req->timestamps.request_begin_at);
+            break;
 
         case ELEMENT_TYPE_REQUEST_HEADER_TIME:
             RESERVE(DURATION_MAX_LEN);
