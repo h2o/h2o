@@ -42,6 +42,12 @@ struct rp_generator_t {
     int is_websocket_handshake;
 };
 
+struct rp_ws_upgrade_info_t {
+    h2o_context_t *ctx;
+    uint64_t timeout;
+    h2o_socket_t *client_sock;
+};
+
 static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, size_t location_len, h2o_url_t *match,
                                     const h2o_url_scheme_t *req_scheme, h2o_iovec_t req_authority, h2o_iovec_t req_basepath)
 {
@@ -265,17 +271,22 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
     do_send(self);
 }
 
-static void on_websocket_upgrade_complete(void *_proxy_sock, h2o_socket_t *sock, size_t reqsize)
+static void on_websocket_upgrade_complete(void *_info, h2o_socket_t *sock, size_t reqsize)
 {
-    h2o_socket_t *proxy_sock = _proxy_sock;
-    h2o_tunnel_establish(sock, proxy_sock);
+    struct rp_ws_upgrade_info_t *info = _info;
+    h2o_tunnel_establish(info->ctx, info->timeout, sock, info->client_sock);
+    free(info);
 }
 
 static inline void on_websocket_upgrade(struct rp_generator_t *self)
 {
     h2o_req_t *req = self->src_req;
     h2o_socket_t *sock = h2o_http1client_steal_socket(self->client);
-    h2o_http1_upgrade(req, NULL, 0, on_websocket_upgrade_complete, sock);
+    struct rp_ws_upgrade_info_t *info = h2o_mem_alloc(sizeof(*info));
+    info->client_sock = sock;
+    info->timeout = req->overrides->websocket.timeout;
+    info->ctx = req->conn->ctx;
+    h2o_http1_upgrade(req, NULL, 0, on_websocket_upgrade_complete, info);
 }
 
 static int on_body(h2o_http1client_t *client, const char *errstr)
@@ -415,8 +426,8 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, int keepalive)
     self->super.proceed = do_proceed;
     self->super.stop = do_close;
     self->src_req = req;
-    if (req->upgrade.base != NULL && req->upgrade.len == sizeof("websocket") - 1 &&
-        h2o_lcstris(req->upgrade.base, sizeof("websocket") - 1, H2O_STRLIT("websocket"))) {
+    if (req->overrides->websocket.enabled && req->upgrade.base != NULL && req->upgrade.len == sizeof("websocket") - 1
+        && h2o_lcstris(req->upgrade.base, sizeof("websocket") - 1, H2O_STRLIT("websocket"))) {
         self->is_websocket_handshake = 1;
         self->up_req.bufs[0] = build_request(req, keepalive, 1);
     } else {

@@ -48,6 +48,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     overrides->location_rewrite.match = &self->upstream;
     overrides->location_rewrite.path_prefix = req->pathconf->path;
     overrides->client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
+    overrides->websocket.enabled = self->config.websocket.enabled;
+    overrides->websocket.timeout = self->config.websocket.timeout;
 
     /* determine the scheme and authority */
     if (self->config.preserve_host) {
