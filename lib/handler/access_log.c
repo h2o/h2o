@@ -425,6 +425,7 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
 
         case ELEMENT_TYPE_LOGNAME:     /* %l */
         case ELEMENT_TYPE_REMOTE_USER: /* %u */
+        case ELEMENT_TYPE_EXTENDED_VAR: /* %{...}x */
             RESERVE(1);
             *pos++ = '-';
             break;
