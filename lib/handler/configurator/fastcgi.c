@@ -166,7 +166,7 @@ static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const
         h2o_configurator_errprintf(cmd, node, "bind(2) failed: %s", strerror(errno));
         goto Error;
     }
-    if (listen(listen_fd, SOMAXCONN) != 0) {
+    if (listen(listen_fd, H2O_SOMAXCONN) != 0) {
         h2o_configurator_errprintf(cmd, node, "listen(2) failed: %s", strerror(errno));
         goto Error;
     }

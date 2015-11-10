@@ -63,9 +63,6 @@
 #endif
 #include "standalone.h"
 
-/* simply use a large value, and let the kernel clip it to the internal max */
-#define H2O_SOMAXCONN (65535)
-
 #ifdef TCP_FASTOPEN
 #define H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE 4096
 #else
