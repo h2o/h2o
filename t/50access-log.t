@@ -75,6 +75,29 @@ subtest 'ltsv-related' => sub {
     );
 };
 
+subtest 'timings' => sub {
+    my $doit = sub {
+        my $opts = shift;
+        doit(
+            sub {
+                my $server = shift;
+                system("curl $opts --silent --data helloworld http://127.0.0.1:$server->{port}/ > /dev/null");
+                system("curl $opts --silent --insecure --data helloworld https://127.0.0.1:$server->{tls_port}/ > /dev/null");
+            },
+            '%{connect-time}x:%{request-header-time}x:%{request-body-time}x:%{response-time}x:%{request-total-time}x:%{duration}x:%{undefined}x',
+            map { qr{^[0-9\.]+:[0-9\.]+:[0-9\.]+:[0-9\.]+:[0-9\.]+:[0-9\.]+:-$} } (1..2),
+        );
+    };
+    subtest 'http1' => sub {
+        $doit->("");
+    };
+    subtest 'http2' => sub {
+        plan skip_all => "curl does not support HTTP/2"
+            unless curl_supports_http2();
+        $doit->("--http2");
+    };
+};
+
 subtest 'header-termination (issue 462)' => sub {
     doit(
         sub {
