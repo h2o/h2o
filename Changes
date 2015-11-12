@@ -1,5 +1,9 @@
 Revision history for H2O.
 
+1.5.4 2015-11-12 04:05:00+0000
+	- [access-log] do not emit protocol and authority for `%U` #586 (Kazuho Oku)
+	- [ssl] fix handshake failure with older versions of Android (2.x) #591 (Kazuho Oku)
+
 1.5.3 2015-11-06 04:30:00+0000
 	- [core] decode url-encoded character at the end of path #567 (Kazuho Oku)
 	- [access-log] fix startup failure on OSX when configured to emit to pipe #580 (Kazuho Oku)
