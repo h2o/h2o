@@ -60,6 +60,11 @@ extern "C" {
 #define H2O_MAX_TOKENS 100
 #endif
 
+#ifndef H2O_SOMAXCONN
+/* simply use a large value, and let the kernel clip it to the internal max */
+#define H2O_SOMAXCONN 65535
+#endif
+
 #define H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE (1024 * 1024 * 1024)
 #define H2O_DEFAULT_MAX_DELEGATIONS 5
 #define H2O_DEFAULT_HANDSHAKE_TIMEOUT_IN_SECS 10
