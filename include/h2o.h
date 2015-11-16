@@ -536,6 +536,17 @@ typedef struct st_h2o_res_t {
     h2o_mime_attributes_t *mime_attr;
 } h2o_res_t;
 
+typedef struct st_h2o_conn_callbacks_t {
+    /**
+     * getsockname (return size of the obtained address, or 0 if failed)
+     */
+    socklen_t (*get_sockname)(h2o_conn_t *conn, struct sockaddr *sa);
+    /**
+     * getpeername (return size of the obtained address, or 0 if failed)
+     */
+    socklen_t (*get_peername)(h2o_conn_t *conn, struct sockaddr *sa);
+} h2o_conn_callbacks_t;
+
 /**
  * basic structure of an HTTP connection (HTTP/1, HTTP/2, etc.)
  */
@@ -553,13 +564,9 @@ struct st_h2o_conn_t {
      */
     struct timeval connected_at;
     /**
-     * getsockname (return size of the obtained address, or 0 if failed)
+     * callbacks
      */
-    socklen_t (*get_sockname)(h2o_conn_t *conn, struct sockaddr *sa);
-    /**
-     * getpeername (return size of the obtained address, or 0 if failed)
-     */
-    socklen_t (*get_peername)(h2o_conn_t *conn, struct sockaddr *sa);
+    const h2o_conn_callbacks_t *callbacks;
 };
 
 typedef struct st_h2o_req_overrides_t {

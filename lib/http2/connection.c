@@ -977,6 +977,7 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
 
 static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, struct timeval connected_at)
 {
+    static const h2o_conn_callbacks_t callbacks = {get_sockname, get_peername};
     h2o_http2_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
     /* init the connection */
@@ -984,8 +985,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     conn->super.ctx = ctx;
     conn->super.hosts = hosts;
     conn->super.connected_at = connected_at;
-    conn->super.get_sockname = get_sockname;
-    conn->super.get_peername = get_peername;
+    conn->super.callbacks = &callbacks;
     conn->sock = sock;
     conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
     conn->streams = kh_init(h2o_http2_stream_t);

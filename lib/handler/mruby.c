@@ -312,7 +312,7 @@ static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value constants)
                  mrb_str_new(mrb, req->hostconf->authority.host.base, req->hostconf->authority.host.len));
     {
         mrb_value h, p;
-        stringify_address(req->conn, req->conn->get_sockname, mrb, &h, &p);
+        stringify_address(req->conn, req->conn->callbacks->get_sockname, mrb, &h, &p);
         if (!mrb_nil_p(h))
             mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_SERVER_ADDR), h);
         if (!mrb_nil_p(p))
@@ -327,7 +327,7 @@ static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value constants)
     }
     {
         mrb_value h, p;
-        stringify_address(req->conn, req->conn->get_peername, mrb, &h, &p);
+        stringify_address(req->conn, req->conn->callbacks->get_peername, mrb, &h, &p);
         if (!mrb_nil_p(h))
             mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_REMOTE_ADDR), h);
         if (!mrb_nil_p(p))

@@ -700,6 +700,7 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
 
 void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
+    static const h2o_conn_callbacks_t callbacks = {get_sockname, get_peername};
     struct st_h2o_http1_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
     /* zero-fill all properties expect req */
@@ -709,8 +710,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     conn->super.ctx = ctx->ctx;
     conn->super.hosts = ctx->hosts;
     conn->super.connected_at = connected_at;
-    conn->super.get_sockname = get_sockname;
-    conn->super.get_peername = get_peername;
+    conn->super.callbacks = &callbacks;
     conn->sock = sock;
     sock->data = conn;
 

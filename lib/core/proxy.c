@@ -92,7 +92,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive)
     h2o_iovec_t cookie_buf = {}, xff_buf = {}, via_buf = {};
 
     /* for x-f-f */
-    if ((sslen = req->conn->get_peername(req->conn, (void *)&ss)) != 0)
+    if ((sslen = req->conn->callbacks->get_peername(req->conn, (void *)&ss)) != 0)
         remote_addr_len = h2o_socket_getnumerichost((void *)&ss, sslen, remote_addr);
 
     /* build response */
