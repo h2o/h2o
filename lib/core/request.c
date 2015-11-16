@@ -489,7 +489,7 @@ void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str,
 
 int h2o_register_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len)
 {
-    if (req->version < 0x200 || req->res_is_delegated)
+    if (req->conn->callbacks->push_path == NULL || req->res_is_delegated)
         return -1;
 
     h2o_iovec_t path =
@@ -497,8 +497,6 @@ int h2o_register_push_path_in_link_header(h2o_req_t *req, const char *value, siz
     if (path.base == NULL)
         return -1;
 
-    h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->http2_push_paths, sizeof(req->http2_push_paths.entries[0]),
-                       req->http2_push_paths.size + 1);
-    req->http2_push_paths.entries[req->http2_push_paths.size++] = path;
+    req->conn->callbacks->push_path(req, path.base, path.len);
     return 0;
 }

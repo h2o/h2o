@@ -31,6 +31,7 @@ struct st_h2o_http2_casper_t {
     H2O_VECTOR(unsigned) keys;
     unsigned capacity_bits;
     unsigned remainder_bits;
+    h2o_iovec_t cookie_cache;
 };
 
 static unsigned calc_key(h2o_http2_casper_t *casper, const char *path, size_t path_len, const char *etag, size_t etag_len)
@@ -56,6 +57,7 @@ h2o_http2_casper_t *h2o_http2_casper_create(unsigned capacity_bits, unsigned rem
     memset(&casper->keys, 0, sizeof(casper->keys));
     casper->capacity_bits = capacity_bits;
     casper->remainder_bits = remainder_bits;
+    casper->cookie_cache = (h2o_iovec_t){};
 
     return casper;
 }
@@ -63,6 +65,7 @@ h2o_http2_casper_t *h2o_http2_casper_create(unsigned capacity_bits, unsigned rem
 void h2o_http2_casper_destroy(h2o_http2_casper_t *casper)
 {
     free(casper->keys.entries);
+    free(casper->cookie_cache.base);
     free(casper);
 }
 
@@ -87,6 +90,8 @@ int h2o_http2_casper_lookup(h2o_http2_casper_t *casper, const char *path, size_t
         return 0;
 
     /* we need to set a new value */
+    free(casper->cookie_cache.base);
+    casper->cookie_cache = (h2o_iovec_t){};
     h2o_vector_reserve(NULL, (void *)&casper->keys, sizeof(casper->keys.entries[0]), casper->keys.size + 1);
     memmove(casper->keys.entries + i + 1, casper->keys.entries + i, (casper->keys.size - i) * sizeof(casper->keys.entries[0]));
     ++casper->keys.size;
@@ -168,8 +173,11 @@ static size_t append_str(char *dst, const char *s, size_t l)
     return l;
 }
 
-h2o_iovec_t h2o_http2_casper_build_cookie(h2o_http2_casper_t *casper, h2o_mem_pool_t *pool)
+h2o_iovec_t h2o_http2_casper_get_cookie(h2o_http2_casper_t *casper)
 {
+    if (casper->cookie_cache.base != NULL)
+        return casper->cookie_cache;
+
     if (casper->keys.size == 0)
         return (h2o_iovec_t){};
 
@@ -184,7 +192,7 @@ h2o_iovec_t h2o_http2_casper_build_cookie(h2o_http2_casper_t *casper, h2o_mem_po
         bin_buf = h2o_mem_alloc(bin_capacity);
     }
 
-    char *header_bytes = h2o_mem_alloc_pool(pool, sizeof(COOKIE_NAME "=" COOKIE_ATTRIBUTES) - 1 + (bin_size + 3) * 4 / 3);
+    char *header_bytes = h2o_mem_alloc(sizeof(COOKIE_NAME "=" COOKIE_ATTRIBUTES) - 1 + (bin_size + 3) * 4 / 3);
     size_t header_len = 0;
 
     header_len += append_str(header_bytes + header_len, H2O_STRLIT(COOKIE_NAME "="));
@@ -194,5 +202,6 @@ h2o_iovec_t h2o_http2_casper_build_cookie(h2o_http2_casper_t *casper, h2o_mem_po
     if (bin_buf != tiny_bin_buf)
         free(bin_buf);
 
-    return h2o_iovec_init(header_bytes, header_len);
+    casper->cookie_cache = h2o_iovec_init(header_bytes, header_len);
+    return casper->cookie_cache;
 }

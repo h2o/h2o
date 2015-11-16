@@ -31,8 +31,7 @@ static size_t sz_min(size_t x, size_t y)
     return x < y ? x : y;
 }
 
-h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req,
-                                          uint32_t push_parent_stream_id)
+h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req)
 {
     h2o_http2_stream_t *stream = h2o_mem_alloc(sizeof(*stream));
 
@@ -45,7 +44,6 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
     h2o_http2_window_init(&stream->input_window, &H2O_HTTP2_SETTINGS_HOST);
     stream->_expected_content_length = SIZE_MAX;
-    stream->push.parent_stream_id = push_parent_stream_id;
 
     /* init request */
     h2o_init_request(&stream->req, &conn->super, src_req);
@@ -56,8 +54,8 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
 
     h2o_http2_conn_register_stream(conn, stream);
 
-    ++conn->num_streams.open_priority;
-    stream->_num_streams_open_slot = &conn->num_streams.open_priority;
+    ++conn->num_streams.priority.open;
+    stream->_num_streams_slot = &conn->num_streams.priority;
 
     return stream;
 }
@@ -65,7 +63,7 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     h2o_http2_conn_unregister_stream(conn, stream);
-    --*stream->_num_streams_open_slot;
+    --stream->_num_streams_slot->open;
     if (stream->_req_headers != NULL)
         h2o_buffer_dispose(&stream->_req_headers);
     if (stream->_req_body != NULL)
@@ -203,23 +201,9 @@ static int is_blocking_asset(h2o_req_t *req)
     return req->res.mime_attr->priority == H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
 }
 
-static int can_push(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
-{
-    if (!conn->peer_settings.enable_push)
-        return 0;
-    /* always allow push if casper is disabled */
-    if (stream->req.hostconf->http2.casper.capacity_bits != 0)
-        return 1;
-    /* if casper is enabled, don't push if proxy is used */
-    if (h2o_find_header(&stream->req.headers, H2O_TOKEN_X_FORWARDED_FOR, -1) != -1)
-        return 0;
-    return 1;
-}
-
 static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     h2o_timestamp_t ts;
-    size_t num_casper_entries_before_push = 0;
 
     h2o_get_timestamp(conn->super.ctx, &stream->req.pool, &ts);
 
@@ -229,16 +213,8 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
             goto CancelPush;
     }
 
-    if (stream->req.hostconf->http2.casper.capacity_bits != 0) {
-        /* extract the client-side cache fingerprint */
-        if (conn->casper == NULL)
-            h2o_http2_conn_init_casper(conn, stream->req.hostconf->http2.casper.capacity_bits);
-        size_t header_index = -1;
-        while ((header_index = h2o_find_header(&stream->req.headers, H2O_TOKEN_COOKIE, header_index)) != -1) {
-            h2o_header_t *header = stream->req.headers.entries + header_index;
-            h2o_http2_casper_consume_cookie(conn->casper, header->value.base, header->value.len);
-        }
-        num_casper_entries_before_push = h2o_http2_casper_num_entries(conn->casper);
+    /* CASPER */
+    if (conn->casper != NULL) {
         /* update casper if necessary */
         if (stream->req.hostconf->http2.casper.track_all_types || is_blocking_asset(&stream->req)) {
             ssize_t etag_index = h2o_find_header(&stream->req.headers, H2O_TOKEN_ETAG, -1);
@@ -249,6 +225,21 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
                     goto CancelPush;
             }
         }
+        /* browsers might ignore push responses, or they may process the responses in a different order than they were pushed.
+         * Therefore H2O tries to include casper cookie only in the last stream that may be received by the client, or when the
+         * value become stable; see also: https://github.com/h2o/h2o/issues/421
+         */
+        if (h2o_http2_stream_is_push(stream->stream_id)) {
+            if (!(conn->num_streams.pull.open == 0 && (conn->num_streams.push.half_closed - conn->num_streams.push.send_body) == 1))
+                goto SkipCookie;
+        } else {
+            if (conn->num_streams.push.half_closed - conn->num_streams.push.send_body != 0)
+                goto SkipCookie;
+        }
+        h2o_iovec_t cookie = h2o_http2_casper_get_cookie(conn->casper);
+        h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, cookie.base, cookie.len);
+    SkipCookie:
+        ;
     }
 
     if (h2o_http2_stream_is_push(stream->stream_id)) {
@@ -259,21 +250,10 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         if (is_blocking_asset(&stream->req))
             h2o_http2_scheduler_rebind(&stream->_refs.scheduler, &conn->scheduler, 257, 0);
     } else {
-        /* for pull, push things requested, as well as send the casper cookie if modified */
-        if (stream->req.http2_push_paths.size != 0 && can_push(conn, stream)) {
-            size_t i;
-            for (i = 0; i != stream->req.http2_push_paths.size; ++i)
-                h2o_http2_conn_push_path(conn, stream->req.http2_push_paths.entries[i], stream);
-            /* send casper cookie if it has been altered (due to the __stream itself__ or by some of the pushes) */
-            if (conn->casper != NULL && num_casper_entries_before_push != h2o_http2_casper_num_entries(conn->casper)) {
-                h2o_iovec_t cookie = h2o_http2_casper_build_cookie(conn->casper, &stream->req.pool);
-                h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, cookie.base, cookie.len);
-            }
-        }
         /* raise the priority of asset files that block rendering to highest if the user-agent is _not_ using dependency-based
          * prioritization (e.g. that of Firefox)
          */
-        if (conn->num_streams.open_priority == 0 && stream->req.hostconf->http2.reprioritize_blocking_assets &&
+        if (conn->num_streams.priority.open == 0 && stream->req.hostconf->http2.reprioritize_blocking_assets &&
             h2o_http2_scheduler_get_parent(&stream->_refs.scheduler) == &conn->scheduler && is_blocking_asset(&stream->req))
             h2o_http2_scheduler_rebind(&stream->_refs.scheduler, &conn->scheduler, 257, 0);
     }

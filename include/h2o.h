@@ -545,6 +545,10 @@ typedef struct st_h2o_conn_callbacks_t {
      * getpeername (return size of the obtained address, or 0 if failed)
      */
     socklen_t (*get_peername)(h2o_conn_t *conn, struct sockaddr *sa);
+    /**
+     * callback for server push (may be NULL)
+     */
+    void (*push_path)(h2o_req_t *req, const char *abspath, size_t abspath_len);
 } h2o_conn_callbacks_t;
 
 /**
@@ -736,10 +740,6 @@ struct st_h2o_req_t {
      */
     char res_is_delegated;
 
-    /**
-     * absolute paths to be pushed (using HTTP/2 server push)
-     */
-    H2O_VECTOR(h2o_iovec_t) http2_push_paths;
     /**
      * the Upgrade request header (or { NULL, 0 } if not available)
      */
