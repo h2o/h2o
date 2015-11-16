@@ -397,7 +397,7 @@ static int parse_rack_header(h2o_req_t *req, mrb_state *mrb, mrb_value name, mrb
             if (*eol == '\n')
                 break;
         if (h2o_memis(lcname.base, lcname.len, H2O_STRLIT("link")) &&
-            h2o_register_push_path_in_link_header(req, vstart, eol - vstart)) {
+            h2o_puth_path_in_link_header(req, vstart, eol - vstart)) {
             /* do not send the link header that is going to be pushed */
         } else {
             h2o_iovec_t vdup = h2o_strdup(&req->pool, vstart, eol - vstart);

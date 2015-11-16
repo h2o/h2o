@@ -487,7 +487,7 @@ void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str,
     h2o_reprocess_request_deferred(req, method, url.scheme, url.authority, url.path, authority_changed ? req->overrides : NULL, 1);
 }
 
-int h2o_register_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len)
+int h2o_puth_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len)
 {
     if (req->conn->callbacks->push_path == NULL || req->res_is_delegated)
         return -1;
