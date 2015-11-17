@@ -483,9 +483,13 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
     /* decode */
     if ((ret = h2o_http2_decode_headers_payload(&payload, frame, err_desc)) != 0)
         return ret;
-    if ((frame->stream_id & 1) == 0 || !(conn->pull_stream_ids.max_open < frame->stream_id)) {
+    if ((frame->stream_id & 1) == 0) {
         *err_desc = "invalid stream id in HEADERS frame";
         return H2O_HTTP2_ERROR_PROTOCOL;
+    }
+    if (!(conn->pull_stream_ids.max_open < frame->stream_id)) {
+        *err_desc = "invalid stream id in HEADERS frame";
+        return H2O_HTTP2_ERROR_STREAM_CLOSED;
     }
     if (frame->stream_id == payload.priority.dependency) {
         *err_desc = "stream cannot depend on itself";
