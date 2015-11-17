@@ -640,7 +640,7 @@ static int handle_window_update_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t 
         }
     } else {
         *err_desc = "invalid stream id in WINDOW_UPDATE frame";
-        return H2O_HTTP2_ERROR_FLOW_CONTROL;
+        return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
     resume_send(conn);
