@@ -244,6 +244,8 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     h2o_http2_scheduler_dispose(&conn->scheduler);
     assert(h2o_linklist_is_empty(&conn->_write.streams_to_proceed));
     assert(!h2o_timeout_is_linked(&conn->_write.timeout_entry));
+    if (conn->_headers_unparsed != NULL)
+        h2o_buffer_dispose(&conn->_headers_unparsed);
     if (conn->casper != NULL)
         h2o_http2_casper_destroy(conn->casper);
     h2o_linklist_unlink(&conn->_conns);
@@ -357,17 +359,17 @@ static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn, const uint
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
-    h2o_buffer_reserve(&stream->_req_headers, frame.length);
-    memcpy(stream->_req_headers->bytes + stream->_req_headers->size, frame.payload, frame.length);
-    stream->_req_headers->size += frame.length;
+    h2o_buffer_reserve(&conn->_headers_unparsed, frame.length);
+    memcpy(conn->_headers_unparsed->bytes + conn->_headers_unparsed->size, frame.payload, frame.length);
+    conn->_headers_unparsed->size += frame.length;
 
-    if (stream->_req_headers->size <= H2O_MAX_REQLEN) {
+    if (conn->_headers_unparsed->size <= H2O_MAX_REQLEN) {
         if ((frame.flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) != 0) {
-            if ((hret = handle_incoming_request(conn, stream, (const uint8_t *)stream->_req_headers->bytes,
-                                                stream->_req_headers->size, err_desc)) != 0)
+            if ((hret = handle_incoming_request(conn, stream, (const uint8_t *)conn->_headers_unparsed->bytes,
+                                                conn->_headers_unparsed->size, err_desc)) != 0)
                 ret = hret;
-            h2o_buffer_dispose(&stream->_req_headers);
-            stream->_req_headers = NULL;
+            h2o_buffer_dispose(&conn->_headers_unparsed);
+            conn->_headers_unparsed = NULL;
         }
     } else {
         /* request is too large (TODO log) */
@@ -518,10 +520,10 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
 
     if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) == 0) {
         /* request is not complete, store in buffer */
-        h2o_buffer_init(&stream->_req_headers, &h2o_socket_buffer_prototype);
-        h2o_buffer_reserve(&stream->_req_headers, payload.headers_len);
-        memcpy(stream->_req_headers->bytes, payload.headers, payload.headers_len);
-        stream->_req_headers->size = payload.headers_len;
+        h2o_buffer_init(&conn->_headers_unparsed, &h2o_socket_buffer_prototype);
+        h2o_buffer_reserve(&conn->_headers_unparsed, payload.headers_len);
+        memcpy(conn->_headers_unparsed->bytes, payload.headers, payload.headers_len);
+        conn->_headers_unparsed->size = payload.headers_len;
     } else {
         /* request is complete, handle it */
         ret = handle_incoming_request(conn, stream, payload.headers, payload.headers_len, err_desc);
