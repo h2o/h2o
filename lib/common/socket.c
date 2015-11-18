@@ -125,14 +125,12 @@ static int write_bio(BIO *b, const char *in, int len)
     h2o_socket_t *sock = b->ptr;
     void *bytes_alloced;
 
-    /* FIXME no support for SSL renegotiation (yet) */
-    if (sock->ssl->did_write_in_read != NULL) {
-        *sock->ssl->did_write_in_read = 1;
-        return -1;
-    }
-
     if (len == 0)
         return 0;
+
+    if (sock->ssl->did_write_in_read != NULL) {
+        *sock->ssl->did_write_in_read = 1;
+    }
 
     bytes_alloced = h2o_mem_alloc_pool(&sock->ssl->output.pool, len);
     memcpy(bytes_alloced, in, len);
@@ -178,6 +176,17 @@ static int free_bio(BIO *b)
     return b != NULL;
 }
 
+static void reneg_write_cb(h2o_socket_t *sock, int status)
+{
+        /* cwyang: There is nothing to do. sock-owner should handle time-out. */
+        return;
+}
+
+static void flush_pending_ssl(h2o_socket_t *sock, h2o_socket_cb cb)
+{
+    do_write(sock, sock->ssl->output.bufs.entries, sock->ssl->output.bufs.size, cb);
+}
+
 int decode_ssl_input(h2o_socket_t *sock)
 {
     assert(sock->ssl != NULL);
@@ -188,16 +197,20 @@ int decode_ssl_input(h2o_socket_t *sock)
         h2o_iovec_t buf = h2o_buffer_reserve(&sock->input, 4096);
         if (buf.base == NULL)
             return errno;
-        { /* call SSL_read (while detecting SSL renegotiation and reporting it as error) */
+        {
             int did_write_in_read = 0;
             sock->ssl->did_write_in_read = &did_write_in_read;
             rlen = SSL_read(sock->ssl->ssl, buf.base, (int)buf.len);
             sock->ssl->did_write_in_read = NULL;
-            if (did_write_in_read)
-                return EIO;
+            if (did_write_in_read) {
+                    /* cwyang: renegotiation occurs. we should flush output buffers */
+                    flush_pending_ssl(sock, reneg_write_cb);
+            }
         }
         if (rlen == -1) {
-            if (SSL_get_error(sock->ssl->ssl, rlen) != SSL_ERROR_WANT_READ) {
+            int err = SSL_get_error(sock->ssl->ssl, rlen);
+                
+            if (err != SSL_ERROR_WANT_READ && err != SSL_ERROR_WANT_WRITE) {
                 return EIO;
             }
             break;
@@ -209,11 +222,6 @@ int decode_ssl_input(h2o_socket_t *sock)
     }
 
     return 0;
-}
-
-static void flush_pending_ssl(h2o_socket_t *sock, h2o_socket_cb cb)
-{
-    do_write(sock, sock->ssl->output.bufs.entries, sock->ssl->output.bufs.size, cb);
 }
 
 static void clear_output_buffer(struct st_h2o_socket_ssl_t *ssl)
