@@ -36,7 +36,7 @@ subtest 'server-push' => sub {
     my $doit = sub {
         my ($proto, $port) = @_;
         my $resp = `nghttp -n --stat '$proto://127.0.0.1:$port/hello.php?link=<index.js>\%3b\%20rel=preload'`;
-        like $resp, qr{\nresponseEnd\s.*\s/index\.js\n.*\s/hello\.php\?}is, $proto;
+        like $resp, qr{\nid\s*responseEnd\s.*\s/index\.js\n.*\s/hello\.php\?}is, $proto;
     };
     $doit->('http', $server->{port});
     $doit->('https', $server->{tls_port});
