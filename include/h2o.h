@@ -1349,6 +1349,7 @@ inline void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostre
 {
     h2o_filter_t *next;
 
+    (void)(self);
     assert(self == req->pathconf->filters.entries[req->_ostr_init_index]);
     if (req->_ostr_init_index + 1 < req->pathconf->filters.size) {
         next = req->pathconf->filters.entries[++req->_ostr_init_index];
