@@ -40,7 +40,10 @@
 
 struct st_h2o_sendfile_generator_t {
     h2o_generator_t super;
-    int fd;
+    struct {
+        h2o_filecache_ref_t *ref;
+        off_t off;
+    } file;
     h2o_req_t *req;
     size_t bytesleft;
     struct {
@@ -90,7 +93,7 @@ static uint64_t time2packed(struct tm *tm)
 static void do_close(h2o_generator_t *_self, h2o_req_t *req)
 {
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
-    close(self->fd);
+    h2o_filecache_close_file(self->file.ref);
 }
 
 static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
@@ -105,7 +108,7 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
     rlen = self->bytesleft;
     if (rlen > MAX_BUF_SIZE)
         rlen = MAX_BUF_SIZE;
-    while ((rret = read(self->fd, self->buf, rlen)) == -1 && errno == EINTR)
+    while ((rret = pread(self->file.ref->fd, self->buf, rlen, self->file.off)) == -1 && errno == EINTR)
         ;
     if (rret == -1) {
         req->http1_is_persistent = 0; /* FIXME need a better interface to dispose an errored response w. content-length */
@@ -113,6 +116,7 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
         do_close(&self->super, req);
         return;
     }
+    self->file.off += rret;
     self->bytesleft -= rret;
     is_final = self->bytesleft == 0;
 
@@ -144,18 +148,17 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
                 sprintf(self->buf, "--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
                         self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end, self->ranged.filesize);
         self->ranged.current_range++;
-        rret = lseek(self->fd, *range_cur, SEEK_SET);
-        if (rret == -1)
-            goto Error;
+        self->file.off = *range_cur;
         self->bytesleft = *++range_cur;
     }
     rlen = self->bytesleft;
     if (rlen + used_buf > MAX_BUF_SIZE)
         rlen = MAX_BUF_SIZE - used_buf;
-    while ((rret = read(self->fd, self->buf + used_buf, rlen)) == -1 && errno == EINTR)
+    while ((rret = pread(self->file.ref->fd, self->buf + used_buf, rlen, self->file.off)) == -1 && errno == EINTR)
         ;
     if (rret == -1)
         goto Error;
+    self->file.off += rret;
     self->bytesleft -= rret;
 
     vec[0].base = self->buf;
@@ -188,7 +191,7 @@ static int do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_t *buf)
 
     if (self->bytesleft < buf->len)
         buf->len = self->bytesleft;
-    while ((rret = read(self->fd, buf->base, buf->len)) == -1 && errno == EINTR)
+    while ((rret = pread(self->file.ref->fd, buf->base, buf->len, self->file.off)) == -1 && errno == EINTR)
         ;
     if (rret <= 0) {
         req->http1_is_persistent = 0; /* FIXME need a better interface to dispose an errored response w. content-length */
@@ -196,6 +199,7 @@ static int do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_t *buf)
         self->bytesleft = 0;
     } else {
         buf->len = rret;
+        self->file.off += rret;
         self->bytesleft -= rret;
     }
 
@@ -209,8 +213,8 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
                                                             int flags)
 {
     struct st_h2o_sendfile_generator_t *self;
-    int fd, is_gzip;
-    struct stat st;
+    h2o_filecache_ref_t *fileref;
+    int is_gzip;
     struct tm last_modified_gmt;
 
     *is_dir = 0;
@@ -223,24 +227,19 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
             char *gzpath = h2o_mem_alloc_pool(&req->pool, path_len + 4);
             memcpy(gzpath, path, path_len);
             strcpy(gzpath + path_len, ".gz");
-            if ((fd = open(gzpath, O_RDONLY | O_CLOEXEC)) != -1) {
+            if ((fileref = h2o_filecache_open_file(req->conn->ctx->filecache, gzpath, O_RDONLY | O_CLOEXEC)) != NULL) {
                 is_gzip = 1;
                 goto Opened;
             }
         }
     }
-    if ((fd = open(path, O_RDONLY | O_CLOEXEC)) == -1)
+    if ((fileref = h2o_filecache_open_file(req->conn->ctx->filecache, path, O_RDONLY | O_CLOEXEC)) == NULL)
         return NULL;
     is_gzip = 0;
 
 Opened:
-    if (fstat(fd, &st) != 0) {
-        perror("fstat");
-        close(fd);
-        return NULL;
-    }
-    if (S_ISDIR(st.st_mode)) {
-        close(fd);
+    if (S_ISDIR(fileref->st.st_mode)) {
+        h2o_filecache_close_file(fileref);
         *is_dir = 1;
         return NULL;
     }
@@ -248,19 +247,21 @@ Opened:
     self = h2o_mem_alloc_pool(&req->pool, sizeof(*self));
     self->super.proceed = do_proceed;
     self->super.stop = do_close;
-    self->fd = fd;
+    self->file.ref = fileref;
+    self->file.off = 0;
     self->req = NULL;
-    self->bytesleft = st.st_size;
+    self->bytesleft = self->file.ref->st.st_size;
     self->ranged.range_count = 0;
     self->ranged.range_infos = NULL;
 
-    gmtime_r(&st.st_mtime, &last_modified_gmt);
+    gmtime_r(&self->file.ref->st.st_mtime, &last_modified_gmt);
     self->last_modified.packed = time2packed(&last_modified_gmt);
     h2o_time2str_rfc1123(self->last_modified.buf, &last_modified_gmt);
     if ((flags & H2O_FILE_FLAG_NO_ETAG) != 0) {
         self->etag_len = 0;
     } else {
-        self->etag_len = sprintf(self->etag_buf, "\"%08x-%zx\"", (unsigned)st.st_mtime, (size_t)st.st_size);
+        self->etag_len =
+            sprintf(self->etag_buf, "\"%08x-%zx\"", (unsigned)self->file.ref->st.st_mtime, (size_t)self->file.ref->st.st_size);
     }
     self->is_gzip = is_gzip;
     self->send_vary = (flags & H2O_FILE_FLAG_SEND_GZIP) != 0;
@@ -323,16 +324,8 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     /* send data */
     h2o_start_response(req, &self->super);
 
-    if (self->ranged.range_count == 1) {
-        ssize_t rret;
-        rret = lseek(self->fd, self->ranged.range_infos[0], SEEK_SET);
-        if (rret == -1) {
-            req->http1_is_persistent = 0;
-            h2o_send(req, NULL, 0, 1);
-            do_close(&self->super, req);
-            return;
-        }
-    }
+    if (self->ranged.range_count == 1)
+        self->file.off = self->ranged.range_infos[0];
     if (req->_ostr_top->start_pull != NULL && self->ranged.range_count < 2) {
         req->_ostr_top->start_pull(req->_ostr_top, do_pull);
     } else {

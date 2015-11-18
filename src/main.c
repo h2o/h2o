@@ -1257,6 +1257,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         update_listener_state(listeners);
         /* run the loop once */
         h2o_evloop_run(conf.threads[thread_index].ctx.loop);
+        h2o_filecache_clear(conf.threads[thread_index].ctx.filecache);
     }
 
     if (thread_index == 0)
@@ -1524,6 +1525,8 @@ int main(int argc, char **argv)
             exit(EX_CONFIG);
         yoml_free(yoml, NULL);
     }
+    /* calculate defaults (note: open file cached is purged once every loop) */
+    conf.globalconf.filecache.capacity = conf.globalconf.http2.max_concurrent_requests_per_connection * 2;
 
     /* check if all the fds passed in by server::starter were bound */
     if (conf.server_starter.fds != NULL) {

@@ -10,6 +10,8 @@
 		101788B219B561AA0084C6D8 /* socket.c in Sources */ = {isa = PBXBuildFile; fileRef = 101788B119B561AA0084C6D8 /* socket.c */; };
 		101B670C19ADD3380084A351 /* access_log.c in Sources */ = {isa = PBXBuildFile; fileRef = 101B670B19ADD3380084A351 /* access_log.c */; };
 		103BAB361B130666000694F4 /* socket.c in Sources */ = {isa = PBXBuildFile; fileRef = 103BAB351B130666000694F4 /* socket.c */; };
+		1044812E1BFD0FBE0007863F /* filecache.h in Headers */ = {isa = PBXBuildFile; fileRef = 1044812D1BFD0FBE0007863F /* filecache.h */; };
+		104481301BFD10450007863F /* filecache.c in Sources */ = {isa = PBXBuildFile; fileRef = 1044812F1BFD10450007863F /* filecache.c */; };
 		104B9A261A4A5041009EEE64 /* serverutil.h in Headers */ = {isa = PBXBuildFile; fileRef = 104B9A231A4A4FAF009EEE64 /* serverutil.h */; };
 		104B9A281A4A5139009EEE64 /* serverutil.c in Sources */ = {isa = PBXBuildFile; fileRef = 104B9A271A4A5139009EEE64 /* serverutil.c */; };
 		104B9A2D1A4BE029009EEE64 /* version.h in Headers */ = {isa = PBXBuildFile; fileRef = 104B9A2C1A4BE029009EEE64 /* version.h */; };
@@ -265,6 +267,8 @@
 		101B670B19ADD3380084A351 /* access_log.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = access_log.c; sourceTree = "<group>"; };
 		1039A20A1BB89531005D3B8F /* mruby_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = mruby_directives.mt; sourceTree = "<group>"; };
 		103BAB351B130666000694F4 /* socket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = socket.c; sourceTree = "<group>"; };
+		1044812D1BFD0FBE0007863F /* filecache.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = filecache.h; sourceTree = "<group>"; };
+		1044812F1BFD10450007863F /* filecache.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = filecache.c; sourceTree = "<group>"; };
 		104960151B9D3F9100FF136D /* dump-github-repository.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; path = "dump-github-repository.pl"; sourceTree = "<group>"; };
 		104B9A221A47BBA1009EEE64 /* 40unix-socket.t */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "40unix-socket.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		104B9A231A4A4FAF009EEE64 /* serverutil.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = serverutil.h; sourceTree = "<group>"; };
@@ -582,6 +586,7 @@
 			isa = PBXGroup;
 			children = (
 				107D4D541B5B30EE004A9B21 /* file.c */,
+				1044812F1BFD10450007863F /* filecache.c */,
 				1058C8891AA6E5E3008D6180 /* hostinfo.c */,
 				10D0905419F102C70043D458 /* http1client.c */,
 				10A3D3D11B4CDBDC00327CF9 /* memcached.c */,
@@ -940,6 +945,7 @@
 			children = (
 				105534D71A3C785000627ECB /* configurator.h */,
 				107D4D521B5B2412004A9B21 /* file.h */,
+				1044812D1BFD0FBE0007863F /* filecache.h */,
 				1058C8871AA6DE4B008D6180 /* hostinfo.h */,
 				107923A019A3215F00C52AD6 /* http1.h */,
 				10D0905619F102DA0043D458 /* http1client.h */,
@@ -1215,6 +1221,7 @@
 				10AA2E9F1A8807CF004322AC /* url.h in Headers */,
 				10B38A721B8D34BB007DC191 /* mruby_.h in Headers */,
 				10FCC13F1B2E4A4500F13674 /* cloexec.h in Headers */,
+				1044812E1BFD0FBE0007863F /* filecache.h in Headers */,
 				107923A619A3215F00C52AD6 /* http2.h in Headers */,
 				107923A719A3215F00C52AD6 /* token.h in Headers */,
 				107923A919A3215F00C52AD6 /* h2o.h in Headers */,
@@ -1462,6 +1469,7 @@
 				10E299581A67E68500701AA6 /* scheduler.c in Sources */,
 				107923D319A3217300C52AD6 /* util.c in Sources */,
 				105534CA1A3BB46900627ECB /* string.c in Sources */,
+				104481301BFD10450007863F /* filecache.c in Sources */,
 				10583BF21AE5A37B004A3AD6 /* README.md in Sources */,
 				10BCF2FD1B168CAE0076939D /* fastcgi.c in Sources */,
 				10A3D40B1B50DAB700327CF9 /* send.c in Sources */,
@@ -2432,6 +2440,7 @@
 				);
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
+					"-lmruby",
 					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
