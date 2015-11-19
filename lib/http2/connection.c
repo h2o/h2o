@@ -810,6 +810,12 @@ static void on_read(h2o_socket_t *sock, int status)
 
     update_idle_timeout(conn);
     parse_input(conn);
+
+    /* write immediately, if there is no write in flight and if pending write exists */
+    if (h2o_timeout_is_linked(&conn->_write.timeout_entry)) {
+        h2o_timeout_unlink(&conn->_write.timeout_entry);
+        do_emit_writereq(conn);
+    }
 }
 
 static void on_upgrade_complete(void *_conn, h2o_socket_t *sock, size_t reqsize)
