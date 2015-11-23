@@ -308,6 +308,12 @@ void h2o_buffer_consume(h2o_buffer_t **_inbuf, size_t delta)
     }
 }
 
+void h2o_buffer__dispose_linked(void *p)
+{
+    h2o_buffer_t **buf = p;
+    h2o_buffer_dispose(buf);
+}
+
 void h2o_vector__expand(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)
 {
     void *new_entries;
