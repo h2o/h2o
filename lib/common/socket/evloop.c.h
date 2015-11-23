@@ -92,8 +92,9 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
 void link_to_pending(struct st_h2o_evloop_socket_t *sock)
 {
     if (sock->_next_pending == sock) {
-        sock->_next_pending = sock->loop->_pending;
-        sock->loop->_pending = sock;
+        struct st_h2o_evloop_socket_t **slot = (sock->_flags & H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION) != 0 ? &sock->loop->_pending_as_server : &sock->loop->_pending_as_client;
+        sock->_next_pending = *slot;
+        *slot = sock;
     }
 }
 
@@ -397,7 +398,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     fcntl(fd, F_SETFL, O_NONBLOCK);
 #endif
 
-    return &create_socket_set_nodelay(listener->loop, fd, 0)->super;
+    return &create_socket_set_nodelay(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 }
 
 h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)
@@ -483,12 +484,19 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
 
 static void run_pending(h2o_evloop_t *loop)
 {
-    while (loop->_pending != NULL) {
-        /* detach the first sock and run */
-        struct st_h2o_evloop_socket_t *sock = loop->_pending;
-        loop->_pending = sock->_next_pending;
-        sock->_next_pending = sock;
-        run_socket(sock);
+    struct st_h2o_evloop_socket_t *sock;
+
+    while (loop->_pending_as_server != NULL || loop->_pending_as_client != NULL) {
+        while ((sock = loop->_pending_as_client) != NULL) {
+            loop->_pending_as_client = sock->_next_pending;
+            sock->_next_pending = sock;
+            run_socket(sock);
+        }
+        if ((sock = loop->_pending_as_server) != NULL) {
+            loop->_pending_as_server = sock->_next_pending;
+            sock->_next_pending = sock;
+            run_socket(sock);
+        }
     }
 }
 
@@ -508,7 +516,9 @@ int h2o_evloop_run(h2o_evloop_t *loop)
         h2o_timeout_t *timeout = H2O_STRUCT_FROM_MEMBER(h2o_timeout_t, _link, node);
         h2o_timeout_run(loop, timeout, loop->_now);
     }
-    assert(loop->_pending == NULL); /* h2o_timeout_run calls run_pending */
+    /* assert h2o_timeout_run has called run_pending */
+    assert(loop->_pending_as_client == NULL);
+    assert(loop->_pending_as_server == NULL);
 
     return 0;
 }
