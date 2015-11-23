@@ -94,6 +94,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     h2o_timeout_init(ctx->loop, &ctx->one_sec_timeout, 1000);
     ctx->queue = h2o_multithread_create_queue(loop);
     h2o_multithread_register_receiver(ctx->queue, &ctx->receivers.hostinfo_getaddr, h2o_hostinfo_getaddr_receiver);
+    ctx->filecache = h2o_filecache_create(config->filecache.capacity);
 
     h2o_timeout_init(ctx->loop, &ctx->handshake_timeout, config->handshake_timeout);
     h2o_timeout_init(ctx->loop, &ctx->http1.req_timeout, config->http1.req_timeout);
@@ -142,6 +143,9 @@ void h2o_context_dispose(h2o_context_t *ctx)
     h2o_timeout_dispose(ctx->loop, &ctx->http2.idle_timeout);
     h2o_timeout_dispose(ctx->loop, &ctx->proxy.io_timeout);
     /* what should we do here? assert(!h2o_linklist_is_empty(&ctx->http2._conns); */
+
+    h2o_filecache_destroy(ctx->filecache);
+    ctx->filecache = NULL;
 
     /* TODO assert that the all the getaddrinfo threads are idle */
     h2o_multithread_unregister_receiver(ctx->queue, &ctx->receivers.hostinfo_getaddr);

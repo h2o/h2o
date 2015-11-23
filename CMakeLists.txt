@@ -161,6 +161,7 @@ SET(LIB_SOURCE_FILES
     deps/picohttpparser/picohttpparser.c
 
     lib/common/file.c
+    lib/common/filecache.c
     lib/common/hostinfo.c
     lib/common/http1client.c
     lib/common/memcached.c

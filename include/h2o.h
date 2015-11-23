@@ -36,6 +36,7 @@ extern "C" {
 #include <time.h>
 #include <unistd.h>
 #include <openssl/ssl.h>
+#include "h2o/filecache.h"
 #include "h2o/hostinfo.h"
 #include "h2o/memcached.h"
 #include "h2o/linklist.h"
@@ -325,6 +326,14 @@ struct st_h2o_globalconf_t {
      */
     h2o_mimemap_t *mimemap;
 
+    /**
+     * filecache
+     */
+    struct {
+        /* capacity of the filecache */
+        size_t capacity;
+    } filecache;
+
     size_t _num_config_slots;
 };
 
@@ -390,6 +399,10 @@ struct st_h2o_context_t {
     struct {
         h2o_multithread_receiver_t hostinfo_getaddr;
     } receivers;
+    /**
+     * open file cache
+     */
+    h2o_filecache_t *filecache;
     /**
      * flag indicating if shutdown has been requested
      */
