@@ -31,13 +31,56 @@ sub doit {
         is $resp, $all_data;
     };
 
-    subtest "singe-ranged" => sub {
-        my $resp = `$curl_cmd -r 100-499 $url`;
-        is $resp, substr($all_data, 100, 400), "content";
+    subtest "single-ranged" => sub {
+        subtest "closed" => sub {
+            my $resp = `$curl_cmd -r 100-499 $url`;
+            is $resp, substr($all_data, 100, 400), "content";
 
-        my $headers = `$curl_cmd -r 100-499 --dump-header /dev/stderr $url 2>&1 > /dev/null`;
-        like $headers, qr{^content-type:\s*image/jpeg\r$}mi, "content-type";
-        like $headers, qr{^content-range:\s*bytes 100-499/@{[length $all_data]}\r}mi, "content-range";
+            my $headers = `$curl_cmd -r 100-499 --dump-header /dev/stderr $url 2>&1 > /dev/null`;
+            like $headers, qr{^content-type:\s*image/jpeg\r$}mi, "content-type";
+            like $headers, qr{^content-range:\s*bytes 100-499/@{[length $all_data]}\r}mi, "content-range";
+        };
+
+        subtest "closed-exceed-end" => sub {
+            my $resp = `$curl_cmd -r 100-999999 $url`;
+            is $resp, substr($all_data, 100), "content";
+
+            my $headers = `$curl_cmd -r 100-999999 --dump-header /dev/stderr $url 2>&1 > /dev/null`;
+            like $headers, qr{^content-type:\s*image/jpeg\r$}mi, "content-type";
+            like $headers, qr{^content-range:\s*bytes 100-@{[length($all_data) - 1]}/@{[length $all_data]}\r}mi, "content-range";
+        };
+
+        subtest "closed-unsatisfied" => sub {
+            my $headers = `$curl_cmd --dump-header /dev/stderr -r 999999-999999 $url 2>&1 > /dev/null`;
+            like $headers, qr{^HTTP/1.1 416 }mi, "416 response";
+        };
+
+        subtest "tail-open" => sub {
+            my $resp = `$curl_cmd -r 100- $url`;
+            is $resp, substr($all_data, 100), "content";
+
+            my $headers = `$curl_cmd -r 100- --dump-header /dev/stderr $url 2>&1 > /dev/null`;
+            like $headers, qr{^content-type:\s*image/jpeg\r$}mi, "content-type";
+            like $headers, qr{^content-range:\s*bytes 100-@{[length($all_data) - 1]}/@{[length $all_data]}\r}mi, "content-range";
+        };
+
+        subtest "suffix" => sub {
+            my $resp = `$curl_cmd -r -100 $url`;
+            is $resp, substr($all_data, -100), "content";
+
+            my $headers = `$curl_cmd -r -100 --dump-header /dev/stderr $url 2>&1 > /dev/null`;
+            like $headers, qr{^content-type:\s*image/jpeg\r$}mi, "content-type";
+            like $headers, qr{^content-range:\s*bytes @{[length($all_data) - 100]}-@{[length($all_data) - 1]}/@{[length $all_data]}\r}mi, "content-range";
+        };
+
+        subtest "suffix-exceed" => sub {
+            my $resp = `$curl_cmd -r -999999 $url`;
+            is $resp, $all_data, "content";
+
+            my $headers = `$curl_cmd -r -999999 --dump-header /dev/stderr $url 2>&1 > /dev/null`;
+            like $headers, qr{^content-type:\s*image/jpeg\r$}mi, "content-type";
+            like $headers, qr{^content-range:\s*bytes 0-@{[length($all_data) - 1]}/@{[length $all_data]}\r}mi, "content-range";
+        };
     };
 
     subtest "multi-ranged" => sub {
