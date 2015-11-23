@@ -97,6 +97,8 @@ h2o_filecache_ref_t *h2o_filecache_open_file(h2o_filecache_t *cache, const char 
         return NULL;
     ref = h2o_mem_alloc(offsetof(h2o_filecache_ref_t, _path) + strlen(path) + 1);
     ref->fd = fd;
+    ref->_last_modified.str[0] = '\0';
+    ref->_etag.len = 0;
     ref->_refcnt = 1;
     ref->_lru = (h2o_linklist_t){};
     strcpy(ref->_path, path);
@@ -131,4 +133,22 @@ void h2o_filecache_close_file(h2o_filecache_ref_t *ref)
     close(ref->fd);
     ref->fd = -1;
     free(ref);
+}
+
+const char *h2o_filecache_get_last_modified(h2o_filecache_ref_t *ref, struct tm **gm)
+{
+    if (ref->_last_modified.str[0] == '\0') {
+        gmtime_r(&ref->st.st_mtime, &ref->_last_modified.gm);
+        h2o_time2str_rfc1123(ref->_last_modified.str, &ref->_last_modified.gm);
+    }
+    if (gm != NULL)
+        *gm = &ref->_last_modified.gm;
+    return ref->_last_modified.str;
+}
+
+h2o_iovec_t h2o_filecache_get_etag(h2o_filecache_ref_t *ref)
+{
+    if (ref->_etag.len == 0)
+        ref->_etag.len = sprintf(ref->_etag.buf, "\"%08x-%zx\"", (unsigned)ref->st.st_mtime, (size_t)ref->st.st_size);
+    return h2o_iovec_init(ref->_etag.buf, ref->_etag.len);
 }

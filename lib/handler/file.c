@@ -46,14 +46,9 @@ struct st_h2o_sendfile_generator_t {
     } file;
     h2o_req_t *req;
     size_t bytesleft;
-    struct {
-        uint64_t packed;
-        char buf[H2O_TIMESTR_RFC1123_LEN + 1];
-    } last_modified;
-    char etag_buf[sizeof("\"deadbeef-deadbeefdeadbeef\"")];
-    size_t etag_len;
-    char is_gzip;
-    char send_vary;
+    int is_gzip : 1;
+    int send_vary : 1;
+    int send_etag : 1;
     char *buf;
     struct {
         size_t filesize;
@@ -80,14 +75,21 @@ const char **h2o_file_default_index_files = default_index_files;
 
 #include "file/templates.c.h"
 
-static uint64_t time2packed(struct tm *tm)
+static int tm_is_lessthan(struct tm *x, struct tm *y)
 {
-    return (uint64_t)(tm->tm_year + 1900) << 40 /* year:  24-bits */
-           | (uint64_t)tm->tm_mon << 32         /* month:  8-bits */
-           | (uint64_t)tm->tm_mday << 24        /* mday:   8-bits */
-           | (uint64_t)tm->tm_hour << 16        /* hour:   8-bits */
-           | (uint64_t)tm->tm_min << 8          /* min:    8-bits */
-           | (uint64_t)tm->tm_sec;              /* sec:    8-bits */
+#define CMP(f)                                                                                                                     \
+    if (x->f < y->f)                                                                                                               \
+        return 1;                                                                                                                  \
+    else if (x->f > y->f)                                                                                                          \
+        return 0;
+    CMP(tm_year);
+    CMP(tm_mon);
+    CMP(tm_mday);
+    CMP(tm_hour);
+    CMP(tm_min);
+    CMP(tm_sec);
+    return 0;
+#undef CMP
 }
 
 static void do_close(h2o_generator_t *_self, h2o_req_t *req)
@@ -215,7 +217,6 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
     struct st_h2o_sendfile_generator_t *self;
     h2o_filecache_ref_t *fileref;
     int is_gzip;
-    struct tm last_modified_gmt;
 
     *is_dir = 0;
 
@@ -253,18 +254,9 @@ Opened:
     self->bytesleft = self->file.ref->st.st_size;
     self->ranged.range_count = 0;
     self->ranged.range_infos = NULL;
-
-    gmtime_r(&self->file.ref->st.st_mtime, &last_modified_gmt);
-    self->last_modified.packed = time2packed(&last_modified_gmt);
-    h2o_time2str_rfc1123(self->last_modified.buf, &last_modified_gmt);
-    if ((flags & H2O_FILE_FLAG_NO_ETAG) != 0) {
-        self->etag_len = 0;
-    } else {
-        self->etag_len =
-            sprintf(self->etag_buf, "\"%08x-%zx\"", (unsigned)self->file.ref->st.st_mtime, (size_t)self->file.ref->st.st_size);
-    }
     self->is_gzip = is_gzip;
     self->send_vary = (flags & H2O_FILE_FLAG_SEND_GZIP) != 0;
+    self->send_etag = (flags & H2O_FILE_FLAG_NO_ETAG) == 0;
 
     return self;
 }
@@ -275,8 +267,10 @@ static void add_headers_unconditional(struct st_h2o_sendfile_generator_t *self, 
      * in a 200 (OK) response to the same request: Cache-Control, Content-Location, Date, ETag, Expires, and Vary (snip) a sender
      * SHOULD NOT generate representation metadata other than the above listed fields unless said metadata exists for the purpose of
      * guiding cache updates. */
-    if (self->etag_len != 0)
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ETAG, self->etag_buf, self->etag_len);
+    if (self->send_etag) {
+        h2o_iovec_t etag = h2o_filecache_get_etag(self->file.ref);
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ETAG, etag.base, etag.len);
+    }
     if (self->send_vary)
         h2o_add_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
 }
@@ -298,7 +292,8 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
         mime_type.len = sprintf(mime_type.base, "multipart/byteranges; boundary=%s", self->ranged.boundary.base);
     }
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, mime_type.base, mime_type.len);
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LAST_MODIFIED, self->last_modified.buf, H2O_TIMESTR_RFC1123_LEN);
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LAST_MODIFIED, h2o_filecache_get_last_modified(self->file.ref, NULL),
+                   H2O_TIMESTR_RFC1123_LEN);
     add_headers_unconditional(self, req);
     if (self->is_gzip)
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_ENCODING, H2O_STRLIT("gzip"));
@@ -640,14 +635,17 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 Opened:
     if ((if_none_match_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_NONE_MATCH, SIZE_MAX)) != -1) {
         h2o_iovec_t *if_none_match = &req->headers.entries[if_none_match_header_index].value;
-        if (h2o_memis(if_none_match->base, if_none_match->len, generator->etag_buf, generator->etag_len))
+        h2o_iovec_t etag = h2o_filecache_get_etag(generator->file.ref);
+        if (h2o_memis(if_none_match->base, if_none_match->len, etag.base, etag.len))
             goto NotModified;
     } else if ((if_modified_since_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_MODIFIED_SINCE, SIZE_MAX)) != -1) {
         h2o_iovec_t *ims_vec = &req->headers.entries[if_modified_since_header_index].value;
-        struct tm ims_tm;
-        if (h2o_time_parse_rfc1123(ims_vec->base, ims_vec->len, &ims_tm) == 0 &&
-            generator->last_modified.packed <= time2packed(&ims_tm))
-            goto NotModified;
+        struct tm ims_tm, *last_modified_tm;
+        if (h2o_time_parse_rfc1123(ims_vec->base, ims_vec->len, &ims_tm) == 0) {
+            h2o_filecache_get_last_modified(generator->file.ref, &last_modified_tm);
+            if (!tm_is_lessthan(&ims_tm, last_modified_tm))
+                goto NotModified;
+        }
     }
 
     /* obtain mime type */
