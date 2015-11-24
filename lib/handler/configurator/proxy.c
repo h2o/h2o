@@ -124,7 +124,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->vars = c->_vars_stack;
     c->vars->io_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
     c->vars->keepalive_timeout = 2000;
-    c->vars->websocket.enabled = 1;
+    c->vars->websocket.enabled = 0; /* have websocket proxying disabled by default; until it becomes non-experimental */
     c->vars->websocket.timeout = H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT;
 
     /* setup handlers */
