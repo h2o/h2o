@@ -184,6 +184,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
         req->headers.size = src->headers.size;
         req->entity = src->entity;
         req->http1_is_persistent = src->http1_is_persistent;
+        req->timestamps = src->timestamps;
         if (src->upgrade.base != NULL) {
             COPY(upgrade);
         } else {
@@ -486,9 +487,9 @@ void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str,
     h2o_reprocess_request_deferred(req, method, url.scheme, url.authority, url.path, authority_changed ? req->overrides : NULL, 1);
 }
 
-int h2o_register_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len)
+int h2o_puth_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len)
 {
-    if (req->version < 0x200 || req->res_is_delegated)
+    if (req->conn->callbacks->push_path == NULL || req->res_is_delegated)
         return -1;
 
     h2o_iovec_t path =
@@ -496,8 +497,6 @@ int h2o_register_push_path_in_link_header(h2o_req_t *req, const char *value, siz
     if (path.base == NULL)
         return -1;
 
-    h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->http2_push_paths, sizeof(req->http2_push_paths.entries[0]),
-                       req->http2_push_paths.size + 1);
-    req->http2_push_paths.entries[req->http2_push_paths.size++] = path;
+    req->conn->callbacks->push_path(req, path.base, path.len);
     return 0;
 }

@@ -36,6 +36,7 @@ extern "C" {
 #include <time.h>
 #include <unistd.h>
 #include <openssl/ssl.h>
+#include "h2o/filecache.h"
 #include "h2o/hostinfo.h"
 #include "h2o/memcached.h"
 #include "h2o/linklist.h"
@@ -58,6 +59,11 @@ extern "C" {
 
 #ifndef H2O_MAX_TOKENS
 #define H2O_MAX_TOKENS 100
+#endif
+
+#ifndef H2O_SOMAXCONN
+/* simply use a large value, and let the kernel clip it to the internal max */
+#define H2O_SOMAXCONN 65535
 #endif
 
 #define H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE (1024 * 1024 * 1024)
@@ -322,6 +328,14 @@ struct st_h2o_globalconf_t {
      */
     h2o_mimemap_t *mimemap;
 
+    /**
+     * filecache
+     */
+    struct {
+        /* capacity of the filecache */
+        size_t capacity;
+    } filecache;
+
     size_t _num_config_slots;
 };
 
@@ -387,6 +401,10 @@ struct st_h2o_context_t {
     struct {
         h2o_multithread_receiver_t hostinfo_getaddr;
     } receivers;
+    /**
+     * open file cache
+     */
+    h2o_filecache_t *filecache;
     /**
      * flag indicating if shutdown has been requested
      */
@@ -533,6 +551,21 @@ typedef struct st_h2o_res_t {
     h2o_mime_attributes_t *mime_attr;
 } h2o_res_t;
 
+typedef struct st_h2o_conn_callbacks_t {
+    /**
+     * getsockname (return size of the obtained address, or 0 if failed)
+     */
+    socklen_t (*get_sockname)(h2o_conn_t *conn, struct sockaddr *sa);
+    /**
+     * getpeername (return size of the obtained address, or 0 if failed)
+     */
+    socklen_t (*get_peername)(h2o_conn_t *conn, struct sockaddr *sa);
+    /**
+     * callback for server push (may be NULL)
+     */
+    void (*push_path)(h2o_req_t *req, const char *abspath, size_t abspath_len);
+} h2o_conn_callbacks_t;
+
 /**
  * basic structure of an HTTP connection (HTTP/1, HTTP/2, etc.)
  */
@@ -546,13 +579,13 @@ struct st_h2o_conn_t {
      */
     h2o_hostconf_t **hosts;
     /**
-     * getsockname (return size of the obtained address, or 0 if failed)
+     * time when the connection was established
      */
-    socklen_t (*get_sockname)(h2o_conn_t *conn, struct sockaddr *sa);
+    struct timeval connected_at;
     /**
-     * getpeername (return size of the obtained address, or 0 if failed)
+     * callbacks
      */
-    socklen_t (*get_peername)(h2o_conn_t *conn, struct sockaddr *sa);
+    const h2o_conn_callbacks_t *callbacks;
 };
 
 typedef struct st_h2o_req_overrides_t {
@@ -684,6 +717,15 @@ struct st_h2o_req_t {
      */
     h2o_timestamp_t processed_at;
     /**
+     * additional timestamps
+     */
+    struct {
+        struct timeval request_begin_at;
+        struct timeval request_body_begin_at;
+        struct timeval response_start_at;
+        struct timeval response_end_at;
+    } timestamps;
+    /**
      * the response
      */
     h2o_res_t res;
@@ -713,10 +755,6 @@ struct st_h2o_req_t {
      */
     char res_is_delegated;
 
-    /**
-     * absolute paths to be pushed (using HTTP/2 server push)
-     */
-    H2O_VECTOR(h2o_iovec_t) http2_push_paths;
     /**
      * the Upgrade request header (or { NULL, 0 } if not available)
      */
@@ -987,10 +1025,12 @@ void h2o_context_dispose_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pa
 /**
  * returns current timestamp
  * @param ctx the context
- * @param pool memory pool
- * @param ts buffer to store the timestamp
+ * @param pool memory pool (used when ts != NULL)
+ * @param ts buffer to store the timestamp (optional)
+ * @return current time in UTC
  */
-void h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts);
+static struct timeval *h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts);
+void h2o_context_update_timestamp_cache(h2o_context_t *ctx);
 /**
  * returns per-module context set
  */
@@ -1044,7 +1084,7 @@ void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str,
 /**
  * registers push path (if necessary) by parsing a Link header
  */
-int h2o_register_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len);
+int h2o_puth_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len);
 /**
  * logs an error
  */
@@ -1335,11 +1375,29 @@ inline void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostre
 {
     h2o_filter_t *next;
 
+    (void)(self);
     assert(self == req->pathconf->filters.entries[req->_ostr_init_index]);
     if (req->_ostr_init_index + 1 < req->pathconf->filters.size) {
         next = req->pathconf->filters.entries[++req->_ostr_init_index];
         next->on_setup_ostream(next, req, slot);
     }
+}
+
+inline struct timeval *h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts)
+{
+    uint64_t now = h2o_now(ctx->loop);
+
+    if (ctx->_timestamp_cache.uv_now_at != now) {
+        h2o_context_update_timestamp_cache(ctx);
+    }
+
+    if (ts != NULL) {
+        ts->at = ctx->_timestamp_cache.tv_at;
+        h2o_mem_link_shared(pool, ctx->_timestamp_cache.value);
+        ts->str = ctx->_timestamp_cache.value;
+    }
+
+    return &ctx->_timestamp_cache.tv_at;
 }
 
 inline void *h2o_context_get_handler_context(h2o_context_t *ctx, h2o_handler_t *handler)

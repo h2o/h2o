@@ -61,13 +61,13 @@ static socklen_t get_peername(h2o_conn_t *conn, struct sockaddr *sa)
 
 h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx, h2o_hostconf_t **hosts)
 {
+    static const h2o_conn_callbacks_t callbacks = {get_sockname, get_peername};
     h2o_loopback_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
     memset(conn, 0, offsetof(struct st_h2o_loopback_conn_t, req));
     conn->super.ctx = ctx;
     conn->super.hosts = hosts;
-    conn->super.get_sockname = get_sockname;
-    conn->super.get_peername = get_peername;
+    conn->super.callbacks = &callbacks;
     h2o_init_request(&conn->req, &conn->super, NULL);
     h2o_buffer_init(&conn->body, &h2o_socket_buffer_prototype);
     conn->req._ostr_top = &conn->_ostr_final;

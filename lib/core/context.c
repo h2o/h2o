@@ -94,6 +94,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     h2o_timeout_init(ctx->loop, &ctx->one_sec_timeout, 1000);
     ctx->queue = h2o_multithread_create_queue(loop);
     h2o_multithread_register_receiver(ctx->queue, &ctx->receivers.hostinfo_getaddr, h2o_hostinfo_getaddr_receiver);
+    ctx->filecache = h2o_filecache_create(config->filecache.capacity);
 
     h2o_timeout_init(ctx->loop, &ctx->handshake_timeout, config->handshake_timeout);
     h2o_timeout_init(ctx->loop, &ctx->http1.req_timeout, config->http1.req_timeout);
@@ -143,6 +144,9 @@ void h2o_context_dispose(h2o_context_t *ctx)
     h2o_timeout_dispose(ctx->loop, &ctx->proxy.io_timeout);
     /* what should we do here? assert(!h2o_linklist_is_empty(&ctx->http2._conns); */
 
+    h2o_filecache_destroy(ctx->filecache);
+    ctx->filecache = NULL;
+
     /* TODO assert that the all the getaddrinfo threads are idle */
     h2o_multithread_unregister_receiver(ctx->queue, &ctx->receivers.hostinfo_getaddr);
     h2o_multithread_destroy_queue(ctx->queue);
@@ -162,27 +166,19 @@ void h2o_context_request_shutdown(h2o_context_t *ctx)
         ctx->globalconf->http2.callbacks.request_shutdown(ctx);
 }
 
-void h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts)
+void h2o_context_update_timestamp_cache(h2o_context_t *ctx)
 {
-    uint64_t now = h2o_now(ctx->loop);
-    struct tm gmt;
-
-    if (ctx->_timestamp_cache.uv_now_at != now) {
-        time_t prev_sec = ctx->_timestamp_cache.tv_at.tv_sec;
-        ctx->_timestamp_cache.uv_now_at = now;
-        gettimeofday(&ctx->_timestamp_cache.tv_at, NULL);
-        if (ctx->_timestamp_cache.tv_at.tv_sec != prev_sec) {
-            /* update the string cache */
-            if (ctx->_timestamp_cache.value != NULL)
-                h2o_mem_release_shared(ctx->_timestamp_cache.value);
-            ctx->_timestamp_cache.value = h2o_mem_alloc_shared(NULL, sizeof(h2o_timestamp_string_t), NULL);
-            gmtime_r(&ctx->_timestamp_cache.tv_at.tv_sec, &gmt);
-            h2o_time2str_rfc1123(ctx->_timestamp_cache.value->rfc1123, &gmt);
-            h2o_time2str_log(ctx->_timestamp_cache.value->log, ctx->_timestamp_cache.tv_at.tv_sec);
-        }
+    time_t prev_sec = ctx->_timestamp_cache.tv_at.tv_sec;
+    ctx->_timestamp_cache.uv_now_at = h2o_now(ctx->loop);
+    gettimeofday(&ctx->_timestamp_cache.tv_at, NULL);
+    if (ctx->_timestamp_cache.tv_at.tv_sec != prev_sec) {
+        struct tm gmt;
+        /* update the string cache */
+        if (ctx->_timestamp_cache.value != NULL)
+            h2o_mem_release_shared(ctx->_timestamp_cache.value);
+        ctx->_timestamp_cache.value = h2o_mem_alloc_shared(NULL, sizeof(h2o_timestamp_string_t), NULL);
+        gmtime_r(&ctx->_timestamp_cache.tv_at.tv_sec, &gmt);
+        h2o_time2str_rfc1123(ctx->_timestamp_cache.value->rfc1123, &gmt);
+        h2o_time2str_log(ctx->_timestamp_cache.value->log, ctx->_timestamp_cache.tv_at.tv_sec);
     }
-
-    ts->at = ctx->_timestamp_cache.tv_at;
-    h2o_mem_link_shared(pool, ctx->_timestamp_cache.value);
-    ts->str = ctx->_timestamp_cache.value;
 }

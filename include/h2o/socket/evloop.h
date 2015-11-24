@@ -31,10 +31,12 @@
 #define H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE 0x10
 #define H2O_SOCKET_FLAG_DONT_READ 0x20
 #define H2O_SOCKET_FLAG_IS_CONNECTING 0x40
+#define H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION 0x80
 #define H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED 0x1000
 
 typedef struct st_h2o_evloop_t {
-    struct st_h2o_evloop_socket_t *_pending;
+    struct st_h2o_evloop_socket_t *_pending_as_client;
+    struct st_h2o_evloop_socket_t *_pending_as_server;
     struct {
         struct st_h2o_evloop_socket_t *head;
         struct st_h2o_evloop_socket_t **tail_ref;

@@ -19,39 +19,43 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__http2__casper_h
-#define h2o__http2__casper_h
+#ifndef h2o__filecache_h
+#define h2o__filecache_h
 
 #include <stddef.h>
-#include <stdlib.h>
+#include <sys/stat.h>
+#include <time.h>
+#include "h2o/linklist.h"
 #include "h2o/memory.h"
+#include "h2o/time_.h"
 
-typedef struct st_h2o_http2_casper_t h2o_http2_casper_t;
+#define H2O_FILECACHE_ETAG_MAXLEN (sizeof("\"deadbeef-deadbeefdeadbeef\"") - 1)
 
-/**
- * creates an object with provided parameters
- */
-h2o_http2_casper_t *h2o_http2_casper_create(unsigned capacity_bits, unsigned remainder_bits);
-/**
- * destroys the object and resources associated to it
- */
-void h2o_http2_casper_destroy(h2o_http2_casper_t *casper);
-/**
- * returns the number of keys stored
- */
-size_t h2o_http2_casper_num_entries(h2o_http2_casper_t *casper);
-/**
- * checks if a key is (was) marked as cached at the moment the fuction is invoked
- */
-int h2o_http2_casper_lookup(h2o_http2_casper_t *casper, const char *path, size_t path_len, const char *etag, size_t etag_len,
-                            int set);
-/**
- * consumes the `Cookie` headers in requests and updates the structure
- */
-void h2o_http2_casper_consume_cookie(h2o_http2_casper_t *casper, const char *cookie, size_t cookie_len);
-/**
- * returns the value of the `Set-Cookie` header that should be sent to the client
- */
-h2o_iovec_t h2o_http2_casper_get_cookie(h2o_http2_casper_t *casper);
+typedef struct st_h2o_filecache_ref_t {
+    int fd;
+    struct stat st;
+    struct {
+        struct tm gm;
+        char str[H2O_TIMESTR_RFC1123_LEN + 1];
+    } _last_modified;
+    struct {
+        char buf[H2O_FILECACHE_ETAG_MAXLEN + 1];
+        size_t len;
+    } _etag;
+    size_t _refcnt;
+    h2o_linklist_t _lru;
+    char _path[1];
+} h2o_filecache_ref_t;
+
+typedef struct st_h2o_filecache_t h2o_filecache_t;
+
+h2o_filecache_t *h2o_filecache_create(size_t capacity);
+void h2o_filecache_destroy(h2o_filecache_t *cache);
+void h2o_filecache_clear(h2o_filecache_t *cache);
+
+h2o_filecache_ref_t *h2o_filecache_open_file(h2o_filecache_t *cache, const char *path, int oflag);
+void h2o_filecache_close_file(h2o_filecache_ref_t *ref);
+struct tm *h2o_filecache_get_last_modified(h2o_filecache_ref_t *ref, char *outbuf);
+size_t h2o_filecache_get_etag(h2o_filecache_ref_t *ref, char *outbuf);
 
 #endif
