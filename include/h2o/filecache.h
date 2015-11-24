@@ -29,6 +29,8 @@
 #include "h2o/memory.h"
 #include "h2o/time_.h"
 
+#define H2O_FILECACHE_ETAG_MAXLEN (sizeof("\"deadbeef-deadbeefdeadbeef\"") - 1)
+
 typedef struct st_h2o_filecache_ref_t {
     int fd;
     struct stat st;
@@ -37,7 +39,7 @@ typedef struct st_h2o_filecache_ref_t {
         char str[H2O_TIMESTR_RFC1123_LEN + 1];
     } _last_modified;
     struct {
-        char buf[sizeof("\"deadbeef-deadbeefdeadbeef\"")];
+        char buf[H2O_FILECACHE_ETAG_MAXLEN + 1];
         size_t len;
     } _etag;
     size_t _refcnt;
@@ -53,7 +55,7 @@ void h2o_filecache_clear(h2o_filecache_t *cache);
 
 h2o_filecache_ref_t *h2o_filecache_open_file(h2o_filecache_t *cache, const char *path, int oflag);
 void h2o_filecache_close_file(h2o_filecache_ref_t *ref);
-const char *h2o_filecache_get_last_modified(h2o_filecache_ref_t *ref, struct tm **gm);
-h2o_iovec_t h2o_filecache_get_etag(h2o_filecache_ref_t *ref);
+struct tm *h2o_filecache_get_last_modified(h2o_filecache_ref_t *ref, char *outbuf);
+size_t h2o_filecache_get_etag(h2o_filecache_ref_t *ref, char *outbuf);
 
 #endif
