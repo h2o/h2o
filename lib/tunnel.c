@@ -36,7 +36,6 @@ static void on_write_complete(h2o_socket_t *sock, int status);
 
 static void close_connection(struct st_h2o_tunnel_t *tunnel)
 {
-    assert(tunnel);
     if (tunnel->timeout != NULL) {
         h2o_timeout_unlink(&tunnel->timeout_entry);
         h2o_timeout_dispose(tunnel->ctx->loop, tunnel->timeout);
@@ -56,7 +55,6 @@ static void close_connection(struct st_h2o_tunnel_t *tunnel)
 
 static void on_handle_timeout(h2o_timeout_entry_t *entry)
 {
-    assert(entry);
     struct st_h2o_tunnel_t *tunnel = H2O_STRUCT_FROM_MEMBER(struct st_h2o_tunnel_t, timeout_entry, entry);
 
     close_connection(tunnel);
@@ -64,7 +62,6 @@ static void on_handle_timeout(h2o_timeout_entry_t *entry)
 
 static void on_timeout(h2o_timeout_entry_t *entry)
 {
-    assert(entry);
     struct st_h2o_tunnel_t *tunnel = H2O_STRUCT_FROM_MEMBER(struct st_h2o_tunnel_t, timeout_entry, entry);
 
     h2o_timeout_unlink(&tunnel->timeout_entry);
@@ -74,7 +71,6 @@ static void on_timeout(h2o_timeout_entry_t *entry)
 
 static inline void reset_timeout(struct st_h2o_tunnel_t *tunnel)
 {
-    assert(tunnel);
     if (tunnel->timeout == NULL) return;
     h2o_timeout_unlink(&tunnel->timeout_entry);
     h2o_timeout_link(tunnel->ctx->loop, tunnel->timeout, &tunnel->timeout_entry);
@@ -85,7 +81,7 @@ void on_read(h2o_socket_t *sock, int status)
 {
     struct st_h2o_tunnel_t *tunnel = sock->data;
     h2o_socket_t *dst;
-    assert(tunnel);
+    assert(tunnel != NULL);
     assert(tunnel->sock[0] == sock || tunnel->sock[1] == sock);
     reset_timeout(tunnel);
 
@@ -113,7 +109,7 @@ static void on_write_complete(h2o_socket_t *sock, int status)
 {
     struct st_h2o_tunnel_t *tunnel = sock->data;
     h2o_socket_t *peer;
-    assert(tunnel);
+    assert(tunnel != NULL);
     assert(tunnel->sock[0] == sock || tunnel->sock[1] == sock);
     reset_timeout(tunnel);
 
@@ -133,10 +129,6 @@ static void on_write_complete(h2o_socket_t *sock, int status)
 
 h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, uint64_t timeout, h2o_socket_t *sock1, h2o_socket_t *sock2)
 {
-    assert(ctx);
-    assert(sock1);
-    assert(sock2);
-
     h2o_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel) + sizeof(*tunnel->timeout));
     memset(tunnel, 0, sizeof(*tunnel));
     tunnel->ctx = ctx;
@@ -166,7 +158,5 @@ h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, uint64_t timeout, h2o_soc
 
 void h2o_tunnel_break(h2o_tunnel_t *tunnel)
 {
-    assert(tunnel);
-
     close_connection(tunnel);
 }
