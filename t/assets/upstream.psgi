@@ -1,5 +1,6 @@
 use strict;
 use warnings;
+use Digest::SHA1 qw(sha1_base64);
 use Plack::App::File;
 use Plack::Builder;
 use Plack::Request;
@@ -117,5 +118,38 @@ builder {
             ],
             [],
         ];
+    };
+    mount "/websocket" => sub {
+        my $env = shift;
+        my $key = $env->{HTTP_SEC_WEBSOCKET_KEY}
+            or return [400, [], ["no Sec-WebSocket-Key"]];
+        $key .= "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+        my $accept_key = sha1_base64($key);
+        my $fh = $env->{"psgix.io"};
+        print $fh join(
+            "\r\n",
+            "HTTP/1.1 101 Switching Protocols",
+            "Upgrade: websocket",
+            "Sec-Websocket-Accept: $accept_key",
+            "",
+            "",
+        );
+        while (1) {
+            my $rfds = '';
+            vec($rfds, fileno($fh), 1) = 1;
+            next if select($rfds, undef, undef, undef) <= 0;
+            $fh->sysread(my $data, 65536) <= 0
+                and last;
+            while (length($data) != 0) {
+                my $wfds = '';
+                vec($wfds, fileno($fh), 1) = 1;
+                next if select(undef, $wfds, undef, undef) <= 0;
+                my $wlen = $fh->syswrite($data);
+                last if $wlen <= 0;
+                $data = substr $data, $wlen;
+            }
+        }
+        close $fh;
+        exit 0;
     };
 };
