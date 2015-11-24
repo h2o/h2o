@@ -207,6 +207,8 @@ SET(LIB_SOURCE_FILES
 
     lib/http1.c
 
+    lib/tunnel.c
+
     lib/http2/casper.c
     lib/http2/connection.c
     lib/http2/frame.c

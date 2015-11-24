@@ -77,6 +77,8 @@ extern "C" {
 #define H2O_DEFAULT_HTTP2_IDLE_TIMEOUT (H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS 30
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT (H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS * 1000)
+#define H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT_IN_SECS 300
+#define H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT (H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT_IN_SECS * 1000)
 
 typedef struct st_h2o_conn_t h2o_conn_t;
 typedef struct st_h2o_context_t h2o_context_t;
@@ -1302,6 +1304,10 @@ typedef struct st_h2o_proxy_config_vars_t {
     uint64_t io_timeout;
     int preserve_host;
     uint64_t keepalive_timeout; /* in milliseconds; set to zero to disable keepalive */
+    struct {
+        int enabled;
+        uint64_t timeout;
+    } websocket;
 } h2o_proxy_config_vars_t;
 
 /**

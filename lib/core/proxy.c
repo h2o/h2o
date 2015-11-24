@@ -25,7 +25,9 @@
 #include <sys/socket.h>
 #include "picohttpparser.h"
 #include "h2o.h"
+#include "h2o/http1.h"
 #include "h2o/http1client.h"
+#include "h2o/tunnel.h"
 
 struct rp_generator_t {
     h2o_generator_t super;
@@ -37,7 +39,22 @@ struct rp_generator_t {
     } up_req;
     h2o_buffer_t *last_content_before_send;
     h2o_doublebuffer_t sending;
+    int is_websocket_handshake;
 };
+
+struct rp_ws_upgrade_info_t {
+    h2o_context_t *ctx;
+    h2o_timeout_t *timeout;
+    h2o_socket_t *upstream_sock;
+};
+
+static h2o_http1client_ctx_t *get_client_ctx(h2o_req_t *req)
+{
+    h2o_req_overrides_t *overrides = req->overrides;
+    if (overrides != NULL && overrides->client_ctx != NULL)
+        return overrides->client_ctx;
+    return &req->conn->ctx->proxy.client_ctx;
+}
 
 static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, size_t location_len, h2o_url_t *match,
                                     const h2o_url_scheme_t *req_scheme, h2o_iovec_t req_authority, h2o_iovec_t req_basepath)
@@ -82,7 +99,7 @@ static h2o_iovec_t build_request_merge_headers(h2o_mem_pool_t *pool, h2o_iovec_t
     return merged;
 }
 
-static h2o_iovec_t build_request(h2o_req_t *req, int keepalive)
+static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket_handshake)
 {
     h2o_iovec_t buf;
     size_t offset = 0, remote_addr_len = SIZE_MAX;
@@ -134,7 +151,9 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive)
     buf.base[offset++] = ' ';
     APPEND(req->path.base, req->path.len);
     APPEND_STRLIT(" HTTP/1.1\r\nconnection: ");
-    if (keepalive) {
+    if (is_websocket_handshake) {
+        APPEND_STRLIT("upgrade\r\nupgrade: websocket\r\nhost: ");
+    } else if (keepalive) {
         APPEND_STRLIT("keep-alive\r\nhost: ");
     } else {
         APPEND_STRLIT("close\r\nhost: ");
@@ -260,6 +279,24 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
     do_send(self);
 }
 
+static void on_websocket_upgrade_complete(void *_info, h2o_socket_t *sock, size_t reqsize)
+{
+    struct rp_ws_upgrade_info_t *info = _info;
+    h2o_tunnel_establish(info->ctx, sock, info->upstream_sock, info->timeout);
+    free(info);
+}
+
+static inline void on_websocket_upgrade(struct rp_generator_t *self, h2o_timeout_t *timeout)
+{
+    h2o_req_t *req = self->src_req;
+    h2o_socket_t *sock = h2o_http1client_steal_socket(self->client);
+    struct rp_ws_upgrade_info_t *info = h2o_mem_alloc(sizeof(*info));
+    info->upstream_sock = sock;
+    info->timeout = timeout;
+    info->ctx = req->conn->ctx;
+    h2o_http1_upgrade(req, NULL, 0, on_websocket_upgrade_complete, info);
+}
+
 static int on_body(h2o_http1client_t *client, const char *errstr)
 {
     struct rp_generator_t *self = client->data;
@@ -342,6 +379,14 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
         }
     }
 
+    if (self->is_websocket_handshake && req->res.status == 101) {
+        h2o_http1client_ctx_t *client_ctx = get_client_ctx(req);
+        assert(client_ctx->websocket_timeout != NULL);
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, H2O_STRLIT("websocket"));
+        on_websocket_upgrade(self, client_ctx->websocket_timeout);
+        self->client = NULL;
+        return NULL;
+    }
     /* declare the start of the response */
     h2o_start_response(req, &self->super);
 
@@ -387,11 +432,17 @@ static void on_generator_dispose(void *_self)
 static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, int keepalive)
 {
     struct rp_generator_t *self = h2o_mem_alloc_shared(&req->pool, sizeof(*self), on_generator_dispose);
+    h2o_http1client_ctx_t *client_ctx = get_client_ctx(req);
 
     self->super.proceed = do_proceed;
     self->super.stop = do_close;
     self->src_req = req;
-    self->up_req.bufs[0] = build_request(req, keepalive);
+    if (client_ctx->websocket_timeout != NULL && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket"))) {
+        self->is_websocket_handshake = 1;
+    } else {
+        self->is_websocket_handshake = 0;
+    }
+    self->up_req.bufs[0] = build_request(req, keepalive, self->is_websocket_handshake);
     self->up_req.bufs[1] = req->entity;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
@@ -402,10 +453,8 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, int keepalive)
 
 void h2o__proxy_process_request(h2o_req_t *req)
 {
-    h2o_context_t *ctx = req->conn->ctx;
     h2o_req_overrides_t *overrides = req->overrides;
-    h2o_http1client_ctx_t *client_ctx =
-        overrides != NULL && overrides->client_ctx != NULL ? overrides->client_ctx : &ctx->proxy.client_ctx;
+    h2o_http1client_ctx_t *client_ctx = get_client_ctx(req);
     struct rp_generator_t *self;
 
     if (overrides != NULL) {
