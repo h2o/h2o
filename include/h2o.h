@@ -549,6 +549,21 @@ typedef struct st_h2o_res_t {
     h2o_mime_attributes_t *mime_attr;
 } h2o_res_t;
 
+typedef struct st_h2o_conn_callbacks_t {
+    /**
+     * getsockname (return size of the obtained address, or 0 if failed)
+     */
+    socklen_t (*get_sockname)(h2o_conn_t *conn, struct sockaddr *sa);
+    /**
+     * getpeername (return size of the obtained address, or 0 if failed)
+     */
+    socklen_t (*get_peername)(h2o_conn_t *conn, struct sockaddr *sa);
+    /**
+     * callback for server push (may be NULL)
+     */
+    void (*push_path)(h2o_req_t *req, const char *abspath, size_t abspath_len);
+} h2o_conn_callbacks_t;
+
 /**
  * basic structure of an HTTP connection (HTTP/1, HTTP/2, etc.)
  */
@@ -566,13 +581,9 @@ struct st_h2o_conn_t {
      */
     struct timeval connected_at;
     /**
-     * getsockname (return size of the obtained address, or 0 if failed)
+     * callbacks
      */
-    socklen_t (*get_sockname)(h2o_conn_t *conn, struct sockaddr *sa);
-    /**
-     * getpeername (return size of the obtained address, or 0 if failed)
-     */
-    socklen_t (*get_peername)(h2o_conn_t *conn, struct sockaddr *sa);
+    const h2o_conn_callbacks_t *callbacks;
 };
 
 typedef struct st_h2o_req_overrides_t {
@@ -742,10 +753,6 @@ struct st_h2o_req_t {
      */
     char res_is_delegated;
 
-    /**
-     * absolute paths to be pushed (using HTTP/2 server push)
-     */
-    H2O_VECTOR(h2o_iovec_t) http2_push_paths;
     /**
      * the Upgrade request header (or { NULL, 0 } if not available)
      */
@@ -1075,7 +1082,7 @@ void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str,
 /**
  * registers push path (if necessary) by parsing a Link header
  */
-int h2o_register_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len);
+int h2o_puth_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len);
 /**
  * logs an error
  */

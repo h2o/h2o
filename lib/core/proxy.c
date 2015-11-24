@@ -92,7 +92,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive)
     h2o_iovec_t cookie_buf = {}, xff_buf = {}, via_buf = {};
 
     /* for x-f-f */
-    if ((sslen = req->conn->get_peername(req->conn, (void *)&ss)) != 0)
+    if ((sslen = req->conn->callbacks->get_peername(req->conn, (void *)&ss)) != 0)
         remote_addr_len = h2o_socket_getnumerichost((void *)&ss, sslen, remote_addr);
 
     /* build response */
@@ -326,7 +326,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 }
                 goto AddHeaderDuped;
             } else if (token == H2O_TOKEN_LINK) {
-                h2o_register_push_path_in_link_header(req, headers[i].value, headers[i].value_len);
+                h2o_puth_path_in_link_header(req, headers[i].value, headers[i].value_len);
             }
         /* default behaviour, transfer the header downstream */
         AddHeaderDuped:

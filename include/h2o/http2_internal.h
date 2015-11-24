@@ -152,6 +152,12 @@ typedef enum enum_h2o_http2_stream_state_t {
     H2O_HTTP2_STREAM_STATE_END_STREAM
 } h2o_http2_stream_state_t;
 
+typedef struct st_h2o_http2_conn_num_streams_t {
+    uint32_t open;
+    uint32_t half_closed;
+    uint32_t send_body;
+} h2o_http2_conn_num_streams_t;
+
 struct st_h2o_http2_stream_t {
     uint32_t stream_id;
     h2o_ostream_t _ostr_final;
@@ -162,12 +168,20 @@ struct st_h2o_http2_stream_t {
     size_t _expected_content_length; /* SIZE_MAX if unknown */
     H2O_VECTOR(h2o_iovec_t) _data;
     h2o_ostream_pull_cb _pull_cb;
-    uint32_t *
-        _num_streams_open_slot; /* points http2_conn_t::num_streams::open_(priority|push|pull) in which the stream is counted */
-    struct {
-        uint32_t parent_stream_id;
-        int promise_sent : 1;
-    } push;
+    h2o_http2_conn_num_streams_t *_num_streams_slot; /* points http2_conn_t::num_streams::* in which the stream is counted */
+    union {
+        struct {
+            uint32_t parent_stream_id;
+            int promise_sent : 1;
+        } push;
+        struct {
+            enum {
+                H2O_HTTP2_STREAM_CASPER_STATE_TBD = 0,
+                H2O_HTTP2_STREAM_CASPER_READY,
+                H2O_HTTP2_STREAM_CASPER_DISABLED
+            } casper_state;
+        } pull;
+    };
     /* references governed by connection.c for handling various things */
     struct {
         h2o_linklist_t link;
@@ -200,10 +214,9 @@ struct st_h2o_http2_conn_t {
         uint32_t max_open;
     } push_stream_ids;
     struct {
-        uint32_t open_priority;
-        uint32_t open_pull;
-        uint32_t open_push;
-        uint32_t responding;
+        h2o_http2_conn_num_streams_t priority;
+        h2o_http2_conn_num_streams_t pull;
+        h2o_http2_conn_num_streams_t push;
     } num_streams;
     /* internal */
     h2o_http2_scheduler_node_t scheduler;
@@ -259,9 +272,8 @@ static void h2o_http2_conn_init_casper(h2o_http2_conn_t *conn, unsigned capacity
 
 /* stream */
 static int h2o_http2_stream_is_push(uint32_t stream_id);
-h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req,
-                                          uint32_t push_parent_stream_id);
-static void h2o_http2_stream_update_open_slot(h2o_http2_stream_t *stream, uint32_t *slot);
+h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req);
+static void h2o_http2_stream_update_open_slot(h2o_http2_stream_t *stream, h2o_http2_conn_num_streams_t *slot);
 static void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_http2_stream_state_t new_state);
 static void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
@@ -342,11 +354,11 @@ inline void h2o_http2_conn_init_casper(h2o_http2_conn_t *conn, unsigned capacity
     conn->casper = h2o_http2_casper_create(capacity_bits, 6);
 }
 
-inline void h2o_http2_stream_update_open_slot(h2o_http2_stream_t *stream, uint32_t *slot)
+inline void h2o_http2_stream_update_open_slot(h2o_http2_stream_t *stream, h2o_http2_conn_num_streams_t *slot)
 {
-    --*stream->_num_streams_open_slot;
-    ++*slot;
-    stream->_num_streams_open_slot = slot;
+    --stream->_num_streams_slot->open;
+    ++slot->open;
+    stream->_num_streams_slot = slot;
 }
 
 inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_http2_stream_state_t new_state)
@@ -358,9 +370,9 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
     case H2O_HTTP2_STREAM_STATE_RECV_HEADERS:
         assert(stream->state == H2O_HTTP2_STREAM_STATE_IDLE);
         if (h2o_http2_stream_is_push(stream->stream_id))
-            h2o_http2_stream_update_open_slot(stream, &conn->num_streams.open_push);
+            h2o_http2_stream_update_open_slot(stream, &conn->num_streams.push);
         else
-            h2o_http2_stream_update_open_slot(stream, &conn->num_streams.open_pull);
+            h2o_http2_stream_update_open_slot(stream, &conn->num_streams.pull);
         stream->state = new_state;
         stream->req.timestamps.request_begin_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
         break;
@@ -373,11 +385,12 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
         break;
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
         assert(stream->state == H2O_HTTP2_STREAM_STATE_REQ_PENDING);
-        ++conn->num_streams.responding;
+        ++stream->_num_streams_slot->half_closed;
         stream->state = new_state;
         break;
     case H2O_HTTP2_STREAM_STATE_SEND_BODY:
         stream->state = new_state;
+        ++stream->_num_streams_slot->send_body;
         stream->req.timestamps.response_start_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
         break;
     case H2O_HTTP2_STREAM_STATE_END_STREAM:
@@ -389,8 +402,11 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
         case H2O_HTTP2_STREAM_STATE_REQ_PENDING:
             break;
         case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
+            --stream->_num_streams_slot->half_closed;
+            break;
         case H2O_HTTP2_STREAM_STATE_SEND_BODY:
-            --conn->num_streams.responding;
+            --stream->_num_streams_slot->half_closed;
+            --stream->_num_streams_slot->send_body;
             break;
         case H2O_HTTP2_STREAM_STATE_END_STREAM:
             assert(!"FIXME");

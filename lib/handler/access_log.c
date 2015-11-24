@@ -382,7 +382,7 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             break;
         case ELEMENT_TYPE_LOCAL_ADDR: /* %A */
             RESERVE(NI_MAXHOST);
-            pos = append_addr(pos, req->conn->get_sockname, req->conn);
+            pos = append_addr(pos, req->conn->callbacks->get_sockname, req->conn);
             break;
         case ELEMENT_TYPE_BYTES_SENT: /* %b */
             RESERVE(sizeof("18446744073709551615") - 1);
@@ -394,7 +394,7 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             break;
         case ELEMENT_TYPE_REMOTE_ADDR: /* %h */
             RESERVE(NI_MAXHOST);
-            pos = append_addr(pos, req->conn->get_peername, req->conn);
+            pos = append_addr(pos, req->conn->callbacks->get_peername, req->conn);
             break;
         case ELEMENT_TYPE_METHOD: /* %m */
             RESERVE(req->input.method.len * 4);
@@ -402,7 +402,7 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             break;
         case ELEMENT_TYPE_LOCAL_PORT: /* %p */
             RESERVE(sizeof("65535") - 1);
-            pos = append_port(pos, req->conn->get_sockname, req->conn);
+            pos = append_port(pos, req->conn->callbacks->get_sockname, req->conn);
             break;
         case ELEMENT_TYPE_QUERY: /* %q */
             if (req->input.query_at != SIZE_MAX) {
