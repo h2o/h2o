@@ -584,13 +584,6 @@ typedef struct st_h2o_req_overrides_t {
          */
         h2o_iovec_t path_prefix;
     } location_rewrite;
-    /**
-     * parameters for websocket proxying
-     */
-    struct {
-        int enabled;
-        uint64_t timeout;
-    } websocket;
 } h2o_req_overrides_t;
 
 /**
