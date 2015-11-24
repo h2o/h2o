@@ -407,9 +407,7 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                             int *pseudo_header_exists_map, size_t *content_length, const char **err_desc)
 {
     const uint8_t *src_end = src + len;
-    int allow_pseudo = 1;
 
-    *pseudo_header_exists_map = 0;
     *content_length = SIZE_MAX;
 
     while (src != src_end) {
@@ -418,7 +416,7 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
         if (ret != 0)
             return ret;
         if (r.name->base[0] == ':') {
-            if (allow_pseudo) {
+            if (pseudo_header_exists_map != NULL) {
                 /* FIXME validate the chars in the value (e.g. reject SP in path) */
                 if (r.name == &H2O_TOKEN_AUTHORITY->buf) {
                     /* FIXME should we perform this check? */
@@ -453,7 +451,7 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                 return H2O_HTTP2_ERROR_PROTOCOL;
             }
         } else {
-            allow_pseudo = 0;
+            pseudo_header_exists_map = NULL;
             if (h2o_iovec_is_token(r.name)) {
                 h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, r.name);
                 if (token == H2O_TOKEN_CONTENT_LENGTH) {

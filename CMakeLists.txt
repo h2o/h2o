@@ -18,7 +18,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
+CMAKE_MINIMUM_REQUIRED(VERSION 2.8.11)
 CMAKE_POLICY(SET CMP0003 NEW)
 
 PROJECT(h2o C)
@@ -161,6 +161,7 @@ SET(LIB_SOURCE_FILES
     deps/picohttpparser/picohttpparser.c
 
     lib/common/file.c
+    lib/common/filecache.c
     lib/common/hostinfo.c
     lib/common/http1client.c
     lib/common/memcached.c

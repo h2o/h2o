@@ -26,8 +26,8 @@ before_script:
   - sudo apt-get install -qq apache2-utils
   # install nghttp2 with `--enable-app` (optionally required for running HTTP/2 tests)
   - sudo apt-get install -qq libev-dev
-  - curl -L http://github.com/tatsuhiro-t/nghttp2/releases/download/v0.7.5/nghttp2-0.7.5.tar.gz | tar xzf -
-  - (cd nghttp2-0.7.5 && ./configure --prefix=/usr --disable-threads --enable-app && make && sudo make install)
+  - curl -L https://github.com/tatsuhiro-t/nghttp2/releases/download/v1.4.0/nghttp2-1.4.0.tar.gz | tar xzf -
+  - (cd nghttp2-1.4.0 && ./configure --prefix=/usr --disable-threads --enable-app && make && sudo make install)
 
 script:
   - cmake -DWITH_MRUBY=ON .
