@@ -46,7 +46,7 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
         if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
             free(sock);
         } else {
-            int changed = 0;
+            int changed = 0, op, ret;
             struct epoll_event ev;
             ev.events = 0;
             if (h2o_socket_is_reading(&sock->super)) {
@@ -75,13 +75,24 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
                 }
             }
             if (changed) {
-                int op = (sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED) != 0 ? EPOLL_CTL_MOD : EPOLL_CTL_ADD, ret;
+                if ((sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED) != 0) {
+                    if (ev.events != 0)
+                        op = EPOLL_CTL_MOD;
+                    else
+                        op = EPOLL_CTL_DEL;
+                } else {
+                    assert(ev.events != 0);
+                    op = EPOLL_CTL_ADD;
+                }
                 ev.data.ptr = sock;
                 while ((ret = epoll_ctl(loop->ep, op, sock->fd, &ev)) != 0 && errno == EINTR)
                     ;
                 if (ret != 0)
                     return -1;
-                sock->_flags |= H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED;
+                if (op == EPOLL_CTL_DEL)
+                    sock->_flags &= ~H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED;
+                else
+                    sock->_flags |= H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED;
             }
         }
     }
