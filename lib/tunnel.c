@@ -62,7 +62,6 @@ static inline void on_read(h2o_socket_t *sock, int status)
     h2o_socket_t *dst;
     assert(tunnel != NULL);
     assert(tunnel->sock[0] == sock || tunnel->sock[1] == sock);
-    reset_timeout(tunnel);
 
     if (status != 0) {
         close_connection(tunnel);
@@ -73,6 +72,7 @@ static inline void on_read(h2o_socket_t *sock, int status)
         return;
 
     h2o_socket_read_stop(sock);
+    reset_timeout(tunnel);
 
     if (tunnel->sock[0] == sock)
         dst = tunnel->sock[1];
@@ -91,12 +91,13 @@ static void on_write_complete(h2o_socket_t *sock, int status)
     h2o_socket_t *peer;
     assert(tunnel != NULL);
     assert(tunnel->sock[0] == sock || tunnel->sock[1] == sock);
-    reset_timeout(tunnel);
 
     if (status != 0) {
         close_connection(tunnel);
         return;
     }
+
+    reset_timeout(tunnel);
 
     if (tunnel->sock[0] == sock)
         peer = tunnel->sock[1];
