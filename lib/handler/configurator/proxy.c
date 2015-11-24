@@ -142,8 +142,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_timeout_keepalive);
     h2o_configurator_define_command(&c->super, "proxy.websocket",
-                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_websocket);
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_websocket);
     h2o_configurator_define_command(&c->super, "proxy.websocket.timeout",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_websocket_timeout);

@@ -71,13 +71,13 @@ static void on_timeout(h2o_timeout_entry_t *entry)
 
 static inline void reset_timeout(struct st_h2o_tunnel_t *tunnel)
 {
-    if (tunnel->timeout == NULL) return;
+    if (tunnel->timeout == NULL)
+        return;
     h2o_timeout_unlink(&tunnel->timeout_entry);
     h2o_timeout_link(tunnel->ctx->loop, tunnel->timeout, &tunnel->timeout_entry);
 }
 
-static inline
-void on_read(h2o_socket_t *sock, int status)
+static inline void on_read(h2o_socket_t *sock, int status)
 {
     struct st_h2o_tunnel_t *tunnel = sock->data;
     h2o_socket_t *dst;
@@ -90,12 +90,15 @@ void on_read(h2o_socket_t *sock, int status)
         return;
     }
 
-    if (sock->bytes_read == 0) return;
+    if (sock->bytes_read == 0)
+        return;
 
     h2o_socket_read_stop(sock);
 
-    if (tunnel->sock[0] == sock) dst = tunnel->sock[1];
-    else dst = tunnel->sock[0];
+    if (tunnel->sock[0] == sock)
+        dst = tunnel->sock[1];
+    else
+        dst = tunnel->sock[0];
 
     assert(dst);
 
@@ -118,8 +121,10 @@ static void on_write_complete(h2o_socket_t *sock, int status)
         return;
     }
 
-    if (tunnel->sock[0] == sock) peer = tunnel->sock[1];
-    else peer = tunnel->sock[0];
+    if (tunnel->sock[0] == sock)
+        peer = tunnel->sock[1];
+    else
+        peer = tunnel->sock[0];
 
     assert(peer);
 

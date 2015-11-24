@@ -427,7 +427,8 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, int keepalive)
     self->super.stop = do_close;
     self->src_req = req;
     if (req->overrides != NULL && req->overrides->websocket.enabled && req->upgrade.base != NULL &&
-        req->upgrade.len == sizeof("websocket") - 1 && h2o_lcstris(req->upgrade.base, sizeof("websocket") - 1, H2O_STRLIT("websocket"))) {
+        req->upgrade.len == sizeof("websocket") - 1 &&
+        h2o_lcstris(req->upgrade.base, sizeof("websocket") - 1, H2O_STRLIT("websocket"))) {
         self->is_websocket_handshake = 1;
         self->up_req.bufs[0] = build_request(req, keepalive, 1);
     } else {
