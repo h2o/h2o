@@ -120,16 +120,30 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
     /* update readable flags, perform writes */
     for (i = 0; i != nevents; ++i) {
         struct st_h2o_evloop_socket_t *sock = events[i].data.ptr;
-        if ((events[i].events & EPOLLIN) != 0) {
-            if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED) {
+        int notified = 0;
+        if ((events[i].events & (EPOLLIN | EPOLLHUP | EPOLLERR)) != 0) {
+            if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_READ) != 0) {
                 sock->_flags |= H2O_SOCKET_FLAG_IS_READ_READY;
                 link_to_pending(sock);
+                notified = 1;
             }
         }
-        if ((events[i].events & EPOLLOUT) != 0) {
-            if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED) {
+        if ((events[i].events & (EPOLLOUT | EPOLLHUP | EPOLLERR)) != 0) {
+            if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE) != 0) {
                 write_pending(sock);
+                notified = 1;
             }
+        }
+        if (!notified) {
+            pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+            static time_t last_reported = 0;
+            time_t now = time(NULL);
+            pthread_mutex_lock(&lock);
+            if (last_reported + 60 < now) {
+                last_reported = now;
+                fprintf(stderr, "ignoring epoll event (fd:%d,event:%x)\n", sock->fd, (int)events[i].events);
+            }
+            pthread_mutex_unlock(&lock);
         }
     }
 
