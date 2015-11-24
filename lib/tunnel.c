@@ -38,14 +38,10 @@ static void close_connection(struct st_h2o_tunnel_t *tunnel)
 {
     h2o_timeout_unlink(&tunnel->timeout_entry);
 
-    if (tunnel->sock[0] != NULL) {
-        h2o_socket_read_stop(tunnel->sock[0]);
-        h2o_socket_close(tunnel->sock[0]);
-    }
-    if (tunnel->sock[1] != NULL) {
-        h2o_socket_read_stop(tunnel->sock[1]);
-        h2o_socket_close(tunnel->sock[1]);
-    }
+    h2o_socket_read_stop(tunnel->sock[0]);
+    h2o_socket_close(tunnel->sock[0]);
+    h2o_socket_read_stop(tunnel->sock[1]);
+    h2o_socket_close(tunnel->sock[1]);
 
     free(tunnel);
 }
@@ -85,8 +81,6 @@ static inline void on_read(h2o_socket_t *sock, int status)
     else
         dst = tunnel->sock[0];
 
-    assert(dst);
-
     h2o_iovec_t buf;
     buf.base = sock->input->bytes;
     buf.len = sock->input->size;
@@ -110,8 +104,6 @@ static void on_write_complete(h2o_socket_t *sock, int status)
         peer = tunnel->sock[1];
     else
         peer = tunnel->sock[0];
-
-    assert(peer);
 
     h2o_buffer_consume(&peer->input, peer->input->size);
     h2o_socket_read_start(peer, on_read);
