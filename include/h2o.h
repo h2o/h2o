@@ -1080,7 +1080,11 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
 /**
  * handles redirect internally
  */
-void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str, size_t url_len);
+void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *url_str, size_t url_len);
+/**
+ * returns method to be used after redirection
+ */
+h2o_iovec_t h2o_get_redirect_method(h2o_iovec_t method, int status);
 /**
  * registers push path (if necessary) by parsing a Link header
  */

@@ -418,7 +418,8 @@ void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
 void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const char *url, size_t url_len)
 {
     if (req->res_is_delegated) {
-        h2o_send_redirect_internal(req, status, url, url_len);
+        h2o_iovec_t method = h2o_get_redirect_method(req->method, status);
+        h2o_send_redirect_internal(req, method, url, url_len);
         return;
     }
 
@@ -448,11 +449,10 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
     h2o_send(req, bufs, bufcnt, 1);
 }
 
-void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str, size_t url_len)
+void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *url_str, size_t url_len)
 {
     h2o_url_t url;
     int authority_changed;
-    h2o_iovec_t method;
 
     /* parse the location URL */
     if (h2o_url_parse_relative(url_str, url_len, &url) != 0) {
@@ -479,12 +479,14 @@ void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str,
     h2o_url_resolve_path(&base_path, &url.path);
     url.path = h2o_concat(&req->pool, base_path, url.path);
 
-    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("POST")) && !(status == 307 || status == 308))
-        method = h2o_iovec_init(H2O_STRLIT("GET"));
-    else
-        method = req->method;
-
     h2o_reprocess_request_deferred(req, method, url.scheme, url.authority, url.path, authority_changed ? req->overrides : NULL, 1);
+}
+
+h2o_iovec_t h2o_get_redirect_method(h2o_iovec_t method, int status)
+{
+    if (h2o_memis(method.base, method.len, H2O_STRLIT("POST")) && !(status == 307 || status == 308))
+        method = h2o_iovec_init(H2O_STRLIT("GET"));
+    return method;
 }
 
 int h2o_puth_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len)
