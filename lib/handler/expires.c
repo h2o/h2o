@@ -61,7 +61,7 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
         break;
     }
 
-    h2o_setup_next_ostream(&self->super, req, slot);
+    h2o_setup_next_ostream(req, slot);
 }
 
 void h2o_expires_register(h2o_pathconf_t *pathconf, h2o_expires_args_t *args)

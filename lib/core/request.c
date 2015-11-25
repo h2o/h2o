@@ -237,7 +237,7 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
     /* reset the response */
     req->res = (h2o_res_t){0, NULL, SIZE_MAX, {}};
     req->res.reason = "OK";
-    req->_ostr_init_index = 0;
+    req->_next_filter_index = 0;
     req->bytes_sent = 0;
 
     /* check the delegation (or reprocess) counter */
@@ -289,7 +289,9 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
     req->_generator = generator;
 
     /* setup response filters */
-    if (req->pathconf->filters.size != 0) {
+    if (req->prefilters != NULL) {
+        req->prefilters->on_setup_ostream(req->prefilters, req, &req->_ostr_top);
+    } else  if (req->pathconf->filters.size != 0) {
         h2o_filter_t *filter = req->pathconf->filters.entries[0];
         filter->on_setup_ostream(filter, req, &req->_ostr_top);
     }
@@ -308,6 +310,14 @@ void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
         req->bytes_sent += bufs[i].len;
 
     req->_ostr_top->do_send(req->_ostr_top, req, bufs, bufcnt, is_final);
+}
+
+h2o_req_prefilter_t *h2o_add_prefilter(h2o_req_t *req, size_t sz)
+{
+    h2o_req_prefilter_t *prefilter = h2o_mem_alloc_pool(&req->pool, sz);
+    prefilter->next = req->prefilters;
+    req->prefilters = prefilter;
+    return prefilter;
 }
 
 h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot)

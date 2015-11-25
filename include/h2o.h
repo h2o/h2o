@@ -588,6 +588,14 @@ struct st_h2o_conn_t {
     const h2o_conn_callbacks_t *callbacks;
 };
 
+/**
+ * filter used for capturing a response (can be used to implement subreq)
+ */
+typedef struct st_h2o_req_prefilter_t {
+    struct st_h2o_req_prefilter_t *next;
+    void (*on_setup_ostream)(struct st_h2o_req_prefilter_t *self, h2o_req_t *req, h2o_ostream_t **slot);
+} h2o_req_prefilter_t;
+
 typedef struct st_h2o_req_overrides_t {
     /**
      * specific client context (or NULL)
@@ -693,6 +701,10 @@ struct st_h2o_req_t {
      */
     h2o_iovec_t path_normalized;
     /**
+     * filters assigned per request
+     */
+    h2o_req_prefilter_t *prefilters;
+    /**
      * additional information (becomes available for extension-based dynamic content)
      */
     h2o_filereq_t *filereq;
@@ -768,7 +780,7 @@ struct st_h2o_req_t {
     /* internal structure */
     h2o_generator_t *_generator;
     h2o_ostream_t *_ostr_top;
-    size_t _ostr_init_index;
+    size_t _next_filter_index;
     h2o_timeout_entry_t _timeout_entry;
     /* per-request memory pool (placed at the last since the structure is large) */
     h2o_mem_pool_t pool;
@@ -936,9 +948,17 @@ void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final);
  */
 static int h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf);
 /**
+ * creates an uninitialized prefilter and returns pointer to it
+ */
+h2o_req_prefilter_t *h2o_add_prefilter(h2o_req_t *req, size_t sz);
+/**
+ * requests the next prefilter or filter (if any) to setup the ostream if necessary
+ */
+static void h2o_setup_next_prefilter(h2o_req_prefilter_t *self, h2o_req_t *req, h2o_ostream_t **slot);
+/**
  * requests the next filter (if any) to setup the ostream if necessary
  */
-static void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot);
+static void h2o_setup_next_ostream(h2o_req_t *req, h2o_ostream_t **slot);
 /**
  * called by the ostream filters to send output to the next ostream filter
  * note: ostream filters should free itself after sending the final chunk (i.e. calling the function with is_final set to true)
@@ -1375,16 +1395,24 @@ inline int h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf)
     return is_final;
 }
 
-inline void h2o_setup_next_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
+inline void h2o_setup_next_ostream(h2o_req_t *req, h2o_ostream_t **slot)
 {
     h2o_filter_t *next;
 
-    (void)(self);
-    assert(self == req->pathconf->filters.entries[req->_ostr_init_index]);
-    if (req->_ostr_init_index + 1 < req->pathconf->filters.size) {
-        next = req->pathconf->filters.entries[++req->_ostr_init_index];
+    if (req->_next_filter_index < req->pathconf->filters.size) {
+        next = req->pathconf->filters.entries[req->_next_filter_index++];
         next->on_setup_ostream(next, req, slot);
     }
+}
+
+inline void h2o_setup_next_prefilter(h2o_req_prefilter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
+{
+    h2o_req_prefilter_t *next = self->next;
+
+    if (next != NULL)
+        next->on_setup_ostream(next, req, slot);
+    else
+        h2o_setup_next_ostream(req, slot);
 }
 
 inline struct timeval *h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts)

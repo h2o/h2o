@@ -124,7 +124,7 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     for (cmd = self->cmds; cmd->cmd != H2O_HEADERS_CMD_NULL; ++cmd)
         rewrite_headers(&req->pool, &req->res.headers, cmd);
 
-    h2o_setup_next_ostream(&self->super, req, slot);
+    h2o_setup_next_ostream(req, slot);
 }
 
 void h2o_headers_register(h2o_pathconf_t *pathconf, h2o_headers_command_t *cmds)

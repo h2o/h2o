@@ -187,7 +187,7 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
         req->preferred_chunk_size = BUF_SIZE;
 
 Next:
-    h2o_setup_next_ostream(self, req, slot);
+    h2o_setup_next_ostream(req, slot);
 }
 
 void h2o_gzip_register(h2o_pathconf_t *pathconf)
