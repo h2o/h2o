@@ -474,7 +474,10 @@ void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *
     if (url.scheme == NULL)
         url.scheme = req->scheme;
     if (url.authority.base == NULL) {
-        url.authority = req->authority;
+        if (req->hostconf != NULL)
+            url.authority = req->hostconf->authority.hostport;
+        else
+            url.authority = req->authority;
         authority_changed = 0;
     } else {
         if (h2o_lcstris(url.authority.base, url.authority.len, req->authority.base, req->authority.len)) {
