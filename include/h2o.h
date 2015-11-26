@@ -1194,6 +1194,8 @@ void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
  */
 void h2o_chunked_register(h2o_pathconf_t *pathconf);
 
+/* lib/gzip.c */
+
 /**
  * registers the gzip encoding output filter (added by default, for now)
  */
@@ -1202,6 +1204,22 @@ void h2o_gzip_register(h2o_pathconf_t *pathconf);
  *
  */
 void h2o_gzip_register_configurator(h2o_globalconf_t *conf);
+
+/* lib/errordoc.c */
+
+typedef struct st_h2o_errordoc_t {
+    int status;
+    h2o_iovec_t url; /* can be relative */
+} h2o_errordoc_t;
+
+/**
+ * registers the errordocument output filter
+ */
+void h2o_errordoc_register(h2o_pathconf_t *pathconf, h2o_errordoc_t *errdocs, size_t cnt);
+/**
+ *
+ */
+void h2o_errordoc_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/expires.c */
 
