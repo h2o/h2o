@@ -48,6 +48,8 @@
 		1065E70E19BF6D9400686E72 /* uv-binding.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 1065E70719BF17FE00686E72 /* uv-binding.c.h */; };
 		106C22F81C040F6400405689 /* tunnel.c in Sources */ = {isa = PBXBuildFile; fileRef = 106C22F71C040F6400405689 /* tunnel.c */; };
 		106C22FA1C040F7800405689 /* tunnel.h in Headers */ = {isa = PBXBuildFile; fileRef = 106C22F91C040F7800405689 /* tunnel.h */; };
+		106C22FF1C05436100405689 /* errordoc.c in Sources */ = {isa = PBXBuildFile; fileRef = 106C22FE1C05436100405689 /* errordoc.c */; };
+		106C23011C0544CE00405689 /* errordoc.c in Sources */ = {isa = PBXBuildFile; fileRef = 106C23001C0544CE00405689 /* errordoc.c */; };
 		1070866A1B70A00F002B8F18 /* casper.c in Sources */ = {isa = PBXBuildFile; fileRef = 107086691B70A00F002B8F18 /* casper.c */; };
 		1070866C1B787D06002B8F18 /* gzip.c in Sources */ = {isa = PBXBuildFile; fileRef = 1070866B1B787D06002B8F18 /* gzip.c */; };
 		107086701B7925D5002B8F18 /* gzip.c in Sources */ = {isa = PBXBuildFile; fileRef = 1070866F1B7925D5002B8F18 /* gzip.c */; };
@@ -269,9 +271,9 @@
 		101B670B19ADD3380084A351 /* access_log.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = access_log.c; sourceTree = "<group>"; };
 		1039A20A1BB89531005D3B8F /* mruby_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = mruby_directives.mt; sourceTree = "<group>"; };
 		103BAB351B130666000694F4 /* socket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = socket.c; sourceTree = "<group>"; };
+		104481271BFC05FC0007863F /* 80issues595.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 80issues595.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		1044812D1BFD0FBE0007863F /* filecache.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = filecache.h; sourceTree = "<group>"; };
 		1044812F1BFD10450007863F /* filecache.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = filecache.c; sourceTree = "<group>"; };
-		104481271BFC05FC0007863F /* 80issues595.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 80issues595.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		104960151B9D3F9100FF136D /* dump-github-repository.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; path = "dump-github-repository.pl"; sourceTree = "<group>"; };
 		104B9A221A47BBA1009EEE64 /* 40unix-socket.t */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "40unix-socket.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		104B9A231A4A4FAF009EEE64 /* serverutil.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = serverutil.h; sourceTree = "<group>"; };
@@ -359,6 +361,9 @@
 		106C22F71C040F6400405689 /* tunnel.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = tunnel.c; sourceTree = "<group>"; };
 		106C22F91C040F7800405689 /* tunnel.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = tunnel.h; sourceTree = "<group>"; };
 		106C22FB1C0413DA00405689 /* 40websocket.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40websocket.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		106C22FE1C05436100405689 /* errordoc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = errordoc.c; sourceTree = "<group>"; };
+		106C23001C0544CE00405689 /* errordoc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = errordoc.c; sourceTree = "<group>"; };
+		106C23021C06AB2F00405689 /* 50errordoc.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50errordoc.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		107086691B70A00F002B8F18 /* casper.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = casper.c; sourceTree = "<group>"; };
 		1070866B1B787D06002B8F18 /* gzip.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = gzip.c; sourceTree = "<group>"; };
 		1070866F1B7925D5002B8F18 /* gzip.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = gzip.c; sourceTree = "<group>"; };
@@ -616,6 +621,7 @@
 				105534D91A3C7A2000627ECB /* configurator */,
 				101B670B19ADD3380084A351 /* access_log.c */,
 				107923AE19A3217300C52AD6 /* chunked.c */,
+				106C22FE1C05436100405689 /* errordoc.c */,
 				104B9A501A5FB096009EEE64 /* expires.c */,
 				10BCF2FC1B168CAE0076939D /* fastcgi.c */,
 				107923AF19A3217300C52AD6 /* file.c */,
@@ -723,6 +729,7 @@
 			children = (
 				105534DA1A3C7A5400627ECB /* access_log.c */,
 				104B9A521A5FC7C4009EEE64 /* expires.c */,
+				106C23001C0544CE00405689 /* errordoc.c */,
 				10BCF2FE1B1A892F0076939D /* fastcgi.c */,
 				105534DC1A3C7AA900627ECB /* file.c */,
 				107086711B798487002B8F18 /* gzip.c */,
@@ -1130,6 +1137,7 @@
 				10AA2EB31A94B66D004322AC /* 40virtual-host.t */,
 				106C22FB1C0413DA00405689 /* 40websocket.t */,
 				10AA2EB11A931409004322AC /* 50access-log.t */,
+				106C23021C06AB2F00405689 /* 50errordoc.t */,
 				104B9A541A60773E009EEE64 /* 50expires.t */,
 				10C5A6311B268632006094A6 /* 50fastcgi.t */,
 				10FCC1421B300A6800F13674 /* 50fastcgi-php.t */,
@@ -1475,6 +1483,7 @@
 				10A3D40D1B50DAB700327CF9 /* strerror.c in Sources */,
 				107923CB19A3217300C52AD6 /* frame.c in Sources */,
 				104B9A491A5F9638009EEE64 /* headers.c in Sources */,
+				106C22FF1C05436100405689 /* errordoc.c in Sources */,
 				107923C219A3217300C52AD6 /* chunked.c in Sources */,
 				10A3D4081B50DAB700327CF9 /* close.c in Sources */,
 				105534EF1A440FC800627ECB /* config.c in Sources */,
@@ -1485,6 +1494,7 @@
 				10583BF21AE5A37B004A3AD6 /* README.md in Sources */,
 				10BCF2FD1B168CAE0076939D /* fastcgi.c in Sources */,
 				10A3D40B1B50DAB700327CF9 /* send.c in Sources */,
+				106C23011C0544CE00405689 /* errordoc.c in Sources */,
 				10FCC13E1B2E4A4500F13674 /* cloexec.c in Sources */,
 				105534DF1A3C7B9800627ECB /* proxy.c in Sources */,
 				10A3D4091B50DAB700327CF9 /* connect.c in Sources */,

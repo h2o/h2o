@@ -237,7 +237,7 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
     /* reset the response */
     req->res = (h2o_res_t){0, NULL, SIZE_MAX, {}};
     req->res.reason = "OK";
-    req->_ostr_init_index = 0;
+    req->_next_filter_index = 0;
     req->bytes_sent = 0;
 
     /* check the delegation (or reprocess) counter */
@@ -289,7 +289,9 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
     req->_generator = generator;
 
     /* setup response filters */
-    if (req->pathconf->filters.size != 0) {
+    if (req->prefilters != NULL) {
+        req->prefilters->on_setup_ostream(req->prefilters, req, &req->_ostr_top);
+    } else  if (req->pathconf->filters.size != 0) {
         h2o_filter_t *filter = req->pathconf->filters.entries[0];
         filter->on_setup_ostream(filter, req, &req->_ostr_top);
     }
@@ -308,6 +310,14 @@ void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
         req->bytes_sent += bufs[i].len;
 
     req->_ostr_top->do_send(req->_ostr_top, req, bufs, bufcnt, is_final);
+}
+
+h2o_req_prefilter_t *h2o_add_prefilter(h2o_req_t *req, size_t sz)
+{
+    h2o_req_prefilter_t *prefilter = h2o_mem_alloc_pool(&req->pool, sz);
+    prefilter->next = req->prefilters;
+    req->prefilters = prefilter;
+    return prefilter;
 }
 
 h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot)
@@ -418,7 +428,8 @@ void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
 void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const char *url, size_t url_len)
 {
     if (req->res_is_delegated) {
-        h2o_send_redirect_internal(req, status, url, url_len);
+        h2o_iovec_t method = h2o_get_redirect_method(req->method, status);
+        h2o_send_redirect_internal(req, method, url, url_len);
         return;
     }
 
@@ -448,11 +459,10 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
     h2o_send(req, bufs, bufcnt, 1);
 }
 
-void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str, size_t url_len)
+void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *url_str, size_t url_len)
 {
     h2o_url_t url;
     int authority_changed;
-    h2o_iovec_t method;
 
     /* parse the location URL */
     if (h2o_url_parse_relative(url_str, url_len, &url) != 0) {
@@ -464,7 +474,10 @@ void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str,
     if (url.scheme == NULL)
         url.scheme = req->scheme;
     if (url.authority.base == NULL) {
-        url.authority = req->authority;
+        if (req->hostconf != NULL)
+            url.authority = req->hostconf->authority.hostport;
+        else
+            url.authority = req->authority;
         authority_changed = 0;
     } else {
         if (h2o_lcstris(url.authority.base, url.authority.len, req->authority.base, req->authority.len)) {
@@ -479,12 +492,14 @@ void h2o_send_redirect_internal(h2o_req_t *req, int status, const char *url_str,
     h2o_url_resolve_path(&base_path, &url.path);
     url.path = h2o_concat(&req->pool, base_path, url.path);
 
-    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("POST")) && !(status == 307 || status == 308))
-        method = h2o_iovec_init(H2O_STRLIT("GET"));
-    else
-        method = req->method;
-
     h2o_reprocess_request_deferred(req, method, url.scheme, url.authority, url.path, authority_changed ? req->overrides : NULL, 1);
+}
+
+h2o_iovec_t h2o_get_redirect_method(h2o_iovec_t method, int status)
+{
+    if (h2o_memis(method.base, method.len, H2O_STRLIT("POST")) && !(status == 307 || status == 308))
+        method = h2o_iovec_init(H2O_STRLIT("GET"));
+    return method;
 }
 
 int h2o_puth_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len)
