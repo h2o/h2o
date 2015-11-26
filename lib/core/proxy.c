@@ -282,7 +282,12 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
 static void on_websocket_upgrade_complete(void *_info, h2o_socket_t *sock, size_t reqsize)
 {
     struct rp_ws_upgrade_info_t *info = _info;
-    h2o_tunnel_establish(info->ctx, sock, info->upstream_sock, info->timeout);
+
+    if (sock != NULL) {
+        h2o_tunnel_establish(info->ctx, sock, info->upstream_sock, info->timeout);
+    } else {
+        h2o_socket_close(info->upstream_sock);
+    }
     free(info);
 }
 
