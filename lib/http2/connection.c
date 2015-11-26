@@ -255,7 +255,8 @@ static void close_connection_now(h2o_http2_conn_t *conn)
         h2o_http2_casper_destroy(conn->casper);
     h2o_linklist_unlink(&conn->_conns);
 
-    h2o_socket_close(conn->sock);
+    if (conn->sock != NULL)
+        h2o_socket_close(conn->sock);
     free(conn);
 }
 
