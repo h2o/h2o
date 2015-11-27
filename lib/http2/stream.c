@@ -63,7 +63,6 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     h2o_http2_conn_unregister_stream(conn, stream);
-    --stream->_num_streams_slot->open;
     if (stream->_req_body != NULL)
         h2o_buffer_dispose(&stream->_req_body);
     h2o_dispose_request(&stream->req);
@@ -83,6 +82,7 @@ void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         break;
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
     case H2O_HTTP2_STREAM_STATE_SEND_BODY:
+    case H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL:
         h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
     /* continues */
     case H2O_HTTP2_STREAM_STATE_END_STREAM:
@@ -317,7 +317,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
     /* fallthru */
     case H2O_HTTP2_STREAM_STATE_SEND_BODY:
         if (is_final)
-            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
+            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL);
         break;
     case H2O_HTTP2_STREAM_STATE_END_STREAM:
         /* might get set by h2o_http2_stream_reset */
@@ -352,10 +352,12 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
     } else {
         /* push mode */
         h2o_iovec_t *nextbuf = send_data_push(conn, stream, stream->_data.entries, stream->_data.size,
-                                              stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM);
+                                              stream->state >= H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL);
         if (nextbuf == stream->_data.entries + stream->_data.size) {
             /* sent all data */
             stream->_data.size = 0;
+            if (stream->state == H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL)
+                h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
         } else if (nextbuf != stream->_data.entries) {
             /* adjust the buffer */
             size_t newsize = stream->_data.size - (nextbuf - stream->_data.entries);

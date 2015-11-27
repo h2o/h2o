@@ -149,6 +149,7 @@ typedef enum enum_h2o_http2_stream_state_t {
     H2O_HTTP2_STREAM_STATE_REQ_PENDING,
     H2O_HTTP2_STREAM_STATE_SEND_HEADERS,
     H2O_HTTP2_STREAM_STATE_SEND_BODY,
+    H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL,
     H2O_HTTP2_STREAM_STATE_END_STREAM
 } h2o_http2_stream_state_t;
 
@@ -393,6 +394,10 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
         ++stream->_num_streams_slot->send_body;
         stream->req.timestamps.response_start_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
         break;
+    case H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL:
+        assert(stream->state == H2O_HTTP2_STREAM_STATE_SEND_BODY);
+        stream->state = new_state;
+        break;
     case H2O_HTTP2_STREAM_STATE_END_STREAM:
         switch (stream->state) {
         case H2O_HTTP2_STREAM_STATE_IDLE:
@@ -405,6 +410,7 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
             --stream->_num_streams_slot->half_closed;
             break;
         case H2O_HTTP2_STREAM_STATE_SEND_BODY:
+        case H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL:
             --stream->_num_streams_slot->half_closed;
             --stream->_num_streams_slot->send_body;
             break;
@@ -414,6 +420,8 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
         }
         stream->state = new_state;
         stream->req.timestamps.response_end_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
+        --stream->_num_streams_slot->open;
+        stream->_num_streams_slot = NULL;
         break;
     }
 }
