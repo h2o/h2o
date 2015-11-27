@@ -210,6 +210,7 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
         break;
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
     case H2O_HTTP2_STREAM_STATE_SEND_BODY:
+    case H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL:
     case H2O_HTTP2_STREAM_STATE_END_STREAM:
         if (h2o_linklist_is_linked(&stream->_refs.link))
             h2o_linklist_unlink(&stream->_refs.link);
@@ -903,7 +904,7 @@ void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_ht
 {
     h2o_http2_conn_request_write(conn);
 
-    if (h2o_http2_stream_has_pending_data(stream) || stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
+    if (h2o_http2_stream_has_pending_data(stream) || stream->state >= H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL) {
         if (h2o_http2_window_get_window(&stream->output_window) > 0) {
             assert(!h2o_linklist_is_linked(&stream->_refs.link));
             h2o_http2_scheduler_activate(&stream->_refs.scheduler);
@@ -972,7 +973,7 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
     h2o_http2_conn_t *conn = cb_arg;
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.scheduler, ref);
 
-    assert(h2o_http2_stream_has_pending_data(stream) || stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM);
+    assert(h2o_http2_stream_has_pending_data(stream) || stream->state >= H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL);
 
     *still_is_active = 0;
 
