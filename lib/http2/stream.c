@@ -212,32 +212,42 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     }
 
     /* CASPER */
-    if (conn->casper != NULL) {
-        /* update casper if necessary */
+    if (stream->req.hostconf->http2.casper.capacity_bits != 0) {
+        /* if the response needs to be tracked using casper, then ... */
         if (stream->req.hostconf->http2.casper.track_all_types || is_blocking_asset(&stream->req)) {
+            /* calculate casper key */
             ssize_t etag_index = h2o_find_header(&stream->req.headers, H2O_TOKEN_ETAG, -1);
             h2o_iovec_t etag = etag_index != -1 ? stream->req.headers.entries[etag_index].value : (h2o_iovec_t){};
-            if (h2o_http2_casper_lookup(conn->casper, stream->req.path.base, stream->req.path.len, etag.base, etag.len, 1)) {
-                /* cancel if the pushed resource is already marked as cached */
-                if (h2o_http2_stream_is_push(stream->stream_id))
-                    goto CancelPush;
-            }
+            unsigned casper_key = h2o_http2_casper_calc_key(stream->req.hostconf->http2.casper.capacity_bits, stream->req.path.base,
+                                                            stream->req.path.len, etag.base, etag.len);
+            /* cancel push if marked as cached */
+            if (conn->casper != NULL && h2o_http2_stream_is_push(stream->stream_id) &&
+                h2o_http2_casper_lookup(conn->casper, casper_key, 1))
+                goto CancelPush;
+            /* set casper header (regardless of if casper is enabled for this connection) */
+            char casper_key_buf[sizeof("4294967295")];
+            sprintf(casper_key_buf, "%u", casper_key);
+            h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("cache-fingerprint-key"), 0,
+                                  casper_key_buf, strlen(casper_key_buf));
         }
         /* browsers might ignore push responses, or they may process the responses in a different order than they were pushed.
          * Therefore H2O tries to include casper cookie only in the last stream that may be received by the client, or when the
          * value become stable; see also: https://github.com/h2o/h2o/issues/421
          */
-        if (h2o_http2_stream_is_push(stream->stream_id)) {
-            if (!(conn->num_streams.pull.open == 0 && (conn->num_streams.push.half_closed - conn->num_streams.push.send_body) == 1))
-                goto SkipCookie;
-        } else {
-            if (conn->num_streams.push.half_closed - conn->num_streams.push.send_body != 0)
-                goto SkipCookie;
+        if (conn->casper != NULL) {
+            if (h2o_http2_stream_is_push(stream->stream_id)) {
+                if (!(conn->num_streams.pull.open == 0 &&
+                      (conn->num_streams.push.half_closed - conn->num_streams.push.send_body) == 1))
+                    goto SkipCookie;
+            } else {
+                if (conn->num_streams.push.half_closed - conn->num_streams.push.send_body != 0)
+                    goto SkipCookie;
+            }
+            h2o_iovec_t cookie = h2o_http2_casper_get_cookie(conn->casper);
+            h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, cookie.base, cookie.len);
+        SkipCookie:
+            ;
         }
-        h2o_iovec_t cookie = h2o_http2_casper_get_cookie(conn->casper);
-        h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, cookie.base, cookie.len);
-    SkipCookie:
-        ;
     }
 
     if (h2o_http2_stream_is_push(stream->stream_id)) {

@@ -29,6 +29,10 @@
 typedef struct st_h2o_http2_casper_t h2o_http2_casper_t;
 
 /**
+ * calculates the casper key
+ */
+unsigned h2o_http2_casper_calc_key(unsigned capacity_bits, const char *path, size_t path_len, const char *etag, size_t etag_len);
+/**
  * creates an object with provided parameters
  */
 h2o_http2_casper_t *h2o_http2_casper_create(unsigned capacity_bits, unsigned remainder_bits);
@@ -43,12 +47,15 @@ size_t h2o_http2_casper_num_entries(h2o_http2_casper_t *casper);
 /**
  * checks if a key is (was) marked as cached at the moment the fuction is invoked
  */
-int h2o_http2_casper_lookup(h2o_http2_casper_t *casper, const char *path, size_t path_len, const char *etag, size_t etag_len,
-                            int set);
+int h2o_http2_casper_lookup(h2o_http2_casper_t *casper, unsigned key, int set);
 /**
  * consumes the `Cookie` headers in requests and updates the structure
  */
 void h2o_http2_casper_consume_cookie(h2o_http2_casper_t *casper, const char *cookie, size_t cookie_len);
+/**
+ * consumes a base64-encoded casper fingerprint
+ */
+void h2o_http2_casper_consume_base64_fingerprint(h2o_http2_casper_t *casper, const char *value, size_t len);
 /**
  * returns the value of the `Set-Cookie` header that should be sent to the client
  */

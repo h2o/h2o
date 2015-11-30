@@ -34,7 +34,7 @@ struct st_h2o_http2_casper_t {
     h2o_iovec_t cookie_cache;
 };
 
-static unsigned calc_key(h2o_http2_casper_t *casper, const char *path, size_t path_len, const char *etag, size_t etag_len)
+unsigned h2o_http2_casper_calc_key(unsigned capacity_bits, const char *path, size_t path_len, const char *etag, size_t etag_len)
 {
     SHA_CTX ctx;
     SHA1_Init(&ctx);
@@ -47,7 +47,7 @@ static unsigned calc_key(h2o_http2_casper_t *casper, const char *path, size_t pa
     } md;
     SHA1_Final(md.bytes, &ctx);
 
-    return md.key & ((1 << casper->capacity_bits) - 1);
+    return md.key & ((1 << capacity_bits) - 1);
 }
 
 h2o_http2_casper_t *h2o_http2_casper_create(unsigned capacity_bits, unsigned remainder_bits)
@@ -74,10 +74,8 @@ size_t h2o_http2_casper_num_entries(h2o_http2_casper_t *casper)
     return casper->keys.size;
 }
 
-int h2o_http2_casper_lookup(h2o_http2_casper_t *casper, const char *path, size_t path_len, const char *etag, size_t etag_len,
-                            int set)
+int h2o_http2_casper_lookup(h2o_http2_casper_t *casper, unsigned key, int set)
 {
-    unsigned key = calc_key(casper, path, path_len, etag, etag_len);
     size_t i;
 
     /* FIXME use binary search */
@@ -101,16 +99,21 @@ int h2o_http2_casper_lookup(h2o_http2_casper_t *casper, const char *path, size_t
 
 void h2o_http2_casper_consume_cookie(h2o_http2_casper_t *casper, const char *cookie, size_t cookie_len)
 {
-    h2o_iovec_t binary = {};
-    unsigned tiny_keys_buf[128], *keys = tiny_keys_buf;
 
     /* check the name of the cookie */
     if (!(cookie_len > sizeof(COOKIE_NAME "=") - 1 && memcmp(cookie, H2O_STRLIT(COOKIE_NAME "=")) == 0))
-        goto Exit;
+        return;
+    h2o_http2_casper_consume_base64_fingerprint(casper, cookie + sizeof(COOKIE_NAME "=") - 1,
+                                                cookie_len - (sizeof(COOKIE_NAME "=") - 1));
+}
+
+void h2o_http2_casper_consume_base64_fingerprint(h2o_http2_casper_t *casper, const char *value, size_t len)
+{
+    h2o_iovec_t binary = {};
+    unsigned tiny_keys_buf[128], *keys = tiny_keys_buf;
 
     /* base64 decode */
-    if ((binary = h2o_decode_base64url(NULL, cookie + sizeof(COOKIE_NAME "=") - 1, cookie_len - (sizeof(COOKIE_NAME "=") - 1)))
-            .base == NULL)
+    if ((binary = h2o_decode_base64url(NULL, value, len)).base == NULL)
         goto Exit;
 
     /* decode GCS, either using tiny_keys_buf or using heap */
