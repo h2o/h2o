@@ -118,7 +118,7 @@ void h2o_http2_casper_consume_base64_fingerprint(h2o_http2_casper_t *casper, con
 
     /* decode GCS, either using tiny_keys_buf or using heap */
     size_t capacity = sizeof(tiny_keys_buf) / sizeof(tiny_keys_buf[0]), num_keys;
-    while (num_keys = capacity, golombset_decode(casper->remainder_bits, binary.base, binary.len, keys, &num_keys) != 0) {
+    while (num_keys = capacity, golombset_decode(binary.base, binary.len, keys, &num_keys) != 0) {
         if (keys != tiny_keys_buf) {
             free(keys);
             keys = tiny_keys_buf; /* reset to something that would not trigger call to free(3) */
@@ -187,8 +187,7 @@ h2o_iovec_t h2o_http2_casper_get_cookie(h2o_http2_casper_t *casper)
     /* encode as binary */
     char tiny_bin_buf[128], *bin_buf = tiny_bin_buf;
     size_t bin_capacity = sizeof(tiny_bin_buf), bin_size;
-    while (bin_size = bin_capacity,
-           golombset_encode(casper->remainder_bits, casper->keys.entries, casper->keys.size, bin_buf, &bin_size) != 0) {
+    while (bin_size = bin_capacity, golombset_encode(casper->keys.entries, casper->keys.size, bin_buf, &bin_size) != 0) {
         if (bin_buf != tiny_bin_buf)
             free(bin_buf);
         bin_capacity *= 2;
