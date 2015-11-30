@@ -291,9 +291,8 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
     /* setup response filters */
     if (req->prefilters != NULL) {
         req->prefilters->on_setup_ostream(req->prefilters, req, &req->_ostr_top);
-    } else  if (req->pathconf->filters.size != 0) {
-        h2o_filter_t *filter = req->pathconf->filters.entries[0];
-        filter->on_setup_ostream(filter, req, &req->_ostr_top);
+    } else {
+        h2o_setup_next_ostream(req, &req->_ostr_top);
     }
 }
 
