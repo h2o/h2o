@@ -1087,10 +1087,14 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
             if (conn->casper == NULL)
                 h2o_http2_conn_init_casper(conn, src_stream->req.hostconf->http2.casper.capacity_bits);
             /* consume casper cookie */
-            for (header_index = -1;
-                 (header_index = h2o_find_header(&src_stream->req.headers, H2O_TOKEN_COOKIE, header_index)) != -1;) {
+            for (header_index = 0; header_index != src_stream->req.headers.size; ++header_index) {
                 h2o_header_t *header = src_stream->req.headers.entries + header_index;
-                h2o_http2_casper_consume_cookie(conn->casper, header->value.base, header->value.len);
+                if (header->name == &H2O_TOKEN_COOKIE->buf) {
+                    h2o_http2_casper_consume_cookie(conn->casper, header->value.base, header->value.len);
+                } else if (!h2o_iovec_is_token(header->name) &&
+                           h2o_memis(header->name->base, header->name->len, H2O_STRLIT("cache-fingerprint"))) {
+                    h2o_http2_casper_consume_base64_fingerprint(conn->casper, header->value.base, header->value.len);
+                }
             }
             src_stream->pull.casper_state = H2O_HTTP2_STREAM_CASPER_READY;
         case H2O_HTTP2_STREAM_CASPER_READY:
