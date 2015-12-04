@@ -58,7 +58,8 @@ static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req
         add_header(&req->pool, &headers_merged, self->res_headers.entries + i);
     for (i = 0; i != req->res.headers.size; ++i) {
         const h2o_header_t *header = req->res.headers.entries + i;
-        if (header->name == &H2O_TOKEN_CONTENT_TYPE->buf || header->name == &H2O_TOKEN_CONTENT_LANGUAGE->buf || header->name == &H2O_TOKEN_COOKIE->buf)
+        if (header->name == &H2O_TOKEN_CONTENT_TYPE->buf || header->name == &H2O_TOKEN_CONTENT_LANGUAGE->buf ||
+            header->name == &H2O_TOKEN_SET_COOKIE->buf)
             add_header(&req->pool, &headers_merged, header);
     }
     req->res.headers = headers_merged;
