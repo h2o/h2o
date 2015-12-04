@@ -66,6 +66,16 @@ As an example, it is possible to log timestamps in millisecond resultion using <
 <tr><td><code>%v</code><td>canonical server name
 <tr><td><code>%{<i>HEADERNAME</i>}i</code><td>value of the given request header (e.g. <code>%{user-agent}i</code>)
 <tr><td><code>%{<i>HEADERNAME</i>}o</code><td>value of the given response header (e.g. <code>%{set-cookie}o</code>)
+<tr><td><code>%{<i>NAME</i>}x</code><td>various extensions.  <code>NAME</code> must be one of:
+<table>
+<tr><td><code>connect-time</code><td>time spent to establish the connection (i.e. since connection gets <code>accept(2)</code>-ed until first octet of the request is received)
+<tr><td><code>request-header-time</code><td>time spent receiving request headers
+<tr><td><code>request-body-time</code><td>time spent receiving request body
+<tr><td><code>request-total-time</code><td>sum of <code>request-header-time</code> and <code>request-body-time</code>
+<tr><td><code>process-time</code><td>time spent after receiving request, before starting to send response
+<tr><td><code>response-time</code><td>time spent sending response
+<tr><td><code>duration</code><td>sum of <code>request-total-time</code>, <code>process-time</code>, <code>response-time</code>
+</table>
 </table>
 
 <p>
