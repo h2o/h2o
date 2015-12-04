@@ -42,11 +42,13 @@ The list of format strings recognized by H2O is as follows.
 <table>
 <tr><th>Format String<th>Description
 <tr><td><code>%%</code><td>the percent sign
+<tr><td><code>%A</code><td>local address (e.g. <code>4.5.6.7</code>)
 <tr><td><code>%b</code><td>size of the response body in bytes
 <tr><td><code>%H</code><td>request protocol as sent by the client (e.g. <code>HTTP/1.1</code>)
 <tr><td><code>%h</code><td>remote address (e.g. <code>1.2.3.4</code>)
 <tr><td><code>%l</code><td>remote logname (always <code>-</code>)
 <tr><td><code>%m</code><td>request method (e.g. <code>GET</code>, <code>POST</code>)
+<tr><td><code>%p</code><td>local port
 <tr><td><code>%q</code><td>query string (<code>?</code> is prepended if exists, otherwise an empty string)
 <tr><td><code>%r</code><td>request line (e.g. <code>GET / HTTP/1.1</code>)
 <tr><td><code>%s</code><td>status code (e.g. <code>200</code>)
