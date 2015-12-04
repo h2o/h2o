@@ -13,7 +13,7 @@
 
 <link rel="stylesheet" href="assets/style.css" type="text/css" />
 
-<title>Proxy Directives - Configure - H2O</title>
+<title>Proxy Directives - Configure - H2O - the optimized HTTP/2 server</title>
 </head>
 <body>
 <div id="body">
@@ -137,6 +137,46 @@ The value should be set to something smaller than that being set at the upstream
 <dt>Default:</dt>
 <dd><code><pre>proxy.timeout.keepalive: 2000</pre></code>
 </dl>
+
+<h3 id="proxy.websocket" class="directive-title"><a href="configure/proxy_directives.html#proxy.websocket"><code>"proxy.websocket"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not to allow upgrading the proxied connection to <a href="https://tools.ietf.org/html/rfc6455">the WebSocket protocol</a>.
+</p>
+
+<p>
+When set to <code>ON</code>, the proxied connection will be upgraded to a bi-directional tunnel stream if upgrading to WebSocket connection is permitted by the backend server (i.e. if the backend server responds to a WebSocket handshake with <code>101</code> status code).
+</p>
+<p>
+Support for WebSocket is considered experimental for the time being and therefore is not yet turned on by default.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.websocket: OFF</pre></code>
+</dl>
+
+<h3 id="proxy.websocket.timeout" class="directive-title"><a href="configure/proxy_directives.html#proxy.websocket.timeout"><code>"proxy.websocket.timeout"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Sets idle timeout of a WebSocket connection being proxied.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.websocket.timeout: 300000</pre></code>
+</dl>
+
 
 
 

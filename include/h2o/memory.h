@@ -244,6 +244,7 @@ static void h2o_buffer_set_prototype(h2o_buffer_t **buffer, h2o_buffer_prototype
  * after it is linked.
  */
 static void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool);
+void h2o_buffer__dispose_linked(void *p);
 /**
  * grows the vector so that it could store at least new_capacity elements of given size (or dies if impossible).
  * @param pool memory pool that the vector is using
@@ -350,7 +351,7 @@ inline void h2o_buffer_set_prototype(h2o_buffer_t **buffer, h2o_buffer_prototype
 
 inline void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool)
 {
-    h2o_buffer_t **slot = (h2o_buffer_t **)h2o_mem_alloc_shared(pool, sizeof(*slot), (void (*)(void *))(void *)h2o_buffer_dispose);
+    h2o_buffer_t **slot = (h2o_buffer_t **)h2o_mem_alloc_shared(pool, sizeof(*slot), h2o_buffer__dispose_linked);
     *slot = buffer;
 }
 

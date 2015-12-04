@@ -162,7 +162,7 @@ hosts:
         file.dir: t/assets/doc_root
 EOT
     my $resp = `nghttp -n --stat https://127.0.0.1:$server->{tls_port}/index.txt`;
-    like $resp, qr{\nresponseEnd\s.*\s/index\.js\n.*\s/index\.txt}is, "receives index.js then /index.txt";
+    like $resp, qr{\nid\s*responseEnd\s.*\s/index\.js\n.*\s/index\.txt}is, "receives index.js then /index.txt";
 };
 
 subtest "infinite-reprocess" => sub {

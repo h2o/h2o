@@ -40,6 +40,6 @@ hosts:
 EOT
 
 my $resp = `nghttp -n --stat "http://127.0.0.1:$server->{port}/index.txt"`;
-like $resp, qr{\nresponseEnd\s.*\s/assets/index\.js\n.*\s/index\.txt\n}is, 'should receive pushed blocking asset from file handler before the main response';
+like $resp, qr{\nid\s*responseEnd\s.*\s/assets/index\.js\n.*\s/index\.txt\n}is, 'should receive pushed blocking asset from file handler before the main response';
 
 done_testing;

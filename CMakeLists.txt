@@ -18,19 +18,19 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
+CMAKE_MINIMUM_REQUIRED(VERSION 2.8.11)
 CMAKE_POLICY(SET CMP0003 NEW)
 
 PROJECT(h2o C)
 
 SET(VERSION_MAJOR "1")
-SET(VERSION_MINOR "5")
-SET(VERSION_PATCH "3")
+SET(VERSION_MINOR "6")
+SET(VERSION_PATCH "0")
 SET(VERSION_PRERELEASE "")
 SET(VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}${VERSION_PRERELEASE}")
 SET(LIBRARY_VERSION_MAJOR "0")
 SET(LIBRARY_VERSION_MINOR "9")
-SET(LIBRARY_VERSION_PATCH "17")
+SET(LIBRARY_VERSION_PATCH "19")
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h)
 
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -161,6 +161,7 @@ SET(LIB_SOURCE_FILES
     deps/picohttpparser/picohttpparser.c
 
     lib/common/file.c
+    lib/common/filecache.c
     lib/common/hostinfo.c
     lib/common/http1client.c
     lib/common/memcached.c
@@ -185,6 +186,7 @@ SET(LIB_SOURCE_FILES
 
     lib/handler/access_log.c
     lib/handler/chunked.c
+    lib/handler/errordoc.c
     lib/handler/expires.c
     lib/handler/fastcgi.c
     lib/handler/file.c
@@ -195,6 +197,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/redirect.c
     lib/handler/reproxy.c
     lib/handler/configurator/access_log.c
+    lib/handler/configurator/errordoc.c
     lib/handler/configurator/expires.c
     lib/handler/configurator/fastcgi.c
     lib/handler/configurator/file.c
@@ -205,6 +208,8 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/reproxy.c
 
     lib/http1.c
+
+    lib/tunnel.c
 
     lib/http2/casper.c
     lib/http2/connection.c

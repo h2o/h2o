@@ -34,11 +34,12 @@ struct st_h2o_accept_data_t {
     h2o_socket_t *sock;
     h2o_timeout_entry_t timeout;
     h2o_memcached_req_t *async_resumption_get_req;
+    struct timeval connected_at;
 };
 
 static void on_accept_timeout(h2o_timeout_entry_t *entry);
 
-static struct st_h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
+static struct st_h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
     struct st_h2o_accept_data_t *data = h2o_mem_alloc(sizeof(*data));
 
@@ -48,18 +49,17 @@ static struct st_h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2
     data->timeout.cb = on_accept_timeout;
     h2o_timeout_link(ctx->ctx->loop, &ctx->ctx->handshake_timeout, &data->timeout);
     data->async_resumption_get_req = NULL;
+    data->connected_at = connected_at;
 
     sock->data = data;
     return data;
 }
 
-static h2o_accept_ctx_t *free_accept_data(struct st_h2o_accept_data_t *data)
+static void free_accept_data(struct st_h2o_accept_data_t *data)
 {
-    h2o_accept_ctx_t *ctx = data->ctx;
     assert(data->async_resumption_get_req == NULL);
     h2o_timeout_unlink(&data->timeout);
     free(data);
-    return ctx;
 }
 
 static struct {
@@ -117,28 +117,28 @@ void on_accept_timeout(h2o_timeout_entry_t *entry)
 
 static void on_ssl_handshake_complete(h2o_socket_t *sock, int status)
 {
-    h2o_accept_ctx_t *ctx = free_accept_data(sock->data);
+    struct st_h2o_accept_data_t *data = sock->data;
     sock->data = NULL;
 
     if (status != 0) {
         h2o_socket_close(sock);
-        return;
+        goto Exit;
     }
 
     h2o_iovec_t proto = h2o_socket_ssl_get_selected_protocol(sock);
     const h2o_iovec_t *ident;
     for (ident = h2o_http2_alpn_protocols; ident->len != 0; ++ident) {
         if (proto.len == ident->len && memcmp(proto.base, ident->base, proto.len) == 0) {
-            goto Is_Http2;
+            /* connect as http2 */
+            h2o_http2_accept(data->ctx, sock, data->connected_at);
+            goto Exit;
         }
     }
     /* connect as http1 */
-    h2o_http1_accept(ctx, sock);
-    return;
+    h2o_http1_accept(data->ctx, sock, data->connected_at);
 
-Is_Http2:
-    /* connect as http2 */
-    h2o_http2_accept(ctx, sock);
+Exit:
+    free_accept_data(data);
 }
 
 static ssize_t parse_proxy_line(char *src, size_t len, struct sockaddr *sa, socklen_t *salen)
@@ -265,23 +265,26 @@ static void on_read_proxy_line(h2o_socket_t *sock, int status)
     if (data->ctx->ssl_ctx != NULL) {
         h2o_socket_ssl_server_handshake(sock, data->ctx->ssl_ctx, on_ssl_handshake_complete);
     } else {
-        h2o_accept_ctx_t *ctx = free_accept_data(data);
+        struct st_h2o_accept_data_t *data = sock->data;
         sock->data = NULL;
-        h2o_http1_accept(ctx, sock);
+        h2o_http1_accept(data->ctx, sock, data->connected_at);
+        free_accept_data(data);
     }
 }
 
 void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
 {
+    struct timeval connected_at = *h2o_get_timestamp(ctx->ctx, NULL, NULL);
+
     if (ctx->expect_proxy_line || ctx->ssl_ctx != NULL) {
-        create_accept_data(ctx, sock);
+        create_accept_data(ctx, sock, connected_at);
         if (ctx->expect_proxy_line) {
             h2o_socket_read_start(sock, on_read_proxy_line);
         } else {
             h2o_socket_ssl_server_handshake(sock, ctx->ssl_ctx, on_ssl_handshake_complete);
         }
     } else {
-        h2o_http1_accept(ctx, sock);
+        h2o_http1_accept(ctx, sock, connected_at);
     }
 }
 

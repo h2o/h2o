@@ -50,8 +50,8 @@ int h2o_http2_casper_lookup(h2o_http2_casper_t *casper, const char *path, size_t
  */
 void h2o_http2_casper_consume_cookie(h2o_http2_casper_t *casper, const char *cookie, size_t cookie_len);
 /**
- * emits a `Set-Cookie` header that should be sent to the client
+ * returns the value of the `Set-Cookie` header that should be sent to the client
  */
-h2o_iovec_t h2o_http2_casper_build_cookie(h2o_http2_casper_t *casper, h2o_mem_pool_t *pool);
+h2o_iovec_t h2o_http2_casper_get_cookie(h2o_http2_casper_t *casper);
 
 #endif

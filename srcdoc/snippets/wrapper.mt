@@ -37,7 +37,7 @@ my $create_tab = sub {
 
 <link rel="stylesheet" href="assets/style.css" type="text/css" />
 
-<title><?= join " - ", ($ctx->{filename} ne 'index.html' ? reverse @title : ()), "H2O" ?></title>
+<title><?= join " - ", ($ctx->{filename} ne 'index.html' ? reverse @title : ()), "H2O - the optimized HTTP/2 server" ?></title>
 </head>
 <body>
 <div id="body">

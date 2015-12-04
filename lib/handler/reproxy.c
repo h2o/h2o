@@ -60,7 +60,7 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     return;
 
 Next: /* just bypass to the next filter */
-    h2o_setup_next_ostream(self, req, slot);
+    h2o_setup_next_ostream(req, slot);
 }
 
 void h2o_reproxy_register(h2o_pathconf_t *pathconf)

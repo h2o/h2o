@@ -246,7 +246,7 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
         append_pair(&req->pool, vecs, H2O_STRLIT("QUERY_STRING"), NULL, 0);
     }
     /* REMOTE_ADDR & REMOTE_PORT */
-    append_address_info(req, vecs, H2O_STRLIT("REMOTE_ADDR"), H2O_STRLIT("REMOTE_PORT"), req->conn->get_peername);
+    append_address_info(req, vecs, H2O_STRLIT("REMOTE_ADDR"), H2O_STRLIT("REMOTE_PORT"), req->conn->callbacks->get_peername);
     /* REQUEST_METHOD */
     append_pair(&req->pool, vecs, H2O_STRLIT("REQUEST_METHOD"), req->method.base, req->method.len);
     /* HTTP_HOST & REQUEST_URI */
@@ -258,7 +258,7 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
         append_pair(&req->pool, vecs, H2O_STRLIT("REQUEST_URI"), req->input.path.base, req->input.path.len);
     }
     /* SERVER_ADDR & SERVER_PORT */
-    append_address_info(req, vecs, H2O_STRLIT("SERVER_ADDR"), H2O_STRLIT("SERVER_PORT"), req->conn->get_sockname);
+    append_address_info(req, vecs, H2O_STRLIT("SERVER_ADDR"), H2O_STRLIT("SERVER_PORT"), req->conn->callbacks->get_sockname);
     /* SERVER_NAME */
     append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_NAME"), req->hostconf->authority.host.base, req->hostconf->authority.host.len);
     { /* SERVER_PROTOCOL */
@@ -497,7 +497,7 @@ static int fill_headers(h2o_req_t *req, struct phr_header *headers, size_t num_h
                 h2o_add_header(&req->pool, &req->res.headers, token,
                                h2o_strdup(&req->pool, headers[i].value, headers[i].value_len).base, headers[i].value_len);
                 if (token == H2O_TOKEN_LINK)
-                    h2o_register_push_path_in_link_header(req, headers[i].value, headers[i].value_len);
+                    h2o_puth_path_in_link_header(req, headers[i].value, headers[i].value_len);
             }
         } else if (h2o_memis(headers[i].name, headers[i].name_len, H2O_STRLIT("status"))) {
             h2o_iovec_t value = h2o_iovec_init(headers[i].value, headers[i].value_len);

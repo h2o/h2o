@@ -166,7 +166,7 @@ static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const
         h2o_configurator_errprintf(cmd, node, "bind(2) failed: %s", strerror(errno));
         goto Error;
     }
-    if (listen(listen_fd, SOMAXCONN) != 0) {
+    if (listen(listen_fd, H2O_SOMAXCONN) != 0) {
         h2o_configurator_errprintf(cmd, node, "listen(2) failed: %s", strerror(errno));
         goto Error;
     }
@@ -223,6 +223,7 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
 {
     struct fastcgi_configurator_t *self = (void *)cmd->configurator;
     char *spawn_user = NULL, *spawn_cmd;
+    char *kill_on_close_cmd_path = NULL, *setuidgid_cmd_path = NULL;
     char dirname[] = "/tmp/h2o.fcgisock.XXXXXX";
     char *argv[10];
     int spawner_fd;
@@ -279,12 +280,12 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
 
     { /* build args */
         size_t i = 0;
-        argv[i++] = h2o_configurator_get_cmd_path("share/h2o/kill-on-close");
+        argv[i++] = kill_on_close_cmd_path = h2o_configurator_get_cmd_path("share/h2o/kill-on-close");
         argv[i++] = "--rm";
         argv[i++] = dirname;
         argv[i++] = "--";
         if (spawn_pw != NULL) {
-            argv[i++] = h2o_configurator_get_cmd_path("share/h2o/setuidgid");
+            argv[i++] = setuidgid_cmd_path = h2o_configurator_get_cmd_path("share/h2o/setuidgid");
             argv[i++] = spawn_pw->pw_name;
         }
         argv[i++] = "/bin/sh";
@@ -328,7 +329,8 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
 Exit:
     if (dirname[0] != '\0')
         unlink(dirname);
-    free(argv[0]);
+    free(kill_on_close_cmd_path);
+    free(setuidgid_cmd_path);
     return ret;
 }
 
