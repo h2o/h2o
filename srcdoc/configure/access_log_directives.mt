@@ -50,6 +50,16 @@ The list of format strings recognized by H2O is as follows.
 <tr><td><code>%q</code><td>query string (<code>?</code> is prepended if exists, otherwise an empty string)
 <tr><td><code>%r</code><td>request line (e.g. <code>GET / HTTP/1.1</code>)
 <tr><td><code>%s</code><td>status code (e.g. <code>200</code>)
+<tr><td><code>%t</code><td>time when the request was received in format: <code>[02/Jan/2006:15:04:05 -0700]</code>
+<tr><td><code>%{<i>FORMAT</i>}t</code><td>time when the request was received using the specified format.  <code>FORMAT</code> should be an argument to <code>strftime</code>, or one of:
+<table>
+<tr><td><code>sec</code><td>number of seconds since Epoch
+<tr><td><code>msec</code><td>number of milliseconds since Epoch
+<tr><td><code>usec</code><td>number of microseconds since Epoch
+<tr><td><code>msec_frac</code><td>millisecond fraction
+<tr><td><code>usec_frac</code><td>microsecond fration
+</table>
+As an example, it is possible to log timestamps in millisecond resultion using <code>%{%Y/%m/%d:%H:%M:%S}t.%{msec_frac}t</code>, which results in a timestamp like <code>2006-01-02:15:04:05.000</code>.
 <tr><td><code>%U</code><td>requested URL path, not including the query string
 <tr><td><code>%u</code><td>remote user if the request was authenticated (always <code>-</code>)
 <tr><td><code>%V</code><td>requested server name (or the default server name if not specified by the client)
