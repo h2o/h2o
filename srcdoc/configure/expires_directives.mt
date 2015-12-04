@@ -20,7 +20,7 @@ EOT
 <li>the units recognized are: <code>second</code>, <code>minute</code>, <code>hour</code>, <code>day</code>, <code>month</code>, <code>year</code>
 <li> the units can also be in plural forms
 </ul>
-<?= $ctx->{example}->('Set <code>Cache-Control: max-age=86400', <<'EOT')
+<?= $ctx->{example}->('Set <code>Cache-Control: max-age=86400</code>', <<'EOT')
 expires: 1 day
 EOT
 ?>
