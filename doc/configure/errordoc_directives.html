@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<base href="../" />
+
+<!-- oktavia -->
+<link rel="stylesheet" href="assets/searchstyle.css" type="text/css" />
+<script src="search/jquery-1.9.1.min.js"></script>
+<script src="search/oktavia-jquery-ui.js"></script>
+<script src="search/oktavia-english-search.js"></script>
+<!-- /oktavia -->
+
+<link rel="stylesheet" href="assets/style.css" type="text/css" />
+
+<title>Errordoc Directives - Configure - H2O - the optimized HTTP/2 server</title>
+</head>
+<body>
+<div id="body">
+<div id="top">
+
+<h1><a href="index.html">H2O</a></h1>
+the optimized HTTP/1.x, HTTP/2 server
+
+<!-- oktavia -->
+<form id="searchform">
+<input class="search" type="search" name="search" id="search" results="5" value="" placeholder="Search" />
+<div id="searchresult_box">
+<div id="close_search_box">&times;</div>
+<div id="searchresult_summary"></div>
+<div id="searchresult"></div>
+<div id="searchresult_nav"></div>
+<span class="pr">Powered by <a href="https://github.com/shibukawa/oktavia">Oktavia</a></span>
+</div>
+</form>
+<!-- /oktavia -->
+
+</div>
+
+<table id="menu">
+<tr>
+<td><a href="index.html">Top</a></td>
+<td><a href="install.html">Install</a></td>
+<td class="selected">Configure</td>
+<td><a href="faq.html">FAQ</a></td>
+<td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
+<td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
+</tr>
+</table>
+
+<div id="main">
+
+<h2>
+<a href="configure.html">Configure</a> &gt;
+Errordoc Directives
+</h2>
+
+
+<p>
+This document describes the configuration directives of the errordoc handler.
+</p>
+
+<h3 id="error-doc" class="directive-title"><a href="configure/errordoc_directives.html#error-doc"><code>"error-doc"</code></a></h3>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Specifies the content to be sent when returning an error response (i.e. a response with 4xx or 5xx status code).
+
+</p>
+
+<p>
+The argument must be a mapping containing following attributes, or if it is a sequence, every element must be a mapping with the following attributes.
+<ul>
+<li><code>status</code> - three-digit number indicating the status code
+<li><code>url</code> - URL of the document to be served
+</ul>
+</p>
+<p>
+URL can either be absolute or relative.
+Only <code>content-type</code>, <code>content-language</code>, <code>set-cookie</code> headers obtained from the specified URL are served to the client.
+</p>
+<p>
+<div class="example">
+<div class="caption">Example. Set error document for 404 status</div>
+<pre><code>error-doc:
+  status: 404
+  url: /404.html
+</code></pre>
+</div>
+
+<div class="example">
+<div class="caption">Example. Set error document for 500 and 503 status</div>
+<pre><code>error-doc:
+  - status: 500
+    url: /internal-error.html
+  - status: 503
+    url: /service-unavailable.html
+</code></pre>
+</div>
+
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extension</dd>
+</dl>
+
+
+
+
+</div>
+<div id="footer">
+<p>
+Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+</p>
+</div>
+</body>
+</html>
