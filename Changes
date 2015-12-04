@@ -1,23 +1,21 @@
 Revision history for H2O.
 
-1.6.0-beta2 2015-11-30 23:57:00+0000
+1.6.0 2015-12-04 05:47:00+0000
 	- [core] customized error pages #606 (Kazuho Oku)
-	- [fastcgi] fix uninitialized memory access / memory leak during startup #611 (Kazuho Oku)
-	- [http2] fix NULL access when an error during upgrade from HTTP/1 #607 (Kazuho Oku)
-	- [http2] fix too-many-streams error with h2load #608 (Kazuho Oku)
-	- [websocket] support proxying websocket connections #581 (Justin Zhu)
-
-1.6.0-beta1 2015-11-24 06:20:00+0000
 	- [core] fix busy loop when receiving RST packet under certain conditions #603 (Kazuho Oku)
 	- [access-log] collect and log various timings #583 (Kazuho Oku)
 	- [access-log] support '%A' and '%p' #585 (Kazuho Oku)
 	- [access-log] support '%{...}t' compatibile with Apache HTTP Server #587 (Kazuho Oku)
 	- [fastcgi] increase backlog size the bundled fastcgi server #588 (Kazuho Oku)
+	- [fastcgi] fix uninitialized memory access / memory leak during startup #611 (Kazuho Oku)
 	- [file] implement file descriptor cache #596 (Kazuho Oku)
 	- [http2] increase incoming window size from 256KB to 16MB #582 (Kazuho Oku)
 	- [http2] decrease memory footprint (and speedup) #599 (Kazuho Oku)
 	- [http2] start server push before the response headers for the original request becomes ready #593 (Kazuho Oku)
 	- [http2] fix issues reported by h2spec 1.2.0 #595 (Kazuho Oku)
+	- [http2] fix NULL access when an error during upgrade from HTTP/1 #607 (Kazuho Oku)
+	- [http2] fix too-many-streams error with h2load #608 (Kazuho Oku)
+	- [websocket] support proxying websocket connections #581 (Justin Zhu)
 	- [libh2o] fix compiler warnings #598 (Matt Clarkson, Kazuho Oku)
 	- [misc] downgrade required CMake version to 2.8.11 #594 (Kazuho Oku)
 
