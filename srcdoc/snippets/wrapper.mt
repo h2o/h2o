@@ -45,6 +45,7 @@ my $create_tab = sub {
 
 <h1>
 <a href="index.html">H2O</a>
+<iframe align="right" valign="top" src="https://ghbtns.com/github-btn.html?user=h2o&repo=h2o&type=star&count=true" frameborder="0" scrolling="0" width="160px" height="30px"></iframe>
 </h1>
 the optimized HTTP/1.x, HTTP/2 server
 
