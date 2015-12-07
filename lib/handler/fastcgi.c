@@ -136,7 +136,7 @@ static void decode_header(struct st_fcgi_record_header_t *decoded, const void *s
     decoded->contentLength = htons(decoded->contentLength);
 }
 
-static void *append(h2o_mem_pool_t *pool, iovec_vector_t *blocks, const void *s, size_t len)
+static char *allocate_buffer(h2o_mem_pool_t *pool, iovec_vector_t *blocks, size_t len)
 {
     h2o_iovec_t *slot;
 
@@ -149,14 +149,11 @@ static void *append(h2o_mem_pool_t *pool, iovec_vector_t *blocks, const void *s,
         slot = blocks->entries + blocks->size - 1;
     }
 
-    if (s != NULL)
-        memcpy(slot->base + slot->len, s, len);
     slot->len += len;
-
     return slot->base + slot->len - len;
 }
 
-static char *encode_length_of_pair(char *p, size_t len)
+static char *encode_length(char *p, size_t len)
 {
     if (len < 127) {
         *p++ = (char)len;
@@ -169,148 +166,30 @@ static char *encode_length_of_pair(char *p, size_t len)
     return p;
 }
 
-static void *append_pair(h2o_mem_pool_t *pool, iovec_vector_t *blocks, const char *name, size_t namelen, const char *value,
-                         size_t valuelen)
+static void *append_field(h2o_req_t *req, const char *name, size_t namelen, int is_http_header, size_t valuelen, void *append_arg)
 {
+    iovec_vector_t *blocks = (void *)append_arg;
     char lenbuf[8];
-    void *name_buf;
+    size_t lengths_len;
+    char *dst;
 
-    append(pool, blocks, lenbuf, encode_length_of_pair(encode_length_of_pair(lenbuf, namelen), valuelen) - lenbuf);
-    name_buf = append(pool, blocks, name, namelen);
-    if (valuelen != 0)
-        append(pool, blocks, value, valuelen);
+    if (is_http_header)
+        namelen += 5;
 
-    return name_buf;
-}
+    lengths_len = encode_length(encode_length(lenbuf, namelen), valuelen) - lenbuf;
+    dst = allocate_buffer(&req->pool, blocks, lengths_len);
+    memcpy(dst, lenbuf, lengths_len);
 
-static void append_address_info(h2o_req_t *req, iovec_vector_t *vecs, const char *addrlabel, size_t addrlabel_len,
-                                const char *portlabel, size_t portlabel_len, socklen_t (*cb)(h2o_conn_t *conn, struct sockaddr *))
-{
-    struct sockaddr_storage ss;
-    socklen_t sslen;
-    char buf[NI_MAXHOST];
-
-    if ((sslen = cb(req->conn, (void *)&ss)) == 0)
-        return;
-
-    size_t l = h2o_socket_getnumerichost((void *)&ss, sslen, buf);
-    if (l != SIZE_MAX)
-        append_pair(&req->pool, vecs, addrlabel, addrlabel_len, buf, l);
-    int32_t port = h2o_socket_getport((void *)&ss);
-    if (port != -1) {
-        char buf[6];
-        int l = sprintf(buf, "%" PRIu16, (uint16_t)port);
-        append_pair(&req->pool, vecs, portlabel, portlabel_len, buf, (size_t)l);
-    }
-}
-
-static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_config_vars_t *config)
-{
-    h2o_iovec_t path_info = {};
-
-    /* CONTENT_LENGTH */
-    if (req->entity.base != NULL) {
-        char buf[32];
-        int l = sprintf(buf, "%zu", req->entity.len);
-        append_pair(&req->pool, vecs, H2O_STRLIT("CONTENT_LENGTH"), buf, (size_t)l);
-    }
-    /* SCRIPT_FILENAME, SCRIPT_NAME, PATH_INFO */
-    if (req->filereq != NULL) {
-        h2o_filereq_t *filereq = req->filereq;
-        append_pair(&req->pool, vecs, H2O_STRLIT("SCRIPT_FILENAME"), filereq->local_path.base, filereq->local_path.len);
-        append_pair(&req->pool, vecs, H2O_STRLIT("SCRIPT_NAME"), req->path_normalized.base, filereq->url_path_len);
-        if (req->path_normalized.len != filereq->url_path_len)
-            path_info =
-                h2o_iovec_init(req->path_normalized.base + filereq->url_path_len, req->path_normalized.len - filereq->url_path_len);
+    dst = allocate_buffer(&req->pool, blocks, namelen);
+    if (is_http_header) {
+        memcpy(dst, "HTTP_", 5);
+        for (dst += 5, namelen -= 5; namelen != 0; --namelen, ++dst, ++name)
+            *dst = *name == '-' ? '_' : h2o_toupper(*name);
     } else {
-        append_pair(&req->pool, vecs, H2O_STRLIT("SCRIPT_NAME"), NULL, 0);
-        path_info = req->path_normalized;
+        memcpy(dst, name, namelen);
     }
-    if (path_info.base != NULL)
-        append_pair(&req->pool, vecs, H2O_STRLIT("PATH_INFO"), path_info.base, path_info.len);
-    /* DOCUMENT_ROOT and PATH_TRANSLATED */
-    if (config->document_root.base != NULL) {
-        append_pair(&req->pool, vecs, H2O_STRLIT("DOCUMENT_ROOT"), config->document_root.base, config->document_root.len);
-        if (path_info.base != NULL) {
-            append_pair(&req->pool, vecs, H2O_STRLIT("PATH_TRANSLATED"), NULL, config->document_root.len + path_info.len);
-            char *dst_end = vecs->entries[vecs->size - 1].base + vecs->entries[vecs->size - 1].len;
-            memcpy(dst_end - path_info.len, path_info.base, path_info.len);
-            memcpy(dst_end - path_info.len - config->document_root.len, config->document_root.base, config->document_root.len);
-        }
-    }
-    /* QUERY_STRING (and adjust PATH_INFO) */
-    if (req->query_at != SIZE_MAX) {
-        append_pair(&req->pool, vecs, H2O_STRLIT("QUERY_STRING"), req->path.base + req->query_at + 1,
-                    req->path.len - (req->query_at + 1));
-    } else {
-        append_pair(&req->pool, vecs, H2O_STRLIT("QUERY_STRING"), NULL, 0);
-    }
-    /* REMOTE_ADDR & REMOTE_PORT */
-    append_address_info(req, vecs, H2O_STRLIT("REMOTE_ADDR"), H2O_STRLIT("REMOTE_PORT"), req->conn->callbacks->get_peername);
-    /* REQUEST_METHOD */
-    append_pair(&req->pool, vecs, H2O_STRLIT("REQUEST_METHOD"), req->method.base, req->method.len);
-    /* HTTP_HOST & REQUEST_URI */
-    if (config->send_delegated_uri) {
-        append_pair(&req->pool, vecs, H2O_STRLIT("HTTP_HOST"), req->authority.base, req->authority.len);
-        append_pair(&req->pool, vecs, H2O_STRLIT("REQUEST_URI"), req->path.base, req->path.len);
-    } else {
-        append_pair(&req->pool, vecs, H2O_STRLIT("HTTP_HOST"), req->input.authority.base, req->input.authority.len);
-        append_pair(&req->pool, vecs, H2O_STRLIT("REQUEST_URI"), req->input.path.base, req->input.path.len);
-    }
-    /* SERVER_ADDR & SERVER_PORT */
-    append_address_info(req, vecs, H2O_STRLIT("SERVER_ADDR"), H2O_STRLIT("SERVER_PORT"), req->conn->callbacks->get_sockname);
-    /* SERVER_NAME */
-    append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_NAME"), req->hostconf->authority.host.base, req->hostconf->authority.host.len);
-    { /* SERVER_PROTOCOL */
-        char buf[sizeof("HTTP/1.1") - 1];
-        size_t l = h2o_stringify_protocol_version(buf, req->version);
-        append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_PROTOCOL"), buf, l);
-    }
-    /* SERVER_SOFTWARE */
-    append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_SOFTWARE"), req->conn->ctx->globalconf->server_name.base,
-                req->conn->ctx->globalconf->server_name.len);
-    /* set HTTPS: on if necessary */
-    if (req->scheme == &H2O_URL_SCHEME_HTTPS)
-        append_pair(&req->pool, vecs, H2O_STRLIT("HTTPS"), H2O_STRLIT("on"));
-    { /* headers */
-        const h2o_header_t *h = req->headers.entries, *h_end = h + req->headers.size;
-        size_t cookie_length = 0;
-        for (; h != h_end; ++h) {
-            if (h->name == &H2O_TOKEN_CONTENT_TYPE->buf) {
-                append_pair(&req->pool, vecs, H2O_STRLIT("CONTENT_TYPE"), h->value.base, h->value.len);
-            } else if (h->name == &H2O_TOKEN_COOKIE->buf) {
-                /* accumulate the length of the cookie, together with the separator */
-                cookie_length += h->value.len + 1;
-            } else {
-                char *dst = append_pair(&req->pool, vecs, NULL, h->name->len + sizeof("HTTP_") - 1, h->value.base, h->value.len);
-                const char *src = h->name->base, *src_end = src + h->name->len;
-                *dst++ = 'H';
-                *dst++ = 'T';
-                *dst++ = 'T';
-                *dst++ = 'P';
-                *dst++ = '_';
-                for (; src != src_end; ++src)
-                    *dst++ = *src == '-' ? '_' : h2o_toupper(*src);
-            }
-        }
-        if (cookie_length != 0) {
-            /* emit the cookie merged */
-            cookie_length -= 1;
-            append_pair(&req->pool, vecs, H2O_STRLIT("HTTP_COOKIE"), NULL, cookie_length);
-            char *dst = vecs->entries[vecs->size - 1].base + vecs->entries[vecs->size - 1].len - cookie_length;
-            for (h = req->headers.entries;; ++h) {
-                if (h->name == &H2O_TOKEN_COOKIE->buf) {
-                    if (cookie_length == h->value.len)
-                        break;
-                    memcpy(dst, h->value.base, h->value.len);
-                    dst += h->value.len;
-                    *dst++ = ';';
-                    cookie_length -= h->value.len + 1;
-                }
-            }
-            memcpy(dst, h->value.base, h->value.len);
-        }
-    }
+
+    return allocate_buffer(&req->pool, blocks, valuelen);
 }
 
 static void annotate_params(h2o_mem_pool_t *pool, iovec_vector_t *vecs, unsigned request_id, size_t max_record_size)
@@ -363,7 +242,7 @@ static void build_request(h2o_req_t *req, iovec_vector_t *vecs, unsigned request
     vecs->entries[1] = h2o_iovec_init(NULL, APPEND_BLOCKSIZE); /* dummy value set to prevent params being appended to the entry */
     vecs->size = 2;
     /* accumulate the params data, and annotate them with FCGI_PARAM headers */
-    append_params(req, vecs, config);
+    h2o_cgiutil_build_request(req, config->document_root, config->send_delegated_uri, append_field, vecs);
     annotate_params(&req->pool, vecs, request_id, max_record_size);
     /* setup FCGI_STDIN headers */
     if (req->entity.len != 0) {
@@ -458,67 +337,6 @@ static void errorclose(struct st_fcgi_generator_t *generator)
     }
 }
 
-static int _isdigit(int ch)
-{
-    return '0' <= ch && ch <= '9';
-}
-
-static int fill_headers(h2o_req_t *req, struct phr_header *headers, size_t num_headers)
-{
-    size_t i;
-
-    /* set the defaults */
-    req->res.status = 200;
-    req->res.reason = "OK";
-    req->res.content_length = SIZE_MAX;
-
-    for (i = 0; i != num_headers; ++i) {
-        const h2o_token_t *token;
-        h2o_strtolower((char *)headers[i].name, headers[i].name_len);
-        if ((token = h2o_lookup_token(headers[i].name, headers[i].name_len)) != NULL) {
-            if (token == H2O_TOKEN_CONTENT_LENGTH) {
-                if (req->res.content_length != SIZE_MAX) {
-                    h2o_req_log_error(req, MODULE_NAME, "received multiple content-length headers from fcgi");
-                    return -1;
-                }
-                if ((req->res.content_length = h2o_strtosize(headers[i].value, headers[i].value_len)) == SIZE_MAX) {
-                    h2o_req_log_error(req, MODULE_NAME, "failed to parse content-length header sent from fcgi: %.*s",
-                                      (int)headers[i].value_len, headers[i].value);
-                    return -1;
-                }
-            } else {
-                /*
-                RFC 3875 defines three headers to have special meaning: Content-Type, Status, Location.
-                Status is handled as below.
-                Content-Type does not seem to have any need to be handled specially.
-                RFC suggests abs-path-style Location headers should trigger an internal redirection, but is that how the web servers
-                work?
-                 */
-                h2o_add_header(&req->pool, &req->res.headers, token,
-                               h2o_strdup(&req->pool, headers[i].value, headers[i].value_len).base, headers[i].value_len);
-                if (token == H2O_TOKEN_LINK)
-                    h2o_puth_path_in_link_header(req, headers[i].value, headers[i].value_len);
-            }
-        } else if (h2o_memis(headers[i].name, headers[i].name_len, H2O_STRLIT("status"))) {
-            h2o_iovec_t value = h2o_iovec_init(headers[i].value, headers[i].value_len);
-            if (value.len < 3 || !(_isdigit(value.base[0]) && _isdigit(value.base[1]) && _isdigit(value.base[2])) ||
-                (value.len >= 4 && value.base[3] != ' ')) {
-                h2o_req_log_error(req, MODULE_NAME, "failed to parse Status header, got: %.*s", (int)value.len, value.base);
-                return -1;
-            }
-            req->res.status = (value.base[0] - '0') * 100 + (value.base[1] - '0') * 10 + (value.base[2] - '0');
-            req->res.reason = value.len >= 5 ? h2o_strdup(&req->pool, value.base + 4, value.len - 4).base : "OK";
-        } else {
-            h2o_iovec_t name_duped = h2o_strdup(&req->pool, headers[i].name, headers[i].name_len),
-                        value_duped = h2o_strdup(&req->pool, headers[i].value, headers[i].value_len);
-            h2o_add_header_by_str(&req->pool, &req->res.headers, name_duped.base, name_duped.len, 0, value_duped.base,
-                                  value_duped.len);
-        }
-    }
-
-    return 0;
-}
-
 static void append_content(struct st_fcgi_generator_t *generator, const void *src, size_t len)
 {
     /* do not accumulate more than content-length bytes */
@@ -542,6 +360,7 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
     struct phr_header headers[100];
     size_t num_headers;
     int parse_result;
+    const char *fill_err;
 
     if (header->contentLength == 0)
         return 0;
@@ -575,8 +394,10 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
     }
 
     /* fill-in the headers, and start the response */
-    if (fill_headers(generator->req, headers, num_headers) != 0)
+    if ((fill_err = h2o_cgiutil_build_response(generator->req, headers, num_headers)) != NULL) {
+        h2o_req_log_error(generator->req, MODULE_NAME, "%s", fill_err);
         return -1;
+    }
     generator->leftsize = generator->req->res.content_length;
     h2o_start_response(generator->req, &generator->super);
     generator->sent_headers = 1;

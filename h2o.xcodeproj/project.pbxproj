@@ -169,6 +169,7 @@
 		10F4180119C2D31600B6E31A /* yoml.h in Headers */ = {isa = PBXBuildFile; fileRef = 10F4180019C2D31600B6E31A /* yoml.h */; };
 		10F4180519CA75C500B6E31A /* configurator.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F4180419CA75C500B6E31A /* configurator.c */; };
 		10F419801B64E70D00BEAEAC /* golombset.h in Headers */ = {isa = PBXBuildFile; fileRef = 10F4197F1B64E70D00BEAEAC /* golombset.h */; };
+		10F4EB7F1C15537C003DA150 /* cgiutil.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F4EB7E1C15537C003DA150 /* cgiutil.c */; };
 		10F9F2651AF4795D0056F26B /* redirect.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F9F2641AF4795D0056F26B /* redirect.c */; };
 		10F9F2671AFC5F550056F26B /* hostinfo.c in Sources */ = {isa = PBXBuildFile; fileRef = 10F9F2661AFC5F550056F26B /* hostinfo.c */; };
 		10FCC13E1B2E4A4500F13674 /* cloexec.c in Sources */ = {isa = PBXBuildFile; fileRef = 10FCC13C1B2E4A4500F13674 /* cloexec.c */; };
@@ -506,6 +507,7 @@
 		10F4180219C2D32100B6E31A /* yoml-parser.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "yoml-parser.h"; path = "yoml/yoml-parser.h"; sourceTree = "<group>"; };
 		10F4180419CA75C500B6E31A /* configurator.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = configurator.c; sourceTree = "<group>"; };
 		10F4197F1B64E70D00BEAEAC /* golombset.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = golombset.h; sourceTree = "<group>"; };
+		10F4EB7E1C15537C003DA150 /* cgiutil.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cgiutil.c; sourceTree = "<group>"; };
 		10F9F2641AF4795D0056F26B /* redirect.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = redirect.c; sourceTree = "<group>"; };
 		10F9F2661AFC5F550056F26B /* hostinfo.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hostinfo.c; sourceTree = "<group>"; };
 		10FCC13C1B2E4A4500F13674 /* cloexec.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cloexec.c; sourceTree = "<group>"; };
@@ -642,6 +644,7 @@
 		104B9A4C1A5FA8B5009EEE64 /* core */ = {
 			isa = PBXGroup;
 			children = (
+				10F4EB7E1C15537C003DA150 /* cgiutil.c */,
 				105534EE1A440FC800627ECB /* config.c */,
 				10F4180419CA75C500B6E31A /* configurator.c */,
 				107923B919A3217300C52AD6 /* context.c */,
@@ -1457,6 +1460,7 @@
 				107923CD19A3217300C52AD6 /* memory.c in Sources */,
 				107923CC19A3217300C52AD6 /* context.c in Sources */,
 				10A3D40C1B50DAB700327CF9 /* socket.c in Sources */,
+				10F4EB7F1C15537C003DA150 /* cgiutil.c in Sources */,
 				10AA2EC21AA0402E004322AC /* reproxy.c in Sources */,
 				107923C519A3217300C52AD6 /* http1.c in Sources */,
 				10AA2EA71A8DA93C004322AC /* redirect.c in Sources */,

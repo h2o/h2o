@@ -892,6 +892,19 @@ h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const c
                                                    const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
                                                    h2o_iovec_t *base_path);
 
+/* cgiutil */
+
+/**
+ * builds a CGI request from h2o_req_t, by calling the append callback for each parameter
+ */
+void h2o_cgiutil_build_request(h2o_req_t *req, h2o_iovec_t document_root, int send_delegated_uri,
+                               void *(*append_cb)(h2o_req_t *req, const char *name, size_t name_len, int is_http_header,
+                                                  size_t value_len, void *append_arg), void *append_arg);
+/**
+ * setups req->res given CGI / FastCGI response headers
+ */
+const char *h2o_cgiutil_build_response(h2o_req_t *req, struct phr_header *headers, size_t num_headers);
+
 /* request */
 
 /**

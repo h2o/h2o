@@ -175,6 +175,7 @@ SET(LIB_SOURCE_FILES
     lib/common/timeout.c
     lib/common/url.c
 
+    lib/core/cgiutil.c
     lib/core/config.c
     lib/core/configurator.c
     lib/core/context.c
