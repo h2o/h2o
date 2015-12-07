@@ -2,19 +2,51 @@
 ? $_mt->wrapper_file("wrapper.mt", "Configure", "HTTP/2 Directives")->(sub {
 
 <p>
-H2O provides one of the world's most sophisticated HTTP/2 protocol implementation, with features including:
+H2O provides one of the world's most sophisticated HTTP/2 protocol implementation, including following features.
+</p>
+
+<h3 id="prioritization">Prioritization</h3>
+
+<p>
+H2O is one of the few servers that fully implement prioritization of HTTP responses conformant to what is defined in the <a href="https://tools.ietf.org/html/rfc7540">HTTP/2 specification</a>.
+The server implements a O(1) scheduler that determines which HTTP response should be sent to the client, per every 16KB chunk.
+</p>
+<p>
+Unfortunately, some web browsers fail to specify response priorities that lead to best end-user experience.
+H2O is capable of detecting such web browsers, and if it does, uses server-driven prioritization; i.e. send responses with certain MIME-types before others.
+</p>
+<p>
+It is possible to tune or turn off server-driven prioritization using directives: <a href="configure/file_directives.html#file.mime.addtypes"><code>file.mime.addtypes</code></a>, <a href="#http2-reprioritize-blocking-assets"><code>http2-reprioritize-blocking-assets</code></a>.
+</p>
+<p>
+See also:
 <ul>
-<li>HTTP/2 prioritization
+<li><a href="benchmarks.html#download-timings">Download Timings Benchmark</a>
+<li><a href="http://blog.kazuhooku.com/2015/06/http2-and-h2o-improves-user-experience.html">HTTP/2 (and H2O) improves user experience over HTTP/1.1 or SPDY</a>
+</ul>
+</p>
+
+<h3 id="server-push">Server push</h3>
+
+<p>
+H2O recognizes <code>link</code> headers with <a href="https://w3c.github.io/preload/">preload</a> keyword sent by a backend application server (reverse proxy or FastCGI) or an mruby handler, and pushes the designated resource to a client.
+</p>
+<p>
+When pushing the resources, the priority is determined using the <a href="configure/file_directives.html#file.mime.addtypes"><code>priority</code> attribute</a> of the MIME-type configuration.  If the priority is set to <code>highest</code> then the resource will be sent to the client before anything else; otherwise the resource will be sent to client after the main content, as per defined by the HTTP/2 specification.
+</p>
+<p>
+The server also provides a mechanism to track the clients' cache state via cookies, and to push the resources specified with the <code>link</code> header only when it does not exist within the clients' cache.  For details, please refer to the documentation of <a href="#http2-casper"><code>http2-casper</code></a> configuration directive.
+</p>
+<p>
+Pushed responses will have <code>x-http2-push: pushed</code> header set; by looking for the header, it is possible to determine if a resource has been pushed.
+It is also possible to log the value in the <a href="configure/access_log_directives.html#access-log">access log</a> by specifying <code>{x-http2-push}o</code>, push responses but cancelled by CASPER will have the value of the header logged as <code>cancelled</code>.
+</p>
+<p>
+See also:
 <ul>
-<li>proportionally distributes the bandwidth as defined in the <a href="https://httpwg.github.io/specs/rfc7540.html">HTTP/2 specification</a>, for both weight and dependency-based prioritization
-<li>mime-type based override for client-based prioritization for even better performance
+<li><a href="http://blog.kazuhooku.com/2015/12/optimizing-performance-of-multi-tiered.html">Optimizing performance of multi-tier web applications using HTTP/2 push</a>
 </ul>
-<li>server-push
-<ul>
-<li>recognizes the <code>Link: rel=preload</code> header set by the <a href="configure/proxy_directives.html">proxy</a>, <a href="configure/fastcgi_directives.html">fastcgi</a>, <a href="configure/mruby_directives.html">mruby</a> handlers
-<li>tracks the state of web browser cache, and cancels the push if the client is known to be in possession of the resource
-</ul>
-</ul>
+</p>
 
 <p>
 The following describes the configuration directives for controlling the HTTP/2 protocol handler.
