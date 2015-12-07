@@ -43,7 +43,9 @@ my $create_tab = sub {
 <div id="body">
 <div id="top">
 
-<h1><a href="index.html">H2O</a></h1>
+<h1>
+<a href="index.html">H2O</a>
+</h1>
 the optimized HTTP/1.x, HTTP/2 server
 
 <!-- oktavia -->
