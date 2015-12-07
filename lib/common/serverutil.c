@@ -114,7 +114,7 @@ size_t h2o_server_starter_get_fds(int **_fds)
     return fds.size;
 }
 
-pid_t h2o_spawnp(const char *cmd, char *const *argv, const int *mapped_fds, int cloexec_mutex_is_locked)
+pid_t h2o_spawnp(const char *cmd, char *const *argv, const int *mapped_fds, char **env, int cloexec_mutex_is_locked)
 {
 #if defined(__linux__)
 
@@ -132,6 +132,7 @@ pid_t h2o_spawnp(const char *cmd, char *const *argv, const int *mapped_fds, int 
     if (!cloexec_mutex_is_locked)
         pthread_mutex_lock(&cloexec_mutex);
     if ((pid = fork()) == 0) {
+        extern char **environ;
         /* in child process, map the file descriptors and execute; return the errnum through pipe if exec failed */
         if (mapped_fds != NULL) {
             for (; *mapped_fds != -1; mapped_fds += 2) {
@@ -140,6 +141,7 @@ pid_t h2o_spawnp(const char *cmd, char *const *argv, const int *mapped_fds, int 
                 close(mapped_fds[0]);
             }
         }
+        environ = env;
         execvp(cmd, argv);
         errnum = errno;
         write(pipefds[1], &errnum, sizeof(errnum));
@@ -183,7 +185,6 @@ Error:
 
     posix_spawn_file_actions_t file_actions;
     pid_t pid;
-    extern char **environ;
     posix_spawn_file_actions_init(&file_actions);
     if (mapped_fds != NULL) {
         for (; *mapped_fds != -1; mapped_fds += 2) {
@@ -194,7 +195,7 @@ Error:
     }
     if (!cloexec_mutex_is_locked)
         pthread_mutex_lock(&cloexec_mutex);
-    errno = posix_spawnp(&pid, cmd, &file_actions, NULL, argv, environ);
+    errno = posix_spawnp(&pid, cmd, &file_actions, NULL, argv, env);
     if (!cloexec_mutex_is_locked)
         pthread_mutex_unlock(&cloexec_mutex);
     if (errno != 0)
@@ -224,7 +225,8 @@ int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *chi
     /* spawn */
     int mapped_fds[] = {respfds[1], 1, /* stdout of the child process is read from the pipe */
                         -1};
-    if ((pid = h2o_spawnp(cmd, argv, mapped_fds, 1)) == -1)
+    extern char **environ;
+    if ((pid = h2o_spawnp(cmd, argv, mapped_fds, environ, 1)) == -1)
         goto Exit;
     close(respfds[1]);
     respfds[1] = -1;

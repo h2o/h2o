@@ -595,7 +595,8 @@ int h2o_access_log_open_log(const char *path)
         /* spawn the logger */
         int mapped_fds[] = {pipefds[0], 0, /* map pipefds[0] to stdin */
                             -1};
-        if ((pid = h2o_spawnp(argv[0], argv, mapped_fds, 0)) == -1) {
+        extern char **environ;
+        if ((pid = h2o_spawnp(argv[0], argv, mapped_fds, environ, 0)) == -1) {
             fprintf(stderr, "failed to open logger: %s:%s\n", path + 1, strerror(errno));
             return -1;
         }
