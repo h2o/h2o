@@ -291,22 +291,9 @@ static void close_generator(struct st_fcgi_generator_t *generator)
         h2o_buffer_dispose(&generator->resp.receiving);
 }
 
-static void do_send(struct st_fcgi_generator_t *generator)
+static inline void do_send(struct st_fcgi_generator_t *generator)
 {
-    h2o_iovec_t vecs[1];
-    size_t veccnt;
-    int is_final;
-
-    vecs[0] = h2o_doublebuffer_prepare(&generator->resp.sending, &generator->resp.receiving, generator->req->preferred_chunk_size);
-    veccnt = vecs[0].len != 0 ? 1 : 0;
-    if (generator->sock == NULL && vecs[0].len == generator->resp.sending.buf->size && generator->resp.receiving->size == 0) {
-        is_final = 1;
-    } else {
-        if (veccnt == 0)
-            return;
-        is_final = 0;
-    }
-    h2o_send(generator->req, vecs, veccnt, is_final);
+    h2o_cgiutil_send(generator->req, &generator->resp.sending, &generator->resp.receiving, generator->sock == NULL);
 }
 
 static void send_eos_and_close(struct st_fcgi_generator_t *generator, int can_keepalive)

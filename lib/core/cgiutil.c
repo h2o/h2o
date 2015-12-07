@@ -225,3 +225,22 @@ const char *h2o_cgiutil_build_response(h2o_req_t *req, struct phr_header *header
 
     return NULL;
 }
+
+void h2o_cgiutil_send(h2o_req_t *req, h2o_doublebuffer_t *doublebuffer, h2o_buffer_t **input, int upstream_closed)
+{
+    h2o_iovec_t vecs[1];
+    size_t veccnt;
+    int is_final;
+
+    vecs[0] = h2o_doublebuffer_prepare(doublebuffer, input, req->preferred_chunk_size);
+    veccnt = vecs[0].len != 0 ? 1 : 0;
+    if (upstream_closed && vecs[0].len == doublebuffer->buf->size && (*input)->size == 0) {
+        is_final = 1;
+    } else {
+        if (veccnt == 0)
+            return;
+        is_final = 0;
+    }
+
+    h2o_send(req, vecs, veccnt, is_final);
+}

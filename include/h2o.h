@@ -904,6 +904,10 @@ void h2o_cgiutil_build_request(h2o_req_t *req, h2o_iovec_t document_root, int se
  * setups req->res given CGI / FastCGI response headers
  */
 const char *h2o_cgiutil_build_response(h2o_req_t *req, struct phr_header *headers, size_t num_headers);
+/**
+ * sends response to client using doublebuffer and input buffer
+ */
+void h2o_cgiutil_send(h2o_req_t *req, h2o_doublebuffer_t *doublebuffer, h2o_buffer_t **input, int upstream_closed);
 
 /* request */
 
