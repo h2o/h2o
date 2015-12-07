@@ -311,6 +311,23 @@ void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
     req->_ostr_top->do_send(req->_ostr_top, req, bufs, bufcnt, is_final);
 }
 
+void h2o_send_buffered(h2o_req_t *req, h2o_doublebuffer_t *doublebuffer, h2o_buffer_t **input, int upstream_closed)
+{
+    h2o_iovec_t vec = h2o_doublebuffer_prepare(doublebuffer, input, req->preferred_chunk_size);
+    size_t veccnt = vec.len != 0 ? 1 : 0;
+    int is_final;
+
+    if (upstream_closed && vec.len == doublebuffer->buf->size && (*input)->size == 0) {
+        is_final = 1;
+    } else {
+        if (veccnt == 0)
+            return;
+        is_final = 0;
+    }
+
+    h2o_send(req, &vec, veccnt, is_final);
+}
+
 h2o_req_prefilter_t *h2o_add_prefilter(h2o_req_t *req, size_t sz)
 {
     h2o_req_prefilter_t *prefilter = h2o_mem_alloc_pool(&req->pool, sz);

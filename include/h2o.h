@@ -944,6 +944,10 @@ h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot);
  */
 void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final);
 /**
+ * wrapper function h2o_send, that sends content given by `input` using `doublebuffer`
+ */
+void h2o_send_buffered(h2o_req_t *req, h2o_doublebuffer_t *doublebuffer, h2o_buffer_t **input, int upstream_closed);
+/**
  * called by the connection layer to pull the content from generator (if pull mode is being used)
  */
 static int h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf);

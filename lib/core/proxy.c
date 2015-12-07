@@ -249,26 +249,9 @@ static void do_close(h2o_generator_t *generator, h2o_req_t *req)
 
 static void do_send(struct rp_generator_t *self)
 {
-    h2o_iovec_t vecs[1];
-    size_t veccnt;
-    int is_eos;
-
     assert(self->sending.bytes_inflight == 0);
-
-    vecs[0] = h2o_doublebuffer_prepare(&self->sending,
-                                       self->client != NULL ? &self->client->sock->input : &self->last_content_before_send,
-                                       self->src_req->preferred_chunk_size);
-
-    if (self->client == NULL && vecs[0].len == self->sending.buf->size && self->last_content_before_send->size == 0) {
-        veccnt = vecs[0].len != 0 ? 1 : 0;
-        is_eos = 1;
-    } else {
-        if (vecs[0].len == 0)
-            return;
-        veccnt = 1;
-        is_eos = 0;
-    }
-    h2o_send(self->src_req, vecs, veccnt, is_eos);
+    h2o_send_buffered(self->src_req, &self->sending,
+                      self->client != NULL ? &self->client->sock->input : &self->last_content_before_send, self->client == NULL);
 }
 
 static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
