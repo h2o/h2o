@@ -325,7 +325,7 @@
 		10583BE81AE5A330004A3AD6 /* libressl.mk */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = libressl.mk; sourceTree = "<group>"; };
 		10583BE91AE5A330004A3AD6 /* makedoc.pl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = makedoc.pl; sourceTree = "<group>"; };
 		10583BEA1AE5A341004A3AD6 /* picotemplate-conf.pl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = "picotemplate-conf.pl"; sourceTree = "<group>"; };
-		10583BEB1AE5A341004A3AD6 /* regen-all.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = "regen-all.sh"; sourceTree = "<group>"; };
+		10583BEB1AE5A341004A3AD6 /* regen.mk */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = regen.mk; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = "<none>"; };
 		10583BED1AE5A37B004A3AD6 /* Makefile */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.make; path = Makefile; sourceTree = "<group>"; };
 		10583BEE1AE5A37B004A3AD6 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		10583BF51AE765E0004A3AD6 /* command_options.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = command_options.mt; sourceTree = "<group>"; };
@@ -1001,7 +1001,7 @@
 				10583BE81AE5A330004A3AD6 /* libressl.mk */,
 				10583BE91AE5A330004A3AD6 /* makedoc.pl */,
 				10583BEA1AE5A341004A3AD6 /* picotemplate-conf.pl */,
-				10583BEB1AE5A341004A3AD6 /* regen-all.sh */,
+				10583BEB1AE5A341004A3AD6 /* regen.mk */,
 				107923AB19A3216B00C52AD6 /* tokens.pl */,
 			);
 			path = misc;
