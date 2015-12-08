@@ -69,7 +69,7 @@ use Net::FastCGI;
 use Net::FastCGI::Constant qw(:common :type :flag :role :protocol_status);
 use Net::FastCGI::IO qw(:all);
 use Net::FastCGI::Protocol qw(:all);
-use POSIX qw(:sys_wait_h);
+use POSIX qw(:sys_wait_h getcwd);
 use Socket qw(SOMAXCONN SOCK_STREAM);
 
 my $master_pid = $$;
@@ -85,6 +85,7 @@ $SIG{TERM} = sub {
     exit 0;
 };
 
+my $base_dir = getcwd;
 chdir "/"
     or die "failed to chdir to /:$!";
 
@@ -150,6 +151,8 @@ sub handle_connection {
     my $env = parse_params($params);
     die "SCRIPT_FILENAME not defined"
         unless $env->{SCRIPT_FILENAME};
+    $env->{SCRIPT_FILENAME} = "$base_dir/$env->{SCRIPT_FILENAME}"
+        if $env->{SCRIPT_FILENAME} !~ m{^/};
 
     # accumulate FCGI_STDIN
     while (1) {
