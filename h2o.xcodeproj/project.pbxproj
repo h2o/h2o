@@ -506,6 +506,7 @@
 		10F4180219C2D32100B6E31A /* yoml-parser.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "yoml-parser.h"; path = "yoml/yoml-parser.h"; sourceTree = "<group>"; };
 		10F4180419CA75C500B6E31A /* configurator.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = configurator.c; sourceTree = "<group>"; };
 		10F4197F1B64E70D00BEAEAC /* golombset.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = golombset.h; sourceTree = "<group>"; };
+		10F4EB831C165B92003DA150 /* fastcgi-cgi.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; path = "fastcgi-cgi.pl"; sourceTree = "<group>"; };
 		10F9F2641AF4795D0056F26B /* redirect.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = redirect.c; sourceTree = "<group>"; };
 		10F9F2661AFC5F550056F26B /* hostinfo.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hostinfo.c; sourceTree = "<group>"; };
 		10FCC13C1B2E4A4500F13674 /* cloexec.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cloexec.c; sourceTree = "<group>"; };
@@ -992,6 +993,7 @@
 		107923AA19A3216B00C52AD6 /* misc */ = {
 			isa = PBXGroup;
 			children = (
+				10F4EB831C165B92003DA150 /* fastcgi-cgi.pl */,
 				10583BE61AE5A322004A3AD6 /* clang-format-all.sh */,
 				104960151B9D3F9100FF136D /* dump-github-repository.pl */,
 				10583BE71AE5A322004A3AD6 /* install-perl-module.pl */,
