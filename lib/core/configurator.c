@@ -818,9 +818,7 @@ char *h2o_configurator_get_cmd_path(const char *cmd)
 
     /* obtain root */
     if ((root = getenv("H2O_ROOT")) == NULL) {
-#ifdef H2O_ROOT
-        root = H2O_ROOT;
-#endif
+        root = H2O_TO_STR(H2O_ROOT);
         if (root == NULL)
             goto ReturnOrig;
     }

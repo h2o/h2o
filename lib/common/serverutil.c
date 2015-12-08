@@ -114,6 +114,26 @@ size_t h2o_server_starter_get_fds(int **_fds)
     return fds.size;
 }
 
+static char **build_spawn_env(void)
+{
+    extern char **environ;
+    size_t num;
+
+    /* calculate number of envvars, as well as looking for H2O_ROOT= */
+    for (num = 0; environ[num] != NULL; ++num)
+        if (strncmp(environ[num], "H2O_ROOT=", sizeof("H2O_ROOT=") - 1) == 0)
+            return environ;
+
+    /* not found */
+    char **newenv = h2o_mem_alloc(sizeof(*newenv) * (num + 2) + sizeof("H2O_ROOT=" H2O_TO_STR(H2O_ROOT)));
+    memcpy(newenv, environ, sizeof(*newenv) * num);
+    newenv[num] = (char *)(newenv + num + 2);
+    newenv[num + 1] = NULL;
+    strcpy(newenv[num], "H2O_ROOT=" H2O_TO_STR(H2O_ROOT));
+
+    return newenv;
+}
+
 pid_t h2o_spawnp(const char *cmd, char *const *argv, const int *mapped_fds, int cloexec_mutex_is_locked)
 {
 #if defined(__linux__)
@@ -121,6 +141,7 @@ pid_t h2o_spawnp(const char *cmd, char *const *argv, const int *mapped_fds, int 
     /* posix_spawnp of Linux does not return error if the executable does not exist, see
      * https://gist.github.com/kazuho/0c233e6f86d27d6e4f09
      */
+    extern char **environ;
     int pipefds[2] = {-1, -1}, errnum;
     pid_t pid;
 
@@ -140,6 +161,7 @@ pid_t h2o_spawnp(const char *cmd, char *const *argv, const int *mapped_fds, int 
                 close(mapped_fds[0]);
             }
         }
+        environ = build_spawn_env();
         execvp(cmd, argv);
         errnum = errno;
         write(pipefds[1], &errnum, sizeof(errnum));
@@ -184,6 +206,7 @@ Error:
     posix_spawn_file_actions_t file_actions;
     pid_t pid;
     extern char **environ;
+    char **env = build_spawn_env();
     posix_spawn_file_actions_init(&file_actions);
     if (mapped_fds != NULL) {
         for (; *mapped_fds != -1; mapped_fds += 2) {
@@ -194,9 +217,11 @@ Error:
     }
     if (!cloexec_mutex_is_locked)
         pthread_mutex_lock(&cloexec_mutex);
-    errno = posix_spawnp(&pid, cmd, &file_actions, NULL, argv, environ);
+    errno = posix_spawnp(&pid, cmd, &file_actions, NULL, argv, env);
     if (!cloexec_mutex_is_locked)
         pthread_mutex_unlock(&cloexec_mutex);
+    if (env != environ)
+        free(env);
     if (errno != 0)
         return -1;
 
