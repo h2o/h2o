@@ -1,0 +1,170 @@
+=head1 NAME
+
+Net::FastCGI - FastCGI Toolkit
+
+=head1 DESCRIPTION
+
+This distribution aims to provide a complete API for working with the FastCGI
+protocol.
+
+The primary goal is to provide a function oriented and object oriented API which 
+are not tied to a specific I/O model or framework.
+
+Secondary goal is to provide higher level tools/API which can be used for debugging
+and interoperability testing.
+
+=head1 PROGRESS
+
+The function oriented API is considered feature complete. L<Net::FastCGI::Protocol> 
+provides functions to build and parse all FastCGI v1.0 messages, also provided is a 
+few convenient higher level functions such as C<build_begin_request()>, 
+C<build_end_request()>, C<parse_record()> and C<dump_record()>.
+
+Work has begun on object oriented implementation and a simple blocking I/O class which is
+intended for testing and debugging.
+
+=head1 PACKAGES
+
+=over 4
+
+=item L<Net::FastCGI::Constant>
+
+FastCGI protocol constants.
+
+=item L<Net::FastCGI::IO>
+
+Provides functions to read and write FastCGI messages.
+
+=item L<Net::FastCGI::Protocol>
+
+Provides functions to build and parse FastCGI messages.
+
+=back
+
+=head1 ENVIRONMENT
+
+Environment variable C<NET_FASTCGI_PP> can be set to a true value before loading 
+this package to disable usage of XS implementation.
+
+=head1 PREREQUISITES
+
+=head2 Run-Time
+
+=over 4
+
+=item L<perl> 5.6 or greater.
+
+=item L<Carp>, core module.
+
+=item L<Exporter>, core module.
+
+=back
+
+=head2 Build-Time
+
+In addition to Run-Time:
+
+=over 4
+
+=item L<Test::More> 0.47 or greater, core module since 5.6.2.
+
+=item L<Test::Exception>.
+
+=item L<Test::HexString>.
+
+=back
+
+=head1 SEE ALSO
+
+=head2 Community
+
+=over 4
+
+=item Official FastCGI site
+
+L<http://www.fastcgi.com/>
+
+=back
+
+=head2 Standards
+
+=over 4
+
+=item FastCGI Specification Version 1.0
+
+L<http://www.fastcgi.com/devkit/doc/fcgi-spec.html>
+
+=item RFC 3875 - The Common Gateway Interface (CGI) Version 1.1
+
+L<http://tools.ietf.org/html/rfc3875>
+
+=back
+
+=head2 White papers
+
+=over 4
+
+=item FastCGI: A High-Performance Web Server Interface
+
+L<http://www.fastcgi.com/devkit/doc/fastcgi-whitepaper/fastcgi.htm>
+
+=item FastCGI - The Forgotten Treasure
+
+L<http://cryp.to/publications/fastcgi/>
+
+=back
+
+=head2 Perl implementations
+
+=over 4
+
+=item L<AnyEvent::FCGI>
+
+Application server implementation, built on top of L<AnyEvent>. Supports Responder role.
+Capable of multiplexing.
+
+=item L<FCGI>
+
+Application server implementation, built on top of C<libfcgi> (reference implementation). 
+Supports all FastCGI roles. Responds to management records. Processes requests synchronously.
+
+=item L<FCGI::Async>
+
+Application server implementation, built on top of L<IO::Async>. Supports Responder role. 
+Responds to management records. Capable of multiplexing.
+
+=item L<FCGI::Client>
+
+Client (Web server) implementation. Supports Responder role.
+
+=item L<FCGI::EV>
+
+Application server implementation, built on top of L<EV>. Supports Responder role.
+
+=item L<Mojo::Server::FastCGI>
+
+Application server implementation. Supports Responder role. Processes requests synchronously.
+
+=item L<POE::Component::FastCGI>
+
+Application server implementation, built on top of L<POE>. Supports Responder role.
+Capable of multiplexing.
+
+=back
+
+=head1 SUPPORT
+
+Please report any bugs or feature requests to C<bug-net-fastcgi@rt.cpan.org>, or through
+the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Net-FastCGI>
+
+=head1 AUTHOR
+
+Christian Hansen C<chansen@cpan.org>
+
+=head1 COPYRIGHT
+
+Copyright 2008-2010 by Christian Hansen.
+
+This library is free software; you can redistribute it and/or modify 
+it under the same terms as Perl itself.
+
