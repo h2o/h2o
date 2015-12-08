@@ -110,6 +110,7 @@ while (1) {
         die "fork failed:$!"
             unless defined $pid;
         if ($pid == 0) {
+            close $listen_sock;
             handle_connection($sock);
             exit 0;
         }
@@ -177,6 +178,7 @@ sub handle_connection {
     die "fork failed:$!"
         unless defined $pid;
     if ($pid == 0) {
+        close $sock;
         close $stdout_rfh;
         close $stderr_rfh;
         open STDERR, ">&", $stderr_wfh
