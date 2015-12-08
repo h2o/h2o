@@ -2,7 +2,9 @@
 
 use strict;
 use warnings;
+use CGI;
 
-print "Content-Type: text/plain; charset=utf-8\r\n\r\n";
+my $q = CGI->new;
 
-print "Hello ", $ENV{PATH_INFO} ? substr $ENV{PATH_INFO}, 1 : "unknown";
+print $q->header("text/plain; charset=utf-8");
+print "Hello ", $q->param("name") || "unknown";

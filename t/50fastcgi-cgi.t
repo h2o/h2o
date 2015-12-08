@@ -9,6 +9,8 @@ use t::Util;
 
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
+eval q{use CGI; 1}
+    or plan skip_all => 'CGI.pm not found';
 
 # spawn h2o
 my $server = spawn_h2o(<< "EOT");
@@ -22,7 +24,16 @@ hosts:
         file.dir: @{[ DOC_ROOT ]}
 EOT
 
-my $resp = `curl --silent http://127.0.0.1:$server->{port}/hello.cgi/world`;
-is $resp, "Hello world";
+my $doit = sub {
+    my ($proto, $port) = @_;
+    subtest $proto => sub {
+        my $resp = `curl --insecure --silent $proto://127.0.0.1:$port/hello.cgi?name=world`;
+        is $resp, "Hello world", "GET";
+        $resp = `curl --insecure --silent -F name=world $proto://127.0.0.1:$port/hello.cgi`;
+        is $resp, "Hello world", "POST";
+    };
+};
+$doit->('http', $server->{port});
+$doit->('https', $server->{tls_port});
 
 done_testing();
