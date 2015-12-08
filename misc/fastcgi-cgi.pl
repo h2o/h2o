@@ -28,39 +28,42 @@ $SIG{TERM} = sub {
 my $base_dir = getcwd;
 chdir "/"
     or die "failed to chdir to /:$!";
+main();
 
-my $listen_sock;
-if (-S STDIN) {
-    $listen_sock = IO::Socket::UNIX->new;
-    $listen_sock->fdopen(fileno(STDIN), "w")
-        or die "failed to open unix socket:$!";
-} else {
-    my $sockpath = $ENV{FASTCGI_CGI_SOCKET}
-        or die "STDIN is not a socket, and FASTCGI_CGI_SOCKET is not defined";
-    unlink $sockpath;
-    $listen_sock = IO::Socket::UNIX->new(
-        Listen => SOMAXCONN,
-        Local  => $sockpath,
-        Type   => SOCK_STREAM,
-    ) or die "failed to create unix socket at $sockpath:$!";
-}
-
-while (1) {
-    if (my $sock = $listen_sock->accept) {
-        my $pid = fork;
-        die "fork failed:$!"
-            unless defined $pid;
-        if ($pid == 0) {
-            close $listen_sock;
-            handle_connection($sock);
-            exit 0;
-        }
-        $sock->close;
-        $child_procs{$pid} = 1;
+sub main {
+    my $listen_sock;
+    if (-S STDIN) {
+        $listen_sock = IO::Socket::UNIX->new;
+        $listen_sock->fdopen(fileno(STDIN), "w")
+            or die "failed to open unix socket:$!";
+    } else {
+        my $sockpath = $ENV{FASTCGI_CGI_SOCKET}
+            or die "STDIN is not a socket, and FASTCGI_CGI_SOCKET is not defined";
+        unlink $sockpath;
+        $listen_sock = IO::Socket::UNIX->new(
+            Listen => SOMAXCONN,
+            Local  => $sockpath,
+            Type   => SOCK_STREAM,
+        ) or die "failed to create unix socket at $sockpath:$!";
     }
-    my $kid = waitpid(-1, WNOHANG);
-    if ($kid > 0) {
-        delete $child_procs{$kid};
+
+    while (1) {
+        if (my $sock = $listen_sock->accept) {
+            my $pid = fork;
+            die "fork failed:$!"
+                unless defined $pid;
+            if ($pid == 0) {
+                close $listen_sock;
+                handle_connection($sock);
+                exit 0;
+            }
+            $sock->close;
+            $child_procs{$pid} = 1;
+        }
+        my $kid = waitpid(-1, WNOHANG);
+        if ($kid > 0) {
+            delete $child_procs{$kid};
+        }
     }
 }
 
