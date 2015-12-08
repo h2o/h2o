@@ -3,6 +3,7 @@
 use strict;
 use warnings;
 use File::Basename qw(dirname);
+use File::Temp qw(tempfile);
 use IO::Socket::UNIX;
 use Net::FastCGI;
 use Net::FastCGI::Constant qw(:common :type :flag :role :protocol_status);
@@ -97,14 +98,21 @@ sub handle_connection {
     while (1) {
         die "received unexpected record: $type"
             if $type != FCGI_STDIN;
+        die "unexpected request id"
+            if $cur_req_id != $req_id;
         last if length $content == 0;
         if (!$input_fh) {
             $input_fh = tempfile()
                 or die "failed to create temporary file:$!";
         }
         print $input_fh $content;
+        ($type, $req_id, $content) = fetch_record($sock);
     }
-    if (!$input_fh) {
+    if ($input_fh) {
+        flush $input_fh;
+        seek $input_fh, 0, 0
+            or die "seek failed:$!";
+    } else {
         open $input_fh, "<", "/dev/null"
             or die "failed to open /dev/null:$!";
     }
