@@ -608,7 +608,9 @@ static void on_read(h2o_socket_t *sock, int status)
     int can_keepalive = 0;
 
     if (status != 0) {
-        h2o_req_log_error(generator->req, MODULE_NAME, "fastcgi connection closed unexpectedly");
+        /* note: FastCGI server is allowed to close the connection any time after sending an empty FCGI_STDOUT record */
+        if (!generator->sent_headers)
+            h2o_req_log_error(generator->req, MODULE_NAME, "fastcgi connection closed unexpectedly");
         errorclose(generator);
         return;
     }
