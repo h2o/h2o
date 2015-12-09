@@ -815,7 +815,7 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
     }
     test_memcached_status = conf.cache.setup == setup_cache_memcached;
 #if H2O_USE_SESSION_TICKETS
-        test_memcached_status = test_memcached_status || conf.ticket.update_thread == ticket_memcached_updater
+        test_memcached_status = test_memcached_status || conf.ticket.update_thread == ticket_memcached_updater;
 #endif
     if (conf.memcached.host == NULL && (test_memcached_status)) {
         h2o_configurator_errprintf(cmd, node, "configuration of memcached is missing");
