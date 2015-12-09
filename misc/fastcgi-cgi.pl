@@ -191,8 +191,7 @@ sub handle_connection {
         }
     }
 
-    # close
-    write_record($sock, FCGI_END_REQUEST, $cur_req_id,  build_end_request_body(0, FCGI_REQUEST_COMPLETE));
+    # close (closing without sending FCGI_END_REQUEST indicates to the client that the connection is not persistent)
     close $sock;
 
     # wait for child process to die
@@ -216,13 +215,12 @@ sub transfer {
     while (1) {
         my $ret = sysread $fh, $buf, 61440;
         next if (!defined $ret) && $! == Errno::EINTR;
-        return undef
-            unless $ret;
+        $buf = "" unless $ret; # send zero-length record to indicate EOS
         last;
     }
     write_record($sock, $type, $req_id, $buf)
         or die "failed to write FCGI response:$!";
-    return 1;
+    return length $buf;
 }
 
 sub print_help {
