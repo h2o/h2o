@@ -178,6 +178,7 @@ sub handle_connection {
             if $stdout_rfh;
         vec($rin, fileno $stderr_rfh, 1) = 1
             if $stderr_rfh;
+        vec($rin, fileno $sock, 1) = 1;
         if (select($rin, undef, undef, undef) <= 0) {
             next;
         }
@@ -188,6 +189,15 @@ sub handle_connection {
         if ($stderr_rfh && vec($rin, fileno $stderr_rfh, 1)) {
             transfer($sock, FCGI_STDERR, $cur_req_id, $stderr_rfh)
                 or undef $stderr_rfh;
+        }
+        if (vec($rin, fileno $sock, 1)) {
+            # atually means that the client has closed the connection, terminate the CGI process the same way apache does
+            kill 'TERM', $pid;
+            $SIG{ALRM} = sub {
+                kill 'KILL', $pid;
+            };
+            alarm 3;
+            last;
         }
     }
 
