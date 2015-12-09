@@ -30,6 +30,7 @@ my $base_dir = getcwd;
 chdir "/"
     or die "failed to chdir to /:$!";
 main();
+my $pass_authz;
 
 sub main {
     my $sockfn;
@@ -38,6 +39,7 @@ sub main {
     GetOptions(
         "listen=s"      => \$sockfn,
         "max-workers=i" => \$max_workers,
+        "pass-authz"    => \$pass_authz,
         "help"          => sub {
             print_help();
             exit 0;
@@ -115,6 +117,8 @@ sub handle_connection {
         unless $env->{SCRIPT_FILENAME};
     $env->{SCRIPT_FILENAME} = "$base_dir/$env->{SCRIPT_FILENAME}"
         if $env->{SCRIPT_FILENAME} !~ m{^/};
+    delete $env->{HTTP_AUTHORIZATION}
+        unless $pass_authz;
 
     # accumulate FCGI_STDIN
     while (1) {
@@ -246,6 +250,7 @@ Options:
                      will be used as the UNIX socket for accepting new
                      connections.
   --max-workers=nnn  maximum number of CGI processes (default: unlimited)
+  --pass-authz       if set, preserves HTTP_AUTHORIZATION parameter
 
 EOT
 }
