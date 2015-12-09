@@ -649,7 +649,7 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
     };
     int modes = -1;
     yoml_t *t;
-	int test_memcached_status;
+    int test_memcached_status;
 
     if ((t = yoml_get(node, "mode")) == NULL) {
         h2o_configurator_errprintf(cmd, node, "mandatory attribute `mode` is missing");
