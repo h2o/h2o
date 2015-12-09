@@ -33,10 +33,12 @@ main();
 
 sub main {
     my $sockfn;
+    my $max_workers = "inf" + 1;
 
     GetOptions(
-        "listen=s" => \$sockfn,
-        "help"     => sub {
+        "listen=s"      => \$sockfn,
+        "max-workers=i" => \$max_workers,
+        "help"          => sub {
             print_help();
             exit 0;
         },
@@ -59,19 +61,25 @@ sub main {
     }
 
     while (1) {
-        if (my $sock = $listen_sock->accept) {
-            my $pid = fork;
-            die "fork failed:$!"
-                unless defined $pid;
-            if ($pid == 0) {
-                close $listen_sock;
-                handle_connection($sock);
-                exit 0;
+        my $wait_opt = 0;
+        if (keys %child_procs < $max_workers) {
+            if (my $sock = $listen_sock->accept) {
+                my $pid = fork;
+                die "fork failed:$!"
+                    unless defined $pid;
+                if ($pid == 0) {
+                    close $listen_sock;
+                    handle_connection($sock);
+                    exit 0;
+                }
+                $sock->close;
+                $child_procs{$pid} = 1;
             }
-            $sock->close;
-            $child_procs{$pid} = 1;
+            $wait_opt = WNOHANG;
+        } else {
+            $wait_opt = 0;
         }
-        my $kid = waitpid(-1, WNOHANG);
+        my $kid = waitpid(-1, $wait_opt);
         if ($kid > 0) {
             delete $child_procs{$kid};
         }
@@ -224,11 +232,12 @@ Usage:
     $0 [options]
 
 Options:
-  --listen=sockfn  path to the UNIX socket.  If specified, the program will
-                   create a UNIX socket at given path replacing the existing
-                   file (should it exist).  If not, file descriptor zero (0)
-                   will be used as the UNIX socket for accepting new
-                   connections.
+  --listen=sockfn    path to the UNIX socket.  If specified, the program will
+                     create a UNIX socket at given path replacing the existing
+                     file (should it exist).  If not, file descriptor zero (0)
+                     will be used as the UNIX socket for accepting new
+                     connections.
+  --max-workers=nnn  maximum number of CGI processes (default: unlimited)
 
 EOT
 }
