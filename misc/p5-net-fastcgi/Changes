@@ -1,0 +1,102 @@
+0.14 2012-03-26
+   - No functional changes in this release
+   - Don't rely on hash keys being ordered in tests, Perl 5.18 introduces a
+     per process randomization.
+
+0.13 2011-02-12
+   - No functional changes in this release
+   - Added eg/runfcgi.pl, contributed by Paul Evans (LeoNerd)
+   - Added eg/server.pl
+
+0.12 2010-07-14
+    - Added Net::FastCGI::IO
+
+0.11 2010-04-09
+    - Documented the goals with this project/distribution
+    - Net::FastCGI::Protocol
+      - Fixed dump_record() to properly escape FCGI_NameValuePair header
+        - Added tests for this
+      - Added get_record_length()
+        - Added documentation and tests
+      - Changed parse_record() to return a list in list context, this makes it 
+        more consistent with parse_header()
+         - Added documentation and tests this change
+      - Changed dump_record() to accept a string of octets (old behavior is 
+        still supported but deprecated, please change function call to dump_record_body())
+        This change makes it more consistent with parse_record_body().
+          - Added documentation and tests this change
+
+0.10 2010-04-02
+    - Minor optimizations to avoid unnecessary copying of '$content' strings
+    - Fixed dump_record() to properly insert ellipsis when truncating stream content
+      - added tests for this
+    - Added more tests for dump_record()
+
+0.09 2010-03-31
+    - Added check_params() and dump_record()
+      - added documentation 
+      - added test for check_params() and dump_record() (incomplete)
+    - Minor optimizations to build_stream() and build_record()
+
+0.08 2010-02-16
+    - Documented return value of get_type_name(), get_role_name()
+      and get_protocol_status_name().
+    - Changed test prerequisite from Test::BinaryData to Test::HexString.
+    - Corrected note about AnyEvent::FCGI, it's capable of multiplexing. 
+
+0.07 2010-02-10
+    - Added notes about existing Perl implementations.
+    - Added references to specifications and white papers.
+    - Minor internal "cosmetic" changes
+    - Added more tests for build_begin_request() and build_end_request()
+
+0.06 2010-02-09
+    - NOTE: Changed application_status to app_status, this affects users of
+      parse_record() or parse_record_body(). Former was unnecessarily verbose.
+      Latter also matches the component name of FCGI_BeginRequestBody struct.
+    - Added build_begin_request() and build_end_request()
+      - added documentation and tests for these
+
+0.05 2010-02-06
+    - Net::FastCGI::Constant
+      - Improved documentation
+      - Added @FCGI_TYPE_NAME, @FCGI_ROLE_NAME and @FCGI_PROTOCOL_STATUS_NAME
+        - Re-factored Net::FastCGI::Protocol to use these.
+      - Renamed FCGI_MAX_LEN to FCGI_MAX_CONTENT_LEN
+        - FCGI_MAX_LEN is deprecated and will be removed in a future version.
+    - Net::FastCGI::Protocol
+      - Fixed parse_record() and parse_record_body() to properly detect malformed
+        stream records.
+        - Added tests for this.
+      - Increased segment size in build_stream() from 8192 to 32760 to reflect modern
+        socket buffers.
+        - Updated tests
+        - Documented segment size
+      - Documented scalar return value of parse_header()
+      - Minor documentation updates
+
+0.04 2010-01-30
+    - Added parse_record() and parse_record_body()
+      - Added tests for these
+      - Added docs (incomplete)
+    - Cleaned up exception messages. Protocol exceptions now have a FastCGI prefix
+    - Fixed parse_params() to correctly detect incomplete FCGI_NameValuePair's
+      - added tests for this
+    - Added tests for build_stream()
+    - Changed parse_header() to return a hash reference in scalar context
+      - added tests for this
+    - Coverage ~90% (stmt:100.0 bran:96.9 cond:92.9)
+      - More tests (and docs) needed to cover all cases
+
+0.03 2010-01-23
+    - Fixed package loading in Net::FastCGI::Protocol
+
+0.02 2010-01-23
+    - Removed object oriented implementation, it will eventually be released as
+      a separate distribution with different prerequisites.
+    - Removed unnecessary functions from Net::FastCGI::Protocol
+    - Re-factored internals of Net::FastCGI::Protocol to be more performant.
+    - No major changes planned for existing API in Net::FastCGI::Protocol
+
+0.01_01 2009-10-17
+    - Initial release.

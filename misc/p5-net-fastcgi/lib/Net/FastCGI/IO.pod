@@ -1,0 +1,391 @@
+=head1 NAME
+
+Net::FastCGI::IO - Provides functions to read and write FastCGI messages.
+
+=head1 SYNOPSIS
+
+    # FCGI_Header
+    @values = read_header($fh);
+    $header = read_header($fh);
+    $result = write_header($fh, $type, $request_id, $content_length, $padding_length);
+    
+    # FCGI_Record
+    @values = read_record($fh);
+    $record = read_record($fh);
+    $result = write_record($fh, $type, $request_id);
+    $result = write_record($fh, $type, $request_id, $content);
+    
+    # FCGI_Record Stream
+    $result = write_stream($fh, $type, $request_id, $content);
+    $result = write_stream($fh, $type, $request_id, $content, $terminate);
+    
+    # I/O ready
+    $result = can_read($fh, $timeout);
+    $result = can_write($fh, $timeout);
+
+=head1 DESCRIPTION
+
+Provides unbuffered blocking I/O functions to read and write FastCGI messages.
+
+=head1 FUNCTIONS
+
+=head2 read_header
+
+Attempts to read a C<FCGI_Header> from file handle C<$fh>.
+
+I<Usage>
+
+    ($type, $request_id, $content_length, $padding_length)
+      = read_header($fh);
+    
+    $header = read_header($fh);
+    say $header->{type};
+    say $header->{request_id};
+    say $header->{content_length};
+    say $header->{padding_length};
+
+I<Arguments>
+
+=over 4
+
+=item C<$fh>
+
+The file handle to read from. Must be a file handle with a file descriptor. File handle 
+mode should be set to binary.
+
+=back
+
+I<Returns>
+
+Upon successful completion, the return value of L<Net::FastCGI::Protocol/parse_header>. 
+Otherwise, a false value (C<undef> in scalar context and an empty list in list context).
+
+If C<read_header> reaches end-of-file before reading any octets, it returns a 
+false value. If unsuccessful, C<read_header> returns a false value and C<$!> 
+contains the error from the C<sysread> call. If C<read_header> encounters 
+end-of-file after some but not all of the needed octets, the function returns 
+a false value and sets C<$!> to C<EPIPE>.
+
+I<Implementation>
+
+The implementation calls C<sysread> in a loop, restarting if C<sysread> 
+returns C<undef> with C<$!> set to C<EINTR>. If C<sysread> does not provide 
+all the requested octets, C<read_header> continues to call C<sysread> until 
+either all the octets have been read, reaches end-of-file or an error occurs.
+
+=head2 read_record
+
+Attempts to read a C<FCGI_Record> from file handle C<$fh>.
+
+I<Usage>
+
+    ($type, $request_id, $content)
+      = read_record($fh);
+    
+    $record = read_record($fh);
+    say $record->{type};
+    say $record->{request_id};
+
+I<Arguments>
+
+=over 4
+
+=item C<$fh>
+
+The file handle to read from. Must be a file handle with a file descriptor. 
+File handle mode should be set to binary.
+
+=back
+
+I<Returns>
+
+Upon successful completion, the return value of L<Net::FastCGI::Protocol/parse_record>. 
+Otherwise, a false value (C<undef> in scalar context and an empty list in list context).
+
+If C<read_record> reaches end-of-file before reading any octets, it returns a 
+false value. If unsuccessful, C<read_record> returns a false value and C<$!> 
+contains the error from the C<sysread> call. If C<read_record> encounters 
+end-of-file after some but not all of the needed octets, the function returns 
+a false value and sets C<$!> to C<EPIPE>.
+
+I<Implementation>
+
+The implementation calls C<sysread> in a loop, restarting if C<sysread> 
+returns C<undef> with C<$!> set to C<EINTR>. If C<sysread> does not provide 
+all the requested octets, C<read_record> continues to call C<sysread> until 
+either all the octets have been read, reaches end-of-file or an error occurs.
+
+=head2 write_header
+
+Attempts to write a C<FCGI_Header> to file handle C<$fh>.
+
+I<Usage>
+
+    $result = write_header($fh, $type, $request_id, $content_length, $padding_length);
+
+I<Arguments>
+
+=over 4
+
+=item C<$fh>
+
+The file handle to write to. Must be a file handle with a file descriptor. File handle 
+mode should be set to binary.
+
+=item C<$type>
+
+An unsigned 8-bit integer.
+
+=item C<$request_id>
+
+An unsigned 16-bit integer.
+
+=item C<$content_length>
+
+An unsigned 16-bit integer.
+
+=item C<$padding_length>
+
+An unsigned 8-bit integer.
+
+=back
+
+I<Returns>
+
+=over 4
+
+=item C<$result>
+
+Upon successful completion, the number of octets actually written. Otherwise, 
+C<undef> and C<$!> contains the error from the C<syswrite> call.
+
+=back
+
+I<Implementation>
+
+The implementation calls C<syswrite> in a loop, restarting if C<syswrite> 
+returns C<undef> with C<$!> set to C<EINTR>. If C<syswrite> does not output 
+all the requested octets, C<write_header> continues to call C<syswrite> until 
+all the octets have been written or an error occurs.
+
+=head2 write_record
+
+Attempts to write a C<FCGI_Record> to file handle C<$fh>.
+
+I<Usage>
+
+    $result = write_record($fh, $type, $request_id);
+    $result = write_record($fh, $type, $request_id, $content);
+
+I<Arguments>
+
+=over 4
+
+=item C<$fh>
+
+The file handle to write to. Must be a file handle with a file descriptor. File handle 
+mode should be set to binary.
+
+=item C<$type>
+
+An unsigned 8-bit integer.
+
+=item C<$request_id>
+
+An unsigned 16-bit integer.
+
+=item C<$content> (optional)
+
+A string of octets containing the content, cannot exceed 65535 octets in length.
+
+=back
+
+I<Returns>
+
+=over 4
+
+=item C<$result>
+
+Upon successful completion, the number of octets actually written. Otherwise, 
+C<undef> and C<$!> contains the error from the C<syswrite> call.
+
+=back
+
+I<Implementation>
+
+The implementation calls C<syswrite> in a loop, restarting if C<syswrite> 
+returns C<undef> with C<$!> set to C<EINTR>. If C<syswrite> does not output 
+all the requested octets, C<write_record> continues to call C<syswrite> until 
+all the octets have been written or an error occurs.
+
+=head2 write_stream
+
+Attempts to write a C<FCGI_Record> stream to file handle C<$fh>.
+
+I<Usage>
+
+    $result = write_stream($fh, $type, $request_id, $content);
+    $result = write_stream($fh, $type, $request_id, $content, $terminate);
+
+I<Arguments>
+
+=over 4
+
+=item C<$fh>
+
+The file handle to write to. Must be a file handle with a file descriptor. File handle 
+mode should be set to binary.
+
+=item C<$type>
+
+An unsigned 8-bit integer.
+
+=item C<$request_id>
+
+An unsigned 16-bit integer.
+
+=item C<$content>
+
+A string of octets containing the stream content.
+
+=item C<$terminate> (optional)
+
+A boolean indicating whether or not the stream should be terminated.
+Defaults to false.
+
+=back
+
+I<Returns>
+
+=over 4
+
+=item C<$result>
+
+Upon successful completion, the number of octets actually written. Otherwise, 
+C<undef> and C<$!> contains the error from the C<syswrite> call.
+
+=back
+
+I<Implementation>
+
+The implementation calls C<syswrite> in a loop, restarting if C<syswrite> 
+returns C<undef> with C<$!> set to C<EINTR>. If C<syswrite> does not output 
+all the requested octets, C<write_stream> continues to call C<syswrite> until 
+all the octets have been written or an error occurs.
+
+=head2 can_read
+
+Determines wheter or not the given file handle C<$fh> is ready for reading 
+within the given timeout C<$timeout>.
+
+I<Usage>
+
+    $result = can_read($fh, $timeout);
+
+I<Arguments>
+
+=over 4
+
+=item C<$fh>
+
+The file handle to test for readiness. Must be a file handle with a file descriptor.
+
+=item C<$timeout>
+
+Maximum interval to wait. Can be set to either a non-negative numeric value or 
+C<undef> for infinite wait.
+
+=back
+
+I<Returns>
+
+Upon successful completion, C<0> or C<1>. Otherwise, C<undef> and C<$!> contains 
+the C<select> error.
+
+I<Implementation>
+
+The implementation calls C<select> in a loop, restarting if C<select> returns 
+C<-1> with C<$!> set to C<EINTR> and C<$timeout> has not elapsed.
+
+=head2 can_write
+
+Determines wheter or not the given file handle C<$fh> is ready for writing 
+within the given timeout C<$timeout>.
+
+I<Usage>
+
+    $result = can_write($fh, $timeout);
+
+I<Arguments>
+
+=over 4
+
+=item C<$fh>
+
+The file handle to test for readiness. Must be a file handle with a file descriptor.
+
+=item C<$timeout>
+
+Maximum interval to wait. Can be set to either a non-negative numeric value or 
+C<undef> for infinite wait.
+
+=back
+
+I<Returns>
+
+Upon successful completion, C<0> or C<1>. Otherwise, C<undef> and C<$!> contains 
+the C<select> error.
+
+I<Implementation>
+
+The implementation calls C<select> in a loop, restarting if C<select> returns 
+C<-1> with C<$!> set to C<EINTR> and C<$timeout> has not elapsed.
+
+=head1 EXPORTS
+
+None by default. All functions can be exported using the C<:all> tag or individually.
+
+=head1 DIAGNOSTICS
+
+=over 4
+
+=item B<(F)> Usage: %s
+
+Subroutine called with wrong number of arguments.
+
+=item B<(W Net::FastCGI::IO)> FastCGI: Could not read %s
+
+=item B<(W Net::FastCGI::IO)> FastCGI: Could not write %s
+
+=back
+
+=head1 SEE ALSO
+
+=over 4
+
+=item FastCGI Specification Version 1.0
+
+L<http://www.fastcgi.com/devkit/doc/fcgi-spec.html>
+
+=item The Common Gateway Interface (CGI) Version 1.1
+
+L<http://tools.ietf.org/html/rfc3875>
+
+=item L<Net::FastCGI::Constant>
+
+=item L<Net::FastCGI::Protocol>
+
+=back
+
+=head1 AUTHOR
+
+Christian Hansen C<chansen@cpan.org>
+
+=head1 COPYRIGHT
+
+Copyright 2008-2010 by Christian Hansen.
+
+This library is free software; you can redistribute it and/or modify 
+it under the same terms as Perl itself.
+
+
