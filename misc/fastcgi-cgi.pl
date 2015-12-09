@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use File::Basename qw(dirname);
 use File::Temp qw(tempfile);
+use Getopt::Long;
 use IO::Socket::UNIX;
 use Net::FastCGI;
 use Net::FastCGI::Constant qw(:common :type :flag :role :protocol_status);
@@ -31,20 +32,30 @@ chdir "/"
 main();
 
 sub main {
+    my $sockfn;
+
+    GetOptions(
+        "listen=s" => \$sockfn,
+        "help"     => sub {
+            print_help();
+            exit 0;
+        },
+    ) or exit 1;
+
     my $listen_sock;
-    if (-S STDIN) {
+    if (defined $sockfn) {
+        unlink $sockfn;
+        $listen_sock = IO::Socket::UNIX->new(
+            Listen => SOMAXCONN,
+            Local  => $sockfn,
+            Type   => SOCK_STREAM,
+        ) or die "failed to create unix socket at $sockfn:$!";
+    } else {
+        die "stdin is no a socket"
+            unless -S STDIN;
         $listen_sock = IO::Socket::UNIX->new;
         $listen_sock->fdopen(fileno(STDIN), "w")
             or die "failed to open unix socket:$!";
-    } else {
-        my $sockpath = $ENV{FASTCGI_CGI_SOCKET}
-            or die "STDIN is not a socket, and FASTCGI_CGI_SOCKET is not defined";
-        unlink $sockpath;
-        $listen_sock = IO::Socket::UNIX->new(
-            Listen => SOMAXCONN,
-            Local  => $sockpath,
-            Type   => SOCK_STREAM,
-        ) or die "failed to create unix socket at $sockpath:$!";
     }
 
     while (1) {
@@ -204,4 +215,20 @@ sub transfer {
     write_record($sock, $type, $req_id, $buf)
         or die "failed to write FCGI response:$!";
     return 1;
+}
+
+sub print_help {
+    # do not use Pod::Usage, since we are fatpacking this script
+    print << "EOT";
+Usage:
+    $0 [options]
+
+Options:
+  --listen=sockfn  path to the UNIX socket.  If specified, the program will
+                   create a UNIX socket at given path replacing the existing
+                   file (should it exist).  If not, file descriptor zero (0)
+                   will be used as the UNIX socket for accepting new
+                   connections.
+
+EOT
 }
