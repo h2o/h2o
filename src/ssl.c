@@ -649,6 +649,7 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
     };
     int modes = -1;
     yoml_t *t;
+	int test_memcached_status;
 
     if ((t = yoml_get(node, "mode")) == NULL) {
         h2o_configurator_errprintf(cmd, node, "mandatory attribute `mode` is missing");
@@ -812,12 +813,11 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
             return -1;
         }
     }
-
-    if (conf.memcached.host == NULL && (conf.cache.setup == setup_cache_memcached
+    test_memcached_status = conf.cache.setup == setup_cache_memcached;
 #if H2O_USE_SESSION_TICKETS
-                                        || conf.ticket.update_thread == ticket_memcached_updater
+        test_memcached_status = test_memcached_status || conf.ticket.update_thread == ticket_memcached_updater
 #endif
-                                        )) {
+    if (conf.memcached.host == NULL && (test_memcached_status)) {
         h2o_configurator_errprintf(cmd, node, "configuration of memcached is missing");
         return -1;
     }
