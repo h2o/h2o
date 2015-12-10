@@ -326,7 +326,7 @@
 		10583BE81AE5A330004A3AD6 /* libressl.mk */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = libressl.mk; sourceTree = "<group>"; };
 		10583BE91AE5A330004A3AD6 /* makedoc.pl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = makedoc.pl; sourceTree = "<group>"; };
 		10583BEA1AE5A341004A3AD6 /* picotemplate-conf.pl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = "picotemplate-conf.pl"; sourceTree = "<group>"; };
-		10583BEB1AE5A341004A3AD6 /* regen-all.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = "regen-all.sh"; sourceTree = "<group>"; };
+		10583BEB1AE5A341004A3AD6 /* regen.mk */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = regen.mk; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = "<none>"; };
 		10583BED1AE5A37B004A3AD6 /* Makefile */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.make; path = Makefile; sourceTree = "<group>"; };
 		10583BEE1AE5A37B004A3AD6 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		10583BF51AE765E0004A3AD6 /* command_options.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = command_options.mt; sourceTree = "<group>"; };
@@ -507,6 +507,9 @@
 		10F4180219C2D32100B6E31A /* yoml-parser.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "yoml-parser.h"; path = "yoml/yoml-parser.h"; sourceTree = "<group>"; };
 		10F4180419CA75C500B6E31A /* configurator.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = configurator.c; sourceTree = "<group>"; };
 		10F4197F1B64E70D00BEAEAC /* golombset.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = golombset.h; sourceTree = "<group>"; };
+		10F4EB831C165B92003DA150 /* fastcgi-cgi.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; path = "fastcgi-cgi.pl"; sourceTree = "<group>"; };
+		10F4EB841C16BADD003DA150 /* 50fastcgi-cgi.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50fastcgi-cgi.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		10F4EB861C177A12003DA150 /* hello.cgi */ = {isa = PBXFileReference; lastKnownFileType = text; path = hello.cgi; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10F9F2641AF4795D0056F26B /* redirect.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = redirect.c; sourceTree = "<group>"; };
 		10F9F2661AFC5F550056F26B /* hostinfo.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hostinfo.c; sourceTree = "<group>"; };
 		10FCC13C1B2E4A4500F13674 /* cloexec.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cloexec.c; sourceTree = "<group>"; };
@@ -994,13 +997,14 @@
 		107923AA19A3216B00C52AD6 /* misc */ = {
 			isa = PBXGroup;
 			children = (
+				10F4EB831C165B92003DA150 /* fastcgi-cgi.pl */,
 				10583BE61AE5A322004A3AD6 /* clang-format-all.sh */,
 				104960151B9D3F9100FF136D /* dump-github-repository.pl */,
 				10583BE71AE5A322004A3AD6 /* install-perl-module.pl */,
 				10583BE81AE5A330004A3AD6 /* libressl.mk */,
 				10583BE91AE5A330004A3AD6 /* makedoc.pl */,
 				10583BEA1AE5A341004A3AD6 /* picotemplate-conf.pl */,
-				10583BEB1AE5A341004A3AD6 /* regen-all.sh */,
+				10583BEB1AE5A341004A3AD6 /* regen.mk */,
 				107923AB19A3216B00C52AD6 /* tokens.pl */,
 			);
 			path = misc;
@@ -1095,6 +1099,7 @@
 		10AA2EC51AA0557A004322AC /* assets */ = {
 			isa = PBXGroup;
 			children = (
+				10F4EB851C1779F8003DA150 /* doc_root */,
 				10AA2EC61AA05598004322AC /* upstream.psgi */,
 			);
 			path = assets;
@@ -1144,6 +1149,7 @@
 				106C23021C06AB2F00405689 /* 50errordoc.t */,
 				104B9A541A60773E009EEE64 /* 50expires.t */,
 				10C5A6311B268632006094A6 /* 50fastcgi.t */,
+				10F4EB841C16BADD003DA150 /* 50fastcgi-cgi.t */,
 				10FCC1421B300A6800F13674 /* 50fastcgi-php.t */,
 				105534F61A460EF600627ECB /* 50file-config.t */,
 				100AE41A1B27D74800CE18BB /* 50file-range.t */,
@@ -1205,6 +1211,14 @@
 				10F4197F1B64E70D00BEAEAC /* golombset.h */,
 			);
 			path = golombset;
+			sourceTree = "<group>";
+		};
+		10F4EB851C1779F8003DA150 /* doc_root */ = {
+			isa = PBXGroup;
+			children = (
+				10F4EB861C177A12003DA150 /* hello.cgi */,
+			);
+			path = doc_root;
 			sourceTree = "<group>";
 		};
 		10FCC13B1B2E4A2C00F13674 /* cloexec */ = {
@@ -1656,6 +1670,7 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"H2O_USE_MRUBY=1",
+					"H2O_ROOT=/mydev/h2o",
 					"$(inherited)",
 				);
 				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
@@ -1800,6 +1815,7 @@
 				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"H2O_USE_MRUBY=1",
+					"H2O_ROOT=/mydev/h2o",
 					"$(inherited)",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -1932,6 +1948,7 @@
 					"DEBUG=1",
 					"H2O_USE_MRUBY=1",
 					"H2O_USE_LIBUV=0",
+					"H2O_ROOT=/mydev/h2o",
 					"$(inherited)",
 				);
 				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
@@ -1972,6 +1989,7 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"H2O_USE_MRUBY=1",
 					"H2O_USE_LIBUV=0",
+					"H2O_ROOT=/mydev/h2o",
 					"$(inherited)",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;

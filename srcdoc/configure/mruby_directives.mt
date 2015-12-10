@@ -82,7 +82,26 @@ When the mruby handler returns status code <code>399</code>, H2O delegates the r
 The feature can be used to add extra headers to the response.
 </p>
 <p>
-For example, the handlers can be used to set <code>Link: rel=preload</code> headers to the response to trigger HTTP/2 server push.
+For example, the following example sets <code>cache-control</code> header for requests against <code>.css</code> and <code>.js</code> files.
+</p>
+
+<?= $ctx->{example}->('Setting cache-control header for certain types of files', <<'EOT')
+paths:
+  "/":
+    mruby.handler: |
+      Proc.new do |env|
+        headers = {}
+        if /\.(css|js)$/.match(env["PATH_INFO"])
+          headers["cache-control"] = "max-age=86400"
+        end
+        [399, headers, []]
+      end
+    file.dir: /path/to/doc-root
+EOT
+?>
+
+<p>
+Or in the example below, the handler triggers <a href="configure/http2_directives.html#server-push">HTTP/2 server push</a> with the use of <code>Link: rel=preload</code> headers, and then requests a FastCGI application to process the request.
 </p>
 
 <?= $ctx->{example}->('Pushing asset files', <<'EOT')
@@ -98,6 +117,7 @@ paths:
         end
         [399, push_paths.empty? ? {} : {"link" => push_paths.map{|p| "<#{p}>; rel=preload"}.join("\n")}, []]
       end
+    fastcgi.connect: ...
 EOT
 ?>
 

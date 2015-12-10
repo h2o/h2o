@@ -1,0 +1,264 @@
+=head1 NAME
+
+Net::FastCGI::Constant - FastCGI protocol constants.
+
+=head1 DESCRIPTION
+
+FastCGI protocol constants.
+
+=head1 CONSTANTS
+
+Constants can either be imported individually or in sets grouped by tag names. 
+The tag names are:
+
+=head2 C<:common>
+
+=over 4
+
+=item C<FCGI_MAX_CONTENT_LEN>
+
+Maximum number of octets that the content component of the record can hold. (C<65535>)
+
+=item C<FCGI_HEADER_LEN>
+
+Number of octets in C<FCGI_Header>. (C<8>)
+
+=item C<FCGI_VERSION_1>
+
+Value for C<version> component of C<FCGI_Header>. (C<1>)
+
+=item C<FCGI_NULL_REQUEST_ID>
+
+Value for C<request_id> component of C<FCGI_Header>. (C<0>)
+
+=back
+
+=head2 C<:type>
+
+Values for C<type> component of C<FCGI_Header>.
+
+=over 4
+
+=item C<FCGI_BEGIN_REQUEST>
+
+=item C<FCGI_ABORT_REQUEST>
+
+=item C<FCGI_END_REQUEST>
+
+=item C<FCGI_PARAMS>
+
+=item C<FCGI_STDIN>
+
+=item C<FCGI_STDOUT>
+
+=item C<FCGI_STDERR>
+
+=item C<FCGI_DATA>
+
+=item C<FCGI_GET_VALUES>
+
+=item C<FCGI_GET_VALUES_RESULT>
+
+=item C<FCGI_UNKNOWN_TYPE>
+
+=item C<FCGI_MAXTYPE>
+
+=back
+
+=head2 C<:flag>
+
+Mask for C<flags> component of C<FCGI_BeginRequestBody>.
+
+=over 4
+
+=item C<FCGI_KEEP_CONN>
+
+=back
+
+=head2 C<:role>
+
+Values for C<role> component of C<FCGI_BeginRequestBody>.
+
+=over 4
+
+=item C<FCGI_RESPONDER>
+
+=item C<FCGI_AUTHORIZER>
+
+=item C<FCGI_FILTER>
+
+=back
+
+=head2 C<:protocol_status>
+
+Values for C<protocol_status> component of C<FCGI_EndRequestBody>.
+
+=over 4
+
+=item C<FCGI_REQUEST_COMPLETE>
+
+=item C<FCGI_CANT_MPX_CONN>
+
+=item C<FCGI_OVERLOADED>
+
+=item C<FCGI_UNKNOWN_ROLE>
+
+=back
+
+=head2 C<:value>
+
+Variable names for C<FCGI_GET_VALUES> / C<FCGI_GET_VALUES_RESULT> records.
+
+=over 4
+
+=item C<FCGI_MAX_CONNS>
+
+=item C<FCGI_MAX_REQS>
+
+=item C<FCGI_MPXS_CONNS>
+
+=back
+
+=head2 C<:pack>
+
+C<pack()> / C<unpack()> templates
+
+=over 4
+
+=item C<FCGI_Header>
+
+    Octet/      0        |        1        |
+        /                |                 |
+       | 0 1 2 3 4 5 6 7 | 0 1 2 3 4 5 6 7 |
+       +-----------------+-----------------+
+     0 |     Version     |      Type       |
+       +-----------------+-----------------+
+     2 |             Request ID            |
+       +-----------------+-----------------+
+     4 |          Content Length           |
+       +-----------------+-----------------+
+     6 | Padding Length  |    Reserved     |
+       +-----------------+-----------------+
+       Total 8 octets
+
+    Template: CCnnCx
+
+    my ($version, $type, $request_id, $content_length, $padding_length)
+      = unpack(FCGI_Header, $octets);
+
+=item C<FCGI_BeginRequestBody> 
+
+    Octet/      0        |        1        |
+        /                |                 |
+       | 0 1 2 3 4 5 6 7 | 0 1 2 3 4 5 6 7 |
+       +-----------------+-----------------+
+     0 |                Role               |
+       +-----------------+-----------------+
+     2 |      Flags      |                 |
+       +-----------------+                 +
+     4 |                                   |
+       +              Reserved             +
+     6 |                                   |
+       +-----------------+-----------------+
+       Total 8 octets
+
+    Template: nCx5
+
+    my ($role, $flags) = unpack(FCGI_BeginRequestBody, $octets);
+
+=item C<FCGI_EndRequestBody> 
+
+    Octet/      0        |        1        |
+        /                |                 |
+       | 0 1 2 3 4 5 6 7 | 0 1 2 3 4 5 6 7 |
+       +-----------------+-----------------+
+     0 |                                   |
+       +        Application Status         +
+     2 |                                   |
+       +-----------------+-----------------+
+     4 | Protocol Status |                 |
+       +-----------------+    Reserved     +
+     6 |                                   |
+       +-----------------+-----------------+
+       Total 8 octets
+
+    Template: NCx3
+
+    my ($app_status, $protocol_status) 
+      = unpack(FCGI_EndRequestBody, $octets);
+
+=item C<FCGI_UnknownTypeBody> 
+
+    Octet/      0        |        1        |
+        /                |                 |
+       | 0 1 2 3 4 5 6 7 | 0 1 2 3 4 5 6 7 |
+       +-----------------+-----------------+
+     0 |  Unknown Type   |                 |
+       +-----------------+                 +
+     2 |                                   |
+       +                                   +
+     4 |              Reserved             |
+       +                                   +
+     6 |                                   |
+       +-----------------+-----------------+
+       Total 8 octets
+
+    Template: Cx7
+
+    my $unknown_type = unpack(FCGI_UnknownTypeBody, $octets);
+
+=back
+
+=head2 C<:name>
+
+Arrays containing names of value components. These are read-only.
+
+=over 4
+
+=item C<@FCGI_TYPE_NAME>
+
+    print $FCGI_TYPE_NAME[FCGI_BEGIN_REQUEST]; # FCGI_BEGIN_REQUEST
+
+=item C<@FCGI_ROLE_NAME>
+
+    print $FCGI_ROLE_NAME[FCGI_RESPONDER]; # FCGI_RESPONDER
+
+=item C<@FCGI_PROTOCOL_STATUS_NAME>
+
+    print $FCGI_PROTOCOL_STATUS_NAME[FCGI_OVERLOADED]; # FCGI_OVERLOADED
+
+=back
+
+I<Note>
+
+It's not safe to assume that C<exists> works for validation purposes, index C<0> 
+might be C<undef>. 
+
+Use boolean context instead:
+
+    ($FCGI_TYPE_NAME[$type])
+      || die;
+
+=head1 EXPORTS
+
+None by default. All functions can be exported using the C<:all> tag or individually.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item L<http://www.fastcgi.com/devkit/doc/fcgi-spec.html>
+
+=back
+
+=head1 AUTHOR
+
+Christian Hansen C<chansen@cpan.org>
+
+=head1 COPYRIGHT
+
+Copyright 2008-2010 by Christian Hansen.
+
+This library is free software; you can redistribute it and/or modify 
+it under the same terms as Perl itself.
+

@@ -145,7 +145,28 @@ When the mruby handler returns status code <code>399</code>, H2O delegates the r
 The feature can be used to add extra headers to the response.
 </p>
 <p>
-For example, the handlers can be used to set <code>Link: rel=preload</code> headers to the response to trigger HTTP/2 server push.
+For example, the following example sets <code>cache-control</code> header for requests against <code>.css</code> and <code>.js</code> files.
+</p>
+
+<div class="example">
+<div class="caption">Example. Setting cache-control header for certain types of files</div>
+<pre><code>paths:
+  &quot;/&quot;:
+    mruby.handler: |
+      Proc.new do |env|
+        headers = {}
+        if /\.(css|js)$/.match(env[&quot;PATH_INFO&quot;])
+          headers[&quot;cache-control&quot;] = &quot;max-age=86400&quot;
+        end
+        [399, headers, []]
+      end
+    file.dir: /path/to/doc-root
+</code></pre>
+</div>
+
+
+<p>
+Or in the example below, the handler triggers <a href="configure/http2_directives.html#server-push">HTTP/2 server push</a> with the use of <code>Link: rel=preload</code> headers, and then requests a FastCGI application to process the request.
 </p>
 
 <div class="example">
@@ -162,6 +183,7 @@ For example, the handlers can be used to set <code>Link: rel=preload</code> head
         end
         [399, push_paths.empty? ? {} : {&quot;link&quot; =&gt; push_paths.map{|p| &quot;&lt;#{p}&gt;; rel=preload&quot;}.join(&quot;\n&quot;)}, []]
       end
+    fastcgi.connect: ...
 </code></pre>
 </div>
 
