@@ -12,7 +12,7 @@ MRuby::Gem::Specification.new('mruby-onig-regexp') do |spec|
     linker.libraries = []
 
     version = '5.15.0'
-    oniguruma_dir = "#{build_dir}/Onigmo-Onigmo-#{version}"
+    oniguruma_dir = "#{build_dir}/onig-#{version}"
     oniguruma_lib = libfile "#{oniguruma_dir}/.libs/libonig"
     unless ENV['OS'] == 'Windows_NT'
       oniguruma_lib = libfile "#{oniguruma_dir}/.libs/libonig"
@@ -30,11 +30,6 @@ MRuby::Gem::Specification.new('mruby-onig-regexp') do |spec|
       Dir.chdir(build_dir) do
         _pp 'extracting', "Onigmo-#{version}"
         `gzip -dc "#{dir}/Onigmo-#{version}.tar.gz" | tar xf -`
-      end
-      unless ENV['OS'] == 'Windows_NT'
-        Dir.chdir(oniguruma_dir) do
-          `patch -p0 < #{dir}/Onigmo-bsd-compat.patch`
-        end
       end
     end
 
