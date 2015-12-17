@@ -72,12 +72,22 @@ typedef struct st_h2o_mruby_context_t {
 
 #define FREEZE_STRING(v) RSTR_SET_FROZEN_FLAG(mrb_str_ptr(v))
 
+static void set_h2o_root(mrb_state *mrb)
+{
+    const char *root = getenv("H2O_ROOT");
+    if (root == NULL)
+        root = H2O_TO_STR(H2O_ROOT);
+    mrb_gv_set(mrb, mrb_intern_lit(mrb, "$H2O_ROOT"), mrb_str_new(mrb, root, strlen(root)));
+}
+
 mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config, char *errbuf)
 {
     mrbc_context *cxt;
     struct mrb_parser_state *parser;
     struct RProc *proc = NULL;
     mrb_value result = mrb_nil_value();
+
+    set_h2o_root(mrb);
 
     /* parse */
     if ((cxt = mrbc_context_new(mrb)) == NULL) {
