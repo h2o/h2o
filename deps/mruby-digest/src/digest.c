@@ -6,13 +6,18 @@
 
 #include "mruby.h"
 
-#ifdef __APPLE__
+#define USE_DIGEST_PICOHASH
+
+#if !defined(USE_DIGEST_PICOHASH)
+#elif defined(__APPLE__)
 #define USE_DIGEST_OSX_COMMONCRYPTO
 #else
 #define USE_DIGEST_OPENSSL
 #endif
 
-#if defined(USE_DIGEST_OPENSSL)
+#if defined(USE_DIGEST_PICOHASH)
+#include "picohash.h"
+#elif defined(USE_DIGEST_OPENSSL)
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
@@ -20,7 +25,7 @@
 #include <CommonCrypto/CommonDigest.h>
 #include <CommonCrypto/CommonHMAC.h>
 #else
-#error "define USE_DIGEST_OPENSSL or USE_DIGEST_OSX_COMMONCRYPTO"
+#error "define USE_DIGEST_PICOHASH or USE_DIGEST_OPENSSL or USE_DIGEST_OSX_COMMONCRYPTO"
 #endif
 #include <limits.h>
 #include <stdio.h>
@@ -68,7 +73,166 @@ static void lib_hmac_init(mrb_state *, struct mrb_hmac *, int, const unsigned ch
 static void lib_hmac_update(mrb_state *, struct mrb_hmac *, unsigned char *, mrb_int);
 
 
-#if defined(USE_DIGEST_OPENSSL)
+#if defined(USE_DIGEST_PICOHASH)
+
+#define HAVE_MD5
+#define HAVE_SHA1
+
+struct mrb_md {
+  picohash_ctx_t ctx;
+};
+
+struct mrb_hmac {
+  picohash_ctx_t ctx;
+};
+
+static void
+lib_md_free(mrb_state *mrb, void *ptr)
+{
+  struct mrb_md *md = ptr;
+  if (md != NULL)
+    mrb_free(mrb, md);
+}
+
+static void
+lib_hmac_free(mrb_state *mrb, void *ptr)
+{
+  struct mrb_hmac *hmac = ptr;
+  if (hmac != NULL)
+    mrb_free(mrb, hmac);
+}
+
+static struct mrb_data_type mrb_md_type = { "MD", lib_md_free };
+static struct mrb_data_type mrb_hmac_type = { "HMAC", lib_hmac_free };
+
+static void
+lib_init(void)
+{
+}
+
+static int
+lib_md_block_length(const struct mrb_md *md)
+{
+  return (int)md->ctx.block_length;
+}
+
+static mrb_value
+lib_md_digest(mrb_state *mrb, const struct mrb_md *md)
+{
+  picohash_ctx_t ctx;
+  unsigned char mdstr[PICOHASH_MAX_DIGEST_LENGTH];
+
+  ctx = md->ctx;
+  picohash_final(&ctx, mdstr);
+  return mrb_str_new(mrb, (char *)mdstr, ctx.digest_length);
+}
+
+static mrb_value
+lib_md_digest_bang(mrb_state *mrb, struct mrb_md *md)
+{
+  unsigned char mdstr[PICOHASH_MAX_DIGEST_LENGTH];
+
+  picohash_final(&md->ctx, mdstr);
+  picohash_reset(&md->ctx);
+  return mrb_str_new(mrb, (char *)mdstr, md->ctx.digest_length);
+}
+
+static int
+lib_md_digest_length(const struct mrb_md *md)
+{
+  return md->ctx.digest_length;
+}
+
+static void (*md_type_md(int type))(picohash_ctx_t *)
+{
+  switch (type) {
+  case MD_TYPE_MD5:	return picohash_init_md5;
+  case MD_TYPE_SHA1:	return picohash_init_sha1;
+  default:		return NULL;
+  }
+}
+
+static void
+lib_md_init(mrb_state *mrb, struct mrb_md *md, int type)
+{
+  void (*ctor)(picohash_ctx_t *) = md_type_md(type);
+  if (ctor == NULL)
+    mrb_raise(mrb, E_NOTIMP_ERROR, "not supported");
+  ctor(&md->ctx);
+}
+
+static void
+lib_md_init_copy(mrb_state *mrb, struct mrb_md *mdnew, struct mrb_md *mdold)
+{
+  mdnew->ctx = mdold->ctx;
+  picohash_reset(&mdnew->ctx);
+}
+
+static void
+lib_md_reset(mrb_state *mrb, struct mrb_md *md)
+{
+  picohash_reset(&md->ctx);
+}
+
+static void
+lib_md_update(mrb_state *mrb, struct mrb_md *md, unsigned char *str, mrb_int len)
+{
+#if MRB_INT_MAX > SIZE_MAX
+  if (len > SIZE_MAX)
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "too long string (not supported yet)");
+#endif
+  picohash_update(&md->ctx, str, len);
+}
+
+static mrb_value
+lib_hmac_digest(mrb_state *mrb, const struct mrb_hmac *hmac)
+{
+  picohash_ctx_t ctx;
+  unsigned char mdstr[PICOHASH_MAX_DIGEST_LENGTH];
+
+  ctx = hmac->ctx;
+  picohash_final(&ctx, mdstr);
+  return mrb_str_new(mrb, (char *)mdstr, ctx.digest_length);
+}
+
+static int
+lib_hmac_block_length(const struct mrb_hmac *hmac)
+{
+  return hmac->ctx.block_length;
+}
+
+static int
+lib_hmac_digest_length(const struct mrb_hmac *hmac)
+{
+  return hmac->ctx.digest_length;
+}
+
+static void
+lib_hmac_init(mrb_state *mrb, struct mrb_hmac *hmac, int type, const unsigned char *key, mrb_int keylen)
+{
+  void (*ctor)(picohash_ctx_t *) = md_type_md(type);
+
+#if MRB_INT_MAX > SIZE_MAX
+  if (keylen > SIZE_MAX)
+      mrb_raise(mrb, E_ARGUMENT_ERROR, "too long key");
+#endif
+  if (ctor == NULL)
+    mrb_raise(mrb, E_NOTIMP_ERROR, "not supported");
+  picohash_init_hmac(&hmac->ctx, ctor, key, keylen);
+}
+
+static void
+lib_hmac_update(mrb_state *mrb, struct mrb_hmac *hmac, unsigned char *data, mrb_int len)
+{
+#if MRB_INT_MAX > SIZE_MAX
+  if (len > SIZE_MAX) {
+      mrb_raise(mrb, E_ARGUMENT_ERROR, "too long string (not supported yet)");
+  }
+#endif
+  picohash_update(&hmac->ctx, data, len);
+}
+
+#elif defined(USE_DIGEST_OPENSSL)
 /*
  * OpenSSL Implementation
  */
