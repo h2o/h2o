@@ -1,6 +1,7 @@
 MRuby::Build.new do |conf|
   toolchain :gcc
   enable_debug
+  enable_test
 
   gem :core => 'mruby-print'
   gem :core => 'mruby-sprintf'
@@ -10,6 +11,7 @@ end
 MRuby::Build.new("onigmo-bundled") do |conf|
   toolchain :gcc
   enable_debug
+  enable_test
 
   gem :core => 'mruby-print'
   gem :core => 'mruby-sprintf'
