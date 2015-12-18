@@ -107,6 +107,25 @@ class String
 
     result
   end
+
+  alias_method :old_index, :index
+
+  def index(pattern, pos=0)
+    if pattern.class == Regexp
+      str = self[pos..-1]
+      if str
+        if num = (pattern =~ str)
+          if pos < 0
+            num += self.size
+          end
+          return num + pos
+        end
+      end
+      nil
+    else
+      self.old_index(pattern, pos)
+    end
+  end
 end
 
 Regexp = OnigRegexp unless Object.const_defined?(:Regexp)
