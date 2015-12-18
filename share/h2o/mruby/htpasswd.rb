@@ -32,7 +32,7 @@ class Htpasswd
 
   def call(env)
     if /\/\.ht/.match(env['PATH_INFO'])
-      return [ 404, { "Conetnt-Type" => "text/plain" }, [ "not found" ] ]
+      return [ 404, { "Content-Type" => "text/plain" }, [ "not found" ] ]
     end
     auth = env['HTTP_AUTHORIZATION']
     if auth
