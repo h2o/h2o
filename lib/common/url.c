@@ -213,6 +213,10 @@ const char *h2o_url_parse_hostport(const char *s, size_t len, h2o_iovec_t *host,
         token_start = token_end;
     }
 
+    /* disallow zero-length host */
+    if (host->len == 0)
+        return NULL;
+
     /* parse port */
     if (token_start != end && *token_start == ':') {
         size_t p;

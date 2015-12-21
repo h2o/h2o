@@ -135,6 +135,14 @@ static void test_hostport(void)
     input = h2o_iovec_init(H2O_STRLIT("[::ffff:192.0.2.1:8081/"));
     ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
     ok(ret == NULL);
+
+    input = h2o_iovec_init(H2O_STRLIT(":8081/"));
+    ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
+    ok(ret == NULL);
+
+    input = h2o_iovec_init(H2O_STRLIT("[]:8081/"));
+    ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
+    ok(ret == NULL);
 }
 
 static void test_parse(void)
