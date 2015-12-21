@@ -128,6 +128,8 @@ h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t h
 {
     h2o_hostconf_t *hostconf;
 
+    assert(host.len != 0);
+
     /* create hostconf */
     hostconf = create_hostconf(config);
     hostconf->authority.host = h2o_strdup(NULL, host.base, host.len);

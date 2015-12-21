@@ -264,6 +264,12 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
             h2o_configurator_errprintf(cmd, key, "invalid key (must be either `host` or `host:port`)");
             return -1;
         }
+        assert(hostname.len != 0);
+        if ((hostname.base[0] == '*' && !(hostname.len == 1 || hostname.base[1] == '.')) ||
+            memchr(hostname.base + 1, '*', hostname.len - 1) != NULL) {
+            h2o_configurator_errprintf(cmd, key, "wildcard (*) can only be used at the start of the hostname");
+            return -1;
+        }
         h2o_configurator_context_t host_ctx = *ctx;
         host_ctx.hostconf = h2o_config_register_host(host_ctx.globalconf, hostname, port);
         host_ctx.mimemap = &host_ctx.hostconf->mimemap;
