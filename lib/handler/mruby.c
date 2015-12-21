@@ -72,46 +72,6 @@ typedef struct st_h2o_mruby_context_t {
 
 #define FREEZE_STRING(v) RSTR_SET_FROZEN_FLAG(mrb_str_ptr(v))
 
-static void dump_source_at_error(char *buf, const char *src, size_t src_len, int line_offset, int lineno, int column)
-{
-    const char *src_end = src + src_len;
-    int i;
-
-    /* find the line */
-    while (line_offset != lineno) {
-        do {
-            if (src == src_end)
-                goto Exit;
-        } while (*src++ != '\n');
-        ++line_offset;
-    }
-
-    /* adjust the starting column */
-    if (src + column >= src_end)
-        goto Exit;
-    if (column > 76) {
-        src += column - 40;
-        column = 40;
-    }
-
-    /* emit */
-    *buf++ = '\n';
-    *buf++ = '\n';
-    for (i = 0; i < 76; ++i) {
-        if (src == src_end || *src == '\n')
-            break;
-        *buf++ = *src++;
-    }
-    *buf++ = '\n';
-    for (i = 1; i < column; ++i)
-        *buf++ = ' ';
-    *buf++ = '^';
-    *buf++ = '\n';
-
-Exit:
-    *buf = '\0';
-}
-
 static void set_h2o_root(mrb_state *mrb)
 {
     const char *root = getenv("H2O_ROOT");
@@ -149,8 +109,12 @@ mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config
             abort();
         }
         snprintf(errbuf, 256, "line %d:%s", parser->error_buffer[0].lineno, parser->error_buffer[0].message);
-        dump_source_at_error(errbuf + strlen(errbuf), config->source.base, config->source.len, config->lineno,
-                             parser->error_buffer[0].lineno, parser->error_buffer[0].column);
+        strcat(errbuf, "\n\n");
+        if (h2o_str_at_position(errbuf + strlen(errbuf), config->source.base, config->source.len,
+                                parser->error_buffer[0].lineno - config->lineno + 1,parser->error_buffer[0].column) != 0) {
+            /* remove trailing "\n\n" in case we failed to append the source code at the error location */
+            errbuf[strlen(errbuf) - 2] = '\0';
+        }
         goto Exit;
     }
     /* generate code */
