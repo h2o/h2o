@@ -67,8 +67,8 @@ paths:
   "/":
     mruby.handler: |
       lambda do |env|
-        if /\/user\/([^/]+)/.match(env["PATH_INFO"])
-          return [307, {"x-reproxy-url" => "/user.php?user=$1"}, []]
+        if /\/user\/([^\/]+)/.match(env["PATH_INFO"])
+          return [307, {"x-reproxy-url" => "/user.php?user=#{$1}"}, []]
         end
         return [399, {}, []]
       end

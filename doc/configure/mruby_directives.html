@@ -129,8 +129,8 @@ When enabled using the <a href="configure/reproxy_directives.html#reproxy"><code
   &quot;/&quot;:
     mruby.handler: |
       lambda do |env|
-        if /\/user\/([^/]+)/.match(env[&quot;PATH_INFO&quot;])
-          return [307, {&quot;x-reproxy-url&quot; =&gt; &quot;/user.php?user=$1&quot;}, []]
+        if /\/user\/([^\/]+)/.match(env[&quot;PATH_INFO&quot;])
+          return [307, {&quot;x-reproxy-url&quot; =&gt; &quot;/user.php?user=#{$1}&quot;}, []]
         end
         return [399, {}, []]
       end
