@@ -354,7 +354,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     long ssl_options = SSL_OP_ALL;
     uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
     unsigned ocsp_max_failures = 3;              /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
-    int use_neverbleed = 0;                      /* disabled by default (for the time being) */
+    int use_neverbleed = 1;                      /* enabled by default */
 
     if (!listener_is_new) {
         if (listener->ssl.size != 0 && ssl_node == NULL) {
