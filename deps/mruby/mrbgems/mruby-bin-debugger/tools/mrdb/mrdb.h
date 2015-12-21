@@ -6,7 +6,7 @@
 #ifndef MRDB_H
 #define MRDB_H
 
-#include "mruby.h"
+#include <mruby.h>
 
 #include "mrdbconf.h"
 

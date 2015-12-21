@@ -6,7 +6,7 @@
 #ifndef APIBREAK_H_
 #define APIBREAK_H_
 
-#include "mruby.h"
+#include <mruby.h>
 #include "mrdb.h"
 
 int32_t mrb_debug_set_break_line( mrb_state *, mrb_debug_context *, const char *, uint16_t );

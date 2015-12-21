@@ -4,14 +4,14 @@
 */
 
 #include <string.h>
-#include "mruby.h"
-#include "mruby/irep.h"
+#include <mruby.h>
+#include <mruby/irep.h>
 #include "mrdb.h"
-#include "mruby/debug.h"
-#include "mruby/opcode.h"
-#include "mruby/class.h"
-#include "mruby/proc.h"
-#include "mruby/variable.h"
+#include <mruby/debug.h>
+#include <mruby/opcode.h>
+#include <mruby/class.h>
+#include <mruby/proc.h>
+#include <mruby/variable.h>
 #include "mrdberror.h"
 #include "apibreak.h"
 

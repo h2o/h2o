@@ -5,22 +5,22 @@ class Hash
 
   ##
   # call-seq:
-  # Hash[ key, value, ... ] -> new_hash
-  # Hash[ [ [key, value], ... ] ] -> new_hash
-  # Hash[ object ] -> new_hash
+  #     Hash[ key, value, ... ] -> new_hash
+  #     Hash[ [ [key, value], ... ] ] -> new_hash
+  #     Hash[ object ] -> new_hash
   #
   # Creates a new hash populated with the given objects.
   #
-  # Similar to the literal <code>{ _key_ => _value_, ... }</code>. In the first
+  # Similar to the literal `{ _key_ => _value_, ... }`. In the first
   # form, keys and values occur in pairs, so there must be an even number of
   # arguments.
   #
   # The second and third form take a single argument which is either an array
   # of key-value pairs or an object convertible to a hash.
   #
-  # Hash["a", 100, "b", 200] #=> {"a"=>100, "b"=>200}
-  # Hash[ [ ["a", 100], ["b", 200] ] ] #=> {"a"=>100, "b"=>200}
-  # Hash["a" => 100, "b" => 200] #=> {"a"=>100, "b"=>200}
+  #     Hash["a", 100, "b", 200] #=> {"a"=>100, "b"=>200}
+  #     Hash[ [ ["a", 100], ["b", 200] ] ] #=> {"a"=>100, "b"=>200}
+  #     Hash["a" => 100, "b" => 200] #=> {"a"=>100, "b"=>200}
   #
 
   def self.[](*object)
@@ -58,6 +58,25 @@ class Hash
       h[object[i]] = object[i + 1]
     end
     h
+  end
+
+  ##
+  # call-seq:
+  #     Hash.try_convert(obj) -> hash or nil
+  #
+  # Try to convert <i>obj</i> into a hash, using to_hash method.
+  # Returns converted hash or nil if <i>obj</i> cannot be converted
+  # for any reason.
+  #
+  #     Hash.try_convert({1=>2})   # => {1=>2}
+  #     Hash.try_convert("1=>2")   # => nil
+  #
+  def self.try_convert(obj)
+    if obj.respond_to?(:to_hash)
+      obj.to_hash
+    else
+      nil
+    end
   end
 
   ##
@@ -126,11 +145,11 @@ class Hash
   def fetch(key, none=NONE, &block)
     unless self.key?(key)
       if block
-        block.call
+        block.call(key)
       elsif none != NONE
         none
       else
-        raise RuntimeError, "Key not found: #{key}"
+        raise KeyError, "Key not found: #{key}"
       end
     else
       self[key]
@@ -156,7 +175,7 @@ class Hash
 
     self.each do |k, v|
       self.delete(k) if block.call(k, v)
-    end 
+    end
     self
   end
 
@@ -249,5 +268,101 @@ class Hash
   #
   def to_h
     self
+  end
+
+  ##
+  #  call-seq:
+  #    hash < other -> true or false
+  #
+  #  Returns <code>true</code> if <i>hash</i> is subset of
+  #  <i>other</i>.
+  #
+  #     h1 = {a:1, b:2}
+  #     h2 = {a:1, b:2, c:3}
+  #     h1 < h2    #=> true
+  #     h2 < h1    #=> false
+  #     h1 < h1    #=> false
+  #
+  def <(hash)
+    begin
+      hash = hash.to_hash
+    rescue NoMethodError
+      raise TypeError, "can't convert #{hash.class} to Hash"
+    end
+    size < hash.size and all? {|key, val|
+      hash.key?(key) and hash[key] == val
+    }
+  end
+
+  ##
+  #  call-seq:
+  #    hash <= other -> true or false
+  #
+  #  Returns <code>true</code> if <i>hash</i> is subset of
+  #  <i>other</i> or equals to <i>other</i>.
+  #
+  #     h1 = {a:1, b:2}
+  #     h2 = {a:1, b:2, c:3}
+  #     h1 <= h2   #=> true
+  #     h2 <= h1   #=> false
+  #     h1 <= h1   #=> true
+  #
+  def <=(hash)
+    begin
+      hash = hash.to_hash
+    rescue NoMethodError
+      raise TypeError, "can't convert #{hash.class} to Hash"
+    end
+    size <= hash.size and all? {|key, val|
+      hash.key?(key) and hash[key] == val
+    }
+  end
+
+  ##
+  #  call-seq:
+  #    hash > other -> true or false
+  #
+  #  Returns <code>true</code> if <i>other</i> is subset of
+  #  <i>hash</i>.
+  #
+  #     h1 = {a:1, b:2}
+  #     h2 = {a:1, b:2, c:3}
+  #     h1 > h2    #=> false
+  #     h2 > h1    #=> true
+  #     h1 > h1    #=> false
+  #
+  def >(hash)
+    begin
+      hash = hash.to_hash
+    rescue NoMethodError
+      raise TypeError, "can't convert #{hash.class} to Hash"
+    end
+    size > hash.size and hash.all? {|key, val|
+      key?(key) and self[key] == val
+    }
+  end
+
+  ##
+  #  call-seq:
+  #    hash >= other -> true or false
+  #
+  #  Returns <code>true</code> if <i>other</i> is subset of
+  #  <i>hash</i> or equals to <i>hash</i>.
+  #
+  #     h1 = {a:1, b:2}
+  #     h2 = {a:1, b:2, c:3}
+  #     h1 >= h2   #=> false
+  #     h2 >= h1   #=> true
+  #     h1 >= h1   #=> true
+  #
+  def >=(hash)
+    begin
+      hash = hash.to_hash
+    rescue NoMethodError
+      raise TypeError, "can't convert #{hash.class} to Hash"
+    end
+    size >= hash.size and hash.all? {|key, val|
+      key?(key) and self[key] == val
+    }
   end
 end

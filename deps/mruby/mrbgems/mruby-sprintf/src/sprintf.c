@@ -4,14 +4,14 @@
 ** See Copyright Notice in mruby.h
 */
 
-#include "mruby.h"
+#include <mruby.h>
 
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
-#include "mruby/string.h"
-#include "mruby/hash.h"
-#include "mruby/numeric.h"
+#include <mruby/string.h>
+#include <mruby/hash.h>
+#include <mruby/numeric.h>
 #include <math.h>
 #include <ctype.h>
 
@@ -71,7 +71,7 @@ sign_bits(int base, const char *p)
 static mrb_value
 mrb_fix2binstr(mrb_state *mrb, mrb_value x, int base)
 {
-  char buf[64], *b = buf + sizeof buf;
+  char buf[66], *b = buf + sizeof buf;
   mrb_int num = mrb_fixnum(x);
   uint64_t val = (uint64_t)num;
   char d;
@@ -79,10 +79,6 @@ mrb_fix2binstr(mrb_state *mrb, mrb_value x, int base)
   if (base != 2) {
     mrb_raisef(mrb, E_ARGUMENT_ERROR, "invalid radix %S", mrb_fixnum_value(base));
   }
-
-  if (val >= (1 << 10))
-    val &= 0x3ff;
-
   if (val == 0) {
     return mrb_str_new_lit(mrb, "0");
   }
@@ -763,11 +759,11 @@ retry:
       case 'B':
       case 'u': {
         mrb_value val = GETARG();
-        char fbuf[32], nbuf[64], *s;
+        char fbuf[32], nbuf[68], *s;
         const char *prefix = NULL;
         int sign = 0, dots = 0;
         char sc = 0;
-        mrb_int v = 0, org_v = 0;
+        mrb_int v = 0;
         int base;
         mrb_int len;
 
@@ -800,10 +796,6 @@ retry:
   bin_retry:
         switch (mrb_type(val)) {
           case MRB_TT_FLOAT:
-            if (FIXABLE(mrb_float(val))) {
-              val = mrb_fixnum_value((mrb_int)mrb_float(val));
-              goto bin_retry;
-            }
             val = mrb_flo_to_fixnum(mrb, val);
             if (mrb_fixnum_p(val)) goto bin_retry;
             break;
@@ -835,7 +827,6 @@ retry:
         }
 
         if (base == 2) {
-          org_v = v;
           if (v < 0 && !sign) {
             val = mrb_fix2binstr(mrb, mrb_fixnum_value(v), base);
             dots = 1;
@@ -843,12 +834,10 @@ retry:
           else {
             val = mrb_fixnum_to_str(mrb, mrb_fixnum_value(v), base);
           }
-          v = mrb_fixnum(mrb_str_to_inum(mrb, val, 10, FALSE));
         }
         if (sign) {
           char c = *p;
           if (c == 'i') c = 'd'; /* %d and %i are identical */
-          if (base == 2) c = 'd';
           if (v < 0) {
             v = -v;
             sc = '-';
@@ -862,20 +851,29 @@ retry:
             sc = ' ';
             width--;
           }
-          snprintf(fbuf, sizeof(fbuf), "%%l%c", c);
-          snprintf(nbuf, sizeof(nbuf), fbuf, v);
+          if (base == 2) {
+            snprintf(nbuf, sizeof(nbuf), "%s", RSTRING_PTR(val));
+          }
+          else {
+            snprintf(fbuf, sizeof(fbuf), "%%l%c", c);
+            snprintf(nbuf, sizeof(nbuf), fbuf, v);
+          }
           s = nbuf;
         }
         else {
           char c = *p;
           if (c == 'X') c = 'x';
-          if (base == 2) c = 'd';
           s = nbuf;
           if (v < 0) {
             dots = 1;
           }
-          snprintf(fbuf, sizeof(fbuf), "%%l%c", c);
-          snprintf(++s, sizeof(nbuf) - 1, fbuf, v);
+          if (base == 2) {
+            snprintf(++s, sizeof(nbuf) - 1, "%s", RSTRING_PTR(val));
+          }
+          else {
+            snprintf(fbuf, sizeof(fbuf), "%%l%c", c);
+            snprintf(++s, sizeof(nbuf) - 1, fbuf, v);
+          }
           if (v < 0) {
             char d;
 
@@ -965,7 +963,7 @@ retry:
         CHECK(prec - len);
         if (dots) PUSH("..", 2);
 
-        if (v < 0 || (base == 2 && org_v < 0)) {
+        if (v < 0) {
           char c = sign_bits(base, p);
           while (len < prec--) {
             buf[blen++] = c;

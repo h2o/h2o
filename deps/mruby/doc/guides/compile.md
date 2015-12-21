@@ -75,7 +75,7 @@ toolchain :visualcpp
 
 Toolchain configuration for Android.
 ```ruby
-toolchain :androideabi
+toolchain :android
 ```
 
 Requires the custom standalone Android NDK and the toolchain path
@@ -463,7 +463,7 @@ can't be disabled for the main build.
 MRuby::CrossBuild.new('Minimal') do |conf|
   toolchain :gcc
 
-  conf.cc.defines = %w(DISABLE_STDIO)
+  conf.cc.defines = %w(MRB_DISABLE_STDIO)
   conf.bins = []
 end
 ```
