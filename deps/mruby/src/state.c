@@ -6,15 +6,17 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include "mruby.h"
-#include "mruby/irep.h"
-#include "mruby/variable.h"
-#include "mruby/debug.h"
-#include "mruby/string.h"
+#include <mruby.h>
+#include <mruby/irep.h>
+#include <mruby/variable.h>
+#include <mruby/debug.h>
+#include <mruby/string.h>
 
-void mrb_init_heap(mrb_state*);
 void mrb_init_core(mrb_state*);
 void mrb_init_mrbgems(mrb_state*);
+
+void mrb_gc_init(mrb_state*, mrb_gc *gc);
+void mrb_gc_destroy(mrb_state*, mrb_gc *gc);
 
 static mrb_value
 inspect_main(mrb_state *mrb, mrb_value mod)
@@ -35,15 +37,9 @@ mrb_open_core(mrb_allocf f, void *ud)
   *mrb = mrb_state_zero;
   mrb->allocf_ud = ud;
   mrb->allocf = f;
-  mrb->current_white_part = MRB_GC_WHITE_A;
   mrb->atexit_stack_len = 0;
 
-#ifndef MRB_GC_FIXED_ARENA
-  mrb->arena = (struct RBasic**)mrb_malloc(mrb, sizeof(struct RBasic*)*MRB_GC_ARENA_SIZE);
-  mrb->arena_capa = MRB_GC_ARENA_SIZE;
-#endif
-
-  mrb_init_heap(mrb);
+  mrb_gc_init(mrb, &mrb->gc);
   mrb->c = (struct mrb_context*)mrb_malloc(mrb, sizeof(struct mrb_context));
   *mrb->c = mrb_context_zero;
   mrb->root_c = mrb->c;
@@ -122,7 +118,6 @@ mrb_open_allocf(mrb_allocf f, void *ud)
 }
 
 void mrb_free_symtbl(mrb_state *mrb);
-void mrb_free_heap(mrb_state *mrb);
 
 void
 mrb_irep_incref(mrb_state *mrb, mrb_irep *irep)
@@ -234,6 +229,7 @@ mrb_free_context(mrb_state *mrb, struct mrb_context *c)
 MRB_API void
 mrb_close(mrb_state *mrb)
 {
+  if (!mrb) return;
   if (mrb->atexit_stack_len > 0) {
     mrb_int i;
     for (i = mrb->atexit_stack_len; i > 0; --i) {
@@ -248,11 +244,8 @@ mrb_close(mrb_state *mrb)
   mrb_gc_free_gv(mrb);
   mrb_free_context(mrb, mrb->root_c);
   mrb_free_symtbl(mrb);
-  mrb_free_heap(mrb);
   mrb_alloca_free(mrb);
-#ifndef MRB_GC_FIXED_ARENA
-  mrb_free(mrb, mrb->arena);
-#endif
+  mrb_gc_destroy(mrb, &mrb->gc);
   mrb_free(mrb, mrb);
 }
 

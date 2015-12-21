@@ -1,5 +1,5 @@
 #include <stdlib.h>
-#include "mruby.h"
+#include <mruby.h>
 
 static mrb_value
 f_exit(mrb_state *mrb, mrb_value self)

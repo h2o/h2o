@@ -74,8 +74,8 @@ class Hash
   #
   # If no block is given, an enumerator is returned instead.
   #
-  #  h = { "a" => 100, "b" => 200 }
-  #  h.each {|key, value| puts "#{key} is #{value}" }
+  #     h = { "a" => 100, "b" => 200 }
+  #     h.each {|key, value| puts "#{key} is #{value}" }
   #
   # <em>produces:</em>
   #
@@ -317,6 +317,29 @@ class Hash
       end
     }
     h
+  end
+
+  ##
+  #  call-seq:
+  #    hsh.rehash -> hsh
+  #
+  #  Rebuilds the hash based on the current hash values for each key. If
+  #  values of key objects have changed since they were inserted, this
+  #  method will reindex <i>hsh</i>.
+  #
+  #     h = {"AAA" => "b"}
+  #     h.keys[0].chop!
+  #     h          #=> {"AA"=>"b"}
+  #     h["AA"]    #=> nil
+  #     h.rehash   #=> {"AA"=>"b"}
+  #     h["AA"]    #=> "b"
+  #
+  def rehash
+    h = {}
+    self.each{|k,v|
+      h[k] = v
+    }
+    self.replace(h)
   end
 
   def __update(h)

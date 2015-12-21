@@ -7,9 +7,12 @@
 #ifndef MRUBY_ERROR_H
 #define MRUBY_ERROR_H
 
-#if defined(__cplusplus)
-extern "C" {
-#endif
+#include "common.h"
+
+/**
+ * MRuby error handling.
+ */
+MRB_BEGIN_DECL
 
 struct RException {
   MRB_OBJECT_HEADER;
@@ -29,18 +32,38 @@ MRB_API mrb_noreturn void mrb_no_method_error(mrb_state *mrb, mrb_sym id, mrb_va
 /* declaration for fail method */
 MRB_API mrb_value mrb_f_raise(mrb_state*, mrb_value);
 
-/* functions defined in mruby-error mrbgem */
+/**
+ * Protect
+ *
+ * @mrbgem mruby-error
+ */
 MRB_API mrb_value mrb_protect(mrb_state *mrb, mrb_func_t body, mrb_value data, mrb_bool *state);
+
+/**
+ * Ensure
+ *
+ * @mrbgem mruby-error
+ */
 MRB_API mrb_value mrb_ensure(mrb_state *mrb, mrb_func_t body, mrb_value b_data,
                              mrb_func_t ensure, mrb_value e_data);
+
+/**
+ * Rescue
+ *
+ * @mrbgem mruby-error
+ */
 MRB_API mrb_value mrb_rescue(mrb_state *mrb, mrb_func_t body, mrb_value b_data,
                              mrb_func_t rescue, mrb_value r_data);
+
+/**
+ * Rescue exception
+ *
+ * @mrbgem mruby-error
+ */
 MRB_API mrb_value mrb_rescue_exceptions(mrb_state *mrb, mrb_func_t body, mrb_value b_data,
                                         mrb_func_t rescue, mrb_value r_data,
                                         mrb_int len, struct RClass **classes);
 
-#if defined(__cplusplus)
-}  /* extern "C" { */
-#endif
+MRB_END_DECL
 
 #endif  /* MRUBY_ERROR_H */

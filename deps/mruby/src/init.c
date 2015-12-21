@@ -4,7 +4,7 @@
 ** See Copyright Notice in mruby.h
 */
 
-#include "mruby.h"
+#include <mruby.h>
 
 void mrb_init_symtbl(mrb_state*);
 void mrb_init_class(mrb_state*);

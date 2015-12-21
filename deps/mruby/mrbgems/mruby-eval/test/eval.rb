@@ -78,3 +78,22 @@ assert('Kernel.#eval(string) context') do
   assert_equal('class') { obj.const_string }
 end
 
+assert('Object#instance_eval with begin-rescue-ensure execution order') do
+  class HellRaiser
+    def raise_hell
+      order = [:enter_raise_hell]
+      begin
+        order.push :begin
+        self.instance_eval("raise 'error'")
+      rescue
+        order.push :rescue
+      ensure
+        order.push :ensure
+      end
+      order
+    end
+  end
+
+  hell_raiser = HellRaiser.new
+  assert_equal([:enter_raise_hell, :begin, :rescue, :ensure], hell_raiser.raise_hell)
+end

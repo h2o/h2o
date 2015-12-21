@@ -4,10 +4,10 @@
 ** See Copyright Notice in mruby.h
 */
 
-#include "mruby.h"
-#include "mruby/class.h"
-#include "mruby/proc.h"
-#include "mruby/opcode.h"
+#include <mruby.h>
+#include <mruby/class.h>
+#include <mruby/proc.h>
+#include <mruby/opcode.h>
 
 static mrb_code call_iseq[] = {
   MKOP_A(OP_CALL, 0),

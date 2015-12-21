@@ -4,13 +4,13 @@
 ** See Copyright Notice in mruby.h
 */
 
-#include "mruby.h"
-#include "mruby/array.h"
-#include "mruby/class.h"
-#include "mruby/proc.h"
-#include "mruby/string.h"
-#include "mruby/variable.h"
-#include "mruby/error.h"
+#include <mruby.h>
+#include <mruby/array.h>
+#include <mruby/class.h>
+#include <mruby/proc.h>
+#include <mruby/string.h>
+#include <mruby/variable.h>
+#include <mruby/error.h>
 
 typedef enum {
   NOEX_PUBLIC    = 0x00,
@@ -654,13 +654,13 @@ mrb_class_instance_method_list(mrb_state *mrb, mrb_bool recur, struct RClass* kl
 {
   khint_t i;
   mrb_value ary;
-  mrb_bool prepended;
+  mrb_bool prepended = FALSE;
   struct RClass* oldklass;
   khash_t(st)* set = kh_init(st, mrb);
 
   if (!recur && (klass->flags & MRB_FLAG_IS_PREPENDED)) {
     MRB_CLASS_ORIGIN(klass);
-    prepended = 1;
+    prepended = TRUE;
   }
 
   oldklass = 0;
@@ -1097,7 +1097,7 @@ mrb_init_kernel(mrb_state *mrb)
 {
   struct RClass *krn;
 
-  krn = mrb->kernel_module = mrb_define_module(mrb, "Kernel");                                                    /* 15.3.1 */
+  mrb->kernel_module = krn = mrb_define_module(mrb, "Kernel");                                                    /* 15.3.1 */
   mrb_define_class_method(mrb, krn, "block_given?",         mrb_f_block_given_p_m,           MRB_ARGS_NONE());    /* 15.3.1.2.2  */
   mrb_define_class_method(mrb, krn, "global_variables",     mrb_f_global_variables,          MRB_ARGS_NONE());    /* 15.3.1.2.4  */
   mrb_define_class_method(mrb, krn, "iterator?",            mrb_f_block_given_p_m,           MRB_ARGS_NONE());    /* 15.3.1.2.5  */

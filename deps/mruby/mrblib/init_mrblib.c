@@ -1,5 +1,5 @@
-#include "mruby.h"
-#include "mruby/irep.h"
+#include <mruby.h>
+#include <mruby/irep.h>
 
 extern const uint8_t mrblib_irep[];
 

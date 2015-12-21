@@ -1,5 +1,5 @@
-#include "mruby.h"
-#include "mruby/range.h"
+#include <mruby.h>
+#include <mruby/range.h>
 #include <math.h>
 
 static mrb_bool

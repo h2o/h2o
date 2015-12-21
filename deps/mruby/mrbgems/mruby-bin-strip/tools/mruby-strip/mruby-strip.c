@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "mruby.h"
-#include "mruby/irep.h"
-#include "mruby/dump.h"
+#include <mruby.h>
+#include <mruby/irep.h>
+#include <mruby/dump.h>
 
 struct strip_args {
   int argc_start;

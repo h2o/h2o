@@ -7,22 +7,22 @@
 #include <stddef.h>
 #include <stdarg.h>
 #include <math.h>
-#include "mruby.h"
-#include "mruby/array.h"
-#include "mruby/class.h"
-#include "mruby/hash.h"
-#include "mruby/irep.h"
-#include "mruby/numeric.h"
-#include "mruby/proc.h"
-#include "mruby/range.h"
-#include "mruby/string.h"
-#include "mruby/variable.h"
-#include "mruby/error.h"
-#include "mruby/opcode.h"
+#include <mruby.h>
+#include <mruby/array.h>
+#include <mruby/class.h>
+#include <mruby/hash.h>
+#include <mruby/irep.h>
+#include <mruby/numeric.h>
+#include <mruby/proc.h>
+#include <mruby/range.h>
+#include <mruby/string.h>
+#include <mruby/variable.h>
+#include <mruby/error.h>
+#include <mruby/opcode.h>
 #include "value_array.h"
-#include "mruby/throw.h"
+#include <mruby/throw.h>
 
-#ifndef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
 #if defined(__cplusplus)
 extern "C" {
 #endif
@@ -52,7 +52,7 @@ The value below allows about 60000 recursive calls in the simplest case. */
 # define DEBUG(x)
 #endif
 
-#define ARENA_RESTORE(mrb,ai) (mrb)->arena_idx = (ai)
+#define ARENA_RESTORE(mrb,ai) (mrb)->gc.arena_idx = (ai)
 
 static inline void
 stack_clear(mrb_value *from, size_t count)
@@ -693,7 +693,7 @@ argnum_error(mrb_state *mrb, mrb_int num)
 
 #define ERR_PC_SET(mrb, pc) mrb->c->ci->err = pc;
 #define ERR_PC_CLR(mrb)     mrb->c->ci->err = 0;
-#ifdef ENABLE_DEBUG
+#ifdef MRB_ENABLE_DEBUG_HOOK
 #define CODE_FETCH_HOOK(mrb, irep, pc, regs) if ((mrb)->code_fetch_hook) (mrb)->code_fetch_hook((mrb), (irep), (pc), (regs));
 #else
 #define CODE_FETCH_HOOK(mrb, irep, pc, regs)
@@ -2178,6 +2178,7 @@ RETRY_TRY_BLOCK:
     CASE(OP_STRCAT) {
       /* A B    R(A).concat(R(B)) */
       mrb_str_concat(mrb, regs[GETARG_A(i)], regs[GETARG_B(i)]);
+      regs = mrb->c->stack;
       NEXT;
     }
 
@@ -2207,15 +2208,6 @@ RETRY_TRY_BLOCK:
       }
       else {
         p = mrb_proc_new(mrb, irep->reps[GETARG_b(i)]);
-        if (c & OP_L_METHOD) {
-          if (p->target_class->tt == MRB_TT_SCLASS) {
-            mrb_value klass;
-            klass = mrb_obj_iv_get(mrb,
-                                   (struct RObject *)p->target_class,
-                                   mrb_intern_lit(mrb, "__attached__"));
-            p->target_class = mrb_class_ptr(klass);
-          }
-        }
       }
       if (c & OP_L_STRICT) p->flags |= MRB_PROC_STRICT;
       regs[GETARG_A(i)] = mrb_obj_value(p);
@@ -2348,10 +2340,10 @@ RETRY_TRY_BLOCK:
 
     CASE(OP_DEBUG) {
       /* A B C    debug print R(A),R(B),R(C) */
-#ifdef ENABLE_DEBUG
+#ifdef MRB_ENABLE_DEBUG_HOOK
       mrb->debug_op_hook(mrb, irep, pc, regs);
 #else
-#ifdef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
       printf("OP_DEBUG %d %d %d\n", GETARG_A(i), GETARG_B(i), GETARG_C(i));
 #else
       abort();

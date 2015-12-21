@@ -1,6 +1,31 @@
 class Array
   ##
   # call-seq:
+  #    Array.try_convert(obj) -> array or nil
+  #
+  # Tries to convert +obj+ into an array, using +to_ary+ method.
+  # converted array or +nil+ if +obj+ cannot be converted for any reason.
+  # This method can be used to check if an argument is an array.
+  #
+  #    Array.try_convert([1])   #=> [1]
+  #    Array.try_convert("1")   #=> nil
+  #
+  #    if tmp = Array.try_convert(arg)
+  #      # the argument is an array
+  #    elsif tmp = String.try_convert(arg)
+  #      # the argument is a string
+  #    end
+  #
+  def self.try_convert(obj)
+    if obj.respond_to?(:to_ary)
+      obj.to_ary
+    else
+      nil
+    end
+  end
+
+  ##
+  # call-seq:
   #    ary.uniq!                -> ary or nil
   #    ary.uniq! { |item| ... } -> ary or nil
   #
@@ -680,5 +705,43 @@ class Array
     end
     return nil if self.size == result.size
     self.replace(result)
+  end
+
+  ##
+  #  call-seq:
+  #     ary.index(val)            -> int or nil
+  #     ary.index {|item| block } ->  int or nil
+  #
+  #  Returns the _index_ of the first object in +ary+ such that the object is
+  #  <code>==</code> to +obj+.
+  #
+  #  If a block is given instead of an argument, returns the _index_ of the
+  #  first object for which the block returns +true+.  Returns +nil+ if no
+  #  match is found.
+  #
+  # ISO 15.2.12.5.14
+  def index(val=NONE, &block)
+    return to_enum(:find_index, val) if !block && val == NONE
+
+    if block
+      idx = 0
+      self.each do |*e|
+        return idx if block.call(*e)
+        idx += 1
+      end
+    else
+      return self.__ary_index(val)
+    end
+    nil
+  end
+
+  ##
+  #  call-seq:
+  #     ary.to_ary -> ary
+  #
+  #  Returns +self+.
+  #
+  def to_ary
+    self
   end
 end

@@ -427,7 +427,6 @@ assert 'modifying existing methods' do
     assert_equal i, e.next
     i += 1
   }
-  assert_nil loop_ret
 end
 
 assert 'Integral#times' do

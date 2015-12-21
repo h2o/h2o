@@ -7,9 +7,19 @@
 #include <math.h>
 #include <stdio.h>
 #include <time.h>
-#include "mruby.h"
-#include "mruby/class.h"
-#include "mruby/data.h"
+#include <mruby.h>
+#include <mruby/class.h>
+#include <mruby/data.h>
+
+#if _MSC_VER < 1800
+double round(double x) {
+  if (x >= 0.0) {
+    return (double)((int)(x + 0.5));
+  } else {
+    return (double)((int)(x - 0.5));
+  }
+}
+#endif
 
 #if !defined(__MINGW64__) && defined(_WIN32)
 # define llround(x) round(x)

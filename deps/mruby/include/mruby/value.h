@@ -7,6 +7,13 @@
 #ifndef MRUBY_VALUE_H
 #define MRUBY_VALUE_H
 
+#include "common.h"
+
+/**
+ * MRuby Value definition functions and macros.
+ */
+MRB_BEGIN_DECL
+
 typedef uint32_t mrb_sym;
 typedef uint8_t mrb_bool;
 struct mrb_state;
@@ -89,7 +96,23 @@ enum mrb_vtype {
   MRB_TT_MAXDEFINE    /*  23 */
 };
 
-#include "mruby/object.h"
+#include <mruby/object.h>
+
+#ifdef MRB_DOCUMENTATION_BLOCK
+
+/**
+ * @abstract
+ * MRuby value boxing.
+ *
+ * Actual implementation depends on configured boxing type.
+ *
+ * @see mruby/boxing_no.h Default boxing representation
+ * @see mruby/boxing_word.h Word representation
+ * @see mruby/boxing_nan.h Boxed double representation
+ */
+typedef void mrb_value;
+
+#endif
 
 #if defined(MRB_NAN_BOXING)
 #include "boxing_nan.h"
@@ -121,8 +144,10 @@ enum mrb_vtype {
 #define mrb_test(o)   mrb_bool(o)
 MRB_API mrb_bool mrb_regexp_p(struct mrb_state*, mrb_value);
 
-static inline mrb_value
-mrb_float_value(struct mrb_state *mrb, mrb_float f)
+/*
+ * Returns a float in Ruby.
+ */
+MRB_INLINE mrb_value mrb_float_value(struct mrb_state *mrb, mrb_float f)
 {
   mrb_value v;
   (void) mrb;
@@ -139,8 +164,10 @@ mrb_cptr_value(struct mrb_state *mrb, void *p)
   return v;
 }
 
-static inline mrb_value
-mrb_fixnum_value(mrb_int i)
+/*
+ * Returns a fixnum in Ruby.
+ */
+MRB_INLINE mrb_value mrb_fixnum_value(mrb_int i)
 {
   mrb_value v;
   SET_INT_VALUE(v, i);
@@ -163,24 +190,34 @@ mrb_obj_value(void *p)
   return v;
 }
 
-static inline mrb_value
-mrb_nil_value(void)
+
+/*
+ * Get a nil mrb_value object.
+ *
+ * @return
+ *      nil mrb_value object reference.
+ */
+MRB_INLINE mrb_value mrb_nil_value(void)
 {
   mrb_value v;
   SET_NIL_VALUE(v);
   return v;
 }
 
-static inline mrb_value
-mrb_false_value(void)
+/*
+ * Returns false in Ruby.
+ */
+MRB_INLINE mrb_value mrb_false_value(void)
 {
   mrb_value v;
   SET_FALSE_VALUE(v);
   return v;
 }
 
-static inline mrb_value
-mrb_true_value(void)
+/*
+ * Returns true in Ruby.
+ */
+MRB_INLINE mrb_value mrb_true_value(void)
 {
   mrb_value v;
   SET_TRUE_VALUE(v);
@@ -225,5 +262,7 @@ mrb_ro_data_p(const char *p)
 #else
 # define mrb_ro_data_p(p) FALSE
 #endif
+
+MRB_END_DECL
 
 #endif  /* MRUBY_VALUE_H */

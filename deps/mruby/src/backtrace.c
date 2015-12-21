@@ -4,15 +4,15 @@
 ** See Copyright Notice in mruby.h
 */
 
-#include "mruby.h"
-#include "mruby/variable.h"
-#include "mruby/proc.h"
-#include "mruby/array.h"
-#include "mruby/string.h"
-#include "mruby/class.h"
-#include "mruby/debug.h"
-#include "mruby/error.h"
-#include "mruby/numeric.h"
+#include <mruby.h>
+#include <mruby/variable.h>
+#include <mruby/proc.h>
+#include <mruby/array.h>
+#include <mruby/string.h>
+#include <mruby/class.h>
+#include <mruby/debug.h>
+#include <mruby/error.h>
+#include <mruby/numeric.h>
 
 struct backtrace_location {
   int i;
@@ -25,7 +25,7 @@ struct backtrace_location {
 
 typedef void (*output_stream_func)(mrb_state*, struct backtrace_location*, void*);
 
-#ifdef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
 
 struct print_backtrace_args {
   FILE *stream;
@@ -165,7 +165,7 @@ exc_output_backtrace(mrb_state *mrb, struct RObject *exc, output_stream_func fun
    overwritten.  So invoke these functions just after detecting exceptions.
 */
 
-#ifdef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
 
 MRB_API void
 mrb_print_backtrace(mrb_state *mrb)

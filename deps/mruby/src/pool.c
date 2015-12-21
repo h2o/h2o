@@ -7,7 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
-#include "mruby.h"
+#include <mruby.h>
 
 /* configuration section */
 /* allocated memory address should be multiple of POOL_ALIGNMENT */

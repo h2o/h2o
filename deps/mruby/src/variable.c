@@ -4,11 +4,11 @@
 ** See Copyright Notice in mruby.h
 */
 
-#include "mruby.h"
-#include "mruby/array.h"
-#include "mruby/class.h"
-#include "mruby/proc.h"
-#include "mruby/string.h"
+#include <mruby.h>
+#include <mruby/array.h>
+#include <mruby/class.h>
+#include <mruby/proc.h>
+#include <mruby/string.h>
 
 typedef int (iv_foreach_func)(mrb_state*,mrb_sym,mrb_value,void*);
 
@@ -282,7 +282,7 @@ iv_free(mrb_state *mrb, iv_tbl *t)
 
 #else
 
-#include "mruby/khash.h"
+#include <mruby/khash.h>
 
 #ifndef MRB_IVHASH_INIT_SIZE
 #define MRB_IVHASH_INIT_SIZE 8
@@ -759,16 +759,28 @@ MRB_API mrb_value
 mrb_mod_cv_get(mrb_state *mrb, struct RClass * c, mrb_sym sym)
 {
   struct RClass * cls = c;
+  mrb_value v;
 
   while (c) {
-    if (c->iv) {
-      iv_tbl *t = c->iv;
-      mrb_value v;
-
-      if (iv_get(mrb, t, sym, &v))
-        return v;
+    if (c->iv && iv_get(mrb, c->iv, sym, &v)) {
+      return v;
     }
     c = c->super;
+  }
+  if (cls && cls->tt == MRB_TT_SCLASS) {
+    mrb_value klass;
+
+    klass = mrb_obj_iv_get(mrb, (struct RObject *)cls,
+                           mrb_intern_lit(mrb, "__attached__"));
+    c = mrb_class_ptr(klass);
+    if (c->tt == MRB_TT_CLASS) {
+      while (c) {
+        if (c->iv && iv_get(mrb, c->iv, sym, &v)) {
+          return v;
+        }
+        c = c->super;
+      }
+    }
   }
   mrb_name_error(mrb, sym, "uninitialized class variable %S in %S",
                  mrb_sym2str(mrb, sym), mrb_obj_value(cls));
@@ -913,6 +925,14 @@ mrb_vm_const_get(mrb_state *mrb, mrb_sym sym)
 
     if (c->iv && iv_get(mrb, c->iv, sym, &v)) {
       return v;
+    }
+    if (c->tt == MRB_TT_SCLASS) {
+      mrb_value klass;
+      klass = mrb_obj_iv_get(mrb, (struct RObject *)c,
+                             mrb_intern_lit(mrb, "__attached__"));
+      c2 = mrb_class_ptr(klass);
+      if (c2->tt == MRB_TT_CLASS)
+        c = c2;
     }
     c2 = c;
     for (;;) {

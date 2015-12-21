@@ -109,6 +109,12 @@ mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config
             abort();
         }
         snprintf(errbuf, 256, "line %d:%s", parser->error_buffer[0].lineno, parser->error_buffer[0].message);
+        strcat(errbuf, "\n\n");
+        if (h2o_str_at_position(errbuf + strlen(errbuf), config->source.base, config->source.len,
+                                parser->error_buffer[0].lineno - config->lineno + 1,parser->error_buffer[0].column) != 0) {
+            /* remove trailing "\n\n" in case we failed to append the source code at the error location */
+            errbuf[strlen(errbuf) - 2] = '\0';
+        }
         goto Exit;
     }
     /* generate code */

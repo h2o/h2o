@@ -5,10 +5,10 @@
 
 #include <ctype.h>
 #include <string.h>
-#include "mruby.h"
-#include "mruby/dump.h"
-#include "mruby/debug.h"
-#include "mruby/string.h"
+#include <mruby.h>
+#include <mruby/dump.h>
+#include <mruby/debug.h>
+#include <mruby/string.h>
 #include "mrdb.h"
 #include "mrdberror.h"
 #include "apibreak.h"

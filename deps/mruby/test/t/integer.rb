@@ -147,6 +147,12 @@ assert('Integer#<<', '15.2.8.3.12') do
 
   # Left Shift by a negative is Right Shift
   assert_equal 23, 46 << -1
+
+  # Left Shift by 31 is bitShift overflow to SignedInt
+  assert_equal 2147483648, 1 << 31
+
+  # -3 Left Shift by 30 is bitShift overflow to SignedInt
+  assert_equal(-3221225472, -3 << 30)
 end
 
 assert('Integer#>>', '15.2.8.3.13') do

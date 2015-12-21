@@ -47,7 +47,12 @@ if Object.const_defined?(:Struct)
     end
 
     def _inspect
-      str = "#<struct #{self.class.to_s} "
+      name = self.class.to_s
+      if name[0] == "#"
+        str = "#<struct "
+      else
+        str = "#<struct #{name} "
+      end
       buf = []
       self.each_pair do |k,v|
         buf.push [k.to_s + "=" + v._inspect]

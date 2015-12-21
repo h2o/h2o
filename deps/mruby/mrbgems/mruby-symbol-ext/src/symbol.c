@@ -1,6 +1,6 @@
-#include "mruby.h"
-#include "mruby/khash.h"
-#include "mruby/array.h"
+#include <mruby.h>
+#include <mruby/khash.h>
+#include <mruby/array.h>
 
 typedef struct symbol_name {
   size_t len;

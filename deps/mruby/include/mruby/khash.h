@@ -7,12 +7,15 @@
 #ifndef MRUBY_KHASH_H
 #define MRUBY_KHASH_H
 
-#if defined(__cplusplus)
-extern "C" {
-#endif
-
-#include "mruby.h"
 #include <string.h>
+
+#include <mruby.h>
+#include "common.h"
+
+/**
+ * khash definitions used in mruby's hash table.
+ */
+MRB_BEGIN_DECL
 
 typedef uint32_t khint_t;
 typedef khint_t khiter_t;
@@ -266,8 +269,6 @@ static inline khint_t __ac_X31_hash_string(const char *s)
 
 typedef const char *kh_cstr_t;
 
-#if defined(__cplusplus)
-}  /* extern "C" { */
-#endif
+MRB_END_DECL
 
 #endif  /* MRUBY_KHASH_H */

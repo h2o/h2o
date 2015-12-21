@@ -7,9 +7,12 @@
 #ifndef MRUBY_VARIABLE_H
 #define MRUBY_VARIABLE_H
 
-#if defined(__cplusplus)
-extern "C" {
-#endif
+#include "common.h"
+
+/**
+ * Functions to access mruby variables.
+ */
+MRB_BEGIN_DECL
 
 typedef struct global_variable {
   int   counter;
@@ -74,8 +77,6 @@ void mrb_gc_mark_iv(mrb_state*, struct RObject*);
 size_t mrb_gc_mark_iv_size(mrb_state*, struct RObject*);
 void mrb_gc_free_iv(mrb_state*, struct RObject*);
 
-#if defined(__cplusplus)
-}  /* extern "C" { */
-#endif
+MRB_END_DECL
 
 #endif  /* MRUBY_VARIABLE_H */

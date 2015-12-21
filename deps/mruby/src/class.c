@@ -5,15 +5,15 @@
 */
 
 #include <stdarg.h>
-#include "mruby.h"
-#include "mruby/array.h"
-#include "mruby/class.h"
-#include "mruby/numeric.h"
-#include "mruby/proc.h"
-#include "mruby/string.h"
-#include "mruby/variable.h"
-#include "mruby/error.h"
-#include "mruby/data.h"
+#include <mruby.h>
+#include <mruby/array.h>
+#include <mruby/class.h>
+#include <mruby/numeric.h>
+#include <mruby/proc.h>
+#include <mruby/string.h>
+#include <mruby/variable.h>
+#include <mruby/error.h>
+#include <mruby/data.h>
 
 KHASH_DEFINE(mt, mrb_sym, struct RProc*, TRUE, kh_int_hash_func, kh_int_hash_equal)
 
@@ -622,7 +622,7 @@ mrb_get_args(mrb_state *mrb, const char *format, ...)
           format++;
           if (i < argc && mrb_nil_p(*sp)) {
             *ps = NULL;
-            i++;
+            i++; sp++;
             break;
           }
         }
@@ -647,7 +647,7 @@ mrb_get_args(mrb_state *mrb, const char *format, ...)
           if (i < argc && mrb_nil_p(*sp)) {
             *pb = 0;
             *pl = 0;
-            i++;
+            i++; sp++;
             break;
           }
         }
@@ -740,7 +740,7 @@ mrb_get_args(mrb_state *mrb, const char *format, ...)
           format++;
           if (i < argc && mrb_nil_p(*sp)) {
             *datap = 0;
-            i++;
+            i++; sp++;
             break;
           }
         }

@@ -1,7 +1,7 @@
-#include "mruby.h"
-#include "mruby/array.h"
-#include "mruby/class.h"
-#include "mruby/proc.h"
+#include <mruby.h>
+#include <mruby/array.h>
+#include <mruby/class.h>
+#include <mruby/proc.h>
 
 #define fiber_ptr(o) ((struct RFiber*)mrb_ptr(o))
 

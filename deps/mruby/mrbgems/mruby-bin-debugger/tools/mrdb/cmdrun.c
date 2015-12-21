@@ -3,7 +3,7 @@
 **
 */
 
-#include "mruby/opcode.h"
+#include <mruby/opcode.h>
 #include "mrdb.h"
 
 dbgcmd_state

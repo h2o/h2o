@@ -1,11 +1,11 @@
-#include "mruby.h"
-#include "mruby/irep.h"
-#include "mruby/debug.h"
-#include "mruby/opcode.h"
-#include "mruby/string.h"
-#include "mruby/proc.h"
+#include <mruby.h>
+#include <mruby/irep.h>
+#include <mruby/debug.h>
+#include <mruby/opcode.h>
+#include <mruby/string.h>
+#include <mruby/proc.h>
 
-#ifdef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
 static int
 print_r(mrb_state *mrb, mrb_irep *irep, size_t n, int pre)
 {
@@ -53,7 +53,7 @@ print_lv(mrb_state *mrb, mrb_irep *irep, mrb_code c, int r)
 static void
 codedump(mrb_state *mrb, mrb_irep *irep)
 {
-#ifdef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
   int i;
   int ai;
   mrb_code c;
@@ -189,7 +189,7 @@ codedump(mrb_state *mrb, mrb_irep *irep)
       print_lv(mrb, irep, c, RA);
       break;
     case OP_JMP:
-      printf("OP_JMP\t\t%03d\n", i+GETARG_sBx(c));
+      printf("OP_JMP\t%03d\n", i+GETARG_sBx(c));
       break;
     case OP_JMPIF:
       printf("OP_JMPIF\tR%d\t%03d\n", GETARG_A(c), i+GETARG_sBx(c));
@@ -240,11 +240,11 @@ codedump(mrb_state *mrb, mrb_irep *irep)
       switch (GETARG_B(c)) {
       case OP_R_NORMAL:
       case OP_R_RETURN:
-        printf("\treturn"); break;
+        printf("\treturn\t"); break;
       case OP_R_BREAK:
-        printf("\tbreak"); break;
+        printf("\tbreak\t"); break;
       default:
-        printf("\tbroken"); break;
+        printf("\tbroken\t"); break;
         break;
       }
       print_lv(mrb, irep, c, RA);
