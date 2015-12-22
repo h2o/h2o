@@ -59,9 +59,19 @@ static h2o_hostconf_t *find_hostconf(h2o_hostconf_t **hostconfs, h2o_iovec_t aut
 
     do {
         h2o_hostconf_t *hostconf = *hostconfs;
-        if ((hostconf->authority.port == port || (hostconf->authority.port == 65535 && port == default_port)) &&
-            h2o_memis(hostconf->authority.host.base, hostconf->authority.host.len, hostname_lc, hostname.len))
-            return hostconf;
+        if (hostconf->authority.port == port || (hostconf->authority.port == 65535 && port == default_port)) {
+            if (hostconf->authority.host.base[0] == '*') {
+                /* matching against "*.foo.bar" */
+                size_t cmplen = hostconf->authority.host.len - 1;
+                if (cmplen < hostname.len &&
+                    memcmp(hostconf->authority.host.base + 1, hostname_lc + hostname.len - cmplen, cmplen) == 0)
+                    return hostconf;
+            } else {
+                /* exact match */
+                if (h2o_memis(hostconf->authority.host.base, hostconf->authority.host.len, hostname_lc, hostname.len))
+                    return hostconf;
+            }
+        }
     } while (*++hostconfs != NULL);
 
     return NULL;
