@@ -55,6 +55,7 @@ enum {
     LIT_SERVER_SOFTWARE,
     LIT_SERVER_SOFTWARE_VALUE,
     PROC_EACH_TO_ARRAY,
+    PROC_TO_FIBER,
     NUM_CONSTANTS
 };
 
@@ -71,6 +72,18 @@ typedef struct st_h2o_mruby_context_t {
 } h2o_mruby_context_t;
 
 #define FREEZE_STRING(v) RSTR_SET_FROZEN_FLAG(mrb_str_ptr(v))
+
+#define assert_mruby(mrb)                                                                                                          \
+    if (mrb->exc != NULL)                                                                                                          \
+    assert_mruby_abort(mrb, __FILE__, __LINE__)
+
+static void assert_mruby_abort(mrb_state *mrb, const char *file, int line)
+{
+    mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
+    struct RString *error = mrb_str_ptr(obj);
+    fprintf(stderr, "unexpected ruby error at file: \"%s\", line %d: %s", file, line, error->as.heap.ptr);
+    abort();
+}
 
 static void set_h2o_root(mrb_state *mrb)
 {
@@ -224,8 +237,30 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
 #undef SET_STRING
 
     mrb_ary_set(mrb, ary, PROC_EACH_TO_ARRAY,
-                mrb_funcall(mrb, mrb_top_self(mrb), "eval", 1,
-                            mrb_str_new_lit(mrb, "Proc.new do |o| a = []; o.each do |x| a << x; end; a; end")));
+                mrb_funcall(mrb, mrb_top_self(mrb), "eval", 1, mrb_str_new_lit(mrb, "Proc.new do |o|\n"
+                                                                                    "  a = []\n"
+                                                                                    "  o.each do |x|\n"
+                                                                                    "    a << x\n"
+                                                                                    "  end\n"
+                                                                                    "  a\n"
+                                                                                    "end")));
+    assert_mruby(mrb);
+
+    mrb_ary_set(mrb, ary, PROC_TO_FIBER,
+                mrb_funcall(mrb, mrb_top_self(mrb), "eval", 1, mrb_str_new_lit(mrb, "Proc.new do |app|\n"
+                                                                                    "  f = Fiber.new do\n"
+                                                                                    "    req = Fiber.yield()\n"
+                                                                                    "    while 1\n"
+                                                                                    "      resp = app.call(req)\n"
+                                                                                    "      req = Fiber.yield(resp)\n"
+                                                                                    "    end\n"
+                                                                                    "  end\n"
+                                                                                    "  f.resume\n"
+                                                                                    "  Proc.new do |req|\n"
+                                                                                    "    f.resume(req)\n"
+                                                                                    "  end\n"
+                                                                                    "end")));
+    assert_mruby(mrb);
 
     return ary;
 }
@@ -242,16 +277,18 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
         fprintf(stderr, "%s: no memory\n", H2O_MRUBY_MODULE_NAME);
         abort();
     }
-
-    /* compile code (must be done for each thread) */
-    int arena = mrb_gc_arena_save(handler_ctx->mrb);
-    handler_ctx->proc = h2o_mruby_compile_code(handler_ctx->mrb, &handler->config, NULL);
-    mrb_gc_arena_restore(handler_ctx->mrb, arena);
-    mrb_gc_protect(handler_ctx->mrb, handler_ctx->proc);
-
     handler_ctx->constants = build_constants(handler_ctx->mrb, ctx->globalconf->server_name.base, ctx->globalconf->server_name.len);
     handler_ctx->symbols.sym_call = mrb_intern_lit(handler_ctx->mrb, "call");
     handler_ctx->symbols.sym_close = mrb_intern_lit(handler_ctx->mrb, "close");
+
+    /* compile code (must be done for each thread) */
+    int arena = mrb_gc_arena_save(handler_ctx->mrb);
+    mrb_value proc = h2o_mruby_compile_code(handler_ctx->mrb, &handler->config, NULL);
+    handler_ctx->proc = mrb_funcall_argv(handler_ctx->mrb, mrb_ary_entry(handler_ctx->constants, PROC_TO_FIBER),
+                                         handler_ctx->symbols.sym_call, 1, &proc);
+    assert_mruby(handler_ctx->mrb);
+    mrb_gc_arena_restore(handler_ctx->mrb, arena);
+    mrb_gc_protect(handler_ctx->mrb, handler_ctx->proc);
 
     h2o_context_set_handler_context(ctx, &handler->super, handler_ctx);
 }
