@@ -111,7 +111,7 @@ mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config
         snprintf(errbuf, 256, "line %d:%s", parser->error_buffer[0].lineno, parser->error_buffer[0].message);
         strcat(errbuf, "\n\n");
         if (h2o_str_at_position(errbuf + strlen(errbuf), config->source.base, config->source.len,
-                                parser->error_buffer[0].lineno - config->lineno + 1,parser->error_buffer[0].column) != 0) {
+                                parser->error_buffer[0].lineno - config->lineno + 1, parser->error_buffer[0].column) != 0) {
             /* remove trailing "\n\n" in case we failed to append the source code at the error location */
             errbuf[strlen(errbuf) - 2] = '\0';
         }
@@ -412,8 +412,7 @@ static int parse_rack_header(h2o_req_t *req, mrb_state *mrb, mrb_value name, mrb
         for (eol = vstart; eol != vend; ++eol)
             if (*eol == '\n')
                 break;
-        if (h2o_memis(lcname.base, lcname.len, H2O_STRLIT("link")) &&
-            h2o_puth_path_in_link_header(req, vstart, eol - vstart)) {
+        if (h2o_memis(lcname.base, lcname.len, H2O_STRLIT("link")) && h2o_puth_path_in_link_header(req, vstart, eol - vstart)) {
             /* do not send the link header that is going to be pushed */
         } else {
             h2o_iovec_t vdup = h2o_strdup(&req->pool, vstart, eol - vstart);
