@@ -59,18 +59,6 @@ enum {
     NUM_CONSTANTS
 };
 
-typedef struct st_h2o_mruby_context_t {
-    h2o_mruby_handler_t *handler;
-    mrb_state *mrb;
-    /* TODO: add other hook code */
-    mrb_value proc;
-    mrb_value constants;
-    struct {
-        mrb_sym sym_call;
-        mrb_sym sym_close;
-    } symbols;
-} h2o_mruby_context_t;
-
 #define FREEZE_STRING(v) RSTR_SET_FROZEN_FLAG(mrb_str_ptr(v))
 
 #define assert_mruby(mrb)                                                                                                          \
@@ -83,6 +71,11 @@ static void assert_mruby_abort(mrb_state *mrb, const char *file, int line)
     struct RString *error = mrb_str_ptr(obj);
     fprintf(stderr, "unexpected ruby error at file: \"%s\", line %d: %s", file, line, error->as.heap.ptr);
     abort();
+}
+
+static mrb_value eval_expr(mrb_state *mrb, const char *expr)
+{
+    return mrb_funcall(mrb, mrb_top_self(mrb), "eval", 1, mrb_str_new_cstr(mrb, expr));
 }
 
 static void set_h2o_root(mrb_state *mrb)
@@ -177,6 +170,28 @@ static h2o_iovec_t convert_header_name_to_env(h2o_mem_pool_t *pool, const char *
 #undef KEY_PREFIX_LEN
 }
 
+static void define_callback(mrb_state *mrb, const char *name, int id)
+{
+    char buf[1024];
+
+    sprintf(buf, "module Kernel\n"
+                 "  def %s(*args)\n"
+                 "    ret = Fiber.yield([%d, args])\n"
+                 "    if ret.kind_of? Exception\n"
+                 "      raise ret\n"
+                 "    end\n"
+                 "    ret\n"
+                 "  end\n"
+                 "end",
+            name, id);
+    eval_expr(mrb, buf);
+
+    if (mrb->exc != NULL) {
+        fprintf(stderr, "failed to define mruby function: %s\n", name);
+        assert_mruby(mrb);
+    }
+}
+
 static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t server_name_len)
 {
     mrb_value ary = mrb_ary_new_capa(mrb, NUM_CONSTANTS);
@@ -236,36 +251,38 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
 #undef SET_LITERAL
 #undef SET_STRING
 
-    mrb_ary_set(mrb, ary, PROC_EACH_TO_ARRAY,
-                mrb_funcall(mrb, mrb_top_self(mrb), "eval", 1, mrb_str_new_lit(mrb, "Proc.new do |o|\n"
-                                                                                    "  a = []\n"
-                                                                                    "  o.each do |x|\n"
-                                                                                    "    a << x\n"
-                                                                                    "  end\n"
-                                                                                    "  a\n"
-                                                                                    "end")));
+    mrb_ary_set(mrb, ary, PROC_EACH_TO_ARRAY, eval_expr(mrb, "Proc.new do |o|\n"
+                                                             "  a = []\n"
+                                                             "  o.each do |x|\n"
+                                                             "    a << x\n"
+                                                             "  end\n"
+                                                             "  a\n"
+                                                             "end"));
     assert_mruby(mrb);
 
-    mrb_ary_set(mrb, ary, PROC_TO_FIBER,
-                mrb_funcall(mrb, mrb_top_self(mrb), "eval", 1, mrb_str_new_lit(mrb, "Proc.new do |app|\n"
-                                                                                    "  f = Fiber.new do\n"
-                                                                                    "    req = Fiber.yield()\n"
-                                                                                    "    while 1\n"
-                                                                                    "      begin\n"
-                                                                                    "        while 1\n"
-                                                                                    "          resp = app.call(req)\n"
-                                                                                    "          req = Fiber.yield(resp)\n"
-                                                                                    "        end\n"
-                                                                                    "      rescue => e\n"
-                                                                                    "        req = Fiber.yield([-1, e])\n"
-                                                                                    "      end\n"
-                                                                                    "    end\n"
-                                                                                    "  end\n"
-                                                                                    "  f.resume\n"
-                                                                                    "  Proc.new do |req|\n"
-                                                                                    "    f.resume(req)\n"
-                                                                                    "  end\n"
-                                                                                    "end")));
+    /* sends exception using H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED */
+    mrb_ary_set(mrb, ary, PROC_TO_FIBER, eval_expr(mrb, "Proc.new do |app|\n"
+                                                        "  f = Fiber.new do\n"
+                                                        "    req = Fiber.yield()\n"
+                                                        "    while 1\n"
+                                                        "      begin\n"
+                                                        "        while 1\n"
+                                                        "          resp = app.call(req)\n"
+                                                        "          req = Fiber.yield(resp)\n"
+                                                        "        end\n"
+                                                        "      rescue => e\n"
+                                                        "        req = Fiber.yield([-1, e])\n"
+                                                        "      end\n"
+                                                        "    end\n"
+                                                        "  end\n"
+                                                        "  f.resume\n"
+                                                        "  Proc.new do |req|\n"
+                                                        "    f.resume(req)\n"
+                                                        "  end\n"
+                                                        "end"));
+    assert_mruby(mrb);
+
+    define_callback(mrb, "http_request", H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST);
     assert_mruby(mrb);
 
     return ary;
@@ -474,31 +491,6 @@ static int parse_rack_response(h2o_req_t *req, h2o_mruby_context_t *handler_ctx,
 {
     mrb_state *mrb = handler_ctx->mrb;
 
-    if (!mrb_array_p(resp)) {
-        h2o_req_log_error(req, H2O_MRUBY_MODULE_NAME, "handler did not return an array");
-        return -1;
-    }
-
-    { /* fetch status */
-        mrb_value v = mrb_to_int(mrb, mrb_ary_entry(resp, 0));
-        if (mrb->exc != NULL)
-            goto GotException;
-        int status = mrb_fixnum(v);
-        switch (status) {
-        case -1:
-            assert(mrb_array_p(resp));
-            report_exception(req, mrb, mrb_ary_entry(resp, 1));
-            return -1;
-        default:
-            break;
-        }
-        if (!(100 <= status && status <= 999)) {
-            h2o_req_log_error(req, H2O_MRUBY_MODULE_NAME, "status returned by handler is out of range:%d\n", status);
-            return -1;
-        }
-        req->res.status = status;
-    }
-
     { /* fetch and set the headers */
         mrb_value headers = mrb_ary_entry(resp, 1);
         if (mrb_hash_p(headers)) {
@@ -580,35 +572,93 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 {
     h2o_mruby_handler_t *handler = (void *)_handler;
     h2o_mruby_context_t *handler_ctx = h2o_context_get_handler_context(req->conn->ctx, &handler->super);
-    mrb_int arena = mrb_gc_arena_save(handler_ctx->mrb);
-    h2o_iovec_t content;
 
-    {
-        /* call rack handler */
-        mrb_value env = build_env(req, handler_ctx->mrb, handler_ctx->constants);
-        mrb_value resp = mrb_funcall_argv(handler_ctx->mrb, handler_ctx->proc, handler_ctx->symbols.sym_call, 1, &env);
-        if (handler_ctx->mrb->exc != NULL) {
-            report_exception(req, handler_ctx->mrb, mrb_obj_value(handler_ctx->mrb->exc));
-            handler_ctx->mrb->exc = NULL;
+    mrb_int arena = mrb_gc_arena_save(handler_ctx->mrb);
+
+    mrb_value env = build_env(req, handler_ctx->mrb, handler_ctx->constants);
+    int is_delegate = 0;
+    h2o_mruby_run_fiber(req, handler_ctx, env, arena, &is_delegate);
+
+    if (is_delegate)
+        return -1;
+    return 0;
+}
+
+void h2o_mruby_run_fiber(h2o_req_t *req, h2o_mruby_context_t *handler_ctx, mrb_value input, mrb_int gc_arena, int *is_delegate)
+{
+    mrb_value output;
+    h2o_iovec_t content;
+    int status;
+
+    while (1) {
+        /* send input to fiber */
+        output = mrb_funcall_argv(handler_ctx->mrb, handler_ctx->proc, handler_ctx->symbols.sym_call, 1, &input);
+        if (handler_ctx->mrb->exc != NULL)
+            goto GotException;
+        if (!mrb_array_p(output)) {
+            h2o_req_log_error(req, H2O_MRUBY_MODULE_NAME, "handler did not return an array");
             goto SendInternalError;
         }
-        /* parse the resposne */
-        if (parse_rack_response(req, handler_ctx, resp, &content) != 0)
+        /* fetch status */
+        mrb_value v = mrb_to_int(handler_ctx->mrb, mrb_ary_entry(output, 0));
+        if (handler_ctx->mrb->exc != NULL)
+            goto GotException;
+        status = mrb_fixnum(v);
+        /* take special actions depending on the status code */
+        switch (status) {
+        case H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED:
+            assert(mrb_array_p(output));
+            report_exception(req, handler_ctx->mrb, mrb_ary_entry(output, 1));
             goto SendInternalError;
+        case H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST:
+            input = h2o_mruby_http_request_callback(req, handler_ctx, mrb_ary_entry(output, 1));
+            if (mrb_nil_p(input))
+                goto Async;
+            goto Next;
+        }
+        /* if no special actions were necessary, then the output is a rack response */
+        break;
+    Next:
+        mrb_gc_arena_restore(handler_ctx->mrb, gc_arena);
+        mrb_gc_protect(handler_ctx->mrb, input);
     }
 
-    mrb_gc_arena_restore(handler_ctx->mrb, arena);
+    if (!(100 <= status && status <= 999)) {
+        h2o_req_log_error(req, H2O_MRUBY_MODULE_NAME, "status returned by handler is out of range:%d\n", status);
+        goto SendInternalError;
+    }
+    req->res.status = status;
+
+    if (parse_rack_response(req, handler_ctx, output, &content) != 0)
+        goto SendInternalError;
+
+    /* end of ruby-related operation, restore GC arena */
+    mrb_gc_arena_restore(handler_ctx->mrb, gc_arena);
 
     /* fall through or send the response */
-    if (req->res.status == STATUS_FALLTHRU)
-        return -1;
-    h2o_send_inline(req, content.base, content.len);
-    return 0;
+    if (req->res.status == STATUS_FALLTHRU) {
+        if (is_delegate != NULL) {
+            *is_delegate = 1;
+            return;
+        }
+        h2o_req_log_error(req, H2O_MRUBY_MODULE_NAME, "cannot (yet) handle async 399 response");
+        goto SendInternalError;
+    }
 
+    h2o_send_inline(req, content.base, content.len);
+    return;
+
+GotException:
+    report_exception(req, handler_ctx->mrb, mrb_obj_value(handler_ctx->mrb->exc));
+    handler_ctx->mrb->exc = NULL;
 SendInternalError:
-    mrb_gc_arena_restore(handler_ctx->mrb, arena);
+    mrb_gc_arena_restore(handler_ctx->mrb, gc_arena);
     h2o_send_error(req, 500, "Internal Server Error", "Internal Server Error", 0);
-    return 0;
+    return;
+
+Async:
+    mrb_gc_arena_restore(handler_ctx->mrb, gc_arena);
+    return;
 }
 
 h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_config_vars_t *vars)

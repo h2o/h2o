@@ -7,10 +7,6 @@
 #include <mruby/compile.h>
 
 #define H2O_MRUBY_MODULE_NAME "h2o_mruby"
-#define H2O_MRUBY_MODULE_VERSION "0.0.1"
-#define H2O_MRUBY_MODULE_DESCRIPTION H2O_MRUBY_MODULE_NAME "/" H2O_MRUBY_MODULE_VERSION
-
-#define H2O_MRUBY_DEFAULT_CONTENT_TYPE "text/plain; charset=utf-8"
 
 typedef struct st_h2o_mruby_config_vars_t {
     h2o_iovec_t source;
@@ -23,9 +19,27 @@ typedef struct st_h2o_mruby_handler_t {
     h2o_mruby_config_vars_t config;
 } h2o_mruby_handler_t;
 
+typedef struct st_h2o_mruby_context_t {
+    h2o_mruby_handler_t *handler;
+    mrb_state *mrb;
+    mrb_value proc;
+    mrb_value constants;
+    struct {
+        mrb_sym sym_call;
+        mrb_sym sym_close;
+    } symbols;
+} h2o_mruby_context_t;
+
+#define H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED -1 /* used to notify exception, does not execution to mruby code */
+#define H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST -2
+
 /* handler/mruby.c */
 mrb_value h2o_mruby_compile_code(mrb_state *mrb_state, h2o_mruby_config_vars_t *config, char *errbuf);
 h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_config_vars_t *config);
+void h2o_mruby_run_fiber(h2o_req_t *req, h2o_mruby_context_t *handler_ctx, mrb_value input, mrb_int gc_arena, int *is_delegate);
+
+/* handler/mruby/http_request.c */
+mrb_value h2o_mruby_http_request_callback(h2o_req_t *req, h2o_mruby_context_t *handler_ctx, mrb_value input);
 
 /* handler/configurator/mruby.c */
 void h2o_mruby_register_configurator(h2o_globalconf_t *conf);
