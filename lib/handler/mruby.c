@@ -251,8 +251,14 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
                                                                                     "  f = Fiber.new do\n"
                                                                                     "    req = Fiber.yield()\n"
                                                                                     "    while 1\n"
-                                                                                    "      resp = app.call(req)\n"
-                                                                                    "      req = Fiber.yield(resp)\n"
+                                                                                    "      begin\n"
+                                                                                    "        while 1\n"
+                                                                                    "          resp = app.call(req)\n"
+                                                                                    "          req = Fiber.yield(resp)\n"
+                                                                                    "        end\n"
+                                                                                    "      rescue => e\n"
+                                                                                    "        req = Fiber.yield([-1, e])\n"
+                                                                                    "      end\n"
                                                                                     "    end\n"
                                                                                     "  end\n"
                                                                                     "  f.resume\n"
@@ -314,12 +320,11 @@ static void on_handler_dispose(h2o_handler_t *_handler)
     free(handler);
 }
 
-static void report_exception(h2o_req_t *req, mrb_state *mrb)
+static void report_exception(h2o_req_t *req, mrb_state *mrb, mrb_value exc)
 {
-    mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
+    mrb_value obj = mrb_funcall(mrb, exc, "inspect", 0);
     struct RString *error = mrb_str_ptr(obj);
     h2o_req_log_error(req, H2O_MRUBY_MODULE_NAME, "mruby raised: %s\n", error->as.heap.ptr);
-    mrb->exc = NULL;
 }
 
 static void stringify_address(h2o_conn_t *conn, socklen_t (*cb)(h2o_conn_t *conn, struct sockaddr *), mrb_state *mrb,
@@ -427,7 +432,8 @@ static int parse_rack_header(h2o_req_t *req, mrb_state *mrb, mrb_value name, mrb
     if (!mrb_string_p(name)) {
         name = mrb_str_to_str(mrb, name);
         if (mrb->exc != NULL) {
-            report_exception(req, mrb);
+            report_exception(req, mrb, mrb_obj_value(mrb->exc));
+            mrb->exc = NULL;
             return -1;
         }
     }
@@ -438,7 +444,8 @@ static int parse_rack_header(h2o_req_t *req, mrb_state *mrb, mrb_value name, mrb
     if (!mrb_string_p(value)) {
         value = mrb_str_to_str(mrb, value);
         if (mrb->exc != NULL) {
-            report_exception(req, mrb);
+            report_exception(req, mrb, mrb_obj_value(mrb->exc));
+            mrb->exc = NULL;
             return -1;
         }
     }
@@ -474,11 +481,17 @@ static int parse_rack_response(h2o_req_t *req, h2o_mruby_context_t *handler_ctx,
 
     { /* fetch status */
         mrb_value v = mrb_to_int(mrb, mrb_ary_entry(resp, 0));
-        if (mrb->exc != NULL) {
-            report_exception(req, mrb);
-            return -1;
-        }
+        if (mrb->exc != NULL)
+            goto GotException;
         int status = mrb_fixnum(v);
+        switch (status) {
+        case -1:
+            assert(mrb_array_p(resp));
+            report_exception(req, mrb, mrb_ary_entry(resp, 1));
+            return -1;
+        default:
+            break;
+        }
         if (!(100 <= status && status <= 999)) {
             h2o_req_log_error(req, H2O_MRUBY_MODULE_NAME, "status returned by handler is out of range:%d\n", status);
             return -1;
@@ -500,10 +513,8 @@ static int parse_rack_response(h2o_req_t *req, h2o_mruby_context_t *handler_ctx,
         } else {
             headers = mrb_funcall_argv(mrb, mrb_ary_entry(handler_ctx->constants, PROC_EACH_TO_ARRAY),
                                        handler_ctx->symbols.sym_call, 1, &headers);
-            if (mrb->exc != NULL) {
-                report_exception(req, mrb);
-                return -1;
-            }
+            if (mrb->exc != NULL)
+                goto GotException;
             assert(mrb_array_p(headers));
             mrb_int i, len = mrb_ary_len(mrb, headers);
             for (i = 0; i != len; ++i) {
@@ -524,17 +535,13 @@ static int parse_rack_response(h2o_req_t *req, h2o_mruby_context_t *handler_ctx,
             /* convert to array by calling #each */
             mrb_value body_array = mrb_funcall_argv(mrb, mrb_ary_entry(handler_ctx->constants, PROC_EACH_TO_ARRAY),
                                                     handler_ctx->symbols.sym_call, 1, &body);
-            if (mrb->exc != NULL) {
-                report_exception(req, mrb);
-                return -1;
-            }
+            if (mrb->exc != NULL)
+                goto GotException;
             assert(mrb_array_p(body_array));
             if (mrb_respond_to(mrb, body, handler_ctx->symbols.sym_close)) {
                 mrb_funcall_argv(mrb, body, handler_ctx->symbols.sym_close, 0, NULL);
-                if (mrb->exc != NULL) {
-                    report_exception(req, mrb);
-                    return -1;
-                }
+                if (mrb->exc != NULL)
+                    goto GotException;
             }
             body = body_array;
         }
@@ -545,10 +552,8 @@ static int parse_rack_response(h2o_req_t *req, h2o_mruby_context_t *handler_ctx,
             mrb_value e = mrb_ary_entry(body, i);
             if (!mrb_string_p(e)) {
                 e = mrb_str_to_str(mrb, e);
-                if (mrb->exc != NULL) {
-                    report_exception(req, mrb);
-                    return -1;
-                }
+                if (mrb->exc != NULL)
+                    goto GotException;
                 mrb_ary_set(mrb, body, i, e);
             }
             content->len += RSTRING_LEN(e);
@@ -564,6 +569,11 @@ static int parse_rack_response(h2o_req_t *req, h2o_mruby_context_t *handler_ctx,
     }
 
     return 0;
+
+GotException:
+    report_exception(req, mrb, mrb_obj_value(mrb->exc));
+    mrb->exc = NULL;
+    return -1;
 }
 
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
@@ -578,7 +588,8 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         mrb_value env = build_env(req, handler_ctx->mrb, handler_ctx->constants);
         mrb_value resp = mrb_funcall_argv(handler_ctx->mrb, handler_ctx->proc, handler_ctx->symbols.sym_call, 1, &env);
         if (handler_ctx->mrb->exc != NULL) {
-            report_exception(req, handler_ctx->mrb);
+            report_exception(req, handler_ctx->mrb, mrb_obj_value(handler_ctx->mrb->exc));
+            handler_ctx->mrb->exc = NULL;
             goto SendInternalError;
         }
         /* parse the resposne */
