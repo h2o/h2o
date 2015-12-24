@@ -68,6 +68,7 @@ typedef struct st_h2o_mruby_context_t {
     struct {
         mrb_sym sym_call;
         mrb_sym sym_close;
+        mrb_sym sym_resume;
     } symbols;
 } h2o_mruby_context_t;
 
@@ -262,9 +263,7 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
                                                                                     "    end\n"
                                                                                     "  end\n"
                                                                                     "  f.resume\n"
-                                                                                    "  Proc.new do |req|\n"
-                                                                                    "    f.resume(req)\n"
-                                                                                    "  end\n"
+                                                                                    "  f\n"
                                                                                     "end")));
     assert_mruby(mrb);
 
@@ -286,6 +285,7 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
     handler_ctx->constants = build_constants(handler_ctx->mrb, ctx->globalconf->server_name.base, ctx->globalconf->server_name.len);
     handler_ctx->symbols.sym_call = mrb_intern_lit(handler_ctx->mrb, "call");
     handler_ctx->symbols.sym_close = mrb_intern_lit(handler_ctx->mrb, "close");
+    handler_ctx->symbols.sym_resume = mrb_intern_lit(handler_ctx->mrb, "resume");
 
     /* compile code (must be done for each thread) */
     int arena = mrb_gc_arena_save(handler_ctx->mrb);
@@ -586,7 +586,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     {
         /* call rack handler */
         mrb_value env = build_env(req, handler_ctx->mrb, handler_ctx->constants);
-        mrb_value resp = mrb_funcall_argv(handler_ctx->mrb, handler_ctx->proc, handler_ctx->symbols.sym_call, 1, &env);
+        mrb_value resp = mrb_funcall_argv(handler_ctx->mrb, handler_ctx->proc, handler_ctx->symbols.sym_resume, 1, &env);
         if (handler_ctx->mrb->exc != NULL) {
             report_exception(req, handler_ctx->mrb, mrb_obj_value(handler_ctx->mrb->exc));
             handler_ctx->mrb->exc = NULL;
