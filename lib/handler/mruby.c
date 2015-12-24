@@ -27,6 +27,7 @@
 #include <mruby/proc.h>
 #include <mruby/array.h>
 #include <mruby/compile.h>
+#include <mruby/error.h>
 #include <mruby/hash.h>
 #include <mruby/string.h>
 #include <mruby/variable.h>
@@ -444,43 +445,19 @@ static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value constants)
     return env;
 }
 
-static int parse_rack_header(h2o_req_t *req, mrb_state *mrb, mrb_value name, mrb_value value)
+static int handle_response_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t name, h2o_iovec_t value, void *_req)
 {
-    /* convert name to lowercase string */
-    if (!mrb_string_p(name)) {
-        name = mrb_str_to_str(mrb, name);
-        if (mrb->exc != NULL) {
-            report_exception(req, mrb);
-            return -1;
-        }
-    }
-    h2o_iovec_t lcname = h2o_strdup(&req->pool, RSTRING_PTR(name), RSTRING_LEN(name));
-    h2o_strtolower(lcname.base, lcname.len);
+    h2o_req_t *req = _req;
 
-    /* convert value to string */
-    if (!mrb_string_p(value)) {
-        value = mrb_str_to_str(mrb, value);
-        if (mrb->exc != NULL) {
-            report_exception(req, mrb);
-            return -1;
-        }
-    }
+    /* convert name to lowercase */
+    name = h2o_strdup(&req->pool, name.base, name.len);
+    h2o_strtolower(name.base, name.len);
 
-    /* register the header, splitting the values with '\n' */
-    const char *vstart = RSTRING_PTR(value), *vend = vstart + RSTRING_LEN(value), *eol;
-    while (1) {
-        for (eol = vstart; eol != vend; ++eol)
-            if (*eol == '\n')
-                break;
-        if (h2o_memis(lcname.base, lcname.len, H2O_STRLIT("link")) && h2o_puth_path_in_link_header(req, vstart, eol - vstart)) {
-            /* do not send the link header that is going to be pushed */
-        } else {
-            h2o_iovec_t vdup = h2o_strdup(&req->pool, vstart, eol - vstart);
-            h2o_add_header_by_str(&req->pool, &req->res.headers, lcname.base, lcname.len, 1, vdup.base, vdup.len);
-        }
-        if (eol == vend)
-            break;
-        vstart = eol + 1;
+    if (h2o_memis(name.base, name.len, H2O_STRLIT("link")) && h2o_puth_path_in_link_header(req, value.base, value.len)) {
+        /* do not send the link header that is going to be pushed */
+    } else {
+        value = h2o_strdup(&req->pool, value.base, value.len);
+        h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 1, value.base, value.len);
     }
 
     return 0;
@@ -490,42 +467,17 @@ static int parse_rack_response(h2o_req_t *req, h2o_mruby_context_t *handler_ctx,
 {
     mrb_state *mrb = handler_ctx->mrb;
 
-    { /* fetch and set the headers */
-        mrb_value headers = mrb_ary_entry(resp, 1);
-        if (mrb_hash_p(headers)) {
-            mrb_value keys = mrb_hash_keys(mrb, headers);
-            mrb_int i, len = mrb_ary_len(mrb, keys);
-            for (i = 0; i != len; ++i) {
-                mrb_value k = mrb_ary_entry(keys, i);
-                mrb_value v = mrb_hash_get(mrb, headers, k);
-                if (parse_rack_header(req, mrb, k, v) != 0)
-                    return -1;
-            }
-        } else {
-            headers = mrb_funcall_argv(mrb, mrb_ary_entry(handler_ctx->constants, PROC_EACH_TO_ARRAY),
-                                       handler_ctx->symbols.sym_call, 1, &headers);
-            if (mrb->exc != NULL)
-                goto GotException;
-            assert(mrb_array_p(headers));
-            mrb_int i, len = mrb_ary_len(mrb, headers);
-            for (i = 0; i != len; ++i) {
-                mrb_value pair = mrb_ary_entry(headers, i);
-                if (!mrb_array_p(pair)) {
-                    h2o_req_log_error(req, H2O_MRUBY_MODULE_NAME, "headers#each did not return an array");
-                    return -1;
-                }
-                if (parse_rack_header(req, mrb, mrb_ary_entry(pair, 0), mrb_ary_entry(pair, 1)) != 0)
-                    return -1;
-            }
-        }
+    /* fetch and set the headers */
+    if (h2o_mruby_iterate_headers(handler_ctx, mrb_ary_entry(resp, 1), handle_response_header, req) != 0) {
+        assert(mrb->exc != NULL);
+        goto GotException;
     }
 
     { /* convert response to string */
         mrb_value body = mrb_ary_entry(resp, 2);
         if (!mrb_array_p(body)) {
             /* convert to array by calling #each */
-            mrb_value body_array = mrb_funcall_argv(mrb, mrb_ary_entry(handler_ctx->constants, PROC_EACH_TO_ARRAY),
-                                                    handler_ctx->symbols.sym_call, 1, &body);
+            mrb_value body_array = h2o_mruby_each_to_array(handler_ctx, body);
             if (mrb->exc != NULL)
                 goto GotException;
             assert(mrb_array_p(body_array));
@@ -671,4 +623,76 @@ h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_conf
         handler->config.path = h2o_strdup(NULL, vars->path, SIZE_MAX).base;
 
     return handler;
+}
+
+mrb_value h2o_mruby_each_to_array(h2o_mruby_context_t *handler_ctx, mrb_value src)
+{
+    return mrb_funcall_argv(handler_ctx->mrb, mrb_ary_entry(handler_ctx->constants, PROC_EACH_TO_ARRAY),
+                            handler_ctx->symbols.sym_call, 1, &src);
+}
+
+static int iterate_headers_handle_pair(h2o_mruby_context_t *handler_ctx, mrb_value name, mrb_value value,
+                                       int (*cb)(h2o_mruby_context_t *, h2o_iovec_t, h2o_iovec_t, void *), void *cb_data)
+{
+    /* convert name and value to string */
+    name = mrb_str_to_str(handler_ctx->mrb, name);
+    if (handler_ctx->mrb->exc != NULL)
+        return -1;
+    value = mrb_str_to_str(handler_ctx->mrb, value);
+    if (handler_ctx->mrb->exc != NULL)
+        return -1;
+
+    /* call the callback, splitting the values with '\n' */
+    const char *vstart = RSTRING_PTR(value), *vend = vstart + RSTRING_LEN(value), *eol;
+    while (1) {
+        for (eol = vstart; eol != vend; ++eol)
+            if (*eol == '\n')
+                break;
+        if (cb(handler_ctx, h2o_iovec_init(RSTRING_PTR(name), RSTRING_LEN(name)), h2o_iovec_init(vstart, eol - vstart), cb_data) !=
+            0)
+            return -1;
+        if (eol == vend)
+            break;
+        vstart = eol + 1;
+    }
+
+    return 0;
+}
+
+int h2o_mruby_iterate_headers(h2o_mruby_context_t *handler_ctx, mrb_value headers,
+                              int (*cb)(h2o_mruby_context_t *, h2o_iovec_t, h2o_iovec_t, void *), void *cb_data)
+{
+    mrb_state *mrb = handler_ctx->mrb;
+
+    if (!(mrb_hash_p(headers) || mrb_array_p(headers))) {
+        headers = h2o_mruby_each_to_array(handler_ctx, headers);
+        if (mrb->exc != NULL)
+            return -1;
+        assert(mrb_array_p(headers));
+    }
+
+    if (mrb_hash_p(headers)) {
+        mrb_value keys = mrb_hash_keys(mrb, headers);
+        mrb_int i, len = mrb_ary_len(mrb, keys);
+        for (i = 0; i != len; ++i) {
+            mrb_value k = mrb_ary_entry(keys, i);
+            mrb_value v = mrb_hash_get(mrb, headers, k);
+            if (iterate_headers_handle_pair(handler_ctx, k, v, cb, cb_data) != 0)
+                return -1;
+        }
+    } else {
+        assert(mrb_array_p(headers));
+        mrb_int i, len = mrb_ary_len(mrb, headers);
+        for (i = 0; i != len; ++i) {
+            mrb_value pair = mrb_ary_entry(headers, i);
+            if (!mrb_array_p(pair)) {
+                mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "array element of headers MUST by an array"));
+                return -1;
+            }
+            if (iterate_headers_handle_pair(handler_ctx, mrb_ary_entry(pair, 0), mrb_ary_entry(pair, 1), cb, cb_data) != 0)
+                return -1;
+        }
+    }
+
+    return 0;
 }

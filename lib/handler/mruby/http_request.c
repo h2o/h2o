@@ -29,7 +29,7 @@
 struct st_h2o_mruby_http_request_context_t {
     h2o_req_t *req;
     h2o_mruby_context_t *handler_ctx;
-    h2o_iovec_t req_buf;
+    h2o_buffer_t *req_buf;
     struct {
         int status;
         H2O_VECTOR(struct phr_header) headers;
@@ -116,59 +116,96 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
         return NULL;
     }
 
-    *reqbufs = &ctx->req_buf;
+    *reqbufs = h2o_mem_alloc_pool(&ctx->req->pool, sizeof(**reqbufs));
+    **reqbufs = h2o_iovec_init(ctx->req_buf->bytes, ctx->req_buf->size);
     *reqbufcnt = 1;
-    *method_is_head = ctx->req_buf.len >= 5 && memcmp(ctx->req_buf.base, "HEAD ", 5) == 0;
+    *method_is_head = ctx->req_buf->size >= 5 && memcmp(ctx->req_buf->bytes, "HEAD ", 5) == 0;
     return on_head;
 }
 
-static h2o_iovec_t build_request(h2o_mem_pool_t *pool, h2o_iovec_t method, const h2o_url_t *url)
+static inline void append_to_buffer(h2o_buffer_t **buf, const void *src, size_t len)
 {
-    h2o_iovec_t buf;
-    buf.len = method.len + url->path.len + url->authority.len + sizeof("  HTTP/1.1\r\nHost: \r\n\r\n") - 1;
-    buf.base = h2o_mem_alloc(buf.len + 1);
+    memcpy((*buf)->bytes + (*buf)->size, src, len);
+    (*buf)->size += len;
+}
 
-    sprintf(buf.base, "%.*s %.*s HTTP/1.1\r\nHost: %.*s\r\n\r\n", (int)method.len, method.base, (int)url->path.len, url->path.base,
-            (int)url->authority.len, url->authority.base);
+static int flatten_request_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t name, h2o_iovec_t value, void *_req_buf)
+{
+    h2o_buffer_t **req_buf = _req_buf;
 
-    return buf;
+    h2o_buffer_reserve(req_buf, name.len + value.len + sizeof(": \r\n") - 1);
+    append_to_buffer(req_buf, name.base, name.len);
+    append_to_buffer(req_buf, H2O_STRLIT(": "));
+    append_to_buffer(req_buf, value.base, value.len);
+    append_to_buffer(req_buf, H2O_STRLIT("\r\n"));
+
+    return 0;
 }
 
 mrb_value h2o_mruby_http_request_callback(h2o_req_t *req, h2o_mruby_context_t *handler_ctx, mrb_value input)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = h2o_mem_alloc_pool(&req->pool, sizeof(*ctx));
     mrb_state *mrb = handler_ctx->mrb;
-    mrb_value method, t;
     h2o_url_t url;
 
     ctx->req = req;
     ctx->handler_ctx = handler_ctx;
+    h2o_buffer_init(&ctx->req_buf, &h2o_socket_buffer_prototype);
 
-    /* parse input */
-    if (!mrb_array_p(input))
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "http_request: unexpected input");
-    /* method */
-    method = mrb_str_to_str(mrb, mrb_ary_entry(input, 0));
-    if (mrb->exc != NULL)
+    if (!mrb_array_p(input)) {
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "http_request: unexpected input"));
         goto RaiseException;
-    /* uri */
-    t = mrb_str_to_str(mrb, mrb_ary_entry(input, 1));
-    if (mrb->exc != NULL)
-        goto RaiseException;
-    h2o_iovec_t urlstr = h2o_strdup(&req->pool, RSTRING_PTR(t), RSTRING_LEN(t));
-    if (h2o_url_parse(urlstr.base, urlstr.len, &url) != 0)
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "invaild URL");
-    if (url.scheme != &H2O_URL_SCHEME_HTTP)
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "scheme is not HTTP");
-    /* TODO handle headers and body */
+    }
+
+    { /* method */
+        mrb_value method = mrb_str_to_str(mrb, mrb_ary_entry(input, 0));
+        if (mrb->exc != NULL)
+            goto RaiseException;
+        h2o_buffer_reserve(&ctx->req_buf, RSTRING_LEN(method) + 1);
+        append_to_buffer(&ctx->req_buf, RSTRING_PTR(method), RSTRING_LEN(method));
+        append_to_buffer(&ctx->req_buf, H2O_STRLIT(" "));
+    }
+    { /* uri */
+        mrb_value t = mrb_str_to_str(mrb, mrb_ary_entry(input, 1));
+        if (mrb->exc != NULL)
+            goto RaiseException;
+        h2o_iovec_t urlstr = h2o_strdup(&req->pool, RSTRING_PTR(t), RSTRING_LEN(t));
+        if (h2o_url_parse(urlstr.base, urlstr.len, &url) != 0) {
+            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "invaild URL"));
+            goto RaiseException;
+        }
+        if (url.scheme != &H2O_URL_SCHEME_HTTP) {
+            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "scheme is not HTTP"));
+            goto RaiseException;
+        }
+        h2o_buffer_reserve(&ctx->req_buf,
+                           url.path.len + url.authority.len + sizeof(" HTTP/1.1\r\nConnection: close\r\nHost: \r\n") - 1);
+        append_to_buffer(&ctx->req_buf, url.path.base, url.path.len);
+        append_to_buffer(&ctx->req_buf, H2O_STRLIT(" HTTP/1.1\r\nConnection: close\r\nHost: "));
+        append_to_buffer(&ctx->req_buf, url.authority.base, url.authority.len);
+        append_to_buffer(&ctx->req_buf, H2O_STRLIT("\r\n"));
+    }
+    { /* headers */
+        mrb_value headers = mrb_ary_entry(input, 2);
+        if (!mrb_nil_p(headers)) {
+            if (h2o_mruby_iterate_headers(handler_ctx, headers, flatten_request_header, &ctx->req_buf) != 0)
+                goto RaiseException;
+        }
+    }
+    h2o_buffer_reserve(&ctx->req_buf, 2);
+    append_to_buffer(&ctx->req_buf, H2O_STRLIT("\r\n"));
+    /* TODO handle body */
 
     /* build request and connect */
-    ctx->req_buf = build_request(&req->pool, h2o_iovec_init(RSTRING_PTR(method), RSTRING_LEN(method)), &url);
+    h2o_buffer_link_to_pool(ctx->req_buf, &req->pool);
     h2o_http1client_connect(NULL, ctx, &req->conn->ctx->proxy.client_ctx, url.host, h2o_url_get_port(&url), on_connect);
     return mrb_nil_value();
 
 RaiseException:
-    t = mrb_obj_value(mrb->exc);
-    mrb->exc = NULL;
-    return t;
+    h2o_buffer_dispose(&ctx->req_buf);
+    {
+        mrb_value t = mrb_obj_value(mrb->exc);
+        mrb->exc = NULL;
+        return t;
+    }
 }
