@@ -337,11 +337,12 @@ static void on_handler_dispose(h2o_handler_t *_handler)
     free(handler);
 }
 
-static void report_exception(h2o_req_t *req, mrb_state *mrb, mrb_value exc)
+static void report_exception(h2o_req_t *req, mrb_state *mrb)
 {
-    mrb_value obj = mrb_funcall(mrb, exc, "inspect", 0);
+    mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
     struct RString *error = mrb_str_ptr(obj);
     h2o_req_log_error(req, H2O_MRUBY_MODULE_NAME, "mruby raised: %s\n", error->as.heap.ptr);
+    mrb->exc = NULL;
 }
 
 static void stringify_address(h2o_conn_t *conn, socklen_t (*cb)(h2o_conn_t *conn, struct sockaddr *), mrb_state *mrb,
@@ -449,8 +450,7 @@ static int parse_rack_header(h2o_req_t *req, mrb_state *mrb, mrb_value name, mrb
     if (!mrb_string_p(name)) {
         name = mrb_str_to_str(mrb, name);
         if (mrb->exc != NULL) {
-            report_exception(req, mrb, mrb_obj_value(mrb->exc));
-            mrb->exc = NULL;
+            report_exception(req, mrb);
             return -1;
         }
     }
@@ -461,8 +461,7 @@ static int parse_rack_header(h2o_req_t *req, mrb_state *mrb, mrb_value name, mrb
     if (!mrb_string_p(value)) {
         value = mrb_str_to_str(mrb, value);
         if (mrb->exc != NULL) {
-            report_exception(req, mrb, mrb_obj_value(mrb->exc));
-            mrb->exc = NULL;
+            report_exception(req, mrb);
             return -1;
         }
     }
@@ -563,8 +562,7 @@ static int parse_rack_response(h2o_req_t *req, h2o_mruby_context_t *handler_ctx,
     return 0;
 
 GotException:
-    report_exception(req, mrb, mrb_obj_value(mrb->exc));
-    mrb->exc = NULL;
+    report_exception(req, mrb);
     return -1;
 }
 
@@ -608,8 +606,8 @@ void h2o_mruby_run_fiber(h2o_req_t *req, h2o_mruby_context_t *handler_ctx, mrb_v
         switch (status) {
         case H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED:
             assert(mrb_array_p(output));
-            report_exception(req, handler_ctx->mrb, mrb_ary_entry(output, 1));
-            goto SendInternalError;
+            handler_ctx->mrb->exc = mrb_obj_ptr(mrb_ary_entry(output, 1));
+            goto GotException;
         case H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST:
             input = h2o_mruby_http_request_callback(req, handler_ctx, mrb_ary_entry(output, 1));
             if (mrb_nil_p(input))
@@ -649,8 +647,7 @@ void h2o_mruby_run_fiber(h2o_req_t *req, h2o_mruby_context_t *handler_ctx, mrb_v
     return;
 
 GotException:
-    report_exception(req, handler_ctx->mrb, mrb_obj_value(handler_ctx->mrb->exc));
-    handler_ctx->mrb->exc = NULL;
+    report_exception(req, handler_ctx->mrb);
 SendInternalError:
     mrb_gc_arena_restore(handler_ctx->mrb, gc_arena);
     h2o_send_error(req, 500, "Internal Server Error", "Internal Server Error", 0);
