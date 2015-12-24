@@ -23,6 +23,7 @@
 #include <mruby.h>
 #include <mruby/array.h>
 #include <mruby/error.h>
+#include <mruby/hash.h>
 #include <mruby/string.h>
 #include "h2o/mruby_.h"
 
@@ -32,10 +33,12 @@ struct st_h2o_mruby_http_request_context_t {
     h2o_buffer_t *req_buf;
     struct {
         int status;
-        H2O_VECTOR(struct phr_header) headers;
+        struct phr_header *headers;
+        size_t num_headers;
     } resp;
 };
 
+/* precond: headers should be ordered in a way that they are grouped by their names */
 static void post_response(h2o_req_t *req, h2o_mruby_context_t *handler_ctx, int status, const struct phr_header *headers,
                           size_t num_headers, h2o_iovec_t body)
 {
@@ -45,15 +48,22 @@ static void post_response(h2o_req_t *req, h2o_mruby_context_t *handler_ctx, int 
 
     mrb_value resp = mrb_ary_new_capa(mrb, 3);
     mrb_ary_set(mrb, resp, 0, mrb_fixnum_value(status));
-    mrb_value headers_ary = mrb_ary_new_capa(mrb, (mrb_int)num_headers);
+    mrb_value headers_hash = mrb_hash_new_capa(mrb, (mrb_int)num_headers);
     for (i = 0; i < num_headers; ++i) {
-        mrb_value nv = mrb_ary_new_capa(mrb, 2);
-        mrb_ary_set(mrb, nv, 0, mrb_str_new(mrb, headers[i].name, headers[i].name_len));
-        mrb_ary_set(mrb, nv, 1, mrb_str_new(mrb, headers[i].value, headers[i].value_len));
-        mrb_ary_set(mrb, headers_ary, (mrb_int)i, nv);
+        mrb_value k = mrb_str_new(mrb, headers[i].name, headers[i].name_len);
+        mrb_value v = mrb_str_new(mrb, headers[i].value, headers[i].value_len);
+        while (i + 1 < num_headers &&
+               h2o_memis(headers[i].name, headers[i].name_len, headers[i + 1].name, headers[i + 1].name_len)) {
+            ++i;
+            v = mrb_str_cat_lit(mrb, v, "\n");
+            v = mrb_str_cat(mrb, v, headers[i].value, headers[i].value_len);
+        }
+        mrb_hash_set(mrb, headers_hash, k, v);
     }
-    mrb_ary_set(mrb, resp, 1, headers_ary);
-    mrb_ary_set(mrb, resp, 2, mrb_str_new(mrb, body.base, body.len));
+    mrb_ary_set(mrb, resp, 1, headers_hash);
+    mrb_value body_ary = mrb_ary_new_capa(mrb, 1);
+    mrb_ary_set(mrb, body_ary, 0, mrb_str_new(mrb, body.base, body.len));
+    mrb_ary_set(mrb, resp, 2, body_ary);
 
     h2o_mruby_run_fiber(req, handler_ctx, resp, gc_arena, NULL);
 }
@@ -70,9 +80,20 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
     if (errstr != NULL)
-        post_response(ctx->req, ctx->handler_ctx, ctx->resp.status, ctx->resp.headers.entries, ctx->resp.headers.size,
+        post_response(ctx->req, ctx->handler_ctx, ctx->resp.status, ctx->resp.headers, ctx->resp.num_headers,
                       h2o_iovec_init(client->sock->input->bytes, client->sock->input->size));
     return 0;
+}
+
+static int headers_sort_cb(const void *_x, const void *_y)
+{
+    const struct phr_header *x = _x, *y = _y;
+
+    if (x->name_len < y->name_len)
+        return -1;
+    if (x->name_len > y->name_len)
+        return 1;
+    return memcmp(x->name, y->name, x->name_len);
 }
 
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
@@ -87,19 +108,21 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 
     h2o_mem_pool_t *pool = &ctx->req->pool;
     ctx->resp.status = status;
-    memset(&ctx->resp.headers, 0, sizeof(ctx->resp.headers));
-    h2o_vector_reserve(&ctx->req->pool, (void *)&ctx->resp.headers, sizeof(ctx->resp.headers.entries[0]), num_headers);
+    ctx->resp.headers = h2o_mem_alloc_pool(pool, sizeof(*ctx->resp.headers) * num_headers);
+    ctx->resp.num_headers = num_headers;
     size_t i;
     for (i = 0; i != num_headers; ++i) {
-        struct phr_header *dst = ctx->resp.headers.entries + i;
+        struct phr_header *dst = ctx->resp.headers + i;
         dst->name = h2o_strdup(pool, headers[i].name, headers[i].name_len).base;
         dst->name_len = headers[i].name_len;
         dst->value = h2o_strdup(pool, headers[i].value, headers[i].value_len).base;
         dst->value_len = headers[i].value_len;
     }
+    /* sort the headers in a way that they will be group by their names */
+    qsort(ctx->resp.headers, num_headers, sizeof(ctx->resp.headers[0]), headers_sort_cb);
 
     if (errstr == h2o_http1client_error_is_eos) {
-        post_response(ctx->req, ctx->handler_ctx, ctx->resp.status, ctx->resp.headers.entries, ctx->resp.headers.size,
+        post_response(ctx->req, ctx->handler_ctx, ctx->resp.status, ctx->resp.headers, ctx->resp.num_headers,
                       h2o_iovec_init(NULL, 0));
         return NULL;
     }
