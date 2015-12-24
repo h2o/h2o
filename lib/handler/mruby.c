@@ -449,9 +449,7 @@ static int handle_response_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
 {
     h2o_req_t *req = _req;
 
-    /* convert name to lowercase */
-    name = h2o_strdup(&req->pool, name.base, name.len);
-    h2o_strtolower(name.base, name.len);
+    /* note: name of the header is lowercased by http1client */
 
     if (h2o_memis(name.base, name.len, H2O_STRLIT("link")) && h2o_puth_path_in_link_header(req, value.base, value.len)) {
         /* do not send the link header that is going to be pushed */
