@@ -356,7 +356,7 @@ ELSE (WITH_BUNDLED_SSL)
     ENDIF (OPENSSL_FOUND)
 ENDIF (WITH_BUNDLED_SSL)
 IF (WITH_MRUBY)
-    TARGET_INCLUDE_DIRECTORIES(h2o BEFORE PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby/include)
+    TARGET_INCLUDE_DIRECTORIES(h2o BEFORE PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby/include ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby-input-stream/src)
     # note: the paths need to be determined before libmruby.flags.mak is generated
     TARGET_LINK_LIBRARIES(h2o
         "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/lib/libmruby.a"
