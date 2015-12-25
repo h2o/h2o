@@ -7,6 +7,13 @@
 #ifndef MRUBYCONF_H
 #define MRUBYCONF_H
 
+#include <limits.h>
+#include <stdint.h>
+
+#if UINT64_MAX == SIZE_MAX
+#define MRB_INT64
+#endif
+
 /* configuration options: */
 /* add -DMRB_USE_FLOAT to use float instead of double for floating point numbers */
 //#define MRB_USE_FLOAT
