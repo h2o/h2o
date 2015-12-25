@@ -30,6 +30,7 @@
 struct st_h2o_mruby_http_request_context_t {
     h2o_req_t *req;
     h2o_mruby_context_t *handler_ctx;
+    mrb_value receiver;
     h2o_buffer_t *req_buf;
     struct {
         int status;
@@ -39,8 +40,8 @@ struct st_h2o_mruby_http_request_context_t {
 };
 
 /* precond: headers should be ordered in a way that they are grouped by their names */
-static void post_response(h2o_req_t *req, h2o_mruby_context_t *handler_ctx, int status, const struct phr_header *headers,
-                          size_t num_headers, h2o_iovec_t body)
+static void post_response(h2o_req_t *req, h2o_mruby_context_t *handler_ctx, mrb_value receiver, int status,
+                          const struct phr_header *headers, size_t num_headers, h2o_iovec_t body)
 {
     mrb_state *mrb = handler_ctx->mrb;
     mrb_int gc_arena = mrb_gc_arena_save(mrb);
@@ -65,14 +66,15 @@ static void post_response(h2o_req_t *req, h2o_mruby_context_t *handler_ctx, int 
     mrb_ary_set(mrb, body_ary, 0, mrb_str_new(mrb, body.base, body.len));
     mrb_ary_set(mrb, resp, 2, body_ary);
 
-    h2o_mruby_run_fiber(req, handler_ctx, resp, gc_arena, NULL);
+    h2o_mruby_run_fiber(req, handler_ctx, receiver, resp, gc_arena, NULL);
 }
 
-static void post_error(h2o_req_t *req, h2o_mruby_context_t *handler_ctx, const char *errstr)
+static void post_error(h2o_req_t *req, h2o_mruby_context_t *handler_ctx, mrb_value receiver, const char *errstr)
 {
     static const struct phr_header headers[1] = {{H2O_STRLIT("content-type"), H2O_STRLIT("text/plain; charset=utf-8")}};
 
-    post_response(req, handler_ctx, 500, headers, sizeof(headers) / sizeof(headers[0]), h2o_iovec_init(errstr, strlen(errstr)));
+    post_response(req, handler_ctx, receiver, 500, headers, sizeof(headers) / sizeof(headers[0]),
+                  h2o_iovec_init(errstr, strlen(errstr)));
 }
 
 static int on_body(h2o_http1client_t *client, const char *errstr)
@@ -80,7 +82,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
     if (errstr != NULL)
-        post_response(ctx->req, ctx->handler_ctx, ctx->resp.status, ctx->resp.headers, ctx->resp.num_headers,
+        post_response(ctx->req, ctx->handler_ctx, ctx->receiver, ctx->resp.status, ctx->resp.headers, ctx->resp.num_headers,
                       h2o_iovec_init(client->sock->input->bytes, client->sock->input->size));
     return 0;
 }
@@ -102,7 +104,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
     if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
-        post_error(ctx->req, ctx->handler_ctx, errstr);
+        post_error(ctx->req, ctx->handler_ctx, ctx->receiver, errstr);
         return NULL;
     }
 
@@ -122,7 +124,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     qsort(ctx->resp.headers, num_headers, sizeof(ctx->resp.headers[0]), headers_sort_cb);
 
     if (errstr == h2o_http1client_error_is_eos) {
-        post_response(ctx->req, ctx->handler_ctx, ctx->resp.status, ctx->resp.headers, ctx->resp.num_headers,
+        post_response(ctx->req, ctx->handler_ctx, ctx->receiver, ctx->resp.status, ctx->resp.headers, ctx->resp.num_headers,
                       h2o_iovec_init(NULL, 0));
         return NULL;
     }
@@ -135,7 +137,7 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
     if (errstr != NULL) {
-        post_error(ctx->req, ctx->handler_ctx, errstr);
+        post_error(ctx->req, ctx->handler_ctx, ctx->receiver, errstr);
         return NULL;
     }
 
@@ -165,7 +167,7 @@ static int flatten_request_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
     return 0;
 }
 
-mrb_value h2o_mruby_http_request_callback(h2o_req_t *req, h2o_mruby_context_t *handler_ctx, mrb_value input)
+mrb_value h2o_mruby_http_request_callback(h2o_req_t *req, h2o_mruby_context_t *handler_ctx, mrb_value receiver, mrb_value input)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = h2o_mem_alloc_pool(&req->pool, sizeof(*ctx));
     mrb_state *mrb = handler_ctx->mrb;
@@ -173,6 +175,7 @@ mrb_value h2o_mruby_http_request_callback(h2o_req_t *req, h2o_mruby_context_t *h
 
     ctx->req = req;
     ctx->handler_ctx = handler_ctx;
+    ctx->receiver = receiver;
     h2o_buffer_init(&ctx->req_buf, &h2o_socket_buffer_prototype);
 
     if (!mrb_array_p(input)) {
