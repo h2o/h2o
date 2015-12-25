@@ -30,6 +30,7 @@
 #include <mruby/hash.h>
 #include <mruby/string.h>
 #include <mruby/variable.h>
+#include <mruby_input_stream.h>
 #include "h2o.h"
 #include "h2o/mruby_.h"
 
@@ -308,8 +309,6 @@ static void stringify_address(h2o_conn_t *conn, socklen_t (*cb)(h2o_conn_t *conn
         *port = mrb_str_new(mrb, buf, l);
     }
 }
-
-mrb_value mrb_input_stream_value(mrb_state *mrb, char *base, mrb_int len);
 
 static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value constants)
 {
