@@ -29,7 +29,12 @@
 
 struct st_h2o_mruby_http_request_context_t {
     h2o_mruby_request_t *rreq;
-    h2o_buffer_t *req_buf;
+    struct {
+        h2o_buffer_t *buf;
+        h2o_iovec_t body; /* body.base != NULL indicates that post content exists (and the length MAY be zero) */
+        int method_is_head : 1;
+        int has_transfer_encoding : 1;
+    } req;
     struct {
         int status;
         struct phr_header *headers;
@@ -137,10 +142,12 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
         return NULL;
     }
 
-    *reqbufs = h2o_mem_alloc_pool(&ctx->rreq->req->pool, sizeof(**reqbufs));
-    **reqbufs = h2o_iovec_init(ctx->req_buf->bytes, ctx->req_buf->size);
+    *reqbufs = h2o_mem_alloc_pool(&ctx->rreq->req->pool, sizeof(**reqbufs) * 2);
+    **reqbufs = h2o_iovec_init(ctx->req.buf->bytes, ctx->req.buf->size);
     *reqbufcnt = 1;
-    *method_is_head = ctx->req_buf->size >= 5 && memcmp(ctx->req_buf->bytes, "HEAD ", 5) == 0;
+    if (ctx->req.body.base != NULL)
+        (*reqbufs)[(*reqbufcnt)++] = ctx->req.body;
+    *method_is_head = ctx->req.method_is_head;
     return on_head;
 }
 
@@ -150,15 +157,21 @@ static inline void append_to_buffer(h2o_buffer_t **buf, const void *src, size_t 
     (*buf)->size += len;
 }
 
-static int flatten_request_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t name, h2o_iovec_t value, void *_req_buf)
+static int flatten_request_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t name, h2o_iovec_t value, void *_ctx)
 {
-    h2o_buffer_t **req_buf = _req_buf;
+    struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
 
-    h2o_buffer_reserve(req_buf, name.len + value.len + sizeof(": \r\n") - 1);
-    append_to_buffer(req_buf, name.base, name.len);
-    append_to_buffer(req_buf, H2O_STRLIT(": "));
-    append_to_buffer(req_buf, value.base, value.len);
-    append_to_buffer(req_buf, H2O_STRLIT("\r\n"));
+    if (h2o_lcstris(name.base, name.len, H2O_STRLIT("content-length"))) {
+        return 0; /* ignored */
+    } else if (h2o_lcstris(name.base, name.len, H2O_STRLIT("transfer-encoding"))) {
+        ctx->req.has_transfer_encoding = 1;
+    }
+
+    h2o_buffer_reserve(&ctx->req.buf, name.len + value.len + sizeof(": \r\n") - 1);
+    append_to_buffer(&ctx->req.buf, name.base, name.len);
+    append_to_buffer(&ctx->req.buf, H2O_STRLIT(": "));
+    append_to_buffer(&ctx->req.buf, value.base, value.len);
+    append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
 
     return 0;
 }
@@ -170,7 +183,10 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_request_t *rreq, mrb_value i
     h2o_url_t url;
 
     ctx->rreq = rreq;
-    h2o_buffer_init(&ctx->req_buf, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&ctx->req.buf, &h2o_socket_buffer_prototype);
+    ctx->req.body = h2o_iovec_init(NULL, 0);
+    ctx->req.method_is_head = 0;
+    ctx->req.has_transfer_encoding = 0;
 
     if (!mrb_array_p(input)) {
         mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "http_request: unexpected input"));
@@ -181,9 +197,11 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_request_t *rreq, mrb_value i
         mrb_value method = mrb_str_to_str(mrb, mrb_ary_entry(input, 0));
         if (mrb->exc != NULL)
             goto RaiseException;
-        h2o_buffer_reserve(&ctx->req_buf, RSTRING_LEN(method) + 1);
-        append_to_buffer(&ctx->req_buf, RSTRING_PTR(method), RSTRING_LEN(method));
-        append_to_buffer(&ctx->req_buf, H2O_STRLIT(" "));
+        h2o_buffer_reserve(&ctx->req.buf, RSTRING_LEN(method) + 1);
+        append_to_buffer(&ctx->req.buf, RSTRING_PTR(method), RSTRING_LEN(method));
+        append_to_buffer(&ctx->req.buf, H2O_STRLIT(" "));
+        if (h2o_memis(RSTRING_PTR(method), RSTRING_LEN(method), H2O_STRLIT("HEAD")))
+            ctx->req.method_is_head = 1;
     }
     { /* uri */
         mrb_value t = mrb_str_to_str(mrb, mrb_ary_entry(input, 1));
@@ -198,31 +216,57 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_request_t *rreq, mrb_value i
             mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "scheme is not HTTP"));
             goto RaiseException;
         }
-        h2o_buffer_reserve(&ctx->req_buf,
+        h2o_buffer_reserve(&ctx->req.buf,
                            url.path.len + url.authority.len + sizeof(" HTTP/1.1\r\nConnection: close\r\nHost: \r\n") - 1);
-        append_to_buffer(&ctx->req_buf, url.path.base, url.path.len);
-        append_to_buffer(&ctx->req_buf, H2O_STRLIT(" HTTP/1.1\r\nConnection: close\r\nHost: "));
-        append_to_buffer(&ctx->req_buf, url.authority.base, url.authority.len);
-        append_to_buffer(&ctx->req_buf, H2O_STRLIT("\r\n"));
+        append_to_buffer(&ctx->req.buf, url.path.base, url.path.len);
+        append_to_buffer(&ctx->req.buf, H2O_STRLIT(" HTTP/1.1\r\nConnection: close\r\nHost: "));
+        append_to_buffer(&ctx->req.buf, url.authority.base, url.authority.len);
+        append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
     }
     { /* headers */
         mrb_value headers = mrb_ary_entry(input, 2);
         if (!mrb_nil_p(headers)) {
-            if (h2o_mruby_iterate_headers(rreq->ctx, headers, flatten_request_header, &ctx->req_buf) != 0)
+            if (h2o_mruby_iterate_headers(rreq->ctx, headers, flatten_request_header, ctx) != 0)
                 goto RaiseException;
         }
     }
-    h2o_buffer_reserve(&ctx->req_buf, 2);
-    append_to_buffer(&ctx->req_buf, H2O_STRLIT("\r\n"));
-    /* TODO handle body */
+    { /* body */
+        mrb_value body = mrb_ary_entry(input, 3);
+        if (!mrb_nil_p(body)) {
+            if (mrb_obj_eq(mrb, body, rreq->rack_input)) {
+                /* fast path (FIXME respect seek) */
+                ctx->req.body = rreq->req->entity;
+            } else {
+                if (!mrb_string_p(body)) {
+                    body = mrb_funcall(mrb, body, "read", 0);
+                    if (mrb->exc != NULL)
+                        goto RaiseException;
+                    if (!mrb_string_p(body)) {
+                        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "body.read did not return string"));
+                        goto RaiseException;
+                    }
+                }
+                ctx->req.body = h2o_strdup(&ctx->rreq->req->pool, RSTRING_PTR(body), RSTRING_LEN(body));
+            }
+            if (!ctx->req.has_transfer_encoding) {
+                char buf[64];
+                size_t l = (size_t)sprintf(buf, "content-length: %zu\r\n", ctx->req.body.len);
+                h2o_buffer_reserve(&ctx->req.buf, l);
+                append_to_buffer(&ctx->req.buf, buf, l);
+            }
+        }
+    }
+
+    h2o_buffer_reserve(&ctx->req.buf, 2);
+    append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
 
     /* build request and connect */
-    h2o_buffer_link_to_pool(ctx->req_buf, &rreq->req->pool);
+    h2o_buffer_link_to_pool(ctx->req.buf, &rreq->req->pool);
     h2o_http1client_connect(NULL, ctx, &rreq->req->conn->ctx->proxy.client_ctx, url.host, h2o_url_get_port(&url), on_connect);
     return mrb_nil_value();
 
 RaiseException:
-    h2o_buffer_dispose(&ctx->req_buf);
+    h2o_buffer_dispose(&ctx->req.buf);
     {
         mrb_value t = mrb_obj_value(mrb->exc);
         mrb->exc = NULL;
