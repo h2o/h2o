@@ -3,7 +3,22 @@
 #include "mruby/value.h"
 #include "mruby/data.h"
 #include "mruby/string.h"
-#include "input_stream.h"
+#include "mruby_input_stream.h"
+
+typedef struct mrb_input_stream_t {
+  char *base;
+  mrb_int len;
+  mrb_int pos;
+} mrb_input_stream_t;
+
+static mrb_input_stream_t*
+mrb_input_stream_create(mrb_state *mrb, char *base, mrb_int len);
+
+static void
+mrb_mruby_input_stream_free(mrb_state *mrb, void *ptr);
+
+static mrb_int
+seek_char(mrb_input_stream_t *stream, const char chr);
 
 const static struct mrb_data_type mrb_input_stream_type = {
   "InputStream",
@@ -75,7 +90,7 @@ mrb_input_stream_value(mrb_state *mrb, char *base, mrb_int len)
   return mrb_obj_value(d);
 }
 
-mrb_value
+static mrb_value
 mrb_input_stream_gets(mrb_state *mrb, mrb_value self)
 {
   mrb_input_stream_t *stream = DATA_PTR(self);
@@ -96,13 +111,13 @@ seek_char(mrb_input_stream_t *stream, char chr){
   char *base = stream->base;
   size_t len = stream->len;
   mrb_int pos = stream->pos;
+  const char *end = base + len;
+  char *start = base + pos;
+  char *s = start;
 
   if (pos >= len) {
     return -1;
   }
-  const char *end = base + len;
-  char *start = base + pos;
-  char *s = start;
 
   while (s < end) {
     if (*s == chr) {
@@ -113,7 +128,7 @@ seek_char(mrb_input_stream_t *stream, char chr){
   return (s - start);
 }
 
-mrb_value
+static mrb_value
 mrb_input_stream_read(mrb_state *mrb, mrb_value self)
 {
   mrb_int len;
@@ -144,7 +159,7 @@ mrb_input_stream_read(mrb_state *mrb, mrb_value self)
   }
 }
 
-mrb_value
+static mrb_value
 mrb_input_stream_rewind(mrb_state *mrb, mrb_value self)
 {
   mrb_input_stream_t *stream = DATA_PTR(self);
@@ -153,11 +168,11 @@ mrb_input_stream_rewind(mrb_state *mrb, mrb_value self)
 }
 
 
-mrb_value
+static mrb_value
 mrb_input_stream_byteindex(mrb_state *mrb, mrb_value self)
 {
-  mrb_int chr;
-  mrb_int n;
+  mrb_input_stream_t *stream = DATA_PTR(self);
+  mrb_int chr, n, len;
 
   n = mrb_get_args(mrb, "i", &chr);
   if (n != 1) {
@@ -167,9 +182,7 @@ mrb_input_stream_byteindex(mrb_state *mrb, mrb_value self)
     mrb_raise(mrb, E_ARGUMENT_ERROR, "index should be a byte (0 - 255)");
   }
 
-  mrb_input_stream_t *stream = DATA_PTR(self);
-
-  mrb_int len = seek_char(stream, chr);
+  len = seek_char(stream, chr);
   if (len < 0) {
     return mrb_nil_value();
   }
