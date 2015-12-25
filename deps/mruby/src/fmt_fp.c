@@ -33,8 +33,8 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <float.h>
 #include <ctype.h>
 
-#include "mruby.h"
-#include "mruby/string.h"
+#include <mruby.h>
+#include <mruby/string.h>
 
 struct fmt_args {
   mrb_state *mrb;
@@ -90,11 +90,6 @@ fmt_u(uint32_t x, char *s)
 typedef char compiler_defines_long_double_incorrectly[9-(int)sizeof(long double)];
 #endif
 
-#if ((defined(__CYGWIN__) || defined(__NetBSD__) || defined(mips)) && !defined(__linux__)) || defined(__android__)
-#undef frexpl
-#define frexpl frexp
-#endif
-
 static int
 fmt_fp(struct fmt_args *f, long double y, int w, int p, int fl, int t)
 {
@@ -127,7 +122,7 @@ fmt_fp(struct fmt_args *f, long double y, int w, int p, int fl, int t)
     return MAX(w, 3+pl);
   }
 
-  y = frexpl(y, &e2) * 2;
+  y = frexp((double)y, &e2) * 2;
   if (y) e2--;
 
   if ((t|32)=='a') {

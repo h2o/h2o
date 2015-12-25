@@ -1,9 +1,9 @@
 #include <string.h>
-#include "mruby.h"
-#include "mruby/array.h"
-#include "mruby/class.h"
-#include "mruby/string.h"
-#include "mruby/range.h"
+#include <mruby.h>
+#include <mruby/array.h>
+#include <mruby/class.h>
+#include <mruby/string.h>
+#include <mruby/range.h>
 
 static mrb_value
 mrb_str_getbyte(mrb_state *mrb, mrb_value str)
@@ -245,6 +245,51 @@ mrb_str_chr(mrb_state *mrb, mrb_value self)
   return mrb_str_substr(mrb, self, 0, 1);
 }
 
+static mrb_value
+mrb_fixnum_chr(mrb_state *mrb, mrb_value num)
+{
+  mrb_int cp = mrb_fixnum(num);
+#ifdef MRB_UTF8_STRING
+  char utf8[4];
+  mrb_int len;
+
+  if (cp < 0 || 0x10FFFF < cp) {
+    mrb_raisef(mrb, E_RANGE_ERROR, "%S out of char range", num);
+  }
+  if (cp < 0x80) {
+    utf8[0] = (char)cp;
+    len = 1;
+  }
+  else if (cp < 0x800) {
+    utf8[0] = (char)(0xC0 | (cp >> 6));
+    utf8[1] = (char)(0x80 | (cp & 0x3F));
+    len = 2;
+  }
+  else if (cp < 0x10000) {
+    utf8[0] = (char)(0xE0 |  (cp >> 12));
+    utf8[1] = (char)(0x80 | ((cp >>  6) & 0x3F));
+    utf8[2] = (char)(0x80 | ( cp        & 0x3F));
+    len = 3;
+  }
+  else {
+    utf8[0] = (char)(0xF0 |  (cp >> 18));
+    utf8[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+    utf8[2] = (char)(0x80 | ((cp >>  6) & 0x3F));
+    utf8[3] = (char)(0x80 | ( cp        & 0x3F));
+    len = 4;
+  }
+  return mrb_str_new(mrb, utf8, len);
+#else
+  char c;
+
+  if (cp < 0 || 0xff < cp) {
+    mrb_raisef(mrb, E_RANGE_ERROR, "%S out of char range", num);
+  }
+  c = (char)cp;
+  return mrb_str_new(mrb, &c, 1);
+#endif
+}
+
 /*
  *  call-seq:
  *     string.lines    ->  array of string
@@ -422,6 +467,72 @@ mrb_str_prepend(mrb_state *mrb, mrb_value self)
   return self;
 }
 
+#ifdef MRB_UTF8_STRING
+static const char utf8len_codepage_zero[256] =
+{
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+  3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,0,0,0,0,0,0,0,0,0,0,0,
+};
+
+static mrb_int
+utf8code(unsigned char* p)
+{
+  mrb_int len;
+
+  if (p[0] < 0x80)
+    return p[0];
+
+  len = utf8len_codepage_zero[p[0]];
+  if (len > 1 && (p[1] & 0xc0) == 0x80) {
+    if (len == 2)
+      return ((p[0] & 0x1f) << 6) + (p[1] & 0x3f);
+    if ((p[2] & 0xc0) == 0x80) {
+      if (len == 3)
+        return ((p[0] & 0x0f) << 12) + ((p[1] & 0x3f) << 6)
+          + (p[2] & 0x3f);
+      if ((p[3] & 0xc0) == 0x80) {
+        if (len == 4)
+          return ((p[0] & 0x07) << 18) + ((p[1] & 0x3f) << 12)
+            + ((p[2] & 0x3f) << 6) + (p[3] & 0x3f);
+        if ((p[4] & 0xc0) == 0x80) {
+          if (len == 5)
+            return ((p[0] & 0x03) << 24) + ((p[1] & 0x3f) << 18)
+              + ((p[2] & 0x3f) << 12) + ((p[3] & 0x3f) << 6)
+              + (p[4] & 0x3f);
+          if ((p[5] & 0xc0) == 0x80 && len == 6)
+            return ((p[0] & 0x01) << 30) + ((p[1] & 0x3f) << 24)
+              + ((p[2] & 0x3f) << 18) + ((p[3] & 0x3f) << 12)
+              + ((p[4] & 0x3f) << 6) + (p[5] & 0x3f);
+        }
+      }
+    }
+  }
+  return p[0];
+}
+
+static mrb_value
+mrb_str_ord(mrb_state* mrb, mrb_value str)
+{
+  if (RSTRING_LEN(str) == 0)
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "empty string");
+  return mrb_fixnum_value(utf8code((unsigned char*) RSTRING_PTR(str)));
+}
+#else
+static mrb_value
+mrb_str_ord(mrb_state* mrb, mrb_value str)
+{
+  if (RSTRING_LEN(str) == 0)
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "empty string");
+  return mrb_fixnum_value(RSTRING_PTR(str)[0]);
+}
+#endif
+
 void
 mrb_mruby_string_ext_gem_init(mrb_state* mrb)
 {
@@ -446,6 +557,9 @@ mrb_mruby_string_ext_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, s, "prepend",         mrb_str_prepend,         MRB_ARGS_REQ(1));
   mrb_alias_method(mrb, s, mrb_intern_lit(mrb, "next"), mrb_intern_lit(mrb, "succ"));
   mrb_alias_method(mrb, s, mrb_intern_lit(mrb, "next!"), mrb_intern_lit(mrb, "succ!"));
+  mrb_define_method(mrb, s, "ord", mrb_str_ord, MRB_ARGS_NONE());
+
+  mrb_define_method(mrb, mrb->fixnum_class, "chr", mrb_fixnum_chr, MRB_ARGS_NONE());
 }
 
 void

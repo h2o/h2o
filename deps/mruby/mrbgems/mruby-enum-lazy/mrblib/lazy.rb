@@ -1,30 +1,29 @@
-# = Enumerable#lazy implementation
-#
-# Enumerable#lazy returns an instance of Enumerable::Lazy.
-# You can use it just like as normal Enumerable object,
-# except these methods act as 'lazy':
-#
-#   - map       collect
-#   - select    find_all
-#   - reject
-#   - grep
-#   - drop
-#   - drop_while
-#   - take_while
-#   - flat_map  collect_concat
-#   - zip
-#
-# == Acknowledgements
-#
-#   Based on https://github.com/yhara/enumerable-lazy
-#   Inspired by https://github.com/antimon2/enumerable_lz
-#   http://jp.rubyist.net/magazine/?0034-Enumerable_lz (ja)
-
 module Enumerable
+
+  # = Enumerable#lazy implementation
+  #
+  # Enumerable#lazy returns an instance of Enumerable::Lazy.
+  # You can use it just like as normal Enumerable object,
+  # except these methods act as 'lazy':
+  #
+  #   - map       collect
+  #   - select    find_all
+  #   - reject
+  #   - grep
+  #   - drop
+  #   - drop_while
+  #   - take_while
+  #   - flat_map  collect_concat
+  #   - zip
   def lazy
     Lazy.new(self)
   end
 
+  # == Acknowledgements
+  #
+  #   Based on https://github.com/yhara/enumerable-lazy
+  #   Inspired by https://github.com/antimon2/enumerable_lz
+  #   http://jp.rubyist.net/magazine/?0034-Enumerable_lz (ja)
   class Lazy < Enumerator
     def initialize(obj, &block)
       super(){|yielder|

@@ -29,11 +29,11 @@
 #define MIRB_USING_HISTORY()
 #endif
 
-#include "mruby.h"
-#include "mruby/array.h"
-#include "mruby/proc.h"
-#include "mruby/compile.h"
-#include "mruby/string.h"
+#include <mruby.h>
+#include <mruby/array.h>
+#include <mruby/proc.h>
+#include <mruby/compile.h>
+#include <mruby/string.h>
 
 #ifdef ENABLE_READLINE
 
@@ -194,6 +194,7 @@ is_code_block_open(struct mrb_parser_state *parser)
 }
 
 struct _args {
+  FILE *rfp;
   mrb_bool verbose      : 1;
   int argc;
   char** argv;
@@ -251,12 +252,30 @@ parse_args(mrb_state *mrb, int argc, char **argv, struct _args *args)
       return EXIT_FAILURE;
     }
   }
+
+  if (args->rfp == NULL) {
+    if (*argv != NULL) {
+      args->rfp = fopen(argv[0], "r");
+      if (args->rfp == NULL) {
+        printf("Cannot open program file. (%s)\n", *argv);
+        return EXIT_FAILURE;
+      }
+      argc--; argv++;
+    }
+  }
+  args->argv = (char **)mrb_realloc(mrb, args->argv, sizeof(char*) * (argc + 1));
+  memcpy(args->argv, argv, (argc+1) * sizeof(char*));
+  args->argc = argc;
+
   return EXIT_SUCCESS;
 }
 
 static void
 cleanup(mrb_state *mrb, struct _args *args)
 {
+  if (args->rfp)
+    fclose(args->rfp);
+  mrb_free(mrb, args->argv);
   mrb_close(mrb);
 }
 
@@ -314,7 +333,7 @@ main(int argc, char **argv)
   char last_code_line[1024] = { 0 };
 #ifndef ENABLE_READLINE
   int last_char;
-  int char_index;
+  size_t char_index;
 #else
   char *history_path;
 #endif
@@ -323,7 +342,9 @@ main(int argc, char **argv)
   mrb_state *mrb;
   mrb_value result;
   struct _args args;
+  mrb_value ARGV;
   int n;
+  int i;
   mrb_bool code_block_open = FALSE;
   int ai;
   unsigned int stack_keep = 0;
@@ -334,7 +355,6 @@ main(int argc, char **argv)
     fputs("Invalid mrb interpreter, exiting mirb\n", stderr);
     return EXIT_FAILURE;
   }
-  mrb_define_global_const(mrb, "ARGV", mrb_ary_new_capa(mrb, 0));
 
   n = parse_args(mrb, argc, argv, &args);
   if (n == EXIT_FAILURE) {
@@ -342,6 +362,16 @@ main(int argc, char **argv)
     usage(argv[0]);
     return n;
   }
+
+  ARGV = mrb_ary_new_capa(mrb, args.argc);
+  for (i = 0; i < args.argc; i++) {
+    char* utf8 = mrb_utf8_from_locale(args.argv[i], -1);
+    if (utf8) {
+      mrb_ary_push(mrb, ARGV, mrb_str_new_cstr(mrb, utf8));
+      mrb_utf8_free(utf8);
+    }
+  }
+  mrb_define_global_const(mrb, "ARGV", ARGV);
 
 #ifdef ENABLE_READLINE
   history_path = get_history_path(mrb);
@@ -366,6 +396,17 @@ main(int argc, char **argv)
   ai = mrb_gc_arena_save(mrb);
 
   while (TRUE) {
+#ifdef ENABLE_READLINE
+    char* line;
+#endif
+    char *utf8;
+
+    if (args.rfp) {
+      if (fgets(last_code_line, sizeof(last_code_line)-1, args.rfp) != NULL)
+        goto done;
+      break;
+    }
+
 #ifndef ENABLE_READLINE
     print_cmdline(code_block_open);
 
@@ -386,7 +427,7 @@ main(int argc, char **argv)
     last_code_line[char_index++] = '\n';
     last_code_line[char_index] = '\0';
 #else
-    char* line = MIRB_READLINE(code_block_open ? "* " : "> ");
+    line = MIRB_READLINE(code_block_open ? "* " : "> ");
     if (line == NULL) {
       printf("\n");
       break;
@@ -400,6 +441,8 @@ main(int argc, char **argv)
     MIRB_ADD_HISTORY(line);
     free(line);
 #endif
+
+done:
 
     if (code_block_open) {
       if (strlen(ruby_code)+strlen(last_code_line) > sizeof(ruby_code)-1) {
@@ -415,17 +458,21 @@ main(int argc, char **argv)
       strcpy(ruby_code, last_code_line);
     }
 
+    utf8 = mrb_utf8_from_locale(ruby_code, -1);
+    if (!utf8) abort();
+
     /* parse code */
     parser = mrb_parser_new(mrb);
     if (parser == NULL) {
       fputs("create parser state error\n", stderr);
       break;
     }
-    parser->s = ruby_code;
-    parser->send = ruby_code + strlen(ruby_code);
+    parser->s = utf8;
+    parser->send = utf8 + strlen(utf8);
     parser->lineno = cxt->lineno;
     mrb_parser_parse(parser, cxt);
     code_block_open = is_code_block_open(parser);
+    mrb_utf8_free(utf8);
 
     if (code_block_open) {
       /* no evaluation of code */

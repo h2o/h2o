@@ -29,11 +29,11 @@ static int set_cloexec(int fd)
     return fcntl(fd, F_SETFD, FD_CLOEXEC) != -1 ? 0 : -1;
 }
 
+/*
+ * note: the socket must be in non-blocking mode, or the call might block while the mutex is being locked
+ */
 int cloexec_accept(int socket, struct sockaddr *addr, socklen_t *addrlen)
 {
-#ifdef __linux__
-    return accept4(socket, addr, addrlen, SOCK_CLOEXEC);
-#else
     int fd = -1;
     pthread_mutex_lock(&cloexec_mutex);
 
@@ -48,7 +48,6 @@ int cloexec_accept(int socket, struct sockaddr *addr, socklen_t *addrlen)
 Exit:
     pthread_mutex_unlock(&cloexec_mutex);
     return fd;
-#endif
 }
 
 int cloexec_pipe(int fds[2])

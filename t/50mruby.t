@@ -92,7 +92,7 @@ EOT
         like $body, qr{"SERVER_PORT":"[0-9]+"}, "REMOTE_PORT";
         like $body, qr{"HTTP_USER_AGENT":"h2o_mruby_test"}, "HTTP_USER_AGENT";
         like $body, qr{"rack.url_scheme":"http"}, "url_scheme";
-        like $body, qr{"server.name":"h2o"}, "server.name";
+        like $body, qr{"SERVER_SOFTWARE":"h2o/[0-9]+\.[0-9]+\.[0-9]+}, "SERVER_SOFTWARE";
     };
     subtest "headers" => sub {
         ($headers, $body) = $fetch->("/headers/");
@@ -162,7 +162,7 @@ hosts:
         file.dir: t/assets/doc_root
 EOT
     my $resp = `nghttp -n --stat https://127.0.0.1:$server->{tls_port}/index.txt`;
-    like $resp, qr{\nresponseEnd\s.*\s/index\.js\n.*\s/index\.txt}is, "receives index.js then /index.txt";
+    like $resp, qr{\nid\s*responseEnd\s.*\s/index\.js\n.*\s/index\.txt}is, "receives index.js then /index.txt";
 };
 
 subtest "infinite-reprocess" => sub {

@@ -4,11 +4,11 @@
 ** See Copyright Notice in mruby.h
 */
 
-#include "mruby.h"
-#include "mruby/class.h"
-#include "mruby/range.h"
-#include "mruby/string.h"
-#include "mruby/array.h"
+#include <mruby.h>
+#include <mruby/class.h>
+#include <mruby/range.h>
+#include <mruby/string.h>
+#include <mruby/array.h>
 
 #define RANGE_CLASS (mrb_class_get(mrb, "Range"))
 

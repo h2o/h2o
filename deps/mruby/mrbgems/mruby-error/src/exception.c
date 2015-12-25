@@ -1,6 +1,6 @@
-#include "mruby.h"
-#include "mruby/throw.h"
-#include "mruby/error.h"
+#include <mruby.h>
+#include <mruby/throw.h>
+#include <mruby/error.h>
 
 MRB_API mrb_value
 mrb_protect(mrb_state *mrb, mrb_func_t body, mrb_value data, mrb_bool *state)

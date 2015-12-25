@@ -1,7 +1,7 @@
 #ifndef MRB_VALUE_ARRAY_H__
 #define MRB_VALUE_ARRAY_H__
 
-#include "mruby.h"
+#include <mruby.h>
 
 static inline void
 value_move(mrb_value *s1, const mrb_value *s2, size_t n)

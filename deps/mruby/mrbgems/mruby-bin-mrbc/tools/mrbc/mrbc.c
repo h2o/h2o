@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "mruby.h"
-#include "mruby/compile.h"
-#include "mruby/dump.h"
-#include "mruby/proc.h"
+#include <mruby.h>
+#include <mruby/compile.h>
+#include <mruby/dump.h>
+#include <mruby/proc.h>
 
 #define RITEBIN_EXT ".mrb"
 #define C_EXT       ".c"

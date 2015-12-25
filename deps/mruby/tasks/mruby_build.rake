@@ -26,8 +26,8 @@ module MRuby
       MRuby::Toolchain.toolchains[@name] = self
     end
 
-    def setup(conf)
-      conf.instance_eval(&@initializer)
+    def setup(conf,params={})
+      conf.instance_exec(conf, params, &@initializer)
     end
 
     def self.load
@@ -158,10 +158,10 @@ EOS
       @enable_bintest
     end
 
-    def toolchain(name)
+    def toolchain(name, params={})
       tc = Toolchain.toolchains[name.to_s]
       fail "Unknown #{name} toolchain" unless tc
-      tc.setup(self)
+      tc.setup(self, params)
       @toolchains.unshift name.to_s
     end
 

@@ -264,6 +264,12 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
             h2o_configurator_errprintf(cmd, key, "invalid key (must be either `host` or `host:port`)");
             return -1;
         }
+        assert(hostname.len != 0);
+        if ((hostname.base[0] == '*' && !(hostname.len == 1 || hostname.base[1] == '.')) ||
+            memchr(hostname.base + 1, '*', hostname.len - 1) != NULL) {
+            h2o_configurator_errprintf(cmd, key, "wildcard (*) can only be used at the start of the hostname");
+            return -1;
+        }
         h2o_configurator_context_t host_ctx = *ctx;
         host_ctx.hostconf = h2o_config_register_host(host_ctx.globalconf, hostname, port);
         host_ctx.mimemap = &host_ctx.hostconf->mimemap;
@@ -623,6 +629,7 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         c->super.enter = on_core_enter;
         c->super.exit = on_core_exit;
         c->vars = c->_vars_stack;
+        c->vars->http2.reprioritize_blocking_assets = 1; /* defaults to ON */
         h2o_configurator_define_command(&c->super, "limit-request-body",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_limit_request_body);
@@ -817,9 +824,7 @@ char *h2o_configurator_get_cmd_path(const char *cmd)
 
     /* obtain root */
     if ((root = getenv("H2O_ROOT")) == NULL) {
-#ifdef H2O_ROOT
-        root = H2O_ROOT;
-#endif
+        root = H2O_TO_STR(H2O_ROOT);
         if (root == NULL)
             goto ReturnOrig;
     }

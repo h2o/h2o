@@ -2,6 +2,7 @@ VPATH=../srcdoc
 OUTPUT=\
     index.html \
     install.html \
+    benchmarks.html \
     configure.html \
     configure/quick_start.html \
     configure/command_options.html \
@@ -10,15 +11,17 @@ OUTPUT=\
     configure/http1_directives.html \
     configure/http2_directives.html \
     configure/access_log_directives.html \
+    configure/errordoc_directives.html \
     configure/expires_directives.html \
     configure/fastcgi_directives.html \
     configure/file_directives.html \
+    configure/gzip_directives.html \
     configure/headers_directives.html \
+    configure/mruby_directives.html \
     configure/proxy_directives.html \
     configure/redirect_directives.html \
     configure/reproxy_directives.html \
     faq.html \
-    vulnerabilities.html \
 
 %.html: %.mt
 	../misc/makedoc.pl $< $@

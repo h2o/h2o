@@ -8,12 +8,12 @@
 #include <stdio.h>
 #include <ctype.h>
 
-#include "mruby.h"
-#include "mruby/dump.h"
-#include "mruby/debug.h"
-#include "mruby/class.h"
-#include "mruby/opcode.h"
-#include "mruby/variable.h"
+#include <mruby.h>
+#include <mruby/dump.h>
+#include <mruby/debug.h>
+#include <mruby/class.h>
+#include <mruby/opcode.h>
+#include <mruby/variable.h>
 
 #include "mrdb.h"
 #include "apibreak.h"

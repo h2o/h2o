@@ -52,6 +52,7 @@
 #endif
 #include "cloexec.h"
 #include "yoml-parser.h"
+#include "neverbleed.h"
 #include "h2o.h"
 #include "h2o/configurator.h"
 #include "h2o/http1.h"
@@ -61,9 +62,6 @@
 #include "h2o/mruby_.h"
 #endif
 #include "standalone.h"
-
-/* simply use a large value, and let the kernel clip it to the internal max */
-#define H2O_SOMAXCONN (65535)
 
 #ifdef TCP_FASTOPEN
 #define H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE 4096
@@ -155,6 +153,8 @@ static struct {
     0,               /* shutdown_requested */
     {},              /* state */
 };
+
+static neverbleed_t *neverbleed = NULL;
 
 static void set_cloexec(int fd)
 {
@@ -354,6 +354,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     long ssl_options = SSL_OP_ALL;
     uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
     unsigned ocsp_max_failures = 3;              /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
+    int use_neverbleed = 1;                      /* enabled by default */
 
     if (!listener_is_new) {
         if (listener->ssl.size != 0 && ssl_node == NULL) {
@@ -406,6 +407,18 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                     ssl_options |= SSL_OP_CIPHER_SERVER_PREFERENCE;
                 } else {
                     h2o_configurator_errprintf(cmd, value, "property of `cipher-preference` must be either of: `client`, `server`");
+                    return -1;
+                }
+                continue;
+            }
+            if (strcmp(key->data.scalar, "neverbleed") == 0) {
+                if (value->type == YOML_TYPE_SCALAR && strcasecmp(value->data.scalar, "ON") == 0) {
+                    /* no need to enable neverbleed for daemon / master */
+                    use_neverbleed = 1;
+                } else if (value->type == YOML_TYPE_SCALAR && strcasecmp(value->data.scalar, "OFF") == 0) {
+                    use_neverbleed = 0;
+                } else {
+                    h2o_configurator_errprintf(cmd, value, "property of `neverbleed` must be either of: `ON`, `OFF");
                     return -1;
                 }
                 continue;
@@ -483,10 +496,36 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         ERR_print_errors_cb(on_openssl_print_errors, stderr);
         goto Error;
     }
-    if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file->data.scalar, SSL_FILETYPE_PEM) != 1) {
-        h2o_configurator_errprintf(cmd, key_file, "failed to load private key file:%s\n", key_file->data.scalar);
-        ERR_print_errors_cb(on_openssl_print_errors, stderr);
-        goto Error;
+    if (use_neverbleed) {
+        /* disable neverbleed in case the process is not going to serve requests */
+        switch (conf.run_mode) {
+        case RUN_MODE_DAEMON:
+        case RUN_MODE_MASTER:
+            use_neverbleed = 0;
+            break;
+        default:
+            break;
+        }
+    }
+    if (use_neverbleed) {
+        char errbuf[NEVERBLEED_ERRBUF_SIZE];
+        if (neverbleed == NULL) {
+            neverbleed = h2o_mem_alloc(sizeof(*neverbleed));
+            if (neverbleed_init(neverbleed, errbuf) != 0) {
+                fprintf(stderr, "%s\n", errbuf);
+                abort();
+            }
+        }
+        if (neverbleed_load_private_key_file(neverbleed, ssl_ctx, key_file->data.scalar, errbuf) != 1) {
+            h2o_configurator_errprintf(cmd, key_file, "failed to load private key file:%s:%s\n", key_file->data.scalar, errbuf);
+            goto Error;
+        }
+    } else {
+        if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file->data.scalar, SSL_FILETYPE_PEM) != 1) {
+            h2o_configurator_errprintf(cmd, key_file, "failed to load private key file:%s\n", key_file->data.scalar);
+            ERR_print_errors_cb(on_openssl_print_errors, stderr);
+            goto Error;
+        }
     }
     if (cipher_suite != NULL && SSL_CTX_set_cipher_list(ssl_ctx, cipher_suite->data.scalar) != 1) {
         h2o_configurator_errprintf(cmd, cipher_suite, "failed to setup SSL cipher suite\n");
@@ -514,10 +553,10 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
 /* setup protocol negotiation methods */
 #if H2O_USE_NPN
-    h2o_ssl_register_npn_protocols(ssl_ctx, h2o_http2_npn_protocols);
+    h2o_ssl_register_npn_protocols(ssl_ctx, h2o_npn_protocols);
 #endif
 #if H2O_USE_ALPN
-    h2o_ssl_register_alpn_protocols(ssl_ctx, h2o_http2_alpn_protocols);
+    h2o_ssl_register_alpn_protocols(ssl_ctx, h2o_alpn_protocols);
 #endif
 
     /* set SNI callback to the first SSL context, when and only when it should be used */
@@ -1050,7 +1089,6 @@ static int popen_annotate_backtrace_symbols(void)
     }
     /* spawn the logger */
     int mapped_fds[] = {pipefds[0], 0,  /* output of the pipe is connected to STDIN of the spawned process */
-                        pipefds[0], -1, /* close pipefds[0] before exec */
                         2,          1,  /* STDOUT of the spawned process in connected to STDERR of h2o */
                         -1};
     if (h2o_spawnp(cmd_fullpath, argv, mapped_fds, 0) == -1) {
@@ -1219,6 +1257,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         update_listener_state(listeners);
         /* run the loop once */
         h2o_evloop_run(conf.threads[thread_index].ctx.loop);
+        h2o_filecache_clear(conf.threads[thread_index].ctx.filecache);
     }
 
     if (thread_index == 0)
@@ -1352,6 +1391,7 @@ static void setup_configurators(void)
 
     h2o_access_log_register_configurator(&conf.globalconf);
     h2o_expires_register_configurator(&conf.globalconf);
+    h2o_errordoc_register_configurator(&conf.globalconf);
     h2o_fastcgi_register_configurator(&conf.globalconf);
     h2o_file_register_configurator(&conf.globalconf);
     h2o_gzip_register_configurator(&conf.globalconf);
@@ -1486,6 +1526,8 @@ int main(int argc, char **argv)
             exit(EX_CONFIG);
         yoml_free(yoml, NULL);
     }
+    /* calculate defaults (note: open file cached is purged once every loop) */
+    conf.globalconf.filecache.capacity = conf.globalconf.http2.max_concurrent_requests_per_connection * 2;
 
     /* check if all the fds passed in by server::starter were bound */
     if (conf.server_starter.fds != NULL) {
@@ -1554,6 +1596,10 @@ int main(int argc, char **argv)
     if (conf.globalconf.user != NULL) {
         if (h2o_setuidgid(conf.globalconf.user) != 0) {
             fprintf(stderr, "failed to change the running user (are you sure you are running as root?)\n");
+            return EX_OSERR;
+        }
+        if (neverbleed != NULL && neverbleed_setuidgid(neverbleed, conf.globalconf.user, 1) != 0) {
+            fprintf(stderr, "failed to change the running user of neverbleed daemon\n");
             return EX_OSERR;
         }
     } else {

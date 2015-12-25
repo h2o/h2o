@@ -1,6 +1,25 @@
 class String
 
   ##
+  #  call-seq:
+  #     String.try_convert(obj) -> string or nil
+  #
+  # Try to convert <i>obj</i> into a String, using to_str method.
+  # Returns converted string or nil if <i>obj</i> cannot be converted
+  # for any reason.
+  #
+  #     String.try_convert("str")     #=> "str"
+  #     String.try_convert(/re/)      #=> nil
+  #
+  def self.try_convert(obj)
+    if obj.respond_to?(:to_str)
+      obj.to_str
+    else
+      nil
+    end
+  end
+
+  ##
   # call-seq:
   #    string.clear    ->  string
   #
@@ -310,4 +329,30 @@ class String
       return self if excl && str == other_str
     end
   end
+
+  def chars(&block)
+    if block_given?
+      self.split('').map do |i|
+        block.call(i)
+      end
+      self
+    else
+      self.split('')
+    end
+  end
+  alias each_char chars
+
+  def codepoints(&block)
+    len = self.size
+
+    if block_given?
+      self.split('').map do|x|
+        block.call(x.ord)
+      end
+      self
+    else
+      self.split('').map{|x| x.ord}
+    end
+  end
+  alias each_codepoint codepoints
 end

@@ -24,6 +24,13 @@
  *   picotemplate.pl --conf=misc/picotemplate-conf.pl lib/file/_templates.c.h
  */
 
+static int cmpstrptr(const void *_x, const void *_y)
+{
+    const char *x = *(const char **)_x;
+    const char *y = *(const char **)_y;
+    return strcmp(x, y);
+}
+
 static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t path_normalized, DIR *dp)
 {
     H2O_VECTOR(char *)files = {};
@@ -34,10 +41,10 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
         while ((ret = readdir_r(dp, &dent, &dentp)) == 0 && dentp != NULL) {
             if (strcmp(dent.d_name, ".") == 0 || strcmp(dent.d_name, "..") == 0)
                 continue;
-            h2o_vector_reserve(NULL, (void *)&files, sizeof(files.entries[0]), files.size + 1);
-            files.entries[files.size++] = h2o_strdup(NULL, dent.d_name, SIZE_MAX).base;
+            h2o_vector_reserve(pool, (void *)&files, sizeof(files.entries[0]), files.size + 1);
+            files.entries[files.size++] = h2o_strdup(pool, dent.d_name, SIZE_MAX).base;
         }
-        qsort(files.entries, files.size, sizeof(files.entries[0]), (void *)strcmp);
+        qsort(files.entries, files.size, sizeof(files.entries[0]), cmpstrptr);
     }
 
     h2o_buffer_t *_;
@@ -88,7 +95,9 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
 
     size_t i;
     for (i = 0; i != files.size; ++i) {
-        h2o_iovec_t fn_escaped = h2o_htmlescape(pool, files.entries[i], strlen(files.entries[i]));
+        h2o_iovec_t link_escaped = h2o_uri_escape(pool, files.entries[i], strlen(files.entries[i]), NULL);
+        link_escaped = h2o_htmlescape(pool, link_escaped.base, link_escaped.len);
+        h2o_iovec_t label_escaped = h2o_htmlescape(pool, files.entries[i], strlen(files.entries[i]));
         {
             h2o_iovec_t _s = (h2o_iovec_init(H2O_STRLIT("<LI><A HREF=\"")));
             if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
@@ -98,7 +107,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
             _->size += _s.len;
         }
         {
-            h2o_iovec_t _s = (fn_escaped);
+            h2o_iovec_t _s = (link_escaped);
             if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
                 --_s.len;
             h2o_buffer_reserve(&_, _s.len);
@@ -114,7 +123,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
             _->size += _s.len;
         }
         {
-            h2o_iovec_t _s = (fn_escaped);
+            h2o_iovec_t _s = (label_escaped);
             if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
                 --_s.len;
             h2o_buffer_reserve(&_, _s.len);
@@ -129,9 +138,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
             memcpy(_->bytes + _->size, _s.base, _s.len);
             _->size += _s.len;
         }
-        free(files.entries[i]);
     }
 
-    free(files.entries);
     return _;
 }

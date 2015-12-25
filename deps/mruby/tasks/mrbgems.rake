@@ -31,7 +31,7 @@ MRuby.each_target do
         f.puts %Q[ *   All manual changes will get lost.]
         f.puts %Q[ */]
         f.puts %Q[]
-        f.puts %Q[#include "mruby.h"]
+        f.puts %Q[#include <mruby.h>]
         f.puts %Q[]
         f.write gem_func_decls
         f.puts %Q[]

@@ -1,7 +1,7 @@
 #include <string.h>
-#include "mruby.h"
-#include "mruby/irep.h"
-#include "mruby/debug.h"
+#include <mruby.h>
+#include <mruby/irep.h>
+#include <mruby/debug.h>
 
 static mrb_irep_debug_info_file *
 get_file(mrb_irep_debug_info *info, uint32_t pc)

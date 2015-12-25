@@ -20,10 +20,13 @@ EOT
 <li>the units recognized are: <code>second</code>, <code>minute</code>, <code>hour</code>, <code>day</code>, <code>month</code>, <code>year</code>
 <li> the units can also be in plural forms
 </ul>
-<?= $ctx->{example}->('Set <code>Cache-Control: max-age=86400', <<'EOT')
+<?= $ctx->{example}->('Set <code>Cache-Control: max-age=86400</code>', <<'EOT')
 expires: 1 day
 EOT
 ?>
+<p>
+You can also find an example that conditionally sets the header depending on the aspects of a request in <a href="configure/mruby_directives.html#modifying-response">Modifying the Response section of the Mruby directives documentation</a>.
+</p>
 ? })
 
 ? })

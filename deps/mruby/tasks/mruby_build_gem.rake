@@ -106,7 +106,7 @@ module MRuby
           git.run_checkout gemdir, params[:checksum_hash]
         else
           # Jump to the top of the branch
-          git.run_checkout gemdir, branch
+          git.run_checkout gemdir, branch if $pull_gems
         end
       else
         fail "unknown gem option #{params}"

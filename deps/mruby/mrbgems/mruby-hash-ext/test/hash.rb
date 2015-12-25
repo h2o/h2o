@@ -39,6 +39,12 @@ assert('Hash.[] "c_key", "c_value"') do
   end
 end
 
+assert('Hash.try_convert') do
+  assert_nil Hash.try_convert(nil)
+  assert_nil Hash.try_convert("{1=>2}")
+  assert_equal({1=>2}, Hash.try_convert({1=>2}))
+end
+
 assert('Hash#merge!') do
   a = { 'abc_key' => 'abc_value', 'cba_key' => 'cba_value' }
   b = { 'cba_key' => 'XXX',  'xyz_key' => 'xyz_value' }
@@ -75,10 +81,9 @@ assert('Hash#fetch') do
   assert_equal "feline", h.fetch("cat")
   assert_equal "mickey", h.fetch("mouse", "mickey")
   assert_equal "minny", h.fetch("mouse"){"minny"}
-  begin
+  assert_equal "mouse", h.fetch("mouse"){|k| k}
+  assert_raise(KeyError) do
     h.fetch("gnu")
-  rescue => e
-    assert_kind_of(StandardError, e);
   end
 end
 
@@ -158,4 +163,76 @@ assert("Hash#to_h") do
   h = { "a" => 100, "b" => 200 }
   assert_equal Hash, h.to_h.class
   assert_equal h, h.to_h
+end
+
+assert('Hash#<') do
+  h1 = {a:1, b:2}
+  h2 = {a:1, b:2, c:3}
+
+  assert_false(h1 < h1)
+  assert_true(h1 < h2)
+  assert_false(h2 < h1)
+  assert_false(h2 < h2)
+
+  h1 = {a:1}
+  h2 = {a:2}
+
+  assert_false(h1 < h1)
+  assert_false(h1 < h2)
+  assert_false(h2 < h1)
+  assert_false(h2 < h2)
+end
+
+assert('Hash#<=') do
+  h1 = {a:1, b:2}
+  h2 = {a:1, b:2, c:3}
+
+  assert_true(h1 <= h1)
+  assert_true(h1 <= h2)
+  assert_false(h2 <= h1)
+  assert_true(h2 <= h2)
+
+  h1 = {a:1}
+  h2 = {a:2}
+
+  assert_true(h1 <= h1)
+  assert_false(h1 <= h2)
+  assert_false(h2 <= h1)
+  assert_true(h2 <= h2)
+end
+
+assert('Hash#>=') do
+  h1 = {a:1, b:2}
+  h2 = {a:1, b:2, c:3}
+
+  assert_true(h1 >= h1)
+  assert_false(h1 >= h2)
+  assert_true(h2 >= h1)
+  assert_true(h2 >= h2)
+
+  h1 = {a:1}
+  h2 = {a:2}
+
+  assert_true(h1 >= h1)
+  assert_false(h1 >= h2)
+  assert_false(h2 >= h1)
+  assert_true(h2 >= h2)
+end
+
+assert('Hash#>') do
+  h1 = {a:1, b:2}
+  h2 = {a:1, b:2, c:3}
+
+  assert_false(h1 > h1)
+  assert_false(h1 > h2)
+  assert_true(h2 > h1)
+  assert_false(h2 > h2)
+
+  h1 = {a:1}
+  h2 = {a:2}
+
+  assert_false(h1 > h1)
+  assert_false(h1 > h2)
+  assert_false(h2 > h1)
+  assert_false(h2 > h2)
 end

@@ -198,5 +198,5 @@ assert('Float#>>') do
   assert_equal 0, 23.0 >> 128
 
   # Don't raise on large Right Shift
-  assert_equal -1, -23.0 >> 128
+  assert_equal(-1, -23.0 >> 128)
 end

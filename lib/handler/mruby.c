@@ -53,10 +53,8 @@ enum {
     LIT_RACK_HIJACK_,
     LIT_RACK_INPUT,
     LIT_RACK_ERRORS,
-    LIT_SERVER__NAME,
-    LIT_SERVER__NAME_VALUE,
-    LIT_SERVER_VERSION,
-    LIT_SERVER_VERSION_VALUE,
+    LIT_SERVER_SOFTWARE,
+    LIT_SERVER_SOFTWARE_VALUE,
     PROC_EACH_TO_ARRAY,
     NUM_CONSTANTS
 };
@@ -75,12 +73,22 @@ typedef struct st_h2o_mruby_context_t {
 
 #define FREEZE_STRING(v) RSTR_SET_FROZEN_FLAG(mrb_str_ptr(v))
 
+static void set_h2o_root(mrb_state *mrb)
+{
+    const char *root = getenv("H2O_ROOT");
+    if (root == NULL)
+        root = H2O_TO_STR(H2O_ROOT);
+    mrb_gv_set(mrb, mrb_intern_lit(mrb, "$H2O_ROOT"), mrb_str_new(mrb, root, strlen(root)));
+}
+
 mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config, char *errbuf)
 {
     mrbc_context *cxt;
     struct mrb_parser_state *parser;
     struct RProc *proc = NULL;
     mrb_value result = mrb_nil_value();
+
+    set_h2o_root(mrb);
 
     /* parse */
     if ((cxt = mrbc_context_new(mrb)) == NULL) {
@@ -102,6 +110,12 @@ mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config
             abort();
         }
         snprintf(errbuf, 256, "line %d:%s", parser->error_buffer[0].lineno, parser->error_buffer[0].message);
+        strcat(errbuf, "\n\n");
+        if (h2o_str_at_position(errbuf + strlen(errbuf), config->source.base, config->source.len,
+                                parser->error_buffer[0].lineno - config->lineno + 1,parser->error_buffer[0].column) != 0) {
+            /* remove trailing "\n\n" in case we failed to append the source code at the error location */
+            errbuf[strlen(errbuf) - 2] = '\0';
+        }
         goto Exit;
     }
     /* generate code */
@@ -151,7 +165,7 @@ static h2o_iovec_t convert_header_name_to_env(h2o_mem_pool_t *pool, const char *
 #undef KEY_PREFIX_LEN
 }
 
-static mrb_value build_constants(mrb_state *mrb)
+static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t server_name_len)
 {
     mrb_value ary = mrb_ary_new_capa(mrb, NUM_CONSTANTS);
     mrb_int i;
@@ -179,13 +193,15 @@ static mrb_value build_constants(mrb_state *mrb)
         h2o_mem_clear_pool(&pool);
     }
 
-#define SET_LITERAL(idx, str)                                                                                                      \
+#define SET_STRING(idx, value)                                                                                                     \
     do {                                                                                                                           \
-        mrb_value lit = mrb_str_new_lit(mrb, str);                                                                                 \
+        mrb_value lit = (value);                                                                                                   \
         FREEZE_STRING(lit);                                                                                                        \
         mrb_ary_set(mrb, ary, idx, lit);                                                                                           \
         mrb_gc_arena_restore(mrb, arena);                                                                                          \
     } while (0)
+#define SET_LITERAL(idx, str) SET_STRING(idx, mrb_str_new_lit(mrb, str))
+
     SET_LITERAL(LIT_REQUEST_METHOD, "REQUEST_METHOD");
     SET_LITERAL(LIT_SCRIPT_NAME, "SCRIPT_NAME");
     SET_LITERAL(LIT_PATH_INFO, "PATH_INFO");
@@ -203,11 +219,11 @@ static mrb_value build_constants(mrb_state *mrb)
     SET_LITERAL(LIT_RACK_HIJACK_, "rack.hijack?");
     SET_LITERAL(LIT_RACK_INPUT, "rack.input");
     SET_LITERAL(LIT_RACK_ERRORS, "rack.errors");
-    SET_LITERAL(LIT_SERVER__NAME, "server.name");
-    SET_LITERAL(LIT_SERVER__NAME_VALUE, "h2o");
-    SET_LITERAL(LIT_SERVER_VERSION, "server.version");
-    SET_LITERAL(LIT_SERVER_VERSION_VALUE, H2O_VERSION);
+    SET_LITERAL(LIT_SERVER_SOFTWARE, "SERVER_SOFTWARE");
+    SET_STRING(LIT_SERVER_SOFTWARE_VALUE, mrb_str_new(mrb, server_name, server_name_len));
+
 #undef SET_LITERAL
+#undef SET_STRING
 
     mrb_ary_set(mrb, ary, PROC_EACH_TO_ARRAY,
                 mrb_funcall(mrb, mrb_top_self(mrb), "eval", 1,
@@ -235,7 +251,7 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
     mrb_gc_arena_restore(handler_ctx->mrb, arena);
     mrb_gc_protect(handler_ctx->mrb, handler_ctx->proc);
 
-    handler_ctx->constants = build_constants(handler_ctx->mrb);
+    handler_ctx->constants = build_constants(handler_ctx->mrb, ctx->globalconf->server_name.base, ctx->globalconf->server_name.len);
     handler_ctx->symbols.sym_call = mrb_intern_lit(handler_ctx->mrb, "call");
     handler_ctx->symbols.sym_close = mrb_intern_lit(handler_ctx->mrb, "close");
 
@@ -316,7 +332,7 @@ static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value constants)
                  mrb_str_new(mrb, req->hostconf->authority.host.base, req->hostconf->authority.host.len));
     {
         mrb_value h, p;
-        stringify_address(req->conn, req->conn->get_sockname, mrb, &h, &p);
+        stringify_address(req->conn, req->conn->callbacks->get_sockname, mrb, &h, &p);
         if (!mrb_nil_p(h))
             mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_SERVER_ADDR), h);
         if (!mrb_nil_p(p))
@@ -334,7 +350,7 @@ static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value constants)
     }
     {
         mrb_value h, p;
-        stringify_address(req->conn, req->conn->get_peername, mrb, &h, &p);
+        stringify_address(req->conn, req->conn->callbacks->get_peername, mrb, &h, &p);
         if (!mrb_nil_p(h))
             mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_REMOTE_ADDR), h);
         if (!mrb_nil_p(p))
@@ -370,8 +386,7 @@ static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value constants)
     mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_RACK_ERRORS), mrb_gv_get(mrb, mrb_intern_lit(mrb, "$stderr")));
 
     /* server name */
-    mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_SERVER__NAME), mrb_ary_entry(constants, LIT_SERVER__NAME_VALUE));
-    mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_SERVER_VERSION), mrb_ary_entry(constants, LIT_SERVER_VERSION_VALUE));
+    mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_SERVER_SOFTWARE), mrb_ary_entry(constants, LIT_SERVER_SOFTWARE_VALUE));
 
     return env;
 }
@@ -405,7 +420,7 @@ static int parse_rack_header(h2o_req_t *req, mrb_state *mrb, mrb_value name, mrb
             if (*eol == '\n')
                 break;
         if (h2o_memis(lcname.base, lcname.len, H2O_STRLIT("link")) &&
-            h2o_register_push_path_in_link_header(req, vstart, eol - vstart)) {
+            h2o_puth_path_in_link_header(req, vstart, eol - vstart)) {
             /* do not send the link header that is going to be pushed */
         } else {
             h2o_iovec_t vdup = h2o_strdup(&req->pool, vstart, eol - vstart);

@@ -1,0 +1,113 @@
+NAME
+    Net::FastCGI - FastCGI Toolkit
+
+DESCRIPTION
+    This distribution aims to provide a complete API for working with the
+    FastCGI protocol.
+
+    The primary goal is to provide a function oriented and object oriented
+    API which are not tied to a specific I/O model or framework.
+
+    Secondary goal is to provide higher level tools/API which can be used
+    for debugging and interoperability testing.
+
+PROGRESS
+    The function oriented API is considered feature complete.
+    Net::FastCGI::Protocol provides functions to build and parse all FastCGI
+    v1.0 messages, also provided is a few convenient higher level functions
+    such as "build_begin_request()", "build_end_request()", "parse_record()"
+    and "dump_record()".
+
+    Work has begun on object oriented implementation and a simple blocking
+    I/O class which is intended for testing and debugging.
+
+PACKAGES
+    Net::FastCGI::Constant
+        FastCGI protocol constants.
+
+    Net::FastCGI::IO
+        Provides functions to read and write FastCGI messages.
+
+    Net::FastCGI::Protocol
+        Provides functions to build and parse FastCGI messages.
+
+ENVIRONMENT
+    Environment variable "NET_FASTCGI_PP" can be set to a true value before
+    loading this package to disable usage of XS implementation.
+
+PREREQUISITES
+  Run-Time
+    perl 5.6 or greater.
+    Carp, core module.
+    Exporter, core module.
+
+  Build-Time
+    In addition to Run-Time:
+
+    Test::More 0.47 or greater, core module since 5.6.2.
+    Test::Exception.
+    Test::HexString.
+
+SEE ALSO
+  Community
+    Official FastCGI site
+        <http://www.fastcgi.com/>
+
+  Standards
+    FastCGI Specification Version 1.0
+        <http://www.fastcgi.com/devkit/doc/fcgi-spec.html>
+
+    RFC 3875 - The Common Gateway Interface (CGI) Version 1.1
+        <http://tools.ietf.org/html/rfc3875>
+
+  White papers
+    FastCGI: A High-Performance Web Server Interface
+        <http://www.fastcgi.com/devkit/doc/fastcgi-whitepaper/fastcgi.htm>
+
+    FastCGI - The Forgotten Treasure
+        <http://cryp.to/publications/fastcgi/>
+
+  Perl implementations
+    AnyEvent::FCGI
+        Application server implementation, built on top of AnyEvent.
+        Supports Responder role. Capable of multiplexing.
+
+    FCGI
+        Application server implementation, built on top of "libfcgi"
+        (reference implementation). Supports all FastCGI roles. Responds to
+        management records. Processes requests synchronously.
+
+    FCGI::Async
+        Application server implementation, built on top of IO::Async.
+        Supports Responder role. Responds to management records. Capable of
+        multiplexing.
+
+    FCGI::Client
+        Client (Web server) implementation. Supports Responder role.
+
+    FCGI::EV
+        Application server implementation, built on top of EV. Supports
+        Responder role.
+
+    Mojo::Server::FastCGI
+        Application server implementation. Supports Responder role.
+        Processes requests synchronously.
+
+    POE::Component::FastCGI
+        Application server implementation, built on top of POE. Supports
+        Responder role. Capable of multiplexing.
+
+SUPPORT
+    Please report any bugs or feature requests to
+    "bug-net-fastcgi@rt.cpan.org", or through the web interface at
+    <http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Net-FastCGI>
+
+AUTHOR
+    Christian Hansen "chansen@cpan.org"
+
+COPYRIGHT
+    Copyright 2008-2010 by Christian Hansen.
+
+    This library is free software; you can redistribute it and/or modify it
+    under the same terms as Perl itself.
+

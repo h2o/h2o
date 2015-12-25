@@ -6,7 +6,7 @@ assert('Compiling multiple files without new line in last line. #2361') do
   a.flush
   b.write('module B; end')
   b.flush
-  result = `bin/mrbc -c -o #{out.path} #{a.path} #{b.path} 2>&1`
-  assert_equal "bin/mrbc:#{a.path}:Syntax OK", result.chomp
+  result = `#{cmd('mrbc')} -c -o #{out.path} #{a.path} #{b.path} 2>&1`
+  assert_equal "#{cmd('mrbc')}:#{a.path}:Syntax OK", result.chomp
   assert_equal 0, $?.exitstatus
 end

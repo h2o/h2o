@@ -94,9 +94,13 @@ int h2o_hex_decode(void *dst, const char *src, size_t src_len);
  */
 void h2o_hex_encode(char *dst, const void *src, size_t src_len);
 /**
+ * URI-ecsapes given string (as defined in RFC 3986)
+ */
+h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l, const char *preserve_chars);
+/**
  * returns the extension portion of path
  */
-const char *h2o_get_filext(const char *path, size_t len);
+h2o_iovec_t h2o_get_filext(const char *path, size_t len);
 /**
  * returns a vector with surrounding WS stripped
  */
@@ -127,6 +131,11 @@ h2o_iovec_t h2o_htmlescape(h2o_mem_pool_t *pool, const char *src, size_t len);
 #define h2o_concat(pool, ...)                                                                                                      \
     h2o_concat_list(pool, (h2o_iovec_t[]){__VA_ARGS__}, sizeof((h2o_iovec_t[]){__VA_ARGS__}) / sizeof(h2o_iovec_t))
 h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t count);
+/**
+ * emits a two-line string to buf that graphically points to given location within the source string
+ * @return 0 if successful
+ */
+int h2o_str_at_position(char *buf, const char *src, size_t src_len, int lineno, int column);
 
 int h2o__lcstris_core(const char *target, const char *test, size_t test_len);
 
