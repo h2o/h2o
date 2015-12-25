@@ -6,13 +6,15 @@
 #include "mruby_input_stream.h"
 
 typedef struct mrb_input_stream_t {
-  char *base;
+  const char *base;
   mrb_int len;
   mrb_int pos;
+  mrb_input_stream_free_callback free_cb;
+  void *free_cb_data;
 } mrb_input_stream_t;
 
 static mrb_input_stream_t*
-mrb_input_stream_create(mrb_state *mrb, char *base, mrb_int len);
+mrb_input_stream_create(mrb_state *mrb, const char *base, mrb_int len, mrb_input_stream_free_callback cb, void *cb_data);
 
 static void
 mrb_mruby_input_stream_free(mrb_state *mrb, void *ptr);
@@ -40,9 +42,9 @@ mrb_input_stream_init(mrb_state *mrb, mrb_value self)
   if (n == 1) {
     len = RSTRING_LEN(str);
     ptr = RSTRING_PTR(str);
-    stream = mrb_input_stream_create(mrb, ptr, len);
+    stream = mrb_input_stream_create(mrb, ptr, len, NULL, NULL);
   } else {
-    stream = mrb_input_stream_create(mrb, NULL, 0);
+    stream = mrb_input_stream_create(mrb, NULL, 0, NULL, NULL);
   }
 
   DATA_TYPE(self) = &mrb_input_stream_type;
@@ -51,43 +53,72 @@ mrb_input_stream_init(mrb_state *mrb, mrb_value self)
 }
 
 static void
+default_free_cb(mrb_state *mrb, const char *base, mrb_int len, void *cb_data)
+{
+  if (base != NULL)
+    mrb_free(mrb, (void *)base);
+}
+
+static void
 mrb_mruby_input_stream_free(mrb_state *mrb, void *ptr)
 {
   mrb_input_stream_t *stream = (mrb_input_stream_t *)ptr;
-  char *base = stream->base;
-  if (base) {
-    mrb_free(mrb, base);
-  }
+  if (stream->free_cb != NULL)
+    stream->free_cb(mrb, stream->base, stream->len, stream->free_cb_data);
   mrb_free(mrb, stream);
 }
 
-mrb_input_stream_t*
-mrb_input_stream_create(mrb_state *mrb, char *base, mrb_int len)
+static void setup_stream(mrb_state *mrb, mrb_input_stream_t *stream, const char *base, mrb_int len, mrb_input_stream_free_callback free_cb, void *free_cb_data)
 {
-  mrb_input_stream_t *stream = (mrb_input_stream_t *)mrb_malloc(mrb, sizeof(mrb_input_stream_t));
-
-  if (len > 0) {
-    char *dst_base = (char *)mrb_malloc(mrb, sizeof(char)*len);
-    memcpy(dst_base, base, len);
-    stream->base = dst_base;
-    stream->len = len;
+  if (free_cb == NULL) {
+    if (len > 0) {
+      char *dst_base = (char *)mrb_malloc(mrb, sizeof(char)*len);
+      memcpy(dst_base, base, len);
+      stream->base = dst_base;
+      stream->len = len;
+    } else {
+      stream->base = NULL;
+      stream->len = 0;
+    }
+    stream->free_cb = default_free_cb;
+    stream->free_cb_data = NULL;
   } else {
-    stream->base = NULL;
-    stream->len = 0;
+    stream->base = base;
+    stream->len = len;
+    stream->free_cb = free_cb;
+    stream->free_cb_data = free_cb_data;
   }
 
   stream->pos = 0;
+}
+
+mrb_input_stream_t*
+mrb_input_stream_create(mrb_state *mrb, const char *base, mrb_int len, mrb_input_stream_free_callback free_cb, void *free_cb_data)
+{
+  mrb_input_stream_t *stream = (mrb_input_stream_t *)mrb_malloc(mrb, sizeof(mrb_input_stream_t));
+
+  setup_stream(mrb, stream, base, len, free_cb, free_cb_data);
   return stream;
 }
 
 mrb_value
-mrb_input_stream_value(mrb_state *mrb, char *base, mrb_int len)
+mrb_input_stream_value(mrb_state *mrb, const char *base, mrb_int len)
 {
-  mrb_input_stream_t *stream = mrb_input_stream_create(mrb, base, len);
+  mrb_input_stream_t *stream = mrb_input_stream_create(mrb, base, len, NULL, NULL);
   struct RClass *c = mrb_class_get(mrb, "InputStream");
   struct RData *d = mrb_data_object_alloc(mrb, c, stream, &mrb_input_stream_type);
 
   return mrb_obj_value(d);
+}
+
+void
+mrb_input_stream_reset(mrb_state *mrb, mrb_value self, const char *base, mrb_int len, mrb_input_stream_free_callback free_cb, void *free_cb_data)
+{
+  mrb_input_stream_t *stream = DATA_PTR(self);
+
+  if (stream->free_cb != NULL)
+    stream->free_cb(mrb, stream->base, stream->len, stream->free_cb_data);
+  setup_stream(mrb, stream, base, len, free_cb, free_cb_data);
 }
 
 static mrb_value
@@ -108,12 +139,12 @@ mrb_input_stream_gets(mrb_state *mrb, mrb_value self)
 
 static mrb_int
 seek_char(mrb_input_stream_t *stream, char chr){
-  char *base = stream->base;
+  const char *base = stream->base;
   size_t len = stream->len;
   mrb_int pos = stream->pos;
   const char *end = base + len;
-  char *start = base + pos;
-  char *s = start;
+  const char *start = base + pos;
+  const char *s = start;
 
   if (pos >= len) {
     return -1;
