@@ -52,7 +52,7 @@ static void post_response(h2o_mruby_request_t *rreq, int status, const struct ph
 
     mrb_value resp = mrb_ary_new_capa(mrb, 3);
     mrb_ary_set(mrb, resp, 0, mrb_fixnum_value(status));
-    mrb_value headers_hash = mrb_hash_new_capa(mrb, (mrb_int)num_headers);
+    mrb_value headers_hash = mrb_hash_new_capa(mrb, (int)num_headers);
     for (i = 0; i < num_headers; ++i) {
         mrb_value k = mrb_str_new(mrb, headers[i].name, headers[i].name_len);
         mrb_value v = mrb_str_new(mrb, headers[i].value, headers[i].value_len);
