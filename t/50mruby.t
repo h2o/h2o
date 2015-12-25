@@ -262,15 +262,12 @@ hosts:
     paths:
       /:
         mruby.handler: |
-          # FIXME for some reason we need to surround prev_input with Proc, else the value is not retained
-          (Proc.new do
-            prev_input = nil
-            Proc.new do |env|
-              resp = [200, {}, [prev_input ? prev_input.read : "not cached"]]
-              prev_input = env["rack.input"]
-              resp
-            end
-          end).call
+          prev_input = nil
+          Proc.new do |env|
+            resp = [200, {}, [prev_input ? prev_input.read : "not cached"]]
+            prev_input = env["rack.input"]
+            resp
+          end
 EOT
     my ($headers, $body) = run_prog("curl --silent --data 'hello' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
     like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
