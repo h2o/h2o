@@ -25,6 +25,7 @@
 #include <mruby/error.h>
 #include <mruby/hash.h>
 #include <mruby/string.h>
+#include <mruby_input_stream.h>
 #include "h2o/mruby_.h"
 
 struct st_h2o_mruby_http_request_context_t {
@@ -238,8 +239,12 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_request_t *rreq, mrb_value i
         mrb_value body = mrb_ary_entry(input, 3);
         if (!mrb_nil_p(body)) {
             if (mrb_obj_eq(mrb, body, rreq->rack_input)) {
-                /* fast path (FIXME respect seek) */
+                /* fast path */
+                mrb_int pos;
+                mrb_input_stream_get_data(mrb, body, NULL, NULL, &pos, NULL, NULL);
                 ctx->req.body = rreq->req->entity;
+                ctx->req.body.base += pos;
+                ctx->req.body.len -= pos;
             } else {
                 if (!mrb_string_p(body)) {
                     body = mrb_funcall(mrb, body, "read", 0);

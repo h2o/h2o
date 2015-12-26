@@ -430,8 +430,8 @@ static mrb_value build_env(h2o_mruby_request_t *rreq)
         int l = sprintf(buf, "%zu", rreq->req->entity.len);
         mrb_hash_set(mrb, env, mrb_ary_entry(rreq->ctx->constants, LIT_CONTENT_LENGTH), mrb_str_new(mrb, buf, l));
         rreq->rack_input = mrb_input_stream_value(mrb, NULL, 0);
-        mrb_input_stream_reset(mrb, rreq->rack_input, rreq->req->entity.base, (mrb_int)rreq->req->entity.len, on_rack_input_free,
-                               &rreq->rack_input);
+        mrb_input_stream_set_data(mrb, rreq->rack_input, rreq->req->entity.base, (mrb_int)rreq->req->entity.len, 0,
+                                  on_rack_input_free, &rreq->rack_input);
         mrb_hash_set(mrb, env, mrb_ary_entry(rreq->ctx->constants, LIT_RACK_INPUT), rreq->rack_input);
     }
     {
@@ -627,7 +627,7 @@ void h2o_mruby_run_fiber(h2o_mruby_request_t *rreq, mrb_value input, mrb_int gc_
 
     /* end of ruby-related operation, restore GC state */
     if (!mrb_nil_p(rreq->rack_input))
-        mrb_input_stream_reset(mrb, rreq->rack_input, NULL, 0, NULL, NULL);
+        mrb_input_stream_set_data(mrb, rreq->rack_input, NULL, 0, 0, NULL, NULL);
     mrb_gc_arena_restore(mrb, gc_arena);
 
     /* fall through or send the response */
