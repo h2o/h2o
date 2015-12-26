@@ -113,17 +113,21 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     h2o_mem_pool_t *pool = &ctx->rreq->req->pool;
     ctx->resp.status = status;
     ctx->resp.headers = h2o_mem_alloc_pool(pool, sizeof(*ctx->resp.headers) * num_headers);
-    ctx->resp.num_headers = num_headers;
+    ctx->resp.num_headers = 0;
     size_t i;
     for (i = 0; i != num_headers; ++i) {
-        struct phr_header *dst = ctx->resp.headers + i;
+        /* ignore special headers */
+        if (h2o_memis(headers[i].name, headers[i].name_len, H2O_STRLIT("content-length")) ||
+            h2o_memis(headers[i].name, headers[i].name_len, H2O_STRLIT("transfer-encoding")))
+            continue;
+        struct phr_header *dst = ctx->resp.headers + ctx->resp.num_headers++;
         dst->name = h2o_strdup(pool, headers[i].name, headers[i].name_len).base;
         dst->name_len = headers[i].name_len;
         dst->value = h2o_strdup(pool, headers[i].value, headers[i].value_len).base;
         dst->value_len = headers[i].value_len;
     }
     /* sort the headers in a way that they will be group by their names */
-    qsort(ctx->resp.headers, num_headers, sizeof(ctx->resp.headers[0]), headers_sort_cb);
+    qsort(ctx->resp.headers, ctx->resp.num_headers, sizeof(ctx->resp.headers[0]), headers_sort_cb);
 
     if (errstr == h2o_http1client_error_is_eos) {
         post_response(ctx->rreq, ctx->resp.status, ctx->resp.headers, ctx->resp.num_headers, h2o_iovec_init(NULL, 0));
