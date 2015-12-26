@@ -108,7 +108,7 @@ mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config
         mrbc_filename(mrb, cxt, config->path);
     cxt->capture_errors = 1;
     cxt->lineno = config->lineno;
-    if ((parser = mrb_parse_nstring(mrb, config->source.base, (mrb_int)config->source.len, cxt)) == NULL) {
+    if ((parser = mrb_parse_nstring(mrb, config->source.base, (int)config->source.len, cxt)) == NULL) {
         fprintf(stderr, "%s: no memory\n", H2O_MRUBY_MODULE_NAME);
         abort();
     }
@@ -208,7 +208,7 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
     mrb_value ary = mrb_ary_new_capa(mrb, NUM_CONSTANTS);
     mrb_int i;
 
-    mrb_int arena = mrb_gc_arena_save(mrb);
+    int arena = mrb_gc_arena_save(mrb);
 
     {
         h2o_mem_pool_t pool;
@@ -398,7 +398,7 @@ static mrb_value build_env(h2o_mruby_request_t *rreq)
 {
     mrb_state *mrb = rreq->ctx->mrb;
     mrb_value env = mrb_hash_new_capa(mrb, 16);
-    mrb_int arena = mrb_gc_arena_save(mrb);
+    int arena = mrb_gc_arena_save(mrb);
 
     /* environment */
     mrb_hash_set(mrb, env, mrb_ary_entry(rreq->ctx->constants, LIT_REQUEST_METHOD),
@@ -553,8 +553,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 {
     h2o_mruby_handler_t *handler = (void *)_handler;
     h2o_mruby_context_t *handler_ctx = h2o_context_get_handler_context(req->conn->ctx, &handler->super);
-    ;
-    mrb_int arena = mrb_gc_arena_save(handler_ctx->mrb);
+    int arena = mrb_gc_arena_save(handler_ctx->mrb);
 
     h2o_mruby_request_t *rreq = h2o_mem_alloc_pool(&req->pool, sizeof(*rreq));
     rreq->req = req;
@@ -571,12 +570,12 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     return 0;
 }
 
-void h2o_mruby_run_fiber(h2o_mruby_request_t *rreq, mrb_value input, mrb_int gc_arena, int *is_delegate)
+void h2o_mruby_run_fiber(h2o_mruby_request_t *rreq, mrb_value input, int gc_arena, int *is_delegate)
 {
     mrb_state *mrb = rreq->ctx->mrb;
     mrb_value output;
     h2o_iovec_t content;
-    int status;
+    mrb_int status;
 
     while (1) {
         /* send input to fiber */
@@ -617,10 +616,10 @@ void h2o_mruby_run_fiber(h2o_mruby_request_t *rreq, mrb_value input, mrb_int gc_
     }
 
     if (!(100 <= status && status <= 999)) {
-        h2o_req_log_error(rreq->req, H2O_MRUBY_MODULE_NAME, "status returned by handler is out of range:%d\n", status);
+        h2o_req_log_error(rreq->req, H2O_MRUBY_MODULE_NAME, "status returned by handler is out of range:%zd\n", status);
         goto SendInternalError;
     }
-    rreq->req->res.status = status;
+    rreq->req->res.status = (int)status;
 
     if (parse_rack_response(rreq->req, rreq->ctx, output, &content) != 0)
         goto SendInternalError;

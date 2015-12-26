@@ -43,7 +43,7 @@ typedef struct st_h2o_mruby_request_t {
 /* handler/mruby.c */
 mrb_value h2o_mruby_compile_code(mrb_state *mrb_state, h2o_mruby_config_vars_t *config, char *errbuf);
 h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_config_vars_t *config);
-void h2o_mruby_run_fiber(h2o_mruby_request_t *rreq, mrb_value input, mrb_int gc_arena, int *is_delegate);
+void h2o_mruby_run_fiber(h2o_mruby_request_t *rreq, mrb_value input, int gc_arena, int *is_delegate);
 mrb_value h2o_mruby_each_to_array(h2o_mruby_context_t *handler_ctx, mrb_value src);
 int h2o_mruby_iterate_headers(h2o_mruby_context_t *handler_ctx, mrb_value headers,
                               int (*cb)(h2o_mruby_context_t *, h2o_iovec_t, h2o_iovec_t, void *), void *cb_data);
