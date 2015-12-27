@@ -32,10 +32,14 @@ typedef struct st_h2o_mruby_context_t {
 
 typedef struct st_h2o_mruby_generator_t {
     h2o_generator_t super;
-    h2o_req_t *req;
+    h2o_req_t *req;/* becomes NULL once the underlying connection gets terminated */
     h2o_mruby_context_t *ctx;
     mrb_value rack_input;
     mrb_value receiver;
+    struct {
+        void (*cb)(struct st_h2o_mruby_generator_t *);
+        void *data;
+    } async_dispose;
 } h2o_mruby_generator_t;
 
 #define H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED -1 /* used to notify exception, does not execution to mruby code */

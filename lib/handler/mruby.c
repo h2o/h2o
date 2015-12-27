@@ -566,19 +566,39 @@ GotException:
     return -1;
 }
 
+static void clear_rack_input(h2o_mruby_generator_t *generator)
+{
+    if (!mrb_nil_p(generator->rack_input))
+        mrb_input_stream_set_data(generator->ctx->mrb, generator->rack_input, NULL, 0, 0, NULL, NULL);
+}
+
+static void on_generator_dispose(void *_generator)
+{
+    h2o_mruby_generator_t *generator = _generator;
+
+    clear_rack_input(generator);
+    generator->req = NULL;
+
+    if (generator->async_dispose.cb != NULL)
+        generator->async_dispose.cb(generator);
+}
+
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 {
     h2o_mruby_handler_t *handler = (void *)_handler;
     h2o_mruby_context_t *handler_ctx = h2o_context_get_handler_context(req->conn->ctx, &handler->super);
     int arena = mrb_gc_arena_save(handler_ctx->mrb);
 
-    h2o_mruby_generator_t *generator = h2o_mem_alloc_pool(&req->pool, sizeof(*generator));
+    h2o_mruby_generator_t *generator = h2o_mem_alloc_shared(&req->pool, sizeof(*generator), on_generator_dispose);
     generator->super.proceed = NULL;
     generator->super.stop = NULL;
     generator->req = req;
     generator->ctx = h2o_context_get_handler_context(req->conn->ctx, &handler->super);
     generator->rack_input = mrb_nil_value();
     generator->receiver = generator->ctx->proc;
+    generator->async_dispose.cb = NULL;
+    generator->async_dispose.data = NULL;
+
     mrb_value env = build_env(generator);
 
     int is_delegate = 0;
@@ -589,12 +609,52 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     return 0;
 }
 
+static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_value resp, int gc_arena, int *is_delegate)
+{
+    mrb_state *mrb = generator->ctx->mrb;
+    h2o_iovec_t content;
+
+    /* set status */
+    generator->req->res.status = (int)status;
+
+    /* set headers */
+    if (parse_rack_response(generator->req, generator->ctx, resp, &content) != 0)
+        goto SendInternalError;
+
+    /* end of ruby-related operation, restore GC state */
+    clear_rack_input(generator);
+    mrb_gc_arena_restore(mrb, gc_arena);
+
+    /* fall through or send the response */
+    if (generator->req->res.status == STATUS_FALLTHRU) {
+        if (is_delegate != NULL) {
+            *is_delegate = 1;
+            return;
+        }
+        h2o_req_log_error(generator->req, H2O_MRUBY_MODULE_NAME, "cannot (yet) handle async 399 response");
+        goto SendInternalError;
+    }
+
+    h2o_start_response(generator->req, &generator->super);
+    if (h2o_memis(generator->req->input.method.base, generator->req->input.method.len, H2O_STRLIT("HEAD")))
+        h2o_send(generator->req, NULL, 0, 1);
+    else
+        h2o_send(generator->req, &content, 1, 1);
+    return;
+
+SendInternalError:
+    mrb_gc_arena_restore(mrb, gc_arena);
+    h2o_send_error(generator->req, 500, "Internal Server Error", "Internal Server Error", 0);
+}
+
 void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value input, int gc_arena, int *is_delegate)
 {
     mrb_state *mrb = generator->ctx->mrb;
     mrb_value output;
-    h2o_iovec_t content;
     mrb_int status;
+
+    generator->async_dispose.cb = NULL;
+    generator->async_dispose.data = NULL;
 
     while (1) {
         /* send input to fiber */
@@ -604,8 +664,8 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value input, int 
         if (mrb->exc != NULL)
             goto GotException;
         if (!mrb_array_p(output)) {
-            h2o_req_log_error(generator->req, H2O_MRUBY_MODULE_NAME, "handler did not return an array");
-            goto SendInternalError;
+            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "rack app did not return an array"));
+            goto GotException;
         }
         /* fetch status */
         mrb_value v = mrb_to_int(mrb, mrb_ary_entry(output, 0));
@@ -635,41 +695,24 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value input, int 
     }
 
     if (!(100 <= status && status <= 999)) {
-        h2o_req_log_error(generator->req, H2O_MRUBY_MODULE_NAME, "status returned by handler is out of range:%zd\n", status);
-        goto SendInternalError;
-    }
-    generator->req->res.status = (int)status;
-
-    if (parse_rack_response(generator->req, generator->ctx, output, &content) != 0)
-        goto SendInternalError;
-
-    /* end of ruby-related operation, restore GC state */
-    if (!mrb_nil_p(generator->rack_input))
-        mrb_input_stream_set_data(mrb, generator->rack_input, NULL, 0, 0, NULL, NULL);
-    mrb_gc_arena_restore(mrb, gc_arena);
-
-    /* fall through or send the response */
-    if (generator->req->res.status == STATUS_FALLTHRU) {
-        if (is_delegate != NULL) {
-            *is_delegate = 1;
-            return;
-        }
-        h2o_req_log_error(generator->req, H2O_MRUBY_MODULE_NAME, "cannot (yet) handle async 399 response");
-        goto SendInternalError;
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "status returned from rack app is out of range"));
+        goto GotException;
     }
 
-    h2o_start_response(generator->req, &generator->super);
-    if (h2o_memis(generator->req->input.method.base, generator->req->input.method.len, H2O_STRLIT("HEAD")))
-        h2o_send(generator->req, NULL, 0, 1);
-    else
-        h2o_send(generator->req, &content, 1, 1);
+    /* send the response (unless req is already closed) */
+    if (generator->req != NULL) {
+        send_response(generator, status, output, gc_arena, is_delegate);
+    } else {
+        mrb_gc_arena_restore(mrb, gc_arena);
+    }
     return;
 
 GotException:
-    report_exception(generator->req, mrb);
-SendInternalError:
+    if (generator->req != NULL) {
+        report_exception(generator->req, mrb);
+        h2o_send_error(generator->req, 500, "Internal Server Error", "Internal Server Error", 0);
+    }
     mrb_gc_arena_restore(mrb, gc_arena);
-    h2o_send_error(generator->req, 500, "Internal Server Error", "Internal Server Error", 0);
     return;
 
 Async:

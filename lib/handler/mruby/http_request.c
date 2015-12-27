@@ -30,6 +30,7 @@
 
 struct st_h2o_mruby_http_request_context_t {
     h2o_mruby_generator_t *generator;
+    h2o_http1client_t *client;
     struct {
         h2o_buffer_t *buf;
         h2o_iovec_t body; /* body.base != NULL indicates that post content exists (and the length MAY be zero) */
@@ -42,6 +43,22 @@ struct st_h2o_mruby_http_request_context_t {
         size_t num_headers;
     } resp;
 };
+
+static mrb_value create_downstream_closed_exception(mrb_state *mrb)
+{
+    return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "downstream HTTP closed");
+}
+
+static void on_generator_dispose(h2o_mruby_generator_t *generator)
+{
+    struct st_h2o_mruby_http_request_context_t *ctx = generator->async_dispose.data;
+
+    h2o_http1client_cancel(ctx->client);
+
+    mrb_state *mrb = ctx->generator->ctx->mrb;
+    int gc_arena = mrb_gc_arena_save(mrb);
+    h2o_mruby_run_fiber(ctx->generator, create_downstream_closed_exception(mrb), gc_arena, NULL);
+}
 
 /* precond: headers should be ordered in a way that they are grouped by their names */
 static void post_response(h2o_mruby_generator_t *generator, int status, const struct phr_header *headers, size_t num_headers,
@@ -183,10 +200,14 @@ static int flatten_request_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
 
 mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_value input)
 {
-    struct st_h2o_mruby_http_request_context_t *ctx = h2o_mem_alloc_pool(&generator->req->pool, sizeof(*ctx));
+    struct st_h2o_mruby_http_request_context_t *ctx;
     mrb_state *mrb = generator->ctx->mrb;
     h2o_url_t url;
 
+    if (generator->req == NULL)
+        return create_downstream_closed_exception(mrb);
+
+    ctx = h2o_mem_alloc_pool(&generator->req->pool, sizeof(*ctx));
     ctx->generator = generator;
     h2o_buffer_init(&ctx->req.buf, &h2o_socket_buffer_prototype);
     ctx->req.body = h2o_iovec_init(NULL, 0);
@@ -271,7 +292,10 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_
 
     /* build request and connect */
     h2o_buffer_link_to_pool(ctx->req.buf, &generator->req->pool);
-    h2o_http1client_connect(NULL, ctx, &generator->req->conn->ctx->proxy.client_ctx, url.host, h2o_url_get_port(&url), on_connect);
+    h2o_http1client_connect(&ctx->client, ctx, &generator->req->conn->ctx->proxy.client_ctx, url.host, h2o_url_get_port(&url),
+                            on_connect);
+    generator->async_dispose.cb = on_generator_dispose;
+    generator->async_dispose.data = ctx;
     return mrb_nil_value();
 
 RaiseException:
