@@ -183,9 +183,7 @@ static void define_callback(mrb_state *mrb, const char *name, int id)
                  "    f = Fiber.current\n"
                  "    ret = Fiber.yield([\n"
                  "      %d,\n"
-                 "      Proc.new do |v|\n"
-                 "        f.resume(v)\n"
-                 "      end,\n"
+                 "      _h2o_create_resumer(),\n"
                  "      args,\n"
                  "    ])\n"
                  "    if ret.kind_of? Exception\n"
@@ -300,6 +298,16 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
                                                         "    fiber.resume(req)\n"
                                                         "  end\n"
                                                         "end"));
+    assert_mruby(mrb);
+
+    eval_expr(mrb, "module Kernel\n"
+                   "  def _h2o_create_resumer()\n"
+                   "    me = Fiber.current\n"
+                   "    Proc.new do |v|\n"
+                   "      me.resume(v)\n"
+                   "    end\n"
+                   "  end\n"
+                   "end");
     assert_mruby(mrb);
 
     define_callback(mrb, "http_request", H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST);
