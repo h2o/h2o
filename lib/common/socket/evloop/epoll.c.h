@@ -135,7 +135,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
             }
         }
         if (!notified) {
-            pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+            static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
             static time_t last_reported = 0;
             time_t now = time(NULL);
             pthread_mutex_lock(&lock);
