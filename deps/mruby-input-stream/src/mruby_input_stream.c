@@ -27,6 +27,17 @@ const static struct mrb_data_type mrb_input_stream_type = {
   mrb_mruby_input_stream_free,
 };
 
+static void
+assert_is_open(mrb_state *mrb, mrb_input_stream_t *stream)
+{
+  if (stream->len < 0) {
+    struct RClass *klass = mrb_class_get(mrb, "IOError");
+    if (klass == NULL)
+      klass = E_RUNTIME_ERROR;
+    mrb_raise(mrb, klass, "stream closed");
+  }
+}
+
 static mrb_value
 mrb_input_stream_init(mrb_state *mrb, mrb_value self)
 {
@@ -78,7 +89,7 @@ static void setup_stream(mrb_state *mrb, mrb_input_stream_t *stream, const char 
       stream->len = len;
     } else {
       stream->base = NULL;
-      stream->len = 0;
+      stream->len = len;
     }
     stream->free_cb = default_free_cb;
     stream->free_cb_data = NULL;
@@ -142,8 +153,12 @@ static mrb_value
 mrb_input_stream_gets(mrb_state *mrb, mrb_value self)
 {
   mrb_input_stream_t *stream = DATA_PTR(self);
-  mrb_int pos = stream->pos;
-  mrb_int len = seek_char(stream, '\n');
+  mrb_int pos, len;
+
+  assert_is_open(mrb, stream);
+
+  pos = stream->pos;
+  len = seek_char(stream, '\n');
   if (len < 0) {
     return mrb_nil_value();
   }
@@ -181,11 +196,14 @@ mrb_input_stream_read(mrb_state *mrb, mrb_value self)
 {
   mrb_int len;
   mrb_value buf;
-  mrb_int n = mrb_get_args(mrb, "|iS", &len, &buf);
-
+  mrb_int n = mrb_get_args(mrb, "|iS", &len, &buf), pos;
   mrb_input_stream_t *stream = DATA_PTR(self);
-  mrb_int pos = stream->pos;
-  const char *start = stream->base + pos;
+  const char *start;
+
+  assert_is_open(mrb, stream);
+
+  pos = stream->pos;
+  start = stream->base + pos;
 
   if (pos >= stream->len) {
     return mrb_nil_value();
@@ -211,6 +229,7 @@ static mrb_value
 mrb_input_stream_rewind(mrb_state *mrb, mrb_value self)
 {
   mrb_input_stream_t *stream = DATA_PTR(self);
+  assert_is_open(mrb, stream);
   stream->pos = 0;
   return self;
 }
@@ -221,6 +240,8 @@ mrb_input_stream_byteindex(mrb_state *mrb, mrb_value self)
 {
   mrb_input_stream_t *stream = DATA_PTR(self);
   mrb_int chr, n, len;
+
+  assert_is_open(mrb, stream);
 
   n = mrb_get_args(mrb, "i", &chr);
   if (n != 1) {

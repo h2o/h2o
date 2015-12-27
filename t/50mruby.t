@@ -264,9 +264,18 @@ hosts:
         mruby.handler: |
           prev_input = nil
           Proc.new do |env|
-            resp = [200, {}, [prev_input ? prev_input.read : "not cached"]]
-            prev_input = env["rack.input"]
-            resp
+            if !prev_input
+              prev_input = env["rack.input"]
+              resp = "not cached"
+            else
+              begin
+                prev_input.read
+                resp = "must not seed this"
+              rescue IOError => e
+                resp = "got IOError"
+              end
+            end
+            [200, {}, [resp]]
           end
 EOT
     my ($headers, $body) = run_prog("curl --silent --data 'hello' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
@@ -274,7 +283,7 @@ EOT
     is $body, "not cached";
     ($headers, $body) = run_prog("curl --silent --data 'hello' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
     like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
-    is $body, "";
+    is $body, "got IOError";
 };
 
 done_testing();
