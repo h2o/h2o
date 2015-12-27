@@ -48,7 +48,7 @@ static void post_response(h2o_mruby_request_t *rreq, int status, const struct ph
                           h2o_iovec_t body)
 {
     mrb_state *mrb = rreq->ctx->mrb;
-    mrb_int gc_arena = mrb_gc_arena_save(mrb);
+    int gc_arena = mrb_gc_arena_save(mrb);
     size_t i;
 
     mrb_value resp = mrb_ary_new_capa(mrb, 3);
