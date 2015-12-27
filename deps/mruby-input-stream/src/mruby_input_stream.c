@@ -68,7 +68,7 @@ mrb_mruby_input_stream_free(mrb_state *mrb, void *ptr)
   mrb_free(mrb, stream);
 }
 
-static void setup_stream(mrb_state *mrb, mrb_input_stream_t *stream, const char *base, mrb_int len, mrb_input_stream_free_callback free_cb, void *free_cb_data)
+static void setup_stream(mrb_state *mrb, mrb_input_stream_t *stream, const char *base, mrb_int len, mrb_int pos, mrb_input_stream_free_callback free_cb, void *free_cb_data)
 {
   if (free_cb == NULL) {
     if (len > 0) {
@@ -89,7 +89,7 @@ static void setup_stream(mrb_state *mrb, mrb_input_stream_t *stream, const char 
     stream->free_cb_data = free_cb_data;
   }
 
-  stream->pos = 0;
+  stream->pos = pos;
 }
 
 mrb_input_stream_t*
@@ -97,7 +97,7 @@ mrb_input_stream_create(mrb_state *mrb, const char *base, mrb_int len, mrb_input
 {
   mrb_input_stream_t *stream = (mrb_input_stream_t *)mrb_malloc(mrb, sizeof(mrb_input_stream_t));
 
-  setup_stream(mrb, stream, base, len, free_cb, free_cb_data);
+  setup_stream(mrb, stream, base, len, 0, free_cb, free_cb_data);
   return stream;
 }
 
@@ -112,13 +112,30 @@ mrb_input_stream_value(mrb_state *mrb, const char *base, mrb_int len)
 }
 
 void
-mrb_input_stream_reset(mrb_state *mrb, mrb_value self, const char *base, mrb_int len, mrb_input_stream_free_callback free_cb, void *free_cb_data)
+mrb_input_stream_get_data(mrb_state *mrb, mrb_value self, const char **base, mrb_int *len, mrb_int *pos, mrb_input_stream_free_callback *free_cb, void **free_cb_data)
+{
+  mrb_input_stream_t *stream = DATA_PTR(self);
+
+  if (base != NULL)
+    *base = stream->base;
+  if (len != NULL)
+    *len = stream->len;
+  if (pos != NULL)
+    *pos = stream->pos;
+  if (free_cb != NULL)
+    *free_cb = stream->free_cb;
+  if (free_cb_data != NULL)
+    *free_cb_data = stream->free_cb_data;
+}
+
+void
+mrb_input_stream_set_data(mrb_state *mrb, mrb_value self, const char *base, mrb_int len, mrb_int pos, mrb_input_stream_free_callback free_cb, void *free_cb_data)
 {
   mrb_input_stream_t *stream = DATA_PTR(self);
 
   if (stream->free_cb != NULL)
     stream->free_cb(mrb, stream->base, stream->len, stream->free_cb_data);
-  setup_stream(mrb, stream, base, len, free_cb, free_cb_data);
+  setup_stream(mrb, stream, base, len, pos, free_cb, free_cb_data);
 }
 
 static mrb_value

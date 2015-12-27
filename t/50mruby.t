@@ -201,8 +201,39 @@ EOT
     is md5_hex($body), md5_file("t/50mruby/index.html");
 };
 
+subtest "exception" => sub {
+    my $server = spawn_h2o(<< 'EOT');
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          cnt = 0
+          Proc.new do |env|
+            cnt += 1
+            if cnt % 2 != 0
+              [200, {}, ["hello\n"]]
+            else
+              raise "error from rack"
+            end
+          end
+EOT
+    my $fetch = sub {
+        run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}");
+    };
+    for (1..3) {
+        my ($headers, $body) = $fetch->();
+        like $headers, qr{^HTTP/1\.1 200 }is;
+        is $body, "hello\n";
+        ($headers, $body) = $fetch->();
+        like $headers, qr{^HTTP/1\.1 500 }is;
+    }
+};
+
 subtest "post" => sub {
     my $server = spawn_h2o(<< "EOT");
+num-threads: 1
 hosts:
   default:
     paths:
