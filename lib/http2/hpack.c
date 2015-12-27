@@ -609,7 +609,7 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
             header_table_add(header_table, name->len + value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET, 32);
         if (entry != NULL) {
             if (name_is_token) {
-                entry->name = (h2o_iovec_t *)h2o_hpack_static_table[name_index - 1].name;
+                entry->name = (h2o_iovec_t *)name;
             } else {
                 entry->name = alloc_buf(NULL, name->len);
                 entry->name->base[name->len] = '\0';
