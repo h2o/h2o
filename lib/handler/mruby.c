@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2014,2015 DeNA Co., Ltd., Kazuho Oku, Ryosuke Matsumoto
+ * Copyright (c) 2014,2015 DeNA Co., Ltd., Kazuho Oku, Ryosuke Matsumoto,
+                           Masayoshi Takahashi
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -30,6 +31,7 @@
 #include <mruby/hash.h>
 #include <mruby/string.h>
 #include <mruby/variable.h>
+#include <mruby_input_stream.h>
 #include "h2o.h"
 #include "h2o/mruby_.h"
 
@@ -51,6 +53,7 @@ enum {
     LIT_RACK_MULTIPROCESS,
     LIT_RACK_RUN_ONCE,
     LIT_RACK_HIJACK_,
+    LIT_RACK_INPUT,
     LIT_RACK_ERRORS,
     LIT_SERVER_SOFTWARE,
     LIT_SERVER_SOFTWARE_VALUE,
@@ -216,6 +219,7 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
     SET_LITERAL(LIT_RACK_MULTIPROCESS, "rack.multiprocess");
     SET_LITERAL(LIT_RACK_RUN_ONCE, "rack.run_once");
     SET_LITERAL(LIT_RACK_HIJACK_, "rack.hijack?");
+    SET_LITERAL(LIT_RACK_INPUT, "rack.input");
     SET_LITERAL(LIT_RACK_ERRORS, "rack.errors");
     SET_LITERAL(LIT_SERVER_SOFTWARE, "SERVER_SOFTWARE");
     SET_STRING(LIT_SERVER_SOFTWARE_VALUE, mrb_str_new(mrb, server_name, server_name_len));
@@ -307,7 +311,14 @@ static void stringify_address(h2o_conn_t *conn, socklen_t (*cb)(h2o_conn_t *conn
     }
 }
 
-static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value constants)
+static void on_input_stream_free(mrb_state *mrb, const char *base, mrb_int len, void *_input_stream)
+{
+    /* reset ref to input_stream */
+    mrb_value *input_stream = _input_stream;
+    *input_stream = mrb_nil_value();
+}
+
+static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value constants, mrb_value *input_stream)
 {
     mrb_value env = mrb_hash_new_capa(mrb, 16);
     mrb_int arena = mrb_gc_arena_save(mrb);
@@ -340,6 +351,9 @@ static mrb_value build_env(h2o_req_t *req, mrb_state *mrb, mrb_value constants)
         char buf[32];
         int l = sprintf(buf, "%zu", req->entity.len);
         mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_CONTENT_LENGTH), mrb_str_new(mrb, buf, l));
+        *input_stream = mrb_input_stream_value(mrb, NULL, 0);
+        mrb_input_stream_reset(mrb, *input_stream, req->entity.base, (mrb_int)req->entity.len, on_input_stream_free, input_stream);
+        mrb_hash_set(mrb, env, mrb_ary_entry(constants, LIT_RACK_INPUT), *input_stream);
     }
     {
         mrb_value h, p;
@@ -535,11 +549,12 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     h2o_mruby_handler_t *handler = (void *)_handler;
     h2o_mruby_context_t *handler_ctx = h2o_context_get_handler_context(req->conn->ctx, &handler->super);
     mrb_int arena = mrb_gc_arena_save(handler_ctx->mrb);
+    mrb_value input_stream = mrb_nil_value();
     h2o_iovec_t content;
 
     {
         /* call rack handler */
-        mrb_value env = build_env(req, handler_ctx->mrb, handler_ctx->constants);
+        mrb_value env = build_env(req, handler_ctx->mrb, handler_ctx->constants, &input_stream);
         mrb_value resp = mrb_funcall_argv(handler_ctx->mrb, handler_ctx->proc, handler_ctx->symbols.sym_call, 1, &env);
         if (handler_ctx->mrb->exc != NULL) {
             report_exception(req, handler_ctx->mrb);
@@ -550,6 +565,8 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
             goto SendInternalError;
     }
 
+    if (!mrb_nil_p(input_stream))
+        mrb_input_stream_reset(handler_ctx->mrb, input_stream, NULL, 0, NULL, NULL);
     mrb_gc_arena_restore(handler_ctx->mrb, arena);
 
     /* fall through or send the response */

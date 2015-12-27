@@ -14,8 +14,9 @@ class HelloApp
     host = env["HTTP_HOST"]
     method = env["REQUEST_METHOD"]
     query = env["QUERY_STRING"]
+    input = env["rack.input"] ? env["rack.input"].read : ""
 
-    msg = "#{h} #{m}. User-Agent:#{ua} New User-Agent:#{new_ua} path:#{path} host:#{host} method:#{method} query:#{query}"
+    msg = "#{h} #{m}. User-Agent:#{ua} New User-Agent:#{new_ua} path:#{path} host:#{host} method:#{method} query:#{query} input:#{input}"
 
     [200,
      {
