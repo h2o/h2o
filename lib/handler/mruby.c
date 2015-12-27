@@ -481,14 +481,22 @@ static mrb_value build_env(h2o_mruby_request_t *rreq)
 static int handle_response_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t name, h2o_iovec_t value, void *_req)
 {
     h2o_req_t *req = _req;
+    const h2o_token_t *token;
 
     /* note: name of the header is lowercased by http1client */
 
-    if (h2o_memis(name.base, name.len, H2O_STRLIT("link")) && h2o_puth_path_in_link_header(req, value.base, value.len)) {
-        /* do not send the link header that is going to be pushed */
+    if ((token = h2o_lookup_token(name.base, name.len)) != NULL) {
+        if (token->proxy_should_drop) {
+            /* skip */
+        } else if (token == H2O_TOKEN_LINK && h2o_puth_path_in_link_header(req, value.base, value.len)) {
+            /* do not send the link header that is going to be pushed */
+        } else {
+            value = h2o_strdup(&req->pool, value.base, value.len);
+            h2o_add_header(&req->pool, &req->res.headers, token, value.base, value.len);
+        }
     } else {
         value = h2o_strdup(&req->pool, value.base, value.len);
-        h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 1, value.base, value.len);
+        h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, value.base, value.len);
     }
 
     return 0;
