@@ -571,7 +571,7 @@ GotException:
 static void clear_rack_input(h2o_mruby_generator_t *generator)
 {
     if (!mrb_nil_p(generator->rack_input))
-        mrb_input_stream_set_data(generator->ctx->mrb, generator->rack_input, NULL, 0, 0, NULL, NULL);
+        mrb_input_stream_set_data(generator->ctx->mrb, generator->rack_input, NULL, -1, 0, NULL, NULL);
 }
 
 static void on_generator_dispose(void *_generator)
