@@ -38,7 +38,7 @@ sub create_upstream {
 my $server = spawn_h2o(sub {
     my ($port, $tls_port) = @_;
     return << "EOT";
-proxy.timeout.io: 10000
+proxy.timeout.io: 1000
 hosts:
   default:
     paths:
