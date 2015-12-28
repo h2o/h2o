@@ -299,7 +299,7 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_
     h2o_buffer_init(&ctx->req.buf, &h2o_socket_buffer_prototype);
 
     { /* method */
-        mrb_value method = mrb_str_to_str(mrb, mrb_ary_entry(input, 0));
+        mrb_value method = h2o_mruby_to_str(mrb, mrb_ary_entry(input, 0));
         if (mrb->exc != NULL)
             goto RaiseException;
         h2o_buffer_reserve(&ctx->req.buf, RSTRING_LEN(method) + 1);
@@ -309,7 +309,7 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_
             ctx->req.method_is_head = 1;
     }
     { /* uri */
-        mrb_value t = mrb_str_to_str(mrb, mrb_ary_entry(input, 1));
+        mrb_value t = h2o_mruby_to_str(mrb, mrb_ary_entry(input, 1));
         if (mrb->exc != NULL)
             goto RaiseException;
         h2o_iovec_t urlstr = h2o_strdup(&generator->req->pool, RSTRING_PTR(t), RSTRING_LEN(t));

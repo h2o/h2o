@@ -90,8 +90,29 @@ enum {
     if (mrb->exc != NULL)                                                                                                          \
     h2o_mruby__assert_failed(mrb, __FILE__, __LINE__)
 
+/* source files using this macro should include mruby/throw.h */
+#define H2O_MRUBY_EXEC_GUARD(block)                                                                                                \
+    do {                                                                                                                           \
+        struct mrb_jmpbuf *prev_jmp = mrb->jmp;                                                                                    \
+        struct mrb_jmpbuf c_jmp;                                                                                                   \
+        MRB_TRY(&c_jmp)                                                                                                            \
+        {                                                                                                                          \
+            mrb->jmp = &c_jmp;                                                                                                     \
+            do {                                                                                                                   \
+                block                                                                                                              \
+            } while (0);                                                                                                           \
+            mrb->jmp = prev_jmp;                                                                                                   \
+        }                                                                                                                          \
+        MRB_CATCH(&c_jmp)                                                                                                          \
+        {                                                                                                                          \
+            mrb->jmp = prev_jmp;                                                                                                   \
+        }                                                                                                                          \
+        MRB_END_EXC(&c_jmp);                                                                                                       \
+    } while (0)
+
 /* handler/mruby.c */
 void h2o_mruby__assert_failed(mrb_state *mrb, const char *file, int line);
+mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v);
 mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr);
 void h2o_mruby_define_callback(mrb_state *mrb, const char *name, int id);
 mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config, char *errbuf);
