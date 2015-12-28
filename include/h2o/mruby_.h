@@ -30,8 +30,13 @@ enum {
     H2O_MRUBY_LIT_SERVER_SOFTWARE_VALUE,
     H2O_MRUBY_PROC_EACH_TO_ARRAY,
     H2O_MRUBY_PROC_APP_TO_FIBER,
+
     /* used by chunked.c */
     H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER,
+
+    /* used by http_request.c */
+    H2O_MRUBY_HTTP_REQUEST_INPUT_STREAM_CLASS,
+
     H2O_MRUBY_NUM_CONSTANTS
 };
 
@@ -73,6 +78,7 @@ typedef struct st_h2o_mruby_generator_t {
 #define H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED -1 /* used to notify exception, does not execution to mruby code */
 #define H2O_MRUBY_CALLBACK_ID_SEND_BODY_CHUNK -2
 #define H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST -3
+#define H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST_FETCH_CHUNK -4
 
 enum {
     H2O_MRUBY_CALLBACK_NEXT_ACTION_STOP,
@@ -105,6 +111,8 @@ mrb_value h2o_mruby_send_chunked_callback(h2o_mruby_generator_t *generator, mrb_
 /* handler/mruby/http_request.c */
 void h2o_mruby_http_request_init_context(h2o_mruby_context_t *ctx);
 mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value input, int *next_action);
+mrb_value h2o_mruby_http_request_fetch_chunk_callback(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value input,
+                                                      int *next_action);
 
 /* handler/configurator/mruby.c */
 void h2o_mruby_register_configurator(h2o_globalconf_t *conf);
