@@ -62,7 +62,7 @@ static void do_proceed(h2o_generator_t *_generator, h2o_req_t *req)
     do_send(generator);
 }
 
-void h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator)
+mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator)
 {
     h2o_mruby_chunked_t *chunked = h2o_mem_alloc_pool(&generator->req->pool, sizeof(*chunked));
     h2o_buffer_init(&chunked->receiving, &h2o_socket_buffer_prototype);
@@ -71,7 +71,7 @@ void h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator)
 
     generator->super.proceed = do_proceed;
     generator->chunked = chunked;
-    generator->receiver = mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER);
+    return mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER);
 }
 
 void h2o_mruby_send_chunked_dispose(h2o_mruby_generator_t *generator)
@@ -82,7 +82,7 @@ void h2o_mruby_send_chunked_dispose(h2o_mruby_generator_t *generator)
     h2o_doublebuffer_dispose(&chunked->sending);
 }
 
-mrb_value h2o_mruby_send_chunked_callback(h2o_mruby_generator_t *generator, mrb_value arg, int *next_action)
+mrb_value h2o_mruby_send_chunked_callback(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value arg, int *next_action)
 {
     mrb_state *mrb = generator->ctx->mrb;
 

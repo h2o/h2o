@@ -31,6 +31,7 @@
 struct st_h2o_mruby_http_request_context_t {
     h2o_mruby_generator_t *generator;
     h2o_http1client_t *client;
+    mrb_value receiver;
     struct {
         h2o_buffer_t *buf;
         h2o_iovec_t body; /* body.base != NULL indicates that post content exists (and the length MAY be zero) */
@@ -57,28 +58,27 @@ static void on_generator_dispose(h2o_mruby_generator_t *generator)
 
     mrb_state *mrb = ctx->generator->ctx->mrb;
     int gc_arena = mrb_gc_arena_save(mrb);
-    h2o_mruby_run_fiber(ctx->generator, create_downstream_closed_exception(mrb), gc_arena, NULL);
+    h2o_mruby_run_fiber(ctx->generator, ctx->receiver, create_downstream_closed_exception(mrb), gc_arena, NULL);
 }
 
 /* precond: headers should be ordered in a way that they are grouped by their names */
-static void post_response(h2o_mruby_generator_t *generator, int status, const struct phr_header *headers, size_t num_headers,
-                          h2o_iovec_t body)
+static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, h2o_iovec_t body)
 {
-    mrb_state *mrb = generator->ctx->mrb;
+    mrb_state *mrb = ctx->generator->ctx->mrb;
     int gc_arena = mrb_gc_arena_save(mrb);
     size_t i;
 
     mrb_value resp = mrb_ary_new_capa(mrb, 3);
-    mrb_ary_set(mrb, resp, 0, mrb_fixnum_value(status));
-    mrb_value headers_hash = mrb_hash_new_capa(mrb, (int)num_headers);
-    for (i = 0; i < num_headers; ++i) {
-        mrb_value k = mrb_str_new(mrb, headers[i].name, headers[i].name_len);
-        mrb_value v = mrb_str_new(mrb, headers[i].value, headers[i].value_len);
-        while (i + 1 < num_headers &&
-               h2o_memis(headers[i].name, headers[i].name_len, headers[i + 1].name, headers[i + 1].name_len)) {
+    mrb_ary_set(mrb, resp, 0, mrb_fixnum_value(ctx->resp.status));
+    mrb_value headers_hash = mrb_hash_new_capa(mrb, (int)ctx->resp.num_headers);
+    for (i = 0; i < ctx->resp.num_headers; ++i) {
+        mrb_value k = mrb_str_new(mrb, ctx->resp.headers[i].name, ctx->resp.headers[i].name_len);
+        mrb_value v = mrb_str_new(mrb, ctx->resp.headers[i].value, ctx->resp.headers[i].value_len);
+        while (i + 1 < ctx->resp.num_headers && h2o_memis(ctx->resp.headers[i].name, ctx->resp.headers[i].name_len,
+                                                          ctx->resp.headers[i + 1].name, ctx->resp.headers[i + 1].name_len)) {
             ++i;
             v = mrb_str_cat_lit(mrb, v, "\n");
-            v = mrb_str_cat(mrb, v, headers[i].value, headers[i].value_len);
+            v = mrb_str_cat(mrb, v, ctx->resp.headers[i].value, ctx->resp.headers[i].value_len);
         }
         mrb_hash_set(mrb, headers_hash, k, v);
     }
@@ -87,14 +87,17 @@ static void post_response(h2o_mruby_generator_t *generator, int status, const st
     mrb_ary_set(mrb, body_ary, 0, mrb_str_new(mrb, body.base, body.len));
     mrb_ary_set(mrb, resp, 2, body_ary);
 
-    h2o_mruby_run_fiber(generator, resp, gc_arena, NULL);
+    h2o_mruby_run_fiber(ctx->generator, ctx->receiver, resp, gc_arena, NULL);
 }
 
-static void post_error(h2o_mruby_generator_t *generator, const char *errstr)
+static void post_error(struct st_h2o_mruby_http_request_context_t *ctx, const char *errstr)
 {
-    static const struct phr_header headers[1] = {{H2O_STRLIT("content-type"), H2O_STRLIT("text/plain; charset=utf-8")}};
+    static const struct phr_header headers[] = {{H2O_STRLIT("content-type"), H2O_STRLIT("text/plain; charset=utf-8")}};
 
-    post_response(generator, 500, headers, sizeof(headers) / sizeof(headers[0]), h2o_iovec_init(errstr, strlen(errstr)));
+    ctx->resp.status = 500;
+    ctx->resp.headers = (struct phr_header *)headers;
+    ctx->resp.num_headers = sizeof(headers) / sizeof(headers[0]);
+    post_response(ctx, h2o_iovec_init(errstr, strlen(errstr)));
 }
 
 static int on_body(h2o_http1client_t *client, const char *errstr)
@@ -102,8 +105,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
     if (errstr != NULL)
-        post_response(ctx->generator, ctx->resp.status, ctx->resp.headers, ctx->resp.num_headers,
-                      h2o_iovec_init(client->sock->input->bytes, client->sock->input->size));
+        post_response(ctx, h2o_iovec_init(client->sock->input->bytes, client->sock->input->size));
     return 0;
 }
 
@@ -124,7 +126,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
     if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
-        post_error(ctx->generator, errstr);
+        post_error(ctx, errstr);
         return NULL;
     }
 
@@ -148,7 +150,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     qsort(ctx->resp.headers, ctx->resp.num_headers, sizeof(ctx->resp.headers[0]), headers_sort_cb);
 
     if (errstr == h2o_http1client_error_is_eos) {
-        post_response(ctx->generator, ctx->resp.status, ctx->resp.headers, ctx->resp.num_headers, h2o_iovec_init(NULL, 0));
+        post_response(ctx, h2o_iovec_init(NULL, 0));
         return NULL;
     }
     return on_body;
@@ -160,7 +162,7 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
     if (errstr != NULL) {
-        post_error(ctx->generator, errstr);
+        post_error(ctx, errstr);
         return NULL;
     }
 
@@ -198,7 +200,7 @@ static int flatten_request_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
     return 0;
 }
 
-mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_value input, int *next_action)
+mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value input, int *next_action)
 {
     struct st_h2o_mruby_http_request_context_t *ctx;
     mrb_state *mrb = generator->ctx->mrb;
@@ -208,11 +210,10 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_
         return create_downstream_closed_exception(mrb);
 
     ctx = h2o_mem_alloc_pool(&generator->req->pool, sizeof(*ctx));
+    memset(ctx, 0, sizeof(*ctx));
     ctx->generator = generator;
+    ctx->receiver = receiver;
     h2o_buffer_init(&ctx->req.buf, &h2o_socket_buffer_prototype);
-    ctx->req.body = h2o_iovec_init(NULL, 0);
-    ctx->req.method_is_head = 0;
-    ctx->req.has_transfer_encoding = 0;
 
     { /* method */
         mrb_value method = mrb_str_to_str(mrb, mrb_ary_entry(input, 0));
