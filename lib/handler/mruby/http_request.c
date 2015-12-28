@@ -198,7 +198,7 @@ static int flatten_request_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
     return 0;
 }
 
-mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_value input)
+mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_value input, int *next_action)
 {
     struct st_h2o_mruby_http_request_context_t *ctx;
     mrb_state *mrb = generator->ctx->mrb;
@@ -296,6 +296,8 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_
                             on_connect);
     generator->async_dispose.cb = on_generator_dispose;
     generator->async_dispose.data = ctx;
+
+    *next_action = H2O_MRUBY_CALLBACK_NEXT_ACTION_ASYNC;
     return mrb_nil_value();
 
 RaiseException:

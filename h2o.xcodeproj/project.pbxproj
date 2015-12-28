@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		100A55101C2BB15600C4E3E0 /* http_request.c in Sources */ = {isa = PBXBuildFile; fileRef = 100A550E1C2BB15100C4E3E0 /* http_request.c */; };
+		100A55151C30C5BC00C4E3E0 /* chunked.c in Sources */ = {isa = PBXBuildFile; fileRef = 100A55141C30C5BC00C4E3E0 /* chunked.c */; };
 		101788B219B561AA0084C6D8 /* socket.c in Sources */ = {isa = PBXBuildFile; fileRef = 101788B119B561AA0084C6D8 /* socket.c */; };
 		101B670C19ADD3380084A351 /* access_log.c in Sources */ = {isa = PBXBuildFile; fileRef = 101B670B19ADD3380084A351 /* access_log.c */; };
 		103BAB361B130666000694F4 /* socket.c in Sources */ = {isa = PBXBuildFile; fileRef = 103BAB351B130666000694F4 /* socket.c */; };
@@ -270,6 +271,7 @@
 		100A550C1C22857B00C4E3E0 /* 50mruby-htpasswd.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-htpasswd.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		100A550E1C2BB15100C4E3E0 /* http_request.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http_request.c; sourceTree = "<group>"; };
 		100A55131C2E5FAC00C4E3E0 /* 50mruby-http-request.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-http-request.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		100A55141C30C5BC00C4E3E0 /* chunked.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = chunked.c; sourceTree = "<group>"; };
 		100AE41A1B27D74800CE18BB /* 50file-range.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50file-range.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		101788B119B561AA0084C6D8 /* socket.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = socket.c; sourceTree = "<group>"; };
 		101B670B19ADD3380084A351 /* access_log.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = access_log.c; sourceTree = "<group>"; };
@@ -587,6 +589,7 @@
 		100A550D1C2BB12A00C4E3E0 /* mruby */ = {
 			isa = PBXGroup;
 			children = (
+				100A55141C30C5BC00C4E3E0 /* chunked.c */,
 				100A550E1C2BB15100C4E3E0 /* http_request.c */,
 			);
 			path = mruby;
@@ -1629,6 +1632,7 @@
 			files = (
 				107D4D4F1B58970D004A9B21 /* ssl.c in Sources */,
 				10756E2C1AC126420009BF57 /* emitter.c in Sources */,
+				100A55151C30C5BC00C4E3E0 /* chunked.c in Sources */,
 				100A55101C2BB15600C4E3E0 /* http_request.c in Sources */,
 				10756E2A1AC126420009BF57 /* api.c in Sources */,
 				10756E2B1AC126420009BF57 /* dumper.c in Sources */,
