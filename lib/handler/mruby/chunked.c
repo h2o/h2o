@@ -86,8 +86,6 @@ mrb_value h2o_mruby_send_chunked_callback(h2o_mruby_generator_t *generator, mrb_
 {
     mrb_state *mrb = generator->ctx->mrb;
 
-    if (!mrb_array_p(arg))
-        return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "h2o_mruby_send_chunked_callback: arg is not an array");
     if (generator->req == NULL)
         return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "h2o_mruby_send_chunked_callback: downstream HTTP closed");
     if (generator->req->_generator == NULL)

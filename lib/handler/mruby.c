@@ -644,18 +644,22 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value input, int 
             generator->receiver = mrb_ary_entry(output, 1);
             if (!mrb_obj_eq(mrb, generator->ctx->proc, generator->receiver))
                 mrb_gc_register(mrb, generator->receiver);
-            mrb_value arg = mrb_ary_entry(output, 2);
             int next_action = H2O_MRUBY_CALLBACK_NEXT_ACTION_IMMEDIATE;
-            switch (status) {
-            case H2O_MRUBY_CALLBACK_ID_SEND_BODY_CHUNK:
-                input = h2o_mruby_send_chunked_callback(generator, arg, &next_action);
-                break;
-            case H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST:
-                input = h2o_mruby_http_request_callback(generator, arg, &next_action);
-                break;
-            default:
-                input = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpected callback id sent from rack app");
-                break;
+            mrb_value args = mrb_ary_entry(output, 2);
+            if (mrb_array_p(args)) {
+                switch (status) {
+                case H2O_MRUBY_CALLBACK_ID_SEND_BODY_CHUNK:
+                    input = h2o_mruby_send_chunked_callback(generator, args, &next_action);
+                    break;
+                case H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST:
+                    input = h2o_mruby_http_request_callback(generator, args, &next_action);
+                    break;
+                default:
+                    input = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpected callback id sent from rack app");
+                    break;
+                }
+            } else {
+                input = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "callback from rack app did not receive an array arg");
             }
             switch (next_action) {
             case H2O_MRUBY_CALLBACK_NEXT_ACTION_STOP:

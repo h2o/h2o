@@ -214,11 +214,6 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_
     ctx->req.method_is_head = 0;
     ctx->req.has_transfer_encoding = 0;
 
-    if (!mrb_array_p(input)) {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "http_request: unexpected input"));
-        goto RaiseException;
-    }
-
     { /* method */
         mrb_value method = mrb_str_to_str(mrb, mrb_ary_entry(input, 0));
         if (mrb->exc != NULL)
