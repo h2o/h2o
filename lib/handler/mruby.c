@@ -67,7 +67,6 @@ void h2o_mruby_define_callback(mrb_state *mrb, const char *name, int id)
 
     sprintf(buf, "module Kernel\n"
                  "  def %s(*args)\n"
-                 "    f = Fiber.current\n"
                  "    ret = Fiber.yield([\n"
                  "      %d,\n"
                  "      _h2o_create_resumer(),\n"
