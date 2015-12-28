@@ -38,49 +38,14 @@
 
 #define STATUS_FALLTHRU 399
 
-enum {
-    LIT_REQUEST_METHOD = H2O_MAX_TOKENS,
-    LIT_SCRIPT_NAME,
-    LIT_PATH_INFO,
-    LIT_QUERY_STRING,
-    LIT_SERVER_NAME,
-    LIT_SERVER_ADDR,
-    LIT_SERVER_PORT,
-    LIT_CONTENT_LENGTH,
-    LIT_REMOTE_ADDR,
-    LIT_REMOTE_PORT,
-    LIT_RACK_URL_SCHEME,
-    LIT_RACK_MULTITHREAD,
-    LIT_RACK_MULTIPROCESS,
-    LIT_RACK_RUN_ONCE,
-    LIT_RACK_HIJACK_,
-    LIT_RACK_INPUT,
-    LIT_RACK_ERRORS,
-    LIT_SERVER_SOFTWARE,
-    LIT_SERVER_SOFTWARE_VALUE,
-    PROC_EACH_TO_ARRAY,
-    PROC_APP_TO_FIBER,
-    PROC_EACH_TO_FIBER,
-    NUM_CONSTANTS
-};
-
 #define FREEZE_STRING(v) RSTR_SET_FROZEN_FLAG(mrb_str_ptr(v))
 
-#define assert_mruby(mrb)                                                                                                          \
-    if (mrb->exc != NULL)                                                                                                          \
-    assert_mruby_abort(mrb, __FILE__, __LINE__)
-
-static void assert_mruby_abort(mrb_state *mrb, const char *file, int line)
+void h2o_mruby__assert_failed(mrb_state *mrb, const char *file, int line)
 {
     mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
     struct RString *error = mrb_str_ptr(obj);
     fprintf(stderr, "unexpected ruby error at file: \"%s\", line %d: %s", file, line, error->as.heap.ptr);
     abort();
-}
-
-static mrb_value eval_expr(mrb_state *mrb, const char *expr)
-{
-    return mrb_funcall(mrb, mrb_top_self(mrb), "eval", 1, mrb_str_new_cstr(mrb, expr));
 }
 
 static void set_h2o_root(mrb_state *mrb)
@@ -89,6 +54,38 @@ static void set_h2o_root(mrb_state *mrb)
     if (root == NULL)
         root = H2O_TO_STR(H2O_ROOT);
     mrb_gv_set(mrb, mrb_intern_lit(mrb, "$H2O_ROOT"), mrb_str_new(mrb, root, strlen(root)));
+}
+
+mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr)
+{
+    return mrb_funcall(mrb, mrb_top_self(mrb), "eval", 1, mrb_str_new_cstr(mrb, expr));
+}
+
+void h2o_mruby_define_callback(mrb_state *mrb, const char *name, int id)
+{
+    char buf[1024];
+
+    sprintf(buf, "module Kernel\n"
+                 "  def %s(*args)\n"
+                 "    f = Fiber.current\n"
+                 "    ret = Fiber.yield([\n"
+                 "      %d,\n"
+                 "      _h2o_create_resumer(),\n"
+                 "      args,\n"
+                 "    ])\n"
+                 "    if ret.kind_of? Exception\n"
+                 "      raise ret\n"
+                 "    end\n"
+                 "    ret\n"
+                 "  end\n"
+                 "end",
+            name, id);
+    h2o_mruby_eval_expr(mrb, buf);
+
+    if (mrb->exc != NULL) {
+        fprintf(stderr, "failed to define mruby function: %s\n", name);
+        h2o_mruby_assert(mrb);
+    }
 }
 
 mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config, char *errbuf)
@@ -175,36 +172,9 @@ static h2o_iovec_t convert_header_name_to_env(h2o_mem_pool_t *pool, const char *
 #undef KEY_PREFIX_LEN
 }
 
-static void define_callback(mrb_state *mrb, const char *name, int id)
-{
-    char buf[1024];
-
-    sprintf(buf, "module Kernel\n"
-                 "  def %s(*args)\n"
-                 "    f = Fiber.current\n"
-                 "    ret = Fiber.yield([\n"
-                 "      %d,\n"
-                 "      _h2o_create_resumer(),\n"
-                 "      args,\n"
-                 "    ])\n"
-                 "    if ret.kind_of? Exception\n"
-                 "      raise ret\n"
-                 "    end\n"
-                 "    ret\n"
-                 "  end\n"
-                 "end",
-            name, id);
-    eval_expr(mrb, buf);
-
-    if (mrb->exc != NULL) {
-        fprintf(stderr, "failed to define mruby function: %s\n", name);
-        assert_mruby(mrb);
-    }
-}
-
 static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t server_name_len)
 {
-    mrb_value ary = mrb_ary_new_capa(mrb, NUM_CONSTANTS);
+    mrb_value ary = mrb_ary_new_capa(mrb, H2O_MRUBY_NUM_CONSTANTS);
     mrb_int i;
 
     int arena = mrb_gc_arena_save(mrb);
@@ -239,94 +209,77 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
     } while (0)
 #define SET_LITERAL(idx, str) SET_STRING(idx, mrb_str_new_lit(mrb, str))
 
-    SET_LITERAL(LIT_REQUEST_METHOD, "REQUEST_METHOD");
-    SET_LITERAL(LIT_SCRIPT_NAME, "SCRIPT_NAME");
-    SET_LITERAL(LIT_PATH_INFO, "PATH_INFO");
-    SET_LITERAL(LIT_QUERY_STRING, "QUERY_STRING");
-    SET_LITERAL(LIT_SERVER_NAME, "SERVER_NAME");
-    SET_LITERAL(LIT_SERVER_ADDR, "SERVER_ADDR");
-    SET_LITERAL(LIT_SERVER_PORT, "SERVER_PORT");
-    SET_LITERAL(LIT_CONTENT_LENGTH, "CONTENT_LENGTH");
-    SET_LITERAL(LIT_REMOTE_ADDR, "REMOTE_ADDR");
-    SET_LITERAL(LIT_REMOTE_PORT, "REMOTE_PORT");
-    SET_LITERAL(LIT_RACK_URL_SCHEME, "rack.url_scheme");
-    SET_LITERAL(LIT_RACK_MULTITHREAD, "rack.multithread");
-    SET_LITERAL(LIT_RACK_MULTIPROCESS, "rack.multiprocess");
-    SET_LITERAL(LIT_RACK_RUN_ONCE, "rack.run_once");
-    SET_LITERAL(LIT_RACK_HIJACK_, "rack.hijack?");
-    SET_LITERAL(LIT_RACK_INPUT, "rack.input");
-    SET_LITERAL(LIT_RACK_ERRORS, "rack.errors");
-    SET_LITERAL(LIT_SERVER_SOFTWARE, "SERVER_SOFTWARE");
-    SET_STRING(LIT_SERVER_SOFTWARE_VALUE, mrb_str_new(mrb, server_name, server_name_len));
+    SET_LITERAL(H2O_MRUBY_LIT_REQUEST_METHOD, "REQUEST_METHOD");
+    SET_LITERAL(H2O_MRUBY_LIT_SCRIPT_NAME, "SCRIPT_NAME");
+    SET_LITERAL(H2O_MRUBY_LIT_PATH_INFO, "PATH_INFO");
+    SET_LITERAL(H2O_MRUBY_LIT_QUERY_STRING, "QUERY_STRING");
+    SET_LITERAL(H2O_MRUBY_LIT_SERVER_NAME, "SERVER_NAME");
+    SET_LITERAL(H2O_MRUBY_LIT_SERVER_ADDR, "SERVER_ADDR");
+    SET_LITERAL(H2O_MRUBY_LIT_SERVER_PORT, "SERVER_PORT");
+    SET_LITERAL(H2O_MRUBY_LIT_CONTENT_LENGTH, "CONTENT_LENGTH");
+    SET_LITERAL(H2O_MRUBY_LIT_REMOTE_ADDR, "REMOTE_ADDR");
+    SET_LITERAL(H2O_MRUBY_LIT_REMOTE_PORT, "REMOTE_PORT");
+    SET_LITERAL(H2O_MRUBY_LIT_RACK_URL_SCHEME, "rack.url_scheme");
+    SET_LITERAL(H2O_MRUBY_LIT_RACK_MULTITHREAD, "rack.multithread");
+    SET_LITERAL(H2O_MRUBY_LIT_RACK_MULTIPROCESS, "rack.multiprocess");
+    SET_LITERAL(H2O_MRUBY_LIT_RACK_RUN_ONCE, "rack.run_once");
+    SET_LITERAL(H2O_MRUBY_LIT_RACK_HIJACK_, "rack.hijack?");
+    SET_LITERAL(H2O_MRUBY_LIT_RACK_INPUT, "rack.input");
+    SET_LITERAL(H2O_MRUBY_LIT_RACK_ERRORS, "rack.errors");
+    SET_LITERAL(H2O_MRUBY_LIT_SERVER_SOFTWARE, "SERVER_SOFTWARE");
+    SET_STRING(H2O_MRUBY_LIT_SERVER_SOFTWARE_VALUE, mrb_str_new(mrb, server_name, server_name_len));
 
 #undef SET_LITERAL
 #undef SET_STRING
 
-    mrb_ary_set(mrb, ary, PROC_EACH_TO_ARRAY, eval_expr(mrb, "Proc.new do |o|\n"
-                                                             "  a = []\n"
-                                                             "  o.each do |x|\n"
-                                                             "    a << x\n"
-                                                             "  end\n"
-                                                             "  a\n"
-                                                             "end"));
-    assert_mruby(mrb);
+    mrb_ary_set(mrb, ary, H2O_MRUBY_PROC_EACH_TO_ARRAY, h2o_mruby_eval_expr(mrb, "Proc.new do |o|\n"
+                                                                                 "  a = []\n"
+                                                                                 "  o.each do |x|\n"
+                                                                                 "    a << x\n"
+                                                                                 "  end\n"
+                                                                                 "  a\n"
+                                                                                 "end"));
+    h2o_mruby_assert(mrb);
 
     /* sends exception using H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED */
-    mrb_ary_set(mrb, ary, PROC_APP_TO_FIBER, eval_expr(mrb, "Proc.new do |app|\n"
-                                                            "  cached = nil\n"
-                                                            "  Proc.new do |req|\n"
-                                                            "    fiber = cached\n"
-                                                            "    cached = nil\n"
-                                                            "    if !fiber\n"
-                                                            "      fiber = Fiber.new do\n"
-                                                            "        self_fiber = Fiber.current\n"
-                                                            "        req = Fiber.yield\n"
-                                                            "        while 1\n"
-                                                            "          begin\n"
-                                                            "            while 1\n"
-                                                            "              resp = app.call(req)\n"
-                                                            "              cached = self_fiber\n"
-                                                            "              req = Fiber.yield(resp)\n"
-                                                            "            end\n"
-                                                            "          rescue => e\n"
-                                                            "            cached = self_fiber\n"
-                                                            "            req = Fiber.yield([-1, e])\n"
-                                                            "          end\n"
-                                                            "        end\n"
-                                                            "      end\n"
-                                                            "      fiber.resume\n"
-                                                            "    end\n"
-                                                            "    fiber.resume(req)\n"
-                                                            "  end\n"
-                                                            "end"));
-    assert_mruby(mrb);
+    mrb_ary_set(mrb, ary, H2O_MRUBY_PROC_APP_TO_FIBER, h2o_mruby_eval_expr(mrb, "Proc.new do |app|\n"
+                                                                                "  cached = nil\n"
+                                                                                "  Proc.new do |req|\n"
+                                                                                "    fiber = cached\n"
+                                                                                "    cached = nil\n"
+                                                                                "    if !fiber\n"
+                                                                                "      fiber = Fiber.new do\n"
+                                                                                "        self_fiber = Fiber.current\n"
+                                                                                "        req = Fiber.yield\n"
+                                                                                "        while 1\n"
+                                                                                "          begin\n"
+                                                                                "            while 1\n"
+                                                                                "              resp = app.call(req)\n"
+                                                                                "              cached = self_fiber\n"
+                                                                                "              req = Fiber.yield(resp)\n"
+                                                                                "            end\n"
+                                                                                "          rescue => e\n"
+                                                                                "            cached = self_fiber\n"
+                                                                                "            req = Fiber.yield([-1, e])\n"
+                                                                                "          end\n"
+                                                                                "        end\n"
+                                                                                "      end\n"
+                                                                                "      fiber.resume\n"
+                                                                                "    end\n"
+                                                                                "    fiber.resume(req)\n"
+                                                                                "  end\n"
+                                                                                "end"));
+    h2o_mruby_assert(mrb);
 
-    eval_expr(mrb, "module Kernel\n"
-                   "  def _h2o_create_resumer()\n"
-                   "    me = Fiber.current\n"
-                   "    Proc.new do |v|\n"
-                   "      me.resume(v)\n"
-                   "    end\n"
-                   "  end\n"
-                   "end");
-    assert_mruby(mrb);
-
-    define_callback(mrb, "_h2o_internal_send_chunk", H2O_MRUBY_CALLBACK_ID_SEND_BODY_CHUNK);
-    mrb_ary_set(mrb, ary, PROC_EACH_TO_FIBER, eval_expr(mrb, "Proc.new do |src|\n"
-                                                             "  fiber = Fiber.new do\n"
-                                                             "    src.each do |chunk|\n"
-                                                             "      if !chunk\n"
-                                                             "        raise \"body#each returned nil\"\n"
-                                                             "      end\n"
-                                                             "      _h2o_internal_send_chunk(chunk)\n"
-                                                             "    end\n"
-                                                             "    _h2o_internal_send_chunk(nil)\n"
-                                                             "  end\n"
-                                                             "  fiber.resume\n"
-                                                             "end"));
-
-    define_callback(mrb, "http_request", H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST);
-    assert_mruby(mrb);
+    h2o_mruby_eval_expr(mrb, "module Kernel\n"
+                             "  def _h2o_create_resumer()\n"
+                             "    me = Fiber.current\n"
+                             "    Proc.new do |v|\n"
+                             "      me.resume(v)\n"
+                             "    end\n"
+                             "  end\n"
+                             "end");
+    h2o_mruby_assert(mrb);
 
     return ary;
 }
@@ -347,12 +300,15 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
     handler_ctx->symbols.sym_call = mrb_intern_lit(handler_ctx->mrb, "call");
     handler_ctx->symbols.sym_close = mrb_intern_lit(handler_ctx->mrb, "close");
 
+    h2o_mruby_send_chunked_init_context(handler_ctx);
+    h2o_mruby_http_request_init_context(handler_ctx);
+
     /* compile code (must be done for each thread) */
     int arena = mrb_gc_arena_save(handler_ctx->mrb);
     mrb_value proc = h2o_mruby_compile_code(handler_ctx->mrb, &handler->config, NULL);
-    handler_ctx->proc = mrb_funcall_argv(handler_ctx->mrb, mrb_ary_entry(handler_ctx->constants, PROC_APP_TO_FIBER),
+    handler_ctx->proc = mrb_funcall_argv(handler_ctx->mrb, mrb_ary_entry(handler_ctx->constants, H2O_MRUBY_PROC_APP_TO_FIBER),
                                          handler_ctx->symbols.sym_call, 1, &proc);
-    assert_mruby(handler_ctx->mrb);
+    h2o_mruby_assert(handler_ctx->mrb);
     mrb_gc_arena_restore(handler_ctx->mrb, arena);
     mrb_gc_protect(handler_ctx->mrb, handler_ctx->proc);
 
@@ -424,46 +380,46 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     int arena = mrb_gc_arena_save(mrb);
 
     /* environment */
-    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, LIT_REQUEST_METHOD),
+    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_REQUEST_METHOD),
                  mrb_str_new(mrb, generator->req->method.base, generator->req->method.len));
     size_t confpath_len_wo_slash = generator->req->pathconf->path.len - 1;
-    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, LIT_SCRIPT_NAME),
+    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_SCRIPT_NAME),
                  mrb_str_new(mrb, generator->req->pathconf->path.base, confpath_len_wo_slash));
-    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, LIT_PATH_INFO),
+    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_PATH_INFO),
                  mrb_str_new(mrb, generator->req->path_normalized.base + confpath_len_wo_slash,
                              generator->req->path_normalized.len - confpath_len_wo_slash));
-    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, LIT_QUERY_STRING),
+    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_QUERY_STRING),
                  generator->req->query_at != SIZE_MAX ? mrb_str_new(mrb, generator->req->path.base + generator->req->query_at + 1,
                                                                     generator->req->path.len - (generator->req->query_at + 1))
                                                       : mrb_str_new_lit(mrb, ""));
-    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, LIT_SERVER_NAME),
+    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_SERVER_NAME),
                  mrb_str_new(mrb, generator->req->hostconf->authority.host.base, generator->req->hostconf->authority.host.len));
     {
         mrb_value h, p;
         stringify_address(generator->req->conn, generator->req->conn->callbacks->get_sockname, mrb, &h, &p);
         if (!mrb_nil_p(h))
-            mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, LIT_SERVER_ADDR), h);
+            mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_SERVER_ADDR), h);
         if (!mrb_nil_p(p))
-            mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, LIT_SERVER_PORT), p);
+            mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_SERVER_PORT), p);
     }
     mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_TOKEN_HOST - h2o__tokens),
                  mrb_str_new(mrb, generator->req->authority.base, generator->req->authority.len));
     if (generator->req->entity.base != NULL) {
         char buf[32];
         int l = sprintf(buf, "%zu", generator->req->entity.len);
-        mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, LIT_CONTENT_LENGTH), mrb_str_new(mrb, buf, l));
+        mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_CONTENT_LENGTH), mrb_str_new(mrb, buf, l));
         generator->rack_input = mrb_input_stream_value(mrb, NULL, 0);
         mrb_input_stream_set_data(mrb, generator->rack_input, generator->req->entity.base, (mrb_int)generator->req->entity.len, 0,
                                   on_rack_input_free, &generator->rack_input);
-        mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, LIT_RACK_INPUT), generator->rack_input);
+        mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_RACK_INPUT), generator->rack_input);
     }
     {
         mrb_value h, p;
         stringify_address(generator->req->conn, generator->req->conn->callbacks->get_peername, mrb, &h, &p);
         if (!mrb_nil_p(h))
-            mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, LIT_REMOTE_ADDR), h);
+            mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_REMOTE_ADDR), h);
         if (!mrb_nil_p(p))
-            mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, LIT_REMOTE_PORT), p);
+            mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_REMOTE_PORT), p);
     }
     mrb_gc_arena_restore(mrb, arena);
 
@@ -485,19 +441,19 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
 
     /* rack.* */
     /* TBD rack.version? */
-    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, LIT_RACK_URL_SCHEME),
+    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_RACK_URL_SCHEME),
                  mrb_str_new(mrb, generator->req->scheme->name.base, generator->req->scheme->name.len));
     /* we are using shared-none architecture, and therefore declare ourselves as multiprocess */
-    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, LIT_RACK_MULTITHREAD), mrb_false_value());
-    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, LIT_RACK_MULTIPROCESS), mrb_true_value());
-    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, LIT_RACK_RUN_ONCE), mrb_false_value());
-    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, LIT_RACK_HIJACK_), mrb_false_value());
-    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, LIT_RACK_ERRORS),
+    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_RACK_MULTITHREAD), mrb_false_value());
+    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_RACK_MULTIPROCESS), mrb_true_value());
+    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_RACK_RUN_ONCE), mrb_false_value());
+    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_RACK_HIJACK_), mrb_false_value());
+    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_RACK_ERRORS),
                  mrb_gv_get(mrb, mrb_intern_lit(mrb, "$stderr")));
 
     /* server name */
-    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, LIT_SERVER_SOFTWARE),
-                 mrb_ary_entry(generator->ctx->constants, LIT_SERVER_SOFTWARE_VALUE));
+    mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_SERVER_SOFTWARE),
+                 mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_SERVER_SOFTWARE_VALUE));
 
     return env;
 }
@@ -634,7 +590,6 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
     if (!mrb_nil_p(body)) {
         h2o_mruby_send_chunked_init(generator);
         h2o_start_response(generator->req, &generator->super);
-        generator->receiver = mrb_ary_entry(generator->ctx->constants, PROC_EACH_TO_FIBER);
         h2o_mruby_run_fiber(generator, body, gc_arena, 0);
         return;
     }
@@ -769,7 +724,7 @@ h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_conf
 
 mrb_value h2o_mruby_each_to_array(h2o_mruby_context_t *handler_ctx, mrb_value src)
 {
-    return mrb_funcall_argv(handler_ctx->mrb, mrb_ary_entry(handler_ctx->constants, PROC_EACH_TO_ARRAY),
+    return mrb_funcall_argv(handler_ctx->mrb, mrb_ary_entry(handler_ctx->constants, H2O_MRUBY_PROC_EACH_TO_ARRAY),
                             handler_ctx->symbols.sym_call, 1, &src);
 }
 

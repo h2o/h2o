@@ -308,3 +308,8 @@ RaiseException:
         return t;
     }
 }
+
+void h2o_mruby_http_request_init_context(h2o_mruby_context_t *ctx)
+{
+    h2o_mruby_define_callback(ctx->mrb, "http_request", H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST);
+}
