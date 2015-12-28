@@ -97,6 +97,7 @@ int h2o_mruby_iterate_headers(h2o_mruby_context_t *handler_ctx, mrb_value header
 
 /* handler/mruby/chunked.c */
 void h2o_mruby_send_chunked_init_context(h2o_mruby_context_t *ctx);
+void h2o_mruby_send_chunked_errorclose(h2o_mruby_generator_t *generator);
 mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator);
 void h2o_mruby_send_chunked_dispose(h2o_mruby_generator_t *generator);
 mrb_value h2o_mruby_send_chunked_callback(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value input, int *next_action);

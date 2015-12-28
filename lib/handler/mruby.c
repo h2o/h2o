@@ -700,8 +700,11 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, m
 GotException:
     if (generator->req != NULL) {
         report_exception(generator->req, mrb);
-        if (generator->req->_generator == NULL)
+        if (generator->req->_generator == NULL) {
             h2o_send_error(generator->req, 500, "Internal Server Error", "Internal Server Error", 0);
+        } else {
+            h2o_mruby_send_chunked_errorclose(generator);
+        }
     }
     mrb_gc_arena_restore(mrb, gc_arena);
     return;

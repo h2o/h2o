@@ -116,6 +116,15 @@ GotException : {
 }
 }
 
+void h2o_mruby_send_chunked_errorclose(h2o_mruby_generator_t *generator)
+{
+    h2o_mruby_chunked_t *chunked = generator->chunked;
+
+    chunked->eos_received = 1;
+    if (chunked->sending.bytes_inflight == 0)
+        do_send(generator);
+}
+
 void h2o_mruby_send_chunked_init_context(h2o_mruby_context_t *ctx)
 {
     mrb_state *mrb = ctx->mrb;
