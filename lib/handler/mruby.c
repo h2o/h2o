@@ -518,11 +518,10 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     generator->async_dispose.data = NULL;
     generator->chunked = NULL;
 
-    generator->receiver = generator->ctx->proc;
     mrb_value env = build_env(generator);
 
     int is_delegate = 0;
-    h2o_mruby_run_fiber(generator, env, arena, &is_delegate);
+    h2o_mruby_run_fiber(generator, generator->ctx->proc, env, arena, &is_delegate);
 
     if (is_delegate)
         return -1;
@@ -587,9 +586,9 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
 
     /* use fiber in case we need to call #each */
     if (!mrb_nil_p(body)) {
-        h2o_mruby_send_chunked_init(generator);
+        mrb_value receiver = h2o_mruby_send_chunked_init(generator);
         h2o_start_response(generator->req, &generator->super);
-        h2o_mruby_run_fiber(generator, body, gc_arena, 0);
+        h2o_mruby_run_fiber(generator, receiver, body, gc_arena, 0);
         return;
     }
 
@@ -609,7 +608,7 @@ SendInternalError:
     h2o_send_error(generator->req, 500, "Internal Server Error", "Internal Server Error", 0);
 }
 
-void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value input, int gc_arena, int *is_delegate)
+void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value input, int gc_arena, int *is_delegate)
 {
     mrb_state *mrb = generator->ctx->mrb;
     mrb_value output;
@@ -618,11 +617,14 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value input, int 
     generator->async_dispose.cb = NULL;
     generator->async_dispose.data = NULL;
 
+    if (!mrb_obj_eq(mrb, generator->ctx->proc, receiver)) {
+        mrb_gc_unregister(mrb, receiver);
+        mrb_gc_protect(mrb, receiver);
+    }
+
     while (1) {
         /* send input to fiber */
-        output = mrb_funcall_argv(mrb, generator->receiver, generator->ctx->symbols.sym_call, 1, &input);
-        if (!mrb_obj_eq(mrb, generator->ctx->proc, generator->receiver))
-            mrb_gc_unregister(mrb, generator->receiver);
+        output = mrb_funcall_argv(mrb, receiver, generator->ctx->symbols.sym_call, 1, &input);
         if (mrb->exc != NULL)
             goto GotException;
         if (!mrb_array_p(output)) {
@@ -640,18 +642,16 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value input, int 
                 mrb->exc = mrb_obj_ptr(mrb_ary_entry(output, 1));
                 goto GotException;
             }
-            generator->receiver = mrb_ary_entry(output, 1);
-            if (!mrb_obj_eq(mrb, generator->ctx->proc, generator->receiver))
-                mrb_gc_register(mrb, generator->receiver);
+            receiver = mrb_ary_entry(output, 1);
             int next_action = H2O_MRUBY_CALLBACK_NEXT_ACTION_IMMEDIATE;
             mrb_value args = mrb_ary_entry(output, 2);
             if (mrb_array_p(args)) {
                 switch (status) {
                 case H2O_MRUBY_CALLBACK_ID_SEND_BODY_CHUNK:
-                    input = h2o_mruby_send_chunked_callback(generator, args, &next_action);
+                    input = h2o_mruby_send_chunked_callback(generator, receiver, args, &next_action);
                     break;
                 case H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST:
-                    input = h2o_mruby_http_request_callback(generator, args, &next_action);
+                    input = h2o_mruby_http_request_callback(generator, receiver, args, &next_action);
                     break;
                 default:
                     input = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpected callback id sent from rack app");
@@ -676,6 +676,7 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value input, int 
         break;
     Next:
         mrb_gc_arena_restore(mrb, gc_arena);
+        mrb_gc_protect(mrb, receiver);
         mrb_gc_protect(mrb, input);
     }
 
@@ -707,6 +708,8 @@ GotException:
 
 Async:
     mrb_gc_arena_restore(mrb, gc_arena);
+    if (!mrb_obj_eq(mrb, generator->ctx->proc, receiver))
+        mrb_gc_register(mrb, receiver);
     return;
 }
 
