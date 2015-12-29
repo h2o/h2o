@@ -31,6 +31,7 @@
 #include <mruby/error.h>
 #include <mruby/hash.h>
 #include <mruby/string.h>
+#include <mruby/throw.h>
 #include <mruby/variable.h>
 #include <mruby_input_stream.h>
 #include "h2o.h"
@@ -54,6 +55,13 @@ static void set_h2o_root(mrb_state *mrb)
     if (root == NULL)
         root = H2O_TO_STR(H2O_ROOT);
     mrb_gv_set(mrb, mrb_intern_lit(mrb, "$H2O_ROOT"), mrb_str_new(mrb, root, strlen(root)));
+}
+
+mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v)
+{
+    if (!mrb_string_p(v))
+        H2O_MRUBY_EXEC_GUARD({ v = mrb_str_to_str(mrb, v); });
+    return v;
 }
 
 mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr)
@@ -554,7 +562,7 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
         for (i = 0; i != len; ++i) {
             mrb_value e = mrb_ary_entry(body, i);
             if (!mrb_string_p(e)) {
-                e = mrb_str_to_str(mrb, e);
+                e = h2o_mruby_to_str(mrb, e);
                 if (mrb->exc != NULL)
                     goto GotException;
                 mrb_ary_set(mrb, body, i, e);
@@ -744,10 +752,10 @@ static int iterate_headers_handle_pair(h2o_mruby_context_t *handler_ctx, mrb_val
                                        int (*cb)(h2o_mruby_context_t *, h2o_iovec_t, h2o_iovec_t, void *), void *cb_data)
 {
     /* convert name and value to string */
-    name = mrb_str_to_str(handler_ctx->mrb, name);
+    name = h2o_mruby_to_str(handler_ctx->mrb, name);
     if (handler_ctx->mrb->exc != NULL)
         return -1;
-    value = mrb_str_to_str(handler_ctx->mrb, value);
+    value = h2o_mruby_to_str(handler_ctx->mrb, value);
     if (handler_ctx->mrb->exc != NULL)
         return -1;
 
