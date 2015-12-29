@@ -52,6 +52,11 @@ hosts:
               env["rack.input"],
             )
           end
+      /as_str:
+        mruby.handler: |
+          Proc.new do |env|
+            [200, {}, [http_request("GET", "http://$upstream_hostport/index.txt")[2].as_str]]
+          end
 EOT
 });
 
@@ -77,6 +82,11 @@ sub doit {
         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/streaming-body");
         like $headers, qr{HTTP/1\.1 200 }is;
         is $body, (join "", 1..30);
+    };
+    subtest "as_str" => sub {
+        my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/as_str/");
+        like $headers, qr{HTTP/1\.1 200 }is;
+        is $body, "hello\n";
     };
 }
 

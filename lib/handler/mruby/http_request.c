@@ -416,6 +416,13 @@ void h2o_mruby_http_request_init_context(h2o_mruby_context_t *ctx)
                              "        yield c\n"
                              "      end\n"
                              "    end\n"
+                             "    def as_str\n"
+                             "      s = \"\"\n"
+                             "      each do |c|\n"
+                             "        s << c\n"
+                             "      end\n"
+                             "      s\n"
+                             "    end\n"
                              "  end\n"
                              "end");
     h2o_mruby_assert(mrb);
