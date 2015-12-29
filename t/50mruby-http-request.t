@@ -67,12 +67,14 @@ hosts:
               end
               self
             end
-            def each
+            def each(&block)
               \@parts.each do |part|
                 if part.kind_of? String
-                  yield part
+                  block.call(part)
                 else
-                  yield part.join[2].join
+                  part.join[2].each do |part|
+                    block.call(part)
+                  end
                 end
               end
             end
