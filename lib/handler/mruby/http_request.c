@@ -82,12 +82,15 @@ static void on_dispose(void *_ctx)
         h2o_http1client_cancel(ctx->client);
         ctx->client = NULL;
     }
-    if (ctx->resp.after_closed != NULL)
-        h2o_buffer_dispose(&ctx->resp.after_closed);
     if (!mrb_nil_p(ctx->refs.request))
         DATA_PTR(ctx->refs.request) = NULL;
     if (!mrb_nil_p(ctx->refs.input_stream))
         DATA_PTR(ctx->refs.input_stream) = NULL;
+
+    /* clear bufs */
+    h2o_buffer_dispose(&ctx->req.buf);
+    if (ctx->resp.after_closed != NULL)
+        h2o_buffer_dispose(&ctx->resp.after_closed);
 
     /* notify the app, if it is waiting to hear from us */
     if (!mrb_nil_p(ctx->receiver)) {
@@ -287,17 +290,25 @@ static int flatten_request_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
     return 0;
 }
 
-mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value input, int *next_action)
+static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
 {
+    h2o_mruby_generator_t *generator;
     struct st_h2o_mruby_http_request_context_t *ctx;
-    mrb_state *mrb = generator->ctx->mrb;
+    const char *arg_url;
+    mrb_int arg_url_len;
+    mrb_value arg_hash;
     h2o_iovec_t method;
-    mrb_value args;
     h2o_url_t url;
 
-    if (generator->req == NULL)
-        return create_downstream_closed_exception(mrb);
+    /* parse args */
+    arg_hash = mrb_nil_value();
+    mrb_get_args(mrb, "s|H", &arg_url, &arg_url_len, &arg_hash);
 
+    /* precond check */
+    if ((generator = h2o_mruby_current_generator) == NULL || generator->req == NULL)
+        mrb_exc_raise(mrb, create_downstream_closed_exception(mrb));
+
+    /* allocate context and initialize */
     ctx = h2o_mem_alloc_shared(&generator->req->pool, sizeof(*ctx), on_dispose);
     memset(ctx, 0, sizeof(*ctx));
     ctx->generator = generator;
@@ -306,34 +317,16 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_
     ctx->refs.request = mrb_nil_value();
     ctx->refs.input_stream = mrb_nil_value();
 
-    { /* uri */
-        mrb_value t = h2o_mruby_to_str(mrb, mrb_ary_entry(input, 0));
-        if (mrb->exc != NULL)
-            goto RaiseException;
-        h2o_iovec_t urlstr = h2o_strdup(&generator->req->pool, RSTRING_PTR(t), RSTRING_LEN(t));
-        if (h2o_url_parse(urlstr.base, urlstr.len, &url) != 0) {
-            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "http_request: invaild URL"));
-            goto RaiseException;
-        }
-    }
-
-    /* args */
-    args = mrb_ary_entry(input, 1);
-    if (!(mrb_nil_p(args) || mrb_hash_p(args))) {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "http_request: 2nd argument must be hash or nil"));
-        goto RaiseException;
-    }
+    /* uri */
+    if (h2o_url_parse(arg_url, arg_url_len, &url) != 0)
+        mrb_raise(mrb, E_ARGUMENT_ERROR, "invaild URL");
 
     /* method */
     method = h2o_iovec_init(H2O_STRLIT("GET"));
-    if (mrb_hash_p(args)) {
-        mrb_value t = mrb_hash_get(mrb, args, mrb_symbol_value(generator->ctx->symbols.sym_method));
-        if (mrb->exc != NULL)
-            goto RaiseException;
+    if (mrb_hash_p(arg_hash)) {
+        mrb_value t = mrb_hash_get(mrb, arg_hash, mrb_symbol_value(generator->ctx->symbols.sym_method));
         if (!mrb_nil_p(t)) {
-            t = h2o_mruby_to_str(mrb, t);
-            if (mrb->exc != NULL)
-                goto RaiseException;
+            t = mrb_str_to_str(mrb, t);
             method = h2o_iovec_init(RSTRING_PTR(t), RSTRING_LEN(t));
         }
     }
@@ -350,20 +343,19 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_
     append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
 
     /* headers */
-    if (mrb_hash_p(args)) {
-        mrb_value headers = mrb_hash_get(mrb, args, mrb_symbol_value(generator->ctx->symbols.sym_headers));
-        if (mrb->exc != NULL)
-            goto RaiseException;
+    if (mrb_hash_p(arg_hash)) {
+        mrb_value headers = mrb_hash_get(mrb, arg_hash, mrb_symbol_value(generator->ctx->symbols.sym_headers));
         if (!mrb_nil_p(headers)) {
-            if (h2o_mruby_iterate_headers(generator->ctx, headers, flatten_request_header, ctx) != 0)
-                goto RaiseException;
+            if (h2o_mruby_iterate_headers(generator->ctx, headers, flatten_request_header, ctx) != 0) {
+                mrb_value exc = mrb_obj_value(mrb->exc);
+                mrb->exc = NULL;
+                mrb_exc_raise(mrb, exc);
+            }
         }
     }
     /* body */
-    if (mrb_hash_p(args)) {
-        mrb_value body = mrb_hash_get(mrb, args, mrb_symbol_value(generator->ctx->symbols.sym_body));
-        if (mrb->exc != NULL)
-            goto RaiseException;
+    if (mrb_hash_p(arg_hash)) {
+        mrb_value body = mrb_hash_get(mrb, arg_hash, mrb_symbol_value(generator->ctx->symbols.sym_body));
         if (!mrb_nil_p(body)) {
             if (mrb_obj_eq(mrb, body, generator->rack_input)) {
                 /* fast path */
@@ -375,12 +367,8 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_
             } else {
                 if (!mrb_string_p(body)) {
                     body = mrb_funcall(mrb, body, "read", 0);
-                    if (mrb->exc != NULL)
-                        goto RaiseException;
-                    if (!mrb_string_p(body)) {
-                        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "body.read did not return string"));
-                        goto RaiseException;
-                    }
+                    if (!mrb_string_p(body))
+                        mrb_raise(mrb, E_ARGUMENT_ERROR, "body.read did not return string");
                 }
                 ctx->req.body = h2o_strdup(&ctx->generator->req->pool, RSTRING_PTR(body), RSTRING_LEN(body));
             }
@@ -397,21 +385,12 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_
     append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
 
     /* build request and connect */
-    h2o_buffer_link_to_pool(ctx->req.buf, &generator->req->pool);
     h2o_http1client_connect(&ctx->client, ctx, &generator->req->conn->ctx->proxy.client_ctx, url.host, h2o_url_get_port(&url),
                             on_connect);
 
-    ctx->refs.request = h2o_mruby_create_data_instance(
-        mrb, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_HTTP_REQUEST_CLASS), ctx, &request_type);
+    ctx->refs.request = h2o_mruby_create_data_instance(mrb, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_HTTP_REQUEST_CLASS),
+                                                       ctx, &request_type);
     return ctx->refs.request;
-
-RaiseException:
-    h2o_buffer_dispose(&ctx->req.buf);
-    {
-        mrb_value t = mrb_obj_value(mrb->exc);
-        mrb->exc = NULL;
-        return t;
-    }
 }
 
 mrb_value h2o_mruby_http_join_response_callback(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value args,
@@ -460,7 +439,7 @@ void h2o_mruby_http_request_init_context(h2o_mruby_context_t *ctx)
     mrb_state *mrb = ctx->mrb;
     struct RClass *module, *klass;
 
-    h2o_mruby_define_callback(mrb, "http_request", H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST);
+    mrb_define_method(mrb, mrb->kernel_module, "http_request", http_request_method, MRB_ARGS_ARG(1, 2));
 
     module = mrb_define_module(mrb, "H2O");
     klass = mrb_define_class_under(mrb, module, "HttpRequest", mrb->object_class);

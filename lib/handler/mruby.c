@@ -42,6 +42,8 @@
 
 #define FREEZE_STRING(v) RSTR_SET_FROZEN_FLAG(mrb_str_ptr(v))
 
+__thread h2o_mruby_generator_t *h2o_mruby_current_generator = NULL;
+
 void h2o_mruby__assert_failed(mrb_state *mrb, const char *file, int line)
 {
     mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
@@ -635,6 +637,8 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, m
         mrb_gc_protect(mrb, receiver);
     }
 
+    h2o_mruby_current_generator = generator;
+
     while (1) {
         /* send input to fiber */
         output = mrb_funcall_argv(mrb, receiver, generator->ctx->symbols.sym_call, 1, &input);
@@ -662,9 +666,6 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, m
                 switch (status) {
                 case H2O_MRUBY_CALLBACK_ID_SEND_BODY_CHUNK:
                     input = h2o_mruby_send_chunked_callback(generator, receiver, args, &next_action);
-                    break;
-                case H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST:
-                    input = h2o_mruby_http_request_callback(generator, receiver, args, &next_action);
                     break;
                 case H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE:
                     input = h2o_mruby_http_join_response_callback(generator, receiver, args, &next_action);
@@ -699,6 +700,8 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, m
         mrb_gc_protect(mrb, input);
     }
 
+    h2o_mruby_current_generator = NULL;
+
     if (!(100 <= status && status <= 999)) {
         mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "status returned from rack app is out of range"));
         goto GotException;
@@ -717,6 +720,7 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, m
     return;
 
 GotException:
+    h2o_mruby_current_generator = NULL;
     if (generator->req != NULL) {
         report_exception(generator->req, mrb);
         if (generator->req->_generator == NULL) {
@@ -729,6 +733,7 @@ GotException:
     return;
 
 Async:
+    h2o_mruby_current_generator = NULL;
     mrb_gc_arena_restore(mrb, gc_arena);
     if (!mrb_obj_eq(mrb, generator->ctx->proc, receiver))
         mrb_gc_register(mrb, receiver);
