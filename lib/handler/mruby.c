@@ -306,6 +306,9 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
     handler_ctx->constants = build_constants(handler_ctx->mrb, ctx->globalconf->server_name.base, ctx->globalconf->server_name.len);
     handler_ctx->symbols.sym_call = mrb_intern_lit(handler_ctx->mrb, "call");
     handler_ctx->symbols.sym_close = mrb_intern_lit(handler_ctx->mrb, "close");
+    handler_ctx->symbols.sym_method = mrb_intern_lit(handler_ctx->mrb, "method");
+    handler_ctx->symbols.sym_headers = mrb_intern_lit(handler_ctx->mrb, "headers");
+    handler_ctx->symbols.sym_body = mrb_intern_lit(handler_ctx->mrb, "body");
 
     h2o_mruby_send_chunked_init_context(handler_ctx);
     h2o_mruby_http_request_init_context(handler_ctx);

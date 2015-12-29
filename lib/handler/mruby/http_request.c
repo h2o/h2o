@@ -276,6 +276,8 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_
 {
     struct st_h2o_mruby_http_request_context_t *ctx;
     mrb_state *mrb = generator->ctx->mrb;
+    h2o_iovec_t method;
+    mrb_value args;
     h2o_url_t url;
 
     if (generator->req == NULL)
@@ -288,45 +290,64 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_
     h2o_buffer_init(&ctx->req.buf, &h2o_socket_buffer_prototype);
     ctx->resp.input_stream = mrb_nil_value();
 
-    { /* method */
-        mrb_value method = h2o_mruby_to_str(mrb, mrb_ary_entry(input, 0));
-        if (mrb->exc != NULL)
-            goto RaiseException;
-        h2o_buffer_reserve(&ctx->req.buf, RSTRING_LEN(method) + 1);
-        append_to_buffer(&ctx->req.buf, RSTRING_PTR(method), RSTRING_LEN(method));
-        append_to_buffer(&ctx->req.buf, H2O_STRLIT(" "));
-        if (h2o_memis(RSTRING_PTR(method), RSTRING_LEN(method), H2O_STRLIT("HEAD")))
-            ctx->req.method_is_head = 1;
-    }
     { /* uri */
-        mrb_value t = h2o_mruby_to_str(mrb, mrb_ary_entry(input, 1));
+        mrb_value t = h2o_mruby_to_str(mrb, mrb_ary_entry(input, 0));
         if (mrb->exc != NULL)
             goto RaiseException;
         h2o_iovec_t urlstr = h2o_strdup(&generator->req->pool, RSTRING_PTR(t), RSTRING_LEN(t));
         if (h2o_url_parse(urlstr.base, urlstr.len, &url) != 0) {
-            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "invaild URL"));
+            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "http_request: invaild URL"));
             goto RaiseException;
         }
-        if (url.scheme != &H2O_URL_SCHEME_HTTP) {
-            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "scheme is not HTTP"));
-            goto RaiseException;
-        }
-        h2o_buffer_reserve(&ctx->req.buf,
-                           url.path.len + url.authority.len + sizeof(" HTTP/1.1\r\nConnection: close\r\nHost: \r\n") - 1);
-        append_to_buffer(&ctx->req.buf, url.path.base, url.path.len);
-        append_to_buffer(&ctx->req.buf, H2O_STRLIT(" HTTP/1.1\r\nConnection: close\r\nHost: "));
-        append_to_buffer(&ctx->req.buf, url.authority.base, url.authority.len);
-        append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
     }
-    { /* headers */
-        mrb_value headers = mrb_ary_entry(input, 2);
+
+    /* args */
+    args = mrb_ary_entry(input, 1);
+    if (!(mrb_nil_p(args) || mrb_hash_p(args))) {
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "http_request: 2nd argument must be hash or nil"));
+        goto RaiseException;
+    }
+
+    /* method */
+    method = h2o_iovec_init(H2O_STRLIT("GET"));
+    if (mrb_hash_p(args)) {
+        mrb_value t = mrb_hash_get(mrb, args, mrb_symbol_value(generator->ctx->symbols.sym_method));
+        if (mrb->exc != NULL)
+            goto RaiseException;
+        if (!mrb_nil_p(t)) {
+            t = h2o_mruby_to_str(mrb, t);
+            if (mrb->exc != NULL)
+                goto RaiseException;
+            method = h2o_iovec_init(RSTRING_PTR(t), RSTRING_LEN(t));
+        }
+    }
+
+    /* start building the request */
+    h2o_buffer_reserve(&ctx->req.buf, method.len + 1);
+    append_to_buffer(&ctx->req.buf, method.base, method.len);
+    append_to_buffer(&ctx->req.buf, H2O_STRLIT(" "));
+    h2o_buffer_reserve(&ctx->req.buf,
+                       url.path.len + url.authority.len + sizeof(" HTTP/1.1\r\nConnection: close\r\nHost: \r\n") - 1);
+    append_to_buffer(&ctx->req.buf, url.path.base, url.path.len);
+    append_to_buffer(&ctx->req.buf, H2O_STRLIT(" HTTP/1.1\r\nConnection: close\r\nHost: "));
+    append_to_buffer(&ctx->req.buf, url.authority.base, url.authority.len);
+    append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
+
+    /* headers */
+    if (mrb_hash_p(args)) {
+        mrb_value headers = mrb_hash_get(mrb, args, mrb_symbol_value(generator->ctx->symbols.sym_headers));
+        if (mrb->exc != NULL)
+            goto RaiseException;
         if (!mrb_nil_p(headers)) {
             if (h2o_mruby_iterate_headers(generator->ctx, headers, flatten_request_header, ctx) != 0)
                 goto RaiseException;
         }
     }
-    { /* body */
-        mrb_value body = mrb_ary_entry(input, 3);
+    /* body */
+    if (mrb_hash_p(args)) {
+        mrb_value body = mrb_hash_get(mrb, args, mrb_symbol_value(generator->ctx->symbols.sym_body));
+        if (mrb->exc != NULL)
+            goto RaiseException;
         if (!mrb_nil_p(body)) {
             if (mrb_obj_eq(mrb, body, generator->rack_input)) {
                 /* fast path */

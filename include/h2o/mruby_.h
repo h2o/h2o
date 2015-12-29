@@ -59,6 +59,9 @@ typedef struct st_h2o_mruby_context_t {
     struct {
         mrb_sym sym_call;
         mrb_sym sym_close;
+        mrb_sym sym_method;
+        mrb_sym sym_headers;
+        mrb_sym sym_body;
     } symbols;
 } h2o_mruby_context_t;
 

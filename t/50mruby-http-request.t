@@ -45,17 +45,15 @@ hosts:
       /:
         mruby.handler: |
           Proc.new do |env|
-            http_request(
-              env["REQUEST_METHOD"],
-              "http://$upstream_hostport#{env["PATH_INFO"]}#{env["QUERY_STRING"]}",
-              nil,
-              env["rack.input"],
-            )
+            http_request("http://$upstream_hostport#{env["PATH_INFO"]}#{env["QUERY_STRING"]}", {
+              method: env["REQUEST_METHOD"],
+              body: env["rack.input"],
+            })
           end
       /as_str:
         mruby.handler: |
           Proc.new do |env|
-            [200, {}, [http_request("GET", "http://$upstream_hostport/index.txt")[2].as_str]]
+            [200, {}, [http_request("http://$upstream_hostport/index.txt")[2].as_str]]
           end
 EOT
 });
