@@ -71,9 +71,7 @@ hosts:
                 if part.kind_of? String
                   block.call(part)
                 else
-                  part.join[2].each do |part|
-                    block.call(part)
-                  end
+                  part.join[2].each(&block)
                 end
               end
             end
