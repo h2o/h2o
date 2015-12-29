@@ -58,14 +58,13 @@ hosts:
       /esi:
         mruby.handler: |
           class ESIResponse
-            def setup(input)
+            def initialize(input)
               \@parts = input.split /(<esi:include +src=".*?" *\\/>)/
               \@parts.each_with_index do |part, index|
                 if /^<esi:include +src=" *(.*?) *"/.match(part)
                   \@parts[index] = http_request("http://$upstream_hostport/#{\$1}")
                 end
               end
-              self
             end
             def each(&block)
               \@parts.each do |part|
@@ -81,7 +80,7 @@ hosts:
           end
           Proc.new do |env|
             resp = http_request("http://$upstream_hostport/esi.html").join
-            resp[2] = ESIResponse.new.setup(resp[2].join)
+            resp[2] = ESIResponse.new(resp[2].join)
             resp
           end
 EOT
