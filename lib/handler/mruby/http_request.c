@@ -43,7 +43,7 @@ struct st_h2o_mruby_http_request_context_t {
         int has_content;
     } resp;
     struct {
-        mrb_value response_sink;
+        mrb_value response;
         mrb_value input_stream;
     } refs;
 };
@@ -52,13 +52,13 @@ static void on_gc_dispose(mrb_state *mrb, void *_ctx)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
     if (ctx != NULL) {
-        ctx->refs.response_sink = mrb_nil_value();
+        ctx->refs.response = mrb_nil_value();
         ctx->refs.input_stream = mrb_nil_value();
     }
 }
 
-const static struct mrb_data_type response_sink_type = {"http_request_response_sink", on_gc_dispose};
-const static struct mrb_data_type input_stream_type = {"http_request_input_stream", on_gc_dispose};
+const static struct mrb_data_type response_type = {"http_response", on_gc_dispose};
+const static struct mrb_data_type input_stream_type = {"http_input_stream", on_gc_dispose};
 
 static mrb_value create_downstream_closed_exception(mrb_state *mrb)
 {
@@ -84,8 +84,8 @@ static void on_dispose(void *_ctx)
     }
     if (ctx->resp.after_closed != NULL)
         h2o_buffer_dispose(&ctx->resp.after_closed);
-    if (!mrb_nil_p(ctx->refs.response_sink))
-        DATA_PTR(ctx->refs.response_sink) = NULL;
+    if (!mrb_nil_p(ctx->refs.response))
+        DATA_PTR(ctx->refs.response) = NULL;
     if (!mrb_nil_p(ctx->refs.input_stream))
         DATA_PTR(ctx->refs.input_stream) = NULL;
 
@@ -132,12 +132,12 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
     /* set input stream */
     assert(mrb_nil_p(ctx->refs.input_stream));
     ctx->refs.input_stream = h2o_mruby_create_data_instance(
-        mrb, mrb_ary_entry(ctx->generator->ctx->constants, H2O_MRUBY_HTTP_REQUEST_INPUT_STREAM_CLASS), ctx, &input_stream_type);
+        mrb, mrb_ary_entry(ctx->generator->ctx->constants, H2O_MRUBY_HTTP_INPUT_STREAM_CLASS), ctx, &input_stream_type);
     mrb_ary_set(mrb, resp, 2, ctx->refs.input_stream);
 
     if (mrb_nil_p(ctx->receiver)) {
         /* is async */
-        mrb_funcall(mrb, ctx->refs.response_sink, "_set_response", 1, resp);
+        mrb_funcall(mrb, ctx->refs.response, "_set_response", 1, resp);
         if (mrb->exc != NULL) {
             fprintf(stderr, "_set_response failed\n");
             abort();
@@ -304,7 +304,7 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_
     ctx->generator = generator;
     ctx->receiver = mrb_nil_value();
     h2o_buffer_init(&ctx->req.buf, &h2o_socket_buffer_prototype);
-    ctx->refs.response_sink = mrb_nil_value();
+    ctx->refs.response = mrb_nil_value();
     ctx->refs.input_stream = mrb_nil_value();
 
     { /* uri */
@@ -412,9 +412,9 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_
                             on_connect);
 
     if (async) {
-        ctx->refs.response_sink = h2o_mruby_create_data_instance(
-            mrb, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_HTTP_REQUEST_RESPONSE_SINK_CLASS), ctx, &response_sink_type);
-        return ctx->refs.response_sink;
+        ctx->refs.response = h2o_mruby_create_data_instance(
+            mrb, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_HTTP_RESPONSE_CLASS), ctx, &response_type);
+        return ctx->refs.response;
     } else {
         ctx->receiver = receiver;
         *next_action = H2O_MRUBY_CALLBACK_NEXT_ACTION_ASYNC;
@@ -430,8 +430,8 @@ RaiseException:
     }
 }
 
-mrb_value h2o_mruby_http_request_join_response(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value args,
-                                               int *next_action)
+mrb_value h2o_mruby_http_join_response_callback(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value args,
+                                                int *next_action)
 {
     mrb_state *mrb = generator->ctx->mrb;
     struct st_h2o_mruby_http_request_context_t *ctx;
@@ -439,16 +439,16 @@ mrb_value h2o_mruby_http_request_join_response(h2o_mruby_generator_t *generator,
     if (generator->req == NULL)
         return create_downstream_closed_exception(mrb);
 
-    if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &response_sink_type)) == NULL)
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "HttpResponseSink#join wrong self");
+    if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &response_type)) == NULL)
+        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "HttpResponse#join wrong self");
 
     ctx->receiver = receiver;
     *next_action = H2O_MRUBY_CALLBACK_NEXT_ACTION_ASYNC;
     return mrb_nil_value();
 }
 
-mrb_value h2o_mruby_http_request_fetch_chunk_callback(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value args,
-                                                      int *next_action)
+mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value args,
+                                              int *next_action)
 {
     mrb_state *mrb = generator->ctx->mrb;
     struct st_h2o_mruby_http_request_context_t *ctx;
@@ -479,20 +479,20 @@ void h2o_mruby_http_request_init_context(h2o_mruby_context_t *ctx)
     h2o_mruby_define_callback(mrb, "http_request", H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST);
 
     module = mrb_define_module(mrb, "H2O");
-    klass = mrb_define_class_under(mrb, module, "HttpResponseSink", mrb->object_class);
-    mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_REQUEST_RESPONSE_SINK_CLASS, mrb_obj_value(klass));
+    klass = mrb_define_class_under(mrb, module, "HttpResponse", mrb->object_class);
+    mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_RESPONSE_CLASS, mrb_obj_value(klass));
 
     klass = mrb_define_class_under(mrb, module, "HttpInputStream", mrb->object_class);
-    mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_REQUEST_INPUT_STREAM_CLASS, mrb_obj_value(klass));
+    mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_INPUT_STREAM_CLASS, mrb_obj_value(klass));
 
-    h2o_mruby_define_callback(mrb, "_h2o__http_request_fetch_chunk", H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST_FETCH_CHUNK);
-    h2o_mruby_define_callback(mrb, "_h2o__http_request_join_response", H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST_JOIN_RESPONSE);
+    h2o_mruby_define_callback(mrb, "_h2o__http_join_response", H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE);
+    h2o_mruby_define_callback(mrb, "_h2o__http_fetch_chunk", H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK);
 
     h2o_mruby_eval_expr(mrb, "module H2O\n"
-                             "  class HttpResponseSink\n"
+                             "  class HttpResponse\n"
                              "    def join\n"
                              "      if !@resp\n"
-                             "        @resp = _h2o__http_request_join_response(self)\n"
+                             "        @resp = _h2o__http_join_response(self)\n"
                              "      end\n"
                              "      @resp\n"
                              "    end\n"
@@ -503,7 +503,7 @@ void h2o_mruby_http_request_init_context(h2o_mruby_context_t *ctx)
                              "  end\n"
                              "  class HttpInputStream\n"
                              "    def each\n"
-                             "      while c = _h2o__http_request_fetch_chunk(self)\n"
+                             "      while c = _h2o__http_fetch_chunk(self)\n"
                              "        yield c\n"
                              "      end\n"
                              "    end\n"

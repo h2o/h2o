@@ -666,11 +666,11 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, m
                 case H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST:
                     input = h2o_mruby_http_request_callback(generator, receiver, args, &next_action);
                     break;
-                case H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST_JOIN_RESPONSE:
-                    input = h2o_mruby_http_request_join_response(generator, receiver, args, &next_action);
+                case H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE:
+                    input = h2o_mruby_http_join_response_callback(generator, receiver, args, &next_action);
                     break;
-                case H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST_FETCH_CHUNK:
-                    input = h2o_mruby_http_request_fetch_chunk_callback(generator, receiver, args, &next_action);
+                case H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK:
+                    input = h2o_mruby_http_fetch_chunk_callback(generator, receiver, args, &next_action);
                     break;
                 default:
                     input = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpected callback id sent from rack app");
