@@ -41,9 +41,6 @@ struct st_h2o_mruby_http_request_context_t {
         int has_transfer_encoding : 1;
     } req;
     struct {
-        int status;
-        struct phr_header *headers;
-        size_t num_headers;
         h2o_buffer_t *after_closed; /* when client becomes NULL, rest of the data will be stored to this pointer */
         int has_content;
     } resp;
@@ -101,28 +98,39 @@ static void on_generator_dispose(h2o_mruby_generator_t *generator)
     h2o_mruby_run_fiber(ctx->generator, detach_receiver(ctx), create_downstream_closed_exception(mrb), gc_arena, NULL);
 }
 
-/* precond: headers should be ordered in a way that they are grouped by their names */
-static void post_response(struct st_h2o_mruby_http_request_context_t *ctx)
+static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int status, const struct phr_header *headers_sorted,
+                          size_t num_headers)
 {
     mrb_state *mrb = ctx->generator->ctx->mrb;
     int gc_arena = mrb_gc_arena_save(mrb);
     size_t i;
 
     mrb_value resp = mrb_ary_new_capa(mrb, 3);
-    mrb_ary_set(mrb, resp, 0, mrb_fixnum_value(ctx->resp.status));
-    mrb_value headers_hash = mrb_hash_new_capa(mrb, (int)ctx->resp.num_headers);
-    for (i = 0; i < ctx->resp.num_headers; ++i) {
-        mrb_value k = mrb_str_new(mrb, ctx->resp.headers[i].name, ctx->resp.headers[i].name_len);
-        mrb_value v = mrb_str_new(mrb, ctx->resp.headers[i].value, ctx->resp.headers[i].value_len);
-        while (i + 1 < ctx->resp.num_headers && h2o_memis(ctx->resp.headers[i].name, ctx->resp.headers[i].name_len,
-                                                          ctx->resp.headers[i + 1].name, ctx->resp.headers[i + 1].name_len)) {
+
+    /* set status */
+    mrb_ary_set(mrb, resp, 0, mrb_fixnum_value(status));
+
+    /* set headers */
+    mrb_value headers_hash = mrb_hash_new_capa(mrb, (int)num_headers);
+    for (i = 0; i < num_headers; ++i) {
+        /* skip the headers, we determine the eos! */
+        if (h2o_memis(headers_sorted[i].name, headers_sorted[i].name_len, H2O_STRLIT("content-length")) ||
+            h2o_memis(headers_sorted[i].name, headers_sorted[i].name_len, H2O_STRLIT("transfer-encoding")))
+            continue;
+        /* build and set the hash entry */
+        mrb_value k = mrb_str_new(mrb, headers_sorted[i].name, headers_sorted[i].name_len);
+        mrb_value v = mrb_str_new(mrb, headers_sorted[i].value, headers_sorted[i].value_len);
+        while (i + 1 < num_headers && h2o_memis(headers_sorted[i].name, headers_sorted[i].name_len, headers_sorted[i + 1].name,
+                                                headers_sorted[i + 1].name_len)) {
             ++i;
             v = mrb_str_cat_lit(mrb, v, "\n");
-            v = mrb_str_cat(mrb, v, ctx->resp.headers[i].value, ctx->resp.headers[i].value_len);
+            v = mrb_str_cat(mrb, v, headers_sorted[i].value, headers_sorted[i].value_len);
         }
         mrb_hash_set(mrb, headers_hash, k, v);
     }
     mrb_ary_set(mrb, resp, 1, headers_hash);
+
+    /* set input stream */
     mrb_ary_set(mrb, resp, 2, input_stream_create(ctx));
 
     h2o_mruby_run_fiber(ctx->generator, detach_receiver(ctx), resp, gc_arena, NULL);
@@ -130,12 +138,9 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx)
 
 static void post_error(struct st_h2o_mruby_http_request_context_t *ctx, const char *errstr)
 {
-    static const struct phr_header headers[] = {{H2O_STRLIT("content-type"), H2O_STRLIT("text/plain; charset=utf-8")}};
+    static const struct phr_header headers_sorted[] = {{H2O_STRLIT("content-type"), H2O_STRLIT("text/plain; charset=utf-8")}};
 
     ctx->client = NULL;
-    ctx->resp.status = 500;
-    ctx->resp.headers = (struct phr_header *)headers;
-    ctx->resp.num_headers = sizeof(headers) / sizeof(headers[0]);
     h2o_buffer_init(&ctx->resp.after_closed, &h2o_socket_buffer_prototype);
     size_t errstr_len = strlen(errstr);
     h2o_buffer_reserve(&ctx->resp.after_closed, errstr_len);
@@ -143,7 +148,7 @@ static void post_error(struct st_h2o_mruby_http_request_context_t *ctx, const ch
     ctx->resp.after_closed->size += errstr_len;
     ctx->resp.has_content = 1;
 
-    post_response(ctx);
+    post_response(ctx, 500, headers_sorted, sizeof(headers_sorted) / sizeof(headers_sorted[0]));
 }
 
 static mrb_value build_chunk(struct st_h2o_mruby_http_request_context_t *ctx)
@@ -207,35 +212,19 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
-    if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
-        post_error(ctx, errstr);
-        return NULL;
-    }
-
-    h2o_mem_pool_t *pool = &ctx->generator->req->pool;
-    ctx->resp.status = status;
-    ctx->resp.headers = h2o_mem_alloc_pool(pool, sizeof(*ctx->resp.headers) * num_headers);
-    ctx->resp.num_headers = 0;
-    size_t i;
-    for (i = 0; i != num_headers; ++i) {
-        /* ignore special headers */
-        if (h2o_memis(headers[i].name, headers[i].name_len, H2O_STRLIT("content-length")) ||
-            h2o_memis(headers[i].name, headers[i].name_len, H2O_STRLIT("transfer-encoding")))
-            continue;
-        struct phr_header *dst = ctx->resp.headers + ctx->resp.num_headers++;
-        dst->name = h2o_strdup(pool, headers[i].name, headers[i].name_len).base;
-        dst->name_len = headers[i].name_len;
-        dst->value = h2o_strdup(pool, headers[i].value, headers[i].value_len).base;
-        dst->value_len = headers[i].value_len;
-    }
-    /* sort the headers in a way that they will be group by their names */
-    qsort(ctx->resp.headers, ctx->resp.num_headers, sizeof(ctx->resp.headers[0]), headers_sort_cb);
-
-    if (errstr == h2o_http1client_error_is_eos) {
+    if (errstr != NULL) {
+        if (errstr != h2o_http1client_error_is_eos) {
+            /* error */
+            post_error(ctx, errstr);
+            return NULL;
+        }
+        /* closed without body */
         ctx->client = NULL;
         h2o_buffer_init(&ctx->resp.after_closed, &h2o_socket_buffer_prototype);
     }
-    post_response(ctx);
+
+    qsort(headers, num_headers, sizeof(headers[0]), headers_sort_cb);
+    post_response(ctx, status, headers, num_headers);
     return on_body;
 }
 
