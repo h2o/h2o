@@ -254,11 +254,14 @@ static int flatten_request_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
 {
     struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
 
-    if (h2o_lcstris(name.base, name.len, H2O_STRLIT("content-length"))) {
-        return 0; /* ignored */
-    } else if (h2o_lcstris(name.base, name.len, H2O_STRLIT("transfer-encoding"))) {
+    /* ignore certain headers */
+    if (h2o_lcstris(name.base, name.len, H2O_STRLIT("content-length")) ||
+        h2o_lcstris(name.base, name.len, H2O_STRLIT("connection")))
+        return 0;
+
+    /* mark the existence of transfer-encoding in order to prevent us from adding content-length header */
+    if (h2o_lcstris(name.base, name.len, H2O_STRLIT("transfer-encoding")))
         ctx->req.has_transfer_encoding = 1;
-    }
 
     h2o_buffer_reserve(&ctx->req.buf, name.len + value.len + sizeof(": \r\n") - 1);
     append_to_buffer(&ctx->req.buf, name.base, name.len);
