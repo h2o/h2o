@@ -68,10 +68,6 @@ typedef struct st_h2o_mruby_generator_t {
     h2o_req_t *req;/* becomes NULL once the underlying connection gets terminated */
     h2o_mruby_context_t *ctx;
     mrb_value rack_input;
-    struct {
-        void (*cb)(struct st_h2o_mruby_generator_t *);
-        void *data;
-    } async_dispose;
     h2o_mruby_chunked_t *chunked;
 } h2o_mruby_generator_t;
 
