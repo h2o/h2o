@@ -481,7 +481,6 @@ void h2o_mruby_http_request_init_context(h2o_mruby_context_t *ctx)
                              "      @resp\n"
                              "    end\n"
                              "    def _set_response(resp)\n"
-                             "      puts 'status:', resp[0]\n"
                              "      @resp = resp\n"
                              "    end\n"
                              "  end\n"
