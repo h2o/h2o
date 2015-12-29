@@ -22,8 +22,6 @@
 #include "picohttpparser.h"
 #include <mruby.h>
 #include <mruby/array.h>
-#include <mruby/class.h>
-#include <mruby/data.h>
 #include <mruby/error.h>
 #include <mruby/hash.h>
 #include <mruby/string.h>
@@ -125,9 +123,8 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
 
     /* set input stream */
     assert(mrb_nil_p(ctx->resp.input_stream));
-    struct RClass *klass = mrb_class_ptr(mrb_ary_entry(ctx->generator->ctx->constants, H2O_MRUBY_HTTP_REQUEST_INPUT_STREAM_CLASS));
-    struct RData *data = mrb_data_object_alloc(mrb, klass, ctx, &input_stream_type);
-    ctx->resp.input_stream = mrb_obj_value(data);
+    ctx->resp.input_stream = h2o_mruby_create_data_instance(
+        mrb, mrb_ary_entry(ctx->generator->ctx->constants, H2O_MRUBY_HTTP_REQUEST_INPUT_STREAM_CLASS), ctx, &input_stream_type);
     mrb_ary_set(mrb, resp, 2, ctx->resp.input_stream);
 
     h2o_mruby_run_fiber(ctx->generator, detach_receiver(ctx), resp, gc_arena, NULL);

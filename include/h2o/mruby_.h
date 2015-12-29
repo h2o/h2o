@@ -3,6 +3,7 @@
 
 #include "h2o.h"
 #include <mruby.h>
+#include <mruby/data.h>
 #include <mruby/proc.h>
 #include <mruby/compile.h>
 
@@ -110,6 +111,7 @@ void h2o_mruby__assert_failed(mrb_state *mrb, const char *file, int line);
 mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v);
 mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr);
 void h2o_mruby_define_callback(mrb_state *mrb, const char *name, int id);
+mrb_value h2o_mruby_create_data_instance(mrb_state *mrb, mrb_value class_obj, void *ptr, const mrb_data_type *type);
 mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config, char *errbuf);
 h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_config_vars_t *config);
 void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value input, int gc_arena, int *is_delegate);

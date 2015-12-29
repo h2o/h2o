@@ -27,6 +27,7 @@
 #include <mruby.h>
 #include <mruby/proc.h>
 #include <mruby/array.h>
+#include <mruby/class.h>
 #include <mruby/compile.h>
 #include <mruby/error.h>
 #include <mruby/hash.h>
@@ -93,6 +94,13 @@ void h2o_mruby_define_callback(mrb_state *mrb, const char *name, int id)
         fprintf(stderr, "failed to define mruby function: %s\n", name);
         h2o_mruby_assert(mrb);
     }
+}
+
+mrb_value h2o_mruby_create_data_instance(mrb_state *mrb, mrb_value class_obj, void *ptr, const mrb_data_type *type)
+{
+    struct RClass *klass = mrb_class_ptr(class_obj);
+    struct RData *data = mrb_data_object_alloc(mrb, klass, ptr, type);
+    return mrb_obj_value(data);
 }
 
 mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config, char *errbuf)
