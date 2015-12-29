@@ -294,7 +294,6 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_
     h2o_iovec_t method;
     mrb_value args;
     h2o_url_t url;
-    int async;
 
     if (generator->req == NULL)
         return create_downstream_closed_exception(mrb);
@@ -397,29 +396,14 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_
     h2o_buffer_reserve(&ctx->req.buf, 2);
     append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
 
-    /* async */
-    async = 0;
-    if (mrb_hash_p(args)) {
-        mrb_value t = mrb_hash_get(mrb, args, mrb_symbol_value(generator->ctx->symbols.sym_async));
-        if (mrb->exc != NULL)
-            goto RaiseException;
-        async = mrb_bool(t);
-    }
-
     /* build request and connect */
     h2o_buffer_link_to_pool(ctx->req.buf, &generator->req->pool);
     h2o_http1client_connect(&ctx->client, ctx, &generator->req->conn->ctx->proxy.client_ctx, url.host, h2o_url_get_port(&url),
                             on_connect);
 
-    if (async) {
-        ctx->refs.response = h2o_mruby_create_data_instance(
-            mrb, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_HTTP_RESPONSE_CLASS), ctx, &response_type);
-        return ctx->refs.response;
-    } else {
-        ctx->receiver = receiver;
-        *next_action = H2O_MRUBY_CALLBACK_NEXT_ACTION_ASYNC;
-        return mrb_nil_value();
-    }
+    ctx->refs.response = h2o_mruby_create_data_instance(
+        mrb, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_HTTP_RESPONSE_CLASS), ctx, &response_type);
+    return ctx->refs.response;
 
 RaiseException:
     h2o_buffer_dispose(&ctx->req.buf);

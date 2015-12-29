@@ -48,12 +48,12 @@ hosts:
             http_request("http://$upstream_hostport#{env["PATH_INFO"]}#{env["QUERY_STRING"]}", {
               method: env["REQUEST_METHOD"],
               body: env["rack.input"],
-            })
+            }).join
           end
       /as_str:
         mruby.handler: |
           Proc.new do |env|
-            [200, {}, [http_request("http://$upstream_hostport/index.txt")[2].as_str]]
+            [200, {}, [http_request("http://$upstream_hostport/index.txt").join[2].as_str]]
           end
 EOT
 });
