@@ -53,7 +53,7 @@ hosts:
       /as_str:
         mruby.handler: |
           Proc.new do |env|
-            [200, {}, [http_request("http://$upstream_hostport/index.txt").join[2].as_str]]
+            [200, {}, [http_request("http://$upstream_hostport/index.txt").join[2].join]]
           end
       /esi:
         mruby.handler: |
@@ -72,14 +72,14 @@ hosts:
                 if part.kind_of? String
                   yield part
                 else
-                  yield part.join[2].as_str
+                  yield part.join[2].join
                 end
               end
             end
           end
           Proc.new do |env|
             resp = http_request("http://$upstream_hostport/esi.html").join
-            resp[2] = ESIResponse.new.setup(resp[2].as_str)
+            resp[2] = ESIResponse.new.setup(resp[2].join)
             resp
           end
 EOT

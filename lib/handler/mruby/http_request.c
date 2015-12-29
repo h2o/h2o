@@ -490,7 +490,7 @@ void h2o_mruby_http_request_init_context(h2o_mruby_context_t *ctx)
                              "        yield c\n"
                              "      end\n"
                              "    end\n"
-                             "    def as_str\n"
+                             "    def join\n"
                              "      s = \"\"\n"
                              "      each do |c|\n"
                              "        s << c\n"
