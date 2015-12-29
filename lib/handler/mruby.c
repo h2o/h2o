@@ -506,8 +506,6 @@ static void on_generator_dispose(void *_generator)
 
     if (generator->chunked != NULL)
         h2o_mruby_send_chunked_dispose(generator);
-    if (generator->async_dispose.cb != NULL)
-        generator->async_dispose.cb(generator);
 }
 
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
@@ -522,8 +520,6 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     generator->req = req;
     generator->ctx = h2o_context_get_handler_context(req->conn->ctx, &handler->super);
     generator->rack_input = mrb_nil_value();
-    generator->async_dispose.cb = NULL;
-    generator->async_dispose.data = NULL;
     generator->chunked = NULL;
 
     mrb_value env = build_env(generator);
@@ -621,9 +617,6 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, m
     mrb_state *mrb = generator->ctx->mrb;
     mrb_value output;
     mrb_int status;
-
-    generator->async_dispose.cb = NULL;
-    generator->async_dispose.data = NULL;
 
     if (!mrb_obj_eq(mrb, generator->ctx->proc, receiver)) {
         mrb_gc_unregister(mrb, receiver);

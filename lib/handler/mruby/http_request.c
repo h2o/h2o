@@ -41,45 +41,24 @@ struct st_h2o_mruby_http_request_context_t {
         int has_transfer_encoding : 1;
     } req;
     struct {
-        int status;
-        struct phr_header *headers;
-        size_t num_headers;
         h2o_buffer_t *after_closed; /* when client becomes NULL, rest of the data will be stored to this pointer */
         int has_content;
+        mrb_value input_stream;
     } resp;
 };
 
-static void input_stream_dispose(mrb_state *mrb, void *ctx);
+static void on_gc_dispose(mrb_state *mrb, void *_ctx)
+{
+    struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
+    if (ctx != NULL)
+        ctx->resp.input_stream = mrb_nil_value();
+}
 
-const static struct mrb_data_type input_stream_type = {"H2O._HttpOutputStream", input_stream_dispose};
+const static struct mrb_data_type input_stream_type = {"H2O._HttpOutputStream", on_gc_dispose};
 
 static mrb_value create_downstream_closed_exception(mrb_state *mrb)
 {
     return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "downstream HTTP closed");
-}
-
-static void dispose_request(struct st_h2o_mruby_http_request_context_t *ctx)
-{
-    if (ctx->client != NULL) {
-        h2o_http1client_cancel(ctx->client);
-        ctx->client = NULL;
-    }
-    if (ctx->resp.after_closed != NULL)
-        h2o_buffer_dispose(&ctx->resp.after_closed);
-}
-
-static mrb_value input_stream_create(struct st_h2o_mruby_http_request_context_t *ctx)
-{
-    mrb_state *mrb = ctx->generator->ctx->mrb;
-    struct RClass *klass = mrb_class_ptr(mrb_ary_entry(ctx->generator->ctx->constants, H2O_MRUBY_HTTP_REQUEST_INPUT_STREAM_CLASS));
-    struct RData *data = mrb_data_object_alloc(mrb, klass, ctx, &input_stream_type);
-    return mrb_obj_value(data);
-}
-
-static void input_stream_dispose(mrb_state *mrb, void *_ctx)
-{
-    struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
-    dispose_request(ctx);
 }
 
 static mrb_value detach_receiver(struct st_h2o_mruby_http_request_context_t *ctx)
@@ -90,52 +69,75 @@ static mrb_value detach_receiver(struct st_h2o_mruby_http_request_context_t *ctx
     return ret;
 }
 
-static void on_generator_dispose(h2o_mruby_generator_t *generator)
+static void on_dispose(void *_ctx)
 {
-    struct st_h2o_mruby_http_request_context_t *ctx = generator->async_dispose.data;
+    struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
 
-    dispose_request(ctx);
+    /* clear the refs */
+    if (ctx->client != NULL) {
+        h2o_http1client_cancel(ctx->client);
+        ctx->client = NULL;
+    }
+    if (ctx->resp.after_closed != NULL)
+        h2o_buffer_dispose(&ctx->resp.after_closed);
+    if (!mrb_nil_p(ctx->resp.input_stream))
+        DATA_PTR(ctx->resp.input_stream) = NULL;
 
-    mrb_state *mrb = ctx->generator->ctx->mrb;
-    int gc_arena = mrb_gc_arena_save(mrb);
-    h2o_mruby_run_fiber(ctx->generator, detach_receiver(ctx), create_downstream_closed_exception(mrb), gc_arena, NULL);
+    /* notify the app, if it is waiting to hear from us */
+    if (!mrb_nil_p(ctx->receiver)) {
+        mrb_state *mrb = ctx->generator->ctx->mrb;
+        int gc_arena = mrb_gc_arena_save(mrb);
+        h2o_mruby_run_fiber(ctx->generator, detach_receiver(ctx), create_downstream_closed_exception(mrb), gc_arena, NULL);
+    }
 }
 
-/* precond: headers should be ordered in a way that they are grouped by their names */
-static void post_response(struct st_h2o_mruby_http_request_context_t *ctx)
+static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int status, const struct phr_header *headers_sorted,
+                          size_t num_headers)
 {
     mrb_state *mrb = ctx->generator->ctx->mrb;
     int gc_arena = mrb_gc_arena_save(mrb);
     size_t i;
 
     mrb_value resp = mrb_ary_new_capa(mrb, 3);
-    mrb_ary_set(mrb, resp, 0, mrb_fixnum_value(ctx->resp.status));
-    mrb_value headers_hash = mrb_hash_new_capa(mrb, (int)ctx->resp.num_headers);
-    for (i = 0; i < ctx->resp.num_headers; ++i) {
-        mrb_value k = mrb_str_new(mrb, ctx->resp.headers[i].name, ctx->resp.headers[i].name_len);
-        mrb_value v = mrb_str_new(mrb, ctx->resp.headers[i].value, ctx->resp.headers[i].value_len);
-        while (i + 1 < ctx->resp.num_headers && h2o_memis(ctx->resp.headers[i].name, ctx->resp.headers[i].name_len,
-                                                          ctx->resp.headers[i + 1].name, ctx->resp.headers[i + 1].name_len)) {
+
+    /* set status */
+    mrb_ary_set(mrb, resp, 0, mrb_fixnum_value(status));
+
+    /* set headers */
+    mrb_value headers_hash = mrb_hash_new_capa(mrb, (int)num_headers);
+    for (i = 0; i < num_headers; ++i) {
+        /* skip the headers, we determine the eos! */
+        if (h2o_memis(headers_sorted[i].name, headers_sorted[i].name_len, H2O_STRLIT("content-length")) ||
+            h2o_memis(headers_sorted[i].name, headers_sorted[i].name_len, H2O_STRLIT("transfer-encoding")))
+            continue;
+        /* build and set the hash entry */
+        mrb_value k = mrb_str_new(mrb, headers_sorted[i].name, headers_sorted[i].name_len);
+        mrb_value v = mrb_str_new(mrb, headers_sorted[i].value, headers_sorted[i].value_len);
+        while (i + 1 < num_headers && h2o_memis(headers_sorted[i].name, headers_sorted[i].name_len, headers_sorted[i + 1].name,
+                                                headers_sorted[i + 1].name_len)) {
             ++i;
             v = mrb_str_cat_lit(mrb, v, "\n");
-            v = mrb_str_cat(mrb, v, ctx->resp.headers[i].value, ctx->resp.headers[i].value_len);
+            v = mrb_str_cat(mrb, v, headers_sorted[i].value, headers_sorted[i].value_len);
         }
         mrb_hash_set(mrb, headers_hash, k, v);
     }
     mrb_ary_set(mrb, resp, 1, headers_hash);
-    mrb_ary_set(mrb, resp, 2, input_stream_create(ctx));
+
+    /* set input stream */
+    assert(mrb_nil_p(ctx->resp.input_stream));
+    struct RClass *klass = mrb_class_ptr(mrb_ary_entry(ctx->generator->ctx->constants, H2O_MRUBY_HTTP_REQUEST_INPUT_STREAM_CLASS));
+    struct RData *data = mrb_data_object_alloc(mrb, klass, ctx, &input_stream_type);
+    ctx->resp.input_stream = mrb_obj_value(data);
+    mrb_ary_set(mrb, resp, 2, ctx->resp.input_stream);
 
     h2o_mruby_run_fiber(ctx->generator, detach_receiver(ctx), resp, gc_arena, NULL);
 }
 
 static void post_error(struct st_h2o_mruby_http_request_context_t *ctx, const char *errstr)
 {
-    static const struct phr_header headers[] = {{H2O_STRLIT("content-type"), H2O_STRLIT("text/plain; charset=utf-8")}};
+    static const struct phr_header headers_sorted[] = {{H2O_STRLIT("content-type"), H2O_STRLIT("text/plain; charset=utf-8")}};
 
     ctx->client = NULL;
-    ctx->resp.status = 500;
-    ctx->resp.headers = (struct phr_header *)headers;
-    ctx->resp.num_headers = sizeof(headers) / sizeof(headers[0]);
     h2o_buffer_init(&ctx->resp.after_closed, &h2o_socket_buffer_prototype);
     size_t errstr_len = strlen(errstr);
     h2o_buffer_reserve(&ctx->resp.after_closed, errstr_len);
@@ -143,7 +145,7 @@ static void post_error(struct st_h2o_mruby_http_request_context_t *ctx, const ch
     ctx->resp.after_closed->size += errstr_len;
     ctx->resp.has_content = 1;
 
-    post_response(ctx);
+    post_response(ctx, 500, headers_sorted, sizeof(headers_sorted) / sizeof(headers_sorted[0]));
 }
 
 static mrb_value build_chunk(struct st_h2o_mruby_http_request_context_t *ctx)
@@ -158,11 +160,11 @@ static mrb_value build_chunk(struct st_h2o_mruby_http_request_context_t *ctx)
         h2o_buffer_consume(&ctx->client->sock->input, ctx->client->sock->input->size);
         ctx->resp.has_content = 0;
     } else {
-        if (ctx->resp.after_closed->size == 0) {
+        if (ctx->resp.after_closed == NULL || ctx->resp.after_closed->size == 0) {
             chunk = mrb_nil_value();
         } else {
             chunk = mrb_str_new(ctx->generator->ctx->mrb, ctx->resp.after_closed->bytes, ctx->resp.after_closed->size);
-            h2o_buffer_consume(&ctx->resp.after_closed, ctx->resp.after_closed->size);
+            h2o_buffer_dispose(&ctx->resp.after_closed);
         }
         /* has_content is retained as true, so that repeated calls will return nil immediately */
     }
@@ -207,35 +209,19 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
-    if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
-        post_error(ctx, errstr);
-        return NULL;
-    }
-
-    h2o_mem_pool_t *pool = &ctx->generator->req->pool;
-    ctx->resp.status = status;
-    ctx->resp.headers = h2o_mem_alloc_pool(pool, sizeof(*ctx->resp.headers) * num_headers);
-    ctx->resp.num_headers = 0;
-    size_t i;
-    for (i = 0; i != num_headers; ++i) {
-        /* ignore special headers */
-        if (h2o_memis(headers[i].name, headers[i].name_len, H2O_STRLIT("content-length")) ||
-            h2o_memis(headers[i].name, headers[i].name_len, H2O_STRLIT("transfer-encoding")))
-            continue;
-        struct phr_header *dst = ctx->resp.headers + ctx->resp.num_headers++;
-        dst->name = h2o_strdup(pool, headers[i].name, headers[i].name_len).base;
-        dst->name_len = headers[i].name_len;
-        dst->value = h2o_strdup(pool, headers[i].value, headers[i].value_len).base;
-        dst->value_len = headers[i].value_len;
-    }
-    /* sort the headers in a way that they will be group by their names */
-    qsort(ctx->resp.headers, ctx->resp.num_headers, sizeof(ctx->resp.headers[0]), headers_sort_cb);
-
-    if (errstr == h2o_http1client_error_is_eos) {
+    if (errstr != NULL) {
+        if (errstr != h2o_http1client_error_is_eos) {
+            /* error */
+            post_error(ctx, errstr);
+            return NULL;
+        }
+        /* closed without body */
         ctx->client = NULL;
         h2o_buffer_init(&ctx->resp.after_closed, &h2o_socket_buffer_prototype);
     }
-    post_response(ctx);
+
+    qsort(headers, num_headers, sizeof(headers[0]), headers_sort_cb);
+    post_response(ctx, status, headers, num_headers);
     return on_body;
 }
 
@@ -292,11 +278,12 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_
     if (generator->req == NULL)
         return create_downstream_closed_exception(mrb);
 
-    ctx = h2o_mem_alloc_pool(&generator->req->pool, sizeof(*ctx));
+    ctx = h2o_mem_alloc_shared(&generator->req->pool, sizeof(*ctx), on_dispose);
     memset(ctx, 0, sizeof(*ctx));
     ctx->generator = generator;
     ctx->receiver = mrb_nil_value();
     h2o_buffer_init(&ctx->req.buf, &h2o_socket_buffer_prototype);
+    ctx->resp.input_stream = mrb_nil_value();
 
     { /* method */
         mrb_value method = h2o_mruby_to_str(mrb, mrb_ary_entry(input, 0));
@@ -373,8 +360,6 @@ mrb_value h2o_mruby_http_request_callback(h2o_mruby_generator_t *generator, mrb_
     h2o_buffer_link_to_pool(ctx->req.buf, &generator->req->pool);
     h2o_http1client_connect(&ctx->client, ctx, &generator->req->conn->ctx->proxy.client_ctx, url.host, h2o_url_get_port(&url),
                             on_connect);
-    generator->async_dispose.cb = on_generator_dispose;
-    generator->async_dispose.data = ctx;
 
     ctx->receiver = receiver;
     *next_action = H2O_MRUBY_CALLBACK_NEXT_ACTION_ASYNC;

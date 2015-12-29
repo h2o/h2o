@@ -65,13 +65,9 @@ typedef struct st_h2o_mruby_context_t {
 typedef struct st_h2o_mruby_chunked_t h2o_mruby_chunked_t;
 typedef struct st_h2o_mruby_generator_t {
     h2o_generator_t super;
-    h2o_req_t *req;/* becomes NULL once the underlying connection gets terminated */
+    h2o_req_t *req; /* becomes NULL once the underlying connection gets terminated */
     h2o_mruby_context_t *ctx;
     mrb_value rack_input;
-    struct {
-        void (*cb)(struct st_h2o_mruby_generator_t *);
-        void *data;
-    } async_dispose;
     h2o_mruby_chunked_t *chunked;
 } h2o_mruby_generator_t;
 
@@ -80,13 +76,9 @@ typedef struct st_h2o_mruby_generator_t {
 #define H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST -3
 #define H2O_MRUBY_CALLBACK_ID_HTTP_REQUEST_FETCH_CHUNK -4
 
-enum {
-    H2O_MRUBY_CALLBACK_NEXT_ACTION_STOP,
-    H2O_MRUBY_CALLBACK_NEXT_ACTION_IMMEDIATE,
-    H2O_MRUBY_CALLBACK_NEXT_ACTION_ASYNC
-};
+enum { H2O_MRUBY_CALLBACK_NEXT_ACTION_STOP, H2O_MRUBY_CALLBACK_NEXT_ACTION_IMMEDIATE, H2O_MRUBY_CALLBACK_NEXT_ACTION_ASYNC };
 
-#define h2o_mruby_assert(mrb)                                                                                                          \
+#define h2o_mruby_assert(mrb)                                                                                                      \
     if (mrb->exc != NULL)                                                                                                          \
     h2o_mruby__assert_failed(mrb, __FILE__, __LINE__)
 
