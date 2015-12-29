@@ -62,7 +62,7 @@ hosts:
               \@parts = input.split /(<esi:include +src=".*?" *\\/>)/
               \@parts.each_with_index do |part, index|
                 if /^<esi:include +src=" *(.*?) *"/.match(part)
-                  \@parts[index] = http_request("http://127.0.0.1:5000/#{\$1}")
+                  \@parts[index] = http_request("http://$upstream_hostport/#{\$1}")
                 end
               end
               self
