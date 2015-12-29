@@ -45,17 +45,41 @@ hosts:
       /:
         mruby.handler: |
           Proc.new do |env|
-            http_request(
-              env["REQUEST_METHOD"],
-              "http://$upstream_hostport#{env["PATH_INFO"]}#{env["QUERY_STRING"]}",
-              nil,
-              env["rack.input"],
-            )
+            http_request("http://$upstream_hostport#{env["PATH_INFO"]}#{env["QUERY_STRING"]}", {
+              method: env["REQUEST_METHOD"],
+              body: env["rack.input"],
+            }).join
           end
       /as_str:
         mruby.handler: |
           Proc.new do |env|
-            [200, {}, [http_request("GET", "http://$upstream_hostport/index.txt")[2].as_str]]
+            [200, {}, [http_request("http://$upstream_hostport/index.txt").join[2].join]]
+          end
+      /esi:
+        mruby.handler: |
+          class ESIResponse
+            def initialize(input)
+              \@parts = input.split /(<esi:include +src=".*?" *\\/>)/
+              \@parts.each_with_index do |part, index|
+                if /^<esi:include +src=" *(.*?) *"/.match(part)
+                  \@parts[index] = http_request("http://$upstream_hostport/#{\$1}")
+                end
+              end
+            end
+            def each(&block)
+              \@parts.each do |part|
+                if part.kind_of? String
+                  block.call(part)
+                else
+                  part.join[2].each(&block)
+                end
+              end
+            end
+          end
+          Proc.new do |env|
+            resp = http_request("http://$upstream_hostport/esi.html").join
+            resp[2] = ESIResponse.new(resp[2].join)
+            resp
           end
 EOT
 });
@@ -87,6 +111,11 @@ sub doit {
         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/as_str/");
         like $headers, qr{HTTP/1\.1 200 }is;
         is $body, "hello\n";
+    };
+    subtest "esi" => sub {
+        my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/esi/");
+        like $headers, qr{HTTP/1\.1 200 }is;
+        is $body, "Hello to the world, from H2O!\n";
     };
 }
 
