@@ -86,34 +86,36 @@ mrb_value h2o_mruby_send_chunked_callback(h2o_mruby_generator_t *generator, mrb_
 {
     mrb_state *mrb = generator->ctx->mrb;
 
-    if (generator->req == NULL)
-        return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "h2o_mruby_send_chunked_callback: downstream HTTP closed");
+    if (generator->req == NULL) {
+        *next_action = H2O_MRUBY_CALLBACK_NEXT_ACTION_STOP;
+        return mrb_nil_value();
+    }
+
     if (generator->req->_generator == NULL)
         return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "h2o_mruby_send_chunked_callback: received chunk before rack response");
 
     h2o_mruby_chunked_t *chunked = generator->chunked;
     mrb_value chunk = mrb_ary_entry(arg, 0);
 
-    if (mrb_nil_p(chunk)) {
-        chunked->eos_received = 1;
-        *next_action = H2O_MRUBY_CALLBACK_NEXT_ACTION_STOP;
-    } else {
+    if (!mrb_nil_p(chunk)) {
         chunk = mrb_str_to_str(mrb, chunk);
-        if (mrb->exc != NULL)
-            goto GotException;
+        if (mrb->exc != NULL) {
+            chunk = mrb_nil_value();
+            mrb->exc = NULL;
+        }
+    }
+    if (mrb_string_p(chunk)) {
         h2o_buffer_reserve(&chunked->receiving, RSTRING_LEN(chunk));
         memcpy(chunked->receiving->bytes + chunked->receiving->size, RSTRING_PTR(chunk), RSTRING_LEN(chunk));
         chunked->receiving->size += RSTRING_LEN(chunk);
+    } else {
+        chunked->eos_received = 1;
+        *next_action = H2O_MRUBY_CALLBACK_NEXT_ACTION_STOP;
     }
     if (chunked->sending.bytes_inflight == 0)
         do_send(generator);
 
     return mrb_nil_value();
-GotException : {
-    mrb_value t = mrb_obj_value(mrb->exc);
-    mrb->exc = NULL;
-    return t;
-}
 }
 
 void h2o_mruby_send_chunked_errorclose(h2o_mruby_generator_t *generator)
@@ -133,13 +135,17 @@ void h2o_mruby_send_chunked_init_context(h2o_mruby_context_t *ctx)
     mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER,
                 h2o_mruby_eval_expr(mrb, "Proc.new do |src|\n"
                                          "  fiber = Fiber.new do\n"
-                                         "    src.each do |chunk|\n"
-                                         "      if !chunk\n"
-                                         "        raise \"body#each returned nil\"\n"
+                                         "    begin\n"
+                                         "      src.each do |chunk|\n"
+                                         "        if !chunk\n"
+                                         "          raise \"body#each returned nil\"\n"
+                                         "        end\n"
+                                         "        _h2o_internal_send_chunk(chunk)\n"
                                          "      end\n"
-                                         "      _h2o_internal_send_chunk(chunk)\n"
+                                         "      _h2o_internal_send_chunk(nil)\n"
+                                         "    rescue\n"
+                                         "      _h2o_internal_send_chunk(nil)\n"
                                          "    end\n"
-                                         "    _h2o_internal_send_chunk(nil)\n"
                                          "  end\n"
                                          "  fiber.resume\n"
                                          "end"));

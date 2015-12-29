@@ -395,6 +395,8 @@ mrb_value h2o_mruby_http_request_fetch_chunk_callback(h2o_mruby_generator_t *gen
         ret = build_chunk(ctx);
     } else {
         ctx->receiver = receiver;
+        generator->async_dispose.cb = on_generator_dispose;
+        generator->async_dispose.data = ctx;
         *next_action = H2O_MRUBY_CALLBACK_NEXT_ACTION_ASYNC;
         ret = mrb_nil_value();
     }
