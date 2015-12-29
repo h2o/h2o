@@ -55,6 +55,33 @@ hosts:
           Proc.new do |env|
             [200, {}, [http_request("http://$upstream_hostport/index.txt").join[2].as_str]]
           end
+      /esi:
+        mruby.handler: |
+          class ESIResponse
+            def setup(input)
+              \@parts = input.split /(<esi:include +src=".*?" *\\/>)/
+              \@parts.each_with_index do |part, index|
+                if /^<esi:include +src=" *(.*?) *"/.match(part)
+                  \@parts[index] = http_request("http://127.0.0.1:5000/#{\$1}")
+                end
+              end
+              self
+            end
+            def each
+              \@parts.each do |part|
+                if part.kind_of? String
+                  yield part
+                else
+                  yield part.join[2].as_str
+                end
+              end
+            end
+          end
+          Proc.new do |env|
+            resp = http_request("http://$upstream_hostport/esi.html").join
+            resp[2] = ESIResponse.new.setup(resp[2].as_str)
+            resp
+          end
 EOT
 });
 
@@ -85,6 +112,11 @@ sub doit {
         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/as_str/");
         like $headers, qr{HTTP/1\.1 200 }is;
         is $body, "hello\n";
+    };
+    subtest "esi" => sub {
+        my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/esi/");
+        like $headers, qr{HTTP/1\.1 200 }is;
+        is $body, "Hello to the world, from H2O!\n";
     };
 }
 
