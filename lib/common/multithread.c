@@ -138,15 +138,19 @@ void h2o_multithread_register_receiver(h2o_multithread_queue_t *queue, h2o_multi
     receiver->_link = (h2o_linklist_t){};
     h2o_linklist_init_anchor(&receiver->_messages);
     receiver->cb = cb;
-
+    
+    pthread_mutex_lock(&receiver->queue->mutex);
     h2o_linklist_insert(&queue->receivers.inactive, &receiver->_link);
+    pthread_mutex_unlock(&receiver->queue->mutex);
 }
 
 void h2o_multithread_unregister_receiver(h2o_multithread_queue_t *queue, h2o_multithread_receiver_t *receiver)
 {
     assert(queue == receiver->queue);
     assert(h2o_linklist_is_empty(&receiver->_messages));
+    pthread_mutex_lock(&receiver->queue->mutex);
     h2o_linklist_unlink(&receiver->_link);
+    pthread_mutex_unlock(&receiver->queue->mutex);
 }
 
 void h2o_multithread_send_message(h2o_multithread_receiver_t *receiver, h2o_multithread_message_t *message)
