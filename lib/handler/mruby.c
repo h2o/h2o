@@ -666,8 +666,8 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, m
             mrb_value args = mrb_ary_entry(output, 2);
             if (mrb_array_p(args)) {
                 switch (status) {
-                case H2O_MRUBY_CALLBACK_ID_SEND_BODY_CHUNK:
-                    input = h2o_mruby_send_chunked_callback(generator, receiver, args, &next_action);
+                case H2O_MRUBY_CALLBACK_ID_SEND_CHUNKED_EOS:
+                    input = h2o_mruby_send_chunked_eos_callback(generator, receiver, args, &next_action);
                     break;
                 case H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE:
                     input = h2o_mruby_http_join_response_callback(generator, receiver, args, &next_action);
@@ -728,7 +728,7 @@ GotException:
         if (generator->req->_generator == NULL) {
             h2o_send_error(generator->req, 500, "Internal Server Error", "Internal Server Error", 0);
         } else {
-            h2o_mruby_send_chunked_errorclose(generator);
+            h2o_mruby_send_chunked_close(generator);
         }
     }
     mrb_gc_arena_restore(mrb, gc_arena);
