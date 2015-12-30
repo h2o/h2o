@@ -48,17 +48,23 @@ struct st_h2o_mruby_http_request_context_t {
     } refs;
 };
 
-static void on_gc_dispose(mrb_state *mrb, void *_ctx)
+static void on_gc_dispose_request(mrb_state *mrb, void *_ctx)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
-    if (ctx != NULL) {
+    if (ctx != NULL)
         ctx->refs.request = mrb_nil_value();
-        ctx->refs.input_stream = mrb_nil_value();
-    }
 }
 
-const static struct mrb_data_type request_type = {"http_request", on_gc_dispose};
-const static struct mrb_data_type input_stream_type = {"http_input_stream", on_gc_dispose};
+const static struct mrb_data_type request_type = {"http_request", on_gc_dispose_request};
+
+static void on_gc_dispose_input_stream(mrb_state *mrb, void *_ctx)
+{
+    struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
+    if (ctx != NULL)
+        ctx->refs.input_stream = mrb_nil_value();
+}
+
+const static struct mrb_data_type input_stream_type = {"http_input_stream", on_gc_dispose_input_stream};
 
 static mrb_value create_downstream_closed_exception(mrb_state *mrb)
 {
