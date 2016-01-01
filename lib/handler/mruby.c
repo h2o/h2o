@@ -492,7 +492,7 @@ static int handle_response_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
         if (token->proxy_should_drop) {
             /* skip */
         } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
-            /* skip; we calculate the length by looking at the body */
+            req->res.content_length = h2o_strtosize(value.base, value.len);
         } else if (token == H2O_TOKEN_LINK && h2o_puth_path_in_link_header(req, value.base, value.len)) {
             /* do not send the link header that is going to be pushed */
         } else {
@@ -613,12 +613,15 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
     }
 
     /* send the entire response immediately */
-    generator->req->res.content_length = content.len;
-    h2o_start_response(generator->req, &generator->super);
-    if (h2o_memis(generator->req->input.method.base, generator->req->input.method.len, H2O_STRLIT("HEAD")))
+    if (h2o_memis(generator->req->input.method.base, generator->req->input.method.len, H2O_STRLIT("HEAD"))) {
+        h2o_start_response(generator->req, &generator->super);
         h2o_send(generator->req, NULL, 0, 1);
-    else
+    } else {
+        if (content.len < generator->req->res.content_length)
+            generator->req->res.content_length = content.len;
+        h2o_start_response(generator->req, &generator->super);
         h2o_send(generator->req, &content, 1, 1);
+    }
     return;
 
 GotException:
