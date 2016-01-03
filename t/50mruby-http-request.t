@@ -55,6 +55,27 @@ hosts:
           Proc.new do |env|
             [200, {}, [http_request("http://$upstream_hostport/index.txt").join[2].join]]
           end
+      /cl:
+        mruby.handler: |
+          Proc.new do |env|
+            if !/^\\/([0-9]+)/.match(env["PATH_INFO"])
+              raise "failed to parse PATH_INFO"
+            end
+            cl = \$1
+            body = ["abc", "def", "ghi", "jkl", "mno"]
+            if \$'.length != 0
+              class T
+                def initialize(a)
+                  \@a = a
+                end
+                def each(&b)
+                  \@a.each(&b)
+                end
+              end
+              body = T.new(body)
+            end
+            [200, {"content-length" => cl}, body]
+          end
       /esi:
         mruby.handler: |
           class ESIResponse
@@ -111,6 +132,33 @@ sub doit {
         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/as_str/");
         like $headers, qr{HTTP/1\.1 200 }is;
         is $body, "hello\n";
+    };
+    subtest "content-length" => sub {
+        subtest "non-chunked" => sub {
+            for my $i (0..15) {
+                subtest "cl=$i" => sub {
+                    my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/cl/$i");
+                    like $headers, qr{^HTTP/1\.1 200 .*\ncontent-length:\s*$i\r}is;
+                    is $body, substr "abcdefghijklmno", 0, $i;
+                }
+            };
+            for my $i (16..30) {
+                subtest "cl=$i" => sub {
+                    my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/cl/$i");
+                    like $headers, qr{^HTTP/1\.1 200 .*\ncontent-length:\s*15\r}is;
+                    is $body, "abcdefghijklmno";
+                }
+            };
+        };
+        subtest "chunked" => sub {
+            for my $i (0..30) {
+                subtest "cl=$i" => sub {
+                    my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/cl/$i/chunked");
+                    like $headers, qr{^HTTP/1\.1 200 .*\ncontent-length:\s*$i\r}is;
+                    is $body, substr "abcdefghijklmno", 0, $i;
+                }
+            };
+        };
     };
     subtest "esi" => sub {
         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/esi/");
