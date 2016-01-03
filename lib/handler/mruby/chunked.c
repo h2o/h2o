@@ -29,6 +29,7 @@
 struct st_h2o_mruby_chunked_t {
     h2o_buffer_t *receiving;
     h2o_doublebuffer_t sending;
+    size_t bytes_left; /* SIZE_MAX indicates that the number is undermined */
     int eos_received;
 };
 
@@ -46,6 +47,9 @@ static void do_send(h2o_mruby_generator_t *generator)
         if (buf.len == 0)
             --bufcnt;
         is_eos = 1;
+        /* terminate the H1 connection if the length of content served did not match the value sent in content-length header */
+        if (chunked->bytes_left != SIZE_MAX && chunked->bytes_left != 0)
+            generator->req->http1_is_persistent = 0;
     } else {
         if (buf.len == 0)
             return;
@@ -67,6 +71,7 @@ mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator)
     h2o_mruby_chunked_t *chunked = h2o_mem_alloc_pool(&generator->req->pool, sizeof(*chunked));
     h2o_buffer_init(&chunked->receiving, &h2o_socket_buffer_prototype);
     h2o_doublebuffer_init(&chunked->sending, &h2o_socket_buffer_prototype);
+    chunked->bytes_left = generator->req->res.content_length;
     chunked->eos_received = 0;
 
     generator->super.proceed = do_proceed;
@@ -109,11 +114,18 @@ static mrb_value send_chunked_method(mrb_state *mrb, mrb_value self)
     /* append to send buffer, and send out immediately if necessary */
     if (len != 0) {
         h2o_mruby_chunked_t *chunked = generator->chunked;
-        h2o_buffer_reserve(&chunked->receiving, len);
-        memcpy(chunked->receiving->bytes + chunked->receiving->size, s, len);
-        chunked->receiving->size += len;
-        if (chunked->sending.bytes_inflight == 0)
-            do_send(generator);
+        if (chunked->bytes_left != SIZE_MAX) {
+            if (len > chunked->bytes_left)
+                len = chunked->bytes_left;
+            chunked->bytes_left -= len;
+        }
+        if (len != 0) {
+            h2o_buffer_reserve(&chunked->receiving, len);
+            memcpy(chunked->receiving->bytes + chunked->receiving->size, s, len);
+            chunked->receiving->size += len;
+            if (chunked->sending.bytes_inflight == 0)
+                do_send(generator);
+        }
     }
 
     return mrb_nil_value();
