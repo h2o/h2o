@@ -606,9 +606,13 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
 
     /* use fiber in case we need to call #each */
     if (!mrb_nil_p(body)) {
-        mrb_value receiver = h2o_mruby_send_chunked_init(generator);
         h2o_start_response(generator->req, &generator->super);
-        h2o_mruby_run_fiber(generator, receiver, body, gc_arena, 0);
+        mrb_value receiver = h2o_mruby_send_chunked_init(generator, body);
+        if (mrb_nil_p(receiver)) {
+            mrb_gc_arena_restore(mrb, gc_arena);
+        } else {
+            h2o_mruby_run_fiber(generator, receiver, body, gc_arena, 0);
+        }
         return;
     }
 

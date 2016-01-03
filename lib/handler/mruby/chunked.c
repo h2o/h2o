@@ -31,6 +31,7 @@ struct st_h2o_mruby_chunked_t {
     h2o_doublebuffer_t sending;
     size_t bytes_left; /* SIZE_MAX indicates that the number is undermined */
     int eos_received;
+    h2o_mruby_http_request_context_t *client; /* shortcut */
 };
 
 static void do_send(h2o_mruby_generator_t *generator)
@@ -66,7 +67,38 @@ static void do_proceed(h2o_generator_t *_generator, h2o_req_t *req)
     do_send(generator);
 }
 
-mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator)
+static void push_content(h2o_mruby_generator_t *generator, const void *data, size_t len)
+{
+    h2o_mruby_chunked_t *chunked = generator->chunked;
+    if (chunked->bytes_left != SIZE_MAX) {
+        if (len > chunked->bytes_left)
+            len = chunked->bytes_left;
+        chunked->bytes_left -= len;
+    }
+    if (len != 0) {
+        h2o_buffer_reserve(&chunked->receiving, len);
+        memcpy(chunked->receiving->bytes + chunked->receiving->size, data, len);
+        chunked->receiving->size += len;
+        if (chunked->sending.bytes_inflight == 0)
+            do_send(generator);
+    }
+}
+
+static void on_shortcut_notify(h2o_mruby_generator_t *generator)
+{
+    h2o_mruby_chunked_t *chunked = generator->chunked;
+    int is_final;
+    h2o_buffer_t **input = h2o_mruby_http_peek_content(chunked->client, &is_final);
+
+    if (*input != NULL && (*input)->size != 0) {
+        push_content(generator, (*input)->bytes, (*input)->size);
+        h2o_buffer_consume(input, (*input)->size);
+    }
+    if (is_final)
+        h2o_mruby_send_chunked_close(generator);
+}
+
+mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator, mrb_value body)
 {
     h2o_mruby_chunked_t *chunked = h2o_mem_alloc_pool(&generator->req->pool, sizeof(*chunked));
     h2o_buffer_init(&chunked->receiving, &h2o_socket_buffer_prototype);
@@ -78,6 +110,11 @@ mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator)
 
     generator->super.proceed = do_proceed;
     generator->chunked = chunked;
+
+    if ((chunked->client = h2o_mruby_http_set_shortcut(generator->ctx->mrb, body, on_shortcut_notify)) != NULL) {
+        on_shortcut_notify(generator);
+        return mrb_nil_value();
+    }
     return mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER);
 }
 
@@ -87,6 +124,7 @@ void h2o_mruby_send_chunked_dispose(h2o_mruby_generator_t *generator)
 
     h2o_buffer_dispose(&chunked->receiving);
     h2o_doublebuffer_dispose(&chunked->sending);
+    /* note: no need to free reference from chunked->client, since it is disposed at the same moment */
 }
 
 static mrb_value check_precond(mrb_state *mrb, h2o_mruby_generator_t *generator)
@@ -113,23 +151,7 @@ static mrb_value send_chunked_method(mrb_state *mrb, mrb_value self)
             mrb_exc_raise(mrb, exc);
     }
 
-    /* append to send buffer, and send out immediately if necessary */
-    if (len != 0) {
-        h2o_mruby_chunked_t *chunked = generator->chunked;
-        if (chunked->bytes_left != SIZE_MAX) {
-            if (len > chunked->bytes_left)
-                len = chunked->bytes_left;
-            chunked->bytes_left -= len;
-        }
-        if (len != 0) {
-            h2o_buffer_reserve(&chunked->receiving, len);
-            memcpy(chunked->receiving->bytes + chunked->receiving->size, s, len);
-            chunked->receiving->size += len;
-            if (chunked->sending.bytes_inflight == 0)
-                do_send(generator);
-        }
-    }
-
+    push_content(generator, s, len);
     return mrb_nil_value();
 }
 
