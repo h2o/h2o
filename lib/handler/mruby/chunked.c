@@ -71,7 +71,9 @@ mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator)
     h2o_mruby_chunked_t *chunked = h2o_mem_alloc_pool(&generator->req->pool, sizeof(*chunked));
     h2o_buffer_init(&chunked->receiving, &h2o_socket_buffer_prototype);
     h2o_doublebuffer_init(&chunked->sending, &h2o_socket_buffer_prototype);
-    chunked->bytes_left = generator->req->res.content_length;
+    chunked->bytes_left = h2o_memis(generator->req->method.base, generator->req->method.len, H2O_STRLIT("HEAD"))
+                              ? 0
+                              : generator->req->res.content_length;
     chunked->eos_received = 0;
 
     generator->super.proceed = do_proceed;
