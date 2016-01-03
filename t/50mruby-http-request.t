@@ -102,6 +102,15 @@ hosts:
             resp[2] = ESIResponse.new(resp[2].join)
             resp
           end
+      /fast-path-partial:
+        mruby.handler: |
+          Proc.new do |env|
+            resp = http_request("http://$upstream_hostport/streaming-body").join
+            resp[2].each do |x|
+              break
+            end
+            resp
+          end
 EOT
 });
 
@@ -164,6 +173,11 @@ sub doit {
         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/esi/");
         like $headers, qr{HTTP/1\.1 200 }is;
         is $body, "Hello to the world, from H2O!\n";
+    };
+    subtest "fast-path-partial" => sub {
+        my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/fast-path-partial/");
+        like $headers, qr{HTTP/1\.1 200 }is;
+        is $body, join "", 2..30;
     };
 }
 
