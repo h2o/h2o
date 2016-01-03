@@ -563,6 +563,17 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
         goto GotException;
     }
 
+    /* fall through if possible */
+    if (generator->req->res.status == STATUS_FALLTHRU) {
+        if (is_delegate != NULL) {
+            *is_delegate = 1;
+            mrb_gc_arena_restore(mrb, gc_arena);
+            return;
+        }
+        h2o_req_log_error(generator->req, H2O_MRUBY_MODULE_NAME, "cannot (yet) handle async 399 response");
+        goto SendInternalError;
+    }
+
     /* obtain body */
     body = mrb_ary_entry(resp, 2);
 
@@ -591,17 +602,6 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
         }
         /* reset body to nil, now that we have read all data */
         body = mrb_nil_value();
-    }
-
-    /* fall through if possible */
-    if (generator->req->res.status == STATUS_FALLTHRU) {
-        if (is_delegate != NULL) {
-            *is_delegate = 1;
-            mrb_gc_arena_restore(mrb, gc_arena);
-            return;
-        }
-        h2o_req_log_error(generator->req, H2O_MRUBY_MODULE_NAME, "cannot (yet) handle async 399 response");
-        goto SendInternalError;
     }
 
     /* use fiber in case we need to call #each */
