@@ -286,4 +286,30 @@ EOT
     is $body, "got IOError";
 };
 
+subtest "header-concat" => sub {
+    my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          Proc.new do |env|
+            [200, {}, [env["HTTP_COOKIE"]]]
+          end
+EOT
+    subtest "http1" => sub {
+        my ($headers, $body) = run_prog("curl --silent -H 'cookie: a=b' -H 'cookie: c=d' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        like $headers, qr{^HTTP/1\.1 200}is;
+        like $body, qr{^a=b;\s*c=d$}is;
+    };
+    subtest "http2" => sub {
+        plan skip_all => "curl does not support HTTP/2"
+            unless curl_supports_http2();
+        my ($headers, $body) = run_prog("curl --http2 --insecure --silent -H 'cookie: a=b' -H 'cookie: c=d' --dump-header /dev/stderr https://127.0.0.1:$server->{tls_port}/");
+        like $headers, qr{^HTTP/2\.0 200}is;
+        like $body, qr{^a=b;\s*c=d$}is;
+    };
+};
+
 done_testing();
