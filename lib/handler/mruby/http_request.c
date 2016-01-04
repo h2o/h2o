@@ -280,7 +280,7 @@ static int flatten_request_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
 
     /* ignore certain headers */
     if (h2o_lcstris(name.base, name.len, H2O_STRLIT("content-length")) ||
-        h2o_lcstris(name.base, name.len, H2O_STRLIT("connection")))
+        h2o_lcstris(name.base, name.len, H2O_STRLIT("connection")) || h2o_lcstris(name.base, name.len, H2O_STRLIT("host")))
         return 0;
 
     /* mark the existence of transfer-encoding in order to prevent us from adding content-length header */
