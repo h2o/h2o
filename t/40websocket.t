@@ -79,8 +79,10 @@ subtest "ws" => sub {
 subtest "wss" => sub {
     eval q{use IO::Socket::SSL; 1}
         or plan skip_all => "IO::Socket::SSL not found";
-    my $conn = IO::Socket::SSL->new("127.0.0.1:$server->{tls_port}")
-        or die "failed to connect via TLS to 127.0.0.1:$server->{tls_port}:$!";
+    my $conn = IO::Socket::SSL->new(
+        PeerAddr        => "127.0.0.1:$server->{tls_port}",
+        SSL_verify_mode => 0,
+    ) or die "failed to connect via TLS to 127.0.0.1:$server->{tls_port}:". IO::Socket::SSL::errstr();
     doit($conn);
 };
 
