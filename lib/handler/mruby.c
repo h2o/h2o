@@ -245,6 +245,8 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
     SET_LITERAL(H2O_MRUBY_LIT_RACK_ERRORS, "rack.errors");
     SET_LITERAL(H2O_MRUBY_LIT_SERVER_SOFTWARE, "SERVER_SOFTWARE");
     SET_STRING(H2O_MRUBY_LIT_SERVER_SOFTWARE_VALUE, mrb_str_new(mrb, server_name, server_name_len));
+    SET_LITERAL(H2O_MRUBY_LIT_SEPARATOR_COMMA, ", ");
+    SET_LITERAL(H2O_MRUBY_LIT_SEPARATOR_SEMICOLON, "; ");
 
 #undef SET_LITERAL
 #undef SET_STRING
@@ -394,11 +396,22 @@ static void on_rack_input_free(mrb_state *mrb, const char *base, mrb_int len, vo
     *input_stream = mrb_nil_value();
 }
 
+int build_env_sort_header_cb(const void *_x, const void *_y)
+{
+    const h2o_header_t *x = *(const h2o_header_t **)_x, *y = *(const h2o_header_t **)_y;
+    if (x->name->len < y->name->len)
+        return -1;
+    if (x->name->len > y->name->len)
+        return 1;
+    if (x->name->base == y->name->base)
+        return 0;
+    return memcmp(x->name->base, y->name->base, x->name->len);
+}
+
 static mrb_value build_env(h2o_mruby_generator_t *generator)
 {
     mrb_state *mrb = generator->ctx->mrb;
     mrb_value env = mrb_hash_new_capa(mrb, 16);
-    int arena = mrb_gc_arena_save(mrb);
 
     /* environment */
     mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_REQUEST_METHOD),
@@ -442,22 +455,32 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
         if (!mrb_nil_p(p))
             mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_REMOTE_PORT), p);
     }
-    mrb_gc_arena_restore(mrb, arena);
 
-    /* headers */
-    size_t i = 0;
-    for (i = 0; i != generator->req->headers.size; ++i) {
-        const h2o_header_t *header = generator->req->headers.entries + i;
-        mrb_value n;
-        if (h2o_iovec_is_token(header->name)) {
-            const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, header->name);
-            n = mrb_ary_entry(generator->ctx->constants, (mrb_int)(token - h2o__tokens));
-        } else {
-            h2o_iovec_t vec = convert_header_name_to_env(&generator->req->pool, header->name->base, header->name->len);
-            n = mrb_str_new(mrb, vec.base, vec.len);
+    { /* headers */
+        h2o_header_t *headers_sorted = alloca(sizeof(*headers_sorted) * generator->req->headers.size);
+        memcpy(headers_sorted, generator->req->headers.entries, sizeof(*headers_sorted) * generator->req->headers.size);
+        qsort(headers_sorted, generator->req->headers.size, sizeof(*headers_sorted), build_env_sort_header_cb);
+        size_t i = 0;
+        for (i = 0; i != generator->req->headers.size; ++i) {
+            const h2o_header_t *header = headers_sorted + i;
+            mrb_value n, v;
+            if (h2o_iovec_is_token(header->name)) {
+                const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, header->name);
+                n = mrb_ary_entry(generator->ctx->constants, (mrb_int)(token - h2o__tokens));
+            } else {
+                h2o_iovec_t vec = convert_header_name_to_env(&generator->req->pool, header->name->base, header->name->len);
+                n = mrb_str_new(mrb, vec.base, vec.len);
+            }
+            v = mrb_str_new(mrb, header->value.base, header->value.len);
+            while (i < generator->req->headers.size - 1) {
+                if (!h2o_memis(headers_sorted[i + 1].name->base, headers_sorted[i + 1].name->len, header->name->base, header->name->len))
+                    break;
+                header = headers_sorted + ++i;
+                v = mrb_str_append(mrb, v, mrb_ary_entry(generator->ctx->constants, header->name == &H2O_TOKEN_COOKIE->buf ? H2O_MRUBY_LIT_SEPARATOR_SEMICOLON : H2O_MRUBY_LIT_SEPARATOR_COMMA));
+                v = mrb_str_append(mrb, v, mrb_str_new(mrb, header->value.base, header->value.len));
+            }
+            mrb_hash_set(mrb, env, n, v);
         }
-        mrb_hash_set(mrb, env, n, mrb_str_new(mrb, header->value.base, header->value.len));
-        mrb_gc_arena_restore(mrb, arena);
     }
 
     /* rack.* */
