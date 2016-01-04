@@ -475,10 +475,13 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
             }
             v = mrb_str_new(mrb, header->value.base, header->value.len);
             while (i < generator->req->headers.size - 1) {
-                if (!h2o_memis(headers_sorted[i + 1].name->base, headers_sorted[i + 1].name->len, header->name->base, header->name->len))
+                if (!h2o_memis(headers_sorted[i + 1].name->base, headers_sorted[i + 1].name->len, header->name->base,
+                               header->name->len))
                     break;
                 header = headers_sorted + ++i;
-                v = mrb_str_append(mrb, v, mrb_ary_entry(generator->ctx->constants, header->name == &H2O_TOKEN_COOKIE->buf ? H2O_MRUBY_LIT_SEPARATOR_SEMICOLON : H2O_MRUBY_LIT_SEPARATOR_COMMA));
+                v = mrb_str_append(mrb, v, mrb_ary_entry(generator->ctx->constants, header->name == &H2O_TOKEN_COOKIE->buf
+                                                                                        ? H2O_MRUBY_LIT_SEPARATOR_SEMICOLON
+                                                                                        : H2O_MRUBY_LIT_SEPARATOR_COMMA));
                 v = mrb_str_append(mrb, v, mrb_str_new(mrb, header->value.base, header->value.len));
             }
             mrb_hash_set(mrb, env, n, v);

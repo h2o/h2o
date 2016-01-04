@@ -236,15 +236,14 @@ void h2o_mruby_send_chunked_init_context(h2o_mruby_context_t *ctx)
 
     mrb_define_method(mrb, mrb->kernel_module, "_h2o_send_chunk", send_chunked_method, MRB_ARGS_ARG(1, 0));
     h2o_mruby_define_callback(mrb, "_h2o_send_chunk_eos", H2O_MRUBY_CALLBACK_ID_SEND_CHUNKED_EOS);
-    mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER,
-                h2o_mruby_eval_expr(mrb, "Proc.new do |src|\n"
-                                         "  fiber = Fiber.new do\n"
-                                         "    src.each do |chunk|\n"
-                                         "      _h2o_send_chunk(chunk)\n"
-                                         "    end\n"
-                                         "    _h2o_send_chunk_eos()\n"
-                                         "  end\n"
-                                         "  fiber.resume\n"
-                                         "end"));
+    mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER, h2o_mruby_eval_expr(mrb, "Proc.new do |src|\n"
+                                                                                                    "  fiber = Fiber.new do\n"
+                                                                                                    "    src.each do |chunk|\n"
+                                                                                                    "      _h2o_send_chunk(chunk)\n"
+                                                                                                    "    end\n"
+                                                                                                    "    _h2o_send_chunk_eos()\n"
+                                                                                                    "  end\n"
+                                                                                                    "  fiber.resume\n"
+                                                                                                    "end"));
     h2o_mruby_assert(mrb);
 }

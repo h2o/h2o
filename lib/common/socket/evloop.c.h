@@ -92,7 +92,9 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
 void link_to_pending(struct st_h2o_evloop_socket_t *sock)
 {
     if (sock->_next_pending == sock) {
-        struct st_h2o_evloop_socket_t **slot = (sock->_flags & H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION) != 0 ? &sock->loop->_pending_as_server : &sock->loop->_pending_as_client;
+        struct st_h2o_evloop_socket_t **slot = (sock->_flags & H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION) != 0
+                                                   ? &sock->loop->_pending_as_server
+                                                   : &sock->loop->_pending_as_client;
         sock->_next_pending = *slot;
         *slot = sock;
     }

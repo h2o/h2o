@@ -25,7 +25,7 @@
 struct errordoc_configurator_t {
     h2o_configurator_t super;
     h2o_mem_pool_t pool;
-    H2O_VECTOR(h2o_errordoc_t)*vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+    H2O_VECTOR(h2o_errordoc_t) * vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
 static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *hash)

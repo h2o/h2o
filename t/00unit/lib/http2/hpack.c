@@ -467,7 +467,7 @@ void test_token_wo_hpack_id(void)
     h2o_add_header(&pool, &res.headers, H2O_TOKEN_TE, H2O_STRLIT("test"));
 
     h2o_hpack_flatten_response(&buf, &table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, &res, NULL, NULL, SIZE_MAX);
-    ok(h2o_memis(buf->bytes + 9, buf->size - 9, H2O_STRLIT("\x88" /* :status:200 */
+    ok(h2o_memis(buf->bytes + 9, buf->size - 9, H2O_STRLIT("\x88"     /* :status:200 */
                                                            "\x40\x02" /* literal header w. incremental indexing, raw, TE */
                                                            "te"
                                                            "\x83" /* header value, huffman */
