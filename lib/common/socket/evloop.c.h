@@ -470,6 +470,7 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
         int status;
         if ((sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0) {
             socklen_t l = sizeof(status);
+            status = 0;
             getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &status, &l);
             sock->_flags &= ~H2O_SOCKET_FLAG_IS_CONNECTING;
         } else {
