@@ -47,8 +47,11 @@
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
-#ifdef __GLIBC__
+#if defined(__GLIBC__) || __FreeBSD__ >= 10 || __NetBSD__ >= 7
 #include <execinfo.h>
+#define LOG_BACKTRACE 1
+#else
+#define LOG_BACKTRACE 0
 #endif
 #include "cloexec.h"
 #include "yoml-parser.h"
@@ -1072,7 +1075,7 @@ static void on_sigterm(int signo)
     notify_all_threads();
 }
 
-#ifdef __GLIBC__
+#if LOG_BACKTRACE
 static int popen_annotate_backtrace_symbols(void)
 {
     char *cmd_fullpath = h2o_configurator_get_cmd_path("share/h2o/annotate-backtrace-symbols"), *argv[] = {cmd_fullpath, NULL};
@@ -1122,7 +1125,7 @@ static void setup_signal_handlers(void)
 {
     h2o_set_signal_handler(SIGTERM, on_sigterm);
     h2o_set_signal_handler(SIGPIPE, SIG_IGN);
-#ifdef __GLIBC__
+#if LOG_BACKTRACE
     if ((backtrace_symbols_to_fd = popen_annotate_backtrace_symbols()) == -1)
         backtrace_symbols_to_fd = 2;
     h2o_set_signal_handler(SIGABRT, on_sigfatal);
