@@ -45,8 +45,16 @@ hosts:
       /:
         mruby.handler: |
           Proc.new do |env|
+            headers = {}
+            env.each do |key, value|
+              if /^HTTP_/.match(key)
+                headers[\$'] = value
+              end
+            end
+            headers["x-h2o-mruby"] = "1"
             http_request("http://$upstream_hostport#{env["PATH_INFO"]}#{env["QUERY_STRING"]}", {
               method: env["REQUEST_METHOD"],
+              headers: headers,
               body: env["rack.input"],
             }).join
           end
@@ -126,6 +134,15 @@ sub doit {
         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/index.txt");
         like $headers, qr{HTTP/1\.1 200 }is;
         is $body, "hello\n";
+    };
+    subtest "headers" => sub {
+        my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/echo-headers");
+        like $headers, qr{^HTTP/1\.1 200 }is;
+        like $body, qr{^host: $upstream_hostport$}im;
+        unlike $body, qr{^host: 127.0.0.1:$port$}im;
+        like $body, qr{^user-agent: *curl/}im;
+        like $body, qr{^accept: *\*/\*$}im;
+        like $body, qr{^x-h2o-mruby:}im;
     };
     subtest "post" => sub {
         my ($headers, $body) = run_prog("$curl_cmd --data 'hello world' $proto://127.0.0.1:$port/echo");
