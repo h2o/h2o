@@ -451,6 +451,8 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
         mrb_value n;
         if (h2o_iovec_is_token(header->name)) {
             const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, header->name);
+            if (token == H2O_TOKEN_TRANSFER_ENCODING)
+                continue;
             n = mrb_ary_entry(generator->ctx->constants, (mrb_int)(token - h2o__tokens));
         } else {
             h2o_iovec_t vec = convert_header_name_to_env(&generator->req->pool, header->name->base, header->name->len);
