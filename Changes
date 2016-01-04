@@ -1,5 +1,20 @@
 Revision history for H2O.
 
+1.7.0-beta1 TBD
+	- [core] support for wildcard hostnames #634 (Kazuho Oku)
+	- [fastcgi] add support for CGI #618 (Kazuho Oku)
+	- [fastcgi] drop transfer-encoding header #641 (Kazuho Oku)
+	- [http2] fix HPACK encoder error (and crash) when trying to encode a token wo. hpack index #640 (Kazuho Oku)
+	- [mruby] provide `env["rack.input"]` #515 #638 #644 (Masayoshi Takahashi, Kazuho Oku)
+	- [mruby] HTTP client API #637 #643 (Kazuho Oku)
+	- [mruby] dump the ruby source on error #631 (Kazuho Oku)
+	- [mruby] provide access to `$H2O_ROOT` #629 (Kazuho Oku)
+	- [mruby] change mrb_int to 64-bit on 64-bit systems #639 (Kazuho Oku)
+	- [mruby] concatenate request headers having same name #666 (Kazuho Oku)
+	- [ssl] turn on neverbleed by default #633 (Kazuho Oku)
+	- [libh2o] fix race condition during multithread receiver (un)registration #659 (Chul-Woong Yang)
+	- [misc] support basic authentication using .htpasswd #624 (Kazuho Oku)
+
 1.6.1 2015-12-18 05:05:00+0000
 	- [misc] fix build error on armv8a #628 (Kazuho Oku)
 	- [misc] fix build error when libuv < 1.0.0 is installed #630 (Kazuho Oku)
