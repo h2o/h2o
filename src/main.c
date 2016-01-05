@@ -829,7 +829,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     if (strcmp(type, "unix") == 0) {
 
         /* unix socket */
-        struct sockaddr_un sa;
+        struct sockaddr_un sa = {};
         int listener_is_new;
         struct listener_config_t *listener;
         /* build sockaddr */
