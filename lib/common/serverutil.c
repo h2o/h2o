@@ -122,7 +122,7 @@ static char **build_spawn_env(void)
     /* calculate number of envvars, as well as looking for H2O_ROOT= */
     for (num = 0; environ[num] != NULL; ++num)
         if (strncmp(environ[num], "H2O_ROOT=", sizeof("H2O_ROOT=") - 1) == 0)
-            return environ;
+            return NULL;
 
     /* not found */
     char **newenv = h2o_mem_alloc(sizeof(*newenv) * (num + 2) + sizeof("H2O_ROOT=" H2O_TO_STR(H2O_ROOT)));
@@ -161,7 +161,9 @@ pid_t h2o_spawnp(const char *cmd, char *const *argv, const int *mapped_fds, int 
                 close(mapped_fds[0]);
             }
         }
-        environ = build_spawn_env();
+        char **env = build_spawn_env();
+        if (env != NULL)
+            environ = env;
         execvp(cmd, argv);
         errnum = errno;
         write(pipefds[1], &errnum, sizeof(errnum));
@@ -217,11 +219,10 @@ Error:
     }
     if (!cloexec_mutex_is_locked)
         pthread_mutex_lock(&cloexec_mutex);
-    errno = posix_spawnp(&pid, cmd, &file_actions, NULL, argv, env);
+    errno = posix_spawnp(&pid, cmd, &file_actions, NULL, argv, env != NULL ? env : environ);
     if (!cloexec_mutex_is_locked)
         pthread_mutex_unlock(&cloexec_mutex);
-    if (env != environ)
-        free(env);
+    free(env);
     if (errno != 0)
         return -1;
 
