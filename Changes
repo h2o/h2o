@@ -1,6 +1,6 @@
 Revision history for H2O.
 
-1.7.0-beta1 TBD
+1.7.0-beta1 2016-01-05 04:23:00+0000
 	- [core] support for wildcard hostnames #634 (Kazuho Oku)
 	- [fastcgi] add support for CGI #618 (Kazuho Oku)
 	- [fastcgi] drop transfer-encoding header #641 (Kazuho Oku)
