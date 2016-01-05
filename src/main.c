@@ -117,6 +117,7 @@ static struct {
         int *fds;
         char *bound_fd_map; /* has `num_fds` elements, set to 1 if fd[index] was bound to one of the listeners */
         size_t num_fds;
+        char *env_var;
     } server_starter;
     struct listener_config_t **listeners;
     size_t num_listeners;
@@ -1516,7 +1517,10 @@ int main(int argc, char **argv)
         for (i = 0; i != conf.server_starter.num_fds; ++i)
             set_cloexec(conf.server_starter.fds[i]);
         conf.server_starter.bound_fd_map = alloca(conf.server_starter.num_fds);
+        memset(conf.server_starter.bound_fd_map, 0, conf.server_starter.num_fds);
+        conf.server_starter.env_var = getenv("SERVER_STARTER_PORT");
     }
+    unsetenv("SERVER_STARTER_PORT");
 
     { /* configure */
         yoml_t *yoml;
@@ -1540,12 +1544,10 @@ int main(int argc, char **argv)
             }
         }
         if (!all_were_bound) {
-            fprintf(stderr, "note: $SERVER_STARTER_PORT was \"%s\"\n", getenv("SERVER_STARTER_PORT"));
+            fprintf(stderr, "note: $SERVER_STARTER_PORT was \"%s\"\n", conf.server_starter.env_var);
             return EX_CONFIG;
         }
     }
-
-    unsetenv("SERVER_STARTER_PORT");
 
     /* handle run_mode == MASTER|TEST */
     switch (conf.run_mode) {
