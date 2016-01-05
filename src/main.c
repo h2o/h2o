@@ -195,10 +195,21 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
         for (i = 0; i != listener->ssl.size; ++i) {
             struct listener_ssl_config_t *ssl_config = listener->ssl.entries[i];
             for (j = 0; j != ssl_config->hostnames.size; ++j) {
-                if (h2o_lcstris(name, name_len, ssl_config->hostnames.entries[j].base, ssl_config->hostnames.entries[j].len)) {
-                    ctx_index = i;
-                    goto Found;
+                if (ssl_config->hostnames.entries[j].base[0] == '*') {
+                  /* matching against "*.foo.bar" */
+                  size_t cmplen = ssl_config->hostnames.entries[j].len - 1;
+                  if (!(cmplen < name_len &&
+                        h2o_lcstris(name + name_len - cmplen, cmplen, ssl_config->hostnames.entries[j].base + 1, ssl_config->hostnames.entries[j].len - 1))) {
+                    continue;
+                  }
+                } else {
+                  if (!h2o_lcstris(name, name_len, ssl_config->hostnames.entries[j].base, ssl_config->hostnames.entries[j].len)) {
+                    continue;
+                  }
                 }
+
+                ctx_index = i;
+                goto Found;
             }
         }
         ctx_index = 0;
