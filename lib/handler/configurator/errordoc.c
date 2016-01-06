@@ -103,7 +103,8 @@ static int on_config_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_
             if (register_errordoc(cmd, ctx, e) != 0)
                 return -1;
         }
-    } break;
+        return 0;
+    }
     case YOML_TYPE_MAPPING:
         return register_errordoc(cmd, ctx, node);
     default:
