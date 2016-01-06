@@ -1,0 +1,435 @@
+#ifdef EPERM
+  { EPERM, NULL, },
+#endif
+#ifdef ENOENT
+  { ENOENT, NULL, },
+#endif
+#ifdef ESRCH
+  { ESRCH, NULL, },
+#endif
+#ifdef EINTR
+  { EINTR, NULL, },
+#endif
+#ifdef EIO
+  { EIO, NULL, },
+#endif
+#ifdef ENXIO
+  { ENXIO, NULL, },
+#endif
+#ifdef E2BIG
+  { E2BIG, NULL, },
+#endif
+#ifdef ENOEXEC
+  { ENOEXEC, NULL, },
+#endif
+#ifdef EBADF
+  { EBADF, NULL, },
+#endif
+#ifdef ECHILD
+  { ECHILD, NULL, },
+#endif
+#ifdef EAGAIN
+  { EAGAIN, NULL, },
+#endif
+#ifdef ENOMEM
+  { ENOMEM, NULL, },
+#endif
+#ifdef EACCES
+  { EACCES, NULL, },
+#endif
+#ifdef EFAULT
+  { EFAULT, NULL, },
+#endif
+#ifdef ENOTBLK
+  { ENOTBLK, NULL, },
+#endif
+#ifdef EBUSY
+  { EBUSY, NULL, },
+#endif
+#ifdef EEXIST
+  { EEXIST, NULL, },
+#endif
+#ifdef EXDEV
+  { EXDEV, NULL, },
+#endif
+#ifdef ENODEV
+  { ENODEV, NULL, },
+#endif
+#ifdef ENOTDIR
+  { ENOTDIR, NULL, },
+#endif
+#ifdef EISDIR
+  { EISDIR, NULL, },
+#endif
+#ifdef EINVAL
+  { EINVAL, NULL, },
+#endif
+#ifdef ENFILE
+  { ENFILE, NULL, },
+#endif
+#ifdef EMFILE
+  { EMFILE, NULL, },
+#endif
+#ifdef ENOTTY
+  { ENOTTY, NULL, },
+#endif
+#ifdef ETXTBSY
+  { ETXTBSY, NULL, },
+#endif
+#ifdef EFBIG
+  { EFBIG, NULL, },
+#endif
+#ifdef ENOSPC
+  { ENOSPC, NULL, },
+#endif
+#ifdef ESPIPE
+  { ESPIPE, NULL, },
+#endif
+#ifdef EROFS
+  { EROFS, NULL, },
+#endif
+#ifdef EMLINK
+  { EMLINK, NULL, },
+#endif
+#ifdef EPIPE
+  { EPIPE, NULL, },
+#endif
+#ifdef EDOM
+  { EDOM, NULL, },
+#endif
+#ifdef ERANGE
+  { ERANGE, NULL, },
+#endif
+#ifdef EDEADLK
+  { EDEADLK, NULL, },
+#endif
+#ifdef ENAMETOOLONG
+  { ENAMETOOLONG, NULL, },
+#endif
+#ifdef ENOLCK
+  { ENOLCK, NULL, },
+#endif
+#ifdef ENOSYS
+  { ENOSYS, NULL, },
+#endif
+#ifdef ENOTEMPTY
+  { ENOTEMPTY, NULL, },
+#endif
+#ifdef ELOOP
+  { ELOOP, NULL, },
+#endif
+#ifdef EWOULDBLOCK
+  { EWOULDBLOCK, NULL, },
+#endif
+#ifdef ENOMSG
+  { ENOMSG, NULL, },
+#endif
+#ifdef EIDRM
+  { EIDRM, NULL, },
+#endif
+#ifdef ECHRNG
+  { ECHRNG, NULL, },
+#endif
+#ifdef EL2NSYNC
+  { EL2NSYNC, NULL, },
+#endif
+#ifdef EL3HLT
+  { EL3HLT, NULL, },
+#endif
+#ifdef EL3RST
+  { EL3RST, NULL, },
+#endif
+#ifdef ELNRNG
+  { ELNRNG, NULL, },
+#endif
+#ifdef EUNATCH
+  { EUNATCH, NULL, },
+#endif
+#ifdef ENOCSI
+  { ENOCSI, NULL, },
+#endif
+#ifdef EL2HLT
+  { EL2HLT, NULL, },
+#endif
+#ifdef EBADE
+  { EBADE, NULL, },
+#endif
+#ifdef EBADR
+  { EBADR, NULL, },
+#endif
+#ifdef EXFULL
+  { EXFULL, NULL, },
+#endif
+#ifdef ENOANO
+  { ENOANO, NULL, },
+#endif
+#ifdef EBADRQC
+  { EBADRQC, NULL, },
+#endif
+#ifdef EBADSLT
+  { EBADSLT, NULL, },
+#endif
+#ifdef EDEADLOCK
+  { EDEADLOCK, NULL, },
+#endif
+#ifdef EBFONT
+  { EBFONT, NULL, },
+#endif
+#ifdef ENOSTR
+  { ENOSTR, NULL, },
+#endif
+#ifdef ENODATA
+  { ENODATA, NULL, },
+#endif
+#ifdef ETIME
+  { ETIME, NULL, },
+#endif
+#ifdef ENOSR
+  { ENOSR, NULL, },
+#endif
+#ifdef ENONET
+  { ENONET, NULL, },
+#endif
+#ifdef ENOPKG
+  { ENOPKG, NULL, },
+#endif
+#ifdef EREMOTE
+  { EREMOTE, NULL, },
+#endif
+#ifdef ENOLINK
+  { ENOLINK, NULL, },
+#endif
+#ifdef EADV
+  { EADV, NULL, },
+#endif
+#ifdef ESRMNT
+  { ESRMNT, NULL, },
+#endif
+#ifdef ECOMM
+  { ECOMM, NULL, },
+#endif
+#ifdef EPROTO
+  { EPROTO, NULL, },
+#endif
+#ifdef EMULTIHOP
+  { EMULTIHOP, NULL, },
+#endif
+#ifdef EDOTDOT
+  { EDOTDOT, NULL, },
+#endif
+#ifdef EBADMSG
+  { EBADMSG, NULL, },
+#endif
+#ifdef EOVERFLOW
+  { EOVERFLOW, NULL, },
+#endif
+#ifdef ENOTUNIQ
+  { ENOTUNIQ, NULL, },
+#endif
+#ifdef EBADFD
+  { EBADFD, NULL, },
+#endif
+#ifdef EREMCHG
+  { EREMCHG, NULL, },
+#endif
+#ifdef ELIBACC
+  { ELIBACC, NULL, },
+#endif
+#ifdef ELIBBAD
+  { ELIBBAD, NULL, },
+#endif
+#ifdef ELIBSCN
+  { ELIBSCN, NULL, },
+#endif
+#ifdef ELIBMAX
+  { ELIBMAX, NULL, },
+#endif
+#ifdef ELIBEXEC
+  { ELIBEXEC, NULL, },
+#endif
+#ifdef EILSEQ
+  { EILSEQ, NULL, },
+#endif
+#ifdef ERESTART
+  { ERESTART, NULL, },
+#endif
+#ifdef ESTRPIPE
+  { ESTRPIPE, NULL, },
+#endif
+#ifdef EUSERS
+  { EUSERS, NULL, },
+#endif
+#ifdef ENOTSOCK
+  { ENOTSOCK, NULL, },
+#endif
+#ifdef EDESTADDRREQ
+  { EDESTADDRREQ, NULL, },
+#endif
+#ifdef EMSGSIZE
+  { EMSGSIZE, NULL, },
+#endif
+#ifdef EPROTOTYPE
+  { EPROTOTYPE, NULL, },
+#endif
+#ifdef ENOPROTOOPT
+  { ENOPROTOOPT, NULL, },
+#endif
+#ifdef EPROTONOSUPPORT
+  { EPROTONOSUPPORT, NULL, },
+#endif
+#ifdef ESOCKTNOSUPPORT
+  { ESOCKTNOSUPPORT, NULL, },
+#endif
+#ifdef EOPNOTSUPP
+  { EOPNOTSUPP, NULL, },
+#endif
+#ifdef EPFNOSUPPORT
+  { EPFNOSUPPORT, NULL, },
+#endif
+#ifdef EAFNOSUPPORT
+  { EAFNOSUPPORT, NULL, },
+#endif
+#ifdef EADDRINUSE
+  { EADDRINUSE, NULL, },
+#endif
+#ifdef EADDRNOTAVAIL
+  { EADDRNOTAVAIL, NULL, },
+#endif
+#ifdef ENETDOWN
+  { ENETDOWN, NULL, },
+#endif
+#ifdef ENETUNREACH
+  { ENETUNREACH, NULL, },
+#endif
+#ifdef ENETRESET
+  { ENETRESET, NULL, },
+#endif
+#ifdef ECONNABORTED
+  { ECONNABORTED, NULL, },
+#endif
+#ifdef ECONNRESET
+  { ECONNRESET, NULL, },
+#endif
+#ifdef ENOBUFS
+  { ENOBUFS, NULL, },
+#endif
+#ifdef EISCONN
+  { EISCONN, NULL, },
+#endif
+#ifdef ENOTCONN
+  { ENOTCONN, NULL, },
+#endif
+#ifdef ESHUTDOWN
+  { ESHUTDOWN, NULL, },
+#endif
+#ifdef ETOOMANYREFS
+  { ETOOMANYREFS, NULL, },
+#endif
+#ifdef ETIMEDOUT
+  { ETIMEDOUT, NULL, },
+#endif
+#ifdef ECONNREFUSED
+  { ECONNREFUSED, NULL, },
+#endif
+#ifdef EHOSTDOWN
+  { EHOSTDOWN, NULL, },
+#endif
+#ifdef EHOSTUNREACH
+  { EHOSTUNREACH, NULL, },
+#endif
+#ifdef EALREADY
+  { EALREADY, NULL, },
+#endif
+#ifdef EINPROGRESS
+  { EINPROGRESS, NULL, },
+#endif
+#ifdef ESTALE
+  { ESTALE, NULL, },
+#endif
+#ifdef EUCLEAN
+  { EUCLEAN, NULL, },
+#endif
+#ifdef ENOTNAM
+  { ENOTNAM, NULL, },
+#endif
+#ifdef ENAVAIL
+  { ENAVAIL, NULL, },
+#endif
+#ifdef EISNAM
+  { EISNAM, NULL, },
+#endif
+#ifdef EREMOTEIO
+  { EREMOTEIO, NULL, },
+#endif
+#ifdef EDQUOT
+  { EDQUOT, NULL, },
+#endif
+#ifdef ECANCELED
+  { ECANCELED, NULL, },
+#endif
+#ifdef EKEYEXPIRED
+  { EKEYEXPIRED, NULL, },
+#endif
+#ifdef EKEYREJECTED
+  { EKEYREJECTED, NULL, },
+#endif
+#ifdef EKEYREVOKED
+  { EKEYREVOKED, NULL, },
+#endif
+#ifdef EMEDIUMTYPE
+  { EMEDIUMTYPE, NULL, },
+#endif
+#ifdef ENOKEY
+  { ENOKEY, NULL, },
+#endif
+#ifdef ENOMEDIUM
+  { ENOMEDIUM, NULL, },
+#endif
+#ifdef ENOTRECOVERABLE
+  { ENOTRECOVERABLE, NULL, },
+#endif
+#ifdef EOWNERDEAD
+  { EOWNERDEAD, NULL, },
+#endif
+#ifdef ERFKILL
+  { ERFKILL, NULL, },
+#endif
+#ifdef EAUTH
+  { EAUTH, NULL, },
+#endif
+#ifdef EBADRPC
+  { EBADRPC, NULL, },
+#endif
+#ifdef EDOOFUS
+  { EDOOFUS, NULL, },
+#endif
+#ifdef EFTYPE
+  { EFTYPE, NULL, },
+#endif
+#ifdef ENEEDAUTH
+  { ENEEDAUTH, NULL, },
+#endif
+#ifdef ENOATTR
+  { ENOATTR, NULL, },
+#endif
+#ifdef ENOTSUP
+  { ENOTSUP, NULL, },
+#endif
+#ifdef EPROCLIM
+  { EPROCLIM, NULL, },
+#endif
+#ifdef EPROCUNAVAIL
+  { EPROCUNAVAIL, NULL, },
+#endif
+#ifdef EPROGMISMATCH
+  { EPROGMISMATCH, NULL, },
+#endif
+#ifdef EPROGUNAVAIL
+  { EPROGUNAVAIL, NULL, },
+#endif
+#ifdef ERPCMISMATCH
+  { ERPCMISMATCH, NULL, },
+#endif
+#ifdef EIPSEC
+  { EIPSEC, NULL, },
+#endif
