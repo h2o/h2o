@@ -110,4 +110,25 @@ EOT
     });
 };
 
+subtest 'multi-error' => sub {
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        file.dir: @{[DOC_ROOT]}
+error-doc:
+  - status: 404
+    url: /404.html
+  - status: 500
+    url: /500.html
+EOT
+
+    run_tests($server, sub {
+        my ($proto, $opts, $port) = @_;
+        my $resp = `curl $opts --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/nonexist 2>&1 > /dev/null`;
+        like $resp, qr{^HTTP/[^ ]+ 404[\t ]}s, "status";
+    });
+};
+
 done_testing;
