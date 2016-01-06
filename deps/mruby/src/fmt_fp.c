@@ -156,7 +156,7 @@ fmt_fp(struct fmt_args *f, long double y, int w, int p, int fl, int t)
 
     s=buf;
     do {
-      int x=y;
+      int x=(int)y;
       *s++=xdigits[x]|(t&32);
       y=16*(y-x);
       if (s-buf==1 && (y||p>0||(fl&ALT_FORM))) *s++='.';
@@ -184,7 +184,7 @@ fmt_fp(struct fmt_args *f, long double y, int w, int p, int fl, int t)
   else a=r=z=big+sizeof(big)/sizeof(*big) - LDBL_MANT_DIG - 1;
 
   do {
-    *z = y;
+    *z = (uint32_t)y;
     y = 1000000000*(y-*z++);
   } while (y);
 
@@ -194,7 +194,7 @@ fmt_fp(struct fmt_args *f, long double y, int w, int p, int fl, int t)
     for (d=z-1; d>=a; d--) {
       uint64_t x = ((uint64_t)*d<<sh)+carry;
       *d = x % 1000000000;
-      carry = x / 1000000000;
+      carry = (uint32_t)(x / 1000000000);
     }
     if (carry) *--a = carry;
     while (z>a && !z[-1]) z--;
