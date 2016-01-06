@@ -1,0 +1,725 @@
+#ifdef EPERM
+  itsdefined(EPERM);
+#else
+  itsnotdefined(EPERM);
+#endif
+#ifdef ENOENT
+  itsdefined(ENOENT);
+#else
+  itsnotdefined(ENOENT);
+#endif
+#ifdef ESRCH
+  itsdefined(ESRCH);
+#else
+  itsnotdefined(ESRCH);
+#endif
+#ifdef EINTR
+  itsdefined(EINTR);
+#else
+  itsnotdefined(EINTR);
+#endif
+#ifdef EIO
+  itsdefined(EIO);
+#else
+  itsnotdefined(EIO);
+#endif
+#ifdef ENXIO
+  itsdefined(ENXIO);
+#else
+  itsnotdefined(ENXIO);
+#endif
+#ifdef E2BIG
+  itsdefined(E2BIG);
+#else
+  itsnotdefined(E2BIG);
+#endif
+#ifdef ENOEXEC
+  itsdefined(ENOEXEC);
+#else
+  itsnotdefined(ENOEXEC);
+#endif
+#ifdef EBADF
+  itsdefined(EBADF);
+#else
+  itsnotdefined(EBADF);
+#endif
+#ifdef ECHILD
+  itsdefined(ECHILD);
+#else
+  itsnotdefined(ECHILD);
+#endif
+#ifdef EAGAIN
+  itsdefined(EAGAIN);
+#else
+  itsnotdefined(EAGAIN);
+#endif
+#ifdef ENOMEM
+  itsdefined(ENOMEM);
+#else
+  itsnotdefined(ENOMEM);
+#endif
+#ifdef EACCES
+  itsdefined(EACCES);
+#else
+  itsnotdefined(EACCES);
+#endif
+#ifdef EFAULT
+  itsdefined(EFAULT);
+#else
+  itsnotdefined(EFAULT);
+#endif
+#ifdef ENOTBLK
+  itsdefined(ENOTBLK);
+#else
+  itsnotdefined(ENOTBLK);
+#endif
+#ifdef EBUSY
+  itsdefined(EBUSY);
+#else
+  itsnotdefined(EBUSY);
+#endif
+#ifdef EEXIST
+  itsdefined(EEXIST);
+#else
+  itsnotdefined(EEXIST);
+#endif
+#ifdef EXDEV
+  itsdefined(EXDEV);
+#else
+  itsnotdefined(EXDEV);
+#endif
+#ifdef ENODEV
+  itsdefined(ENODEV);
+#else
+  itsnotdefined(ENODEV);
+#endif
+#ifdef ENOTDIR
+  itsdefined(ENOTDIR);
+#else
+  itsnotdefined(ENOTDIR);
+#endif
+#ifdef EISDIR
+  itsdefined(EISDIR);
+#else
+  itsnotdefined(EISDIR);
+#endif
+#ifdef EINVAL
+  itsdefined(EINVAL);
+#else
+  itsnotdefined(EINVAL);
+#endif
+#ifdef ENFILE
+  itsdefined(ENFILE);
+#else
+  itsnotdefined(ENFILE);
+#endif
+#ifdef EMFILE
+  itsdefined(EMFILE);
+#else
+  itsnotdefined(EMFILE);
+#endif
+#ifdef ENOTTY
+  itsdefined(ENOTTY);
+#else
+  itsnotdefined(ENOTTY);
+#endif
+#ifdef ETXTBSY
+  itsdefined(ETXTBSY);
+#else
+  itsnotdefined(ETXTBSY);
+#endif
+#ifdef EFBIG
+  itsdefined(EFBIG);
+#else
+  itsnotdefined(EFBIG);
+#endif
+#ifdef ENOSPC
+  itsdefined(ENOSPC);
+#else
+  itsnotdefined(ENOSPC);
+#endif
+#ifdef ESPIPE
+  itsdefined(ESPIPE);
+#else
+  itsnotdefined(ESPIPE);
+#endif
+#ifdef EROFS
+  itsdefined(EROFS);
+#else
+  itsnotdefined(EROFS);
+#endif
+#ifdef EMLINK
+  itsdefined(EMLINK);
+#else
+  itsnotdefined(EMLINK);
+#endif
+#ifdef EPIPE
+  itsdefined(EPIPE);
+#else
+  itsnotdefined(EPIPE);
+#endif
+#ifdef EDOM
+  itsdefined(EDOM);
+#else
+  itsnotdefined(EDOM);
+#endif
+#ifdef ERANGE
+  itsdefined(ERANGE);
+#else
+  itsnotdefined(ERANGE);
+#endif
+#ifdef EDEADLK
+  itsdefined(EDEADLK);
+#else
+  itsnotdefined(EDEADLK);
+#endif
+#ifdef ENAMETOOLONG
+  itsdefined(ENAMETOOLONG);
+#else
+  itsnotdefined(ENAMETOOLONG);
+#endif
+#ifdef ENOLCK
+  itsdefined(ENOLCK);
+#else
+  itsnotdefined(ENOLCK);
+#endif
+#ifdef ENOSYS
+  itsdefined(ENOSYS);
+#else
+  itsnotdefined(ENOSYS);
+#endif
+#ifdef ENOTEMPTY
+  itsdefined(ENOTEMPTY);
+#else
+  itsnotdefined(ENOTEMPTY);
+#endif
+#ifdef ELOOP
+  itsdefined(ELOOP);
+#else
+  itsnotdefined(ELOOP);
+#endif
+#ifdef EWOULDBLOCK
+  itsdefined(EWOULDBLOCK);
+#else
+  itsnotdefined(EWOULDBLOCK);
+#endif
+#ifdef ENOMSG
+  itsdefined(ENOMSG);
+#else
+  itsnotdefined(ENOMSG);
+#endif
+#ifdef EIDRM
+  itsdefined(EIDRM);
+#else
+  itsnotdefined(EIDRM);
+#endif
+#ifdef ECHRNG
+  itsdefined(ECHRNG);
+#else
+  itsnotdefined(ECHRNG);
+#endif
+#ifdef EL2NSYNC
+  itsdefined(EL2NSYNC);
+#else
+  itsnotdefined(EL2NSYNC);
+#endif
+#ifdef EL3HLT
+  itsdefined(EL3HLT);
+#else
+  itsnotdefined(EL3HLT);
+#endif
+#ifdef EL3RST
+  itsdefined(EL3RST);
+#else
+  itsnotdefined(EL3RST);
+#endif
+#ifdef ELNRNG
+  itsdefined(ELNRNG);
+#else
+  itsnotdefined(ELNRNG);
+#endif
+#ifdef EUNATCH
+  itsdefined(EUNATCH);
+#else
+  itsnotdefined(EUNATCH);
+#endif
+#ifdef ENOCSI
+  itsdefined(ENOCSI);
+#else
+  itsnotdefined(ENOCSI);
+#endif
+#ifdef EL2HLT
+  itsdefined(EL2HLT);
+#else
+  itsnotdefined(EL2HLT);
+#endif
+#ifdef EBADE
+  itsdefined(EBADE);
+#else
+  itsnotdefined(EBADE);
+#endif
+#ifdef EBADR
+  itsdefined(EBADR);
+#else
+  itsnotdefined(EBADR);
+#endif
+#ifdef EXFULL
+  itsdefined(EXFULL);
+#else
+  itsnotdefined(EXFULL);
+#endif
+#ifdef ENOANO
+  itsdefined(ENOANO);
+#else
+  itsnotdefined(ENOANO);
+#endif
+#ifdef EBADRQC
+  itsdefined(EBADRQC);
+#else
+  itsnotdefined(EBADRQC);
+#endif
+#ifdef EBADSLT
+  itsdefined(EBADSLT);
+#else
+  itsnotdefined(EBADSLT);
+#endif
+#ifdef EDEADLOCK
+  itsdefined(EDEADLOCK);
+#else
+  itsnotdefined(EDEADLOCK);
+#endif
+#ifdef EBFONT
+  itsdefined(EBFONT);
+#else
+  itsnotdefined(EBFONT);
+#endif
+#ifdef ENOSTR
+  itsdefined(ENOSTR);
+#else
+  itsnotdefined(ENOSTR);
+#endif
+#ifdef ENODATA
+  itsdefined(ENODATA);
+#else
+  itsnotdefined(ENODATA);
+#endif
+#ifdef ETIME
+  itsdefined(ETIME);
+#else
+  itsnotdefined(ETIME);
+#endif
+#ifdef ENOSR
+  itsdefined(ENOSR);
+#else
+  itsnotdefined(ENOSR);
+#endif
+#ifdef ENONET
+  itsdefined(ENONET);
+#else
+  itsnotdefined(ENONET);
+#endif
+#ifdef ENOPKG
+  itsdefined(ENOPKG);
+#else
+  itsnotdefined(ENOPKG);
+#endif
+#ifdef EREMOTE
+  itsdefined(EREMOTE);
+#else
+  itsnotdefined(EREMOTE);
+#endif
+#ifdef ENOLINK
+  itsdefined(ENOLINK);
+#else
+  itsnotdefined(ENOLINK);
+#endif
+#ifdef EADV
+  itsdefined(EADV);
+#else
+  itsnotdefined(EADV);
+#endif
+#ifdef ESRMNT
+  itsdefined(ESRMNT);
+#else
+  itsnotdefined(ESRMNT);
+#endif
+#ifdef ECOMM
+  itsdefined(ECOMM);
+#else
+  itsnotdefined(ECOMM);
+#endif
+#ifdef EPROTO
+  itsdefined(EPROTO);
+#else
+  itsnotdefined(EPROTO);
+#endif
+#ifdef EMULTIHOP
+  itsdefined(EMULTIHOP);
+#else
+  itsnotdefined(EMULTIHOP);
+#endif
+#ifdef EDOTDOT
+  itsdefined(EDOTDOT);
+#else
+  itsnotdefined(EDOTDOT);
+#endif
+#ifdef EBADMSG
+  itsdefined(EBADMSG);
+#else
+  itsnotdefined(EBADMSG);
+#endif
+#ifdef EOVERFLOW
+  itsdefined(EOVERFLOW);
+#else
+  itsnotdefined(EOVERFLOW);
+#endif
+#ifdef ENOTUNIQ
+  itsdefined(ENOTUNIQ);
+#else
+  itsnotdefined(ENOTUNIQ);
+#endif
+#ifdef EBADFD
+  itsdefined(EBADFD);
+#else
+  itsnotdefined(EBADFD);
+#endif
+#ifdef EREMCHG
+  itsdefined(EREMCHG);
+#else
+  itsnotdefined(EREMCHG);
+#endif
+#ifdef ELIBACC
+  itsdefined(ELIBACC);
+#else
+  itsnotdefined(ELIBACC);
+#endif
+#ifdef ELIBBAD
+  itsdefined(ELIBBAD);
+#else
+  itsnotdefined(ELIBBAD);
+#endif
+#ifdef ELIBSCN
+  itsdefined(ELIBSCN);
+#else
+  itsnotdefined(ELIBSCN);
+#endif
+#ifdef ELIBMAX
+  itsdefined(ELIBMAX);
+#else
+  itsnotdefined(ELIBMAX);
+#endif
+#ifdef ELIBEXEC
+  itsdefined(ELIBEXEC);
+#else
+  itsnotdefined(ELIBEXEC);
+#endif
+#ifdef EILSEQ
+  itsdefined(EILSEQ);
+#else
+  itsnotdefined(EILSEQ);
+#endif
+#ifdef ERESTART
+  itsdefined(ERESTART);
+#else
+  itsnotdefined(ERESTART);
+#endif
+#ifdef ESTRPIPE
+  itsdefined(ESTRPIPE);
+#else
+  itsnotdefined(ESTRPIPE);
+#endif
+#ifdef EUSERS
+  itsdefined(EUSERS);
+#else
+  itsnotdefined(EUSERS);
+#endif
+#ifdef ENOTSOCK
+  itsdefined(ENOTSOCK);
+#else
+  itsnotdefined(ENOTSOCK);
+#endif
+#ifdef EDESTADDRREQ
+  itsdefined(EDESTADDRREQ);
+#else
+  itsnotdefined(EDESTADDRREQ);
+#endif
+#ifdef EMSGSIZE
+  itsdefined(EMSGSIZE);
+#else
+  itsnotdefined(EMSGSIZE);
+#endif
+#ifdef EPROTOTYPE
+  itsdefined(EPROTOTYPE);
+#else
+  itsnotdefined(EPROTOTYPE);
+#endif
+#ifdef ENOPROTOOPT
+  itsdefined(ENOPROTOOPT);
+#else
+  itsnotdefined(ENOPROTOOPT);
+#endif
+#ifdef EPROTONOSUPPORT
+  itsdefined(EPROTONOSUPPORT);
+#else
+  itsnotdefined(EPROTONOSUPPORT);
+#endif
+#ifdef ESOCKTNOSUPPORT
+  itsdefined(ESOCKTNOSUPPORT);
+#else
+  itsnotdefined(ESOCKTNOSUPPORT);
+#endif
+#ifdef EOPNOTSUPP
+  itsdefined(EOPNOTSUPP);
+#else
+  itsnotdefined(EOPNOTSUPP);
+#endif
+#ifdef EPFNOSUPPORT
+  itsdefined(EPFNOSUPPORT);
+#else
+  itsnotdefined(EPFNOSUPPORT);
+#endif
+#ifdef EAFNOSUPPORT
+  itsdefined(EAFNOSUPPORT);
+#else
+  itsnotdefined(EAFNOSUPPORT);
+#endif
+#ifdef EADDRINUSE
+  itsdefined(EADDRINUSE);
+#else
+  itsnotdefined(EADDRINUSE);
+#endif
+#ifdef EADDRNOTAVAIL
+  itsdefined(EADDRNOTAVAIL);
+#else
+  itsnotdefined(EADDRNOTAVAIL);
+#endif
+#ifdef ENETDOWN
+  itsdefined(ENETDOWN);
+#else
+  itsnotdefined(ENETDOWN);
+#endif
+#ifdef ENETUNREACH
+  itsdefined(ENETUNREACH);
+#else
+  itsnotdefined(ENETUNREACH);
+#endif
+#ifdef ENETRESET
+  itsdefined(ENETRESET);
+#else
+  itsnotdefined(ENETRESET);
+#endif
+#ifdef ECONNABORTED
+  itsdefined(ECONNABORTED);
+#else
+  itsnotdefined(ECONNABORTED);
+#endif
+#ifdef ECONNRESET
+  itsdefined(ECONNRESET);
+#else
+  itsnotdefined(ECONNRESET);
+#endif
+#ifdef ENOBUFS
+  itsdefined(ENOBUFS);
+#else
+  itsnotdefined(ENOBUFS);
+#endif
+#ifdef EISCONN
+  itsdefined(EISCONN);
+#else
+  itsnotdefined(EISCONN);
+#endif
+#ifdef ENOTCONN
+  itsdefined(ENOTCONN);
+#else
+  itsnotdefined(ENOTCONN);
+#endif
+#ifdef ESHUTDOWN
+  itsdefined(ESHUTDOWN);
+#else
+  itsnotdefined(ESHUTDOWN);
+#endif
+#ifdef ETOOMANYREFS
+  itsdefined(ETOOMANYREFS);
+#else
+  itsnotdefined(ETOOMANYREFS);
+#endif
+#ifdef ETIMEDOUT
+  itsdefined(ETIMEDOUT);
+#else
+  itsnotdefined(ETIMEDOUT);
+#endif
+#ifdef ECONNREFUSED
+  itsdefined(ECONNREFUSED);
+#else
+  itsnotdefined(ECONNREFUSED);
+#endif
+#ifdef EHOSTDOWN
+  itsdefined(EHOSTDOWN);
+#else
+  itsnotdefined(EHOSTDOWN);
+#endif
+#ifdef EHOSTUNREACH
+  itsdefined(EHOSTUNREACH);
+#else
+  itsnotdefined(EHOSTUNREACH);
+#endif
+#ifdef EALREADY
+  itsdefined(EALREADY);
+#else
+  itsnotdefined(EALREADY);
+#endif
+#ifdef EINPROGRESS
+  itsdefined(EINPROGRESS);
+#else
+  itsnotdefined(EINPROGRESS);
+#endif
+#ifdef ESTALE
+  itsdefined(ESTALE);
+#else
+  itsnotdefined(ESTALE);
+#endif
+#ifdef EUCLEAN
+  itsdefined(EUCLEAN);
+#else
+  itsnotdefined(EUCLEAN);
+#endif
+#ifdef ENOTNAM
+  itsdefined(ENOTNAM);
+#else
+  itsnotdefined(ENOTNAM);
+#endif
+#ifdef ENAVAIL
+  itsdefined(ENAVAIL);
+#else
+  itsnotdefined(ENAVAIL);
+#endif
+#ifdef EISNAM
+  itsdefined(EISNAM);
+#else
+  itsnotdefined(EISNAM);
+#endif
+#ifdef EREMOTEIO
+  itsdefined(EREMOTEIO);
+#else
+  itsnotdefined(EREMOTEIO);
+#endif
+#ifdef EDQUOT
+  itsdefined(EDQUOT);
+#else
+  itsnotdefined(EDQUOT);
+#endif
+#ifdef ECANCELED
+  itsdefined(ECANCELED);
+#else
+  itsnotdefined(ECANCELED);
+#endif
+#ifdef EKEYEXPIRED
+  itsdefined(EKEYEXPIRED);
+#else
+  itsnotdefined(EKEYEXPIRED);
+#endif
+#ifdef EKEYREJECTED
+  itsdefined(EKEYREJECTED);
+#else
+  itsnotdefined(EKEYREJECTED);
+#endif
+#ifdef EKEYREVOKED
+  itsdefined(EKEYREVOKED);
+#else
+  itsnotdefined(EKEYREVOKED);
+#endif
+#ifdef EMEDIUMTYPE
+  itsdefined(EMEDIUMTYPE);
+#else
+  itsnotdefined(EMEDIUMTYPE);
+#endif
+#ifdef ENOKEY
+  itsdefined(ENOKEY);
+#else
+  itsnotdefined(ENOKEY);
+#endif
+#ifdef ENOMEDIUM
+  itsdefined(ENOMEDIUM);
+#else
+  itsnotdefined(ENOMEDIUM);
+#endif
+#ifdef ENOTRECOVERABLE
+  itsdefined(ENOTRECOVERABLE);
+#else
+  itsnotdefined(ENOTRECOVERABLE);
+#endif
+#ifdef EOWNERDEAD
+  itsdefined(EOWNERDEAD);
+#else
+  itsnotdefined(EOWNERDEAD);
+#endif
+#ifdef ERFKILL
+  itsdefined(ERFKILL);
+#else
+  itsnotdefined(ERFKILL);
+#endif
+#ifdef EAUTH
+  itsdefined(EAUTH);
+#else
+  itsnotdefined(EAUTH);
+#endif
+#ifdef EBADRPC
+  itsdefined(EBADRPC);
+#else
+  itsnotdefined(EBADRPC);
+#endif
+#ifdef EDOOFUS
+  itsdefined(EDOOFUS);
+#else
+  itsnotdefined(EDOOFUS);
+#endif
+#ifdef EFTYPE
+  itsdefined(EFTYPE);
+#else
+  itsnotdefined(EFTYPE);
+#endif
+#ifdef ENEEDAUTH
+  itsdefined(ENEEDAUTH);
+#else
+  itsnotdefined(ENEEDAUTH);
+#endif
+#ifdef ENOATTR
+  itsdefined(ENOATTR);
+#else
+  itsnotdefined(ENOATTR);
+#endif
+#ifdef ENOTSUP
+  itsdefined(ENOTSUP);
+#else
+  itsnotdefined(ENOTSUP);
+#endif
+#ifdef EPROCLIM
+  itsdefined(EPROCLIM);
+#else
+  itsnotdefined(EPROCLIM);
+#endif
+#ifdef EPROCUNAVAIL
+  itsdefined(EPROCUNAVAIL);
+#else
+  itsnotdefined(EPROCUNAVAIL);
+#endif
+#ifdef EPROGMISMATCH
+  itsdefined(EPROGMISMATCH);
+#else
+  itsnotdefined(EPROGMISMATCH);
+#endif
+#ifdef EPROGUNAVAIL
+  itsdefined(EPROGUNAVAIL);
+#else
+  itsnotdefined(EPROGUNAVAIL);
+#endif
+#ifdef ERPCMISMATCH
+  itsdefined(ERPCMISMATCH);
+#else
+  itsnotdefined(ERPCMISMATCH);
+#endif
+#ifdef EIPSEC
+  itsdefined(EIPSEC);
+#else
+  itsnotdefined(EIPSEC);
+#endif
