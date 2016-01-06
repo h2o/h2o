@@ -27,6 +27,8 @@ struct REnv {
 #define MRB_ENV_UNSHARE_STACK(e) ((e)->cioff = -1)
 #define MRB_ENV_STACK_SHARED_P(e) ((e)->cioff >= 0)
 
+MRB_API void mrb_env_unshare(mrb_state*, struct REnv*);
+
 struct RProc {
   MRB_OBJECT_HEADER;
   union {

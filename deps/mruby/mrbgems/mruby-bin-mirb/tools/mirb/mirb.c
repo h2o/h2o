@@ -11,6 +11,9 @@
 #include <stdio.h>
 #include <ctype.h>
 
+#include <signal.h>
+#include <setjmp.h>
+
 #ifdef ENABLE_READLINE
 #include <readline/readline.h>
 #include <readline/history.h>
@@ -27,6 +30,16 @@
 #define MIRB_WRITE_HISTORY(path) linenoiseHistorySave(path)
 #define MIRB_READ_HISTORY(path) linenoiseHistoryLoad(history_path)
 #define MIRB_USING_HISTORY()
+#endif
+
+#ifndef _WIN32
+#define MIRB_SIGSETJMP(env) sigsetjmp(env, 1)
+#define MIRB_SIGLONGJMP(env, val) siglongjmp(env, val)
+#define SIGJMP_BUF sigjmp_buf
+#else
+#define MIRB_SIGSETJMP(env) setjmp(env)
+#define MIRB_SIGLONGJMP(env, val) longjmp(env, val)
+#define SIGJMP_BUF jmp_buf
 #endif
 
 #include <mruby.h>
@@ -326,16 +339,34 @@ check_keyword(const char *buf, const char *word)
   return 1;
 }
 
+
+#ifndef ENABLE_READLINE
+volatile sig_atomic_t input_canceled = 0;
+void
+ctrl_c_handler(int signo)
+{
+  input_canceled = 1;
+}
+#else
+SIGJMP_BUF ctrl_c_buf;
+void
+ctrl_c_handler(int signo)
+{
+  MIRB_SIGLONGJMP(ctrl_c_buf, 1);
+}
+#endif
+
 int
 main(int argc, char **argv)
 {
-  char ruby_code[1024] = { 0 };
+  char ruby_code[4096] = { 0 };
   char last_code_line[1024] = { 0 };
 #ifndef ENABLE_READLINE
   int last_char;
   size_t char_index;
 #else
   char *history_path;
+  char* line;
 #endif
   mrbc_context *cxt;
   struct mrb_parser_state *parser;
@@ -396,9 +427,6 @@ main(int argc, char **argv)
   ai = mrb_gc_arena_save(mrb);
 
   while (TRUE) {
-#ifdef ENABLE_READLINE
-    char* line;
-#endif
     char *utf8;
 
     if (args.rfp) {
@@ -410,6 +438,7 @@ main(int argc, char **argv)
 #ifndef ENABLE_READLINE
     print_cmdline(code_block_open);
 
+    signal(SIGINT, ctrl_c_handler);
     char_index = 0;
     while ((last_char = getchar()) != '\n') {
       if (last_char == EOF) break;
@@ -419,6 +448,15 @@ main(int argc, char **argv)
       }
       last_code_line[char_index++] = last_char;
     }
+    signal(SIGINT, SIG_DFL);
+    if (input_canceled) {
+      ruby_code[0] = '\0';
+      last_code_line[0] = '\0';
+      code_block_open = FALSE;
+      puts("^C");
+      input_canceled = 0;
+      continue;
+    }
     if (last_char == EOF) {
       fputs("\n", stdout);
       break;
@@ -427,7 +465,19 @@ main(int argc, char **argv)
     last_code_line[char_index++] = '\n';
     last_code_line[char_index] = '\0';
 #else
+    if (MIRB_SIGSETJMP(ctrl_c_buf) == 0) {
+      ;
+    }
+    else {
+      ruby_code[0] = '\0';
+      last_code_line[0] = '\0';
+      code_block_open = FALSE;
+      puts("^C");
+    }
+    signal(SIGINT, ctrl_c_handler);
     line = MIRB_READLINE(code_block_open ? "* " : "> ");
+    signal(SIGINT, SIG_DFL);
+
     if (line == NULL) {
       printf("\n");
       break;

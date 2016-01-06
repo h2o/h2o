@@ -87,7 +87,7 @@ typedef struct {
 enum mrb_fiber_state {
   MRB_FIBER_CREATED = 0,
   MRB_FIBER_RUNNING,
-  MRB_FIBER_RESUMING,
+  MRB_FIBER_RESUMED,
   MRB_FIBER_SUSPENDED,
   MRB_FIBER_TRANSFERRED,
   MRB_FIBER_TERMINATED,
@@ -108,10 +108,19 @@ struct mrb_context {
   int esize;
 
   enum mrb_fiber_state status;
+  mrb_bool vmexec;
   struct RFiber *fib;
 };
 
 struct mrb_jmpbuf;
+
+typedef struct {
+  const char *filename;
+  int lineno;
+  struct RClass *klass;
+  const char *sep;
+  mrb_sym method_id;
+} mrb_backtrace_entry;
 
 typedef void (*mrb_atexit_func)(struct mrb_state*);
 
@@ -125,6 +134,12 @@ typedef struct mrb_state {
   struct mrb_context *root_c;
 
   struct RObject *exc;                    /* exception */
+  struct {
+    struct RObject *exc;
+    int n;
+    int n_allocated;
+    mrb_backtrace_entry *entries;
+  } backtrace;
   struct iv_tbl *globals;                 /* global variable table */
 
   struct RObject *top_self;
@@ -920,6 +935,7 @@ MRB_API mrb_value mrb_top_self(mrb_state *);
 MRB_API mrb_value mrb_run(mrb_state*, struct RProc*, mrb_value);
 MRB_API mrb_value mrb_toplevel_run(mrb_state*, struct RProc*);
 MRB_API mrb_value mrb_context_run(mrb_state*, struct RProc*, mrb_value, unsigned int);
+MRB_API mrb_value mrb_vm_exec(mrb_state*, struct RProc*, mrb_code*);
 
 MRB_API void mrb_p(mrb_state*, mrb_value);
 MRB_API mrb_int mrb_obj_id(mrb_value obj);
