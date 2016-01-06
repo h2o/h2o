@@ -725,6 +725,10 @@ struct st_h2o_req_t {
      */
     h2o_iovec_t entity;
     /**
+     * remote_user (base == NULL if none)
+     */
+    h2o_iovec_t remote_user;
+    /**
      * timestamp when the request was processed
      */
     h2o_timestamp_t processed_at;

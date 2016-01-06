@@ -467,6 +467,12 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             RESERVE(path_len * 4);
             pos = append_unsafe_string(pos, req->input.path.base, path_len);
         } break;
+        case ELEMENT_TYPE_REMOTE_USER: /* %u */
+            if (req->remote_user.base == NULL)
+                goto EmitDash;
+            RESERVE(req->remote_user.len * 4);
+            pos = append_unsafe_string(pos, req->remote_user.base, req->remote_user.len);
+            break;
         case ELEMENT_TYPE_AUTHORITY: /* %V */
             RESERVE(req->input.authority.len * 4);
             pos = append_unsafe_string(pos, req->input.authority.base, req->input.authority.len);
@@ -476,24 +482,14 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             pos = append_unsafe_string(pos, req->hostconf->authority.hostport.base, req->hostconf->authority.hostport.len);
             break;
 
-        case ELEMENT_TYPE_LOGNAME:      /* %l */
-        case ELEMENT_TYPE_REMOTE_USER:  /* %u */
-        case ELEMENT_TYPE_EXTENDED_VAR: /* %{...}x */
-            RESERVE(1);
-            *pos++ = '-';
-            break;
-
 #define EMIT_HEADER(headers, _index)                                                                                               \
     do {                                                                                                                           \
         ssize_t index = (_index);                                                                                                  \
-        if (index != -1) {                                                                                                         \
-            const h2o_header_t *header = (headers)->entries + index;                                                               \
-            RESERVE(header->value.len * 4);                                                                                        \
-            pos = append_unsafe_string(pos, header->value.base, header->value.len);                                                \
-        } else {                                                                                                                   \
-            RESERVE(1);                                                                                                            \
-            *pos++ = '-';                                                                                                          \
-        }                                                                                                                          \
+        if (index == -1)                                                                                                           \
+            goto EmitDash;                                                                                                         \
+        const h2o_header_t *header = (headers)->entries + index;                                                                   \
+        RESERVE(header->value.len * 4);                                                                                            \
+        pos = append_unsafe_string(pos, header->value.base, header->value.len);                                                    \
     } while (0)
         case ELEMENT_TYPE_IN_HEADER_TOKEN:
             EMIT_HEADER(&req->headers, h2o_find_header(&req->headers, element->data.header_token, SIZE_MAX));
@@ -546,6 +542,13 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
         case ELEMENT_TYPE_DURATION:
             RESERVE(DURATION_MAX_LEN);
             pos = append_duration(pos, &req->timestamps.request_begin_at, &req->timestamps.response_end_at);
+            break;
+
+        case ELEMENT_TYPE_LOGNAME:      /* %l */
+        case ELEMENT_TYPE_EXTENDED_VAR: /* %{...}x */
+        EmitDash:
+            RESERVE(1);
+            *pos++ = '-';
             break;
 
         default:

@@ -39,6 +39,7 @@
 #include "h2o/mruby_.h"
 
 #define STATUS_FALLTHRU 399
+#define FALLTHRU_SET_PREFIX "x-fallthru-set-"
 
 #define FREEZE_STRING(v) RSTR_SET_FROZEN_FLAG(mrb_str_ptr(v))
 
@@ -236,6 +237,7 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
     SET_LITERAL(H2O_MRUBY_LIT_CONTENT_LENGTH, "CONTENT_LENGTH");
     SET_LITERAL(H2O_MRUBY_LIT_REMOTE_ADDR, "REMOTE_ADDR");
     SET_LITERAL(H2O_MRUBY_LIT_REMOTE_PORT, "REMOTE_PORT");
+    SET_LITERAL(H2O_MRUBY_LIT_REMOTE_USER, "REMOTE_USER");
     SET_LITERAL(H2O_MRUBY_LIT_RACK_URL_SCHEME, "rack.url_scheme");
     SET_LITERAL(H2O_MRUBY_LIT_RACK_MULTITHREAD, "rack.multithread");
     SET_LITERAL(H2O_MRUBY_LIT_RACK_MULTIPROCESS, "rack.multiprocess");
@@ -455,6 +457,9 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
         if (!mrb_nil_p(p))
             mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_REMOTE_PORT), p);
     }
+    if (generator->req->remote_user.base != NULL)
+        mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_REMOTE_USER),
+                     mrb_str_new(mrb, generator->req->remote_user.base, generator->req->remote_user.len));
 
     { /* headers */
         h2o_header_t *headers_sorted = alloca(sizeof(*headers_sorted) * generator->req->headers.size);
@@ -511,6 +516,7 @@ static int handle_response_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
 {
     h2o_req_t *req = _req;
     const h2o_token_t *token;
+    static const h2o_iovec_t fallthru_set_prefix = {H2O_STRLIT(FALLTHRU_SET_PREFIX)};
 
     /* convert name to lowercase */
     name = h2o_strdup(&req->pool, name.base, name.len);
@@ -526,6 +532,13 @@ static int handle_response_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
         } else {
             value = h2o_strdup(&req->pool, value.base, value.len);
             h2o_add_header(&req->pool, &req->res.headers, token, value.base, value.len);
+        }
+    } else if (name.len > fallthru_set_prefix.len &&
+               h2o_memis(name.base, fallthru_set_prefix.len, fallthru_set_prefix.base, fallthru_set_prefix.len)) {
+        /* register additional request header if status is fallthru, otherwise discard */
+        if (req->res.status == STATUS_FALLTHRU) {
+            if (h2o_memis(name.base + fallthru_set_prefix.len, name.len - fallthru_set_prefix.len, H2O_STRLIT("remote-user")))
+                req->remote_user = h2o_strdup(&req->pool, value.base, value.len);
         }
     } else {
         value = h2o_strdup(&req->pool, value.base, value.len);
@@ -582,6 +595,12 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
     mrb_value body;
     h2o_iovec_t content = {};
 
+    /* TODO support delegation from async handler */
+    if (status == STATUS_FALLTHRU && is_delegate == NULL) {
+        h2o_req_log_error(generator->req, H2O_MRUBY_MODULE_NAME, "cannot (yet) handle async 399 response");
+        goto SendInternalError;
+    }
+
     /* set status */
     generator->req->res.status = (int)status;
 
@@ -591,15 +610,12 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
         goto GotException;
     }
 
-    /* fall through if possible */
+    /* return without processing body, if status is fallthru */
     if (generator->req->res.status == STATUS_FALLTHRU) {
-        if (is_delegate != NULL) {
-            *is_delegate = 1;
-            mrb_gc_arena_restore(mrb, gc_arena);
-            return;
-        }
-        h2o_req_log_error(generator->req, H2O_MRUBY_MODULE_NAME, "cannot (yet) handle async 399 response");
-        goto SendInternalError;
+        assert(is_delegate != NULL);
+        *is_delegate = 1;
+        mrb_gc_arena_restore(mrb, gc_arena);
+        return;
     }
 
     /* obtain body */

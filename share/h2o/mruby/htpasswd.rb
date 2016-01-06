@@ -41,7 +41,7 @@ class Htpasswd
         user, pass = cred.unpack("m")[0].split(':', 2)
         begin
           if lookup(user, pass)
-            return [ 399, {}, [] ]
+            return [ 399, { "x-fallthru-set-remote-user" => user }, [] ]
           end
         rescue => e
           $stderr.puts "failed to validate password using file:#{@path}:#{e.message}"
