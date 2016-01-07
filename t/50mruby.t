@@ -348,4 +348,41 @@ EOT
     is $body, "hello";
 };
 
+subtest "close-called-on-exception" => sub {
+    my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          is_open = false
+          lambda do |env|
+            if is_open
+              return [500, {}, ["close not called"]]
+            end
+            is_open = true
+            return [
+              200,
+              {},
+              Class.new do
+                def each
+                  yield "hello"
+                  raise "yeah!"
+                end
+                define_method(:close) do
+                  is_open = false
+                end
+              end.new,
+            ]
+          end
+EOT
+    my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    like $headers, qr{^HTTP/1\.1 200 }is;
+    is $body, "hello";
+    ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    like $headers, qr{^HTTP/1\.1 200 }is;
+    is $body, "hello";
+};
+
 done_testing();
