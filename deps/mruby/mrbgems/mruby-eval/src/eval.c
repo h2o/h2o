@@ -150,6 +150,7 @@ create_proc_from_string(mrb_state *mrb, char *s, int len, mrb_value binding, cha
   }
   cxt->capture_errors = TRUE;
   cxt->no_optimize = TRUE;
+  //  cxt->dump_result = TRUE;
 
   p = mrb_parse_nstring(mrb, s, len, cxt);
 
