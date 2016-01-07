@@ -320,26 +320,24 @@ hosts:
     paths:
       /:
         mruby.handler: |
-          class Body
-            \@\@is_open = nil
-            def initialize
-              \@\@is_open = true
-            end
-            def each
-              yield "hello"
-            end
-            def close
-              \@\@is_open = nil
-            end
-            def self.is_open
-              \@\@is_open
-            end
-          end
+          is_open = false
           lambda do |env|
-            if Body.is_open
+            if is_open
               return [500, {}, ["close not called"]]
             end
-            return [200, {}, Body.new]
+            is_open = true
+            return [
+              200,
+              {},
+              Class.new do
+                def each
+                  yield "hello"
+                end
+                define_method(:close) do
+                  is_open = false
+                end
+              end.new,
+            ]
           end
 EOT
     my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
