@@ -22,6 +22,8 @@ struct mrb_state;
 # error "You can't define MRB_INT16 and MRB_INT64 at the same time."
 #endif
 
+#include <inttypes.h>
+
 #if defined(MRB_INT64)
   typedef int64_t mrb_int;
 # define MRB_INT_BIT 64

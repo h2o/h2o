@@ -759,7 +759,7 @@ retry:
       case 'B':
       case 'u': {
         mrb_value val = GETARG();
-        char fbuf[32], nbuf[68], *s;
+        char nbuf[68], *s;
         const char *prefix = NULL;
         int sign = 0, dots = 0;
         char sc = 0;
@@ -836,8 +836,6 @@ retry:
           }
         }
         if (sign) {
-          char c = *p;
-          if (c == 'i') c = 'd'; /* %d and %i are identical */
           if (v < 0) {
             v = -v;
             sc = '-';
@@ -851,28 +849,40 @@ retry:
             sc = ' ';
             width--;
           }
-          if (base == 2) {
-            snprintf(nbuf, sizeof(nbuf), "%s", RSTRING_PTR(val));
-          }
-          else {
-            snprintf(fbuf, sizeof(fbuf), "%%l%c", c);
-            snprintf(nbuf, sizeof(nbuf), fbuf, v);
+          switch (base) {
+          case 2:
+            strncpy(nbuf, RSTRING_PTR(val), sizeof(nbuf));
+            break;
+          case 8:
+            snprintf(nbuf, sizeof(nbuf), "%"MRB_PRIo, v);
+            break;
+          case 10:
+            snprintf(nbuf, sizeof(nbuf), "%"MRB_PRId, v);
+            break;
+          case 16:
+            snprintf(nbuf, sizeof(nbuf), "%"MRB_PRIx, v);
+            break;
           }
           s = nbuf;
         }
         else {
-          char c = *p;
-          if (c == 'X') c = 'x';
           s = nbuf;
           if (v < 0) {
             dots = 1;
           }
-          if (base == 2) {
-            snprintf(++s, sizeof(nbuf) - 1, "%s", RSTRING_PTR(val));
-          }
-          else {
-            snprintf(fbuf, sizeof(fbuf), "%%l%c", c);
-            snprintf(++s, sizeof(nbuf) - 1, fbuf, v);
+          switch (base) {
+          case 2:
+            strncpy(++s, RSTRING_PTR(val), sizeof(nbuf)-1);
+            break;
+          case 8:
+            snprintf(++s, sizeof(nbuf)-1, "%"MRB_PRIo, v);
+            break;
+          case 10:
+            snprintf(++s, sizeof(nbuf)-1, "%"MRB_PRId, v);
+            break;
+          case 16:
+            snprintf(++s, sizeof(nbuf)-1, "%"MRB_PRIx, v);
+            break;
           }
           if (v < 0) {
             char d;

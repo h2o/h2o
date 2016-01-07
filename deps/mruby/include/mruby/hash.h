@@ -8,6 +8,7 @@
 #define MRUBY_HASH_H
 
 #include "common.h"
+#include <mruby/khash.h>
 
 /**
  * Hash class
@@ -58,6 +59,15 @@ MRB_API mrb_value mrb_hash_empty_p(mrb_state *mrb, mrb_value self);
  * Clears the hash.
  */
 MRB_API mrb_value mrb_hash_clear(mrb_state *mrb, mrb_value hash);
+
+/* declaration of struct kh_ht */
+/* be careful when you touch the internal */
+typedef struct {
+  mrb_value v;
+  mrb_int n;
+} mrb_hash_value;
+
+KHASH_DECLARE(ht, mrb_value, mrb_hash_value, TRUE)
 
 /* RHASH_TBL allocates st_table if not available. */
 #define RHASH(obj)   ((struct RHash*)(mrb_ptr(obj)))

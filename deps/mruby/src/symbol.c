@@ -354,7 +354,9 @@ symname_p(const char *name)
       if (*++m == '*') ++m;
       break;
     case '!':
-      if (*++m == '=') ++m;
+      switch (*++m) {
+        case '=': case '~': ++m;
+      }
       break;
     case '+': case '-':
       if (*++m == '@') ++m;

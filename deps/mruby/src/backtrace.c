@@ -216,7 +216,7 @@ print_backtrace(mrb_state *mrb, mrb_value backtrace)
   for (i = 0; i < n; i++) {
     mrb_value entry = RARRAY_PTR(backtrace)[i];
 
-    fprintf(stream, "\t[%d] %.*s\n", i, RSTRING_LEN(entry), RSTRING_PTR(entry));
+    fprintf(stream, "\t[%d] %.*s\n", i, (int)RSTRING_LEN(entry), RSTRING_PTR(entry));
   }
 }
 
