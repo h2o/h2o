@@ -3,6 +3,9 @@ use warnings;
 use Test::More;
 use t::Util;
 
+plan skip_all => 'curl not found'
+    unless prog_exists('curl');
+
 my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
@@ -28,5 +31,6 @@ doit("http://127.0.0.1:$server->{port}/foo", 302, "https://example.com/foo");
 doit("https://127.0.0.1:$server->{tls_port}/foo", 302, "https://example.com/foo");
 doit("http://127.0.0.1:$server->{port}/abc/foo", 301, "http://example.net/bar/foo");
 doit("http://127.0.0.1:$server->{port}/foo?abc=def", 302, qr{https://example.com/foo\?abc=def});
+doit("http://127.0.0.1:$server->{port}/foo%0D%0Aa:1", 302, "https://example\.com/foo\%0d\%0aa\%3a1");
 
 done_testing;
