@@ -629,7 +629,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     } else {
         if (h2o_mimemap_has_dynamic_type(self->mimemap) && try_dynamic_request(self, req, rpath, rpath_len) == 0)
             return 0;
-        if (errno == ENOENT) {
+        if (errno == ENOENT || errno == ENOTDIR) {
             return -1;
         } else {
             h2o_send_error(req, 403, "Access Forbidden", "access forbidden", 0);
