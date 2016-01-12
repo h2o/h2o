@@ -121,13 +121,10 @@ static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
             memcmp(req->path_normalized.base, pathconf->path.base, confpath_wo_slash) == 0) {
             if (req->path_normalized.len == confpath_wo_slash) {
                 req->pathconf = pathconf;
-
-                h2o_iovec_t path = h2o_uri_escape(&req->pool, pathconf->path.base, pathconf->path.len, "/");
-                h2o_iovec_t query = req->query_at != SIZE_MAX
-                                        ? h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at)
-                                        : h2o_iovec_init(H2O_STRLIT(""));
-                h2o_iovec_t dest = h2o_concat(&req->pool, path, query);
-
+                h2o_iovec_t dest = h2o_uri_escape(&req->pool, pathconf->path.base, pathconf->path.len, "/");
+                if (req->query_at != SIZE_MAX)
+                    dest =
+                        h2o_concat(&req->pool, dest, h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at));
                 h2o_send_redirect(req, 301, "Moved Permanently", dest.base, dest.len);
                 return;
             }
