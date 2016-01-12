@@ -324,8 +324,8 @@ h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l, const 
             encoded.base[encoded.len++] = ch;
         } else {
             encoded.base[encoded.len++] = '%';
-            encoded.base[encoded.len++] = "0123456789abcdef"[(ch >> 4) & 0xf];
-            encoded.base[encoded.len++] = "0123456789abcdef"[ch & 0xf];
+            encoded.base[encoded.len++] = "0123456789ABCDEF"[(ch >> 4) & 0xf];
+            encoded.base[encoded.len++] = "0123456789ABCDEF"[ch & 0xf];
         }
     }
     encoded.base[encoded.len] = '\0';
