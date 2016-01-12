@@ -104,11 +104,11 @@ static void init_request(struct st_h2o_http1_conn_t *conn, int reinit)
     conn->_ostr_final.sent_headers = 0;
 }
 
-static void close_connection(struct st_h2o_http1_conn_t *conn)
+static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
 {
     h2o_timeout_unlink(&conn->_timeout_entry);
     h2o_dispose_request(&conn->req);
-    if (conn->sock != NULL)
+    if (conn->sock != NULL && close_socket)
         h2o_socket_close(conn->sock);
     free(conn);
 }
@@ -367,7 +367,7 @@ static void on_continue_sent(h2o_socket_t *sock, int status)
     struct st_h2o_http1_conn_t *conn = sock->data;
 
     if (status != 0) {
-        close_connection(conn);
+        close_connection(conn, 1);
         return;
     }
 
@@ -427,7 +427,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
     case -2: // incomplete
         if (inreqlen == H2O_MAX_REQLEN) {
             // request is too long (TODO notify)
-            close_connection(conn);
+            close_connection(conn, 1);
         }
         return;
     case -1: // error
@@ -441,13 +441,13 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                 struct timeval connected_at = conn->super.connected_at;
                 /* destruct the connection after detatching the socket */
                 conn->sock = NULL;
-                close_connection(conn);
+                close_connection(conn, 1);
                 /* and accept as http2 connection */
                 h2o_http2_accept(&accept_ctx, sock, connected_at);
                 return;
             }
         }
-        close_connection(conn);
+        close_connection(conn, 1);
         return;
     }
 }
@@ -457,7 +457,7 @@ void reqread_on_read(h2o_socket_t *sock, int status)
     struct st_h2o_http1_conn_t *conn = sock->data;
 
     if (status != 0) {
-        close_connection(conn);
+        close_connection(conn, 1);
         return;
     }
 
@@ -473,7 +473,7 @@ static void reqread_on_timeout(h2o_timeout_entry_t *entry)
 
     /* TODO log */
     conn->req.http1_is_persistent = 0;
-    close_connection(conn);
+    close_connection(conn, 1);
 }
 
 static inline void reqread_start(struct st_h2o_http1_conn_t *conn)
@@ -489,7 +489,7 @@ static void on_send_next_push(h2o_socket_t *sock, int status)
     struct st_h2o_http1_conn_t *conn = sock->data;
 
     if (status != 0)
-        close_connection(conn);
+        close_connection(conn, 1);
     else
         h2o_proceed_response(&conn->req);
 }
@@ -499,7 +499,7 @@ static void on_send_next_pull(h2o_socket_t *sock, int status)
     struct st_h2o_http1_conn_t *conn = sock->data;
 
     if (status != 0)
-        close_connection(conn);
+        close_connection(conn, 1);
     else
         proceed_pull(conn, 0);
 }
@@ -514,7 +514,7 @@ static void on_send_complete(h2o_socket_t *sock, int status)
 
     if (!conn->req.http1_is_persistent) {
         /* TODO use lingering close */
-        close_connection(conn);
+        close_connection(conn, 1);
         return;
     }
 
@@ -537,10 +537,9 @@ static void on_upgrade_complete(h2o_socket_t *socket, int status)
     /* destruct the connection (after detaching the socket) */
     if (status == 0) {
         sock = conn->sock;
-        conn->sock = NULL;
         reqsize = conn->_reqsize;
     }
-    close_connection(conn);
+    close_connection(conn, 0);
 
     cb(data, sock, reqsize);
 }
