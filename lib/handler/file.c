@@ -596,6 +596,9 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
                 /* note: apache redirects "path/" to "path/index.txt/" if index.txt is a dir */
                 h2o_iovec_t dest = h2o_concat(&req->pool, req->path_normalized, *index_file, h2o_iovec_init(H2O_STRLIT("/")));
                 dest = h2o_uri_escape(&req->pool, dest.base, dest.len, "/");
+                if (req->query_at != SIZE_MAX)
+                    dest =
+                        h2o_concat(&req->pool, dest, h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at));
                 h2o_send_redirect(req, 301, "Moved Permantently", dest.base, dest.len);
                 return 0;
             }
@@ -618,6 +621,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         if (is_dir) {
             h2o_iovec_t dest = h2o_concat(&req->pool, req->path_normalized, h2o_iovec_init(H2O_STRLIT("/")));
             dest = h2o_uri_escape(&req->pool, dest.base, dest.len, "/");
+            if (req->query_at != SIZE_MAX)
+                dest = h2o_concat(&req->pool, dest, h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at));
             h2o_send_redirect(req, 301, "Moved Permanently", dest.base, dest.len);
             return 0;
         }
