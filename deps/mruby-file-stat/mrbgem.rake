@@ -1,5 +1,4 @@
 require 'mkmf'
-require 'rake/clean'
 
 # patch for old mkmf bug
 if RUBY_VERSION <= "1.9.3"
@@ -11,11 +10,8 @@ if RUBY_VERSION <= "1.9.3"
 end
 # patch end
 
-file_stat_dir = File.dirname(__FILE__)
-extconf = "#{file_stat_dir}/src/extconf.h"
-
-file extconf => ["#{file_stat_dir}/src/file-stat.c"] do |t|
-  File.unlink(t.name) if File.exist?(t.name)
+build_extconf = lambda do |fn|
+  return if File.exist?(fn)
 
   # TODO
   # if open this block
@@ -30,15 +26,15 @@ file extconf => ["#{file_stat_dir}/src/file-stat.c"] do |t|
     have_func "getgroups", "unistd.h"
   end
 
-  create_header t.name
+  create_header fn
 end
-
-CLOBBER << extconf
 
 MRuby::Gem::Specification.new('mruby-file-stat') do |spec|
   spec.license = 'MIT'
   spec.author  = 'ksss <co000ri@gmail.com>'
   spec.add_dependency('mruby-time')
 
-  Rake::Task[extconf].invoke
+  FileUtils.mkdir_p build_dir
+  build_extconf["#{build_dir}/extconf.h"]
+  cc.include_paths << build_dir
 end

@@ -1,7 +1,6 @@
 # mruby-file-stat
 
 [![Build Status](https://travis-ci.org/ksss/mruby-file-stat.svg?branch=master)](https://travis-ci.org/ksss/mruby-file-stat)
-
 [![Build status](https://ci.appveyor.com/api/projects/status/04am84uda2cj49n3/branch/master?svg=true)](https://ci.appveyor.com/project/ksss/mruby-file-stat/branch/master)
 
 **File::Stat** class in mruby
@@ -52,7 +51,8 @@ stat.setgid?
 stat.sticky?
 stat.ftype #=> socket, link, file, blockSpecial, directory, characterSpecial, fifo or unknown
 
-# support methods
+# Obsolete methods
+# Please use https://github.com/ksss/mruby-process-ext if you want to use these
 Process.uid
 Process.gid
 Process.euid
@@ -69,6 +69,9 @@ Write in /mruby/build_config.rb
 
 ```ruby
 MRuby::Build.new do |conf|
+  # by mgem
+  conf.gem :mgem => 'mruby-file-stat'
+  # by github
   conf.gem :github => 'ksss/mruby-file-stat', :branch => 'master'
 end
 ```

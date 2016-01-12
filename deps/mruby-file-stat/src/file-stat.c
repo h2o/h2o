@@ -882,10 +882,22 @@ mrb_mruby_file_stat_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, stat, "owned?", stat_owned_p, MRB_ARGS_NONE());
   mrb_define_method(mrb, stat, "owned_real?", stat_owned_real_p, MRB_ARGS_NONE());
 
-  mrb_define_class_method(mrb, process, "uid", process_getuid, MRB_ARGS_NONE());
-  mrb_define_class_method(mrb, process, "gid", process_getgid, MRB_ARGS_NONE());
-  mrb_define_class_method(mrb, process, "euid", process_geteuid, MRB_ARGS_NONE());
-  mrb_define_class_method(mrb, process, "egid", process_getegid, MRB_ARGS_NONE());
+  /*
+  Obsolete methods
+  Avoid install when already defined by other lib
+  */
+  if (!mrb_obj_respond_to(mrb, ((struct RObject *)process)->c, mrb_intern_lit(mrb, "uid"))) {
+    mrb_define_class_method(mrb, process, "uid", process_getuid, MRB_ARGS_NONE());
+  }
+  if (!mrb_obj_respond_to(mrb, ((struct RObject *)process)->c, mrb_intern_lit(mrb, "gid"))) {
+    mrb_define_class_method(mrb, process, "gid", process_getgid, MRB_ARGS_NONE());
+  }
+  if (!mrb_obj_respond_to(mrb, ((struct RObject *)process)->c, mrb_intern_lit(mrb, "euid"))) {
+    mrb_define_class_method(mrb, process, "euid", process_geteuid, MRB_ARGS_NONE());
+  }
+  if (!mrb_obj_respond_to(mrb, ((struct RObject *)process)->c, mrb_intern_lit(mrb, "egid"))) {
+    mrb_define_class_method(mrb, process, "egid", process_getegid, MRB_ARGS_NONE());
+  }
 }
 
 void
