@@ -44,7 +44,7 @@ Explanation and other benchmark numbers can be found in the <a href="benchmarks.
 <h3 id="news">News</h3>
 
 <ul>
-<li><b>Version <a href="https://github.com/h2o/h2o/releases/tag/v1.6.2">1.6.2</a> is now available with <a href=""vulnerabilities.html#CVE-2016-1133">a vulnerability fix</a></b> (Jan 13 2016)</li>
+<li><b>Version <a href="https://github.com/h2o/h2o/releases/tag/v1.6.2">1.6.2</a> is now available with <a href="vulnerabilities.html#CVE-2016-1133">a vulnerability fix</a></b> (Jan 13 2016)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v1.6.1">1.6.1</a> is now available (Dec 18 2015)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v1.6.0">1.6.0</a> is now available (Dec 04 2015)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v1.5.4">1.5.4</a> is now available with bug fixes (Nov 12 2015)</li>
