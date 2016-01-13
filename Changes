@@ -1,5 +1,13 @@
 Revision history for H2O.
 
+1.6.2 2016-01-13 06:24:00+0000
+	- [security fix][redirect] uri-escape the user-supplied portion of the redirect path (CVE-2016-1133) #682 #684 (Kazuho Oku)
+	- [core] fix error when trying to set multiple error documents using one `error-doc` directive #676 (Yamagishi Kazutoshi)
+	- [file] fix a bug that incorrectly returns 403 when a file is requested with a trailing slash #686 (Yamagishi Kazutoshi)
+	- [http2] fix HPACK encoder error (and crash) when trying to encode a token wo. hpack index #640 (Kazuho Oku)
+	- [libh2o] fix race condition during multithread receiver (un)registration #659 (Chul-Woong Yang)
+	- [libh2o] fix memory leak on dispose #683 (Kazuho Oku)
+
 1.6.1 2015-12-18 05:05:00+0000
 	- [misc] fix build error on armv8a #628 (Kazuho Oku)
 	- [misc] fix build error when libuv < 1.0.0 is installed #630 (Kazuho Oku)
