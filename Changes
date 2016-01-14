@@ -1,5 +1,13 @@
 Revision history for H2O.
 
+1.7.0-beta3 2016-01-14 05:22:00+0000
+	- [security fix][redirect] uri-escape the user-supplied portion of the redirect path (CVE-2016-1133) #682 #684 (Kazuho Oku)
+	- [core][file] preserve query paramaters upon redirection to a directory #690 (Tatsuhiro Tsujikawa)
+	- [core] use uppercase letters in URI-escape sequence #695 (Kazuho Oku)
+	- [file] fix a bug that incorrectly returns 403 when a file is requested with a trailing slash #686 (Yamagishi Kazutoshi)
+	- [websocket] fix crash when access logging is enabled #698 (Shota Fukumori)
+	- [libh2o] fix memory leak on dispose #683 (Kazuho Oku)
+
 1.7.0-beta2 2016-01-07 01:48:00+0000
 	- [core] fix error when trying to set multiple error documents using one `error-doc` directive #676 (Yamagishi Kazutoshi)
 	- [mruby] bundle mruby-errno, mruby-file-stat #675 (Kazuho Oku)
