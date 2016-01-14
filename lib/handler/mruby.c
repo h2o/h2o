@@ -195,7 +195,7 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
     mrb_value ary = mrb_ary_new_capa(mrb, H2O_MRUBY_NUM_CONSTANTS);
     mrb_int i;
 
-    int arena = mrb_gc_arena_save(mrb);
+    int gc_arena = mrb_gc_arena_save(mrb);
 
     {
         h2o_mem_pool_t pool;
@@ -213,7 +213,6 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
                 FREEZE_STRING(lit);
                 mrb_ary_set(mrb, ary, i, lit);
             }
-            mrb_gc_arena_restore(mrb, arena);
         }
         h2o_mem_clear_pool(&pool);
     }
@@ -223,7 +222,6 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
         mrb_value lit = (value);                                                                                                   \
         FREEZE_STRING(lit);                                                                                                        \
         mrb_ary_set(mrb, ary, idx, lit);                                                                                           \
-        mrb_gc_arena_restore(mrb, arena);                                                                                          \
     } while (0)
 #define SET_LITERAL(idx, str) SET_STRING(idx, mrb_str_new_lit(mrb, str))
 
@@ -302,6 +300,7 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
                              "end");
     h2o_mruby_assert(mrb);
 
+    mrb_gc_arena_restore(mrb, gc_arena);
     return ary;
 }
 
@@ -569,7 +568,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 {
     h2o_mruby_handler_t *handler = (void *)_handler;
     h2o_mruby_context_t *handler_ctx = h2o_context_get_handler_context(req->conn->ctx, &handler->super);
-    int arena = mrb_gc_arena_save(handler_ctx->mrb);
+    int gc_arena = mrb_gc_arena_save(handler_ctx->mrb);
 
     h2o_mruby_generator_t *generator = h2o_mem_alloc_shared(&req->pool, sizeof(*generator), on_generator_dispose);
     generator->super.proceed = NULL;
@@ -582,14 +581,15 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     mrb_value env = build_env(generator);
 
     int is_delegate = 0;
-    h2o_mruby_run_fiber(generator, generator->ctx->proc, env, arena, &is_delegate);
+    h2o_mruby_run_fiber(generator, generator->ctx->proc, env, &is_delegate);
 
+    mrb_gc_arena_restore(handler_ctx->mrb, gc_arena);
     if (is_delegate)
         return -1;
     return 0;
 }
 
-static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_value resp, int gc_arena, int *is_delegate)
+static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_value resp, int *is_delegate)
 {
     mrb_state *mrb = generator->ctx->mrb;
     mrb_value body;
@@ -614,7 +614,6 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
     if (generator->req->res.status == STATUS_FALLTHRU) {
         assert(is_delegate != NULL);
         *is_delegate = 1;
-        mrb_gc_arena_restore(mrb, gc_arena);
         return;
     }
 
@@ -652,11 +651,8 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
     if (!mrb_nil_p(body)) {
         h2o_start_response(generator->req, &generator->super);
         mrb_value receiver = h2o_mruby_send_chunked_init(generator, body);
-        if (mrb_nil_p(receiver)) {
-            mrb_gc_arena_restore(mrb, gc_arena);
-        } else {
-            h2o_mruby_run_fiber(generator, receiver, body, gc_arena, 0);
-        }
+        if (!mrb_nil_p(receiver))
+            h2o_mruby_run_fiber(generator, receiver, body, 0);
         return;
     }
 
@@ -675,11 +671,10 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
 GotException:
     report_exception(generator->req, mrb);
 SendInternalError:
-    mrb_gc_arena_restore(mrb, gc_arena);
     h2o_send_error(generator->req, 500, "Internal Server Error", "Internal Server Error", 0);
 }
 
-void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value input, int gc_arena, int *is_delegate)
+void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value input, int *is_delegate)
 {
     mrb_state *mrb = generator->ctx->mrb;
     mrb_value output;
@@ -735,7 +730,6 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, m
             }
             switch (next_action) {
             case H2O_MRUBY_CALLBACK_NEXT_ACTION_STOP:
-                mrb_gc_arena_restore(mrb, gc_arena);
                 return;
             case H2O_MRUBY_CALLBACK_NEXT_ACTION_ASYNC:
                 goto Async;
@@ -748,7 +742,6 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, m
         /* if no special actions were necessary, then the output is a rack response */
         break;
     Next:
-        mrb_gc_arena_restore(mrb, gc_arena);
         mrb_gc_protect(mrb, receiver);
         mrb_gc_protect(mrb, input);
     }
@@ -761,15 +754,13 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, m
     }
 
     /* send the response (unless req is already closed) */
-    if (generator->req == NULL) {
-        mrb_gc_arena_restore(mrb, gc_arena);
+    if (generator->req == NULL)
         return;
-    }
     if (generator->req->_generator != NULL) {
         mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpectedly received a rack response"));
         goto GotException;
     }
-    send_response(generator, status, output, gc_arena, is_delegate);
+    send_response(generator, status, output, is_delegate);
     return;
 
 GotException:
@@ -782,12 +773,10 @@ GotException:
             h2o_mruby_send_chunked_close(generator);
         }
     }
-    mrb_gc_arena_restore(mrb, gc_arena);
     return;
 
 Async:
     h2o_mruby_current_generator = NULL;
-    mrb_gc_arena_restore(mrb, gc_arena);
     if (!mrb_obj_eq(mrb, generator->ctx->proc, receiver))
         mrb_gc_register(mrb, receiver);
     return;

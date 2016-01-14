@@ -102,7 +102,8 @@ static void on_dispose(void *_ctx)
     if (!mrb_nil_p(ctx->receiver)) {
         mrb_state *mrb = ctx->generator->ctx->mrb;
         int gc_arena = mrb_gc_arena_save(mrb);
-        h2o_mruby_run_fiber(ctx->generator, detach_receiver(ctx), create_downstream_closed_exception(mrb), gc_arena, NULL);
+        h2o_mruby_run_fiber(ctx->generator, detach_receiver(ctx), create_downstream_closed_exception(mrb), NULL);
+        mrb_gc_arena_restore(mrb, gc_arena);
     }
 }
 
@@ -153,8 +154,10 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
         }
     } else {
         /* send response to the waiting receiver */
-        h2o_mruby_run_fiber(ctx->generator, detach_receiver(ctx), resp, gc_arena, NULL);
+        h2o_mruby_run_fiber(ctx->generator, detach_receiver(ctx), resp, NULL);
     }
+
+    mrb_gc_arena_restore(mrb, gc_arena);
 }
 
 static void post_error(struct st_h2o_mruby_http_request_context_t *ctx, const char *errstr)
@@ -215,7 +218,8 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
         } else if (!mrb_nil_p(ctx->receiver)) {
             int gc_arena = mrb_gc_arena_save(ctx->generator->ctx->mrb);
             mrb_value chunk = build_chunk(ctx);
-            h2o_mruby_run_fiber(ctx->generator, detach_receiver(ctx), chunk, gc_arena, NULL);
+            h2o_mruby_run_fiber(ctx->generator, detach_receiver(ctx), chunk, NULL);
+            mrb_gc_arena_restore(ctx->generator->ctx->mrb, gc_arena);
         }
     }
     return 0;
