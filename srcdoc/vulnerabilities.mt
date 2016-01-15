@@ -4,7 +4,7 @@
 <h3 id="CVE-2016-1133">CVE-2016-1133 (Response Splitting)</h3>
 
 <div>
-Date: Jan. 13, 2015<br>
+Date: Jan. 13, 2016<br>
 CVE-ID: <a href="http://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-1133">CVE-2016-1133</a>
 </div>
 
