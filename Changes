@@ -1,5 +1,9 @@
 Revision history for H2O.
 
+1.7.0-beta4 2016-01-18 23:52:00+0000
+	- [mruby] fix memory leak #699 #701 (Kazuho Oku)
+	- [mruby] fix out-of-bounds access leading to crash #705 #706 (Kazuho Oku)
+
 1.7.0-beta3 2016-01-14 05:22:00+0000
 	- [security fix][redirect] uri-escape the user-supplied portion of the redirect path (CVE-2016-1133) #682 #684 (Kazuho Oku)
 	- [core][file] preserve query paramaters upon redirection to a directory #690 (Tatsuhiro Tsujikawa)
