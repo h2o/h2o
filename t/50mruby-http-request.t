@@ -119,6 +119,19 @@ hosts:
             end
             resp
           end
+      /async-delegate:
+        mruby.handler: |
+          Proc.new do |env|
+            resp = http_request("http://$upstream_hostport#{env["PATH_INFO"]}").join
+            if resp[0] != 200
+              resp = [399, {}, []]
+            end
+            resp
+          end
+        mruby.handler: |
+          Proc.new do |env|
+            [200, {}, ["delegated!"]]
+          end
 EOT
 });
 
@@ -195,6 +208,18 @@ sub doit {
         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/fast-path-partial/");
         like $headers, qr{HTTP/1\.1 200 }is;
         is $body, join "", 2..30;
+    };
+    subtest "async-delegate" => sub {
+        subtest "non-delegated" => sub {
+            my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/async-delegate/index.txt");
+            like $headers, qr{HTTP/1\.1 200 }is;
+            is $body, "hello\n";
+        };
+        subtest "delegated" => sub {
+            my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/async-delegate/notfound");
+            like $headers, qr{HTTP/1\.1 200 }is;
+            is $body, "delegated!";
+        };
     };
 }
 
