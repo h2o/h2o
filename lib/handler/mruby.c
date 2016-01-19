@@ -595,12 +595,6 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
     mrb_value body;
     h2o_iovec_t content = {};
 
-    /* TODO support delegation from async handler */
-    if (status == STATUS_FALLTHRU && is_delegate == NULL) {
-        h2o_req_log_error(generator->req, H2O_MRUBY_MODULE_NAME, "cannot (yet) handle async 399 response");
-        goto SendInternalError;
-    }
-
     /* set status */
     generator->req->res.status = (int)status;
 
@@ -612,8 +606,10 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
 
     /* return without processing body, if status is fallthru */
     if (generator->req->res.status == STATUS_FALLTHRU) {
-        assert(is_delegate != NULL);
-        *is_delegate = 1;
+        if (is_delegate != NULL)
+            *is_delegate = 1;
+        else
+            h2o_delegate_request_deferred(generator->req, &generator->ctx->handler->super);
         return;
     }
 
@@ -670,7 +666,6 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
 
 GotException:
     report_exception(generator->req, mrb);
-SendInternalError:
     h2o_send_error(generator->req, 500, "Internal Server Error", "Internal Server Error", 0);
 }
 

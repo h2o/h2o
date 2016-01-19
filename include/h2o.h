@@ -914,6 +914,14 @@ void h2o_dispose_request(h2o_req_t *req);
  */
 void h2o_process_request(h2o_req_t *req);
 /**
+ * delegates the request to the next handler; called asynchronously by handlers that returned zero from `on_req`
+ */
+void h2o_delegate_request(h2o_req_t *req, h2o_handler_t *current_handler);
+/**
+ * calls h2o_delegate_request using zero_timeout callback
+ */
+void h2o_delegate_request_deferred(h2o_req_t *req, h2o_handler_t *current_handler);
+/**
  * reprocesses a request once more (used for internal redirection)
  */
 void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_scheme_t *scheme, h2o_iovec_t authority,

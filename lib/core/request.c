@@ -25,6 +25,12 @@
 
 #define INITIAL_INBUFSZ 8192
 
+struct st_delegate_request_deferred_t {
+    h2o_req_t *req;
+    h2o_handler_t *current_handler;
+    h2o_timeout_entry_t _timeout;
+};
+
 struct st_reprocess_request_deferred_t {
     h2o_req_t *req;
     h2o_iovec_t method;
@@ -105,10 +111,20 @@ static h2o_hostconf_t *setup_before_processing(h2o_req_t *req)
     return hostconf;
 }
 
+static void call_handlers(h2o_req_t *req, h2o_handler_t **handler)
+{
+    h2o_handler_t **end = req->pathconf->handlers.entries + req->pathconf->handlers.size;
+
+    for (; handler != end; ++handler)
+        if ((*handler)->on_req(*handler, req) == 0)
+            return;
+
+    h2o_send_error(req, 404, "File Not Found", "not found", 0);
+}
+
 static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
 {
     size_t i;
-    h2o_handler_t **handler, **end;
 
     req->hostconf = hostconf;
     req->pathconf = &hostconf->fallback_path;
@@ -135,12 +151,7 @@ static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
         }
     }
 
-    for (handler = req->pathconf->handlers.entries, end = handler + req->pathconf->handlers.size; handler != end; ++handler) {
-        if ((*handler)->on_req(*handler, req) == 0)
-            return;
-    }
-
-    h2o_send_error(req, 404, "File Not Found", "not found", 0);
+    call_handlers(req, req->pathconf->handlers.entries);
 }
 
 static void deferred_proceed_cb(h2o_timeout_entry_t *entry)
@@ -229,6 +240,33 @@ void h2o_process_request(h2o_req_t *req)
 {
     h2o_hostconf_t *hostconf = setup_before_processing(req);
     process_hosted_request(req, hostconf);
+}
+
+void h2o_delegate_request(h2o_req_t *req, h2o_handler_t *current_handler)
+{
+    h2o_handler_t **handler = req->pathconf->handlers.entries, **end = handler + req->pathconf->handlers.size;
+
+    for (; handler != end; ++handler) {
+        if (*handler == current_handler) {
+            ++handler;
+            break;
+        }
+    }
+    call_handlers(req, handler);
+}
+
+static void on_delegate_request_cb(h2o_timeout_entry_t *entry)
+{
+    struct st_delegate_request_deferred_t *args = H2O_STRUCT_FROM_MEMBER(struct st_delegate_request_deferred_t, _timeout, entry);
+    h2o_delegate_request(args->req, args->current_handler);
+}
+
+void h2o_delegate_request_deferred(h2o_req_t *req, h2o_handler_t *current_handler)
+{
+    struct st_delegate_request_deferred_t *args = h2o_mem_alloc_pool(&req->pool, sizeof(*args));
+    *args = (struct st_delegate_request_deferred_t){req, current_handler};
+    args->_timeout.cb = on_delegate_request_cb;
+    h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &args->_timeout);
 }
 
 void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_scheme_t *scheme, h2o_iovec_t authority,
