@@ -126,14 +126,27 @@ h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *p
 
 h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t host, uint16_t port)
 {
-    h2o_hostconf_t *hostconf;
+    h2o_hostconf_t *hostconf = NULL;
+    h2o_iovec_t host_lc;
 
     assert(host.len != 0);
 
+    /* convert hostname to lowercase */
+    host_lc = h2o_strdup(NULL, host.base, host.len);
+    h2o_strtolower(host_lc.base, host_lc.len);
+
+    { /* return NULL if given authority is already registered */
+        h2o_hostconf_t **p;
+        for (p = config->hosts; *p != NULL; ++p)
+            if (h2o_memis((*p)->authority.host.base, (*p)->authority.host.len, host_lc.base, host_lc.len) &&
+                (*p)->authority.port == port)
+                goto Exit;
+    }
+
     /* create hostconf */
     hostconf = create_hostconf(config);
-    hostconf->authority.host = h2o_strdup(NULL, host.base, host.len);
-    h2o_strtolower(hostconf->authority.host.base, hostconf->authority.host.len);
+    hostconf->authority.host = host_lc;
+    host_lc = (h2o_iovec_t){};
     hostconf->authority.port = port;
     if (hostconf->authority.port == 65535) {
         hostconf->authority.hostport = hostconf->authority.host;
@@ -151,6 +164,8 @@ h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t h
     /* append to the list */
     h2o_append_to_null_terminated_list((void *)&config->hosts, hostconf);
 
+Exit:
+    free(host_lc.base);
     return hostconf;
 }
 

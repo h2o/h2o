@@ -271,7 +271,10 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
             return -1;
         }
         h2o_configurator_context_t host_ctx = *ctx;
-        host_ctx.hostconf = h2o_config_register_host(host_ctx.globalconf, hostname, port);
+        if ((host_ctx.hostconf = h2o_config_register_host(host_ctx.globalconf, hostname, port)) == NULL) {
+            h2o_configurator_errprintf(cmd, key, "duplicate host entry");
+            return -1;
+        }
         host_ctx.mimemap = &host_ctx.hostconf->mimemap;
         host_ctx.parent = ctx;
         if (h2o_configurator_apply_commands(&host_ctx, value, H2O_CONFIGURATOR_FLAG_HOST, NULL) != 0)
