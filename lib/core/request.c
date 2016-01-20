@@ -543,7 +543,7 @@ void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *
     h2o_url_resolve_path(&base_path, &url.path);
     url.path = h2o_concat(&req->pool, base_path, url.path);
 
-    h2o_reprocess_request_deferred(req, method, url.scheme, url.authority, url.path, authority_changed ? req->overrides : NULL, 1);
+    h2o_reprocess_request_deferred(req, method, url.scheme, url.authority, url.path, authority_changed ? NULL : req->overrides, 1);
 }
 
 h2o_iovec_t h2o_get_redirect_method(h2o_iovec_t method, int status)
