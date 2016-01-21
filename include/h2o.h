@@ -1106,13 +1106,17 @@ void h2o_send_inline(h2o_req_t *req, const char *body, size_t len);
  */
 void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body, int flags);
 /**
+ * sends error response using zero timeout; can be called by output filters while processing the headers
+ */
+void h2o_send_error_deferred(h2o_req_t *req, int status, const char *reason, const char *body, int flags);
+/**
  * sends a redirect response
  */
 void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const char *url, size_t url_len);
 /**
  * handles redirect internally
  */
-void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *url_str, size_t url_len);
+void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *url_str, size_t url_len, int preserve_overrides);
 /**
  * returns method to be used after redirection
  */
