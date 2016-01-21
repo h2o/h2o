@@ -252,7 +252,9 @@ void h2o_buffer__dispose_linked(void *p);
  * @param element_size size of the elements stored in the vector
  * @param new_capacity the capacity of the buffer after the function returns
  */
-static void h2o_vector_reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
+#define h2o_vector_reserve(pool, vector, new_capacity)                                                                             \
+    h2o_vector__reserve((pool), (h2o_vector_t *)(void *)(vector), sizeof((vector)->entries[0]), (new_capacity))
+static void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
 void h2o_vector__expand(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
 
 /**
@@ -355,7 +357,7 @@ inline void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool)
     *slot = buffer;
 }
 
-inline void h2o_vector_reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)
+inline void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)
 {
     if (vector->capacity < new_capacity) {
         h2o_vector__expand(pool, vector, element_size, new_capacity);

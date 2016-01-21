@@ -41,7 +41,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
         while ((ret = readdir_r(dp, &dent, &dentp)) == 0 && dentp != NULL) {
             if (strcmp(dent.d_name, ".") == 0 || strcmp(dent.d_name, "..") == 0)
                 continue;
-            h2o_vector_reserve(pool, (void *)&files, sizeof(files.entries[0]), files.size + 1);
+            h2o_vector_reserve(pool, &files, files.size + 1);
             files.entries[files.size++] = h2o_strdup(pool, dent.d_name, SIZE_MAX).base;
         }
         qsort(files.entries, files.size, sizeof(files.entries[0]), cmpstrptr);

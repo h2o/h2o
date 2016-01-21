@@ -32,8 +32,7 @@ void h2o_context_init_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pathc
     for (i = 0; i != ctx->_pathconfs_inited.size; ++i)
         if (ctx->_pathconfs_inited.entries[i] == pathconf)
             return;
-    h2o_vector_reserve(NULL, (void *)&ctx->_pathconfs_inited, sizeof(ctx->_pathconfs_inited.entries[0]),
-                       ctx->_pathconfs_inited.size + 1);
+    h2o_vector_reserve(NULL, &ctx->_pathconfs_inited, ctx->_pathconfs_inited.size + 1);
     ctx->_pathconfs_inited.entries[ctx->_pathconfs_inited.size++] = pathconf;
 
 #define DOIT(type, list)                                                                                                           \
