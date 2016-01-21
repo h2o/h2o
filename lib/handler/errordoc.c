@@ -122,7 +122,7 @@ Found:
         method = h2o_iovec_init(H2O_STRLIT("GET"));
     req->headers = (h2o_headers_t){};
     req->res.headers = (h2o_headers_t){};
-    h2o_send_redirect_internal(req, method, errordoc->url.base, errordoc->url.len);
+    h2o_send_redirect_internal(req, method, errordoc->url.base, errordoc->url.len, 0);
     /* create fake ostream that swallows the contents emitted by the generator */
     ostream = h2o_add_ostream(req, sizeof(*ostream), slot);
     ostream->do_send = on_ostream_send;

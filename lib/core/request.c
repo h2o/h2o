@@ -42,6 +42,15 @@ struct st_reprocess_request_deferred_t {
     h2o_timeout_entry_t _timeout;
 };
 
+struct st_send_error_deferred_t {
+    h2o_req_t *req;
+    int status;
+    const char *reason;
+    const char *body;
+    int flags;
+    h2o_timeout_entry_t _timeout;
+};
+
 static h2o_hostconf_t *find_hostconf(h2o_hostconf_t **hostconfs, h2o_iovec_t authority, uint16_t default_port)
 {
     h2o_iovec_t hostname;
@@ -177,6 +186,14 @@ static void close_generator_and_filters(h2o_req_t *req)
     }
 }
 
+static void reset_response(h2o_req_t *req)
+{
+    req->res = (h2o_res_t){0, NULL, SIZE_MAX, {}};
+    req->res.reason = "OK";
+    req->_next_filter_index = 0;
+    req->bytes_sent = 0;
+}
+
 void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
 {
     /* clear all memory (expect memory pool, since it is large) */
@@ -277,7 +294,7 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
     /* close generators and filters that are already running */
     close_generator_and_filters(req);
 
-    /* setup the request parameters */
+    /* setup the request/response parameters */
     req->method = method;
     req->scheme = scheme;
     req->authority = authority;
@@ -285,12 +302,7 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
     req->path_normalized = h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at);
     req->overrides = overrides;
     req->res_is_delegated |= is_delegated;
-
-    /* reset the response */
-    req->res = (h2o_res_t){0, NULL, SIZE_MAX, {}};
-    req->res.reason = "OK";
-    req->_next_filter_index = 0;
-    req->bytes_sent = 0;
+    reset_response(req);
 
     /* check the delegation (or reprocess) counter */
     if (req->res_is_delegated) {
@@ -451,6 +463,21 @@ void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *
     h2o_send_inline(req, body, SIZE_MAX);
 }
 
+static void send_error_deferred_cb(h2o_timeout_entry_t *entry)
+{
+    struct st_send_error_deferred_t *args = H2O_STRUCT_FROM_MEMBER(struct st_send_error_deferred_t, _timeout, entry);
+    reset_response(args->req);
+    h2o_send_error(args->req, args->status, args->reason, args->body, args->flags);
+}
+
+void h2o_send_error_deferred(h2o_req_t *req, int status, const char *reason, const char *body, int flags)
+{
+    struct st_send_error_deferred_t *args = h2o_mem_alloc_pool(&req->pool, sizeof(*args));
+    *args = (struct st_send_error_deferred_t){req, status, reason, body, flags};
+    args->_timeout.cb = send_error_deferred_cb;
+    h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &args->_timeout);
+}
+
 void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
 {
 #define PREFIX "[%s] in request:%.32s:"
@@ -480,7 +507,7 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
 {
     if (req->res_is_delegated) {
         h2o_iovec_t method = h2o_get_redirect_method(req->method, status);
-        h2o_send_redirect_internal(req, method, url, url_len);
+        h2o_send_redirect_internal(req, method, url, url_len, 0);
         return;
     }
 
@@ -510,15 +537,14 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
     h2o_send(req, bufs, bufcnt, 1);
 }
 
-void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *url_str, size_t url_len)
+void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *url_str, size_t url_len, int preserve_overrides)
 {
     h2o_url_t url;
-    int authority_changed;
 
     /* parse the location URL */
     if (h2o_url_parse_relative(url_str, url_len, &url) != 0) {
         /* TODO log fprintf(stderr, "[proxy] cannot handle location header: %.*s\n", (int)url_len, url); */
-        h2o_send_error(req, 502, "Gateway Error", "internal error", 0);
+        h2o_send_error_deferred(req, 502, "Gateway Error", "internal error", 0);
         return;
     }
     /* convert the location to absolute (while creating copies of the values passed to the deferred call) */
@@ -529,21 +555,19 @@ void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *
             url.authority = req->hostconf->authority.hostport;
         else
             url.authority = req->authority;
-        authority_changed = 0;
     } else {
         if (h2o_lcstris(url.authority.base, url.authority.len, req->authority.base, req->authority.len)) {
-            authority_changed = 0;
             url.authority = req->authority;
         } else {
-            authority_changed = 1;
             url.authority = h2o_strdup(&req->pool, url.authority.base, url.authority.len);
+            preserve_overrides = 0;
         }
     }
     h2o_iovec_t base_path = req->path;
     h2o_url_resolve_path(&base_path, &url.path);
     url.path = h2o_concat(&req->pool, base_path, url.path);
 
-    h2o_reprocess_request_deferred(req, method, url.scheme, url.authority, url.path, authority_changed ? req->overrides : NULL, 1);
+    h2o_reprocess_request_deferred(req, method, url.scheme, url.authority, url.path, preserve_overrides ? req->overrides: NULL, 1);
 }
 
 h2o_iovec_t h2o_get_redirect_method(h2o_iovec_t method, int status)

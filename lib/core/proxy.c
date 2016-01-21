@@ -357,7 +357,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 if (req->res_is_delegated && (300 <= status && status <= 399) && status != 304) {
                     self->client = NULL;
                     h2o_iovec_t method = h2o_get_redirect_method(req->method, status);
-                    h2o_send_redirect_internal(req, method, headers[i].value, headers[i].value_len);
+                    h2o_send_redirect_internal(req, method, headers[i].value, headers[i].value_len, 1);
                     return NULL;
                 }
                 if (req->overrides != NULL && req->overrides->location_rewrite.match != NULL) {
