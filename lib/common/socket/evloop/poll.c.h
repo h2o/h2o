@@ -88,7 +88,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
             continue;
         assert(fd == sock->fd);
         if ((sock->_flags & (H2O_SOCKET_FLAG_IS_POLLED_FOR_READ | H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE)) != 0) {
-            struct pollfd *slot = h2o_vector_append_new(NULL, (void *)&pollfds);
+            struct pollfd *slot = h2o_vector_append_new(NULL, &pollfds);
             slot->fd = fd;
             slot->events = 0;
             slot->revents = 0;
