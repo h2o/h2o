@@ -137,11 +137,11 @@ struct st_h2o_buffer_prototype_t {
     h2o_buffer_mmap_settings_t *mmap_settings;
 };
 
-#define H2O_VECTOR(type)                                                                                                           \
-    struct {                                                                                                                       \
-        type *entries;                                                                                                             \
-        size_t size;                                                                                                               \
-        size_t capacity;                                                                                                           \
+#define H2O_VECTOR(type) \
+    struct {             \
+        type *entries;   \
+        size_t size;     \
+        size_t capacity; \
     }
 
 typedef H2O_VECTOR(void) h2o_vector_t;
@@ -252,7 +252,7 @@ void h2o_buffer__dispose_linked(void *p);
  * @param element_size size of the elements stored in the vector
  * @param new_capacity the capacity of the buffer after the function returns
  */
-static void h2o_vector_reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
+static void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
 void h2o_vector__expand(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
 
 /**
@@ -355,11 +355,47 @@ inline void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool)
     *slot = buffer;
 }
 
-inline void h2o_vector_reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)
+inline void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)
 {
     if (vector->capacity < new_capacity) {
         h2o_vector__expand(pool, vector, element_size, new_capacity);
     }
+}
+
+#define h2o_vector_reserve(ppool, pvector, new_capacity) h2o_vector__reserve(ppool, (h2o_vector_t *)(pvector), \
+    sizeof((pvector)->entries[0]), new_capacity)
+
+#define h2o_vector_reserve_more(ppool, pvector, more_size) h2o_vector_reserve(ppool, (pvector), (pvector)->size + more_size)
+
+#define h2o_vector_append_new(ppool, pvector) \
+(h2o_vector_reserve_more(ppool, (pvector), 1), ((pvector)->entries + ((pvector)->size++)))
+
+#define h2o_vector_push_back(ppool, pvector, pelement) \
+{ \
+    h2o_vector_reserve_more(ppool, (pvector), 1); \
+    (pvector)->entries[(pvector)->size++] = (pelement); \
+}
+
+#define h2o_vector_push_front(ppool, pvector, pelement) \
+{ \
+    h2o_vector_reserve_more(ppool, (pvector), 1); \
+    memmove((pvector)->entries + 1, (pvector)->entries, sizeof((pvector)->entries[0]) * (pvector)->size); \
+    ++(pvector)->size; \
+    (pvector)->entries[0] = (pelement); \
+}
+
+#define h2o_vector_assign(ppool, pvector_dest, pvector_src) \
+{ \
+    h2o_vector_reserve(ppool, (pvector_dest), (pvector_src)->size); \
+    memcpy((pvector_dest)->entries, (pvector_src)->entries, (pvector_src)->size * sizeof((pvector_dest)->entries[0])); \
+    (pvector_dest)->size = (pvector_src)->size; \
+}
+
+#define h2o_vector_assign_elements(ppool, pvector_dest, pelements, num_elements) \
+{ \
+    h2o_vector_reserve(ppool, (pvector_dest), num_elements); \
+    memcpy((pvector_dest)->entries, (pelements), num_elements * sizeof((pvector_dest)->entries[0])); \
+    (pvector_dest)->size = num_elements; \
 }
 
 inline int h2o_memis(const void *_target, size_t target_len, const void *_test, size_t test_len)

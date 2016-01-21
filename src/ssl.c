@@ -290,10 +290,7 @@ static int update_tickets(session_ticket_vector_t *tickets, uint64_t now)
         uint64_t not_before = has_valid_ticket ? now + 60 : now;
         struct st_session_ticket_t *ticket = new_ticket(conf.ticket.vars.generating.cipher, conf.ticket.vars.generating.md,
                                                         not_before, not_before + conf.lifetime - 1, 1);
-        h2o_vector_reserve(NULL, (void *)tickets, sizeof(tickets->entries[0]), tickets->size + 1);
-        memmove(tickets->entries + 1, tickets->entries, sizeof(tickets->entries[0]) * tickets->size);
-        ++tickets->size;
-        tickets->entries[0] = ticket;
+        h2o_vector_push_front(NULL, tickets, ticket);
         altered = 1;
     }
 
@@ -444,8 +441,7 @@ static int parse_tickets(session_ticket_vector_t *tickets, const void *src, size
             sprintf(errstr, "at element index %zu:%s\n", i, errbuf);
             goto Error;
         }
-        h2o_vector_reserve(NULL, (void *)tickets, sizeof(tickets->entries[0]), tickets->size + 1);
-        tickets->entries[tickets->size++] = ticket;
+        h2o_vector_push_back(NULL, tickets, ticket);
     }
 
     yoml_free(doc, h2o_mem_set_secure);

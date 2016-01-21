@@ -38,8 +38,7 @@ struct st_errordoc_filter_t {
 
 static void add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_header_t *header)
 {
-    h2o_vector_reserve(pool, (void *)headers, sizeof(headers->entries[0]), headers->size + 1);
-    headers->entries[headers->size++] = *header;
+    h2o_vector_push_back(pool, headers, *header);
 }
 
 static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)
@@ -134,7 +133,7 @@ void h2o_errordoc_register(h2o_pathconf_t *pathconf, h2o_errordoc_t *errdocs, si
     size_t i;
 
     self->super.on_setup_ostream = on_filter_setup_ostream;
-    h2o_vector_reserve(NULL, (void *)&self->errordocs, sizeof(self->errordocs.entries[0]), cnt);
+    h2o_vector_reserve(NULL, &self->errordocs, cnt);
     self->errordocs.size = cnt;
     for (i = 0; i != cnt; ++i) {
         const h2o_errordoc_t *src = errdocs + i;

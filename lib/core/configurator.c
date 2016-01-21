@@ -168,11 +168,9 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
         }
         /* handle the command (or keep it for later execution) */
         if ((cmd->flags & H2O_CONFIGURATOR_FLAG_SEMI_DEFERRED) != 0) {
-            h2o_vector_reserve(NULL, (void *)&semi_deferred, sizeof(semi_deferred.entries[0]), semi_deferred.size + 1);
-            semi_deferred.entries[semi_deferred.size++] = (struct st_cmd_value_t){cmd, value};
+            h2o_vector_push_back(NULL, &semi_deferred, ((struct st_cmd_value_t){cmd, value}));
         } else if ((cmd->flags & H2O_CONFIGURATOR_FLAG_DEFERRED) != 0) {
-            h2o_vector_reserve(NULL, (void *)&deferred, sizeof(deferred.entries[0]), deferred.size + 1);
-            deferred.entries[deferred.size++] = (struct st_cmd_value_t){cmd, value};
+            h2o_vector_push_back(NULL, &deferred, ((struct st_cmd_value_t){cmd, value}));
         } else {
             if (cmd->cb(cmd, ctx, value) != 0)
                 return -1;
@@ -709,11 +707,7 @@ h2o_configurator_t *h2o_configurator_create(h2o_globalconf_t *conf, size_t sz)
 
 void h2o_configurator_define_command(h2o_configurator_t *configurator, const char *name, int flags, h2o_configurator_command_cb cb)
 {
-    h2o_configurator_command_t *cmd;
-
-    h2o_vector_reserve(NULL, (void *)&configurator->commands, sizeof(configurator->commands.entries[0]),
-                       configurator->commands.size + 1);
-    cmd = configurator->commands.entries + configurator->commands.size++;
+    h2o_configurator_command_t *cmd = h2o_vector_append_new(NULL, &configurator->commands);
     cmd->configurator = configurator;
     cmd->flags = flags;
     cmd->name = name;

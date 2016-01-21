@@ -49,8 +49,7 @@ static void gzip_encoder_free(void *opaque, void *address)
 
 static void expand_buf(h2o_mem_pool_t *pool, iovec_vector_t *bufs)
 {
-    h2o_vector_reserve(pool, (void *)bufs, sizeof(bufs->entries[0]), bufs->size + 1);
-    bufs->entries[bufs->size++] = h2o_iovec_init(h2o_mem_alloc_pool(pool, BUF_SIZE), 0);
+    h2o_vector_push_back(pool, bufs, h2o_iovec_init(h2o_mem_alloc_pool(pool, BUF_SIZE), 0));
 }
 
 static size_t compress_chunk(h2o_mem_pool_t *pool, z_stream *zs, const void *src, size_t len, int flush, iovec_vector_t *bufs,

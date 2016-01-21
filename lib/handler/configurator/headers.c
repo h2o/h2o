@@ -78,8 +78,7 @@ static int add_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2
         }
     }
 
-    h2o_vector_reserve(NULL, (h2o_vector_t *)self->cmds, sizeof(self->cmds->entries[0]), self->cmds->size + 1);
-    self->cmds->entries[self->cmds->size++] = (h2o_headers_command_t){cmd_id, name, value};
+    h2o_vector_push_back(NULL, self->cmds, ((h2o_headers_command_t){cmd_id, name, value}));
     return 0;
 }
 
@@ -127,9 +126,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
 {
     struct headers_configurator_t *self = (void *)_self;
 
-    h2o_vector_reserve(NULL, (h2o_vector_t *)&self->cmds[1], sizeof(self->cmds[0].entries[0]), self->cmds[0].size);
-    memcpy(self->cmds[1].entries, self->cmds[0].entries, sizeof(self->cmds->entries[0]) * self->cmds->size);
-    self->cmds[1].size = self->cmds[0].size;
+    h2o_vector_assign(NULL, &self->cmds[1], &self->cmds[0]);
     ++self->cmds;
     return 0;
 }
@@ -139,8 +136,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
     struct headers_configurator_t *self = (void *)_self;
 
     if (ctx->pathconf != NULL && self->cmds->size != 0) {
-        h2o_vector_reserve(NULL, (h2o_vector_t *)self->cmds, sizeof(self->cmds->entries[0]), self->cmds->size + 1);
-        self->cmds->entries[self->cmds->size] = (h2o_headers_command_t){H2O_HEADERS_CMD_NULL};
+        h2o_vector_push_back(NULL, self->cmds, ((h2o_headers_command_t){H2O_HEADERS_CMD_NULL}));
         h2o_headers_register(ctx->pathconf, self->cmds->entries);
     } else {
         free(self->cmds->entries);

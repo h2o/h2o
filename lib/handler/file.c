@@ -460,7 +460,7 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
         }
 
         if (H2O_LIKELY(range_start != SIZE_MAX)) {
-            h2o_vector_reserve(pool, (void *)&ranges, sizeof(ranges.entries[0]), ranges.size + 2);
+            h2o_vector_reserve_more(pool, &ranges, 2);
             ranges.entries[ranges.size++] = range_start;
             ranges.entries[ranges.size++] = range_count;
         }

@@ -294,7 +294,7 @@ void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb)
         return;
 
     /* set dummy data in the send buffer */
-    h2o_vector_reserve(&stream->req.pool, (h2o_vector_t *)&stream->_data, sizeof(h2o_iovec_t), 1);
+    h2o_vector_reserve_more(&stream->req.pool, &stream->_data, 1);
     stream->_data.entries[0].base = "<pull interface>";
     stream->_data.entries[0].len = 1;
     stream->_data.size = 1;
@@ -328,9 +328,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
 
     /* save the contents in queue */
     if (bufcnt != 0) {
-        h2o_vector_reserve(&req->pool, (h2o_vector_t *)&stream->_data, sizeof(h2o_iovec_t), bufcnt);
-        memcpy(stream->_data.entries, bufs, sizeof(h2o_iovec_t) * bufcnt);
-        stream->_data.size = bufcnt;
+        h2o_vector_assign_elements(&req->pool, &stream->_data, bufs, bufcnt);
     }
 
     h2o_http2_conn_register_for_proceed_callback(conn, stream);
