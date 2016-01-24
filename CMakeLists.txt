@@ -86,6 +86,18 @@ ELSE (WITH_BUNDLED_SSL)
     ENDIF (OPENSSL_VERSION VERSION_LESS "1.0.2")
 ENDIF (WITH_BUNDLED_SSL)
 
+INCLUDE_DIRECTORIES(
+    include
+    deps/cloexec
+    deps/golombset
+    deps/libyrmcds
+    deps/klib
+    deps/neverbleed
+    deps/picohttpparser
+    deps/picotest
+    deps/yaml/include
+    deps/yoml)
+
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBUV libuv>=1.0.0)
     IF (LIBUV_FOUND)
@@ -138,18 +150,6 @@ IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
 ENDIF ()
 
 SET(CMAKE_C_FLAGS "-O2 -g ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS} -DH2O_ROOT=\"${CMAKE_INSTALL_PREFIX}\"")
-
-INCLUDE_DIRECTORIES(
-    include
-    deps/cloexec
-    deps/golombset
-    deps/libyrmcds
-    deps/klib
-    deps/neverbleed
-    deps/picohttpparser
-    deps/picotest
-    deps/yaml/include
-    deps/yoml)
 
 SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/api.c
