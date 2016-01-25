@@ -785,7 +785,6 @@ static void on_handler_dispose(h2o_handler_t *_handler)
 
     h2o_socketpool_dispose(&handler->sockpool);
     free(handler->config.document_root.base);
-    free(handler);
 }
 
 static h2o_fastcgi_handler_t *register_common(h2o_pathconf_t *pathconf, h2o_fastcgi_config_vars_t *vars)
