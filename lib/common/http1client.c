@@ -108,7 +108,6 @@ static void on_body_until_close(h2o_socket_t *sock, int status)
             close_client(client);
             return;
         }
-        h2o_buffer_consume(&sock->input, sock->input->size);
     }
 
     h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
