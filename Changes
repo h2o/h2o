@@ -1,5 +1,10 @@
 Revision history for H2O.
 
+1.6.3 2016-01-26 07:46:00+0000
+	- [fastcgi][proxy] fix double-free issue during configuration phase #723 (Kazuho Oku)
+	- [proxy] fix response getting truncated when neither content-length nor transfer-encoding is used #725 (Kazuho Oku)
+	- [websocket] fix crash when access-log is enabled #698 (Shota Fukumori)
+
 1.6.2 2016-01-13 06:24:00+0000
 	- [security fix][redirect] uri-escape the user-supplied portion of the redirect path (CVE-2016-1133) #682 #684 (Kazuho Oku)
 	- [core] fix error when trying to set multiple error documents using one `error-doc` directive #676 (Yamagishi Kazutoshi)
