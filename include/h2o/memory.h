@@ -362,23 +362,29 @@ inline void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size
     }
 }
 
-#define h2o_vector_reserve(ppool, pvector, new_capacity) h2o_vector__reserve(ppool, (h2o_vector_t *)(pvector), \
-    sizeof((pvector)->entries[0]), new_capacity)
+#define h2o_vector_reserve(ppool, pvector, new_capacity) \
+    (assert((pvector) == (pvector)),\
+    h2o_vector__reserve(ppool, (h2o_vector_t *)(pvector), sizeof((pvector)->entries[0]), (new_capacity)))
 
-#define h2o_vector_reserve_more(ppool, pvector, more_size) h2o_vector_reserve(ppool, (pvector), (pvector)->size + more_size)
+#define h2o_vector_reserve_more(ppool, pvector, more_size) \
+    (assert((pvector) == (pvector)),\
+    h2o_vector_reserve(ppool, (pvector), (pvector)->size + (more_size)))
 
 #define h2o_vector_append_new(ppool, pvector) \
-(h2o_vector_reserve_more(ppool, (pvector), 1), ((pvector)->entries + ((pvector)->size++)))
+    (assert(((ppool) == (ppool)) && ((pvector) == (pvector))),\
+    (h2o_vector_reserve_more((ppool), (pvector), 1), ((pvector)->entries + ((pvector)->size++))))
 
 #define h2o_vector_push_back(ppool, pvector, pelement) \
 { \
-    h2o_vector_reserve_more(ppool, (pvector), 1); \
+    assert((pvector) == (pvector));\
+    h2o_vector_reserve_more((ppool), (pvector), 1); \
     (pvector)->entries[(pvector)->size++] = (pelement); \
 }
 
 #define h2o_vector_push_front(ppool, pvector, pelement) \
 { \
-    h2o_vector_reserve_more(ppool, (pvector), 1); \
+    assert((pvector) == (pvector));\
+    h2o_vector_reserve_more((ppool), (pvector), 1); \
     memmove((pvector)->entries + 1, (pvector)->entries, sizeof((pvector)->entries[0]) * (pvector)->size); \
     ++(pvector)->size; \
     (pvector)->entries[0] = (pelement); \
@@ -386,16 +392,20 @@ inline void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size
 
 #define h2o_vector_assign(ppool, pvector_dest, pvector_src) \
 { \
-    h2o_vector_reserve(ppool, (pvector_dest), (pvector_src)->size); \
+    assert((pvector_dest) == (pvector_dest));\
+    assert((pvector_src) == (pvector_src));\
+    h2o_vector_reserve((ppool), (pvector_dest), (pvector_src)->size); \
     memcpy((pvector_dest)->entries, (pvector_src)->entries, (pvector_src)->size * sizeof((pvector_dest)->entries[0])); \
     (pvector_dest)->size = (pvector_src)->size; \
 }
 
 #define h2o_vector_assign_elements(ppool, pvector_dest, pelements, num_elements) \
 { \
-    h2o_vector_reserve(ppool, (pvector_dest), num_elements); \
-    memcpy((pvector_dest)->entries, (pelements), num_elements * sizeof((pvector_dest)->entries[0])); \
-    (pvector_dest)->size = num_elements; \
+    assert((pvector_dest) == (pvector_dest));\
+    assert((num_elements) == (num_elements));\
+    h2o_vector_reserve((ppool), (pvector_dest), (num_elements)); \
+    memcpy((pvector_dest)->entries, (pelements), (num_elements) * sizeof((pvector_dest)->entries[0])); \
+    (pvector_dest)->size = (num_elements); \
 }
 
 inline int h2o_memis(const void *_target, size_t target_len, const void *_test, size_t test_len)
