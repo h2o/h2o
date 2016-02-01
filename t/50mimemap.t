@@ -3,7 +3,13 @@ use warnings;
 use Test::More;
 use t::Util;
 
-my $server = spawn_h2o(<< 'EOT');
+my $CURL_CMD = q{curl --silent --show-error --output /dev/null --write-out '%{content_type}'};
+
+plan skip_all => 'curl not found'
+    unless prog_exists('curl');
+
+subtest "basic" => sub {
+    my $server = spawn_h2o(<< 'EOT');
 hosts:
   default:
     paths:
@@ -32,26 +38,37 @@ file.index:
   - index.xhtml
 EOT
 
-plan skip_all => 'curl not found'
-    unless prog_exists('curl');
+    my $port = $server->{port};
+    my %expected = (
+        '/'             => 'application/xml',
+        '/addtypes/'    => 'application/xhtml+xml',
+        '/removetypes/' => 'application/octet-stream',
+        '/settypes/'    => 'text/xml',
+    );
 
-my $CURL_CMD = q{curl --silent --show-error --output /dev/null --write-out '%{content_type}'};
-my $port = $server->{port};
-my %expected = (
-    '/'             => 'application/xml',
-    '/addtypes/'    => 'application/xhtml+xml',
-    '/removetypes/' => 'application/octet-stream',
-    '/settypes/'    => 'text/xml',
-);
+    for my $path (sort keys %expected) {
+        my $ct = `$CURL_CMD http://127.0.0.1:$port$path`;
+        is $ct, $expected{$path}, "$path";
+        $ct = `$CURL_CMD http://127.0.0.1:$port${path}index.xhtml`;
+        is $ct, $expected{$path}, "${path}index.xhtml";
+    }
 
-for my $path (sort keys %expected) {
-    my $ct = `$CURL_CMD http://127.0.0.1:$port$path`;
-    is $ct, $expected{$path}, "$path";
-    $ct = `$CURL_CMD http://127.0.0.1:$port${path}index.xhtml`;
-    is $ct, $expected{$path}, "${path}index.xhtml";
-}
+    my $ct = `$CURL_CMD --header 'host: default-type-test' http://127.0.0.1:$port/`;
+    is $ct, 'application/xhtml+xml', 'setdefaulttype';
+};
 
-my $ct = `$CURL_CMD --header 'host: default-type-test' http://127.0.0.1:$port/`;
-is $ct, 'application/xhtml+xml', 'setdefaulttype';
+subtest "issue730" => sub {
+    my $server = spawn_h2o(<< 'EOT');
+hosts:
+  default:
+    paths:
+      /:
+        file.dir: t/assets/doc_root
+file.mime.addtypes:
+  "text/plain; charset=mycharset": ".txt"
+EOT
+    my $ct = `$CURL_CMD http://127.0.0.1:$server->{port}/index.txt`;
+    is $ct, "text/plain; charset=mycharset";
+};
 
 done_testing;
