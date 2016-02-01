@@ -351,8 +351,7 @@ static void listener_setup_ssl_add_host(struct listener_ssl_config_t *ssl_config
     if (host_end == NULL)
         host_end = host.base + host.len;
 
-    h2o_vector_reserve(NULL, (void *)&ssl_config->hostnames, sizeof(ssl_config->hostnames.entries[0]),
-                       ssl_config->hostnames.size + 1);
+    h2o_vector_reserve(NULL, &ssl_config->hostnames, ssl_config->hostnames.size + 1);
     ssl_config->hostnames.entries[ssl_config->hostnames.size++] = h2o_iovec_init(host.base, host_end - host.base);
 }
 
@@ -579,7 +578,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     { /* create a new entry in the SSL context list */
         struct listener_ssl_config_t *ssl_config = h2o_mem_alloc(sizeof(*ssl_config));
         memset(ssl_config, 0, sizeof(*ssl_config));
-        h2o_vector_reserve(NULL, (void *)&listener->ssl, sizeof(listener->ssl.entries[0]), listener->ssl.size + 1);
+        h2o_vector_reserve(NULL, &listener->ssl, listener->ssl.size + 1);
         listener->ssl.entries[listener->ssl.size++] = ssl_config;
         if (ctx->hostconf != NULL) {
             listener_setup_ssl_add_host(ssl_config, ctx->hostconf->authority.hostport);
@@ -1296,24 +1295,24 @@ static char **build_server_starter_argv(const char *h2o_cmd, const char *config_
     H2O_VECTOR(char *)args = {};
     size_t i;
 
-    h2o_vector_reserve(NULL, (void *)&args, sizeof(args.entries[0]), 1);
+    h2o_vector_reserve(NULL, &args, 1);
     args.entries[args.size++] = h2o_configurator_get_cmd_path("share/h2o/start_server");
 
     /* error-log and pid-file are the directives that are handled by server-starter */
     if (conf.pid_file != NULL) {
-        h2o_vector_reserve(NULL, (void *)&args, sizeof(args.entries[0]), args.size + 1);
+        h2o_vector_reserve(NULL, &args, args.size + 1);
         args.entries[args.size++] =
             h2o_concat(NULL, h2o_iovec_init(H2O_STRLIT("--pid-file=")), h2o_iovec_init(conf.pid_file, strlen(conf.pid_file))).base;
     }
     if (conf.error_log != NULL) {
-        h2o_vector_reserve(NULL, (void *)&args, sizeof(args.entries[0]), args.size + 1);
+        h2o_vector_reserve(NULL, &args, args.size + 1);
         args.entries[args.size++] = h2o_concat(NULL, h2o_iovec_init(H2O_STRLIT("--log-file=")),
                                                h2o_iovec_init(conf.error_log, strlen(conf.error_log))).base;
     }
 
     switch (conf.run_mode) {
     case RUN_MODE_DAEMON:
-        h2o_vector_reserve(NULL, (void *)&args, sizeof(args.entries[0]), args.size + 1);
+        h2o_vector_reserve(NULL, &args, args.size + 1);
         args.entries[args.size++] = "--daemonize";
         break;
     default:
@@ -1344,11 +1343,11 @@ static char **build_server_starter_argv(const char *h2o_cmd, const char *config_
             sprintf(newarg, "--path=%s", sa->sun_path);
         } break;
         }
-        h2o_vector_reserve(NULL, (void *)&args, sizeof(args.entries[0]), args.size + 1);
+        h2o_vector_reserve(NULL, &args, args.size + 1);
         args.entries[args.size++] = newarg;
     }
 
-    h2o_vector_reserve(NULL, (void *)&args, sizeof(args.entries[0]), args.size + 5);
+    h2o_vector_reserve(NULL, &args, args.size + 5);
     args.entries[args.size++] = "--";
     args.entries[args.size++] = (char *)h2o_cmd;
     args.entries[args.size++] = "-c";
@@ -1639,7 +1638,7 @@ int main(int argc, char **argv)
         H2O_VECTOR(SSL_CTX *)ssl_contexts = {};
         for (i = 0; i != conf.num_listeners; ++i) {
             for (j = 0; j != conf.listeners[i]->ssl.size; ++j) {
-                h2o_vector_reserve(NULL, (void *)&ssl_contexts, sizeof(ssl_contexts.entries[0]), ssl_contexts.size + 1);
+                h2o_vector_reserve(NULL, &ssl_contexts, ssl_contexts.size + 1);
                 ssl_contexts.entries[ssl_contexts.size++] = conf.listeners[i]->ssl.entries[j]->ctx;
             }
         }

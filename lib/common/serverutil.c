@@ -106,7 +106,7 @@ size_t h2o_server_starter_get_fds(int **_fds)
             fprintf(stderr, "invalid file descriptor number in $SERVER_STARTER_PORT: %s\n", ports_env);
             return SIZE_MAX;
         }
-        h2o_vector_reserve(NULL, (void *)&fds, sizeof(fds.entries[0]), fds.size + 1);
+        h2o_vector_reserve(NULL, &fds, fds.size + 1);
         fds.entries[fds.size++] = (int)t;
     }
 

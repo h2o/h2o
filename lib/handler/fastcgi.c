@@ -141,7 +141,7 @@ static void *append(h2o_mem_pool_t *pool, iovec_vector_t *blocks, const void *s,
     h2o_iovec_t *slot;
 
     if (blocks->entries[blocks->size - 1].len + len > APPEND_BLOCKSIZE) {
-        h2o_vector_reserve(pool, (void *)blocks, sizeof(blocks->entries[0]), blocks->size + 1);
+        h2o_vector_reserve(pool, blocks, blocks->size + 1);
         slot = blocks->entries + blocks->size++;
         slot->base = h2o_mem_alloc_pool(pool, len < APPEND_BLOCKSIZE ? APPEND_BLOCKSIZE : len);
         slot->len = 0;
@@ -327,12 +327,12 @@ static void annotate_params(h2o_mem_pool_t *pool, iovec_vector_t *vecs, unsigned
         } else {
             vecs->entries[header_slot] = create_header(pool, FCGI_PARAMS, request_id, max_record_size);
             if (recsize + vecs->entries[index].len == max_record_size) {
-                h2o_vector_reserve(pool, (void *)vecs, sizeof(vecs->entries[0]), vecs->size + 1);
+                h2o_vector_reserve(pool, vecs, vecs->size + 1);
                 memmove(vecs->entries + index + 2, vecs->entries + index + 1,
                         (vecs->size - (index + 1)) * sizeof(vecs->entries[0]));
                 ++vecs->size;
             } else {
-                h2o_vector_reserve(pool, (void *)vecs, sizeof(vecs->entries[0]), vecs->size + 2);
+                h2o_vector_reserve(pool, vecs, vecs->size + 2);
                 memmove(vecs->entries + index + 2, vecs->entries + index, (vecs->size - index) * sizeof(vecs->entries[0]));
                 vecs->size += 2;
                 size_t lastsz = max_record_size - recsize;
@@ -348,7 +348,7 @@ static void annotate_params(h2o_mem_pool_t *pool, iovec_vector_t *vecs, unsigned
 
     vecs->entries[header_slot] = create_header(pool, FCGI_PARAMS, request_id, recsize);
     if (recsize != 0) {
-        h2o_vector_reserve(pool, (void *)vecs, sizeof(vecs->entries[0]), vecs->size + 1);
+        h2o_vector_reserve(pool, vecs, vecs->size + 1);
         vecs->entries[vecs->size++] = create_header(pool, FCGI_PARAMS, request_id, 0);
     }
 }
@@ -359,7 +359,7 @@ static void build_request(h2o_req_t *req, iovec_vector_t *vecs, unsigned request
     *vecs = (iovec_vector_t){};
 
     /* first entry is FCGI_BEGIN_REQUEST */
-    h2o_vector_reserve(&req->pool, (void *)vecs, sizeof(vecs->entries[0]), 5 /* we send at least 5 iovecs */);
+    h2o_vector_reserve(&req->pool, vecs, 5 /* we send at least 5 iovecs */);
     vecs->entries[0] =
         create_begin_request(&req->pool, request_id, FCGI_RESPONDER, config->keepalive_timeout != 0 ? FCGI_KEEP_CONN : 0);
     /* second entry is reserved for FCGI_PARAMS header */
@@ -372,17 +372,17 @@ static void build_request(h2o_req_t *req, iovec_vector_t *vecs, unsigned request
     if (req->entity.len != 0) {
         size_t off = 0;
         for (; off + max_record_size < req->entity.len; off += max_record_size) {
-            h2o_vector_reserve(&req->pool, (void *)vecs, sizeof(vecs->entries[0]), vecs->size + 2);
+            h2o_vector_reserve(&req->pool, vecs, vecs->size + 2);
             vecs->entries[vecs->size++] = create_header(&req->pool, FCGI_STDIN, request_id, max_record_size);
             vecs->entries[vecs->size++] = h2o_iovec_init(req->entity.base + off, max_record_size);
         }
         if (off != req->entity.len) {
-            h2o_vector_reserve(&req->pool, (void *)vecs, sizeof(vecs->entries[0]), vecs->size + 2);
+            h2o_vector_reserve(&req->pool, vecs, vecs->size + 2);
             vecs->entries[vecs->size++] = create_header(&req->pool, FCGI_STDIN, request_id, req->entity.len - off);
             vecs->entries[vecs->size++] = h2o_iovec_init(req->entity.base + off, req->entity.len - off);
         }
     }
-    h2o_vector_reserve(&req->pool, (void *)vecs, sizeof(vecs->entries[0]), vecs->size + 1);
+    h2o_vector_reserve(&req->pool, vecs, vecs->size + 1);
     vecs->entries[vecs->size++] = create_header(&req->pool, FCGI_STDIN, request_id, 0);
 }
 
