@@ -92,10 +92,7 @@ int h2o_http2_casper_lookup(h2o_http2_casper_t *casper, const char *path, size_t
     /* we need to set a new value */
     free(casper->cookie_cache.base);
     casper->cookie_cache = (h2o_iovec_t){};
-    h2o_vector_reserve(NULL, (void *)&casper->keys, sizeof(casper->keys.entries[0]), casper->keys.size + 1);
-    memmove(casper->keys.entries + i + 1, casper->keys.entries + i, (casper->keys.size - i) * sizeof(casper->keys.entries[0]));
-    ++casper->keys.size;
-    casper->keys.entries[i] = key;
+    h2o_vector_push_front(NULL, &casper->keys, key);
     return 0;
 }
 
@@ -130,14 +127,12 @@ void h2o_http2_casper_consume_cookie(h2o_http2_casper_t *casper, const char *coo
     if (num_keys == 0) {
         /* nothing to do */
     } else if (casper->keys.size == 0) {
-        h2o_vector_reserve(NULL, (void *)&casper->keys, sizeof(casper->keys.entries[0]), num_keys);
-        memcpy(casper->keys.entries, keys, num_keys * sizeof(*keys));
-        casper->keys.size = num_keys;
+        h2o_vector_assign_elements(NULL, &casper->keys, keys, num_keys);
     } else {
         unsigned *orig_keys = casper->keys.entries;
         size_t num_orig_keys = casper->keys.size, orig_index = 0, new_index = 0;
         memset(&casper->keys, 0, sizeof(casper->keys));
-        h2o_vector_reserve(NULL, (void *)&casper->keys, sizeof(casper->keys.entries[0]), num_keys + num_orig_keys);
+        h2o_vector_reserve(NULL, &casper->keys, num_keys + num_orig_keys);
         do {
             if (orig_keys[orig_index] < keys[new_index]) {
                 casper->keys.entries[casper->keys.size++] = orig_keys[orig_index++];

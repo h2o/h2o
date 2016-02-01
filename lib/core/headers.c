@@ -26,10 +26,7 @@
 static h2o_header_t *add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_iovec_t *name, const char *value,
                                 size_t value_len)
 {
-    h2o_header_t *slot;
-
-    h2o_vector_reserve(pool, (h2o_vector_t *)headers, sizeof(h2o_header_t), headers->size + 1);
-    slot = headers->entries + headers->size++;
+    h2o_header_t *slot = h2o_vector_append_new(pool, headers);
 
     slot->name = name;
     slot->value.base = (char *)value;

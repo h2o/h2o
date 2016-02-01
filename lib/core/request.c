@@ -221,9 +221,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
         COPY(input.path);
         req->input.scheme = src->input.scheme;
         req->version = src->version;
-        h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->headers, sizeof(h2o_header_t), src->headers.size);
-        memcpy(req->headers.entries, src->headers.entries, sizeof(req->headers.entries[0]) * src->headers.size);
-        req->headers.size = src->headers.size;
+        h2o_vector_assign(&req->pool, &req->headers, &src->headers);
         req->entity = src->entity;
         req->http1_is_persistent = src->http1_is_persistent;
         req->timestamps = src->timestamps;

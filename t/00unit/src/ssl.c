@@ -93,7 +93,7 @@ static void test_serialize_tickets(void)
     int ret;
     size_t i;
 
-    h2o_vector_reserve(NULL, (void *)&orig, sizeof(orig.entries[0]), orig.size + 2);
+    h2o_vector_reserve_more(NULL, &orig, 2);
     orig.entries[orig.size++] = new_ticket(EVP_aes_256_cbc(), EVP_sha256(), UTC2000, UTC2000 + 3600, 1);
     orig.entries[orig.size++] = new_ticket(EVP_aes_256_cbc(), EVP_sha256(), UTC2000 + 600, UTC2000 + 4200, 1);
 
