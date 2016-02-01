@@ -50,6 +50,7 @@ static void destroy_hostconf(h2o_hostconf_t *hostconf)
         h2o_pathconf_t *pathconf = hostconf->paths.entries + i;
         h2o_config_dispose_pathconf(pathconf);
     }
+    free(hostconf->paths.entries);
     h2o_config_dispose_pathconf(&hostconf->fallback_path);
     h2o_mem_release_shared(hostconf->mimemap);
 
@@ -85,6 +86,7 @@ void h2o_config_dispose_pathconf(h2o_pathconf_t *pathconf)
     DESTROY_LIST(h2o_logger_t, pathconf->loggers);
 #undef DESTROY_LIST
 
+    free(pathconf->path.base);
     if (pathconf->mimemap != NULL)
         h2o_mem_release_shared(pathconf->mimemap);
 }
