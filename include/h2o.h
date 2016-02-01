@@ -1186,7 +1186,7 @@ h2o_mimemap_type_t *h2o_mimemap_get_type_by_extension(h2o_mimemap_t *mimemap, h2
 /**
  * returns the mime-type corresponding to given mimetype
  */
-h2o_mimemap_type_t *h2o_mimemap_get_type_by_mimetype(h2o_mimemap_t *mimemap, h2o_iovec_t mime);
+h2o_mimemap_type_t *h2o_mimemap_get_type_by_mimetype(h2o_mimemap_t *mimemap, h2o_iovec_t mime, int exact_match_only);
 /**
  * returns the default mime attributes given a mime type
  */

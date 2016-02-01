@@ -249,7 +249,7 @@ void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, const char *mime, h2o_
     h2o_mimemap_type_t *new_type;
 
     /* obtain or create new type */
-    if ((new_type = h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(mime, strlen(mime)))) != NULL &&
+    if ((new_type = h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(mime, strlen(mime)), 1)) != NULL &&
         (attr == NULL || memcmp(&new_type->data.attr, attr, sizeof(*attr)) == 0)) {
         h2o_mem_addref_shared(new_type);
     } else {
@@ -291,7 +291,7 @@ void h2o_mimemap_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const 
 {
     h2o_mimemap_type_t *new_type;
 
-    if ((new_type = h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(mime, strlen(mime)))) != NULL &&
+    if ((new_type = h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(mime, strlen(mime)), 1)) != NULL &&
         (attr == NULL || memcmp(&new_type->data.attr, attr, sizeof(*attr)) == 0)) {
         h2o_mem_addref_shared(new_type);
     } else {
@@ -349,22 +349,23 @@ h2o_mimemap_type_t *h2o_mimemap_get_type_by_extension(h2o_mimemap_t *mimemap, h2
     return mimemap->default_type;
 }
 
-h2o_mimemap_type_t *h2o_mimemap_get_type_by_mimetype(h2o_mimemap_t *mimemap, h2o_iovec_t mime)
+h2o_mimemap_type_t *h2o_mimemap_get_type_by_mimetype(h2o_mimemap_t *mimemap, h2o_iovec_t mime, int exact_match_only)
 {
     h2o_mimemap_type_t key = {H2O_MIMEMAP_TYPE_MIMETYPE};
     khiter_t iter;
+    size_t type_end_at;
 
     /* exact match */
     key.data.mimetype = mime;
     if ((iter = kh_get(typeset, mimemap->typeset, &key)) != kh_end(mimemap->typeset))
         return kh_key(mimemap->typeset, iter);
 
-    /* determine the end of the type */
-    size_t type_end_at = 0;
-    for (; type_end_at != mime.len; ++type_end_at)
-        if (mime.base[type_end_at] == ';' || mime.base[type_end_at] == ' ')
-            goto HasAttributes;
-    /* no attributes */
+    if (!exact_match_only) {
+        /* determine the end of the type */
+        for (type_end_at = 0; type_end_at != mime.len; ++type_end_at)
+            if (mime.base[type_end_at] == ';' || mime.base[type_end_at] == ' ')
+                goto HasAttributes;
+    }
     return NULL;
 
 HasAttributes:

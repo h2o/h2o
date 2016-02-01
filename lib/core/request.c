@@ -417,7 +417,7 @@ void h2o_req_fill_mime_attributes(h2o_req_t *req)
         return;
 
     if ((content_type_index = h2o_find_header(&req->res.headers, H2O_TOKEN_CONTENT_TYPE, -1)) != -1 &&
-        (mime = h2o_mimemap_get_type_by_mimetype(req->pathconf->mimemap, req->res.headers.entries[content_type_index].value)) !=
+        (mime = h2o_mimemap_get_type_by_mimetype(req->pathconf->mimemap, req->res.headers.entries[content_type_index].value, 0)) !=
             NULL)
         req->res.mime_attr = &mime->data.attr;
     else
