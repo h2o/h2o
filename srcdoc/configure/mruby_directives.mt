@@ -24,10 +24,9 @@ EOT
 ?>
 
 <p>
-It should be noted that as of H2O version 1.5.0, there are limitations when compared to ordinary web application server with support for Rack such as Unicorn:
+It should be noted that as of H2O version 1.7.0, there are limitations when compared to ordinary web application server with support for Rack such as Unicorn:
 <ul>
 <li>no libraries provided as part of Rack is available (only the interface is compatible)
-<li><code>rack.input</code> is not available
 </ul>
 </p>
 
