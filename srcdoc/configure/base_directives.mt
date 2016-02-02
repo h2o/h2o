@@ -20,6 +20,14 @@ The directive is mandatory, and must at least contain one entry.
 When <code>port</code> is omitted, the entry will match the requests targetting the default ports (i.e. port 80 for HTTP, port 443 for HTTPS) with given hostname.
 Otherwise, the entry will match the requests targetting the specified port.
 </p>
+<p>
+Wildcard character <code>*</code> can be used as the first component of the hostname.
+If used, they are matched using the rule defined in <a href="https://tools.ietf.org/html/rfc2818#section-3.1" target="_blank">RFC 2818 Section 3.1</a>.
+For example, <code>*.example.com</code> will match HTTP requests for both <code>foo.example.com</code> and <code>bar.example.com</code>.
+Note that an exact match is preferred over host definitions using wildcard characters.
+</p>
+
+
 <?= $ctx->{example}->('A host redirecting all HTTP requests to HTTPS', <<'EOT');
 hosts:
   "www.example.com:80":
