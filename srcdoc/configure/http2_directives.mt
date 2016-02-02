@@ -115,7 +115,7 @@ EOT
 $ctx->{directive}->(
     name    => "http2-max-concurrent-requests-per-connection",
     levels  => [ qw(global) ],
-    default => 'http2-max-concurrent-requests-per-connection: 256',
+    default => 'http2-max-concurrent-requests-per-connection: 100',
     desc    => <<'EOT',
 Maximum number of requests to be handled concurrently within a single HTTP/2 connection.
 EOT
