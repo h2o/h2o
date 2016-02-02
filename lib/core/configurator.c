@@ -583,8 +583,7 @@ static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configu
         exts[i] = NULL;
     } break;
     default:
-        h2o_configurator_errprintf(cmd, ext_node,
-                                   "only scalar or sequence of scalar is permitted at the value part of the argument");
+        h2o_configurator_errprintf(cmd, ext_node, "`extensions` must be a scalar or sequence of scalar");
         return -1;
     }
     clone_mimemap_if_clean(ctx);
