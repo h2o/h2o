@@ -48,7 +48,7 @@ paths:
   "/":
     mruby.handler: |
       lambda do |env|
-        if /^192\.168\./.match(req["REMOTE_ADDR"])
+        if /\A192\.168\./.match(req["REMOTE_ADDR"])
           return [399, {}, []]
         end
         [403, {'content-type' => 'text/plain'}, ["access forbidden\n"]]
@@ -91,7 +91,7 @@ paths:
     mruby.handler: |
       Proc.new do |env|
         headers = {}
-        if /\.(css|js)$/.match(env["PATH_INFO"])
+        if /\.(css|js)\z/.match(env["PATH_INFO"])
           headers["cache-control"] = "max-age=86400"
         end
         [399, headers, []]
@@ -111,7 +111,7 @@ paths:
       Proc.new do |env|
         push_paths = []
         # push css and js when request is to dir root or HTML
-        if /(\/|\.html)$/.match(env["PATH_INFO"])
+        if /(\/|\.html)\z/.match(env["PATH_INFO"])
           push_paths << "/css/style.css"
           push_paths << "/js/app.js"
         end
