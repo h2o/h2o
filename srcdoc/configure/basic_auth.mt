@@ -22,4 +22,6 @@ paths:
 EOT
 ?>
 
+For convenience, the mruby script also forbids access to files or directories that start with <code>.ht</code>.
+
 ? })
