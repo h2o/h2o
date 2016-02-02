@@ -120,7 +120,48 @@ paths:
 EOT
 ?>
 
+<h3 id="http-client">Using the HTTP Client</h3>
+
 <p>
+Starting from version 1.7, a HTTP client API is provided.
+HTTP requests issued through the API will be handled asynchronously; the client does not block the event loop of the HTTP server.
+</p>
+
+<?= $ctx->{example}->('Mruby handler returning the response of http://example.com', <<'EOT')
+paths:
+  "/":
+    mruby.handler: |
+      Proc.new do |env|
+        req = http_request("http://example.com")
+        status, headers, body = req.join
+        [status, headers, body]
+      end
+EOT
+?>
+
+<p>
+<code>http_request</code> is the method that issues a HTTP request.
+</p>
+<p>
+The method takes two arguments.
+First argument is the target URI.
+Second argument is an optional hash; <code>method</code> (defaults to <code>GET</code>), <code>header</code>, <code>body</code> atttributes are recognized.
+</p>
+<p>
+The method returns a promise object.
+When <code>#join</code> method of the promise is invoked, a three-argument array containing the status code, response headers, and the body is returned.
+The response body is also a promise.
+Applications can choose from three ways when dealing with the body: a) call <code>#each</code> method to receive the contents, b) call <code>#join</code> to retrieve the body as a string, c) return the object as the response body of the mruby handler.
+</p>
+<p>
+The header and the body object passed to <code>http_request</code> should conform to the requirements laid out by the Rack specification for request header and request body.
+The response header and the response body object returned by the <code>#join</code> method of the promise returned by <code>http_request</code> conforms to the requirements of the Rack specification.
+</p>
+<p>
+Since the API provides an asynchronous HTTP client, it is possible to effectively issue multiple HTTP requests concurrently and merge them into a single response.
+</p>
+
+<p style="margin-top: 2em;">
 The following are the configuration directives of the mruby handler.
 </p>
 
