@@ -28,6 +28,7 @@
 </li>
 <li>How-To
 <ul>
+<li><a href="configure/basic_auth.html">Using Basic Authentication</a></li>
 <li><a href="configure/cgi.html">Using CGI</a></li>
 </ul>
 </li>
