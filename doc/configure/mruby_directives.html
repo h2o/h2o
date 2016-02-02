@@ -83,10 +83,9 @@ Below is a simple configuration that returns <i>hello world</i>.
 
 
 <p>
-It should be noted that as of H2O version 1.5.0, there are limitations when compared to ordinary web application server with support for Rack such as Unicorn:
+It should be noted that as of H2O version 1.7.0, there are limitations when compared to ordinary web application server with support for Rack such as Unicorn:
 <ul>
 <li>no libraries provided as part of Rack is available (only the interface is compatible)
-<li><code>rack.input</code> is not available
 </ul>
 </p>
 
@@ -108,7 +107,7 @@ The example below restricts access to requests from <code>192.168.</code> privat
   &quot;/&quot;:
     mruby.handler: |
       lambda do |env|
-        if /^192\.168\./.match(env[&quot;REMOTE_ADDR&quot;])
+        if /\A192\.168\./.match(req[&quot;REMOTE_ADDR&quot;])
           return [399, {}, []]
         end
         [403, {&#39;content-type&#39; =&gt; &#39;text/plain&#39;}, [&quot;access forbidden\n&quot;]]
@@ -155,7 +154,7 @@ For example, the following example sets <code>cache-control</code> header for re
     mruby.handler: |
       Proc.new do |env|
         headers = {}
-        if /\.(css|js)$/.match(env[&quot;PATH_INFO&quot;])
+        if /\.(css|js)\z/.match(env[&quot;PATH_INFO&quot;])
           headers[&quot;cache-control&quot;] = &quot;max-age=86400&quot;
         end
         [399, headers, []]
@@ -177,7 +176,7 @@ Or in the example below, the handler triggers <a href="configure/http2_directive
       Proc.new do |env|
         push_paths = []
         # push css and js when request is to dir root or HTML
-        if /(\/|\.html)$/.match(env[&quot;PATH_INFO&quot;])
+        if /(\/|\.html)\z/.match(env[&quot;PATH_INFO&quot;])
           push_paths &lt;&lt; &quot;/css/style.css&quot;
           push_paths &lt;&lt; &quot;/js/app.js&quot;
         end
@@ -188,7 +187,50 @@ Or in the example below, the handler triggers <a href="configure/http2_directive
 </div>
 
 
+<h3 id="http-client">Using the HTTP Client</h3>
+
 <p>
+Starting from version 1.7, a HTTP client API is provided.
+HTTP requests issued through the API will be handled asynchronously; the client does not block the event loop of the HTTP server.
+</p>
+
+<div class="example">
+<div class="caption">Example. Mruby handler returning the response of http://example.com</div>
+<pre><code>paths:
+  &quot;/&quot;:
+    mruby.handler: |
+      Proc.new do |env|
+        req = http_request(&quot;http://example.com&quot;)
+        status, headers, body = req.join
+        [status, headers, body]
+      end
+</code></pre>
+</div>
+
+
+<p>
+<code>http_request</code> is the method that issues a HTTP request.
+</p>
+<p>
+The method takes two arguments.
+First argument is the target URI.
+Second argument is an optional hash; <code>method</code> (defaults to <code>GET</code>), <code>header</code>, <code>body</code> atttributes are recognized.
+</p>
+<p>
+The method returns a promise object.
+When <code>#join</code> method of the promise is invoked, a three-argument array containing the status code, response headers, and the body is returned.
+The response body is also a promise.
+Applications can choose from three ways when dealing with the body: a) call <code>#each</code> method to receive the contents, b) call <code>#join</code> to retrieve the body as a string, c) return the object as the response body of the mruby handler.
+</p>
+<p>
+The header and the body object passed to <code>http_request</code> should conform to the requirements laid out by the Rack specification for request header and request body.
+The response header and the response body object returned by the <code>#join</code> method of the promise returned by <code>http_request</code> conforms to the requirements of the Rack specification.
+</p>
+<p>
+Since the API provides an asynchronous HTTP client, it is possible to effectively issue multiple HTTP requests concurrently and merge them into a single response.
+</p>
+
+<p style="margin-top: 2em;">
 The following are the configuration directives of the mruby handler.
 </p>
 
