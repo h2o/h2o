@@ -186,8 +186,8 @@ Default is 3.
 </dd>
 <dt>neverbleed:</dt>
 <dd>
-when set to <code>ON</code>, this experimental property isolates RSA private key operations to an islotated process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
-Default is OFF.
+unless set to <code>OFF</code>, H2O isolates RSA private key operations to an islotated process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
+Default is <code>ON</code>.
 </dl>
 <p>
 <a href="configure/base_directives.html#ssl-session-resumption"><code>ssl-session-resumption</code></a> directive is provided for tuning parameters related to session resumption and session tickets.
