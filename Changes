@@ -1,5 +1,18 @@
 Revision history for H2O.
 
+1.7.0-beta5 2016-02-02 02:04:00+0000
+	- [core] forbid duplicates in `hosts` section #709 (Kazuho Oku)
+	- [fastcgi][proxy] fix double-free issue during configuration phase #723 (Kazuho Oku)
+	- [file] fix a bug that caused `file.mime.addtypes` to fail setting the attributes of a content-type #731 (Kazuho Oku)
+	- [http2] fix broken `PUSH_PROMISE` frames being sent under high pressure #734 #736 (Kazuho Oku)
+	- [mruby] refrain from building mruby handler by default if mkmf (part of ruby dev files) is not found #710 (Kazuho Oku)
+	- [mruby] support 399 response from mruby handler running asynchronously #707 (Kazuho Oku)
+	- [proxy] fix response getting truncated when neither content-length nor transfer-encoding is used #725 (Kazuho Oku)
+	- [reproxy] add support for relative URI #712 (Kazuho Oku)
+	- [libh2o] fix memory leaks during destruction #724 (greatwar)
+	- [libh2o] simplify vector operations #715 #735 (Domingo Alvarez Duarte)
+	- [misc] fix build error when an older version of H2O is installed aside an external dependency #718 #722 #736 (Kazuho Oku)
+
 1.7.0-beta4 2016-01-18 23:52:00+0000
 	- [mruby] fix memory leak #699 #701 (Kazuho Oku)
 	- [mruby] fix out-of-bounds access leading to crash #705 #706 (Kazuho Oku)
