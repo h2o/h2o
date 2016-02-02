@@ -25,6 +25,12 @@
 <li><a href="configure/redirect_directives.html">Redirect</a>
 <li><a href="configure/reproxy_directives.html">Reproxy</a>
 </ul>
+</li>
+<li>How-To
+<ul>
+<li><a href="configure/cgi.html">Using CGI</a></li>
+</ul>
+</li>
 <li><a href="https://github.com/h2o/h2o/wiki#configuration-examples" target="_blank">Configuration Examples (Wiki)</a>
 </ul>
 

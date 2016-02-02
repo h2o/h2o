@@ -10,20 +10,6 @@ The configuration directives of the FastCGI handler can be categorized into two 
 Other directives customize how the connections to the FastCGI processes should be maintained.
 </p>
 
-<p>
-Starting from version 1.7, H2O comes with a FastCGI-to-CGI gateway (<code>fastcgi-cgi</code>), which can be found under <code>share/h2o</code> directory of the installation path.
-The gateway can be used for running CGI scripts through the FastCGI handler.
-It is also possible to run CGI scripts under different privileges (consult the <code>user</code> attribute of <a href="configure/fastcgi_directives.html#fastcgi.spawn">fastcgi.spawn</a>), or to limit the concurrency of running CGI processes (see <a href="https://gist.github.com/kazuho/55fa6dcc445420a61bd7"><code>fastcgi-cgi --help</code></a>).
-</p>
-
-<?= $ctx->{example}->('Execute <code>.cgi</code> files using FastCGI-to-CGI gateway</code>', <<'EOT');
-file.custom-handler:
-  extension: .cgi
-  fastcgi.spawn:
-    command: "exec $H2O_ROOT/share/h2o/fastcgi-cgi"
-EOT
-?>
-
 <?
 $ctx->{directive}->(
     name      => "fastcgi.connect",

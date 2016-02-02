@@ -21,6 +21,7 @@ OUTPUT=\
     configure/proxy_directives.html \
     configure/redirect_directives.html \
     configure/reproxy_directives.html \
+    configure/cgi.html \
     faq.html \
 
 %.html: %.mt
