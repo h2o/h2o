@@ -1,5 +1,5 @@
 SOURCE_DIR=.
-VERSION=2.2.5
+VERSION=2.2.6
 ARCHIVE=$(SOURCE_DIR)/libressl-$(VERSION).tar.gz
 DEST=libressl-build
 UNAME=$(shell uname -s)
