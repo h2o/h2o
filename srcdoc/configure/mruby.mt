@@ -55,6 +55,10 @@ paths:
 EOT
 ?>
 
+<p>
+Support for <a href="configure/basic_auth.html">Basic Authentication</a> is also provided by an mruby script.
+</p>
+
 <h3 id="delegating-request">Delegating the Request</h3>
 
 <p>
