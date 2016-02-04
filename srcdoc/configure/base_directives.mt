@@ -204,6 +204,32 @@ If the first octets do not accord with the specification, it is considered as th
 <p>
 Default is <code>OFF</code>.
 </p>
+<h4 id="listen-unix-socket">Listening to a Unix Socket</h4>
+<p>
+If the <code>type</code> attribute is set to <code>unix</code>, then the <code>port</code> attribute is assumed to specify the path of the unix socket to which the standalone server should bound.
+Also following attributes are recognized.
+</p>
+<dl>
+<dt>owner</dt>
+<dd>
+username of the owner of the socket file.
+If omitted, the socket file will be owned by the launching user.
+</dd>
+<dt>permission</dt>
+<dd>
+an octal number specifying the permission of the sokcet file.
+Many operating systems require write permission for connecting to the socket file.
+If omitted, the permission of the socket file will reflect the umask of the calling process.
+</dd>
+</dl>
+<?= $ctx->{example}->('Listening to a Unix Socket accessible only by www-data', <<'EOT')
+listen:
+  type:       unix
+  port:       /tmp/h2o.sock
+  owner:      www-data
+  permission: 600
+EOT
+?>
 ? })
 
 <?
