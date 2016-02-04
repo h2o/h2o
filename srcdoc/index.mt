@@ -3,10 +3,11 @@
 
 <div style="margin-top: 3em;">
 <p>
-H2O is a new generation HTTP server <b>providing quicker response to users</b> when compared to older generation of web servers.
-The server takes full advantage of HTTP/2 features including prioritized content serving and server push, promising outstanding experience to the visitors of your web site.
+H2O is a new generation HTTP server that <b>provides quicker response to users with less CPU utilization</b> when compared to older generation of web servers.
+Designed from ground-up for HTTP/2, the server takes full advantage of HTTP/2 features including prioritized content serving and server push, promising outstanding experience to the visitors of your web site.
 <div align="center">
-<a href="assets/8mbps100msec-nginx195-h2o150.png" target="_blank"><img src="assets/8mbps100msec-nginx195-h2o150.png" width="400"></a>
+<a href="assets/8mbps100msec-nginx195-h2o150.png" target="_blank"><img src="assets/8mbps100msec-nginx195-h2o150.png" width="333" height="250"></a>
+<a href="assets/staticfile612-nginx1910-h2o170.png" target="_blank"><img src="assets/staticfile612-nginx1910-h2o170.png" width="200" height="250"></a>
 </div>
 Explanation and other benchmark numbers can be found in the <a href="benchmarks.html">benchmarks</a> page.
 <p>
