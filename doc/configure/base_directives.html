@@ -79,6 +79,14 @@ The directive is mandatory, and must at least contain one entry.
 When <code>port</code> is omitted, the entry will match the requests targetting the default ports (i.e. port 80 for HTTP, port 443 for HTTPS) with given hostname.
 Otherwise, the entry will match the requests targetting the specified port.
 </p>
+<p>
+Wildcard character <code>*</code> can be used as the first component of the hostname.
+If used, they are matched using the rule defined in <a href="https://tools.ietf.org/html/rfc2818#section-3.1" target="_blank">RFC 2818 Section 3.1</a>.
+For example, <code>*.example.com</code> will match HTTP requests for both <code>foo.example.com</code> and <code>bar.example.com</code>.
+Note that an exact match is preferred over host definitions using wildcard characters.
+</p>
+
+
 <div class="example">
 <div class="caption">Example. A host redirecting all HTTP requests to HTTPS</div>
 <pre><code>hosts:
@@ -257,8 +265,8 @@ Default is 3.
 </dd>
 <dt>neverbleed:</dt>
 <dd>
-when set to <code>ON</code>, this experimental property isolates RSA private key operations to an islotated process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
-Default is OFF.
+unless set to <code>OFF</code>, H2O isolates RSA private key operations to an islotated process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
+Default is <code>ON</code>.
 </dl>
 <p>
 <a href="configure/base_directives.html#ssl-session-resumption"><code>ssl-session-resumption</code></a> directive is provided for tuning parameters related to session resumption and session tickets.

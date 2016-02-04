@@ -37,7 +37,7 @@ Explanation and other benchmark numbers can be found in the <a href="benchmarks.
 <li><a href="configure/file_directives.html">static file serving</a>
 <li><a href="configure/fastcgi_directives.html">FastCGI</a>
 <li><a href="configure/proxy_directives.html">reverse proxy</a>
-<li><a href="configure/mruby_directives.html">scriptable using mruby</a> (Rack-based)
+<li><a href="configure/mruby.html">scriptable using mruby</a> (Rack-based)
 <li>graceful restart and self-upgrade
 </ul>
 

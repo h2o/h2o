@@ -13,7 +13,7 @@
 
 <link rel="stylesheet" href="assets/style.css" type="text/css" />
 
-<title>Expires Directives - Configure - H2O - the optimized HTTP/2 server</title>
+<title>Using CGI - Configure - H2O - the optimized HTTP/2 server</title>
 </head>
 <body>
 <div id="body">
@@ -54,44 +54,49 @@ the optimized HTTP/1.x, HTTP/2 server
 
 <h2>
 <a href="configure.html">Configure</a> &gt;
-Expires Directives
+Using CGI
 </h2>
 
 
 <p>
-This document describes the configuration directives of the expires handler.
+Starting from version 1.7, H2O comes with a FastCGI-to-CGI gateway (<code>fastcgi-cgi</code>), which can be found under <code>share/h2o</code> directory of the installation path.
+The gateway can be used for running CGI scripts through the FastCGI handler.
 </p>
 
-<h3 id="expires" class="directive-title"><a href="configure/expires_directives.html#expires"><code>"expires"</code></a></h3>
-
-<dl class="directive-desc">
-<dt>Description:</dt>
-<dd>
 <p>
-An optional directive for setting the <code>Cache-Control: max-age=</code> header.
-
+The example below maps <code>.cgi</code> files to be executed by the gateway.
+It is also possible to run CGI scripts under different privileges by specifying the <code>user</code> attribute of the directive.
 </p>
 
-<ul>
-<li>if the argument is <code>OFF</code> the feature is not used
-<li>if the value is <code><i>NUMBER</i> <i>UNIT</i></code> then the header is set
-<li>the units recognized are: <code>second</code>, <code>minute</code>, <code>hour</code>, <code>day</code>, <code>month</code>, <code>year</code>
-<li> the units can also be in plural forms
-</ul>
 <div class="example">
-<div class="caption">Example. Set <code>Cache-Control: max-age=86400</code></div>
-<pre><code>expires: 1 day
+<div class="caption">Example. Execute <code>.cgi</code> files using FastCGI-to-CGI gateway</div>
+<pre><code>file.custom-handler:
+  extension: .cgi
+  fastcgi.spawn:
+    command: &quot;exec $H2O_ROOT/share/h2o/fastcgi-cgi&quot;
 </code></pre>
 </div>
 
-<p>
-You can also find an example that conditionally sets the header depending on the aspects of a request in <a href="configure/mruby.html#modifying-response">Modifying the Response section of the Mruby directives documentation</a>.
-</p>
 
-</dd>
-<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
-<dd>global, host, path, extension</dd>
-</dl>
+The gateway also provides options to for tuning the behavior.  A full list of options can be obtained by running the gateway directly with <code>--help</code> option.
+
+<div class="example">
+<div class="caption">Example. Output of <code>share/h2o/fastcgi-cgi --help</code></div>
+<pre><code>$ share/h2o/fastcgi-cgi --help
+Usage:
+    share/h2o/fastcgi-cgi [options]
+
+Options:
+  --listen=sockfn    path to the UNIX socket.  If specified, the program will
+                     create a UNIX socket at given path replacing the existing
+                     file (should it exist).  If not, file descriptor zero (0)
+                     will be used as the UNIX socket for accepting new
+                     connections.
+  --max-workers=nnn  maximum number of CGI processes (default: unlimited)
+  --pass-authz       if set, preserves HTTP_AUTHORIZATION parameter
+</code></pre>
+</div>
+
 
 
 

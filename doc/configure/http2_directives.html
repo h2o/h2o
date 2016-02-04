@@ -73,7 +73,7 @@ Unfortunately, some web browsers fail to specify response priorities that lead t
 H2O is capable of detecting such web browsers, and if it does, uses server-driven prioritization; i.e. send responses with certain MIME-types before others.
 </p>
 <p>
-It is possible to tune or turn off server-driven prioritization using directives: <a href="configure/file_directives.html#file.mime.addtypes"><code>file.mime.addtypes</code></a>, <a href="#http2-reprioritize-blocking-assets"><code>http2-reprioritize-blocking-assets</code></a>.
+It is possible to tune or turn off server-driven prioritization using directives: <a href="configure/file_directives.html#file.mime.addtypes"><code>file.mime.addtypes</code></a>, <a href="configure/http2_directives.html#http2-reprioritize-blocking-assets"><code>http2-reprioritize-blocking-assets</code></a>.
 </p>
 <p>
 See also:
@@ -92,7 +92,7 @@ H2O recognizes <code>link</code> headers with <a href="https://w3c.github.io/pre
 When pushing the resources, the priority is determined using the <a href="configure/file_directives.html#file.mime.addtypes"><code>priority</code> attribute</a> of the MIME-type configuration.  If the priority is set to <code>highest</code> then the resource will be sent to the client before anything else; otherwise the resource will be sent to client after the main content, as per defined by the HTTP/2 specification.
 </p>
 <p>
-The server also provides a mechanism to track the clients' cache state via cookies, and to push the resources specified with the <code>link</code> header only when it does not exist within the clients' cache.  For details, please refer to the documentation of <a href="#http2-casper"><code>http2-casper</code></a> configuration directive.
+The server also provides a mechanism to track the clients' cache state via cookies, and to push the resources specified with the <code>link</code> header only when it does not exist within the clients' cache.  For details, please refer to the documentation of <a href="configure/http2_directives.html#http2-casper"><code>http2-casper</code></a> configuration directive.
 </p>
 <p>
 Pushed responses will have <code>x-http2-push: pushed</code> header set; by looking for the header, it is possible to determine if a resource has been pushed.
@@ -201,7 +201,7 @@ The value cannot exceed 256.
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
 <dt>Default:</dt>
-<dd><code><pre>http2-max-concurrent-requests-per-connection: 256</pre></code>
+<dd><code><pre>http2-max-concurrent-requests-per-connection: 100</pre></code>
 </dl>
 
 <h3 id="http2-reprioritize-blocking-assets" class="directive-title"><a href="configure/http2_directives.html#http2-reprioritize-blocking-assets"><code>"http2-reprioritize-blocking-assets"</code></a></h3>
