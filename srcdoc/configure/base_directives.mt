@@ -152,39 +152,39 @@ EOT
 The <code style="font-weight: bold;">ssl</code> attribute must be defined as a mapping, and recognizes the following attributes.
 </p>
 <dl>
-<dt>certificate-file:</dt>
+<dt id="certificate-file">certificate-file:</dt>
 <dd>path of the SSL certificate file (mandatory)</dd>
-<dt>key-file:</dt>
+<dt id="key-file">key-file:</dt>
 <dd>path of the SSL private key file (mandatory)</dd>
-<dt>minimum-version:</dt>
+<dt id="minimum-version">minimum-version:</dt>
 <dd>
 minimum protocol version, should be one of: <code>SSLv2</code>, <code>SSLv3</code>, <code>TLSv1</code>, <code>TLSv1.1</code>, <code>TLSv1.2</code>.
 Default is <code>TLSv1</code>
 </dd>
-<dt>cipher-suite:</dt>
+<dt id="cipher-suite">cipher-suite:</dt>
 <dd>list of cipher suites to be passed to OpenSSL via SSL_CTX_set_cipher_list (optional)</dd>
-<dt>cipher-preference:</dt>
+<dt id="cipher-preferences">cipher-preference:</dt>
 <dd>
 side of the list that should be used for selecting the cipher-suite; should be either of: <code>client</code>, <code>server</code>.
 Default is <code>client</code>.
 </dd>
-<dt>dh-file:</dt>
+<dt id="dh-file">dh-file:</dt>
 <dd>
 path of a PEM file containing the Diffie-Hellman paratemers to be used.
 Use of the file is recommended for servers using Diffie-Hellman key agreement.
 (optional)
 </dd>
-<dt>ocsp-update-interval:</dt>
+<dt id="ocsp-update-interval">ocsp-update-interval:</dt>
 <dd>
 interval for updating the OCSP stapling data (in seconds), or set to zero to disable OCSP stapling.
 Default is <code>14400</code> (4 hours).
 </dd>
-<dt>ocsp-max-failures:</dt>
+<dt id="ocsp-max-failures">ocsp-max-failures:</dt>
 <dd>
 number of consecutive OCSP queriy failures before stopping to send OCSP stapling data to the client.
 Default is 3.
 </dd>
-<dt>neverbleed:</dt>
+<dt id="neverbleed">neverbleed:</dt>
 <dd>
 unless set to <code>OFF</code>, H2O isolates RSA private key operations to an islotated process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
 Default is <code>ON</code>.

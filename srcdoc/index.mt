@@ -32,7 +32,7 @@ Explanation and other benchmark numbers can be found in the <a href="benchmarks.
 <li>session tickets with automatic key rollover
 <li>automatic OCSP stapling
 <li>forward secrecy &amp; fast AEAD ciphers<?= $note->(q{chacha20-poly1305: see <a href="https://blog.cloudflare.com/do-the-chacha-better-mobile-performance-with-cryptography/">Do the ChaCha: better mobile performance with cryptography</a>}) ?></li>
-<li>private key protection using privilege separation
+<li><a href="configure/base_directives.html#neverbleed">private key protection using privilege separation</a>
 </ul>
 </li>
 <li><a href="configure/file_directives.html">static file serving</a>
