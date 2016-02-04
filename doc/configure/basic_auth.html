@@ -66,7 +66,7 @@ The script provides a Rack handler that implements Basic Authentication using pa
 <p>
 Below example uses the mruby script to restrict access to the path.
 If authentication fails, the mruby handler returns a <code>401 Unauthorized</code> response.
-If authentication succeeds, the handler returns a <code>399</code> response, and the request is <a href="configure/mruby_directives.html#delegating-request">delegated</a> internally to the next handler (i.e. <code>file.dir</code>).
+If authentication succeeds, the handler returns a <code>399</code> response, and the request is <a href="configure/mruby.html#delegating-request">delegated</a> internally to the next handler (i.e. <code>file.dir</code>).
 </p>
 
 <div class="example">
