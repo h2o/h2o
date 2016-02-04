@@ -440,6 +440,7 @@
 		10952D591C5082F7000D664C /* 80issues-from-proxy-reproxy-to-different-host.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80issues-from-proxy-reproxy-to-different-host.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10952D5B1C608A6B000D664C /* cgi.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = cgi.mt; sourceTree = "<group>"; };
 		10952D5C1C608D19000D664C /* basic_auth.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = basic_auth.mt; sourceTree = "<group>"; };
+		10952D5D1C62D4DC000D664C /* mruby.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = mruby.mt; sourceTree = "<group>"; };
 		10A3D3D01B4CDBC700327CF9 /* memcached.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = memcached.h; sourceTree = "<group>"; };
 		10A3D3D11B4CDBDC00327CF9 /* memcached.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = memcached.c; sourceTree = "<group>"; };
 		10A3D3D61B4F1E3200327CF9 /* 50mruby.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50mruby.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -832,6 +833,7 @@
 				10583C091AF2D302004A3AD6 /* reproxy_directives.mt */,
 				10952D5C1C608D19000D664C /* basic_auth.mt */,
 				10952D5B1C608A6B000D664C /* cgi.mt */,
+				10952D5D1C62D4DC000D664C /* mruby.mt */,
 			);
 			path = configure;
 			sourceTree = "<group>";

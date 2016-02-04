@@ -23,6 +23,7 @@ OUTPUT=\
     configure/reproxy_directives.html \
     configure/basic_auth.html \
     configure/cgi.html \
+    configure/mruby.html \
     faq.html \
 
 %.html: %.mt

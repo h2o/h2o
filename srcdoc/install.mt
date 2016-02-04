@@ -59,7 +59,7 @@ This option instructs whether or not to use <a href="http://www.libressl.org/">L
 </dd>
 <dt><code>-DWITH_MRUBY=<i>on</i>|<i>off</i></code></dt>
 <dd>
-This option instructs whether or not to build the standalone server with support for <a href="configure/mruby_directives.html">scripting using mruby</a>.
+This option instructs whether or not to build the standalone server with support for <a href="configure/mruby.html">scripting using mruby</a>.
 It is turned on by default if the prerequisites (<a href="https://www.gnu.org/software/bison/">bison</a>, <a href="https://www.ruby-lang.org/">ruby</a> and the development files<?= $ctx->{note}->(q{<code>mkmf</code> - a program for building ruby extensions is required.  In many distributions, the program is packaged as part of <code>ruby-dev<code> or <code>ruby-devel</code> package.}) ?>) are found.
 </dl>
 </p>
