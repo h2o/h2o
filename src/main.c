@@ -703,6 +703,28 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
 {
     struct stat st;
     int fd;
+    struct passwd *owner = NULL, pwbuf;
+    char pwbuf_buf[65536];
+    unsigned mode = UINT_MAX;
+    yoml_t *t;
+
+    /* obtain owner and permission */
+    if ((t = yoml_get(node, "owner")) != NULL) {
+        if (t->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, t, "`owner` is not a scalar");
+            return -1;
+        }
+        if (getpwnam_r(t->data.scalar, &pwbuf, pwbuf_buf, sizeof(pwbuf_buf), &owner) != 0 || owner == NULL) {
+            h2o_configurator_errprintf(cmd, t, "failed to obtain uid of user:%s: %s", t->data.scalar, strerror(errno));
+            return -1;
+        }
+    }
+    if ((t = yoml_get(node, "permission")) != NULL) {
+        if (t->type != YOML_TYPE_SCALAR || sscanf(t->data.scalar, "%o", &mode) != 1) {
+            h2o_configurator_errprintf(cmd, t, "`permission` must be an octal number");
+            return -1;
+        }
+    }
 
     /* remove existing socket file as suggested in #45 */
     if (lstat(sa->sun_path, &st) == 0) {
@@ -713,6 +735,7 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
             return -1;
         }
     }
+
     /* add new listener */
     if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1 || bind(fd, (void *)sa, sizeof(*sa)) != 0 || listen(fd, H2O_SOMAXCONN) != 0) {
         if (fd != -1)
@@ -721,6 +744,17 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
         return -1;
     }
     set_cloexec(fd);
+
+    /* set file owner and permission */
+    if (owner != NULL && chown(sa->sun_path, owner->pw_uid, owner->pw_gid) != 0) {
+        h2o_configurator_errprintf(NULL, node, "failed to chown socket:%s to %s: %s", sa->sun_path, owner->pw_name,
+                                   strerror(errno));
+        return -1;
+    }
+    if (mode != UINT_MAX && chmod(sa->sun_path, mode) != 0) {
+        h2o_configurator_errprintf(NULL, node, "failed to chmod socket:%s to %o: %s", sa->sun_path, mode, strerror(errno));
+        return -1;
+    }
 
     return fd;
 }
