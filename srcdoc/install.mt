@@ -49,14 +49,18 @@ When complete, proceed to <a href="configure.html">Configure</a> section for how
 Following list shows the interesting arguments recognized by CMake.
 
 <dl>
-<dt><code>-DWITH_BUNDLED_SSL=<i>on</i>|<i>off</i></code></dt>
-<dd>
-This option instructs whether or not to use <a href="http://www.libressl.org/">LibreSSL</a> being bundled (default: <code>off</code> if <a href="https://www.openssl.org/">OpenSSL</a> version >= 1.0.2 is found, <code>on</code> if otherwise).  Read the section below for comparison between OpenSSL and LibreSSL.
-</dd>
 <dt><code>-DCMAKE_INSTALL_PREFIX=<i>directory</i></code></dt>
 <dd>
 This option specifies the directory to which H2O will be installed (default: <code>/usr/local</code>).
 </dd>
+<dt><code>-DWITH_BUNDLED_SSL=<i>on</i>|<i>off</i></code></dt>
+<dd>
+This option instructs whether or not to use <a href="http://www.libressl.org/">LibreSSL</a> being bundled (default: <code>off</code> if <a href="https://www.openssl.org/">OpenSSL</a> version >= 1.0.2 is found, <code>on</code> if otherwise).  Read the section below for comparison between OpenSSL and LibreSSL.
+</dd>
+<dt><code>-DWITH_MRUBY=<i>on</i>|<i>off</i></code></dt>
+<dd>
+This option instructs whether or not to build the standalone server with support for <a href="configure/mruby_directives.html">scripting using mruby</a>.
+It is turned on by default if the prerequisites (<a href="https://www.gnu.org/software/bison/">bison</a>, <a href="https://www.ruby-lang.org/">ruby</a> and the development files<?= $ctx->{note}->(q{<code>mkmf</code> - a program for building ruby extensions is required.  In many distributions, the program is packaged as part of <code>ruby-dev<code> or <code>ruby-devel</code> package.}) ?>) are found.
 </dl>
 </p>
 
