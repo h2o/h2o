@@ -1,9 +1,9 @@
-#include "mruby.h"
-#include "mruby/proc.h"
-#include "mruby/opcode.h"
-#include "mruby/array.h"
-#include "mruby/string.h"
-#include "mruby/debug.h"
+#include <mruby.h>
+#include <mruby/proc.h>
+#include <mruby/opcode.h>
+#include <mruby/array.h>
+#include <mruby/string.h>
+#include <mruby/debug.h>
 
 static mrb_value
 mrb_proc_lambda(mrb_state *mrb, mrb_value self)

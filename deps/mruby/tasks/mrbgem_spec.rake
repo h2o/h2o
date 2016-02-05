@@ -52,7 +52,7 @@ module MRuby
         MRuby::Build::COMMANDS.each do |command|
           instance_variable_set("@#{command}", @build.send(command).clone)
         end
-        @linker = LinkerConfig.new([], [], [], [])
+        @linker = LinkerConfig.new([], [], [], [], [])
 
         @rbfiles = Dir.glob("#{dir}/mrblib/**/*.rb").sort
         @objs = Dir.glob("#{dir}/src/*.{c,cpp,cxx,cc,m,asm,s,S}").map do |f|
@@ -101,6 +101,10 @@ module MRuby
         requirements = ['>= 0.0.0'] if requirements.empty?
         requirements.flatten!
         @dependencies << {:gem => name, :requirements => requirements, :default => default_gem}
+      end
+
+      def add_test_dependency(*args)
+        add_dependency(*args) if build.test_enabled?
       end
 
       def add_conflict(name, *req)
@@ -177,18 +181,18 @@ module MRuby
       def print_gem_init_header(f)
         print_gem_comment(f)
         f.puts %Q[#include <stdlib.h>] unless rbfiles.empty?
-        f.puts %Q[#include "mruby.h"]
-        f.puts %Q[#include "mruby/irep.h"] unless rbfiles.empty?
+        f.puts %Q[#include <mruby.h>]
+        f.puts %Q[#include <mruby/irep.h>] unless rbfiles.empty?
       end
 
       def print_gem_test_header(f)
         print_gem_comment(f)
         f.puts %Q[#include <stdio.h>]
         f.puts %Q[#include <stdlib.h>]
-        f.puts %Q[#include "mruby.h"]
-        f.puts %Q[#include "mruby/irep.h"]
-        f.puts %Q[#include "mruby/variable.h"]
-        f.puts %Q[#include "mruby/hash.h"] unless test_args.empty?
+        f.puts %Q[#include <mruby.h>]
+        f.puts %Q[#include <mruby/irep.h>]
+        f.puts %Q[#include <mruby/variable.h>]
+        f.puts %Q[#include <mruby/hash.h>] unless test_args.empty?
       end
 
       def test_dependencies

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 DeNA Co., Ltd., Kazuho Oku
+ * Copyright (c) 2015-2016 DeNA Co., Ltd., Kazuho Oku
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -25,7 +25,7 @@
 struct errordoc_configurator_t {
     h2o_configurator_t super;
     h2o_mem_pool_t pool;
-    H2O_VECTOR(h2o_errordoc_t)*vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+    H2O_VECTOR(h2o_errordoc_t) * vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
 static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *hash)
@@ -73,7 +73,7 @@ static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_c
     }
 
     { /* register */
-        h2o_vector_reserve(&self->pool, (void *)self->vars, sizeof(self->vars->entries[0]), self->vars->size + 1);
+        h2o_vector_reserve(&self->pool, self->vars, self->vars->size + 1);
         h2o_errordoc_t *errordoc = self->vars->entries + self->vars->size++;
         errordoc->status = status;
         errordoc->url = h2o_strdup(&self->pool, url, SIZE_MAX);
@@ -103,7 +103,8 @@ static int on_config_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_
             if (register_errordoc(cmd, ctx, e) != 0)
                 return -1;
         }
-    } break;
+        return 0;
+    }
     case YOML_TYPE_MAPPING:
         return register_errordoc(cmd, ctx, node);
     default:
@@ -125,7 +126,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
 
     /* copy vars */
     memset(&self->vars[1], 0, sizeof(self->vars[1]));
-    h2o_vector_reserve(&self->pool, (void *)&self->vars[1], sizeof(self->vars[1].entries[0]), self->vars[0].size);
+    h2o_vector_reserve(&self->pool, &self->vars[1], self->vars[0].size);
     memcpy(self->vars[1].entries, self->vars[0].entries, sizeof(self->vars[0].entries[0]) * self->vars[0].size);
     self->vars[1].size = self->vars[0].size;
 

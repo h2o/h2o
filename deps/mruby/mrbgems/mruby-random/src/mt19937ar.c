@@ -4,7 +4,7 @@
 ** See Copyright Notice in mruby.h
 */
 
-#include "mruby.h"
+#include <mruby.h>
 #include "mt19937ar.h"
 
 /* Period parameters */

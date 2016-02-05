@@ -168,10 +168,10 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
         }
         /* handle the command (or keep it for later execution) */
         if ((cmd->flags & H2O_CONFIGURATOR_FLAG_SEMI_DEFERRED) != 0) {
-            h2o_vector_reserve(NULL, (void *)&semi_deferred, sizeof(semi_deferred.entries[0]), semi_deferred.size + 1);
+            h2o_vector_reserve(NULL, &semi_deferred, semi_deferred.size + 1);
             semi_deferred.entries[semi_deferred.size++] = (struct st_cmd_value_t){cmd, value};
         } else if ((cmd->flags & H2O_CONFIGURATOR_FLAG_DEFERRED) != 0) {
-            h2o_vector_reserve(NULL, (void *)&deferred, sizeof(deferred.entries[0]), deferred.size + 1);
+            h2o_vector_reserve(NULL, &deferred, deferred.size + 1);
             deferred.entries[deferred.size++] = (struct st_cmd_value_t){cmd, value};
         } else {
             if (cmd->cb(cmd, ctx, value) != 0)
@@ -264,8 +264,17 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
             h2o_configurator_errprintf(cmd, key, "invalid key (must be either `host` or `host:port`)");
             return -1;
         }
+        assert(hostname.len != 0);
+        if ((hostname.base[0] == '*' && !(hostname.len == 1 || hostname.base[1] == '.')) ||
+            memchr(hostname.base + 1, '*', hostname.len - 1) != NULL) {
+            h2o_configurator_errprintf(cmd, key, "wildcard (*) can only be used at the start of the hostname");
+            return -1;
+        }
         h2o_configurator_context_t host_ctx = *ctx;
-        host_ctx.hostconf = h2o_config_register_host(host_ctx.globalconf, hostname, port);
+        if ((host_ctx.hostconf = h2o_config_register_host(host_ctx.globalconf, hostname, port)) == NULL) {
+            h2o_configurator_errprintf(cmd, key, "duplicate host entry");
+            return -1;
+        }
         host_ctx.mimemap = &host_ctx.hostconf->mimemap;
         host_ctx.parent = ctx;
         if (h2o_configurator_apply_commands(&host_ctx, value, H2O_CONFIGURATOR_FLAG_HOST, NULL) != 0)
@@ -574,8 +583,7 @@ static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configu
         exts[i] = NULL;
     } break;
     default:
-        h2o_configurator_errprintf(cmd, ext_node,
-                                   "only scalar or sequence of scalar is permitted at the value part of the argument");
+        h2o_configurator_errprintf(cmd, ext_node, "`extensions` must be a scalar or sequence of scalar");
         return -1;
     }
     clone_mimemap_if_clean(ctx);
@@ -702,8 +710,7 @@ void h2o_configurator_define_command(h2o_configurator_t *configurator, const cha
 {
     h2o_configurator_command_t *cmd;
 
-    h2o_vector_reserve(NULL, (void *)&configurator->commands, sizeof(configurator->commands.entries[0]),
-                       configurator->commands.size + 1);
+    h2o_vector_reserve(NULL, &configurator->commands, configurator->commands.size + 1);
     cmd = configurator->commands.entries + configurator->commands.size++;
     cmd->configurator = configurator;
     cmd->flags = flags;

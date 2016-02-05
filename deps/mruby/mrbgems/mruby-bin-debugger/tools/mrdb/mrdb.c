@@ -8,12 +8,12 @@
 #include <stdio.h>
 #include <ctype.h>
 
-#include "mruby.h"
-#include "mruby/dump.h"
-#include "mruby/debug.h"
-#include "mruby/class.h"
-#include "mruby/opcode.h"
-#include "mruby/variable.h"
+#include <mruby.h>
+#include <mruby/dump.h>
+#include <mruby/debug.h>
+#include <mruby/class.h>
+#include <mruby/opcode.h>
+#include <mruby/variable.h>
 
 #include "mrdb.h"
 #include "apibreak.h"
@@ -57,6 +57,7 @@ static const debug_command debug_command_list[] = {
   {"quit",      NULL,           1, 0, 0, DBGCMD_QUIT,           dbgcmd_quit},            /* q[uit] */
   {"run",       NULL,           1, 0, 0, DBGCMD_RUN,            dbgcmd_run},             /* r[un] */
   {"step",      NULL,           1, 0, 1, DBGCMD_STEP,           dbgcmd_step},            /* s[tep] */
+  {"next",      NULL,           1, 0, 1, DBGCMD_NEXT,           dbgcmd_next},            /* n[ext] */
   {NULL}
 };
 
@@ -560,6 +561,7 @@ mrb_code_fetch_hook(mrb_state *mrb, mrb_irep *irep, mrb_code *pc, mrb_value *reg
     dbg->root_irep = irep;
     dbg->prvfile = NULL;
     dbg->prvline = 0;
+    dbg->prvci = NULL;
     dbg->xm = DBG_RUN;
     dbg->xphase = DBG_PHASE_RUNNING;
   }
@@ -569,12 +571,23 @@ mrb_code_fetch_hook(mrb_state *mrb, mrb_irep *irep, mrb_code *pc, mrb_value *reg
 
   switch (dbg->xm) {
   case DBG_STEP:
-  case DBG_NEXT:  // temporary
     if (!file || (dbg->prvfile == file && dbg->prvline == line)) {
       return;
     }
     dbg->method_bpno = 0;
     dbg->bm = BRK_STEP;
+    break;
+
+  case DBG_NEXT:
+    if (!file || (dbg->prvfile == file && dbg->prvline == line)) {
+      return;
+    }
+    if((uint32_t)(dbg->prvci) < (uint32_t)(mrb->c->ci)) {
+      return;
+    }
+    dbg->prvci = NULL;
+    dbg->method_bpno = 0;
+    dbg->bm = BRK_NEXT;
     break;
 
   case DBG_RUN:

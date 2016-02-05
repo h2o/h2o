@@ -7,11 +7,13 @@
 #ifndef MRUBY_PROC_H
 #define MRUBY_PROC_H
 
-#include "mruby/irep.h"
+#include "common.h"
+#include <mruby/irep.h>
 
-#if defined(__cplusplus)
-extern "C" {
-#endif
+/**
+ * Proc class
+ */
+MRB_BEGIN_DECL
 
 struct REnv {
   MRB_OBJECT_HEADER;
@@ -24,6 +26,8 @@ struct REnv {
 #define MRB_ENV_STACK_LEN(e) ((mrb_int)(e)->flags)
 #define MRB_ENV_UNSHARE_STACK(e) ((e)->cioff = -1)
 #define MRB_ENV_STACK_SHARED_P(e) ((e)->cioff >= 0)
+
+MRB_API void mrb_env_unshare(mrb_state*, struct REnv*);
 
 struct RProc {
   MRB_OBJECT_HEADER;
@@ -66,11 +70,9 @@ MRB_API mrb_value mrb_proc_cfunc_env_get(mrb_state*, mrb_int);
 /* old name */
 #define mrb_cfunc_env_get(mrb, idx) mrb_proc_cfunc_env_get(mrb, idx)
 
-#include "mruby/khash.h"
+#include <mruby/khash.h>
 KHASH_DECLARE(mt, mrb_sym, struct RProc*, TRUE)
 
-#if defined(__cplusplus)
-}  /* extern "C" { */
-#endif
+MRB_END_DECL
 
 #endif  /* MRUBY_PROC_H */

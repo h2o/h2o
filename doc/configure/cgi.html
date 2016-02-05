@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<base href="../" />
+
+<!-- oktavia -->
+<link rel="stylesheet" href="assets/searchstyle.css" type="text/css" />
+<script src="search/jquery-1.9.1.min.js"></script>
+<script src="search/oktavia-jquery-ui.js"></script>
+<script src="search/oktavia-english-search.js"></script>
+<!-- /oktavia -->
+
+<link rel="stylesheet" href="assets/style.css" type="text/css" />
+
+<title>Using CGI - Configure - H2O - the optimized HTTP/2 server</title>
+</head>
+<body>
+<div id="body">
+<div id="top">
+
+<h1>
+<a href="index.html">H2O</a>
+</h1>
+the optimized HTTP/1.x, HTTP/2 server
+
+<!-- oktavia -->
+<form id="searchform">
+<input class="search" type="search" name="search" id="search" results="5" value="" placeholder="Search" />
+<div id="searchresult_box">
+<div id="close_search_box">&times;</div>
+<div id="searchresult_summary"></div>
+<div id="searchresult"></div>
+<div id="searchresult_nav"></div>
+<span class="pr">Powered by <a href="https://github.com/shibukawa/oktavia">Oktavia</a></span>
+</div>
+</form>
+<!-- /oktavia -->
+
+</div>
+
+<table id="menu">
+<tr>
+<td><a href="index.html">Top</a></td>
+<td><a href="install.html">Install</a></td>
+<td class="selected">Configure</td>
+<td><a href="faq.html">FAQ</a></td>
+<td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
+<td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
+</tr>
+</table>
+
+<div id="main">
+
+<h2>
+<a href="configure.html">Configure</a> &gt;
+Using CGI
+</h2>
+
+
+<p>
+Starting from version 1.7, H2O comes with a FastCGI-to-CGI gateway (<code>fastcgi-cgi</code>), which can be found under <code>share/h2o</code> directory of the installation path.
+The gateway can be used for running CGI scripts through the FastCGI handler.
+</p>
+
+<p>
+The example below maps <code>.cgi</code> files to be executed by the gateway.
+It is also possible to run CGI scripts under different privileges by specifying the <code>user</code> attribute of the directive.
+</p>
+
+<div class="example">
+<div class="caption">Example. Execute <code>.cgi</code> files using FastCGI-to-CGI gateway</div>
+<pre><code>file.custom-handler:
+  extension: .cgi
+  fastcgi.spawn:
+    command: &quot;exec $H2O_ROOT/share/h2o/fastcgi-cgi&quot;
+</code></pre>
+</div>
+
+
+The gateway also provides options to for tuning the behavior.  A full list of options can be obtained by running the gateway directly with <code>--help</code> option.
+
+<div class="example">
+<div class="caption">Example. Output of <code>share/h2o/fastcgi-cgi --help</code></div>
+<pre><code>$ share/h2o/fastcgi-cgi --help
+Usage:
+    share/h2o/fastcgi-cgi [options]
+
+Options:
+  --listen=sockfn    path to the UNIX socket.  If specified, the program will
+                     create a UNIX socket at given path replacing the existing
+                     file (should it exist).  If not, file descriptor zero (0)
+                     will be used as the UNIX socket for accepting new
+                     connections.
+  --max-workers=nnn  maximum number of CGI processes (default: unlimited)
+  --pass-authz       if set, preserves HTTP_AUTHORIZATION parameter
+</code></pre>
+</div>
+
+
+
+
+
+</div>
+<div id="footer">
+<p>
+Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+</p>
+</div>
+</body>
+</html>

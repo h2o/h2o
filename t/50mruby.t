@@ -201,4 +201,188 @@ EOT
     is md5_hex($body), md5_file("t/50mruby/index.html");
 };
 
+subtest "exception" => sub {
+    my $server = spawn_h2o(<< 'EOT');
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          cnt = 0
+          Proc.new do |env|
+            cnt += 1
+            if cnt % 2 != 0
+              [200, {}, ["hello\n"]]
+            else
+              raise "error from rack"
+            end
+          end
+EOT
+    my $fetch = sub {
+        run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}");
+    };
+    for (1..3) {
+        my ($headers, $body) = $fetch->();
+        like $headers, qr{^HTTP/1\.1 200 }is;
+        is $body, "hello\n";
+        ($headers, $body) = $fetch->();
+        like $headers, qr{^HTTP/1\.1 500 }is;
+    }
+};
+
+subtest "post" => sub {
+    my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          Proc.new do |env|
+            body = []
+            3.times do
+              env["rack.input"].rewind
+              body << env["rack.input"].read
+              body << "\\n"
+            end
+            [200, {}, body]
+          end
+EOT
+    my ($headers, $body) = run_prog("curl --silent --data 'hello' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
+    is $body, "hello\n" x 3;
+};
+
+subtest "InputStream#read-after-close" => sub {
+    my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          prev_input = nil
+          Proc.new do |env|
+            if !prev_input
+              prev_input = env["rack.input"]
+              resp = "not cached"
+            else
+              begin
+                prev_input.read
+                resp = "must not seed this"
+              rescue IOError => e
+                resp = "got IOError"
+              end
+            end
+            [200, {}, [resp]]
+          end
+EOT
+    my ($headers, $body) = run_prog("curl --silent --data 'hello' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
+    is $body, "not cached";
+    ($headers, $body) = run_prog("curl --silent --data 'hello' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
+    is $body, "got IOError";
+};
+
+subtest "header-concat" => sub {
+    my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          Proc.new do |env|
+            [200, {}, [env["HTTP_COOKIE"]]]
+          end
+EOT
+    subtest "http1" => sub {
+        my ($headers, $body) = run_prog("curl --silent -H 'cookie: a=b' -H 'cookie: c=d' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        like $headers, qr{^HTTP/1\.1 200}is;
+        like $body, qr{^a=b;\s*c=d$}is;
+    };
+    subtest "http2" => sub {
+        plan skip_all => "curl does not support HTTP/2"
+            unless curl_supports_http2();
+        my ($headers, $body) = run_prog("curl --http2 --insecure --silent -H 'cookie: a=b' -H 'cookie: c=d' --dump-header /dev/stderr https://127.0.0.1:$server->{tls_port}/");
+        like $headers, qr{^HTTP/2\.0 200}is;
+        like $body, qr{^a=b;\s*c=d$}is;
+    };
+};
+
+subtest "close-called" => sub {
+    my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          is_open = false
+          lambda do |env|
+            if is_open
+              return [500, {}, ["close not called"]]
+            end
+            is_open = true
+            return [
+              200,
+              {},
+              Class.new do
+                def each
+                  yield "hello"
+                end
+                define_method(:close) do
+                  is_open = false
+                end
+              end.new,
+            ]
+          end
+EOT
+    my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    like $headers, qr{^HTTP/1\.1 200 }is;
+    is $body, "hello";
+    ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    like $headers, qr{^HTTP/1\.1 200 }is;
+    is $body, "hello";
+};
+
+subtest "close-called-on-exception" => sub {
+    my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          is_open = false
+          lambda do |env|
+            if is_open
+              return [500, {}, ["close not called"]]
+            end
+            is_open = true
+            return [
+              200,
+              {},
+              Class.new do
+                def each
+                  yield "hello"
+                  raise "yeah!"
+                end
+                define_method(:close) do
+                  is_open = false
+                end
+              end.new,
+            ]
+          end
+EOT
+    my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    like $headers, qr{^HTTP/1\.1 200 }is;
+    is $body, "hello";
+    ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    like $headers, qr{^HTTP/1\.1 200 }is;
+    is $body, "hello";
+};
+
 done_testing();

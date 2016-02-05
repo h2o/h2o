@@ -21,6 +21,9 @@ OUTPUT=\
     configure/proxy_directives.html \
     configure/redirect_directives.html \
     configure/reproxy_directives.html \
+    configure/basic_auth.html \
+    configure/cgi.html \
+    configure/mruby.html \
     faq.html \
     vulnerabilities.html \
 

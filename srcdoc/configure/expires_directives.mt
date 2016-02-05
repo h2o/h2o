@@ -25,7 +25,7 @@ expires: 1 day
 EOT
 ?>
 <p>
-You can also find an example that conditionally sets the header depending on the aspects of a request in <a href="configure/mruby_directives.html#modifying-response">Modifying the Response section of the Mruby directives documentation</a>.
+You can also find an example that conditionally sets the header depending on the aspects of a request in <a href="configure/mruby.html#modifying-response">Modifying the Response section of the Mruby directives documentation</a>.
 </p>
 ? })
 

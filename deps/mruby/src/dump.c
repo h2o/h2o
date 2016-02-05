@@ -6,11 +6,11 @@
 
 #include <string.h>
 #include <limits.h>
-#include "mruby/dump.h"
-#include "mruby/string.h"
-#include "mruby/irep.h"
-#include "mruby/numeric.h"
-#include "mruby/debug.h"
+#include <mruby/dump.h>
+#include <mruby/string.h>
+#include <mruby/irep.h>
+#include <mruby/numeric.h>
+#include <mruby/debug.h>
 
 #define FLAG_BYTEORDER_NATIVE 2
 #define FLAG_BYTEORDER_NONATIVE 0
@@ -54,7 +54,7 @@ write_irep_header(mrb_state *mrb, mrb_irep *irep, uint8_t *buf)
 {
   uint8_t *cur = buf;
 
-  cur += uint32_to_bin(get_irep_record_size_1(mrb, irep), cur);  /* record size */
+  cur += uint32_to_bin((uint32_t)get_irep_record_size_1(mrb, irep), cur);  /* record size */
   cur += uint16_to_bin((uint16_t)irep->nlocals, cur);  /* number of local variable */
   cur += uint16_to_bin((uint16_t)irep->nregs, cur);  /* number of register variable */
   cur += uint16_to_bin((uint16_t)irep->rlen, cur);  /* number of child irep */
@@ -989,7 +989,7 @@ mrb_dump_irep(mrb_state *mrb, mrb_irep *irep, uint8_t flags, uint8_t **bin, size
   return dump_irep(mrb, irep, dump_flags(flags, FLAG_BYTEORDER_NONATIVE), bin, bin_size);
 }
 
-#ifdef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
 
 int
 mrb_dump_irep_binary(mrb_state *mrb, mrb_irep *irep, uint8_t flags, FILE* fp)
@@ -1092,4 +1092,4 @@ mrb_dump_irep_cfunc(mrb_state *mrb, mrb_irep *irep, uint8_t flags, FILE *fp, con
   return result;
 }
 
-#endif /* ENABLE_STDIO */
+#endif /* MRB_DISABLE_STDIO */

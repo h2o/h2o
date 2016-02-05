@@ -28,20 +28,18 @@ static void on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, si
 
 static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
 {
-    h2o_url_t xru_parsed;
-    size_t xru_index = h2o_find_header(&req->res.headers, H2O_TOKEN_X_REPROXY_URL, -1);
-    h2o_iovec_t method;
+    h2o_iovec_t dest, method;
+    ssize_t xru_index;
 
-    /* skip if not x-reproxy-url */
-    if (xru_index == -1)
-        goto Next;
+    /* obtain x-reproxy-url header, or skip to next ostream */
+    if ((xru_index = h2o_find_header(&req->res.headers, H2O_TOKEN_X_REPROXY_URL, -1)) == -1) {
+        h2o_setup_next_ostream(req, slot);
+        return;
+    }
+    dest = req->res.headers.entries[xru_index].value;
+    h2o_delete_header(&req->res.headers, xru_index);
 
-    /* see if we can parse x-reproxy-url */
-    if (h2o_url_parse(req->res.headers.entries[xru_index].value.base, req->res.headers.entries[xru_index].value.len, &xru_parsed) !=
-        0)
-        goto Next;
-
-    /* schedule the reprocessing */
+    /* setup params */
     switch (req->res.status) {
     case 307:
     case 308:
@@ -52,15 +50,13 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
         req->entity = (h2o_iovec_t){};
         break;
     }
-    h2o_reprocess_request_deferred(req, method, xru_parsed.scheme, xru_parsed.authority, xru_parsed.path, NULL, 1);
+
+    /* request internal redirect (is deferred) */
+    h2o_send_redirect_internal(req, method, dest.base, dest.len, 0);
 
     /* setup filter (that swallows the response until the timeout gets fired) */
     h2o_ostream_t *ostream = h2o_add_ostream(req, sizeof(*ostream), slot);
     ostream->do_send = on_send;
-    return;
-
-Next: /* just bypass to the next filter */
-    h2o_setup_next_ostream(req, slot);
 }
 
 void h2o_reproxy_register(h2o_pathconf_t *pathconf)

@@ -1,12 +1,13 @@
-#include "mruby.h"
-#include "mruby/array.h"
-#include "mruby/class.h"
-#include "mruby/proc.h"
+#include <mruby.h>
+#include <mruby/array.h>
+#include <mruby/class.h>
+#include <mruby/proc.h>
 
 #define fiber_ptr(o) ((struct RFiber*)mrb_ptr(o))
 
 #define FIBER_STACK_INIT_SIZE 64
 #define FIBER_CI_INIT_SIZE 8
+#define CI_ACC_RESUMED -3
 
 /*
  *  call-seq:
@@ -155,10 +156,9 @@ fiber_result(mrb_state *mrb, const mrb_value *a, mrb_int len)
 /* mark return from context modifying method */
 #define MARK_CONTEXT_MODIFY(c) (c)->ci->target_class = NULL
 
-static mrb_value
-fiber_switch(mrb_state *mrb, mrb_value self, mrb_int len, const mrb_value *a, mrb_bool resume)
+static void
+fiber_check_cfunc(mrb_state *mrb, struct mrb_context *c)
 {
-  struct mrb_context *c = fiber_check(mrb, self);
   mrb_callinfo *ci;
 
   for (ci = c->ci; ci >= c->cibase; ci--) {
@@ -166,16 +166,26 @@ fiber_switch(mrb_state *mrb, mrb_value self, mrb_int len, const mrb_value *a, mr
       mrb_raise(mrb, E_FIBER_ERROR, "can't cross C function boundary");
     }
   }
+}
+
+static mrb_value
+fiber_switch(mrb_state *mrb, mrb_value self, mrb_int len, const mrb_value *a, mrb_bool resume, mrb_bool vmexec)
+{
+  struct mrb_context *c = fiber_check(mrb, self);
+  struct mrb_context *old_c = mrb->c;
+  mrb_value value;
+
+  fiber_check_cfunc(mrb, c);
   if (resume && c->status == MRB_FIBER_TRANSFERRED) {
     mrb_raise(mrb, E_FIBER_ERROR, "resuming transferred fiber");
   }
-  if (c->status == MRB_FIBER_RUNNING || c->status == MRB_FIBER_RESUMING) {
-    mrb_raise(mrb, E_FIBER_ERROR, "double resume");
+  if (c->status == MRB_FIBER_RUNNING || c->status == MRB_FIBER_RESUMED) {
+    mrb_raise(mrb, E_FIBER_ERROR, "double resume (fib)");
   }
   if (c->status == MRB_FIBER_TERMINATED) {
     mrb_raise(mrb, E_FIBER_ERROR, "resuming dead fiber");
   }
-  mrb->c->status = resume ? MRB_FIBER_RESUMING : MRB_FIBER_TRANSFERRED;
+  mrb->c->status = resume ? MRB_FIBER_RESUMED : MRB_FIBER_TRANSFERRED;
   c->prev = resume ? mrb->c : (c->prev ? c->prev : mrb->root_c);
   if (c->status == MRB_FIBER_CREATED) {
     mrb_value *b = c->stack+1;
@@ -185,22 +195,24 @@ fiber_switch(mrb_state *mrb, mrb_value self, mrb_int len, const mrb_value *a, mr
       *b++ = *a++;
     }
     c->cibase->argc = len;
-    if (c->prev->fib)
-      mrb_field_write_barrier(mrb, (struct RBasic*)c->fib, (struct RBasic*)c->prev->fib);
-    mrb_write_barrier(mrb, (struct RBasic*)c->fib);
-    c->status = MRB_FIBER_RUNNING;
-    mrb->c = c;
-
-    MARK_CONTEXT_MODIFY(c);
-    return c->ci->proc->env->stack[0];
+    value = c->stack[0] = c->ci->proc->env->stack[0];
   }
-  MARK_CONTEXT_MODIFY(c);
-  if (c->prev->fib)
-    mrb_field_write_barrier(mrb, (struct RBasic*)c->fib, (struct RBasic*)c->prev->fib);
+  else {
+    value = fiber_result(mrb, a, len);
+  }
   mrb_write_barrier(mrb, (struct RBasic*)c->fib);
   c->status = MRB_FIBER_RUNNING;
   mrb->c = c;
-  return fiber_result(mrb, a, len);
+
+  if (vmexec) {
+    c->vmexec = TRUE;
+    value = mrb_vm_exec(mrb, c->ci[-1].proc, c->ci->pc);
+    mrb->c = old_c;
+  }
+  else {
+    MARK_CONTEXT_MODIFY(c);
+  }
+  return value;
 }
 
 /*
@@ -223,16 +235,20 @@ fiber_resume(mrb_state *mrb, mrb_value self)
 {
   mrb_value *a;
   mrb_int len;
+  mrb_bool vmexec = FALSE;
 
   mrb_get_args(mrb, "*", &a, &len);
-  return fiber_switch(mrb, self, len, a, TRUE);
+  if (mrb->c->ci->acc < 0) {
+    vmexec = TRUE;
+  }
+  return fiber_switch(mrb, self, len, a, TRUE, vmexec);
 }
 
 /* resume thread with given arguments */
 MRB_API mrb_value
 mrb_fiber_resume(mrb_state *mrb, mrb_value fib, mrb_int len, const mrb_value *a)
 {
-  return fiber_switch(mrb, fib, len, a, TRUE);
+  return fiber_switch(mrb, fib, len, a, TRUE, TRUE);
 }
 
 /*
@@ -280,6 +296,7 @@ fiber_transfer(mrb_state *mrb, mrb_value self)
   mrb_value* a;
   mrb_int len;
 
+  fiber_check_cfunc(mrb, mrb->c);
   mrb_get_args(mrb, "*", &a, &len);
 
   if (c == mrb->root_c) {
@@ -295,7 +312,7 @@ fiber_transfer(mrb_state *mrb, mrb_value self)
     return fiber_result(mrb, a, len);
   }
 
-  return fiber_switch(mrb, self, len, a, FALSE);
+  return fiber_switch(mrb, self, len, a, FALSE, FALSE);
 }
 
 /* yield values to the caller fiber */
@@ -304,13 +321,7 @@ MRB_API mrb_value
 mrb_fiber_yield(mrb_state *mrb, mrb_int len, const mrb_value *a)
 {
   struct mrb_context *c = mrb->c;
-  mrb_callinfo *ci;
 
-  for (ci = c->ci; ci >= c->cibase; ci--) {
-    if (ci->acc < 0) {
-      mrb_raise(mrb, E_FIBER_ERROR, "can't cross C function boundary");
-    }
-  }
   if (!c->prev) {
     mrb_raise(mrb, E_FIBER_ERROR, "can't yield from root fiber");
   }
@@ -319,8 +330,12 @@ mrb_fiber_yield(mrb_state *mrb, mrb_int len, const mrb_value *a)
   c->status = MRB_FIBER_SUSPENDED;
   mrb->c = c->prev;
   c->prev = NULL;
-  MARK_CONTEXT_MODIFY(mrb->c);
+  if (c->vmexec) {
+    c->vmexec = FALSE;
+    mrb->c->ci->acc = CI_ACC_RESUMED;
+  }
   mrb_write_barrier(mrb, (struct RBasic*)c->fib);
+  MARK_CONTEXT_MODIFY(mrb->c);
   return fiber_result(mrb, a, len);
 }
 
@@ -332,7 +347,9 @@ mrb_fiber_yield(mrb_state *mrb, mrb_int len, const mrb_value *a)
  *  along any arguments that were passed to it. The fiber will resume
  *  processing at this point when <code>resume</code> is called next.
  *  Any arguments passed to the next <code>resume</code> will be the
- *  value that this <code>Fiber.yield</code> expression evaluates to.
+ *
+ *  mruby limitation: Fiber resume/yield cannot cross C function boundary.
+ *  thus you cannot yield from #initialize which is called by mrb_funcall().
  */
 static mrb_value
 fiber_yield(mrb_state *mrb, mrb_value self)

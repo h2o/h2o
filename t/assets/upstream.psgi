@@ -53,6 +53,16 @@ builder {
         };
     }
     mount "/" => Plack::App::File->new(root => DOC_ROOT)->to_app;
+    mount "/echo-query" => sub {
+        my $env = shift;
+        return [
+            200,
+            [
+                'content-type' => 'text/plain',
+            ],
+            [$env->{QUERY_STRING}],
+        ];
+    };
     mount "/echo" => sub {
         my $env = shift;
         my $content = Plack::TempBuffer->new;

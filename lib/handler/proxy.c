@@ -128,8 +128,6 @@ static void on_handler_dispose(h2o_handler_t *_self)
         h2o_socketpool_dispose(self->sockpool);
         free(self->sockpool);
     }
-
-    free(self);
 }
 
 void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstream, h2o_proxy_config_vars_t *config)

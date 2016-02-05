@@ -4,11 +4,11 @@
 ** See Copyright Notice in mruby.h
 */
 
-#include "mruby.h"
-#include "mruby/array.h"
-#include "mruby/class.h"
-#include "mruby/string.h"
-#include "mruby/range.h"
+#include <mruby.h>
+#include <mruby/array.h>
+#include <mruby/class.h>
+#include <mruby/string.h>
+#include <mruby/range.h>
 #include "value_array.h"
 
 #define ARY_DEFAULT_LEN   4
@@ -1068,7 +1068,7 @@ mrb_init_array(mrb_state *mrb)
 {
   struct RClass *a;
 
-  a = mrb->array_class = mrb_define_class(mrb, "Array", mrb->object_class);            /* 15.2.12 */
+  mrb->array_class = a = mrb_define_class(mrb, "Array", mrb->object_class);            /* 15.2.12 */
   MRB_SET_INSTANCE_TT(a, MRB_TT_ARRAY);
 
   mrb_define_class_method(mrb, a, "[]",        mrb_ary_s_create,     MRB_ARGS_ANY());  /* 15.2.12.4.1 */
@@ -1101,4 +1101,5 @@ mrb_init_array(mrb_state *mrb)
 
   mrb_define_method(mrb, a, "__ary_eq",        mrb_ary_eq,           MRB_ARGS_REQ(1));
   mrb_define_method(mrb, a, "__ary_cmp",       mrb_ary_cmp,          MRB_ARGS_REQ(1));
+  mrb_define_method(mrb, a, "__ary_index",     mrb_ary_index_m,      MRB_ARGS_REQ(1)); /* kept for mruby-array-ext */
 }

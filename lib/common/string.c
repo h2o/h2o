@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014,2015 DeNA Co., Ltd., Kazuho Oku, Justin Zhu
+ * Copyright (c) 2014-2016 DeNA Co., Ltd., Kazuho Oku, Justin Zhu
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -324,8 +324,8 @@ h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l, const 
             encoded.base[encoded.len++] = ch;
         } else {
             encoded.base[encoded.len++] = '%';
-            encoded.base[encoded.len++] = "0123456789abcdef"[(ch >> 4) & 0xf];
-            encoded.base[encoded.len++] = "0123456789abcdef"[ch & 0xf];
+            encoded.base[encoded.len++] = "0123456789ABCDEF"[(ch >> 4) & 0xf];
+            encoded.base[encoded.len++] = "0123456789ABCDEF"[ch & 0xf];
         }
     }
     encoded.base[encoded.len] = '\0';
@@ -524,4 +524,43 @@ h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t coun
     ret.base[ret.len] = '\0';
 
     return ret;
+}
+
+int h2o_str_at_position(char *buf, const char *src, size_t src_len, int lineno, int column)
+{
+    const char *src_end = src + src_len;
+    int i;
+
+    /* find the line */
+    if (lineno <= 0 || column <= 0)
+        return -1;
+    for (--lineno; lineno != 0; --lineno) {
+        do {
+            if (src == src_end)
+                return -1;
+        } while (*src++ != '\n');
+    }
+
+    /* adjust the starting column */
+    while (column > 40) {
+        if (src != src_end)
+            ++src;
+        --column;
+    }
+
+    /* emit */
+    for (i = 1; i <= 76; ++i) {
+        if (src == src_end || *src == '\n')
+            break;
+        *buf++ = *src++;
+    }
+    if (i < column)
+        column = i;
+    *buf++ = '\n';
+    for (i = 1; i < column; ++i)
+        *buf++ = ' ';
+    *buf++ = '^';
+    *buf++ = '\n';
+    *buf = '\0';
+    return 0;
 }

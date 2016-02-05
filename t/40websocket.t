@@ -21,8 +21,8 @@ my $upstream = spawn_server(
     },
 );
 
-# spawn server
-my $server = spawn_h2o(<< "EOT");
+sub silent_server {
+    return spawn_h2o(<< "EOT");
 hosts:
   default:
     paths:
@@ -31,8 +31,10 @@ hosts:
         proxy.websocket: ON
         proxy.websocket.timeout: 1000
 EOT
+}
 
 subtest "http/1.1" => sub {
+    my $server = silent_server();
     plan skip_all => "curl not found"
         unless prog_exists("curl");
     my $resp = `curl --silent --insecure 'http://127.0.0.1:$server->{port}/index.txt'`;
@@ -68,6 +70,7 @@ sub doit {
 }
 
 subtest "ws" => sub {
+    my $server = silent_server();
     my $conn = IO::Socket::INET->new(
         PeerHost => '127.0.0.1',
         PeerPort => $server->{port},
@@ -77,10 +80,33 @@ subtest "ws" => sub {
 };
 
 subtest "wss" => sub {
+    my $server = silent_server();
     eval q{use IO::Socket::SSL; 1}
         or plan skip_all => "IO::Socket::SSL not found";
-    my $conn = IO::Socket::SSL->new("127.0.0.1:$server->{tls_port}")
-        or die "failed to connect via TLS to 127.0.0.1:$server->{tls_port}:$!";
+    my $conn = IO::Socket::SSL->new(
+        PeerAddr        => "127.0.0.1:$server->{tls_port}",
+        SSL_verify_mode => 0,
+    ) or die "failed to connect via TLS to 127.0.0.1:$server->{tls_port}:". IO::Socket::SSL::errstr();
+    doit($conn);
+};
+
+subtest "logged-ws" => sub {
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        proxy.reverse.url: http://127.0.0.1:$upstream_port/
+        proxy.websocket: ON
+        proxy.websocket.timeout: 1000
+access-log: /dev/null # enable logging
+EOT
+
+    my $conn = IO::Socket::INET->new(
+        PeerHost => '127.0.0.1',
+        PeerPort => $server->{port},
+        Proto    => 'tcp',
+    ) or die "failed to connect to 127.0.0.1:$server->{port}:$!";
     doit($conn);
 };
 

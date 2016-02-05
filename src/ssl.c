@@ -290,7 +290,7 @@ static int update_tickets(session_ticket_vector_t *tickets, uint64_t now)
         uint64_t not_before = has_valid_ticket ? now + 60 : now;
         struct st_session_ticket_t *ticket = new_ticket(conf.ticket.vars.generating.cipher, conf.ticket.vars.generating.md,
                                                         not_before, not_before + conf.lifetime - 1, 1);
-        h2o_vector_reserve(NULL, (void *)tickets, sizeof(tickets->entries[0]), tickets->size + 1);
+        h2o_vector_reserve(NULL, tickets, tickets->size + 1);
         memmove(tickets->entries + 1, tickets->entries, sizeof(tickets->entries[0]) * tickets->size);
         ++tickets->size;
         tickets->entries[0] = ticket;
@@ -444,7 +444,7 @@ static int parse_tickets(session_ticket_vector_t *tickets, const void *src, size
             sprintf(errstr, "at element index %zu:%s\n", i, errbuf);
             goto Error;
         }
-        h2o_vector_reserve(NULL, (void *)tickets, sizeof(tickets->entries[0]), tickets->size + 1);
+        h2o_vector_reserve(NULL, tickets, tickets->size + 1);
         tickets->entries[tickets->size++] = ticket;
     }
 
@@ -647,7 +647,7 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
         MODE_CACHE = 1,
         MODE_TICKET = 2,
     };
-    int modes = -1;
+    int modes = -1, uses_memcached;
     yoml_t *t;
 
     if ((t = yoml_get(node, "mode")) == NULL) {
@@ -813,11 +813,11 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
         }
     }
 
-    if (conf.memcached.host == NULL && (conf.cache.setup == setup_cache_memcached
+    uses_memcached = conf.cache.setup == setup_cache_memcached;
 #if H2O_USE_SESSION_TICKETS
-                                        || conf.ticket.update_thread == ticket_memcached_updater
+    uses_memcached = (uses_memcached || conf.ticket.update_thread == ticket_memcached_updater);
 #endif
-                                        )) {
+    if (uses_memcached && conf.memcached.host == NULL) {
         h2o_configurator_errprintf(cmd, node, "configuration of memcached is missing");
         return -1;
     }

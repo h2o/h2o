@@ -1,8 +1,8 @@
-#include "mruby.h"
-#include "mruby/value.h"
-#include "mruby/array.h"
-#include "mruby/range.h"
-#include "mruby/hash.h"
+#include <mruby.h>
+#include <mruby/value.h>
+#include <mruby/array.h>
+#include <mruby/range.h>
+#include <mruby/hash.h>
 
 /*
  *  call-seq:
@@ -113,8 +113,9 @@ mrb_ary_values_at(mrb_state *mrb, mrb_value self)
  *  Returns the result of interpreting <i>aray</i> as an array of
  *  <tt>[key, value]</tt> paris.
  *
- *     [[:foo, :bar], [1, 2]].to_h
- *       # => {:foo => :bar, 1 => 2}
+ *      [[:foo, :bar], [1, 2]].to_h
+ *        # => {:foo => :bar, 1 => 2}
+ *
  */
 
 static mrb_value

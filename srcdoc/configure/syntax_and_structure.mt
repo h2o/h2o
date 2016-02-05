@@ -3,7 +3,7 @@
 
 <h3>Syntax</h3>
 
-H2O uses <a href="http://www.yaml.org/">YAML</a> 1.1 the syntax of its configuration file.
+H2O uses <a href="http://www.yaml.org/">YAML</a> 1.1 as the syntax of its configuration file.
 
 <h3 id="config_levels">Levels of Configuration</h3>
 
@@ -58,9 +58,37 @@ The second host accepts connections on port 80 (via the plain-text HTTP protocol
 </p>
 
 <p>
-Certain configuration directives can be used in more than one levels.  For example, the <code>listen</code> directive can be used either at the global level or at the host level.
-<code>Expires</code> can be used at all levels.
-On the other hand <code>file.dir</code> can only be used at the path level.
+Certain configuration directives can be used in more than one levels.  For example, the <a href="configure/base_directives.html#listen"><code>listen</code></a> can be used either at the global level or at the host level.
+<a href="configure/expires_directives.html#expires"><code>Expires</code></a> can be used at all levels.
+On the other hand <a href="configure/file_directives.html#file.dir"><code>file.dir</code></a> can only be used at the path level.
 </p>
+
+<h3 id="yaml_alias">Using YAML Alias</h3>
+
+<p>
+H2O resolves <a href="http://yaml.org/YAML_for_ruby.html#aliases_and_anchors">YAML aliases</a> before processing the configuration file.
+Therefore, it is possible to use an alias to reduce the redundancy of the configuration file.
+For example, the following configuration reuses the first <code>paths</code> element (that is given an anchor named <code>default_paths</code>) in the following definitions.
+
+<?= $ctx->{code}->(<< 'EOT')
+hosts:
+  "example.com":
+    listen:
+      port: 443
+      ssl:
+        certificate-file: /path/to/example.com.crt
+        key-file:         /path/to/example.com.crt
+    paths: &default_paths
+      "/":
+        file.dir: /path/to/doc-root
+  "example.org":
+    listen:
+      port: 443
+      ssl:
+        certificate-file: /path/to/example.org.crt
+        key-file:         /path/to/example.org.crt
+    paths: *default_paths
+EOT
+?>
 
 ? })

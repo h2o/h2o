@@ -124,11 +124,23 @@ subtest 'curl' => sub {
             like $content, qr{^location: $proto://127.0.0.1:$port/abc\r$}m;
         };
         subtest "x-reproxy-url ($proto)" => sub {
-            for my $file (sort keys %files) {
-                my $content = `curl --silent --show-error --insecure "$proto://127.0.0.1:$port/404?resp:status=200&resp:x-reproxy-url=http://@{[uri_escape($upstream)]}/$file"`;
-                is length($content), $files{$file}->{size}, "$file (size)";
-                is md5_hex($content), $files{$file}->{md5}, "$file (md5)";
-            }
+            my $fetch_test = sub {
+                my $url_prefix = shift;
+                for my $file (sort keys %files) {
+                    my $content = `curl --silent --show-error --insecure "$proto://127.0.0.1:$port/404?resp:status=200&resp:x-reproxy-url=$url_prefix$file"`;
+                    is length($content), $files{$file}->{size}, "$file (size)";
+                    is md5_hex($content), $files{$file}->{md5}, "$file (md5)";
+                }
+            };
+            subtest "abs-url" => sub {
+                $fetch_test->("http://@{[uri_escape($upstream)]}/");
+            };
+            subtest "abs-path" => sub {
+                $fetch_test->("/");
+            };
+            subtest "rel-path" => sub {
+                $fetch_test->("");
+            };
             my $content = `curl --silent --show-error --insecure "$proto://127.0.0.1:$port/streaming-body?resp:status=200&resp:x-reproxy-url=http://@{[uri_escape($upstream)]}/index.txt"`;
             is $content, "hello\n", "streaming-body";
             $content = `curl --silent --dump-header /dev/stderr --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=https://@{[uri_escape($upstream)]}/index.txt" 2>&1 > /dev/null`;

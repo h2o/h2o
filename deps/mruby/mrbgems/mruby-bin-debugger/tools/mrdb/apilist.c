@@ -9,9 +9,9 @@
 #include "mrdb.h"
 #include "mrdberror.h"
 #include "apilist.h"
-#include "mruby/compile.h"
-#include "mruby/irep.h"
-#include "mruby/debug.h"
+#include <mruby/compile.h>
+#include <mruby/irep.h>
+#include <mruby/debug.h>
 
 #define LINE_BUF_SIZE MAX_COMMAND_LINE
 

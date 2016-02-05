@@ -1070,7 +1070,7 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
         return;
     if (conn->push_stream_ids.max_open >= 0x7ffffff0)
         return;
-    if (!can_run_requests(conn))
+    if (!(h2o_linklist_is_empty(&conn->_pending_reqs) && can_run_requests(conn)))
         return;
 
     /* casper-related code */

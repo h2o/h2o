@@ -2,42 +2,55 @@
 # Struct ISO Test
 
 assert('Struct', '15.2.18') do
-  Struct.class == Class
+  assert_equal Class, Struct.class
 end
 
 assert('Struct.new', '15.2.18.3.1') do
   c = Struct.new(:m1, :m2)
-  c.superclass == Struct and
-    c.members == [:m1,:m2]
+  assert_equal Struct, c.superclass
+  assert_equal [:m1, :m2], c.members
 end
 
 # Check crash bug with Struc.new and no params.
 assert('Struct.new', '15.2.18.3.1') do
   c = Struct.new()
-  c.superclass == Struct and c.members == []
+  assert_equal Struct, c.superclass
+  assert_equal [], c.members
 end
 
 assert('Struct#==', '15.2.18.4.1') do
   c = Struct.new(:m1, :m2)
   cc1 = c.new(1,2)
   cc2 = c.new(1,2)
-  cc1 == cc2
+  assert_true cc1 == cc2
 end
 
 assert('Struct#[]', '15.2.18.4.2') do
   c = Struct.new(:m1, :m2)
   cc = c.new(1,2)
-  cc[:m1] == 1 and cc["m2"] == 2
+  assert_equal 1, cc[:m1]
+  assert_equal 2, cc["m2"]
+  assert_equal 1, cc[0]
+  assert_equal 2, cc[-1]
+  assert_raise(TypeError) { cc[[]] }
+  assert_raise(IndexError) { cc[2] }
+  assert_raise(NameError) { cc['tama'] }
 end
 
 assert('Struct#[]=', '15.2.18.4.3') do
   c = Struct.new(:m1, :m2)
   cc = c.new(1,2)
   cc[:m1] = 3
-  cc[:m1] == 3
+  assert_equal 3, cc[:m1]
   cc["m2"] = 3
   assert_equal 3, cc["m2"]
+  cc[0] = 4
+  assert_equal 4, cc[0]
+  cc[-1] = 5
+  assert_equal 5, cc[-1]
   assert_raise(TypeError) { cc[[]] = 3 }
+  assert_raise(IndexError) { cc[2] = 7 }
+  assert_raise(NameError) { cc['pochi'] = 8 }
 end
 
 assert('Struct#each', '15.2.18.4.4') do
@@ -47,7 +60,7 @@ assert('Struct#each', '15.2.18.4.4') do
   cc.each{|x|
     a << x
   }
-  a[0] == 1 and a[1] == 2
+  assert_equal [1, 2], a
 end
 
 assert('Struct#each_pair', '15.2.18.4.5') do
@@ -57,19 +70,17 @@ assert('Struct#each_pair', '15.2.18.4.5') do
   cc.each_pair{|k,v|
     a << [k,v]
   }
-  a[0] == [:m1, 1] and a[1] == [:m2, 2]
+  assert_equal [[:m1, 1], [:m2, 2]], a
 end
 
 assert('Struct#members', '15.2.18.4.6') do
   c = Struct.new(:m1, :m2)
-  cc = c.new(1,2)
-  cc.members == [:m1,:m2]
+  assert_equal [:m1, :m2], c.new(1,2).members
 end
 
 assert('Struct#select', '15.2.18.4.7') do
   c = Struct.new(:m1, :m2)
-  cc = c.new(1,2)
-  cc.select{|v| v % 2 == 0} == [2]
+  assert_equal([2]) { c.new(1,2).select{|v| v % 2 == 0} }
 end
 
 assert('large struct') do
@@ -103,7 +114,7 @@ end
 assert('struct inspect') do
   c = Struct.new(:m1, :m2, :m3, :m4, :m5)
   cc = c.new(1,2,3,4,5)
-  assert_equal "#<struct #{c.inspect} m1=1, m2=2, m3=3, m4=4, m5=5>", cc.inspect
+  assert_equal "#<struct m1=1, m2=2, m3=3, m4=4, m5=5>", cc.inspect
 end
 
 assert('Struct#length, Struct#size') do

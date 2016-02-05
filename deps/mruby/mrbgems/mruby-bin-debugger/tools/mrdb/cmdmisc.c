@@ -8,7 +8,7 @@
 #include <string.h>
 
 #include "apilist.h"
-#include "mruby/compile.h"
+#include <mruby/compile.h>
 
 typedef struct help_msg {
   const char *cmd1;

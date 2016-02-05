@@ -1,0 +1,19 @@
+---
+version: "#{build}"
+environment:
+  MRUBY_CONFIG: "C:/projects/mruby-file-stat/.travis_build_config.rb"
+  matrix:
+  - Compiler: mingw
+
+install:
+  - SET PATH=C:\Ruby%ruby_version%\bin;%PATH%
+  - set PATH=C:\MinGW\bin;C:\MinGW\msys\1.0\bin;%PATH%
+  - ruby --version
+  - gem --version
+  - gcc --version
+  - gem install rake
+  - cd ..
+  - git clone --depth 1 https://github.com/mruby/mruby.git
+  - cd mruby
+build_script:
+  - ruby minirake all test --trace --verbose

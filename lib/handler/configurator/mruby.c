@@ -38,7 +38,7 @@ static int compile_test(h2o_mruby_config_vars_t *config, char *errbuf)
     mrb_state *mrb;
 
     if ((mrb = mrb_open()) == NULL) {
-        fprintf(stderr, "%s: no memory\n", H2O_MRUBY_MODULE_VERSION);
+        fprintf(stderr, "%s: no memory\n", H2O_MRUBY_MODULE_NAME);
         abort();
     }
     int ok = !mrb_nil_p(h2o_mruby_compile_code(mrb, config, errbuf));
@@ -57,7 +57,7 @@ static int on_config_mruby_handler(h2o_configurator_command_t *cmd, h2o_configur
     self->vars->lineno = (int)node->line;
 
     /* check if there is any error in source */
-    char errbuf[256];
+    char errbuf[1024];
     if (!compile_test(self->vars, errbuf)) {
         h2o_configurator_errprintf(cmd, node, "ruby compile error:%s", errbuf);
         return -1;
@@ -98,7 +98,7 @@ static int on_config_mruby_handler_file(h2o_configurator_command_t *cmd, h2o_con
     self->vars->lineno = 0;
 
     /* check if there is any error in source */
-    char errbuf[256];
+    char errbuf[1024];
     if (!compile_test(self->vars, errbuf)) {
         h2o_configurator_errprintf(cmd, node, "failed to compile file:%s:%s", node->data.scalar, errbuf);
         goto Exit;

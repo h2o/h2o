@@ -725,6 +725,10 @@ struct st_h2o_req_t {
      */
     h2o_iovec_t entity;
     /**
+     * remote_user (base == NULL if none)
+     */
+    h2o_iovec_t remote_user;
+    /**
      * timestamp when the request was processed
      */
     h2o_timestamp_t processed_at;
@@ -910,6 +914,14 @@ void h2o_dispose_request(h2o_req_t *req);
  */
 void h2o_process_request(h2o_req_t *req);
 /**
+ * delegates the request to the next handler; called asynchronously by handlers that returned zero from `on_req`
+ */
+void h2o_delegate_request(h2o_req_t *req, h2o_handler_t *current_handler);
+/**
+ * calls h2o_delegate_request using zero_timeout callback
+ */
+void h2o_delegate_request_deferred(h2o_req_t *req, h2o_handler_t *current_handler);
+/**
  * reprocesses a request once more (used for internal redirection)
  */
 void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_scheme_t *scheme, h2o_iovec_t authority,
@@ -1094,13 +1106,17 @@ void h2o_send_inline(h2o_req_t *req, const char *body, size_t len);
  */
 void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body, int flags);
 /**
+ * sends error response using zero timeout; can be called by output filters while processing the headers
+ */
+void h2o_send_error_deferred(h2o_req_t *req, int status, const char *reason, const char *body, int flags);
+/**
  * sends a redirect response
  */
 void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const char *url, size_t url_len);
 /**
  * handles redirect internally
  */
-void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *url_str, size_t url_len);
+void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *url_str, size_t url_len, int preserve_overrides);
 /**
  * returns method to be used after redirection
  */
@@ -1170,7 +1186,7 @@ h2o_mimemap_type_t *h2o_mimemap_get_type_by_extension(h2o_mimemap_t *mimemap, h2
 /**
  * returns the mime-type corresponding to given mimetype
  */
-h2o_mimemap_type_t *h2o_mimemap_get_type_by_mimetype(h2o_mimemap_t *mimemap, h2o_iovec_t mime);
+h2o_mimemap_type_t *h2o_mimemap_get_type_by_mimetype(h2o_mimemap_t *mimemap, h2o_iovec_t mime, int exact_match_only);
 /**
  * returns the default mime attributes given a mime type
  */

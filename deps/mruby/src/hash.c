@@ -4,13 +4,13 @@
 ** See Copyright Notice in mruby.h
 */
 
-#include "mruby.h"
-#include "mruby/array.h"
-#include "mruby/class.h"
-#include "mruby/hash.h"
-#include "mruby/khash.h"
-#include "mruby/string.h"
-#include "mruby/variable.h"
+#include <mruby.h>
+#include <mruby/array.h>
+#include <mruby/class.h>
+#include <mruby/hash.h>
+#include <mruby/khash.h>
+#include <mruby/string.h>
+#include <mruby/variable.h>
 
 /* a function to get hash value of a float number */
 mrb_int mrb_float_id(mrb_float f);
@@ -91,12 +91,6 @@ mrb_hash_ht_hash_equal(mrb_state *mrb, mrb_value a, mrb_value b)
   }
 }
 
-typedef struct {
-  mrb_value v;
-  mrb_int n;
-} mrb_hash_value;
-
-KHASH_DECLARE(ht, mrb_value, mrb_hash_value, TRUE)
 KHASH_DEFINE (ht, mrb_value, mrb_hash_value, TRUE, mrb_hash_ht_hash_func, mrb_hash_ht_hash_equal)
 
 static void mrb_hash_modify(mrb_state *mrb, mrb_value hash);
@@ -104,10 +98,11 @@ static void mrb_hash_modify(mrb_state *mrb, mrb_value hash);
 static inline mrb_value
 mrb_hash_ht_key(mrb_state *mrb, mrb_value key)
 {
-  if (mrb_string_p(key))
-    return mrb_str_dup(mrb, key);
-  else
-    return key;
+  if (mrb_string_p(key) && !RSTR_FROZEN_P(mrb_str_ptr(key))) {
+    key = mrb_str_dup(mrb, key);
+    RSTR_SET_FROZEN_FLAG(mrb_str_ptr(key));
+  }
+  return key;
 }
 
 #define KEY(key) mrb_hash_ht_key(mrb, key)
@@ -293,22 +288,22 @@ mrb_hash_modify(mrb_state *mrb, mrb_value hash)
  *  default value. It is the block's responsibility to store the value
  *  in the hash if required.
  *
- *     h = Hash.new("Go Fish")
- *     h["a"] = 100
- *     h["b"] = 200
- *     h["a"]           #=> 100
- *     h["c"]           #=> "Go Fish"
- *     # The following alters the single default object
- *     h["c"].upcase!   #=> "GO FISH"
- *     h["d"]           #=> "GO FISH"
- *     h.keys           #=> ["a", "b"]
+ *      h = Hash.new("Go Fish")
+ *      h["a"] = 100
+ *      h["b"] = 200
+ *      h["a"]           #=> 100
+ *      h["c"]           #=> "Go Fish"
+ *      # The following alters the single default object
+ *      h["c"].upcase!   #=> "GO FISH"
+ *      h["d"]           #=> "GO FISH"
+ *      h.keys           #=> ["a", "b"]
  *
- *     # While this creates a new default object each time
- *     h = Hash.new { |hash, key| hash[key] = "Go Fish: #{key}" }
- *     h["c"]           #=> "Go Fish: c"
- *     h["c"].upcase!   #=> "GO FISH: C"
- *     h["d"]           #=> "Go Fish: d"
- *     h.keys           #=> ["c", "d"]
+ *      # While this creates a new default object each time
+ *      h = Hash.new { |hash, key| hash[key] = "Go Fish: #{key}" }
+ *      h["c"]           #=> "Go Fish: c"
+ *      h["c"].upcase!   #=> "GO FISH: C"
+ *      h["d"]           #=> "Go Fish: d"
+ *      h.keys           #=> ["c", "d"]
  *
  */
 
@@ -516,10 +511,10 @@ mrb_hash_delete_key(mrb_state *mrb, mrb_value hash, mrb_value key)
  *  key is not found, pass in the key and return the result of
  *  <i>block</i>.
  *
- *     h = { "a" => 100, "b" => 200 }
- *     h.delete("a")                              #=> 100
- *     h.delete("z")                              #=> nil
- *     h.delete("z") { |el| "#{el} not found" }   #=> "z not found"
+ *      h = { "a" => 100, "b" => 200 }
+ *      h.delete("a")                              #=> 100
+ *      h.delete("z")                              #=> nil
+ *      h.delete("z") { |el| "#{el} not found" }   #=> "z not found"
  *
  */
 static mrb_value
@@ -540,9 +535,9 @@ mrb_hash_delete(mrb_state *mrb, mrb_value self)
  *  two-item array <code>[</code> <i>key, value</i> <code>]</code>, or
  *  the hash's default value if the hash is empty.
  *
- *     h = { 1 => "a", 2 => "b", 3 => "c" }
- *     h.shift   #=> [1, "a"]
- *     h         #=> {2=>"b", 3=>"c"}
+ *      h = { 1 => "a", 2 => "b", 3 => "c" }
+ *      h.shift   #=> [1, "a"]
+ *      h         #=> {2=>"b", 3=>"c"}
  */
 
 static mrb_value
@@ -579,10 +574,10 @@ mrb_hash_shift(mrb_state *mrb, mrb_value hash)
  *  call-seq:
  *     hsh.clear -> hsh
  *
- *  Removes all key-value pairs from <i>hsh</i>.
+ *  Removes all key-value pairs from `hsh`.
  *
- *     h = { "a" => 100, "b" => 200 }   #=> {"a"=>100, "b"=>200}
- *     h.clear                          #=> {}
+ *      h = { "a" => 100, "b" => 200 }   #=> {"a"=>100, "b"=>200}
+ *      h.clear                          #=> {}
  *
  */
 
@@ -608,10 +603,10 @@ mrb_hash_clear(mrb_state *mrb, mrb_value hash)
  *  use as a key (a <code>String</code> passed as a key will be
  *  duplicated and frozen).
  *
- *     h = { "a" => 100, "b" => 200 }
- *     h["a"] = 9
- *     h["c"] = 4
- *     h   #=> {"a"=>9, "b"=>200, "c"=>4}
+ *      h = { "a" => 100, "b" => 200 }
+ *      h["a"] = 9
+ *      h["c"] = 4
+ *      h   #=> {"a"=>9, "b"=>200, "c"=>4}
  *
  */
 static mrb_value
@@ -826,7 +821,7 @@ mrb_init_hash(mrb_state *mrb)
 {
   struct RClass *h;
 
-  h = mrb->hash_class = mrb_define_class(mrb, "Hash", mrb->object_class);              /* 15.2.13 */
+  mrb->hash_class = h = mrb_define_class(mrb, "Hash", mrb->object_class);              /* 15.2.13 */
   MRB_SET_INSTANCE_TT(h, MRB_TT_HASH);
 
   mrb_define_method(mrb, h, "[]",              mrb_hash_aget,        MRB_ARGS_REQ(1)); /* 15.2.13.4.2  */

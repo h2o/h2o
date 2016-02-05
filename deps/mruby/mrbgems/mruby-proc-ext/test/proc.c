@@ -1,6 +1,6 @@
-#include "mruby.h"
-#include "mruby/proc.h"
-#include "mruby/class.h"
+#include <mruby.h>
+#include <mruby/proc.h>
+#include <mruby/class.h>
 
 static mrb_value
 return_func_name(mrb_state *mrb, mrb_value self)

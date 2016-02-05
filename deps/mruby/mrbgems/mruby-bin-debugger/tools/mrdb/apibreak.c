@@ -4,14 +4,14 @@
 */
 
 #include <string.h>
-#include "mruby.h"
-#include "mruby/irep.h"
+#include <mruby.h>
+#include <mruby/irep.h>
 #include "mrdb.h"
-#include "mruby/debug.h"
-#include "mruby/opcode.h"
-#include "mruby/class.h"
-#include "mruby/proc.h"
-#include "mruby/variable.h"
+#include <mruby/debug.h>
+#include <mruby/opcode.h>
+#include <mruby/class.h>
+#include <mruby/proc.h>
+#include <mruby/variable.h>
 #include "mrdberror.h"
 #include "apibreak.h"
 
@@ -450,7 +450,7 @@ mrb_debug_check_breakpoint_line( mrb_state *mrb, mrb_debug_context *dbg, const c
 {
   mrb_debug_breakpoint *bp;
   mrb_debug_linepoint *line_p;
-  int i;
+  uint32_t i;
 
   if((mrb == NULL) || (dbg == NULL) || (file == NULL) || (line <= 0)) {
     return MRB_DEBUG_INVALID_ARGUMENT;
@@ -488,7 +488,7 @@ mrb_debug_check_breakpoint_method( mrb_state *mrb, mrb_debug_context *dbg, struc
 {
   mrb_debug_breakpoint *bp;
   int32_t bpno;
-  int i;
+  uint32_t i;
 
   if((mrb == NULL) || (dbg == NULL) || (class_obj == NULL)) {
     return MRB_DEBUG_INVALID_ARGUMENT;

@@ -4,12 +4,12 @@
 ** See Copyright Notice in mruby.h
 */
 
-#include "mruby.h"
-#include "mruby/string.h"
-#include "mruby/data.h"
-#include "mruby/class.h"
-#include "mruby/re.h"
-#include "mruby/irep.h"
+#include <mruby.h>
+#include <mruby/string.h>
+#include <mruby/data.h>
+#include <mruby/class.h>
+#include <mruby/re.h>
+#include <mruby/irep.h>
 
 MRB_API struct RData*
 mrb_data_object_alloc(mrb_state *mrb, struct RClass *klass, void *ptr, const mrb_data_type *type)

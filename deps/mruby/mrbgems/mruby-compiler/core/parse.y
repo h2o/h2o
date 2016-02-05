@@ -22,12 +22,12 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include "mruby.h"
-#include "mruby/compile.h"
-#include "mruby/proc.h"
-#include "mruby/error.h"
+#include <mruby.h>
+#include <mruby/compile.h>
+#include <mruby/proc.h>
+#include <mruby/error.h>
+#include <mruby/throw.h>
 #include "node.h"
-#include "mruby/throw.h"
 
 #define YYLEX_PARAM p
 
@@ -761,9 +761,9 @@ new_dsym(parser_state *p, node *a)
 
 /* (:str . (a . a)) */
 static node*
-new_regx(parser_state *p, const char *p1, const char* p2)
+new_regx(parser_state *p, const char *p1, const char* p2, const char* p3)
 {
-  return cons((node*)NODE_REGX, cons((node*)p1, (node*)p2));
+  return cons((node*)NODE_REGX, cons((node*)p1, cons((node*)p2, (node*)p3)));
 }
 
 /* (:dregx . a) */
@@ -852,19 +852,24 @@ call_with_block(parser_state *p, node *a, node *b)
 {
   node *n;
 
-  if (a->car == (node*)NODE_SUPER ||
-      a->car == (node*)NODE_ZSUPER) {
+  switch ((enum node_type)(intptr_t)a->car) {
+  case NODE_SUPER:
+  case NODE_ZSUPER:
     if (!a->cdr) a->cdr = cons(0, b);
     else {
       args_with_block(p, a->cdr, b);
     }
-  }
-  else {
+    break;
+  case NODE_CALL:
+  case NODE_FCALL:
     n = a->cdr->cdr->cdr;
     if (!n->car) n->car = cons(0, b);
     else {
       args_with_block(p, n->car, b);
     }
+    break;
+  default:
+    break;
   }
 }
 
@@ -3294,7 +3299,7 @@ yyerror(parser_state *p, const char *s)
   int n;
 
   if (! p->capture_errors) {
-#ifdef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
     if (p->filename) {
       fprintf(stderr, "%s:%d:%d: %s\n", p->filename, p->lineno, p->column, s);
     }
@@ -3330,7 +3335,7 @@ yywarn(parser_state *p, const char *s)
   int n;
 
   if (! p->capture_errors) {
-#ifdef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
     if (p->filename) {
       fprintf(stderr, "%s:%d:%d: %s\n", p->filename, p->lineno, p->column, s);
     }
@@ -3401,7 +3406,7 @@ nextc(parser_state *p)
     cons_free(tmp);
   }
   else {
-#ifdef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
     if (p->f) {
       if (feof(p->f)) goto eof;
       c = fgetc(p->f);
@@ -3468,6 +3473,7 @@ peekc_n(parser_state *p, int n)
   do {
     c0 = nextc(p);
     if (c0 == -1) return c0;    /* do not skip partial EOF */
+    if (c0 >= 0) --p->column;
     list = push(list, (node*)(intptr_t)c0);
   } while(n--);
   if (p->pb) {
@@ -3491,7 +3497,7 @@ peeks(parser_state *p, const char *s)
 {
   int len = strlen(s);
 
-#ifdef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
   if (p->f) {
     int n = 0;
     while (*s) {
@@ -3986,6 +3992,8 @@ parse_string(parser_state *p)
     char *s = strndup(tok(p), toklen(p));
     char flags[3];
     char *flag = flags;
+    char enc = '\0';
+    char *encp;
     char *dup;
 
     newtok(p);
@@ -3994,6 +4002,8 @@ parse_string(parser_state *p)
       case 'i': f |= 1; break;
       case 'x': f |= 2; break;
       case 'm': f |= 4; break;
+      case 'u': f |= 16; break;
+      case 'n': f |= 32; break;
       default: tokadd(p, re_opt); break;
       }
     }
@@ -4009,12 +4019,20 @@ parse_string(parser_state *p)
       if (f & 1) *flag++ = 'i';
       if (f & 2) *flag++ = 'x';
       if (f & 4) *flag++ = 'm';
-      dup = strndup(flags, (size_t)(flag - flags));
+      if (f & 16) enc = 'u';
+      if (f & 32) enc = 'n';
     }
-    else {
+    if (flag > flags) {
+      dup = strndup(flags, (size_t)(flag - flags));
+    } else {
       dup = NULL;
     }
-    yylval.nd = new_regx(p, s, dup);
+    if (enc) {
+      encp = strndup(&enc, 1);
+    } else {
+      encp = NULL;
+    }
+    yylval.nd = new_regx(p, s, dup, encp);
 
     return tREGEXP;
   }
@@ -5430,7 +5448,7 @@ mrb_parser_new(mrb_state *mrb)
   p->pool = pool;
 
   p->s = p->send = NULL;
-#ifdef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
   p->f = NULL;
 #endif
 
@@ -5529,7 +5547,7 @@ mrb_parser_get_filename(struct mrb_parser_state* p, uint16_t idx) {
   }
 }
 
-#ifdef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
 MRB_API parser_state*
 mrb_parse_file(mrb_state *mrb, FILE *f, mrbc_context *c)
 {
@@ -5621,7 +5639,7 @@ load_exec(mrb_state *mrb, parser_state *p, mrbc_context *c)
   return v;
 }
 
-#ifdef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
 MRB_API mrb_value
 mrb_load_file_cxt(mrb_state *mrb, FILE *f, mrbc_context *c)
 {
@@ -5659,7 +5677,7 @@ mrb_load_string(mrb_state *mrb, const char *s)
   return mrb_load_string_cxt(mrb, s, NULL);
 }
 
-#ifdef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
 
 static void
 dump_prefix(node *tree, int offset)
@@ -5685,7 +5703,7 @@ dump_recur(mrb_state *mrb, node *tree, int offset)
 void
 mrb_parser_dump(mrb_state *mrb, node *tree, int offset)
 {
-#ifdef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
   int nodetype;
 
   if (!tree) return;
@@ -5972,9 +5990,7 @@ mrb_parser_dump(mrb_state *mrb, node *tree, int offset)
     break;
 
   case NODE_COLON3:
-    printf("NODE_COLON3:\n");
-    dump_prefix(tree, offset+1);
-    printf("::%s\n", mrb_sym2name(mrb, sym(tree)));
+    printf("NODE_COLON3: ::%s\n", mrb_sym2name(mrb, sym(tree)));
     break;
 
   case NODE_ARRAY:

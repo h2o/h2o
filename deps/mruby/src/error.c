@@ -7,16 +7,16 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <stdlib.h>
-#include "mruby.h"
-#include "mruby/array.h"
-#include "mruby/irep.h"
-#include "mruby/proc.h"
-#include "mruby/string.h"
-#include "mruby/variable.h"
-#include "mruby/debug.h"
-#include "mruby/error.h"
-#include "mruby/class.h"
-#include "mruby/throw.h"
+#include <mruby.h>
+#include <mruby/array.h>
+#include <mruby/irep.h>
+#include <mruby/proc.h>
+#include <mruby/string.h>
+#include <mruby/variable.h>
+#include <mruby/debug.h>
+#include <mruby/error.h>
+#include <mruby/class.h>
+#include <mruby/throw.h>
 
 MRB_API mrb_value
 mrb_exc_new(mrb_state *mrb, struct RClass *c, const char *ptr, size_t len)
@@ -174,6 +174,42 @@ exc_inspect(mrb_state *mrb, mrb_value exc)
   return str;
 }
 
+void mrb_save_backtrace(mrb_state *mrb);
+mrb_value mrb_restore_backtrace(mrb_state *mrb);
+
+static mrb_value
+exc_get_backtrace(mrb_state *mrb, mrb_value exc)
+{
+  mrb_sym attr_name;
+  mrb_value backtrace;
+
+  attr_name = mrb_intern_lit(mrb, "backtrace");
+  backtrace = mrb_iv_get(mrb, exc, attr_name);
+  if (mrb_nil_p(backtrace)) {
+    if (mrb_obj_ptr(exc) == mrb->backtrace.exc && mrb->backtrace.n > 0) {
+      backtrace = mrb_restore_backtrace(mrb);
+      mrb->backtrace.n = 0;
+      mrb->backtrace.exc = 0;
+    }
+    else {
+      backtrace = mrb_exc_backtrace(mrb, exc);
+    }
+    mrb_iv_set(mrb, exc, attr_name, backtrace);
+  }
+
+  return backtrace;
+}
+
+static mrb_value
+exc_set_backtrace(mrb_state *mrb, mrb_value exc)
+{
+  mrb_value backtrace;
+
+  mrb_get_args(mrb, "o", &backtrace);
+  mrb_iv_set(mrb, exc, mrb_intern_lit(mrb, "backtrace"), backtrace);
+
+  return backtrace;
+}
 
 static void
 exc_debug_info(mrb_state *mrb, struct RObject *exc)
@@ -202,12 +238,52 @@ exc_debug_info(mrb_state *mrb, struct RObject *exc)
   }
 }
 
+static void
+set_backtrace(mrb_state *mrb, mrb_value info, mrb_value bt)
+{
+  mrb_funcall(mrb, info, "set_backtrace", 1, bt);
+}
+
+static mrb_bool
+have_backtrace(mrb_state *mrb, struct RObject *exc)
+{
+  return !mrb_nil_p(mrb_obj_iv_get(mrb, exc, mrb_intern_lit(mrb, "backtrace")));
+}
+
+void
+mrb_exc_set(mrb_state *mrb, mrb_value exc)
+{
+  if (!mrb->gc.out_of_memory && mrb->backtrace.n > 0) {
+    mrb_value target_exc = mrb_nil_value();
+    if ((mrb->exc && !have_backtrace(mrb, mrb->exc))) {
+      target_exc = mrb_obj_value(mrb->exc);
+    }
+    else if (!mrb_nil_p(exc) && mrb_obj_ptr(exc) == mrb->backtrace.exc) {
+      target_exc = exc;
+    }
+    if (!mrb_nil_p(target_exc)) {
+      mrb_value backtrace;
+      backtrace = mrb_restore_backtrace(mrb);
+      set_backtrace(mrb, target_exc, backtrace);
+    }
+  }
+
+  mrb->backtrace.n = 0;
+  if (mrb_nil_p(exc)) {
+    mrb->exc = 0;
+  }
+  else {
+    mrb->exc = mrb_obj_ptr(exc);
+  }
+}
+
 MRB_API mrb_noreturn void
 mrb_exc_raise(mrb_state *mrb, mrb_value exc)
 {
-  mrb->exc = mrb_obj_ptr(exc);
-  if (!mrb->out_of_memory) {
+  mrb_exc_set(mrb, exc);
+  if (!mrb->gc.out_of_memory) {
     exc_debug_info(mrb, mrb->exc);
+    mrb_save_backtrace(mrb);
   }
   if (!mrb->jmp) {
     mrb_p(mrb, exc);
@@ -309,7 +385,7 @@ mrb_name_error(mrb_state *mrb, mrb_sym id, const char *fmt, ...)
 MRB_API void
 mrb_warn(mrb_state *mrb, const char *fmt, ...)
 {
-#ifdef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
   va_list ap;
   mrb_value str;
 
@@ -324,7 +400,7 @@ mrb_warn(mrb_state *mrb, const char *fmt, ...)
 MRB_API mrb_noreturn void
 mrb_bug(mrb_state *mrb, const char *fmt, ...)
 {
-#ifdef ENABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
   va_list ap;
   mrb_value str;
 
@@ -335,12 +411,6 @@ mrb_bug(mrb_state *mrb, const char *fmt, ...)
   va_end(ap);
 #endif
   exit(EXIT_FAILURE);
-}
-
-static void
-set_backtrace(mrb_state *mrb, mrb_value info, mrb_value bt)
-{
-  mrb_funcall(mrb, info, "set_backtrace", 1, bt);
 }
 
 static mrb_value
@@ -390,7 +460,7 @@ exception_call:
     if (!mrb_obj_is_kind_of(mrb, mesg, mrb->eException_class))
       mrb_raise(mrb, E_TYPE_ERROR, "exception object expected");
     if (argc > 2)
-        set_backtrace(mrb, mesg, argv[2]);
+      set_backtrace(mrb, mesg, argv[2]);
   }
 
   return mesg;
@@ -449,7 +519,8 @@ mrb_init_exception(mrb_state *mrb)
   mrb_define_method(mrb, exception, "to_s",            exc_to_s,          MRB_ARGS_NONE());
   mrb_define_method(mrb, exception, "message",         exc_message,       MRB_ARGS_NONE());
   mrb_define_method(mrb, exception, "inspect",         exc_inspect,       MRB_ARGS_NONE());
-  mrb_define_method(mrb, exception, "backtrace",       mrb_exc_backtrace, MRB_ARGS_NONE());
+  mrb_define_method(mrb, exception, "backtrace",       exc_get_backtrace, MRB_ARGS_NONE());
+  mrb_define_method(mrb, exception, "set_backtrace",   exc_set_backtrace, MRB_ARGS_REQ(1));
 
   mrb->eStandardError_class = mrb_define_class(mrb, "StandardError", mrb->eException_class); /* 15.2.23 */
   runtime_error = mrb_define_class(mrb, "RuntimeError", mrb->eStandardError_class);          /* 15.2.28 */

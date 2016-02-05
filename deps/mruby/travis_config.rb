@@ -12,6 +12,17 @@ MRuby::Build.new('debug') do |conf|
   build_mrbc_exec
 end
 
+MRuby::Build.new('full-debug') do |conf|
+  toolchain :gcc
+  enable_debug
+
+  # include all core GEMs
+  conf.gembox 'full-core'
+  conf.cc.defines = %w(MRB_ENABLE_DEBUG_HOOK)
+
+  conf.enable_test
+end
+
 MRuby::Build.new do |conf|
   toolchain :gcc
 

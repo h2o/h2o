@@ -86,6 +86,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     /* build the URL */
     h2o_iovec_t path =
         h2o_iovec_init(req->path_normalized.base + req->pathconf->path.len, req->path_normalized.len - req->pathconf->path.len);
+    path = h2o_uri_escape(&req->pool, path.base, path.len, "/@");
     h2o_iovec_t query = req->query_at != SIZE_MAX ? h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at)
                                                   : h2o_iovec_init(H2O_STRLIT(""));
     h2o_iovec_t dest = h2o_concat(&req->pool, self->prefix, path, query);

@@ -1,9 +1,9 @@
 [![Build Status][build-status-img]][travis-ci]
 
-## What's mruby
+## What is mruby
 
 mruby is the lightweight implementation of the Ruby language complying to (part
-of) the [ISO standard][ISO-standard].  Its syntax is Ruby 1.9 compatible.
+of) the [ISO standard][ISO-standard]. Its syntax is Ruby 1.9 compatible.
 
 mruby can be linked and embedded within your application.  We provide the
 interpreter program "mruby" and the interactive mruby shell "mirb" as examples.
@@ -15,39 +15,28 @@ program under the "test" directory for an example.
 This achievement was sponsored by the Regional Innovation Creation R&D Programs
 of the Ministry of Economy, Trade and Industry of Japan.
 
-
 ## How to get mruby
 
-The stable version 1.1.0 of mruby can be downloaded via the following URL:
+The stable version 1.2.0 of mruby can be downloaded via the following URL: [https://github.com/mruby/mruby/archive/1.2.0.zip](https://github.com/mruby/mruby/archive/1.2.0.zip)
 
-  https://github.com/mruby/mruby/archive/1.1.0.zip
-
-The latest development version of mruby can be downloaded via the following URL:
-
-  https://github.com/mruby/mruby/zipball/master
+The latest development version of mruby can be downloaded via the following URL: [https://github.com/mruby/mruby/zipball/master](https://github.com/mruby/mruby/zipball/master)
 
 The trunk of the mruby source tree can be checked out with the
 following command:
 
     $ git clone https://github.com/mruby/mruby.git
 
-
 ## mruby home-page
 
-The URL of the mruby home-page is:
-
-  http://www.mruby.org/
-
+The URL of the mruby home-page is: [http://www.mruby.org](http://www.mruby.org).
 
 ## Mailing list
 
-We don't have mailing list, use GitHub forum <http://github.com/mruby/mruby>.
-
+We don't have mailing list, but you can use [GitHub issues](https://github.com/mruby/mruby).
 
 ## How to compile and install (mruby and gems)
 
-See the [doc/compile/README.md](doc/compile/README.md) file.
-
+See the [doc/guides/compile.md](doc/guides/compile.md) file.
 
 ## Running Tests
 
@@ -59,37 +48,16 @@ Or
 
     $ ruby ./minirake test
 
-
 ## How to customize mruby (mrbgems)
 
 mruby contains a package manager called *mrbgems*. To create extensions
 in C and/or Ruby you should create a *GEM*. For a documentation of how to
-use mrbgems consult the file [doc/mrbgems/README.md](doc/mrbgems/README.md). For example code of
+use mrbgems consult the file [doc/guides/mrbgems.md](doc/guides/mrbgems.md). For example code of
 how to use mrbgems look into the folder *examples/mrbgems/*.
-
 
 ## License
 
-Copyright (c) 2015 mruby developers
-
-Permission is hereby granted, free of charge, to any person obtaining a
-copy of this software and associated documentation files (the "Software"),
-to deal in the Software without restriction, including without limitation
-the rights to use, copy, modify, merge, publish, distribute, sublicense,
-and/or sell copies of the Software, and to permit persons to whom the
-Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-
+mruby is released under the [MIT License](MITL).
 
 ## Note for License
 
@@ -108,17 +76,15 @@ file.)
 
 Please ask us if you want to distribute your code under another license.
 
-
 ## How to Contribute
 
-See the [contribution guidelines][contribution-guidelines] then send a pull
+See the [contribution guidelines][contribution-guidelines], and then send a pull
 request to <http://github.com/mruby/mruby>.  We consider you have granted
 non-exclusive right to your contributed code under MIT license.  If you want to
 be named as one of mruby developers, please include an update to the AUTHORS
 file in your pull request.
 
 [ISO-standard]: http://www.iso.org/iso/iso_catalogue/catalogue_tc/catalogue_detail.htm?csnumber=59579
-[build-status-img]: https://travis-ci.org/mruby/mruby.png?branch=master
-[contribution-guidelines]: https://github.com/mruby/mruby/blob/master/CONTRIBUTING.md
+[build-status-img]: https://travis-ci.org/mruby/mruby.svg?branch=master
+[contribution-guidelines]: CONTRIBUTING.md
 [travis-ci]: https://travis-ci.org/mruby/mruby
-

@@ -452,9 +452,40 @@ static void test_hpack_dynamic_table(void)
     ok(memcmp(encoded, expected.base, expected.len) == 0);
 }
 
+void test_token_wo_hpack_id(void)
+{
+    h2o_mem_pool_t pool;
+    h2o_mem_init_pool(&pool);
+    h2o_hpack_header_table_t table = {};
+    table.hpack_capacity = 4096;
+    h2o_res_t res = {};
+    h2o_buffer_t *buf;
+    h2o_buffer_init(&buf, &h2o_socket_buffer_prototype);
+
+    res.status = 200;
+    res.reason = "OK";
+    h2o_add_header(&pool, &res.headers, H2O_TOKEN_TE, H2O_STRLIT("test"));
+
+    h2o_hpack_flatten_response(&buf, &table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, &res, NULL, NULL, SIZE_MAX);
+    ok(h2o_memis(buf->bytes + 9, buf->size - 9, H2O_STRLIT("\x88"     /* :status:200 */
+                                                           "\x40\x02" /* literal header w. incremental indexing, raw, TE */
+                                                           "te"
+                                                           "\x83" /* header value, huffman */
+                                                           "IP\x9f" /* test */)));
+    h2o_buffer_consume(&buf, buf->size);
+    h2o_hpack_flatten_response(&buf, &table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, &res, NULL, NULL, SIZE_MAX);
+    ok(h2o_memis(buf->bytes + 9, buf->size - 9, H2O_STRLIT("\x88" /* :status:200 */
+                                                           "\xbe" /* te: test, indexed */)));
+
+    h2o_buffer_dispose(&buf);
+    h2o_hpack_dispose_header_table(&table);
+    h2o_mem_clear_pool(&pool);
+}
+
 void test_lib__http2__hpack(void)
 {
     subtest("hpack", test_hpack);
     subtest("hpack-push", test_hpack_push);
     subtest("hpack-dynamic-table", test_hpack_dynamic_table);
+    subtest("token-wo-hpack-id", test_token_wo_hpack_id);
 }

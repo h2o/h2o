@@ -342,3 +342,12 @@ assert('Hash#inspect') do
   assert_include ret, '"a"=>100'
   assert_include ret, '"d"=>400'
 end
+
+assert('Hash#rehash') do
+  h = {[:a] => "b"}
+  # hash key modified
+  h.keys[0][0] = :b
+  # h[[:b]] => nil
+  h.rehash
+  assert_equal("b", h[[:b]])
+end

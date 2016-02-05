@@ -609,7 +609,7 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
             header_table_add(header_table, name->len + value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET, 32);
         if (entry != NULL) {
             if (name_is_token) {
-                entry->name = (h2o_iovec_t *)h2o_hpack_static_table[name_index - 1].name;
+                entry->name = (h2o_iovec_t *)name;
             } else {
                 entry->name = alloc_buf(NULL, name->len);
                 entry->name->base[name->len] = '\0';
@@ -732,10 +732,7 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
     uint8_t *dst = (void *)h2o_buffer_reserve(buf, capacity).base + H2O_HTTP2_FRAME_HEADER_SIZE;
 
     /* encode */
-    *dst++ = (uint8_t)(stream_id << 24);
-    *dst++ = (uint8_t)(stream_id << 16);
-    *dst++ = (uint8_t)(stream_id << 8);
-    *dst++ = (uint8_t)stream_id;
+    dst = h2o_http2_encode32u(dst, stream_id);
     dst = encode_method(header_table, dst, req->input.method);
     dst = encode_scheme(header_table, dst, req->input.scheme);
     dst = encode_header(header_table, dst, &H2O_TOKEN_AUTHORITY->buf, &req->input.authority);

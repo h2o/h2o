@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 DeNA Co., Ltd.
+ * Copyright (c) 2014-2016 DeNA Co., Ltd., Kazuho Oku
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -92,7 +92,9 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
 void link_to_pending(struct st_h2o_evloop_socket_t *sock)
 {
     if (sock->_next_pending == sock) {
-        struct st_h2o_evloop_socket_t **slot = (sock->_flags & H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION) != 0 ? &sock->loop->_pending_as_server : &sock->loop->_pending_as_client;
+        struct st_h2o_evloop_socket_t **slot = (sock->_flags & H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION) != 0
+                                                   ? &sock->loop->_pending_as_server
+                                                   : &sock->loop->_pending_as_client;
         sock->_next_pending = *slot;
         *slot = sock;
     }
@@ -468,6 +470,7 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
         int status;
         if ((sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0) {
             socklen_t l = sizeof(status);
+            status = 0;
             getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &status, &l);
             sock->_flags &= ~H2O_SOCKET_FLAG_IS_CONNECTING;
         } else {

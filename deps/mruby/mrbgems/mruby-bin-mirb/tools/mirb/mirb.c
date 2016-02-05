@@ -11,6 +11,9 @@
 #include <stdio.h>
 #include <ctype.h>
 
+#include <signal.h>
+#include <setjmp.h>
+
 #ifdef ENABLE_READLINE
 #include <readline/readline.h>
 #include <readline/history.h>
@@ -29,11 +32,21 @@
 #define MIRB_USING_HISTORY()
 #endif
 
-#include "mruby.h"
-#include "mruby/array.h"
-#include "mruby/proc.h"
-#include "mruby/compile.h"
-#include "mruby/string.h"
+#ifndef _WIN32
+#define MIRB_SIGSETJMP(env) sigsetjmp(env, 1)
+#define MIRB_SIGLONGJMP(env, val) siglongjmp(env, val)
+#define SIGJMP_BUF sigjmp_buf
+#else
+#define MIRB_SIGSETJMP(env) setjmp(env)
+#define MIRB_SIGLONGJMP(env, val) longjmp(env, val)
+#define SIGJMP_BUF jmp_buf
+#endif
+
+#include <mruby.h>
+#include <mruby/array.h>
+#include <mruby/proc.h>
+#include <mruby/compile.h>
+#include <mruby/string.h>
 
 #ifdef ENABLE_READLINE
 
@@ -194,6 +207,7 @@ is_code_block_open(struct mrb_parser_state *parser)
 }
 
 struct _args {
+  FILE *rfp;
   mrb_bool verbose      : 1;
   int argc;
   char** argv;
@@ -251,12 +265,30 @@ parse_args(mrb_state *mrb, int argc, char **argv, struct _args *args)
       return EXIT_FAILURE;
     }
   }
+
+  if (args->rfp == NULL) {
+    if (*argv != NULL) {
+      args->rfp = fopen(argv[0], "r");
+      if (args->rfp == NULL) {
+        printf("Cannot open program file. (%s)\n", *argv);
+        return EXIT_FAILURE;
+      }
+      argc--; argv++;
+    }
+  }
+  args->argv = (char **)mrb_realloc(mrb, args->argv, sizeof(char*) * (argc + 1));
+  memcpy(args->argv, argv, (argc+1) * sizeof(char*));
+  args->argc = argc;
+
   return EXIT_SUCCESS;
 }
 
 static void
 cleanup(mrb_state *mrb, struct _args *args)
 {
+  if (args->rfp)
+    fclose(args->rfp);
+  mrb_free(mrb, args->argv);
   mrb_close(mrb);
 }
 
@@ -307,23 +339,43 @@ check_keyword(const char *buf, const char *word)
   return 1;
 }
 
+
+#ifndef ENABLE_READLINE
+volatile sig_atomic_t input_canceled = 0;
+void
+ctrl_c_handler(int signo)
+{
+  input_canceled = 1;
+}
+#else
+SIGJMP_BUF ctrl_c_buf;
+void
+ctrl_c_handler(int signo)
+{
+  MIRB_SIGLONGJMP(ctrl_c_buf, 1);
+}
+#endif
+
 int
 main(int argc, char **argv)
 {
-  char ruby_code[1024] = { 0 };
+  char ruby_code[4096] = { 0 };
   char last_code_line[1024] = { 0 };
 #ifndef ENABLE_READLINE
   int last_char;
-  int char_index;
+  size_t char_index;
 #else
   char *history_path;
+  char* line;
 #endif
   mrbc_context *cxt;
   struct mrb_parser_state *parser;
   mrb_state *mrb;
   mrb_value result;
   struct _args args;
+  mrb_value ARGV;
   int n;
+  int i;
   mrb_bool code_block_open = FALSE;
   int ai;
   unsigned int stack_keep = 0;
@@ -334,7 +386,6 @@ main(int argc, char **argv)
     fputs("Invalid mrb interpreter, exiting mirb\n", stderr);
     return EXIT_FAILURE;
   }
-  mrb_define_global_const(mrb, "ARGV", mrb_ary_new_capa(mrb, 0));
 
   n = parse_args(mrb, argc, argv, &args);
   if (n == EXIT_FAILURE) {
@@ -342,6 +393,16 @@ main(int argc, char **argv)
     usage(argv[0]);
     return n;
   }
+
+  ARGV = mrb_ary_new_capa(mrb, args.argc);
+  for (i = 0; i < args.argc; i++) {
+    char* utf8 = mrb_utf8_from_locale(args.argv[i], -1);
+    if (utf8) {
+      mrb_ary_push(mrb, ARGV, mrb_str_new_cstr(mrb, utf8));
+      mrb_utf8_free(utf8);
+    }
+  }
+  mrb_define_global_const(mrb, "ARGV", ARGV);
 
 #ifdef ENABLE_READLINE
   history_path = get_history_path(mrb);
@@ -366,9 +427,18 @@ main(int argc, char **argv)
   ai = mrb_gc_arena_save(mrb);
 
   while (TRUE) {
+    char *utf8;
+
+    if (args.rfp) {
+      if (fgets(last_code_line, sizeof(last_code_line)-1, args.rfp) != NULL)
+        goto done;
+      break;
+    }
+
 #ifndef ENABLE_READLINE
     print_cmdline(code_block_open);
 
+    signal(SIGINT, ctrl_c_handler);
     char_index = 0;
     while ((last_char = getchar()) != '\n') {
       if (last_char == EOF) break;
@@ -378,6 +448,15 @@ main(int argc, char **argv)
       }
       last_code_line[char_index++] = last_char;
     }
+    signal(SIGINT, SIG_DFL);
+    if (input_canceled) {
+      ruby_code[0] = '\0';
+      last_code_line[0] = '\0';
+      code_block_open = FALSE;
+      puts("^C");
+      input_canceled = 0;
+      continue;
+    }
     if (last_char == EOF) {
       fputs("\n", stdout);
       break;
@@ -386,7 +465,19 @@ main(int argc, char **argv)
     last_code_line[char_index++] = '\n';
     last_code_line[char_index] = '\0';
 #else
-    char* line = MIRB_READLINE(code_block_open ? "* " : "> ");
+    if (MIRB_SIGSETJMP(ctrl_c_buf) == 0) {
+      ;
+    }
+    else {
+      ruby_code[0] = '\0';
+      last_code_line[0] = '\0';
+      code_block_open = FALSE;
+      puts("^C");
+    }
+    signal(SIGINT, ctrl_c_handler);
+    line = MIRB_READLINE(code_block_open ? "* " : "> ");
+    signal(SIGINT, SIG_DFL);
+
     if (line == NULL) {
       printf("\n");
       break;
@@ -400,6 +491,8 @@ main(int argc, char **argv)
     MIRB_ADD_HISTORY(line);
     free(line);
 #endif
+
+done:
 
     if (code_block_open) {
       if (strlen(ruby_code)+strlen(last_code_line) > sizeof(ruby_code)-1) {
@@ -415,17 +508,21 @@ main(int argc, char **argv)
       strcpy(ruby_code, last_code_line);
     }
 
+    utf8 = mrb_utf8_from_locale(ruby_code, -1);
+    if (!utf8) abort();
+
     /* parse code */
     parser = mrb_parser_new(mrb);
     if (parser == NULL) {
       fputs("create parser state error\n", stderr);
       break;
     }
-    parser->s = ruby_code;
-    parser->send = ruby_code + strlen(ruby_code);
+    parser->s = utf8;
+    parser->send = utf8 + strlen(utf8);
     parser->lineno = cxt->lineno;
     mrb_parser_parse(parser, cxt);
     code_block_open = is_code_block_open(parser);
+    mrb_utf8_free(utf8);
 
     if (code_block_open) {
       /* no evaluation of code */

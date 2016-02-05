@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 DeNA Co., Ltd.
+ * Copyright (c) 2014-2016 DeNA Co., Ltd., Kazuho Oku
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -20,6 +20,7 @@
  * IN THE SOFTWARE.
  */
 #include <assert.h>
+#include <errno.h>
 #include <netdb.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -46,11 +47,16 @@ struct st_h2o_socketpool_connect_request_t {
     h2o_socket_t *sock;
 };
 
+static void destroy_detached(struct pool_entry_t *entry)
+{
+    h2o_socket_dispose_export(&entry->sockinfo);
+    free(entry);
+}
+
 static void destroy_attached(struct pool_entry_t *entry)
 {
     h2o_linklist_unlink(&entry->link);
-    h2o_socket_dispose_export(&entry->sockinfo);
-    free(entry);
+    destroy_detached(entry);
 }
 
 static void destroy_expired(h2o_socketpool_t *pool)
@@ -224,24 +230,43 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     if (_req != NULL)
         *_req = NULL;
 
-    /* fetch an entry */
+    /* fetch an entry and return it */
     pthread_mutex_lock(&pool->_shared.mutex);
     destroy_expired(pool);
-    if (!h2o_linklist_is_empty(&pool->_shared.sockets)) {
+    while (1) {
+        if (h2o_linklist_is_empty(&pool->_shared.sockets))
+            break;
         entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_shared.sockets.next);
         h2o_linklist_unlink(&entry->link);
+        pthread_mutex_unlock(&pool->_shared.mutex);
+
+        /* test if the connection is still alive */
+        char buf[1];
+        ssize_t rret = recv(entry->sockinfo.fd, buf, 1, MSG_PEEK);
+        if (rret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            /* yes! return it */
+            h2o_socket_t *sock = h2o_socket_import(loop, &entry->sockinfo);
+            free(entry);
+            sock->on_close.cb = on_close;
+            sock->on_close.data = pool;
+            cb(sock, NULL, data);
+            return;
+        }
+
+        /* connection is dead, report, close, and retry */
+        if (rret <= 0) {
+            static long counter = 0;
+            if (__sync_fetch_and_add(&counter, 1) == 0)
+                fprintf(stderr, "[WARN] detected close by upstream before the expected timeout (see issue #679)\n");
+        } else {
+            static long counter = 0;
+            if (__sync_fetch_and_add(&counter, 1) == 0)
+                fprintf(stderr, "[WARN] unexpectedly received data to a pooled socket (see issue #679)\n");
+        }
+        destroy_detached(entry);
+        pthread_mutex_lock(&pool->_shared.mutex);
     }
     pthread_mutex_unlock(&pool->_shared.mutex);
-
-    /* return the socket, if any */
-    if (entry != NULL) {
-        h2o_socket_t *sock = h2o_socket_import(loop, &entry->sockinfo);
-        free(entry);
-        sock->on_close.cb = on_close;
-        sock->on_close.data = pool;
-        cb(sock, NULL, data);
-        return;
-    }
 
     /* FIXME repsect `capacity` */
     __sync_add_and_fetch(&pool->_shared.count, 1);

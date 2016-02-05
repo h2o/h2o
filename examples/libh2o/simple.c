@@ -67,7 +67,7 @@ static int reproxy_test(h2o_handler_t *self, h2o_req_t *req)
 
     req->res.status = 200;
     req->res.reason = "OK";
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT("http://www.google.com/"));
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT("http://www.ietf.org/"));
     h2o_send_inline(req, H2O_STRLIT("you should never see this!\n"));
 
     return 0;

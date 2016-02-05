@@ -26,11 +26,11 @@ PROJECT(h2o C)
 SET(VERSION_MAJOR "1")
 SET(VERSION_MINOR "7")
 SET(VERSION_PATCH "0")
-SET(VERSION_PRERELEASE "-alpha1")
+SET(VERSION_PRERELEASE "")
 SET(VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}${VERSION_PRERELEASE}")
 SET(LIBRARY_VERSION_MAJOR "0")
 SET(LIBRARY_VERSION_MINOR "9")
-SET(LIBRARY_VERSION_PATCH "20")
+SET(LIBRARY_VERSION_PATCH "21")
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h)
 
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -55,7 +55,14 @@ OPTION(BUILD_SHARED_LIBS "whether to build a shared library" OFF)
 
 FIND_PROGRAM(RUBY ruby)
 FIND_PROGRAM(BISON bison)
-IF ((NOT (${RUBY} STREQUAL "RUBY-NOTFOUND")) AND (NOT (${BISON} STREQUAL "BISON-NOTFOUND")))
+SET(MKMF_FOUND "NO")
+IF (RUBY)
+    EXECUTE_PROCESS(COMMAND ruby -e "require 'mkmf'" RESULT_VARIABLE REQUIRE_MKMF_RESULT ERROR_QUIET)
+    IF (${REQUIRE_MKMF_RESULT} EQUAL 0)
+        SET(MKMF_FOUND "YES")
+    ENDIF ()
+ENDIF ()
+IF (RUBY AND BISON AND MKMF_FOUND)
     SET(WITH_MRUBY_DEFAULT "ON")
 ELSE ()
     SET(WITH_MRUBY_DEFAULT "OFF")
@@ -78,6 +85,18 @@ ELSE (WITH_BUNDLED_SSL)
         MESSAGE(WARNING "*********************************************************************** OpenSSL 1.0.2 is required for HTTP/2 interoperability with web browsers ***********************************************************************")
     ENDIF (OPENSSL_VERSION VERSION_LESS "1.0.2")
 ENDIF (WITH_BUNDLED_SSL)
+
+INCLUDE_DIRECTORIES(
+    include
+    deps/cloexec
+    deps/golombset
+    deps/libyrmcds
+    deps/klib
+    deps/neverbleed
+    deps/picohttpparser
+    deps/picotest
+    deps/yaml/include
+    deps/yoml)
 
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBUV libuv>=1.0.0)
@@ -131,18 +150,6 @@ IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
 ENDIF ()
 
 SET(CMAKE_C_FLAGS "-O2 -g ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS} -DH2O_ROOT=\"${CMAKE_INSTALL_PREFIX}\"")
-
-INCLUDE_DIRECTORIES(
-    include
-    deps/cloexec
-    deps/golombset
-    deps/libyrmcds
-    deps/klib
-    deps/neverbleed
-    deps/picohttpparser
-    deps/picotest
-    deps/yaml/include
-    deps/yoml)
 
 SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/api.c
@@ -282,8 +289,8 @@ SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES
     OUTPUT_NAME h2o-evloop
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
 IF (OPENSSL_FOUND)
-    TARGET_INCLUDE_DIRECTORIES(libh2o BEFORE PUBLIC ${OPENSSL_INCLUDE_DIR})
-    TARGET_INCLUDE_DIRECTORIES(libh2o-evloop BEFORE PUBLIC ${OPENSSL_INCLUDE_DIR})
+    TARGET_INCLUDE_DIRECTORIES(libh2o PUBLIC ${OPENSSL_INCLUDE_DIR})
+    TARGET_INCLUDE_DIRECTORIES(libh2o-evloop PUBLIC ${OPENSSL_INCLUDE_DIR})
     TARGET_LINK_LIBRARIES(libh2o ${OPENSSL_LIBRARIES})
     TARGET_LINK_LIBRARIES(libh2o-evloop ${OPENSSL_LIBRARIES})
     IF (LIBUV_FOUND AND NOT WITHOUT_LIBS)
@@ -339,6 +346,8 @@ IF (WITH_MRUBY)
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby)
     LIST(APPEND STANDALONE_SOURCE_FILES
         lib/handler/mruby.c
+        lib/handler/mruby/chunked.c
+        lib/handler/mruby/http_request.c
         lib/handler/configurator/mruby.c)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_MRUBY=1")
 ENDIF (WITH_MRUBY)
@@ -350,12 +359,12 @@ IF (WITH_BUNDLED_SSL)
     ADD_DEPENDENCIES(h2o bundled-ssl)
 ELSE (WITH_BUNDLED_SSL)
     IF (OPENSSL_FOUND)
-        TARGET_INCLUDE_DIRECTORIES(h2o BEFORE PUBLIC ${OPENSSL_INCLUDE_DIR})
+        TARGET_INCLUDE_DIRECTORIES(h2o PUBLIC ${OPENSSL_INCLUDE_DIR})
         TARGET_LINK_LIBRARIES(h2o ${OPENSSL_LIBRARIES})
     ENDIF (OPENSSL_FOUND)
 ENDIF (WITH_BUNDLED_SSL)
 IF (WITH_MRUBY)
-    TARGET_INCLUDE_DIRECTORIES(h2o BEFORE PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby/include)
+    TARGET_INCLUDE_DIRECTORIES(h2o BEFORE PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby/include ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby-input-stream/src)
     # note: the paths need to be determined before libmruby.flags.mak is generated
     TARGET_LINK_LIBRARIES(h2o
         "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/lib/libmruby.a"
@@ -396,9 +405,9 @@ IF (WITH_BUNDLED_SSL)
     ADD_DEPENDENCIES(t-00unit-libuv.t bundled-ssl)
 ELSE (WITH_BUNDLED_SSL)
     IF (OPENSSL_FOUND)
-        TARGET_INCLUDE_DIRECTORIES(t-00unit-evloop.t BEFORE PUBLIC ${OPENSSL_INCLUDE_DIR})
+        TARGET_INCLUDE_DIRECTORIES(t-00unit-evloop.t PUBLIC ${OPENSSL_INCLUDE_DIR})
         TARGET_LINK_LIBRARIES(t-00unit-evloop.t ${OPENSSL_LIBRARIES})
-        TARGET_INCLUDE_DIRECTORIES(t-00unit-libuv.t BEFORE PUBLIC ${OPENSSL_INCLUDE_DIR})
+        TARGET_INCLUDE_DIRECTORIES(t-00unit-libuv.t PUBLIC ${OPENSSL_INCLUDE_DIR})
         TARGET_LINK_LIBRARIES(t-00unit-libuv.t ${OPENSSL_LIBRARIES})
     ENDIF (OPENSSL_FOUND)
 ENDIF (WITH_BUNDLED_SSL)
