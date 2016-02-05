@@ -63,12 +63,12 @@ Certain configuration directives can be used in more than one levels.  For examp
 On the other hand <a href="configure/file_directives.html#file.dir"><code>file.dir</code></a> can only be used at the path level.
 </p>
 
-<h3 id="config_levels">Using YAML Alias</h3>
+<h3 id="yaml_alias">Using YAML Alias</h3>
 
 <p>
 H2O resolves <a href="http://yaml.org/YAML_for_ruby.html#aliases_and_anchors">YAML aliases</a> before processing the configuration file.
 Therefore, it is possible to use an alias to reduce the redundancy of the configuration file.
-For example, the following configuration file reuses the first <code>paths</code> element (that is given an anchor named <code>default_paths</code>) in the following definitions.
+For example, the following configuration reuses the first <code>paths</code> element (that is given an anchor named <code>default_paths</code>) in the following definitions.
 
 <?= $ctx->{code}->(<< 'EOT')
 hosts:
