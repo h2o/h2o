@@ -1,51 +1,42 @@
 Revision history for H2O.
 
-1.7.0-beta5 2016-02-02 02:04:00+0000
-	- [core] forbid duplicates in `hosts` section #709 (Kazuho Oku)
-	- [fastcgi][proxy] fix double-free issue during configuration phase #723 (Kazuho Oku)
-	- [file] fix a bug that caused `file.mime.addtypes` to fail setting the attributes of a content-type #731 (Kazuho Oku)
-	- [http2] fix broken `PUSH_PROMISE` frames being sent under high pressure #734 #736 (Kazuho Oku)
-	- [mruby] refrain from building mruby handler by default if mkmf (part of ruby dev files) is not found #710 (Kazuho Oku)
-	- [mruby] support 399 response from mruby handler running asynchronously #707 (Kazuho Oku)
-	- [proxy] fix response getting truncated when neither content-length nor transfer-encoding is used #725 (Kazuho Oku)
-	- [reproxy] add support for relative URI #712 (Kazuho Oku)
-	- [libh2o] fix memory leaks during destruction #724 (greatwar)
-	- [libh2o] simplify vector operations #715 #735 (Domingo Alvarez Duarte)
-	- [misc] fix build error when an older version of H2O is installed aside an external dependency #718 #722 #736 (Kazuho Oku)
-
-1.7.0-beta4 2016-01-18 23:52:00+0000
-	- [mruby] fix memory leak #699 #701 (Kazuho Oku)
-	- [mruby] fix out-of-bounds access leading to crash #705 #706 (Kazuho Oku)
-
-1.7.0-beta3 2016-01-14 05:22:00+0000
-	- [security fix][redirect] uri-escape the user-supplied portion of the redirect path (CVE-2016-1133) #682 #684 (Kazuho Oku)
+1.7.0 2016-02-05 02:03:00+0000
+	- [core] support for wildcard hostnames #634 (Kazuho Oku)
 	- [core][file] preserve query paramaters upon redirection to a directory #690 (Tatsuhiro Tsujikawa)
 	- [core] use uppercase letters in URI-escape sequence #695 (Kazuho Oku)
-	- [file] fix a bug that incorrectly returns 403 when a file is requested with a trailing slash #686 (Yamagishi Kazutoshi)
-	- [websocket] fix crash when access logging is enabled #698 (Shota Fukumori)
-	- [libh2o] fix memory leak on dispose #683 (Kazuho Oku)
-
-1.7.0-beta2 2016-01-07 01:48:00+0000
-	- [core] fix error when trying to set multiple error documents using one `error-doc` directive #676 (Yamagishi Kazutoshi)
-	- [mruby] bundle mruby-errno, mruby-file-stat #675 (Kazuho Oku)
-	- [mruby] call `body#close` (regression in 1.7.0-beta1) #680 (Kazuho Oku)
-	- [proxy] decet upstream close of pooled socket before reuse #679 (Kazuho Oku)
-	- [misc] provide `REMOTE_USER` from basic authenticator #624 #673 (Kazuho Oku)
-
-1.7.0-beta1 2016-01-05 04:23:00+0000
-	- [core] support for wildcard hostnames #634 (Kazuho Oku)
+	- [core] forbid duplicates in `hosts` section #709 (Kazuho Oku)
 	- [fastcgi] add support for CGI #618 (Kazuho Oku)
 	- [fastcgi] drop transfer-encoding header #641 (Kazuho Oku)
-	- [http2] fix HPACK encoder error (and crash) when trying to encode a token wo. hpack index #640 (Kazuho Oku)
+	- [file] fix a bug that caused `file.mime.addtypes` to fail setting the attributes of a content-type #731 (Kazuho Oku)
+	- [http2] fix broken `PUSH_PROMISE` frames being sent under high pressure #734 #736 (Kazuho Oku)
 	- [mruby] provide `env["rack.input"]` #515 #638 #644 (Masayoshi Takahashi, Kazuho Oku)
 	- [mruby] HTTP client API #637 #643 (Kazuho Oku)
 	- [mruby] dump the ruby source on error #631 (Kazuho Oku)
 	- [mruby] provide access to `$H2O_ROOT` #629 (Kazuho Oku)
 	- [mruby] change mrb_int to 64-bit on 64-bit systems #639 (Kazuho Oku)
 	- [mruby] concatenate request headers having same name #666 (Kazuho Oku)
+	- [mruby] bundle mruby-errno, mruby-file-stat #675 (Kazuho Oku)
+	- [mruby] refrain from building mruby handler by default if mkmf (part of ruby dev files) is not found #710 (Kazuho Oku)
+	- [proxy] detect upstream close of pooled socket before reuse #679 (Kazuho Oku)
+	- [reproxy] add support for relative URI #712 (Kazuho Oku)
 	- [ssl] turn on neverbleed by default #633 (Kazuho Oku)
-	- [libh2o] fix race condition during multithread receiver (un)registration #659 (Chul-Woong Yang)
+	- [libh2o] fix memory leaks during destruction #724 (greatwar)
+	- [libh2o] simplify vector operations #715 #735 (Domingo Alvarez Duarte)
 	- [misc] support basic authentication using .htpasswd #624 (Kazuho Oku)
+	- [misc] fix build error when an older version of H2O is installed aside an external dependency #718 #722 #736 (Kazuho Oku)
+
+1.6.3 2016-01-26 07:46:00+0000
+	- [fastcgi][proxy] fix double-free issue during configuration phase #723 (Kazuho Oku)
+	- [proxy] fix response getting truncated when neither content-length nor transfer-encoding is used #725 (Kazuho Oku)
+	- [websocket] fix crash when access-log is enabled #698 (Shota Fukumori)
+
+1.6.2 2016-01-13 06:24:00+0000
+	- [security fix][redirect] uri-escape the user-supplied portion of the redirect path (CVE-2016-1133) #682 #684 (Kazuho Oku)
+	- [core] fix error when trying to set multiple error documents using one `error-doc` directive #676 (Yamagishi Kazutoshi)
+	- [file] fix a bug that incorrectly returns 403 when a file is requested with a trailing slash #686 (Yamagishi Kazutoshi)
+	- [http2] fix HPACK encoder error (and crash) when trying to encode a token wo. hpack index #640 (Kazuho Oku)
+	- [libh2o] fix race condition during multithread receiver (un)registration #659 (Chul-Woong Yang)
+	- [libh2o] fix memory leak on dispose #683 (Kazuho Oku)
 
 1.6.1 2015-12-18 05:05:00+0000
 	- [misc] fix build error on armv8a #628 (Kazuho Oku)
