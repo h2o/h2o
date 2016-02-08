@@ -12,15 +12,14 @@ RUN apk update \
                curl \
                linux-headers \
                zlib-dev \
-               ca-certificates curl wget
-
-RUN            wget -O - $(curl -s https://api.github.com/repos/h2o/h2o/releases/latest | grep tarball | cut -d\" -f4) | tar xz \
+               ca-certificates curl wget \
+    && wget -O - $(curl -s https://api.github.com/repos/h2o/h2o/releases/latest | grep tarball | cut -d\" -f4) | tar xz \
         && cd h2o-* \
         && cmake -DWITH_BUNDLED_SSL=on . \
         && make install \
         && cd .. \
         && rm -rf h2o-* \
-RUN apk del build-base \
+    && apk del build-base \
                cmake \
                curl \
                linux-headers \
