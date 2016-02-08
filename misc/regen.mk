@@ -10,8 +10,9 @@ all: tokens lib/handler/file/templates.c.h clang-format-all share/h2o/start_serv
 tokens:
 	misc/tokens.pl
 
-lib/handler/file/templates.c.h:
+lib/handler/file/templates.c.h: misc/picotemplate-conf.pl lib/handler/file/_templates.c.h
 	misc/picotemplate/picotemplate.pl --conf misc/picotemplate-conf.pl lib/handler/file/_templates.c.h || exit 1
+	clang-format -i $@
 
 clang-format-all:
 	misc/clang-format-all.sh
