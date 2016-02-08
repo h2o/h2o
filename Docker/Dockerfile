@@ -7,6 +7,8 @@ MAINTAINER Lars K.W. Gohlke <lkwg82@gmx.de>
 
 RUN apk update \
     && apk upgrade \
+    # need for ocsp stapling \
+    && apk add -U perl openssl \
     && apk add -U build-base \
                cmake \
                curl \
