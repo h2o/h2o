@@ -32,6 +32,8 @@ SET(LIBRARY_VERSION_MAJOR "0")
 SET(LIBRARY_VERSION_MINOR "9")
 SET(LIBRARY_VERSION_PATCH "21")
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h)
+CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libh2o.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libh2o.pc @ONLY)
+CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libh2o-evloop.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libh2o-evloop.pc @ONLY)
 
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
@@ -382,6 +384,10 @@ INSTALL(TARGETS h2o
 
 IF (NOT WITHOUT_LIBS)
     INSTALL(DIRECTORY include/ DESTINATION include FILES_MATCHING PATTERN "*.h")
+    IF (LIBUV_FOUND)
+        INSTALL(FILES "${CMAKE_BINARY_DIR}/libh2o.pc" DESTINATION lib/pkgconfig)
+    ENDIF ()
+    INSTALL(FILES "${CMAKE_BINARY_DIR}/libh2o-evloop.pc" DESTINATION lib/pkgconfig)
 ENDIF ()
 
 INSTALL(PROGRAMS share/h2o/annotate-backtrace-symbols share/h2o/fetch-ocsp-response share/h2o/kill-on-close share/h2o/setuidgid share/h2o/start_server DESTINATION share/h2o)
