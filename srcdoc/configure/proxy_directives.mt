@@ -2,7 +2,21 @@
 ? $_mt->wrapper_file("wrapper.mt", "Configure", "Proxy Directives")->(sub {
 
 <p>
-This document describes the configuration directives of the proxy handler.
+Proxy module is the reverse proxy implementation for H2O - it implements a HTTP client that forwards a HTTP request to an upstream server.
+</p>
+<p>
+When forwarding the requests, the module sets following request headers:
+<ul>
+<li><a href="https://tools.ietf.org/html/rfc7230#section-5.7.1">via</a></li>
+<li><a href="http://docs.aws.amazon.com/ElasticLoadBalancing/latest/DeveloperGuide/x-forwarded-headers.html#x-forwarded-for">x-forwarded-for</a></li>
+<li><a href="http://docs.aws.amazon.com/ElasticLoadBalancing/latest/DeveloperGuide/x-forwarded-headers.html#x-forwarded-proto">x-forwarded-proto</a></li>
+</ul>
+</p>
+<p>
+The HTTP client only supports HTTP/1 over TLS; neither HTTP/2 nor HTTPS are supported for the time being.
+</p>
+<p>
+Following sections describe the configuration directives defined for the module.
 </p>
 
 <?
