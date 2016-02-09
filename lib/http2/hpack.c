@@ -477,9 +477,14 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
     return 0;
 }
 
+static inline int encode_int_is_onebyte(uint32_t value, size_t prefix_bits)
+{
+    return value < (1 << prefix_bits) - 1;
+}
+
 static uint8_t *encode_int(uint8_t *dst, uint32_t value, size_t prefix_bits)
 {
-    if (value < (1 << prefix_bits) - 1) {
+    if (encode_int_is_onebyte(value, prefix_bits)) {
         *dst++ |= value;
     } else {
         /* see also: MAX_ENCODE_INT_LENGTH */
@@ -527,31 +532,37 @@ static size_t encode_huffman(uint8_t *_dst, const uint8_t *src, size_t len)
     return dst - _dst;
 }
 
-size_t h2o_hpack_encode_string(uint8_t *_dst, const char *s, size_t len)
+static size_t encode_as_is(uint8_t *dst, const char *s, size_t len)
 {
-    uint8_t *dst = _dst;
-    uint8_t huffbuf[4096];
-
-    /* try to encode in huffman */
-    if (0 < len && len < sizeof(huffbuf)) {
-        size_t hufflen = encode_huffman(huffbuf, (const uint8_t *)s, len);
-        if (hufflen != 0) {
-            *dst = '\x80';
-            dst = encode_int(dst, (uint32_t)hufflen, 7);
-            memcpy(dst, huffbuf, hufflen);
-            dst += hufflen;
-            goto Exit;
-        }
-    }
-
-    /* encode as-is */
+    uint8_t *start = dst;
     *dst = '\0';
     dst = encode_int(dst, (uint32_t)len, 7);
     memcpy(dst, s, len);
     dst += len;
+    return dst - start;
+}
 
-Exit:
-    return dst - _dst;
+size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len)
+{
+    if (H2O_LIKELY(len != 0)) {
+        /* try to encode using huffman */
+        size_t hufflen = encode_huffman(dst + 1, (const uint8_t *)s, len);
+        if (H2O_LIKELY(hufflen != 0)) {
+            size_t head_len;
+            if (H2O_LIKELY(encode_int_is_onebyte((uint32_t)hufflen, 7))) {
+                dst[0] = (uint8_t)(0x80 | hufflen);
+                head_len = 1;
+            } else {
+                uint8_t head[8];
+                head[0] = '\x80';
+                head_len = encode_int(head, (uint32_t)hufflen, 7) - head;
+                memmove(dst + head_len, dst + 1, hufflen);
+                memcpy(dst, head, head_len);
+            }
+            return head_len + hufflen;
+        }
+    }
+    return encode_as_is(dst, s, len);
 }
 
 static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_iovec_t *name,
