@@ -29,14 +29,11 @@ RUN apk update \
                ca-certificates curl wget \
     && rm -rf /var/cache/apk/*
 
+RUN mkdir /etc/h2o
+ADD h2o.conf /etc/h2o
 
-COPY h2o.conf /etc/
+WORKDIR /etc/h2o
 
-WORKDIR /var/www/html
+EXPOSE 80 443
 
-EXPOSE 8080 8443
-
-RUN addgroup h2o && adduser -G h2o -D -H h2o
-USER h2o
-
-CMD ["h2o", "-c", "/etc/h2o.conf"]
+CMD h2o
