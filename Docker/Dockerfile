@@ -30,7 +30,7 @@ RUN apk update \
     && rm -rf /var/cache/apk/*
 
 RUN mkdir /etc/h2o
-ADD h2o.conf /etc/h2o
+ADD h2o.conf /etc/h2o/
 
 WORKDIR /etc/h2o
 
