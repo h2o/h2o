@@ -80,6 +80,9 @@ extern "C" {
 #define H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT_IN_SECS 300
 #define H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT (H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT_IN_SECS * 1000)
 
+#define H2O_STATUS_FALLTHRU 399
+#define H2O_FALLTHRU_SET_PREFIX "x-fallthru-set-"
+
 typedef struct st_h2o_conn_t h2o_conn_t;
 typedef struct st_h2o_context_t h2o_context_t;
 typedef struct st_h2o_req_t h2o_req_t;
@@ -625,6 +628,10 @@ typedef struct st_h2o_req_overrides_t {
          */
         h2o_iovec_t path_prefix;
     } location_rewrite;
+    /**
+     * handler that generated the overrides
+     */
+    h2o_handler_t *origin_handler;
 } h2o_req_overrides_t;
 
 /**
@@ -1126,6 +1133,11 @@ h2o_iovec_t h2o_get_redirect_method(h2o_iovec_t method, int status);
  */
 int h2o_puth_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len);
 /**
+ * collects request info from 399 a response
+ */
+static int h2o_capture_fallthru_headers(h2o_req_t *req, const char *name, size_t name_len, const char *value, size_t value_len,
+                                        int is_fallthru);
+/**
  * logs an error
  */
 void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
@@ -1489,6 +1501,21 @@ inline void h2o_context_set_filter_context(h2o_context_t *ctx, h2o_filter_t *fil
 inline void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *logger)
 {
     return ctx->_module_configs[logger->_config_slot];
+}
+
+inline int h2o_capture_fallthru_headers(h2o_req_t *req, const char *name, size_t name_len, const char *value, size_t value_len,
+                                        int is_fallthru)
+{
+    size_t prefix_len = sizeof(H2O_FALLTHRU_SET_PREFIX) - 1;
+
+    if (name_len <= prefix_len || memcmp(name, H2O_FALLTHRU_SET_PREFIX, prefix_len) != 0)
+        return 0;
+
+    if (is_fallthru) {
+        if (h2o_memis(name + prefix_len, name_len - prefix_len, H2O_STRLIT("remote-user")))
+            req->remote_user = h2o_strdup(&req->pool, value, value_len);
+    }
+    return 1;
 }
 
 static inline void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype)

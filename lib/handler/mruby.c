@@ -38,9 +38,6 @@
 #include "h2o.h"
 #include "h2o/mruby_.h"
 
-#define STATUS_FALLTHRU 399
-#define FALLTHRU_SET_PREFIX "x-fallthru-set-"
-
 #define FREEZE_STRING(v) RSTR_SET_FROZEN_FLAG(mrb_str_ptr(v))
 
 __thread h2o_mruby_generator_t *h2o_mruby_current_generator = NULL;
@@ -515,7 +512,6 @@ static int handle_response_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
 {
     h2o_req_t *req = _req;
     const h2o_token_t *token;
-    static const h2o_iovec_t fallthru_set_prefix = {H2O_STRLIT(FALLTHRU_SET_PREFIX)};
 
     /* convert name to lowercase */
     name = h2o_strdup(&req->pool, name.base, name.len);
@@ -532,13 +528,8 @@ static int handle_response_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
             value = h2o_strdup(&req->pool, value.base, value.len);
             h2o_add_header(&req->pool, &req->res.headers, token, value.base, value.len);
         }
-    } else if (name.len > fallthru_set_prefix.len &&
-               h2o_memis(name.base, fallthru_set_prefix.len, fallthru_set_prefix.base, fallthru_set_prefix.len)) {
-        /* register additional request header if status is fallthru, otherwise discard */
-        if (req->res.status == STATUS_FALLTHRU) {
-            if (h2o_memis(name.base + fallthru_set_prefix.len, name.len - fallthru_set_prefix.len, H2O_STRLIT("remote-user")))
-                req->remote_user = h2o_strdup(&req->pool, value.base, value.len);
-        }
+    } else if (h2o_capture_fallthru_headers(req, name.base, name.len, value.base, value.len, req->res.status == H2O_STATUS_FALLTHRU)) {
+        /* don't pass the header downstream if x-fallthru-set-* */
     } else {
         value = h2o_strdup(&req->pool, value.base, value.len);
         h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, value.base, value.len);
@@ -605,7 +596,7 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
     }
 
     /* return without processing body, if status is fallthru */
-    if (generator->req->res.status == STATUS_FALLTHRU) {
+    if (generator->req->res.status == H2O_STATUS_FALLTHRU) {
         if (is_delegate != NULL)
             *is_delegate = 1;
         else

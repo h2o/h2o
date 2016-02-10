@@ -326,6 +326,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
     size_t i;
+    int is_fallthru;
 
     if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
         self->client = NULL;
@@ -333,6 +334,8 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
         h2o_send_error(req, 502, "Gateway Error", errstr, 0);
         return NULL;
     }
+
+    is_fallthru = status == H2O_STATUS_FALLTHRU && req->overrides != NULL;
 
     /* copy the response (note: all the headers must be copied; http1client discards the input once we return from this callback) */
     req->res.status = status;
@@ -378,6 +381,9 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
             h2o_add_header(&req->pool, &req->res.headers, token, value.base, value.len);
         Skip:
             ;
+        } else if (h2o_capture_fallthru_headers(req, headers[i].name, headers[i].name_len, headers[i].value,
+                                                headers[i].value_len, is_fallthru)) {
+            /* don't pass the header downstream if x-fallthru-set-* */
         } else {
             h2o_iovec_t name = h2o_strdup(&req->pool, headers[i].name, headers[i].name_len);
             h2o_iovec_t value = h2o_strdup(&req->pool, headers[i].value, headers[i].value_len);
@@ -385,6 +391,12 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
         }
     }
 
+    /* handle fallthru */
+    if (is_fallthru) {
+        h2o_delegate_request(req, req->overrides->origin_handler);
+        return NULL;
+    }
+    /* handle websocket handshake */
     if (self->is_websocket_handshake && req->res.status == 101) {
         h2o_http1client_ctx_t *client_ctx = get_client_ctx(req);
         assert(client_ctx->websocket_timeout != NULL);
