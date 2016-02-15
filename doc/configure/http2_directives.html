@@ -97,7 +97,7 @@ The server also provides a mechanism to track the clients' cache state via cooki
 </p>
 <p>
 Pushed responses will have <code>x-http2-push: pushed</code> header set; by looking for the header, it is possible to determine if a resource has been pushed.
-It is also possible to log the value in the <a href="configure/access_log_directives.html#access-log">access log</a> by specifying <code>{x-http2-push}o</code>, push responses but cancelled by CASPER will have the value of the header logged as <code>cancelled</code>.
+It is also possible to log the value in the <a href="configure/access_log_directives.html#access-log">access log</a> by specifying <code>%{x-http2-push}o</code>, push responses but cancelled by CASPER will have the value of the header logged as <code>cancelled</code>.
 </p>
 <p>
 See also:
