@@ -47,7 +47,7 @@ paths:
   "/":
     mruby.handler: |
       lambda do |env|
-        if /\A192\.168\./.match(req["REMOTE_ADDR"])
+        if /\A192\.168\./.match(env["REMOTE_ADDR"])
           return [399, {}, []]
         end
         [403, {'content-type' => 'text/plain'}, ["access forbidden\n"]]
