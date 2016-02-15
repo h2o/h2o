@@ -140,17 +140,17 @@ sub doit {
     my $curl_cmd = 'curl --insecure --silent --dump-header /dev/stderr';
     subtest "connection-error" => sub {
         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/index.txt");
-        like $headers, qr{HTTP/1\.1 500 }is;
+        like $headers, qr{HTTP/[^ ]+ 500\s}is;
     };
     my $upstream = create_upstream();
     subtest "get" => sub {
         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/index.txt");
-        like $headers, qr{HTTP/1\.1 200 }is;
+        like $headers, qr{HTTP/[^ ]+ 200\s}is;
         is $body, "hello\n";
     };
     subtest "headers" => sub {
         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/echo-headers");
-        like $headers, qr{^HTTP/1\.1 200 }is;
+        like $headers, qr{^HTTP/[^ ]+ 200\s}is;
         like $body, qr{^host: $upstream_hostport$}im;
         unlike $body, qr{^host: 127.0.0.1:$port$}im;
         like $body, qr{^user-agent: *curl/}im;
@@ -159,17 +159,17 @@ sub doit {
     };
     subtest "post" => sub {
         my ($headers, $body) = run_prog("$curl_cmd --data 'hello world' $proto://127.0.0.1:$port/echo");
-        like $headers, qr{HTTP/1\.1 200 }is;
+        like $headers, qr{HTTP/[^ ]+ 200\s}is;
         is $body, 'hello world';
     };
     subtest "slow-chunked" => sub {
         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/streaming-body");
-        like $headers, qr{HTTP/1\.1 200 }is;
+        like $headers, qr{HTTP/[^ ]+ 200\s}is;
         is $body, (join "", 1..30);
     };
     subtest "as_str" => sub {
         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/as_str/");
-        like $headers, qr{HTTP/1\.1 200 }is;
+        like $headers, qr{HTTP/[^ ]+ 200\s}is;
         is $body, "hello\n";
     };
     subtest "content-length" => sub {
@@ -177,14 +177,14 @@ sub doit {
             for my $i (0..15) {
                 subtest "cl=$i" => sub {
                     my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/cl/$i");
-                    like $headers, qr{^HTTP/1\.1 200 .*\ncontent-length:\s*$i\r}is;
+                    like $headers, qr{^HTTP/[^ ]+ 200\s.*\ncontent-length:\s*$i\r}is;
                     is $body, substr "abcdefghijklmno", 0, $i;
                 }
             };
             for my $i (16..30) {
                 subtest "cl=$i" => sub {
                     my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/cl/$i");
-                    like $headers, qr{^HTTP/1\.1 200 .*\ncontent-length:\s*15\r}is;
+                    like $headers, qr{^HTTP/[^ ]+ 200\s.*\ncontent-length:\s*15\r}is;
                     is $body, "abcdefghijklmno";
                 }
             };
@@ -193,7 +193,7 @@ sub doit {
             for my $i (0..30) {
                 subtest "cl=$i" => sub {
                     my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/cl/$i/chunked");
-                    like $headers, qr{^HTTP/1\.1 200 .*\ncontent-length:\s*$i\r}is;
+                    like $headers, qr{^HTTP/[^ ]+ 200\s.*\ncontent-length:\s*$i\r}is;
                     is $body, substr "abcdefghijklmno", 0, $i;
                 }
             };
@@ -201,23 +201,23 @@ sub doit {
     };
     subtest "esi" => sub {
         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/esi/");
-        like $headers, qr{HTTP/1\.1 200 }is;
+        like $headers, qr{HTTP/[^ ]+ 200\s}is;
         is $body, "Hello to the world, from H2O!\n";
     };
     subtest "fast-path-partial" => sub {
         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/fast-path-partial/");
-        like $headers, qr{HTTP/1\.1 200 }is;
+        like $headers, qr{HTTP/[^ ]+ 200\s}is;
         is $body, join "", 2..30;
     };
     subtest "async-delegate" => sub {
         subtest "non-delegated" => sub {
             my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/async-delegate/index.txt");
-            like $headers, qr{HTTP/1\.1 200 }is;
+            like $headers, qr{HTTP/[^ ]+ 200\s}is;
             is $body, "hello\n";
         };
         subtest "delegated" => sub {
             my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/async-delegate/notfound");
-            like $headers, qr{HTTP/1\.1 200 }is;
+            like $headers, qr{HTTP/[^ ]+ 200\s}is;
             is $body, "delegated!";
         };
     };

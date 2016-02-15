@@ -27,9 +27,9 @@ subtest 'http1' => sub {
             if $chunked;
         subtest "$proto, @{[ $chunked ? 'chunked' : 'content-length' ]}" => sub {
             my $resp = `curl --silent --dump-header /dev/stderr --data hello $extra $url 2>&1 > /dev/null`;
-            like $resp, qr{^HTTP/1\.[0-9]+ 405 }s, 'shorter than the limit';
+            like $resp, qr{^HTTP/[^ ]+ 405\s}s, 'shorter than the limit';
             $resp = `curl --silent --dump-header /dev/stderr --data helloworld $extra $url 2>&1 > /dev/null`;
-            like $resp, qr{^HTTP/1\.[0-9]+ 413 }s, 'longer than the limit';
+            like $resp, qr{^HTTP/[^ ]+ 413\s}s, 'longer than the limit';
         };
     };
     $doit->("http", $server->{port});

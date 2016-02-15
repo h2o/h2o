@@ -52,7 +52,7 @@ sub doit {
 
         subtest "closed-unsatisfied" => sub {
             my $headers = `$curl_cmd --dump-header /dev/stderr -r 999999-999999 $url 2>&1 > /dev/null`;
-            like $headers, qr{^HTTP/1.1 416 }mi, "416 response";
+            like $headers, qr{^HTTP/[^ ]+ 416\s}mi, "416 response";
         };
 
         subtest "tail-open" => sub {
