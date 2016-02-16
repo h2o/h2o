@@ -657,8 +657,11 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
         h2o_start_response(generator->req, &generator->super);
         h2o_send(generator->req, NULL, 0, 1);
     } else {
-        if (content.len < generator->req->res.content_length)
+        if (content.len < generator->req->res.content_length) {
             generator->req->res.content_length = content.len;
+        } else {
+            content.len = generator->req->res.content_length;
+        }
         h2o_start_response(generator->req, &generator->super);
         h2o_send(generator->req, &content, 1, 1);
     }
