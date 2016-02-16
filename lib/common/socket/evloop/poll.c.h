@@ -88,7 +88,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
             continue;
         assert(fd == sock->fd);
         if ((sock->_flags & (H2O_SOCKET_FLAG_IS_POLLED_FOR_READ | H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE)) != 0) {
-            h2o_vector_reserve(NULL, (void *)&pollfds, sizeof(pollfds.entries[0]), pollfds.size + 1);
+            h2o_vector_reserve(NULL, &pollfds, pollfds.size + 1);
             struct pollfd *slot = pollfds.entries + pollfds.size++;
             slot->fd = fd;
             slot->events = 0;
@@ -143,7 +143,7 @@ static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock)
     struct st_h2o_evloop_poll_t *loop = (struct st_h2o_evloop_poll_t *)sock->loop;
 
     if (sock->fd >= loop->socks.size) {
-        h2o_vector_reserve(NULL, (void *)&loop->socks, sizeof(loop->socks.entries[0]), sock->fd + 1);
+        h2o_vector_reserve(NULL, &loop->socks, sock->fd + 1);
         memset(loop->socks.entries + loop->socks.size, 0, (sock->fd + 1 - loop->socks.size) * sizeof(loop->socks.entries[0]));
         loop->socks.size = sock->fd + 1;
     }
