@@ -89,98 +89,90 @@ hosts:
 @{[ $h2o_keepalive ? "" : "        proxy.timeout.keepalive: 0" ]}
 reproxy: ON
 EOT
-my $port = $server->{port};
-my $tls_port = $server->{tls_port};
 
-subtest 'curl' => sub {
-    plan skip_all => 'curl not found'
-        unless prog_exists('curl');
-    my $doit = sub {
-        my ($proto, $port) = @_;
-        for my $file (sort keys %files) {
-            my $content = `curl --silent --show-error --insecure $proto://127.0.0.1:$port/$file`;
-            is length($content), $files{$file}->{size}, "$proto://127.0.0.1/$file (size)";
-            is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/$file (md5)";
-        }
-        for my $file (sort keys %files) {
-            my $content = `curl --silent --show-error --insecure --data-binary \@@{[ DOC_ROOT ]}/$file $proto://127.0.0.1:$port/echo`;
-            is length($content), $files{$file}->{size}, "$proto://127.0.0.1/echo (POST, $file, size)";
-            is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/echo (POST, $file, md5)";
-        }
-        for my $file (sort keys %files) {
-            my $content = `curl --silent --show-error --insecure --header 'Transfer-Encoding: chunked' --data-binary \@@{[ DOC_ROOT ]}/$file $proto://127.0.0.1:$port/echo`;
-            is length($content), $files{$file}->{size}, "$proto://127.0.0.1/echo (POST, chunked, $file, size)";
-            is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/echo (POST, chunked, $file, md5)";
-        }
-        my $content = `curl --silent --show-error --insecure --data-binary \@$huge_file $proto://127.0.0.1:$port/echo`;
-        is length($content), $huge_file_size, "$proto://127.0.0.1/echo (POST, mmap-backed, size)";
-        is md5_hex($content), $huge_file_md5, "$proto://127.0.0.1/echo (POST, mmap-backed, md5)";
-        $content = `curl --silent --show-error --insecure --header 'Transfer-Encoding: chunked' --data-binary \@$huge_file $proto://127.0.0.1:$port/echo`;
-        is length($content), $huge_file_size, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, size)";
-        is md5_hex($content), $huge_file_md5, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, md5)";
-        subtest 'rewrite-redirect' => sub {
-            $content = `curl --silent --insecure --dump-header /dev/stdout --max-redirs 0 "$proto://127.0.0.1:$port/?resp:status=302&resp:location=http://@{[uri_escape($upstream)]}/abc"`;
-            like $content, qr{HTTP/[^ ]+ 302\s}m;
-            like $content, qr{^location: ?$proto://127.0.0.1:$port/abc\r$}m;
-        };
-        subtest "x-reproxy-url ($proto)" => sub {
-            my $fetch_test = sub {
-                my $url_prefix = shift;
-                for my $file (sort keys %files) {
-                    my $content = `curl --silent --show-error --insecure "$proto://127.0.0.1:$port/404?resp:status=200&resp:x-reproxy-url=$url_prefix$file"`;
-                    is length($content), $files{$file}->{size}, "$file (size)";
-                    is md5_hex($content), $files{$file}->{md5}, "$file (md5)";
-                }
-            };
-            subtest "abs-url" => sub {
-                $fetch_test->("http://@{[uri_escape($upstream)]}/");
-            };
-            subtest "abs-path" => sub {
-                $fetch_test->("/");
-            };
-            subtest "rel-path" => sub {
-                $fetch_test->("");
-            };
-            my $content = `curl --silent --show-error --insecure "$proto://127.0.0.1:$port/streaming-body?resp:status=200&resp:x-reproxy-url=http://@{[uri_escape($upstream)]}/index.txt"`;
-            is $content, "hello\n", "streaming-body";
-            $content = `curl --silent --dump-header /dev/stderr --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=https://@{[uri_escape($upstream)]}/index.txt" 2>&1 > /dev/null`;
-            like $content, qr{^HTTP/[^ ]+ 502\s}m, "cannot handle x-reproxy-url pointing to HTTPS";
-            $content = `curl --silent --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=https://default/files/index.txt"`;
-            is length($content), $files{"index.txt"}->{size}, "to file handler (size)";
-            is md5_hex($content), $files{"index.txt"}->{md5}, "to file handler (md5)";
-            $content = `curl --silent --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://@{[uri_escape($upstream)]}/?resp:status=302%26resp:location=index.txt"`;
-            is length($content), $files{"index.txt"}->{size}, "reproxy & internal redirect to upstream (size)";
-            is md5_hex($content), $files{"index.txt"}->{md5}, "reproxy & internal redirect to upstream (md5)";
-            $content = `curl --silent --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://@{[uri_escape($upstream)]}/?resp:status=302%26resp:location=https://default/files/index.txt"`;
-            is length($content), $files{"index.txt"}->{size}, "reproxy & internal redirect to file (size)";
-            is md5_hex($content), $files{"index.txt"}->{md5}, "reproxy & internal redirect to file (md5)";
-            $content = `curl --silent --dump-header /dev/stderr --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://@{[uri_escape($upstream)]}/?resp:status=302%26resp:location=https://@{[uri_escape($upstream)]}/index.txt" 2>&1 > /dev/null`;
-            like $content, qr{^HTTP/[^ ]+ 502\s}m, "cannot handle internal redirect via location: to https";
-            $content = `curl --silent --insecure "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://default/files"`;
-            is length($content), $files{"index.txt"}->{size}, "redirect handled internally after delegation (size)";
-            is md5_hex($content), $files{"index.txt"}->{md5}, "redirect handled internally after delegation (md5)";
-        };
-        subtest "x-forwarded ($proto)" => sub {
-            my $resp = `curl --silent --insecure $proto://127.0.0.1:$port/echo-headers`;
-            like $resp, qr/^x-forwarded-for: ?127\.0\.0\.1$/mi, "x-forwarded-for";
-            like $resp, qr/^x-forwarded-proto: ?$proto$/mi, "x-forwarded-proto";
-            like $resp, qr/^via: ?[^ ]+ 127\.0\.0\.1:$port$/mi, "via";
-            $resp = `curl --silent --insecure --header 'X-Forwarded-For: 127.0.0.2' --header 'Via: 2 example.com' $proto://127.0.0.1:$port/echo-headers`;
-            like $resp, qr/^x-forwarded-for: ?127\.0\.0\.2, 127\.0\.0\.1$/mi, "x-forwarded-for (append)";
-            like $resp, qr/^via: ?2 example.com, [^ ]+ 127\.0\.0\.1:$port$/mi, "via (append)";
-        };
-        subtest 'issues/266' => sub {
-            my $resp = `curl --dump-header /dev/stderr --silent --insecure -H 'cookie: a=@{['x' x 4000]}' $proto://127.0.0.1:$port/index.txt 2>&1 > /dev/null`;
-            like $resp, qr{^HTTP/[^ ]+ 200\s}m;
-        };
-        subtest 'gzip' => sub {
-            my $resp = `curl --silent --insecure -H Accept-Encoding:gzip $proto://127.0.0.1:$port/gzip/alice.txt | gzip -cd`;
-            is md5_hex($resp), md5_file("@{[DOC_ROOT]}/alice.txt");
-        };
+run_with_curl($server, sub {
+    my ($proto, $port, $curl) = @_;
+    for my $file (sort keys %files) {
+        my $content = `$curl --silent --show-error $proto://127.0.0.1:$port/$file`;
+        is length($content), $files{$file}->{size}, "$proto://127.0.0.1/$file (size)";
+        is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/$file (md5)";
+    }
+    for my $file (sort keys %files) {
+        my $content = `$curl --silent --show-error --data-binary \@@{[ DOC_ROOT ]}/$file $proto://127.0.0.1:$port/echo`;
+        is length($content), $files{$file}->{size}, "$proto://127.0.0.1/echo (POST, $file, size)";
+        is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/echo (POST, $file, md5)";
+    }
+    for my $file (sort keys %files) {
+        my $content = `$curl --silent --show-error --header 'Transfer-Encoding: chunked' --data-binary \@@{[ DOC_ROOT ]}/$file $proto://127.0.0.1:$port/echo`;
+        is length($content), $files{$file}->{size}, "$proto://127.0.0.1/echo (POST, chunked, $file, size)";
+        is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/echo (POST, chunked, $file, md5)";
+    }
+    my $content = `$curl --silent --show-error --data-binary \@$huge_file $proto://127.0.0.1:$port/echo`;
+    is length($content), $huge_file_size, "$proto://127.0.0.1/echo (POST, mmap-backed, size)";
+    is md5_hex($content), $huge_file_md5, "$proto://127.0.0.1/echo (POST, mmap-backed, md5)";
+    $content = `$curl --silent --show-error --header 'Transfer-Encoding: chunked' --data-binary \@$huge_file $proto://127.0.0.1:$port/echo`;
+    is length($content), $huge_file_size, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, size)";
+    is md5_hex($content), $huge_file_md5, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, md5)";
+    subtest 'rewrite-redirect' => sub {
+        $content = `$curl --silent --dump-header /dev/stdout --max-redirs 0 "$proto://127.0.0.1:$port/?resp:status=302&resp:location=http://@{[uri_escape($upstream)]}/abc"`;
+        like $content, qr{HTTP/[^ ]+ 302\s}m;
+        like $content, qr{^location: ?$proto://127.0.0.1:$port/abc\r$}m;
     };
-    $doit->('http', $port);
-    $doit->('https', $tls_port);
-};
+    subtest "x-reproxy-url ($proto)" => sub {
+        my $fetch_test = sub {
+            my $url_prefix = shift;
+            for my $file (sort keys %files) {
+                my $content = `$curl --silent --show-error "$proto://127.0.0.1:$port/404?resp:status=200&resp:x-reproxy-url=$url_prefix$file"`;
+                is length($content), $files{$file}->{size}, "$file (size)";
+                is md5_hex($content), $files{$file}->{md5}, "$file (md5)";
+            }
+        };
+        subtest "abs-url" => sub {
+            $fetch_test->("http://@{[uri_escape($upstream)]}/");
+        };
+        subtest "abs-path" => sub {
+            $fetch_test->("/");
+        };
+        subtest "rel-path" => sub {
+            $fetch_test->("");
+        };
+        my $content = `$curl --silent --show-error "$proto://127.0.0.1:$port/streaming-body?resp:status=200&resp:x-reproxy-url=http://@{[uri_escape($upstream)]}/index.txt"`;
+        is $content, "hello\n", "streaming-body";
+        $content = `$curl --silent --dump-header /dev/stderr "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=https://@{[uri_escape($upstream)]}/index.txt" 2>&1 > /dev/null`;
+        like $content, qr{^HTTP/[^ ]+ 502\s}m, "cannot handle x-reproxy-url pointing to HTTPS";
+        $content = `$curl --silent "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=https://default/files/index.txt"`;
+        is length($content), $files{"index.txt"}->{size}, "to file handler (size)";
+        is md5_hex($content), $files{"index.txt"}->{md5}, "to file handler (md5)";
+        $content = `$curl --silent "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://@{[uri_escape($upstream)]}/?resp:status=302%26resp:location=index.txt"`;
+        is length($content), $files{"index.txt"}->{size}, "reproxy & internal redirect to upstream (size)";
+        is md5_hex($content), $files{"index.txt"}->{md5}, "reproxy & internal redirect to upstream (md5)";
+        $content = `$curl --silent "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://@{[uri_escape($upstream)]}/?resp:status=302%26resp:location=https://default/files/index.txt"`;
+        is length($content), $files{"index.txt"}->{size}, "reproxy & internal redirect to file (size)";
+        is md5_hex($content), $files{"index.txt"}->{md5}, "reproxy & internal redirect to file (md5)";
+        $content = `$curl --silent --dump-header /dev/stderr "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://@{[uri_escape($upstream)]}/?resp:status=302%26resp:location=https://@{[uri_escape($upstream)]}/index.txt" 2>&1 > /dev/null`;
+        like $content, qr{^HTTP/[^ ]+ 502\s}m, "cannot handle internal redirect via location: to https";
+        $content = `$curl --silent "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://default/files"`;
+        is length($content), $files{"index.txt"}->{size}, "redirect handled internally after delegation (size)";
+        is md5_hex($content), $files{"index.txt"}->{md5}, "redirect handled internally after delegation (md5)";
+    };
+    subtest "x-forwarded ($proto)" => sub {
+        my $resp = `$curl --silent $proto://127.0.0.1:$port/echo-headers`;
+        like $resp, qr/^x-forwarded-for: ?127\.0\.0\.1$/mi, "x-forwarded-for";
+        like $resp, qr/^x-forwarded-proto: ?$proto$/mi, "x-forwarded-proto";
+        like $resp, qr/^via: ?[^ ]+ 127\.0\.0\.1:$port$/mi, "via";
+        $resp = `$curl --silent --header 'X-Forwarded-For: 127.0.0.2' --header 'Via: 2 example.com' $proto://127.0.0.1:$port/echo-headers`;
+        like $resp, qr/^x-forwarded-for: ?127\.0\.0\.2, 127\.0\.0\.1$/mi, "x-forwarded-for (append)";
+        like $resp, qr/^via: ?2 example.com, [^ ]+ 127\.0\.0\.1:$port$/mi, "via (append)";
+    };
+    subtest 'issues/266' => sub {
+        my $resp = `$curl --dump-header /dev/stderr --silent -H 'cookie: a=@{['x' x 4000]}' $proto://127.0.0.1:$port/index.txt 2>&1 > /dev/null`;
+        like $resp, qr{^HTTP/[^ ]+ 200\s}m;
+    };
+    subtest 'gzip' => sub {
+        my $resp = `$curl --silent -H Accept-Encoding:gzip $proto://127.0.0.1:$port/gzip/alice.txt | gzip -cd`;
+        is md5_hex($resp), md5_file("@{[DOC_ROOT]}/alice.txt");
+    };
+});
 
 subtest 'nghttp' => sub {
     plan skip_all => 'nghttp not found'
@@ -244,15 +236,15 @@ subtest 'nghttp' => sub {
         };
     };
     subtest 'http (upgrade)' => sub {
-        $doit->('http', '-u', $port);
+        $doit->('http', '-u', $server->{port});
     };
     subtest 'http (direct)' => sub {
-        $doit->('http', '', $port);
+        $doit->('http', '', $server->{port});
     };
     subtest 'https' => sub {
         plan skip_all => 'OpenSSL does not support protocol negotiation; it is too old'
             unless openssl_can_negotiate();
-        $doit->('https', '', $tls_port);
+        $doit->('https', '', $server->{tls_port});
     };
 };
 

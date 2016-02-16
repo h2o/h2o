@@ -135,9 +135,9 @@ hosts:
 EOT
 });
 
-sub doit {
-    my ($proto, $port) = @_;
-    my $curl_cmd = 'curl --insecure --silent --dump-header /dev/stderr';
+run_with_curl($server, sub {
+    my ($proto, $port, $curl_cmd) = @_;
+    $curl_cmd .= ' --silent --dump-header /dev/stderr';
     subtest "connection-error" => sub {
         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/index.txt");
         like $headers, qr{HTTP/[^ ]+ 500\s}is;
@@ -221,20 +221,6 @@ sub doit {
             is $body, "delegated!";
         };
     };
-}
-
-subtest "http/1" => sub {
-    doit("http", $server->{port});
-};
-
-subtest "https/1" => sub {
-    doit("https", $server->{tls_port});
-};
-
-subtest "http2" => sub {
-    plan skip_all => "curl does not support HTTP/2"
-        unless curl_supports_http2();
-    doit("https", $server->{tls_port}, "--http2");
-};
+});
 
 done_testing();
