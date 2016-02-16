@@ -104,7 +104,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
     ret = poll(pollfds.entries, (nfds_t)pollfds.size, get_max_wait(&loop->super));
     update_now(&loop->super);
     if (ret == -1)
-        return -1;
+        goto Exit;
     DEBUG_LOG("poll returned: %d\n", ret);
 
     /* update readable flags, perform writes */
@@ -133,9 +133,12 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
                 }
             }
         }
+        ret = 0;
     }
 
-    return 0;
+Exit:
+    free(pollfds.entries);
+    return ret;
 }
 
 static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock)
