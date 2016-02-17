@@ -265,7 +265,7 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
     /* SERVER_NAME */
     append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_NAME"), req->hostconf->authority.host.base, req->hostconf->authority.host.len);
     { /* SERVER_PROTOCOL */
-        char buf[sizeof("HTTP/1.1") - 1];
+        char buf[sizeof("HTTP/1.1")];
         size_t l = h2o_stringify_protocol_version(buf, req->version);
         append_pair(&req->pool, vecs, H2O_STRLIT("SERVER_PROTOCOL"), buf, l);
     }
