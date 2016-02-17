@@ -173,6 +173,8 @@ run_with_curl($server, sub {
         like $resp, qr{^HTTP/[^ ]+ 200\s}m;
     };
     subtest 'gzip' => sub {
+        plan skip_all => 'curl issue #661'
+            if $curl =~ /--http2/;
         my $resp = `$curl --silent -H Accept-Encoding:gzip $proto://127.0.0.1:$port/gzip/alice.txt | gzip -cd`;
         is md5_hex($resp), md5_file("@{[DOC_ROOT]}/alice.txt");
     };

@@ -27,6 +27,8 @@ EOT
 
 run_with_curl($server, sub {
     my ($proto, $port, $curl) = @_;
+    plan skip_all => 'curl issue #661'
+        if $curl =~ /--http2/;
     my $fetch_orig = sub {
         my ($path, $opts) = @_;
         run_prog("$curl --silent $opts $proto://127.0.0.1:$port$path/alice.txt");
