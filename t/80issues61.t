@@ -35,8 +35,11 @@ subtest 'http1' => sub {
     my $doit = sub {
         my ($proto, $port) = @_;
         my $extra = '';
-        $extra .= ' --insecure'
-            if $proto eq 'https';
+        if ($proto eq 'https') {
+            $extra .= ' --insecure';
+            $extra .= ' --http1.1'
+                if curl_supports_http2();
+        }
         subtest $proto => sub {
             my $resp = `curl --max-time 1 $extra $proto://127.0.0.1:$port/streaming-body 2>&1`;
             like $resp, qr/operation timed out/i, "operation should time out";

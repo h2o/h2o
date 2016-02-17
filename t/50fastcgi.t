@@ -51,33 +51,29 @@ fastcgi.timeout.keepalive: @{[$keepalive ? 5000 : 0]}
 EOT
         # the tests
         subtest 'files' => sub {
-            my $doit = sub {
-                my ($proto, $port) = @_;
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
                 for my $file (sort keys %files) {
-                    my $content = `curl --silent --show-error --insecure $proto://127.0.0.1:$port/$file`;
+                    my $content = `$curl --silent --show-error $proto://127.0.0.1:$port/$file`;
                     is length($content), $files{$file}->{size}, "$proto://127.0.0.1/$file (size)";
                     is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/$file (md5)";
                 }
-            };
-            $doit->('http', $server->{port});
-            $doit->('https', $server->{tls_port});
+            });
         };
         subtest 'echo' => sub {
             # send header that exceeds the max. length fcgi record (the size of the response also exceeds the record size, and uses chunked encoding)
-            my $doit = sub {
-                my ($proto, $port) = @_;
-                subtest $proto => sub {
-                    my $content = `curl --silent --show-error --insecure -H foo:@{["0123456789"x7000]} $proto://127.0.0.1:$port/echo-headers`;
-                    like $content, qr/^foo: (0123456789){7000,7000}$/mi;
-                    if ($proto eq 'https') {
-                        like $content, qr/^https: on$/m;
-                    } else {
-                        unlike $content, qr/^https: on$/m;
-                    }
-                };
-            };
-            $doit->('http', $server->{port});
-            $doit->('https', $server->{tls_port});
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                plan skip_all => "skip due to curl bug #659"
+                    if $curl =~ /--http2/;
+                my $content = `$curl --silent --show-error -H foo:@{["0123456789"x7000]} $proto://127.0.0.1:$port/echo-headers`;
+                like $content, qr/^foo: (0123456789){7000,7000}$/mi;
+                if ($proto eq 'https') {
+                    like $content, qr/^https: on$/m;
+                } else {
+                    unlike $content, qr/^https: on$/m;
+                }
+            });
         };
         subtest 'cookie-merge' => sub {
             plan skip_all => "curl does not support HTTP/2"

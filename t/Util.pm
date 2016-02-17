@@ -11,7 +11,7 @@ use Test::More;
 use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2);
+our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
@@ -213,6 +213,26 @@ sub openssl_can_negotiate {
 
 sub curl_supports_http2 {
     return !! (`curl --version` =~ /^Features:.*\sHTTP2(?:\s|$)/m);
+}
+
+sub run_with_curl {
+    my ($server, $cb) = @_;
+    plan skip_all => "curl not found"
+        unless prog_exists("curl");
+    subtest "http/1" => sub {
+        $cb->("http", $server->{port}, "curl");
+    };
+    subtest "https/1" => sub {
+        my $cmd = "curl --insecure";
+        $cmd .= " --http1.1"
+            if curl_supports_http2();
+        $cb->("https", $server->{tls_port}, $cmd);
+    };
+    subtest "https/2" => sub {
+        plan skip_all => "curl does not support HTTP/2"
+            unless curl_supports_http2();
+        $cb->("https", $server->{tls_port}, "curl --insecure --http2");
+    };
 }
 
 1;

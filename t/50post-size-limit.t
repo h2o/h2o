@@ -21,8 +21,11 @@ subtest 'http1' => sub {
         my ($proto, $port, $chunked) = @_;
         my $url = "$proto://127.0.0.1:$port/";
         my $extra = "";
-        $extra .= " --insecure"
-            if $proto eq 'https';
+        if ($proto eq 'https') {
+            $extra .= " --insecure";
+            $extra .= " --http1.1"
+                if curl_supports_http2();
+        }
         $extra .= " --header 'Transfer-Encoding: chunked'"
             if $chunked;
         subtest "$proto, @{[ $chunked ? 'chunked' : 'content-length' ]}" => sub {
