@@ -218,6 +218,8 @@ h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t l
     return decoded;
 
 Error:
+    if(pool == NULL)
+        free(decoded.base);
     return h2o_iovec_init(NULL, 0);
 }
 
