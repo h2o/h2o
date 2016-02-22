@@ -1103,11 +1103,8 @@ static yoml_t *load_config(const char *fn)
 static void notify_all_threads(void)
 {
     unsigned i;
-    for (i = 0; i != conf.num_threads; ++i) {
-        h2o_multithread_message_t *message = h2o_mem_alloc(sizeof(*message));
-        *message = (h2o_multithread_message_t){};
-        h2o_multithread_send_message(&conf.threads[i].server_notifications, message);
-    }
+    for (i = 0; i != conf.num_threads; ++i)
+        h2o_multithread_send_message(&conf.threads[i].server_notifications, NULL);
 }
 
 static void on_sigterm(int signo)
