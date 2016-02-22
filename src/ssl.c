@@ -511,7 +511,8 @@ static int ticket_memcached_update_tickets(yrmcds *conn, h2o_iovec_t key, time_t
             goto Exit;
         }
     }
-    qsort(tickets.entries, tickets.size, sizeof(tickets.entries[0]), ticket_sort_compare);
+    if (tickets.size > 1)
+        qsort(tickets.entries, tickets.size, sizeof(tickets.entries[0]), ticket_sort_compare);
 
     /* if we need to update the tickets, atomically update the value in memcached, and request refetch to the caller */
     if (update_tickets(&tickets, now) != 0) {
@@ -543,6 +544,7 @@ static int ticket_memcached_update_tickets(yrmcds *conn, h2o_iovec_t key, time_t
     pthread_rwlock_unlock(&session_tickets.rwlock);
 
 Exit:
+    free(tickets_serialized.base);
     free_tickets(&tickets);
     return retry;
 }
@@ -592,7 +594,8 @@ static int load_tickets_file(const char *fn)
         goto Exit;
     }
     /* sort the ticket entries being read */
-    qsort(tickets.entries, tickets.size, sizeof(tickets.entries[0]), ticket_sort_compare);
+    if (tickets.size > 1)
+        qsort(tickets.entries, tickets.size, sizeof(tickets.entries[0]), ticket_sort_compare);
     /* replace the ticket list */
     pthread_rwlock_wrlock(&session_tickets.rwlock);
     h2o_mem_swap(&session_tickets.tickets, &tickets, sizeof(tickets));

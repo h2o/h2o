@@ -140,6 +140,8 @@ static void test_loopback(void)
 
     ok(conn->req.res.status == 404);
 
+    h2o_loopback_destroy(conn);
+
     h2o_context_dispose(&ctx);
     h2o_config_dispose(&conf);
 }
