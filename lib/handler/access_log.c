@@ -69,6 +69,7 @@ enum {
     ELEMENT_TYPE_PROCESS_TIME,               /* %{process-time}x */
     ELEMENT_TYPE_RESPONSE_TIME,              /* %{response-total-time}x */
     ELEMENT_TYPE_DURATION,                   /* %{duration}x */
+    ELEMENT_TYPE_PROTOCOL_SPECIFIC,          /* %{protocol-specific...}x */
     NUM_ELEMENT_TYPES
 };
 
@@ -78,6 +79,7 @@ struct log_element_t {
     union {
         const h2o_token_t *header_token;
         h2o_iovec_t name;
+        size_t protocol_specific_callback_index;
     } data;
 };
 
@@ -159,25 +161,38 @@ static struct log_element_t *compile_log_format(const char *fmt, size_t *_num_el
                     }
                     break;
                 case 'x':
-                    if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT("connect-time"))) {
-                        NEW_ELEMENT(ELEMENT_TYPE_CONNECT_TIME);
-                    } else if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT("request-total-time"))) {
-                        NEW_ELEMENT(ELEMENT_TYPE_REQUEST_TOTAL_TIME);
-                    } else if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT("request-header-time"))) {
-                        NEW_ELEMENT(ELEMENT_TYPE_REQUEST_HEADER_TIME);
-                    } else if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT("request-body-time"))) {
-                        NEW_ELEMENT(ELEMENT_TYPE_REQUEST_BODY_TIME);
-                    } else if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT("process-time"))) {
-                        NEW_ELEMENT(ELEMENT_TYPE_PROCESS_TIME);
-                    } else if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT("response-time"))) {
-                        NEW_ELEMENT(ELEMENT_TYPE_RESPONSE_TIME);
-                    } else if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT("duration"))) {
-                        NEW_ELEMENT(ELEMENT_TYPE_DURATION);
-                    } else {
+#define MAP_EXT_TO_TYPE(name, id)                                                                                                  \
+    if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT(name))) {                                                                       \
+        NEW_ELEMENT(id);                                                                                                           \
+        goto MAP_EXT_Found;                                                                                                        \
+    }
+#define MAP_EXT_TO_PROTO(name, cb)                                                                                                 \
+    if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT(name))) {                                                                       \
+        NEW_ELEMENT(ELEMENT_TYPE_PROTOCOL_SPECIFIC);                                                                               \
+        elements[num_elements - 1].data.protocol_specific_callback_index =                                                         \
+            &((h2o_conn_callbacks_t *)NULL)->log_.cb - ((h2o_conn_callbacks_t *)NULL)->log_.callbacks;                             \
+        goto MAP_EXT_Found;                                                                                                        \
+    }
+                    MAP_EXT_TO_TYPE("connect-time", ELEMENT_TYPE_CONNECT_TIME);
+                    MAP_EXT_TO_TYPE("request-total-time", ELEMENT_TYPE_REQUEST_TOTAL_TIME);
+                    MAP_EXT_TO_TYPE("request-header-time", ELEMENT_TYPE_REQUEST_HEADER_TIME);
+                    MAP_EXT_TO_TYPE("request-body-time", ELEMENT_TYPE_REQUEST_BODY_TIME);
+                    MAP_EXT_TO_TYPE("process-time", ELEMENT_TYPE_PROCESS_TIME);
+                    MAP_EXT_TO_TYPE("response-time", ELEMENT_TYPE_RESPONSE_TIME);
+                    MAP_EXT_TO_TYPE("duration", ELEMENT_TYPE_DURATION);
+                    MAP_EXT_TO_PROTO("http2.stream-id", http2.stream_id);
+                    MAP_EXT_TO_PROTO("http2.priority.received", http2.priority_received);
+                    MAP_EXT_TO_PROTO("http2.priority.received.exclusive", http2.priority_received_exclusive);
+                    MAP_EXT_TO_PROTO("http2.priority.received.parent", http2.priority_received_parent);
+                    MAP_EXT_TO_PROTO("http2.priority.received.weight", http2.priority_received_weight);
+                    { /* not found */
                         h2o_iovec_t name = strdup_lowercased(pt, quote_end - pt);
                         NEW_ELEMENT(ELEMENT_TYPE_EXTENDED_VAR);
                         elements[num_elements - 1].data.name = name;
                     }
+                MAP_EXT_Found:
+#undef MAP_EXT_TO_TYPE
+#undef MAP_EXT_TO_PROTO
                     break;
                 default:
                     fprintf(stderr, "failed to compile log format: header name is not followed by either `i`, `o`, `x`\n");
@@ -543,6 +558,17 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             RESERVE(DURATION_MAX_LEN);
             pos = append_duration(pos, &req->timestamps.request_begin_at, &req->timestamps.response_end_at);
             break;
+
+        case ELEMENT_TYPE_PROTOCOL_SPECIFIC: {
+            h2o_iovec_t (*cb)(h2o_req_t *) = req->conn->callbacks->log_.callbacks[element->data.protocol_specific_callback_index];
+            if (cb != NULL) {
+                h2o_iovec_t s = cb(req);
+                RESERVE(s.len);
+                pos = append_safe_string(pos, s.base, s.len);
+            } else {
+                goto EmitDash;
+            }
+        } break;
 
         case ELEMENT_TYPE_LOGNAME:      /* %l */
         case ELEMENT_TYPE_EXTENDED_VAR: /* %{...}x */

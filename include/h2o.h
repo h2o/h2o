@@ -564,6 +564,21 @@ typedef struct st_h2o_conn_callbacks_t {
      * callback for server push (may be NULL)
      */
     void (*push_path)(h2o_req_t *req, const char *abspath, size_t abspath_len);
+    /**
+     * logging callbacks (may be NULL)
+     */
+    union {
+        struct {
+            struct {
+                h2o_iovec_t (*stream_id)(h2o_req_t *req);
+                h2o_iovec_t (*priority_received)(h2o_req_t *req);
+                h2o_iovec_t (*priority_received_exclusive)(h2o_req_t *req);
+                h2o_iovec_t (*priority_received_parent)(h2o_req_t *req);
+                h2o_iovec_t (*priority_received_weight)(h2o_req_t *req);
+            } http2;
+        };
+        h2o_iovec_t (*callbacks[1])(h2o_req_t *req);
+    } log_;
 } h2o_conn_callbacks_t;
 
 /**
