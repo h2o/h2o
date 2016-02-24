@@ -1296,7 +1296,7 @@ void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/file.c */
 
-enum { H2O_FILE_FLAG_NO_ETAG = 0x1, H2O_FILE_FLAG_DIR_LISTING = 0x2, H2O_FILE_FLAG_SEND_GZIP = 0x4 };
+enum { H2O_FILE_FLAG_NO_ETAG = 0x1, H2O_FILE_FLAG_DIR_LISTING = 0x2, H2O_FILE_FLAG_SEND_COMPRESSED = 0x4 };
 
 typedef struct st_h2o_file_handler_t h2o_file_handler_t;
 
