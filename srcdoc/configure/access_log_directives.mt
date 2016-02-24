@@ -68,8 +68,10 @@ As an example, it is possible to log timestamps in millisecond resultion using <
 <tr><td><code>%v</code><td>canonical server name
 <tr><td><code>%{<i>HEADERNAME</i>}i</code><td>value of the given request header (e.g. <code>%{user-agent}i</code>)
 <tr><td><code>%{<i>HEADERNAME</i>}o</code><td>value of the given response header (e.g. <code>%{set-cookie}o</code>)
-<tr><td><code>%{<i>NAME</i>}x</code><td>various extensions.  <code>NAME</code> must be one of:
+<tr><td><code>%{<i>NAME</i>}x</code><td>various extensions.  <code>NAME</code> must be one listed in the following tables.  A dash (<code>-</code>) is emitted if the directive is not applicable to the request being logged.
 <table>
+<caption>Access Timings</caption>
+<tr><th>Name<th>Description
 <tr><td><code>connect-time</code><td>time spent to establish the connection (i.e. since connection gets <code>accept(2)</code>-ed until first octet of the request is received)
 <tr><td><code>request-header-time</code><td>time spent receiving request headers
 <tr><td><code>request-body-time</code><td>time spent receiving request body
@@ -77,6 +79,24 @@ As an example, it is possible to log timestamps in millisecond resultion using <
 <tr><td><code>process-time</code><td>time spent after receiving request, before starting to send response
 <tr><td><code>response-time</code><td>time spent sending response
 <tr><td><code>duration</code><td>sum of <code>request-total-time</code>, <code>process-time</code>, <code>response-time</code>
+</table>
+<table>
+<caption>Connection</caption>
+<tr><th>Name<th>Description
+<tr><td><code>connection-id</code><td>64-bit internal ID assigned to every client connection
+<tr><td><code>ssl.protocol-version</code><td>SSL protocol version obtained from <a href="https://www.openssl.org/docs/manmaster/ssl/SSL_get_version.html"><code>SSL_get_version</code></a>
+<tr><td><code>ssl.session-reused</code><td><code>1</code> if the <a href="configure/base_directives.html#ssl-session-resumption">SSL session was reused</a>, or <code>0</code> if not<?= $ctx->{note}->(q{A single SSL connection may transfer more than one HTTP request.}) ?>
+<tr><td><code>ssl.cipher</code><td>name of the <a href="https://tools.ietf.org/html/rfc5246#appendix-A.5">cipher suite</a> being used, obtained from <a href="https://www.openssl.org/docs/manmaster/ssl/SSL_CIPHER_get_name.html">SSL_CIPHER_get_name</a>
+<tr><td><code>ssl.cipher-bits</code><td>strength of the cipher suite in bits
+</table>
+<table>
+<caption>HTTP/2</caption>
+<tr><th>Name<th>Description
+<tr><td><code>http2.stream-id</code><td>stream ID
+<tr><td><code>http2.priority.received</code><td>colon-concatenated values of <i>exclusive</i>, <i>parent</i>, <i>weight</i>
+<tr><td><code>http2.priority.received.exclusive</code><td>exclusive bit of the most recent priority specified by the client
+<tr><td><code>http2.priority.received.parent</code><td>parent stream ID of the most recent priority specified by the client
+<tr><td><code>http2.priority.received.weight</code><td>weight of the most recent priority specified by the client
 </table>
 </table>
 
