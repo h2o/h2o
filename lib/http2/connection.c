@@ -1034,6 +1034,20 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
     return h2o_socket_getpeername(conn->sock, sa);
 }
 
+#define DEFINE_TLS_LOGGER(name)                                                                                                    \
+    static h2o_iovec_t log_##name(h2o_req_t *req)                                                                                  \
+    {                                                                                                                              \
+        h2o_http2_conn_t *conn = (void *)req->conn;                                                                                \
+        return h2o_socket_log_ssl_##name(conn->sock, &req->pool);                                                                  \
+    }
+
+DEFINE_TLS_LOGGER(protocol_version)
+DEFINE_TLS_LOGGER(session_reused)
+DEFINE_TLS_LOGGER(cipher)
+DEFINE_TLS_LOGGER(cipher_bits)
+
+#undef DEFINE_TLS_LOGGER
+
 static h2o_iovec_t log_stream_id(h2o_req_t *req)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
@@ -1079,10 +1093,11 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         get_sockname, /* stringify address */
         get_peername, /* ditto */
         push_path,    /* HTTP2 push */
-        {
-         {log_stream_id, log_priority_received, log_priority_received_exclusive, log_priority_received_parent,
-          log_priority_received_weight} /* http2 */
-        }                               /* loggers */
+        {{
+          {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits}, /* ssl */
+          {log_stream_id, log_priority_received, log_priority_received_exclusive, log_priority_received_parent,
+           log_priority_received_weight} /* http2 */
+        }}                               /* loggers */
     };
     h2o_http2_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 

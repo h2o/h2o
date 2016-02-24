@@ -185,6 +185,10 @@ static struct log_element_t *compile_log_format(const char *fmt, size_t *_num_el
                     MAP_EXT_TO_PROTO("http2.priority.received.exclusive", http2.priority_received_exclusive);
                     MAP_EXT_TO_PROTO("http2.priority.received.parent", http2.priority_received_parent);
                     MAP_EXT_TO_PROTO("http2.priority.received.weight", http2.priority_received_weight);
+                    MAP_EXT_TO_PROTO("ssl.protocol-version", ssl.protocol_version);
+                    MAP_EXT_TO_PROTO("ssl.session-reused", ssl.session_reused);
+                    MAP_EXT_TO_PROTO("ssl.cipher", ssl.cipher);
+                    MAP_EXT_TO_PROTO("ssl.cipher-bits", ssl.cipher_bits);
                     { /* not found */
                         h2o_iovec_t name = strdup_lowercased(pt, quote_end - pt);
                         NEW_ELEMENT(ELEMENT_TYPE_EXTENDED_VAR);

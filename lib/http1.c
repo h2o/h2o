@@ -697,9 +697,30 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
     return h2o_socket_getpeername(conn->sock, sa);
 }
 
+#define DEFINE_TLS_LOGGER(name)                                                                                                    \
+    static h2o_iovec_t log_##name(h2o_req_t *req)                                                                                  \
+    {                                                                                                                              \
+        struct st_h2o_http1_conn_t *conn = (void *)req->conn;                                                                      \
+        return h2o_socket_log_ssl_##name(conn->sock, &req->pool);                                                                  \
+    }
+
+DEFINE_TLS_LOGGER(protocol_version)
+DEFINE_TLS_LOGGER(session_reused)
+DEFINE_TLS_LOGGER(cipher)
+DEFINE_TLS_LOGGER(cipher_bits)
+
+#undef DEFINE_TLS_LOGGER
+
 void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
-    static const h2o_conn_callbacks_t callbacks = {get_sockname, get_peername};
+    static const h2o_conn_callbacks_t callbacks = {
+        get_sockname, /* stringify address */
+        get_peername, /* ditto */
+        NULL,         /* push */
+        {{
+          {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits}, /* ssl */
+          {}                                                                       /* http2 */
+        }}};
     struct st_h2o_http1_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
     /* zero-fill all properties expect req */

@@ -441,6 +441,26 @@ socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa)
     return len;
 }
 
+const char *h2o_socket_get_ssl_protocol_version(h2o_socket_t *sock)
+{
+    return sock->ssl != NULL ? SSL_get_version(sock->ssl->ssl) : NULL;
+}
+
+int h2o_socket_get_ssl_session_reused(h2o_socket_t *sock)
+{
+    return sock->ssl != NULL ? (int)SSL_session_reused(sock->ssl->ssl) : -1;
+}
+
+const char *h2o_socket_get_ssl_cipher(h2o_socket_t *sock)
+{
+    return sock->ssl != NULL ? SSL_get_cipher_name(sock->ssl->ssl) : NULL;
+}
+
+int h2o_socket_get_ssl_cipher_bits(h2o_socket_t *sock)
+{
+    return sock->ssl != NULL ? SSL_get_cipher_bits(sock->ssl->ssl, NULL) : 0;
+}
+
 int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y)
 {
 #define CMP(a, b)                                                                                                                  \
