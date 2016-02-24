@@ -21,6 +21,7 @@
  */
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <netdb.h>
 #include <string.h>
@@ -459,6 +460,19 @@ const char *h2o_socket_get_ssl_cipher(h2o_socket_t *sock)
 int h2o_socket_get_ssl_cipher_bits(h2o_socket_t *sock)
 {
     return sock->ssl != NULL ? SSL_get_cipher_bits(sock->ssl->ssl, NULL) : 0;
+}
+
+h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *pool)
+{
+    int bits = h2o_socket_get_ssl_cipher_bits(sock);
+    if (bits != 0) {
+        char *s = (char *)(pool != NULL ? h2o_mem_alloc_pool(pool, sizeof(H2O_INT16_LONGEST_STR))
+                                        : h2o_mem_alloc(sizeof(H2O_INT16_LONGEST_STR)));
+        size_t len = sprintf(s, "%" PRId16, (int16_t)bits);
+        return h2o_iovec_init(s, len);
+    } else {
+        return h2o_iovec_init(H2O_STRLIT("-"));
+    }
 }
 
 int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y)

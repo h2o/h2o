@@ -26,7 +26,6 @@
 extern "C" {
 #endif
 
-#include <inttypes.h>
 #include <stdint.h>
 #include <sys/socket.h>
 #include <openssl/ssl.h>
@@ -178,7 +177,7 @@ int h2o_socket_get_ssl_cipher_bits(h2o_socket_t *sock);
 static h2o_iovec_t h2o_socket_log_ssl_protocol_version(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 static h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 static h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t *pool);
-static h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 /**
  * compares socket addresses
  */
@@ -264,19 +263,6 @@ inline h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t 
 {
     const char *s = h2o_socket_get_ssl_cipher(sock);
     return s != NULL ? h2o_iovec_init(s, strlen(s)) : h2o_iovec_init(H2O_STRLIT("-"));
-}
-
-inline h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *pool)
-{
-    int bits = h2o_socket_get_ssl_cipher_bits(sock);
-    if (bits != 0) {
-        char *s = (char *)(pool != NULL ? h2o_mem_alloc_pool(pool, sizeof(H2O_INT16_LONGEST_STR))
-                                        : h2o_mem_alloc(sizeof(H2O_INT16_LONGEST_STR)));
-        size_t len = sprintf(s, "%" PRId16, (int16_t)bits);
-        return h2o_iovec_init(s, len);
-    } else {
-        return h2o_iovec_init(H2O_STRLIT("-"));
-    }
 }
 
 #ifdef __cplusplus
