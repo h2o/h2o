@@ -158,15 +158,19 @@ void h2o_multithread_send_message(h2o_multithread_receiver_t *receiver, h2o_mult
 {
     int do_send = 0;
 
-    assert(!h2o_linklist_is_linked(&message->link));
-
     pthread_mutex_lock(&receiver->queue->mutex);
-    if (h2o_linklist_is_empty(&receiver->_messages)) {
-        h2o_linklist_unlink(&receiver->_link);
-        h2o_linklist_insert(&receiver->queue->receivers.active, &receiver->_link);
-        do_send = 1;
+    if (message != NULL) {
+        assert(!h2o_linklist_is_linked(&message->link));
+        if (h2o_linklist_is_empty(&receiver->_messages)) {
+            h2o_linklist_unlink(&receiver->_link);
+            h2o_linklist_insert(&receiver->queue->receivers.active, &receiver->_link);
+            do_send = 1;
+        }
+        h2o_linklist_insert(&receiver->_messages, &message->link);
+    } else {
+        if (h2o_linklist_is_empty(&receiver->_messages))
+            do_send = 1;
     }
-    h2o_linklist_insert(&receiver->_messages, &message->link);
     pthread_mutex_unlock(&receiver->queue->mutex);
 
     if (do_send) {
