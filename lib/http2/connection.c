@@ -1099,14 +1099,10 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
            log_priority_received_weight} /* http2 */
         }}                               /* loggers */
     };
-    h2o_http2_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
-    /* init the connection */
-    memset(conn, 0, sizeof(*conn));
-    conn->super.ctx = ctx;
-    conn->super.hosts = hosts;
-    conn->super.connected_at = connected_at;
-    conn->super.callbacks = &callbacks;
+    h2o_http2_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx, hosts, connected_at, &callbacks);
+
+    memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
     conn->sock = sock;
     conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
     conn->streams = kh_init(h2o_http2_stream_t);

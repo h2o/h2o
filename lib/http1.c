@@ -721,10 +721,10 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
           {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits}, /* ssl */
           {}                                                                       /* http2 */
         }}};
-    struct st_h2o_http1_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
+    struct st_h2o_http1_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx->ctx, ctx->hosts, connected_at, &callbacks);
 
     /* zero-fill all properties expect req */
-    memset(conn, 0, offsetof(struct st_h2o_http1_conn_t, req));
+    memset((char *)conn + sizeof(conn->super), 0, offsetof(struct st_h2o_http1_conn_t, req) - sizeof(conn->super));
 
     /* init properties that need to be non-zero */
     conn->super.ctx = ctx->ctx;
