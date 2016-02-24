@@ -77,8 +77,7 @@ The directive specifies the address at where the FastCGI daemon is running.
 </p>
 
 <p>
-If the argument is a scalar, the value is considered as the path to a unix socket.
-Following properties are recognized if the argument is a mapping.
+If the argument is a mapping, following properties are recognized.
 <dl>
 <dt><code>host</code>
 <dd>name (or IP address) of the server running the FastCGI daemon (ignored if <code>type</code> is <code>unix</code>)
@@ -87,6 +86,9 @@ Following properties are recognized if the argument is a mapping.
 <dt><code>type</code>
 <dd>either <code>tcp</code> (default) or <code>unix</code>
 </dl>
+</p>
+<p>
+If the argument is a scalar, the value is considered as a TCP port number and the host is assumed to be <code>127.0.0.1</code>.
 </p>
 <div class="example">
 <div class="caption">Example. Map <code>/app</code> to FastCGI daemon listening to <code>/tmp/fcgi.sock</code></div>

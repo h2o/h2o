@@ -31,7 +31,7 @@ If the supplied argument is a mapping, its <code>path</code> property is conside
 <?= $ctx->{example}->('Emit access log to file using Common Log Format', <<'EOT')
 access-log:
     path: /path/to/access-log-file
-    format: "%h %l %u %t \"%r\" %>s %b"
+    format: "%h %l %u %t \"%r\" %s %b"
 EOT
 ?>
 
