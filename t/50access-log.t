@@ -139,4 +139,32 @@ subtest 'header-termination (issue 462)' => sub {
     );
 };
 
+subtest 'extensions' => sub {
+    doit(
+        sub {
+            my $server = shift;
+            system("curl --silent http://127.0.0.1:$server->{port}/ > /dev/null");
+            system("curl --silent --insecure @{[curl_supports_http2() ? ' --http1.1' : '']} https://127.0.0.1:$server->{tls_port}/ > /dev/null");
+            if (prog_exists("nghttp")) {
+                system("nghttp -n https://127.0.0.1:$server->{tls_port}/");
+                system("nghttp -n --weight=22 https://127.0.0.1:$server->{tls_port}/");
+            }
+        },
+        '%{connection-id}x %{ssl.protocol-version}x %{ssl.session-reused}x %{ssl.cipher}x %{ssl.cipher-bits}x %{http2.stream-id}x %{http2.priority.received}x',
+        do {
+            my @expected = (
+                qr{^2 - - - - - -$}is,
+                qr{^3 TLSv[0-9.]+ 0 \S+RSA\S+ (?:128|256) - -$}is,
+            );
+            if (prog_exists("nghttp")) {
+                push @expected, +(
+                    qr{^4 TLSv[0-9.]+ 0 \S+RSA\S+ (?:128|256) [0-9]*[13579] 0:[0-9]+:16}is,
+                    qr{^5 TLSv[0-9.]+ 0 \S+RSA\S+ (?:128|256) [0-9]*[13579] 0:[0-9]+:22}is,
+                );
+            }
+            @expected;
+        },
+    );
+};
+
 done_testing;
