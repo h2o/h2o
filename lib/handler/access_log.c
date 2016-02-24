@@ -302,7 +302,7 @@ static inline int timeval_is_null(struct timeval *tv)
     return tv->tv_sec == 0;
 }
 
-#define DURATION_MAX_LEN (sizeof("-2147483648.999999") - 1)
+#define DURATION_MAX_LEN (sizeof(H2O_INT32_LONGEST_STR ".999999") - 1)
 
 static char *append_duration(char *pos, struct timeval *from, struct timeval *until)
 {
@@ -385,8 +385,8 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             pos = append_addr(pos, req->conn->callbacks->get_sockname, req->conn);
             break;
         case ELEMENT_TYPE_BYTES_SENT: /* %b */
-            RESERVE(sizeof("18446744073709551615") - 1);
-            pos += sprintf(pos, "%llu", (unsigned long long)req->bytes_sent);
+            RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
+            pos += sprintf(pos, "%" PRIu64, (uint64_t)req->bytes_sent);
             break;
         case ELEMENT_TYPE_PROTOCOL: /* %H */
             RESERVE(sizeof("HTTP/1.1"));
@@ -401,7 +401,7 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             pos = append_unsafe_string(pos, req->input.method.base, req->input.method.len);
             break;
         case ELEMENT_TYPE_LOCAL_PORT: /* %p */
-            RESERVE(sizeof("65535") - 1);
+            RESERVE(sizeof(H2O_UINT16_LONGEST_STR) - 1);
             pos = append_port(pos, req->conn->callbacks->get_sockname, req->conn);
             break;
         case ELEMENT_TYPE_QUERY: /* %q */
@@ -420,8 +420,8 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             pos += h2o_stringify_protocol_version(pos, req->version);
             break;
         case ELEMENT_TYPE_STATUS: /* %s */
-            RESERVE(sizeof("2147483647") - 1);
-            pos += sprintf(pos, "%d", req->res.status);
+            RESERVE(sizeof(H2O_INT32_LONGEST_STR) - 1);
+            pos += sprintf(pos, "%" PRId32, (int32_t)req->res.status);
             break;
         case ELEMENT_TYPE_TIMESTAMP: /* %t */
             RESERVE(H2O_TIMESTR_LOG_LEN + 2);
@@ -441,16 +441,16 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
             pos += len;
         } break;
         case ELEMENT_TYPE_TIMESTAMP_SEC_SINCE_EPOCH: /* %{sec}t */
-            RESERVE(sizeof("4294967295") - 1);
+            RESERVE(sizeof(H2O_UINT32_LONGEST_STR) - 1);
             pos += sprintf(pos, "%" PRIu32, (uint32_t)req->processed_at.at.tv_sec);
             break;
         case ELEMENT_TYPE_TIMESTAMP_MSEC_SINCE_EPOCH: /* %{msec}t */
-            RESERVE(sizeof("18446744073709551615") - 1);
+            RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
             pos += sprintf(pos, "%" PRIu64,
                            (uint64_t)req->processed_at.at.tv_sec * 1000 + (uint64_t)req->processed_at.at.tv_usec / 1000);
             break;
         case ELEMENT_TYPE_TIMESTAMP_USEC_SINCE_EPOCH: /* %{usec}t */
-            RESERVE(sizeof("18446744073709551615") - 1);
+            RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
             pos +=
                 sprintf(pos, "%" PRIu64, (uint64_t)req->processed_at.at.tv_sec * 1000000 + (uint64_t)req->processed_at.at.tv_usec);
             break;

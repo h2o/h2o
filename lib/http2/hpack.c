@@ -31,7 +31,7 @@
 #define HEADER_TABLE_ENTRY_SIZE_OFFSET 32
 #define STATUS_HEADER_MAX_SIZE 5
 #define CONTENT_LENGTH_HEADER_MAX_SIZE                                                                                             \
-    (3 + sizeof("18446744073709551615") - 1) /* uses Literal Header Field without Indexing (RFC7541 6.2.2) */
+    (3 + sizeof(H2O_UINT64_LONGEST_STR) - 1) /* uses Literal Header Field without Indexing (RFC7541 6.2.2) */
 
 struct st_h2o_hpack_static_table_entry_t {
     const h2o_token_t *name;
