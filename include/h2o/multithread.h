@@ -68,7 +68,7 @@ void h2o_multithread_register_receiver(h2o_multithread_queue_t *queue, h2o_multi
  */
 void h2o_multithread_unregister_receiver(h2o_multithread_queue_t *queue, h2o_multithread_receiver_t *receiver);
 /**
- * sends a message
+ * sends a message (or set message to NULL to just wake up the receiving thread)
  */
 void h2o_multithread_send_message(h2o_multithread_receiver_t *receiver, h2o_multithread_message_t *message);
 /**

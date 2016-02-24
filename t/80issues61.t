@@ -35,14 +35,17 @@ subtest 'http1' => sub {
     my $doit = sub {
         my ($proto, $port) = @_;
         my $extra = '';
-        $extra .= ' --insecure'
-            if $proto eq 'https';
+        if ($proto eq 'https') {
+            $extra .= ' --insecure';
+            $extra .= ' --http1.1'
+                if curl_supports_http2();
+        }
         subtest $proto => sub {
             my $resp = `curl --max-time 1 $extra $proto://127.0.0.1:$port/streaming-body 2>&1`;
             like $resp, qr/operation timed out/i, "operation should time out";
             sleep 1;
             $resp = `curl --silent --dump-header /dev/stderr $extra $proto://127.0.0.1:$port/ 2>&1 > /dev/null`;
-            like $resp, qr{^HTTP/1\.[0-9]+ 404 }s, "server is still alive";
+            like $resp, qr{^HTTP/[^ ]+ 404\s}s, "server is still alive";
         };
     };
     $doit->('http', $h2o->{port});

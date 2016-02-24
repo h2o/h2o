@@ -143,6 +143,8 @@ void test_lib__common__multithread_c(void)
 #endif
     }
 
+    pthread_join(tid, NULL);
+
     h2o_multithread_unregister_receiver(worker_thread.queue, &worker_thread.ping_receiver);
     h2o_multithread_destroy_queue(worker_thread.queue);
     destroy_loop(worker_thread.loop);

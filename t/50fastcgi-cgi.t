@@ -24,16 +24,12 @@ hosts:
         file.dir: @{[ DOC_ROOT ]}
 EOT
 
-my $doit = sub {
-    my ($proto, $port) = @_;
-    subtest $proto => sub {
-        my $resp = `curl --insecure --silent $proto://127.0.0.1:$port/hello.cgi?name=world`;
-        is $resp, "Hello world", "GET";
-        $resp = `curl --insecure --silent -F name=world $proto://127.0.0.1:$port/hello.cgi`;
-        is $resp, "Hello world", "POST";
-    };
-};
-$doit->('http', $server->{port});
-$doit->('https', $server->{tls_port});
+run_with_curl($server, sub {
+    my ($proto, $port, $curl) = @_;
+    my $resp = `$curl --silent $proto://127.0.0.1:$port/hello.cgi?name=world`;
+    is $resp, "Hello world", "GET";
+    $resp = `$curl --silent -F name=world $proto://127.0.0.1:$port/hello.cgi`;
+    is $resp, "Hello world", "POST";
+});
 
 done_testing();

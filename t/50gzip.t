@@ -25,15 +25,17 @@ hosts:
             is_compressible: NO
 EOT
 
-my $doit = sub {
-    my ($proto, $port) = @_;
+run_with_curl($server, sub {
+    my ($proto, $port, $curl) = @_;
+    plan skip_all => 'curl issue #661'
+        if $curl =~ /--http2/;
     my $fetch_orig = sub {
         my ($path, $opts) = @_;
-        run_prog("curl --silent --insecure $opts $proto://127.0.0.1:$port$path/alice.txt");
+        run_prog("$curl --silent $opts $proto://127.0.0.1:$port$path/alice.txt");
     };
     my $fetch_gunzip = sub {
         my ($path, $opts) = @_;
-        run_prog("curl --silent --insecure $opts $proto://127.0.0.1:$port$path/alice.txt | gzip -cd");
+        run_prog("$curl --silent $opts $proto://127.0.0.1:$port$path/alice.txt | gzip -cd");
     };
     my $expected = md5_file("@{[DOC_ROOT]}/alice.txt");
 
@@ -55,19 +57,12 @@ my $doit = sub {
     $resp = $fetch_orig->("/off-by-mime", "-H accept-encoding:gzip");
     is md5_hex($resp), $expected, "off due to is_compressible:NO";
 
-    $resp = run_prog("curl --silent --insecure -H accept-encoding:gzip $proto://127.0.0.1:$port/on/index.txt");
+    $resp = run_prog("$curl --silent -H accept-encoding:gzip $proto://127.0.0.1:$port/on/index.txt");
     is md5_hex($resp), md5_file("@{[DOC_ROOT]}/index.txt"), "tiny file not compressed";
 
-    $resp = run_prog("curl --silent --insecure -H accept-encoding:gzip $proto://127.0.0.1:$port/on/halfdome.jpg");
+    $resp = run_prog("$curl --silent -H accept-encoding:gzip $proto://127.0.0.1:$port/on/halfdome.jpg");
     is md5_hex($resp), md5_file("@{[DOC_ROOT]}/halfdome.jpg"), "image not compressed";
-};
-
-subtest 'http' => sub {
-    $doit->('http', $server->{port});
-};
-subtest 'https' => sub {
-    $doit->('https', $server->{tls_port});
-};
+});
 
 undef $server;
 

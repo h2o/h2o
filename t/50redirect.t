@@ -6,6 +6,10 @@ use t::Util;
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
 
+my $curl = "curl --insecure";
+$curl .= " --http1.1"
+    if curl_supports_http2();
+
 my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
@@ -21,9 +25,9 @@ EOT
 sub doit {
     my ($url, $expected_status, $expected_location) = @_;
     subtest $url => sub {
-        my ($stderr, $stdout) = run_prog("curl --silent --show-error --insecure --max-redirs 0 --dump-header /dev/stderr $url");
-        like $stderr, qr{^HTTP/1\.1 $expected_status .*}s, "status";
-        like $stderr, qr{^location: $expected_location\r$}im, "location";
+        my ($stderr, $stdout) = run_prog("$curl --silent --show-error --max-redirs 0 --dump-header /dev/stderr $url");
+        like $stderr, qr{^HTTP/[^ ]+ $expected_status\s}s, "status";
+        like $stderr, qr{^location: ?$expected_location\r$}im, "location";
     };
 }
 

@@ -175,7 +175,7 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
             deferred.entries[deferred.size++] = (struct st_cmd_value_t){cmd, value};
         } else {
             if (cmd->cb(cmd, ctx, value) != 0)
-                return -1;
+                goto Exit;
         }
     SkipCommand:
         ;

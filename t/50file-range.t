@@ -21,9 +21,9 @@ hosts:
         file.dir: @{[ DOC_ROOT ]}
 EOT
 
-sub doit {
-    my ($proto, $port, $curl_opts) = @_;
-    my $curl_cmd = "curl --silent --show-error --insecure $curl_opts";
+run_with_curl($server, sub {
+    my ($proto, $port, $curl_cmd) = @_;
+    $curl_cmd .= " --silent --show-error";
     my $url = "$proto://127.0.0.1:$port/halfdome.jpg";
 
     subtest "non-ranged" => sub {
@@ -52,7 +52,7 @@ sub doit {
 
         subtest "closed-unsatisfied" => sub {
             my $headers = `$curl_cmd --dump-header /dev/stderr -r 999999-999999 $url 2>&1 > /dev/null`;
-            like $headers, qr{^HTTP/1.1 416 }mi, "416 response";
+            like $headers, qr{^HTTP/[^ ]+ 416\s}mi, "416 response";
         };
 
         subtest "tail-open" => sub {
@@ -95,20 +95,6 @@ sub doit {
         my $headers = `$curl_cmd -r 100-199,1000-1099 --dump-header /dev/stderr $url 2>&1 > /dev/null`;
         like $headers, qr{^content-type:\s*multipart/byteranges; boundary=[0-9A-Za-z]{20}\r$}mi, "content-type";
     };
-}
-
-subtest "http1(http)" => sub {
-    doit("http", $server->{port}, "");
-};
-
-subtest "http1(https)" => sub {
-    doit("https", $server->{tls_port}, "");
-};
-
-subtest "http2" => sub {
-    plan skip_all => "curl does not support HTTP/2"
-        unless curl_supports_http2();
-    doit("https", $server->{tls_port}, "--http2");
-};
+});
 
 done_testing();

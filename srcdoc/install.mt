@@ -1,15 +1,24 @@
 ? my $ctx = $main::context;
 ? $_mt->wrapper_file("wrapper.mt", "Install")->(sub {
 
-<h3>Installing the Binary Distribution</h3>
+<h3 id="binary">Installing a Binary Package</h3>
 
-<div>
-Thanks to others, H2O is provided as a binary package on some of the operating systems (e.g. yum, apt-get, brew).
-
+<p>
+Thanks to others, H2O is provided as a binary package on some environments.
 Therefore you may try to at first install the software using your favorite packaging system, and then resort to installing from source as described below.
-</div>
+</p>
 
-<h3>Installing from Source</h3>
+<p>
+At the time being, following packages are known to be actively maintained<?= $ctx->{note}->(q{Please open a new issue on <a href="https://github.com/h2o/h2o">Github</a> if you want a new package to get added.}) ?>:
+<ul>
+<li><a href="http://portsmon.freebsd.org/portoverview.py?category=www&portname=h2o">FreeBSD</a></li>
+<li><a href="http://brewformulas.org/H2o">Homebrew (OS X)</a></li>
+<li><a href="https://github.com/tatsushid/h2o-rpm">RPM (Fedora, RHEL/CentOS, OpenSUSE)</a></li>
+<li><a href="https://hub.docker.com/r/lkwg82/h2o-http2-server/">Docker Image</a></li>
+</ul>
+</p>
+
+<h3 id="from-source">Installing from Source</h3>
 
 <p>
 Download a release version from <a href="https://github.com/h2o/h2o/releases">the releases page</a> or clone the master branch from <a href="https://github.com/h2o/h2o/">the source repository</a>, and build it using <a href="http://www.cmake.org/">CMake</a><?= $ctx->{note}->("CMake is a popular build tool that can be found as a binary package on most operating systems.") ?>.
