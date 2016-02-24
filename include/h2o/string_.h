@@ -36,6 +36,13 @@ extern "C" {
 
 #define H2O_STRLIT(s) (s), sizeof(s) - 1
 
+#define H2O_INT16_LONGEST_STR "-32768"
+#define H2O_UINT16_LONGEST_STR "65535"
+#define H2O_INT32_LONGEST_STR "-2147483648"
+#define H2O_UINT32_LONGEST_STR "4294967295"
+#define H2O_INT64_LONGEST_STR "-9223372036854775808"
+#define H2O_UINT64_LONGEST_STR "18446744073709551615"
+
 /**
  * duplicates given string
  * @param pool memory pool (or NULL to use malloc)

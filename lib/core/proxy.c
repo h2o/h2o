@@ -163,7 +163,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
     buf.base[offset++] = '\n';
     assert(offset <= buf.len);
     if (req->entity.base != NULL) {
-        RESERVE(sizeof("content-length: 18446744073709551615") - 1);
+        RESERVE(sizeof("content-length: " H2O_UINT64_LONGEST_STR) - 1);
         offset += sprintf(buf.base + offset, "content-length: %zu\r\n", req->entity.len);
     }
     {

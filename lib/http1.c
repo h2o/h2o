@@ -548,7 +548,7 @@ static size_t flatten_headers_estimate_size(h2o_req_t *req, size_t server_name_a
 {
     size_t len = sizeof("HTTP/1.1  \r\ndate: \r\nserver: \r\nconnection: \r\ncontent-length: \r\n\r\n") + 3 +
                  strlen(req->res.reason) + H2O_TIMESTR_RFC1123_LEN + server_name_and_connection_len +
-                 sizeof("18446744073709551615") - 1 + sizeof("cache-control: private") - 1;
+                 sizeof(H2O_UINT64_LONGEST_STR) - 1 + sizeof("cache-control: private") - 1;
     const h2o_header_t *header, *end;
 
     for (header = req->res.headers.entries, end = header + req->res.headers.size; header != end; ++header)
@@ -697,13 +697,34 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
     return h2o_socket_getpeername(conn->sock, sa);
 }
 
+#define DEFINE_TLS_LOGGER(name)                                                                                                    \
+    static h2o_iovec_t log_##name(h2o_req_t *req)                                                                                  \
+    {                                                                                                                              \
+        struct st_h2o_http1_conn_t *conn = (void *)req->conn;                                                                      \
+        return h2o_socket_log_ssl_##name(conn->sock, &req->pool);                                                                  \
+    }
+
+DEFINE_TLS_LOGGER(protocol_version)
+DEFINE_TLS_LOGGER(session_reused)
+DEFINE_TLS_LOGGER(cipher)
+DEFINE_TLS_LOGGER(cipher_bits)
+
+#undef DEFINE_TLS_LOGGER
+
 void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
-    static const h2o_conn_callbacks_t callbacks = {get_sockname, get_peername};
-    struct st_h2o_http1_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
+    static const h2o_conn_callbacks_t callbacks = {
+        get_sockname, /* stringify address */
+        get_peername, /* ditto */
+        NULL,         /* push */
+        {{
+          {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits}, /* ssl */
+          {}                                                                       /* http2 */
+        }}};
+    struct st_h2o_http1_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx->ctx, ctx->hosts, connected_at, &callbacks);
 
     /* zero-fill all properties expect req */
-    memset(conn, 0, offsetof(struct st_h2o_http1_conn_t, req));
+    memset((char *)conn + sizeof(conn->super), 0, offsetof(struct st_h2o_http1_conn_t, req) - sizeof(conn->super));
 
     /* init properties that need to be non-zero */
     conn->super.ctx = ctx->ctx;

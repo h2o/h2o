@@ -382,3 +382,5 @@ const h2o_iovec_t *h2o_alpn_protocols = alpn_protocols;
 const char *h2o_http2_npn_protocols = NPN_PROTOCOLS_CORE;
 const char *h2o_npn_protocols = NPN_PROTOCOLS_CORE "\x08"
                                                    "http/1.1";
+
+uint64_t h2o_connection_id = 0;
