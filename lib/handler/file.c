@@ -225,21 +225,20 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
     *is_dir = 0;
 
     if ((flags & H2O_FILE_FLAG_SEND_COMPRESSED) != 0 && req->version >= 0x101) {
-        ssize_t header_index;
-        if ((header_index = h2o_find_header(&req->headers, H2O_TOKEN_ACCEPT_ENCODING, -1)) != -1) {
-            h2o_iovec_t accept_encoding = req->headers.entries[header_index].value;
+        int compressible_types = h2o_get_compressible_types(&req->headers);
+        if (compressible_types != 0) {
             char *variant_path = h2o_mem_alloc_pool(&req->pool, path_len + sizeof(".gz"));
-#define TRY_VARIANT(enc, ext)                                                                                                      \
-    if (h2o_contains_token(accept_encoding.base, accept_encoding.len, enc, sizeof(enc) - 1, ',')) {                                \
-        memcpy(variant_path, path, path_len);                                                                                      \
+            memcpy(variant_path, path, path_len);
+#define TRY_VARIANT(mask, enc, ext)                                                                                                \
+    if ((compressible_types & mask) != 0) {                                                                                        \
         strcpy(variant_path + path_len, ext);                                                                                      \
         if ((fileref = h2o_filecache_open_file(req->conn->ctx->filecache, variant_path, O_RDONLY | O_CLOEXEC)) != NULL) {          \
             content_encoding = h2o_iovec_init(enc, sizeof(enc) - 1);                                                               \
             goto Opened;                                                                                                           \
         }                                                                                                                          \
     }
-            TRY_VARIANT("br", ".br");
-            TRY_VARIANT("gzip", ".gz");
+            TRY_VARIANT(H2O_COMPRESSIBLE_BROTLI, "br", ".br");
+            TRY_VARIANT(H2O_COMPRESSIBLE_GZIP, "gzip", ".gz");
 #undef TRY_VARIANT
         }
     }

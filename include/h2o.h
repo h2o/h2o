@@ -895,6 +895,12 @@ size_t h2o_stringify_protocol_version(char *dst, int version);
 h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
                                                    const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
                                                    h2o_iovec_t *base_path);
+/**
+ * return a bitmap of compressible types, by parsing the `accept-encoding` header
+ */
+int h2o_get_compressible_types(const h2o_headers_t *headers);
+#define H2O_COMPRESSIBLE_GZIP 1
+#define H2O_COMPRESSIBLE_BROTLI 2
 
 /* request */
 

@@ -359,6 +359,29 @@ None:
     return (h2o_iovec_t){};
 }
 
+int h2o_get_compressible_types(const h2o_headers_t *headers)
+{
+    size_t header_index;
+    int compressible_types = 0;
+
+    for (header_index = 0; header_index != headers->size; ++header_index) {
+        const h2o_header_t *header = headers->entries + header_index;
+        if (H2O_UNLIKELY(header->name == &H2O_TOKEN_ACCEPT_ENCODING->buf)) {
+            h2o_iovec_t iter = h2o_iovec_init(header->value.base, header->value.len);
+            const char *token = NULL;
+            size_t token_len = 0;
+            while ((token = h2o_next_token(&iter, ',', &token_len, NULL)) != NULL) {
+                if (h2o_lcstris(token, token_len, H2O_STRLIT("gzip")))
+                    compressible_types |= H2O_COMPRESSIBLE_GZIP;
+                else if (h2o_lcstris(token, token_len, H2O_STRLIT("br")))
+                    compressible_types |= H2O_COMPRESSIBLE_BROTLI;
+            }
+        }
+    }
+
+    return compressible_types;
+}
+
 /* h2-14 and h2-16 are kept for backwards compatibility, as they are often used */
 #define ALPN_ENTRY(s)                                                                                                              \
     {                                                                                                                              \
