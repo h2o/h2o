@@ -21,7 +21,7 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8.11)
 CMAKE_POLICY(SET CMP0003 NEW)
 
-PROJECT(h2o C)
+PROJECT(h2o)
 
 SET(VERSION_MAJOR "1")
 SET(VERSION_MINOR "8")
@@ -93,6 +93,7 @@ ENDIF (WITH_BUNDLED_SSL)
 INCLUDE_DIRECTORIES(
     include
     deps/cloexec
+    deps/brotli/enc
     deps/golombset
     deps/libyrmcds
     deps/klib
@@ -156,6 +157,7 @@ IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
 ENDIF ()
 
 SET(CMAKE_C_FLAGS "-O2 -g ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS} -DH2O_ROOT=\"${CMAKE_INSTALL_PREFIX}\"")
+SET(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}")
 
 SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/api.c
@@ -166,6 +168,22 @@ SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/reader.c
     deps/yaml/src/scanner.c
     deps/yaml/src/writer.c)
+
+SET(BROTLI_SOURCE_FILES
+    deps/brotli/enc/backward_references.cc
+    deps/brotli/enc/block_splitter.cc
+    deps/brotli/enc/brotli_bit_stream.cc
+    deps/brotli/enc/compress_fragment.cc
+    deps/brotli/enc/compress_fragment_two_pass.cc
+    deps/brotli/enc/dictionary.cc
+    deps/brotli/enc/encode.cc
+    deps/brotli/enc/entropy_encode.cc
+    deps/brotli/enc/histogram.cc
+    deps/brotli/enc/literal_cost.cc
+    deps/brotli/enc/metablock.cc
+    deps/brotli/enc/static_dict.cc
+    deps/brotli/enc/streams.cc
+    deps/brotli/enc/utf8_util.cc)
 
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
@@ -348,8 +366,14 @@ SET_TARGET_PROPERTIES(examples-websocket PROPERTIES
 TARGET_LINK_LIBRARIES(examples-websocket libh2o ${LIBUV_LIBRARIES} ${WSLAY_LIBRARIES} ${EXTRA_LIBS})
 
 # standalone server directly links to libh2o using evloop
-SET(STANDALONE_SOURCE_FILES ${LIB_SOURCE_FILES} ${LIBYAML_SOURCE_FILES} deps/neverbleed/neverbleed.c src/ssl.c src/main.c)
-SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
+SET(STANDALONE_SOURCE_FILES
+    ${LIB_SOURCE_FILES}
+    ${LIBYAML_SOURCE_FILES}
+    ${BROTLI_SOURCE_FILES}
+    deps/neverbleed/neverbleed.c
+    src/main.c
+    src/ssl.c)
+SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1")
 IF (WITH_MRUBY)
     IF (${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
         SET(MRUBY_TOOLCHAIN "clang")
