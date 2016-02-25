@@ -53,9 +53,9 @@
 		106C22FF1C05436100405689 /* errordoc.c in Sources */ = {isa = PBXBuildFile; fileRef = 106C22FE1C05436100405689 /* errordoc.c */; };
 		106C23011C0544CE00405689 /* errordoc.c in Sources */ = {isa = PBXBuildFile; fileRef = 106C23001C0544CE00405689 /* errordoc.c */; };
 		1070866A1B70A00F002B8F18 /* casper.c in Sources */ = {isa = PBXBuildFile; fileRef = 107086691B70A00F002B8F18 /* casper.c */; };
-		1070866C1B787D06002B8F18 /* gzip.c in Sources */ = {isa = PBXBuildFile; fileRef = 1070866B1B787D06002B8F18 /* gzip.c */; };
-		107086701B7925D5002B8F18 /* gzip.c in Sources */ = {isa = PBXBuildFile; fileRef = 1070866F1B7925D5002B8F18 /* gzip.c */; };
-		107086721B798488002B8F18 /* gzip.c in Sources */ = {isa = PBXBuildFile; fileRef = 107086711B798487002B8F18 /* gzip.c */; };
+		1070866C1B787D06002B8F18 /* compress.c in Sources */ = {isa = PBXBuildFile; fileRef = 1070866B1B787D06002B8F18 /* compress.c */; };
+		107086701B7925D5002B8F18 /* compress.c in Sources */ = {isa = PBXBuildFile; fileRef = 1070866F1B7925D5002B8F18 /* compress.c */; };
+		107086721B798488002B8F18 /* compress.c in Sources */ = {isa = PBXBuildFile; fileRef = 107086711B798487002B8F18 /* compress.c */; };
 		1070E1631B4508B0001CCAFA /* util.c in Sources */ = {isa = PBXBuildFile; fileRef = 1070E1621B4508B0001CCAFA /* util.c */; };
 		10756E2A1AC126420009BF57 /* api.c in Sources */ = {isa = PBXBuildFile; fileRef = 10756E261AC126420009BF57 /* api.c */; };
 		10756E2B1AC126420009BF57 /* dumper.c in Sources */ = {isa = PBXBuildFile; fileRef = 10756E271AC126420009BF57 /* dumper.c */; };
@@ -113,6 +113,7 @@
 		107D4D4F1B58970D004A9B21 /* ssl.c in Sources */ = {isa = PBXBuildFile; fileRef = 107D4D4D1B58970D004A9B21 /* ssl.c */; };
 		107D4D531B5B2412004A9B21 /* file.h in Headers */ = {isa = PBXBuildFile; fileRef = 107D4D521B5B2412004A9B21 /* file.h */; };
 		107D4D551B5B30EE004A9B21 /* file.c in Sources */ = {isa = PBXBuildFile; fileRef = 107D4D541B5B30EE004A9B21 /* file.c */; };
+		107E34101C7EB13F00AEF5F8 /* gzip.c in Sources */ = {isa = PBXBuildFile; fileRef = 107E340F1C7EB13F00AEF5F8 /* gzip.c */; };
 		108867751AD9069900987967 /* defaults.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 108867741AD9069900987967 /* defaults.c.h */; };
 		108DD0861BA22E46004167DC /* mruby.c in Sources */ = {isa = PBXBuildFile; fileRef = 10B38A651B8D345D007DC191 /* mruby.c */; };
 		10A3D3D21B4CDBDC00327CF9 /* memcached.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3D11B4CDBDC00327CF9 /* memcached.c */; };
@@ -372,10 +373,10 @@
 		106C23021C06AB2F00405689 /* 50errordoc.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50errordoc.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		106C23041C1132E000405689 /* errordoc_directives.mt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = errordoc_directives.mt; sourceTree = "<group>"; };
 		107086691B70A00F002B8F18 /* casper.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = casper.c; sourceTree = "<group>"; };
-		1070866B1B787D06002B8F18 /* gzip.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = gzip.c; sourceTree = "<group>"; };
-		1070866F1B7925D5002B8F18 /* gzip.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = gzip.c; sourceTree = "<group>"; };
-		107086711B798487002B8F18 /* gzip.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = gzip.c; sourceTree = "<group>"; };
-		107086741B79A08D002B8F18 /* 50gzip.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50gzip.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		1070866B1B787D06002B8F18 /* compress.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = compress.c; sourceTree = "<group>"; };
+		1070866F1B7925D5002B8F18 /* compress.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = compress.c; sourceTree = "<group>"; };
+		107086711B798487002B8F18 /* compress.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = compress.c; sourceTree = "<group>"; };
+		107086741B79A08D002B8F18 /* 50compress.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50compress.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		1070E15C1B438E8F001CCAFA /* poll.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = poll.c.h; sourceTree = "<group>"; };
 		1070E1621B4508B0001CCAFA /* util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = util.c; sourceTree = "<group>"; };
 		1070E1641B451D43001CCAFA /* 40proxy-protocol.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40proxy-protocol.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -427,6 +428,7 @@
 		107D4D521B5B2412004A9B21 /* file.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = file.h; sourceTree = "<group>"; };
 		107D4D541B5B30EE004A9B21 /* file.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = file.c; sourceTree = "<group>"; };
 		107D4D5D1B5F143B004A9B21 /* setuidgid.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = setuidgid.c; sourceTree = "<group>"; };
+		107E340F1C7EB13F00AEF5F8 /* gzip.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = gzip.c; sourceTree = "<group>"; };
 		108102151C3DB05100C024CD /* 50reverse-proxy-disconnected-keepalive.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-disconnected-keepalive.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		108214FE1AAD34DD00D27E66 /* 50reverse-proxy-0.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-0.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		108215071AAD41CE00D27E66 /* test.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; name = test.pl; path = "50reverse-proxy/test.pl"; sourceTree = "<group>"; };
@@ -648,12 +650,13 @@
 				105534D91A3C7A2000627ECB /* configurator */,
 				101B670B19ADD3380084A351 /* access_log.c */,
 				107923AE19A3217300C52AD6 /* chunked.c */,
+				1070866B1B787D06002B8F18 /* compress.c */,
+				107E340E1C7EB10700AEF5F8 /* compress */,
 				106C22FE1C05436100405689 /* errordoc.c */,
 				104B9A501A5FB096009EEE64 /* expires.c */,
 				10BCF2FC1B168CAE0076939D /* fastcgi.c */,
 				107923AF19A3217300C52AD6 /* file.c */,
 				105534E91A42A83700627ECB /* file */,
-				1070866B1B787D06002B8F18 /* gzip.c */,
 				10AA2EBD1AA019D8004322AC /* headers.c */,
 				107923BB19A3217300C52AD6 /* mimemap.c */,
 				108867731AD9061100987967 /* mimemap */,
@@ -711,7 +714,7 @@
 			children = (
 				10BCF3001B214C460076939D /* fastcgi.c */,
 				105534BD1A3B8F7700627ECB /* file.c */,
-				1070866F1B7925D5002B8F18 /* gzip.c */,
+				1070866F1B7925D5002B8F18 /* compress.c */,
 				105534C21A3B917000627ECB /* mimemap.c */,
 				1058C87C1AA41789008D6180 /* headers.c */,
 				10F9F2641AF4795D0056F26B /* redirect.c */,
@@ -756,11 +759,11 @@
 			isa = PBXGroup;
 			children = (
 				105534DA1A3C7A5400627ECB /* access_log.c */,
+				107086711B798487002B8F18 /* compress.c */,
 				104B9A521A5FC7C4009EEE64 /* expires.c */,
 				106C23001C0544CE00405689 /* errordoc.c */,
 				10BCF2FE1B1A892F0076939D /* fastcgi.c */,
 				105534DC1A3C7AA900627ECB /* file.c */,
-				107086711B798487002B8F18 /* gzip.c */,
 				10AA2EBF1AA019FC004322AC /* headers.c */,
 				10B38A731B8D3544007DC191 /* mruby.c */,
 				105534DE1A3C7B9800627ECB /* proxy.c */,
@@ -1080,6 +1083,14 @@
 			path = src;
 			sourceTree = "<group>";
 		};
+		107E340E1C7EB10700AEF5F8 /* compress */ = {
+			isa = PBXGroup;
+			children = (
+				107E340F1C7EB13F00AEF5F8 /* gzip.c */,
+			);
+			path = compress;
+			sourceTree = "<group>";
+		};
 		108215061AAD41A000D27E66 /* 50reverse-proxy */ = {
 			isa = PBXGroup;
 			children = (
@@ -1171,6 +1182,7 @@
 				10AA2EB31A94B66D004322AC /* 40virtual-host.t */,
 				106C22FB1C0413DA00405689 /* 40websocket.t */,
 				10AA2EB11A931409004322AC /* 50access-log.t */,
+				107086741B79A08D002B8F18 /* 50compress.t */,
 				106C23021C06AB2F00405689 /* 50errordoc.t */,
 				104B9A541A60773E009EEE64 /* 50expires.t */,
 				10C5A6311B268632006094A6 /* 50fastcgi.t */,
@@ -1178,7 +1190,6 @@
 				10FCC1421B300A6800F13674 /* 50fastcgi-php.t */,
 				105534F61A460EF600627ECB /* 50file-config.t */,
 				100AE41A1B27D74800CE18BB /* 50file-range.t */,
-				107086741B79A08D002B8F18 /* 50gzip.t */,
 				1058C87F1AA42568008D6180 /* 50headers.t */,
 				105534F71A460F2E00627ECB /* 50mimemap.t */,
 				10A3D3D61B4F1E3200327CF9 /* 50mruby.t */,
@@ -1491,6 +1502,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				107E34101C7EB13F00AEF5F8 /* gzip.c in Sources */,
 				107923C719A3217300C52AD6 /* hpack.c in Sources */,
 				10A3D40A1B50DAB700327CF9 /* recv.c in Sources */,
 				101788B219B561AA0084C6D8 /* socket.c in Sources */,
@@ -1532,8 +1544,8 @@
 				10A3D3D21B4CDBDC00327CF9 /* memcached.c in Sources */,
 				10B38A741B8D3544007DC191 /* mruby.c in Sources */,
 				107923CF19A3217300C52AD6 /* request.c in Sources */,
-				1070866C1B787D06002B8F18 /* gzip.c in Sources */,
-				107086721B798488002B8F18 /* gzip.c in Sources */,
+				1070866C1B787D06002B8F18 /* compress.c in Sources */,
+				107086721B798488002B8F18 /* compress.c in Sources */,
 				10BCF2FF1B1A892F0076939D /* fastcgi.c in Sources */,
 				104B9A531A5FC7C4009EEE64 /* expires.c in Sources */,
 				10A3D40D1B50DAB700327CF9 /* strerror.c in Sources */,
@@ -1604,7 +1616,7 @@
 				1070866A1B70A00F002B8F18 /* casper.c in Sources */,
 				107D4D491B5880BC004A9B21 /* parser.c in Sources */,
 				104B9A481A5F9472009EEE64 /* headers.c in Sources */,
-				107086701B7925D5002B8F18 /* gzip.c in Sources */,
+				107086701B7925D5002B8F18 /* compress.c in Sources */,
 				107D4D4C1B5880BC004A9B21 /* writer.c in Sources */,
 				10E2995A1A68D03100701AA6 /* scheduler.c in Sources */,
 				103BAB361B130666000694F4 /* socket.c in Sources */,

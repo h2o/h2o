@@ -1216,16 +1216,34 @@ void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
  */
 void h2o_chunked_register(h2o_pathconf_t *pathconf);
 
-/* lib/gzip.c */
+/* lib/compress.c */
+
+enum {
+    H2O_COMPRESS_FLAG_PARTIAL,
+    H2O_COMPRESS_FLAG_FLUSH,
+    H2O_COMPRESS_FLAG_EOS
+};
 
 /**
- * registers the gzip encoding output filter (added by default, for now)
+ * compressor context
  */
-void h2o_gzip_register(h2o_pathconf_t *pathconf);
+typedef struct st_h2o_compress_context_t {
+    void (*compress)(struct st_h2o_compress_context_t *self, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final,
+                     h2o_iovec_t **outbufs, size_t *outbufcnt);
+} h2o_compress_context_t;
+
 /**
- *
+ * registers the gzip/brotli encoding output filter (added by default, for now)
  */
-void h2o_gzip_register_configurator(h2o_globalconf_t *conf);
+void h2o_compress_register(h2o_pathconf_t *pathconf);
+/**
+ * instantiates the gzip compressor
+ */
+h2o_compress_context_t *h2o_compress_gzip_open(h2o_mem_pool_t *pool);
+/**
+ * registers the configurator for the gzip/brotli output filter
+ */
+void h2o_compress_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/errordoc.c */
 

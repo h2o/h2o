@@ -22,18 +22,18 @@
 #include "h2o.h"
 #include "h2o/configurator.h"
 
-struct gzip_config_vars_t {
+struct compress_config_vars_t {
     int on;
 };
 
-struct gzip_configurator_t {
+struct compress_configurator_t {
     h2o_configurator_t super;
-    struct gzip_config_vars_t *vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+    struct compress_config_vars_t *vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
-static int on_config_gzip(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_compress(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct gzip_configurator_t *self = (void *)cmd->configurator;
+    struct compress_configurator_t *self = (void *)cmd->configurator;
 
     if ((self->vars->on = (int)h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
         return -1;
@@ -42,7 +42,7 @@ static int on_config_gzip(h2o_configurator_command_t *cmd, h2o_configurator_cont
 
 static int on_config_enter(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct gzip_configurator_t *self = (void *)configurator;
+    struct compress_configurator_t *self = (void *)configurator;
 
     ++self->vars;
     self->vars[0] = self->vars[-1];
@@ -51,22 +51,24 @@ static int on_config_enter(h2o_configurator_t *configurator, h2o_configurator_co
 
 static int on_config_exit(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct gzip_configurator_t *self = (void *)configurator;
+    struct compress_configurator_t *self = (void *)configurator;
 
     if (ctx->pathconf != NULL && self->vars->on)
-        h2o_gzip_register(ctx->pathconf);
+        h2o_compress_register(ctx->pathconf);
 
     --self->vars;
     return 0;
 }
 
-void h2o_gzip_register_configurator(h2o_globalconf_t *conf)
+void h2o_compress_register_configurator(h2o_globalconf_t *conf)
 {
-    struct gzip_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
+    struct compress_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
 
     c->super.enter = on_config_enter;
     c->super.exit = on_config_exit;
+    h2o_configurator_define_command(&c->super, "compress", H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_compress);
     h2o_configurator_define_command(&c->super, "gzip", H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_gzip);
+                                    on_config_compress);
     c->vars = c->_vars_stack;
 }

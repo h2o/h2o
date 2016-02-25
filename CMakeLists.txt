@@ -203,22 +203,24 @@ SET(LIB_SOURCE_FILES
 
     lib/handler/access_log.c
     lib/handler/chunked.c
+    lib/handler/compress.c
+    lib/handler/compress/gzip.c
     lib/handler/errordoc.c
     lib/handler/expires.c
     lib/handler/fastcgi.c
     lib/handler/file.c
-    lib/handler/gzip.c
+    lib/handler/compress.c
     lib/handler/headers.c
     lib/handler/mimemap.c
     lib/handler/proxy.c
     lib/handler/redirect.c
     lib/handler/reproxy.c
     lib/handler/configurator/access_log.c
+    lib/handler/configurator/compress.c
     lib/handler/configurator/errordoc.c
     lib/handler/configurator/expires.c
     lib/handler/configurator/fastcgi.c
     lib/handler/configurator/file.c
-    lib/handler/configurator/gzip.c
     lib/handler/configurator/headers.c
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
@@ -250,9 +252,9 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/core/headers.c
     t/00unit/lib/core/proxy.c
     t/00unit/lib/core/util.c
+    t/00unit/lib/handler/compress.c
     t/00unit/lib/handler/fastcgi.c
     t/00unit/lib/handler/file.c
-    t/00unit/lib/handler/gzip.c
     t/00unit/lib/handler/headers.c
     t/00unit/lib/handler/mimemap.c
     t/00unit/lib/handler/redirect.c
@@ -272,9 +274,10 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/core/headers.c
     lib/core/proxy.c
     lib/core/util.c
+    lib/handler/compress.c
+    lib/handler/compress/gzip.c
     lib/handler/fastcgi.c
     lib/handler/file.c
-    lib/handler/gzip.c
     lib/handler/headers.c
     lib/handler/mimemap.c
     lib/handler/redirect.c
