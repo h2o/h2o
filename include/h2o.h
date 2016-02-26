@@ -1244,18 +1244,27 @@ typedef struct st_h2o_compress_context_t {
                      h2o_iovec_t **outbufs, size_t *outbufcnt);
 } h2o_compress_context_t;
 
+typedef struct st_h2o_compress_args_t {
+    struct {
+        int quality; /* -1 if disabled */
+    } gzip;
+    struct {
+        int quality; /* -1 if disabled */
+    } brotli;
+} h2o_compress_args_t;
+
 /**
  * registers the gzip/brotli encoding output filter (added by default, for now)
  */
-void h2o_compress_register(h2o_pathconf_t *pathconf);
+void h2o_compress_register(h2o_pathconf_t *pathconf, h2o_compress_args_t *args);
 /**
  * instantiates the gzip compressor
  */
-h2o_compress_context_t *h2o_compress_gzip_open(h2o_mem_pool_t *pool);
+h2o_compress_context_t *h2o_compress_gzip_open(h2o_mem_pool_t *pool, int quality);
 /**
  * instantiates the brotli compressor (only available if H2O_USE_BROTLI is set)
  */
-h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, size_t estimated_cotent_length);
+h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, int quality, size_t estimated_cotent_length);
 /**
  * registers the configurator for the gzip/brotli output filter
  */

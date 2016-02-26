@@ -33,9 +33,10 @@ namespace {
         brotli::BrotliParams params_;
         std::vector<h2o_iovec_t> bufs_; // all bufs_[nnn].base must be free(3)ed
     public:
-        brotli_context(size_t estimated_content_length) : brotli_(NULL) {
+        brotli_context(int quality, size_t estimated_content_length) : brotli_(NULL) {
             name = h2o_iovec_init(H2O_STRLIT("br"));
             compress = _compress;
+            params_.quality = quality;
             if (estimated_content_length != std::numeric_limits<size_t>::max())
                 _update_lgwin(params_, estimated_content_length);
         }
@@ -127,8 +128,8 @@ void brotli_context::_update_lgwin(brotli::BrotliParams &params, size_t estimate
         params.lgwin = std::max(bits, brotli::kMinWindowBits);
 }
 
-h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, size_t estimated_content_length)
+h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, int quality, size_t estimated_content_length)
 {
     brotli_context *ctx = static_cast<brotli_context *>(h2o_mem_alloc_shared(pool, sizeof(*ctx), brotli_context::dispose));
-    return new (ctx) brotli_context(estimated_content_length);
+    return new (ctx) brotli_context(quality, estimated_content_length);
 }
