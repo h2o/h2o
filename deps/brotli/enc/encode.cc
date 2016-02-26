@@ -9,6 +9,7 @@
 #include "./encode.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 

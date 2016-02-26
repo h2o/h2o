@@ -11,6 +11,7 @@
 #include "./brotli_bit_stream.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <vector>
