@@ -1255,7 +1255,7 @@ h2o_compress_context_t *h2o_compress_gzip_open(h2o_mem_pool_t *pool);
 /**
  * instantiates the brotli compressor (only available if H2O_USE_BROTLI is set)
  */
-h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool);
+h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, size_t estimated_cotent_length);
 /**
  * registers the configurator for the gzip/brotli output filter
  */

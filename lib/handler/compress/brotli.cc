@@ -33,9 +33,11 @@ namespace {
         brotli::BrotliParams params_;
         std::vector<h2o_iovec_t> bufs_; // all bufs_[nnn].base must be free(3)ed
     public:
-        brotli_context() : brotli_(NULL) {
+        brotli_context(size_t estimated_content_length) : brotli_(NULL) {
             name = h2o_iovec_init(H2O_STRLIT("br"));
             compress = _compress;
+            if (estimated_content_length != std::numeric_limits<size_t>::max())
+                _update_lgwin(params_, estimated_content_length);
         }
         ~brotli_context() {
             _clear_bufs();
@@ -53,6 +55,7 @@ namespace {
                               h2o_iovec_t **outbufs, size_t *outbufcnt) {
             static_cast<brotli_context*>(self)->_compress(inbufs, inbufcnt, is_final, outbufs, outbufcnt);
         }
+        static void _update_lgwin(brotli::BrotliParams &params, size_t estimated_content_length);
     };
 }
 
@@ -75,8 +78,16 @@ void brotli_context::_emit(bool is_last, bool force_flush)
 
 void brotli_context::_compress(h2o_iovec_t *inbufs, size_t inbufcnt, int is_final, h2o_iovec_t **outbufs, size_t *outbufcnt)
 {
-    if (brotli_ == NULL)
+    if (brotli_ == NULL) {
+        if (is_final) {
+            uint64_t len = 0;
+            for (size_t i = 0; i != inbufcnt; ++i)
+                len += inbufs[i].len;
+            if (len < std::numeric_limits<size_t>::max())
+                _update_lgwin(params_, len);
+        }
         brotli_ = new brotli::BrotliCompressor(params_);
+    }
 
     _clear_bufs();
 
@@ -109,8 +120,15 @@ void brotli_context::_compress(h2o_iovec_t *inbufs, size_t inbufcnt, int is_fina
     *outbufcnt = bufs_.size();
 }
 
-h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool)
+void brotli_context::_update_lgwin(brotli::BrotliParams &params, size_t estimated_content_length)
+{
+    int bits = estimated_content_length > 1 ? sizeof(unsigned long long) * 8 - __builtin_clzll(estimated_content_length - 1) : 1;
+    if (bits < params.lgwin)
+        params.lgwin = std::max(bits, brotli::kMinWindowBits);
+}
+
+h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, size_t estimated_content_length)
 {
     brotli_context *ctx = static_cast<brotli_context *>(h2o_mem_alloc_shared(pool, sizeof(*ctx), brotli_context::dispose));
-    return new (ctx) brotli_context();
+    return new (ctx) brotli_context(estimated_content_length);
 }
