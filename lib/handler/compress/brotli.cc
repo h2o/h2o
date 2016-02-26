@@ -47,8 +47,7 @@ namespace {
         }
     private:
         void _clear_bufs();
-        void _duplicate_last_buf();
-        void _compress_block(const void *src, size_t len, bool is_last, bool force_flush);
+        void _emit(bool is_last, bool force_flush);
         void _compress(h2o_iovec_t *inbufs, size_t inbufcnt, int is_final, h2o_iovec_t **outbufs, size_t *outbufcnt);
         static void _compress(h2o_compress_context_t *self, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final,
                               h2o_iovec_t **outbufs, size_t *outbufcnt) {
@@ -64,15 +63,12 @@ void brotli_context::_clear_bufs()
     bufs_.clear();
 }
 
-void brotli_context::_compress_block(const void *src, size_t len, bool is_last, bool force_flush)
+void brotli_context::_emit(bool is_last, bool force_flush)
 {
     uint8_t *output;
     size_t out_size;
-
-    brotli_->CopyInputToRingBuffer(len, static_cast<const uint8_t *>(src));
     bool ret = brotli_->WriteBrotliData(is_last, force_flush, &out_size, &output);
     assert(ret);
-
     if (out_size != 0)
         bufs_.push_back(h2o_strdup(NULL, reinterpret_cast<const char *>(output), out_size));
 }
@@ -85,18 +81,23 @@ void brotli_context::_compress(h2o_iovec_t *inbufs, size_t inbufcnt, int is_fina
     _clear_bufs();
 
     if (inbufcnt != 0) {
-        size_t max_block_size = brotli_->input_block_size();
-        for (size_t inbufindex = 0; inbufindex != inbufcnt; ++inbufindex) {
-            for (size_t offset = 0; offset != inbufs[inbufindex].len;) {
-                size_t block_size = std::min(inbufs[inbufindex].len - offset, max_block_size);
-                bool is_last = inbufindex == inbufcnt - 1 && offset + block_size == inbufs[inbufindex].len;
-                _compress_block(inbufs[inbufindex].base + offset, block_size, is_last && is_final, is_last && !is_final);
-                offset += block_size;
+        size_t inbufindex = 0, offset = 0, block_space = brotli_->input_block_size();
+        while (inbufindex != inbufcnt) {
+            size_t copy_len = std::min(block_space, inbufs[inbufindex].len - offset);
+            brotli_->CopyInputToRingBuffer(copy_len, reinterpret_cast<const uint8_t *>(inbufs[inbufindex].base) + offset);
+            offset += copy_len;
+            if (inbufs[inbufindex].len == offset)
+                if (++inbufindex == inbufcnt)
+                    break;
+            if (block_space == 0) {
+                _emit(false, false);
+                block_space = brotli_->input_block_size();
             }
         }
+        _emit(is_final, !is_final);
     } else {
         if (is_final)
-            _compress_block("", 0, true, false);
+            _emit(true, false);
     }
 
     if (is_final) {
