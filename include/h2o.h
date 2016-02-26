@@ -50,6 +50,11 @@ extern "C" {
 #include "h2o/url.h"
 #include "h2o/version.h"
 
+#ifndef H2O_USE_BROTLI
+/* disabled for all but the standalone server, since the encoder is written in C++ */
+#define H2O_USE_BROTLI 0
+#endif
+
 #ifndef H2O_MAX_HEADERS
 #define H2O_MAX_HEADERS 100
 #endif
@@ -1228,6 +1233,13 @@ enum {
  * compressor context
  */
 typedef struct st_h2o_compress_context_t {
+    /**
+     * name used in content-encoding header
+     */
+    h2o_iovec_t name;
+    /**
+     * compress
+     */
     void (*compress)(struct st_h2o_compress_context_t *self, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final,
                      h2o_iovec_t **outbufs, size_t *outbufcnt);
 } h2o_compress_context_t;
@@ -1240,6 +1252,10 @@ void h2o_compress_register(h2o_pathconf_t *pathconf);
  * instantiates the gzip compressor
  */
 h2o_compress_context_t *h2o_compress_gzip_open(h2o_mem_pool_t *pool);
+/**
+ * instantiates the brotli compressor (only available if H2O_USE_BROTLI is set)
+ */
+h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool);
 /**
  * registers the configurator for the gzip/brotli output filter
  */

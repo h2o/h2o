@@ -223,6 +223,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/chunked.c
     lib/handler/compress.c
     lib/handler/compress/gzip.c
+    lib/handler/compress/brotli.cc
     lib/handler/errordoc.c
     lib/handler/expires.c
     lib/handler/fastcgi.c
@@ -258,6 +259,7 @@ SET(LIB_SOURCE_FILES
 SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}
     ${LIBYAML_SOURCE_FILES}
+    ${BROTLI_SOURCE_FILES}
     deps/picotest/picotest.c
     t/00unit/test.c
     t/00unit/lib/common/hostinfo.c
@@ -433,12 +435,12 @@ ENDIF (WITH_MRUBY)
 # tests
 ADD_EXECUTABLE(t-00unit-evloop.t ${UNIT_TEST_SOURCE_FILES})
 SET_TARGET_PROPERTIES(t-00unit-evloop.t PROPERTIES
-    COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_UNITTEST=1"
+    COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1 -DH2O_UNITTEST=1"
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(t-00unit-evloop.t ${EXTRA_LIBS})
 ADD_EXECUTABLE(t-00unit-libuv.t ${UNIT_TEST_SOURCE_FILES})
 SET_TARGET_PROPERTIES(t-00unit-libuv.t PROPERTIES
-    COMPILE_FLAGS "-DH2O_UNITTEST=1"
+    COMPILE_FLAGS "-DH2O_USE_BROTLI=1 -DH2O_UNITTEST=1"
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(t-00unit-libuv.t ${LIBUV_LIBRARIES} ${EXTRA_LIBS})
 IF (WITH_BUNDLED_SSL)
