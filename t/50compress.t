@@ -23,6 +23,13 @@ hosts:
           text/plain:
             extensions: [".txt"]
             is_compressible: NO
+      /compress-jpg:
+        file.dir: @{[DOC_ROOT]}
+        gzip: ON
+        file.mime.settypes:
+          image/jpg:
+            extensions: [".jpg"]
+            is_compressible: YES
 EOT
 
 run_with_curl($server, sub {
@@ -48,7 +55,7 @@ run_with_curl($server, sub {
     $resp = $fetch_gunzip->("/on", "-H accept-encoding:gzip");
     is md5_hex($resp), $expected, "on with accept-encoding";
     $resp = $fetch_gunzip->("/on", "-H 'accept-encoding:gzip, deflate'");
-    is md5_hex($resp), $expected, "on with accept-encoding: gzip,deflate";
+    is md5_hex($resp), $expected, "on with accept-encoding: gzip, deflate";
     $resp = $fetch_gunzip->("/on", "-H 'accept-encoding:deflate, gzip'");
     is md5_hex($resp), $expected, "on with accept-encoding: deflate, gzip";
     $resp = $fetch_orig->("/on", "-H accept-encoding:deflate");
@@ -62,6 +69,18 @@ run_with_curl($server, sub {
 
     $resp = run_prog("$curl --silent -H accept-encoding:gzip $proto://127.0.0.1:$port/on/halfdome.jpg");
     is md5_hex($resp), md5_file("@{[DOC_ROOT]}/halfdome.jpg"), "image not compressed";
+
+    $resp = run_prog("$curl --silent -H accept-encoding:gzip $proto://127.0.0.1:$port/compress-jpg/halfdome.jpg | gzip -cd");
+    is md5_hex($resp), md5_file("@{[DOC_ROOT]}/halfdome.jpg"), "image compressed using gzip";
+
+    subtest "brotli-decompress" => sub {
+        plan skip_all => "bro not found"
+            unless prog_exists("bro");
+        $resp = run_prog("$curl --silent -H accept-encoding:br $proto://127.0.0.1:$port/on/alice.txt | bro --decompress");
+        is md5_hex($resp), md5_file("@{[DOC_ROOT]}/alice.txt"), "alice.txt";
+        $resp = run_prog("$curl --silent -H accept-encoding:br $proto://127.0.0.1:$port/compress-jpg/halfdome.jpg | bro --decompress");
+        is md5_hex($resp), md5_file("@{[DOC_ROOT]}/halfdome.jpg"), "halfdome.jpg";
+    };
 });
 
 undef $server;
