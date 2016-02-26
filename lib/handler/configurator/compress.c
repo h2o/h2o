@@ -30,7 +30,7 @@ struct compress_configurator_t {
     h2o_compress_args_t *vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
-static const h2o_compress_args_t all_off = {-1, -1}, all_on = {DEFAULT_GZIP_QUALITY, DEFAULT_BROTLI_QUALITY};
+static const h2o_compress_args_t all_off = {{-1}, {-1}}, all_on = {{DEFAULT_GZIP_QUALITY}, {DEFAULT_BROTLI_QUALITY}};
 
 static int on_config_gzip(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
