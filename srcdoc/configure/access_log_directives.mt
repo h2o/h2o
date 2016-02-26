@@ -103,6 +103,9 @@ As an example, it is possible to log timestamps in millisecond resultion using <
 <p>
 The default format is <code>%h %l %u %t "%r" %s %b "%{Referer}i" "%{User-agent}i"</code>, a.k.a. the <a href="http://httpd.apache.org/docs/2.4/mod/mod_log_config.html.en#examples" target="_blank">NCSA extended/combined log format</a>.
 </p>
+<p>
+Note that you may need to quote (and escape) the format string as required by YAML (see <a href="http://www.yaml.org/YAML_for_ruby.html#single-quoted_strings">Yaml Cookbook</a>).
+</p>
 ? })
 
 ? })
