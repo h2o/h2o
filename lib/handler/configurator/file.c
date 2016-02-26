@@ -79,16 +79,16 @@ static int on_config_etag(h2o_configurator_command_t *cmd, h2o_configurator_cont
     return 0;
 }
 
-static int on_config_send_gzip(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_send_compressed(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
 
     switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
     case 0: /* off */
-        self->vars->flags &= ~H2O_FILE_FLAG_SEND_GZIP;
+        self->vars->flags &= ~H2O_FILE_FLAG_SEND_COMPRESSED;
         break;
     case 1: /* on */
-        self->vars->flags |= H2O_FILE_FLAG_SEND_GZIP;
+        self->vars->flags |= H2O_FILE_FLAG_SEND_COMPRESSED;
         break;
     default: /* error */
         return -1;
@@ -167,10 +167,14 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
                                     (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_etag);
+    h2o_configurator_define_command(&self->super, "file.send-compressed",
+                                    (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_send_compressed);
     h2o_configurator_define_command(&self->super, "file.send-gzip",
                                     (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_send_gzip);
+                                    on_config_send_compressed);
     h2o_configurator_define_command(&self->super, "file.dirlisting",
                                     (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,

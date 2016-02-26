@@ -21,7 +21,7 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8.11)
 CMAKE_POLICY(SET CMP0003 NEW)
 
-PROJECT(h2o C)
+PROJECT(h2o)
 
 SET(VERSION_MAJOR "1")
 SET(VERSION_MINOR "8")
@@ -93,6 +93,7 @@ ENDIF (WITH_BUNDLED_SSL)
 INCLUDE_DIRECTORIES(
     include
     deps/cloexec
+    deps/brotli/enc
     deps/golombset
     deps/libyrmcds
     deps/klib
@@ -156,6 +157,7 @@ IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
 ENDIF ()
 
 SET(CMAKE_C_FLAGS "-O2 -g ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS} -DH2O_ROOT=\"${CMAKE_INSTALL_PREFIX}\"")
+SET(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}")
 
 SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/api.c
@@ -166,6 +168,22 @@ SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/reader.c
     deps/yaml/src/scanner.c
     deps/yaml/src/writer.c)
+
+SET(BROTLI_SOURCE_FILES
+    deps/brotli/enc/backward_references.cc
+    deps/brotli/enc/block_splitter.cc
+    deps/brotli/enc/brotli_bit_stream.cc
+    deps/brotli/enc/compress_fragment.cc
+    deps/brotli/enc/compress_fragment_two_pass.cc
+    deps/brotli/enc/dictionary.cc
+    deps/brotli/enc/encode.cc
+    deps/brotli/enc/entropy_encode.cc
+    deps/brotli/enc/histogram.cc
+    deps/brotli/enc/literal_cost.cc
+    deps/brotli/enc/metablock.cc
+    deps/brotli/enc/static_dict.cc
+    deps/brotli/enc/streams.cc
+    deps/brotli/enc/utf8_util.cc)
 
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
@@ -203,22 +221,25 @@ SET(LIB_SOURCE_FILES
 
     lib/handler/access_log.c
     lib/handler/chunked.c
+    lib/handler/compress.c
+    lib/handler/compress/gzip.c
+    lib/handler/compress/brotli.cc
     lib/handler/errordoc.c
     lib/handler/expires.c
     lib/handler/fastcgi.c
     lib/handler/file.c
-    lib/handler/gzip.c
+    lib/handler/compress.c
     lib/handler/headers.c
     lib/handler/mimemap.c
     lib/handler/proxy.c
     lib/handler/redirect.c
     lib/handler/reproxy.c
     lib/handler/configurator/access_log.c
+    lib/handler/configurator/compress.c
     lib/handler/configurator/errordoc.c
     lib/handler/configurator/expires.c
     lib/handler/configurator/fastcgi.c
     lib/handler/configurator/file.c
-    lib/handler/configurator/gzip.c
     lib/handler/configurator/headers.c
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
@@ -238,6 +259,7 @@ SET(LIB_SOURCE_FILES
 SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}
     ${LIBYAML_SOURCE_FILES}
+    ${BROTLI_SOURCE_FILES}
     deps/picotest/picotest.c
     t/00unit/test.c
     t/00unit/lib/common/hostinfo.c
@@ -250,9 +272,9 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/core/headers.c
     t/00unit/lib/core/proxy.c
     t/00unit/lib/core/util.c
+    t/00unit/lib/handler/compress.c
     t/00unit/lib/handler/fastcgi.c
     t/00unit/lib/handler/file.c
-    t/00unit/lib/handler/gzip.c
     t/00unit/lib/handler/headers.c
     t/00unit/lib/handler/mimemap.c
     t/00unit/lib/handler/redirect.c
@@ -272,9 +294,10 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/core/headers.c
     lib/core/proxy.c
     lib/core/util.c
+    lib/handler/compress.c
+    lib/handler/compress/gzip.c
     lib/handler/fastcgi.c
     lib/handler/file.c
-    lib/handler/gzip.c
     lib/handler/headers.c
     lib/handler/mimemap.c
     lib/handler/redirect.c
@@ -345,8 +368,14 @@ SET_TARGET_PROPERTIES(examples-websocket PROPERTIES
 TARGET_LINK_LIBRARIES(examples-websocket libh2o ${LIBUV_LIBRARIES} ${WSLAY_LIBRARIES} ${EXTRA_LIBS})
 
 # standalone server directly links to libh2o using evloop
-SET(STANDALONE_SOURCE_FILES ${LIB_SOURCE_FILES} ${LIBYAML_SOURCE_FILES} deps/neverbleed/neverbleed.c src/ssl.c src/main.c)
-SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
+SET(STANDALONE_SOURCE_FILES
+    ${LIB_SOURCE_FILES}
+    ${LIBYAML_SOURCE_FILES}
+    ${BROTLI_SOURCE_FILES}
+    deps/neverbleed/neverbleed.c
+    src/main.c
+    src/ssl.c)
+SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1")
 IF (WITH_MRUBY)
     IF (${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
         SET(MRUBY_TOOLCHAIN "clang")
@@ -406,12 +435,12 @@ ENDIF (WITH_MRUBY)
 # tests
 ADD_EXECUTABLE(t-00unit-evloop.t ${UNIT_TEST_SOURCE_FILES})
 SET_TARGET_PROPERTIES(t-00unit-evloop.t PROPERTIES
-    COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_UNITTEST=1"
+    COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1 -DH2O_UNITTEST=1"
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(t-00unit-evloop.t ${EXTRA_LIBS})
 ADD_EXECUTABLE(t-00unit-libuv.t ${UNIT_TEST_SOURCE_FILES})
 SET_TARGET_PROPERTIES(t-00unit-libuv.t PROPERTIES
-    COMPILE_FLAGS "-DH2O_UNITTEST=1"
+    COMPILE_FLAGS "-DH2O_USE_BROTLI=1 -DH2O_UNITTEST=1"
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(t-00unit-libuv.t ${LIBUV_LIBRARIES} ${EXTRA_LIBS})
 IF (WITH_BUNDLED_SSL)

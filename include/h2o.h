@@ -50,6 +50,11 @@ extern "C" {
 #include "h2o/url.h"
 #include "h2o/version.h"
 
+#ifndef H2O_USE_BROTLI
+/* disabled for all but the standalone server, since the encoder is written in C++ */
+#define H2O_USE_BROTLI 0
+#endif
+
 #ifndef H2O_MAX_HEADERS
 #define H2O_MAX_HEADERS 100
 #endif
@@ -925,6 +930,12 @@ size_t h2o_stringify_protocol_version(char *dst, int version);
 h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
                                                    const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
                                                    h2o_iovec_t *base_path);
+/**
+ * return a bitmap of compressible types, by parsing the `accept-encoding` header
+ */
+int h2o_get_compressible_types(const h2o_headers_t *headers);
+#define H2O_COMPRESSIBLE_GZIP 1
+#define H2O_COMPRESSIBLE_BROTLI 2
 
 extern uint64_t h2o_connection_id;
 
@@ -1242,16 +1253,54 @@ void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
  */
 void h2o_chunked_register(h2o_pathconf_t *pathconf);
 
-/* lib/gzip.c */
+/* lib/compress.c */
+
+enum {
+    H2O_COMPRESS_FLAG_PARTIAL,
+    H2O_COMPRESS_FLAG_FLUSH,
+    H2O_COMPRESS_FLAG_EOS
+};
 
 /**
- * registers the gzip encoding output filter (added by default, for now)
+ * compressor context
  */
-void h2o_gzip_register(h2o_pathconf_t *pathconf);
+typedef struct st_h2o_compress_context_t {
+    /**
+     * name used in content-encoding header
+     */
+    h2o_iovec_t name;
+    /**
+     * compress
+     */
+    void (*compress)(struct st_h2o_compress_context_t *self, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final,
+                     h2o_iovec_t **outbufs, size_t *outbufcnt);
+} h2o_compress_context_t;
+
+typedef struct st_h2o_compress_args_t {
+    struct {
+        int quality; /* -1 if disabled */
+    } gzip;
+    struct {
+        int quality; /* -1 if disabled */
+    } brotli;
+} h2o_compress_args_t;
+
 /**
- *
+ * registers the gzip/brotli encoding output filter (added by default, for now)
  */
-void h2o_gzip_register_configurator(h2o_globalconf_t *conf);
+void h2o_compress_register(h2o_pathconf_t *pathconf, h2o_compress_args_t *args);
+/**
+ * instantiates the gzip compressor
+ */
+h2o_compress_context_t *h2o_compress_gzip_open(h2o_mem_pool_t *pool, int quality);
+/**
+ * instantiates the brotli compressor (only available if H2O_USE_BROTLI is set)
+ */
+h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, int quality, size_t estimated_cotent_length);
+/**
+ * registers the configurator for the gzip/brotli output filter
+ */
+void h2o_compress_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/errordoc.c */
 
@@ -1328,7 +1377,7 @@ void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/file.c */
 
-enum { H2O_FILE_FLAG_NO_ETAG = 0x1, H2O_FILE_FLAG_DIR_LISTING = 0x2, H2O_FILE_FLAG_SEND_GZIP = 0x4 };
+enum { H2O_FILE_FLAG_NO_ETAG = 0x1, H2O_FILE_FLAG_DIR_LISTING = 0x2, H2O_FILE_FLAG_SEND_COMPRESSED = 0x4 };
 
 typedef struct st_h2o_file_handler_t h2o_file_handler_t;
 
