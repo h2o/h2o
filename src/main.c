@@ -47,7 +47,7 @@
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
-#ifdef __GLIBC__
+#if H2O_USE_BACKTRACE
 #include <execinfo.h>
 #endif
 #include "cloexec.h"
@@ -62,6 +62,7 @@
 #include "h2o/mruby_.h"
 #endif
 #include "standalone.h"
+
 
 #ifdef TCP_FASTOPEN
 #define H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE 4096
@@ -1113,7 +1114,7 @@ static void on_sigterm(int signo)
     notify_all_threads();
 }
 
-#ifdef __GLIBC__
+#if H2O_USE_BACKTRACE
 static int popen_annotate_backtrace_symbols(void)
 {
     char *cmd_fullpath = h2o_configurator_get_cmd_path("share/h2o/annotate-backtrace-symbols"), *argv[] = {cmd_fullpath, NULL};
@@ -1163,7 +1164,7 @@ static void setup_signal_handlers(void)
 {
     h2o_set_signal_handler(SIGTERM, on_sigterm);
     h2o_set_signal_handler(SIGPIPE, SIG_IGN);
-#ifdef __GLIBC__
+#if H2O_USE_BACKTRACE
     if ((backtrace_symbols_to_fd = popen_annotate_backtrace_symbols()) == -1)
         backtrace_symbols_to_fd = 2;
     h2o_set_signal_handler(SIGABRT, on_sigfatal);
