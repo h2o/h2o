@@ -179,7 +179,7 @@ typedef struct st_h2o_pathconf_t {
      */
     h2o_globalconf_t *global;
     /**
-     * pathname in lower case with "/" appended at last and NULL terminated (or is {NULL,0} if is fallback or extension-level)
+     * pathname in lower case, may or may not have "/" at last, NULL terminated, or is {NULL,0} if is fallback or extension-level
      */
     h2o_iovec_t path;
     /**
