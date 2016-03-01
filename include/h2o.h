@@ -936,6 +936,10 @@ h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const c
 int h2o_get_compressible_types(const h2o_headers_t *headers);
 #define H2O_COMPRESSIBLE_GZIP 1
 #define H2O_COMPRESSIBLE_BROTLI 2
+/**
+ * builds destination URL or path, by contatenating the prefix and path_info of the request
+ */
+h2o_iovec_t h2o_build_destination_path(h2o_req_t *req, const char *prefix, size_t prefix_len);
 
 extern uint64_t h2o_connection_id;
 

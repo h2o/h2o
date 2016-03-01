@@ -82,32 +82,7 @@ SendInternalError:
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     h2o_redirect_handler_t *self = (void *)_self;
-    h2o_iovec_t parts[4], dest;
-    size_t num_parts = 0;
-    int conf_ends_with_slash = req->pathconf->path.base[req->pathconf->path.len - 1] == '/';
-    int prefix_ends_with_slash = self->prefix.base[self->prefix.len - 1] == '/';
-
-    /* dest starts with prefix */
-    parts[num_parts++] = self->prefix;
-
-    /* make adjustments depending on the trailing slashes */
-    if (conf_ends_with_slash != prefix_ends_with_slash) {
-        if (conf_ends_with_slash) {
-            parts[num_parts++] = h2o_iovec_init(H2O_STRLIT("/"));
-        } else {
-            if (req->path_normalized.len != req->pathconf->path.len)
-                parts[num_parts - 1].len -= 1;
-        }
-    }
-
-    /* append suffix path and query */
-    parts[num_parts++] = h2o_uri_escape(
-        &req->pool, req->path_normalized.base + req->pathconf->path.len, req->path_normalized.len - req->pathconf->path.len, "/@");
-    if (req->query_at != SIZE_MAX)
-        parts[num_parts++] = h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at);
-
-    /* build dest URL */
-    dest = h2o_concat_list(&req->pool, parts, num_parts);
+    h2o_iovec_t dest = h2o_build_destination_path(req, self->prefix.base, self->prefix.len);
 
     /* redirect */
     if (self->internal) {
