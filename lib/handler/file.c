@@ -558,27 +558,15 @@ static void send_method_not_allowed(h2o_req_t *req)
     h2o_send_error(req, 405, "Method Not Allowed", "method not allowed", H2O_SEND_ERROR_KEEP_HEADERS);
 }
 
-static int on_req(h2o_handler_t *_self, h2o_req_t *req)
+static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h2o_req_t *req, const char *rpath, size_t rpath_len,
+                                h2o_mimemap_t *mimemap)
 {
-    h2o_file_handler_t *self = (void *)_self;
+    enum { METHOD_IS_GET, METHOD_IS_HEAD, METHOD_IS_OTHER } method_type;
     h2o_mimemap_type_t *mime_type;
-    char *rpath;
-    size_t rpath_len, req_path_prefix;
-    struct st_h2o_sendfile_generator_t *generator = NULL;
     size_t if_modified_since_header_index, if_none_match_header_index;
     size_t range_header_index;
-    int is_dir;
-    enum { METHOD_IS_GET, METHOD_IS_HEAD, METHOD_IS_OTHER } method_type;
 
-    if (req->path_normalized.len < self->conf_path.len) {
-        h2o_iovec_t dest = h2o_uri_escape(&req->pool, self->conf_path.base, self->conf_path.len, "/");
-        if (req->query_at != SIZE_MAX)
-            dest = h2o_concat(&req->pool, dest, h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at));
-        h2o_send_redirect(req, 301, "Moved Permanently", dest.base, dest.len);
-        return 0;
-    }
-
-    /* only accept GET and HEAD */
+    /* determine the method */
     if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))) {
         method_type = METHOD_IS_GET;
     } else if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"))) {
@@ -587,76 +575,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         method_type = METHOD_IS_OTHER;
     }
 
-    /* build path (still unterminated at the end of the block) */
-    req_path_prefix = self->conf_path.len;
-    rpath = alloca(self->real_path.len + (req->path_normalized.len - req_path_prefix) + self->max_index_file_len + 1);
-    rpath_len = 0;
-    memcpy(rpath + rpath_len, self->real_path.base, self->real_path.len);
-    rpath_len += self->real_path.len;
-    memcpy(rpath + rpath_len, req->path_normalized.base + req_path_prefix, req->path_normalized.len - req_path_prefix);
-    rpath_len += req->path_normalized.len - req_path_prefix;
-
-    /* build generator (as well as terminating the rpath and its length upon success) */
-    if (rpath[rpath_len - 1] == '/') {
-        h2o_iovec_t *index_file;
-        for (index_file = self->index_files; index_file->base != NULL; ++index_file) {
-            memcpy(rpath + rpath_len, index_file->base, index_file->len);
-            rpath[rpath_len + index_file->len] = '\0';
-            if ((generator = create_generator(req, rpath, rpath_len + index_file->len, &is_dir, self->flags)) != NULL) {
-                rpath_len += index_file->len;
-                goto Opened;
-            }
-            if (is_dir) {
-                /* note: apache redirects "path/" to "path/index.txt/" if index.txt is a dir */
-                h2o_iovec_t dest = h2o_concat(&req->pool, req->path_normalized, *index_file, h2o_iovec_init(H2O_STRLIT("/")));
-                dest = h2o_uri_escape(&req->pool, dest.base, dest.len, "/");
-                if (req->query_at != SIZE_MAX)
-                    dest =
-                        h2o_concat(&req->pool, dest, h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at));
-                h2o_send_redirect(req, 301, "Moved Permantently", dest.base, dest.len);
-                return 0;
-            }
-            if (errno != ENOENT)
-                break;
-        }
-        if (index_file->base == NULL && (self->flags & H2O_FILE_FLAG_DIR_LISTING) != 0) {
-            rpath[rpath_len] = '\0';
-            if (method_type == METHOD_IS_OTHER) {
-                send_method_not_allowed(req);
-                return 0;
-            }
-            if (send_dir_listing(req, rpath, rpath_len, method_type == METHOD_IS_GET) == 0)
-                return 0;
-        }
-    } else {
-        rpath[rpath_len] = '\0';
-        if ((generator = create_generator(req, rpath, rpath_len, &is_dir, self->flags)) != NULL)
-            goto Opened;
-        if (is_dir) {
-            h2o_iovec_t dest = h2o_concat(&req->pool, req->path_normalized, h2o_iovec_init(H2O_STRLIT("/")));
-            dest = h2o_uri_escape(&req->pool, dest.base, dest.len, "/");
-            if (req->query_at != SIZE_MAX)
-                dest = h2o_concat(&req->pool, dest, h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at));
-            h2o_send_redirect(req, 301, "Moved Permanently", dest.base, dest.len);
-            return 0;
-        }
-    }
-    /* failed to open */
-
-    if (errno == ENFILE || errno == EMFILE) {
-        h2o_send_error(req, 503, "Service Unavailable", "please try again later", 0);
-    } else {
-        if (h2o_mimemap_has_dynamic_type(self->mimemap) && try_dynamic_request(self, req, rpath, rpath_len) == 0)
-            return 0;
-        if (errno == ENOENT || errno == ENOTDIR) {
-            return -1;
-        } else {
-            h2o_send_error(req, 403, "Access Forbidden", "access forbidden", 0);
-        }
-    }
-    return 0;
-
-Opened:
+    /* if-non-match and if-modified-since */
     if ((if_none_match_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_NONE_MATCH, SIZE_MAX)) != -1) {
         h2o_iovec_t *if_none_match = &req->headers.entries[if_none_match_header_index].value;
         char etag[H2O_FILECACHE_ETAG_MAXLEN + 1];
@@ -674,7 +593,7 @@ Opened:
     }
 
     /* obtain mime type */
-    mime_type = h2o_mimemap_get_type_by_extension(self->mimemap, h2o_get_filext(rpath, rpath_len));
+    mime_type = h2o_mimemap_get_type_by_extension(mimemap, h2o_get_filext(rpath, rpath_len));
     switch (mime_type->type) {
     case H2O_MIMEMAP_TYPE_MIMETYPE:
         break;
@@ -690,7 +609,7 @@ Opened:
         return 0;
     }
 
-    /* check if range request */
+    /* if-range */
     if ((range_header_index = h2o_find_header(&req->headers, H2O_TOKEN_RANGE, SIZE_MAX)) != -1) {
         h2o_iovec_t *range = &req->headers.entries[range_header_index].value;
         size_t *range_infos, range_count;
@@ -765,6 +684,100 @@ NotModified:
 Close:
     do_close(&generator->super, req);
     return 0;
+}
+
+static int on_req(h2o_handler_t *_self, h2o_req_t *req)
+{
+    h2o_file_handler_t *self = (void *)_self;
+    char *rpath;
+    size_t rpath_len, req_path_prefix;
+    struct st_h2o_sendfile_generator_t *generator = NULL;
+    int is_dir;
+
+    if (req->path_normalized.len < self->conf_path.len) {
+        h2o_iovec_t dest = h2o_uri_escape(&req->pool, self->conf_path.base, self->conf_path.len, "/");
+        if (req->query_at != SIZE_MAX)
+            dest = h2o_concat(&req->pool, dest, h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at));
+        h2o_send_redirect(req, 301, "Moved Permanently", dest.base, dest.len);
+        return 0;
+    }
+
+    /* build path (still unterminated at the end of the block) */
+    req_path_prefix = self->conf_path.len;
+    rpath = alloca(self->real_path.len + (req->path_normalized.len - req_path_prefix) + self->max_index_file_len + 1);
+    rpath_len = 0;
+    memcpy(rpath + rpath_len, self->real_path.base, self->real_path.len);
+    rpath_len += self->real_path.len;
+    memcpy(rpath + rpath_len, req->path_normalized.base + req_path_prefix, req->path_normalized.len - req_path_prefix);
+    rpath_len += req->path_normalized.len - req_path_prefix;
+
+    /* build generator (as well as terminating the rpath and its length upon success) */
+    if (rpath[rpath_len - 1] == '/') {
+        h2o_iovec_t *index_file;
+        for (index_file = self->index_files; index_file->base != NULL; ++index_file) {
+            memcpy(rpath + rpath_len, index_file->base, index_file->len);
+            rpath[rpath_len + index_file->len] = '\0';
+            if ((generator = create_generator(req, rpath, rpath_len + index_file->len, &is_dir, self->flags)) != NULL) {
+                rpath_len += index_file->len;
+                goto Opened;
+            }
+            if (is_dir) {
+                /* note: apache redirects "path/" to "path/index.txt/" if index.txt is a dir */
+                h2o_iovec_t dest = h2o_concat(&req->pool, req->path_normalized, *index_file, h2o_iovec_init(H2O_STRLIT("/")));
+                dest = h2o_uri_escape(&req->pool, dest.base, dest.len, "/");
+                if (req->query_at != SIZE_MAX)
+                    dest =
+                        h2o_concat(&req->pool, dest, h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at));
+                h2o_send_redirect(req, 301, "Moved Permantently", dest.base, dest.len);
+                return 0;
+            }
+            if (errno != ENOENT)
+                break;
+        }
+        if (index_file->base == NULL && (self->flags & H2O_FILE_FLAG_DIR_LISTING) != 0) {
+            rpath[rpath_len] = '\0';
+            int is_get = 0;
+            if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))) {
+                is_get = 1;
+            } else if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"))) {
+                /* ok */
+            } else {
+                send_method_not_allowed(req);
+                return 0;
+            }
+            if (send_dir_listing(req, rpath, rpath_len, is_get) == 0)
+                return 0;
+        }
+    } else {
+        rpath[rpath_len] = '\0';
+        if ((generator = create_generator(req, rpath, rpath_len, &is_dir, self->flags)) != NULL)
+            goto Opened;
+        if (is_dir) {
+            h2o_iovec_t dest = h2o_concat(&req->pool, req->path_normalized, h2o_iovec_init(H2O_STRLIT("/")));
+            dest = h2o_uri_escape(&req->pool, dest.base, dest.len, "/");
+            if (req->query_at != SIZE_MAX)
+                dest = h2o_concat(&req->pool, dest, h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at));
+            h2o_send_redirect(req, 301, "Moved Permanently", dest.base, dest.len);
+            return 0;
+        }
+    }
+    /* failed to open */
+
+    if (errno == ENFILE || errno == EMFILE) {
+        h2o_send_error(req, 503, "Service Unavailable", "please try again later", 0);
+    } else {
+        if (h2o_mimemap_has_dynamic_type(self->mimemap) && try_dynamic_request(self, req, rpath, rpath_len) == 0)
+            return 0;
+        if (errno == ENOENT || errno == ENOTDIR) {
+            return -1;
+        } else {
+            h2o_send_error(req, 403, "Access Forbidden", "access forbidden", 0);
+        }
+    }
+    return 0;
+
+Opened:
+    return serve_with_generator(generator, req, rpath, rpath_len, self->mimemap);
 }
 
 static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
