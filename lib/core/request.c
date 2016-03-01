@@ -144,7 +144,7 @@ static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
         if (req->path_normalized.len >= pathconf->path.len &&
             memcmp(req->path_normalized.base, pathconf->path.base, pathconf->path.len) == 0 &&
             (pathconf->path.base[pathconf->path.len - 1] == '/' || req->path_normalized.len == pathconf->path.len ||
-             req->path_normalized.base[req->pathconf->path.len] == '/')) {
+             req->path_normalized.base[pathconf->path.len] == '/')) {
             req->pathconf = pathconf;
             break;
         }
