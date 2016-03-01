@@ -1392,7 +1392,7 @@ extern const char **h2o_file_default_index_files;
  */
 int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *path, h2o_iovec_t mime_type, int flags);
 /**
- * registers the file handler to the context
+ * registers a handler that serves a directory of statically-served files
  * @param pathconf
  * @param virtual_path
  * @param real_path
@@ -1401,6 +1401,15 @@ int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *pa
  */
 h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real_path, const char **index_files,
                                       h2o_mimemap_t *mimemap, int flags);
+/**
+ * registers a handler that serves a specific file
+ * @param pathconf
+ * @param virtual_path
+ * @param real_path
+ * @param index_files optional NULL-terminated list of of filenames to be considered as the "directory-index"
+ * @param mimemap the mimemap (h2o_mimemap_create is called internally if the argument is NULL)
+ */
+h2o_handler_t *h2o_file_register_file(h2o_pathconf_t *pathconf, const char *real_path, h2o_mimemap_type_t *mime_type, int flags);
 /**
  * returns the associated mimemap
  */

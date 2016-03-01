@@ -41,6 +41,15 @@ static int on_config_dir(h2o_configurator_command_t *cmd, h2o_configurator_conte
     return 0;
 }
 
+static int on_config_file(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
+    h2o_mimemap_type_t *mime_type =
+        h2o_mimemap_get_type_by_extension(*ctx->mimemap, h2o_get_filext(node->data.scalar, strlen(node->data.scalar)));
+    h2o_file_register_file(ctx->pathconf, node->data.scalar, mime_type, self->vars->flags);
+    return 0;
+}
+
 static int on_config_index(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
@@ -159,6 +168,9 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
     h2o_configurator_define_command(&self->super, "file.dir", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
                                                                   H2O_CONFIGURATOR_FLAG_DEFERRED,
                                     on_config_dir);
+    h2o_configurator_define_command(&self->super, "file.file", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
+                                                                   H2O_CONFIGURATOR_FLAG_DEFERRED,
+                                    on_config_file);
     h2o_configurator_define_command(&self->super, "file.index",
                                     (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,

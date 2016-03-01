@@ -74,6 +74,13 @@ struct st_h2o_file_handler_t {
     h2o_iovec_t index_files[1];
 };
 
+struct st_h2o_specific_file_handler_t {
+    h2o_handler_t super;
+    h2o_iovec_t real_path;
+    h2o_mimemap_type_t *mime_type;
+    int flags;
+};
+
 static const char *default_index_files[] = {"index.html", "index.htm", "index.txt", NULL};
 
 const char **h2o_file_default_index_files = default_index_files;
@@ -559,10 +566,9 @@ static void send_method_not_allowed(h2o_req_t *req)
 }
 
 static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h2o_req_t *req, const char *rpath, size_t rpath_len,
-                                h2o_mimemap_t *mimemap)
+                                h2o_mimemap_type_t *mime_type)
 {
     enum { METHOD_IS_GET, METHOD_IS_HEAD, METHOD_IS_OTHER } method_type;
-    h2o_mimemap_type_t *mime_type;
     size_t if_modified_since_header_index, if_none_match_header_index;
     size_t range_header_index;
 
@@ -593,14 +599,11 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
     }
 
     /* obtain mime type */
-    mime_type = h2o_mimemap_get_type_by_extension(mimemap, h2o_get_filext(rpath, rpath_len));
-    switch (mime_type->type) {
-    case H2O_MIMEMAP_TYPE_MIMETYPE:
-        break;
-    case H2O_MIMEMAP_TYPE_DYNAMIC:
+    if (mime_type->type == H2O_MIMEMAP_TYPE_DYNAMIC) {
         do_close(&generator->super, req);
         return delegate_dynamic_request(req, req->path_normalized.len, rpath, rpath_len, mime_type);
     }
+    assert(mime_type->type == H2O_MIMEMAP_TYPE_MIMETYPE);
 
     /* only allow GET or POST for static files */
     if (method_type == METHOD_IS_OTHER) {
@@ -777,7 +780,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     return 0;
 
 Opened:
-    return serve_with_generator(generator, req, rpath, rpath_len, self->mimemap);
+    return serve_with_generator(generator, req, rpath, rpath_len,
+                                h2o_mimemap_get_type_by_extension(self->mimemap, h2o_get_filext(rpath, rpath_len)));
 }
 
 static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
@@ -849,4 +853,68 @@ h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real
 h2o_mimemap_t *h2o_file_get_mimemap(h2o_file_handler_t *handler)
 {
     return handler->mimemap;
+}
+
+static void specific_handler_on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
+{
+    struct st_h2o_specific_file_handler_t *self = (void *)_self;
+
+    if (self->mime_type->type == H2O_MIMEMAP_TYPE_DYNAMIC)
+        h2o_context_init_pathconf_context(ctx, &self->mime_type->data.dynamic.pathconf);
+}
+
+static void specific_handler_on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
+{
+    struct st_h2o_specific_file_handler_t *self = (void *)_self;
+
+    if (self->mime_type->type == H2O_MIMEMAP_TYPE_DYNAMIC)
+        h2o_context_dispose_pathconf_context(ctx, &self->mime_type->data.dynamic.pathconf);
+}
+
+static void specific_handler_on_dispose(h2o_handler_t *_self)
+{
+    struct st_h2o_specific_file_handler_t *self = (void *)_self;
+
+    free(self->real_path.base);
+    h2o_mem_release_shared(self->mime_type);
+}
+
+static int specific_handler_on_req(h2o_handler_t *_self, h2o_req_t *req)
+{
+    struct st_h2o_specific_file_handler_t *self = (void *)_self;
+    struct st_h2o_sendfile_generator_t *generator;
+    int is_dir;
+
+    /* open file (or send error or return -1) */
+    if ((generator = create_generator(req, self->real_path.base, self->real_path.len, &is_dir, self->flags)) == NULL) {
+        if (is_dir) {
+            h2o_send_error(req, 403, "Access Forbidden", "access forbidden", 0);
+        } else if (errno == ENOENT) {
+            return -1;
+        } else if (errno == ENFILE || errno == EMFILE) {
+            h2o_send_error(req, 503, "Service Unavailable", "please try again later", 0);
+        } else {
+            h2o_send_error(req, 403, "Access Forbidden", "access forbidden", 0);
+        }
+        return 0;
+    }
+
+    return serve_with_generator(generator, req, self->real_path.base, self->real_path.len, self->mime_type);
+}
+
+h2o_handler_t *h2o_file_register_file(h2o_pathconf_t *pathconf, const char *real_path, h2o_mimemap_type_t *mime_type, int flags)
+{
+    struct st_h2o_specific_file_handler_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
+
+    self->super.on_context_init = specific_handler_on_context_init;
+    self->super.on_context_dispose = specific_handler_on_context_dispose;
+    self->super.dispose = specific_handler_on_dispose;
+    self->super.on_req = specific_handler_on_req;
+
+    self->real_path = h2o_strdup(NULL, real_path, SIZE_MAX);
+    h2o_mem_addref_shared(mime_type);
+    self->mime_type = mime_type;
+    self->flags = flags;
+
+    return &self->super;
 }
