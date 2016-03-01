@@ -104,8 +104,51 @@ static void test_extract_push_path_from_link_header(void)
 #undef BASE
 }
 
+void test_build_destination(void)
+{
+    h2o_pathconf_t conf_not_slashed = {NULL, {H2O_STRLIT("/abc")}}, conf_slashed = {NULL, {H2O_STRLIT("/abc")}};
+    h2o_req_t req;
+    h2o_iovec_t dest;
+
+    h2o_init_request(&req, NULL, NULL);
+
+    /* basic pattern */
+    req.path_normalized = h2o_iovec_init(H2O_STRLIT("/abc/xyz"));
+    req.query_at = req.path_normalized.len;
+    req.path = h2o_concat(&req.pool, req.path_normalized, h2o_iovec_init(H2O_STRLIT("?q")));
+    req.pathconf = &conf_not_slashed;
+    dest = h2o_build_destination(&req, H2O_STRLIT("/def"));
+    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz?q")));
+    dest = h2o_build_destination(&req, H2O_STRLIT("/def/"));
+    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz?q")));
+    req.pathconf = &conf_slashed;
+    dest = h2o_build_destination(&req, H2O_STRLIT("/def"));
+    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz?q")));
+    dest = h2o_build_destination(&req, H2O_STRLIT("/def/"));
+    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz?q")));
+
+    /* test wo. query */
+    req.pathconf = &conf_not_slashed;
+    req.query_at = SIZE_MAX;
+    dest = h2o_build_destination(&req, H2O_STRLIT("/def"));
+    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz")));
+
+    /* no trailing */
+    req.path_normalized = h2o_iovec_init(H2O_STRLIT("/abc"));
+    req.query_at = req.path_normalized.len;
+    req.path = h2o_concat(&req.pool, req.path_normalized, h2o_iovec_init(H2O_STRLIT("?q")));
+    req.pathconf = &conf_not_slashed;
+    dest = h2o_build_destination(&req, H2O_STRLIT("/def"));
+    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def?q")));
+    dest = h2o_build_destination(&req, H2O_STRLIT("/def/"));
+    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/?q")));
+
+    h2o_mem_clear_pool(&req.pool);
+}
+
 void test_lib__core__util_c()
 {
     subtest("parse_proxy_line", test_parse_proxy_line);
     subtest("extract_push_path_from_link_header", test_extract_push_path_from_link_header);
+    subtest("test_build_destination", test_build_destination);
 }

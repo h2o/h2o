@@ -382,7 +382,7 @@ int h2o_get_compressible_types(const h2o_headers_t *headers)
     return compressible_types;
 }
 
-h2o_iovec_t h2o_build_destination_path(h2o_req_t *req, const char *prefix, size_t prefix_len)
+h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t prefix_len)
 {
     h2o_iovec_t parts[4];
     size_t num_parts = 0;

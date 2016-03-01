@@ -82,7 +82,7 @@ SendInternalError:
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     h2o_redirect_handler_t *self = (void *)_self;
-    h2o_iovec_t dest = h2o_build_destination_path(req, self->prefix.base, self->prefix.len);
+    h2o_iovec_t dest = h2o_build_destination(req, self->prefix.base, self->prefix.len);
 
     /* redirect */
     if (self->internal) {
