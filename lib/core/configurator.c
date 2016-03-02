@@ -232,7 +232,7 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
         yoml_t *key = node->data.mapping.elements[i].key;
         yoml_t *value = node->data.mapping.elements[i].value;
         h2o_configurator_context_t path_ctx = *ctx;
-        path_ctx.pathconf = h2o_config_register_path(path_ctx.hostconf, key->data.scalar);
+        path_ctx.pathconf = h2o_config_register_path(path_ctx.hostconf, key->data.scalar, 0);
         path_ctx.mimemap = &path_ctx.pathconf->mimemap;
         path_ctx.parent = ctx;
         if (h2o_configurator_apply_commands(&path_ctx, value, H2O_CONFIGURATOR_FLAG_PATH, NULL) != 0)
