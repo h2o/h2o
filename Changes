@@ -8,7 +8,7 @@ Revision history for H2O.
 	- [fastcgi] add support for CGI #618 (Kazuho Oku)
 	- [fastcgi] drop transfer-encoding header #641 (Kazuho Oku)
 	- [file] fix a bug that caused `file.mime.addtypes` to fail setting the attributes of a content-type #731 (Kazuho Oku)
-	- [http2] fix broken `PUSH_PROMISE` frames being sent under high pressure #734 #736 (Kazuho Oku)
+	- [http2] fix broken `PUSH_PROMISE` frames being sent under high pressure #734 #737 (Kazuho Oku)
 	- [mruby] provide `env["rack.input"]` #515 #638 #644 (Masayoshi Takahashi, Kazuho Oku)
 	- [mruby] HTTP client API #637 #643 (Kazuho Oku)
 	- [mruby] dump the ruby source on error #631 (Kazuho Oku)
