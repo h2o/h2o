@@ -66,6 +66,7 @@ struct st_h2o_sendfile_generator_t {
 
 struct st_h2o_file_handler_t {
     h2o_handler_t super;
+    h2o_iovec_t conf_path; /* has "/" appended at last */
     h2o_iovec_t real_path; /* has "/" appended at last */
     h2o_mimemap_t *mimemap;
     int flags;
@@ -545,7 +546,7 @@ static int try_dynamic_request(h2o_file_handler_t *self, h2o_req_t *req, char *r
     case H2O_MIMEMAP_TYPE_MIMETYPE:
         return -1;
     case H2O_MIMEMAP_TYPE_DYNAMIC:
-        return delegate_dynamic_request(req, req->pathconf->path.len + slash_at - self->real_path.len, rpath, slash_at, mime_type);
+        return delegate_dynamic_request(req, self->conf_path.len + slash_at - self->real_path.len, rpath, slash_at, mime_type);
     }
     fprintf(stderr, "unknown h2o_miemmap_type_t::type (%d)\n", (int)mime_type->type);
     abort();
@@ -569,6 +570,14 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     int is_dir;
     enum { METHOD_IS_GET, METHOD_IS_HEAD, METHOD_IS_OTHER } method_type;
 
+    if (req->path_normalized.len < self->conf_path.len) {
+        h2o_iovec_t dest = h2o_uri_escape(&req->pool, self->conf_path.base, self->conf_path.len, "/");
+        if (req->query_at != SIZE_MAX)
+            dest = h2o_concat(&req->pool, dest, h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at));
+        h2o_send_redirect(req, 301, "Moved Permanently", dest.base, dest.len);
+        return 0;
+    }
+
     /* only accept GET and HEAD */
     if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))) {
         method_type = METHOD_IS_GET;
@@ -579,7 +588,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     }
 
     /* build path (still unterminated at the end of the block) */
-    req_path_prefix = req->pathconf->path.len;
+    req_path_prefix = self->conf_path.len;
     rpath = alloca(self->real_path.len + (req->path_normalized.len - req_path_prefix) + self->max_index_file_len + 1);
     rpath_len = 0;
     memcpy(rpath + rpath_len, self->real_path.base, self->real_path.len);
@@ -777,6 +786,7 @@ static void on_dispose(h2o_handler_t *_self)
     h2o_file_handler_t *self = (void *)_self;
     size_t i;
 
+    free(self->conf_path.base);
     free(self->real_path.base);
     h2o_mem_release_shared(self->mimemap);
     for (i = 0; self->index_files[i].base != NULL; ++i)
@@ -805,6 +815,7 @@ h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real
     self->super.on_req = on_req;
 
     /* setup attributes */
+    self->conf_path = h2o_strdup_slashed(NULL, pathconf->path.base, pathconf->path.len);
     self->real_path = h2o_strdup_slashed(NULL, real_path, SIZE_MAX);
     if (mimemap != NULL) {
         h2o_mem_addref_shared(mimemap);

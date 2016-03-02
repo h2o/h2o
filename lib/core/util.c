@@ -382,6 +382,35 @@ int h2o_get_compressible_types(const h2o_headers_t *headers)
     return compressible_types;
 }
 
+h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t prefix_len)
+{
+    h2o_iovec_t parts[4];
+    size_t num_parts = 0;
+    int conf_ends_with_slash = req->pathconf->path.base[req->pathconf->path.len - 1] == '/';
+    int prefix_ends_with_slash = prefix[prefix_len - 1] == '/';
+
+    /* destination starts with given prefix */
+    parts[num_parts++] = h2o_iovec_init(prefix, prefix_len);
+
+    /* make adjustments depending on the trailing slashes */
+    if (conf_ends_with_slash != prefix_ends_with_slash) {
+        if (conf_ends_with_slash) {
+            parts[num_parts++] = h2o_iovec_init(H2O_STRLIT("/"));
+        } else {
+            if (req->path_normalized.len != req->pathconf->path.len)
+                parts[num_parts - 1].len -= 1;
+        }
+    }
+
+    /* append suffix path and query */
+    parts[num_parts++] = h2o_uri_escape(
+        &req->pool, req->path_normalized.base + req->pathconf->path.len, req->path_normalized.len - req->pathconf->path.len, "/@");
+    if (req->query_at != SIZE_MAX)
+        parts[num_parts++] = h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at);
+
+    return h2o_concat_list(&req->pool, parts, num_parts);
+}
+
 /* h2-14 and h2-16 are kept for backwards compatibility, as they are often used */
 #define ALPN_ENTRY(s)                                                                                                              \
     {                                                                                                                              \

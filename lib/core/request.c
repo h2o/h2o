@@ -141,22 +141,12 @@ static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
     /* setup pathconf, or redirect to "path/" */
     for (i = 0; i != hostconf->paths.size; ++i) {
         h2o_pathconf_t *pathconf = hostconf->paths.entries + i;
-        size_t confpath_wo_slash = pathconf->path.len - 1;
-        if (req->path_normalized.len >= confpath_wo_slash &&
-            memcmp(req->path_normalized.base, pathconf->path.base, confpath_wo_slash) == 0) {
-            if (req->path_normalized.len == confpath_wo_slash) {
-                req->pathconf = pathconf;
-                h2o_iovec_t dest = h2o_uri_escape(&req->pool, pathconf->path.base, pathconf->path.len, "/");
-                if (req->query_at != SIZE_MAX)
-                    dest =
-                        h2o_concat(&req->pool, dest, h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at));
-                h2o_send_redirect(req, 301, "Moved Permanently", dest.base, dest.len);
-                return;
-            }
-            if (req->path_normalized.base[confpath_wo_slash] == '/') {
-                req->pathconf = pathconf;
-                break;
-            }
+        if (req->path_normalized.len >= pathconf->path.len &&
+            memcmp(req->path_normalized.base, pathconf->path.base, pathconf->path.len) == 0 &&
+            (pathconf->path.base[pathconf->path.len - 1] == '/' || req->path_normalized.len == pathconf->path.len ||
+             req->path_normalized.base[pathconf->path.len] == '/')) {
+            req->pathconf = pathconf;
+            break;
         }
     }
 
