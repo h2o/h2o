@@ -114,14 +114,14 @@ void h2o_config_init(h2o_globalconf_t *config)
     h2o_configurator__init_core(config);
 }
 
-h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *pathname)
+h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *path, int flags)
 {
     h2o_pathconf_t *pathconf;
 
     h2o_vector_reserve(NULL, &hostconf->paths, hostconf->paths.size + 1);
     pathconf = hostconf->paths.entries + hostconf->paths.size++;
 
-    h2o_config_init_pathconf(pathconf, hostconf->global, pathname, hostconf->mimemap);
+    h2o_config_init_pathconf(pathconf, hostconf->global, path, hostconf->mimemap);
 
     return pathconf;
 }
