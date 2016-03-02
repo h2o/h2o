@@ -20,6 +20,7 @@
  * IN THE SOFTWARE.
  */
 #include <assert.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stddef.h>
 #include <unistd.h>
@@ -83,30 +84,21 @@ h2o_filecache_ref_t *h2o_filecache_open_file(h2o_filecache_t *cache, const char 
 {
     khiter_t iter = kh_get(opencache_set, cache->hash, path);
     h2o_filecache_ref_t *ref;
-    int fd, dummy;
+    int dummy;
 
     /* lookup cache, and return the one if found */
     if (iter != kh_end(cache->hash)) {
         ref = H2O_STRUCT_FROM_MEMBER(h2o_filecache_ref_t, _path, kh_key(cache->hash, iter));
         ++ref->_refcnt;
-        return ref;
+        goto Exit;
     }
 
-    /* not found, try to open the new file */
-    if ((fd = open(path, oflag)) == -1)
-        return NULL;
+    /* create a new cache entry */
     ref = h2o_mem_alloc(offsetof(h2o_filecache_ref_t, _path) + strlen(path) + 1);
-    ref->fd = fd;
-    ref->_last_modified.str[0] = '\0';
-    ref->_etag.len = 0;
     ref->_refcnt = 1;
     ref->_lru = (h2o_linklist_t){};
     strcpy(ref->_path, path);
-    if (fstat(fd, &ref->st) != 0) {
-        close(fd);
-        free(ref);
-        return NULL;
-    }
+
     /* if cache is used, then... */
     if (cache->capacity != 0) {
         /* purge one entry from LRU if cache is full */
@@ -122,6 +114,25 @@ h2o_filecache_ref_t *h2o_filecache_open_file(h2o_filecache_t *cache, const char 
         h2o_linklist_insert(cache->lru.next, &ref->_lru);
     }
 
+    /* open the file, or memoize the error */
+    if ((ref->fd = open(path, oflag)) != -1 && fstat(ref->fd, &ref->st) == 0) {
+        ref->_last_modified.str[0] = '\0';
+        ref->_etag.len = 0;
+    } else {
+        ref->open_err = errno;
+        if (ref->fd != -1) {
+            close(ref->fd);
+            ref->fd = -1;
+        }
+    }
+
+Exit:
+    /* if the cache entry retains an error, return it instead of the reference */
+    if (ref->fd == -1) {
+        errno = ref->open_err;
+        h2o_filecache_close_file(ref);
+        ref = NULL;
+    }
     return ref;
 }
 
@@ -130,13 +141,16 @@ void h2o_filecache_close_file(h2o_filecache_ref_t *ref)
     if (--ref->_refcnt != 0)
         return;
     assert(!h2o_linklist_is_linked(&ref->_lru));
-    close(ref->fd);
-    ref->fd = -1;
+    if (ref->fd != -1) {
+        close(ref->fd);
+        ref->fd = -1;
+    }
     free(ref);
 }
 
 struct tm *h2o_filecache_get_last_modified(h2o_filecache_ref_t *ref, char *outbuf)
 {
+    assert(ref->fd != -1);
     if (ref->_last_modified.str[0] == '\0') {
         gmtime_r(&ref->st.st_mtime, &ref->_last_modified.gm);
         h2o_time2str_rfc1123(ref->_last_modified.str, &ref->_last_modified.gm);
@@ -148,6 +162,7 @@ struct tm *h2o_filecache_get_last_modified(h2o_filecache_ref_t *ref, char *outbu
 
 size_t h2o_filecache_get_etag(h2o_filecache_ref_t *ref, char *outbuf)
 {
+    assert(ref->fd != -1);
     if (ref->_etag.len == 0)
         ref->_etag.len = sprintf(ref->_etag.buf, "\"%08x-%zx\"", (unsigned)ref->st.st_mtime, (size_t)ref->st.st_size);
     memcpy(outbuf, ref->_etag.buf, ref->_etag.len + 1);
