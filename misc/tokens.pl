@@ -104,13 +104,13 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
     switch (len) {
 ? for my $len (uniq sort { $a <=> $b } map { length $_->[0] } @$tokens) {
     case <?= $len ?>:
-        switch (name[<?= $len - 1 ?>]) {
+        switch (h2o_tolower(name[<?= $len - 1 ?>])) {
 ?  my @tokens_of_len = grep { length($_->[0]) == $len } @$tokens;
 ?  for my $end (uniq sort map { substr($_->[0], length($_->[0]) - 1) } @tokens_of_len) {
         case '<?= $end ?>':
 ?   my @tokens_of_end = grep { substr($_->[0], length($_->[0]) - 1) eq $end } @tokens_of_len;
 ?   for my $token (@tokens_of_end) {
-            if (memcmp(name, "<?= substr($token->[0], 0, length($token->[0]) - 1) ?>", <?= length($token->[0]) - 1 ?>) == 0)
+            if (h2o__lcstris_core(name, "<?= substr($token->[0], 0, length($token->[0]) - 1) ?>", <?= length($token->[0]) - 1 ?>))
                 return <?= normalize_name($token->[0]) ?>;
 ?   }
             break;
