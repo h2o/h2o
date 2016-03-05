@@ -169,7 +169,8 @@ pid_t h2o_spawnp(const char *cmd, char *const *argv, const int *mapped_fds, int 
             environ = env;
         execvp(cmd, argv);
         errnum = errno;
-        write(pipefds[1], &errnum, sizeof(errnum));
+        if (write(pipefds[1], &errnum, sizeof(errnum)) == -1)
+            perror("write failed");
         _exit(EX_SOFTWARE);
     }
     if (!cloexec_mutex_is_locked)

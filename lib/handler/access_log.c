@@ -598,7 +598,8 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
         pos = append_safe_string(pos, element->suffix.base, element->suffix.len);
     }
 
-    write(fh->fd, line, pos - line);
+    if (write(fh->fd, line, pos - line) == -1)
+        perror("write failed");
 
     if (line_end - line != LOG_ALLOCA_SIZE)
         free(line);
