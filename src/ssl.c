@@ -779,6 +779,8 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
             cmd, mode, "ticket-based session resumption cannot be used, the server is built without support for the feature");
         return -1;
 #endif
+    } else {
+        conf.ticket.update_thread = NULL;
     }
 
     if ((t = yoml_get(node, "memcached")) != NULL) {
