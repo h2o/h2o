@@ -120,7 +120,7 @@ static int on_read_core(int fd, h2o_buffer_t **input)
             /* memory allocation failed */
             return -1;
         }
-        while ((rret = read(fd, buf.base, buf.len)) == -1 && errno == EINTR)
+        while ((rret = read(fd, buf.base, buf.len <= INT_MAX / 2 ? buf.len : INT_MAX / 2 + 1)) == -1 && errno == EINTR)
             ;
         if (rret == -1) {
             if (errno == EAGAIN)
