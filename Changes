@@ -1,5 +1,21 @@
 Revision history for H2O.
 
+1.7.1 2016-03-07 06:50:00+0000
+	- [core] fix incorrect line no. reported in case of YAML syntax error #785 (Kazuho Oku)
+	- [core] fix build issue / memory leak when the poll backend is used #777 #787 (devlearner)
+	- [core] when building, repect `EXTRA_LIBS` passed from command line #793 (Kazuho Oku)
+	- [core] fix memory leaks during start-up #792 (Domingo Alvarez Duarte)
+	- [core] fix stability issue when receiving a signal #799 (Kazuho Oku)
+	- [fastcgi] fix off-by-one buffer overflow #762 (Domingo Alvarez Duarte)
+	- [fastcgi][mruby] install missing script files #791 #798 (AIZAWA Hina)
+	- [mruby] truncate body to the size specified by `content-length` #778 (Kazuho Oku)
+	- [mruby] fix error when reading a ruby script >= 64K #824 (Domingo Alvarez Duarte)
+	- [proxy] fix I/O error when transferring files over 2GB on FreeBSD / OS X #821 #834 (Kazuho Oku)
+	- [ssl] bugfix: use of session ticket not disabled even when configured to #819 #835 (Kazuho Oku)
+	- [libh2o] provide pkg-config .pc files #743 (OGINO Masanori)
+	- [libh2o] include version numbers in the .so filename #794 (Matt Clarkson)
+	- [doc] refine documentation #601 #746 #748 #766 #781 #811
+
 1.7.0 2016-02-05 02:03:00+0000
 	- [core] support for wildcard hostnames #634 (Kazuho Oku)
 	- [core][file] preserve query paramaters upon redirection to a directory #690 (Tatsuhiro Tsujikawa)
