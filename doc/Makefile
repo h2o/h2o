@@ -8,6 +8,7 @@ OUTPUT=\
     configure/command_options.html \
     configure/syntax_and_structure.html \
     configure/base_directives.html \
+    configure/compress_directives.html \
     configure/http1_directives.html \
     configure/http2_directives.html \
     configure/access_log_directives.html \

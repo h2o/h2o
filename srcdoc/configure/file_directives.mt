@@ -169,20 +169,32 @@ EOT
 
 <?
 $ctx->{directive}->(
-    name     => "file.send-gzip",
+    name     => "file.send-compress",
     levels   => [ qw(global host path) ],
-    default  => q{file.send-gzip: OFF},
+    default  => q{file.send-compress: OFF},
     see_also => render_mt(<<'EOT'),
-<a href="configure/gzip_directives.html#gzip"><code>gzip</code></a>
+<a href="configure/compress_directives.html#compress"><code>compress</code></a>
 EOT
     desc    => <<'EOT',
-A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not so send <code>.gz</code> variants if possible.
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not so send <code>.br</code> or <code>.gz</code> variants if possible.
 EOT
 )->(sub {
 ?>
 <p>
-If set to <code>ON</code>, the handler looks for a file with <code>.gz</code> appended and sends the file  (i.e. sends the contents of <code>index.html.gz</code> in place of <code>index.html</code>) if the client is capable of transparently decoding a gzipped response.
+If set to <code>ON</code>, the handler looks for a file with <code>.br</code> or <code>.gz</code> appended and sends the file, if the client is capable of transparently decoding a <a href="https://datatracker.ietf.org/doc/draft-alakuijala-brotli/">brotli</a> or <a href="https://tools.ietf.org/html/rfc1952">gzip</a>-encoded response.
+For example, if a client requests a file named <code>index.html</code> with <code>Accept-Encoding: gzip</code> header and if <code>index.html.gz</code> exists, the <code>.gz</code> file is sent as a response together with a <code>Content-Encoding: gzip</code> response header.
 </p>
 ? })
+
+<?
+$ctx->{directive}->(
+    name     => "file.send-gzip",
+    levels   => [ qw(global host path) ],
+    desc     => <<'EOT',
+Obsolete.
+Synonym of <a href="configure/file_directives.html#send-compress"><code>send-compress</code></a>.
+EOT
+)->(sub {})
+?>
 
 ? })

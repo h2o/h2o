@@ -387,7 +387,7 @@
 		1058C87F1AA42568008D6180 /* 50headers.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50headers.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		1058C8871AA6DE4B008D6180 /* hostinfo.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hostinfo.h; sourceTree = "<group>"; };
 		1058C8891AA6E5E3008D6180 /* hostinfo.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hostinfo.c; sourceTree = "<group>"; };
-		1063FE901BB291300064D9C7 /* gzip_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = gzip_directives.mt; sourceTree = "<group>"; };
+		1063FE901BB291300064D9C7 /* compress_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = compress_directives.mt; sourceTree = "<group>"; };
 		1065E6EF19B8C64200686E72 /* evloop.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = evloop.c.h; sourceTree = "<group>"; };
 		1065E6F619B99E6D00686E72 /* kqueue.c.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = kqueue.c.h; sourceTree = "<group>"; };
 		1065E6F719B9B1AC00686E72 /* epoll.c.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = epoll.c.h; sourceTree = "<group>"; };
@@ -875,7 +875,7 @@
 				10583C041AF1F315004A3AD6 /* expires_directives.mt */,
 				10FCC1431B31408B00F13674 /* fastcgi_directives.mt */,
 				10583C051AF1F893004A3AD6 /* file_directives.mt */,
-				1063FE901BB291300064D9C7 /* gzip_directives.mt */,
+				1063FE901BB291300064D9C7 /* compress_directives.mt */,
 				10583C061AF20BE5004A3AD6 /* headers_directives.mt */,
 				1039A20A1BB89531005D3B8F /* mruby_directives.mt */,
 				10583C071AF21539004A3AD6 /* proxy_directives.mt */,
