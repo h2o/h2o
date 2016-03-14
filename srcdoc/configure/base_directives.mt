@@ -80,7 +80,7 @@ When H2O receives a request that exactly matches to an entry in paths that does 
 </p>
 <p>
 Since 2.0, it depends on the handler of the path whether if a 301 redirect that appends a slash is returned.
-Server administartors can take advantage of this change to define per-path configurations (see the examples in <a href="configure/file_directives.html#file.file"><code>file.file</code></a> and the <a href="configure/fastcgi_directives.html#proxy.reverse.url">FastCGI handler</a>).
+Server administartors can take advantage of this change to define per-path configurations (see the examples in <a href="configure/file_directives.html#file.file"><code>file.file</code></a> and the <a href="configure/fastcgi_directives.html">FastCGI handler</a>).
 <a href="configure/file_directives.html#file.dir"><code>file.dir</code></a> is an exception that continues to perform the redirection; in case of the example above, access to <code>/assets</code> is redirected to <code>/assets/<code>.
 </p>
 ? })
