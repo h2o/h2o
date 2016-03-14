@@ -94,7 +94,7 @@ EOT
 <h3 id="yaml_merge">Using YAML Merge</h3>
 
 <p>
-When parsing the configuration file, H2O recognizes <a href="http://yaml.org/type/merge.html">Merge Key Language-Independent Type for YAML&trade; Version 1.1</a>.
+Since version 2.0, H2O recognizes <a href="http://yaml.org/type/merge.html">Merge Key Language-Independent Type for YAML&trade; Version 1.1</a>.
 Users can use the feature to merge an existing mapping against another.
 The following example reuses the TLS configuration of <code>example.com</code> in <code>example.org</code>.
 </p>
