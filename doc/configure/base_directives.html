@@ -82,7 +82,7 @@ When <code>port</code> is omitted, the entry will match the requests targetting 
 Otherwise, the entry will match the requests targetting the specified port.
 </p>
 <p>
-Wildcard character <code>*</code> can be used as the first component of the hostname.
+Since version 1.7, a wildcard character <code>*</code> can be used as the first component of the hostname.
 If used, they are matched using the rule defined in <a href="https://tools.ietf.org/html/rfc2818#section-3.1" target="_blank">RFC 2818 Section 3.1</a>.
 For example, <code>*.example.com</code> will match HTTP requests for both <code>foo.example.com</code> and <code>bar.example.com</code>.
 Note that an exact match is preferred over host definitions using wildcard characters.
@@ -147,6 +147,15 @@ An <code>404 Not Found</code> error is returned if no matching paths were found.
 </code></pre>
 </div>
 
+<p>
+In releases prior to version 2.0, all the path entries are considered as directories.
+When H2O receives a request that exactly matches to an entry in paths that does not end with a slash, the server always returns a 301 redirect that appends a slash.
+</p>
+<p>
+Since 2.0, it depends on the handler of the path whether if a 301 redirect that appends a slash is returned.
+Server administartors can take advantage of this change to define per-path configurations (see the examples in <a href="configure/file_directives.html#file.file"><code>file.file</code></a> and the <a href="configure/fastcgi_directives.html#proxy.reverse.url">FastCGI handler</a>).
+<a href="configure/file_directives.html#file.dir"><code>file.dir</code></a> is an exception that continues to perform the redirection; in case of the example above, access to <code>/assets</code> is redirected to <code>/assets/<code>.
+</p>
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>

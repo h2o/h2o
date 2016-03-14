@@ -2,7 +2,11 @@
 ? $_mt->wrapper_file("wrapper.mt", "Configure", "File Directives")->(sub {
 
 <p>
-This document describes the configuration directives of the file handler.
+This document describes the configuration directives of the file handler - a handler that for serving static files.
+</p>
+<p>
+Two directives: <a href="configure/file_directives.html#file.dir"><code>file.dir</code></a> and <a href="configure/file_directives.html#file.file"><code>file.file</code></a> are used to define the mapping.
+Other directives modify the behavior of the mappings defined by the two.
 </p>
 
 <?
@@ -32,6 +36,11 @@ $ctx->{directive}->(
     name    => "file.dir",
     levels  => [ qw(path) ],
     desc    => q{The directive specifies the directory under which should be served for the corresponding path.},
+    see_also => render_mt(<<EOT),
+<a href="configure/file_directives.html#file.dirlisting"><code>file.dirlisting</code></a>,
+<a href="configure/file_directives.html#file.file"><code>file.file</code></a>,
+<a href="configure/file_directives.html#file.dirlisting"><code>file.index</code></a>
+EOT
 )->(sub {
 ?>
 <?= $ctx->{example}->('Serving files under different paths', <<'EOT')
@@ -52,6 +61,9 @@ $ctx->{directive}->(
     desc    => <<'EOT',
 A boolean flag (<code>OFF</code>, or <code>ON</code>) specifying whether or not to send the directory listing in case none of the index files exist.
 EOT
+    see_also => render_mt(<<EOT),
+<a href="configure/file_directives.html#file.dir"><code>file.dir</code></a>
+EOT
 )->(sub {});
 
 $ctx->{directive}->(
@@ -66,10 +78,32 @@ EOT
 
 <?
 $ctx->{directive}->(
+    name     => "file.file",
+    levels   => [ qw(path) ],
+    desc     => q{The directive maps a path to a specific file.},
+    see_also => render_mt(<<EOT),
+<a href="configure/file_directives.html#file.dir"><code>file.dir</code></a>
+EOT
+    since    => '2.0',
+)->(sub {
+?>
+<?= $ctx->{example}->('Mapping a path to a specific file', <<'EOT')
+paths:
+  /robots.txt:
+    file.file: /path/to/robots.txt
+EOT
+?>
+? })
+
+<?
+$ctx->{directive}->(
     name    => "file.index",
     levels  => [ qw(global host path) ],
     default => "file.index: [ 'index.html', 'index.htm', 'index.txt' ]",
     desc    => q{Specifies the names of the files that should be served when the client sends a request against the directory.},
+    see_also => render_mt(<<EOT),
+<a href="configure/file_directives.html#file.dir"><code>file.dir</code></a>
+EOT
 )->(sub {
 ?>
 <p>

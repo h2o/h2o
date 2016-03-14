@@ -59,7 +59,11 @@ File Directives
 
 
 <p>
-This document describes the configuration directives of the file handler.
+This document describes the configuration directives of the file handler - a handler that for serving static files.
+</p>
+<p>
+Two directives: <a href="configure/file_directives.html#file.dir"><code>file.dir</code></a> and <a href="configure/file_directives.html#file.file"><code>file.file</code></a> are used to define the mapping.
+Other directives modify the behavior of the mappings defined by the two.
 </p>
 
 <div id="file.custom-handler" class="directive-head">
@@ -119,6 +123,11 @@ The directive specifies the directory under which should be served for the corre
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>path</dd>
+<dt>See also:</dt>
+<dd><a href="configure/file_directives.html#file.dirlisting"><code>file.dirlisting</code></a>,
+<a href="configure/file_directives.html#file.file"><code>file.file</code></a>,
+<a href="configure/file_directives.html#file.dirlisting"><code>file.index</code></a>
+</dd>
 </dl>
 
 <div id="file.dirlisting" class="directive-head">
@@ -138,6 +147,9 @@ A boolean flag (<code>OFF</code>, or <code>ON</code>) specifying whether or not 
 <dd>global, host, path</dd>
 <dt>Default:</dt>
 <dd><code><pre>file.dirlisting: OFF</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/file_directives.html#file.dir"><code>file.dir</code></a>
+</dd>
 </dl>
 <div id="file.etag" class="directive-head">
 <h3><a href="configure/file_directives.html#file.etag"><code>"file.etag"</code></a></h3>
@@ -159,6 +171,35 @@ A boolean flag (<code>OFF</code>, or <code>ON</code>) specifying whether or not 
 </dl>
 
 
+<div id="file.file" class="directive-head">
+<div class="directive-since">since v2.0</div>
+<h3><a href="configure/file_directives.html#file.file"><code>"file.file"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+The directive maps a path to a specific file.
+</p>
+
+<div class="example">
+<div class="caption">Example. Mapping a path to a specific file</div>
+<pre><code>paths:
+  /robots.txt:
+    file.file: /path/to/robots.txt
+</code></pre>
+</div>
+
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>path</dd>
+<dt>See also:</dt>
+<dd><a href="configure/file_directives.html#file.dir"><code>file.dir</code></a>
+</dd>
+</dl>
+
 <div id="file.index" class="directive-head">
 <h3><a href="configure/file_directives.html#file.index"><code>"file.index"</code></a></h3>
 </div>
@@ -179,6 +220,9 @@ The sequence of filenames afer search from left to right, and the first file tha
 <dd>global, host, path</dd>
 <dt>Default:</dt>
 <dd><code><pre>file.index: [ &#39;index.html&#39;, &#39;index.htm&#39;, &#39;index.txt&#39; ]</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/file_directives.html#file.dir"><code>file.dir</code></a>
+</dd>
 </dl>
 
 <div id="file.mime.addtypes" class="directive-head">
