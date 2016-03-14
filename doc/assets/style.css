@@ -198,14 +198,25 @@ a {
     text-decoration: none;
 }
 
-#main .directive-title {
+#main .directive-head {
+    margin: 2em 0 1em 0;
     border-bottom: 1px solid #999;
+}
+
+#main .directive-head h3 {
+    margin: 0;
     font-size: 120%;
 }
 
-#main .directive-title a {
+#main .directive-head h3 a {
     color: black;
     text-decoration: none;
+}
+
+#main .directive-since {
+    margin: 0;
+    font-size: 80%;
+    float: right;
 }
 
 #main .directive-desc dt {

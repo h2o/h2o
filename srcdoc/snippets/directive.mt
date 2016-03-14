@@ -1,6 +1,11 @@
 ? my $ctx = $main::context;
 ? my ($content, $args) = @_;
-<h3 id="<?= $args->{name} ?>" class="directive-title"><a href="<?= $ctx->{filename} ?>#<?= $args->{name} ?>"><code>"<?= $args->{name} ?>"</code></a></h3>
+<div id="<?= $args->{name} ?>" class="directive-head">
+? if ($args->{since}) {
+<div class="directive-since">since v<?= $args->{since} ?></div>
+? }
+<h3><a href="<?= $ctx->{filename} ?>#<?= $args->{name} ?>"><code>"<?= $args->{name} ?>"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -18,6 +23,6 @@
 ? }
 ? if ($args->{see_also}) {
 <dt>See also:</dt>
-<dd><?= $args->{see_also} ?></pre></code>
+<dd><?= $args->{see_also} ?></dd>
 ? }
 </dl>

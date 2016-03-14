@@ -175,6 +175,7 @@ $ctx->{directive}->(
     see_also => render_mt(<<'EOT'),
 <a href="configure/compress_directives.html#compress"><code>compress</code></a>
 EOT
+    since   => '2.0',
     desc    => <<'EOT',
 A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not so send <code>.br</code> or <code>.gz</code> variants if possible.
 EOT
@@ -191,7 +192,7 @@ $ctx->{directive}->(
     name     => "file.send-gzip",
     levels   => [ qw(global host path) ],
     desc     => <<'EOT',
-Obsolete.
+Obsoleted in 2.0.
 Synonym of <a href="configure/file_directives.html#send-compress"><code>send-compress</code></a>.
 EOT
 )->(sub {})

@@ -62,7 +62,9 @@ File Directives
 This document describes the configuration directives of the file handler.
 </p>
 
-<h3 id="file.custom-handler" class="directive-title"><a href="configure/file_directives.html#file.custom-handler"><code>"file.custom-handler"</code></a></h3>
+<div id="file.custom-handler" class="directive-head">
+<h3><a href="configure/file_directives.html#file.custom-handler"><code>"file.custom-handler"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -92,7 +94,9 @@ Only one handler must exist within the directives.
 <dd>global, host, path</dd>
 </dl>
 
-<h3 id="file.dir" class="directive-title"><a href="configure/file_directives.html#file.dir"><code>"file.dir"</code></a></h3>
+<div id="file.dir" class="directive-head">
+<h3><a href="configure/file_directives.html#file.dir"><code>"file.dir"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -117,7 +121,9 @@ The directive specifies the directory under which should be served for the corre
 <dd>path</dd>
 </dl>
 
-<h3 id="file.dirlisting" class="directive-title"><a href="configure/file_directives.html#file.dirlisting"><code>"file.dirlisting"</code></a></h3>
+<div id="file.dirlisting" class="directive-head">
+<h3><a href="configure/file_directives.html#file.dirlisting"><code>"file.dirlisting"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -133,7 +139,9 @@ A boolean flag (<code>OFF</code>, or <code>ON</code>) specifying whether or not 
 <dt>Default:</dt>
 <dd><code><pre>file.dirlisting: OFF</pre></code>
 </dl>
-<h3 id="file.etag" class="directive-title"><a href="configure/file_directives.html#file.etag"><code>"file.etag"</code></a></h3>
+<div id="file.etag" class="directive-head">
+<h3><a href="configure/file_directives.html#file.etag"><code>"file.etag"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -151,7 +159,9 @@ A boolean flag (<code>OFF</code>, or <code>ON</code>) specifying whether or not 
 </dl>
 
 
-<h3 id="file.index" class="directive-title"><a href="configure/file_directives.html#file.index"><code>"file.index"</code></a></h3>
+<div id="file.index" class="directive-head">
+<h3><a href="configure/file_directives.html#file.index"><code>"file.index"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -171,7 +181,9 @@ The sequence of filenames afer search from left to right, and the first file tha
 <dd><code><pre>file.index: [ &#39;index.html&#39;, &#39;index.htm&#39;, &#39;index.txt&#39; ]</pre></code>
 </dl>
 
-<h3 id="file.mime.addtypes" class="directive-title"><a href="configure/file_directives.html#file.mime.addtypes"><code>"file.mime.addtypes"</code></a></h3>
+<div id="file.mime.addtypes" class="directive-head">
+<h3><a href="configure/file_directives.html#file.mime.addtypes"><code>"file.mime.addtypes"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -231,10 +243,12 @@ By default, mime-types for CSS and JavaScript files are the only ones that are g
 <dd><a href="configure/gzip_directives.html#gzip"><code>gzip</code></a>,
 <a href="configure/http2_directives.html#http2-casper"><code>http2-casper</code></a>,
 <a href="configure/http2_directives.html#http2-reprioritize-blocking-assets"><code>http2-reprioritize-blocking-assets</code></a>
-</pre></code>
+</dd>
 </dl>
 
-<h3 id="file.mime.removetypes" class="directive-title"><a href="configure/file_directives.html#file.mime.removetypes"><code>"file.mime.removetypes"</code></a></h3>
+<div id="file.mime.removetypes" class="directive-head">
+<h3><a href="configure/file_directives.html#file.mime.removetypes"><code>"file.mime.removetypes"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -255,7 +269,9 @@ Removes the MIME mappings for specified extensions supplied as a sequence of ext
 <dd>global, host, path</dd>
 </dl>
 
-<h3 id="file.mime.setdefaulttype" class="directive-title"><a href="configure/file_directives.html#file.mime.setdefaulttype"><code>"file.mime.setdefaulttype"</code></a></h3>
+<div id="file.mime.setdefaulttype" class="directive-head">
+<h3><a href="configure/file_directives.html#file.mime.setdefaulttype"><code>"file.mime.setdefaulttype"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -272,7 +288,9 @@ Sets the default MIME-type that is used when an extension does not exist in the 
 </dl>
 
 
-<h3 id="file.mime.settypes" class="directive-title"><a href="configure/file_directives.html#file.mime.settypes"><code>"file.mime.settypes"</code></a></h3>
+<div id="file.mime.settypes" class="directive-head">
+<h3><a href="configure/file_directives.html#file.mime.settypes"><code>"file.mime.settypes"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -295,7 +313,10 @@ Resets the MIME mappings to given mapping.
 <dd>global, host, path</dd>
 </dl>
 
-<h3 id="file.send-compress" class="directive-title"><a href="configure/file_directives.html#file.send-compress"><code>"file.send-compress"</code></a></h3>
+<div id="file.send-compress" class="directive-head">
+<div class="directive-since">since v2.0</div>
+<h3><a href="configure/file_directives.html#file.send-compress"><code>"file.send-compress"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -317,16 +338,18 @@ For example, if a client requests a file named <code>index.html</code> with <cod
 <dd><code><pre>file.send-compress: OFF</pre></code>
 <dt>See also:</dt>
 <dd><a href="configure/compress_directives.html#compress"><code>compress</code></a>
-</pre></code>
+</dd>
 </dl>
 
-<h3 id="file.send-gzip" class="directive-title"><a href="configure/file_directives.html#file.send-gzip"><code>"file.send-gzip"</code></a></h3>
+<div id="file.send-gzip" class="directive-head">
+<h3><a href="configure/file_directives.html#file.send-gzip"><code>"file.send-gzip"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
 <dd>
 <p>
-Obsolete.
+Obsoleted in 2.0.
 Synonym of <a href="configure/file_directives.html#send-compress"><code>send-compress</code></a>.
 
 </p>

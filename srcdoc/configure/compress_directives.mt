@@ -21,6 +21,7 @@ $ctx->{directive}->(
     see_also => render_mt(<<'EOT'),
 <a href="configure/file_directives.html#file.send-compress"><code>file.send-compress</code></a>, <a href="configure/file_directives.html#file.mime.addtypes"><code>file.mime.addtypes</code></a>
 EOT
+    since    => '2.0',
     desc     => <<'EOT',
 Enables on-the-fly compression of HTTP response.
 EOT
@@ -56,6 +57,7 @@ $ctx->{directive}->(
     see_also => render_mt(<<'EOT'),
 <a href="configure/compress_directives.html#compress"><code>compress</code></a>
 EOT
+    since    => '1.5',
     desc     => <<'EOT',
 Enables on-the-fly compression of HTTP response using gzip.
 EOT

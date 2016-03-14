@@ -62,7 +62,9 @@ Base Directives
 This document describes the configuration directives common to all the protocols and handlers.
 </p>
 
-<h3 id="hosts" class="directive-title"><a href="configure/base_directives.html#hosts"><code>"hosts"</code></a></h3>
+<div id="hosts" class="directive-head">
+<h3><a href="configure/base_directives.html#hosts"><code>"hosts"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -114,7 +116,9 @@ Note that an exact match is preferred over host definitions using wildcard chara
 <dd>global</dd>
 </dl>
 
-<h3 id="paths" class="directive-title"><a href="configure/base_directives.html#paths"><code>"paths"</code></a></h3>
+<div id="paths" class="directive-head">
+<h3><a href="configure/base_directives.html#paths"><code>"paths"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -149,7 +153,9 @@ An <code>404 Not Found</code> error is returned if no matching paths were found.
 <dd>host</dd>
 </dl>
 
-<h3 id="listen" class="directive-title"><a href="configure/base_directives.html#listen"><code>"listen"</code></a></h3>
+<div id="listen" class="directive-head">
+<h3><a href="configure/base_directives.html#listen"><code>"listen"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -317,7 +323,9 @@ If omitted, the permission of the socket file will reflect the umask of the call
 <dd>global, host</dd>
 </dl>
 
-<h3 id="error-log" class="directive-title"><a href="configure/base_directives.html#error-log"><code>"error-log"</code></a></h3>
+<div id="error-log" class="directive-head">
+<h3><a href="configure/base_directives.html#error-log"><code>"error-log"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -350,7 +358,9 @@ If the path starts with <code>|</code>, the rest of the path is considered as a 
 <dd>global</dd>
 </dl>
 
-<h3 id="limit-request-body" class="directive-title"><a href="configure/base_directives.html#limit-request-body"><code>"limit-request-body"</code></a></h3>
+<div id="limit-request-body" class="directive-head">
+<h3><a href="configure/base_directives.html#limit-request-body"><code>"limit-request-body"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -368,7 +378,9 @@ Default is 1073741824 (1GB).
 <dd>global</dd>
 </dl>
 
-<h3 id="max-connections" class="directive-title"><a href="configure/base_directives.html#max-connections"><code>"max-connections"</code></a></h3>
+<div id="max-connections" class="directive-head">
+<h3><a href="configure/base_directives.html#max-connections"><code>"max-connections"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -383,7 +395,9 @@ Number of connections to handle at once at maximum.
 <dt>Default:</dt>
 <dd><code><pre>max-connections: 1024</pre></code>
 </dl>
-<h3 id="max-delegations" class="directive-title"><a href="configure/base_directives.html#max-delegations"><code>"max-delegations"</code></a></h3>
+<div id="max-delegations" class="directive-head">
+<h3><a href="configure/base_directives.html#max-delegations"><code>"max-delegations"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -398,7 +412,9 @@ Limits the number of delegations (i.e. internal redirects using the <code>X-Repr
 <dt>Default:</dt>
 <dd><code><pre>max-delegations: 5</pre></code>
 </dl>
-<h3 id="num-name-resolution-threads" class="directive-title"><a href="configure/base_directives.html#num-name-resolution-threads"><code>"num-name-resolution-threads"</code></a></h3>
+<div id="num-name-resolution-threads" class="directive-head">
+<h3><a href="configure/base_directives.html#num-name-resolution-threads"><code>"num-name-resolution-threads"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -415,7 +431,9 @@ Number of threads to run for name resolution.
 </dl>
 
 
-<h3 id="num-threads" class="directive-title"><a href="configure/base_directives.html#num-threads"><code>"num-threads"</code></a></h3>
+<div id="num-threads" class="directive-head">
+<h3><a href="configure/base_directives.html#num-threads"><code>"num-threads"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -433,7 +451,9 @@ Default is the number of the processors connected to the system as obtained by <
 <dd>global</dd>
 </dl>
 
-<h3 id="pid-file" class="directive-title"><a href="configure/base_directives.html#pid-file"><code>"pid-file"</code></a></h3>
+<div id="pid-file" class="directive-head">
+<h3><a href="configure/base_directives.html#pid-file"><code>"pid-file"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -451,7 +471,9 @@ Default is none.
 <dd>global</dd>
 </dl>
 
-<h3 id="tcp-fastopen" class="directive-title"><a href="configure/base_directives.html#tcp-fastopen"><code>"tcp-fastopen"</code></a></h3>
+<div id="tcp-fastopen" class="directive-head">
+<h3><a href="configure/base_directives.html#tcp-fastopen"><code>"tcp-fastopen"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -471,7 +493,9 @@ On other platforms the default value is <code>0</code> (disabled).
 <dd>global</dd>
 </dl>
 
-<h3 id="ssl-session-resumption" class="directive-title"><a href="configure/base_directives.html#ssl-session-resumption"><code>"ssl-session-resumption"</code></a></h3>
+<div id="ssl-session-resumption" class="directive-head">
+<h3><a href="configure/base_directives.html#ssl-session-resumption"><code>"ssl-session-resumption"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -602,7 +626,9 @@ The value must be a mapping with <code>host</code> attribute specifying the addr
 <dd>global</dd>
 </dl>
 
-<h3 id="user" class="directive-title"><a href="configure/base_directives.html#user"><code>"user"</code></a></h3>
+<div id="user" class="directive-head">
+<h3><a href="configure/base_directives.html#user"><code>"user"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
