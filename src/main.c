@@ -173,15 +173,18 @@ static int on_openssl_print_errors(const char *str, size_t len, void *fp)
 
 static void setup_ecc_key(SSL_CTX *ssl_ctx)
 {
+#ifdef SSL_CTX_set_ecdh_auto
+    SSL_CTX_set_ecdh_auto(ssl_ctx, 1);
+#else
     int nid = NID_X9_62_prime256v1;
     EC_KEY *key = EC_KEY_new_by_curve_name(nid);
     if (key == NULL) {
         fprintf(stderr, "Failed to create curve \"%s\"\n", OBJ_nid2sn(nid));
         return;
     }
-
     SSL_CTX_set_tmp_ecdh(ssl_ctx, key);
     EC_KEY_free(key);
+#endif
 }
 
 static int on_sni_callback(SSL *ssl, int *ad, void *arg)
