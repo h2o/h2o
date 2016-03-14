@@ -116,7 +116,7 @@ $ctx->{directive}->(
     name     => "file.mime.addtypes",
     levels   => [ qw(global host path) ],
     see_also => render_mt(<<'EOT'),
-<a href="configure/gzip_directives.html#gzip"><code>gzip</code></a>,
+<a href="configure/compress_directives.html#compress"><code>compress</code></a>,
 <a href="configure/http2_directives.html#http2-casper"><code>http2-casper</code></a>,
 <a href="configure/http2_directives.html#http2-reprioritize-blocking-assets"><code>http2-reprioritize-blocking-assets</code></a>
 EOT
