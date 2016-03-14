@@ -16,7 +16,6 @@ OUTPUT=\
     configure/expires_directives.html \
     configure/fastcgi_directives.html \
     configure/file_directives.html \
-    configure/gzip_directives.html \
     configure/headers_directives.html \
     configure/mruby_directives.html \
     configure/proxy_directives.html \
