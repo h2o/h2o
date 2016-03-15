@@ -203,9 +203,9 @@ EOT
 
 <?
 $ctx->{directive}->(
-    name     => "file.send-compress",
+    name     => "file.send-compressed",
     levels   => [ qw(global host path) ],
-    default  => q{file.send-compress: OFF},
+    default  => q{file.send-compressed: OFF},
     see_also => render_mt(<<'EOT'),
 <a href="configure/compress_directives.html#compress"><code>compress</code></a>
 EOT
@@ -227,7 +227,7 @@ $ctx->{directive}->(
     levels   => [ qw(global host path) ],
     desc     => <<'EOT',
 Obsoleted in 2.0.
-Synonym of <a href="configure/file_directives.html#send-compress"><code>send-compress</code></a>.
+Synonym of <a href="configure/file_directives.html#send-compressed"><code>send-compressed</code></a>.
 EOT
 )->(sub {})
 ?>

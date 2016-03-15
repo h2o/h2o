@@ -19,7 +19,7 @@ $ctx->{directive}->(
     levels   => [ qw(global host path extension) ],
     default  => "compress: OFF",
     see_also => render_mt(<<'EOT'),
-<a href="configure/file_directives.html#file.send-compress"><code>file.send-compress</code></a>, <a href="configure/file_directives.html#file.mime.addtypes"><code>file.mime.addtypes</code></a>
+<a href="configure/file_directives.html#file.send-compressed"><code>file.send-compressed</code></a>, <a href="configure/file_directives.html#file.mime.addtypes"><code>file.mime.addtypes</code></a>
 EOT
     since    => '2.0',
     desc     => <<'EOT',
