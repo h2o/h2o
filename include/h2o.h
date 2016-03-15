@@ -50,6 +50,11 @@ extern "C" {
 #include "h2o/url.h"
 #include "h2o/version.h"
 
+#ifndef H2O_USE_BROTLI
+/* disabled for all but the standalone server, since the encoder is written in C++ */
+#define H2O_USE_BROTLI 0
+#endif
+
 #ifndef H2O_MAX_HEADERS
 #define H2O_MAX_HEADERS 100
 #endif
@@ -174,7 +179,7 @@ typedef struct st_h2o_pathconf_t {
      */
     h2o_globalconf_t *global;
     /**
-     * pathname in lower case with "/" appended at last and NULL terminated (or is {NULL,0} if is fallback or extension-level)
+     * pathname in lower case, may or may not have "/" at last, NULL terminated, or is {NULL,0} if is fallback or extension-level
      */
     h2o_iovec_t path;
     /**
@@ -564,6 +569,27 @@ typedef struct st_h2o_conn_callbacks_t {
      * callback for server push (may be NULL)
      */
     void (*push_path)(h2o_req_t *req, const char *abspath, size_t abspath_len);
+    /**
+     * logging callbacks (may be NULL)
+     */
+    union {
+        struct {
+            struct {
+                h2o_iovec_t (*protocol_version)(h2o_req_t *req);
+                h2o_iovec_t (*session_reused)(h2o_req_t *req);
+                h2o_iovec_t (*cipher)(h2o_req_t *req);
+                h2o_iovec_t (*cipher_bits)(h2o_req_t *req);
+            } ssl;
+            struct {
+                h2o_iovec_t (*stream_id)(h2o_req_t *req);
+                h2o_iovec_t (*priority_received)(h2o_req_t *req);
+                h2o_iovec_t (*priority_received_exclusive)(h2o_req_t *req);
+                h2o_iovec_t (*priority_received_parent)(h2o_req_t *req);
+                h2o_iovec_t (*priority_received_weight)(h2o_req_t *req);
+            } http2;
+        };
+        h2o_iovec_t (*callbacks[1])(h2o_req_t *req);
+    } log_;
 } h2o_conn_callbacks_t;
 
 /**
@@ -582,6 +608,10 @@ struct st_h2o_conn_t {
      * time when the connection was established
      */
     struct timeval connected_at;
+    /**
+     * connection id
+     */
+    uint64_t id;
     /**
      * callbacks
      */
@@ -882,6 +912,11 @@ extern const h2o_iovec_t *h2o_alpn_protocols;
  */
 void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock);
 /**
+ * creates a new connection
+ */
+static h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
+                                         const h2o_conn_callbacks_t *callbacks);
+/**
  * setups accept context for async SSL resumption
  */
 void h2o_accept_setup_async_ssl_resumption(h2o_memcached_context_t *ctx, unsigned expiration);
@@ -895,6 +930,18 @@ size_t h2o_stringify_protocol_version(char *dst, int version);
 h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
                                                    const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
                                                    h2o_iovec_t *base_path);
+/**
+ * return a bitmap of compressible types, by parsing the `accept-encoding` header
+ */
+int h2o_get_compressible_types(const h2o_headers_t *headers);
+#define H2O_COMPRESSIBLE_GZIP 1
+#define H2O_COMPRESSIBLE_BROTLI 2
+/**
+ * builds destination URL or path, by contatenating the prefix and path_info of the request
+ */
+h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t prefix_len);
+
+extern uint64_t h2o_connection_id;
 
 /* request */
 
@@ -1013,8 +1060,23 @@ void h2o_config_init(h2o_globalconf_t *config);
 h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t host, uint16_t port);
 /**
  * registers a path context
+ * @param hostconf host-level configuration that the path-level configuration belongs to
+ * @param path path
+ * @param flags unused and must be set to zero
+ *
+ * Handling of the path argument has changed in version 2.0 (of the standard server).
+ * 
+ * Before 2.0, the function implicitely added a trailing `/` to the supplied path (if it did not end with a `/`), and when receiving
+ * a HTTP request for a matching path without the trailing `/`, libh2o sent a 301 response redirecting the client to a URI with a
+ * trailing `/`.
+ * 
+ * Since 2.0, the function retains the exact path given as the argument, and the handlers of the pathconf is invoked if one of the
+ * following conditions are met:
+ *
+ * * request path is an exact match to the configuration path
+ * * configuration path does not end with a `/`, and the request path begins with the configuration path followed by a `/`
  */
-h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *pathname);
+h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *path, int flags);
 /**
  * disposes of the resources allocated for the global configuration
  */
@@ -1210,16 +1272,54 @@ void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
  */
 void h2o_chunked_register(h2o_pathconf_t *pathconf);
 
-/* lib/gzip.c */
+/* lib/compress.c */
+
+enum {
+    H2O_COMPRESS_FLAG_PARTIAL,
+    H2O_COMPRESS_FLAG_FLUSH,
+    H2O_COMPRESS_FLAG_EOS
+};
 
 /**
- * registers the gzip encoding output filter (added by default, for now)
+ * compressor context
  */
-void h2o_gzip_register(h2o_pathconf_t *pathconf);
+typedef struct st_h2o_compress_context_t {
+    /**
+     * name used in content-encoding header
+     */
+    h2o_iovec_t name;
+    /**
+     * compress
+     */
+    void (*compress)(struct st_h2o_compress_context_t *self, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final,
+                     h2o_iovec_t **outbufs, size_t *outbufcnt);
+} h2o_compress_context_t;
+
+typedef struct st_h2o_compress_args_t {
+    struct {
+        int quality; /* -1 if disabled */
+    } gzip;
+    struct {
+        int quality; /* -1 if disabled */
+    } brotli;
+} h2o_compress_args_t;
+
 /**
- *
+ * registers the gzip/brotli encoding output filter (added by default, for now)
  */
-void h2o_gzip_register_configurator(h2o_globalconf_t *conf);
+void h2o_compress_register(h2o_pathconf_t *pathconf, h2o_compress_args_t *args);
+/**
+ * instantiates the gzip compressor
+ */
+h2o_compress_context_t *h2o_compress_gzip_open(h2o_mem_pool_t *pool, int quality);
+/**
+ * instantiates the brotli compressor (only available if H2O_USE_BROTLI is set)
+ */
+h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, int quality, size_t estimated_cotent_length);
+/**
+ * registers the configurator for the gzip/brotli output filter
+ */
+void h2o_compress_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/errordoc.c */
 
@@ -1296,7 +1396,7 @@ void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/file.c */
 
-enum { H2O_FILE_FLAG_NO_ETAG = 0x1, H2O_FILE_FLAG_DIR_LISTING = 0x2, H2O_FILE_FLAG_SEND_GZIP = 0x4 };
+enum { H2O_FILE_FLAG_NO_ETAG = 0x1, H2O_FILE_FLAG_DIR_LISTING = 0x2, H2O_FILE_FLAG_SEND_COMPRESSED = 0x4 };
 
 typedef struct st_h2o_file_handler_t h2o_file_handler_t;
 
@@ -1307,7 +1407,7 @@ extern const char **h2o_file_default_index_files;
  */
 int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *path, h2o_iovec_t mime_type, int flags);
 /**
- * registers the file handler to the context
+ * registers a handler that serves a directory of statically-served files
  * @param pathconf
  * @param virtual_path
  * @param real_path
@@ -1316,6 +1416,15 @@ int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *pa
  */
 h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real_path, const char **index_files,
                                       h2o_mimemap_t *mimemap, int flags);
+/**
+ * registers a handler that serves a specific file
+ * @param pathconf
+ * @param virtual_path
+ * @param real_path
+ * @param index_files optional NULL-terminated list of of filenames to be considered as the "directory-index"
+ * @param mimemap the mimemap (h2o_mimemap_create is called internally if the argument is NULL)
+ */
+h2o_handler_t *h2o_file_register_file(h2o_pathconf_t *pathconf, const char *real_path, h2o_mimemap_type_t *mime_type, int flags);
 /**
  * returns the associated mimemap
  */
@@ -1408,6 +1517,20 @@ void h2o_reproxy_register(h2o_pathconf_t *pathconf);
 void h2o_reproxy_register_configurator(h2o_globalconf_t *conf);
 
 /* inline defs */
+
+inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
+                                         const h2o_conn_callbacks_t *callbacks)
+{
+    h2o_conn_t *conn = (h2o_conn_t *)h2o_mem_alloc(sz);
+
+    conn->ctx = ctx;
+    conn->hosts = hosts;
+    conn->connected_at = connected_at;
+    conn->id = __sync_add_and_fetch(&h2o_connection_id, 1);
+    conn->callbacks = callbacks;
+
+    return conn;
+}
 
 inline void h2o_proceed_response(h2o_req_t *req)
 {

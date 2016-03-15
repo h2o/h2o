@@ -66,12 +66,12 @@ hosts:
       "/":
         mruby.handler: |
           Proc.new do |env|
-            [200, { "x-reproxy-url" => "/proxy?resp:status=302&resp:location=/index.txt" }, ["from mruby"]]
+            [200, { "x-reproxy-url" => "/proxy/?resp:status=302&resp:location=/index.txt" }, ["from mruby"]]
           end
       "/proxy":
         proxy.reverse.url: http://127.0.0.1:$upstream/
 EOT
-    my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    my ($headers, $body) = run_prog("curl --max-redirs 0 --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
     like $headers, qr{^HTTP/1\.1 200 }is;
     is $body, "hello\n";
 };

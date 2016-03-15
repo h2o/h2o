@@ -63,7 +63,7 @@ void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *global
     pathconf->global = globalconf;
     h2o_chunked_register(pathconf);
     if (path != NULL)
-        pathconf->path = h2o_strdup_slashed(NULL, path, SIZE_MAX);
+        pathconf->path = h2o_strdup(NULL, path, SIZE_MAX);
     h2o_mem_addref_shared(mimemap);
     pathconf->mimemap = mimemap;
 }
@@ -114,14 +114,14 @@ void h2o_config_init(h2o_globalconf_t *config)
     h2o_configurator__init_core(config);
 }
 
-h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *pathname)
+h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *path, int flags)
 {
     h2o_pathconf_t *pathconf;
 
     h2o_vector_reserve(NULL, &hostconf->paths, hostconf->paths.size + 1);
     pathconf = hostconf->paths.entries + hostconf->paths.size++;
 
-    h2o_config_init_pathconf(pathconf, hostconf->global, pathname, hostconf->mimemap);
+    h2o_config_init_pathconf(pathconf, hostconf->global, path, hostconf->mimemap);
 
     return pathconf;
 }
@@ -153,7 +153,7 @@ h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t h
     if (hostconf->authority.port == 65535) {
         hostconf->authority.hostport = hostconf->authority.host;
     } else {
-        hostconf->authority.hostport.base = h2o_mem_alloc(hostconf->authority.host.len + sizeof("[]:65535"));
+        hostconf->authority.hostport.base = h2o_mem_alloc(hostconf->authority.host.len + sizeof("[]:" H2O_UINT16_LONGEST_STR));
         if (strchr(hostconf->authority.host.base, ':') != NULL) {
             hostconf->authority.hostport.len =
                 sprintf(hostconf->authority.hostport.base, "[%s]:%" PRIu16, hostconf->authority.host.base, port);

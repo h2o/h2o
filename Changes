@@ -1,5 +1,32 @@
 Revision history for H2O.
 
+2.0.0-beta1 2016-03-15 02:24:00+0000
+	- [core][breaking change] do not automatically append `/` to path-level configuration #820 (Kazuho Oku)
+	- [core] support `<<` in configuration file #786 (Kazuho Oku)
+	- [access-log] add directive for logging protocol-specific values #801 (Kazuho Oku)
+	- [compress] on-the-fly compression using brotli, as well as directives to tune the compression parameters #802 (Kazuho Oku)
+	- [file] `file.file` directive for mapping specific file #822 (Kazuho Oku)
+	- [file] `send-compress` directive (renamed from `send-gzip`) to support pre-compressed files using brotli #802 (Kazuho Oku)
+	- [file] cache open failures #836 (Kazuho Oku)
+	- [http2] avoid memcpy during HPACK huffman encoding #749 (Kazuho Oku)
+	- [ssl] support ECDH curves other than P-256 #841 (Kazuho Oku)
+
+1.7.1 2016-03-07 06:50:00+0000
+	- [core] fix incorrect line no. reported in case of YAML syntax error #785 (Kazuho Oku)
+	- [core] fix build issue / memory leak when the poll backend is used #777 #787 (devlearner)
+	- [core] when building, repect `EXTRA_LIBS` passed from command line #793 (Kazuho Oku)
+	- [core] fix memory leaks during start-up #792 (Domingo Alvarez Duarte)
+	- [core] fix stability issue when receiving a signal #799 (Kazuho Oku)
+	- [fastcgi] fix off-by-one buffer overflow #762 (Domingo Alvarez Duarte)
+	- [fastcgi][mruby] install missing script files #791 #798 (AIZAWA Hina)
+	- [mruby] truncate body to the size specified by `content-length` #778 (Kazuho Oku)
+	- [mruby] fix error when reading a ruby script >= 64K #824 (Domingo Alvarez Duarte)
+	- [proxy] fix I/O error when transferring files over 2GB on FreeBSD / OS X #821 #834 (Kazuho Oku)
+	- [ssl] bugfix: use of session ticket not disabled even when configured to #819 #835 (Kazuho Oku)
+	- [libh2o] provide pkg-config .pc files #743 (OGINO Masanori)
+	- [libh2o] include version numbers in the .so filename #794 (Matt Clarkson)
+	- [doc] refine documentation #601 #746 #748 #766 #781 #811
+
 1.7.0 2016-02-05 02:03:00+0000
 	- [core] support for wildcard hostnames #634 (Kazuho Oku)
 	- [core][file] preserve query paramaters upon redirection to a directory #690 (Tatsuhiro Tsujikawa)
@@ -8,7 +35,7 @@ Revision history for H2O.
 	- [fastcgi] add support for CGI #618 (Kazuho Oku)
 	- [fastcgi] drop transfer-encoding header #641 (Kazuho Oku)
 	- [file] fix a bug that caused `file.mime.addtypes` to fail setting the attributes of a content-type #731 (Kazuho Oku)
-	- [http2] fix broken `PUSH_PROMISE` frames being sent under high pressure #734 #736 (Kazuho Oku)
+	- [http2] fix broken `PUSH_PROMISE` frames being sent under high pressure #734 #737 (Kazuho Oku)
 	- [mruby] provide `env["rack.input"]` #515 #638 #644 (Masayoshi Takahashi, Kazuho Oku)
 	- [mruby] HTTP client API #637 #643 (Kazuho Oku)
 	- [mruby] dump the ruby source on error #631 (Kazuho Oku)

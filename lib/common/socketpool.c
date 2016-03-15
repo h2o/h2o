@@ -121,7 +121,7 @@ void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, u
 
     common_init(pool, H2O_SOCKETPOOL_TYPE_NAMED, capacity);
     pool->peer.named.host = h2o_strdup(NULL, host.base, host.len);
-    pool->peer.named.port.base = h2o_mem_alloc(sizeof("65535"));
+    pool->peer.named.port.base = h2o_mem_alloc(sizeof(H2O_UINT16_LONGEST_STR));
     pool->peer.named.port.len = sprintf(pool->peer.named.port.base, "%u", (unsigned)port);
 }
 

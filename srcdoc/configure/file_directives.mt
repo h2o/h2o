@@ -2,7 +2,11 @@
 ? $_mt->wrapper_file("wrapper.mt", "Configure", "File Directives")->(sub {
 
 <p>
-This document describes the configuration directives of the file handler.
+This document describes the configuration directives of the file handler - a handler that for serving static files.
+</p>
+<p>
+Two directives: <a href="configure/file_directives.html#file.dir"><code>file.dir</code></a> and <a href="configure/file_directives.html#file.file"><code>file.file</code></a> are used to define the mapping.
+Other directives modify the behavior of the mappings defined by the two.
 </p>
 
 <?
@@ -32,6 +36,11 @@ $ctx->{directive}->(
     name    => "file.dir",
     levels  => [ qw(path) ],
     desc    => q{The directive specifies the directory under which should be served for the corresponding path.},
+    see_also => render_mt(<<EOT),
+<a href="configure/file_directives.html#file.dirlisting"><code>file.dirlisting</code></a>,
+<a href="configure/file_directives.html#file.file"><code>file.file</code></a>,
+<a href="configure/file_directives.html#file.dirlisting"><code>file.index</code></a>
+EOT
 )->(sub {
 ?>
 <?= $ctx->{example}->('Serving files under different paths', <<'EOT')
@@ -52,6 +61,9 @@ $ctx->{directive}->(
     desc    => <<'EOT',
 A boolean flag (<code>OFF</code>, or <code>ON</code>) specifying whether or not to send the directory listing in case none of the index files exist.
 EOT
+    see_also => render_mt(<<EOT),
+<a href="configure/file_directives.html#file.dir"><code>file.dir</code></a>
+EOT
 )->(sub {});
 
 $ctx->{directive}->(
@@ -66,10 +78,32 @@ EOT
 
 <?
 $ctx->{directive}->(
+    name     => "file.file",
+    levels   => [ qw(path) ],
+    desc     => q{The directive maps a path to a specific file.},
+    see_also => render_mt(<<EOT),
+<a href="configure/file_directives.html#file.dir"><code>file.dir</code></a>
+EOT
+    since    => '2.0',
+)->(sub {
+?>
+<?= $ctx->{example}->('Mapping a path to a specific file', <<'EOT')
+paths:
+  /robots.txt:
+    file.file: /path/to/robots.txt
+EOT
+?>
+? })
+
+<?
+$ctx->{directive}->(
     name    => "file.index",
     levels  => [ qw(global host path) ],
     default => "file.index: [ 'index.html', 'index.htm', 'index.txt' ]",
     desc    => q{Specifies the names of the files that should be served when the client sends a request against the directory.},
+    see_also => render_mt(<<EOT),
+<a href="configure/file_directives.html#file.dir"><code>file.dir</code></a>
+EOT
 )->(sub {
 ?>
 <p>
@@ -82,7 +116,7 @@ $ctx->{directive}->(
     name     => "file.mime.addtypes",
     levels   => [ qw(global host path) ],
     see_also => render_mt(<<'EOT'),
-<a href="configure/gzip_directives.html#gzip"><code>gzip</code></a>,
+<a href="configure/compress_directives.html#compress"><code>compress</code></a>,
 <a href="configure/http2_directives.html#http2-casper"><code>http2-casper</code></a>,
 <a href="configure/http2_directives.html#http2-reprioritize-blocking-assets"><code>http2-reprioritize-blocking-assets</code></a>
 EOT
@@ -169,20 +203,33 @@ EOT
 
 <?
 $ctx->{directive}->(
-    name     => "file.send-gzip",
+    name     => "file.send-compress",
     levels   => [ qw(global host path) ],
-    default  => q{file.send-gzip: OFF},
+    default  => q{file.send-compress: OFF},
     see_also => render_mt(<<'EOT'),
-<a href="configure/gzip_directives.html#gzip"><code>gzip</code></a>
+<a href="configure/compress_directives.html#compress"><code>compress</code></a>
 EOT
+    since   => '2.0',
     desc    => <<'EOT',
-A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not so send <code>.gz</code> variants if possible.
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not so send <code>.br</code> or <code>.gz</code> variants if possible.
 EOT
 )->(sub {
 ?>
 <p>
-If set to <code>ON</code>, the handler looks for a file with <code>.gz</code> appended and sends the file  (i.e. sends the contents of <code>index.html.gz</code> in place of <code>index.html</code>) if the client is capable of transparently decoding a gzipped response.
+If set to <code>ON</code>, the handler looks for a file with <code>.br</code> or <code>.gz</code> appended and sends the file, if the client is capable of transparently decoding a <a href="https://datatracker.ietf.org/doc/draft-alakuijala-brotli/">brotli</a> or <a href="https://tools.ietf.org/html/rfc1952">gzip</a>-encoded response.
+For example, if a client requests a file named <code>index.html</code> with <code>Accept-Encoding: gzip</code> header and if <code>index.html.gz</code> exists, the <code>.gz</code> file is sent as a response together with a <code>Content-Encoding: gzip</code> response header.
 </p>
 ? })
+
+<?
+$ctx->{directive}->(
+    name     => "file.send-gzip",
+    levels   => [ qw(global host path) ],
+    desc     => <<'EOT',
+Obsoleted in 2.0.
+Synonym of <a href="configure/file_directives.html#send-compress"><code>send-compress</code></a>.
+EOT
+)->(sub {})
+?>
 
 ? })

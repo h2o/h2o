@@ -41,6 +41,15 @@ static int on_config_dir(h2o_configurator_command_t *cmd, h2o_configurator_conte
     return 0;
 }
 
+static int on_config_file(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
+    h2o_mimemap_type_t *mime_type =
+        h2o_mimemap_get_type_by_extension(*ctx->mimemap, h2o_get_filext(node->data.scalar, strlen(node->data.scalar)));
+    h2o_file_register_file(ctx->pathconf, node->data.scalar, mime_type, self->vars->flags);
+    return 0;
+}
+
 static int on_config_index(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
@@ -79,16 +88,16 @@ static int on_config_etag(h2o_configurator_command_t *cmd, h2o_configurator_cont
     return 0;
 }
 
-static int on_config_send_gzip(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_send_compressed(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
 
     switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
     case 0: /* off */
-        self->vars->flags &= ~H2O_FILE_FLAG_SEND_GZIP;
+        self->vars->flags &= ~H2O_FILE_FLAG_SEND_COMPRESSED;
         break;
     case 1: /* on */
-        self->vars->flags |= H2O_FILE_FLAG_SEND_GZIP;
+        self->vars->flags |= H2O_FILE_FLAG_SEND_COMPRESSED;
         break;
     default: /* error */
         return -1;
@@ -159,6 +168,9 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
     h2o_configurator_define_command(&self->super, "file.dir", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
                                                                   H2O_CONFIGURATOR_FLAG_DEFERRED,
                                     on_config_dir);
+    h2o_configurator_define_command(&self->super, "file.file", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
+                                                                   H2O_CONFIGURATOR_FLAG_DEFERRED,
+                                    on_config_file);
     h2o_configurator_define_command(&self->super, "file.index",
                                     (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
@@ -167,10 +179,14 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
                                     (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_etag);
+    h2o_configurator_define_command(&self->super, "file.send-compressed",
+                                    (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_send_compressed);
     h2o_configurator_define_command(&self->super, "file.send-gzip",
                                     (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_send_gzip);
+                                    on_config_send_compressed);
     h2o_configurator_define_command(&self->super, "file.dirlisting",
                                     (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,

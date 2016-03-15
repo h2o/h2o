@@ -1,0 +1,32 @@
+language:
+- objective-c
+env:
+  matrix:
+  - INSTALL_TYPE='system' VERSION=2.7
+  - INSTALL_TYPE='macpython' VERSION=2.7.10 CC=clang CXX=clang++
+  - INSTALL_TYPE='macpython' VERSION=3.4.3 CC=clang CXX=clang++
+  - INSTALL_TYPE='macpython' VERSION=3.5.0 CC=clang CXX=clang++
+  - INSTALL_TYPE='homebrew' VERSION=2.7.10
+  - INSTALL_TYPE='homebrew' VERSION=3.4.3
+  - INSTALL_TYPE='homebrew' VERSION=3.5.0
+install:
+- source terryfy/travis_tools.sh
+- get_python_environment $INSTALL_TYPE $VERSION venv
+- pip install --upgrade wheel
+script:
+- python setup.py build_ext test
+after_success:
+- pip wheel -w dist .
+before_deploy:
+- export WHEELS=$(ls ./dist/*.whl)
+
+deploy:
+  provider: releases
+  api_key:
+    secure: YcCBi6W/w4dtKCa59Wfm8L5lGWvK7KxaFNDr3yh1Hz5aStXXf758pEMHGewnlbfbwuj5a3SjBb1nLp1M69OQJfxm442uXBaBKo52PM9PPbD7NjvbNIso73pqcSODXQXKuZxDFpEhfuDTVq3hUkUqiwhChWhrFucJsSL51i7qSss=
+  file:
+    - "${WHEELS}"
+  skip_cleanup: true
+  on:
+    repo: google/brotli
+    tags: true

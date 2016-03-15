@@ -417,7 +417,9 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     /* environment */
     mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_REQUEST_METHOD),
                  mrb_str_new(mrb, generator->req->method.base, generator->req->method.len));
-    size_t confpath_len_wo_slash = generator->req->pathconf->path.len - 1;
+    size_t confpath_len_wo_slash = generator->req->pathconf->path.len;
+    if (generator->req->pathconf->path.base[generator->req->pathconf->path.len - 1] == '/')
+        --confpath_len_wo_slash;
     mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_SCRIPT_NAME),
                  mrb_str_new(mrb, generator->req->pathconf->path.base, confpath_len_wo_slash));
     mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_PATH_INFO),

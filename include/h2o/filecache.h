@@ -33,17 +33,24 @@
 
 typedef struct st_h2o_filecache_ref_t {
     int fd;
-    struct stat st;
-    struct {
-        struct tm gm;
-        char str[H2O_TIMESTR_RFC1123_LEN + 1];
-    } _last_modified;
-    struct {
-        char buf[H2O_FILECACHE_ETAG_MAXLEN + 1];
-        size_t len;
-    } _etag;
     size_t _refcnt;
     h2o_linklist_t _lru;
+    union {
+        struct {
+            /* used if fd != -1 */
+            struct stat st;
+            struct {
+                struct tm gm;
+                char str[H2O_TIMESTR_RFC1123_LEN + 1];
+            } _last_modified;
+            struct {
+                char buf[H2O_FILECACHE_ETAG_MAXLEN + 1];
+                size_t len;
+            } _etag;
+        };
+        /* used if fd != -1 */
+        int open_err;
+    };
     char _path[1];
 } h2o_filecache_ref_t;
 
