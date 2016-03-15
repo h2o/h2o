@@ -1,6 +1,6 @@
 Revision history for H2O.
 
-2.0.0-beta1 TBD
+2.0.0-beta1 2016-03-15 02:24:00+0000
 	- [core][breaking change] do not automatically append `/` to path-level configuration #820 (Kazuho Oku)
 	- [core] support `<<` in configuration file #786 (Kazuho Oku)
 	- [access-log] add directive for logging protocol-specific values #801 (Kazuho Oku)
