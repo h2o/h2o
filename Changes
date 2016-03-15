@@ -9,6 +9,7 @@ Revision history for H2O.
 	- [file] `send-compress` directive (renamed from `send-gzip`) to support pre-compressed files using brotli #802 (Kazuho Oku)
 	- [file] cache open failures #836 (Kazuho Oku)
 	- [http2] avoid memcpy during HPACK huffman encoding #749 (Kazuho Oku)
+	- [ssl] support ECDH curves other than P-256 #841 (Kazuho Oku)
 
 1.7.1 2016-03-07 06:50:00+0000
 	- [core] fix incorrect line no. reported in case of YAML syntax error #785 (Kazuho Oku)
