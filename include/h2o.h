@@ -891,9 +891,9 @@ void h2o_set_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_toke
 void h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
                            const char *value, size_t value_len, int overwrite_if_exists);
 /**
- * adds a header token
+ * sets a header token
  */
-void h2o_add_header_token(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value,
+void h2o_set_header_token(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value,
                           size_t value_len);
 /**
  * deletes a header from list
