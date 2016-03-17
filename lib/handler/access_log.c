@@ -116,7 +116,7 @@ h2o_access_log_filehandle_t *h2o_access_log_open_handle(const char *path, const 
     /* default to combined log format */
     if (fmt == NULL)
         fmt = "%h %l %u %t \"%r\" %s %b \"%{Referer}i\" \"%{User-agent}i\"";
-    if ((logconf = h2o_logconf_compile(fmt, errbuf)) == NULL) {
+    if ((logconf = h2o_logconf_compile(fmt, H2O_LOGCONF_ESCAPE_APACHE, errbuf)) == NULL) {
         fprintf(stderr, "%s\n", errbuf);
         return NULL;
     }

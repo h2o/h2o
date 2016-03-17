@@ -1196,10 +1196,15 @@ void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
 
 /* log */
 
+enum {
+    H2O_LOGCONF_ESCAPE_APACHE,
+    H2O_LOGCONF_ESCAPE_JSON
+};
+
 /**
  * compiles a log configuration
  */
-h2o_logconf_t *h2o_logconf_compile(const char *fmt, char *errbuf);
+h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf);
 /**
  * disposes of a log configuration
  */

@@ -90,7 +90,8 @@ void h2o_status_register(h2o_pathconf_t *pathconf)
 
     self->super.on_req = on_req;
     self->super.dispose = on_dispose;
-    if ((self->logconf = h2o_logconf_compile("%h %l %u %t \"%r\" %s %b \"%{Referer}i\" \"%{User-agent}i\"", errbuf)) == NULL) {
+    if ((self->logconf = h2o_logconf_compile("%h %l %u %t \"%r\" %s %b \"%{Referer}i\" \"%{User-agent}i\"", H2O_LOGCONF_ESCAPE_JSON,
+                                             errbuf)) == NULL) {
         fprintf(stderr, "%s\n", errbuf);
         h2o_fatal("[status] failed to compile log format:%s\n");
     }
