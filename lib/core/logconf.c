@@ -157,7 +157,8 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, char *errbuf)
 #define MAP_EXT_TO_PROTO(name, cb)                                                                                                 \
     if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT(name))) {                                                                       \
         NEW_ELEMENT(ELEMENT_TYPE_PROTOCOL_SPECIFIC);                                                                               \
-        LAST_ELEMENT()->data.protocol_specific_callback_index =                                                                    \
+        LAST_ELEMENT()                                                                                                             \
+            ->data.protocol_specific_callback_index =                                                                              \
             &((h2o_conn_callbacks_t *)NULL)->log_.cb - ((h2o_conn_callbacks_t *)NULL)->log_.callbacks;                             \
         goto MAP_EXT_Found;                                                                                                        \
     }
@@ -436,41 +437,57 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             pos += sprintf(pos, "%" PRId32, (int32_t)req->res.status);
             break;
         case ELEMENT_TYPE_TIMESTAMP: /* %t */
+            if (timeval_is_null(&req->processed_at.at))
+                goto EmitDash;
             RESERVE(H2O_TIMESTR_LOG_LEN + 2);
             *pos++ = '[';
             pos = append_safe_string(pos, req->processed_at.str->log, H2O_TIMESTR_LOG_LEN);
             *pos++ = ']';
             break;
-        case ELEMENT_TYPE_TIMESTAMP_STRFTIME: /* %{...}t */ {
-            size_t bufsz, len;
-            if (localt.tm_year == 0)
-                localtime_r(&req->processed_at.at.tv_sec, &localt);
-            for (bufsz = 128;; bufsz *= 2) {
-                RESERVE(bufsz);
-                if ((len = strftime(pos, bufsz, element->data.name.base, &localt)) != 0)
-                    break;
+        case ELEMENT_TYPE_TIMESTAMP_STRFTIME: /* %{...}t */
+            if (timeval_is_null(&req->processed_at.at))
+                goto EmitDash;
+            {
+                size_t bufsz, len;
+                if (localt.tm_year == 0)
+                    localtime_r(&req->processed_at.at.tv_sec, &localt);
+                for (bufsz = 128;; bufsz *= 2) {
+                    RESERVE(bufsz);
+                    if ((len = strftime(pos, bufsz, element->data.name.base, &localt)) != 0)
+                        break;
+                }
+                pos += len;
             }
-            pos += len;
-        } break;
+            break;
         case ELEMENT_TYPE_TIMESTAMP_SEC_SINCE_EPOCH: /* %{sec}t */
+            if (timeval_is_null(&req->processed_at.at))
+                goto EmitDash;
             RESERVE(sizeof(H2O_UINT32_LONGEST_STR) - 1);
             pos += sprintf(pos, "%" PRIu32, (uint32_t)req->processed_at.at.tv_sec);
             break;
         case ELEMENT_TYPE_TIMESTAMP_MSEC_SINCE_EPOCH: /* %{msec}t */
+            if (timeval_is_null(&req->processed_at.at))
+                goto EmitDash;
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
             pos += sprintf(pos, "%" PRIu64,
                            (uint64_t)req->processed_at.at.tv_sec * 1000 + (uint64_t)req->processed_at.at.tv_usec / 1000);
             break;
         case ELEMENT_TYPE_TIMESTAMP_USEC_SINCE_EPOCH: /* %{usec}t */
+            if (timeval_is_null(&req->processed_at.at))
+                goto EmitDash;
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
             pos +=
                 sprintf(pos, "%" PRIu64, (uint64_t)req->processed_at.at.tv_sec * 1000000 + (uint64_t)req->processed_at.at.tv_usec);
             break;
         case ELEMENT_TYPE_TIMESTAMP_MSEC_FRAC: /* %{msec_frac}t */
+            if (timeval_is_null(&req->processed_at.at))
+                goto EmitDash;
             RESERVE(3);
             pos += sprintf(pos, "%03u", (unsigned)(req->processed_at.at.tv_usec / 1000));
             break;
         case ELEMENT_TYPE_TIMESTAMP_USEC_FRAC: /* %{usec_frac}t */
+            if (timeval_is_null(&req->processed_at.at))
+                goto EmitDash;
             RESERVE(6);
             pos += sprintf(pos, "%06u", (unsigned)req->processed_at.at.tv_usec);
             break;
