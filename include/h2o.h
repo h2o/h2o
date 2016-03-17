@@ -94,6 +94,7 @@ typedef struct st_h2o_configurator_t h2o_configurator_t;
 typedef struct st_h2o_hostconf_t h2o_hostconf_t;
 typedef struct st_h2o_globalconf_t h2o_globalconf_t;
 typedef struct st_h2o_mimemap_t h2o_mimemap_t;
+typedef struct st_h2o_logconf_t h2o_logconf_t;
 
 /**
  * a predefined, read-only, fast variant of h2o_iovec_t, defined in h2o/token.h
@@ -1191,6 +1192,21 @@ int h2o_puth_path_in_link_header(h2o_req_t *req, const char *value, size_t value
  * logs an error
  */
 void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
+
+/* log */
+
+/**
+ * compiles a log configuration
+ */
+h2o_logconf_t *h2o_logconf_compile(const char *fmt, char *errbuf);
+/**
+ * disposes of a log configuration
+ */
+void h2o_logconf_dispose(h2o_logconf_t *logconf);
+/**
+ * logs a request
+ */
+char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char *buf);
 
 /* proxy */
 
