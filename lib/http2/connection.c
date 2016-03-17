@@ -62,8 +62,9 @@ static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t
 static int do_emit_writereq(h2o_http2_conn_t *conn);
 static void on_read(h2o_socket_t *sock, int status);
 static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_len);
+static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 
-const h2o_protocol_callbacks_t H2O_HTTP2_CALLBACKS = {initiate_graceful_shutdown};
+const h2o_protocol_callbacks_t H2O_HTTP2_CALLBACKS = {initiate_graceful_shutdown, foreach_request};
 
 static int is_idle_stream_id(h2o_http2_conn_t *conn, uint32_t stream_id)
 {
@@ -1199,6 +1200,22 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
      * invocation of send_headers */
     if (!stream->push.promise_sent && stream->state != H2O_HTTP2_STREAM_STATE_END_STREAM)
         h2o_http2_stream_send_push_promise(conn, stream);
+}
+
+static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata)
+{
+    h2o_linklist_t *node;
+
+    for (node = ctx->http2._conns.next; node != &ctx->http2._conns; node = node->next) {
+        h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _conns, node);
+        h2o_http2_stream_t *stream;
+        kh_foreach_value(conn->streams, stream, {
+            int ret = cb(&stream->req, cbdata);
+            if (ret != 0)
+                return ret;
+        });
+    }
+    return 0;
 }
 
 void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
