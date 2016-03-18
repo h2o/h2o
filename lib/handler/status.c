@@ -104,19 +104,10 @@ static void collect_reqs_of_context(struct st_h2o_status_collector_t *collector,
     }
 }
 
-static void free_pp(void *pp)
-{
-    void *p = *(void **)pp;
-    free(p);
-}
-
 static void send_response(struct st_h2o_status_collector_t *collector)
 {
     static h2o_generator_t generator = {NULL, NULL};
     h2o_req_t *req;
-
-    h2o_logconf_dispose(collector->logconf);
-    pthread_mutex_destroy(&collector->mutex);
 
     if ((req = collector->src.req) != NULL) {
         h2o_iovec_t resp[2] = {collector->data, {H2O_STRLIT("\n]\n")}};
@@ -128,11 +119,7 @@ static void send_response(struct st_h2o_status_collector_t *collector)
         h2o_send(req, resp,
                  h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")) ? 0 : sizeof(resp) / sizeof(resp[0]),
                  1);
-        *(void **)h2o_mem_alloc_shared(&req->pool, sizeof(void *), free_pp) = collector->data.base;
-    } else {
-        free(collector->data.base);
     }
-
     h2o_mem_release_shared(collector);
 }
 
@@ -159,6 +146,15 @@ static void on_collect_notify(h2o_multithread_receiver_t *receiver, h2o_linklist
             send_response(collector);
         }
     }
+}
+
+static void on_collector_dispose(void *_collector)
+{
+    struct st_h2o_status_collector_t *collector = _collector;
+
+    h2o_logconf_dispose(collector->logconf);
+    pthread_mutex_destroy(&collector->mutex);
+    free(collector->data.base);
 }
 
 static void on_req_close(void *p)
@@ -209,7 +205,7 @@ static int on_req_json(struct st_h2o_status_handler_t *self, h2o_req_t *req)
 
     { /* construct collector and send request to every thread */
         struct st_h2o_status_context_t *status_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
-        struct st_h2o_status_collector_t *collector = h2o_mem_alloc_shared(NULL, sizeof(*collector), NULL);
+        struct st_h2o_status_collector_t *collector = h2o_mem_alloc_shared(NULL, sizeof(*collector), on_collector_dispose);
         size_t i;
 
         collector->src.req = req;
