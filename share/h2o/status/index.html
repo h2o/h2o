@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>H2O status</title>
+<script type="text/javascript">
+
+function $(id) {
+  return document.getElementById(id);
+}
+
+function toArray(list) {
+  return Array.prototype.map.call(list, function (e) {
+    return e;
+  });
+}
+
+function fetchJson(url, cb) {
+  var xhr = new XMLHttpRequest();
+  xhr.open("GET", url, true);
+  xhr.onreadystatechange = function () {
+    if (xhr.readyState != 4)
+      return;
+    if (xhr.status == 200) {
+      try {
+         cb(JSON.parse(xhr.responseText));
+      } catch (e) {
+         console.log(e);
+         cb(null);
+      }
+    } else {
+      cb(null);
+    }
+  }
+  xhr.send();
+}
+
+function update(cb) {
+  var json_uri = (location.pathname + "/json").replace(/\/{2,}/g, "/");
+  fetchJson(json_uri, function (json) {
+    if (json == null) {
+      alert("an error occurred while trying to receive the status");
+      cb(false);
+      return;
+    }
+
+    function stringifyColumn(req, field) {
+      if (field == "id") {
+        var s = req["connection-id"];
+        if (req["http2.stream-id"])
+          s += "-" + req["http2.stream-id"];
+        return s;
+      } else if (field == "address") {
+        return req.host;
+      } else if (field == "path") {
+        return req.path + req.query;
+      }
+      return req[field];
+    }
+
+    var table = $("in-flight");
+    var columns = toArray(table.getElementsByTagName("th"));
+    var oldRows = toArray(table.getElementsByTagName("tr"));
+    oldRows.shift(); // first tr is a list of headers
+    json.map(function (req) {
+      if (!req.method)
+        return;
+      var row = document.createElement("tr");
+      columns.map(function (column) {
+        var text = stringifyColumn(req, column.innerHTML);
+        row.insertBefore((function () {
+          var node = document.createElement("td");
+          node.insertBefore(document.createTextNode(text), null);
+          return node;
+        })(), null);
+        table.insertBefore(row, oldRows.length != 0 ? oldRows[0] : null);
+      });
+    });
+    while (oldRows.length != 0)
+      table.removeChild(oldRows.shift());
+
+    cb(true);
+  });
+}
+
+window.addEventListener("load", function () {
+  update(function (success) {
+  });
+});
+</script>
+<style type="text/css">
+table {
+  border: 1px solid gray;
+  border-collapse: collapse;
+  width: 100%;
+}
+table caption {
+  font-weight: bold;
+  margin: 1em auto 0.5em auto;
+}
+table td,th {
+  border: 1px solid gray;
+  padding: 0 0.5em;
+}
+table th {
+  text-align: center;
+  background: #ddd;
+}
+table td {
+  vertical-align: top;
+}
+</style>
+</head>
+<body>
+<table id="in-flight">
+<caption>Requests In-flight</caption>
+<tr><th>id</th><th>host</th><th>method</th><th>path</th><th>protocol</th><th>referer</th><th>user-agent</th></tr>
+</table>
+</body>
+</html>
