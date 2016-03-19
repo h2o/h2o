@@ -83,6 +83,7 @@ static void collect_reqs_of_context(struct st_h2o_status_collector_t *collector,
     int was_last_thread;
 
     h2o_buffer_init(&cbdata.buffer, &h2o_socket_buffer_prototype);
+    ctx->globalconf->http1.callbacks.foreach_request(ctx, collect_req_status, &cbdata);
     ctx->globalconf->http2.callbacks.foreach_request(ctx, collect_req_status, &cbdata);
 
     pthread_mutex_lock(&collector->mutex);

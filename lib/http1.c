@@ -43,6 +43,7 @@ struct st_h2o_http1_conn_t {
     h2o_conn_t super;
     h2o_socket_t *sock;
     /* internal structure */
+    h2o_linklist_t _conns;
     h2o_timeout_t *_timeout;
     h2o_timeout_entry_t _timeout_entry;
     size_t _prevreqlen;
@@ -76,9 +77,11 @@ static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled);
 static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb);
 static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final);
 static void reqread_on_read(h2o_socket_t *sock, int status);
+static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 
 const h2o_protocol_callbacks_t H2O_HTTP1_CALLBACKS = {
-    NULL /* graceful_shutdown (note: nothing special needs to be done for handling graceful shutdown) */
+    NULL, /* graceful_shutdown (note: nothing special needs to be done for handling graceful shutdown) */
+    foreach_request
 };
 
 static int is_msie(h2o_req_t *req)
@@ -110,6 +113,7 @@ static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
     h2o_dispose_request(&conn->req);
     if (conn->sock != NULL && close_socket)
         h2o_socket_close(conn->sock);
+    h2o_linklist_unlink(&conn->_conns);
     free(conn);
 }
 
@@ -711,6 +715,19 @@ DEFINE_TLS_LOGGER(cipher_bits)
 
 #undef DEFINE_TLS_LOGGER
 
+static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata)
+{
+    h2o_linklist_t *node;
+
+    for (node = ctx->http1._conns.next; node != &ctx->http1._conns; node = node->next) {
+        struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _conns, node);
+        int ret = cb(&conn->req, cbdata);
+        if (ret != 0)
+            return ret;
+    }
+    return 0;
+}
+
 void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
     static const h2o_conn_callbacks_t callbacks = {
@@ -733,6 +750,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     conn->super.callbacks = &callbacks;
     conn->sock = sock;
     sock->data = conn;
+    h2o_linklist_insert(&ctx->ctx->http1._conns, &conn->_conns);
 
     init_request(conn, 0);
     reqread_start(conn);

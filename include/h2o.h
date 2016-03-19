@@ -427,6 +427,10 @@ struct st_h2o_context_t {
          * request timeout
          */
         h2o_timeout_t req_timeout;
+        /**
+         * link-list of h2o_http1_conn_t
+         */
+        h2o_linklist_t _conns;
     } http1;
 
     struct {
