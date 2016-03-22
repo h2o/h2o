@@ -171,6 +171,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_TYPE("process-time", ELEMENT_TYPE_PROCESS_TIME);
                     MAP_EXT_TO_TYPE("response-time", ELEMENT_TYPE_RESPONSE_TIME);
                     MAP_EXT_TO_TYPE("duration", ELEMENT_TYPE_DURATION);
+                    MAP_EXT_TO_PROTO("http1.request-index", http1.request_index);
                     MAP_EXT_TO_PROTO("http2.stream-id", http2.stream_id);
                     MAP_EXT_TO_PROTO("http2.priority.received", http2.priority_received);
                     MAP_EXT_TO_PROTO("http2.priority.received.exclusive", http2.priority_received_exclusive);

@@ -46,6 +46,7 @@ struct st_h2o_http1_conn_t {
     h2o_linklist_t _conns;
     h2o_timeout_t *_timeout;
     h2o_timeout_entry_t _timeout_entry;
+    uint64_t _req_index;
     size_t _prevreqlen;
     size_t _reqsize;
     struct st_h2o_http1_req_entity_reader *_req_entity_reader;
@@ -101,6 +102,7 @@ static void init_request(struct st_h2o_http1_conn_t *conn, int reinit)
         h2o_dispose_request(&conn->req);
     h2o_init_request(&conn->req, &conn->super, NULL);
 
+    ++conn->_req_index;
     conn->req._ostr_top = &conn->_ostr_final.super;
     conn->_ostr_final.super.do_send = finalostream_send;
     conn->_ostr_final.super.start_pull = finalostream_start_pull;
@@ -715,6 +717,14 @@ DEFINE_TLS_LOGGER(cipher_bits)
 
 #undef DEFINE_TLS_LOGGER
 
+static h2o_iovec_t log_request_index(h2o_req_t *req)
+{
+    struct st_h2o_http1_conn_t *conn = (void *)req->conn;
+    char *s = h2o_mem_alloc_pool(&req->pool, sizeof(H2O_UINT64_LONGEST_STR));
+    size_t len = sprintf(s, "%" PRIu64, conn->_req_index);
+    return h2o_iovec_init(s, len);
+}
+
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata)
 {
     h2o_linklist_t *node;
@@ -736,6 +746,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
         NULL,         /* push */
         {{
           {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits}, /* ssl */
+          {log_request_index},                                                     /* http1 */
           {}                                                                       /* http2 */
         }}};
     struct st_h2o_http1_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx->ctx, ctx->hosts, connected_at, &callbacks);

@@ -1134,6 +1134,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         push_path,    /* HTTP2 push */
         {{
             {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits}, /* ssl */
+            {}, /* http1 */
             {log_stream_id, log_priority_received, log_priority_received_exclusive, log_priority_received_parent,
              log_priority_received_weight, log_priority_actual, log_priority_actual_parent, log_priority_actual_weight} /* http2 */
         }} /* loggers */

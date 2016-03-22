@@ -593,6 +593,9 @@ typedef struct st_h2o_conn_callbacks_t {
                 h2o_iovec_t (*cipher_bits)(h2o_req_t *req);
             } ssl;
             struct {
+                h2o_iovec_t (*request_index)(h2o_req_t *req);
+            } http1;
+            struct {
                 h2o_iovec_t (*stream_id)(h2o_req_t *req);
                 h2o_iovec_t (*priority_received)(h2o_req_t *req);
                 h2o_iovec_t (*priority_received_exclusive)(h2o_req_t *req);

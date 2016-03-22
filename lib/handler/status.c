@@ -186,6 +186,8 @@ static int on_req_json(struct st_h2o_status_handler_t *self, h2o_req_t *req)
         /* connection */
         X_ELEMENT("connection-id") SEPARATOR X_ELEMENT("ssl.protocol-version") SEPARATOR X_ELEMENT("ssl.session-reused")
             SEPARATOR X_ELEMENT("ssl.cipher") SEPARATOR X_ELEMENT("ssl.cipher-bits") SEPARATOR
+        /* http1 */
+        X_ELEMENT("http1.request-index") SEPARATOR
         /* http2 */
         X_ELEMENT("http2.stream-id") SEPARATOR X_ELEMENT("http2.priority.received.exclusive")
             SEPARATOR X_ELEMENT("http2.priority.received.parent") SEPARATOR X_ELEMENT("http2.priority.received.weight")
