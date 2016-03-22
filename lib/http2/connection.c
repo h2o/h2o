@@ -1088,6 +1088,44 @@ static h2o_iovec_t log_priority_received_weight(h2o_req_t *req)
     return h2o_iovec_init(s, len);
 }
 
+static uint32_t get_parent_stream_id(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+{
+    h2o_http2_scheduler_node_t *parent_sched = h2o_http2_scheduler_get_parent(&stream->_refs.scheduler);
+    if (parent_sched == &conn->scheduler) {
+        return 0;
+    } else {
+        h2o_http2_stream_t *parent_stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.scheduler, parent_sched);
+        return parent_stream->stream_id;
+    }
+}
+
+static h2o_iovec_t log_priority_actual(h2o_req_t *req)
+{
+    h2o_http2_conn_t *conn = (void *)req->conn;
+    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
+    char *s = h2o_mem_alloc_pool(&stream->req.pool, sizeof(H2O_UINT32_LONGEST_STR ":" H2O_UINT16_LONGEST_STR));
+    size_t len = (size_t)sprintf(s, "%" PRIu32 ":%" PRIu16, get_parent_stream_id(conn, stream),
+                                 h2o_http2_scheduler_get_weight(&stream->_refs.scheduler));
+    return h2o_iovec_init(s, len);
+}
+
+static h2o_iovec_t log_priority_actual_parent(h2o_req_t *req)
+{
+    h2o_http2_conn_t *conn = (void *)req->conn;
+    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
+    char *s = h2o_mem_alloc_pool(&stream->req.pool, sizeof(H2O_UINT32_LONGEST_STR));
+    size_t len = (size_t)sprintf(s, "%" PRIu32, get_parent_stream_id(conn, stream));
+    return h2o_iovec_init(s, len);
+}
+
+static h2o_iovec_t log_priority_actual_weight(h2o_req_t *req)
+{
+    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
+    char *s = h2o_mem_alloc_pool(&stream->req.pool, sizeof(H2O_UINT16_LONGEST_STR));
+    size_t len = (size_t)sprintf(s, "%" PRIu16, h2o_http2_scheduler_get_weight(&stream->_refs.scheduler));
+    return h2o_iovec_init(s, len);
+}
+
 static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, struct timeval connected_at)
 {
     static const h2o_conn_callbacks_t callbacks = {
@@ -1095,10 +1133,10 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         get_peername, /* ditto */
         push_path,    /* HTTP2 push */
         {{
-          {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits}, /* ssl */
-          {log_stream_id, log_priority_received, log_priority_received_exclusive, log_priority_received_parent,
-           log_priority_received_weight} /* http2 */
-        }}                               /* loggers */
+            {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits}, /* ssl */
+            {log_stream_id, log_priority_received, log_priority_received_exclusive, log_priority_received_parent,
+             log_priority_received_weight, log_priority_actual, log_priority_actual_parent, log_priority_actual_weight} /* http2 */
+        }} /* loggers */
     };
 
     h2o_http2_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx, hosts, connected_at, &callbacks);

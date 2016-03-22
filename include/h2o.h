@@ -592,6 +592,9 @@ typedef struct st_h2o_conn_callbacks_t {
                 h2o_iovec_t (*priority_received_exclusive)(h2o_req_t *req);
                 h2o_iovec_t (*priority_received_parent)(h2o_req_t *req);
                 h2o_iovec_t (*priority_received_weight)(h2o_req_t *req);
+                h2o_iovec_t (*priority_actual)(h2o_req_t *req);
+                h2o_iovec_t (*priority_actual_parent)(h2o_req_t *req);
+                h2o_iovec_t (*priority_actual_weight)(h2o_req_t *req);
             } http2;
         };
         h2o_iovec_t (*callbacks[1])(h2o_req_t *req);

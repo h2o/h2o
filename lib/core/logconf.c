@@ -176,6 +176,9 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_PROTO("http2.priority.received.exclusive", http2.priority_received_exclusive);
                     MAP_EXT_TO_PROTO("http2.priority.received.parent", http2.priority_received_parent);
                     MAP_EXT_TO_PROTO("http2.priority.received.weight", http2.priority_received_weight);
+                    MAP_EXT_TO_PROTO("http2.priority.actual", http2.priority_actual);
+                    MAP_EXT_TO_PROTO("http2.priority.actual.parent", http2.priority_actual_parent);
+                    MAP_EXT_TO_PROTO("http2.priority.actual.weight", http2.priority_actual_weight);
                     MAP_EXT_TO_PROTO("ssl.protocol-version", ssl.protocol_version);
                     MAP_EXT_TO_PROTO("ssl.session-reused", ssl.session_reused);
                     MAP_EXT_TO_PROTO("ssl.cipher", ssl.cipher);
