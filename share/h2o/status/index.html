@@ -59,7 +59,7 @@ function update(cb) {
         return ["actual.parent", "actual.weight", "received.parent", "received.weight", "received.exclusive"].map(function (n) {
           return req["http2.priority." + n];
         }).join("/");
-      } else if (field == "address") {
+      } else if (field == "client") {
         return req.host;
       } else if (field == "path") {
         return req.path + req.query;
@@ -133,7 +133,7 @@ Worker-threads: <span id="value:worker-threads">-</span>
 <tr>
 <th>id</th>
 <th>HTTP/2<span style="font-weight: normal; font-size: 80%"><br>Pa/Wa/Pr/Wr/X</span></th>
-<th>host</th>
+<th>client</th>
 <th>method</th>
 <th>path</th>
 <th>protocol</th>
