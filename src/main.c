@@ -126,6 +126,7 @@ static struct {
     int max_connections;
     size_t num_threads;
     int tfo_queues;
+    time_t launch_time;
     struct {
         pthread_t tid;
         h2o_context_t ctx;
@@ -148,6 +149,7 @@ static struct {
     NULL,            /* pid_file */
     NULL,            /* error_log */
     1024,            /* max_connections */
+    0,               /* initialized in main() */
     0,               /* initialized in main() */
     0,               /* initialized in main() */
     NULL,            /* thread_ids */
@@ -1404,19 +1406,27 @@ static h2o_iovec_t on_extra_status(h2o_globalconf_t *_conf, h2o_mem_pool_t *pool
 {
 #define BUFSIZE 1024
     h2o_iovec_t ret;
+    char current_time[H2O_TIMESTR_LOG_LEN + 1], restart_time[H2O_TIMESTR_LOG_LEN + 1];
     const char *generation;
+    time_t now = time(NULL);
 
+    h2o_time2str_log(current_time, now);
+    h2o_time2str_log(restart_time, conf.launch_time);
     if ((generation = getenv("SERVER_STARTER_GENERATION")) == NULL)
         generation = "null";
 
     ret.base = h2o_mem_alloc_pool(pool, BUFSIZE);
     ret.len = snprintf(ret.base, BUFSIZE, ",\n"
+                                          " \"current-time\": \"%s\",\n"
+                                          " \"restart-time\": \"%s\",\n"
+                                          " \"uptime\": %" PRIu64 ",\n"
                                           " \"generation\": %s,\n"
                                           " \"connections\": %d,\n"
                                           " \"max-connections\": %d,\n"
                                           " \"listeners\": %zu,\n"
                                           " \"worker-threads\": %zu",
-                       generation, num_connections(0), conf.max_connections, conf.num_listeners, conf.num_threads);
+                       current_time, restart_time, (uint64_t)(now - conf.launch_time), generation, num_connections(0),
+                       conf.max_connections, conf.num_listeners, conf.num_threads);
     assert(ret.len < BUFSIZE);
 
     return ret;
@@ -1481,6 +1491,7 @@ int main(int argc, char **argv)
 
     conf.num_threads = h2o_numproc();
     conf.tfo_queues = H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE;
+    conf.launch_time = time(NULL);
 
     h2o_hostinfo_max_threads = H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS;
 

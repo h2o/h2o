@@ -49,6 +49,21 @@ function update(cb) {
         slot.innerHTML = json[k] != null ? json[k] : "-";
     }
 
+    $("value:uptime").innerHTML = (function () {
+      var d = json["uptime"];
+      if (isNaN(d))
+        return "-";
+      var s = "";
+      if (d >= 86400)
+        s += Math.floor(d / 86400) + "d";
+      if (d >= 3600)
+        s += Math.floor(d / 3600 % 24) + "h";
+      if (d >= 60)
+        s += Math.floor(d / 60 % 60) + "m";
+      s += (d % 60) + "s";
+      return s;
+    })();
+
     function stringifyColumn(req, field) {
       if (field == "id") {
         var s = req["connection-id"];
@@ -127,9 +142,12 @@ window.addEventListener("load", function () {
 <body>
 <h1>H2O Server Status</h1>
 <p>
+Current Time: <span id="value:current-time">-</span><br>
+Restart Time: <span id="value:restart-time">-</span><br>
+Uptime: <span id="value:uptime">-</span><br>
 Generation: <span id="value:generation">-</span><br>
 Connections: <span id="value:connections">-</span> / <span id="value:max-connections">-</span><br>
-Worker-threads: <span id="value:worker-threads">-</span>
+Worker threads: <span id="value:worker-threads">-</span>
 </p>
 <table id="reqs-in-flight">
 <caption>Requests In-flight</caption>
