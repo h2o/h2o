@@ -120,9 +120,24 @@ window.addEventListener("load", function () {
 });
 </script>
 <style type="text/css">
+#summary {
+  border: 0;
+  margin: 1em 0;
+}
+#summary th,td {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+#summary th {
+  font-weight: normal;
+  text-align: right;
+  padding-right: 0.5em;
+}
 #reqs-in-flight {
   border: 1px solid gray;
   border-collapse: collapse;
+  margin: 1em 0;
   width: 100%;
 }
 #reqs-in-flight caption {
@@ -144,14 +159,16 @@ window.addEventListener("load", function () {
 </style>
 </head>
 <body>
-Server Version: <span id="value:server-version">-</span><br>
-OpenSSL Version: <span id="value:openssl-version">-</span><br>
-Current Time: <span id="value:current-time">-</span><br>
-Restart Time: <span id="value:restart-time">-</span><br>
-Uptime: <span id="value:uptime">-</span><br>
-Generation: <span id="value:generation">-</span><br>
-Connections: <span id="value:connections">-</span> / <span id="value:max-connections">-</span><br>
-Worker threads: <span id="value:worker-threads">-</span>
+<table id="summary">
+<tr><th>Server Version:<td id="value:server-version">-
+<tr><th>OpenSSL Version: <td id="value:openssl-version">-
+<tr><th>Current Time: <td id="value:current-time">-
+<tr><th>Restart Time: <td id="value:restart-time">-
+<tr><th>Uptime: <td id="value:uptime">-
+<tr><th>Generation: <td id="value:generation">-
+<tr><th>Connections: <td><span id="value:connections">-</span> / <span id="value:max-connections"></span>
+<tr><th>Worker threads: <td id="value:worker-threads">-
+</table>
 <table id="reqs-in-flight">
 <caption>Requests In-flight</caption>
 <tr>
