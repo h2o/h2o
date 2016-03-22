@@ -63,8 +63,9 @@ function update(cb) {
         }).join("/");
       } else if (field == "client") {
         return req.host;
-      } else if (field == "path") {
-        return req.path + req.query;
+      } else if (field == "URI") {
+        var scheme = req["ssl.cipher-bits"] != "-" ? "https:" : "http";
+        return scheme + "://" + req.authority + req.path + req.query;
       }
       return req[field];
     }
@@ -137,7 +138,7 @@ Worker-threads: <span id="value:worker-threads">-</span>
 <th>HTTP/2<span style="font-weight: normal; font-size: 80%"><br>Pa/Wa/Pr/Wr/X</span></th>
 <th>client</th>
 <th>method</th>
-<th>path</th>
+<th>URI</th>
 <th>protocol</th>
 <th>referer</th>
 <th>user-agent</th>
