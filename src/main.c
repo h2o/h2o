@@ -1417,6 +1417,8 @@ static h2o_iovec_t on_extra_status(h2o_globalconf_t *_conf, h2o_mem_pool_t *pool
 
     ret.base = h2o_mem_alloc_pool(pool, BUFSIZE);
     ret.len = snprintf(ret.base, BUFSIZE, ",\n"
+                                          " \"server-version\": \"" H2O_VERSION "\",\n"
+                                          " \"openssl-version\": \"%s\",\n"
                                           " \"current-time\": \"%s\",\n"
                                           " \"restart-time\": \"%s\",\n"
                                           " \"uptime\": %" PRIu64 ",\n"
@@ -1425,8 +1427,8 @@ static h2o_iovec_t on_extra_status(h2o_globalconf_t *_conf, h2o_mem_pool_t *pool
                                           " \"max-connections\": %d,\n"
                                           " \"listeners\": %zu,\n"
                                           " \"worker-threads\": %zu",
-                       current_time, restart_time, (uint64_t)(now - conf.launch_time), generation, num_connections(0),
-                       conf.max_connections, conf.num_listeners, conf.num_threads);
+                       SSLeay_version(SSLEAY_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
+                       num_connections(0), conf.max_connections, conf.num_listeners, conf.num_threads);
     assert(ret.len < BUFSIZE);
 
     return ret;
