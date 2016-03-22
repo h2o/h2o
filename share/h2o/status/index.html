@@ -49,6 +49,10 @@ function update(cb) {
         if (req["http2.stream-id"])
           s += "-" + req["http2.stream-id"];
         return s;
+      } else if (field.match(/^HTTP\/2/)) {
+        return ["actual.parent", "actual.weight", "received.parent", "received.weight", "received.exclusive"].map(function (n) {
+          return req["http2.priority." + n];
+        }).join("/");
       } else if (field == "address") {
         return req.host;
       } else if (field == "path") {
@@ -99,7 +103,8 @@ table caption {
 }
 table td,th {
   border: 1px solid gray;
-  padding: 0 0.5em;
+  line-height: 1.2em;
+  padding: 0.3em 0.5em;
 }
 table th {
   text-align: center;
@@ -113,7 +118,16 @@ table td {
 <body>
 <table id="in-flight">
 <caption>Requests In-flight</caption>
-<tr><th>id</th><th>host</th><th>method</th><th>path</th><th>protocol</th><th>referer</th><th>user-agent</th></tr>
+<tr>
+<th>id</th>
+<th>HTTP/2<span style="font-weight: normal; font-size: 80%"><br>Pa/Wa/Pr/Wr/X</span></th>
+<th>host</th>
+<th>method</th>
+<th>path</th>
+<th>protocol</th>
+<th>referer</th>
+<th>user-agent</th>
+</tr>
 </table>
 </body>
 </html>
