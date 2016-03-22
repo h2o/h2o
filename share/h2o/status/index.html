@@ -76,6 +76,10 @@ function update(cb) {
         return ["actual.parent", "actual.weight", "received.parent", "received.weight", "received.exclusive"].map(function (n) {
           return req["http2.priority." + n];
         }).join("/");
+      } else if (field.match(/^SSL/)) {
+        if (req["ssl.protocol-version"] == "-")
+          return "-";
+        return req["ssl.protocol-version"] + "/" + req["ssl.cipher"] + "/" + (req["ssl.session-reused"] == "1" ? "Y" : "N");
       } else if (field == "client") {
         return req.host;
       } else if (field == "URI") {
@@ -153,6 +157,7 @@ Worker threads: <span id="value:worker-threads">-</span>
 <tr>
 <th>id</th>
 <th>HTTP/2<span style="font-weight: normal; font-size: 80%"><br>Pa/Wa/Pr/Wr/X</span></th>
+<th>SSL<span style="font-weight: normal; font-size: 80%"><br>Ver/Cipher/Resume</th>
 <th>client</th>
 <th>method</th>
 <th>URI</th>
