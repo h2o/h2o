@@ -52,7 +52,7 @@ function update(cb) {
     function stringifyColumn(req, field) {
       if (field == "id") {
         var s = req["connection-id"];
-        if (req["http2.stream-id"])
+        if (req["http2.stream-id"] != "-")
           s += "-" + req["http2.stream-id"];
         return s;
       } else if (field.match(/^HTTP\/2/)) {
