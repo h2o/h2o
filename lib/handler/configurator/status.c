@@ -37,6 +37,7 @@ void h2o_status_register_configurator(h2o_globalconf_t *conf)
 {
     h2o_configurator_t *c = h2o_configurator_create(conf, sizeof(*c));
 
-    h2o_configurator_define_command(c, "status", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+    h2o_configurator_define_command(c, "status", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED |
+                                                     H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_status);
 }
