@@ -34,7 +34,34 @@ function fetchJson(url, cb) {
   xhr.send();
 }
 
-function update(cb) {
+var update = function () {
+  var inFlight = false;
+  var timerId = null;
+  return function (force) {
+    if (timerId != null) {
+      clearTimeout(timerId);
+      timerId = null;
+    }
+    if (!inFlight && (force || $("refresh").checked)) {
+      inFlight = true;
+      update.doUpdate(function (result) {
+        inFlight = false;
+        if (result) {
+          if ($("refresh").checked) {
+            timerId = setTimeout(function () {
+              timerId = null;
+              update(false);
+            }.bind(this), 1000);
+          }
+        } else {
+          $("refresh").checked = false;
+        }
+      }.bind(this));
+    }
+  }
+}();
+
+update.doUpdate = function update(cb) {
   var json_uri = (location.pathname + "/json").replace(/\/{2,}/g, "/");
   fetchJson(json_uri, function (json) {
     if (json == null) {
@@ -115,8 +142,10 @@ function update(cb) {
 }
 
 window.addEventListener("load", function () {
-  update(function (success) {
+  $("refresh").addEventListener("click", function () {
+    update(false);
   });
+  update(true);
 });
 </script>
 <style type="text/css">
@@ -171,6 +200,7 @@ body {
 <tr><th>Generation: <td id="value:generation">-
 <tr><th>Connections: <td><span id="value:connections">-</span> / <span id="value:max-connections"></span>
 <tr><th>Worker threads: <td id="value:worker-threads">-
+<tr><th>Refresh:<td><input id="refresh" type="checkbox">
 </table>
 <table id="reqs-in-flight">
 <caption>Requests In-flight</caption>
