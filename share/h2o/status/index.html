@@ -56,6 +56,8 @@ function update(cb) {
           s += "-" + req["http2.stream-id"];
         return s;
       } else if (field.match(/^HTTP\/2/)) {
+        if (req["http2.priority.actual.parent"] == "-")
+          return "-";
         return ["actual.parent", "actual.weight", "received.parent", "received.weight", "received.exclusive"].map(function (n) {
           return req["http2.priority." + n];
         }).join("/");
