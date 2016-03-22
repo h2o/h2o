@@ -214,6 +214,7 @@ SET(LIB_SOURCE_FILES
     lib/core/configurator.c
     lib/core/context.c
     lib/core/headers.c
+    lib/core/logconf.c
     lib/core/proxy.c
     lib/core/request.c
     lib/core/token.c
@@ -234,6 +235,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/proxy.c
     lib/handler/redirect.c
     lib/handler/reproxy.c
+    lib/handler/status.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/compress.c
     lib/handler/configurator/errordoc.c
@@ -244,6 +246,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
     lib/handler/configurator/reproxy.c
+    lib/handler/configurator/status.c
 
     lib/http1.c
 
