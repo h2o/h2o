@@ -64,10 +64,9 @@ static int collect_req_status(h2o_req_t *req, void *_cbdata)
     /* append to buffer */
     assert(len != 0);
     --len; /* omit trailing LF */
-    h2o_buffer_reserve(&cbdata->buffer, len + 3);
-    cbdata->buffer->bytes[cbdata->buffer->size++] = ',';
-    cbdata->buffer->bytes[cbdata->buffer->size++] = '\n';
-    cbdata->buffer->bytes[cbdata->buffer->size++] = ' ';
+    h2o_buffer_reserve(&cbdata->buffer, len + 4);
+    memcpy(cbdata->buffer->bytes + cbdata->buffer->size, ",\n  ", 4);
+    cbdata->buffer->size += 4;
     memcpy(cbdata->buffer->bytes + cbdata->buffer->size, logline, len);
     cbdata->buffer->size += len;
 
@@ -111,10 +110,11 @@ static void send_response(struct st_h2o_status_collector_t *collector)
     h2o_req_t *req;
 
     if ((req = collector->src.req) != NULL) {
-        h2o_iovec_t resp[2] = {collector->data, {H2O_STRLIT("\n]\n")}};
-        resp[0].base[0] = '[';
+        h2o_iovec_t resp[] = {{H2O_STRLIT("{\n \"requests\": ")}, collector->data, {H2O_STRLIT("\n ]")}, {}, {H2O_STRLIT("\n}\n")}};
+        resp[1].base[0] = '[';
+        if (req->conn->ctx->globalconf->status.extra_status != NULL)
+            resp[3] = req->conn->ctx->globalconf->status.extra_status(req->conn->ctx->globalconf, &req->pool);
         req->res.status = 200;
-        req->res.content_length = resp[0].len + resp[1].len;
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
         h2o_start_response(req, &generator);
         h2o_send(req, resp,

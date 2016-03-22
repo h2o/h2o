@@ -43,6 +43,12 @@ function update(cb) {
       return;
     }
 
+    for (var k in json) {
+      var slot = $("value:" + k);
+      if (slot != null)
+        slot.innerHTML = json[k] != null ? json[k] : "-";
+    }
+
     function stringifyColumn(req, field) {
       if (field == "id") {
         var s = req["connection-id"];
@@ -61,11 +67,11 @@ function update(cb) {
       return req[field];
     }
 
-    var table = $("in-flight");
+    var table = $("reqs-in-flight");
     var columns = toArray(table.getElementsByTagName("th"));
     var oldRows = toArray(table.getElementsByTagName("tr"));
     oldRows.shift(); // first tr is a list of headers
-    json.map(function (req) {
+    json.requests.map(function (req) {
       if (!req.method)
         return;
       var row = document.createElement("tr");
@@ -92,31 +98,37 @@ window.addEventListener("load", function () {
 });
 </script>
 <style type="text/css">
-table {
+#reqs-in-flight {
   border: 1px solid gray;
   border-collapse: collapse;
   width: 100%;
 }
-table caption {
+#reqs-in-flight caption {
   font-weight: bold;
   margin: 1em auto 0.5em auto;
 }
-table td,th {
+#reqs-in-flight td,th {
   border: 1px solid gray;
   line-height: 1.2em;
   padding: 0.3em 0.5em;
 }
-table th {
+#reqs-in-flight th {
   text-align: center;
   background: #ddd;
 }
-table td {
+#reqs-in-flight td {
   vertical-align: top;
 }
 </style>
 </head>
 <body>
-<table id="in-flight">
+<h1>H2O Server Status</h1>
+<p>
+Generation: <span id="value:generation">-</span><br>
+Connections: <span id="value:connections">-</span> / <span id="value:max-connections">-</span><br>
+Worker-threads: <span id="value:worker-threads">-</span>
+</p>
+<table id="reqs-in-flight">
 <caption>Requests In-flight</caption>
 <tr>
 <th>id</th>

@@ -1400,6 +1400,29 @@ static int run_using_server_starter(const char *h2o_cmd, const char *config_file
     return EX_CONFIG;
 }
 
+static h2o_iovec_t on_extra_status(h2o_globalconf_t *_conf, h2o_mem_pool_t *pool)
+{
+#define BUFSIZE 1024
+    h2o_iovec_t ret;
+    const char *generation;
+
+    if ((generation = getenv("SERVER_STARTER_GENERATION")) == NULL)
+        generation = "null";
+
+    ret.base = h2o_mem_alloc_pool(pool, BUFSIZE);
+    ret.len = snprintf(ret.base, BUFSIZE, ",\n"
+                                          " \"generation\": %s,\n"
+                                          " \"connections\": %d,\n"
+                                          " \"max-connections\": %d,\n"
+                                          " \"listeners\": %zu,\n"
+                                          " \"worker-threads\": %zu",
+                       generation, num_connections(0), conf.max_connections, conf.num_listeners, conf.num_threads);
+    assert(ret.len < BUFSIZE);
+
+    return ret;
+#undef BUFSIZE
+}
+
 static void setup_configurators(void)
 {
     h2o_config_init(&conf.globalconf);
@@ -1447,6 +1470,8 @@ static void setup_configurators(void)
 #if H2O_USE_MRUBY
     h2o_mruby_register_configurator(&conf.globalconf);
 #endif
+
+    conf.globalconf.status.extra_status = on_extra_status;
 }
 
 int main(int argc, char **argv)

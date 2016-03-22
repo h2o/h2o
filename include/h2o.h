@@ -343,6 +343,12 @@ struct st_h2o_globalconf_t {
         size_t capacity;
     } filecache;
 
+    /* status */
+    struct {
+        /* optional callback set by the user of libh2o to feed additional json to the status handler */
+        h2o_iovec_t (*extra_status)(h2o_globalconf_t *conf, h2o_mem_pool_t *pool);
+    } status;
+
     size_t _num_config_slots;
 };
 
