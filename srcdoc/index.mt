@@ -45,7 +45,7 @@ Explanation of the benchmark charts can be found in the <a href="benchmarks.html
 <h3 id="news">News</h3>
 
 <ul>
-<li>Version <a href="https://github.com/h2o/h2o/releases/tag/v2.0.0-beta1">2.0.0-beta1</a> is now available (Mar 15 2016)</li>
+<li>Version <a href="https://github.com/h2o/h2o/releases/tag/v2.0.0-beta2">2.0.0-beta2</a> is now available (Mar 23 2016)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v1.7.1">1.7.1</a> is now available (Mar 11 2016)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v1.7.0">1.7.0</a> is now available (Feb 5 2016)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v1.6.3">1.6.3</a> is now available (Jan 26 2016)</li>
