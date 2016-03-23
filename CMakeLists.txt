@@ -214,6 +214,7 @@ SET(LIB_SOURCE_FILES
     lib/core/configurator.c
     lib/core/context.c
     lib/core/headers.c
+    lib/core/logconf.c
     lib/core/proxy.c
     lib/core/request.c
     lib/core/token.c
@@ -234,6 +235,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/proxy.c
     lib/handler/redirect.c
     lib/handler/reproxy.c
+    lib/handler/status.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/compress.c
     lib/handler/configurator/errordoc.c
@@ -244,6 +246,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
     lib/handler/configurator/reproxy.c
+    lib/handler/configurator/status.c
 
     lib/http1.c
 
@@ -427,7 +430,9 @@ IF (NOT WITHOUT_LIBS)
 ENDIF ()
 
 INSTALL(PROGRAMS share/h2o/annotate-backtrace-symbols share/h2o/fastcgi-cgi share/h2o/fetch-ocsp-response share/h2o/kill-on-close share/h2o/setuidgid share/h2o/start_server DESTINATION share/h2o)
+INSTALL(FILES share/h2o/status/index.html DESTINATION share/h2o/status)
 INSTALL(DIRECTORY doc/ DESTINATION share/doc/h2o PATTERN "Makefile" EXCLUDE PATTERN "README.md" EXCLUDE)
+INSTALL(DIRECTORY examples/ DESTINATION share/doc/h2o/examples)
 IF (WITH_MRUBY)
     INSTALL(DIRECTORY share/h2o/mruby DESTINATION share/h2o)
 ENDIF (WITH_MRUBY)

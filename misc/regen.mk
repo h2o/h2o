@@ -1,6 +1,6 @@
 define FATPACK_SHEBANG
 #! /bin/sh
-exec perl -x $$0 "$$@"
+exec $${H2O_PERL:-perl} -x $$0 "$$@"
 #! perl
 endef
 export FATPACK_SHEBANG

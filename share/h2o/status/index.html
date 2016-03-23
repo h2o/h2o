@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>H2O status</title>
+<script type="text/javascript">
+
+function $(id) {
+  return document.getElementById(id);
+}
+
+function toArray(list) {
+  return Array.prototype.map.call(list, function (e) {
+    return e;
+  });
+}
+
+function fetchJson(url, cb) {
+  var xhr = new XMLHttpRequest();
+  xhr.open("GET", url, true);
+  xhr.onreadystatechange = function () {
+    if (xhr.readyState != 4)
+      return;
+    if (xhr.status == 200) {
+      try {
+         cb(JSON.parse(xhr.responseText));
+      } catch (e) {
+         console.log(e);
+         cb(null);
+      }
+    } else {
+      cb(null);
+    }
+  }
+  xhr.send();
+}
+
+var update = function () {
+  var inFlight = false;
+  var timerId = null;
+  return function (force) {
+    if (timerId != null) {
+      clearTimeout(timerId);
+      timerId = null;
+    }
+    if (!inFlight && (force || $("refresh").checked)) {
+      inFlight = true;
+      update.doUpdate(function (result) {
+        inFlight = false;
+        if (result) {
+          if ($("refresh").checked) {
+            timerId = setTimeout(function () {
+              timerId = null;
+              update(false);
+            }.bind(this), 1000);
+          }
+        } else {
+          $("refresh").checked = false;
+        }
+      }.bind(this));
+    }
+  }
+}();
+
+update.doUpdate = function update(cb) {
+  var json_uri = (location.pathname + "/json").replace(/\/{2,}/g, "/");
+  fetchJson(json_uri, function (json) {
+    if (json == null) {
+      alert("an error occurred while trying to receive the status");
+      cb(false);
+      return;
+    }
+
+    for (var k in json) {
+      var slot = $("value:" + k);
+      if (slot != null)
+        slot.innerHTML = json[k] != null ? json[k] : "-";
+    }
+
+    $("value:uptime").innerHTML = (function () {
+      var d = json["uptime"];
+      if (isNaN(d))
+        return "-";
+      var s = "";
+      if (d >= 86400)
+        s += Math.floor(d / 86400) + "d";
+      if (d >= 3600)
+        s += Math.floor(d / 3600 % 24) + "h";
+      if (d >= 60)
+        s += Math.floor(d / 60 % 60) + "m";
+      s += (d % 60) + "s";
+      return s;
+    })();
+
+    function stringifyColumn(req, field) {
+      if (field == "id") {
+        var s = req["connection-id"];
+        if (req["http1.request-index"] != "-") {
+          s += "-" + req["http1.request-index"];
+        } else if (req["http2.stream-id"] != "-") {
+          s += "-" + req["http2.stream-id"];
+        }
+        return s;
+      } else if (field.match(/^HTTP\/2/)) {
+        if (req["http2.priority.actual.parent"] == "-")
+          return "-";
+        return ["actual.parent", "actual.weight", "received.parent", "received.weight", "received.exclusive"].map(function (n) {
+          return req["http2.priority." + n];
+        }).join("/");
+      } else if (field.match(/^SSL/)) {
+        if (req["ssl.protocol-version"] == "-")
+          return "-";
+        return req["ssl.protocol-version"] + "/" + req["ssl.cipher"] + "/" + (req["ssl.session-reused"] == "1" ? "Y" : "N");
+      } else if (field == "client") {
+        return req.host;
+      } else if (field == "URI") {
+        var scheme = req["ssl.cipher-bits"] != "-" ? "https" : "http";
+        return scheme + "://" + req.authority + req.path + req.query;
+      }
+      return req[field];
+    }
+
+    var table = $("reqs-in-flight");
+    var columns = toArray(table.getElementsByTagName("th"));
+    var oldRows = toArray(table.getElementsByTagName("tr"));
+    oldRows.shift(); // first tr is a list of headers
+    json.requests.map(function (req) {
+      if (!req.method)
+        return;
+      var row = document.createElement("tr");
+      columns.map(function (column) {
+        var text = stringifyColumn(req, column.innerHTML);
+        row.insertBefore((function () {
+          var node = document.createElement("td");
+          node.insertBefore(document.createTextNode(text), null);
+          return node;
+        })(), null);
+        table.insertBefore(row, oldRows.length != 0 ? oldRows[0] : null);
+      });
+    });
+    while (oldRows.length != 0)
+      table.removeChild(oldRows.shift());
+
+    cb(true);
+  });
+}
+
+window.addEventListener("load", function () {
+  $("refresh").addEventListener("click", function () {
+    update(false);
+  });
+  update(true);
+});
+</script>
+<style type="text/css">
+body {
+  font-family: sans-serif;
+}
+#summary {
+  border: 0;
+  margin: 1em 0;
+}
+#summary th,td {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+#summary th {
+  font-weight: normal;
+  text-align: right;
+  padding-right: 0.5em;
+}
+#reqs-in-flight {
+  border: 1px solid gray;
+  border-collapse: collapse;
+  margin: 1em 0;
+  width: 100%;
+}
+#reqs-in-flight caption {
+  font-weight: bold;
+  margin: 1em auto 0.5em auto;
+}
+#reqs-in-flight td,th {
+  border: 1px solid gray;
+  line-height: 1.2em;
+  padding: 0.3em 0.5em;
+}
+#reqs-in-flight th {
+  text-align: center;
+  background: #ddd;
+}
+#reqs-in-flight td {
+  vertical-align: top;
+}
+</style>
+</head>
+<body>
+<table id="summary">
+<tr><th>Server Version:<td id="value:server-version">-
+<tr><th>OpenSSL Version: <td id="value:openssl-version">-
+<tr><th>Current Time: <td id="value:current-time">-
+<tr><th>Restart Time: <td id="value:restart-time">-
+<tr><th>Uptime: <td id="value:uptime">-
+<tr><th>Generation: <td id="value:generation">-
+<tr><th>Connections: <td><span id="value:connections">-</span> / <span id="value:max-connections"></span>
+<tr><th>Worker threads: <td id="value:worker-threads">-
+<tr><th>Refresh:<td><input id="refresh" type="checkbox">
+</table>
+<table id="reqs-in-flight">
+<caption>Requests In-flight</caption>
+<tr>
+<th>id</th>
+<th>HTTP/2<span style="font-weight: normal; font-size: 80%"><br>Pa/Wa/Pr/Wr/X</span></th>
+<th>SSL<span style="font-weight: normal; font-size: 80%"><br>Ver/Cipher/Resume</th>
+<th>client</th>
+<th>method</th>
+<th>URI</th>
+<th>protocol</th>
+<th>referer</th>
+<th>user-agent</th>
+</tr>
+</table>
+</body>
+</html>

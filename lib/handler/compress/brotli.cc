@@ -98,9 +98,11 @@ void brotli_context::_compress(h2o_iovec_t *inbufs, size_t inbufcnt, int is_fina
             size_t copy_len = std::min(block_space, inbufs[inbufindex].len - offset);
             brotli_->CopyInputToRingBuffer(copy_len, reinterpret_cast<const uint8_t *>(inbufs[inbufindex].base) + offset);
             offset += copy_len;
-            if (inbufs[inbufindex].len == offset)
+            if (inbufs[inbufindex].len == offset) {
                 if (++inbufindex == inbufcnt)
                     break;
+                offset = 0;
+            }
             if (block_space == 0) {
                 _emit(false, false);
                 block_space = brotli_->input_block_size();

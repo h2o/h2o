@@ -144,6 +144,9 @@
 		107E34201C7FEE1000AEF5F8 /* streams.cc in Sources */ = {isa = PBXBuildFile; fileRef = 107E34001C7EAF9300AEF5F8 /* streams.cc */; };
 		107E34211C7FEE1000AEF5F8 /* utf8_util.cc in Sources */ = {isa = PBXBuildFile; fileRef = 107E34011C7EAF9300AEF5F8 /* utf8_util.cc */; };
 		107E34221C7FEE2200AEF5F8 /* brotli.cc in Sources */ = {isa = PBXBuildFile; fileRef = 107E34111C7EE0D200AEF5F8 /* brotli.cc */; };
+		10835E011C9A6C2400197E59 /* logconf.c in Sources */ = {isa = PBXBuildFile; fileRef = 10835E001C9A6C2400197E59 /* logconf.c */; };
+		10835E031C9A860000197E59 /* status.c in Sources */ = {isa = PBXBuildFile; fileRef = 10835E021C9A860000197E59 /* status.c */; };
+		10835E051C9B3C6200197E59 /* status.c in Sources */ = {isa = PBXBuildFile; fileRef = 10835E041C9B3C6200197E59 /* status.c */; };
 		108867751AD9069900987967 /* defaults.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 108867741AD9069900987967 /* defaults.c.h */; };
 		108DD0861BA22E46004167DC /* mruby.c in Sources */ = {isa = PBXBuildFile; fileRef = 10B38A651B8D345D007DC191 /* mruby.c */; };
 		10A3D3D21B4CDBDC00327CF9 /* memcached.c in Sources */ = {isa = PBXBuildFile; fileRef = 10A3D3D11B4CDBDC00327CF9 /* memcached.c */; };
@@ -484,6 +487,11 @@
 		1082150C1AB26F4700D27E66 /* FindWslay.cmake */ = {isa = PBXFileReference; lastKnownFileType = text; path = FindWslay.cmake; sourceTree = "<group>"; };
 		1082150D1AB26F4700D27E66 /* FindLibYAML.cmake */ = {isa = PBXFileReference; lastKnownFileType = text; path = FindLibYAML.cmake; sourceTree = "<group>"; };
 		1082150E1AB26F4700D27E66 /* FindLibUV.cmake */ = {isa = PBXFileReference; lastKnownFileType = text; path = FindLibUV.cmake; sourceTree = "<group>"; };
+		10835E001C9A6C2400197E59 /* logconf.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = logconf.c; sourceTree = "<group>"; };
+		10835E021C9A860000197E59 /* status.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = status.c; sourceTree = "<group>"; };
+		10835E041C9B3C6200197E59 /* status.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = status.c; sourceTree = "<group>"; };
+		10835E071C9B8EA700197E59 /* index.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = index.html; sourceTree = "<group>"; };
+		10835E081CA2204E00197E59 /* status_directives.mt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = status_directives.mt; sourceTree = "<group>"; };
 		108867741AD9069900987967 /* defaults.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = defaults.c.h; sourceTree = "<group>"; };
 		1092E0011BEB1DDC001074BF /* 80issues579.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 80issues579.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10952D591C5082F7000D664C /* 80issues-from-proxy-reproxy-to-different-host.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80issues-from-proxy-reproxy-to-different-host.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -661,6 +669,7 @@
 			isa = PBXGroup;
 			children = (
 				10F4EB881C195B5C003DA150 /* mruby */,
+				10835E061C9B8E8000197E59 /* status */,
 				10A60DE91B0D87FE006E38EC /* annotate-backtrace-symbols */,
 				104B9A401A5CD69B009EEE64 /* fetch-ocsp-response */,
 				10FCC1411B2FCC6B00F13674 /* kill-on-close */,
@@ -711,6 +720,7 @@
 				10D0907219F633B00043D458 /* proxy.c */,
 				10AA2EA41A8D9999004322AC /* redirect.c */,
 				10AA2EC31AA0403A004322AC /* reproxy.c */,
+				10835E021C9A860000197E59 /* status.c */,
 			);
 			path = handler;
 			sourceTree = "<group>";
@@ -722,6 +732,7 @@
 				10F4180419CA75C500B6E31A /* configurator.c */,
 				107923B919A3217300C52AD6 /* context.c */,
 				107923B019A3217300C52AD6 /* headers.c */,
+				10835E001C9A6C2400197E59 /* logconf.c */,
 				10AA2EBB1A9EEDF8004322AC /* proxy.c */,
 				107923BC19A3217300C52AD6 /* request.c */,
 				107923BF19A3217300C52AD6 /* token.c */,
@@ -815,6 +826,7 @@
 				105534DE1A3C7B9800627ECB /* proxy.c */,
 				10AA2EA61A8DA93C004322AC /* redirect.c */,
 				10AA2EC11AA0402E004322AC /* reproxy.c */,
+				10835E041C9B3C6200197E59 /* status.c */,
 			);
 			path = configurator;
 			sourceTree = "<group>";
@@ -881,6 +893,7 @@
 				10583C071AF21539004A3AD6 /* proxy_directives.mt */,
 				10583C081AF2188E004A3AD6 /* redirect_directives.mt */,
 				10583C091AF2D302004A3AD6 /* reproxy_directives.mt */,
+				10835E081CA2204E00197E59 /* status_directives.mt */,
 				10952D5C1C608D19000D664C /* basic_auth.mt */,
 				10952D5B1C608A6B000D664C /* cgi.mt */,
 				10952D5D1C62D4DC000D664C /* mruby.mt */,
@@ -1185,6 +1198,14 @@
 				1082150E1AB26F4700D27E66 /* FindLibUV.cmake */,
 			);
 			path = cmake;
+			sourceTree = "<group>";
+		};
+		10835E061C9B8E8000197E59 /* status */ = {
+			isa = PBXGroup;
+			children = (
+				10835E071C9B8EA700197E59 /* index.html */,
+			);
+			path = status;
 			sourceTree = "<group>";
 		};
 		108867731AD9061100987967 /* mimemap */ = {
@@ -1593,7 +1614,9 @@
 				105534DB1A3C7A5400627ECB /* access_log.c in Sources */,
 				107923CE19A3217300C52AD6 /* mimemap.c in Sources */,
 				107923C619A3217300C52AD6 /* connection.c in Sources */,
+				10835E051C9B3C6200197E59 /* status.c in Sources */,
 				1058C87E1AA41A1F008D6180 /* headers.c in Sources */,
+				10835E031C9A860000197E59 /* status.c in Sources */,
 				10AA2E961A80A612004322AC /* time.c in Sources */,
 				107923C319A3217300C52AD6 /* file.c in Sources */,
 				106C22F81C040F6400405689 /* tunnel.c in Sources */,
@@ -1602,6 +1625,7 @@
 				107923CC19A3217300C52AD6 /* context.c in Sources */,
 				10A3D40C1B50DAB700327CF9 /* socket.c in Sources */,
 				10AA2EC21AA0402E004322AC /* reproxy.c in Sources */,
+				10835E011C9A6C2400197E59 /* logconf.c in Sources */,
 				107923C519A3217300C52AD6 /* http1.c in Sources */,
 				10AA2EA71A8DA93C004322AC /* redirect.c in Sources */,
 				10AA2EA11A88082E004322AC /* url.c in Sources */,
