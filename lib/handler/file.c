@@ -288,7 +288,7 @@ static void add_headers_unconditional(struct st_h2o_sendfile_generator_t *self, 
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ETAG, self->header_bufs.etag, etag_len);
     }
     if (self->send_vary)
-        h2o_set_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
+        h2o_add_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
 }
 
 static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *req, int status, const char *reason,
