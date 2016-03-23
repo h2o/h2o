@@ -94,6 +94,7 @@ typedef struct st_h2o_configurator_t h2o_configurator_t;
 typedef struct st_h2o_hostconf_t h2o_hostconf_t;
 typedef struct st_h2o_globalconf_t h2o_globalconf_t;
 typedef struct st_h2o_mimemap_t h2o_mimemap_t;
+typedef struct st_h2o_logconf_t h2o_logconf_t;
 
 /**
  * a predefined, read-only, fast variant of h2o_iovec_t, defined in h2o/token.h
@@ -252,6 +253,7 @@ struct st_h2o_hostconf_t {
 
 typedef struct st_h2o_protocol_callbacks_t {
     void (*request_shutdown)(h2o_context_t *ctx);
+    int (*foreach_request)(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 } h2o_protocol_callbacks_t;
 
 struct st_h2o_globalconf_t {
@@ -341,6 +343,12 @@ struct st_h2o_globalconf_t {
         size_t capacity;
     } filecache;
 
+    /* status */
+    struct {
+        /* optional callback set by the user of libh2o to feed additional json to the status handler */
+        h2o_iovec_t (*extra_status)(h2o_globalconf_t *conf, h2o_mem_pool_t *pool);
+    } status;
+
     size_t _num_config_slots;
 };
 
@@ -425,6 +433,10 @@ struct st_h2o_context_t {
          * request timeout
          */
         h2o_timeout_t req_timeout;
+        /**
+         * link-list of h2o_http1_conn_t
+         */
+        h2o_linklist_t _conns;
     } http1;
 
     struct {
@@ -581,11 +593,17 @@ typedef struct st_h2o_conn_callbacks_t {
                 h2o_iovec_t (*cipher_bits)(h2o_req_t *req);
             } ssl;
             struct {
+                h2o_iovec_t (*request_index)(h2o_req_t *req);
+            } http1;
+            struct {
                 h2o_iovec_t (*stream_id)(h2o_req_t *req);
                 h2o_iovec_t (*priority_received)(h2o_req_t *req);
                 h2o_iovec_t (*priority_received_exclusive)(h2o_req_t *req);
                 h2o_iovec_t (*priority_received_parent)(h2o_req_t *req);
                 h2o_iovec_t (*priority_received_weight)(h2o_req_t *req);
+                h2o_iovec_t (*priority_actual)(h2o_req_t *req);
+                h2o_iovec_t (*priority_actual_parent)(h2o_req_t *req);
+                h2o_iovec_t (*priority_actual_weight)(h2o_req_t *req);
             } http2;
         };
         h2o_iovec_t (*callbacks[1])(h2o_req_t *req);
@@ -891,9 +909,9 @@ void h2o_set_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_toke
 void h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
                            const char *value, size_t value_len, int overwrite_if_exists);
 /**
- * adds a header token
+ * sets a header token
  */
-void h2o_add_header_token(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value,
+void h2o_set_header_token(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value,
                           size_t value_len);
 /**
  * deletes a header from list
@@ -1191,6 +1209,26 @@ int h2o_puth_path_in_link_header(h2o_req_t *req, const char *value, size_t value
  * logs an error
  */
 void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
+
+/* log */
+
+enum {
+    H2O_LOGCONF_ESCAPE_APACHE,
+    H2O_LOGCONF_ESCAPE_JSON
+};
+
+/**
+ * compiles a log configuration
+ */
+h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf);
+/**
+ * disposes of a log configuration
+ */
+void h2o_logconf_dispose(h2o_logconf_t *logconf);
+/**
+ * logs a request
+ */
+char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char *buf);
 
 /* proxy */
 
@@ -1515,6 +1553,17 @@ void h2o_reproxy_register(h2o_pathconf_t *pathconf);
  * registers the configurator
  */
 void h2o_reproxy_register_configurator(h2o_globalconf_t *conf);
+
+/* lib/handler/status.c */
+
+/**
+ * registers the status handler
+ */
+void h2o_status_register(h2o_pathconf_t *pathconf);
+/**
+ * registers the configurator
+ */
+void h2o_status_register_configurator(h2o_globalconf_t *conf);
 
 /* inline defs */
 
