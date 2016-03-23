@@ -24,13 +24,15 @@
 
 static int on_config_status(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    if (strcasecmp(node->data.scalar, "default") != 0) {
-        h2o_configurator_errprintf(cmd, node, "unknown mode");
+    switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
+    case 0: /* ON */
+        h2o_status_register(ctx->pathconf);
+        return 0;
+    case 1: /* OFF */
+        return 0;
+    default: /* error */
         return -1;
     }
-
-    h2o_status_register(ctx->pathconf);
-    return 0;
 }
 
 void h2o_status_register_configurator(h2o_globalconf_t *conf)

@@ -24,6 +24,7 @@
 <li><a href="configure/proxy_directives.html">Proxy</a>
 <li><a href="configure/redirect_directives.html">Redirect</a>
 <li><a href="configure/reproxy_directives.html">Reproxy</a>
+<li><a href="configure/status_directives.html">Status</a>
 </ul>
 </li>
 <li>How-To
