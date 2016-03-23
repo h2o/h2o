@@ -1,5 +1,5 @@
 ? my $ctx = $main::context;
-? $_mt->wrapper_file("wrapper.mt", "Configure", "Reproxy Directives")->(sub {
+? $_mt->wrapper_file("wrapper.mt", "Configure", "Status Directives")->(sub {
 
 <p>
 The status handler exposes the current states of the HTTP server.
