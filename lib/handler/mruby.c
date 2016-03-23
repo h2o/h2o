@@ -53,12 +53,15 @@ void h2o_mruby__assert_failed(mrb_state *mrb, const char *file, int line)
     abort();
 }
 
-static void set_h2o_root(mrb_state *mrb)
+static void setup_globals(mrb_state *mrb)
 {
     const char *root = getenv("H2O_ROOT");
     if (root == NULL)
         root = H2O_TO_STR(H2O_ROOT);
     mrb_gv_set(mrb, mrb_intern_lit(mrb, "$H2O_ROOT"), mrb_str_new(mrb, root, strlen(root)));
+
+    h2o_mruby_eval_expr(mrb, "$LOAD_PATH << \"#{$H2O_ROOT}/share/h2o/mruby\"");
+    h2o_mruby_assert(mrb);
 }
 
 mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v)
@@ -113,7 +116,7 @@ mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config
     struct RProc *proc = NULL;
     mrb_value result = mrb_nil_value();
 
-    set_h2o_root(mrb);
+    setup_globals(mrb);
 
     /* parse */
     if ((cxt = mrbc_context_new(mrb)) == NULL) {

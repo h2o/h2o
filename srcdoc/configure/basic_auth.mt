@@ -16,11 +16,15 @@ If authentication succeeds, the handler returns a <code>399</code> response, and
 paths:
   "/":
     mruby.handler: |
-      require "#{$H2O_ROOT}/share/h2o/mruby/htpasswd.rb"
+      require "htpasswd.rb"
       Htpasswd.new("/path/to/.htpasswd", "realm-name")
     file.dir: /path/to/doc_root
 EOT
 ?>
+
+<p>
+In H2O versions prior to 2.0, you should specify <code>"#{$H2O_ROOT}/share/h2o/mruby/htpasswd.rb"</code> as the argument to <code>require</code>, since the directory is not registered as part of <code>$LOAD_PATH</code>.
+</p>
 
 For convenience, the mruby script also forbids access to files or directories that start with <code>.ht</code>.
 

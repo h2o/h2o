@@ -10,6 +10,7 @@ This document describes the configuration directives of the handler.
 $ctx->{directive}->(
     name    => "status",
     levels  => [ qw(path) ],
+    since   => '2.0',
     desc    => <<'EOT',
 If the argument is <code>ON</code>, the directive registers the status handler to the current path.
 EOT
@@ -23,7 +24,7 @@ The example below uses <a href="configure/basic_auth.html">Basic authentication<
 paths:
   /server-status:
     mruby.handler: |
-      require "#{$H2O_ROOT}/share/h2o/mruby/htpasswd.rb"
+      require "htpasswd.rb"
       Htpasswd.new("/path/to/.htpasswd", "status")
     status: ON
 EOT
