@@ -125,6 +125,42 @@ by default.
 Note that all clients must support and enable the compression to
 properly handle compressed data.
 
+Text protocol support
+---------------------
+
+Although libyrmcds is designed for binary protocol, yet it provides
+limited access to text protocol commands.  Use `yrmcds_text_mode()`
+to put the connection into the text protocol mode:
+
+```c
+    check_error( yrmcds_connect(&c, "localhost", 11211) );
+    check_error( yrmcds_text_mode(&c) );
+
+    // Use the library API just in the same way as binary protocol.
+```
+
+Limitations:
+
+* Only subset of commands can be used.
+
+    `yrmcds_get_touch`, lock related functions, `yrmcds_incr2` and
+    `yrmcds_decr2`, stat functions, key dump extension are not supported.
+
+* Quiet mutation cannot be used.
+
+    `quiet` arguments must be 0.  You need to receive a response for
+    every command.
+
+* `yrmcds_response::cas_unique` is always 0 for storage commands.
+
+    The response for `yrmcds_set`, `yrmcds_add`, or `yrmcds_replace`
+    will not bring the correct CAS value.  Use `yrmcds_get` or
+    `yrmcds_getk` to retrieve the correct value.
+
+* `yrmcds_response::command` value is dummy.
+
+    Because `command` is one of binary protocol command numbers.
+
 Counter extension
 -----------------
 
