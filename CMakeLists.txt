@@ -191,8 +191,10 @@ SET(LIB_SOURCE_FILES
     deps/libyrmcds/connect.c
     deps/libyrmcds/recv.c
     deps/libyrmcds/send.c
+    deps/libyrmcds/send_text.c
     deps/libyrmcds/socket.c
     deps/libyrmcds/strerror.c
+    deps/libyrmcds/text_mode.c
     deps/picohttpparser/picohttpparser.c
 
     lib/common/file.c
