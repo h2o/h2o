@@ -172,14 +172,17 @@ static void *writer_main(void *_conn)
                     goto Error;
                 break;
             case REQ_TYPE_SET:
-                if ((err = yrmcds_set(&conn->yrmcds, req->key.base, req->key.len, req->data.set.value.base, req->data.set.value.len,
-                                      0, req->data.set.expiration, 0, 1, NULL)) != YRMCDS_OK)
+                err = yrmcds_set(&conn->yrmcds, req->key.base, req->key.len, req->data.set.value.base, req->data.set.value.len, 0,
+                                 req->data.set.expiration, 0, 1, NULL);
+                discard_req(req);
+                if (err != YRMCDS_OK)
                     goto Error;
                 break;
             case REQ_TYPE_DELETE:
-                if ((err = yrmcds_remove(&conn->yrmcds, req->key.base, req->key.len, 1, NULL)) != YRMCDS_OK)
+                err = yrmcds_remove(&conn->yrmcds, req->key.base, req->key.len, 1, NULL);
+                discard_req(req);
+                if (err != YRMCDS_OK)
                     goto Error;
-                break;
             default:
                 fprintf(stderr, "[lib/common/memcached.c] unknown type:%d\n", (int)req->type);
                 err = YRMCDS_NOT_IMPLEMENTED;
