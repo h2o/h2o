@@ -564,6 +564,8 @@ H2O_NORETURN static void *ticket_memcached_updater(void *unused)
                         conf.memcached.port, yrmcds_strerror(err));
             sleep(10);
         }
+        if (conf.memcached.text_protocol)
+            yrmcds_text_mode(&conn);
         /* connected */
         while (ticket_memcached_update_tickets(&conn, conf.ticket.vars.memcached.key, time(NULL)))
             ;
