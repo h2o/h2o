@@ -811,7 +811,7 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
                     return -1;
                 }
             } else if (strcmp(key->data.scalar, "protocol") == 0) {
-                ssize_t sel = h2o_configurator_get_one_of(cmd, value, "BINARY,TEXT");
+                ssize_t sel = h2o_configurator_get_one_of(cmd, value, "BINARY,ASCII");
                 if (sel == -1)
                     return -1;
                 conf.memcached.text_protocol = (int)sel;
