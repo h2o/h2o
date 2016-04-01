@@ -1260,13 +1260,11 @@ void h2o_mimemap_on_context_dispose(h2o_mimemap_t *mimemap, h2o_context_t *ctx);
  */
 int h2o_mimemap_has_dynamic_type(h2o_mimemap_t *mimemap);
 /**
- * sets the default mime-type
- */
-void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, const char *mime, h2o_mime_attributes_t *attr);
-/**
  * adds a mime-type mapping
+ * @param extension (or NULL to register the default)
  */
 void h2o_mimemap_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const char *mime, h2o_mime_attributes_t *attr);
+#define h2o_mimemap_set_default_type(mimemap, mime, attr) h2o_mimemap_define_mimetype((mimemap), NULL, (mime), (attr))
 /**
  * adds a mime-type mapping
  */

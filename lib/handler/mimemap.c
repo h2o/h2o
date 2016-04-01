@@ -244,45 +244,31 @@ int h2o_mimemap_has_dynamic_type(h2o_mimemap_t *mimemap)
     return mimemap->num_dynamic != 0;
 }
 
-void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, const char *mime, h2o_mime_attributes_t *attr)
-{
-    h2o_mimemap_type_t *new_type;
-
-    /* obtain or create new type */
-    if ((new_type = h2o_mimemap_get_type_by_mimetype(mimemap, h2o_iovec_init(mime, strlen(mime)), 1)) != NULL &&
-        (attr == NULL || memcmp(&new_type->data.attr, attr, sizeof(*attr)) == 0)) {
-        h2o_mem_addref_shared(new_type);
-    } else {
-        new_type = create_extension_type(mime, attr);
-    }
-
-    /* unlink the old one */
-    on_unlink(mimemap, mimemap->default_type);
-    h2o_mem_release_shared(mimemap->default_type);
-
-    /* update */
-    mimemap->default_type = new_type;
-    on_link(mimemap, new_type);
-    rebuild_typeset(mimemap);
-}
-
 static void set_type(h2o_mimemap_t *mimemap, const char *ext, h2o_mimemap_type_t *type)
 {
-    /* obtain key, and remove the old value */
-    khiter_t iter = kh_get(extmap, mimemap->extmap, ext);
-    if (iter != kh_end(mimemap->extmap)) {
-        h2o_mimemap_type_t *oldtype = kh_val(mimemap->extmap, iter);
-        on_unlink(mimemap, oldtype);
-        h2o_mem_release_shared(oldtype);
+    if (ext != NULL) {
+        /* obtain key, and remove the old value */
+        khiter_t iter = kh_get(extmap, mimemap->extmap, ext);
+        if (iter != kh_end(mimemap->extmap)) {
+            h2o_mimemap_type_t *oldtype = kh_val(mimemap->extmap, iter);
+            on_unlink(mimemap, oldtype);
+            h2o_mem_release_shared(oldtype);
+        } else {
+            int ret;
+            iter = kh_put(extmap, mimemap->extmap, dupref(ext).base, &ret);
+            assert(iter != kh_end(mimemap->extmap));
+        }
+        /* set the new one */
+        kh_val(mimemap->extmap, iter) = type;
     } else {
-        int ret;
-        iter = kh_put(extmap, mimemap->extmap, dupref(ext).base, &ret);
-        assert(iter != kh_end(mimemap->extmap));
+        /* remove old, and set the new default */
+        on_unlink(mimemap, mimemap->default_type);
+        h2o_mem_release_shared(mimemap->default_type);
+        mimemap->default_type = type;
     }
 
     /* update */
     h2o_mem_addref_shared(type);
-    kh_val(mimemap->extmap, iter) = type;
     on_link(mimemap, type);
     rebuild_typeset(mimemap);
 }
@@ -307,10 +293,14 @@ h2o_mimemap_type_t *h2o_mimemap_define_dynamic(h2o_mimemap_t *mimemap, const cha
      * note also that we may want to update the reference from the dynamic type to the mimemap as we clone the mimemap,
      * but doing so naively would cause unnecessary copies of fastcgi.spawns... */
     h2o_mimemap_type_t *new_type = create_dynamic_type(globalconf, mimemap);
-    size_t i;
 
-    for (i = 0; exts[i] != NULL; ++i)
-        set_type(mimemap, exts[i], new_type);
+    if (exts != NULL) {
+        size_t i;
+        for (i = 0; exts[i] != NULL; ++i)
+            set_type(mimemap, exts[i], new_type);
+    } else {
+        set_type(mimemap, NULL, new_type);
+    }
     h2o_mem_release_shared(new_type);
     return new_type;
 }
