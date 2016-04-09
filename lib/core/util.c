@@ -310,9 +310,9 @@ size_t h2o_stringify_protocol_version(char *dst, int version)
     return p - dst;
 }
 
-h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
-                                                   const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
-                                                   h2o_iovec_t *base_path)
+h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len, h2o_iovec_t base_path,
+                                                   const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
+                                                   const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority)
 {
     h2o_iovec_t url;
     h2o_url_t parsed, resolved;
@@ -341,17 +341,20 @@ h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const c
     if (h2o_url_parse_relative(url.base, url.len, &parsed) != 0)
         goto None;
 
-    /* return the URL found in Link header, if it is an absolute path-only URL */
-    if (parsed.scheme == NULL && parsed.authority.base == NULL && url.len != 0 && url.base[0] == '/')
+    /* fast-path for abspath form */
+    if (base_scheme == NULL && parsed.scheme == NULL && parsed.authority.base == NULL && url.len != 0 && url.base[0] == '/')
         return h2o_strdup(pool, url.base, url.len);
 
-    /* check scheme and authority if given URL contains either of the two */
-    h2o_url_t base = {base_scheme, *base_authority, {}, *base_path, 65535};
+    /* check scheme and authority if given URL contains either of the two, or if base is specified */
+    h2o_url_t base = {input_scheme, input_authority, {}, base_path, 65535};
+    if (base_scheme != NULL) {
+        base.scheme = base_scheme;
+        base.authority = *base_authority;
+    }
     h2o_url_resolve(pool, &base, &parsed, &resolved);
-    if (base.scheme != resolved.scheme)
+    if (input_scheme != resolved.scheme)
         goto None;
-    if (parsed.authority.base != NULL &&
-        !h2o_lcstris(base.authority.base, base.authority.len, resolved.authority.base, resolved.authority.len))
+    if (!h2o_lcstris(input_authority.base, input_authority.len, resolved.authority.base, resolved.authority.len))
         goto None;
     return resolved.path;
 

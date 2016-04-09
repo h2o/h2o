@@ -572,8 +572,9 @@ int h2o_puth_path_in_link_header(h2o_req_t *req, const char *value, size_t value
     if (req->conn->callbacks->push_path == NULL)
         return -1;
 
-    h2o_iovec_t path =
-        h2o_extract_push_path_from_link_header(&req->pool, value, value_len, req->input.scheme, &req->input.authority, &req->path);
+    h2o_iovec_t path = h2o_extract_push_path_from_link_header(&req->pool, value, value_len, req->path_normalized, req->input.scheme,
+                                                              req->input.authority, req->res_is_delegated ? req->scheme : NULL,
+                                                              req->res_is_delegated ? &req->authority : NULL);
     if (path.base == NULL)
         return -1;
 
