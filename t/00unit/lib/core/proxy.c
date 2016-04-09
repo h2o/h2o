@@ -22,28 +22,6 @@
 #include "../../test.h"
 #include "../../../../lib/core/proxy.c"
 
-static void test_rewrite_location(void)
-{
-    h2o_url_t upstream;
-    h2o_mem_pool_t pool;
-    h2o_iovec_t ret;
-
-    h2o_url_parse(H2O_STRLIT("http://realhost:81/real/"), &upstream);
-
-    h2o_mem_init_pool(&pool);
-
-    ret = rewrite_location(&pool, H2O_STRLIT("http://realhost:81/real/abc"), &upstream, &H2O_URL_SCHEME_HTTPS,
-                           h2o_iovec_init(H2O_STRLIT("vhost:8443")), h2o_iovec_init(H2O_STRLIT("/virtual/")));
-    ok(h2o_memis(ret.base, ret.len, H2O_STRLIT("https://vhost:8443/virtual/abc")));
-    ret = rewrite_location(&pool, H2O_STRLIT("http://realhost:81/other/abc"), &upstream, &H2O_URL_SCHEME_HTTPS,
-                           h2o_iovec_init(H2O_STRLIT("vhost:8443")), h2o_iovec_init(H2O_STRLIT("/virtual/")));
-    ok(ret.base == NULL);
-    ok(ret.len == 0);
-
-    h2o_mem_clear_pool(&pool);
-}
-
 void test_lib__core__proxy_c()
 {
-    subtest("rewrite_location", test_rewrite_location);
 }

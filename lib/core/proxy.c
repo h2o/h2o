@@ -56,31 +56,6 @@ static h2o_http1client_ctx_t *get_client_ctx(h2o_req_t *req)
     return &req->conn->ctx->proxy.client_ctx;
 }
 
-static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, size_t location_len, h2o_url_t *match,
-                                    const h2o_url_scheme_t *req_scheme, h2o_iovec_t req_authority, h2o_iovec_t req_basepath)
-{
-    h2o_url_t loc_parsed;
-
-    if (h2o_url_parse(location, location_len, &loc_parsed) != 0)
-        goto NoRewrite;
-    if (loc_parsed.scheme != &H2O_URL_SCHEME_HTTP)
-        goto NoRewrite;
-    if (!h2o_lcstris(loc_parsed.host.base, loc_parsed.host.len, match->host.base, match->host.len))
-        goto NoRewrite;
-    if (h2o_url_get_port(&loc_parsed) != h2o_url_get_port(match))
-        goto NoRewrite;
-    if (loc_parsed.path.len < match->path.len)
-        goto NoRewrite;
-    if (memcmp(loc_parsed.path.base, match->path.base, match->path.len) != 0)
-        goto NoRewrite;
-
-    return h2o_concat(pool, req_scheme->name, h2o_iovec_init(H2O_STRLIT("://")), req_authority, req_basepath,
-                      h2o_iovec_init(loc_parsed.path.base + match->path.len, loc_parsed.path.len - match->path.len));
-
-NoRewrite:
-    return (h2o_iovec_t){};
-}
-
 static h2o_iovec_t build_request_merge_headers(h2o_mem_pool_t *pool, h2o_iovec_t merged, h2o_iovec_t added, int seperator)
 {
     if (added.len == 0)
@@ -361,11 +336,10 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                     return NULL;
                 }
                 if (req->overrides != NULL && req->overrides->location_rewrite.match != NULL) {
-                    value =
-                        rewrite_location(&req->pool, headers[i].value, headers[i].value_len, req->overrides->location_rewrite.match,
-                                         req->input.scheme, req->input.authority, req->overrides->location_rewrite.path_prefix);
-                    if (value.base != NULL)
-                        goto AddHeader;
+                    value = h2o_url_rebase(&req->pool, headers[i].value, headers[i].value_len,
+                                           req->overrides->location_rewrite.match, req->input.scheme, req->input.authority,
+                                           req->overrides->location_rewrite.path_prefix);
+                    goto AddHeader;
                 }
                 goto AddHeaderDuped;
             } else if (token == H2O_TOKEN_LINK) {

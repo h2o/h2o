@@ -417,3 +417,28 @@ const char *h2o_url_host_to_sun(h2o_iovec_t host, struct sockaddr_un *sa)
 }
 
 const char *h2o_url_host_to_sun_err_is_not_unix_socket = "supplied name does not look like an unix-domain socket";
+
+h2o_iovec_t h2o_url_rebase(h2o_mem_pool_t *pool, const char *url, size_t url_len, h2o_url_t *match,
+                           const h2o_url_scheme_t *new_scheme, h2o_iovec_t new_authority, h2o_iovec_t new_basepath)
+{
+    h2o_url_t loc_parsed;
+
+    if (h2o_url_parse(url, url_len, &loc_parsed) != 0)
+        goto NoRewrite;
+    if (loc_parsed.scheme != &H2O_URL_SCHEME_HTTP)
+        goto NoRewrite;
+    if (!h2o_lcstris(loc_parsed.host.base, loc_parsed.host.len, match->host.base, match->host.len))
+        goto NoRewrite;
+    if (h2o_url_get_port(&loc_parsed) != h2o_url_get_port(match))
+        goto NoRewrite;
+    if (loc_parsed.path.len < match->path.len)
+        goto NoRewrite;
+    if (memcmp(loc_parsed.path.base, match->path.base, match->path.len) != 0)
+        goto NoRewrite;
+
+    return h2o_concat(pool, new_scheme->name, h2o_iovec_init(H2O_STRLIT("://")), new_authority, new_basepath,
+                      h2o_iovec_init(loc_parsed.path.base + match->path.len, loc_parsed.path.len - match->path.len));
+
+NoRewrite:
+    return h2o_strdup(pool, url, url_len);
+}
