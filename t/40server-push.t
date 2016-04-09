@@ -68,10 +68,11 @@ EOT
     };
 };
 
-subtest "reproxy and server-push" => sub {
-    my $server = spawn_h2o(sub {
-        my ($port, $tls_port) = @_;
-        return << "EOT";
+subtest "push-after-reproxy" => sub {
+    subtest "authority-match" => sub {
+        my $server = spawn_h2o(sub {
+            my ($port, $tls_port) = @_;
+            return << "EOT";
 hosts:
   "127.0.0.1:$tls_port":
     paths:
@@ -85,16 +86,47 @@ hosts:
             when "/index.txt"
               push_paths = []
               push_paths << "/index.js"
-              [399, push_paths.empty? ? {} : {"link" => push_paths.map{|p| "<#{p}>; rel=preload"}.join()}, []]
+              [399, push_paths.empty? ? {} : {"link" => push_paths.map{|p| "<#{p}>; rel=preload"}.join("\\n")}, []]
             else
               [399, {}, []]
             end
           end
         file.dir: t/assets/doc_root
 EOT
-    });
-    my $resp = `nghttp -n --stat https://127.0.0.1:$server->{tls_port}/reproxy`;
-    like $resp, qr{\nid\s*responseEnd\s.*\s/index\.js\n.*\s/reproxy}is, "receives index.js then /reproxy";
+        });
+        my $resp = `nghttp -n --stat https://127.0.0.1:$server->{tls_port}/reproxy`;
+        like $resp, qr{\nid\s*responseEnd\s.*\s/index\.js\n.*\s/reproxy}is, "receives index.js then /reproxy";
+    };
+    subtest "authority-mismatch" => sub {
+        my $server = spawn_h2o(sub {
+            my ($port, $tls_port) = @_;
+            return << "EOT";
+hosts:
+  default:
+    paths:
+      /:
+        reproxy: ON
+        mruby.handler: |
+          Proc.new do |env|
+            case env["PATH_INFO"]
+            when "/reproxy"
+              [307, {"x-reproxy-url" => "/index.txt"}, ["should never see this"]]
+            when "/index.txt"
+              push_paths = []
+              push_paths << "/index.js?1"
+              push_paths << "https://127.0.0.1:$tls_port/index.js?2"
+              [399, push_paths.empty? ? {} : {"link" => push_paths.map{|p| "<#{p}>; rel=preload"}.join("\\n")}, []]
+            else
+              [399, {}, []]
+            end
+          end
+        file.dir: t/assets/doc_root
+EOT
+        });
+        my $resp = `nghttp -n --stat https://127.0.0.1:$server->{tls_port}/reproxy`;
+        like $resp, qr{\nid\s*responseEnd\s.*\s/index\.js\?2\n.*\s/reproxy}is, "receives index.js?2 then /reproxy";
+        unlike $resp, qr{/index\.js\?1\n}is, "index.js?1 not received (authority mismatch)";
+    };
 };
 
 done_testing;
