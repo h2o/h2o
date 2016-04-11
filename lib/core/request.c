@@ -458,6 +458,8 @@ void h2o_send_inline(h2o_req_t *req, const char *body, size_t len)
 
 void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body, int flags)
 {
+    h2o_context_report_emitted_error(req->conn->ctx, status, 1);
+
     if (req->pathconf == NULL) {
         h2o_hostconf_t *hostconf = setup_before_processing(req);
         h2o_req_bind_conf(req, hostconf, &hostconf->fallback_path);

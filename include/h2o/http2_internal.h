@@ -48,7 +48,7 @@ typedef struct st_h2o_http2_stream_t h2o_http2_stream_t;
 #define H2O_HTTP2_ERROR_COMPRESSION -9
 #define H2O_HTTP2_ERROR_CONNECT -10
 #define H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM -11
-#define H2O_HTTP2_ERROR_INADEUATE_SECURITY -12
+#define H2O_HTTP2_ERROR_INADEQUATE_SECURITY -12
 #define H2O_HTTP2_ERROR_INCOMPLETE -255 /* an internal value indicating that all data is not ready */
 #define H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY -256
 

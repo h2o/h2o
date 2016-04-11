@@ -275,6 +275,28 @@ typedef struct st_h2o_protocol_callbacks_t {
     int (*foreach_request)(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 } h2o_protocol_callbacks_t;
 
+enum h2o_status_handler_type {
+    H2O_STATUS_HANDLER_SIMPLE,
+    H2O_STATUS_HANDLER_PER_THREAD,
+};
+typedef h2o_iovec_t (*simple_status_handler_cb)(h2o_globalconf_t *gconf, h2o_mem_pool_t *pool);
+typedef struct h2o_status_handler {
+    enum h2o_status_handler_type type;
+    h2o_iovec_t name;
+    union {
+        struct {
+            simple_status_handler_cb status_cb;
+        } simple;
+        struct {
+            void *(*alloc_context_cb)(h2o_req_t *src_req);
+            void (*per_thread_cb)(void *priv, h2o_context_t *ctx);
+            h2o_iovec_t (*assemble_cb)(void *ctx);
+            void (*done_cb)(void *ctx);
+        } per_thread;
+    };
+} h2o_status_handler_t;
+
+typedef H2O_VECTOR(h2o_status_handler_t) h2o_status_callbacks_t;
 struct st_h2o_globalconf_t {
     /**
      * a NULL-terminated list of host contexts (h2o_hostconf_t)
@@ -371,10 +393,7 @@ struct st_h2o_globalconf_t {
     } filecache;
 
     /* status */
-    struct {
-        /* optional callback set by the user of libh2o to feed additional json to the status handler */
-        h2o_iovec_t (*extra_status)(h2o_globalconf_t *conf, h2o_mem_pool_t *pool);
-    } status;
+    h2o_status_callbacks_t statuses;
 
     size_t _num_config_slots;
 };
@@ -410,6 +429,42 @@ typedef struct st_h2o_mimemap_type_t {
         } dynamic;
     } data;
 } h2o_mimemap_type_t;
+
+/* errors emanating from h2o */
+enum {
+    /* http */
+    E_HTTP_400 = 0,
+    E_HTTP_403,
+    E_HTTP_404,
+    E_HTTP_405,
+    E_HTTP_416,
+    E_HTTP_417,
+    E_HTTP_500,
+    E_HTTP_502,
+    E_HTTP_503,
+    E_HTTP_4XX,
+    E_HTTP_5XX,
+    E_HTTP_XXX,
+    /* http2 */
+    E_HTTP2_PROTOCOL,
+    E_HTTP2_INTERNAL,
+    E_HTTP2_FLOW_CONTROL,
+    E_HTTP2_SETTINGS_TIMEOUT,
+    E_HTTP2_STREAM_CLOSED,
+    E_HTTP2_FRAME_SIZE,
+    E_HTTP2_REFUSED_STREAM,
+    E_HTTP2_CANCEL,
+    E_HTTP2_COMPRESSION,
+    E_HTTP2_CONNECT,
+    E_HTTP2_ENHANCE_YOUR_CALM,
+    E_HTTP2_INADEQUATE_SECURITY,
+    E_HTTP2_OTHER,
+    EMITTED_ERRORS_MAX,
+};
+
+typedef struct st_h2o_emitted_errors_cnt {
+    unsigned long emitted_errors_cnt[EMITTED_ERRORS_MAX];
+} h2o_emitted_errors_t;
 
 /**
  * context of the http server.
@@ -502,6 +557,11 @@ struct st_h2o_context_t {
         struct timeval tv_at;
         h2o_timestamp_string_t *value;
     } _timestamp_cache;
+
+    /**
+     * counter for errors internally emitted by h2o
+     */
+    h2o_emitted_errors_t emitted_errors;
 
     H2O_VECTOR(h2o_pathconf_t *) _pathconfs_inited;
 };
@@ -1144,6 +1204,11 @@ h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t h
  */
 h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *path, int flags);
 /**
+ * registers an extra status handler
+ */
+void h2o_config_register_status_handler(h2o_globalconf_t *config, h2o_status_handler_t);
+void h2o_config_register_simple_status_handler(h2o_globalconf_t *config, h2o_iovec_t name, simple_status_handler_cb status_handler);
+/**
  * disposes of the resources allocated for the global configuration
  */
 void h2o_config_dispose(h2o_globalconf_t *config);
@@ -1211,7 +1276,10 @@ static void h2o_context_set_filter_context(h2o_context_t *ctx, h2o_filter_t *fil
  * returns per-module context set by the on_context_init callback
  */
 static void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *logger);
-
+/**
+ * internally reports an error emitted by h2o, so that this can in turn be reported in statuses
+ */
+void h2o_context_report_emitted_error(h2o_context_t *ctx, int status, int http);
 /* built-in generators */
 
 enum {

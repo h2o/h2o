@@ -21,6 +21,13 @@
  */
 #include "h2o.h"
 
+extern h2o_status_handler_t errors_status_handler;
+extern h2o_status_handler_t requests_status_handler;
+
+struct st_h2o_status_logger_t {
+    h2o_logger_t super;
+};
+
 struct st_h2o_status_handler_t {
     h2o_handler_t super;
     H2O_VECTOR(h2o_multithread_receiver_t *) receivers;
@@ -31,15 +38,19 @@ struct st_h2o_status_context_t {
     h2o_multithread_receiver_t receiver;
 };
 
+struct status_ctx {
+    int active;
+    void *ctx;
+};
 struct st_h2o_status_collector_t {
     struct {
         h2o_req_t *req;
         h2o_multithread_receiver_t *receiver;
     } src;
-    h2o_logconf_t *logconf;
     pthread_mutex_t mutex;
-    h2o_iovec_t data;
     size_t num_remaining_threads;
+    h2o_globalconf_t *gconf;
+    H2O_VECTOR(struct status_ctx) status_ctx;
 };
 
 struct st_h2o_status_message_t {
@@ -47,54 +58,27 @@ struct st_h2o_status_message_t {
     struct st_h2o_status_collector_t *collector;
 };
 
-struct st_collect_req_status_cbdata_t {
-    h2o_logconf_t *logconf;
-    h2o_buffer_t *buffer;
-};
-
-static int collect_req_status(h2o_req_t *req, void *_cbdata)
-{
-    struct st_collect_req_status_cbdata_t *cbdata = _cbdata;
-
-    /* collect log */
-    char buf[4096];
-    size_t len = sizeof(buf);
-    char *logline = h2o_log_request(cbdata->logconf, req, &len, buf);
-
-    /* append to buffer */
-    assert(len != 0);
-    --len; /* omit trailing LF */
-    h2o_buffer_reserve(&cbdata->buffer, len + 4);
-    memcpy(cbdata->buffer->bytes + cbdata->buffer->size, ",\n  ", 4);
-    cbdata->buffer->size += 4;
-    memcpy(cbdata->buffer->bytes + cbdata->buffer->size, logline, len);
-    cbdata->buffer->size += len;
-
-    if (logline != buf)
-        free(logline);
-
-    return 0;
-}
-
 static void collect_reqs_of_context(struct st_h2o_status_collector_t *collector, h2o_context_t *ctx)
 {
-    struct st_collect_req_status_cbdata_t cbdata = {collector->logconf};
     int was_last_thread;
-
-    h2o_buffer_init(&cbdata.buffer, &h2o_socket_buffer_prototype);
-    ctx->globalconf->http1.callbacks.foreach_request(ctx, collect_req_status, &cbdata);
-    ctx->globalconf->http2.callbacks.foreach_request(ctx, collect_req_status, &cbdata);
+    int i;
 
     pthread_mutex_lock(&collector->mutex);
-    if (cbdata.buffer->size != 0) {
-        collector->data.base = h2o_mem_realloc(collector->data.base, collector->data.len + cbdata.buffer->size);
-        memcpy(collector->data.base + collector->data.len, cbdata.buffer->bytes, cbdata.buffer->size);
-        collector->data.len += cbdata.buffer->size;
+
+    for (i = 0; i < collector->gconf->statuses.size; i++) {
+        h2o_status_handler_t *sh;
+        sh = &collector->gconf->statuses.entries[i];
+        if (!collector->status_ctx.entries[i].active) {
+            continue;
+        }
+        if (sh->type == H2O_STATUS_HANDLER_PER_THREAD) {
+            sh->per_thread.per_thread_cb(collector->status_ctx.entries[i].ctx, ctx);
+        }
     }
+
+
     was_last_thread = --collector->num_remaining_threads == 0;
     pthread_mutex_unlock(&collector->mutex);
-
-    h2o_buffer_dispose(&cbdata.buffer);
 
     if (was_last_thread) {
         struct st_h2o_status_message_t *message = h2o_mem_alloc(sizeof(*message));
@@ -108,19 +92,57 @@ static void send_response(struct st_h2o_status_collector_t *collector)
 {
     static h2o_generator_t generator = {NULL, NULL};
     h2o_req_t *req;
+    size_t nr_statuses;
+    int i;
+    int cur_resp = 0;
 
-    if ((req = collector->src.req) != NULL) {
-        h2o_iovec_t resp[] = {{H2O_STRLIT("{\n \"requests\": ")}, collector->data, {H2O_STRLIT("\n ]")}, {}, {H2O_STRLIT("\n}\n")}};
-        resp[1].base[0] = '[';
-        if (req->conn->ctx->globalconf->status.extra_status != NULL)
-            resp[3] = req->conn->ctx->globalconf->status.extra_status(req->conn->ctx->globalconf, &req->pool);
-        req->res.status = 200;
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("no-cache, no-store"));
-        h2o_start_response(req, &generator);
-        h2o_send(req, resp,
-                 h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")) ? 0 : sizeof(resp) / sizeof(resp[0]),
-                 1);
+    req = collector->src.req;
+    if (!req) {
+        h2o_mem_release_shared(collector);
+        return;
+    }
+
+    nr_statuses = req->conn->ctx->globalconf->statuses.size;
+    size_t nr_resp = nr_statuses + 2; // 2 for the footer and header
+    h2o_iovec_t resp[nr_resp];
+
+    memset(resp, 0, sizeof(resp[0]) * nr_resp);
+    resp[cur_resp++] = (h2o_iovec_t){ H2O_STRLIT("{\n") };
+
+    int coma_removed = 0;
+    for (i = 0; i < req->conn->ctx->globalconf->statuses.size; i++) {
+        h2o_status_handler_t *sh = &req->conn->ctx->globalconf->statuses.entries[i];
+        if (!collector->status_ctx.entries[i].active) {
+            continue;
+        }
+        if (sh->type == H2O_STATUS_HANDLER_SIMPLE) {
+            resp[cur_resp++] = sh->simple.status_cb(req->conn->ctx->globalconf, &req->pool);
+        } else {
+            resp[cur_resp++] = sh->per_thread.assemble_cb(collector->status_ctx.entries[i].ctx);
+        }
+        if (resp[cur_resp - 1].len > 0 && !coma_removed) {
+            /* requests come in with a leading coma, replace if with a space */
+            resp[cur_resp - 1].base[0] = ' ';
+            coma_removed = 1;
+        }
+    }
+    resp[cur_resp++] = (h2o_iovec_t){ H2O_STRLIT("\n}\n") };
+
+    req->res.status = 200;
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("no-cache, no-store"));
+    h2o_start_response(req, &generator);
+    h2o_send(req, resp,
+            h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")) ? 0 : nr_resp,
+            1);
+    for (i = 0; i < req->conn->ctx->globalconf->statuses.size; i++) {
+        h2o_status_handler_t *sh = &req->conn->ctx->globalconf->statuses.entries[i];
+        if (!collector->status_ctx.entries[i].active) {
+            continue;
+        }
+        if (sh->type == H2O_STATUS_HANDLER_PER_THREAD) {
+            sh->per_thread.done_cb(collector->status_ctx.entries[i].ctx);
+        }
     }
     h2o_mem_release_shared(collector);
 }
@@ -154,9 +176,7 @@ static void on_collector_dispose(void *_collector)
 {
     struct st_h2o_status_collector_t *collector = _collector;
 
-    h2o_logconf_dispose(collector->logconf);
     pthread_mutex_destroy(&collector->mutex);
-    free(collector->data.base);
 }
 
 static void on_req_close(void *p)
@@ -166,60 +186,44 @@ static void on_req_close(void *p)
     h2o_mem_release_shared(collector);
 }
 
-static int on_req_json(struct st_h2o_status_handler_t *self, h2o_req_t *req)
+static int on_req_json(struct st_h2o_status_handler_t *self, h2o_req_t *req, h2o_iovec_t *status_list)
 {
-    h2o_logconf_t *logconf;
-
-#define ELEMENT(key, expr) "\"" key "\": \"" expr "\""
-#define X_ELEMENT(id) ELEMENT(id, "%{" id "}x")
-#define SEPARATOR ", "
-    const char *fmt = "{"
-        /* combined_log */
-        ELEMENT("host", "%h") SEPARATOR ELEMENT("user", "%u") SEPARATOR ELEMENT("at", "%{%Y%m%dT%H%M%S}t.%{usec_frac}t%{%z}t")
-            SEPARATOR ELEMENT("method", "%m") SEPARATOR ELEMENT("path", "%U") SEPARATOR ELEMENT("query", "%q")
-                SEPARATOR ELEMENT("protocol", "%H") SEPARATOR ELEMENT("referer", "%{Referer}i")
-                    SEPARATOR ELEMENT("user-agent", "%{User-agent}i") SEPARATOR
-        /* time */
-        X_ELEMENT("connect-time") SEPARATOR X_ELEMENT("request-header-time") SEPARATOR X_ELEMENT("request-body-time")
-            SEPARATOR X_ELEMENT("request-total-time") SEPARATOR X_ELEMENT("process-time") SEPARATOR X_ELEMENT("response-time")
-                SEPARATOR
-        /* connection */
-        X_ELEMENT("connection-id") SEPARATOR X_ELEMENT("ssl.protocol-version") SEPARATOR X_ELEMENT("ssl.session-reused")
-            SEPARATOR X_ELEMENT("ssl.cipher") SEPARATOR X_ELEMENT("ssl.cipher-bits") SEPARATOR
-        /* http1 */
-        X_ELEMENT("http1.request-index") SEPARATOR
-        /* http2 */
-        X_ELEMENT("http2.stream-id") SEPARATOR X_ELEMENT("http2.priority.received.exclusive")
-            SEPARATOR X_ELEMENT("http2.priority.received.parent") SEPARATOR X_ELEMENT("http2.priority.received.weight")
-                SEPARATOR X_ELEMENT("http2.priority.actual.parent") SEPARATOR X_ELEMENT("http2.priority.actual.weight") SEPARATOR
-        /* misc */
-        ELEMENT("authority", "%V")
-        /* end */
-        "}";
-#undef ELEMENT
-#undef X_ELEMENT
-#undef SEPARATOR
-
-    { /* compile logconf */
-        char errbuf[256];
-        if ((logconf = h2o_logconf_compile(fmt, H2O_LOGCONF_ESCAPE_JSON, errbuf)) == NULL) {
-            h2o_iovec_t resp = h2o_concat(&req->pool, h2o_iovec_init(H2O_STRLIT("failed to compile log format:")),
-                                          h2o_iovec_init(errbuf, strlen(errbuf)));
-            h2o_send_error(req, 400, "Invalid Request", resp.base, 0);
-            return 0;
-        }
-    }
-
     { /* construct collector and send request to every thread */
         struct st_h2o_status_context_t *status_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
         struct st_h2o_status_collector_t *collector = h2o_mem_alloc_shared(NULL, sizeof(*collector), on_collector_dispose);
-        size_t i;
+        size_t i, j;
 
+        memset(collector, 0, sizeof(*collector));
+        for (i = 0; i < req->conn->ctx->globalconf->statuses.size; i++) {
+            h2o_status_handler_t *sh;
+
+            h2o_vector_reserve(&req->pool, &collector->status_ctx, collector->status_ctx.size + 1);
+            sh = &req->conn->ctx->globalconf->statuses.entries[i];
+
+            if (status_list) {
+                int found = 0;
+                for (j = 0; status_list[j].base; j++) {
+                    if (h2o_memis(status_list[j].base, status_list[j].len, sh->name.base, sh->name.len)) {
+                        found = 1;
+                        break;
+                    }
+                }
+                if (!found) {
+                    collector->status_ctx.entries[collector->status_ctx.size].active = 0;
+                    goto Skip;
+                }
+            }
+            if (sh->type == H2O_STATUS_HANDLER_PER_THREAD && sh->per_thread.alloc_context_cb) {
+                collector->status_ctx.entries[collector->status_ctx.size].ctx = sh->per_thread.alloc_context_cb(req);
+            }
+            collector->status_ctx.entries[collector->status_ctx.size].active = 1;
+Skip:
+            collector->status_ctx.size++;
+        }
+        collector->gconf = req->conn->ctx->globalconf;
         collector->src.req = req;
         collector->src.receiver = &status_ctx->receiver;
-        collector->logconf = logconf;
         pthread_mutex_init(&collector->mutex, NULL);
-        collector->data = h2o_iovec_init(NULL, 0);
         collector->num_remaining_threads = self->receivers.size;
 
         for (i = 0; i != self->receivers.size; ++i) {
@@ -234,6 +238,44 @@ static int on_req_json(struct st_h2o_status_handler_t *self, h2o_req_t *req)
     }
 
     return 0;
+}
+
+static h2o_iovec_t *build_status_list(const char *param, size_t len)
+{
+    int i, cur, start;
+    int nr_list = 1;
+    h2o_iovec_t *ret;
+    for (i = 0; i < len; i++) {
+        if (param[i] == '|') {
+            nr_list++;
+        }
+    }
+    ret = h2o_mem_alloc(sizeof(*ret) * (nr_list + 1));
+    cur = 0;
+    start = 0;
+    for (i = 0; i < len; i++) {
+        if (param[i] == '|') {
+            ret[cur++] = h2o_strdup(NULL, &param[start], i - start);
+            start = i + 1;
+        }
+    }
+    if (start != i) {
+            ret[cur++] = h2o_strdup(NULL, &param[start], i - start);
+    }
+    ret[cur] = h2o_iovec_init(NULL, 0);
+
+    return ret;
+}
+
+static void free_status_list(h2o_iovec_t *status_list)
+{
+    int i;
+    if (!status_list)
+        return;
+    for (i = 0; status_list[i].base; i++) {
+        free(status_list[i].base);
+    }
+    free(status_list);
 }
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
@@ -252,8 +294,17 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("no-cache"));
         return h2o_file_send(req, 200, "OK", fn.base, h2o_iovec_init(H2O_STRLIT("text/html; charset=utf-8")), 0);
     } else if (h2o_memis(local_path.base, local_path.len, H2O_STRLIT("/json"))) {
+        int ret;
         /* "/json" maps to the JSON API */
-        return on_req_json(self, req);
+        h2o_iovec_t *status_list = NULL; /* NULL means all */
+        if (req->query_at != SIZE_MAX && (req->path.len - req->query_at > 6)) {
+            if (h2o_memis(&req->path.base[req->query_at], 6, "?show=", 6)) {
+                status_list = build_status_list(&req->path.base[req->query_at + 6], req->path.len - req->query_at - 6);
+            }
+        }
+        ret = on_req_json(self, req, status_list);
+        free_status_list(status_list);
+        return ret;
     }
 
     return -1;
@@ -291,10 +342,12 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
     free(status_ctx);
 }
 
-void h2o_status_register(h2o_pathconf_t *pathconf)
+void h2o_status_register(h2o_pathconf_t *conf)
 {
-    struct st_h2o_status_handler_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
+    struct st_h2o_status_handler_t *self = (void *)h2o_create_handler(conf, sizeof(*self));
     self->super.on_context_init = on_context_init;
     self->super.on_context_dispose = on_context_dispose;
     self->super.on_req = on_req;
+    h2o_config_register_status_handler(conf->global, requests_status_handler);
+    h2o_config_register_status_handler(conf->global, errors_status_handler);
 }

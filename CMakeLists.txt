@@ -239,6 +239,8 @@ SET(LIB_SOURCE_FILES
     lib/handler/redirect.c
     lib/handler/reproxy.c
     lib/handler/status.c
+    lib/handler/status/errors.c
+    lib/handler/status/requests.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/compress.c
     lib/handler/configurator/errordoc.c
