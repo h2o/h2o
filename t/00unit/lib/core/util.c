@@ -87,6 +87,9 @@ static void test_extract_push_path_from_link_header(void)
     path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http:otherpath>; rel=preload"), BASE);
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/basepath/otherpath")));
 
+    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http:otherpath>; rel=preload; nopush"), BASE);
+    ok(path.base == NULL);
+    ok(path.len == 0);
     path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<../otherpath>; rel=author"), BASE);
     ok(path.base == NULL);
     ok(path.len == 0);

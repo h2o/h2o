@@ -328,12 +328,17 @@ h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const c
             goto None;
         url = h2o_iovec_init(token + 1, token_len - 2);
         /* find rel=preload */
+        int preload = 0;
         while ((token = h2o_next_token(&iter, ';', &token_len, &token_value)) != NULL) {
             if (h2o_lcstris(token, token_len, H2O_STRLIT("rel")) &&
-                h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload")))
-                break;
+                h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload"))) {
+                preload++;
+            } else
+            if (h2o_lcstris(token, token_len, H2O_STRLIT("nopush"))) {
+                goto None;
+            }
         }
-        if (token == NULL)
+        if (!preload)
             goto None;
     }
 
