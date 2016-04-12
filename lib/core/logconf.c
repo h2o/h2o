@@ -254,8 +254,16 @@ void h2o_logconf_dispose(h2o_logconf_t *logconf)
 {
     size_t i;
 
-    for (i = 0; i != logconf->elements.size; ++i)
+    for (i = 0; i != logconf->elements.size; ++i) {
         free(logconf->elements.entries[i].suffix.base);
+        switch (logconf->elements.entries[i].type) {
+        case ELEMENT_TYPE_EXTENDED_VAR:
+        case ELEMENT_TYPE_IN_HEADER_STRING:
+        case ELEMENT_TYPE_OUT_HEADER_STRING:
+        case ELEMENT_TYPE_TIMESTAMP_STRFTIME:
+            free(logconf->elements.entries[i].data.name.base);
+        }
+    }
     free(logconf->elements.entries);
     free(logconf);
 }
