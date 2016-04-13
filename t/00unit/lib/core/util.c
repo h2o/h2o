@@ -72,7 +72,8 @@ static void test_extract_push_path_from_link_header(void)
 {
     h2o_mem_pool_t pool;
     h2o_iovec_t path;
-    h2o_iovec_t base_path = {H2O_STRLIT("/basepath/")}, input_authority = {H2O_STRLIT("basehost")};
+    h2o_iovec_t base_path = {H2O_STRLIT("/basepath/")}, input_authority = {H2O_STRLIT("basehost")},
+                other_authority = {H2O_STRLIT("otherhost")};
 #define INPUT base_path, &H2O_URL_SCHEME_HTTP, input_authority
     h2o_mem_init_pool(&pool);
 
@@ -90,15 +91,32 @@ static void test_extract_push_path_from_link_header(void)
     path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<../otherpath>; rel=author"), INPUT, NULL, NULL);
     ok(path.base == NULL);
     ok(path.len == 0);
-    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http://basehost:81/otherpath>; rel=preload"), INPUT, NULL, NULL);
+    path =
+        h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http://basehost:81/otherpath>; rel=preload"), INPUT, NULL, NULL);
     ok(path.base == NULL);
     ok(path.len == 0);
-    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<https://basehost/otherpath>; rel=preload"), INPUT, NULL, NULL);
+    path =
+        h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<https://basehost/otherpath>; rel=preload"), INPUT, NULL, NULL);
     ok(path.base == NULL);
     ok(path.len == 0);
     path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<https:otherpath>; rel=preload"), INPUT, NULL, NULL);
     ok(path.base == NULL);
     ok(path.len == 0);
+
+    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</otherpath>; rel=preload"), INPUT, &H2O_URL_SCHEME_HTTPS,
+                                                  &input_authority);
+    ok(path.base == NULL);
+    ok(path.len == 0);
+    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</otherpath>; rel=preload"), INPUT, &H2O_URL_SCHEME_HTTP,
+                                                  &input_authority);
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/otherpath")));
+    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</otherpath>; rel=preload"), INPUT, &H2O_URL_SCHEME_HTTP,
+                                                  &other_authority);
+    ok(path.base == NULL);
+    ok(path.len == 0);
+    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http://basehost/otherpath>; rel=preload"), INPUT,
+                                                  &H2O_URL_SCHEME_HTTP, &other_authority);
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/otherpath")));
 
     h2o_mem_clear_pool(&pool);
 #undef INPUT
