@@ -118,6 +118,10 @@ static void test_extract_push_path_from_link_header(void)
                                                   &H2O_URL_SCHEME_HTTP, &other_authority);
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/otherpath")));
 
+    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http:otherpath>; rel=preload; nopush"), INPUT, NULL, NULL);
+    ok(path.base == NULL);
+    ok(path.len == 0);
+
     h2o_mem_clear_pool(&pool);
 #undef INPUT
 }
