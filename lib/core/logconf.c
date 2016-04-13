@@ -262,6 +262,9 @@ void h2o_logconf_dispose(h2o_logconf_t *logconf)
         case ELEMENT_TYPE_OUT_HEADER_STRING:
         case ELEMENT_TYPE_TIMESTAMP_STRFTIME:
             free(logconf->elements.entries[i].data.name.base);
+            break;
+        default:
+            break;
         }
     }
     free(logconf->elements.entries);
