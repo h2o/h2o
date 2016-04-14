@@ -773,10 +773,6 @@ struct st_h2o_req_t {
      */
     h2o_iovec_t entity;
     /**
-     * remote_user (base == NULL if none)
-     */
-    h2o_iovec_t remote_user;
-    /**
      * timestamp when the request was processed
      */
     h2o_timestamp_t processed_at;
@@ -805,6 +801,11 @@ struct st_h2o_req_t {
      * counts the number of times the request has been delegated
      */
     unsigned num_delegated;
+
+    /**
+     * environment variables
+     */
+    h2o_iovec_vector_t env;
 
     /* flags */
 
@@ -1055,6 +1056,10 @@ static void h2o_proceed_response(h2o_req_t *req);
  * if NULL, supplements h2o_req_t::mime_attr
  */
 void h2o_req_fill_mime_attributes(h2o_req_t *req);
+/**
+ * returns an environment variable
+ */
+static h2o_iovec_t *h2o_req_getenv(h2o_req_t *req, const char *name, size_t name_len, int allocate_if_not_found);
 
 /* config */
 
@@ -1588,6 +1593,20 @@ inline void h2o_proceed_response(h2o_req_t *req)
     } else {
         req->_ostr_top->do_send(req->_ostr_top, req, NULL, 0, 1);
     }
+}
+
+inline h2o_iovec_t *h2o_req_getenv(h2o_req_t *req, const char *name, size_t name_len, int allocate_if_not_found)
+{
+    size_t i;
+    for (i = 0; i != req->env.size; i += 2)
+        if (h2o_memis(req->env.entries[i].base, req->env.entries[i].len, name, name_len))
+            return req->env.entries + i + 1;
+    if (!allocate_if_not_found)
+        return NULL;
+    h2o_vector_reserve(&req->pool, &req->env, req->env.size + 2);
+    req->env.entries[req->env.size++] = h2o_iovec_init(name, name_len);
+    req->env.entries[req->env.size++] = h2o_iovec_init(NULL, 0);
+    return req->env.entries + req->env.size - 1;
 }
 
 inline int h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf)

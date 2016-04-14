@@ -550,12 +550,13 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             RESERVE(path_len * unsafe_factor);
             pos = append_unsafe_string(pos, req->input.path.base, path_len);
         } break;
-        case ELEMENT_TYPE_REMOTE_USER: /* %u */
-            if (req->remote_user.base == NULL)
+        case ELEMENT_TYPE_REMOTE_USER: /* %u */ {
+            h2o_iovec_t *remote_user = h2o_req_getenv(req, H2O_STRLIT("REMOTE_USER"), 0);
+            if (remote_user == NULL)
                 goto EmitDash;
-            RESERVE(req->remote_user.len * unsafe_factor);
-            pos = append_unsafe_string(pos, req->remote_user.base, req->remote_user.len);
-            break;
+            RESERVE(remote_user->len * unsafe_factor);
+            pos = append_unsafe_string(pos, remote_user->base, remote_user->len);
+        } break;
         case ELEMENT_TYPE_AUTHORITY: /* %V */
             RESERVE(req->input.authority.len * unsafe_factor);
             pos = append_unsafe_string(pos, req->input.authority.base, req->input.authority.len);
