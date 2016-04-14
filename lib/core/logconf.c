@@ -242,6 +242,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
     LAST_ELEMENT()->suffix.base[LAST_ELEMENT()->suffix.len++] = '\n';
 
 #undef NEW_ELEMENT
+#undef LAST_ELEMENT
 
     return logconf;
 
