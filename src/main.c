@@ -1546,12 +1546,13 @@ int main(int argc, char **argv)
     setup_configurators();
 
     { /* parse options */
+#define LONG_OPT_MRUBY 1001
         int ch;
         static struct option longopts[] = {{"conf", required_argument, NULL, 'c'},
                                            {"mode", required_argument, NULL, 'm'},
                                            {"test", no_argument, NULL, 't'},
 #if H2O_USE_MRUBY
-                                           {"mruby", required_argument, NULL, 1001},
+                                           {"mruby", required_argument, NULL, LONG_OPT_MRUBY},
 #endif
                                            {"version", no_argument, NULL, 'v'},
                                            {"help", no_argument, NULL, 'h'},
@@ -1590,7 +1591,7 @@ int main(int argc, char **argv)
                 conf.run_mode = RUN_MODE_TEST;
                 break;
 #if H2O_USE_MRUBY
-            case 1001:
+            case LONG_OPT_MRUBY:
                 if (conf.run_mode != RUN_MODE_TEST) {
                     printf("--mruby requires --mode=test\n");
                     exit(1);
@@ -1627,6 +1628,10 @@ int main(int argc, char **argv)
                        "                               process to reconfigure or upgrade the server.\n"
                        "                     - test:   tests the configuration and exits\n"
                        "  -t, --test         synonym of `--mode=test`\n"
+#if H2O_USE_MRUBY
+                       "  --mruby FILE       eval specified file as mruby under h2o context.\n"
+                       "                     only works with `--mode=test`\n"
+#endif
                        "  -v, --version      prints the version number\n"
                        "  -h, --help         print this help\n"
                        "\n"
@@ -1645,6 +1650,7 @@ int main(int argc, char **argv)
         }
         argc -= optind;
         argv += optind;
+#undef LONG_OPT_MRUBY
     }
 
     /* setup conf.server_starter */
