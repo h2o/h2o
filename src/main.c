@@ -1134,7 +1134,7 @@ static int eval_mruby(const char *fn)
         fprintf(stderr, "%s: no memory\n", H2O_MRUBY_MODULE_NAME);
         abort();
     }
-    mrb_value result = h2o_mruby_compile_code(mrb, &config, errbuf);
+    h2o_mruby_compile_code(mrb, &config, errbuf);
     if (errbuf[0]) {
         fprintf(stderr, "%s\n", errbuf);
         goto Exit;
