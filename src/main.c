@@ -1135,6 +1135,7 @@ static int eval_mruby(const char *fn)
         abort();
     }
     h2o_mruby_compile_code(mrb, &config, errbuf);
+    mrb_close(mrb);
     if (errbuf[0]) {
         fprintf(stderr, "%s\n", errbuf);
         goto Exit;
