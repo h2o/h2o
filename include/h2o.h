@@ -174,6 +174,17 @@ typedef struct st_h2o_casper_conf_t {
     int track_all_types;
 } h2o_casper_conf_t;
 
+typedef struct st_h2o_envconf_t {
+    /**
+     * list of names to be unset
+     */
+    h2o_iovec_vector_t unsets;
+    /**
+     * list of name-value pairs to be set
+     */
+    h2o_iovec_vector_t sets;
+} h2o_envconf_t;
+
 typedef struct st_h2o_pathconf_t {
     /**
      * globalconf to which the pathconf belongs
@@ -199,6 +210,10 @@ typedef struct st_h2o_pathconf_t {
      * mimemap
      */
     h2o_mimemap_t *mimemap;
+    /**
+     * env
+     */
+    h2o_envconf_t *env;
 } h2o_pathconf_t;
 
 struct st_h2o_hostconf_t {
@@ -1011,6 +1026,10 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator);
  * @return pointer to the ostream filter
  */
 h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot);
+/**
+ * binds configurations to the request
+ */
+void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t *pathconf);
 
 /**
  * called by the generators to send output
@@ -1060,8 +1079,16 @@ void h2o_req_fill_mime_attributes(h2o_req_t *req);
  * returns an environment variable
  */
 static h2o_iovec_t *h2o_req_getenv(h2o_req_t *req, const char *name, size_t name_len, int allocate_if_not_found);
+/**
+ * unsets an environment variable
+ */
+static void h2o_req_unsetenv(h2o_req_t *req, const char *name, size_t name_len);
 
 /* config */
+
+h2o_envconf_t *h2o_config_create_envconf(h2o_envconf_t *src);
+void h2o_config_setenv(h2o_envconf_t *envconf, const char *name, const char *value);
+void h2o_config_unsetenv(h2o_envconf_t *envconf, const char *name);
 
 /**
  * initializes pathconf
@@ -1607,6 +1634,19 @@ inline h2o_iovec_t *h2o_req_getenv(h2o_req_t *req, const char *name, size_t name
     req->env.entries[req->env.size++] = h2o_iovec_init(name, name_len);
     req->env.entries[req->env.size++] = h2o_iovec_init(NULL, 0);
     return req->env.entries + req->env.size - 1;
+}
+
+inline void h2o_req_unsetenv(h2o_req_t *req, const char *name, size_t name_len)
+{
+    size_t i;
+    for (i = 0; i != req->env.size; i += 2)
+        if (h2o_memis(req->env.entries[i].base, req->env.entries[i].len, name, name_len))
+            goto Found;
+    /* not found */
+    return;
+Found:
+    memmove(req->env.entries + i, req->env.entries + i + 2, req->env.size - i - 2);
+    req->env.size -= 2;
 }
 
 inline int h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf)

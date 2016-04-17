@@ -133,22 +133,21 @@ static void call_handlers(h2o_req_t *req, h2o_handler_t **handler)
 
 static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
 {
+    h2o_pathconf_t *selected_pathconf = &hostconf->fallback_path;
     size_t i;
-
-    req->hostconf = hostconf;
-    req->pathconf = &hostconf->fallback_path;
 
     /* setup pathconf, or redirect to "path/" */
     for (i = 0; i != hostconf->paths.size; ++i) {
-        h2o_pathconf_t *pathconf = hostconf->paths.entries + i;
-        if (req->path_normalized.len >= pathconf->path.len &&
-            memcmp(req->path_normalized.base, pathconf->path.base, pathconf->path.len) == 0 &&
-            (pathconf->path.base[pathconf->path.len - 1] == '/' || req->path_normalized.len == pathconf->path.len ||
-             req->path_normalized.base[pathconf->path.len] == '/')) {
-            req->pathconf = pathconf;
+        h2o_pathconf_t *candidate = hostconf->paths.entries + i;
+        if (req->path_normalized.len >= candidate->path.len &&
+            memcmp(req->path_normalized.base, candidate->path.base, candidate->path.len) == 0 &&
+            (candidate->path.base[candidate->path.len - 1] == '/' || req->path_normalized.len == candidate->path.len ||
+             req->path_normalized.base[candidate->path.len] == '/')) {
+            selected_pathconf = candidate;
             break;
         }
     }
+    h2o_req_bind_conf(req, hostconf, selected_pathconf);
 
     call_handlers(req, req->pathconf->handlers.entries);
 }
@@ -224,6 +223,13 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
             req->upgrade.len = 0;
         }
 #undef COPY
+        if (src->env.size != 0) {
+            size_t i;
+            h2o_vector_reserve(&req->pool, &req->env, src->env.size);
+            req->env.size = src->env.size;
+            for (i = 0; i != req->env.size; ++i)
+                req->env.entries[i] = h2o_strdup(&req->pool, src->env.entries[i].base, src->env.entries[i].len);
+        }
     }
 }
 
@@ -386,6 +392,20 @@ h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot)
     return ostr;
 }
 
+void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t *pathconf)
+{
+    req->hostconf = hostconf;
+    req->pathconf = pathconf;
+    if (pathconf->env != NULL) {
+        h2o_envconf_t *src = pathconf->env;
+        size_t i;
+        for (i = 0; i != src->unsets.size; ++i)
+            h2o_req_unsetenv(req, src->unsets.entries[i].base, src->unsets.entries[i].len);
+        for (i = 0; i != src->sets.size; i += 2)
+            *h2o_req_getenv(req, src->sets.entries[i].base, src->sets.entries[i].len, 1) = src->sets.entries[1];
+    }
+}
+
 void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
 {
     if (is_final) {
@@ -434,8 +454,7 @@ void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *
 {
     if (req->pathconf == NULL) {
         h2o_hostconf_t *hostconf = setup_before_processing(req);
-        req->hostconf = hostconf;
-        req->pathconf = &hostconf->fallback_path;
+        h2o_req_bind_conf(req, hostconf, &hostconf->fallback_path);
     }
 
     if ((flags & H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION) != 0)

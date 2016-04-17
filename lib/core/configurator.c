@@ -37,6 +37,36 @@ struct st_core_configurator_t {
     struct st_core_config_vars_t *vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
+static h2o_configurator_context_t *create_context(h2o_configurator_context_t *parent, int is_custom_handler)
+{
+    h2o_configurator_context_t *ctx = h2o_mem_alloc(sizeof(*ctx));
+    if (parent == NULL) {
+        *ctx = (h2o_configurator_context_t){};
+        return ctx;
+    }
+    *ctx = *parent;
+    if (is_custom_handler) {
+        /* not need to inherit parent envs, since custom-handler level envs are applied after path-level envs */
+        ctx->env = NULL;
+    } else {
+        if (ctx->env != NULL)
+            h2o_mem_addref_shared(ctx->env);
+    }
+    ctx->parent = parent;
+    return ctx;
+}
+
+static void destroy_context(h2o_configurator_context_t *ctx)
+{
+    if (ctx->env != NULL) {
+        if (ctx->pathconf != NULL)
+            ctx->pathconf->env = ctx->env;
+        else
+            h2o_mem_release_shared(ctx->env);
+    }
+    free(ctx);
+}
+
 static int on_core_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_core_configurator_t *self = (void *)_self;
@@ -231,12 +261,13 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key;
         yoml_t *value = node->data.mapping.elements[i].value;
-        h2o_configurator_context_t path_ctx = *ctx;
-        path_ctx.pathconf = h2o_config_register_path(path_ctx.hostconf, key->data.scalar, 0);
-        path_ctx.mimemap = &path_ctx.pathconf->mimemap;
-        path_ctx.parent = ctx;
-        if (h2o_configurator_apply_commands(&path_ctx, value, H2O_CONFIGURATOR_FLAG_PATH, NULL) != 0)
-            return -1;
+        h2o_configurator_context_t *path_ctx = create_context(ctx, 0);
+        path_ctx->pathconf = h2o_config_register_path(path_ctx->hostconf, key->data.scalar, 0);
+        path_ctx->mimemap = &path_ctx->pathconf->mimemap;
+        int cmd_ret = h2o_configurator_apply_commands(path_ctx, value, H2O_CONFIGURATOR_FLAG_PATH, NULL);
+        destroy_context(path_ctx);
+        if (cmd_ret != 0)
+            return cmd_ret;
     }
 
     return 0;
@@ -270,14 +301,15 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
             h2o_configurator_errprintf(cmd, key, "wildcard (*) can only be used at the start of the hostname");
             return -1;
         }
-        h2o_configurator_context_t host_ctx = *ctx;
-        if ((host_ctx.hostconf = h2o_config_register_host(host_ctx.globalconf, hostname, port)) == NULL) {
+        h2o_configurator_context_t *host_ctx = create_context(ctx, 0);
+        if ((host_ctx->hostconf = h2o_config_register_host(host_ctx->globalconf, hostname, port)) == NULL) {
             h2o_configurator_errprintf(cmd, key, "duplicate host entry");
             return -1;
         }
-        host_ctx.mimemap = &host_ctx.hostconf->mimemap;
-        host_ctx.parent = ctx;
-        if (h2o_configurator_apply_commands(&host_ctx, value, H2O_CONFIGURATOR_FLAG_HOST, NULL) != 0)
+        host_ctx->mimemap = &host_ctx->hostconf->mimemap;
+        int cmd_ret = h2o_configurator_apply_commands(host_ctx, value, H2O_CONFIGURATOR_FLAG_HOST, NULL);
+        destroy_context(host_ctx);
+        if (cmd_ret != 0)
             return -1;
         if (yoml_get(value, "paths") == NULL) {
             h2o_configurator_errprintf(NULL, value, "mandatory configuration directive `paths` is missing");
@@ -590,12 +622,13 @@ static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configu
     type = h2o_mimemap_define_dynamic(*ctx->mimemap, exts, ctx->globalconf);
 
     /* apply the configuration commands */
-    h2o_configurator_context_t ext_ctx = *ctx;
-    ext_ctx.pathconf = &type->data.dynamic.pathconf;
-    ext_ctx.mimemap = NULL;
-    ext_ctx.parent = ctx;
-    if (h2o_configurator_apply_commands(&ext_ctx, node, H2O_CONFIGURATOR_FLAG_EXTENSION, ignore_commands) != 0)
-        return -1;
+    h2o_configurator_context_t *ext_ctx = create_context(ctx, 1);
+    ext_ctx->pathconf = &type->data.dynamic.pathconf;
+    ext_ctx->mimemap = NULL;
+    int cmd_ret = h2o_configurator_apply_commands(ext_ctx, node, H2O_CONFIGURATOR_FLAG_EXTENSION, ignore_commands);
+    destroy_context(ext_ctx);
+    if (cmd_ret != 0)
+        return cmd_ret;
     switch (type->data.dynamic.pathconf.handlers.size) {
     case 1:
         break;
@@ -608,6 +641,66 @@ static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configu
     }
 
     return 0;
+}
+
+static int on_config_setenv(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    h2o_envconf_t *newenv = h2o_config_create_envconf(ctx->env);
+    size_t i;
+
+    for (i = 0; i != node->data.mapping.size; ++i) {
+        yoml_t *key = node->data.mapping.elements[i].key, *value = node->data.mapping.elements[i].value;
+        if (key->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, key, "key must be a scalar");
+            goto Error;
+        }
+        if (value->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, value, "value must be a scalar");
+            goto Error;
+        }
+        h2o_config_setenv(newenv, key->data.scalar, value->data.scalar);
+    }
+
+    if (ctx->env != NULL)
+        h2o_mem_release_shared(ctx->env);
+    ctx->env = newenv;
+    return 0;
+Error:
+    h2o_mem_release_shared(newenv);
+    return -1;
+}
+
+static int on_config_unsetenv(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    h2o_envconf_t *newenv = h2o_config_create_envconf(ctx->env);
+
+    switch (node->type) {
+    case YOML_TYPE_SCALAR:
+        h2o_config_unsetenv(newenv, node->data.scalar);
+        break;
+    case YOML_TYPE_SEQUENCE: {
+        size_t i;
+        for (i = 0; i != node->data.sequence.size; ++i) {
+            yoml_t *element = node->data.sequence.elements[i];
+            if (element->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, element, "element of a sequence passed to unsetenv must be a scalar");
+                goto Error;
+            }
+            h2o_config_unsetenv(newenv, element->data.scalar);
+        }
+    } break;
+    default:
+        h2o_configurator_errprintf(cmd, node, "argument to unsetenv must be either a scalar or a sequence");
+        goto Error;
+    }
+
+    if (ctx->env != NULL)
+        h2o_mem_release_shared(ctx->env);
+    ctx->env = newenv;
+    return 0;
+Error:
+    h2o_mem_release_shared(newenv);
+    return -1;
 }
 
 void h2o_configurator__init_core(h2o_globalconf_t *conf)
@@ -679,6 +772,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                         (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
                                             H2O_CONFIGURATOR_FLAG_SEMI_DEFERRED,
                                         on_config_custom_handler);
+        h2o_configurator_define_command(&c->super, "setenv",
+                                        H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING, on_config_setenv);
+        h2o_configurator_define_command(&c->super, "unsetenv", H2O_CONFIGURATOR_FLAG_ALL_LEVELS, on_config_unsetenv);
     }
 }
 
@@ -738,18 +834,19 @@ h2o_configurator_command_t *h2o_configurator_get_command(h2o_globalconf_t *conf,
 
 int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node, int dry_run)
 {
-    h2o_configurator_context_t ctx = {};
-    ctx.globalconf = config;
-    ctx.mimemap = &ctx.globalconf->mimemap;
-    ctx.dry_run = dry_run;
+    h2o_configurator_context_t *ctx = create_context(NULL, 0);
+    ctx->globalconf = config;
+    ctx->mimemap = &ctx->globalconf->mimemap;
+    ctx->dry_run = dry_run;
+    int cmd_ret = h2o_configurator_apply_commands(ctx, node, H2O_CONFIGURATOR_FLAG_GLOBAL, NULL);
+    destroy_context(ctx);
 
-    if (h2o_configurator_apply_commands(&ctx, node, H2O_CONFIGURATOR_FLAG_GLOBAL, NULL) != 0)
-        return -1;
+    if (cmd_ret != 0)
+        return cmd_ret;
     if (config->hosts[0] == NULL) {
         h2o_configurator_errprintf(NULL, node, "mandatory configuration directive `hosts` is missing");
         return -1;
     }
-
     return 0;
 }
 
