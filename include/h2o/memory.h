@@ -257,6 +257,11 @@ void h2o_buffer__dispose_linked(void *p);
     h2o_vector__reserve((pool), (h2o_vector_t *)(void *)(vector), sizeof((vector)->entries[0]), (new_capacity))
 static void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
 void h2o_vector__expand(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
+/**
+ * erase the entry at given index from the vector
+ */
+#define h2o_vector_erase(vector, index) h2o_vector__erase((h2o_vector_t *)(void *)(vector), sizeof((vector)->entries[0]), (index))
+static void h2o_vector__erase(h2o_vector_t *vector, size_t element_size, size_t index);
 
 /**
  * tests if target chunk (target_len bytes long) is equal to test chunk (test_len bytes long)
@@ -363,6 +368,13 @@ inline void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size
     if (vector->capacity < new_capacity) {
         h2o_vector__expand(pool, vector, element_size, new_capacity);
     }
+}
+
+inline void h2o_vector__erase(h2o_vector_t *vector, size_t element_size, size_t index)
+{
+    char *entries = (char *)vector->entries;
+    memmove(entries + element_size * index, entries + element_size * (index + 1), vector->size - index - 1);
+    --vector->size;
 }
 
 inline int h2o_memis(const void *_target, size_t target_len, const void *_test, size_t test_len)
