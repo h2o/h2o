@@ -41,11 +41,33 @@ enum {
 #define H2O_CONFIGURATOR_NUM_LEVELS 4
 
 typedef struct st_h2o_configurator_context_t {
+    /**
+     * pointer to globalconf
+     */
     h2o_globalconf_t *globalconf;
+    /**
+     * pointer to hostconf, or NULL if the context is above host level
+     */
     h2o_hostconf_t *hostconf;
+    /**
+     * pointer to pathconf (either at path level or custom handler level), or NULL
+     */
     h2o_pathconf_t *pathconf;
+    /**
+     * pointer to mimemap
+     */
     h2o_mimemap_t **mimemap;
+    /**
+     * pointer to env
+     */
+    h2o_envconf_t *env;
+    /**
+     * if is a dry run
+     */
     int dry_run;
+    /**
+     * parent context (or NULL if the context is at global level)
+     */
     struct st_h2o_configurator_context_t *parent;
 } h2o_configurator_context_t;
 

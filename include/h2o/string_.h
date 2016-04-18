@@ -52,6 +52,10 @@ extern "C" {
  */
 h2o_iovec_t h2o_strdup(h2o_mem_pool_t *pool, const char *s, size_t len);
 /**
+ * variant of h2o_strdup that calls h2o_mem_alloc_shared
+ */
+h2o_iovec_t h2o_strdup_shared(h2o_mem_pool_t *pool, const char *s, size_t len);
+/**
  * duplicates given string appending '/' to the tail if not found
  */
 h2o_iovec_t h2o_strdup_slashed(h2o_mem_pool_t *pool, const char *s, size_t len);
