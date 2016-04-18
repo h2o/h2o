@@ -62,6 +62,9 @@ static void on_dispose_envconf(void *_envconf)
     h2o_envconf_t *envconf = _envconf;
     size_t i;
 
+    if (envconf->parent != NULL)
+        h2o_mem_release_shared(envconf->parent);
+
     for (i = 0; i != envconf->unsets.size; ++i)
         h2o_mem_release_shared(envconf->unsets.entries[i].base);
     free(envconf->unsets.entries);
@@ -70,21 +73,14 @@ static void on_dispose_envconf(void *_envconf)
     free(envconf->sets.entries);
 }
 
-h2o_envconf_t *h2o_config_create_envconf(h2o_envconf_t *src)
+h2o_envconf_t *h2o_config_create_envconf(h2o_envconf_t *parent)
 {
     h2o_envconf_t *envconf = h2o_mem_alloc_shared(NULL, sizeof(*envconf), on_dispose_envconf);
     *envconf = (h2o_envconf_t){};
 
-    if (src != NULL) {
-#define COPY_SHARED(list) \
-    h2o_vector_reserve(NULL, &envconf->list, src->list.size); \
-    for (; envconf->list.size != src->list.size; ++envconf->list.size) { \
-        envconf->list.entries[envconf->list.size] = src->list.entries[envconf->list.size]; \
-        h2o_mem_addref_shared(envconf->list.entries[envconf->list.size].base); \
-    }
-        COPY_SHARED(unsets);
-        COPY_SHARED(sets);
-#undef COPY_SHARED
+    if (parent != NULL) {
+        envconf->parent = parent;
+        h2o_mem_addref_shared(parent);
     }
     return envconf;
 }

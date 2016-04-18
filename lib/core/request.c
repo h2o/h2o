@@ -392,18 +392,24 @@ h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot)
     return ostr;
 }
 
+static void apply_env(h2o_req_t *req, h2o_envconf_t *env)
+{
+    size_t i;
+
+    if (env->parent != NULL)
+        apply_env(req, env->parent);
+    for (i = 0; i != env->unsets.size; ++i)
+        h2o_req_unsetenv(req, env->unsets.entries[i].base, env->unsets.entries[i].len);
+    for (i = 0; i != env->sets.size; i += 2)
+        *h2o_req_getenv(req, env->sets.entries[i].base, env->sets.entries[i].len, 1) = env->sets.entries[i + 1];
+}
+
 void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t *pathconf)
 {
     req->hostconf = hostconf;
     req->pathconf = pathconf;
-    if (pathconf->env != NULL) {
-        h2o_envconf_t *src = pathconf->env;
-        size_t i;
-        for (i = 0; i != src->unsets.size; ++i)
-            h2o_req_unsetenv(req, src->unsets.entries[i].base, src->unsets.entries[i].len);
-        for (i = 0; i != src->sets.size; i += 2)
-            *h2o_req_getenv(req, src->sets.entries[i].base, src->sets.entries[i].len, 1) = src->sets.entries[i + 1];
-    }
+    if (pathconf->env != NULL)
+        apply_env(req, pathconf->env);
 }
 
 void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final)

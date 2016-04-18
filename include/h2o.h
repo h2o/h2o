@@ -176,6 +176,10 @@ typedef struct st_h2o_casper_conf_t {
 
 typedef struct st_h2o_envconf_t {
     /**
+     * parent
+     */
+    struct st_h2o_envconf_t *parent;
+    /**
      * list of names to be unset
      */
     h2o_iovec_vector_t unsets;
