@@ -25,15 +25,30 @@ hosts:
           "path": 345
           "foo": "abc"
         file.dir: @{[ DOC_ROOT ]}
+      "/unset":
+        unsetenv: "host"
+        file.dir: @{[ DOC_ROOT ]}
 EOT
-    run_with_curl($server, sub {
-        my ($proto, $port, $curl) = @_;
-        my $resp = `$curl --silent $proto://127.0.0.1:$port/printenv.cgi`;
-        like $resp, qr{^global:123$}im;
-        like $resp, qr{^host:234$}im;
-        like $resp, qr{^path:345$}im;
-        unlike $resp, qr{^foo:}im;
-    });
+    subtest "basic" => sub {
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            my $resp = `$curl --silent $proto://127.0.0.1:$port/printenv.cgi`;
+            like $resp, qr{^global:123$}m;
+            like $resp, qr{^host:234$}m;
+            like $resp, qr{^path:345$}m;
+            unlike $resp, qr{^foo:}m;
+        });
+    };
+    subtest "unsetenv" => sub {
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            my $resp = `$curl --silent $proto://127.0.0.1:$port/unset/printenv.cgi`;
+            like $resp, qr{^global:123$}m;
+            unlike $resp, qr{^host:}m;
+            unlike $resp, qr{^path:}m;
+            unlike $resp, qr{^foo:}m;
+        });
+    };
 };
 
 done_testing();
