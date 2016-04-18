@@ -94,8 +94,15 @@ void h2o_config_setenv(h2o_envconf_t *envconf, const char *name, const char *val
     size_t name_len = strlen(name), i;
     h2o_iovec_t *value_slot;
 
-    h2o_config_unsetenv(envconf, name);
-
+    /* remove from the list of unsets */
+    for (i = 0; i != envconf->unsets.size; ++i) {
+        if (h2o_memis(envconf->unsets.entries[i].base, envconf->unsets.entries[i].len, name, name_len)) {
+            h2o_mem_release_shared(envconf->unsets.entries[i].base);
+            h2o_vector_erase(&envconf->unsets, i);
+            break;
+        }
+    }
+    /* find the slot */
     for (i = 0; i != envconf->sets.size; i += 2) {
         if (h2o_memis(envconf->sets.entries[i].base, envconf->sets.entries[i].len, name, name_len)) {
             value_slot = envconf->sets.entries + i + 1;
@@ -115,14 +122,13 @@ void h2o_config_unsetenv(h2o_envconf_t *envconf, const char *name)
 {
     size_t i, name_len = strlen(name);
 
+    /* do nothing if already set */
     for (i = 0; i != envconf->unsets.size; ++i)
         if (h2o_memis(envconf->unsets.entries[i].base, envconf->unsets.entries[i].len, name, name_len))
-            goto Found;
-    /* not found */
-    return;
-Found:
-    h2o_mem_release_shared(envconf->unsets.entries[i].base);
-    h2o_vector_erase(&envconf->unsets, i);
+            return;
+    /* register */
+    h2o_vector_reserve(NULL, &envconf->unsets, envconf->unsets.size + 1);
+    envconf->unsets.entries[envconf->unsets.size++] = h2o_strdup_shared(NULL, name, name_len);
 }
 
 void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, const char *path, h2o_mimemap_t *mimemap)

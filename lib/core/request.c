@@ -402,7 +402,7 @@ void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t 
         for (i = 0; i != src->unsets.size; ++i)
             h2o_req_unsetenv(req, src->unsets.entries[i].base, src->unsets.entries[i].len);
         for (i = 0; i != src->sets.size; i += 2)
-            *h2o_req_getenv(req, src->sets.entries[i].base, src->sets.entries[i].len, 1) = src->sets.entries[1];
+            *h2o_req_getenv(req, src->sets.entries[i].base, src->sets.entries[i].len, 1) = src->sets.entries[i + 1];
     }
 }
 
