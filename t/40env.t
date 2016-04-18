@@ -11,18 +11,28 @@ subtest "fastcgi" => sub {
 file.custom-handler:
   extension: .cgi
   fastcgi.spawn: "exec \$H2O_ROOT/share/h2o/fastcgi-cgi"
+  unsetenv:
+    - "foo"
+setenv:
+  "global": 123
 hosts:
   default:
+    setenv:
+      "host": 234
     paths:
       "/":
         setenv:
-          "FOO": "1"
+          "path": 345
+          "foo": "abc"
         file.dir: @{[ DOC_ROOT ]}
 EOT
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
         my $resp = `$curl --silent $proto://127.0.0.1:$port/printenv.cgi`;
-        like $resp, qr{^FOO:1$}im;
+        like $resp, qr{^global:123$}im;
+        like $resp, qr{^host:234$}im;
+        like $resp, qr{^path:345$}im;
+        unlike $resp, qr{^foo:}im;
     });
 };
 
