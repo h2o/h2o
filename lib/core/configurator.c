@@ -45,13 +45,8 @@ static h2o_configurator_context_t *create_context(h2o_configurator_context_t *pa
         return ctx;
     }
     *ctx = *parent;
-    if (is_custom_handler) {
-        /* not need to inherit parent envs, since custom-handler level envs are applied after path-level envs */
-        ctx->env = NULL;
-    } else {
-        if (ctx->env != NULL)
-            h2o_mem_addref_shared(ctx->env);
-    }
+    if (ctx->env != NULL)
+        h2o_mem_addref_shared(ctx->env);
     ctx->parent = parent;
     return ctx;
 }
@@ -643,40 +638,41 @@ static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configu
     return 0;
 }
 
+static void inherit_env_if_necessary(h2o_configurator_context_t *ctx)
+{
+    if (ctx->env == (ctx->parent != NULL ? ctx->parent->env : NULL))
+        ctx->env = h2o_config_create_envconf(ctx->env);
+}
+
 static int on_config_setenv(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    h2o_envconf_t *newenv = h2o_config_create_envconf(ctx->env);
     size_t i;
+
+    inherit_env_if_necessary(ctx);
 
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key, *value = node->data.mapping.elements[i].value;
         if (key->type != YOML_TYPE_SCALAR) {
             h2o_configurator_errprintf(cmd, key, "key must be a scalar");
-            goto Error;
+            return -1;
         }
         if (value->type != YOML_TYPE_SCALAR) {
             h2o_configurator_errprintf(cmd, value, "value must be a scalar");
-            goto Error;
+            return -1;
         }
-        h2o_config_setenv(newenv, key->data.scalar, value->data.scalar);
+        h2o_config_setenv(ctx->env, key->data.scalar, value->data.scalar);
     }
 
-    if (ctx->env != NULL)
-        h2o_mem_release_shared(ctx->env);
-    ctx->env = newenv;
     return 0;
-Error:
-    h2o_mem_release_shared(newenv);
-    return -1;
 }
 
 static int on_config_unsetenv(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    h2o_envconf_t *newenv = h2o_config_create_envconf(ctx->env);
+    inherit_env_if_necessary(ctx);
 
     switch (node->type) {
     case YOML_TYPE_SCALAR:
-        h2o_config_unsetenv(newenv, node->data.scalar);
+        h2o_config_unsetenv(ctx->env, node->data.scalar);
         break;
     case YOML_TYPE_SEQUENCE: {
         size_t i;
@@ -684,23 +680,17 @@ static int on_config_unsetenv(h2o_configurator_command_t *cmd, h2o_configurator_
             yoml_t *element = node->data.sequence.elements[i];
             if (element->type != YOML_TYPE_SCALAR) {
                 h2o_configurator_errprintf(cmd, element, "element of a sequence passed to unsetenv must be a scalar");
-                goto Error;
+                return -1;
             }
-            h2o_config_unsetenv(newenv, element->data.scalar);
+            h2o_config_unsetenv(ctx->env, element->data.scalar);
         }
     } break;
     default:
         h2o_configurator_errprintf(cmd, node, "argument to unsetenv must be either a scalar or a sequence");
-        goto Error;
+        return -1;
     }
 
-    if (ctx->env != NULL)
-        h2o_mem_release_shared(ctx->env);
-    ctx->env = newenv;
     return 0;
-Error:
-    h2o_mem_release_shared(newenv);
-    return -1;
 }
 
 void h2o_configurator__init_core(h2o_globalconf_t *conf)
