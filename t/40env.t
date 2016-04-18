@@ -51,4 +51,30 @@ EOT
     };
 };
 
+subtest "mruby" => sub {
+    plan skip_all => 'mruby support is off'
+        unless server_features()->{mruby};
+    my $server = spawn_h2o(<< 'EOT');
+hosts:
+  default:
+    paths:
+      "/":
+        setenv:
+          foo: 123
+        mruby.handler: |
+          Proc.new do |env|
+            [
+              200,
+              {"content-type" => "text/plain; charset=utf-8"},
+              [(env.map {|k, v| k + ":" + String(v) + "\n"}).join]
+            ]
+          end
+EOT
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my $resp = `$curl --silent $proto://127.0.0.1:$port/`;
+        like $resp, qr{^foo:123$}m;
+    });
+};
+
 done_testing();
