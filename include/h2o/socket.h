@@ -55,7 +55,7 @@ extern "C" {
 
 typedef struct st_h2o_socket_t h2o_socket_t;
 
-typedef void (*h2o_socket_cb)(h2o_socket_t *sock, int err);
+typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
 
 #if H2O_USE_LIBUV
 #include "socket/uv-binding.h"
@@ -99,6 +99,12 @@ typedef void (*h2o_socket_ssl_resumption_remove_cb)(h2o_iovec_t session_id);
 
 extern h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings;
 extern __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype;
+
+extern const char *h2o_socket_error_out_of_memory;
+extern const char *h2o_socket_error_io;
+extern const char *h2o_socket_error_closed;
+extern const char *h2o_socket_error_conn_fail;
+extern const char *h2o_socket_error_ssl_decode;
 
 /**
  * returns the loop

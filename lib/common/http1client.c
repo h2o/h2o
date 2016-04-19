@@ -91,13 +91,13 @@ static void on_body_timeout(h2o_timeout_entry_t *entry)
     on_body_error(client, "I/O timeout");
 }
 
-static void on_body_until_close(h2o_socket_t *sock, int status)
+static void on_body_until_close(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_private_t *client = sock->data;
 
     h2o_timeout_unlink(&client->_timeout);
 
-    if (status != 0) {
+    if (err != NULL) {
         client->_cb.on_body(&client->super, h2o_http1client_error_is_eos);
         close_client(client);
         return;
@@ -113,13 +113,13 @@ static void on_body_until_close(h2o_socket_t *sock, int status)
     h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
 }
 
-static void on_body_content_length(h2o_socket_t *sock, int status)
+static void on_body_content_length(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_private_t *client = sock->data;
 
     h2o_timeout_unlink(&client->_timeout);
 
-    if (status != 0) {
+    if (err != NULL) {
         on_body_error(client, "I/O error (body; content-length)");
         return;
     }
@@ -153,14 +153,14 @@ static void on_body_content_length(h2o_socket_t *sock, int status)
     h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
 }
 
-static void on_body_chunked(h2o_socket_t *sock, int status)
+static void on_body_chunked(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_private_t *client = sock->data;
     h2o_buffer_t *inbuf;
 
     h2o_timeout_unlink(&client->_timeout);
 
-    if (status != 0) {
+    if (err != NULL) {
         on_body_error(client, "I/O error (body; chunked)");
         return;
     }
@@ -208,7 +208,7 @@ static void on_error_before_head(struct st_h2o_http1client_private_t *client, co
     close_client(client);
 }
 
-static void on_head(h2o_socket_t *sock, int status)
+static void on_head(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_private_t *client = sock->data;
     int minor_version, http_status, rlen, is_eos;
@@ -219,7 +219,7 @@ static void on_head(h2o_socket_t *sock, int status)
 
     h2o_timeout_unlink(&client->_timeout);
 
-    if (status != 0) {
+    if (err != NULL) {
         on_error_before_head(client, "I/O error (head)");
         return;
     }
@@ -306,13 +306,13 @@ static void on_head_timeout(h2o_timeout_entry_t *entry)
     on_error_before_head(client, "I/O timeout");
 }
 
-static void on_send_request(h2o_socket_t *sock, int status)
+static void on_send_request(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_private_t *client = sock->data;
 
     h2o_timeout_unlink(&client->_timeout);
 
-    if (status != 0) {
+    if (err != NULL) {
         on_error_before_head(client, "I/O error (send request)");
         return;
     }
@@ -335,7 +335,7 @@ static void on_connect_error(struct st_h2o_http1client_private_t *client, const 
     close_client(client);
 }
 
-static void on_connect(h2o_socket_t *sock, int status)
+static void on_connect(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_private_t *client = sock->data;
     h2o_iovec_t *reqbufs;
@@ -343,7 +343,7 @@ static void on_connect(h2o_socket_t *sock, int status)
 
     h2o_timeout_unlink(&client->_timeout);
 
-    if (status != 0) {
+    if (err != NULL) {
         on_connect_error(client, "connection failed");
         return;
     }

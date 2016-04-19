@@ -56,37 +56,37 @@ static void on_read_tcp(uv_stream_t *stream, ssize_t nread, const uv_buf_t *_unu
 
     if (nread < 0) {
         sock->super.bytes_read = 0;
-        sock->super._cb.read(&sock->super, -1);
+        sock->super._cb.read(&sock->super, h2o_socket_error_closed);
         return;
     }
 
     sock->super.input->size += nread;
     sock->super.bytes_read = nread;
-    sock->super._cb.read(&sock->super, 0);
+    sock->super._cb.read(&sock->super, NULL);
 }
 
 static void on_read_ssl(uv_stream_t *stream, ssize_t nread, const uv_buf_t *_unused)
 {
     struct st_h2o_uv_socket_t *sock = stream->data;
     size_t prev_bytes_read = sock->super.input->size;
-    int status = -1;
+    const char *err = h2o_socket_error_io;
 
     if (nread > 0) {
         sock->super.ssl->input.encrypted->size += nread;
         if (sock->super.ssl->handshake.cb == NULL)
-            status = decode_ssl_input(&sock->super);
+            err = decode_ssl_input(&sock->super);
         else
-            status = 0;
+            err = NULL;
     }
     sock->super.bytes_read = sock->super.input->size - prev_bytes_read;
-    sock->super._cb.read(&sock->super, status);
+    sock->super._cb.read(&sock->super, err);
 }
 
 static void on_do_write_complete(uv_write_t *wreq, int status)
 {
     struct st_h2o_uv_socket_t *sock = H2O_STRUCT_FROM_MEMBER(struct st_h2o_uv_socket_t, _wreq, wreq);
     if (sock->super._cb.write != NULL)
-        on_write_complete(&sock->super, status);
+        on_write_complete(&sock->super, status == 0 ? NULL : h2o_socket_error_io);
 }
 
 static void free_sock(uv_handle_t *handle)
@@ -188,7 +188,7 @@ static void on_connect(uv_connect_t *conn, int status)
     struct st_h2o_uv_socket_t *sock = H2O_STRUCT_FROM_MEMBER(struct st_h2o_uv_socket_t, _creq, conn);
     h2o_socket_cb cb = sock->super._cb.write;
     sock->super._cb.write = NULL;
-    cb(&sock->super, status);
+    cb(&sock->super, status == 0 ? NULL : h2o_socket_error_conn_fail);
 }
 
 h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *_sock)

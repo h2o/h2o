@@ -171,14 +171,14 @@ static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *e
     cb(sock, errstr, data);
 }
 
-static void on_connect(h2o_socket_t *sock, int status)
+static void on_connect(h2o_socket_t *sock, const char *err)
 {
     h2o_socketpool_connect_request_t *req = sock->data;
     const char *errstr = NULL;
 
     assert(req->sock == sock);
 
-    if (status != 0) {
+    if (err != NULL) {
         h2o_socket_close(sock);
         req->sock = NULL;
         errstr = "connection failed";

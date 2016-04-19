@@ -31,11 +31,11 @@ static h2o_loop_t *loop;
 static SSL_CTX *ssl_ctx;
 static int exit_loop;
 
-static void on_read(h2o_socket_t *sock, int status)
+static void on_read(h2o_socket_t *sock, const char *err)
 {
-    if (status != 0) {
+    if (err != NULL) {
         /* read failed */
-        fprintf(stderr, "read failed\n");
+        fprintf(stderr, "read failed:%s\n", err);
         h2o_socket_close(sock);
         exit_loop = 1;
         return;
@@ -44,11 +44,11 @@ static void on_read(h2o_socket_t *sock, int status)
     fwrite(sock->input->bytes, 1, sock->input->size, stdout);
 }
 
-static void on_write(h2o_socket_t *sock, int status)
+static void on_write(h2o_socket_t *sock, const char *err)
 {
-    if (status != 0) {
+    if (err != NULL) {
         /* write failed */
-        fprintf(stderr, "write failed\n");
+        fprintf(stderr, "write failed:%s\n", err);
         h2o_socket_close(sock);
         exit_loop = 1;
         return;
@@ -57,11 +57,11 @@ static void on_write(h2o_socket_t *sock, int status)
     h2o_socket_read_start(sock, on_read);
 }
 
-static void on_handshake_complete(h2o_socket_t *sock, int status)
+static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
-    if (status != 0) {
+    if (err != NULL) {
         /* TLS handshake failed */
-        fprintf(stderr, "TLS handshake failure\n");
+        fprintf(stderr, "TLS handshake failure:%s\n", err);
         h2o_socket_close(sock);
         exit_loop = 1;
         return;
@@ -70,11 +70,11 @@ static void on_handshake_complete(h2o_socket_t *sock, int status)
     h2o_socket_write(sock, sock->data, 1, on_write);
 }
 
-static void on_connect(h2o_socket_t *sock, int status)
+static void on_connect(h2o_socket_t *sock, const char *err)
 {
-    if (status != 0) {
+    if (err != NULL) {
         /* connection failed */
-        fprintf(stderr, "failed to connect to host:%s\n", strerror(status));
+        fprintf(stderr, "failed to connect to host:%s\n", err);
         h2o_socket_close(sock);
         exit_loop = 1;
         return;

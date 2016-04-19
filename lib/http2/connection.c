@@ -60,7 +60,7 @@ static void close_connection(h2o_http2_conn_t *conn);
 static void send_stream_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum);
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
 static int do_emit_writereq(h2o_http2_conn_t *conn);
-static void on_read(h2o_socket_t *sock, int status);
+static void on_read(h2o_socket_t *sock, const char *err);
 static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_len);
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 
@@ -852,11 +852,11 @@ EarlyExit:
         h2o_socket_read_stop(conn->sock);
 }
 
-static void on_read(h2o_socket_t *sock, int status)
+static void on_read(h2o_socket_t *sock, const char *err)
 {
     h2o_http2_conn_t *conn = sock->data;
 
-    if (status != 0) {
+    if (err != NULL) {
         h2o_socket_read_stop(conn->sock);
         close_connection(conn);
         return;
@@ -919,14 +919,14 @@ void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_ht
     }
 }
 
-static void on_write_complete(h2o_socket_t *sock, int status)
+static void on_write_complete(h2o_socket_t *sock, const char *err)
 {
     h2o_http2_conn_t *conn = sock->data;
 
     assert(conn->_write.buf_in_flight != NULL);
 
     /* close by error if necessary */
-    if (status != 0) {
+    if (err != NULL) {
         close_connection_now(conn);
         return;
     }
@@ -936,7 +936,7 @@ static void on_write_complete(h2o_socket_t *sock, int status)
     assert(conn->_write.buf_in_flight == NULL);
 
     /* call the proceed callback of the streams that have been flushed (while unlinking them from the list) */
-    if (status == 0 && conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
+    if (err == NULL && conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
         while (!h2o_linklist_is_empty(&conn->_write.streams_to_proceed)) {
             h2o_http2_stream_t *stream =
                 H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.link, conn->_write.streams_to_proceed.next);

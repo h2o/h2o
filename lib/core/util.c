@@ -115,12 +115,12 @@ void on_accept_timeout(h2o_timeout_entry_t *entry)
     h2o_socket_close(sock);
 }
 
-static void on_ssl_handshake_complete(h2o_socket_t *sock, int status)
+static void on_ssl_handshake_complete(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_accept_data_t *data = sock->data;
     sock->data = NULL;
 
-    if (status != 0) {
+    if (err != NULL) {
         h2o_socket_close(sock);
         goto Exit;
     }
@@ -237,11 +237,11 @@ SkipToEOL:
 #undef SKIP_TO_WS
 }
 
-static void on_read_proxy_line(h2o_socket_t *sock, int status)
+static void on_read_proxy_line(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_accept_data_t *data = sock->data;
 
-    if (status != 0) {
+    if (err != NULL) {
         free_accept_data(data);
         h2o_socket_close(sock);
         return;

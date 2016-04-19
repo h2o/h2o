@@ -77,7 +77,7 @@ struct st_h2o_http1_chunked_entity_reader {
 static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled);
 static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb);
 static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final);
-static void reqread_on_read(h2o_socket_t *sock, int status);
+static void reqread_on_read(h2o_socket_t *sock, const char *err);
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 
 const h2o_protocol_callbacks_t H2O_HTTP1_CALLBACKS = {
@@ -368,11 +368,11 @@ static ssize_t fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header
     return entity_header_index;
 }
 
-static void on_continue_sent(h2o_socket_t *sock, int status)
+static void on_continue_sent(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1_conn_t *conn = sock->data;
 
-    if (status != 0) {
+    if (err != NULL) {
         close_connection(conn, 1);
         return;
     }
@@ -458,11 +458,11 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
     }
 }
 
-void reqread_on_read(h2o_socket_t *sock, int status)
+void reqread_on_read(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1_conn_t *conn = sock->data;
 
-    if (status != 0) {
+    if (err != NULL) {
         close_connection(conn, 1);
         return;
     }
@@ -490,27 +490,27 @@ static inline void reqread_start(struct st_h2o_http1_conn_t *conn)
         handle_incoming_request(conn);
 }
 
-static void on_send_next_push(h2o_socket_t *sock, int status)
+static void on_send_next_push(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1_conn_t *conn = sock->data;
 
-    if (status != 0)
+    if (err != NULL)
         close_connection(conn, 1);
     else
         h2o_proceed_response(&conn->req);
 }
 
-static void on_send_next_pull(h2o_socket_t *sock, int status)
+static void on_send_next_pull(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1_conn_t *conn = sock->data;
 
-    if (status != 0)
+    if (err != NULL)
         close_connection(conn, 1);
     else
         proceed_pull(conn, 0);
 }
 
-static void on_send_complete(h2o_socket_t *sock, int status)
+static void on_send_complete(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1_conn_t *conn = sock->data;
 
@@ -532,7 +532,7 @@ static void on_send_complete(h2o_socket_t *sock, int status)
     reqread_start(conn);
 }
 
-static void on_upgrade_complete(h2o_socket_t *socket, int status)
+static void on_upgrade_complete(h2o_socket_t *socket, const char *err)
 {
     struct st_h2o_http1_conn_t *conn = socket->data;
     h2o_http1_upgrade_cb cb = conn->upgrade.cb;
@@ -541,7 +541,7 @@ static void on_upgrade_complete(h2o_socket_t *socket, int status)
     size_t reqsize = 0;
 
     /* destruct the connection (after detaching the socket) */
-    if (status == 0) {
+    if (err == 0) {
         sock = conn->sock;
         reqsize = conn->_reqsize;
     }

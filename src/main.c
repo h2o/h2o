@@ -1194,14 +1194,14 @@ static void on_socketclose(void *data)
     }
 }
 
-static void on_accept(h2o_socket_t *listener, int status)
+static void on_accept(h2o_socket_t *listener, const char *err)
 {
     struct listener_ctx_t *ctx = listener->data;
     size_t num_accepts = conf.max_connections / 16 / conf.num_threads;
     if (num_accepts < 8)
         num_accepts = 8;
 
-    if (status == -1) {
+    if (err != NULL) {
         return;
     }
 
