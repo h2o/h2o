@@ -31,9 +31,6 @@ extern "C" {
 #include <time.h>
 #include "h2o/memory.h"
 
-#define H2O_TO__STR(n) #n
-#define H2O_TO_STR(n) H2O_TO__STR(n)
-
 #define H2O_STRLIT(s) (s), sizeof(s) - 1
 
 #define H2O_INT16_LONGEST_STR "-32768"
