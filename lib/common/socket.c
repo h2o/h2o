@@ -619,7 +619,11 @@ static void proceed_handshake(h2o_socket_t *sock, int status)
     }
 
 Redo:
-    ret = SSL_accept(sock->ssl->ssl);
+    if (sock->ssl->ssl->server) {
+        ret = SSL_accept(sock->ssl->ssl);
+    } else {
+        ret = SSL_connect(sock->ssl->ssl);
+    }
 
     switch (sock->ssl->handshake.async_resumption.state) {
     case ASYNC_RESUMPTION_STATE_RECORD:
@@ -668,7 +672,7 @@ Complete:
     on_handshake_complete(sock, status);
 }
 
-void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, h2o_socket_cb handshake_cb)
+void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, int is_server, h2o_socket_cb handshake_cb)
 {
     sock->ssl = h2o_mem_alloc(sizeof(*sock->ssl));
     memset(sock->ssl, 0, offsetof(struct st_h2o_socket_ssl_t, output.pool));
@@ -685,12 +689,16 @@ void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, h2o_s
     create_ssl(sock, ssl_ctx);
 
     sock->ssl->handshake.cb = handshake_cb;
-    if (SSL_CTX_sess_get_get_cb(ssl_ctx) != NULL)
-        sock->ssl->handshake.async_resumption.state = ASYNC_RESUMPTION_STATE_RECORD;
-    if (sock->ssl->input.encrypted->size != 0)
+    if (is_server) {
+        if (SSL_CTX_sess_get_get_cb(ssl_ctx) != NULL)
+            sock->ssl->handshake.async_resumption.state = ASYNC_RESUMPTION_STATE_RECORD;
+        if (sock->ssl->input.encrypted->size != 0)
+            proceed_handshake(sock, 0);
+        else
+            h2o_socket_read_start(sock, proceed_handshake);
+    } else {
         proceed_handshake(sock, 0);
-    else
-        h2o_socket_read_start(sock, proceed_handshake);
+    }
 }
 
 void h2o_socket_ssl_resume_server_handshake(h2o_socket_t *sock, h2o_iovec_t session_data)
