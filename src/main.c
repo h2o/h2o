@@ -1105,6 +1105,52 @@ static yoml_t *load_config(const char *fn)
     return yoml;
 }
 
+#if H2O_USE_MRUBY
+static int eval_mruby(const char *fn)
+{
+    FILE *fp;
+    int ret = -1;
+    h2o_mruby_config_vars_t config = { {0}, NULL, 1};
+
+    config.path = (char*)fn;
+
+    if ((fp = fopen(fn, "rb")) == NULL) {
+        fprintf(stderr, "could not open file:%s:%s\n", fn, strerror(errno));
+        return EX_OSERR;
+    }
+    while (!feof(fp)) {
+        config.source.base = h2o_mem_realloc(config.source.base, config.source.len + 65536);
+        config.source.len += fread(config.source.base + config.source.len, 1, 65536, fp);
+        if (ferror(fp)) {
+            fprintf(stderr, "could not read file:%s:%s\n", fn, strerror(errno));
+            goto Exit;
+        }
+    }
+
+
+    char errbuf[1024] = {0};
+    mrb_state *mrb;
+    if ((mrb = mrb_open()) == NULL) {
+        fprintf(stderr, "%s: no memory\n", H2O_MRUBY_MODULE_NAME);
+        abort();
+    }
+    h2o_mruby_compile_code(mrb, &config, errbuf);
+    mrb_close(mrb);
+    if (errbuf[0]) {
+        fprintf(stderr, "%s\n", errbuf);
+        goto Exit;
+    }
+
+    ret = 0;
+Exit:
+    if (fp != NULL)
+        fclose(fp);
+    if (config.source.base != NULL)
+        free(config.source.base);
+    return ret;
+}
+#endif
+
 static void notify_all_threads(void)
 {
     unsigned i;
@@ -1501,10 +1547,14 @@ int main(int argc, char **argv)
     setup_configurators();
 
     { /* parse options */
+#define LONG_OPT_MRUBY 1001
         int ch;
         static struct option longopts[] = {{"conf", required_argument, NULL, 'c'},
                                            {"mode", required_argument, NULL, 'm'},
                                            {"test", no_argument, NULL, 't'},
+#if H2O_USE_MRUBY
+                                           {"mruby", required_argument, NULL, LONG_OPT_MRUBY},
+#endif
                                            {"version", no_argument, NULL, 'v'},
                                            {"help", no_argument, NULL, 'h'},
                                            {NULL, 0, NULL, 0}};
@@ -1541,6 +1591,14 @@ int main(int argc, char **argv)
             case 't':
                 conf.run_mode = RUN_MODE_TEST;
                 break;
+#if H2O_USE_MRUBY
+            case LONG_OPT_MRUBY:
+                if (conf.run_mode != RUN_MODE_TEST) {
+                    printf("--mruby requires --mode=test\n");
+                    exit(1);
+                }
+                return eval_mruby(optarg);
+#endif
             case 'v':
                 printf("h2o version " H2O_VERSION "\n");
                 printf("OpenSSL: %s\n", SSLeay_version(SSLEAY_VERSION));
@@ -1571,6 +1629,10 @@ int main(int argc, char **argv)
                        "                               process to reconfigure or upgrade the server.\n"
                        "                     - test:   tests the configuration and exits\n"
                        "  -t, --test         synonym of `--mode=test`\n"
+#if H2O_USE_MRUBY
+                       "  --mruby FILE       eval specified file as mruby under h2o context.\n"
+                       "                     only works with `--mode=test`\n"
+#endif
                        "  -v, --version      prints the version number\n"
                        "  -h, --help         print this help\n"
                        "\n"
@@ -1589,6 +1651,7 @@ int main(int argc, char **argv)
         }
         argc -= optind;
         argv += optind;
+#undef LONG_OPT_MRUBY
     }
 
     /* setup conf.server_starter */
