@@ -28,6 +28,7 @@
 #include "h2o/string_.h"
 
 static h2o_loop_t *loop;
+static SSL_CTX *ssl_ctx;
 static int exit_loop;
 
 static void on_read(h2o_socket_t *sock, int status)
@@ -56,10 +57,21 @@ static void on_write(h2o_socket_t *sock, int status)
     h2o_socket_read_start(sock, on_read);
 }
 
+static void on_handshake_complete(h2o_socket_t *sock, int status)
+{
+    if (status != 0) {
+        /* TLS handshake failed */
+        fprintf(stderr, "TLS handshake failure\n");
+        h2o_socket_close(sock);
+        exit_loop = 1;
+        return;
+    }
+
+    h2o_socket_write(sock, sock->data, 1, on_write);
+}
+
 static void on_connect(h2o_socket_t *sock, int status)
 {
-    h2o_iovec_t *send_data = sock->data;
-
     if (status != 0) {
         /* connection failed */
         fprintf(stderr, "failed to connect to host:%s\n", strerror(status));
@@ -68,7 +80,17 @@ static void on_connect(h2o_socket_t *sock, int status)
         return;
     }
 
-    h2o_socket_write(sock, send_data, 1, on_write);
+    if (ssl_ctx != NULL) {
+        h2o_socket_ssl_handshake(sock, ssl_ctx, 0, on_handshake_complete);
+    } else {
+        h2o_socket_write(sock, sock->data, 1, on_write);
+    }
+}
+
+static void usage(const char *cmd)
+{
+    fprintf(stderr, "Usage: %s [--tls] <host> <port>\n", cmd);
+    exit(1);
 }
 
 int main(int argc, char **argv)
@@ -78,10 +100,20 @@ int main(int argc, char **argv)
     h2o_socket_t *sock;
     h2o_iovec_t send_data = {H2O_STRLIT("GET / HTTP/1.0\r\n\r\n")};
 
-    if (argc != 3) {
-        fprintf(stderr, "Usage: %s <host> <port>\n", argv[0]);
-        goto Exit;
+    const char *cmd = (--argc, *argv++);
+    if (argc < 2)
+        usage(cmd);
+    if (strcmp(*argv, "-t") == 0 || strcmp(*argv, "--tls") == 0) {
+        --argc, ++argv;
+        SSL_load_error_strings();
+        SSL_library_init();
+        OpenSSL_add_all_algorithms();
+        ssl_ctx = SSL_CTX_new(TLSv1_client_method());
     }
+    if (argc != 2)
+        usage(cmd);
+    const char *host = (--argc, *argv++);
+    const char *port = (--argc, *argv++);
 
 #if H2O_USE_LIBUV
     loop = uv_loop_new();
@@ -94,8 +126,8 @@ int main(int argc, char **argv)
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
     hints.ai_flags = AI_ADDRCONFIG;
-    if ((err = getaddrinfo(argv[1], argv[2], &hints, &res)) != 0) {
-        fprintf(stderr, "failed to resolve %s:%s:%s\n", argv[1], argv[2], gai_strerror(err));
+    if ((err = getaddrinfo(host, port, &hints, &res)) != 0) {
+        fprintf(stderr, "failed to resolve %s:%s:%s\n", host, port, gai_strerror(err));
         goto Exit;
     }
 
