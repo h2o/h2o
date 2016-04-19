@@ -67,6 +67,9 @@ extern "C" {
 #define H2O_RETURNS_NONNULL
 #endif
 
+#define H2O_TO__STR(n) #n
+#define H2O_TO_STR(n) H2O_TO__STR(n)
+
 typedef struct st_h2o_buffer_prototype_t h2o_buffer_prototype_t;
 
 /**
@@ -152,7 +155,8 @@ extern void *(*h2o_mem__set_secure)(void *, int, size_t);
 /**
  * prints an error message and aborts
  */
-H2O_NORETURN void h2o_fatal(const char *msg);
+#define h2o_fatal(msg) h2o__fatal(__FILE__ ":" H2O_TO_STR(__LINE__) ":" msg)
+H2O_NORETURN void h2o__fatal(const char *msg);
 
 /**
  * constructor for h2o_iovec_t

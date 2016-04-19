@@ -56,7 +56,7 @@ void *(*h2o_mem__set_secure)(void *, int, size_t) = memset;
 
 static __thread h2o_mem_recycle_t mempool_allocator = {16};
 
-void h2o_fatal(const char *msg)
+void h2o__fatal(const char *msg)
 {
     fprintf(stderr, "fatal:%s\n", msg);
     abort();

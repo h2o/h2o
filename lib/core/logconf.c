@@ -425,7 +425,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         unsafe_factor = 6;
         break;
     default:
-        h2o_fatal("[status] unexpected escape mode");
+        h2o_fatal("unexpected escape mode");
         break;
     }
 
