@@ -576,11 +576,14 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
     /* send essential headers with the first chars uppercased for max. interoperability (#72) */
     if (req->res.content_length != SIZE_MAX) {
         dst +=
-            sprintf(dst, "HTTP/1.1 %d %s\r\nDate: %s\r\nServer: %s\r\nConnection: %s\r\nContent-Length: %zu\r\n", req->res.status,
-                    req->res.reason, ts.str->rfc1123, ctx->globalconf->server_name.base, connection, req->res.content_length);
+            sprintf(dst, "HTTP/1.1 %d %s\r\nDate: %s\r\nConnection: %s\r\nContent-Length: %zu\r\n", req->res.status,
+                    req->res.reason, ts.str->rfc1123, connection, req->res.content_length);
     } else {
-        dst += sprintf(dst, "HTTP/1.1 %d %s\r\nDate: %s\r\nServer: %s\r\nConnection: %s\r\n", req->res.status, req->res.reason,
-                       ts.str->rfc1123, ctx->globalconf->server_name.base, connection);
+        dst += sprintf(dst, "HTTP/1.1 %d %s\r\nDate: %s\r\nConnection: %s\r\n", req->res.status, req->res.reason,
+                       ts.str->rfc1123, connection);
+    }
+    if (ctx->globalconf->server_name.len) {
+        dst += sprintf(dst, "Server: %s\r\n", ctx->globalconf->server_name.base);
     }
 
     { /* flatten the normal headers */

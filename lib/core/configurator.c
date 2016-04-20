@@ -693,6 +693,26 @@ static int on_config_unsetenv(h2o_configurator_command_t *cmd, h2o_configurator_
     return 0;
 }
 
+static int on_config_server_name(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    ctx->globalconf->server_name = h2o_strdup(NULL, node->data.scalar, SIZE_MAX);
+    return 0;
+}
+
+static int on_config_send_server_name(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    ssize_t on;
+
+    if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+
+    if (!on) {
+        ctx->globalconf->server_name = h2o_iovec_init(H2O_STRLIT(""));
+    }
+
+    return 0;
+}
+
 void h2o_configurator__init_core(h2o_globalconf_t *conf)
 {
     /* check if already initialized */
@@ -765,6 +785,11 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "setenv",
                                         H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING, on_config_setenv);
         h2o_configurator_define_command(&c->super, "unsetenv", H2O_CONFIGURATOR_FLAG_ALL_LEVELS, on_config_unsetenv);
+        h2o_configurator_define_command(&c->super, "server-name",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_server_name);
+        h2o_configurator_define_command(&c->super, "send-server-name",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
+                                        H2O_CONFIGURATOR_FLAG_DEFERRED , on_config_send_server_name);
     }
 }
 
