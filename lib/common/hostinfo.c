@@ -84,8 +84,7 @@ static void *lookup_thread_main(void *_unused)
         pthread_cond_wait(&queue.cond, &queue.mutex);
     }
 
-    pthread_mutex_unlock(&queue.mutex);
-
+    h2o_fatal("unreachable");
     return NULL;
 }
 
