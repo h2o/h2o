@@ -190,7 +190,7 @@ Default is <code>14400</code> (4 hours).
 </dd>
 <dt id="ocsp-max-failures">ocsp-max-failures:</dt>
 <dd>
-number of consecutive OCSP queriy failures before stopping to send OCSP stapling data to the client.
+number of consecutive OCSP query failures before stopping to send OCSP stapling data to the client.
 Default is 3.
 </dd>
 <dt id="neverbleed">neverbleed:</dt>
