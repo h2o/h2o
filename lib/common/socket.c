@@ -39,6 +39,7 @@
 #define IOV_MAX UIO_MAXIOV
 #endif
 
+#define OPENSSL_HOSTNAME_VALIDATION_LINKAGE static
 #include "../../deps/ssl-conservatory/openssl/openssl_hostname_validation.c"
 
 struct st_h2o_socket_ssl_t {
