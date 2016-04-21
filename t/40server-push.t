@@ -10,6 +10,8 @@ plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 plan skip_all => 'nghttp not found'
     unless prog_exists('nghttp');
+plan skip_all => 'mruby support is off'
+    unless server_features()->{mruby};
 
 subtest "basic" => sub {
     # spawn upstream
@@ -50,8 +52,6 @@ EOT
             like $resp, qr{\nid\s*responseEnd\s.*\s/index\.txt\?.*\s/index\.txt.gz\n}is;
         };
         subtest 'push-while-sleep' => sub {
-            plan skip_all => 'mruby support is off'
-                unless server_features()->{mruby};
             my $resp = `nghttp $opts -n --stat '$proto://127.0.0.1:$port/mruby/sleep-and-respond?sleep=1'`;
             like $resp, qr{\nid\s*responseEnd\s.*\s/index\.txt\.gz\n.*\s/mruby/sleep-and-respond}is;
         };
