@@ -9,7 +9,13 @@
  * License: See LICENSE
  *
  */
- 
+#ifndef openssl_hostname_validation_h
+#define openssl_hostname_validation_h
+
+#ifndef OPENSSL_HOSTNAME_VALIDATION_LINKAGE
+#define OPENSSL_HOSTNAME_VALIDATION_LINKAGE extern
+#endif
+
 typedef enum {
 	MatchFound,
 	MatchNotFound,
@@ -29,4 +35,6 @@ typedef enum {
 * Returns MalformedCertificate if any of the hostnames had a NUL character embedded in it.
 * Returns Error if there was an error.
 */
-HostnameValidationResult validate_hostname(const char *hostname, const X509 *server_cert);
+OPENSSL_HOSTNAME_VALIDATION_LINKAGE HostnameValidationResult validate_hostname(const char *hostname, const X509 *server_cert);
+
+#endif
