@@ -655,7 +655,12 @@ Redo:
 
     if (ret == 0 || (ret < 0 && SSL_get_error(sock->ssl->ssl, ret) != SSL_ERROR_WANT_READ)) {
         /* failed */
-        err = "TLS handshake error";
+        long verify_result = SSL_get_verify_result(sock->ssl->ssl);
+        if (verify_result != X509_V_OK) {
+            err = X509_verify_cert_error_string(verify_result);
+        } else {
+            err = "ssl handshake failure";
+        }
         goto Complete;
     }
 
