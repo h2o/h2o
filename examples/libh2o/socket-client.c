@@ -28,6 +28,7 @@
 #include "h2o/string_.h"
 
 static h2o_loop_t *loop;
+const char *host;
 static SSL_CTX *ssl_ctx;
 static int exit_loop;
 
@@ -81,7 +82,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     }
 
     if (ssl_ctx != NULL) {
-        h2o_socket_ssl_handshake(sock, ssl_ctx, 0, on_handshake_complete);
+        h2o_socket_ssl_handshake(sock, ssl_ctx, host, on_handshake_complete);
     } else {
         h2o_socket_write(sock, sock->data, 1, on_write);
     }
@@ -114,7 +115,7 @@ int main(int argc, char **argv)
     }
     if (argc != 2)
         usage(cmd);
-    const char *host = (--argc, *argv++);
+    host = (--argc, *argv++);
     const char *port = (--argc, *argv++);
 
 #if H2O_USE_LIBUV

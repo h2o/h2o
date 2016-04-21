@@ -682,7 +682,7 @@ Complete:
     on_handshake_complete(sock, err);
 }
 
-void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, int is_server, h2o_socket_cb handshake_cb)
+void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_socket_cb handshake_cb)
 {
     sock->ssl = h2o_mem_alloc(sizeof(*sock->ssl));
     memset(sock->ssl, 0, offsetof(struct st_h2o_socket_ssl_t, output.pool));
@@ -699,7 +699,8 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, int is_serve
     create_ssl(sock, ssl_ctx);
 
     sock->ssl->handshake.cb = handshake_cb;
-    if (is_server) {
+    if (server_name == NULL) {
+        /* is server */
         if (SSL_CTX_sess_get_get_cb(ssl_ctx) != NULL)
             sock->ssl->handshake.async_resumption.state = ASYNC_RESUMPTION_STATE_RECORD;
         if (sock->ssl->input.encrypted->size != 0)
@@ -707,6 +708,7 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, int is_serve
         else
             h2o_socket_read_start(sock, proceed_handshake);
     } else {
+        SSL_set_tlsext_host_name(sock->ssl->ssl, server_name);
         proceed_handshake(sock, 0);
     }
 }
