@@ -104,6 +104,9 @@ extern const char *h2o_socket_error_out_of_memory;
 extern const char *h2o_socket_error_io;
 extern const char *h2o_socket_error_closed;
 extern const char *h2o_socket_error_conn_fail;
+extern const char *h2o_socket_error_ssl_no_cert;
+extern const char *h2o_socket_error_ssl_cert_invalid;
+extern const char *h2o_socket_error_ssl_cert_name_mismatch;
 extern const char *h2o_socket_error_ssl_decode;
 
 /**
