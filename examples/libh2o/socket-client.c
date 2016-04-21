@@ -109,6 +109,7 @@ int main(int argc, char **argv)
         SSL_library_init();
         OpenSSL_add_all_algorithms();
         ssl_ctx = SSL_CTX_new(TLSv1_client_method());
+        SSL_CTX_load_verify_locations(ssl_ctx, H2O_TO_STR(H2O_ROOT) "/share/h2o/ca-bundle.crt", NULL);
         SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
     }
     if (argc != 2)
