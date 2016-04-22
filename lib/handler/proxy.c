@@ -140,10 +140,10 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
         struct sockaddr_un sa;
         const char *to_sa_err;
         if ((to_sa_err = h2o_url_host_to_sun(upstream->host, &sa)) == h2o_url_host_to_sun_err_is_not_unix_socket) {
-            h2o_socketpool_init_by_hostport(self->sockpool, upstream->host, h2o_url_get_port(upstream), SIZE_MAX /* FIXME */);
+            h2o_socketpool_init_by_hostport(self->sockpool, upstream->host, h2o_url_get_port(upstream), NULL, SIZE_MAX /* FIXME */);
         } else {
             assert(to_sa_err == NULL);
-            h2o_socketpool_init_by_address(self->sockpool, (void *)&sa, sizeof(sa), SIZE_MAX /* FIXME */);
+            h2o_socketpool_init_by_address(self->sockpool, (void *)&sa, sizeof(sa), NULL, SIZE_MAX /* FIXME */);
         }
     }
     h2o_url_copy(NULL, &self->upstream, upstream);

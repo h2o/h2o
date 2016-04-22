@@ -42,6 +42,7 @@ static void start_request(h2o_http1client_ctx_t *ctx)
 {
     h2o_url_t url_parsed;
     h2o_iovec_t *req;
+    SSL_CTX *ssl_ctx = NULL;
 
     /* clear memory pool */
     h2o_mem_clear_pool(&pool);
@@ -52,8 +53,12 @@ static void start_request(h2o_http1client_ctx_t *ctx)
         exit(1);
     }
     if (url_parsed.scheme == &H2O_URL_SCHEME_HTTPS) {
-        fprintf(stderr, "https is not (yet) supported\n");
-        exit(1);
+        SSL_load_error_strings();
+        SSL_library_init();
+        OpenSSL_add_all_algorithms();
+        ssl_ctx = SSL_CTX_new(TLSv1_client_method());
+        SSL_CTX_load_verify_locations(ssl_ctx, H2O_TO_STR(H2O_ROOT) "/share/h2o/ca-bundle.crt", NULL);
+        SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
     }
 
     /* build request */
@@ -67,12 +72,12 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     if (1) {
         if (sockpool == NULL) {
             sockpool = h2o_mem_alloc(sizeof(*sockpool));
-            h2o_socketpool_init_by_hostport(sockpool, url_parsed.host, h2o_url_get_port(&url_parsed), 10);
+            h2o_socketpool_init_by_hostport(sockpool, url_parsed.host, h2o_url_get_port(&url_parsed), ssl_ctx, 10);
             h2o_socketpool_set_timeout(sockpool, ctx->loop, 5000 /* in msec */);
         }
         h2o_http1client_connect_with_pool(NULL, req, ctx, sockpool, on_connect);
     } else {
-        h2o_http1client_connect(NULL, req, ctx, url_parsed.host, h2o_url_get_port(&url_parsed), on_connect);
+        h2o_http1client_connect(NULL, req, ctx, url_parsed.host, h2o_url_get_port(&url_parsed), ssl_ctx, on_connect);
     }
 }
 
