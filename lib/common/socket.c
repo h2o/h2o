@@ -198,6 +198,16 @@ static int free_bio(BIO *b)
     return b != NULL;
 }
 
+static void setup_bio(h2o_socket_t *sock)
+{
+    static BIO_METHOD bio_methods = {BIO_TYPE_FD, "h2o_socket", write_bio, read_bio, puts_bio,
+                                     NULL,        ctrl_bio,     new_bio,   free_bio, NULL};
+    BIO *bio = BIO_new(&bio_methods);
+    bio->ptr = sock;
+    bio->init = 1;
+    SSL_set_bio(sock->ssl->ssl, bio, bio);
+}
+
 const char *decode_ssl_input(h2o_socket_t *sock)
 {
     assert(sock->ssl != NULL);
@@ -351,8 +361,10 @@ h2o_socket_t *h2o_socket_import(h2o_loop_t *loop, h2o_socket_export_t *info)
 
     sock = do_import(loop, info);
     info->fd = -1; /* just in case */
-    if ((sock->ssl = info->ssl) != NULL)
+    if ((sock->ssl = info->ssl) != NULL) {
+        setup_bio(sock);
         h2o_buffer_set_prototype(&sock->ssl->input.encrypted, &h2o_socket_buffer_prototype);
+    }
     sock->input = info->input;
     h2o_buffer_set_prototype(&sock->input, &h2o_socket_buffer_prototype);
     return sock;
@@ -558,13 +570,8 @@ int32_t h2o_socket_getport(struct sockaddr *sa)
 
 static void create_ssl(h2o_socket_t *sock, SSL_CTX *ssl_ctx)
 {
-    static BIO_METHOD bio_methods = {BIO_TYPE_FD, "h2o_socket", write_bio, read_bio, puts_bio,
-                                     NULL,        ctrl_bio,     new_bio,   free_bio, NULL};
-    BIO *bio = BIO_new(&bio_methods);
-    bio->ptr = sock;
-    bio->init = 1;
     sock->ssl->ssl = SSL_new(ssl_ctx);
-    SSL_set_bio(sock->ssl->ssl, bio, bio);
+    setup_bio(sock);
 }
 
 static SSL_SESSION *on_async_resumption_get(SSL *ssl, unsigned char *data, int len, int *copy)
