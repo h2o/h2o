@@ -46,6 +46,7 @@ typedef struct st_h2o_http1client_ctx_t {
     h2o_multithread_receiver_t *getaddr_receiver;
     h2o_timeout_t *io_timeout;
     h2o_timeout_t *websocket_timeout; /* NULL if upgrade to websocket is not allowed */
+    SSL_CTX *ssl_ctx;
 } h2o_http1client_ctx_t;
 
 struct st_h2o_http1client_t {
@@ -55,8 +56,7 @@ struct st_h2o_http1client_t {
         h2o_socketpool_connect_request_t *connect_req;
     } sockpool;
     struct {
-        SSL_CTX *ctx;
-        char *server_name;
+        char *server_name; /* non-null if ssl is to be used */
     } ssl;
     h2o_socket_t *sock;
     void *data;
@@ -65,7 +65,7 @@ struct st_h2o_http1client_t {
 extern const char *const h2o_http1client_error_is_eos;
 
 void h2o_http1client_connect(h2o_http1client_t **client, void *data, h2o_http1client_ctx_t *ctx, h2o_iovec_t host, uint16_t port,
-                             SSL_CTX *ssl_ctx, h2o_http1client_connect_cb cb);
+                             int is_ssl, h2o_http1client_connect_cb cb);
 void h2o_http1client_connect_with_pool(h2o_http1client_t **client, void *data, h2o_http1client_ctx_t *ctx,
                                        h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb);
 void h2o_http1client_cancel(h2o_http1client_t *client);

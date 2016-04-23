@@ -471,7 +471,7 @@ void h2o__proxy_process_request(h2o_req_t *req)
         } else if (overrides->hostport.host.base != NULL) {
             self = proxy_send_prepare(req, 0);
             h2o_http1client_connect(&self->client, self, client_ctx, req->overrides->hostport.host, req->overrides->hostport.port,
-                                    NULL, on_connect);
+                                    0, on_connect);
             return;
         }
     }
@@ -489,7 +489,7 @@ void h2o__proxy_process_request(h2o_req_t *req)
         if (port == 65535)
             port = 80;
         self = proxy_send_prepare(req, 0);
-        h2o_http1client_connect(&self->client, self, client_ctx, host, port, NULL, on_connect);
+        h2o_http1client_connect(&self->client, self, client_ctx, host, port, 0, on_connect);
         return;
     }
 }

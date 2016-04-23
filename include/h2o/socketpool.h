@@ -52,7 +52,7 @@ typedef struct st_h2o_socketpool_t {
             } sockaddr;
         };
     } peer;
-    SSL_CTX *ssl_ctx;
+    int is_ssl;
     size_t capacity;
     uint64_t timeout; /* in milliseconds (UINT64_MAX if not set) */
     struct {
@@ -75,12 +75,11 @@ typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr
 /**
  * initializes a socket loop
  */
-void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa, socklen_t salen, SSL_CTX *ssl_ctx,
-                                    size_t capacity);
+void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa, socklen_t salen, int is_ssl, size_t capacity);
 /**
  * initializes a socket loop
  */
-void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, uint16_t port, SSL_CTX *ssl_ctx, size_t capacity);
+void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, uint16_t port, int is_ssl, size_t capacity);
 /**
  * disposes of a socket loop
  */

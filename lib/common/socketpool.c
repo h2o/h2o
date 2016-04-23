@@ -87,24 +87,21 @@ static void on_timeout(h2o_timeout_entry_t *timeout_entry)
     h2o_timeout_link(pool->_interval_cb.loop, &pool->_interval_cb.timeout, &pool->_interval_cb.entry);
 }
 
-static void common_init(h2o_socketpool_t *pool, h2o_socketpool_type_t type, h2o_iovec_t host, SSL_CTX *ssl_ctx, size_t capacity)
+static void common_init(h2o_socketpool_t *pool, h2o_socketpool_type_t type, h2o_iovec_t host, int is_ssl, size_t capacity)
 {
     memset(pool, 0, sizeof(*pool));
 
     pool->type = type;
     pool->peer.host = h2o_strdup(NULL, host.base, host.len);
+    pool->is_ssl = is_ssl;
     pool->capacity = capacity;
     pool->timeout = UINT64_MAX;
-    if (ssl_ctx != NULL) {
-        pool->ssl_ctx = ssl_ctx;
-        CRYPTO_add(&ssl_ctx->references, 1, CRYPTO_LOCK_SSL_CTX); /* SSL_CTX_up_ref not available in 1.0.2 */
-    }
 
     pthread_mutex_init(&pool->_shared.mutex, NULL);
     h2o_linklist_init_anchor(&pool->_shared.sockets);
 }
 
-void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa, socklen_t salen, SSL_CTX *ssl_ctx, size_t capacity)
+void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa, socklen_t salen, int is_ssl, size_t capacity)
 {
     char host[NI_MAXHOST];
     size_t host_len;
@@ -114,23 +111,23 @@ void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa,
     if ((host_len = h2o_socket_getnumerichost(sa, salen, host)) == SIZE_MAX)
         h2o_fatal("failed to stringify socket address");
 
-    common_init(pool, H2O_SOCKETPOOL_TYPE_SOCKADDR, h2o_iovec_init(host, host_len), ssl_ctx, capacity);
+    common_init(pool, H2O_SOCKETPOOL_TYPE_SOCKADDR, h2o_iovec_init(host, host_len), is_ssl, capacity);
     memcpy(&pool->peer.sockaddr.bytes, sa, salen);
     pool->peer.sockaddr.len = salen;
 }
 
-void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, uint16_t port, SSL_CTX *ssl_ctx, size_t capacity)
+void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, uint16_t port, int is_ssl, size_t capacity)
 {
     struct sockaddr_in sin = {};
 
     if (h2o_hostinfo_aton(host, &sin.sin_addr) == 0) {
         sin.sin_family = AF_INET;
         sin.sin_port = htons(port);
-        h2o_socketpool_init_by_address(pool, (void *)&sin, sizeof(sin), ssl_ctx, capacity);
+        h2o_socketpool_init_by_address(pool, (void *)&sin, sizeof(sin), is_ssl, capacity);
         return;
     }
 
-    common_init(pool, H2O_SOCKETPOOL_TYPE_NAMED, host, ssl_ctx, capacity);
+    common_init(pool, H2O_SOCKETPOOL_TYPE_NAMED, host, is_ssl, capacity);
     pool->peer.named_serv.base = h2o_mem_alloc(sizeof(H2O_UINT16_LONGEST_STR));
     pool->peer.named_serv.len = sprintf(pool->peer.named_serv.base, "%u", (unsigned)port);
 }
@@ -150,8 +147,6 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
         h2o_timeout_unlink(&pool->_interval_cb.entry);
         h2o_timeout_dispose(pool->_interval_cb.loop, &pool->_interval_cb.timeout);
     }
-    if (pool->ssl_ctx != NULL)
-        SSL_CTX_free(pool->ssl_ctx);
     free(pool->peer.host.base);
     switch (pool->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:

@@ -367,7 +367,6 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     on_connection_ready(client);
 }
 
-
 static void on_connect(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_private_t *client = sock->data;
@@ -377,8 +376,9 @@ static void on_connect(h2o_socket_t *sock, const char *err)
         on_connect_error(client, err);
         return;
     }
-    if (client->super.ssl.ctx != NULL && client->super.sock->ssl == NULL) {
-        h2o_socket_ssl_handshake(client->super.sock, client->super.ssl.ctx, client->super.ssl.server_name, on_handshake_complete);
+    if (client->super.ssl.server_name != NULL && client->super.sock->ssl == NULL) {
+        h2o_socket_ssl_handshake(client->super.sock, client->super.ctx->ssl_ctx, client->super.ssl.server_name,
+                                 on_handshake_complete);
         return;
     }
 
@@ -437,16 +437,13 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
 }
 
 static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
-                                                          SSL_CTX *ssl_ctx, h2o_iovec_t ssl_server_name,
-                                                          h2o_http1client_connect_cb cb)
+                                                          h2o_iovec_t ssl_server_name, h2o_http1client_connect_cb cb)
 {
     struct st_h2o_http1client_private_t *client = h2o_mem_alloc(sizeof(*client));
 
     *client = (struct st_h2o_http1client_private_t){{ctx, {}}};
-    if (ssl_ctx != NULL) {
-        client->super.ssl.ctx = ssl_ctx;
+    if (ssl_server_name.base != NULL)
         client->super.ssl.server_name = h2o_strdup(NULL, ssl_server_name.base, ssl_server_name.len).base;
-    }
     client->super.data = data;
     client->_cb.on_connect = cb;
     /* caller needs to setup _cb, timeout.cb, sock, and sock->data */
@@ -459,13 +456,13 @@ static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_c
 const char *const h2o_http1client_error_is_eos = "end of stream";
 
 void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx, h2o_iovec_t host, uint16_t port,
-                             SSL_CTX *ssl_ctx, h2o_http1client_connect_cb cb)
+                             int is_ssl, h2o_http1client_connect_cb cb)
 {
     struct st_h2o_http1client_private_t *client;
     char serv[sizeof("65536")];
 
     /* setup */
-    client = create_client(_client, data, ctx, ssl_ctx, host, cb);
+    client = create_client(_client, data, ctx, is_ssl ? host : h2o_iovec_init(NULL, 0), cb);
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);
 
@@ -499,7 +496,8 @@ void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1c
 void h2o_http1client_connect_with_pool(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
                                        h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb)
 {
-    struct st_h2o_http1client_private_t *client = create_client(_client, data, ctx, sockpool->ssl_ctx, sockpool->peer.host, cb);
+    struct st_h2o_http1client_private_t *client =
+        create_client(_client, data, ctx, sockpool->is_ssl ? sockpool->peer.host : h2o_iovec_init(NULL, 0), cb);
     client->super.sockpool.pool = sockpool;
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);

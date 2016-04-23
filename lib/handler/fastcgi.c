@@ -818,7 +818,7 @@ h2o_fastcgi_handler_t *h2o_fastcgi_register_by_hostport(h2o_pathconf_t *pathconf
 {
     h2o_fastcgi_handler_t *handler = register_common(pathconf, vars);
 
-    h2o_socketpool_init_by_hostport(&handler->sockpool, h2o_iovec_init(host, strlen(host)), port, NULL, SIZE_MAX /* FIXME */);
+    h2o_socketpool_init_by_hostport(&handler->sockpool, h2o_iovec_init(host, strlen(host)), port, 0, SIZE_MAX /* FIXME */);
     return handler;
 }
 
@@ -827,6 +827,6 @@ h2o_fastcgi_handler_t *h2o_fastcgi_register_by_address(h2o_pathconf_t *pathconf,
 {
     h2o_fastcgi_handler_t *handler = register_common(pathconf, vars);
 
-    h2o_socketpool_init_by_address(&handler->sockpool, sa, salen, NULL, SIZE_MAX /* FIXME */);
+    h2o_socketpool_init_by_address(&handler->sockpool, sa, salen, 0, SIZE_MAX /* FIXME */);
     return handler;
 }
