@@ -478,8 +478,7 @@ void h2o__proxy_process_request(h2o_req_t *req)
     { /* default logic */
         h2o_iovec_t host;
         uint16_t port;
-        if (req->scheme != &H2O_URL_SCHEME_HTTP ||
-            h2o_url_parse_hostport(req->authority.base, req->authority.len, &host, &port) == NULL) {
+        if (h2o_url_parse_hostport(req->authority.base, req->authority.len, &host, &port) == NULL) {
             h2o_req_log_error(req, "lib/core/proxy.c", "invalid URL supplied for internal redirection:%s://%.*s%.*s",
                               req->scheme->name.base, (int)req->authority.len, req->authority.base, (int)req->path.len,
                               req->path.base);
@@ -489,7 +488,7 @@ void h2o__proxy_process_request(h2o_req_t *req)
         if (port == 65535)
             port = 80;
         self = proxy_send_prepare(req, 0);
-        h2o_http1client_connect(&self->client, self, client_ctx, host, port, 0, on_connect);
+        h2o_http1client_connect(&self->client, self, client_ctx, host, port, req->scheme == &H2O_URL_SCHEME_HTTPS, on_connect);
         return;
     }
 }

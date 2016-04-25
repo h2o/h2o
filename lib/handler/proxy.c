@@ -93,6 +93,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     } else {
         client_ctx->websocket_timeout = NULL;
     }
+    client_ctx->ssl_ctx = self->config.ssl_ctx;
 
     h2o_context_set_handler_context(ctx, &self->super, client_ctx);
 }
@@ -120,6 +121,8 @@ static void on_handler_dispose(h2o_handler_t *_self)
 {
     struct rp_handler_t *self = (void *)_self;
 
+    if (self->config.ssl_ctx != NULL)
+        SSL_CTX_free(self->config.ssl_ctx);
     free(self->upstream.host.base);
     free(self->upstream.path.base);
     if (self->sockpool != NULL) {
@@ -139,14 +142,18 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
         self->sockpool = h2o_mem_alloc(sizeof(*self->sockpool));
         struct sockaddr_un sa;
         const char *to_sa_err;
+        int is_ssl = upstream->scheme == &H2O_URL_SCHEME_HTTPS;
         if ((to_sa_err = h2o_url_host_to_sun(upstream->host, &sa)) == h2o_url_host_to_sun_err_is_not_unix_socket) {
-            h2o_socketpool_init_by_hostport(self->sockpool, upstream->host, h2o_url_get_port(upstream), 0, SIZE_MAX /* FIXME */);
+            h2o_socketpool_init_by_hostport(self->sockpool, upstream->host, h2o_url_get_port(upstream), is_ssl,
+                                            SIZE_MAX /* FIXME */);
         } else {
             assert(to_sa_err == NULL);
-            h2o_socketpool_init_by_address(self->sockpool, (void *)&sa, sizeof(sa), 0, SIZE_MAX /* FIXME */);
+            h2o_socketpool_init_by_address(self->sockpool, (void *)&sa, sizeof(sa), is_ssl, SIZE_MAX /* FIXME */);
         }
     }
     h2o_url_copy(NULL, &self->upstream, upstream);
     h2o_strtolower(self->upstream.host.base, self->upstream.host.len);
     self->config = *config;
+    if (self->config.ssl_ctx != NULL)
+        CRYPTO_add(&self->config.ssl_ctx->references, 1, CRYPTO_LOCK_SSL_CTX);
 }
