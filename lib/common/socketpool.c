@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/un.h>
 #include <netinet/in.h>
 #include "h2o/hostinfo.h"
 #include "h2o/linklist.h"
@@ -108,8 +109,13 @@ void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa,
 
     assert(salen <= sizeof(pool->peer.sockaddr.bytes));
 
-    if ((host_len = h2o_socket_getnumerichost(sa, salen, host)) == SIZE_MAX)
-        h2o_fatal("failed to stringify socket address");
+    if ((host_len = h2o_socket_getnumerichost(sa, salen, host)) == SIZE_MAX) {
+        if (sa->sa_family != AF_UNIX)
+            h2o_fatal("failed to convert a non-unix socket address to a numerical representation");
+        /* use the sockaddr_un::sun_path as the SNI indicator (is that the right thing to do?) */
+        strcpy(host, ((struct sockaddr_un *)sa)->sun_path);
+        host_len = strlen(host);
+    }
 
     common_init(pool, H2O_SOCKETPOOL_TYPE_SOCKADDR, h2o_iovec_init(host, host_len), is_ssl, capacity);
     memcpy(&pool->peer.sockaddr.bytes, sa, salen);
