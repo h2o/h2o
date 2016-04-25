@@ -359,7 +359,11 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 
     h2o_timeout_unlink(&client->_timeout);
 
-    if (err != NULL) {
+    if (err == NULL) {
+        /* success */
+    } else if (err == h2o_socket_error_ssl_cert_name_mismatch && (client->super.ctx->ssl_ctx->verify_mode & SSL_VERIFY_PEER) == 0) {
+        /* peer verification skipped */
+    } else {
         on_connect_error(client, err);
         return;
     }
