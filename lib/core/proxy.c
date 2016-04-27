@@ -486,7 +486,7 @@ void h2o__proxy_process_request(h2o_req_t *req)
             return;
         }
         if (port == 65535)
-            port = 80;
+            port = req->scheme->default_port;
         self = proxy_send_prepare(req, 0);
         h2o_http1client_connect(&self->client, self, client_ctx, host, port, req->scheme == &H2O_URL_SCHEME_HTTPS, on_connect);
         return;
