@@ -151,6 +151,7 @@ int main(int argc, char **argv)
     init_openssl();
 
     { /* library tests */
+        subtest("lib/cache.c", test_lib__common__cache_c);
         subtest("lib/common/multithread.c", test_lib__common__multithread_c);
         subtest("lib/common/hostinfo.c", test_lib__common__hostinfo_c);
         subtest("lib/common/serverutil.c", test_lib__common__serverutil_c);
