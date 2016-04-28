@@ -129,4 +129,43 @@ EOT
     };
 };
 
+subtest "casper" => sub {
+    subtest "custom capacity-bits" => sub {
+        my $server = spawn_h2o(sub {
+            my ($port, $tls_port) = @_;
+            return << "EOT";
+hosts:
+  "127.0.0.1:$tls_port":
+    http2-casper:
+      capacity-bits:  11
+    paths:
+      /:
+        reproxy: ON
+        mruby.handler: |
+          Proc.new do |env|
+            case env["PATH_INFO"]
+            when "/index.txt"
+              push_paths = []
+              push_paths << "/index.js"
+              [399, push_paths.empty? ? {} : {"link" => push_paths.map{|p| "<#{p}>; rel=preload"}.join("\\n")}, []]
+            else
+              [399, {}, []]
+            end
+          end
+        file.dir: t/assets/doc_root
+EOT
+        });
+        my $resp = `nghttp -v -n --stat https://127.0.0.1:$server->{tls_port}/index.txt`;
+        like $resp, qr{\nid\s*responseEnd\s.*\s/index\.js\n.*\s/index.txt}is, "receives index.js then /index.txt";
+        my ($casper) = ($resp =~ qr{set-cookie:\s*(h2o_casper=[^\s;]+)}i);
+
+        is length($casper), 17;
+
+        {
+            my $resp = `nghttp -H'cookie: $casper' -v -n --stat https://127.0.0.1:$server->{tls_port}/index.txt`;
+            unlike $resp, qr{\nid\s*responseEnd\s.*\s/index\.js\n}is, "does not receives index.js";
+        }
+    };
+};
+
 done_testing;
