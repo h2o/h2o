@@ -78,9 +78,11 @@ static void clone_ssl_ctx(SSL_CTX **slot)
         /* the defaults */
         *slot = SSL_CTX_new(TLSv1_client_method());
         SSL_CTX_set_verify(*slot, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
-        if (X509_STORE_load_locations((*slot)->cert_store, H2O_TO_STR(H2O_ROOT) "/share/h2o/ca-bundle.crt", NULL) != 1)
-            fprintf(stderr, "Warning: failed to load the default certificates file at " H2O_TO_STR(
-                                H2O_ROOT) "/share/h2o/ca-bundle.crt. Proxying to HTTPS servers may fail.\n");
+        char *ca_bundle = h2o_configurator_get_cmd_path("share/h2o/ca-bundle.crt");
+        if (X509_STORE_load_locations((*slot)->cert_store, ca_bundle, NULL) != 1)
+            fprintf(stderr, "Warning: failed to load the default certificates file at %s. Proxying to HTTPS servers may fail.\n",
+                    ca_bundle);
+        free(ca_bundle);
         return;
     }
 
