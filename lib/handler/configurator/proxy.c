@@ -72,31 +72,29 @@ static int on_config_websocket(h2o_configurator_command_t *cmd, h2o_configurator
     return 0;
 }
 
-static void clone_ssl_ctx(SSL_CTX **slot)
+static void update_ssl_ctx(SSL_CTX **ctx, const SSL_METHOD *method, X509_STORE *cert_store, int verify_mode)
 {
-    if (*slot == NULL) {
-        /* the defaults */
-        *slot = SSL_CTX_new(TLSv1_client_method());
-        SSL_CTX_set_verify(*slot, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
-        char *ca_bundle = h2o_configurator_get_cmd_path("share/h2o/ca-bundle.crt");
-        if (X509_STORE_load_locations((*slot)->cert_store, ca_bundle, NULL) != 1)
-            fprintf(stderr, "Warning: failed to load the default certificates file at %s. Proxying to HTTPS servers may fail.\n",
-                    ca_bundle);
-        free(ca_bundle);
-        return;
-    }
+    assert(*ctx != NULL);
 
-    /* create a duplicate */
-    SSL_CTX *ctx = SSL_CTX_new((*slot)->method);
-    if (ctx->cert_store != NULL)
-        X509_STORE_free(ctx->cert_store);
-    ctx->cert_store = (*slot)->cert_store;
-    CRYPTO_add(&ctx->cert_store->references, 1, CRYPTO_LOCK_X509_STORE);
-    SSL_CTX_set_verify(ctx, (*slot)->verify_mode, NULL);
+    /* inherit the properties that weren't specified */
+    if (method == NULL)
+        method = (*ctx)->method;
+    if (cert_store == NULL)
+        cert_store = (*ctx)->cert_store;
+    CRYPTO_add(&cert_store->references, 1, CRYPTO_LOCK_X509_STORE);
+    if (verify_mode == -1)
+        verify_mode = (*ctx)->verify_mode;
 
-    /* replate the one in the slot */
-    SSL_CTX_free(*slot);
-    *slot = ctx;
+    /* free the existing context */
+    if (*ctx != NULL)
+        SSL_CTX_free(*ctx);
+
+    /* create new ctx */
+    *ctx = SSL_CTX_new(method);
+    if ((*ctx)->cert_store != NULL)
+        X509_STORE_free((*ctx)->cert_store);
+    (*ctx)->cert_store = cert_store;
+    SSL_CTX_set_verify(*ctx, verify_mode, NULL);
 }
 
 static int on_config_ssl_verify_peer(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -106,8 +104,7 @@ static int on_config_ssl_verify_peer(h2o_configurator_command_t *cmd, h2o_config
     if (ret == -1)
         return -1;
 
-    clone_ssl_ctx(&self->vars->ssl_ctx);
-    SSL_CTX_set_verify(self->vars->ssl_ctx, ret != 0 ? SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT : SSL_VERIFY_NONE, NULL);
+    update_ssl_ctx(&self->vars->ssl_ctx, NULL, NULL, ret != 0 ? SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT : SSL_VERIFY_NONE);
 
     return 0;
 }
@@ -115,18 +112,19 @@ static int on_config_ssl_verify_peer(h2o_configurator_command_t *cmd, h2o_config
 static int on_config_ssl_cafile(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
+    X509_STORE *store = X509_STORE_new();
+    int ret = -1;
 
-    clone_ssl_ctx(&self->vars->ssl_ctx);
-    /* reset the store, and load the certificates file */
-    X509_STORE_free(self->vars->ssl_ctx->cert_store);
-    self->vars->ssl_ctx->cert_store = X509_STORE_new();
-    if (X509_STORE_load_locations(self->vars->ssl_ctx->cert_store, node->data.scalar, NULL) != 1) {
+    if (X509_STORE_load_locations(store, node->data.scalar, NULL) == 1) {
+        update_ssl_ctx(&self->vars->ssl_ctx, NULL, store, -1);
+        ret = 0;
+    } else {
         h2o_configurator_errprintf(cmd, node, "failed to load certificates file:%s", node->data.scalar);
         ERR_print_errors_fp(stderr);
-        return -1;
     }
 
-    return 0;
+    X509_STORE_free(store);
+    return ret;
 }
 
 static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -152,9 +150,15 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
     ++self->vars;
 
     if (ctx->pathconf == NULL && ctx->hostconf == NULL) {
-        /* is global conf */
-        assert(self->vars->ssl_ctx == NULL);
-        clone_ssl_ctx(&self->vars->ssl_ctx);
+        /* is global conf, setup the default SSL context */
+        self->vars->ssl_ctx = SSL_CTX_new(TLSv1_client_method());
+        char *ca_bundle = h2o_configurator_get_cmd_path("share/h2o/ca-bundle.crt");
+        if (SSL_CTX_load_verify_locations(self->vars->ssl_ctx, ca_bundle, NULL) != 1)
+            fprintf(stderr,
+                    "Warning: failed to load the default certificates file at %s. Proxying to HTTPS servers may fail.\n",
+                    ca_bundle);
+        free(ca_bundle);
+        SSL_CTX_set_verify(self->vars->ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
     } else {
         CRYPTO_add(&self->vars->ssl_ctx->references, 1, CRYPTO_LOCK_SSL_CTX);
     }
