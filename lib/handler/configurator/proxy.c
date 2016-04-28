@@ -28,11 +28,6 @@
 #include "h2o.h"
 #include "h2o/configurator.h"
 
-/* missing declaration(s) in libressl */
-#ifndef SSL_OP_NO_SSL_MASK
-#define SSL_OP_NO_SSL_MASK (SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1 | SSL_OP_NO_TLSv1_2)
-#endif
-
 struct proxy_configurator_t {
     h2o_configurator_t super;
     h2o_proxy_config_vars_t *vars;
@@ -77,15 +72,18 @@ static int on_config_websocket(h2o_configurator_command_t *cmd, h2o_configurator
     return 0;
 }
 
-static void update_ssl_ctx(SSL_CTX **ctx, const SSL_METHOD *method, int no_ssl_mask, X509_STORE *cert_store, int verify_mode)
+static SSL_CTX *create_ssl_ctx(void)
+{
+    SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
+    SSL_CTX_set_options(ctx, SSL_CTX_get_options(ctx) | SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
+    return ctx;
+}
+
+static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mode)
 {
     assert(*ctx != NULL);
 
     /* inherit the properties that weren't specified */
-    if (method == NULL)
-        method = (*ctx)->method;
-    if (no_ssl_mask == -1)
-        no_ssl_mask = SSL_CTX_get_options(*ctx) & SSL_OP_NO_SSL_MASK;
     if (cert_store == NULL)
         cert_store = (*ctx)->cert_store;
     CRYPTO_add(&cert_store->references, 1, CRYPTO_LOCK_X509_STORE);
@@ -97,8 +95,7 @@ static void update_ssl_ctx(SSL_CTX **ctx, const SSL_METHOD *method, int no_ssl_m
         SSL_CTX_free(*ctx);
 
     /* create new ctx */
-    *ctx = SSL_CTX_new(method);
-    SSL_CTX_set_options(*ctx, (SSL_CTX_get_options(*ctx) & ~SSL_OP_NO_SSL_MASK) | no_ssl_mask);
+    *ctx = create_ssl_ctx();
     if ((*ctx)->cert_store != NULL)
         X509_STORE_free((*ctx)->cert_store);
     (*ctx)->cert_store = cert_store;
@@ -112,8 +109,7 @@ static int on_config_ssl_verify_peer(h2o_configurator_command_t *cmd, h2o_config
     if (ret == -1)
         return -1;
 
-    update_ssl_ctx(&self->vars->ssl_ctx, NULL, -1, NULL,
-                   ret != 0 ? SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT : SSL_VERIFY_NONE);
+    update_ssl_ctx(&self->vars->ssl_ctx, NULL, ret != 0 ? SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT : SSL_VERIFY_NONE);
 
     return 0;
 }
@@ -125,7 +121,7 @@ static int on_config_ssl_cafile(h2o_configurator_command_t *cmd, h2o_configurato
     int ret = -1;
 
     if (X509_STORE_load_locations(store, node->data.scalar, NULL) == 1) {
-        update_ssl_ctx(&self->vars->ssl_ctx, NULL, -1, store, -1);
+        update_ssl_ctx(&self->vars->ssl_ctx, store, -1);
         ret = 0;
     } else {
         h2o_configurator_errprintf(cmd, node, "failed to load certificates file:%s", node->data.scalar);
@@ -160,9 +156,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
 
     if (ctx->pathconf == NULL && ctx->hostconf == NULL) {
         /* is global conf, setup the default SSL context */
-        self->vars->ssl_ctx = SSL_CTX_new(SSLv23_client_method());
-        SSL_CTX_set_options(self->vars->ssl_ctx,
-                            (SSL_CTX_get_options(self->vars->ssl_ctx) & ~SSL_OP_NO_SSL_MASK) | SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
+        self->vars->ssl_ctx = create_ssl_ctx();
         char *ca_bundle = h2o_configurator_get_cmd_path("share/h2o/ca-bundle.crt");
         if (SSL_CTX_load_verify_locations(self->vars->ssl_ctx, ca_bundle, NULL) != 1)
             fprintf(stderr, "Warning: failed to load the default certificates file at %s. Proxying to HTTPS servers may fail.\n",
