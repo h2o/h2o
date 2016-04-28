@@ -364,7 +364,7 @@ static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configura
         /* override the attributes defined */
         yoml_t *t;
         if ((t = yoml_get(node, "capacity-bits")) != NULL) {
-            if (!(t->type == YOML_TYPE_SCALAR && sscanf(t->data.scalar, "%u", &self->vars->http2.casper.capacity_bits) == 0 &&
+            if (!(t->type == YOML_TYPE_SCALAR && sscanf(t->data.scalar, "%u", &self->vars->http2.casper.capacity_bits) == 1 &&
                   self->vars->http2.casper.capacity_bits < 16)) {
                 h2o_configurator_errprintf(cmd, t, "value of `capacity-bits` must be an integer between 0 to 15");
                 return -1;
