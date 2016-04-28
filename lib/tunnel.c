@@ -32,7 +32,7 @@ struct st_h2o_tunnel_t {
     h2o_socket_t *sock[2];
 };
 
-static void on_write_complete(h2o_socket_t *sock, int status);
+static void on_write_complete(h2o_socket_t *sock, const char *err);
 
 static void close_connection(struct st_h2o_tunnel_t *tunnel)
 {
@@ -56,14 +56,14 @@ static inline void reset_timeout(struct st_h2o_tunnel_t *tunnel)
     h2o_timeout_link(tunnel->ctx->loop, tunnel->timeout, &tunnel->timeout_entry);
 }
 
-static inline void on_read(h2o_socket_t *sock, int status)
+static inline void on_read(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_tunnel_t *tunnel = sock->data;
     h2o_socket_t *dst;
     assert(tunnel != NULL);
     assert(tunnel->sock[0] == sock || tunnel->sock[1] == sock);
 
-    if (status != 0) {
+    if (err != NULL) {
         close_connection(tunnel);
         return;
     }
@@ -85,14 +85,14 @@ static inline void on_read(h2o_socket_t *sock, int status)
     h2o_socket_write(dst, &buf, 1, on_write_complete);
 }
 
-static void on_write_complete(h2o_socket_t *sock, int status)
+static void on_write_complete(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_tunnel_t *tunnel = sock->data;
     h2o_socket_t *peer;
     assert(tunnel != NULL);
     assert(tunnel->sock[0] == sock || tunnel->sock[1] == sock);
 
-    if (status != 0) {
+    if (err != NULL) {
         close_connection(tunnel);
         return;
     }

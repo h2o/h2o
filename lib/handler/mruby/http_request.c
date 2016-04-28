@@ -400,7 +400,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
 
     /* build request and connect */
     h2o_http1client_connect(&ctx->client, ctx, &generator->req->conn->ctx->proxy.client_ctx, url.host, h2o_url_get_port(&url),
-                            on_connect);
+                            url.scheme == &H2O_URL_SCHEME_HTTPS, on_connect);
 
     ctx->refs.request = h2o_mruby_create_data_instance(mrb, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_HTTP_REQUEST_CLASS),
                                                        ctx, &request_type);

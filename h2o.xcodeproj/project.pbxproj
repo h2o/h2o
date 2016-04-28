@@ -503,6 +503,8 @@
 		10835E081CA2204E00197E59 /* status_directives.mt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = status_directives.mt; sourceTree = "<group>"; };
 		108867741AD9069900987967 /* defaults.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = defaults.c.h; sourceTree = "<group>"; };
 		1092E0011BEB1DDC001074BF /* 80issues579.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 80issues579.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		109428AB1CC6C4C700E676CB /* openssl_hostname_validation.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = openssl_hostname_validation.c; sourceTree = "<group>"; };
+		109428AC1CC6C4C700E676CB /* openssl_hostname_validation.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = openssl_hostname_validation.h; sourceTree = "<group>"; };
 		10952D591C5082F7000D664C /* 80issues-from-proxy-reproxy-to-different-host.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80issues-from-proxy-reproxy-to-different-host.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10952D5B1C608A6B000D664C /* cgi.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = cgi.mt; sourceTree = "<group>"; };
 		10952D5C1C608D19000D664C /* basic_auth.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = basic_auth.mt; sourceTree = "<group>"; };
@@ -570,6 +572,7 @@
 		10D0906E19F494CC0043D458 /* test.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = test.c; sourceTree = "<group>"; };
 		10D0906F19F494CC0043D458 /* test.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = test.h; sourceTree = "<group>"; };
 		10D0907219F633B00043D458 /* proxy.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = proxy.c; sourceTree = "<group>"; };
+		10DA969A1CCEF2C200679165 /* 50reverse-proxy-https.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-https.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10E299571A67E68500701AA6 /* scheduler.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = scheduler.c; sourceTree = "<group>"; };
 		10E299591A68D03100701AA6 /* scheduler.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = scheduler.c; sourceTree = "<group>"; };
 		10EC2A351A0B4D370083514F /* socketpool.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = socketpool.h; sourceTree = "<group>"; };
@@ -1024,6 +1027,7 @@
 				10FFEE071BB23A730087AD75 /* neverbleed */,
 				1079235619A3210D00C52AD6 /* picohttpparser */,
 				10F417FB19C2D2B400B6E31A /* picotest */,
+				109428A91CC6C48C00E676CB /* ssl-conservatory */,
 				10756E221AC125E00009BF57 /* yaml */,
 				10F417FC19C2D2BA00B6E31A /* yoml */,
 			);
@@ -1224,6 +1228,23 @@
 			path = mimemap;
 			sourceTree = "<group>";
 		};
+		109428A91CC6C48C00E676CB /* ssl-conservatory */ = {
+			isa = PBXGroup;
+			children = (
+				109428AA1CC6C4B600E676CB /* openssl */,
+			);
+			path = "ssl-conservatory";
+			sourceTree = "<group>";
+		};
+		109428AA1CC6C4B600E676CB /* openssl */ = {
+			isa = PBXGroup;
+			children = (
+				109428AB1CC6C4C700E676CB /* openssl_hostname_validation.c */,
+				109428AC1CC6C4C700E676CB /* openssl_hostname_validation.h */,
+			);
+			path = openssl;
+			sourceTree = "<group>";
+		};
 		10A3D3DC1B4FAA5900327CF9 /* libyrmcds */ = {
 			isa = PBXGroup;
 			children = (
@@ -1313,6 +1334,7 @@
 				108102151C3DB05100C024CD /* 50reverse-proxy-disconnected-keepalive.t */,
 				104C65021A6DF36B000AC190 /* 50reverse-proxy-config.t */,
 				10AA2EB21A9479B4004322AC /* 50reverse-proxy-upstream-down.t */,
+				10DA969A1CCEF2C200679165 /* 50reverse-proxy-https.t */,
 				104B9A2B1A4BBDA4009EEE64 /* 50server-starter.t */,
 				105534FA1A460F4200627ECB /* 50sni.t */,
 				105534FE1A46134A00627ECB /* 80issues61.t */,

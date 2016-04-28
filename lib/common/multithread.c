@@ -73,9 +73,9 @@ static void queue_cb(h2o_multithread_queue_t *queue)
 #include <fcntl.h>
 #include <unistd.h>
 
-static void on_read(h2o_socket_t *sock, int status)
+static void on_read(h2o_socket_t *sock, const char *err)
 {
-    if (status != 0) {
+    if (err != NULL) {
         fprintf(stderr, "pipe error\n");
         abort();
     }

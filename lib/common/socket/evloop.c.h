@@ -109,7 +109,7 @@ static void link_to_statechanged(struct st_h2o_evloop_socket_t *sock)
     }
 }
 
-static int on_read_core(int fd, h2o_buffer_t **input)
+static const char *on_read_core(int fd, h2o_buffer_t **input)
 {
     int read_any = 0;
 
@@ -118,7 +118,7 @@ static int on_read_core(int fd, h2o_buffer_t **input)
         h2o_iovec_t buf = h2o_buffer_reserve(input, 4096);
         if (buf.base == NULL) {
             /* memory allocation failed */
-            return -1;
+            return h2o_socket_error_out_of_memory;
         }
         while ((rret = read(fd, buf.base, buf.len <= INT_MAX / 2 ? buf.len : INT_MAX / 2 + 1)) == -1 && errno == EINTR)
             ;
@@ -126,10 +126,10 @@ static int on_read_core(int fd, h2o_buffer_t **input)
             if (errno == EAGAIN)
                 break;
             else
-                return -1;
+                return h2o_socket_error_io;
         } else if (rret == 0) {
             if (!read_any)
-                return -1; /* TODO notify close */
+                return h2o_socket_error_closed; /* TODO notify close */
             break;
         }
         (*input)->size += rret;
@@ -137,7 +137,7 @@ static int on_read_core(int fd, h2o_buffer_t **input)
             break;
         read_any = 1;
     }
-    return 0;
+    return NULL;
 }
 
 static void wreq_free_buffer_if_allocated(struct st_h2o_evloop_socket_t *sock)
@@ -221,17 +221,17 @@ Complete:
 
 static void read_on_ready(struct st_h2o_evloop_socket_t *sock)
 {
-    int status = 0;
+    const char *err = 0;
     size_t prev_bytes_read = sock->super.input->size;
 
     if ((sock->_flags & H2O_SOCKET_FLAG_DONT_READ) != 0)
         goto Notify;
 
-    if ((status = on_read_core(sock->fd, sock->super.ssl == NULL ? &sock->super.input : &sock->super.ssl->input.encrypted)) != 0)
+    if ((err = on_read_core(sock->fd, sock->super.ssl == NULL ? &sock->super.input : &sock->super.ssl->input.encrypted)) != NULL)
         goto Notify;
 
     if (sock->super.ssl != NULL && sock->super.ssl->handshake.cb == NULL)
-        status = decode_ssl_input(&sock->super);
+        err = decode_ssl_input(&sock->super);
 
 Notify:
     /* the application may get notified even if no new data is avaiable.  The
@@ -239,7 +239,7 @@ Notify:
      * can update their timeout counters when a partial SSL record arrives.
      */
     sock->super.bytes_read = sock->super.input->size - prev_bytes_read;
-    sock->super._cb.read(&sock->super, status);
+    sock->super._cb.read(&sock->super, err);
 }
 
 void do_dispose_socket(h2o_socket_t *_sock)
@@ -467,16 +467,22 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
     }
 
     if (sock->super._cb.write != NULL && sock->_wreq.cnt == 0) {
-        int status;
+        const char *err = NULL;
         if ((sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0) {
-            socklen_t l = sizeof(status);
-            status = 0;
-            getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &status, &l);
+            int so_err = 0;
+            socklen_t l = sizeof(so_err);
+            so_err = 0;
+            getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &so_err, &l);
+            if (so_err != 0) {
+                /* FIXME lookup the error table */
+                err = h2o_socket_error_conn_fail;
+            }
             sock->_flags &= ~H2O_SOCKET_FLAG_IS_CONNECTING;
         } else {
-            status = (sock->_flags & H2O_SOCKET_FLAG_IS_WRITE_ERROR) != 0 ? -1 : 0;
+            if ((sock->_flags & H2O_SOCKET_FLAG_IS_WRITE_ERROR) != 0)
+                err = h2o_socket_error_io;
         }
-        on_write_complete(&sock->super, status);
+        on_write_complete(&sock->super, err);
     }
 
     if ((sock->_flags & H2O_SOCKET_FLAG_IS_READ_READY) != 0) {

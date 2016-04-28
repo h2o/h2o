@@ -347,6 +347,10 @@ struct st_h2o_globalconf_t {
          * io timeout (in milliseconds)
          */
         uint64_t io_timeout;
+        /**
+         * SSL context for connections initiated by the proxy (optional, governed by the application)
+         */
+        SSL_CTX *ssl_ctx;
     } proxy;
 
     /**
@@ -1549,6 +1553,7 @@ typedef struct st_h2o_proxy_config_vars_t {
         int enabled;
         uint64_t timeout;
     } websocket;
+    SSL_CTX *ssl_ctx; /* optional */
 } h2o_proxy_config_vars_t;
 
 /**
