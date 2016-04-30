@@ -34,43 +34,51 @@ void test_lib__common__cache_c(void)
     h2o_cache_t *cache = h2o_cache_create(1024, 1000, on_destroy);
     uint64_t now = 0;
     h2o_iovec_t key = { H2O_STRLIT("key") };
-    h2o_cache_ref_t *ref, *ref2;
-
-    /* set "key" => "value" */
-    ref = h2o_cache_fetch(cache, key, now);
-    ok(ref->data.base == NULL);
-    ref->data = h2o_iovec_init(H2O_STRLIT("value"));
-    h2o_cache_update(cache, ref, now);
+    h2o_cache_ref_t *ref;
 
     /* fetch "key" */
-    ref = h2o_cache_fetch(cache, key, now);
-    ok(h2o_memis(ref->data.base, ref->data.len, H2O_STRLIT("value")));
+    ref = h2o_cache_fetch(cache, now, key, 0);
+    ok(ref == NULL);
+
+    /* set "key" => "value" */
+    h2o_cache_set(cache, now, key, 0, h2o_iovec_init(H2O_STRLIT("value")));
+
+    /* delete "key" */
+    h2o_cache_delete(cache, now, key, 0);
+    ref = h2o_cache_fetch(cache, now, key, 0);
+    ok(ref == NULL);
+
+    /* set "key" => "value" */
+    h2o_cache_set(cache, now, key, 0, h2o_iovec_init(H2O_STRLIT("value")));
+
+    /* fetch "key" */
+    ref = h2o_cache_fetch(cache, now, key, 0);
+    ok(h2o_memis(ref->value.base, ref->value.len, H2O_STRLIT("value")));
     h2o_cache_release(cache, ref);
 
-    /* proceed 1001ms */
+    /* proceed 999ms */
     now += 999;
 
     /* should fail to fetch "key" */
-    ref = h2o_cache_fetch(cache, key, now);
-    ok(ref->data.base == NULL);
+    ref = h2o_cache_fetch(cache, now, key, 0);
+    ok(ref == NULL);
 
     /* refetch should succeed */
-    ref2 = h2o_cache_fetch(cache, key, now);
-    ok(h2o_memis(ref2->data.base, ref2->data.len, H2O_STRLIT("value")));
-    h2o_cache_release(cache, ref2);
-
-    /* set "key" to "value2" */
-    ref->data = h2o_iovec_init(H2O_STRLIT("value2"));
-    h2o_cache_update(cache, ref, now);
-
-    /* fetch */
-    ref = h2o_cache_fetch(cache, key, now);
-    ok(h2o_memis(ref->data.base, ref->data.len, H2O_STRLIT("value2")));
+    ref = h2o_cache_fetch(cache, now, key, 0);
+    ok(h2o_memis(ref->value.base, ref->value.len, H2O_STRLIT("value")));
     h2o_cache_release(cache, ref);
 
-    ok(bytes_destroyed == 5);
+    /* set "key" to "value2" */
+    h2o_cache_set(cache, now, key, 0, h2o_iovec_init(H2O_STRLIT("value2")));
+
+    /* fetch */
+    ref = h2o_cache_fetch(cache, now, key, 0);
+    ok(h2o_memis(ref->value.base, ref->value.len, H2O_STRLIT("value2")));
+    h2o_cache_release(cache, ref);
+
+    ok(bytes_destroyed == 10);
 
     h2o_cache_destroy(cache);
 
-    ok(bytes_destroyed == 11);
+    ok(bytes_destroyed == 16);
 }

@@ -36,22 +36,61 @@ typedef struct st_h2o_cache_key_t {
 } h2o_cache_key_t;
 
 typedef struct st_h2o_cache_ref_t {
-    h2o_cache_key_t key;
-    h2o_iovec_t data;
+    h2o_iovec_t key;
+    h2o_cache_hashcode_t keyhash;
     uint64_t at;
+    h2o_iovec_t value;
     int _requested_early_update;
     h2o_linklist_t _lru_link;
     h2o_linklist_t _age_link;
     size_t _refcnt;
 } h2o_cache_ref_t;
 
+/**
+ * calculates the hash code of a key
+ */
+h2o_cache_hashcode_t h2o_cache_calchash(const char *s, size_t len);
+
+/**
+ * creates a new cache
+ */
 h2o_cache_t *h2o_cache_create(size_t capacity, uint64_t duration, void (*destroy_cb)(h2o_iovec_t value));
+/**
+ * destroys a cache
+ */
 void h2o_cache_destroy(h2o_cache_t *cache);
-
-void h2o_cache_clear(h2o_cache_t *cache, uint64_t now);
-
-h2o_cache_ref_t *h2o_cache_fetch(h2o_cache_t *cache, h2o_iovec_t key, uint64_t now);
+/**
+ * clears a cache
+ */
+void h2o_cache_clear(h2o_cache_t *cache);
+/**
+ * returns a value named by key from the cache if found, or else returns NULL
+ * @param cache
+ * @param now
+ * @param key
+ * @param keyhash callers may optionally pass in the precalculated hash value (or should be set to 0)
+ */
+h2o_cache_ref_t *h2o_cache_fetch(h2o_cache_t *cache, uint64_t now, h2o_iovec_t key, h2o_cache_hashcode_t keyhash);
+/**
+ * releases the reference returned by h2o_cache_fetch
+ */
 void h2o_cache_release(h2o_cache_t *cache, h2o_cache_ref_t *ref);
-void h2o_cache_update(h2o_cache_t *cache, h2o_cache_ref_t *ref, uint64_t now);
+/**
+ * sets the value of the cache
+ * @param cache
+ * @param now
+ * @param key
+ * @param keyhash callers may optionally pass in the precalculated hash value (or should be set to 0)
+ * @param value (when no longer needed, destroy_cb will be called)
+ */
+void h2o_cache_set(h2o_cache_t *cache, uint64_t now, h2o_iovec_t key, h2o_cache_hashcode_t keyhash, h2o_iovec_t value);
+/**
+ * deletes a named value from the cache
+ * @param cache
+ * @param now
+ * @param key
+ * @param keyhash callers may optionally pass in the precalculated hash value (or should be set to 0)
+ */
+void h2o_cache_delete(h2o_cache_t *cache, uint64_t now, h2o_iovec_t key, h2o_cache_hashcode_t keyhash);
 
 #endif
