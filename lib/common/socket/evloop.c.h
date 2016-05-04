@@ -294,6 +294,12 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *_bufs, size_t bufcnt, h2o_socket
     link_to_statechanged(sock);
 }
 
+int do_get_sock_fd(h2o_socket_t *_sock)
+{
+    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
+    return sock->fd;
+}
+
 void do_read_start(h2o_socket_t *_sock)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
