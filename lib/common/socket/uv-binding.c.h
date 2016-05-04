@@ -103,12 +103,12 @@ void do_dispose_socket(h2o_socket_t *_sock)
     uv_close((uv_handle_t *)sock->uv.stream, free_sock);
 }
 
-int do_get_sock_fd(h2o_socket_t *_sock)
+int h2o_socket_get_fd(h2o_socket_t *_sock)
 {
     int fd, ret;
     struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
 
-    ret = uv_fileno(sock->uv.stream, (uv_os_fd_t*)&fd);
+    ret = uv_fileno((uv_handle_t *)sock->uv.stream, (uv_os_fd_t*)&fd);
     if (ret)
         return -1;
 

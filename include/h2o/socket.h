@@ -132,7 +132,7 @@ void h2o_socket_close(h2o_socket_t *sock);
 /**
  * Obtain the underlying fd of a sock struct
  */
-int h2o_get_sock_fd(h2o_socket_t *sock);
+int h2o_socket_get_fd(h2o_socket_t *sock);
 /**
  * connects to peer
  */

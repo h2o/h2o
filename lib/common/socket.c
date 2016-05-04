@@ -462,11 +462,6 @@ void h2o_socket_setpeername(h2o_socket_t *sock, struct sockaddr *sa, socklen_t l
     memcpy(&sock->_peername->addr, sa, len);
 }
 
-int h2o_get_sock_fd(h2o_socket_t *sock)
-{
-    return do_get_sock_fd(sock);
-}
-
 socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa)
 {
     /* return cached, if exists */
