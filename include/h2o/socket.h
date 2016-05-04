@@ -130,6 +130,10 @@ void h2o_socket_dispose_export(h2o_socket_export_t *info);
  */
 void h2o_socket_close(h2o_socket_t *sock);
 /**
+ * Obtain the underlying fd of a sock struct
+ */
+int h2o_socket_get_fd(h2o_socket_t *sock);
+/**
  * connects to peer
  */
 h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb);

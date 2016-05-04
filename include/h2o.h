@@ -605,6 +605,10 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     void (*push_path)(h2o_req_t *req, const char *abspath, size_t abspath_len);
     /**
+     * Return the underlying socket struct
+     */
+    h2o_socket_t *(*get_socket)(h2o_conn_t *_conn);
+    /**
      * logging callbacks (may be NULL)
      */
     union {
