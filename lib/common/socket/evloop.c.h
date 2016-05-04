@@ -192,7 +192,7 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
 {
     assert(sock->super._cb.write != NULL);
 
-    if ((sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0) {
+    if ((sock->_flags & H2O_SOCKET_FLAG_DONT_WRITE) != 0) {
         /* connection complete */
         assert(sock->_wreq.cnt == 0);
         goto Complete;
@@ -315,6 +315,18 @@ void do_read_stop(h2o_socket_t *_sock)
     link_to_statechanged(sock);
 }
 
+
+void h2o_socket_dont_read(h2o_socket_t *_sock, int dont_read)
+{
+    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
+
+    if (dont_read) {
+        sock->_flags |= H2O_SOCKET_FLAG_DONT_READ;
+    } else {
+        sock->_flags &= ~H2O_SOCKET_FLAG_DONT_READ;
+    }
+}
+
 int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info)
 {
     struct st_h2o_evloop_socket_t *sock = (void *)_sock;
@@ -422,7 +434,7 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
         return NULL;
     }
 
-    sock = create_socket_set_nodelay(loop, fd, H2O_SOCKET_FLAG_IS_CONNECTING);
+    sock = create_socket_set_nodelay(loop, fd, H2O_SOCKET_FLAG_DONT_WRITE);
     sock->super._cb.write = cb;
     link_to_statechanged(sock);
     return &sock->super;
@@ -465,6 +477,16 @@ int32_t get_max_wait(h2o_evloop_t *loop)
     return (int32_t)max_wait;
 }
 
+void h2o_socket_notify_write(h2o_socket_t *_sock, h2o_socket_cb cb)
+{
+    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
+    assert(sock->super._cb.write == NULL);
+
+    sock->super._cb.write = cb;
+    sock->_flags |= H2O_SOCKET_FLAG_DONT_WRITE;
+    link_to_statechanged(sock);
+}
+
 static void run_socket(struct st_h2o_evloop_socket_t *sock)
 {
     if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
@@ -474,7 +496,7 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
 
     if (sock->super._cb.write != NULL && sock->_wreq.cnt == 0) {
         const char *err = NULL;
-        if ((sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0) {
+        if ((sock->_flags & H2O_SOCKET_FLAG_DONT_WRITE) != 0) {
             int so_err = 0;
             socklen_t l = sizeof(so_err);
             so_err = 0;
@@ -483,7 +505,7 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
                 /* FIXME lookup the error table */
                 err = h2o_socket_error_conn_fail;
             }
-            sock->_flags &= ~H2O_SOCKET_FLAG_IS_CONNECTING;
+            sock->_flags &= ~H2O_SOCKET_FLAG_DONT_WRITE;
         } else {
             if ((sock->_flags & H2O_SOCKET_FLAG_IS_WRITE_ERROR) != 0)
                 err = h2o_socket_error_io;
