@@ -275,7 +275,7 @@ Default is <code>14400</code> (4 hours).
 </dd>
 <dt id="ocsp-max-failures">ocsp-max-failures:</dt>
 <dd>
-number of consecutive OCSP queriy failures before stopping to send OCSP stapling data to the client.
+number of consecutive OCSP query failures before stopping to send OCSP stapling data to the client.
 Default is 3.
 </dd>
 <dt id="neverbleed">neverbleed:</dt>
@@ -582,7 +582,7 @@ Ticket-based session resumption uses master secret(s) to encrypt the keys used f
 To achieve <a href="https://en.wikipedia.org/wiki/Forward_secrecy" target="_blank">forward-secrecy</a> (i.e. protect past communications from being decrypted in case a master secret gets obtained by a third party), it is essential to periodically change the secret and remove the old ones.
 </p>
 <p>
-Among the three types of stores supported for ticket-based session remusption, the <code>internal</code> store and <code>memcached</code> store implement automatic roll-over of the secrets.
+Among the three types of stores supported for ticket-based session resumption, the <code>internal</code> store and <code>memcached</code> store implement automatic roll-over of the secrets.
 A new master secret is created every 1/4 of the session lifetime (defined by the <code>lifetime</code> attribute), and they expire (and gets removed) after 5/4 of the session lifetime elapse.
 </p>
 <p>
