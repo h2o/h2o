@@ -607,7 +607,7 @@ typedef struct st_h2o_conn_callbacks_t {
     /**
      * Return the underlying socket struct
      */
-    h2o_socket_t *(*get_h2o_socket)(h2o_conn_t *_conn);
+    h2o_socket_t *(*get_socket)(h2o_conn_t *_conn);
     /**
      * logging callbacks (may be NULL)
      */

@@ -706,7 +706,7 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
     return h2o_socket_getpeername(conn->sock, sa);
 }
 
-static h2o_socket_t *get_h2o_socket(h2o_conn_t *_conn)
+static h2o_socket_t *get_socket(h2o_conn_t *_conn)
 {
     struct st_h2o_http1_conn_t *conn = (void *)_conn;
     return conn->sock;
@@ -753,7 +753,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
         get_sockname,   /* stringify address */
         get_peername,   /* ditto */
         NULL,           /* push */
-        get_h2o_socket, /* get underlying socket */
+        get_socket, /* get underlying socket */
         {{
           {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits}, /* ssl */
           {log_request_index},                                                     /* http1 */
