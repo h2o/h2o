@@ -312,6 +312,9 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     /* FIXME should there be a way to notify error downstream? */
 
     if (errstr != NULL) {
+        if (errstr != h2o_http1client_error_is_eos) {
+            h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
+        }
         /* detach the content */
         self->last_content_before_send = self->client->sock->input;
         h2o_buffer_init(&self->client->sock->input, &h2o_socket_buffer_prototype);
