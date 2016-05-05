@@ -190,3 +190,44 @@ void h2o_multithread_create_thread(pthread_t *tid, const pthread_attr_t *attr, v
         abort();
     }
 }
+
+void h2o_sem_init(h2o_sem_t *sem, ssize_t capacity)
+{
+    pthread_mutex_init(&sem->_mutex, NULL);
+    pthread_cond_init(&sem->_cond, NULL);
+    sem->_cur = capacity;
+    sem->_capacity = capacity;
+}
+
+void h2o_sem_destroy(h2o_sem_t *sem)
+{
+    assert(sem->_cur == sem->_capacity);
+    pthread_cond_destroy(&sem->_cond);
+    pthread_mutex_destroy(&sem->_mutex);
+}
+
+void h2o_sem_wait(h2o_sem_t *sem)
+{
+    pthread_mutex_lock(&sem->_mutex);
+    while (sem->_cur <= 0)
+        pthread_cond_wait(&sem->_cond, &sem->_mutex);
+    --sem->_cur;
+    pthread_mutex_unlock(&sem->_mutex);
+}
+
+void h2o_sem_post(h2o_sem_t *sem)
+{
+    pthread_mutex_lock(&sem->_mutex);
+    ++sem->_cur;
+    pthread_cond_signal(&sem->_cond);
+    pthread_mutex_unlock(&sem->_mutex);
+}
+
+void h2o_sem_set_capacity(h2o_sem_t *sem, ssize_t new_capacity)
+{
+    pthread_mutex_lock(&sem->_mutex);
+    sem->_cur += new_capacity - sem->_capacity;
+    sem->_capacity = new_capacity;
+    pthread_cond_broadcast(&sem->_cond);
+    pthread_mutex_unlock(&sem->_mutex);
+}
