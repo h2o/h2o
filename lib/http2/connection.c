@@ -1175,15 +1175,20 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
     h2o_http2_conn_t *conn = (void *)src_req->conn;
     h2o_http2_stream_t *src_stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, src_req);
 
+    /* RFC 7540 8.2.1: PUSH_PROMISE frames can be sent by the server in response to any client-initiated stream */
+    if (h2o_http2_stream_is_push(src_stream->stream_id))
+        return;
+
     if (!conn->peer_settings.enable_push || conn->num_streams.push.open >= conn->peer_settings.max_concurrent_streams)
         return;
+
     if (conn->push_stream_ids.max_open >= 0x7ffffff0)
         return;
     if (!(h2o_linklist_is_empty(&conn->_pending_reqs) && can_run_requests(conn)))
         return;
 
     /* casper-related code */
-    if (src_stream->req.hostconf->http2.casper.capacity_bits != 0 && !h2o_http2_stream_is_push(src_stream->stream_id)) {
+    if (src_stream->req.hostconf->http2.casper.capacity_bits != 0) {
         size_t header_index;
         switch (src_stream->pull.casper_state) {
         case H2O_HTTP2_STREAM_CASPER_STATE_TBD:
