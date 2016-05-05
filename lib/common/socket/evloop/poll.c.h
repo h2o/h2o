@@ -60,7 +60,7 @@ static void update_socks(struct st_h2o_evloop_poll_t *loop)
                 sock->_flags &= ~H2O_SOCKET_FLAG_IS_POLLED_FOR_READ;
             }
             if (h2o_socket_is_writing(&sock->super) &&
-                (sock->_wreq.cnt != 0 || (sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0)) {
+                (sock->_wreq.cnt != 0 || (sock->_flags & H2O_SOCKET_FLAG_NOTIFY_WRITE) != 0)) {
                 DEBUG_LOG("setting WRITE for fd: %d\n", sock->fd);
                 sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE;
             } else {

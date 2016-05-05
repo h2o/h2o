@@ -130,9 +130,19 @@ void h2o_socket_dispose_export(h2o_socket_export_t *info);
  */
 void h2o_socket_close(h2o_socket_t *sock);
 /**
+ * Schedules a callback to be notify we the socket can be written to
+ */
+void h2o_socket_notify_write(h2o_socket_t *sock, h2o_socket_cb cb);
+/**
  * Obtain the underlying fd of a sock struct
  */
 int h2o_socket_get_fd(h2o_socket_t *sock);
+/**
+ * Set/Unset the H2O_SOCKET_FLAG_DONT_READ flag.
+ * Setting it allows to be simply notified rather than having the data
+ * automatically be read.
+ */
+void h2o_socket_dont_read(h2o_socket_t *sock, int dont_read);
 /**
  * connects to peer
  */

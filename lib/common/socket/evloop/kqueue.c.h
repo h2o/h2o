@@ -85,7 +85,7 @@ static int collect_status(struct st_h2o_socket_loop_kqueue_t *loop, struct keven
                 }
             }
             if (h2o_socket_is_writing(&sock->super) &&
-                (sock->_wreq.cnt != 0 || (sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0)) {
+                (sock->_wreq.cnt != 0 || (sock->_flags & H2O_SOCKET_FLAG_IS_NOTIFY_WRITE) != 0)) {
                 if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE) == 0) {
                     sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE;
                     SET_AND_UPDATE(EVFILT_WRITE, EV_ADD);
