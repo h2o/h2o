@@ -147,6 +147,15 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
     return 0;
 }
 
+static int on_config_preserve_x_forwarded_proto(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
+    if (ret == -1)
+        return -1;
+    ctx->globalconf->proxy.preserve_x_forwarded_proto = (int)ret;
+    return 0;
+}
+
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)_self;
@@ -221,4 +230,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
                                     on_config_ssl_verify_peer);
     h2o_configurator_define_command(&c->super, "proxy.ssl.cafile",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_ssl_cafile);
+    h2o_configurator_define_command(&c->super, "proxy.preserve-x-forwarded-proto",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_preserve_x_forwarded_proto);
 }

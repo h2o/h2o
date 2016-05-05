@@ -351,6 +351,10 @@ struct st_h2o_globalconf_t {
          * SSL context for connections initiated by the proxy (optional, governed by the application)
          */
         SSL_CTX *ssl_ctx;
+        /**
+         * a boolean flag if set to true, instructs the proxy to preserve the x-forwarded-proto header passed by the client
+         */
+        int preserve_x_forwarded_proto;
     } proxy;
 
     /**
