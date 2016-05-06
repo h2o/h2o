@@ -34,7 +34,7 @@ KHASH_INIT(cache, h2o_cache_ref_t *, char, 0, get_keyhash, is_equal)
 
 struct st_h2o_cache_t {
     int flags;
-    khash_t(cache) *table;
+    khash_t(cache) * table;
     size_t size;
     size_t capacity;
     h2o_linklist_t lru;
@@ -106,7 +106,7 @@ h2o_cache_hashcode_t h2o_cache_calchash(const char *s, size_t l)
 {
     h2o_cache_hashcode_t h = 0;
     for (; l != 0; --l)
-        h = (h << 5) - h + *(unsigned char*)s;
+        h = (h << 5) - h + *(unsigned char *)s;
     return h;
 }
 
@@ -175,7 +175,7 @@ h2o_cache_ref_t *h2o_cache_fetch(h2o_cache_t *cache, uint64_t now, h2o_iovec_t k
     timeleft = get_timeleft(cache, ref, now);
     if (timeleft < 0)
         goto NotFound;
-    if (timeleft < 10 && ! ref->_requested_early_update) {
+    if (timeleft < 10 && !ref->_requested_early_update) {
         ref->_requested_early_update = 1;
         goto NotFound;
     }

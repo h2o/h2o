@@ -51,9 +51,7 @@ typedef struct st_h2o_cache_ref_t {
  */
 h2o_cache_hashcode_t h2o_cache_calchash(const char *s, size_t len);
 
-enum {
-    H2O_CACHE_FLAG_MULTITHREADED = 0x1
-};
+enum { H2O_CACHE_FLAG_MULTITHREADED = 0x1 };
 
 /**
  * creates a new cache
