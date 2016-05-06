@@ -51,7 +51,16 @@ typedef struct st_h2o_cache_ref_t {
  */
 h2o_cache_hashcode_t h2o_cache_calchash(const char *s, size_t len);
 
-enum { H2O_CACHE_FLAG_MULTITHREADED = 0x1 };
+enum {
+    /**
+     * if set, the internals of the cache is protected by a mutex so that it can be accessed concurrently
+     */
+    H2O_CACHE_FLAG_MULTITHREADED = 0x1,
+    /**
+     * if set, the cache triggers an early update
+     */
+    H2O_CACHE_FLAG_EARLY_UPDATE = 0x2
+};
 
 /**
  * creates a new cache

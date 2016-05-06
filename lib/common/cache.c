@@ -175,7 +175,7 @@ h2o_cache_ref_t *h2o_cache_fetch(h2o_cache_t *cache, uint64_t now, h2o_iovec_t k
     timeleft = get_timeleft(cache, ref, now);
     if (timeleft < 0)
         goto NotFound;
-    if (timeleft < 10 && !ref->_requested_early_update) {
+    if ((cache->flags & H2O_CACHE_FLAG_EARLY_UPDATE) != 0 && timeleft < 10 && !ref->_requested_early_update) {
         ref->_requested_early_update = 1;
         goto NotFound;
     }
