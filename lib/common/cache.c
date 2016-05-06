@@ -33,7 +33,7 @@ static int is_equal(h2o_cache_ref_t *x, h2o_cache_ref_t *y);
 KHASH_INIT(cache, h2o_cache_ref_t *, char, 0, get_keyhash, is_equal)
 
 struct st_h2o_cache_t {
-    pthread_mutex_t lock;
+    int flags;
     khash_t(cache) *table;
     size_t size;
     size_t capacity;
@@ -41,6 +41,7 @@ struct st_h2o_cache_t {
     h2o_linklist_t age;
     uint64_t duration;
     void (*destroy_cb)(h2o_iovec_t value);
+    pthread_mutex_t mutex; /* only used if (flags & H2O_CACHE_FLAG_MULTITHREADED) != 0 */
 };
 
 static h2o_cache_hashcode_t get_keyhash(h2o_cache_ref_t *ref)
@@ -51,6 +52,18 @@ static h2o_cache_hashcode_t get_keyhash(h2o_cache_ref_t *ref)
 static int is_equal(h2o_cache_ref_t *x, h2o_cache_ref_t *y)
 {
     return x->key.len == y->key.len && memcmp(x->key.base, y->key.base, x->key.len) == 0;
+}
+
+static void lock_cache(h2o_cache_t *cache)
+{
+    if ((cache->flags & H2O_CACHE_FLAG_MULTITHREADED) != 0)
+        pthread_mutex_lock(&cache->mutex);
+}
+
+static void unlock_cache(h2o_cache_t *cache)
+{
+    if ((cache->flags & H2O_CACHE_FLAG_MULTITHREADED) != 0)
+        pthread_mutex_unlock(&cache->mutex);
 }
 
 static void erase_ref(h2o_cache_t *cache, khiter_t iter, int reuse)
@@ -97,11 +110,11 @@ h2o_cache_hashcode_t h2o_cache_calchash(const char *s, size_t l)
     return h;
 }
 
-h2o_cache_t *h2o_cache_create(size_t capacity, uint64_t duration, void (*destroy_cb)(h2o_iovec_t value))
+h2o_cache_t *h2o_cache_create(int flags, size_t capacity, uint64_t duration, void (*destroy_cb)(h2o_iovec_t value))
 {
     h2o_cache_t *cache = h2o_mem_alloc(sizeof(*cache));
 
-    pthread_mutex_init(&cache->lock, NULL);
+    cache->flags = flags;
     cache->table = kh_init(cache);
     cache->size = 0;
     cache->capacity = capacity;
@@ -109,6 +122,8 @@ h2o_cache_t *h2o_cache_create(size_t capacity, uint64_t duration, void (*destroy
     h2o_linklist_init_anchor(&cache->age);
     cache->duration = duration;
     cache->destroy_cb = destroy_cb;
+    if ((cache->flags & H2O_CACHE_FLAG_MULTITHREADED) != 0)
+        pthread_mutex_init(&cache->mutex, NULL);
 
     return cache;
 }
@@ -117,13 +132,14 @@ void h2o_cache_destroy(h2o_cache_t *cache)
 {
     h2o_cache_clear(cache);
     kh_destroy(cache, cache->table);
-    pthread_mutex_destroy(&cache->lock);
+    if ((cache->flags & H2O_CACHE_FLAG_MULTITHREADED) != 0)
+        pthread_mutex_destroy(&cache->mutex);
     free(cache);
 }
 
 void h2o_cache_clear(h2o_cache_t *cache)
 {
-    pthread_mutex_lock(&cache->lock);
+    lock_cache(cache);
 
     while (!h2o_linklist_is_empty(&cache->lru)) {
         h2o_cache_ref_t *ref = H2O_STRUCT_FROM_MEMBER(h2o_cache_ref_t, _lru_link, cache->lru.next);
@@ -133,7 +149,7 @@ void h2o_cache_clear(h2o_cache_t *cache)
     assert(kh_size(cache->table) == 0);
     assert(cache->size == 0);
 
-    pthread_mutex_unlock(&cache->lock);
+    unlock_cache(cache);
 }
 
 h2o_cache_ref_t *h2o_cache_fetch(h2o_cache_t *cache, uint64_t now, h2o_iovec_t key, h2o_cache_hashcode_t keyhash)
@@ -147,7 +163,7 @@ h2o_cache_ref_t *h2o_cache_fetch(h2o_cache_t *cache, uint64_t now, h2o_iovec_t k
     search_key.key = key;
     search_key.keyhash = keyhash;
 
-    pthread_mutex_lock(&cache->lock);
+    lock_cache(cache);
 
     purge(cache, now);
 
@@ -169,11 +185,11 @@ h2o_cache_ref_t *h2o_cache_fetch(h2o_cache_t *cache, uint64_t now, h2o_iovec_t k
     __sync_fetch_and_add(&ref->_refcnt, 1);
 
     /* unlock and return the found entry */
-    pthread_mutex_unlock(&cache->lock);
+    unlock_cache(cache);
     return ref;
 
 NotFound:
-    pthread_mutex_unlock(&cache->lock);
+    unlock_cache(cache);
     return NULL;
 }
 
@@ -200,7 +216,7 @@ void h2o_cache_set(h2o_cache_t *cache, uint64_t now, h2o_iovec_t key, h2o_cache_
     newref = h2o_mem_alloc(sizeof(*newref));
     *newref = (h2o_cache_ref_t){h2o_strdup(NULL, key.base, key.len), keyhash, now, value, 0, {}, {}, 1};
 
-    pthread_mutex_lock(&cache->lock);
+    lock_cache(cache);
 
     /* set or replace the named value */
     iter = kh_get(cache, cache->table, newref);
@@ -217,7 +233,7 @@ void h2o_cache_set(h2o_cache_t *cache, uint64_t now, h2o_iovec_t key, h2o_cache_
 
     purge(cache, now);
 
-    pthread_mutex_unlock(&cache->lock);
+    unlock_cache(cache);
 }
 
 void h2o_cache_delete(h2o_cache_t *cache, uint64_t now, h2o_iovec_t key, h2o_cache_hashcode_t keyhash)
@@ -230,12 +246,12 @@ void h2o_cache_delete(h2o_cache_t *cache, uint64_t now, h2o_iovec_t key, h2o_cac
     search_key.key = key;
     search_key.keyhash = keyhash;
 
-    pthread_mutex_lock(&cache->lock);
+    lock_cache(cache);
 
     purge(cache, now);
 
     if ((iter = kh_get(cache, cache->table, &search_key)) != kh_end(cache->table))
         erase_ref(cache, iter, 0);
 
-    pthread_mutex_unlock(&cache->lock);
+    unlock_cache(cache);
 }

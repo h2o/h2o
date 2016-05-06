@@ -51,10 +51,14 @@ typedef struct st_h2o_cache_ref_t {
  */
 h2o_cache_hashcode_t h2o_cache_calchash(const char *s, size_t len);
 
+enum {
+    H2O_CACHE_FLAG_MULTITHREADED = 0x1
+};
+
 /**
  * creates a new cache
  */
-h2o_cache_t *h2o_cache_create(size_t capacity, uint64_t duration, void (*destroy_cb)(h2o_iovec_t value));
+h2o_cache_t *h2o_cache_create(int flags, size_t capacity, uint64_t duration, void (*destroy_cb)(h2o_iovec_t value));
 /**
  * destroys a cache
  */

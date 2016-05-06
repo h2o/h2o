@@ -31,7 +31,7 @@ static void on_destroy(h2o_iovec_t vec)
 
 void test_lib__common__cache_c(void)
 {
-    h2o_cache_t *cache = h2o_cache_create(1024, 1000, on_destroy);
+    h2o_cache_t *cache = h2o_cache_create(0, 1024, 1000, on_destroy);
     uint64_t now = 0;
     h2o_iovec_t key = { H2O_STRLIT("key") };
     h2o_cache_ref_t *ref;
