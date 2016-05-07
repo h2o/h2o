@@ -367,6 +367,62 @@ The default value is <code>h2o/VERSION-NUMBER</code>.
 
 <?
 $ctx->{directive}->(
+    name     => "setenv",
+    levels   => [ qw(global host path extension) ],
+    since    => '2.0',
+    desc     => 'Sets one or more environment variables.',
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#unsetenv"><code>unsetenv</code></a>
+EOT
+)->(sub {
+?>
+<p>
+Environment variables are a set of key-value pairs containing arbitrary strings, that can be read from applications invoked by the standalone server (e.g. <a href="configure/fastcgi_directives.html">fastcgi handler</a>, <a href="configure/mruby_directives.html">mruby handler</a>) and the access logger.
+</p>
+<p>
+The directive is applied from outer-level to inner-level.
+At each level, the directive is applied after the <a href="configure/base_directives.html#unsetenv"><code>unsetenv</code></a> directive at the corresponding level is applied.
+</p>
+<p>
+Environment variables are retained through internal redirections.
+</p>
+<?= $ctx->{example}->('Setting an environment variable named <code>FOO</code>', <<'EOT')
+setenv:
+  FOO: "value_of_FOO"
+EOT
+?>
+? })
+
+<?
+$ctx->{directive}->(
+    name     => "unsetenv",
+    levels   => [ qw(global host path extension) ],
+    since    => '2.0',
+    desc     => 'Unsets one or more environment variables.',
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#setenv"><code>setenv</code></a>
+EOT
+)->(sub {
+?>
+<p>
+The directive can be used to have an exception for the paths that have an environment variable set, or can be used to reset variables after an internal redirection.
+</p>
+<?= $ctx->{example}->('Setting environment variable for <code>example.com</code> excluding <code>/specific-path</code>', <<'EOT')
+hosts:
+  example.com:
+    setenv:
+      FOO: "value_of_FOO"
+    paths:
+      /specific-path:
+        unsetenv:
+          - FOO
+      ...
+EOT
+?>
+? })
+
+<?
+$ctx->{directive}->(
     name   => "ssl-session-resumption",
     levels => [ qw(global) ],
     desc   => q{Configures cache-based and ticket-based session resumption.},
