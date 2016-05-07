@@ -13,6 +13,7 @@ Revision history for H2O.
 	- [proxy] add support for HTTPS #875 (Kazuho Oku)
 	- [proxy] add an configuration option to pass through `x-forwarded-proto` request header #883 (Kazuho Oku)
 	- [proxy] log error when upstream connection is unexpectedly closed #895 (Frederik Deweerdt)
+	- [ssl] update libressl to 2.2.7 #898 (Kazuho Oku)
 	- [ssl] add support for text-based memcache protocol #854 (Kazuho Oku)
 	- [ssl] fix memory leak when using TLS resumption with the memcached backend #856 (Kazuho Oku)
 	- [ssl] fix "undefined subroutine" error in the OCSP updater #872 (Masayuki Matsuki)
