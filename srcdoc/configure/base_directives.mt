@@ -295,7 +295,7 @@ $ctx->{directive}->(
     name    => "num-name-resolution-threads",
     levels  => [ qw(global) ],
     default => 'num-name-resolution-threads: 32',
-    desc    => q{Number of threads to run for name resolution.},
+    desc    => q{Maximum number of threads to run for name resolution.},
 )->(sub {});
 ?>
 
