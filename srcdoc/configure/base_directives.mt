@@ -339,6 +339,34 @@ On other platforms the default value is <code>0</code> (disabled).
 
 <?
 $ctx->{directive}->(
+    name     => "send-server-name",
+    levels   => [ qw(global) ],
+    since    => '2.0',
+    desc     => q{A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether if the <code>server</code> response header should be sent.},
+    default  => q{send-server-name: ON},
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#server-name"><code>server-name</code></a>
+EOT
+)->(sub {
+?>
+? })
+
+<?
+$ctx->{directive}->(
+    name => "server-name",
+    levels   => [ qw(global) ],
+    since    => '2.0',
+    desc     => q{Lets the user override the value of the <code>server</code> response header.},
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#send-server-name"><code>send-server-name</code></a>
+EOT
+)->(sub {
+?>
+The default value is <code>h2o/VERSION-NUMBER</code>.
+? })
+
+<?
+$ctx->{directive}->(
     name   => "ssl-session-resumption",
     levels => [ qw(global) ],
     desc   => q{Configures cache-based and ticket-based session resumption.},
