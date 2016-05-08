@@ -541,6 +541,8 @@ Default value is <code>3600</code> (in seconds).
 <dd>
 specifies the location of memcached used by the <code>memcached</code> stores.
 The value must be a mapping with <code>host</code> attribute specifying the address of the memcached server, and optionally a <code>port</code> attribute specifying the port number (default is <code>11211</code>).
+By default, the memcached client uses the <a href="https://github.com/memcached/memcached/blob/master/doc/protocol-binary.xml">BINARY protocol</a>.
+Users can opt-in to using the legacy <a href="https://github.com/memcached/memcached/blob/master/doc/protocol.txt">ASCII protocol</a> by adding a <code>protocol</code> attribute set to <code>ASCII</code>.
 </dd>
 ? })
 
