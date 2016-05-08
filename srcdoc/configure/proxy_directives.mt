@@ -13,7 +13,8 @@ When forwarding the requests, the module sets following request headers:
 </ul>
 </p>
 <p>
-The HTTP client only supports plain text HTTP/1; neither HTTP/2 nor HTTPS are supported for the time being.
+The HTTP client only supports HTTP/1.
+Support for HTTPS has been introduced in version 2.0.
 </p>
 <p>
 Following sections describe the configuration directives defined for the module.
@@ -31,7 +32,6 @@ proxy.reverse.url: "http://127.0.0.1:8080/"
 EOT
 ?>
 <p>
-At the moment, only HTTP is supported.
 If you want load balancing multiple backends, replace 127.0.0.1 with hostname witch returns IP addresses via DNS or /etc/hosts.
 </p>
 <p>
@@ -48,7 +48,42 @@ $ctx->{directive}->(
     default => q{proxy.preserve-host: OFF},
     desc    => q{A boolean flag (<code>ON</code> or <code>OFF</code>) designating whether or not to pass <code>Host</code> header from incoming request to upstream.},
 )->(sub {});
+?>
 
+<?
+$ctx->{directive}->(
+    name    => "proxy.ssl.cafile",
+    levels  => [ qw(global host path) ],
+    since   => "2.0",
+    desc    => "Specifies the file storing the list of trusted root certificates.",
+    see_also => render_mt(<<'EOT'),
+<a href="configure/proxy_directives.html#proxy.ssl.verify-peer"><code>proxy.ssl.verify-peer</code></a>
+EOT
+)->(sub {
+?>
+<p>
+By default, H2O uses <code>share/h2o/ca-bundle.crt</code>.  The file contains a set of trusted root certificates maintained by Mozilla, downloaded and converted using <a href="https://curl.haxx.se/docs/mk-ca-bundle.html">mk-ca-bundle.pl</a>.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "proxy.ssl.verify-peer",
+    levels  => [ qw(global host path) ],
+    since   => "2.0",
+    desc    => "A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if the server certificate and hostname should be verified.",
+    default => q{proxy.ssl.verify-peer: ON},
+    see_also => render_mt(<<'EOT'),
+<a href="configure/proxy_directives.html#proxy.ssl.cafile"><code>proxy.ssl.cafile</code></a>
+EOT
+)->(sub {
+?>
+<p>
+If set to <code>ON</code>, the HTTP client implementation of H2O verifies the peer's certificate using the list of trusted certificates as well as compares the hostname presented in the certificate against the connecting hostname.
+</p>
+? })
+
+<?
 $ctx->{directive}->(
     name    => "proxy.timeout.io",
     levels  => [ qw(global host path) ],
