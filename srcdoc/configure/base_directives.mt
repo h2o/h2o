@@ -301,6 +301,25 @@ $ctx->{directive}->(
 
 <?
 $ctx->{directive}->(
+    name    => "num-ocsp-updaters",
+    levels  => [ qw(global) ],
+    since   => "2.0",
+    default => 'num-ocsp-updaters: 10',
+    desc    => q{Maximum number of OCSP updaters.},
+)->(sub {
+?>
+<p>
+<a href="https://en.wikipedia.org/wiki/OCSP_stapling">OSCP Stapling</a> is an optimization that speeds up the time spent for establishing a TLS connection.
+In order to <i>staple</i> OCSP information, a HTTP server is required to periodically contact the certificate authority.
+This directive caps the number of the processes spawn for collecting the information.
+</p>
+<p>
+The use and the update interval of OCSP can be configured using the <a href="configure/base_directives.html#listen-ssl">SSL attributes</a> of the <a href="configure/base_directives.html#listen"><code>listen</code></a> configuration directive.
+</p>
+? });
+
+<?
+$ctx->{directive}->(
     name   => "num-threads",
     levels => [ qw(global) ],
     desc   => q{Number of worker threads.},
