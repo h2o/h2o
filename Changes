@@ -1,6 +1,6 @@
 Revision history for H2O.
 
-2.0.0-beta3 TBD
+2.0.0-beta3 2016-05-09 03:12:00+0000
 	- [core] configurable server: header #877 (Frederik Deweerdt)
 	- [core] fix crash when receiving SIGTERM during start-up #878 (Frederik Deweerdt)
 	- [core] spawn the configured number of DNS client threads #880 (Sean McArthur)
