@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 DeNA Co., Ltd.
+ * Copyright (c) 2014-2016 DeNA Co., Ltd., Kazuho Oku, Fastly, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -174,6 +174,21 @@ typedef struct st_h2o_casper_conf_t {
     int track_all_types;
 } h2o_casper_conf_t;
 
+typedef struct st_h2o_envconf_t {
+    /**
+     * parent
+     */
+    struct st_h2o_envconf_t *parent;
+    /**
+     * list of names to be unset
+     */
+    h2o_iovec_vector_t unsets;
+    /**
+     * list of name-value pairs to be set
+     */
+    h2o_iovec_vector_t sets;
+} h2o_envconf_t;
+
 typedef struct st_h2o_pathconf_t {
     /**
      * globalconf to which the pathconf belongs
@@ -199,6 +214,10 @@ typedef struct st_h2o_pathconf_t {
      * mimemap
      */
     h2o_mimemap_t *mimemap;
+    /**
+     * env
+     */
+    h2o_envconf_t *env;
 } h2o_pathconf_t;
 
 struct st_h2o_hostconf_t {
@@ -328,6 +347,14 @@ struct st_h2o_globalconf_t {
          * io timeout (in milliseconds)
          */
         uint64_t io_timeout;
+        /**
+         * SSL context for connections initiated by the proxy (optional, governed by the application)
+         */
+        SSL_CTX *ssl_ctx;
+        /**
+         * a boolean flag if set to true, instructs the proxy to preserve the x-forwarded-proto header passed by the client
+         */
+        int preserve_x_forwarded_proto;
     } proxy;
 
     /**
@@ -582,6 +609,10 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     void (*push_path)(h2o_req_t *req, const char *abspath, size_t abspath_len);
     /**
+     * Return the underlying socket struct
+     */
+    h2o_socket_t *(*get_socket)(h2o_conn_t *_conn);
+    /**
      * logging callbacks (may be NULL)
      */
     union {
@@ -773,10 +804,6 @@ struct st_h2o_req_t {
      */
     h2o_iovec_t entity;
     /**
-     * remote_user (base == NULL if none)
-     */
-    h2o_iovec_t remote_user;
-    /**
      * timestamp when the request was processed
      */
     h2o_timestamp_t processed_at;
@@ -805,6 +832,11 @@ struct st_h2o_req_t {
      * counts the number of times the request has been delegated
      */
     unsigned num_delegated;
+
+    /**
+     * environment variables
+     */
+    h2o_iovec_vector_t env;
 
     /* flags */
 
@@ -945,9 +977,9 @@ size_t h2o_stringify_protocol_version(char *dst, int version);
 /**
  * extracts path to be pushed from `Link: rel=prelead` header, duplicating the chunk (or returns {NULL,0} if none)
  */
-h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
-                                                   const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
-                                                   h2o_iovec_t *base_path);
+h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len, h2o_iovec_t base_path,
+                                                   const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
+                                                   const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority);
 /**
  * return a bitmap of compressible types, by parsing the `accept-encoding` header
  */
@@ -1010,6 +1042,10 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator);
  * @return pointer to the ostream filter
  */
 h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot);
+/**
+ * binds configurations to the request
+ */
+void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t *pathconf);
 
 /**
  * called by the generators to send output
@@ -1055,8 +1091,20 @@ static void h2o_proceed_response(h2o_req_t *req);
  * if NULL, supplements h2o_req_t::mime_attr
  */
 void h2o_req_fill_mime_attributes(h2o_req_t *req);
+/**
+ * returns an environment variable
+ */
+static h2o_iovec_t *h2o_req_getenv(h2o_req_t *req, const char *name, size_t name_len, int allocate_if_not_found);
+/**
+ * unsets an environment variable
+ */
+static void h2o_req_unsetenv(h2o_req_t *req, const char *name, size_t name_len);
 
 /* config */
+
+h2o_envconf_t *h2o_config_create_envconf(h2o_envconf_t *src);
+void h2o_config_setenv(h2o_envconf_t *envconf, const char *name, const char *value);
+void h2o_config_unsetenv(h2o_envconf_t *envconf, const char *name);
 
 /**
  * initializes pathconf
@@ -1513,6 +1561,7 @@ typedef struct st_h2o_proxy_config_vars_t {
         int enabled;
         uint64_t timeout;
     } websocket;
+    SSL_CTX *ssl_ctx; /* optional */
 } h2o_proxy_config_vars_t;
 
 /**
@@ -1588,6 +1637,33 @@ inline void h2o_proceed_response(h2o_req_t *req)
     } else {
         req->_ostr_top->do_send(req->_ostr_top, req, NULL, 0, 1);
     }
+}
+
+inline h2o_iovec_t *h2o_req_getenv(h2o_req_t *req, const char *name, size_t name_len, int allocate_if_not_found)
+{
+    size_t i;
+    for (i = 0; i != req->env.size; i += 2)
+        if (h2o_memis(req->env.entries[i].base, req->env.entries[i].len, name, name_len))
+            return req->env.entries + i + 1;
+    if (!allocate_if_not_found)
+        return NULL;
+    h2o_vector_reserve(&req->pool, &req->env, req->env.size + 2);
+    req->env.entries[req->env.size++] = h2o_iovec_init(name, name_len);
+    req->env.entries[req->env.size++] = h2o_iovec_init(NULL, 0);
+    return req->env.entries + req->env.size - 1;
+}
+
+inline void h2o_req_unsetenv(h2o_req_t *req, const char *name, size_t name_len)
+{
+    size_t i;
+    for (i = 0; i != req->env.size; i += 2)
+        if (h2o_memis(req->env.entries[i].base, req->env.entries[i].len, name, name_len))
+            goto Found;
+    /* not found */
+    return;
+Found:
+    memmove(req->env.entries + i, req->env.entries + i + 2, req->env.size - i - 2);
+    req->env.size -= 2;
 }
 
 inline int h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf)

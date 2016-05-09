@@ -1,5 +1,26 @@
 Revision history for H2O.
 
+2.0.0-beta3 TBD
+	- [core] configurable server: header #877 (Frederik Deweerdt)
+	- [core] fix crash when receiving SIGTERM during start-up #878 (Frederik Deweerdt)
+	- [core] spawn the configured number of DNS client threads #880 (Sean McArthur)
+	- [access-log][fastcgi][mruby] per-request environment variables #868 (Kazuho Oku)
+	- [access-log] fix memory leak during start-up #864 (Frederik Deweerdt)
+	- [http2] support for nopush attribute in the link rel=preload header #863 (Satoh Hiroh)
+	- [http2] support for push after delegation #866 (Kazuho Oku)
+	- [http2] accept `capacity-bits` attribute of the `http2-casper` configuration directive #882 (Satoh Hiroh)
+	- [http2] ignore push indications made by a pushed response #897 (Kazuho Oku)
+	- [proxy] add support for HTTPS #875 (Kazuho Oku)
+	- [proxy] add an configuration option to pass through `x-forwarded-proto` request header #883 (Kazuho Oku)
+	- [proxy] log error when upstream connection is unexpectedly closed #895 (Frederik Deweerdt)
+	- [ssl] update libressl to 2.2.7 #898 (Kazuho Oku)
+	- [ssl] add support for text-based memcache protocol #854 (Kazuho Oku)
+	- [ssl] fix memory leak when using TLS resumption with the memcached backend #856 (Kazuho Oku)
+	- [ssl] fix "undefined subroutine" error in the OCSP updater #872 (Masayuki Matsuki)
+	- [ssl] cap the number of OCSP updaters running concurrently #891 (Kazuho Oku)
+	- [libh2o] add API for obtaining the socket descriptor #886 (Frederik Deweerdt)
+	- [libh2o] add API to selectively disable automated I/O on reads and writes #890 (Frederik Deweerdt)
+
 2.0.0-beta2 2016-03-23 03:23:00+0000
 	- [compress] fix potential SEGV when encoding brotli #849 (Kazuho Oku)
 	- [compress][expires] refrain from setting redundant `cache-control` tokens #846 (Kazuho Oku)

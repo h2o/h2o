@@ -461,9 +461,13 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
         if (!mrb_nil_p(p))
             mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_REMOTE_PORT), p);
     }
-    if (generator->req->remote_user.base != NULL)
-        mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_REMOTE_USER),
-                     mrb_str_new(mrb, generator->req->remote_user.base, generator->req->remote_user.len));
+    {
+        size_t i;
+        for (i = 0; i != generator->req->env.size; i += 2) {
+            h2o_iovec_t *name = generator->req->env.entries + i, *value = name + 1;
+            mrb_hash_set(mrb, env, mrb_str_new(mrb, name->base, name->len), mrb_str_new(mrb, value->base, value->len));
+        }
+    }
 
     { /* headers */
         h2o_header_t *headers_sorted = alloca(sizeof(*headers_sorted) * generator->req->headers.size);
@@ -539,11 +543,14 @@ static int handle_response_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
         }
     } else if (name.len > fallthru_set_prefix.len &&
                h2o_memis(name.base, fallthru_set_prefix.len, fallthru_set_prefix.base, fallthru_set_prefix.len)) {
-        /* register additional request header if status is fallthru, otherwise discard */
-        if (req->res.status == STATUS_FALLTHRU) {
-            if (h2o_memis(name.base + fallthru_set_prefix.len, name.len - fallthru_set_prefix.len, H2O_STRLIT("remote-user")))
-                req->remote_user = h2o_strdup(&req->pool, value.base, value.len);
-        }
+        /* register environment variables (with the name converted to uppercase, and using `_`) */
+        size_t i;
+        name.base += fallthru_set_prefix.len;
+        name.len -= fallthru_set_prefix.len;
+        for (i = 0; i != name.len; ++i)
+            name.base[i] = name.base[i] == '-' ? '_' : h2o_toupper(name.base[i]);
+        h2o_iovec_t *slot = h2o_req_getenv(req, name.base, name.len, 1);
+        *slot = h2o_strdup(&req->pool, value.base, value.len);
     } else {
         value = h2o_strdup(&req->pool, value.base, value.len);
         h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, value.base, value.len);

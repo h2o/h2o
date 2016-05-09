@@ -1,6 +1,5 @@
 #include "yrmcds.h"
 #include <errno.h>
-#include <error.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -235,7 +234,7 @@ int main(int argc, char** argv) {
     argv += optind;
 
     yrmcds_cnt c;
-    int e = yrmcds_cnt_connect(&c, server, port);
+    yrmcds_error e = yrmcds_cnt_connect(&c, server, port);
     if( e != YRMCDS_OK ) {
         fprintf(stderr, "yc-cnt: failed to connect to '%s:%d': %s\n",
                 server, port, yrmcds_strerror(e));

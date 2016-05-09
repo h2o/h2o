@@ -310,22 +310,6 @@ INLINE_SIMPLE_STRUCTS  = NO
 
 TYPEDEF_HIDES_STRUCT   = NO
 
-# The SYMBOL_CACHE_SIZE determines the size of the internal cache use to
-# determine which symbols to keep in memory and which to flush to disk.
-# When the cache is full, less often used symbols will be written to disk.
-# For small to medium size projects (<1000 input files) the default value is
-# probably good enough. For larger projects a too small cache size can cause
-# doxygen to be busy swapping symbols to and from disk most of the time
-# causing a significant performance penalty.
-# If the system has enough physical memory increasing the cache will improve the
-# performance by keeping more symbols in memory. Note that the value works on
-# a logarithmic scale so increasing the size by one will roughly double the
-# memory usage. The cache size is given by this formula:
-# 2^(16+SYMBOL_CACHE_SIZE). The valid range is 0..9, the default is 0,
-# corresponding to a cache size of 2^16 = 65536 symbols.
-
-SYMBOL_CACHE_SIZE      = 0
-
 # Similar to the SYMBOL_CACHE_SIZE the size of the symbol lookup cache can be
 # set using LOOKUP_CACHE_SIZE. This cache is used to resolve symbols given
 # their name and scope. Since this can be an expensive process and often the
@@ -540,12 +524,6 @@ MAX_INITIALIZER_LINES  = 30
 
 SHOW_USED_FILES        = YES
 
-# If the sources in your project are distributed over multiple directories
-# then setting the SHOW_DIRECTORIES tag to YES will show the directory hierarchy
-# in the documentation. The default is NO.
-
-SHOW_DIRECTORIES       = NO
-
 # Set the SHOW_FILES tag to NO to disable the generation of the Files page.
 # This will remove the Files entry from the Quick Index and from the
 # Folder Tree View (if specified). The default is YES.
@@ -648,7 +626,7 @@ WARN_LOGFILE           =
 # directories like "/usr/src/myproject". Separate the files or directories
 # with spaces.
 
-INPUT                  =
+INPUT                  = yrmcds.h
 
 # This tag can be used to specify the character encoding of the source files
 # that doxygen parses. Internally doxygen uses the UTF-8 encoding, which is
@@ -934,12 +912,6 @@ HTML_COLORSTYLE_GAMMA  = 80
 
 HTML_TIMESTAMP         = YES
 
-# If the HTML_ALIGN_MEMBERS tag is set to YES, the members of classes,
-# files or namespaces will be aligned in HTML using tables. If set to
-# NO a bullet list will be used.
-
-HTML_ALIGN_MEMBERS     = YES
-
 # If the HTML_DYNAMIC_SECTIONS tag is set to YES then the generated HTML
 # documentation will contain sections that can be hidden and shown after the
 # page has loaded. For this to work a browser that supports
@@ -1125,11 +1097,6 @@ GENERATE_TREEVIEW      = NO
 # values from appearing in the overview section.
 
 ENUM_VALUES_PER_LINE   = 4
-
-# By enabling USE_INLINE_TREES, doxygen will generate the Groups, Directories,
-# and Class Hierarchy pages using a tree view instead of an ordered list.
-
-USE_INLINE_TREES       = NO
 
 # If the treeview is enabled (see GENERATE_TREEVIEW) then this tag can be
 # used to set the initial width (in pixels) of the frame in which the tree

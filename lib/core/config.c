@@ -57,6 +57,76 @@ static void destroy_hostconf(h2o_hostconf_t *hostconf)
     free(hostconf);
 }
 
+static void on_dispose_envconf(void *_envconf)
+{
+    h2o_envconf_t *envconf = _envconf;
+    size_t i;
+
+    if (envconf->parent != NULL)
+        h2o_mem_release_shared(envconf->parent);
+
+    for (i = 0; i != envconf->unsets.size; ++i)
+        h2o_mem_release_shared(envconf->unsets.entries[i].base);
+    free(envconf->unsets.entries);
+    for (i = 0; i != envconf->sets.size; ++i)
+        h2o_mem_release_shared(envconf->sets.entries[i].base);
+    free(envconf->sets.entries);
+}
+
+h2o_envconf_t *h2o_config_create_envconf(h2o_envconf_t *parent)
+{
+    h2o_envconf_t *envconf = h2o_mem_alloc_shared(NULL, sizeof(*envconf), on_dispose_envconf);
+    *envconf = (h2o_envconf_t){};
+
+    if (parent != NULL) {
+        envconf->parent = parent;
+        h2o_mem_addref_shared(parent);
+    }
+    return envconf;
+}
+
+void h2o_config_setenv(h2o_envconf_t *envconf, const char *name, const char *value)
+{
+    size_t name_len = strlen(name), i;
+    h2o_iovec_t *value_slot;
+
+    /* remove from the list of unsets */
+    for (i = 0; i != envconf->unsets.size; ++i) {
+        if (h2o_memis(envconf->unsets.entries[i].base, envconf->unsets.entries[i].len, name, name_len)) {
+            h2o_mem_release_shared(envconf->unsets.entries[i].base);
+            h2o_vector_erase(&envconf->unsets, i);
+            break;
+        }
+    }
+    /* find the slot */
+    for (i = 0; i != envconf->sets.size; i += 2) {
+        if (h2o_memis(envconf->sets.entries[i].base, envconf->sets.entries[i].len, name, name_len)) {
+            value_slot = envconf->sets.entries + i + 1;
+            h2o_mem_release_shared(value_slot->base);
+            goto SetValue;
+        }
+    }
+    /* name not found in existing sets */
+    h2o_vector_reserve(NULL, &envconf->sets, envconf->sets.size + 2);
+    envconf->sets.entries[envconf->sets.size++] = h2o_strdup_shared(NULL, name, name_len);
+    value_slot = envconf->sets.entries + envconf->sets.size++;
+SetValue:
+    *value_slot = h2o_strdup_shared(NULL, value, SIZE_MAX);
+}
+
+void h2o_config_unsetenv(h2o_envconf_t *envconf, const char *name)
+{
+    size_t i, name_len = strlen(name);
+
+    /* do nothing if already set */
+    for (i = 0; i != envconf->unsets.size; ++i)
+        if (h2o_memis(envconf->unsets.entries[i].base, envconf->unsets.entries[i].len, name, name_len))
+            return;
+    /* register */
+    h2o_vector_reserve(NULL, &envconf->unsets, envconf->unsets.size + 1);
+    envconf->unsets.entries[envconf->unsets.size++] = h2o_strdup_shared(NULL, name, name_len);
+}
+
 void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, const char *path, h2o_mimemap_t *mimemap)
 {
     memset(pathconf, 0, sizeof(*pathconf));
@@ -89,6 +159,8 @@ void h2o_config_dispose_pathconf(h2o_pathconf_t *pathconf)
     free(pathconf->path.base);
     if (pathconf->mimemap != NULL)
         h2o_mem_release_shared(pathconf->mimemap);
+    if (pathconf->env != NULL)
+        h2o_mem_release_shared(pathconf->env);
 }
 
 void h2o_config_init(h2o_globalconf_t *config)

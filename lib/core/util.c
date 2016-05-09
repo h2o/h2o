@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 DeNA Co., Ltd., Kazuho Oku
+ * Copyright (c) 2014-2016 DeNA Co., Ltd., Kazuho Oku, Satoh Hiroh
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -115,12 +115,12 @@ void on_accept_timeout(h2o_timeout_entry_t *entry)
     h2o_socket_close(sock);
 }
 
-static void on_ssl_handshake_complete(h2o_socket_t *sock, int status)
+static void on_ssl_handshake_complete(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_accept_data_t *data = sock->data;
     sock->data = NULL;
 
-    if (status != 0) {
+    if (err != NULL) {
         h2o_socket_close(sock);
         goto Exit;
     }
@@ -237,11 +237,11 @@ SkipToEOL:
 #undef SKIP_TO_WS
 }
 
-static void on_read_proxy_line(h2o_socket_t *sock, int status)
+static void on_read_proxy_line(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_accept_data_t *data = sock->data;
 
-    if (status != 0) {
+    if (err != NULL) {
         free_accept_data(data);
         h2o_socket_close(sock);
         return;
@@ -263,7 +263,7 @@ static void on_read_proxy_line(h2o_socket_t *sock, int status)
     }
 
     if (data->ctx->ssl_ctx != NULL) {
-        h2o_socket_ssl_server_handshake(sock, data->ctx->ssl_ctx, on_ssl_handshake_complete);
+        h2o_socket_ssl_handshake(sock, data->ctx->ssl_ctx, NULL, on_ssl_handshake_complete);
     } else {
         struct st_h2o_accept_data_t *data = sock->data;
         sock->data = NULL;
@@ -281,7 +281,7 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
         if (ctx->expect_proxy_line) {
             h2o_socket_read_start(sock, on_read_proxy_line);
         } else {
-            h2o_socket_ssl_server_handshake(sock, ctx->ssl_ctx, on_ssl_handshake_complete);
+            h2o_socket_ssl_handshake(sock, ctx->ssl_ctx, NULL, on_ssl_handshake_complete);
         }
     } else {
         h2o_http1_accept(ctx, sock, connected_at);
@@ -310,9 +310,9 @@ size_t h2o_stringify_protocol_version(char *dst, int version)
     return p - dst;
 }
 
-h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
-                                                   const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
-                                                   h2o_iovec_t *base_path)
+h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len, h2o_iovec_t base_path,
+                                                   const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
+                                                   const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority)
 {
     h2o_iovec_t url;
     h2o_url_t parsed, resolved;
@@ -328,12 +328,17 @@ h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const c
             goto None;
         url = h2o_iovec_init(token + 1, token_len - 2);
         /* find rel=preload */
+        int preload = 0;
         while ((token = h2o_next_token(&iter, ';', &token_len, &token_value)) != NULL) {
             if (h2o_lcstris(token, token_len, H2O_STRLIT("rel")) &&
-                h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload")))
-                break;
+                h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload"))) {
+                preload++;
+            } else
+            if (h2o_lcstris(token, token_len, H2O_STRLIT("nopush"))) {
+                goto None;
+            }
         }
-        if (token == NULL)
+        if (!preload)
             goto None;
     }
 
@@ -341,17 +346,20 @@ h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const c
     if (h2o_url_parse_relative(url.base, url.len, &parsed) != 0)
         goto None;
 
-    /* return the URL found in Link header, if it is an absolute path-only URL */
-    if (parsed.scheme == NULL && parsed.authority.base == NULL && url.len != 0 && url.base[0] == '/')
+    /* fast-path for abspath form */
+    if (base_scheme == NULL && parsed.scheme == NULL && parsed.authority.base == NULL && url.len != 0 && url.base[0] == '/')
         return h2o_strdup(pool, url.base, url.len);
 
-    /* check scheme and authority if given URL contains either of the two */
-    h2o_url_t base = {base_scheme, *base_authority, {}, *base_path, 65535};
+    /* check scheme and authority if given URL contains either of the two, or if base is specified */
+    h2o_url_t base = {input_scheme, input_authority, {}, base_path, 65535};
+    if (base_scheme != NULL) {
+        base.scheme = base_scheme;
+        base.authority = *base_authority;
+    }
     h2o_url_resolve(pool, &base, &parsed, &resolved);
-    if (base.scheme != resolved.scheme)
+    if (input_scheme != resolved.scheme)
         goto None;
-    if (parsed.authority.base != NULL &&
-        !h2o_lcstris(base.authority.base, base.authority.len, resolved.authority.base, resolved.authority.len))
+    if (!h2o_lcstris(input_authority.base, input_authority.len, resolved.authority.base, resolved.authority.len))
         goto None;
     return resolved.path;
 

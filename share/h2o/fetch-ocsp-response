@@ -138,7 +138,7 @@ sub run_openssl {
         or die "failed to invoke $openssl_cmd:$!";
     my $resp = do { local $/; <$fh> };
     close $fh
-        or ($tempfail ? \&tempfail : \&die)->("OpenSSL exitted abnormally: $openssl_cmd $args:$!");
+        or ($tempfail ? \&tempfail : \&CORE::die)->("OpenSSL exitted abnormally: $openssl_cmd $args:$!");
     $resp;
 }
 
