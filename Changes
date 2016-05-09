@@ -1,5 +1,13 @@
 Revision history for H2O.
 
+1.7.2 2016-05-09 03:12:00+0000
+	- [core] fix crash when receiving SIGTERM during start-up #878 (Frederik Deweerdt)
+	- [core] spawn the configured number of DNS client threads #880 (Sean McArthur)
+	- [http2] accept `capacity-bits` attribute of the `http2-casper` configuration directive #882 (Satoh Hiroh)
+	- [ssl] update libressl to 2.2.7 #898 (Kazuho Oku)
+	- [ssl] fix memory leak when using TLS resumption with the memcached backend #856 (Kazuho Oku)
+	- [ssl] fix "undefined subroutine" error in the OCSP updater #872 (Masayuki Matsuki)
+
 1.7.1 2016-03-07 06:50:00+0000
 	- [core] fix incorrect line no. reported in case of YAML syntax error #785 (Kazuho Oku)
 	- [core] fix build issue / memory leak when the poll backend is used #777 #787 (devlearner)
