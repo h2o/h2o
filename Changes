@@ -1,5 +1,8 @@
 Revision history for H2O.
 
+2.0.0-beta4 2016-05-09 20:20:00+0000
+	- [ssl] fix build issue on CentOS 7 (and others that have `tolower` defined as a macro) #901 (Kazuho Oku)
+
 2.0.0-beta3 2016-05-09 03:12:00+0000
 	- [core] configurable server: header #877 (Frederik Deweerdt)
 	- [core] fix crash when receiving SIGTERM during start-up #878 (Frederik Deweerdt)
