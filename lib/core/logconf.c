@@ -242,6 +242,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
     LAST_ELEMENT()->suffix.base[LAST_ELEMENT()->suffix.len++] = '\n';
 
 #undef NEW_ELEMENT
+#undef LAST_ELEMENT
 
     return logconf;
 
@@ -254,8 +255,19 @@ void h2o_logconf_dispose(h2o_logconf_t *logconf)
 {
     size_t i;
 
-    for (i = 0; i != logconf->elements.size; ++i)
+    for (i = 0; i != logconf->elements.size; ++i) {
         free(logconf->elements.entries[i].suffix.base);
+        switch (logconf->elements.entries[i].type) {
+        case ELEMENT_TYPE_EXTENDED_VAR:
+        case ELEMENT_TYPE_IN_HEADER_STRING:
+        case ELEMENT_TYPE_OUT_HEADER_STRING:
+        case ELEMENT_TYPE_TIMESTAMP_STRFTIME:
+            free(logconf->elements.entries[i].data.name.base);
+            break;
+        default:
+            break;
+        }
+    }
     free(logconf->elements.entries);
     free(logconf);
 }
@@ -413,7 +425,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         unsafe_factor = 6;
         break;
     default:
-        h2o_fatal("[status] unexpected escape mode");
+        h2o_fatal("unexpected escape mode");
         break;
     }
 
@@ -538,12 +550,13 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             RESERVE(path_len * unsafe_factor);
             pos = append_unsafe_string(pos, req->input.path.base, path_len);
         } break;
-        case ELEMENT_TYPE_REMOTE_USER: /* %u */
-            if (req->remote_user.base == NULL)
+        case ELEMENT_TYPE_REMOTE_USER: /* %u */ {
+            h2o_iovec_t *remote_user = h2o_req_getenv(req, H2O_STRLIT("REMOTE_USER"), 0);
+            if (remote_user == NULL)
                 goto EmitDash;
-            RESERVE(req->remote_user.len * unsafe_factor);
-            pos = append_unsafe_string(pos, req->remote_user.base, req->remote_user.len);
-            break;
+            RESERVE(remote_user->len * unsafe_factor);
+            pos = append_unsafe_string(pos, remote_user->base, remote_user->len);
+        } break;
         case ELEMENT_TYPE_AUTHORITY: /* %V */
             RESERVE(req->input.authority.len * unsafe_factor);
             pos = append_unsafe_string(pos, req->input.authority.base, req->input.authority.len);

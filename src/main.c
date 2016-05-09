@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2014-2016 DeNA Co., Ltd., Kazuho Oku, Tatsuhiko Kubo,
  *                         Domingo Alvarez Duarte, Nick Desaulniers,
- *                         Jeff Marrison, Shota Fukumori
+ *                         Jeff Marrison, Shota Fukumori, Fastly, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -71,6 +71,8 @@
 
 #define H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS 32
 
+#define H2O_DEFAULT_OCSP_UPDATER_MAX_THREADS 10
+
 struct listener_ssl_config_t {
     H2O_VECTOR(h2o_iovec_t) hostnames;
     char *certificate_file;
@@ -134,6 +136,7 @@ static struct {
         h2o_multithread_receiver_t memcached;
     } *threads;
     volatile sig_atomic_t shutdown_requested;
+    volatile sig_atomic_t initialized_threads;
     struct {
         /* unused buffers exist to avoid false sharing of the cache line */
         char _unused1[32];
@@ -154,6 +157,7 @@ static struct {
     0,               /* initialized in main() */
     NULL,            /* thread_ids */
     0,               /* shutdown_requested */
+    0,               /* initialized_threads */
     {},              /* state */
 };
 
@@ -272,6 +276,8 @@ Exit:
     return ret;
 }
 
+static h2o_sem_t ocsp_updater_semaphore;
+
 static void *ocsp_updater_thread(void *_ssl_conf)
 {
     struct listener_ssl_config_t *ssl_conf = _ssl_conf;
@@ -290,7 +296,9 @@ static void *ocsp_updater_thread(void *_ssl_conf)
             continue;
         }
         /* fetch the response */
+        h2o_sem_wait(&ocsp_updater_semaphore);
         status = get_ocsp_response(ssl_conf->certificate_file, ssl_conf->ocsp_stapling.cmd, &resp);
+        h2o_sem_post(&ocsp_updater_semaphore);
         switch (status) {
         case 0: /* success */
             fail_cnt = 0;
@@ -1080,6 +1088,19 @@ static int on_config_tcp_fastopen(h2o_configurator_command_t *cmd, h2o_configura
     return 0;
 }
 
+static int on_config_num_ocsp_updaters(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    ssize_t n;
+    if (h2o_configurator_scanf(cmd, node, "%zd", &n) != 0)
+        return -1;
+    if (n <= 0) {
+        h2o_configurator_errprintf(cmd, node, "num-ocsp-updaters must be >=1");
+        return -1;
+    }
+    h2o_sem_set_capacity(&ocsp_updater_semaphore, n);
+    return 0;
+}
+
 static yoml_t *load_config(const char *fn)
 {
     FILE *fp;
@@ -1115,6 +1136,10 @@ static void notify_all_threads(void)
 static void on_sigterm(int signo)
 {
     conf.shutdown_requested = 1;
+    if (conf.initialized_threads != conf.num_threads) {
+        /* initialization hasn't completed yet, exit right away */
+        exit(0);
+    }
     notify_all_threads();
 }
 
@@ -1194,14 +1219,14 @@ static void on_socketclose(void *data)
     }
 }
 
-static void on_accept(h2o_socket_t *listener, int status)
+static void on_accept(h2o_socket_t *listener, const char *err)
 {
     struct listener_ctx_t *ctx = listener->data;
     size_t num_accepts = conf.max_connections / 16 / conf.num_threads;
     if (num_accepts < 8)
         num_accepts = 8;
 
-    if (status == -1) {
+    if (err != NULL) {
         return;
     }
 
@@ -1296,6 +1321,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     /* and start listening */
     update_listener_state(listeners);
 
+    __sync_fetch_and_add(&conf.initialized_threads, 1);
     /* the main loop */
     while (1) {
         if (conf.shutdown_requested)
@@ -1466,6 +1492,8 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "ssl-session-resumption",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
                                         ssl_session_resumption_on_config);
+        h2o_configurator_define_command(c, "num-ocsp-updaters", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_num_ocsp_updaters);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
@@ -1496,6 +1524,8 @@ int main(int argc, char **argv)
     conf.launch_time = time(NULL);
 
     h2o_hostinfo_max_threads = H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS;
+
+    h2o_sem_init(&ocsp_updater_semaphore, H2O_DEFAULT_OCSP_UPDATER_MAX_THREADS);
 
     init_openssl();
     setup_configurators();

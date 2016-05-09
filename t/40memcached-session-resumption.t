@@ -13,42 +13,50 @@ plan skip_all => "could not find openssl"
 
 my $tempdir = tempdir(CLEANUP => 1);
 
-# start memcached
-my $memc_port = empty_port();
-my $memc_guard = spawn_server(
-    argv     => [ qw(memcached -l 127.0.0.1 -p), $memc_port ],
-    is_ready => sub {
-        check_port($memc_port);
-    },
-);
-
-spawn_and_connect("-sess_out $tempdir/session", "New");
-spawn_and_connect("-sess_in $tempdir/session", "Reused");
+doit("binary");
+doit("ascii");
 
 done_testing;
 
-sub spawn_and_connect {
-    my ($opts, $expected) = @_;
-    my $server = spawn_h2o(<< "EOT");
+sub doit {
+    my $memc_proto = shift;
+    subtest $memc_proto => sub {
+        # start memcached
+        my $memc_port = empty_port();
+        my $memc_guard = spawn_server(
+            argv     => [ qw(memcached -l 127.0.0.1 -p), $memc_port, "-B", $memc_proto ],
+            is_ready => sub {
+                check_port($memc_port);
+            },
+        );
+        # the test
+        my $spawn_and_connect = sub {
+            my ($opts, $expected) = @_;
+            my $server = spawn_h2o(<< "EOT");
 ssl-session-resumption:
   mode: cache
   cache-store: memcached
   memcached:
     host: 127.0.0.1
     port: $memc_port
+    protocol: $memc_proto
 hosts:
   default:
     paths:
       /:
         file.dir: @{[ DOC_ROOT ]}
 EOT
-    my $lines = do {
-        open my $fh, "-|", "openssl s_client -no_ticket $opts -connect 127.0.0.1:$server->{tls_port} 2>&1 < /dev/null"
-            or die "failed to open pipe:$!";
-        local $/;
-        <$fh>;
+            my $lines = do {
+                open my $fh, "-|", "openssl s_client -no_ticket $opts -connect 127.0.0.1:$server->{tls_port} 2>&1 < /dev/null"
+                    or die "failed to open pipe:$!";
+                local $/;
+                <$fh>;
+            };
+            $lines =~ m{---\n(New|Reused),}s
+                or die "failed to parse the output of s_client:{{{$lines}}}";
+            is $1, $expected;
+        };
+        $spawn_and_connect->("-sess_out $tempdir/session", "New");
+        $spawn_and_connect->("-sess_in $tempdir/session", "Reused");
     };
-    $lines =~ m{---\n(New|Reused),}s
-        or die "failed to parse the output of s_client:{{{$lines}}}";
-    is $1, $expected;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 DeNA Co., Ltd., Kazuho Oku
+ * Copyright (c) 2014-2016 DeNA Co., Ltd., Kazuho Oku, Fastly, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -109,7 +109,7 @@ static void link_to_statechanged(struct st_h2o_evloop_socket_t *sock)
     }
 }
 
-static int on_read_core(int fd, h2o_buffer_t **input)
+static const char *on_read_core(int fd, h2o_buffer_t **input)
 {
     int read_any = 0;
 
@@ -118,7 +118,7 @@ static int on_read_core(int fd, h2o_buffer_t **input)
         h2o_iovec_t buf = h2o_buffer_reserve(input, 4096);
         if (buf.base == NULL) {
             /* memory allocation failed */
-            return -1;
+            return h2o_socket_error_out_of_memory;
         }
         while ((rret = read(fd, buf.base, buf.len <= INT_MAX / 2 ? buf.len : INT_MAX / 2 + 1)) == -1 && errno == EINTR)
             ;
@@ -126,10 +126,10 @@ static int on_read_core(int fd, h2o_buffer_t **input)
             if (errno == EAGAIN)
                 break;
             else
-                return -1;
+                return h2o_socket_error_io;
         } else if (rret == 0) {
             if (!read_any)
-                return -1; /* TODO notify close */
+                return h2o_socket_error_closed; /* TODO notify close */
             break;
         }
         (*input)->size += rret;
@@ -137,7 +137,7 @@ static int on_read_core(int fd, h2o_buffer_t **input)
             break;
         read_any = 1;
     }
-    return 0;
+    return NULL;
 }
 
 static void wreq_free_buffer_if_allocated(struct st_h2o_evloop_socket_t *sock)
@@ -192,7 +192,7 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
 {
     assert(sock->super._cb.write != NULL);
 
-    if ((sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0) {
+    if ((sock->_flags & H2O_SOCKET_FLAG_DONT_WRITE) != 0) {
         /* connection complete */
         assert(sock->_wreq.cnt == 0);
         goto Complete;
@@ -221,17 +221,17 @@ Complete:
 
 static void read_on_ready(struct st_h2o_evloop_socket_t *sock)
 {
-    int status = 0;
+    const char *err = 0;
     size_t prev_bytes_read = sock->super.input->size;
 
     if ((sock->_flags & H2O_SOCKET_FLAG_DONT_READ) != 0)
         goto Notify;
 
-    if ((status = on_read_core(sock->fd, sock->super.ssl == NULL ? &sock->super.input : &sock->super.ssl->input.encrypted)) != 0)
+    if ((err = on_read_core(sock->fd, sock->super.ssl == NULL ? &sock->super.input : &sock->super.ssl->input.encrypted)) != NULL)
         goto Notify;
 
     if (sock->super.ssl != NULL && sock->super.ssl->handshake.cb == NULL)
-        status = decode_ssl_input(&sock->super);
+        err = decode_ssl_input(&sock->super);
 
 Notify:
     /* the application may get notified even if no new data is avaiable.  The
@@ -239,7 +239,7 @@ Notify:
      * can update their timeout counters when a partial SSL record arrives.
      */
     sock->super.bytes_read = sock->super.input->size - prev_bytes_read;
-    sock->super._cb.read(&sock->super, status);
+    sock->super._cb.read(&sock->super, err);
 }
 
 void do_dispose_socket(h2o_socket_t *_sock)
@@ -294,6 +294,12 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *_bufs, size_t bufcnt, h2o_socket
     link_to_statechanged(sock);
 }
 
+int h2o_socket_get_fd(h2o_socket_t *_sock)
+{
+    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
+    return sock->fd;
+}
+
 void do_read_start(h2o_socket_t *_sock)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
@@ -307,6 +313,18 @@ void do_read_stop(h2o_socket_t *_sock)
 
     sock->_flags &= ~H2O_SOCKET_FLAG_IS_READ_READY;
     link_to_statechanged(sock);
+}
+
+
+void h2o_socket_dont_read(h2o_socket_t *_sock, int dont_read)
+{
+    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
+
+    if (dont_read) {
+        sock->_flags |= H2O_SOCKET_FLAG_DONT_READ;
+    } else {
+        sock->_flags &= ~H2O_SOCKET_FLAG_DONT_READ;
+    }
 }
 
 int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info)
@@ -416,7 +434,7 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
         return NULL;
     }
 
-    sock = create_socket_set_nodelay(loop, fd, H2O_SOCKET_FLAG_IS_CONNECTING);
+    sock = create_socket_set_nodelay(loop, fd, H2O_SOCKET_FLAG_DONT_WRITE);
     sock->super._cb.write = cb;
     link_to_statechanged(sock);
     return &sock->super;
@@ -459,6 +477,16 @@ int32_t get_max_wait(h2o_evloop_t *loop)
     return (int32_t)max_wait;
 }
 
+void h2o_socket_notify_write(h2o_socket_t *_sock, h2o_socket_cb cb)
+{
+    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
+    assert(sock->super._cb.write == NULL);
+
+    sock->super._cb.write = cb;
+    sock->_flags |= H2O_SOCKET_FLAG_DONT_WRITE;
+    link_to_statechanged(sock);
+}
+
 static void run_socket(struct st_h2o_evloop_socket_t *sock)
 {
     if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
@@ -467,16 +495,22 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
     }
 
     if (sock->super._cb.write != NULL && sock->_wreq.cnt == 0) {
-        int status;
-        if ((sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0) {
-            socklen_t l = sizeof(status);
-            status = 0;
-            getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &status, &l);
-            sock->_flags &= ~H2O_SOCKET_FLAG_IS_CONNECTING;
+        const char *err = NULL;
+        if ((sock->_flags & H2O_SOCKET_FLAG_DONT_WRITE) != 0) {
+            int so_err = 0;
+            socklen_t l = sizeof(so_err);
+            so_err = 0;
+            getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &so_err, &l);
+            if (so_err != 0) {
+                /* FIXME lookup the error table */
+                err = h2o_socket_error_conn_fail;
+            }
+            sock->_flags &= ~H2O_SOCKET_FLAG_DONT_WRITE;
         } else {
-            status = (sock->_flags & H2O_SOCKET_FLAG_IS_WRITE_ERROR) != 0 ? -1 : 0;
+            if ((sock->_flags & H2O_SOCKET_FLAG_IS_WRITE_ERROR) != 0)
+                err = h2o_socket_error_io;
         }
-        on_write_complete(&sock->super, status);
+        on_write_complete(&sock->super, err);
     }
 
     if ((sock->_flags & H2O_SOCKET_FLAG_IS_READ_READY) != 0) {

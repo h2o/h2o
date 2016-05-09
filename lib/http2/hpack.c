@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 DeNA Co., Ltd.
+ * Copyright (c) 2014-2016 DeNA Co., Ltd., Kazuho Oku, Fastly, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -773,7 +773,9 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
     capacity += STATUS_HEADER_MAX_SIZE;      /* for :status: */
 #ifndef H2O_UNITTEST
     capacity += 2 + H2O_TIMESTR_RFC1123_LEN; /* for Date: */
-    capacity += 5 + server_name->len;        /* for Server: */
+    if (server_name->len) {
+        capacity += 5 + server_name->len;        /* for Server: */
+    }
 #endif
     if (content_length != SIZE_MAX)
         capacity += CONTENT_LENGTH_HEADER_MAX_SIZE; /* for content-length: UINT64_MAX (with huffman compression applied) */
@@ -785,7 +787,9 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
     dst = encode_status(dst, res->status);
 #ifndef H2O_UNITTEST
     /* TODO keep some kind of reference to the indexed headers of Server and Date, and reuse them */
-    dst = encode_header(header_table, dst, &H2O_TOKEN_SERVER->buf, server_name);
+    if (server_name->len) {
+        dst = encode_header(header_table, dst, &H2O_TOKEN_SERVER->buf, server_name);
+    }
     h2o_iovec_t date_value = {ts->str->rfc1123, H2O_TIMESTR_RFC1123_LEN};
     dst = encode_header(header_table, dst, &H2O_TOKEN_DATE->buf, &date_value);
 #endif

@@ -247,9 +247,13 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
     }
     /* REMOTE_ADDR & REMOTE_PORT */
     append_address_info(req, vecs, H2O_STRLIT("REMOTE_ADDR"), H2O_STRLIT("REMOTE_PORT"), req->conn->callbacks->get_peername);
-    /* REMOTE_USER */
-    if (req->remote_user.base != NULL)
-        append_pair(&req->pool, vecs, H2O_STRLIT("REMOTE_USER"), req->remote_user.base, req->remote_user.len);
+    { /* environment variables (REMOTE_USER, etc.) */
+        size_t i;
+        for (i = 0; i != req->env.size; i += 2) {
+            h2o_iovec_t *name = req->env.entries + i, *value = name + 1;
+            append_pair(&req->pool, vecs, name->base, name->len, value->base, value->len);
+        }
+    }
     /* REQUEST_METHOD */
     append_pair(&req->pool, vecs, H2O_STRLIT("REQUEST_METHOD"), req->method.base, req->method.len);
     /* HTTP_HOST & REQUEST_URI */
@@ -607,12 +611,12 @@ static void on_rw_timeout(h2o_timeout_entry_t *entry)
     errorclose(generator);
 }
 
-static void on_read(h2o_socket_t *sock, int status)
+static void on_read(h2o_socket_t *sock, const char *err)
 {
     struct st_fcgi_generator_t *generator = sock->data;
     int can_keepalive = 0;
 
-    if (status != 0) {
+    if (err != NULL) {
         /* note: FastCGI server is allowed to close the connection any time after sending an empty FCGI_STDOUT record */
         if (!generator->sent_headers)
             h2o_req_log_error(generator->req, MODULE_NAME, "fastcgi connection closed unexpectedly");
@@ -675,7 +679,7 @@ Error:
     errorclose(generator);
 }
 
-static void on_send_complete(h2o_socket_t *sock, int status)
+static void on_send_complete(h2o_socket_t *sock, const char *err)
 {
     struct st_fcgi_generator_t *generator = sock->data;
 
@@ -814,7 +818,7 @@ h2o_fastcgi_handler_t *h2o_fastcgi_register_by_hostport(h2o_pathconf_t *pathconf
 {
     h2o_fastcgi_handler_t *handler = register_common(pathconf, vars);
 
-    h2o_socketpool_init_by_hostport(&handler->sockpool, h2o_iovec_init(host, strlen(host)), port, SIZE_MAX /* FIXME */);
+    h2o_socketpool_init_by_hostport(&handler->sockpool, h2o_iovec_init(host, strlen(host)), port, 0, SIZE_MAX /* FIXME */);
     return handler;
 }
 
@@ -823,6 +827,6 @@ h2o_fastcgi_handler_t *h2o_fastcgi_register_by_address(h2o_pathconf_t *pathconf,
 {
     h2o_fastcgi_handler_t *handler = register_common(pathconf, vars);
 
-    h2o_socketpool_init_by_address(&handler->sockpool, sa, salen, SIZE_MAX /* FIXME */);
+    h2o_socketpool_init_by_address(&handler->sockpool, sa, salen, 0, SIZE_MAX /* FIXME */);
     return handler;
 }

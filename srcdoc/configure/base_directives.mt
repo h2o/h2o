@@ -190,7 +190,7 @@ Default is <code>14400</code> (4 hours).
 </dd>
 <dt id="ocsp-max-failures">ocsp-max-failures:</dt>
 <dd>
-number of consecutive OCSP queriy failures before stopping to send OCSP stapling data to the client.
+number of consecutive OCSP query failures before stopping to send OCSP stapling data to the client.
 Default is 3.
 </dd>
 <dt id="neverbleed">neverbleed:</dt>
@@ -295,9 +295,28 @@ $ctx->{directive}->(
     name    => "num-name-resolution-threads",
     levels  => [ qw(global) ],
     default => 'num-name-resolution-threads: 32',
-    desc    => q{Number of threads to run for name resolution.},
+    desc    => q{Maximum number of threads to run for name resolution.},
 )->(sub {});
 ?>
+
+<?
+$ctx->{directive}->(
+    name    => "num-ocsp-updaters",
+    levels  => [ qw(global) ],
+    since   => "2.0",
+    default => 'num-ocsp-updaters: 10',
+    desc    => q{Maximum number of OCSP updaters.},
+)->(sub {
+?>
+<p>
+<a href="https://en.wikipedia.org/wiki/OCSP_stapling">OSCP Stapling</a> is an optimization that speeds up the time spent for establishing a TLS connection.
+In order to <i>staple</i> OCSP information, a HTTP server is required to periodically contact the certificate authority.
+This directive caps the number of the processes spawn for collecting the information.
+</p>
+<p>
+The use and the update interval of OCSP can be configured using the <a href="configure/base_directives.html#listen-ssl">SSL attributes</a> of the <a href="configure/base_directives.html#listen"><code>listen</code></a> configuration directive.
+</p>
+? });
 
 <?
 $ctx->{directive}->(
@@ -335,6 +354,90 @@ $ctx->{directive}->(
 On Linux that support the feature, the default value is <code>4,096</code>.
 On other platforms the default value is <code>0</code> (disabled).
 </p>
+? })
+
+<?
+$ctx->{directive}->(
+    name     => "send-server-name",
+    levels   => [ qw(global) ],
+    since    => '2.0',
+    desc     => q{A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether if the <code>server</code> response header should be sent.},
+    default  => q{send-server-name: ON},
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#server-name"><code>server-name</code></a>
+EOT
+)->(sub {
+?>
+? })
+
+<?
+$ctx->{directive}->(
+    name => "server-name",
+    levels   => [ qw(global) ],
+    since    => '2.0',
+    desc     => q{Lets the user override the value of the <code>server</code> response header.},
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#send-server-name"><code>send-server-name</code></a>
+EOT
+)->(sub {
+?>
+The default value is <code>h2o/VERSION-NUMBER</code>.
+? })
+
+<?
+$ctx->{directive}->(
+    name     => "setenv",
+    levels   => [ qw(global host path extension) ],
+    since    => '2.0',
+    desc     => 'Sets one or more environment variables.',
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#unsetenv"><code>unsetenv</code></a>
+EOT
+)->(sub {
+?>
+<p>
+Environment variables are a set of key-value pairs containing arbitrary strings, that can be read from applications invoked by the standalone server (e.g. <a href="configure/fastcgi_directives.html">fastcgi handler</a>, <a href="configure/mruby_directives.html">mruby handler</a>) and the access logger.
+</p>
+<p>
+The directive is applied from outer-level to inner-level.
+At each level, the directive is applied after the <a href="configure/base_directives.html#unsetenv"><code>unsetenv</code></a> directive at the corresponding level is applied.
+</p>
+<p>
+Environment variables are retained through internal redirections.
+</p>
+<?= $ctx->{example}->('Setting an environment variable named <code>FOO</code>', <<'EOT')
+setenv:
+  FOO: "value_of_FOO"
+EOT
+?>
+? })
+
+<?
+$ctx->{directive}->(
+    name     => "unsetenv",
+    levels   => [ qw(global host path extension) ],
+    since    => '2.0',
+    desc     => 'Unsets one or more environment variables.',
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#setenv"><code>setenv</code></a>
+EOT
+)->(sub {
+?>
+<p>
+The directive can be used to have an exception for the paths that have an environment variable set, or can be used to reset variables after an internal redirection.
+</p>
+<?= $ctx->{example}->('Setting environment variable for <code>example.com</code> excluding <code>/specific-path</code>', <<'EOT')
+hosts:
+  example.com:
+    setenv:
+      FOO: "value_of_FOO"
+    paths:
+      /specific-path:
+        unsetenv:
+          - FOO
+      ...
+EOT
+?>
 ? })
 
 <?
@@ -411,7 +514,7 @@ Ticket-based session resumption uses master secret(s) to encrypt the keys used f
 To achieve <a href="https://en.wikipedia.org/wiki/Forward_secrecy" target="_blank">forward-secrecy</a> (i.e. protect past communications from being decrypted in case a master secret gets obtained by a third party), it is essential to periodically change the secret and remove the old ones.
 </p>
 <p>
-Among the three types of stores supported for ticket-based session remusption, the <code>internal</code> store and <code>memcached</code> store implement automatic roll-over of the secrets.
+Among the three types of stores supported for ticket-based session resumption, the <code>internal</code> store and <code>memcached</code> store implement automatic roll-over of the secrets.
 A new master secret is created every 1/4 of the session lifetime (defined by the <code>lifetime</code> attribute), and they expire (and gets removed) after 5/4 of the session lifetime elapse.
 </p>
 <p>
@@ -457,6 +560,8 @@ Default value is <code>3600</code> (in seconds).
 <dd>
 specifies the location of memcached used by the <code>memcached</code> stores.
 The value must be a mapping with <code>host</code> attribute specifying the address of the memcached server, and optionally a <code>port</code> attribute specifying the port number (default is <code>11211</code>).
+By default, the memcached client uses the <a href="https://github.com/memcached/memcached/blob/master/doc/protocol-binary.xml">BINARY protocol</a>.
+Users can opt-in to using the legacy <a href="https://github.com/memcached/memcached/blob/master/doc/protocol.txt">ASCII protocol</a> by adding a <code>protocol</code> attribute set to <code>ASCII</code>.
 </dd>
 ? })
 

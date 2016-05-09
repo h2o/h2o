@@ -1,0 +1,16 @@
+language: c
+os:
+  - linux
+  - osx
+compiler:
+  - gcc
+  - clang
+services:
+  - memcached
+before_install:
+  - if [ "$TRAVIS_OS_NAME" = osx ]; then brew update; fi
+  - if [ "$TRAVIS_OS_NAME" = osx ]; then brew install memcached; fi
+  - if [ "$TRAVIS_OS_NAME" = osx ]; then /usr/local/opt/memcached/bin/memcached -d; fi
+script:
+  - make
+  - env YRMCDS_HOST=localhost make test

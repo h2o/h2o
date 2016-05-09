@@ -72,6 +72,7 @@ static void *lookup_thread_main(void *_unused)
     pthread_mutex_lock(&queue.mutex);
 
     while (1) {
+        --queue.num_threads_idle;
         while (!h2o_linklist_is_empty(&queue.pending)) {
             h2o_hostinfo_getaddr_req_t *req = H2O_STRUCT_FROM_MEMBER(h2o_hostinfo_getaddr_req_t, _pending, queue.pending.next);
             h2o_linklist_unlink(&req->_pending);
@@ -79,11 +80,11 @@ static void *lookup_thread_main(void *_unused)
             lookup_and_respond(req);
             pthread_mutex_lock(&queue.mutex);
         }
+        ++queue.num_threads_idle;
         pthread_cond_wait(&queue.cond, &queue.mutex);
     }
 
-    pthread_mutex_unlock(&queue.mutex);
-
+    h2o_fatal("unreachable");
     return NULL;
 }
 

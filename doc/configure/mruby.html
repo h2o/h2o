@@ -234,6 +234,9 @@ The response header and the response body object returned by the <code>#join</co
 <p>
 Since the API provides an asynchronous HTTP client, it is possible to effectively issue multiple HTTP requests concurrently and merge them into a single response.
 </p>
+<p>
+When HTTPS is used, servers are verified using the properties of <a href="configure/proxy_directives.html#proxy.ssl.cafile"><code>proxy.ssl.cafile</code></a> and <a href="configure/proxy_directives.html#proxy.ssl.verify-peer"><code>proxy.ssl.verify-peer</code></a> specified at the global level.
+</p>
 
 
 
