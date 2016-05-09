@@ -70,7 +70,8 @@ When forwarding the requests, the module sets following request headers:
 </ul>
 </p>
 <p>
-The HTTP client only supports plain text HTTP/1; neither HTTP/2 nor HTTPS are supported for the time being.
+The HTTP client only supports HTTP/1.
+Support for HTTPS has been introduced in version 2.0.
 </p>
 <p>
 Following sections describe the configuration directives defined for the module.
@@ -94,7 +95,6 @@ Forwards the requests to the specified URL, and proxies the response.
 </div>
 
 <p>
-At the moment, only HTTP is supported.
 If you want load balancing multiple backends, replace 127.0.0.1 with hostname witch returns IP addresses via DNS or /etc/hosts.
 </p>
 <p>
@@ -125,6 +125,82 @@ A boolean flag (<code>ON</code> or <code>OFF</code>) designating whether or not 
 <dt>Default:</dt>
 <dd><code><pre>proxy.preserve-host: OFF</pre></code>
 </dl>
+
+
+<div id="proxy.preserve-x-forwarded-proto" class="directive-head">
+<div class="directive-since">since v2.0</div>
+<h3><a href="configure/proxy_directives.html#proxy.preserve-x-forwarded-proto"><code>"proxy.preserve-x-forwarded-proto"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag(<code>ON</code> or <code>OFF</code>) indicating if the server preserve the received <code>x-forwarded-proto</code> request header.
+</p>
+
+<p>
+By default, when transmitting a HTTP request to an upstream HTTP server, H2O removes the received <code>x-forwarded-proto</code> request header and sends its own, as a precautios measure to prevent an attacker connecting through HTTP to lie that they are connected via HTTPS.
+However in case H2O is run behind a trusted HTTPS proxy, such protection might not be desirable, and this configuration directive can be used to modify the behaviour.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.preserve-x-forwarded-proto: OFF</pre></code>
+</dl>
+
+<div id="proxy.ssl.cafile" class="directive-head">
+<div class="directive-since">since v2.0</div>
+<h3><a href="configure/proxy_directives.html#proxy.ssl.cafile"><code>"proxy.ssl.cafile"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Specifies the file storing the list of trusted root certificates.
+</p>
+
+<p>
+By default, H2O uses <code>share/h2o/ca-bundle.crt</code>.  The file contains a set of trusted root certificates maintained by Mozilla, downloaded and converted using <a href="https://curl.haxx.se/docs/mk-ca-bundle.html">mk-ca-bundle.pl</a>.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+<dt>See also:</dt>
+<dd><a href="configure/proxy_directives.html#proxy.ssl.verify-peer"><code>proxy.ssl.verify-peer</code></a>
+</dd>
+</dl>
+
+<div id="proxy.ssl.verify-peer" class="directive-head">
+<div class="directive-since">since v2.0</div>
+<h3><a href="configure/proxy_directives.html#proxy.ssl.verify-peer"><code>"proxy.ssl.verify-peer"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if the server certificate and hostname should be verified.
+</p>
+
+<p>
+If set to <code>ON</code>, the HTTP client implementation of H2O verifies the peer's certificate using the list of trusted certificates as well as compares the hostname presented in the certificate against the connecting hostname.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.ssl.verify-peer: ON</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/proxy_directives.html#proxy.ssl.cafile"><code>proxy.ssl.cafile</code></a>
+</dd>
+</dl>
+
 <div id="proxy.timeout.io" class="directive-head">
 <h3><a href="configure/proxy_directives.html#proxy.timeout.io"><code>"proxy.timeout.io"</code></a></h3>
 </div>
