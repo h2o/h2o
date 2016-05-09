@@ -20,7 +20,7 @@
 
 #define HOSTNAME_MAX_SIZE 255
 
-static int tolower(int ch) {
+static int lowercase(int ch) {
 	if ('A' <= ch && ch <= 'Z')
 		return ch - 'A' + 'a';
 	return ch;
@@ -30,7 +30,7 @@ static int memeq_ncase(const char *x, const char *y, size_t l) {
 	if (l == 0)
 		return 1;
 	do {
-		if (tolower(*x++) != tolower(*y++))
+		if (lowercase(*x++) != lowercase(*y++))
 			return 0;
 	} while (--l != 0);
 	return 1;
