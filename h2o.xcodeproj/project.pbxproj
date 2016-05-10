@@ -181,7 +181,6 @@
 		10AAAC631B6C7A7D004487C3 /* http2_casper.h in Headers */ = {isa = PBXBuildFile; fileRef = 10AAAC621B6C7A7D004487C3 /* http2_casper.h */; };
 		10AAAC651B6C9275004487C3 /* casper.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AAAC641B6C9275004487C3 /* casper.c */; };
 		10B38A721B8D34BB007DC191 /* mruby_.h in Headers */ = {isa = PBXBuildFile; fileRef = 10B38A711B8D34BB007DC191 /* mruby_.h */; };
-		10B38A741B8D3544007DC191 /* mruby.c in Sources */ = {isa = PBXBuildFile; fileRef = 10B38A731B8D3544007DC191 /* mruby.c */; };
 		10BA72AA19AAD6300059392A /* stream.c in Sources */ = {isa = PBXBuildFile; fileRef = 10BA72A919AAD6300059392A /* stream.c */; };
 		10BCF2FD1B168CAE0076939D /* fastcgi.c in Sources */ = {isa = PBXBuildFile; fileRef = 10BCF2FC1B168CAE0076939D /* fastcgi.c */; };
 		10BCF2FF1B1A892F0076939D /* fastcgi.c in Sources */ = {isa = PBXBuildFile; fileRef = 10BCF2FE1B1A892F0076939D /* fastcgi.c */; };
@@ -201,6 +200,7 @@
 		10D0907319F633B00043D458 /* proxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 10D0907219F633B00043D458 /* proxy.c */; };
 		10E299581A67E68500701AA6 /* scheduler.c in Sources */ = {isa = PBXBuildFile; fileRef = 10E299571A67E68500701AA6 /* scheduler.c */; };
 		10E2995A1A68D03100701AA6 /* scheduler.c in Sources */ = {isa = PBXBuildFile; fileRef = 10E299591A68D03100701AA6 /* scheduler.c */; };
+		10E598011CE1683A000D7B94 /* mruby.c in Sources */ = {isa = PBXBuildFile; fileRef = 10B38A731B8D3544007DC191 /* mruby.c */; };
 		10EC2A361A0B4D370083514F /* socketpool.h in Headers */ = {isa = PBXBuildFile; fileRef = 10EC2A351A0B4D370083514F /* socketpool.h */; };
 		10EC2A381A0B4DC70083514F /* socketpool.c in Sources */ = {isa = PBXBuildFile; fileRef = 10EC2A371A0B4DC70083514F /* socketpool.c */; };
 		10F417CC19C1907B00B6E31A /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
@@ -1681,7 +1681,6 @@
 				107D4D551B5B30EE004A9B21 /* file.c in Sources */,
 				10D0907319F633B00043D458 /* proxy.c in Sources */,
 				10A3D3D21B4CDBDC00327CF9 /* memcached.c in Sources */,
-				10B38A741B8D3544007DC191 /* mruby.c in Sources */,
 				107923CF19A3217300C52AD6 /* request.c in Sources */,
 				1070866C1B787D06002B8F18 /* compress.c in Sources */,
 				107086721B798488002B8F18 /* compress.c in Sources */,
@@ -1824,6 +1823,7 @@
 				107E340A1C7EAF9300AEF5F8 /* utf8_util.cc in Sources */,
 				10FFEE0A1BB23A8C0087AD75 /* neverbleed.c in Sources */,
 				107E34041C7EAF9300AEF5F8 /* entropy_encode.cc in Sources */,
+				10E598011CE1683A000D7B94 /* mruby.c in Sources */,
 				107E33F71C7EAF5A00AEF5F8 /* compress_fragment_two_pass.cc in Sources */,
 				107E34081C7EAF9300AEF5F8 /* static_dict.cc in Sources */,
 				107E34091C7EAF9300AEF5F8 /* streams.cc in Sources */,
