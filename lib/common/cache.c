@@ -198,16 +198,18 @@ void h2o_cache_release(h2o_cache_t *cache, h2o_cache_ref_t *ref)
     if (__sync_fetch_and_sub(&ref->_refcnt, 1) == 1) {
         assert(!h2o_linklist_is_linked(&ref->_lru_link));
         assert(!h2o_linklist_is_linked(&ref->_age_link));
-        cache->destroy_cb(ref->value);
+        if (cache->destroy_cb != NULL)
+            cache->destroy_cb(ref->value);
         free(ref->key.base);
         free(ref);
     }
 }
 
-void h2o_cache_set(h2o_cache_t *cache, uint64_t now, h2o_iovec_t key, h2o_cache_hashcode_t keyhash, h2o_iovec_t value)
+int h2o_cache_set(h2o_cache_t *cache, uint64_t now, h2o_iovec_t key, h2o_cache_hashcode_t keyhash, h2o_iovec_t value)
 {
     h2o_cache_ref_t *newref;
     khiter_t iter;
+    int existed;
 
     if (keyhash == 0)
         keyhash = h2o_cache_calchash(key.base, key.len);
@@ -223,9 +225,11 @@ void h2o_cache_set(h2o_cache_t *cache, uint64_t now, h2o_iovec_t key, h2o_cache_
     if (iter != kh_end(cache->table)) {
         erase_ref(cache, iter, 1);
         kh_key(cache->table, iter) = newref;
+        existed = 1;
     } else {
         int unused;
         kh_put(cache, cache->table, newref, &unused);
+        existed = 0;
     }
     h2o_linklist_insert(&cache->lru, &newref->_lru_link);
     h2o_linklist_insert(&cache->age, &newref->_age_link);
@@ -234,6 +238,8 @@ void h2o_cache_set(h2o_cache_t *cache, uint64_t now, h2o_iovec_t key, h2o_cache_
     purge(cache, now);
 
     unlock_cache(cache);
+
+    return existed;
 }
 
 void h2o_cache_delete(h2o_cache_t *cache, uint64_t now, h2o_iovec_t key, h2o_cache_hashcode_t keyhash)

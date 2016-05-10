@@ -93,8 +93,9 @@ void h2o_cache_release(h2o_cache_t *cache, h2o_cache_ref_t *ref);
  * @param key
  * @param keyhash callers may optionally pass in the precalculated hash value (or should be set to 0)
  * @param value (when no longer needed, destroy_cb will be called)
+ * @return if the specified value already existed
  */
-void h2o_cache_set(h2o_cache_t *cache, uint64_t now, h2o_iovec_t key, h2o_cache_hashcode_t keyhash, h2o_iovec_t value);
+int h2o_cache_set(h2o_cache_t *cache, uint64_t now, h2o_iovec_t key, h2o_cache_hashcode_t keyhash, h2o_iovec_t value);
 /**
  * deletes a named value from the cache
  * @param cache
