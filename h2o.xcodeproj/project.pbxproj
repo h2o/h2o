@@ -2653,7 +2653,6 @@
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lmruby",
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-lz",
@@ -2686,7 +2685,6 @@
 				);
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-luv",
@@ -2717,7 +2715,6 @@
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lmruby",
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-lz",
@@ -2746,7 +2743,6 @@
 				);
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-luv",
