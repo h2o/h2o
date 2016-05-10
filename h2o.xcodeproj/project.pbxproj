@@ -2638,6 +2638,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					deps/yaml/include,
 					deps/mruby/include,
 					"deps/mruby-input-stream/src",
 					"/usr/local/openssl-1.0.2/include",
@@ -2671,6 +2672,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					deps/yaml/include,
 					deps/mruby/include,
 					"deps/mruby-input-stream/src",
 					"/usr/local/openssl-1.0.2/include",
@@ -2700,6 +2702,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					deps/yaml/include,
 					deps/mruby/include,
 					"deps/mruby-input-stream/src",
 					"/usr/local/openssl-1.0.2/include",
@@ -2729,6 +2732,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					deps/yaml/include,
 					deps/mruby/include,
 					"deps/mruby-input-stream/src",
 					"/usr/local/openssl-1.0.2/include",
