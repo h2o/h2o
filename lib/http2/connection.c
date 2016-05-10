@@ -254,6 +254,8 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     assert(!h2o_timeout_is_linked(&conn->_write.timeout_entry));
     if (conn->_headers_unparsed != NULL)
         h2o_buffer_dispose(&conn->_headers_unparsed);
+    if (conn->push_memo != NULL)
+        h2o_cache_destroy(conn->push_memo);
     if (conn->casper != NULL)
         h2o_http2_casper_destroy(conn->casper);
     h2o_linklist_unlink(&conn->_conns);
@@ -1170,6 +1172,18 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     return conn;
 }
 
+static int update_push_memo(h2o_http2_conn_t *conn, h2o_req_t *src_req, const char *abspath, size_t abspath_len)
+{
+
+    if (conn->push_memo == NULL)
+        conn->push_memo = h2o_cache_create(0, 1024, 1, NULL);
+
+    /* uses the hash as the key */
+    h2o_cache_hashcode_t url_hash = h2o_cache_calchash(src_req->input.scheme->name.base, src_req->input.scheme->name.len) ^
+        h2o_cache_calchash(src_req->input.authority.base, src_req->input.authority.len) ^ h2o_cache_calchash(abspath, abspath_len);
+    return h2o_cache_set(conn->push_memo, 0, h2o_iovec_init(&url_hash, sizeof(url_hash)), url_hash, h2o_iovec_init(NULL, 0));
+}
+
 static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_len)
 {
     h2o_http2_conn_t *conn = (void *)src_req->conn;
@@ -1213,6 +1227,10 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
             return;
         }
     }
+
+    /* update the push memo, and if it already pushed on the same connection, return */
+    if (update_push_memo(conn, src_req, abspath, abspath_len))
+        return;
 
     /* open the stream */
     conn->push_stream_ids.max_open += 2;
