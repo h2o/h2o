@@ -68,6 +68,34 @@ EOT
     };
 };
 
+subtest "push-twice" => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        return << "EOT";
+hosts:
+  "127.0.0.1:$tls_port":
+    paths:
+      /:
+        mruby.handler: |
+          Proc.new do |env|
+            case env["PATH_INFO"]
+            when "/index.txt"
+              push_paths = []
+              push_paths << "/index.js"
+              [399, push_paths.empty? ? {} : {"link" => push_paths.map{|p| "<#{p}>; rel=preload"}.join("\\n")}, []]
+            else
+              [399, {}, []]
+            end
+          end
+        file.dir: t/assets/doc_root
+EOT
+    });
+    my $resp = `nghttp -v -m 2 -n --stat https://127.0.0.1:$server->{tls_port}/index.txt`;
+    like $resp, qr{\s+200\s+16\s+/index\.js\n}is, "receives index.js";
+    unlike $resp, qr{\s+200\s+16\s+/index\.js\n.*\s+200\s+16\s+/index\.js\n}is, "receives index.js only once";
+};
+
+
 subtest "push-after-reproxy" => sub {
     subtest "authority-match" => sub {
         my $server = spawn_h2o(sub {
