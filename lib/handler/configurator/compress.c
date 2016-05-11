@@ -30,7 +30,7 @@ struct compress_configurator_t {
     h2o_compress_args_t *vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
-static const h2o_compress_args_t all_off = {{-1}, {-1}}, all_on = {{DEFAULT_GZIP_QUALITY}, {DEFAULT_BROTLI_QUALITY}};
+static const h2o_compress_args_t all_off = {0, {-1}, {-1}}, all_on = {100, {DEFAULT_GZIP_QUALITY}, {DEFAULT_BROTLI_QUALITY}};
 
 static int on_config_gzip(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
@@ -65,6 +65,12 @@ static int obtain_quality(yoml_t *node, int min_quality, int max_quality, int de
         return 0;
     }
     return -1;
+}
+
+static int on_config_compress_min_size(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct compress_configurator_t *self = (void *)cmd->configurator;
+    return h2o_configurator_scanf(cmd, node, "%zu", &self->vars->min_size);
 }
 
 static int on_config_compress(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -155,6 +161,9 @@ void h2o_compress_register_configurator(h2o_globalconf_t *conf)
     c->super.enter = on_config_enter;
     c->super.exit = on_config_exit;
     h2o_configurator_define_command(&c->super, "compress", H2O_CONFIGURATOR_FLAG_ALL_LEVELS, on_config_compress);
+    h2o_configurator_define_command(&c->super, "compress-min-size",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_compress_min_size);
     h2o_configurator_define_command(&c->super, "gzip", H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_gzip);
     c->vars = c->_vars_stack;
