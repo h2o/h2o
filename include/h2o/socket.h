@@ -68,6 +68,14 @@ struct st_h2o_socket_peername_t {
     struct sockaddr addr;
 };
 
+enum {
+    H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_TBD = 0,
+    H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_DISABLED,
+    H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_NEEDS_UPDATE,
+    H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_TINY_TLS_RECORDS,
+    H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_LARGE_TLS_RECORDS
+};
+
 /**
  * abstraction layer for sockets (SSL vs. TCP)
  */
@@ -85,6 +93,12 @@ struct st_h2o_socket_t {
         h2o_socket_cb write;
     } _cb;
     struct st_h2o_socket_peername_t *_peername;
+    struct {
+        uint8_t mode; /* one of H2O_SOCKET_LATENCY_MODE_* */
+        uint8_t tls_overhead;
+        uint16_t mss;
+        size_t suggested_write_size; /* SIZE_MAX if no need to optimize for latency */
+    } _latency_optimization;
 };
 
 typedef struct st_h2o_socket_export_t {
@@ -147,6 +161,11 @@ void h2o_socket_dont_read(h2o_socket_t *sock, int dont_read);
  * connects to peer
  */
 h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb);
+/**
+ * prepares for latency-optimized write and returns the number of octets that should be written, or SIZE_MAX if failed to prepare
+ */
+static size_t h2o_socket_prepare_for_latency_optimized_write(h2o_socket_t *sock, int minimum_rtt);
+size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock, int minimum_rtt);
 /**
  * writes given data to socket
  * @param sock the socket
@@ -262,6 +281,19 @@ inline int h2o_socket_is_writing(h2o_socket_t *sock)
 inline int h2o_socket_is_reading(h2o_socket_t *sock)
 {
     return sock->_cb.read != NULL;
+}
+
+inline size_t h2o_socket_prepare_for_latency_optimized_write(h2o_socket_t *sock, int minimum_rtt)
+{
+    switch (sock->_latency_optimization.mode) {
+    case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_DISABLED:
+        return SIZE_MAX;
+    case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_TINY_TLS_RECORDS:
+    case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_LARGE_TLS_RECORDS:
+        return sock->_latency_optimization.suggested_write_size;
+    default:
+        return h2o_socket_do_prepare_for_latency_optimized_write(sock, minimum_rtt);
+    }
 }
 
 inline h2o_iovec_t h2o_socket_log_ssl_protocol_version(h2o_socket_t *sock, h2o_mem_pool_t *pool)

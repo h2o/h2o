@@ -24,6 +24,8 @@
 #include <inttypes.h>
 #include <limits.h>
 #include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <string.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -37,6 +39,11 @@
 
 #ifndef IOV_MAX
 #define IOV_MAX UIO_MAXIOV
+#endif
+
+/* kernel-headers bundled with Ubuntu 14.04 does not have the constant defined in netinet/tcp.h */
+#if defined(__linux__) && !defined(TCP_NOTSENT_LOWAT)
+#define TCP_NOTSENT_LOWAT 25
 #endif
 
 #define OPENSSL_HOSTNAME_VALIDATION_LINKAGE static
@@ -379,6 +386,102 @@ void h2o_socket_close(h2o_socket_t *sock)
     }
 }
 
+#if defined(TCP_INFO) && defined(TCP_NOTSENT_LOWAT)
+static int fetch_tcp_info(h2o_socket_t *sock, struct tcp_info *info)
+{
+    int fd = h2o_socket_get_fd(sock);
+    socklen_t sz = sizeof(*info);
+    return getsockopt(fd, IPPROTO_TCP, TCP_INFO, info, &sz);
+}
+
+size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock, int minimum_rtt)
+{
+    struct tcp_info tcpi;
+
+    switch (sock->_latency_optimization.mode) {
+
+    case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_TBD: {
+        int16_t tls_overhead;
+        if (fetch_tcp_info(sock, &tcpi) != 0)
+            goto Disable;
+        if (tcpi.tcpi_rtt < minimum_rtt)
+            goto Disable;
+        if (sock->ssl != NULL) {
+            /* FIXME check the numbers! taken from http://d.hatena.ne.jp/jovi0608/20160404/1459748671 */
+            const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ssl);
+            switch (cipher->id) {
+            case TLS1_CK_RSA_WITH_AES_128_GCM_SHA256:
+            case TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256:
+            case TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
+            case TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:
+            case TLS1_CK_RSA_WITH_AES_256_GCM_SHA384:
+            case TLS1_CK_DHE_RSA_WITH_AES_256_GCM_SHA384:
+            case TLS1_CK_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
+            case TLS1_CK_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:
+                tls_overhead = 5 /* header */ + 8 /* IV */ + 12 /* tag */;
+#if defined(TLS1_CK_DHE_RSA_CHACHA20_POLY1305)
+            case TLS1_CK_DHE_RSA_CHACHA20_POLY1305:
+            case TLS1_CK_ECDHE_RSA_CHACHA20_POLY1305:
+            case TLS1_CK_ECDHE_ECDSA_CHACHA20_POLY1305:
+                tls_overhead = 5 /* header */ + 16 /* tag */;
+#endif
+            default:
+                goto Disable;
+            }
+        } else {
+            tls_overhead = 0;
+        }
+        int notsent_lowat = 1; /* cannot be set to zero on Linux */
+        if (setsockopt(h2o_socket_get_fd(sock), IPPROTO_TCP, TCP_NOTSENT_LOWAT, &notsent_lowat, sizeof(notsent_lowat)) != 0)
+            goto Disable;
+        /* successfully set up.  Save the parameters */
+        sock->_latency_optimization.tls_overhead = tls_overhead;
+        sock->_latency_optimization.mss = tcpi.tcpi_snd_mss;
+    } break;
+
+    case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_NEEDS_UPDATE:
+        /* re-fetch TCP_INFO */
+        if (fetch_tcp_info(sock, &tcpi) != 0)
+            return SIZE_MAX;
+        break;
+
+    default:
+        h2o_fatal("unexpected mode");
+        break;
+    }
+
+    /* latency-optimization is enabled, and TCP_INFO is obtained */
+
+    /* no need to:
+     *   1) adjust the write size if single_write_size << cwnd_size
+     *   2) align TLS record boundary to TCP packet boundary if packet loss-rate is low and BW isn't small (implied by cwnd size)
+     */
+    if (sock->_latency_optimization.mss * tcpi.tcpi_snd_cwnd >= 65536) {
+        sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_LARGE_TLS_RECORDS;
+        return SIZE_MAX;
+    }
+
+    sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_TINY_TLS_RECORDS;
+    size_t packets_sendable = tcpi.tcpi_snd_cwnd > tcpi.tcpi_unacked ? tcpi.tcpi_snd_cwnd - tcpi.tcpi_unacked : 0;
+    sock->_latency_optimization.suggested_write_size =
+        (packets_sendable + 1) * (sock->_latency_optimization.mss - sock->_latency_optimization.tls_overhead);
+    return sock->_latency_optimization.suggested_write_size;
+
+Disable:
+    sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_DISABLED;
+    return SIZE_MAX;
+}
+
+#else
+
+size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock, int minimum_rtt)
+{
+    sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_DISABLED;
+    return SIZE_MAX;
+}
+
+#endif
+
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
 #if H2O_SOCKET_DUMP_WRITE
@@ -401,13 +504,28 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
     } else {
         assert(sock->ssl->output.bufs.size == 0);
         /* fill in the data */
+        size_t ssl_record_size;
+        switch (sock->_latency_optimization.mode) {
+        case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_TINY_TLS_RECORDS:
+        case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_NEEDS_UPDATE:
+            ssl_record_size = sock->_latency_optimization.mss;
+            sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_NEEDS_UPDATE;
+            break;
+        case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_LARGE_TLS_RECORDS:
+            ssl_record_size = 16384 - sock->_latency_optimization.tls_overhead;
+            sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_NEEDS_UPDATE;
+            break;
+        default:
+            ssl_record_size = 1400;
+            break;
+        }
         for (; bufcnt != 0; ++bufs, --bufcnt) {
             size_t off = 0;
             while (off != bufs[0].len) {
                 int ret;
                 size_t sz = bufs[0].len - off;
-                if (sz > 1400)
-                    sz = 1400;
+                if (sz > ssl_record_size)
+                    sz = ssl_record_size;
                 ret = SSL_write(sock->ssl->ssl, bufs[0].base + off, (int)sz);
                 if (ret != sz) {
                     /* The error happens if SSL_write is called after SSL_read returns a fatal error (e.g. due to corrupt TCP packet
