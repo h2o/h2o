@@ -287,7 +287,8 @@ inline size_t h2o_socket_prepare_for_latency_optimized_write(h2o_socket_t *sock,
 {
     switch (sock->_latency_optimization.mode) {
     case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_DISABLED:
-        return SIZE_MAX;
+        /* SIZE_MAX might not be available in case the file is included from a C++ source file */
+        return (size_t)-1;
     case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_TINY_TLS_RECORDS:
     case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_LARGE_TLS_RECORDS:
         return sock->_latency_optimization.suggested_write_size;
