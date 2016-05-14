@@ -407,7 +407,6 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock, int
         if (tcpi.tcpi_rtt < minimum_rtt)
             goto Disable;
         if (sock->ssl != NULL) {
-            /* FIXME check the numbers! taken from http://d.hatena.ne.jp/jovi0608/20160404/1459748671 */
             const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ssl);
             switch (cipher->id) {
             case TLS1_CK_RSA_WITH_AES_128_GCM_SHA256:
@@ -418,12 +417,14 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock, int
             case TLS1_CK_DHE_RSA_WITH_AES_256_GCM_SHA384:
             case TLS1_CK_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
             case TLS1_CK_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:
-                tls_overhead = 5 /* header */ + 8 /* IV */ + 12 /* tag */;
+                tls_overhead = 5 /* header */ + 8 /* record_iv_length (RFC 5288 3) */ + 16 /* tag (RFC 5116 5.1) */;
+                break;
 #if defined(TLS1_CK_DHE_RSA_CHACHA20_POLY1305)
             case TLS1_CK_DHE_RSA_CHACHA20_POLY1305:
             case TLS1_CK_ECDHE_RSA_CHACHA20_POLY1305:
             case TLS1_CK_ECDHE_ECDSA_CHACHA20_POLY1305:
                 tls_overhead = 5 /* header */ + 16 /* tag */;
+                break;
 #endif
             default:
                 goto Disable;
