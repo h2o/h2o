@@ -526,9 +526,9 @@ static int handle_response_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
             /* skip */
         } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
             req->res.content_length = h2o_strtosize(value.base, value.len);
-        } else if (token == H2O_TOKEN_LINK && h2o_puth_path_in_link_header(req, value.base, value.len)) {
-            /* do not send the link header that is going to be pushed */
         } else {
+            if (token == H2O_TOKEN_LINK)
+                h2o_push_path_in_link_header(req, value.base, value.len);
             value = h2o_strdup(&req->pool, value.base, value.len);
             h2o_add_header(&req->pool, &req->res.headers, token, value.base, value.len);
         }

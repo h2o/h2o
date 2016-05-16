@@ -577,7 +577,7 @@ h2o_iovec_t h2o_get_redirect_method(h2o_iovec_t method, int status)
     return method;
 }
 
-int h2o_puth_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len)
+int h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len)
 {
     if (req->conn->callbacks->push_path == NULL || req->res_is_delegated)
         return -1;

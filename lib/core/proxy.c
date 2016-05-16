@@ -369,7 +369,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 }
                 goto AddHeaderDuped;
             } else if (token == H2O_TOKEN_LINK) {
-                h2o_puth_path_in_link_header(req, headers[i].value, headers[i].value_len);
+                h2o_push_path_in_link_header(req, headers[i].value, headers[i].value_len);
             }
         /* default behaviour, transfer the header downstream */
         AddHeaderDuped:
