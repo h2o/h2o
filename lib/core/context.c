@@ -184,19 +184,18 @@ void h2o_context_update_timestamp_cache(h2o_context_t *ctx)
     }
 }
 
-void h2o_context_report_emitted_error(h2o_context_t *ctx, int status, int http)
+void h2o_context_report_http1_error(h2o_context_t *ctx, int status)
 {
     int s100;
 
 #define INC_PREDEF_ERROR(x) \
     do { \
         if (status == x) { \
-            ctx->emitted_errors.emitted_errors_cnt[E_HTTP_ ## x]++; \
+            ctx->emitted_errors[E_HTTP_ ## x]++; \
             return; \
         } \
     } while(0)
 
-    if (http == 1) {
         INC_PREDEF_ERROR(400);
         INC_PREDEF_ERROR(403);
         INC_PREDEF_ERROR(404);
@@ -212,39 +211,13 @@ void h2o_context_report_emitted_error(h2o_context_t *ctx, int status, int http)
         s100 = status / 100;
         switch(s100) {
             case 4:
-                ctx->emitted_errors.emitted_errors_cnt[E_HTTP_4XX]++;
+                ctx->emitted_errors[E_HTTP_4XX]++;
                 return;
             case 5:
-                ctx->emitted_errors.emitted_errors_cnt[E_HTTP_5XX]++;
+                ctx->emitted_errors[E_HTTP_5XX]++;
                 return;
             default:
-                ctx->emitted_errors.emitted_errors_cnt[E_HTTP_XXX]++;
+                ctx->emitted_errors[E_HTTP_XXX]++;
                 return;
         }
-    } else {
-#define INC_PREDEF_ERROR2(name, x) \
-    do { \
-        if (status == x) { \
-            ctx->emitted_errors.emitted_errors_cnt[E_HTTP2_ ## name]++; \
-            return; \
-        } \
-    } while(0)
-
-        INC_PREDEF_ERROR2(PROTOCOL, -1);
-        INC_PREDEF_ERROR2(INTERNAL, -2);
-        INC_PREDEF_ERROR2(FLOW_CONTROL, -3);
-        INC_PREDEF_ERROR2(SETTINGS_TIMEOUT, -4);
-        INC_PREDEF_ERROR2(STREAM_CLOSED, -5);
-        INC_PREDEF_ERROR2(FRAME_SIZE, -6);
-        INC_PREDEF_ERROR2(REFUSED_STREAM, -7);
-        INC_PREDEF_ERROR2(CANCEL, -8);
-        INC_PREDEF_ERROR2(COMPRESSION, -9);
-        INC_PREDEF_ERROR2(CONNECT, -10);
-        INC_PREDEF_ERROR2(ENHANCE_YOUR_CALM, -11);
-        INC_PREDEF_ERROR2(INADEQUATE_SECURITY, -12);
-
-        ctx->emitted_errors.emitted_errors_cnt[E_HTTP2_OTHER]++;
-        return;
-#undef INC_PREDEF_ERROR
-    }
 }

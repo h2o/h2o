@@ -23,15 +23,19 @@
 #include "h2o.h"
 
 struct errors_status_ctx {
-    unsigned long long agg_errors[EMITTED_ERRORS_MAX];
+    unsigned long long agg_errors_http1[E_HTTP_MAX];
+    unsigned long long agg_errors_http2[E_HTTP2_MAX];
 };
 
 static void errors_status_per_thread(void *priv, h2o_context_t *ctx)
 {
     size_t i;
     struct errors_status_ctx *esc = priv;
-    for (i = 0; i < EMITTED_ERRORS_MAX; i++) {
-        esc->agg_errors[i] += ctx->emitted_errors.emitted_errors_cnt[i];
+    for (i = 0; i < E_HTTP_MAX; i++) {
+        esc->agg_errors_http1[i] += ctx->emitted_errors[i];
+    }
+    for (i = 0; i < E_HTTP_MAX; i++) {
+        esc->agg_errors_http2[i] += ctx->http2.emitted_errors[i];
     }
 }
 
@@ -78,15 +82,19 @@ static h2o_iovec_t errors_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                                           " \"http2-errors-enhance_your_calm\": %llu, \n"
                                           " \"http2-errors-inadequate_security\": %llu, \n"
                                           " \"http2-errors-other\": %llu",
-                                          esc->agg_errors[E_HTTP_400], esc->agg_errors[E_HTTP_403], esc->agg_errors[E_HTTP_404],
-                                          esc->agg_errors[E_HTTP_405], esc->agg_errors[E_HTTP_416], esc->agg_errors[E_HTTP_417],
-                                          esc->agg_errors[E_HTTP_500], esc->agg_errors[E_HTTP_502], esc->agg_errors[E_HTTP_503],
-                                          esc->agg_errors[E_HTTP_4XX], esc->agg_errors[E_HTTP_5XX], esc->agg_errors[E_HTTP_XXX],
-                                          esc->agg_errors[E_HTTP2_PROTOCOL], esc->agg_errors[E_HTTP2_INTERNAL], esc->agg_errors[E_HTTP2_FLOW_CONTROL],
-                                          esc->agg_errors[E_HTTP2_SETTINGS_TIMEOUT], esc->agg_errors[E_HTTP2_STREAM_CLOSED], esc->agg_errors[E_HTTP2_FRAME_SIZE],
-                                          esc->agg_errors[E_HTTP2_REFUSED_STREAM], esc->agg_errors[E_HTTP2_CANCEL], esc->agg_errors[E_HTTP2_COMPRESSION],
-                                          esc->agg_errors[E_HTTP2_CONNECT], esc->agg_errors[E_HTTP2_ENHANCE_YOUR_CALM], esc->agg_errors[E_HTTP2_INADEQUATE_SECURITY],
-                                          esc->agg_errors[E_HTTP2_OTHER]);
+                                          esc->agg_errors_http1[E_HTTP_400], esc->agg_errors_http1[E_HTTP_403],
+                                          esc->agg_errors_http1[E_HTTP_404], esc->agg_errors_http1[E_HTTP_405],
+                                          esc->agg_errors_http1[E_HTTP_416], esc->agg_errors_http1[E_HTTP_417],
+                                          esc->agg_errors_http1[E_HTTP_500], esc->agg_errors_http1[E_HTTP_502],
+                                          esc->agg_errors_http1[E_HTTP_503], esc->agg_errors_http1[E_HTTP_4XX],
+                                          esc->agg_errors_http1[E_HTTP_5XX], esc->agg_errors_http1[E_HTTP_XXX],
+                                          esc->agg_errors_http2[E_HTTP2_PROTOCOL], esc->agg_errors_http2[E_HTTP2_INTERNAL],
+                                          esc->agg_errors_http2[E_HTTP2_FLOW_CONTROL], esc->agg_errors_http2[E_HTTP2_SETTINGS_TIMEOUT],
+                                          esc->agg_errors_http2[E_HTTP2_STREAM_CLOSED], esc->agg_errors_http2[E_HTTP2_FRAME_SIZE],
+                                          esc->agg_errors_http2[E_HTTP2_REFUSED_STREAM], esc->agg_errors_http2[E_HTTP2_CANCEL],
+                                          esc->agg_errors_http2[E_HTTP2_COMPRESSION], esc->agg_errors_http2[E_HTTP2_CONNECT],
+                                          esc->agg_errors_http2[E_HTTP2_ENHANCE_YOUR_CALM], esc->agg_errors_http2[E_HTTP2_INADEQUATE_SECURITY],
+                                          esc->agg_errors_http2[E_HTTP2_OTHER]);
     free(esc);
     return ret;
 #undef BUFSIZE

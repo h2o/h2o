@@ -153,7 +153,7 @@ static void entity_read_send_error(struct st_h2o_http1_conn_t *conn, int status,
     set_timeout(conn, NULL, NULL);
     h2o_socket_read_stop(conn->sock);
     conn->req.http1_is_persistent = 0;
-    h2o_send_error(&conn->req, status, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+    h2o_send_error_generic(&conn->req, status, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
 }
 
 static void on_entity_read_complete(struct st_h2o_http1_conn_t *conn)
@@ -409,7 +409,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                 if (!h2o_lcstris(expect.base, expect.len, H2O_STRLIT("100-continue"))) {
                     set_timeout(conn, NULL, NULL);
                     h2o_socket_read_stop(conn->sock);
-                    h2o_send_error(&conn->req, 417, "Expectation Failed", "unknown expectation",
+                    h2o_send_error_417(&conn->req, "Expectation Failed", "unknown expectation",
                                    H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
                     return;
                 }

@@ -205,7 +205,7 @@ static int on_req_json(struct st_h2o_root_status_handler_t *self, h2o_req_t *req
                 void *p;
                 p = sh->init(&err);
                 if (!p) {
-                    h2o_send_error(req, 400, "Invalid Request", err.base, 0);
+                    h2o_send_error_400(req, "Invalid Request", err.base, 0);
                     return 0;
                 }
                 collector->status_ctx.entries[collector->status_ctx.size].ctx = p;

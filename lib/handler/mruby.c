@@ -681,7 +681,7 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
 
 GotException:
     report_exception(generator->req, mrb);
-    h2o_send_error(generator->req, 500, "Internal Server Error", "Internal Server Error", 0);
+    h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
 }
 
 void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value input, int *is_delegate)
@@ -778,7 +778,7 @@ GotException:
     if (generator->req != NULL) {
         report_exception(generator->req, mrb);
         if (generator->req->_generator == NULL) {
-            h2o_send_error(generator->req, 500, "Internal Server Error", "Internal Server Error", 0);
+            h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
         } else {
             h2o_mruby_send_chunked_close(generator);
         }

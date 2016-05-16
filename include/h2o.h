@@ -419,19 +419,6 @@ typedef struct st_h2o_mimemap_type_t {
 
 /* errors emanating from h2o */
 enum {
-    /* http */
-    E_HTTP_400 = 0,
-    E_HTTP_403,
-    E_HTTP_404,
-    E_HTTP_405,
-    E_HTTP_416,
-    E_HTTP_417,
-    E_HTTP_500,
-    E_HTTP_502,
-    E_HTTP_503,
-    E_HTTP_4XX,
-    E_HTTP_5XX,
-    E_HTTP_XXX,
     /* http2 */
     E_HTTP2_PROTOCOL,
     E_HTTP2_INTERNAL,
@@ -446,12 +433,24 @@ enum {
     E_HTTP2_ENHANCE_YOUR_CALM,
     E_HTTP2_INADEQUATE_SECURITY,
     E_HTTP2_OTHER,
-    EMITTED_ERRORS_MAX,
+    E_HTTP2_MAX,
 };
-
-typedef struct st_h2o_emitted_errors_cnt {
-    unsigned long emitted_errors_cnt[EMITTED_ERRORS_MAX];
-} h2o_emitted_errors_t;
+enum {
+    /* http1 */
+    E_HTTP_400 = 0,
+    E_HTTP_403,
+    E_HTTP_404,
+    E_HTTP_405,
+    E_HTTP_416,
+    E_HTTP_417,
+    E_HTTP_500,
+    E_HTTP_502,
+    E_HTTP_503,
+    E_HTTP_4XX,
+    E_HTTP_5XX,
+    E_HTTP_XXX,
+    E_HTTP_MAX,
+};
 
 /**
  * context of the http server.
@@ -521,6 +520,10 @@ struct st_h2o_context_t {
          * timeout entry used for graceful shutdown
          */
         h2o_timeout_entry_t _graceful_shutdown_timeout;
+        /**
+         * counter for http2 errors internally emitted by h2o
+         */
+        unsigned long emitted_errors[E_HTTP2_MAX];
     } http2;
 
     struct {
@@ -546,9 +549,9 @@ struct st_h2o_context_t {
     } _timestamp_cache;
 
     /**
-     * counter for errors internally emitted by h2o
+     * counter for http1 errors internally emitted by h2o
      */
-    h2o_emitted_errors_t emitted_errors;
+    unsigned long emitted_errors[E_HTTP_MAX];
 
     H2O_VECTOR(h2o_pathconf_t *) _pathconfs_inited;
 };
@@ -1266,7 +1269,7 @@ static void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *lo
 /**
  * internally reports an error emitted by h2o, so that this can in turn be reported in statuses
  */
-void h2o_context_report_emitted_error(h2o_context_t *ctx, int status, int http);
+void h2o_context_report_http1_error(h2o_context_t *ctx, int status);
 /* built-in generators */
 
 enum {
@@ -1287,7 +1290,24 @@ void h2o_send_inline(h2o_req_t *req, const char *body, size_t len);
 /**
  * sends the given information as an error response to the client
  */
-void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body, int flags);
+void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, const char *body, int flags);
+#define H2O_SEND_ERROR_XXX(status) \
+    static inline void h2o_send_error_ ## status(h2o_req_t *req, const char *reason, const char *body, int flags) \
+    { \
+        req->conn->ctx->emitted_errors[E_HTTP_ ## status]++; \
+        h2o_send_error_generic(req, status, reason, body, flags); \
+    }
+
+H2O_SEND_ERROR_XXX(400)
+H2O_SEND_ERROR_XXX(403)
+H2O_SEND_ERROR_XXX(404)
+H2O_SEND_ERROR_XXX(405)
+H2O_SEND_ERROR_XXX(416)
+H2O_SEND_ERROR_XXX(417)
+H2O_SEND_ERROR_XXX(500)
+H2O_SEND_ERROR_XXX(502)
+H2O_SEND_ERROR_XXX(503)
+
 /**
  * sends error response using zero timeout; can be called by output filters while processing the headers
  */

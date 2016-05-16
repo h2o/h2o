@@ -128,7 +128,7 @@ static void call_handlers(h2o_req_t *req, h2o_handler_t **handler)
         if ((*handler)->on_req(*handler, req) == 0)
             return;
 
-    h2o_send_error(req, 404, "File Not Found", "not found", 0);
+    h2o_send_error_404(req, "File Not Found", "not found", 0);
 }
 
 static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
@@ -304,14 +304,14 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
     if (req->res_is_delegated) {
         if (req->num_delegated == req->conn->ctx->globalconf->max_delegations) {
             /* TODO log */
-            h2o_send_error(req, 502, "Gateway Error", "too many internal delegations", 0);
+            h2o_send_error_502(req, "Gateway Error", "too many internal delegations", 0);
             return;
         }
         ++req->num_delegated;
     } else {
         if (req->num_reprocessed >= 5) {
             /* TODO log */
-            h2o_send_error(req, 502, "Gateway Error", "too many internal reprocesses", 0);
+            h2o_send_error_502(req, "Gateway Error", "too many internal reprocesses", 0);
             return;
         }
         ++req->num_reprocessed;
@@ -456,10 +456,8 @@ void h2o_send_inline(h2o_req_t *req, const char *body, size_t len)
         h2o_send(req, &buf, 1, 1);
 }
 
-void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *body, int flags)
+void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, const char *body, int flags)
 {
-    h2o_context_report_emitted_error(req->conn->ctx, status, 1);
-
     if (req->pathconf == NULL) {
         h2o_hostconf_t *hostconf = setup_before_processing(req);
         h2o_req_bind_conf(req, hostconf, &hostconf->fallback_path);
@@ -484,7 +482,8 @@ static void send_error_deferred_cb(h2o_timeout_entry_t *entry)
 {
     struct st_send_error_deferred_t *args = H2O_STRUCT_FROM_MEMBER(struct st_send_error_deferred_t, _timeout, entry);
     reset_response(args->req);
-    h2o_send_error(args->req, args->status, args->reason, args->body, args->flags);
+    h2o_context_report_http1_error(args->req->conn->ctx, args->status);
+    h2o_send_error_generic(args->req, args->status, args->reason, args->body, args->flags);
 }
 
 void h2o_send_error_deferred(h2o_req_t *req, int status, const char *reason, const char *body, int flags)
