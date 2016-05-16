@@ -275,25 +275,12 @@ typedef struct st_h2o_protocol_callbacks_t {
     int (*foreach_request)(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 } h2o_protocol_callbacks_t;
 
-enum h2o_status_handler_type {
-    H2O_STATUS_HANDLER_SIMPLE,
-    H2O_STATUS_HANDLER_PER_THREAD,
-};
-typedef h2o_iovec_t (*simple_status_handler_cb)(h2o_globalconf_t *gconf, h2o_mem_pool_t *pool);
-typedef struct h2o_status_handler {
-    enum h2o_status_handler_type type;
+typedef h2o_iovec_t (*final_status_handler_cb)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req);
+typedef struct st_h2o_status_handler_t {
     h2o_iovec_t name;
-    union {
-        struct {
-            simple_status_handler_cb status_cb;
-        } simple;
-        struct {
-            void *(*alloc_context_cb)(h2o_req_t *src_req);
-            void (*per_thread_cb)(void *priv, h2o_context_t *ctx);
-            h2o_iovec_t (*assemble_cb)(void *ctx);
-            void (*done_cb)(void *ctx);
-        } per_thread;
-    };
+    void *(*init)(h2o_iovec_t *error); /* optional call back, allocates a context that will be passed to per_thread() */
+    void (*per_thread)(void *priv, h2o_context_t *ctx); /* optional callback, will be called for each thread */
+    h2o_iovec_t (*final)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req); /* mandatory, will be passed the optional context */
 } h2o_status_handler_t;
 
 typedef H2O_VECTOR(h2o_status_handler_t) h2o_status_callbacks_t;
@@ -1207,7 +1194,7 @@ h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *p
  * registers an extra status handler
  */
 void h2o_config_register_status_handler(h2o_globalconf_t *config, h2o_status_handler_t);
-void h2o_config_register_simple_status_handler(h2o_globalconf_t *config, h2o_iovec_t name, simple_status_handler_cb status_handler);
+void h2o_config_register_simple_status_handler(h2o_globalconf_t *config, h2o_iovec_t name, final_status_handler_cb status_handler);
 /**
  * disposes of the resources allocated for the global configuration
  */

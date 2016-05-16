@@ -204,15 +204,15 @@ void h2o_config_register_status_handler(h2o_globalconf_t *config, h2o_status_han
     config->statuses.entries[config->statuses.size++] = status_handler;
 }
 
-void h2o_config_register_simple_status_handler(h2o_globalconf_t *config, h2o_iovec_t name, simple_status_handler_cb status_handler)
+void h2o_config_register_simple_status_handler(h2o_globalconf_t *config, h2o_iovec_t name, final_status_handler_cb status_handler)
 {
     h2o_status_handler_t *sh;
 
     h2o_vector_reserve(NULL, &config->statuses, config->statuses.size + 1);
     sh = &config->statuses.entries[config->statuses.size++];
-    sh->type = H2O_STATUS_HANDLER_SIMPLE;
+    memset(sh, 0, sizeof(*sh));
     sh->name = h2o_strdup(NULL, name.base, name.len);
-    sh->simple.status_cb = status_handler;
+    sh->final = status_handler;
 }
 
 h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t host, uint16_t port)

@@ -28,7 +28,7 @@ struct st_h2o_status_logger_t {
     h2o_logger_t super;
 };
 
-struct st_h2o_status_handler_t {
+struct st_h2o_root_status_handler_t {
     h2o_handler_t super;
     H2O_VECTOR(h2o_multithread_receiver_t *) receivers;
 };
@@ -71,8 +71,8 @@ static void collect_reqs_of_context(struct st_h2o_status_collector_t *collector,
         if (!collector->status_ctx.entries[i].active) {
             continue;
         }
-        if (sh->type == H2O_STATUS_HANDLER_PER_THREAD) {
-            sh->per_thread.per_thread_cb(collector->status_ctx.entries[i].ctx, ctx);
+        if (sh->per_thread) {
+            sh->per_thread(collector->status_ctx.entries[i].ctx, ctx);
         }
     }
 
@@ -115,11 +115,7 @@ static void send_response(struct st_h2o_status_collector_t *collector)
         if (!collector->status_ctx.entries[i].active) {
             continue;
         }
-        if (sh->type == H2O_STATUS_HANDLER_SIMPLE) {
-            resp[cur_resp++] = sh->simple.status_cb(req->conn->ctx->globalconf, &req->pool);
-        } else {
-            resp[cur_resp++] = sh->per_thread.assemble_cb(collector->status_ctx.entries[i].ctx);
-        }
+        resp[cur_resp++] = sh->final(collector->status_ctx.entries[i].ctx, req->conn->ctx->globalconf, req);
         if (resp[cur_resp - 1].len > 0 && !coma_removed) {
             /* requests come in with a leading coma, replace if with a space */
             resp[cur_resp - 1].base[0] = ' ';
@@ -135,15 +131,6 @@ static void send_response(struct st_h2o_status_collector_t *collector)
     h2o_send(req, resp,
             h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")) ? 0 : nr_resp,
             1);
-    for (i = 0; i < req->conn->ctx->globalconf->statuses.size; i++) {
-        h2o_status_handler_t *sh = &req->conn->ctx->globalconf->statuses.entries[i];
-        if (!collector->status_ctx.entries[i].active) {
-            continue;
-        }
-        if (sh->type == H2O_STATUS_HANDLER_PER_THREAD) {
-            sh->per_thread.done_cb(collector->status_ctx.entries[i].ctx);
-        }
-    }
     h2o_mem_release_shared(collector);
 }
 
@@ -186,7 +173,7 @@ static void on_req_close(void *p)
     h2o_mem_release_shared(collector);
 }
 
-static int on_req_json(struct st_h2o_status_handler_t *self, h2o_req_t *req, h2o_iovec_t *status_list)
+static int on_req_json(struct st_h2o_root_status_handler_t *self, h2o_req_t *req, h2o_iovec_t *status_list)
 {
     { /* construct collector and send request to every thread */
         struct st_h2o_status_context_t *status_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
@@ -213,8 +200,15 @@ static int on_req_json(struct st_h2o_status_handler_t *self, h2o_req_t *req, h2o
                     goto Skip;
                 }
             }
-            if (sh->type == H2O_STATUS_HANDLER_PER_THREAD && sh->per_thread.alloc_context_cb) {
-                collector->status_ctx.entries[collector->status_ctx.size].ctx = sh->per_thread.alloc_context_cb(req);
+            if (sh->init) {
+                h2o_iovec_t err = {NULL, 0};
+                void *p;
+                p = sh->init(&err);
+                if (!p) {
+                    h2o_send_error(req, 400, "Invalid Request", err.base, 0);
+                    return 0;
+                }
+                collector->status_ctx.entries[collector->status_ctx.size].ctx = p;
             }
             collector->status_ctx.entries[collector->status_ctx.size].active = 1;
 Skip:
@@ -280,7 +274,7 @@ static void free_status_list(h2o_iovec_t *status_list)
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
-    struct st_h2o_status_handler_t *self = (void *)_self;
+    struct st_h2o_root_status_handler_t *self = (void *)_self;
     size_t prefix_len = req->pathconf->path.len - (req->pathconf->path.base[req->pathconf->path.len - 1] == '/');
     h2o_iovec_t local_path = h2o_iovec_init(req->path_normalized.base + prefix_len, req->path_normalized.len - prefix_len);
 
@@ -312,7 +306,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
 static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 {
-    struct st_h2o_status_handler_t *self = (void *)_self;
+    struct st_h2o_root_status_handler_t *self = (void *)_self;
     struct st_h2o_status_context_t *status_ctx = h2o_mem_alloc(sizeof(*status_ctx));
 
     status_ctx->ctx = ctx;
@@ -326,7 +320,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 
 static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
 {
-    struct st_h2o_status_handler_t *self = (void *)_self;
+    struct st_h2o_root_status_handler_t *self = (void *)_self;
     struct st_h2o_status_context_t *status_ctx = h2o_context_get_handler_context(ctx, &self->super);
     size_t i;
 
@@ -344,7 +338,7 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
 
 void h2o_status_register(h2o_pathconf_t *conf)
 {
-    struct st_h2o_status_handler_t *self = (void *)h2o_create_handler(conf, sizeof(*self));
+    struct st_h2o_root_status_handler_t *self = (void *)h2o_create_handler(conf, sizeof(*self));
     self->super.on_context_init = on_context_init;
     self->super.on_context_dispose = on_context_dispose;
     self->super.on_req = on_req;

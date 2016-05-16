@@ -23,7 +23,6 @@
 #include "h2o.h"
 
 struct errors_status_ctx {
-    h2o_mem_pool_t *pool;
     unsigned long long agg_errors[EMITTED_ERRORS_MAX];
 };
 
@@ -36,24 +35,23 @@ static void errors_status_per_thread(void *priv, h2o_context_t *ctx)
     }
 }
 
-static void *errors_status_alloc_context(h2o_req_t *req)
+static void *errors_status_init(h2o_iovec_t *err)
 {
     struct errors_status_ctx *ret;
 
-    ret = h2o_mem_alloc_pool(&req->pool, sizeof(*ret));
+    ret = h2o_mem_alloc(sizeof(*ret));
     memset(ret, 0, sizeof(*ret));
-    ret->pool = &req->pool;
 
     return ret;
 }
 
-static h2o_iovec_t errors_status_assemble(void *priv)
+static h2o_iovec_t errors_status_final(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
 {
     struct errors_status_ctx *esc = priv;
     h2o_iovec_t ret;
 
 #define BUFSIZE (2*1024)
-    ret.base = h2o_mem_alloc_pool(esc->pool, BUFSIZE);
+    ret.base = h2o_mem_alloc_pool(&req->pool, BUFSIZE);
     ret.len = snprintf(ret.base, BUFSIZE, ",\n"
                                           " \"http1-errors-400\": %llu,\n"
                                           " \"http1-errors-403\": %llu,\n"
@@ -89,25 +87,14 @@ static h2o_iovec_t errors_status_assemble(void *priv)
                                           esc->agg_errors[E_HTTP2_REFUSED_STREAM], esc->agg_errors[E_HTTP2_CANCEL], esc->agg_errors[E_HTTP2_COMPRESSION],
                                           esc->agg_errors[E_HTTP2_CONNECT], esc->agg_errors[E_HTTP2_ENHANCE_YOUR_CALM], esc->agg_errors[E_HTTP2_INADEQUATE_SECURITY],
                                           esc->agg_errors[E_HTTP2_OTHER]);
+    free(esc);
     return ret;
 #undef BUFSIZE
 }
 
-static void errors_status_done(void *priv)
-{
-    struct errors_status_ctx *esc = priv;
-    if (!esc->pool) {
-        free(esc);
-    }
-}
-
 h2o_status_handler_t errors_status_handler = {
-    .type = H2O_STATUS_HANDLER_PER_THREAD,
-    .name = { H2O_STRLIT("errors") },
-    .per_thread = {
-        .alloc_context_cb = errors_status_alloc_context,
-        .per_thread_cb = errors_status_per_thread,
-        .assemble_cb = errors_status_assemble,
-        .done_cb = errors_status_done,
-    }
+    { H2O_STRLIT("errors") },
+    errors_status_init,
+    errors_status_per_thread,
+    errors_status_final,
 };

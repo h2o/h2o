@@ -1428,7 +1428,7 @@ static int run_using_server_starter(const char *h2o_cmd, const char *config_file
     return EX_CONFIG;
 }
 
-static h2o_iovec_t on_extra_status(h2o_globalconf_t *_conf, h2o_mem_pool_t *pool)
+static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_req_t *req)
 {
 #define BUFSIZE 1024
     h2o_iovec_t ret;
@@ -1441,7 +1441,7 @@ static h2o_iovec_t on_extra_status(h2o_globalconf_t *_conf, h2o_mem_pool_t *pool
     if ((generation = getenv("SERVER_STARTER_GENERATION")) == NULL)
         generation = "null";
 
-    ret.base = h2o_mem_alloc_pool(pool, BUFSIZE);
+    ret.base = h2o_mem_alloc_pool(&req->pool, BUFSIZE);
     ret.len = snprintf(ret.base, BUFSIZE, ",\n"
                                           " \"server-version\": \"" H2O_VERSION "\",\n"
                                           " \"openssl-version\": \"%s\",\n"

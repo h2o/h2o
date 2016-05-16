@@ -24,7 +24,6 @@
 
 struct requests_status_ctx {
     h2o_logconf_t *logconf;
-    h2o_mem_pool_t *pool;
     h2o_iovec_t req_data;
     int first; /* used to know if a thread is the first one, we skip the leading
                 * coma in that case. */
@@ -88,11 +87,10 @@ static void requests_status_per_thread(void *priv, h2o_context_t *ctx)
     h2o_buffer_dispose(&cbdata.buffer);
 }
 
-static void *requests_status_alloc_context(h2o_req_t *req)
+static void *requests_status_init(h2o_iovec_t *error)
 {
     struct requests_status_ctx *rsc;
-    rsc = h2o_mem_alloc_pool(&req->pool, sizeof(*rsc));
-    rsc->pool = &req->pool;
+    rsc = h2o_mem_alloc(sizeof(*rsc));
     rsc->first = 1;
 
 #define ELEMENT(key, expr) "\"" key "\": \"" expr "\""
@@ -128,9 +126,10 @@ static void *requests_status_alloc_context(h2o_req_t *req)
     { /* compile logconf */
         char errbuf[256];
         if ((rsc->logconf = h2o_logconf_compile(fmt, H2O_LOGCONF_ESCAPE_JSON, errbuf)) == NULL) {
-            h2o_iovec_t resp = h2o_concat(&req->pool, h2o_iovec_init(H2O_STRLIT("failed to compile log format:")),
+            h2o_iovec_t resp = h2o_concat(NULL, h2o_iovec_init(H2O_STRLIT("failed to compile log format:")),
                     h2o_iovec_init(errbuf, strlen(errbuf)));
-            h2o_send_error(req, 400, "Invalid Request", resp.base, 0);
+            *error = resp;
+            free(rsc);
             return NULL;
         }
     }
@@ -139,39 +138,29 @@ static void *requests_status_alloc_context(h2o_req_t *req)
     return rsc;
 }
 
-static h2o_iovec_t requests_status_assemble(void *priv)
+static h2o_iovec_t requests_status_final(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
 {
+    h2o_iovec_t ret;
     struct requests_status_ctx *rsc = priv;
 
 #define JSON_FOOTER "\n ]"
 #define JSON_FOOTER_LEN 3
-    rsc->req_data.base = h2o_mem_realloc(rsc->req_data.base, rsc->req_data.len + JSON_FOOTER_LEN);
-    memcpy(rsc->req_data.base + rsc->req_data.len, JSON_FOOTER, JSON_FOOTER_LEN);
-    rsc->req_data.len += JSON_FOOTER_LEN;
+    ret.base = h2o_mem_alloc_pool(&req->pool, rsc->req_data.len + JSON_FOOTER_LEN);
+    memcpy(ret.base, rsc->req_data.base, rsc->req_data.len);
+    memcpy(ret.base + rsc->req_data.len, JSON_FOOTER, JSON_FOOTER_LEN);
+    ret.len = rsc->req_data.len + JSON_FOOTER_LEN;
 #undef JSON_FOOTER
 #undef JSON_FOOTER_LEN
 
-    return rsc->req_data;
-}
-
-static void requests_status_done(void *priv)
-{
-    struct requests_status_ctx *rsc = priv;
-
     h2o_logconf_dispose(rsc->logconf);
     free(rsc->req_data.base);
-
-    if (!rsc->pool) {
-        free(rsc);
-    }
+    free(rsc);
+    return ret;
 }
+
 h2o_status_handler_t requests_status_handler = {
-    .type = H2O_STATUS_HANDLER_PER_THREAD,
-    .name = { H2O_STRLIT("requests") },
-    .per_thread = {
-        .alloc_context_cb = requests_status_alloc_context,
-        .per_thread_cb = requests_status_per_thread,
-        .assemble_cb = requests_status_assemble,
-        .done_cb = requests_status_done,
-    }
+    { H2O_STRLIT("requests") },
+    requests_status_init,
+    requests_status_per_thread,
+    requests_status_final,
 };
