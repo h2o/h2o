@@ -288,10 +288,8 @@ void send_stream_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum)
 static void request_gathered_write(h2o_http2_conn_t *conn)
 {
     assert(conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING);
-    if (conn->_write.buf_in_flight == NULL) {
-        if (!h2o_timeout_is_linked(&conn->_write.timeout_entry))
-            h2o_timeout_link(conn->super.ctx->loop, &conn->super.ctx->zero_timeout, &conn->_write.timeout_entry);
-    }
+    if (conn->sock->_cb.write == NULL && !h2o_timeout_is_linked(&conn->_write.timeout_entry))
+        h2o_timeout_link(conn->super.ctx->loop, &conn->super.ctx->zero_timeout, &conn->_write.timeout_entry);
 }
 
 static int update_stream_output_window(h2o_http2_stream_t *stream, ssize_t delta)
@@ -904,6 +902,17 @@ void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_ht
     }
 }
 
+static void on_notify_write(h2o_socket_t *sock, const char *err)
+{
+    h2o_http2_conn_t *conn = sock->data;
+
+    if (err != NULL) {
+        close_connection_now(conn);
+        return;
+    }
+    do_emit_writereq(conn);
+}
+
 static void on_write_complete(h2o_socket_t *sock, const char *err)
 {
     h2o_http2_conn_t *conn = sock->data;
@@ -921,7 +930,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     assert(conn->_write.buf_in_flight == NULL);
 
     /* call the proceed callback of the streams that have been flushed (while unlinking them from the list) */
-    if (err == NULL && conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
+    if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
         while (!h2o_linklist_is_empty(&conn->_write.streams_to_proceed)) {
             h2o_http2_stream_t *stream =
                 H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.link, conn->_write.streams_to_proceed.next);
@@ -934,6 +943,11 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     /* cancel the write callback if scheduled (as the generator may have scheduled a write just before this function gets called) */
     if (h2o_timeout_is_linked(&conn->_write.timeout_entry))
         h2o_timeout_unlink(&conn->_write.timeout_entry);
+
+    if (conn->sock->_latency_optimization.mode == H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_NEEDS_UPDATE) {
+        h2o_socket_notify_write(conn->sock, on_notify_write);
+        return;
+    }
 
     /* write more, if possible */
     if (do_emit_writereq(conn))
