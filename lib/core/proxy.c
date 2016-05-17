@@ -411,6 +411,20 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     return on_body;
 }
 
+static int on_1xx(h2o_http1client_t *client, int minor_version, int status, h2o_iovec_t msg, struct phr_header *headers,
+                  size_t num_headers)
+{
+    struct rp_generator_t *self = client->data;
+    size_t i;
+
+    for (i = 0; i != num_headers; ++i) {
+        if (h2o_memis(headers[i].name, headers[i].name_len, H2O_STRLIT("link")))
+            h2o_push_path_in_link_header(self->src_req, headers[i].value, headers[i].value_len);
+    }
+
+    return 0;
+}
+
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
                                           int *method_is_head)
 {
@@ -426,6 +440,7 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     *reqbufs = self->up_req.bufs;
     *reqbufcnt = self->up_req.bufs[1].base != NULL ? 2 : 1;
     *method_is_head = self->up_req.is_head;
+    self->client->informational_cb = on_1xx;
     return on_head;
 }
 
