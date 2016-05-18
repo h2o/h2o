@@ -478,21 +478,26 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
     h2o_send_inline(req, body, SIZE_MAX);
 }
 
-static void send_error_deferred_cb(h2o_timeout_entry_t *entry)
-{
-    struct st_send_error_deferred_t *args = H2O_STRUCT_FROM_MEMBER(struct st_send_error_deferred_t, _timeout, entry);
-    reset_response(args->req);
-    h2o_context_report_http1_error(args->req->conn->ctx, args->status);
-    h2o_send_error_generic(args->req, args->status, args->reason, args->body, args->flags);
-}
+#define SEND_ERROR_DEFERRED(status_) \
+    static void send_error_deferred_cb_ ## status_ (h2o_timeout_entry_t *entry) \
+	{ \
+	    struct st_send_error_deferred_t *args = H2O_STRUCT_FROM_MEMBER(struct st_send_error_deferred_t, _timeout, entry); \
+	    reset_response(args->req); \
+	    args->req->conn->ctx->emitted_errors[E_HTTP_ ## status_]++; \
+	    h2o_send_error_generic(args->req, args->status, args->reason, args->body, args->flags); \
+	} \
+ \
+	static void h2o_send_error_deferred_ ## status_ (h2o_req_t *req, const char *reason, const char *body, int flags) \
+	{ \
+	    struct st_send_error_deferred_t *args = h2o_mem_alloc_pool(&req->pool, sizeof(*args)); \
+	    *args = (struct st_send_error_deferred_t){req, status_, reason, body, flags}; \
+	    args->_timeout.cb = send_error_deferred_cb_ ## status_; \
+	    h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &args->_timeout); \
+	}
 
-void h2o_send_error_deferred(h2o_req_t *req, int status, const char *reason, const char *body, int flags)
-{
-    struct st_send_error_deferred_t *args = h2o_mem_alloc_pool(&req->pool, sizeof(*args));
-    *args = (struct st_send_error_deferred_t){req, status, reason, body, flags};
-    args->_timeout.cb = send_error_deferred_cb;
-    h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &args->_timeout);
-}
+SEND_ERROR_DEFERRED(502)
+
+#undef SEND_ERROR_DEFERRED
 
 void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
 {
@@ -560,7 +565,7 @@ void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *
     /* parse the location URL */
     if (h2o_url_parse_relative(url_str, url_len, &url) != 0) {
         /* TODO log fprintf(stderr, "[proxy] cannot handle location header: %.*s\n", (int)url_len, url); */
-        h2o_send_error_deferred(req, 502, "Gateway Error", "internal error", 0);
+        h2o_send_error_deferred_502(req, "Gateway Error", "internal error", 0);
         return;
     }
     /* convert the location to absolute (while creating copies of the values passed to the deferred call) */

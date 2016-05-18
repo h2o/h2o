@@ -21,10 +21,11 @@
  */
 
 #include "h2o.h"
+#include <inttypes.h>
 
 struct errors_status_ctx {
-    unsigned long long agg_errors_http1[E_HTTP_MAX];
-    unsigned long long agg_errors_http2[E_HTTP2_MAX];
+    uint64_t agg_errors_http1[E_HTTP_MAX];
+    uint64_t agg_errors_http2[H2O_HTTP2_ERROR_MAX];
 };
 
 static void errors_status_per_thread(void *priv, h2o_context_t *ctx)
@@ -57,44 +58,38 @@ static h2o_iovec_t errors_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
 #define BUFSIZE (2*1024)
     ret.base = h2o_mem_alloc_pool(&req->pool, BUFSIZE);
     ret.len = snprintf(ret.base, BUFSIZE, ",\n"
-                                          " \"http1-errors-400\": %llu,\n"
-                                          " \"http1-errors-403\": %llu,\n"
-                                          " \"http1-errors-404\": %llu,\n"
-                                          " \"http1-errors-405\": %llu,\n"
-                                          " \"http1-errors-416\": %llu,\n"
-                                          " \"http1-errors-417\": %llu,\n"
-                                          " \"http1-errors-500\": %llu,\n"
-                                          " \"http1-errors-502\": %llu,\n"
-                                          " \"http1-errors-503\": %llu,\n"
-                                          " \"http1-errors-4xx-others\": %llu,\n"
-                                          " \"http1-errors-5xx-others\": %llu,\n"
-                                          " \"http1-errors-others\": %llu,\n"
-                                          " \"http2-errors-protocol\": %llu, \n"
-                                          " \"http2-errors-internal\": %llu, \n"
-                                          " \"http2-errors-flow_control\": %llu, \n"
-                                          " \"http2-errors-settings_timeout\": %llu, \n"
-                                          " \"http2-errors-stream_closed\": %llu, \n"
-                                          " \"http2-errors-frame_size\": %llu, \n"
-                                          " \"http2-errors-refused_stream\": %llu, \n"
-                                          " \"http2-errors-cancel\": %llu, \n"
-                                          " \"http2-errors-compression\": %llu, \n"
-                                          " \"http2-errors-connect\": %llu, \n"
-                                          " \"http2-errors-enhance_your_calm\": %llu, \n"
-                                          " \"http2-errors-inadequate_security\": %llu, \n"
-                                          " \"http2-errors-other\": %llu",
+                                          " \"http1-errors-400\": %" PRIu64 ",\n"
+                                          " \"http1-errors-403\": %" PRIu64 ",\n"
+                                          " \"http1-errors-404\": %" PRIu64 ",\n"
+                                          " \"http1-errors-405\": %" PRIu64 ",\n"
+                                          " \"http1-errors-416\": %" PRIu64 ",\n"
+                                          " \"http1-errors-417\": %" PRIu64 ",\n"
+                                          " \"http1-errors-500\": %" PRIu64 ",\n"
+                                          " \"http1-errors-502\": %" PRIu64 ",\n"
+                                          " \"http1-errors-503\": %" PRIu64 ",\n"
+                                          " \"http2-errors-protocol\": %" PRIu64 ", \n"
+                                          " \"http2-errors-internal\": %" PRIu64 ", \n"
+                                          " \"http2-errors-flow_control\": %" PRIu64 ", \n"
+                                          " \"http2-errors-settings_timeout\": %" PRIu64 ", \n"
+                                          " \"http2-errors-stream_closed\": %" PRIu64 ", \n"
+                                          " \"http2-errors-frame_size\": %" PRIu64 ", \n"
+                                          " \"http2-errors-refused_stream\": %" PRIu64 ", \n"
+                                          " \"http2-errors-cancel\": %" PRIu64 ", \n"
+                                          " \"http2-errors-compression\": %" PRIu64 ", \n"
+                                          " \"http2-errors-connect\": %" PRIu64 ", \n"
+                                          " \"http2-errors-enhance_your_calm\": %" PRIu64 ", \n"
+                                          " \"http2-errors-inadequate_security\": %" PRIu64 "\n",
                                           esc->agg_errors_http1[E_HTTP_400], esc->agg_errors_http1[E_HTTP_403],
                                           esc->agg_errors_http1[E_HTTP_404], esc->agg_errors_http1[E_HTTP_405],
                                           esc->agg_errors_http1[E_HTTP_416], esc->agg_errors_http1[E_HTTP_417],
                                           esc->agg_errors_http1[E_HTTP_500], esc->agg_errors_http1[E_HTTP_502],
-                                          esc->agg_errors_http1[E_HTTP_503], esc->agg_errors_http1[E_HTTP_4XX],
-                                          esc->agg_errors_http1[E_HTTP_5XX], esc->agg_errors_http1[E_HTTP_XXX],
-                                          esc->agg_errors_http2[E_HTTP2_PROTOCOL], esc->agg_errors_http2[E_HTTP2_INTERNAL],
-                                          esc->agg_errors_http2[E_HTTP2_FLOW_CONTROL], esc->agg_errors_http2[E_HTTP2_SETTINGS_TIMEOUT],
-                                          esc->agg_errors_http2[E_HTTP2_STREAM_CLOSED], esc->agg_errors_http2[E_HTTP2_FRAME_SIZE],
-                                          esc->agg_errors_http2[E_HTTP2_REFUSED_STREAM], esc->agg_errors_http2[E_HTTP2_CANCEL],
-                                          esc->agg_errors_http2[E_HTTP2_COMPRESSION], esc->agg_errors_http2[E_HTTP2_CONNECT],
-                                          esc->agg_errors_http2[E_HTTP2_ENHANCE_YOUR_CALM], esc->agg_errors_http2[E_HTTP2_INADEQUATE_SECURITY],
-                                          esc->agg_errors_http2[E_HTTP2_OTHER]);
+                                          esc->agg_errors_http1[E_HTTP_503],
+                                          esc->agg_errors_http2[-H2O_HTTP2_ERROR_PROTOCOL], esc->agg_errors_http2[-H2O_HTTP2_ERROR_INTERNAL],
+                                          esc->agg_errors_http2[-H2O_HTTP2_ERROR_FLOW_CONTROL], esc->agg_errors_http2[-H2O_HTTP2_ERROR_SETTINGS_TIMEOUT],
+                                          esc->agg_errors_http2[-H2O_HTTP2_ERROR_STREAM_CLOSED], esc->agg_errors_http2[-H2O_HTTP2_ERROR_FRAME_SIZE],
+                                          esc->agg_errors_http2[-H2O_HTTP2_ERROR_REFUSED_STREAM], esc->agg_errors_http2[-H2O_HTTP2_ERROR_CANCEL],
+                                          esc->agg_errors_http2[-H2O_HTTP2_ERROR_COMPRESSION], esc->agg_errors_http2[-H2O_HTTP2_ERROR_CONNECT],
+                                          esc->agg_errors_http2[-H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM], esc->agg_errors_http2[-H2O_HTTP2_ERROR_INADEQUATE_SECURITY]);
     free(esc);
     return ret;
 #undef BUFSIZE

@@ -417,24 +417,26 @@ typedef struct st_h2o_mimemap_type_t {
     } data;
 } h2o_mimemap_type_t;
 
-/* errors emanating from h2o */
-enum {
-    /* http2 */
-    E_HTTP2_PROTOCOL,
-    E_HTTP2_INTERNAL,
-    E_HTTP2_FLOW_CONTROL,
-    E_HTTP2_SETTINGS_TIMEOUT,
-    E_HTTP2_STREAM_CLOSED,
-    E_HTTP2_FRAME_SIZE,
-    E_HTTP2_REFUSED_STREAM,
-    E_HTTP2_CANCEL,
-    E_HTTP2_COMPRESSION,
-    E_HTTP2_CONNECT,
-    E_HTTP2_ENHANCE_YOUR_CALM,
-    E_HTTP2_INADEQUATE_SECURITY,
-    E_HTTP2_OTHER,
-    E_HTTP2_MAX,
-};
+/* defined as negated form of the error codes defined in HTTP2-spec section 7 */
+#define H2O_HTTP2_ERROR_NONE 0
+#define H2O_HTTP2_ERROR_PROTOCOL -1
+#define H2O_HTTP2_ERROR_INTERNAL -2
+#define H2O_HTTP2_ERROR_FLOW_CONTROL -3
+#define H2O_HTTP2_ERROR_SETTINGS_TIMEOUT -4
+#define H2O_HTTP2_ERROR_STREAM_CLOSED -5
+#define H2O_HTTP2_ERROR_FRAME_SIZE -6
+#define H2O_HTTP2_ERROR_REFUSED_STREAM -7
+#define H2O_HTTP2_ERROR_CANCEL -8
+#define H2O_HTTP2_ERROR_COMPRESSION -9
+#define H2O_HTTP2_ERROR_CONNECT -10
+#define H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM -11
+#define H2O_HTTP2_ERROR_INADEQUATE_SECURITY -12
+/* end of the HTT2-spec defined errors */
+#define H2O_HTTP2_ERROR_OTHER -13
+#define H2O_HTTP2_ERROR_MAX 14
+#define H2O_HTTP2_ERROR_INCOMPLETE -255 /* an internal value indicating that all data is not ready */
+#define H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY -256
+
 enum {
     /* http1 */
     E_HTTP_400 = 0,
@@ -446,9 +448,6 @@ enum {
     E_HTTP_500,
     E_HTTP_502,
     E_HTTP_503,
-    E_HTTP_4XX,
-    E_HTTP_5XX,
-    E_HTTP_XXX,
     E_HTTP_MAX,
 };
 
@@ -523,7 +522,7 @@ struct st_h2o_context_t {
         /**
          * counter for http2 errors internally emitted by h2o
          */
-        unsigned long emitted_errors[E_HTTP2_MAX];
+        uint64_t emitted_errors[H2O_HTTP2_ERROR_MAX];
     } http2;
 
     struct {
@@ -1266,10 +1265,6 @@ static void h2o_context_set_filter_context(h2o_context_t *ctx, h2o_filter_t *fil
  * returns per-module context set by the on_context_init callback
  */
 static void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *logger);
-/**
- * internally reports an error emitted by h2o, so that this can in turn be reported in statuses
- */
-void h2o_context_report_http1_error(h2o_context_t *ctx, int status);
 /* built-in generators */
 
 enum {

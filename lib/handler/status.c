@@ -49,7 +49,6 @@ struct st_h2o_status_collector_t {
     } src;
     pthread_mutex_t mutex;
     size_t num_remaining_threads;
-    h2o_globalconf_t *gconf;
     H2O_VECTOR(struct status_ctx) status_ctx;
 };
 
@@ -65,9 +64,9 @@ static void collect_reqs_of_context(struct st_h2o_status_collector_t *collector,
 
     pthread_mutex_lock(&collector->mutex);
 
-    for (i = 0; i < collector->gconf->statuses.size; i++) {
+    for (i = 0; i < ctx->globalconf->statuses.size; i++) {
         h2o_status_handler_t *sh;
-        sh = &collector->gconf->statuses.entries[i];
+        sh = &ctx->globalconf->statuses.entries[i];
         if (!collector->status_ctx.entries[i].active) {
             continue;
         }
@@ -173,12 +172,12 @@ static void on_req_close(void *p)
     h2o_mem_release_shared(collector);
 }
 
-static int on_req_json(struct st_h2o_root_status_handler_t *self, h2o_req_t *req, h2o_iovec_t *status_list)
+static int on_req_json(struct st_h2o_root_status_handler_t *self, h2o_req_t *req, h2o_iovec_t status_list)
 {
     { /* construct collector and send request to every thread */
         struct st_h2o_status_context_t *status_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
         struct st_h2o_status_collector_t *collector = h2o_mem_alloc_shared(NULL, sizeof(*collector), on_collector_dispose);
-        size_t i, j;
+        size_t i;
 
         memset(collector, 0, sizeof(*collector));
         for (i = 0; i < req->conn->ctx->globalconf->statuses.size; i++) {
@@ -187,15 +186,8 @@ static int on_req_json(struct st_h2o_root_status_handler_t *self, h2o_req_t *req
             h2o_vector_reserve(&req->pool, &collector->status_ctx, collector->status_ctx.size + 1);
             sh = &req->conn->ctx->globalconf->statuses.entries[i];
 
-            if (status_list) {
-                int found = 0;
-                for (j = 0; status_list[j].base; j++) {
-                    if (h2o_memis(status_list[j].base, status_list[j].len, sh->name.base, sh->name.len)) {
-                        found = 1;
-                        break;
-                    }
-                }
-                if (!found) {
+            if (status_list.base) {
+                if (!h2o_contains_token(status_list.base, status_list.len, sh->name.base, sh->name.len, ',')) {
                     collector->status_ctx.entries[collector->status_ctx.size].active = 0;
                     goto Skip;
                 }
@@ -214,7 +206,6 @@ static int on_req_json(struct st_h2o_root_status_handler_t *self, h2o_req_t *req
 Skip:
             collector->status_ctx.size++;
         }
-        collector->gconf = req->conn->ctx->globalconf;
         collector->src.req = req;
         collector->src.receiver = &status_ctx->receiver;
         pthread_mutex_init(&collector->mutex, NULL);
@@ -232,44 +223,6 @@ Skip:
     }
 
     return 0;
-}
-
-static h2o_iovec_t *build_status_list(const char *param, size_t len)
-{
-    int i, cur, start;
-    int nr_list = 1;
-    h2o_iovec_t *ret;
-    for (i = 0; i < len; i++) {
-        if (param[i] == '|') {
-            nr_list++;
-        }
-    }
-    ret = h2o_mem_alloc(sizeof(*ret) * (nr_list + 1));
-    cur = 0;
-    start = 0;
-    for (i = 0; i < len; i++) {
-        if (param[i] == '|') {
-            ret[cur++] = h2o_strdup(NULL, &param[start], i - start);
-            start = i + 1;
-        }
-    }
-    if (start != i) {
-            ret[cur++] = h2o_strdup(NULL, &param[start], i - start);
-    }
-    ret[cur] = h2o_iovec_init(NULL, 0);
-
-    return ret;
-}
-
-static void free_status_list(h2o_iovec_t *status_list)
-{
-    int i;
-    if (!status_list)
-        return;
-    for (i = 0; status_list[i].base; i++) {
-        free(status_list[i].base);
-    }
-    free(status_list);
 }
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
@@ -290,14 +243,13 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     } else if (h2o_memis(local_path.base, local_path.len, H2O_STRLIT("/json"))) {
         int ret;
         /* "/json" maps to the JSON API */
-        h2o_iovec_t *status_list = NULL; /* NULL means all */
+        h2o_iovec_t status_list = {NULL, 0}; /* NULL means we'll show all statuses */
         if (req->query_at != SIZE_MAX && (req->path.len - req->query_at > 6)) {
             if (h2o_memis(&req->path.base[req->query_at], 6, "?show=", 6)) {
-                status_list = build_status_list(&req->path.base[req->query_at + 6], req->path.len - req->query_at - 6);
+                status_list = h2o_iovec_init(&req->path.base[req->query_at + 6], req->path.len - req->query_at - 6);
             }
         }
         ret = on_req_json(self, req, status_list);
-        free_status_list(status_list);
         return ret;
     }
 

@@ -278,7 +278,7 @@ void close_connection(h2o_http2_conn_t *conn)
 
 static inline void h2o_context_report_http2_error(h2o_context_t *ctx, int errnum)
 {
-    ctx->http2.emitted_errors[errnum]++;
+    ctx->http2.emitted_errors[-errnum]++;
 }
 
 void send_stream_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum)
@@ -866,7 +866,7 @@ static void on_read(h2o_socket_t *sock, const char *err)
     h2o_http2_conn_t *conn = sock->data;
 
     if (err != NULL) {
-        h2o_context_report_http2_error(conn->super.ctx, E_HTTP2_OTHER);
+        h2o_context_report_http2_error(conn->super.ctx, H2O_HTTP2_ERROR_OTHER);
         h2o_socket_read_stop(conn->sock);
         close_connection(conn);
         return;
@@ -937,7 +937,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
 
     /* close by error if necessary */
     if (err != NULL) {
-        h2o_context_report_http2_error(conn->super.ctx, E_HTTP2_OTHER);
+        h2o_context_report_http2_error(conn->super.ctx, H2O_HTTP2_ERROR_OTHER);
         close_connection_now(conn);
         return;
     }
