@@ -1221,6 +1221,16 @@ void h2o_gzip_register(h2o_pathconf_t *pathconf);
  */
 void h2o_gzip_register_configurator(h2o_globalconf_t *conf);
 
+/* lib/handler/traffic.c */
+/**
+ * registers the traffic shaping filter
+ */
+void h2o_traffic_register(h2o_pathconf_t *pathconf);
+/**
+ * configurator
+ */
+void h2o_traffic_register_configurator(h2o_globalconf_t *conf);
+
 /* lib/errordoc.c */
 
 typedef struct st_h2o_errordoc_t {

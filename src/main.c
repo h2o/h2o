@@ -1406,6 +1406,7 @@ static void setup_configurators(void)
     h2o_fastcgi_register_configurator(&conf.globalconf);
     h2o_file_register_configurator(&conf.globalconf);
     h2o_gzip_register_configurator(&conf.globalconf);
+    h2o_traffic_register_configurator(&conf.globalconf);
     h2o_headers_register_configurator(&conf.globalconf);
     h2o_proxy_register_configurator(&conf.globalconf);
     h2o_reproxy_register_configurator(&conf.globalconf);
