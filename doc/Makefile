@@ -8,6 +8,7 @@ OUTPUT=\
     configure/command_options.html \
     configure/syntax_and_structure.html \
     configure/base_directives.html \
+    configure/compress_directives.html \
     configure/http1_directives.html \
     configure/http2_directives.html \
     configure/access_log_directives.html \
@@ -15,12 +16,15 @@ OUTPUT=\
     configure/expires_directives.html \
     configure/fastcgi_directives.html \
     configure/file_directives.html \
-    configure/gzip_directives.html \
     configure/headers_directives.html \
     configure/mruby_directives.html \
     configure/proxy_directives.html \
     configure/redirect_directives.html \
     configure/reproxy_directives.html \
+    configure/status_directives.html \
+    configure/basic_auth.html \
+    configure/cgi.html \
+    configure/mruby.html \
     faq.html \
 
 %.html: %.mt

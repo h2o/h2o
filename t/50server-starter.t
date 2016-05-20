@@ -82,10 +82,13 @@ sub fetch_test {
 
     plan skip_all => 'curl not found'
         unless prog_exists('curl');
+    my $curl = "curl --insecure";
+    $curl .= " --http1.1"
+        if curl_supports_http2();
 
     my $doit = sub {
         my ($proto, $port) = @_;
-        my $content = `curl --silent --show-error --insecure $proto://127.0.0.1:$port/`;
+        my $content = `$curl --silent --show-error $proto://127.0.0.1:$port/`;
         is md5_hex($content), md5_file(DOC_ROOT . "/index.txt"), $proto;
     };
     $doit->("http", $port);

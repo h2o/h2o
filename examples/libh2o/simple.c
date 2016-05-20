@@ -37,7 +37,7 @@
 
 static h2o_pathconf_t *register_handler(h2o_hostconf_t *hostconf, const char *path, int (*on_req)(h2o_handler_t *, h2o_req_t *))
 {
-    h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, path);
+    h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, path, 0);
     h2o_handler_t *handler = h2o_create_handler(pathconf, sizeof(*handler));
     handler->on_req = on_req;
     return pathconf;
@@ -190,7 +190,7 @@ static int setup_ssl(const char *cert_file, const char *key_file)
 
     if (USE_MEMCACHED) {
         accept_ctx.libmemcached_receiver = &libmemcached_receiver;
-        h2o_accept_setup_async_ssl_resumption(h2o_memcached_create_context("127.0.0.1", 11211, 1, "h2o:ssl-resumption:"), 86400);
+        h2o_accept_setup_async_ssl_resumption(h2o_memcached_create_context("127.0.0.1", 11211, 0, 1, "h2o:ssl-resumption:"), 86400);
         h2o_socket_ssl_async_resumption_setup_ctx(accept_ctx.ssl_ctx);
     }
 
@@ -226,7 +226,7 @@ int main(int argc, char **argv)
     register_handler(hostconf, "/post-test", post_test);
     register_handler(hostconf, "/chunked-test", chunked_test);
     h2o_reproxy_register(register_handler(hostconf, "/reproxy-test", reproxy_test));
-    h2o_file_register(h2o_config_register_path(hostconf, "/"), "examples/doc_root", NULL, NULL, 0);
+    h2o_file_register(h2o_config_register_path(hostconf, "/", 0), "examples/doc_root", NULL, NULL, 0);
 
 #if H2O_USE_LIBUV
     uv_loop_t loop;

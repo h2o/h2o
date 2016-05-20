@@ -1,3 +1,4 @@
+[![Build Status](https://travis-ci.org/cybozu/libyrmcds.png)](https://travis-ci.org/cybozu/libyrmcds)
 libyrmcds
 =========
 
@@ -15,10 +16,11 @@ Features
     Instead, it can be used as a base library to implement such rich
     features.
 
-* Only the binary protocol is supported.
+* Designed for binary protocol.
 
-    By supporting only the latest [binary protocol][binprot], libyrmcds
-    provides full access to the every aspect of the protocol.
+    In order to access the true power of the binary protocol, libyrmcds
+    is designed primarily for binary protocol.  Limited support for the
+    text protocol is provided, though.
 
 * Support for [yrmcds][] extensions.
 
@@ -65,6 +67,7 @@ Authors & Contributors
 * Nojima, Yusuke [@nojima](https://github.com/nojima)
 * Tanuma, Shuhei [@chobie](https://github.com/chobie)
 * Oku, Kazuho [@kazuho](https://github.com/kazuho)
+* Fazal Majid [@fazalmajid](https://github.com/fazalmajid)
 
 [memcached]: http://memcached.org/
 [yrmcds]: http://cybozu.github.io/yrmcds/

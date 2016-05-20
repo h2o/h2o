@@ -59,10 +59,27 @@ Proxy Directives
 
 
 <p>
-This document describes the configuration directives of the proxy handler.
+Proxy module is the reverse proxy implementation for H2O - it implements a HTTP client that forwards a HTTP request to an upstream server.
+</p>
+<p>
+When forwarding the requests, the module sets following request headers:
+<ul>
+<li><a href="https://tools.ietf.org/html/rfc7230#section-5.7.1">via</a></li>
+<li><a href="http://docs.aws.amazon.com/ElasticLoadBalancing/latest/DeveloperGuide/x-forwarded-headers.html#x-forwarded-for">x-forwarded-for</a></li>
+<li><a href="http://docs.aws.amazon.com/ElasticLoadBalancing/latest/DeveloperGuide/x-forwarded-headers.html#x-forwarded-proto">x-forwarded-proto</a></li>
+</ul>
+</p>
+<p>
+The HTTP client only supports HTTP/1.
+Support for HTTPS has been introduced in version 2.0.
+</p>
+<p>
+Following sections describe the configuration directives defined for the module.
 </p>
 
-<h3 id="proxy.reverse.url" class="directive-title"><a href="configure/proxy_directives.html#proxy.reverse.url"><code>"proxy.reverse.url"</code></a></h3>
+<div id="proxy.reverse.url" class="directive-head">
+<h3><a href="configure/proxy_directives.html#proxy.reverse.url"><code>"proxy.reverse.url"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -78,7 +95,6 @@ Forwards the requests to the specified URL, and proxies the response.
 </div>
 
 <p>
-At the moment, only HTTP is supported.
 If you want load balancing multiple backends, replace 127.0.0.1 with hostname witch returns IP addresses via DNS or /etc/hosts.
 </p>
 <p>
@@ -92,7 +108,9 @@ Path to the unix socket should be surrounded by square brackets, and prefixed wi
 <dd>path</dd>
 </dl>
 
-<h3 id="proxy.preserve-host" class="directive-title"><a href="configure/proxy_directives.html#proxy.preserve-host"><code>"proxy.preserve-host"</code></a></h3>
+<div id="proxy.preserve-host" class="directive-head">
+<h3><a href="configure/proxy_directives.html#proxy.preserve-host"><code>"proxy.preserve-host"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -107,7 +125,85 @@ A boolean flag (<code>ON</code> or <code>OFF</code>) designating whether or not 
 <dt>Default:</dt>
 <dd><code><pre>proxy.preserve-host: OFF</pre></code>
 </dl>
-<h3 id="proxy.timeout.io" class="directive-title"><a href="configure/proxy_directives.html#proxy.timeout.io"><code>"proxy.timeout.io"</code></a></h3>
+
+
+<div id="proxy.preserve-x-forwarded-proto" class="directive-head">
+<div class="directive-since">since v2.0</div>
+<h3><a href="configure/proxy_directives.html#proxy.preserve-x-forwarded-proto"><code>"proxy.preserve-x-forwarded-proto"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag(<code>ON</code> or <code>OFF</code>) indicating if the server preserve the received <code>x-forwarded-proto</code> request header.
+</p>
+
+<p>
+By default, when transmitting a HTTP request to an upstream HTTP server, H2O removes the received <code>x-forwarded-proto</code> request header and sends its own, as a precautios measure to prevent an attacker connecting through HTTP to lie that they are connected via HTTPS.
+However in case H2O is run behind a trusted HTTPS proxy, such protection might not be desirable, and this configuration directive can be used to modify the behaviour.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.preserve-x-forwarded-proto: OFF</pre></code>
+</dl>
+
+<div id="proxy.ssl.cafile" class="directive-head">
+<div class="directive-since">since v2.0</div>
+<h3><a href="configure/proxy_directives.html#proxy.ssl.cafile"><code>"proxy.ssl.cafile"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Specifies the file storing the list of trusted root certificates.
+</p>
+
+<p>
+By default, H2O uses <code>share/h2o/ca-bundle.crt</code>.  The file contains a set of trusted root certificates maintained by Mozilla, downloaded and converted using <a href="https://curl.haxx.se/docs/mk-ca-bundle.html">mk-ca-bundle.pl</a>.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+<dt>See also:</dt>
+<dd><a href="configure/proxy_directives.html#proxy.ssl.verify-peer"><code>proxy.ssl.verify-peer</code></a>
+</dd>
+</dl>
+
+<div id="proxy.ssl.verify-peer" class="directive-head">
+<div class="directive-since">since v2.0</div>
+<h3><a href="configure/proxy_directives.html#proxy.ssl.verify-peer"><code>"proxy.ssl.verify-peer"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if the server certificate and hostname should be verified.
+</p>
+
+<p>
+If set to <code>ON</code>, the HTTP client implementation of H2O verifies the peer's certificate using the list of trusted certificates as well as compares the hostname presented in the certificate against the connecting hostname.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.ssl.verify-peer: ON</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/proxy_directives.html#proxy.ssl.cafile"><code>proxy.ssl.cafile</code></a>
+</dd>
+</dl>
+
+<div id="proxy.timeout.io" class="directive-head">
+<h3><a href="configure/proxy_directives.html#proxy.timeout.io"><code>"proxy.timeout.io"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -124,7 +220,9 @@ Sets the upstream I/O timeout in milliseconds.
 </dl>
 
 
-<h3 id="proxy.timeout.keepalive" class="directive-title"><a href="configure/proxy_directives.html#proxy.timeout.keepalive"><code>"proxy.timeout.keepalive"</code></a></h3>
+<div id="proxy.timeout.keepalive" class="directive-head">
+<h3><a href="configure/proxy_directives.html#proxy.timeout.keepalive"><code>"proxy.timeout.keepalive"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -145,7 +243,9 @@ The value should be set to something smaller than that being set at the upstream
 <dd><code><pre>proxy.timeout.keepalive: 2000</pre></code>
 </dl>
 
-<h3 id="proxy.websocket" class="directive-title"><a href="configure/proxy_directives.html#proxy.websocket"><code>"proxy.websocket"</code></a></h3>
+<div id="proxy.websocket" class="directive-head">
+<h3><a href="configure/proxy_directives.html#proxy.websocket"><code>"proxy.websocket"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -168,7 +268,9 @@ Support for WebSocket is considered experimental for the time being and therefor
 <dd><code><pre>proxy.websocket: OFF</pre></code>
 </dl>
 
-<h3 id="proxy.websocket.timeout" class="directive-title"><a href="configure/proxy_directives.html#proxy.websocket.timeout"><code>"proxy.websocket.timeout"</code></a></h3>
+<div id="proxy.websocket.timeout" class="directive-head">
+<h3><a href="configure/proxy_directives.html#proxy.websocket.timeout"><code>"proxy.websocket.timeout"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>

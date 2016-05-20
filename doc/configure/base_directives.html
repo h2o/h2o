@@ -62,7 +62,9 @@ Base Directives
 This document describes the configuration directives common to all the protocols and handlers.
 </p>
 
-<h3 id="hosts" class="directive-title"><a href="configure/base_directives.html#hosts"><code>"hosts"</code></a></h3>
+<div id="hosts" class="directive-head">
+<h3><a href="configure/base_directives.html#hosts"><code>"hosts"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -79,6 +81,14 @@ The directive is mandatory, and must at least contain one entry.
 When <code>port</code> is omitted, the entry will match the requests targetting the default ports (i.e. port 80 for HTTP, port 443 for HTTPS) with given hostname.
 Otherwise, the entry will match the requests targetting the specified port.
 </p>
+<p>
+Since version 1.7, a wildcard character <code>*</code> can be used as the first component of the hostname.
+If used, they are matched using the rule defined in <a href="https://tools.ietf.org/html/rfc2818#section-3.1" target="_blank">RFC 2818 Section 3.1</a>.
+For example, <code>*.example.com</code> will match HTTP requests for both <code>foo.example.com</code> and <code>bar.example.com</code>.
+Note that an exact match is preferred over host definitions using wildcard characters.
+</p>
+
+
 <div class="example">
 <div class="caption">Example. A host redirecting all HTTP requests to HTTPS</div>
 <pre><code>hosts:
@@ -106,7 +116,9 @@ Otherwise, the entry will match the requests targetting the specified port.
 <dd>global</dd>
 </dl>
 
-<h3 id="paths" class="directive-title"><a href="configure/base_directives.html#paths"><code>"paths"</code></a></h3>
+<div id="paths" class="directive-head">
+<h3><a href="configure/base_directives.html#paths"><code>"paths"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -135,13 +147,24 @@ An <code>404 Not Found</code> error is returned if no matching paths were found.
 </code></pre>
 </div>
 
+<p>
+In releases prior to version 2.0, all the path entries are considered as directories.
+When H2O receives a request that exactly matches to an entry in paths that does not end with a slash, the server always returns a 301 redirect that appends a slash.
+</p>
+<p>
+Since 2.0, it depends on the handler of the path whether if a 301 redirect that appends a slash is returned.
+Server administartors can take advantage of this change to define per-path configurations (see the examples in <a href="configure/file_directives.html#file.file"><code>file.file</code></a> and the <a href="configure/fastcgi_directives.html">FastCGI handler</a>).
+<a href="configure/file_directives.html#file.dir"><code>file.dir</code></a> is an exception that continues to perform the redirection; in case of the example above, access to <code>/assets</code> is redirected to <code>/assets/</code>.
+</p>
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>host</dd>
 </dl>
 
-<h3 id="listen" class="directive-title"><a href="configure/base_directives.html#listen"><code>"listen"</code></a></h3>
+<div id="listen" class="directive-head">
+<h3><a href="configure/base_directives.html#listen"><code>"listen"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -223,42 +246,42 @@ The feature is useful for setting up a HTTPS virtual host using <a href="https:/
 The <code style="font-weight: bold;">ssl</code> attribute must be defined as a mapping, and recognizes the following attributes.
 </p>
 <dl>
-<dt>certificate-file:</dt>
+<dt id="certificate-file">certificate-file:</dt>
 <dd>path of the SSL certificate file (mandatory)</dd>
-<dt>key-file:</dt>
+<dt id="key-file">key-file:</dt>
 <dd>path of the SSL private key file (mandatory)</dd>
-<dt>minimum-version:</dt>
+<dt id="minimum-version">minimum-version:</dt>
 <dd>
 minimum protocol version, should be one of: <code>SSLv2</code>, <code>SSLv3</code>, <code>TLSv1</code>, <code>TLSv1.1</code>, <code>TLSv1.2</code>.
 Default is <code>TLSv1</code>
 </dd>
-<dt>cipher-suite:</dt>
+<dt id="cipher-suite">cipher-suite:</dt>
 <dd>list of cipher suites to be passed to OpenSSL via SSL_CTX_set_cipher_list (optional)</dd>
-<dt>cipher-preference:</dt>
+<dt id="cipher-preferences">cipher-preference:</dt>
 <dd>
 side of the list that should be used for selecting the cipher-suite; should be either of: <code>client</code>, <code>server</code>.
 Default is <code>client</code>.
 </dd>
-<dt>dh-file:</dt>
+<dt id="dh-file">dh-file:</dt>
 <dd>
 path of a PEM file containing the Diffie-Hellman paratemers to be used.
 Use of the file is recommended for servers using Diffie-Hellman key agreement.
 (optional)
 </dd>
-<dt>ocsp-update-interval:</dt>
+<dt id="ocsp-update-interval">ocsp-update-interval:</dt>
 <dd>
 interval for updating the OCSP stapling data (in seconds), or set to zero to disable OCSP stapling.
 Default is <code>14400</code> (4 hours).
 </dd>
-<dt>ocsp-max-failures:</dt>
+<dt id="ocsp-max-failures">ocsp-max-failures:</dt>
 <dd>
-number of consecutive OCSP queriy failures before stopping to send OCSP stapling data to the client.
+number of consecutive OCSP query failures before stopping to send OCSP stapling data to the client.
 Default is 3.
 </dd>
-<dt>neverbleed:</dt>
+<dt id="neverbleed">neverbleed:</dt>
 <dd>
-when set to <code>ON</code>, this experimental property isolates RSA private key operations to an islotated process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
-Default is OFF.
+unless set to <code>OFF</code>, H2O isolates RSA private key operations to an islotated process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
+Default is <code>ON</code>.
 </dl>
 <p>
 <a href="configure/base_directives.html#ssl-session-resumption"><code>ssl-session-resumption</code></a> directive is provided for tuning parameters related to session resumption and session tickets.
@@ -275,13 +298,43 @@ If the first octets do not accord with the specification, it is considered as th
 <p>
 Default is <code>OFF</code>.
 </p>
+<h4 id="listen-unix-socket">Listening to a Unix Socket</h4>
+<p>
+If the <code>type</code> attribute is set to <code>unix</code>, then the <code>port</code> attribute is assumed to specify the path of the unix socket to which the standalone server should bound.
+Also following attributes are recognized.
+</p>
+<dl>
+<dt>owner</dt>
+<dd>
+username of the owner of the socket file.
+If omitted, the socket file will be owned by the launching user.
+</dd>
+<dt>permission</dt>
+<dd>
+an octal number specifying the permission of the sokcet file.
+Many operating systems require write permission for connecting to the socket file.
+If omitted, the permission of the socket file will reflect the umask of the calling process.
+</dd>
+</dl>
+<div class="example">
+<div class="caption">Example. Listening to a Unix Socket accessible only by www-data</div>
+<pre><code>listen:
+  type:       unix
+  port:       /tmp/h2o.sock
+  owner:      www-data
+  permission: 600
+</code></pre>
+</div>
+
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global, host</dd>
 </dl>
 
-<h3 id="error-log" class="directive-title"><a href="configure/base_directives.html#error-log"><code>"error-log"</code></a></h3>
+<div id="error-log" class="directive-head">
+<h3><a href="configure/base_directives.html#error-log"><code>"error-log"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -314,7 +367,9 @@ If the path starts with <code>|</code>, the rest of the path is considered as a 
 <dd>global</dd>
 </dl>
 
-<h3 id="limit-request-body" class="directive-title"><a href="configure/base_directives.html#limit-request-body"><code>"limit-request-body"</code></a></h3>
+<div id="limit-request-body" class="directive-head">
+<h3><a href="configure/base_directives.html#limit-request-body"><code>"limit-request-body"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -332,7 +387,9 @@ Default is 1073741824 (1GB).
 <dd>global</dd>
 </dl>
 
-<h3 id="max-connections" class="directive-title"><a href="configure/base_directives.html#max-connections"><code>"max-connections"</code></a></h3>
+<div id="max-connections" class="directive-head">
+<h3><a href="configure/base_directives.html#max-connections"><code>"max-connections"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -347,7 +404,9 @@ Number of connections to handle at once at maximum.
 <dt>Default:</dt>
 <dd><code><pre>max-connections: 1024</pre></code>
 </dl>
-<h3 id="max-delegations" class="directive-title"><a href="configure/base_directives.html#max-delegations"><code>"max-delegations"</code></a></h3>
+<div id="max-delegations" class="directive-head">
+<h3><a href="configure/base_directives.html#max-delegations"><code>"max-delegations"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -362,13 +421,15 @@ Limits the number of delegations (i.e. internal redirects using the <code>X-Repr
 <dt>Default:</dt>
 <dd><code><pre>max-delegations: 5</pre></code>
 </dl>
-<h3 id="num-name-resolution-threads" class="directive-title"><a href="configure/base_directives.html#num-name-resolution-threads"><code>"num-name-resolution-threads"</code></a></h3>
+<div id="num-name-resolution-threads" class="directive-head">
+<h3><a href="configure/base_directives.html#num-name-resolution-threads"><code>"num-name-resolution-threads"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
 <dd>
 <p>
-Number of threads to run for name resolution.
+Maximum number of threads to run for name resolution.
 </p>
 
 </dd>
@@ -379,7 +440,37 @@ Number of threads to run for name resolution.
 </dl>
 
 
-<h3 id="num-threads" class="directive-title"><a href="configure/base_directives.html#num-threads"><code>"num-threads"</code></a></h3>
+<div id="num-ocsp-updaters" class="directive-head">
+<div class="directive-since">since v2.0</div>
+<h3><a href="configure/base_directives.html#num-ocsp-updaters"><code>"num-ocsp-updaters"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Maximum number of OCSP updaters.
+</p>
+
+<p>
+<a href="https://en.wikipedia.org/wiki/OCSP_stapling">OSCP Stapling</a> is an optimization that speeds up the time spent for establishing a TLS connection.
+In order to <i>staple</i> OCSP information, a HTTP server is required to periodically contact the certificate authority.
+This directive caps the number of the processes spawn for collecting the information.
+</p>
+<p>
+The use and the update interval of OCSP can be configured using the <a href="configure/base_directives.html#listen-ssl">SSL attributes</a> of the <a href="configure/base_directives.html#listen"><code>listen</code></a> configuration directive.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>num-ocsp-updaters: 10</pre></code>
+</dl>
+
+<div id="num-threads" class="directive-head">
+<h3><a href="configure/base_directives.html#num-threads"><code>"num-threads"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -397,7 +488,9 @@ Default is the number of the processors connected to the system as obtained by <
 <dd>global</dd>
 </dl>
 
-<h3 id="pid-file" class="directive-title"><a href="configure/base_directives.html#pid-file"><code>"pid-file"</code></a></h3>
+<div id="pid-file" class="directive-head">
+<h3><a href="configure/base_directives.html#pid-file"><code>"pid-file"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -415,7 +508,9 @@ Default is none.
 <dd>global</dd>
 </dl>
 
-<h3 id="tcp-fastopen" class="directive-title"><a href="configure/base_directives.html#tcp-fastopen"><code>"tcp-fastopen"</code></a></h3>
+<div id="tcp-fastopen" class="directive-head">
+<h3><a href="configure/base_directives.html#tcp-fastopen"><code>"tcp-fastopen"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -435,7 +530,130 @@ On other platforms the default value is <code>0</code> (disabled).
 <dd>global</dd>
 </dl>
 
-<h3 id="ssl-session-resumption" class="directive-title"><a href="configure/base_directives.html#ssl-session-resumption"><code>"ssl-session-resumption"</code></a></h3>
+<div id="send-server-name" class="directive-head">
+<div class="directive-since">since v2.0</div>
+<h3><a href="configure/base_directives.html#send-server-name"><code>"send-server-name"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether if the <code>server</code> response header should be sent.
+</p>
+
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>send-server-name: ON</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/base_directives.html#server-name"><code>server-name</code></a>
+</dd>
+</dl>
+
+<div id="server-name" class="directive-head">
+<div class="directive-since">since v2.0</div>
+<h3><a href="configure/base_directives.html#server-name"><code>"server-name"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Lets the user override the value of the <code>server</code> response header.
+</p>
+
+The default value is <code>h2o/VERSION-NUMBER</code>.
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>See also:</dt>
+<dd><a href="configure/base_directives.html#send-server-name"><code>send-server-name</code></a>
+</dd>
+</dl>
+
+<div id="setenv" class="directive-head">
+<div class="directive-since">since v2.0</div>
+<h3><a href="configure/base_directives.html#setenv"><code>"setenv"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Sets one or more environment variables.
+</p>
+
+<p>
+Environment variables are a set of key-value pairs containing arbitrary strings, that can be read from applications invoked by the standalone server (e.g. <a href="configure/fastcgi_directives.html">fastcgi handler</a>, <a href="configure/mruby_directives.html">mruby handler</a>) and the access logger.
+</p>
+<p>
+The directive is applied from outer-level to inner-level.
+At each level, the directive is applied after the <a href="configure/base_directives.html#unsetenv"><code>unsetenv</code></a> directive at the corresponding level is applied.
+</p>
+<p>
+Environment variables are retained through internal redirections.
+</p>
+<div class="example">
+<div class="caption">Example. Setting an environment variable named <code>FOO</code></div>
+<pre><code>setenv:
+  FOO: &quot;value_of_FOO&quot;
+</code></pre>
+</div>
+
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extension</dd>
+<dt>See also:</dt>
+<dd><a href="configure/base_directives.html#unsetenv"><code>unsetenv</code></a>
+</dd>
+</dl>
+
+<div id="unsetenv" class="directive-head">
+<div class="directive-since">since v2.0</div>
+<h3><a href="configure/base_directives.html#unsetenv"><code>"unsetenv"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Unsets one or more environment variables.
+</p>
+
+<p>
+The directive can be used to have an exception for the paths that have an environment variable set, or can be used to reset variables after an internal redirection.
+</p>
+<div class="example">
+<div class="caption">Example. Setting environment variable for <code>example.com</code> excluding <code>/specific-path</code></div>
+<pre><code>hosts:
+  example.com:
+    setenv:
+      FOO: &quot;value_of_FOO&quot;
+    paths:
+      /specific-path:
+        unsetenv:
+          - FOO
+      ...
+</code></pre>
+</div>
+
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extension</dd>
+<dt>See also:</dt>
+<dd><a href="configure/base_directives.html#setenv"><code>setenv</code></a>
+</dd>
+</dl>
+
+<div id="ssl-session-resumption" class="directive-head">
+<h3><a href="configure/base_directives.html#ssl-session-resumption"><code>"ssl-session-resumption"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -476,6 +694,7 @@ ssl-session-resumption:
 <p>
 The <code>mode</code> attribute defines which methods should be used for resuming the TLS sessions.
 The value can be either of: <code>off</code>, <code>cache</code>, <code>ticket</code>, <code>all</code>.
+Default is <code>all</code>.
 </p>
 <p>
 If set to <code>off</code>, session resumption will be disabled, and all TLS connections will be established via full handshakes.
@@ -512,7 +731,7 @@ Ticket-based session resumption uses master secret(s) to encrypt the keys used f
 To achieve <a href="https://en.wikipedia.org/wiki/Forward_secrecy" target="_blank">forward-secrecy</a> (i.e. protect past communications from being decrypted in case a master secret gets obtained by a third party), it is essential to periodically change the secret and remove the old ones.
 </p>
 <p>
-Among the three types of stores supported for ticket-based session remusption, the <code>internal</code> store and <code>memcached</code> store implement automatic roll-over of the secrets.
+Among the three types of stores supported for ticket-based session resumption, the <code>internal</code> store and <code>memcached</code> store implement automatic roll-over of the secrets.
 A new master secret is created every 1/4 of the session lifetime (defined by the <code>lifetime</code> attribute), and they expire (and gets removed) after 5/4 of the session lifetime elapse.
 </p>
 <p>
@@ -558,6 +777,8 @@ Default value is <code>3600</code> (in seconds).
 <dd>
 specifies the location of memcached used by the <code>memcached</code> stores.
 The value must be a mapping with <code>host</code> attribute specifying the address of the memcached server, and optionally a <code>port</code> attribute specifying the port number (default is <code>11211</code>).
+By default, the memcached client uses the <a href="https://github.com/memcached/memcached/blob/master/doc/protocol-binary.xml">BINARY protocol</a>.
+Users can opt-in to using the legacy <a href="https://github.com/memcached/memcached/blob/master/doc/protocol.txt">ASCII protocol</a> by adding a <code>protocol</code> attribute set to <code>ASCII</code>.
 </dd>
 
 </dd>
@@ -565,7 +786,42 @@ The value must be a mapping with <code>host</code> attribute specifying the addr
 <dd>global</dd>
 </dl>
 
-<h3 id="user" class="directive-title"><a href="configure/base_directives.html#user"><code>"user"</code></a></h3>
+<div id="temp-buffer-path" class="directive-head">
+<div class="directive-since">since v2.0</div>
+<h3><a href="configure/base_directives.html#temp-buffer-path"><code>"temp-buffer-path"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Directory in which temporary buffer files are created.
+</p>
+
+<p>
+H2O uses an internal structure called <code>h2o_buffer_t</code> for buffering various kinds of data (e.g. POST content, response from upstream HTTP or FastCGI server).
+When amount of the data allocated in the buffer exceeds 32MB, it starts allocating storage from the directory pointed to by the directive.
+</p>
+<p>
+By using the directive, users can set the directory to one within a memory-backed file system (e.g. <a href="https://en.wikipedia.org/wiki/Tmpfs">tmpfs</a>) for speed, or specify a disk-based file system to avoid memory pressure.
+</p>
+<p>
+Note that the directory must be writable by the running user of the server.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>temp-buffer-path: &quot;/tmp&quot;</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/base_directives.html#user"><code>user</code></a>
+</dd>
+</dl>
+
+<div id="user" class="directive-head">
+<h3><a href="configure/base_directives.html#user"><code>"user"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>

@@ -83,7 +83,7 @@ static int on_config_mruby_handler_file(h2o_configurator_command_t *cmd, h2o_con
     }
     while (!feof(fp)) {
         buf.base = h2o_mem_realloc(buf.base, buf.len + 65536);
-        buf.len += fread(buf.base, 1, 65536, fp);
+        buf.len += fread(buf.base + buf.len, 1, 65536, fp);
         if (ferror(fp)) {
             h2o_configurator_errprintf(cmd, node, "I/O error occurred while reading file:%s:%s", node->data.scalar,
                                        strerror(errno));
@@ -137,7 +137,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
     struct mruby_configurator_t *self = (void *)_self;
 
     /* free if the to-be-exitted frame level contains a different source */
-    if (self->vars[-1].source.base != self->vars[-1].source.base)
+    if (self->vars[-1].source.base != self->vars[0].source.base)
         free(self->vars->source.base);
 
     --self->vars;

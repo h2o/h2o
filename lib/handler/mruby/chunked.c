@@ -89,6 +89,9 @@ static void do_proceed(h2o_generator_t *_generator, h2o_req_t *req)
             is_final = 1;
         }
         break;
+    default:
+        h2o_fatal("unexpected type");
+        break;
     }
 
     do_send(generator, input, is_final);

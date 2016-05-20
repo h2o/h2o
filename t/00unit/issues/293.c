@@ -30,10 +30,10 @@ static void register_authority(h2o_globalconf_t *globalconf, h2o_iovec_t host, u
     static h2o_iovec_t x_authority = {H2O_STRLIT("x-authority")};
 
     h2o_hostconf_t *hostconf = h2o_config_register_host(globalconf, host, port);
-    h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, "/");
+    h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, "/", 0);
     h2o_file_register(pathconf, "t/00unit/assets", NULL, NULL, 0);
 
-    char *authority = h2o_mem_alloc(host.len + sizeof(":65535"));
+    char *authority = h2o_mem_alloc(host.len + sizeof(":" H2O_UINT16_LONGEST_STR));
     sprintf(authority, "%.*s:%" PRIu16, (int)host.len, host.base, port);
     h2o_headers_command_t *cmds = h2o_mem_alloc(sizeof(*cmds) * 2);
     cmds[0] = (h2o_headers_command_t){H2O_HEADERS_CMD_ADD, &x_authority, {authority, strlen(authority)}};

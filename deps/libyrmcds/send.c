@@ -1,7 +1,8 @@
-// (C) 2013-2015 Cybozu et al.
+// (C) 2013-2016 Cybozu et al.
 
 #include "yrmcds.h"
-#include "portability.h"
+#include "yrmcds_portability.h"
+#include "yrmcds_text.h"
 
 #ifdef LIBYRMCDS_USE_LZ4
 #  include "lz4/lib/lz4.h"
@@ -168,6 +169,9 @@ yrmcds_error yrmcds_noop(yrmcds* c, uint32_t* serial) {
     if( c == NULL )
         return YRMCDS_BAD_ARGUMENT;
 
+    if( c->text_mode )
+        return YRMCDS_NOT_IMPLEMENTED;
+
     return send_command(c, YRMCDS_CMD_NOOP, 0, serial,
                         0, NULL, 0, NULL, 0, NULL);
 }
@@ -176,6 +180,9 @@ yrmcds_error yrmcds_get(yrmcds* c, const char* key, size_t key_len,
                         int quiet, uint32_t* serial) {
     if( c == NULL || key == NULL || key_len == 0 )
         return YRMCDS_BAD_ARGUMENT;
+
+    if( c->text_mode )
+        return yrmcds_text_get(c, key, key_len, quiet, serial);
 
     return send_command(c, quiet ? YRMCDS_CMD_GETQ : YRMCDS_CMD_GET,
                         0, serial, key_len, key, 0, NULL, 0, NULL);
@@ -186,6 +193,9 @@ yrmcds_error yrmcds_getk(yrmcds* c, const char* key, size_t key_len,
     if( c == NULL || key == NULL || key_len == 0 )
         return YRMCDS_BAD_ARGUMENT;
 
+    if( c->text_mode )
+        return yrmcds_text_get(c, key, key_len, quiet, serial);
+
     return send_command(c, quiet ? YRMCDS_CMD_GETKQ : YRMCDS_CMD_GETK,
                         0, serial, key_len, key, 0, NULL, 0, NULL);
 }
@@ -194,6 +204,9 @@ yrmcds_error yrmcds_get_touch(yrmcds* c, const char* key, size_t key_len,
                               uint32_t expire, int quiet, uint32_t* serial) {
     if( c == NULL || key == NULL || key_len == 0 )
         return YRMCDS_BAD_ARGUMENT;
+
+    if( c->text_mode )
+        return YRMCDS_NOT_IMPLEMENTED;
 
     char extras[4];
     hton32(expire, extras);
@@ -207,6 +220,9 @@ yrmcds_error yrmcds_getk_touch(yrmcds* c, const char* key, size_t key_len,
     if( c == NULL || key == NULL || key_len == 0 )
         return YRMCDS_BAD_ARGUMENT;
 
+    if( c->text_mode )
+        return YRMCDS_NOT_IMPLEMENTED;
+
     char extras[4];
     hton32(expire, extras);
     return send_command(c, quiet ? YRMCDS_CMD_GATKQ : YRMCDS_CMD_GATK,
@@ -219,6 +235,9 @@ yrmcds_error yrmcds_lock_get(yrmcds* c, const char* key, size_t key_len,
     if( c == NULL || key == NULL || key_len == 0 )
         return YRMCDS_BAD_ARGUMENT;
 
+    if( c->text_mode )
+        return YRMCDS_NOT_IMPLEMENTED;
+
     return send_command(c, quiet ? YRMCDS_CMD_LAGQ : YRMCDS_CMD_LAG,
                         0, serial, key_len, key, 0, NULL, 0, NULL);
 }
@@ -228,6 +247,9 @@ yrmcds_error yrmcds_lock_getk(yrmcds* c, const char* key, size_t key_len,
     if( c == NULL || key == NULL || key_len == 0 )
         return YRMCDS_BAD_ARGUMENT;
 
+    if( c->text_mode )
+        return YRMCDS_NOT_IMPLEMENTED;
+
     return send_command(c, quiet ? YRMCDS_CMD_LAGKQ : YRMCDS_CMD_LAGK,
                         0, serial, key_len, key, 0, NULL, 0, NULL);
 }
@@ -236,6 +258,9 @@ yrmcds_error yrmcds_touch(yrmcds* c, const char* key, size_t key_len,
                           uint32_t expire, int quiet, uint32_t* serial) {
     if( c == NULL || key == NULL || key_len == 0 )
         return YRMCDS_BAD_ARGUMENT;
+
+    if( c->text_mode )
+        return yrmcds_text_touch(c, key, key_len, expire, quiet, serial);
 
     char extras[4];
     hton32(expire, extras);
@@ -247,6 +272,10 @@ yrmcds_error yrmcds_set(yrmcds* c, const char* key, size_t key_len,
                         const char* data, size_t data_len,
                         uint32_t flags, uint32_t expire, uint64_t cas,
                         int quiet, uint32_t* serial) {
+    if( c && c->text_mode )
+        return yrmcds_text_set(c, key, key_len, data, data_len,
+                               flags, expire, cas, quiet, serial);
+
     return send_data(c, quiet ? YRMCDS_CMD_SETQ : YRMCDS_CMD_SET,
                      key, key_len, data, data_len, flags, expire, cas, serial);
 }
@@ -255,6 +284,10 @@ yrmcds_error yrmcds_replace(yrmcds* c, const char* key, size_t key_len,
                             const char* data, size_t data_len,
                             uint32_t flags, uint32_t expire, uint64_t cas,
                             int quiet, uint32_t* serial) {
+    if( c && c->text_mode )
+        return yrmcds_text_replace(c, key, key_len, data, data_len,
+                                   flags, expire, cas, quiet, serial);
+
     return send_data(c, quiet ? YRMCDS_CMD_REPLACEQ : YRMCDS_CMD_REPLACE,
                      key, key_len, data, data_len, flags, expire, cas, serial);
 }
@@ -263,6 +296,10 @@ yrmcds_error yrmcds_add(yrmcds* c, const char* key, size_t key_len,
                         const char* data, size_t data_len,
                         uint32_t flags, uint32_t expire, uint64_t cas,
                         int quiet, uint32_t* serial) {
+    if( c && c->text_mode )
+        return yrmcds_text_add(c, key, key_len, data, data_len,
+                               flags, expire, cas, quiet, serial);
+
     return send_data(c, quiet ? YRMCDS_CMD_ADDQ : YRMCDS_CMD_ADD,
                      key, key_len, data, data_len, flags, expire, cas, serial);
 }
@@ -271,6 +308,9 @@ yrmcds_error yrmcds_replace_unlock(yrmcds* c, const char* key, size_t key_len,
                                    const char* data, size_t data_len,
                                    uint32_t flags, uint32_t expire,
                                    int quiet, uint32_t* serial) {
+    if( c && c->text_mode )
+        return YRMCDS_NOT_IMPLEMENTED;
+
     return send_data(c, quiet ? YRMCDS_CMD_RAUQ : YRMCDS_CMD_RAU,
                      key, key_len, data, data_len, flags, expire, 0, serial);
 }
@@ -279,6 +319,9 @@ yrmcds_error yrmcds_incr(yrmcds* c, const char* key, size_t key_len,
                          uint64_t value, int quiet, uint32_t* serial) {
     if( c == NULL || key == NULL || key_len == 0 )
         return YRMCDS_BAD_ARGUMENT;
+
+    if( c->text_mode )
+        return yrmcds_text_incr(c, key, key_len, value, quiet, serial);
 
     char extras[20];
     hton64(value, extras);
@@ -295,6 +338,9 @@ yrmcds_error yrmcds_incr2(yrmcds* c, const char* key, size_t key_len,
     if( c == NULL || key == NULL || key_len == 0 )
         return YRMCDS_BAD_ARGUMENT;
 
+    if( c->text_mode )
+        return YRMCDS_NOT_IMPLEMENTED;
+
     char extras[20];
     hton64(value, extras);
     hton64(initial, &extras[8]);
@@ -308,6 +354,9 @@ yrmcds_error yrmcds_decr(yrmcds* c, const char* key, size_t key_len,
                          uint64_t value, int quiet, uint32_t* serial) {
     if( c == NULL || key == NULL || key_len == 0 )
         return YRMCDS_BAD_ARGUMENT;
+
+    if( c->text_mode )
+        return yrmcds_text_decr(c, key, key_len, value, quiet, serial);
 
     char extras[20];
     hton64(value, extras);
@@ -323,6 +372,9 @@ yrmcds_error yrmcds_decr2(yrmcds* c, const char* key, size_t key_len,
                           int quiet, uint32_t* serial) {
     if( c == NULL || key == NULL || key_len == 0 )
         return YRMCDS_BAD_ARGUMENT;
+
+    if( c->text_mode )
+        return YRMCDS_NOT_IMPLEMENTED;
 
     char extras[20];
     hton64(value, extras);
@@ -340,6 +392,10 @@ yrmcds_error yrmcds_append(yrmcds* c, const char* key, size_t key_len,
         data == NULL || data_len == 0 )
         return YRMCDS_BAD_ARGUMENT;
 
+    if( c->text_mode )
+        return yrmcds_text_append(c, key, key_len, data, data_len,
+                                  quiet, serial);
+
     return send_command(c, quiet ? YRMCDS_CMD_APPENDQ : YRMCDS_CMD_APPEND,
                         0, serial, key_len, key, 0, NULL, data_len, data);
 }
@@ -351,6 +407,10 @@ yrmcds_error yrmcds_prepend(yrmcds* c, const char* key, size_t key_len,
         data == NULL || data_len == 0 )
         return YRMCDS_BAD_ARGUMENT;
 
+    if( c->text_mode )
+        return yrmcds_text_prepend(c, key, key_len, data, data_len,
+                                   quiet, serial);
+
     return send_command(c, quiet ? YRMCDS_CMD_PREPENDQ : YRMCDS_CMD_PREPEND,
                         0, serial, key_len, key, 0, NULL, data_len, data);
 }
@@ -359,6 +419,9 @@ yrmcds_error yrmcds_remove(yrmcds* c, const char* key, size_t key_len,
                            int quiet, uint32_t* serial) {
     if( c == NULL || key == NULL || key_len == 0 )
         return YRMCDS_BAD_ARGUMENT;
+
+    if( c->text_mode )
+        return yrmcds_text_remove(c, key, key_len, quiet, serial);
 
     return send_command(c, quiet ? YRMCDS_CMD_DELETEQ : YRMCDS_CMD_DELETE,
                         0, serial, key_len, key, 0, NULL, 0, NULL);
@@ -369,6 +432,9 @@ yrmcds_error yrmcds_lock(yrmcds* c, const char* key, size_t key_len,
     if( c == NULL || key == NULL || key_len == 0 )
         return YRMCDS_BAD_ARGUMENT;
 
+    if( c->text_mode )
+        return YRMCDS_NOT_IMPLEMENTED;
+
     return send_command(c, quiet ? YRMCDS_CMD_LOCKQ : YRMCDS_CMD_LOCK,
                         0, serial, key_len, key, 0, NULL, 0, NULL);
 }
@@ -378,6 +444,9 @@ yrmcds_error yrmcds_unlock(yrmcds* c, const char* key, size_t key_len,
     if( c == NULL || key == NULL || key_len == 0 )
         return YRMCDS_BAD_ARGUMENT;
 
+    if( c->text_mode )
+        return YRMCDS_NOT_IMPLEMENTED;
+
     return send_command(c, quiet ? YRMCDS_CMD_UNLOCKQ : YRMCDS_CMD_UNLOCK,
                         0, serial, key_len, key, 0, NULL, 0, NULL);
 }
@@ -385,6 +454,9 @@ yrmcds_error yrmcds_unlock(yrmcds* c, const char* key, size_t key_len,
 yrmcds_error yrmcds_unlockall(yrmcds* c, int quiet, uint32_t* serial) {
     if( c == NULL )
         return YRMCDS_BAD_ARGUMENT;
+
+    if( c->text_mode )
+        return YRMCDS_NOT_IMPLEMENTED;
 
     return send_command(c, quiet ? YRMCDS_CMD_UNLOCKALLQ : YRMCDS_CMD_UNLOCKALL,
                         0, serial, 0, NULL, 0, NULL, 0, NULL);
@@ -394,6 +466,9 @@ yrmcds_error yrmcds_flush(yrmcds* c, uint32_t delay,
                           int quiet, uint32_t* serial) {
     if( c == NULL )
         return YRMCDS_BAD_ARGUMENT;
+
+    if( c->text_mode )
+        return yrmcds_text_flush(c, delay, quiet, serial);
 
     if( delay == 0 )
         return send_command(c, quiet ? YRMCDS_CMD_FLUSHQ : YRMCDS_CMD_FLUSH,
@@ -409,6 +484,9 @@ yrmcds_error yrmcds_stat_general(yrmcds* c, uint32_t* serial) {
     if( c == NULL )
         return YRMCDS_BAD_ARGUMENT;
 
+    if( c->text_mode )
+        return YRMCDS_NOT_IMPLEMENTED;
+
     return send_command(c, YRMCDS_CMD_STAT,
                         0, serial, 0, NULL, 0, NULL, 0, NULL);
 }
@@ -416,6 +494,9 @@ yrmcds_error yrmcds_stat_general(yrmcds* c, uint32_t* serial) {
 yrmcds_error yrmcds_stat_settings(yrmcds* c, uint32_t* serial) {
     if( c == NULL )
         return YRMCDS_BAD_ARGUMENT;
+
+    if( c->text_mode )
+        return YRMCDS_NOT_IMPLEMENTED;
 
     const char key[] = "settings";
     return send_command(c, YRMCDS_CMD_STAT,
@@ -426,6 +507,9 @@ yrmcds_error yrmcds_stat_items(yrmcds* c, uint32_t* serial) {
     if( c == NULL )
         return YRMCDS_BAD_ARGUMENT;
 
+    if( c->text_mode )
+        return YRMCDS_NOT_IMPLEMENTED;
+
     const char key[] = "items";
     return send_command(c, YRMCDS_CMD_STAT,
                         0, serial, sizeof(key) - 1, key, 0, NULL, 0, NULL);
@@ -435,14 +519,34 @@ yrmcds_error yrmcds_stat_sizes(yrmcds* c, uint32_t* serial) {
     if( c == NULL )
         return YRMCDS_BAD_ARGUMENT;
 
+    if( c->text_mode )
+        return YRMCDS_NOT_IMPLEMENTED;
+
     const char key[] = "sizes";
     return send_command(c, YRMCDS_CMD_STAT,
                         0, serial, sizeof(key) - 1, key, 0, NULL, 0, NULL);
 }
 
+yrmcds_error yrmcds_keys(yrmcds* c, const char* prefix, size_t prefix_len,
+                         uint32_t* serial) {
+    if( c == NULL ||
+        (prefix == NULL && prefix_len != 0) ||
+        (prefix != NULL && prefix_len == 0) )
+        return YRMCDS_BAD_ARGUMENT;
+
+    if( c->text_mode )
+        return YRMCDS_NOT_IMPLEMENTED;
+
+    return send_command(c, YRMCDS_CMD_KEYS,
+                        0, serial, prefix_len, prefix, 0, NULL, 0, NULL);
+}
+
 yrmcds_error yrmcds_version(yrmcds* c, uint32_t* serial) {
     if( c == NULL )
         return YRMCDS_BAD_ARGUMENT;
+
+    if( c->text_mode )
+        return yrmcds_text_version(c, serial);
 
     return send_command(c, YRMCDS_CMD_VERSION,
                         0, serial, 0, NULL, 0, NULL, 0, NULL);
@@ -451,6 +555,9 @@ yrmcds_error yrmcds_version(yrmcds* c, uint32_t* serial) {
 yrmcds_error yrmcds_quit(yrmcds* c, int quiet, uint32_t* serial) {
     if( c == NULL )
         return YRMCDS_BAD_ARGUMENT;
+
+    if( c->text_mode )
+        return yrmcds_text_quit(c, serial);
 
     return send_command(c, quiet ? YRMCDS_CMD_QUITQ : YRMCDS_CMD_QUIT,
                         0, serial, 0, NULL, 0, NULL, 0, NULL);

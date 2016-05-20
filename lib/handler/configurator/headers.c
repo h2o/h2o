@@ -78,7 +78,7 @@ static int add_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2
         }
     }
 
-    h2o_vector_reserve(NULL, (h2o_vector_t *)self->cmds, sizeof(self->cmds->entries[0]), self->cmds->size + 1);
+    h2o_vector_reserve(NULL, self->cmds, self->cmds->size + 1);
     self->cmds->entries[self->cmds->size++] = (h2o_headers_command_t){cmd_id, name, value};
     return 0;
 }
@@ -91,8 +91,12 @@ static int on_config_header_2arg(h2o_configurator_command_t *cmd, h2o_configurat
         h2o_configurator_errprintf(cmd, node, "failed to parse the value; should be in form of `name: value`");
         return -1;
     }
-    if (add_cmd(cmd, node, cmd_id, name, value) != 0)
+    if (add_cmd(cmd, node, cmd_id, name, value) != 0) {
+        if (!h2o_iovec_is_token(name))
+            free(name->base);
+        free(value.base);
         return -1;
+    }
     return 0;
 }
 
@@ -118,8 +122,11 @@ static int on_config_header_unset(h2o_configurator_command_t *cmd, h2o_configura
         h2o_configurator_errprintf(cmd, node, "invalid header name");
         return -1;
     }
-    if (add_cmd(cmd, node, H2O_HEADERS_CMD_UNSET, name, (h2o_iovec_t){}) != 0)
+    if (add_cmd(cmd, node, H2O_HEADERS_CMD_UNSET, name, (h2o_iovec_t){}) != 0) {
+        if (!h2o_iovec_is_token(name))
+            free(name->base);
         return -1;
+    }
     return 0;
 }
 
@@ -127,7 +134,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
 {
     struct headers_configurator_t *self = (void *)_self;
 
-    h2o_vector_reserve(NULL, (h2o_vector_t *)&self->cmds[1], sizeof(self->cmds[0].entries[0]), self->cmds[0].size);
+    h2o_vector_reserve(NULL, &self->cmds[1], self->cmds[0].size);
     memcpy(self->cmds[1].entries, self->cmds[0].entries, sizeof(self->cmds->entries[0]) * self->cmds->size);
     self->cmds[1].size = self->cmds[0].size;
     ++self->cmds;
@@ -139,7 +146,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
     struct headers_configurator_t *self = (void *)_self;
 
     if (ctx->pathconf != NULL && self->cmds->size != 0) {
-        h2o_vector_reserve(NULL, (h2o_vector_t *)self->cmds, sizeof(self->cmds->entries[0]), self->cmds->size + 1);
+        h2o_vector_reserve(NULL, self->cmds, self->cmds->size + 1);
         self->cmds->entries[self->cmds->size] = (h2o_headers_command_t){H2O_HEADERS_CMD_NULL};
         h2o_headers_register(ctx->pathconf, self->cmds->entries);
     } else {

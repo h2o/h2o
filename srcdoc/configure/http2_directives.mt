@@ -16,7 +16,7 @@ Unfortunately, some web browsers fail to specify response priorities that lead t
 H2O is capable of detecting such web browsers, and if it does, uses server-driven prioritization; i.e. send responses with certain MIME-types before others.
 </p>
 <p>
-It is possible to tune or turn off server-driven prioritization using directives: <a href="configure/file_directives.html#file.mime.addtypes"><code>file.mime.addtypes</code></a>, <a href="#http2-reprioritize-blocking-assets"><code>http2-reprioritize-blocking-assets</code></a>.
+It is possible to tune or turn off server-driven prioritization using directives: <a href="configure/file_directives.html#file.mime.addtypes"><code>file.mime.addtypes</code></a>, <a href="configure/http2_directives.html#http2-reprioritize-blocking-assets"><code>http2-reprioritize-blocking-assets</code></a>.
 </p>
 <p>
 See also:
@@ -31,15 +31,30 @@ See also:
 <p>
 H2O recognizes <code>link</code> headers with <a href="https://w3c.github.io/preload/">preload</a> keyword sent by a backend application server (reverse proxy or FastCGI) or an mruby handler, and pushes the designated resource to a client.
 </p>
+<?= $ctx->{example}->('A link response header triggering HTTP/2 push', <<'EOT')
+link: </assets/jquery.js>; rel=preload
+EOT
+?>
+
+<p>When the HTTP/2 driver of H2O recognizes a <code>link</code> response header with <code>rel=preload</code> attribute set, and if all of the following conditions are met, the specified resource is pushed to the client.
+</p>
+<ul>
+<li>the <code>link</code> header does not have the <code>nopush</code> attribute set</li>
+<li>the <code>link</code> header is <i>not</i> part of a pushed response</li>
+<li>the client does not disable HTTP/2 push</li>
+<li>number of the pushed responses in-flight is below the negotiated threshold</li>
+<li>authority of the resource specified is equivalent to the request that tried to trigger the push</li>
+<li>(for handlers that return the status code synchronously) the status code of the response to be pushed does not indicate an error (i.e. 4xx or 5xx)</li>
+</ul>
 <p>
-When pushing the resources, the priority is determined using the <a href="configure/file_directives.html#file.mime.addtypes"><code>priority</code> attribute</a> of the MIME-type configuration.  If the priority is set to <code>highest</code> then the resource will be sent to the client before anything else; otherwise the resource will be sent to client after the main content, as per defined by the HTTP/2 specification.
+The server also provides a mechanism to track the clients' cache state via cookies, and to push the resources specified with the <code>link</code> header only when it does not exist within the clients' cache.  For details, please refer to the documentation of <a href="configure/http2_directives.html#http2-casper"><code>http2-casper</code></a> configuration directive.
 </p>
 <p>
-The server also provides a mechanism to track the clients' cache state via cookies, and to push the resources specified with the <code>link</code> header only when it does not exist within the clients' cache.  For details, please refer to the documentation of <a href="#http2-casper"><code>http2-casper</code></a> configuration directive.
+When a resource is pushed, the priority is determined using the <a href="configure/file_directives.html#file.mime.addtypes"><code>priority</code> attribute</a> of the MIME-type configuration.  If the priority is set to <code>highest</code> then the resource will be sent to the client before anything else; otherwise the resource will be sent to client after the main content, as per defined by the HTTP/2 specification.
 </p>
 <p>
 Pushed responses will have <code>x-http2-push: pushed</code> header set; by looking for the header, it is possible to determine if a resource has been pushed.
-It is also possible to log the value in the <a href="configure/access_log_directives.html#access-log">access log</a> by specifying <code>{x-http2-push}o</code>, push responses but cancelled by CASPER will have the value of the header logged as <code>cancelled</code>.
+It is also possible to log the value in the <a href="configure/access_log_directives.html#access-log">access log</a> by specifying <code>%{x-http2-push}o</code>, push responses but cancelled by CASPER will have the value of the header logged as <code>cancelled</code>.
 </p>
 <p>
 See also:
@@ -115,7 +130,7 @@ EOT
 $ctx->{directive}->(
     name    => "http2-max-concurrent-requests-per-connection",
     levels  => [ qw(global) ],
-    default => 'http2-max-concurrent-requests-per-connection: 256',
+    default => 'http2-max-concurrent-requests-per-connection: 100',
     desc    => <<'EOT',
 Maximum number of requests to be handled concurrently within a single HTTP/2 connection.
 EOT

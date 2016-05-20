@@ -133,32 +133,21 @@ static void call_handlers(h2o_req_t *req, h2o_handler_t **handler)
 
 static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
 {
+    h2o_pathconf_t *selected_pathconf = &hostconf->fallback_path;
     size_t i;
-
-    req->hostconf = hostconf;
-    req->pathconf = &hostconf->fallback_path;
 
     /* setup pathconf, or redirect to "path/" */
     for (i = 0; i != hostconf->paths.size; ++i) {
-        h2o_pathconf_t *pathconf = hostconf->paths.entries + i;
-        size_t confpath_wo_slash = pathconf->path.len - 1;
-        if (req->path_normalized.len >= confpath_wo_slash &&
-            memcmp(req->path_normalized.base, pathconf->path.base, confpath_wo_slash) == 0) {
-            if (req->path_normalized.len == confpath_wo_slash) {
-                req->pathconf = pathconf;
-                h2o_iovec_t dest = h2o_uri_escape(&req->pool, pathconf->path.base, pathconf->path.len, "/");
-                if (req->query_at != SIZE_MAX)
-                    dest =
-                        h2o_concat(&req->pool, dest, h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at));
-                h2o_send_redirect(req, 301, "Moved Permanently", dest.base, dest.len);
-                return;
-            }
-            if (req->path_normalized.base[confpath_wo_slash] == '/') {
-                req->pathconf = pathconf;
-                break;
-            }
+        h2o_pathconf_t *candidate = hostconf->paths.entries + i;
+        if (req->path_normalized.len >= candidate->path.len &&
+            memcmp(req->path_normalized.base, candidate->path.base, candidate->path.len) == 0 &&
+            (candidate->path.base[candidate->path.len - 1] == '/' || req->path_normalized.len == candidate->path.len ||
+             req->path_normalized.base[candidate->path.len] == '/')) {
+            selected_pathconf = candidate;
+            break;
         }
     }
+    h2o_req_bind_conf(req, hostconf, selected_pathconf);
 
     call_handlers(req, req->pathconf->handlers.entries);
 }
@@ -221,7 +210,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
         COPY(input.path);
         req->input.scheme = src->input.scheme;
         req->version = src->version;
-        h2o_vector_reserve(&req->pool, (h2o_vector_t *)&req->headers, sizeof(h2o_header_t), src->headers.size);
+        h2o_vector_reserve(&req->pool, &req->headers, src->headers.size);
         memcpy(req->headers.entries, src->headers.entries, sizeof(req->headers.entries[0]) * src->headers.size);
         req->headers.size = src->headers.size;
         req->entity = src->entity;
@@ -234,6 +223,13 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
             req->upgrade.len = 0;
         }
 #undef COPY
+        if (src->env.size != 0) {
+            size_t i;
+            h2o_vector_reserve(&req->pool, &req->env, src->env.size);
+            req->env.size = src->env.size;
+            for (i = 0; i != req->env.size; ++i)
+                req->env.entries[i] = h2o_strdup(&req->pool, src->env.entries[i].base, src->env.entries[i].len);
+        }
     }
 }
 
@@ -396,6 +392,26 @@ h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot)
     return ostr;
 }
 
+static void apply_env(h2o_req_t *req, h2o_envconf_t *env)
+{
+    size_t i;
+
+    if (env->parent != NULL)
+        apply_env(req, env->parent);
+    for (i = 0; i != env->unsets.size; ++i)
+        h2o_req_unsetenv(req, env->unsets.entries[i].base, env->unsets.entries[i].len);
+    for (i = 0; i != env->sets.size; i += 2)
+        *h2o_req_getenv(req, env->sets.entries[i].base, env->sets.entries[i].len, 1) = env->sets.entries[i + 1];
+}
+
+void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t *pathconf)
+{
+    req->hostconf = hostconf;
+    req->pathconf = pathconf;
+    if (pathconf->env != NULL)
+        apply_env(req, pathconf->env);
+}
+
 void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
 {
     if (is_final) {
@@ -417,7 +433,7 @@ void h2o_req_fill_mime_attributes(h2o_req_t *req)
         return;
 
     if ((content_type_index = h2o_find_header(&req->res.headers, H2O_TOKEN_CONTENT_TYPE, -1)) != -1 &&
-        (mime = h2o_mimemap_get_type_by_mimetype(req->pathconf->mimemap, req->res.headers.entries[content_type_index].value)) !=
+        (mime = h2o_mimemap_get_type_by_mimetype(req->pathconf->mimemap, req->res.headers.entries[content_type_index].value, 0)) !=
             NULL)
         req->res.mime_attr = &mime->data.attr;
     else
@@ -444,8 +460,7 @@ void h2o_send_error(h2o_req_t *req, int status, const char *reason, const char *
 {
     if (req->pathconf == NULL) {
         h2o_hostconf_t *hostconf = setup_before_processing(req);
-        req->hostconf = hostconf;
-        req->pathconf = &hostconf->fallback_path;
+        h2o_req_bind_conf(req, hostconf, &hostconf->fallback_path);
     }
 
     if ((flags & H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION) != 0)
@@ -567,7 +582,7 @@ void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *
     h2o_url_resolve_path(&base_path, &url.path);
     url.path = h2o_concat(&req->pool, base_path, url.path);
 
-    h2o_reprocess_request_deferred(req, method, url.scheme, url.authority, url.path, preserve_overrides ? req->overrides: NULL, 1);
+    h2o_reprocess_request_deferred(req, method, url.scheme, url.authority, url.path, preserve_overrides ? req->overrides : NULL, 1);
 }
 
 h2o_iovec_t h2o_get_redirect_method(h2o_iovec_t method, int status)
@@ -577,13 +592,14 @@ h2o_iovec_t h2o_get_redirect_method(h2o_iovec_t method, int status)
     return method;
 }
 
-int h2o_puth_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len)
+int h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len)
 {
-    if (req->conn->callbacks->push_path == NULL || req->res_is_delegated)
+    if (req->conn->callbacks->push_path == NULL)
         return -1;
 
-    h2o_iovec_t path =
-        h2o_extract_push_path_from_link_header(&req->pool, value, value_len, req->input.scheme, &req->input.authority, &req->path);
+    h2o_iovec_t path = h2o_extract_push_path_from_link_header(&req->pool, value, value_len, req->path_normalized, req->input.scheme,
+                                                              req->input.authority, req->res_is_delegated ? req->scheme : NULL,
+                                                              req->res_is_delegated ? &req->authority : NULL);
     if (path.base == NULL)
         return -1;
 

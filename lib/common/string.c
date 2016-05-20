@@ -44,6 +44,20 @@ h2o_iovec_t h2o_strdup(h2o_mem_pool_t *pool, const char *s, size_t slen)
     return ret;
 }
 
+h2o_iovec_t h2o_strdup_shared(h2o_mem_pool_t *pool, const char *s, size_t slen)
+{
+    h2o_iovec_t ret;
+
+    if (slen == SIZE_MAX)
+        slen = strlen(s);
+
+    ret.base = h2o_mem_alloc_shared(pool, slen + 1, NULL);
+    memcpy(ret.base, s, slen);
+    ret.base[slen] = '\0';
+    ret.len = slen;
+    return ret;
+}
+
 h2o_iovec_t h2o_strdup_slashed(h2o_mem_pool_t *pool, const char *src, size_t len)
 {
     h2o_iovec_t ret;
@@ -218,6 +232,8 @@ h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t l
     return decoded;
 
 Error:
+    if (pool == NULL)
+        free(decoded.base);
     return h2o_iovec_init(NULL, 0);
 }
 

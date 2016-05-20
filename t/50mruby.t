@@ -165,6 +165,29 @@ EOT
     like $resp, qr{\nid\s*responseEnd\s.*\s/index\.js\n.*\s/index\.txt}is, "receives index.js then /index.txt";
 };
 
+subtest "server-push / nopush" => sub {
+    plan skip_all => 'nghttp not found'
+        unless prog_exists('nghttp');
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          Proc.new do |env|
+            push_paths = []
+            if env["PATH_INFO"] == "/index.txt"
+              push_paths << "/index.js"
+            end
+            [399, push_paths.empty? ? {} : {"link" => push_paths.map{|p| "<#{p}>; rel=preload; nopush"}.join()}, []]
+          end
+        file.dir: t/assets/doc_root
+EOT
+    my $resp = `nghttp -n --stat https://127.0.0.1:$server->{tls_port}/index.txt`;
+    unlike $resp, qr{/index\.js}is, "receives only /index.txt";
+    like $resp, qr{/index\.txt}is, "receives only /index.txt";
+};
+
 subtest "infinite-reprocess" => sub {
     my $server = spawn_h2o(sub {
         my ($port, $tls_port) = @_;
@@ -298,18 +321,12 @@ hosts:
             [200, {}, [env["HTTP_COOKIE"]]]
           end
 EOT
-    subtest "http1" => sub {
-        my ($headers, $body) = run_prog("curl --silent -H 'cookie: a=b' -H 'cookie: c=d' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
-        like $headers, qr{^HTTP/1\.1 200}is;
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my ($headers, $body) = run_prog("$curl --silent -H 'cookie: a=b' -H 'cookie: c=d' --dump-header /dev/stderr $proto://127.0.0.1:$port/");
+        like $headers, qr{^HTTP/\S+ 200}is;
         like $body, qr{^a=b;\s*c=d$}is;
-    };
-    subtest "http2" => sub {
-        plan skip_all => "curl does not support HTTP/2"
-            unless curl_supports_http2();
-        my ($headers, $body) = run_prog("curl --http2 --insecure --silent -H 'cookie: a=b' -H 'cookie: c=d' --dump-header /dev/stderr https://127.0.0.1:$server->{tls_port}/");
-        like $headers, qr{^HTTP/2\.0 200}is;
-        like $body, qr{^a=b;\s*c=d$}is;
-    };
+    });
 };
 
 subtest "close-called" => sub {

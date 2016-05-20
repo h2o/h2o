@@ -68,15 +68,6 @@ Sets a header line when and only when a header with the same name does not alrea
 EOT
 )->(sub {});
 
-$ctx->{directive}->(
-    name => "header.setifempty",
-    levels  => [ qw(global host path extension) ],
-    desc    => <<'EOT',
-Sets a header line when and only when a header with the same name does not already exist.
-EOT
-)->(sub {});
-?>
-
 <?
 $ctx->{directive}->(
     name => "header.unset",

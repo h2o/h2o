@@ -25,6 +25,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include "khash.h"
+#include "h2o/cache.h"
 #include "h2o/http2_casper.h"
 #include "h2o/http2_scheduler.h"
 
@@ -165,6 +166,7 @@ struct st_h2o_http2_stream_t {
     h2o_http2_stream_state_t state;
     h2o_http2_window_t output_window;
     h2o_http2_window_t input_window;
+    h2o_http2_priority_t received_priority;
     h2o_buffer_t *_req_body;         /* NULL unless request body IS expected */
     size_t _expected_content_length; /* SIZE_MAX if unknown */
     H2O_VECTOR(h2o_iovec_t) _data;
@@ -238,6 +240,7 @@ struct st_h2o_http2_conn_t {
         h2o_timeout_entry_t timeout_entry;
         h2o_http2_window_t window;
     } _write;
+    h2o_cache_t *push_memo;
     h2o_http2_casper_t *casper;
 };
 
@@ -273,7 +276,8 @@ static void h2o_http2_conn_init_casper(h2o_http2_conn_t *conn, unsigned capacity
 
 /* stream */
 static int h2o_http2_stream_is_push(uint32_t stream_id);
-h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req);
+h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req,
+                                          const h2o_http2_priority_t *received_priority);
 static void h2o_http2_stream_update_open_slot(h2o_http2_stream_t *stream, h2o_http2_conn_num_streams_t *slot);
 static void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_http2_stream_state_t new_state);
 static void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);

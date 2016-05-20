@@ -3,7 +3,7 @@
 
 <h3>Syntax</h3>
 
-H2O uses <a href="http://www.yaml.org/">YAML</a> 1.1 the syntax of its configuration file.
+H2O uses <a href="http://www.yaml.org/">YAML</a> 1.1 as the syntax of its configuration file.
 
 <h3 id="config_levels">Levels of Configuration</h3>
 
@@ -58,9 +58,69 @@ The second host accepts connections on port 80 (via the plain-text HTTP protocol
 </p>
 
 <p>
-Certain configuration directives can be used in more than one levels.  For example, the <code>listen</code> directive can be used either at the global level or at the host level.
-<code>Expires</code> can be used at all levels.
-On the other hand <code>file.dir</code> can only be used at the path level.
+Certain configuration directives can be used in more than one levels.  For example, the <a href="configure/base_directives.html#listen"><code>listen</code></a> can be used either at the global level or at the host level.
+<a href="configure/expires_directives.html#expires"><code>Expires</code></a> can be used at all levels.
+On the other hand <a href="configure/file_directives.html#file.dir"><code>file.dir</code></a> can only be used at the path level.
 </p>
+
+<h3 id="yaml_alias">Using YAML Alias</h3>
+
+<p>
+H2O resolves <a href="http://yaml.org/YAML_for_ruby.html#aliases_and_anchors">YAML aliases</a> before processing the configuration file.
+Therefore, it is possible to use an alias to reduce the redundancy of the configuration file.
+For example, the following configuration reuses the first <code>paths</code> element (that is given an anchor named <code>default_paths</code>) in the following definitions.
+
+<?= $ctx->{code}->(<< 'EOT')
+hosts:
+  "example.com":
+    listen:
+      port: 443
+      ssl:
+        certificate-file: /path/to/example.com.crt
+        key-file:         /path/to/example.com.crt
+    paths: &default_paths
+      "/":
+        file.dir: /path/to/doc-root
+  "example.org":
+    listen:
+      port: 443
+      ssl:
+        certificate-file: /path/to/example.org.crt
+        key-file:         /path/to/example.org.crt
+    paths: *default_paths
+EOT
+?>
+
+<h3 id="yaml_merge">Using YAML Merge</h3>
+
+<p>
+Since version 2.0, H2O recognizes <a href="http://yaml.org/type/merge.html">Merge Key Language-Independent Type for YAML&trade; Version 1.1</a>.
+Users can use the feature to merge an existing mapping against another.
+The following example reuses the TLS configuration of <code>example.com</code> in <code>example.org</code>.
+</p>
+
+<?= $ctx->{code}->(<< 'EOT')
+hosts:
+  "example.com":
+    listen:
+      port: 443
+      ssl: &default_ssl
+        minimum-version: TLSv1.2
+        cipher-suite: ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256
+        certificate-file: /path/to/example.com.crt
+        key-file:         /path/to/example.com.crt
+    paths:
+      ...
+  "example.org":
+    listen:
+      port: 443
+      ssl:
+        <<: *default_ssl
+        certificate-file: /path/to/example.org.crt
+        key-file:         /path/to/example.org.crt
+    paths:
+      ...
+EOT
+?>
 
 ? })

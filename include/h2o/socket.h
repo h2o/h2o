@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 DeNA Co., Ltd.
+ * Copyright (c) 2014-2016 DeNA Co., Ltd., Kazuho Oku, Fastly, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -30,6 +30,7 @@ extern "C" {
 #include <sys/socket.h>
 #include <openssl/ssl.h>
 #include "h2o/memory.h"
+#include "h2o/string_.h"
 
 #ifndef H2O_USE_LIBUV
 #if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_KQUEUE
@@ -54,7 +55,7 @@ extern "C" {
 
 typedef struct st_h2o_socket_t h2o_socket_t;
 
-typedef void (*h2o_socket_cb)(h2o_socket_t *sock, int err);
+typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
 
 #if H2O_USE_LIBUV
 #include "socket/uv-binding.h"
@@ -99,6 +100,15 @@ typedef void (*h2o_socket_ssl_resumption_remove_cb)(h2o_iovec_t session_id);
 extern h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings;
 extern __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype;
 
+extern const char *h2o_socket_error_out_of_memory;
+extern const char *h2o_socket_error_io;
+extern const char *h2o_socket_error_closed;
+extern const char *h2o_socket_error_conn_fail;
+extern const char *h2o_socket_error_ssl_no_cert;
+extern const char *h2o_socket_error_ssl_cert_invalid;
+extern const char *h2o_socket_error_ssl_cert_name_mismatch;
+extern const char *h2o_socket_error_ssl_decode;
+
 /**
  * returns the loop
  */
@@ -119,6 +129,20 @@ void h2o_socket_dispose_export(h2o_socket_export_t *info);
  * closes the socket
  */
 void h2o_socket_close(h2o_socket_t *sock);
+/**
+ * Schedules a callback to be notify we the socket can be written to
+ */
+void h2o_socket_notify_write(h2o_socket_t *sock, h2o_socket_cb cb);
+/**
+ * Obtain the underlying fd of a sock struct
+ */
+int h2o_socket_get_fd(h2o_socket_t *sock);
+/**
+ * Set/Unset the H2O_SOCKET_FLAG_DONT_READ flag.
+ * Setting it allows to be simply notified rather than having the data
+ * automatically be read.
+ */
+void h2o_socket_dont_read(h2o_socket_t *sock, int dont_read);
 /**
  * connects to peer
  */
@@ -167,6 +191,17 @@ socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa);
  */
 void h2o_socket_setpeername(h2o_socket_t *sock, struct sockaddr *sa, socklen_t len);
 /**
+ *
+ */
+const char *h2o_socket_get_ssl_protocol_version(h2o_socket_t *sock);
+int h2o_socket_get_ssl_session_reused(h2o_socket_t *sock);
+const char *h2o_socket_get_ssl_cipher(h2o_socket_t *sock);
+int h2o_socket_get_ssl_cipher_bits(h2o_socket_t *sock);
+static h2o_iovec_t h2o_socket_log_ssl_protocol_version(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+static h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+static h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+/**
  * compares socket addresses
  */
 int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y);
@@ -184,7 +219,7 @@ int32_t h2o_socket_getport(struct sockaddr *sa);
  * @param ssl_ctx SSL context
  * @param handshake_cb callback to be called when handshake is complete
  */
-void h2o_socket_ssl_server_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, h2o_socket_cb handshake_cb);
+void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_socket_cb handshake_cb);
 /**
  * resumes SSL handshake with given session data
  * @param sock the socket
@@ -227,6 +262,30 @@ inline int h2o_socket_is_writing(h2o_socket_t *sock)
 inline int h2o_socket_is_reading(h2o_socket_t *sock)
 {
     return sock->_cb.read != NULL;
+}
+
+inline h2o_iovec_t h2o_socket_log_ssl_protocol_version(h2o_socket_t *sock, h2o_mem_pool_t *pool)
+{
+    const char *s = h2o_socket_get_ssl_protocol_version(sock);
+    return s != NULL ? h2o_iovec_init(s, strlen(s)) : h2o_iovec_init(H2O_STRLIT("-"));
+}
+
+inline h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem_pool_t *pool)
+{
+    switch (h2o_socket_get_ssl_session_reused(sock)) {
+    case 0:
+        return h2o_iovec_init(H2O_STRLIT("0"));
+    case 1:
+        return h2o_iovec_init(H2O_STRLIT("1"));
+    default:
+        return h2o_iovec_init(H2O_STRLIT("-"));
+    }
+}
+
+inline h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t *pool)
+{
+    const char *s = h2o_socket_get_ssl_cipher(sock);
+    return s != NULL ? h2o_iovec_init(s, strlen(s)) : h2o_iovec_init(H2O_STRLIT("-"));
 }
 
 #ifdef __cplusplus

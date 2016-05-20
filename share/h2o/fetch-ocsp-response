@@ -1,5 +1,5 @@
 #! /bin/sh
-exec perl -x $0 "$@"
+exec ${H2O_PERL:-perl} -x $0 "$@"
 #! perl
 
 # Copyright (c) 2015 DeNA Co., Ltd., Kazuho Oku, Tatsuhiro Tsujikawa
@@ -138,7 +138,7 @@ sub run_openssl {
         or die "failed to invoke $openssl_cmd:$!";
     my $resp = do { local $/; <$fh> };
     close $fh
-        or ($tempfail ? \&tempfail : \&die)->("OpenSSL exitted abnormally: $openssl_cmd $args:$!");
+        or ($tempfail ? \&tempfail : \&CORE::die)->("OpenSSL exitted abnormally: $openssl_cmd $args:$!");
     $resp;
 }
 

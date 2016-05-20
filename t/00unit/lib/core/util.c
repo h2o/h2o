@@ -72,40 +72,105 @@ static void test_extract_push_path_from_link_header(void)
 {
     h2o_mem_pool_t pool;
     h2o_iovec_t path;
-    h2o_iovec_t base_authority = {H2O_STRLIT("basehost")}, base_path = {H2O_STRLIT("/basepath/")};
-#define BASE &H2O_URL_SCHEME_HTTP, &base_authority, &base_path
+    h2o_iovec_t base_path = {H2O_STRLIT("/basepath/")}, input_authority = {H2O_STRLIT("basehost")},
+                other_authority = {H2O_STRLIT("otherhost")};
+#define INPUT base_path, &H2O_URL_SCHEME_HTTP, input_authority
     h2o_mem_init_pool(&pool);
 
-    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http://basehost/otherpath>; rel=preload"), BASE);
+    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http://basehost/otherpath>; rel=preload"), INPUT, NULL, NULL);
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/otherpath")));
-    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</otherpath>; rel=preload"), BASE);
+    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</otherpath>; rel=preload"), INPUT, NULL, NULL);
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/otherpath")));
-    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<otherpath>; rel=preload"), BASE);
+    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<otherpath>; rel=preload"), INPUT, NULL, NULL);
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/basepath/otherpath")));
-    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<../otherpath>; rel=preload"), BASE);
+    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<../otherpath>; rel=preload"), INPUT, NULL, NULL);
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/otherpath")));
-    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http:otherpath>; rel=preload"), BASE);
+    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http:otherpath>; rel=preload"), INPUT, NULL, NULL);
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/basepath/otherpath")));
 
-    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<../otherpath>; rel=author"), BASE);
+    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<../otherpath>; rel=author"), INPUT, NULL, NULL);
     ok(path.base == NULL);
     ok(path.len == 0);
-    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http://basehost:81/otherpath>; rel=preload"), BASE);
+    path =
+        h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http://basehost:81/otherpath>; rel=preload"), INPUT, NULL, NULL);
     ok(path.base == NULL);
     ok(path.len == 0);
-    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<https://basehost/otherpath>; rel=preload"), BASE);
+    path =
+        h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<https://basehost/otherpath>; rel=preload"), INPUT, NULL, NULL);
     ok(path.base == NULL);
     ok(path.len == 0);
-    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<https:otherpath>; rel=preload"), BASE);
+    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<https:otherpath>; rel=preload"), INPUT, NULL, NULL);
+    ok(path.base == NULL);
+    ok(path.len == 0);
+
+    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</otherpath>; rel=preload"), INPUT, &H2O_URL_SCHEME_HTTPS,
+                                                  &input_authority);
+    ok(path.base == NULL);
+    ok(path.len == 0);
+    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</otherpath>; rel=preload"), INPUT, &H2O_URL_SCHEME_HTTP,
+                                                  &input_authority);
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/otherpath")));
+    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</otherpath>; rel=preload"), INPUT, &H2O_URL_SCHEME_HTTP,
+                                                  &other_authority);
+    ok(path.base == NULL);
+    ok(path.len == 0);
+    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http://basehost/otherpath>; rel=preload"), INPUT,
+                                                  &H2O_URL_SCHEME_HTTP, &other_authority);
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/otherpath")));
+
+    path = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http:otherpath>; rel=preload; nopush"), INPUT, NULL, NULL);
     ok(path.base == NULL);
     ok(path.len == 0);
 
     h2o_mem_clear_pool(&pool);
-#undef BASE
+#undef INPUT
+}
+
+void test_build_destination(void)
+{
+    h2o_pathconf_t conf_not_slashed = {NULL, {H2O_STRLIT("/abc")}}, conf_slashed = {NULL, {H2O_STRLIT("/abc")}};
+    h2o_req_t req;
+    h2o_iovec_t dest;
+
+    h2o_init_request(&req, NULL, NULL);
+
+    /* basic pattern */
+    req.path_normalized = h2o_iovec_init(H2O_STRLIT("/abc/xyz"));
+    req.query_at = req.path_normalized.len;
+    req.path = h2o_concat(&req.pool, req.path_normalized, h2o_iovec_init(H2O_STRLIT("?q")));
+    req.pathconf = &conf_not_slashed;
+    dest = h2o_build_destination(&req, H2O_STRLIT("/def"));
+    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz?q")));
+    dest = h2o_build_destination(&req, H2O_STRLIT("/def/"));
+    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz?q")));
+    req.pathconf = &conf_slashed;
+    dest = h2o_build_destination(&req, H2O_STRLIT("/def"));
+    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz?q")));
+    dest = h2o_build_destination(&req, H2O_STRLIT("/def/"));
+    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz?q")));
+
+    /* test wo. query */
+    req.pathconf = &conf_not_slashed;
+    req.query_at = SIZE_MAX;
+    dest = h2o_build_destination(&req, H2O_STRLIT("/def"));
+    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz")));
+
+    /* no trailing */
+    req.path_normalized = h2o_iovec_init(H2O_STRLIT("/abc"));
+    req.query_at = req.path_normalized.len;
+    req.path = h2o_concat(&req.pool, req.path_normalized, h2o_iovec_init(H2O_STRLIT("?q")));
+    req.pathconf = &conf_not_slashed;
+    dest = h2o_build_destination(&req, H2O_STRLIT("/def"));
+    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def?q")));
+    dest = h2o_build_destination(&req, H2O_STRLIT("/def/"));
+    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/?q")));
+
+    h2o_mem_clear_pool(&req.pool);
 }
 
 void test_lib__core__util_c()
 {
     subtest("parse_proxy_line", test_parse_proxy_line);
     subtest("extract_push_path_from_link_header", test_extract_push_path_from_link_header);
+    subtest("test_build_destination", test_build_destination);
 }

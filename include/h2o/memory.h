@@ -67,6 +67,9 @@ extern "C" {
 #define H2O_RETURNS_NONNULL
 #endif
 
+#define H2O_TO__STR(n) #n
+#define H2O_TO_STR(n) H2O_TO__STR(n)
+
 typedef struct st_h2o_buffer_prototype_t h2o_buffer_prototype_t;
 
 /**
@@ -145,13 +148,15 @@ struct st_h2o_buffer_prototype_t {
     }
 
 typedef H2O_VECTOR(void) h2o_vector_t;
+typedef H2O_VECTOR(h2o_iovec_t) h2o_iovec_vector_t;
 
 extern void *(*h2o_mem__set_secure)(void *, int, size_t);
 
 /**
  * prints an error message and aborts
  */
-H2O_NORETURN void h2o_fatal(const char *msg);
+#define h2o_fatal(msg) h2o__fatal(__FILE__ ":" H2O_TO_STR(__LINE__) ":" msg)
+H2O_NORETURN void h2o__fatal(const char *msg);
 
 /**
  * constructor for h2o_iovec_t
@@ -252,8 +257,15 @@ void h2o_buffer__dispose_linked(void *p);
  * @param element_size size of the elements stored in the vector
  * @param new_capacity the capacity of the buffer after the function returns
  */
-static void h2o_vector_reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
+#define h2o_vector_reserve(pool, vector, new_capacity)                                                                             \
+    h2o_vector__reserve((pool), (h2o_vector_t *)(void *)(vector), sizeof((vector)->entries[0]), (new_capacity))
+static void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
 void h2o_vector__expand(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
+/**
+ * erase the entry at given index from the vector
+ */
+#define h2o_vector_erase(vector, index) h2o_vector__erase((h2o_vector_t *)(void *)(vector), sizeof((vector)->entries[0]), (index))
+static void h2o_vector__erase(h2o_vector_t *vector, size_t element_size, size_t index);
 
 /**
  * tests if target chunk (target_len bytes long) is equal to test chunk (test_len bytes long)
@@ -355,11 +367,18 @@ inline void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool)
     *slot = buffer;
 }
 
-inline void h2o_vector_reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)
+inline void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)
 {
     if (vector->capacity < new_capacity) {
         h2o_vector__expand(pool, vector, element_size, new_capacity);
     }
+}
+
+inline void h2o_vector__erase(h2o_vector_t *vector, size_t element_size, size_t index)
+{
+    char *entries = (char *)vector->entries;
+    memmove(entries + element_size * index, entries + element_size * (index + 1), vector->size - index - 1);
+    --vector->size;
 }
 
 inline int h2o_memis(const void *_target, size_t target_len, const void *_test, size_t test_len)

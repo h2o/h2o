@@ -50,10 +50,81 @@ static void destroy_hostconf(h2o_hostconf_t *hostconf)
         h2o_pathconf_t *pathconf = hostconf->paths.entries + i;
         h2o_config_dispose_pathconf(pathconf);
     }
+    free(hostconf->paths.entries);
     h2o_config_dispose_pathconf(&hostconf->fallback_path);
     h2o_mem_release_shared(hostconf->mimemap);
 
     free(hostconf);
+}
+
+static void on_dispose_envconf(void *_envconf)
+{
+    h2o_envconf_t *envconf = _envconf;
+    size_t i;
+
+    if (envconf->parent != NULL)
+        h2o_mem_release_shared(envconf->parent);
+
+    for (i = 0; i != envconf->unsets.size; ++i)
+        h2o_mem_release_shared(envconf->unsets.entries[i].base);
+    free(envconf->unsets.entries);
+    for (i = 0; i != envconf->sets.size; ++i)
+        h2o_mem_release_shared(envconf->sets.entries[i].base);
+    free(envconf->sets.entries);
+}
+
+h2o_envconf_t *h2o_config_create_envconf(h2o_envconf_t *parent)
+{
+    h2o_envconf_t *envconf = h2o_mem_alloc_shared(NULL, sizeof(*envconf), on_dispose_envconf);
+    *envconf = (h2o_envconf_t){};
+
+    if (parent != NULL) {
+        envconf->parent = parent;
+        h2o_mem_addref_shared(parent);
+    }
+    return envconf;
+}
+
+void h2o_config_setenv(h2o_envconf_t *envconf, const char *name, const char *value)
+{
+    size_t name_len = strlen(name), i;
+    h2o_iovec_t *value_slot;
+
+    /* remove from the list of unsets */
+    for (i = 0; i != envconf->unsets.size; ++i) {
+        if (h2o_memis(envconf->unsets.entries[i].base, envconf->unsets.entries[i].len, name, name_len)) {
+            h2o_mem_release_shared(envconf->unsets.entries[i].base);
+            h2o_vector_erase(&envconf->unsets, i);
+            break;
+        }
+    }
+    /* find the slot */
+    for (i = 0; i != envconf->sets.size; i += 2) {
+        if (h2o_memis(envconf->sets.entries[i].base, envconf->sets.entries[i].len, name, name_len)) {
+            value_slot = envconf->sets.entries + i + 1;
+            h2o_mem_release_shared(value_slot->base);
+            goto SetValue;
+        }
+    }
+    /* name not found in existing sets */
+    h2o_vector_reserve(NULL, &envconf->sets, envconf->sets.size + 2);
+    envconf->sets.entries[envconf->sets.size++] = h2o_strdup_shared(NULL, name, name_len);
+    value_slot = envconf->sets.entries + envconf->sets.size++;
+SetValue:
+    *value_slot = h2o_strdup_shared(NULL, value, SIZE_MAX);
+}
+
+void h2o_config_unsetenv(h2o_envconf_t *envconf, const char *name)
+{
+    size_t i, name_len = strlen(name);
+
+    /* do nothing if already set */
+    for (i = 0; i != envconf->unsets.size; ++i)
+        if (h2o_memis(envconf->unsets.entries[i].base, envconf->unsets.entries[i].len, name, name_len))
+            return;
+    /* register */
+    h2o_vector_reserve(NULL, &envconf->unsets, envconf->unsets.size + 1);
+    envconf->unsets.entries[envconf->unsets.size++] = h2o_strdup_shared(NULL, name, name_len);
 }
 
 void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, const char *path, h2o_mimemap_t *mimemap)
@@ -62,7 +133,7 @@ void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *global
     pathconf->global = globalconf;
     h2o_chunked_register(pathconf);
     if (path != NULL)
-        pathconf->path = h2o_strdup_slashed(NULL, path, SIZE_MAX);
+        pathconf->path = h2o_strdup(NULL, path, SIZE_MAX);
     h2o_mem_addref_shared(mimemap);
     pathconf->mimemap = mimemap;
 }
@@ -85,8 +156,11 @@ void h2o_config_dispose_pathconf(h2o_pathconf_t *pathconf)
     DESTROY_LIST(h2o_logger_t, pathconf->loggers);
 #undef DESTROY_LIST
 
+    free(pathconf->path.base);
     if (pathconf->mimemap != NULL)
         h2o_mem_release_shared(pathconf->mimemap);
+    if (pathconf->env != NULL)
+        h2o_mem_release_shared(pathconf->env);
 }
 
 void h2o_config_init(h2o_globalconf_t *config)
@@ -112,14 +186,14 @@ void h2o_config_init(h2o_globalconf_t *config)
     h2o_configurator__init_core(config);
 }
 
-h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *pathname)
+h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *path, int flags)
 {
     h2o_pathconf_t *pathconf;
 
-    h2o_vector_reserve(NULL, (void *)&hostconf->paths, sizeof(hostconf->paths.entries[0]), hostconf->paths.size + 1);
+    h2o_vector_reserve(NULL, &hostconf->paths, hostconf->paths.size + 1);
     pathconf = hostconf->paths.entries + hostconf->paths.size++;
 
-    h2o_config_init_pathconf(pathconf, hostconf->global, pathname, hostconf->mimemap);
+    h2o_config_init_pathconf(pathconf, hostconf->global, path, hostconf->mimemap);
 
     return pathconf;
 }
@@ -151,7 +225,7 @@ h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t h
     if (hostconf->authority.port == 65535) {
         hostconf->authority.hostport = hostconf->authority.host;
     } else {
-        hostconf->authority.hostport.base = h2o_mem_alloc(hostconf->authority.host.len + sizeof("[]:65535"));
+        hostconf->authority.hostport.base = h2o_mem_alloc(hostconf->authority.host.len + sizeof("[]:" H2O_UINT16_LONGEST_STR));
         if (strchr(hostconf->authority.host.base, ':') != NULL) {
             hostconf->authority.hostport.len =
                 sprintf(hostconf->authority.hostport.base, "[%s]:%" PRIu16, hostconf->authority.host.base, port);
@@ -190,7 +264,7 @@ h2o_handler_t *h2o_create_handler(h2o_pathconf_t *conf, size_t sz)
     memset(handler, 0, sz);
     handler->_config_slot = conf->global->_num_config_slots++;
 
-    h2o_vector_reserve(NULL, (void *)&conf->handlers, sizeof(conf->handlers.entries[0]), conf->handlers.size + 1);
+    h2o_vector_reserve(NULL, &conf->handlers, conf->handlers.size + 1);
     conf->handlers.entries[conf->handlers.size++] = handler;
 
     return handler;
@@ -203,7 +277,7 @@ h2o_filter_t *h2o_create_filter(h2o_pathconf_t *conf, size_t sz)
     memset(filter, 0, sz);
     filter->_config_slot = conf->global->_num_config_slots++;
 
-    h2o_vector_reserve(NULL, (void *)&conf->filters, sizeof(conf->filters.entries[0]), conf->filters.size + 1);
+    h2o_vector_reserve(NULL, &conf->filters, conf->filters.size + 1);
     memmove(conf->filters.entries + 1, conf->filters.entries, conf->filters.size * sizeof(conf->filters.entries[0]));
     conf->filters.entries[0] = filter;
     ++conf->filters.size;
@@ -218,7 +292,7 @@ h2o_logger_t *h2o_create_logger(h2o_pathconf_t *conf, size_t sz)
     memset(logger, 0, sz);
     logger->_config_slot = conf->global->_num_config_slots++;
 
-    h2o_vector_reserve(NULL, (void *)&conf->loggers, sizeof(conf->loggers.entries[0]), conf->loggers.size + 1);
+    h2o_vector_reserve(NULL, &conf->loggers, conf->loggers.size + 1);
     conf->loggers.entries[conf->loggers.size++] = logger;
 
     return logger;

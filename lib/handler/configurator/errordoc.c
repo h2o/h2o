@@ -73,7 +73,7 @@ static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_c
     }
 
     { /* register */
-        h2o_vector_reserve(&self->pool, (void *)self->vars, sizeof(self->vars->entries[0]), self->vars->size + 1);
+        h2o_vector_reserve(&self->pool, self->vars, self->vars->size + 1);
         h2o_errordoc_t *errordoc = self->vars->entries + self->vars->size++;
         errordoc->status = status;
         errordoc->url = h2o_strdup(&self->pool, url, SIZE_MAX);
@@ -126,7 +126,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
 
     /* copy vars */
     memset(&self->vars[1], 0, sizeof(self->vars[1]));
-    h2o_vector_reserve(&self->pool, (void *)&self->vars[1], sizeof(self->vars[1].entries[0]), self->vars[0].size);
+    h2o_vector_reserve(&self->pool, &self->vars[1], self->vars[0].size);
     memcpy(self->vars[1].entries, self->vars[0].entries, sizeof(self->vars[0].entries[0]) * self->vars[0].size);
     self->vars[1].size = self->vars[0].size;
 

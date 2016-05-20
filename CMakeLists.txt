@@ -21,17 +21,21 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8.11)
 CMAKE_POLICY(SET CMP0003 NEW)
 
-PROJECT(h2o C)
+PROJECT(h2o)
 
-SET(VERSION_MAJOR "1")
-SET(VERSION_MINOR "7")
+SET(VERSION_MAJOR "2")
+SET(VERSION_MINOR "0")
 SET(VERSION_PATCH "0")
-SET(VERSION_PRERELEASE "-beta4")
+SET(VERSION_PRERELEASE "-DEV")
 SET(VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}${VERSION_PRERELEASE}")
 SET(LIBRARY_VERSION_MAJOR "0")
-SET(LIBRARY_VERSION_MINOR "9")
-SET(LIBRARY_VERSION_PATCH "20")
+SET(LIBRARY_VERSION_MINOR "10")
+SET(LIBRARY_VERSION_PATCH "0")
+SET(LIBRARY_VERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}.${LIBRARY_VERSION_PATCH}${VERSION_PRERELEASE}")
+SET(LIBRARY_SOVERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}")
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h)
+CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libh2o.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libh2o.pc @ONLY)
+CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libh2o-evloop.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libh2o-evloop.pc @ONLY)
 
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
@@ -89,6 +93,7 @@ ENDIF (WITH_BUNDLED_SSL)
 INCLUDE_DIRECTORIES(
     include
     deps/cloexec
+    deps/brotli/enc
     deps/golombset
     deps/libyrmcds
     deps/klib
@@ -143,13 +148,16 @@ ENDIF (ZLIB_FOUND)
 
 SET(CC_WARNING_FLAGS "-Wall -Wno-unused-value -Wno-unused-function")
 IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
-    SET(CC_WARNING_FLAGS "${CC_WARNING_FLAGS} -Wno-unused-but-set-variable")
+    IF (NOT ("${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "4.6"))
+        SET(CC_WARNING_FLAGS "${CC_WARNING_FLAGS} -Wno-unused-but-set-variable")
+    ENDIF ()
     IF (NOT ("${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "4.5"))
         SET(CC_WARNING_FLAGS "${CC_WARNING_FLAGS} -Wno-unused-result")
     ENDIF ()
 ENDIF ()
 
 SET(CMAKE_C_FLAGS "-O2 -g ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS} -DH2O_ROOT=\"${CMAKE_INSTALL_PREFIX}\"")
+SET(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}")
 
 SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/api.c
@@ -161,16 +169,35 @@ SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/scanner.c
     deps/yaml/src/writer.c)
 
+SET(BROTLI_SOURCE_FILES
+    deps/brotli/enc/backward_references.cc
+    deps/brotli/enc/block_splitter.cc
+    deps/brotli/enc/brotli_bit_stream.cc
+    deps/brotli/enc/compress_fragment.cc
+    deps/brotli/enc/compress_fragment_two_pass.cc
+    deps/brotli/enc/dictionary.cc
+    deps/brotli/enc/encode.cc
+    deps/brotli/enc/entropy_encode.cc
+    deps/brotli/enc/histogram.cc
+    deps/brotli/enc/literal_cost.cc
+    deps/brotli/enc/metablock.cc
+    deps/brotli/enc/static_dict.cc
+    deps/brotli/enc/streams.cc
+    deps/brotli/enc/utf8_util.cc)
+
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
     deps/libyrmcds/close.c
     deps/libyrmcds/connect.c
     deps/libyrmcds/recv.c
     deps/libyrmcds/send.c
+    deps/libyrmcds/send_text.c
     deps/libyrmcds/socket.c
     deps/libyrmcds/strerror.c
+    deps/libyrmcds/text_mode.c
     deps/picohttpparser/picohttpparser.c
 
+    lib/common/cache.c
     lib/common/file.c
     lib/common/filecache.c
     lib/common/hostinfo.c
@@ -190,6 +217,7 @@ SET(LIB_SOURCE_FILES
     lib/core/configurator.c
     lib/core/context.c
     lib/core/headers.c
+    lib/core/logconf.c
     lib/core/proxy.c
     lib/core/request.c
     lib/core/token.c
@@ -197,28 +225,33 @@ SET(LIB_SOURCE_FILES
 
     lib/handler/access_log.c
     lib/handler/chunked.c
+    lib/handler/compress.c
+    lib/handler/compress/gzip.c
+    lib/handler/compress/brotli.cc
     lib/handler/errordoc.c
     lib/handler/expires.c
     lib/handler/fastcgi.c
     lib/handler/file.c
-    lib/handler/gzip.c
+    lib/handler/compress.c
     lib/handler/headers.c
     lib/handler/mimemap.c
     lib/handler/proxy.c
     lib/handler/redirect.c
     lib/handler/reproxy.c
     lib/handler/traffic.c
+    lib/handler/status.c
     lib/handler/configurator/access_log.c
+    lib/handler/configurator/compress.c
     lib/handler/configurator/errordoc.c
     lib/handler/configurator/expires.c
     lib/handler/configurator/fastcgi.c
     lib/handler/configurator/file.c
-    lib/handler/configurator/gzip.c
     lib/handler/configurator/headers.c
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
     lib/handler/configurator/reproxy.c
     lib/handler/configurator/traffic.c
+    lib/handler/configurator/status.c
 
     lib/http1.c
 
@@ -234,8 +267,10 @@ SET(LIB_SOURCE_FILES
 SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}
     ${LIBYAML_SOURCE_FILES}
+    ${BROTLI_SOURCE_FILES}
     deps/picotest/picotest.c
     t/00unit/test.c
+    t/00unit/lib/common/cache.c
     t/00unit/lib/common/hostinfo.c
     t/00unit/lib/common/multithread.c
     t/00unit/lib/common/serverutil.c
@@ -246,9 +281,9 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/core/headers.c
     t/00unit/lib/core/proxy.c
     t/00unit/lib/core/util.c
+    t/00unit/lib/handler/compress.c
     t/00unit/lib/handler/fastcgi.c
     t/00unit/lib/handler/file.c
-    t/00unit/lib/handler/gzip.c
     t/00unit/lib/handler/headers.c
     t/00unit/lib/handler/mimemap.c
     t/00unit/lib/handler/redirect.c
@@ -258,6 +293,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/src/ssl.c
     t/00unit/issues/293.c)
 LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
+    lib/common/cache.c
     lib/common/hostinfo.c
     lib/common/multithread.c
     lib/common/serverutil.c
@@ -268,9 +304,10 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/core/headers.c
     lib/core/proxy.c
     lib/core/util.c
+    lib/handler/compress.c
+    lib/handler/compress/gzip.c
     lib/handler/fastcgi.c
     lib/handler/file.c
-    lib/handler/gzip.c
     lib/handler/headers.c
     lib/handler/mimemap.c
     lib/handler/redirect.c
@@ -278,21 +315,26 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/http2/hpack.c
     lib/http2/scheduler.c)
 
-SET(EXTRA_LIBRARIES ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
+SET(EXTRA_LIBS ${EXTRA_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
 
 IF (ZLIB_FOUND)
-    LIST(INSERT EXTRA_LIBRARIES 0 ${ZLIB_LIBRARIES})
+    LIST(INSERT EXTRA_LIBS 0 ${ZLIB_LIBRARIES})
 ENDIF (ZLIB_FOUND)
 
 ADD_LIBRARY(libh2o ${LIB_SOURCE_FILES})
 ADD_LIBRARY(libh2o-evloop ${LIB_SOURCE_FILES})
-SET_TARGET_PROPERTIES(libh2o PROPERTIES OUTPUT_NAME h2o)
+SET_TARGET_PROPERTIES(libh2o PROPERTIES
+    OUTPUT_NAME h2o
+    VERSION ${LIBRARY_VERSION}
+    SOVERSION ${LIBRARY_SOVERSION})
 SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES
     OUTPUT_NAME h2o-evloop
-    COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
+    COMPILE_FLAGS "-DH2O_USE_LIBUV=0"
+    VERSION ${LIBRARY_VERSION}
+    SOVERSION ${LIBRARY_SOVERSION})
 IF (OPENSSL_FOUND)
-    TARGET_INCLUDE_DIRECTORIES(libh2o BEFORE PUBLIC ${OPENSSL_INCLUDE_DIR})
-    TARGET_INCLUDE_DIRECTORIES(libh2o-evloop BEFORE PUBLIC ${OPENSSL_INCLUDE_DIR})
+    TARGET_INCLUDE_DIRECTORIES(libh2o PUBLIC ${OPENSSL_INCLUDE_DIR})
+    TARGET_INCLUDE_DIRECTORIES(libh2o-evloop PUBLIC ${OPENSSL_INCLUDE_DIR})
     TARGET_LINK_LIBRARIES(libh2o ${OPENSSL_LIBRARIES})
     TARGET_LINK_LIBRARIES(libh2o-evloop ${OPENSSL_LIBRARIES})
     IF (LIBUV_FOUND AND NOT WITHOUT_LIBS)
@@ -318,26 +360,32 @@ ENDIF (WSLAY_FOUND)
 ADD_EXECUTABLE(examples-http1client examples/libh2o/http1client.c)
 SET_TARGET_PROPERTIES(examples-http1client PROPERTIES
     EXCLUDE_FROM_ALL 1)
-TARGET_LINK_LIBRARIES(examples-http1client libh2o ${LIBUV_LIBRARIES} ${EXTRA_LIBRARIES})
+TARGET_LINK_LIBRARIES(examples-http1client libh2o ${LIBUV_LIBRARIES} ${EXTRA_LIBS})
 
 ADD_EXECUTABLE(examples-socket-client examples/libh2o/socket-client.c)
 SET_TARGET_PROPERTIES(examples-socket-client PROPERTIES
     EXCLUDE_FROM_ALL 1)
-TARGET_LINK_LIBRARIES(examples-socket-client libh2o ${LIBUV_LIBRARIES} ${EXTRA_LIBRARIES})
+TARGET_LINK_LIBRARIES(examples-socket-client libh2o ${LIBUV_LIBRARIES} ${EXTRA_LIBS})
 
 ADD_EXECUTABLE(examples-simple examples/libh2o/simple.c)
 SET_TARGET_PROPERTIES(examples-simple PROPERTIES
     EXCLUDE_FROM_ALL 1)
-TARGET_LINK_LIBRARIES(examples-simple libh2o ${LIBUV_LIBRARIES} ${EXTRA_LIBRARIES})
+TARGET_LINK_LIBRARIES(examples-simple libh2o ${LIBUV_LIBRARIES} ${EXTRA_LIBS})
 
 ADD_EXECUTABLE(examples-websocket lib/websocket.c examples/libh2o/websocket.c)
 SET_TARGET_PROPERTIES(examples-websocket PROPERTIES
     EXCLUDE_FROM_ALL 1)
-TARGET_LINK_LIBRARIES(examples-websocket libh2o ${LIBUV_LIBRARIES} ${WSLAY_LIBRARIES} ${EXTRA_LIBRARIES})
+TARGET_LINK_LIBRARIES(examples-websocket libh2o ${LIBUV_LIBRARIES} ${WSLAY_LIBRARIES} ${EXTRA_LIBS})
 
 # standalone server directly links to libh2o using evloop
-SET(STANDALONE_SOURCE_FILES ${LIB_SOURCE_FILES} ${LIBYAML_SOURCE_FILES} deps/neverbleed/neverbleed.c src/ssl.c src/main.c)
-SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
+SET(STANDALONE_SOURCE_FILES
+    ${LIB_SOURCE_FILES}
+    ${LIBYAML_SOURCE_FILES}
+    ${BROTLI_SOURCE_FILES}
+    deps/neverbleed/neverbleed.c
+    src/main.c
+    src/ssl.c)
+SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1")
 IF (WITH_MRUBY)
     IF (${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
         SET(MRUBY_TOOLCHAIN "clang")
@@ -361,7 +409,7 @@ IF (WITH_BUNDLED_SSL)
     ADD_DEPENDENCIES(h2o bundled-ssl)
 ELSE (WITH_BUNDLED_SSL)
     IF (OPENSSL_FOUND)
-        TARGET_INCLUDE_DIRECTORIES(h2o BEFORE PUBLIC ${OPENSSL_INCLUDE_DIR})
+        TARGET_INCLUDE_DIRECTORIES(h2o PUBLIC ${OPENSSL_INCLUDE_DIR})
         TARGET_LINK_LIBRARIES(h2o ${OPENSSL_LIBRARIES})
     ENDIF (OPENSSL_FOUND)
 ENDIF (WITH_BUNDLED_SSL)
@@ -374,7 +422,7 @@ IF (WITH_MRUBY)
         "m")
     ADD_DEPENDENCIES(h2o mruby)
 ENDIF (WITH_MRUBY)
-TARGET_LINK_LIBRARIES(h2o ${EXTRA_LIBRARIES})
+TARGET_LINK_LIBRARIES(h2o ${EXTRA_LIBS})
 
 INSTALL(TARGETS h2o
     RUNTIME DESTINATION bin
@@ -382,22 +430,32 @@ INSTALL(TARGETS h2o
 
 IF (NOT WITHOUT_LIBS)
     INSTALL(DIRECTORY include/ DESTINATION include FILES_MATCHING PATTERN "*.h")
+    IF (LIBUV_FOUND)
+        INSTALL(FILES "${CMAKE_BINARY_DIR}/libh2o.pc" DESTINATION lib/pkgconfig)
+    ENDIF ()
+    INSTALL(FILES "${CMAKE_BINARY_DIR}/libh2o-evloop.pc" DESTINATION lib/pkgconfig)
 ENDIF ()
 
-INSTALL(PROGRAMS share/h2o/annotate-backtrace-symbols share/h2o/fetch-ocsp-response share/h2o/kill-on-close share/h2o/setuidgid share/h2o/start_server DESTINATION share/h2o)
+INSTALL(PROGRAMS share/h2o/annotate-backtrace-symbols share/h2o/fastcgi-cgi share/h2o/fetch-ocsp-response share/h2o/kill-on-close share/h2o/setuidgid share/h2o/start_server DESTINATION share/h2o)
+INSTALL(FILES share/h2o/ca-bundle.crt DESTINATION share/h2o)
+INSTALL(FILES share/h2o/status/index.html DESTINATION share/h2o/status)
 INSTALL(DIRECTORY doc/ DESTINATION share/doc/h2o PATTERN "Makefile" EXCLUDE PATTERN "README.md" EXCLUDE)
+INSTALL(DIRECTORY examples/ DESTINATION share/doc/h2o/examples)
+IF (WITH_MRUBY)
+    INSTALL(DIRECTORY share/h2o/mruby DESTINATION share/h2o)
+ENDIF (WITH_MRUBY)
 
 # tests
 ADD_EXECUTABLE(t-00unit-evloop.t ${UNIT_TEST_SOURCE_FILES})
 SET_TARGET_PROPERTIES(t-00unit-evloop.t PROPERTIES
-    COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_UNITTEST=1"
+    COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1 -DH2O_UNITTEST=1"
     EXCLUDE_FROM_ALL 1)
-TARGET_LINK_LIBRARIES(t-00unit-evloop.t ${EXTRA_LIBRARIES})
+TARGET_LINK_LIBRARIES(t-00unit-evloop.t ${EXTRA_LIBS})
 ADD_EXECUTABLE(t-00unit-libuv.t ${UNIT_TEST_SOURCE_FILES})
 SET_TARGET_PROPERTIES(t-00unit-libuv.t PROPERTIES
-    COMPILE_FLAGS "-DH2O_UNITTEST=1"
+    COMPILE_FLAGS "-DH2O_USE_BROTLI=1 -DH2O_UNITTEST=1"
     EXCLUDE_FROM_ALL 1)
-TARGET_LINK_LIBRARIES(t-00unit-libuv.t ${LIBUV_LIBRARIES} ${EXTRA_LIBRARIES})
+TARGET_LINK_LIBRARIES(t-00unit-libuv.t ${LIBUV_LIBRARIES} ${EXTRA_LIBS})
 IF (WITH_BUNDLED_SSL)
     TARGET_INCLUDE_DIRECTORIES(t-00unit-evloop.t BEFORE PUBLIC ${BUNDLED_SSL_INCLUDE_DIR})
     TARGET_LINK_LIBRARIES(t-00unit-evloop.t ${BUNDLED_SSL_LIBRARIES})
@@ -407,9 +465,9 @@ IF (WITH_BUNDLED_SSL)
     ADD_DEPENDENCIES(t-00unit-libuv.t bundled-ssl)
 ELSE (WITH_BUNDLED_SSL)
     IF (OPENSSL_FOUND)
-        TARGET_INCLUDE_DIRECTORIES(t-00unit-evloop.t BEFORE PUBLIC ${OPENSSL_INCLUDE_DIR})
+        TARGET_INCLUDE_DIRECTORIES(t-00unit-evloop.t PUBLIC ${OPENSSL_INCLUDE_DIR})
         TARGET_LINK_LIBRARIES(t-00unit-evloop.t ${OPENSSL_LIBRARIES})
-        TARGET_INCLUDE_DIRECTORIES(t-00unit-libuv.t BEFORE PUBLIC ${OPENSSL_INCLUDE_DIR})
+        TARGET_INCLUDE_DIRECTORIES(t-00unit-libuv.t PUBLIC ${OPENSSL_INCLUDE_DIR})
         TARGET_LINK_LIBRARIES(t-00unit-libuv.t ${OPENSSL_LIBRARIES})
     ENDIF (OPENSSL_FOUND)
 ENDIF (WITH_BUNDLED_SSL)

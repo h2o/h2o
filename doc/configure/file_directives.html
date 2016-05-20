@@ -59,10 +59,16 @@ File Directives
 
 
 <p>
-This document describes the configuration directives of the file handler.
+This document describes the configuration directives of the file handler - a handler that for serving static files.
+</p>
+<p>
+Two directives: <a href="configure/file_directives.html#file.dir"><code>file.dir</code></a> and <a href="configure/file_directives.html#file.file"><code>file.file</code></a> are used to define the mapping.
+Other directives modify the behavior of the mappings defined by the two.
 </p>
 
-<h3 id="file.custom-handler" class="directive-title"><a href="configure/file_directives.html#file.custom-handler"><code>"file.custom-handler"</code></a></h3>
+<div id="file.custom-handler" class="directive-head">
+<h3><a href="configure/file_directives.html#file.custom-handler"><code>"file.custom-handler"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -92,7 +98,9 @@ Only one handler must exist within the directives.
 <dd>global, host, path</dd>
 </dl>
 
-<h3 id="file.dir" class="directive-title"><a href="configure/file_directives.html#file.dir"><code>"file.dir"</code></a></h3>
+<div id="file.dir" class="directive-head">
+<h3><a href="configure/file_directives.html#file.dir"><code>"file.dir"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -115,9 +123,16 @@ The directive specifies the directory under which should be served for the corre
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>path</dd>
+<dt>See also:</dt>
+<dd><a href="configure/file_directives.html#file.dirlisting"><code>file.dirlisting</code></a>,
+<a href="configure/file_directives.html#file.file"><code>file.file</code></a>,
+<a href="configure/file_directives.html#file.dirlisting"><code>file.index</code></a>
+</dd>
 </dl>
 
-<h3 id="file.dirlisting" class="directive-title"><a href="configure/file_directives.html#file.dirlisting"><code>"file.dirlisting"</code></a></h3>
+<div id="file.dirlisting" class="directive-head">
+<h3><a href="configure/file_directives.html#file.dirlisting"><code>"file.dirlisting"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -132,8 +147,13 @@ A boolean flag (<code>OFF</code>, or <code>ON</code>) specifying whether or not 
 <dd>global, host, path</dd>
 <dt>Default:</dt>
 <dd><code><pre>file.dirlisting: OFF</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/file_directives.html#file.dir"><code>file.dir</code></a>
+</dd>
 </dl>
-<h3 id="file.etag" class="directive-title"><a href="configure/file_directives.html#file.etag"><code>"file.etag"</code></a></h3>
+<div id="file.etag" class="directive-head">
+<h3><a href="configure/file_directives.html#file.etag"><code>"file.etag"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -151,7 +171,38 @@ A boolean flag (<code>OFF</code>, or <code>ON</code>) specifying whether or not 
 </dl>
 
 
-<h3 id="file.index" class="directive-title"><a href="configure/file_directives.html#file.index"><code>"file.index"</code></a></h3>
+<div id="file.file" class="directive-head">
+<div class="directive-since">since v2.0</div>
+<h3><a href="configure/file_directives.html#file.file"><code>"file.file"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+The directive maps a path to a specific file.
+</p>
+
+<div class="example">
+<div class="caption">Example. Mapping a path to a specific file</div>
+<pre><code>paths:
+  /robots.txt:
+    file.file: /path/to/robots.txt
+</code></pre>
+</div>
+
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>path</dd>
+<dt>See also:</dt>
+<dd><a href="configure/file_directives.html#file.dir"><code>file.dir</code></a>
+</dd>
+</dl>
+
+<div id="file.index" class="directive-head">
+<h3><a href="configure/file_directives.html#file.index"><code>"file.index"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -169,9 +220,14 @@ The sequence of filenames afer search from left to right, and the first file tha
 <dd>global, host, path</dd>
 <dt>Default:</dt>
 <dd><code><pre>file.index: [ &#39;index.html&#39;, &#39;index.htm&#39;, &#39;index.txt&#39; ]</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/file_directives.html#file.dir"><code>file.dir</code></a>
+</dd>
 </dl>
 
-<h3 id="file.mime.addtypes" class="directive-title"><a href="configure/file_directives.html#file.mime.addtypes"><code>"file.mime.addtypes"</code></a></h3>
+<div id="file.mime.addtypes" class="directive-head">
+<h3><a href="configure/file_directives.html#file.mime.addtypes"><code>"file.mime.addtypes"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -228,13 +284,15 @@ By default, mime-types for CSS and JavaScript files are the only ones that are g
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global, host, path</dd>
 <dt>See also:</dt>
-<dd><a href="configure/gzip_directives.html#gzip"><code>gzip</code></a>,
+<dd><a href="configure/compress_directives.html#compress"><code>compress</code></a>,
 <a href="configure/http2_directives.html#http2-casper"><code>http2-casper</code></a>,
 <a href="configure/http2_directives.html#http2-reprioritize-blocking-assets"><code>http2-reprioritize-blocking-assets</code></a>
-</pre></code>
+</dd>
 </dl>
 
-<h3 id="file.mime.removetypes" class="directive-title"><a href="configure/file_directives.html#file.mime.removetypes"><code>"file.mime.removetypes"</code></a></h3>
+<div id="file.mime.removetypes" class="directive-head">
+<h3><a href="configure/file_directives.html#file.mime.removetypes"><code>"file.mime.removetypes"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -255,7 +313,9 @@ Removes the MIME mappings for specified extensions supplied as a sequence of ext
 <dd>global, host, path</dd>
 </dl>
 
-<h3 id="file.mime.setdefaulttype" class="directive-title"><a href="configure/file_directives.html#file.mime.setdefaulttype"><code>"file.mime.setdefaulttype"</code></a></h3>
+<div id="file.mime.setdefaulttype" class="directive-head">
+<h3><a href="configure/file_directives.html#file.mime.setdefaulttype"><code>"file.mime.setdefaulttype"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -272,7 +332,9 @@ Sets the default MIME-type that is used when an extension does not exist in the 
 </dl>
 
 
-<h3 id="file.mime.settypes" class="directive-title"><a href="configure/file_directives.html#file.mime.settypes"><code>"file.mime.settypes"</code></a></h3>
+<div id="file.mime.settypes" class="directive-head">
+<h3><a href="configure/file_directives.html#file.mime.settypes"><code>"file.mime.settypes"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -295,29 +357,52 @@ Resets the MIME mappings to given mapping.
 <dd>global, host, path</dd>
 </dl>
 
-<h3 id="file.send-gzip" class="directive-title"><a href="configure/file_directives.html#file.send-gzip"><code>"file.send-gzip"</code></a></h3>
+<div id="file.send-compressed" class="directive-head">
+<div class="directive-since">since v2.0</div>
+<h3><a href="configure/file_directives.html#file.send-compressed"><code>"file.send-compressed"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
 <dd>
 <p>
-A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not so send <code>.gz</code> variants if possible.
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not so send <code>.br</code> or <code>.gz</code> variants if possible.
 
 </p>
 
 <p>
-If set to <code>ON</code>, the handler looks for a file with <code>.gz</code> appended and sends the file  (i.e. sends the contents of <code>index.html.gz</code> in place of <code>index.html</code>) if the client is capable of transparently decoding a gzipped response.
+If set to <code>ON</code>, the handler looks for a file with <code>.br</code> or <code>.gz</code> appended and sends the file, if the client is capable of transparently decoding a <a href="https://datatracker.ietf.org/doc/draft-alakuijala-brotli/">brotli</a> or <a href="https://tools.ietf.org/html/rfc1952">gzip</a>-encoded response.
+For example, if a client requests a file named <code>index.html</code> with <code>Accept-Encoding: gzip</code> header and if <code>index.html.gz</code> exists, the <code>.gz</code> file is sent as a response together with a <code>Content-Encoding: gzip</code> response header.
 </p>
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global, host, path</dd>
 <dt>Default:</dt>
-<dd><code><pre>file.send-gzip: OFF</pre></code>
+<dd><code><pre>file.send-compressed: OFF</pre></code>
 <dt>See also:</dt>
-<dd><a href="configure/gzip_directives.html#gzip"><code>gzip</code></a>
-</pre></code>
+<dd><a href="configure/compress_directives.html#compress"><code>compress</code></a>
+</dd>
 </dl>
+
+<div id="file.send-gzip" class="directive-head">
+<h3><a href="configure/file_directives.html#file.send-gzip"><code>"file.send-gzip"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Obsoleted in 2.0.
+Synonym of <a href="configure/file_directives.html#send-compressed"><code>send-compressed</code></a>.
+
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+</dl>
+
 
 
 

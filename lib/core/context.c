@@ -32,8 +32,7 @@ void h2o_context_init_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pathc
     for (i = 0; i != ctx->_pathconfs_inited.size; ++i)
         if (ctx->_pathconfs_inited.entries[i] == pathconf)
             return;
-    h2o_vector_reserve(NULL, (void *)&ctx->_pathconfs_inited, sizeof(ctx->_pathconfs_inited.entries[0]),
-                       ctx->_pathconfs_inited.size + 1);
+    h2o_vector_reserve(NULL, &ctx->_pathconfs_inited, ctx->_pathconfs_inited.size + 1);
     ctx->_pathconfs_inited.entries[ctx->_pathconfs_inited.size++] = pathconf;
 
 #define DOIT(type, list)                                                                                                           \
@@ -98,12 +97,14 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
 
     h2o_timeout_init(ctx->loop, &ctx->handshake_timeout, config->handshake_timeout);
     h2o_timeout_init(ctx->loop, &ctx->http1.req_timeout, config->http1.req_timeout);
+    h2o_linklist_init_anchor(&ctx->http1._conns);
     h2o_timeout_init(ctx->loop, &ctx->http2.idle_timeout, config->http2.idle_timeout);
     h2o_linklist_init_anchor(&ctx->http2._conns);
     ctx->proxy.client_ctx.loop = loop;
     h2o_timeout_init(ctx->loop, &ctx->proxy.io_timeout, config->proxy.io_timeout);
     ctx->proxy.client_ctx.getaddr_receiver = &ctx->receivers.hostinfo_getaddr;
     ctx->proxy.client_ctx.io_timeout = &ctx->proxy.io_timeout;
+    ctx->proxy.client_ctx.ssl_ctx = config->proxy.ssl_ctx;
 
     ctx->_module_configs = h2o_mem_alloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
     memset(ctx->_module_configs, 0, sizeof(*ctx->_module_configs) * config->_num_config_slots);

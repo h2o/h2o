@@ -73,7 +73,7 @@ Unfortunately, some web browsers fail to specify response priorities that lead t
 H2O is capable of detecting such web browsers, and if it does, uses server-driven prioritization; i.e. send responses with certain MIME-types before others.
 </p>
 <p>
-It is possible to tune or turn off server-driven prioritization using directives: <a href="configure/file_directives.html#file.mime.addtypes"><code>file.mime.addtypes</code></a>, <a href="#http2-reprioritize-blocking-assets"><code>http2-reprioritize-blocking-assets</code></a>.
+It is possible to tune or turn off server-driven prioritization using directives: <a href="configure/file_directives.html#file.mime.addtypes"><code>file.mime.addtypes</code></a>, <a href="configure/http2_directives.html#http2-reprioritize-blocking-assets"><code>http2-reprioritize-blocking-assets</code></a>.
 </p>
 <p>
 See also:
@@ -88,15 +88,32 @@ See also:
 <p>
 H2O recognizes <code>link</code> headers with <a href="https://w3c.github.io/preload/">preload</a> keyword sent by a backend application server (reverse proxy or FastCGI) or an mruby handler, and pushes the designated resource to a client.
 </p>
+<div class="example">
+<div class="caption">Example. A link response header triggering HTTP/2 push</div>
+<pre><code>link: &lt;/assets/jquery.js&gt;; rel=preload
+</code></pre>
+</div>
+
+
+<p>When the HTTP/2 driver of H2O recognizes a <code>link</code> response header with <code>rel=preload</code> attribute set, and if all of the following conditions are met, the specified resource is pushed to the client.
+</p>
+<ul>
+<li>the <code>link</code> header does not have the <code>nopush</code> attribute set</li>
+<li>the <code>link</code> header is <i>not</i> part of a pushed response</li>
+<li>the client does not disable HTTP/2 push</li>
+<li>number of the pushed responses in-flight is below the negotiated threshold</li>
+<li>authority of the resource specified is equivalent to the request that tried to trigger the push</li>
+<li>(for handlers that return the status code synchronously) the status code of the response to be pushed does not indicate an error (i.e. 4xx or 5xx)</li>
+</ul>
 <p>
-When pushing the resources, the priority is determined using the <a href="configure/file_directives.html#file.mime.addtypes"><code>priority</code> attribute</a> of the MIME-type configuration.  If the priority is set to <code>highest</code> then the resource will be sent to the client before anything else; otherwise the resource will be sent to client after the main content, as per defined by the HTTP/2 specification.
+The server also provides a mechanism to track the clients' cache state via cookies, and to push the resources specified with the <code>link</code> header only when it does not exist within the clients' cache.  For details, please refer to the documentation of <a href="configure/http2_directives.html#http2-casper"><code>http2-casper</code></a> configuration directive.
 </p>
 <p>
-The server also provides a mechanism to track the clients' cache state via cookies, and to push the resources specified with the <code>link</code> header only when it does not exist within the clients' cache.  For details, please refer to the documentation of <a href="#http2-casper"><code>http2-casper</code></a> configuration directive.
+When a resource is pushed, the priority is determined using the <a href="configure/file_directives.html#file.mime.addtypes"><code>priority</code> attribute</a> of the MIME-type configuration.  If the priority is set to <code>highest</code> then the resource will be sent to the client before anything else; otherwise the resource will be sent to client after the main content, as per defined by the HTTP/2 specification.
 </p>
 <p>
 Pushed responses will have <code>x-http2-push: pushed</code> header set; by looking for the header, it is possible to determine if a resource has been pushed.
-It is also possible to log the value in the <a href="configure/access_log_directives.html#access-log">access log</a> by specifying <code>{x-http2-push}o</code>, push responses but cancelled by CASPER will have the value of the header logged as <code>cancelled</code>.
+It is also possible to log the value in the <a href="configure/access_log_directives.html#access-log">access log</a> by specifying <code>%{x-http2-push}o</code>, push responses but cancelled by CASPER will have the value of the header logged as <code>cancelled</code>.
 </p>
 <p>
 See also:
@@ -109,7 +126,9 @@ See also:
 The following describes the configuration directives for controlling the HTTP/2 protocol handler.
 </p>
 
-<h3 id="http2-casper" class="directive-title"><a href="configure/http2_directives.html#http2-casper"><code>"http2-casper"</code></a></h3>
+<div id="http2-casper" class="directive-head">
+<h3><a href="configure/http2_directives.html#http2-casper"><code>"http2-casper"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -164,10 +183,12 @@ Therefore with current cookie-based implementation, it is necessary in many case
 <dt>See also:</dt>
 <dd><a href="configure/file_directives.html#file.mime.addtypes"><code>file.mime.addtypes</code></a>,
 <a href="https://github.com/h2o/h2o/issues/421">issue #421</a>
-</pre></code>
+</dd>
 </dl>
 
-<h3 id="http2-idle-timeout" class="directive-title"><a href="configure/http2_directives.html#http2-idle-timeout"><code>"http2-idle-timeout"</code></a></h3>
+<div id="http2-idle-timeout" class="directive-head">
+<h3><a href="configure/http2_directives.html#http2-idle-timeout"><code>"http2-idle-timeout"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -183,7 +204,9 @@ Timeout for idle connections in seconds.
 <dt>Default:</dt>
 <dd><code><pre>http2-idle-timeout: 10</pre></code>
 </dl>
-<h3 id="http2-max-concurrent-requests-per-connection" class="directive-title"><a href="configure/http2_directives.html#http2-max-concurrent-requests-per-connection"><code>"http2-max-concurrent-requests-per-connection"</code></a></h3>
+<div id="http2-max-concurrent-requests-per-connection" class="directive-head">
+<h3><a href="configure/http2_directives.html#http2-max-concurrent-requests-per-connection"><code>"http2-max-concurrent-requests-per-connection"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -201,10 +224,12 @@ The value cannot exceed 256.
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
 <dt>Default:</dt>
-<dd><code><pre>http2-max-concurrent-requests-per-connection: 256</pre></code>
+<dd><code><pre>http2-max-concurrent-requests-per-connection: 100</pre></code>
 </dl>
 
-<h3 id="http2-reprioritize-blocking-assets" class="directive-title"><a href="configure/http2_directives.html#http2-reprioritize-blocking-assets"><code>"http2-reprioritize-blocking-assets"</code></a></h3>
+<div id="http2-reprioritize-blocking-assets" class="directive-head">
+<h3><a href="configure/http2_directives.html#http2-reprioritize-blocking-assets"><code>"http2-reprioritize-blocking-assets"</code></a></h3>
+</div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
@@ -238,7 +263,7 @@ Technically speaking, it does the following:
 <dt>See also:</dt>
 <dd><a href="configure/file_directives.html#file.mime.addtypes"><code>file.mime.addtypes</code></a>,
 <a href="http://blog.kazuhooku.com/2015/06/http2-and-h2o-improves-user-experience.html">HTTP/2 (and H2O) improves user experience over HTTP/1.1 or SPDY</a>
-</pre></code>
+</dd>
 </dl>
 
 

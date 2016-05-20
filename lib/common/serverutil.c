@@ -100,18 +100,21 @@ size_t h2o_server_starter_get_fds(int **_fds)
             end = start + strlen(start);
         if ((eq = memchr(start, '=', end - start)) == NULL) {
             fprintf(stderr, "invalid $SERVER_STARTER_PORT, an element without `=` in: %s\n", ports_env);
-            return SIZE_MAX;
+            goto Error;
         }
         if ((t = h2o_strtosize(eq + 1, end - eq - 1)) == SIZE_MAX) {
             fprintf(stderr, "invalid file descriptor number in $SERVER_STARTER_PORT: %s\n", ports_env);
-            return SIZE_MAX;
+            goto Error;
         }
-        h2o_vector_reserve(NULL, (void *)&fds, sizeof(fds.entries[0]), fds.size + 1);
+        h2o_vector_reserve(NULL, &fds, fds.size + 1);
         fds.entries[fds.size++] = (int)t;
     }
 
     *_fds = fds.entries;
     return fds.size;
+Error:
+    free(fds.entries);
+    return SIZE_MAX;
 }
 
 static char **build_spawn_env(void)

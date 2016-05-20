@@ -6,6 +6,23 @@ use t::Util;
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
 
+subtest 'root-redirect' => sub {
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /abc:
+        file.dir: @{[ DOC_ROOT ]}
+EOT
+
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my ($stderr, $stdout) = run_prog("$curl --silent --show-error --max-redirs 0 --dump-header /dev/stderr $proto://127.0.0.1:$port/abc");
+        like $stderr, qr{^HTTP/[^ ]+ 301\s}s, "is 301";
+        like $stderr, qr{^location: ?/abc/\r$}im, "location header";
+    });
+};
+
 subtest 'etag' => sub {
     my $fetch = sub {
         my $extra_conf = shift;
@@ -29,23 +46,23 @@ EOT
     like $resp, $etag_re, "on";
 };
 
-subtest 'send-gzip' => sub {
+subtest 'send-compressed' => sub {
     my $doit = sub {
-        my ($send_gzip, $curl_opts, $expected_length) = @_;
+        my ($send_compressed, $curl_opts, $expected_length) = @_;
         my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
     paths:
       /:
         file.dir: t/assets/doc_root
-@{[ defined $send_gzip ? "file.send-gzip: $send_gzip" : "" ]}
+@{[ defined $send_compressed ? "file.send-compressed: $send_compressed" : "" ]}
 EOT
         my $fetch = sub {
             my $path = shift;
-            subtest "send-gzip:@{[ defined $send_gzip ? $send_gzip : q(default) ]}, $curl_opts, $path" => sub {
+            subtest "send-compressed:@{[ $send_compressed || q(default) ]}, $curl_opts, $path" => sub {
                 my $resp = `curl --silent --dump-header /dev/stderr $curl_opts http://127.0.0.1:$server->{port}$path 2>&1 > /dev/null`;
                 like $resp, qr/^content-length:\s*$expected_length\r$/im, "length is as expected";
-                if (($send_gzip || '') eq 'ON') {
+                if (($send_compressed || '') eq 'ON') {
                     like $resp, qr/^vary:\s*accept-encoding\r$/im, "has vary set";
                 } else {
                     unlike $resp, qr/^vary:\s*accept-encoding\r$/im, "not has vary set";
@@ -58,16 +75,21 @@ EOT
 
     my $orig_len = (stat 't/assets/doc_root/index.txt')[7];
     my $gz_len = (stat 't/assets/doc_root/index.txt.gz')[7];
+    my $br_len = (stat 't/assets/doc_root/index.txt.br')[7];
 
     $doit->(undef, "", $orig_len);
     $doit->(undef, q{--header "Accept-Encoding: gzip"}, $orig_len);
     $doit->("OFF", q{--header "Accept-Encoding: gzip"}, $orig_len);
+    $doit->("OFF", q{--header "Accept-Encoding: br, gzip"}, $orig_len);
 
     $doit->("ON", "", $orig_len);
     $doit->("ON", q{--header "Accept-Encoding: gzip"}, $gz_len);
     $doit->("ON", q{--header "Accept-Encoding: gzip, deflate"}, $gz_len);
     $doit->("ON", q{--header "Accept-Encoding: deflate, gzip"}, $gz_len);
     $doit->("ON", q{--header "Accept-Encoding: deflate"}, $orig_len);
+    $doit->("ON", q{--header "Accept-Encoding: br, gzip"}, $br_len);
+    $doit->("ON", q{--header "Accept-Encoding: gzip, br"}, $br_len);
+    $doit->("ON", q{--header "Accept-Encoding: br"}, $br_len);
 
     subtest 'MSIE-workaround' => sub {
         my $server = spawn_h2o(<< "EOT");

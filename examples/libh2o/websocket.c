@@ -122,7 +122,7 @@ int main(int argc, char **argv)
 
     h2o_config_init(&config);
     hostconf = h2o_config_register_host(&config, h2o_iovec_init(H2O_STRLIT("default")), 65535);
-    pathconf = h2o_config_register_path(hostconf, "/");
+    pathconf = h2o_config_register_path(hostconf, "/", 0);
     h2o_create_handler(pathconf, sizeof(h2o_handler_t))->on_req = on_req;
 
     h2o_context_init(&ctx, loop, &config);

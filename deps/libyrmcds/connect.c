@@ -1,4 +1,4 @@
-// (C) 2013 Cybozu.
+// (C) 2013, 2016 Cybozu.
 
 #include "yrmcds.h"
 
@@ -160,6 +160,8 @@ yrmcds_error yrmcds_connect(yrmcds* c, const char* node, uint16_t port) {
     c->last_size = 0;
     c->decompressed = NULL;
     c->invalid = 0;
+    c->text_mode = 0;
+    c->rserial = 0;
     return YRMCDS_OK;
 }
 

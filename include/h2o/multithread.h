@@ -50,6 +50,13 @@ struct st_h2o_multithread_request_t {
     h2o_multithread_response_cb cb;
 };
 
+typedef struct st_h2o_sem_t {
+    pthread_mutex_t _mutex;
+    pthread_cond_t _cond;
+    ssize_t _cur;
+    ssize_t _capacity;
+} h2o_sem_t;
+
 /**
  * creates a queue that is used for inter-thread communication
  */
@@ -68,7 +75,7 @@ void h2o_multithread_register_receiver(h2o_multithread_queue_t *queue, h2o_multi
  */
 void h2o_multithread_unregister_receiver(h2o_multithread_queue_t *queue, h2o_multithread_receiver_t *receiver);
 /**
- * sends a message
+ * sends a message (or set message to NULL to just wake up the receiving thread)
  */
 void h2o_multithread_send_message(h2o_multithread_receiver_t *receiver, h2o_multithread_message_t *message);
 /**
@@ -79,5 +86,11 @@ void h2o_multithread_send_request(h2o_multithread_receiver_t *receiver, h2o_mult
  * create a thread
  */
 void h2o_multithread_create_thread(pthread_t *tid, const pthread_attr_t *attr, void *(*func)(void *), void *arg);
+
+void h2o_sem_init(h2o_sem_t *sem, ssize_t capacity);
+void h2o_sem_destroy(h2o_sem_t *sem);
+void h2o_sem_wait(h2o_sem_t *sem);
+void h2o_sem_post(h2o_sem_t *sem);
+void h2o_sem_set_capacity(h2o_sem_t *sem, ssize_t new_capacity);
 
 #endif

@@ -31,7 +31,8 @@ static size_t sz_min(size_t x, size_t y)
     return x < y ? x : y;
 }
 
-h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req)
+h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req,
+                                          const h2o_http2_priority_t *received_priority)
 {
     h2o_http2_stream_t *stream = h2o_mem_alloc(sizeof(*stream));
 
@@ -43,6 +44,7 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     stream->state = H2O_HTTP2_STREAM_STATE_IDLE;
     h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
     h2o_http2_window_init(&stream->input_window, &H2O_HTTP2_SETTINGS_HOST);
+    stream->received_priority = *received_priority;
     stream->_expected_content_length = SIZE_MAX;
 
     /* init request */
@@ -294,7 +296,7 @@ void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb)
         return;
 
     /* set dummy data in the send buffer */
-    h2o_vector_reserve(&stream->req.pool, (h2o_vector_t *)&stream->_data, sizeof(h2o_iovec_t), 1);
+    h2o_vector_reserve(&stream->req.pool, &stream->_data, 1);
     stream->_data.entries[0].base = "<pull interface>";
     stream->_data.entries[0].len = 1;
     stream->_data.size = 1;
@@ -328,7 +330,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
 
     /* save the contents in queue */
     if (bufcnt != 0) {
-        h2o_vector_reserve(&req->pool, (h2o_vector_t *)&stream->_data, sizeof(h2o_iovec_t), bufcnt);
+        h2o_vector_reserve(&req->pool, &stream->_data, bufcnt);
         memcpy(stream->_data.entries, bufs, sizeof(h2o_iovec_t) * bufcnt);
         stream->_data.size = bufcnt;
     }

@@ -20,6 +20,14 @@ The directive is mandatory, and must at least contain one entry.
 When <code>port</code> is omitted, the entry will match the requests targetting the default ports (i.e. port 80 for HTTP, port 443 for HTTPS) with given hostname.
 Otherwise, the entry will match the requests targetting the specified port.
 </p>
+<p>
+Since version 1.7, a wildcard character <code>*</code> can be used as the first component of the hostname.
+If used, they are matched using the rule defined in <a href="https://tools.ietf.org/html/rfc2818#section-3.1" target="_blank">RFC 2818 Section 3.1</a>.
+For example, <code>*.example.com</code> will match HTTP requests for both <code>foo.example.com</code> and <code>bar.example.com</code>.
+Note that an exact match is preferred over host definitions using wildcard characters.
+</p>
+
+
 <?= $ctx->{example}->('A host redirecting all HTTP requests to HTTPS', <<'EOT');
 hosts:
   "www.example.com:80":
@@ -66,6 +74,15 @@ hosts:
         file.dir: /path/to/assets
 EOT
 ?>
+<p>
+In releases prior to version 2.0, all the path entries are considered as directories.
+When H2O receives a request that exactly matches to an entry in paths that does not end with a slash, the server always returns a 301 redirect that appends a slash.
+</p>
+<p>
+Since 2.0, it depends on the handler of the path whether if a 301 redirect that appends a slash is returned.
+Server administartors can take advantage of this change to define per-path configurations (see the examples in <a href="configure/file_directives.html#file.file"><code>file.file</code></a> and the <a href="configure/fastcgi_directives.html">FastCGI handler</a>).
+<a href="configure/file_directives.html#file.dir"><code>file.dir</code></a> is an exception that continues to perform the redirection; in case of the example above, access to <code>/assets</code> is redirected to <code>/assets/</code>.
+</p>
 ? })
 
 <?
@@ -144,42 +161,42 @@ EOT
 The <code style="font-weight: bold;">ssl</code> attribute must be defined as a mapping, and recognizes the following attributes.
 </p>
 <dl>
-<dt>certificate-file:</dt>
+<dt id="certificate-file">certificate-file:</dt>
 <dd>path of the SSL certificate file (mandatory)</dd>
-<dt>key-file:</dt>
+<dt id="key-file">key-file:</dt>
 <dd>path of the SSL private key file (mandatory)</dd>
-<dt>minimum-version:</dt>
+<dt id="minimum-version">minimum-version:</dt>
 <dd>
 minimum protocol version, should be one of: <code>SSLv2</code>, <code>SSLv3</code>, <code>TLSv1</code>, <code>TLSv1.1</code>, <code>TLSv1.2</code>.
 Default is <code>TLSv1</code>
 </dd>
-<dt>cipher-suite:</dt>
+<dt id="cipher-suite">cipher-suite:</dt>
 <dd>list of cipher suites to be passed to OpenSSL via SSL_CTX_set_cipher_list (optional)</dd>
-<dt>cipher-preference:</dt>
+<dt id="cipher-preferences">cipher-preference:</dt>
 <dd>
 side of the list that should be used for selecting the cipher-suite; should be either of: <code>client</code>, <code>server</code>.
 Default is <code>client</code>.
 </dd>
-<dt>dh-file:</dt>
+<dt id="dh-file">dh-file:</dt>
 <dd>
 path of a PEM file containing the Diffie-Hellman paratemers to be used.
 Use of the file is recommended for servers using Diffie-Hellman key agreement.
 (optional)
 </dd>
-<dt>ocsp-update-interval:</dt>
+<dt id="ocsp-update-interval">ocsp-update-interval:</dt>
 <dd>
 interval for updating the OCSP stapling data (in seconds), or set to zero to disable OCSP stapling.
 Default is <code>14400</code> (4 hours).
 </dd>
-<dt>ocsp-max-failures:</dt>
+<dt id="ocsp-max-failures">ocsp-max-failures:</dt>
 <dd>
-number of consecutive OCSP queriy failures before stopping to send OCSP stapling data to the client.
+number of consecutive OCSP query failures before stopping to send OCSP stapling data to the client.
 Default is 3.
 </dd>
-<dt>neverbleed:</dt>
+<dt id="neverbleed">neverbleed:</dt>
 <dd>
-when set to <code>ON</code>, this experimental property isolates RSA private key operations to an islotated process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
-Default is OFF.
+unless set to <code>OFF</code>, H2O isolates RSA private key operations to an islotated process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
+Default is <code>ON</code>.
 </dl>
 <p>
 <a href="configure/base_directives.html#ssl-session-resumption"><code>ssl-session-resumption</code></a> directive is provided for tuning parameters related to session resumption and session tickets.
@@ -196,6 +213,32 @@ If the first octets do not accord with the specification, it is considered as th
 <p>
 Default is <code>OFF</code>.
 </p>
+<h4 id="listen-unix-socket">Listening to a Unix Socket</h4>
+<p>
+If the <code>type</code> attribute is set to <code>unix</code>, then the <code>port</code> attribute is assumed to specify the path of the unix socket to which the standalone server should bound.
+Also following attributes are recognized.
+</p>
+<dl>
+<dt>owner</dt>
+<dd>
+username of the owner of the socket file.
+If omitted, the socket file will be owned by the launching user.
+</dd>
+<dt>permission</dt>
+<dd>
+an octal number specifying the permission of the sokcet file.
+Many operating systems require write permission for connecting to the socket file.
+If omitted, the permission of the socket file will reflect the umask of the calling process.
+</dd>
+</dl>
+<?= $ctx->{example}->('Listening to a Unix Socket accessible only by www-data', <<'EOT')
+listen:
+  type:       unix
+  port:       /tmp/h2o.sock
+  owner:      www-data
+  permission: 600
+EOT
+?>
 ? })
 
 <?
@@ -252,9 +295,28 @@ $ctx->{directive}->(
     name    => "num-name-resolution-threads",
     levels  => [ qw(global) ],
     default => 'num-name-resolution-threads: 32',
-    desc    => q{Number of threads to run for name resolution.},
+    desc    => q{Maximum number of threads to run for name resolution.},
 )->(sub {});
 ?>
+
+<?
+$ctx->{directive}->(
+    name    => "num-ocsp-updaters",
+    levels  => [ qw(global) ],
+    since   => "2.0",
+    default => 'num-ocsp-updaters: 10',
+    desc    => q{Maximum number of OCSP updaters.},
+)->(sub {
+?>
+<p>
+<a href="https://en.wikipedia.org/wiki/OCSP_stapling">OSCP Stapling</a> is an optimization that speeds up the time spent for establishing a TLS connection.
+In order to <i>staple</i> OCSP information, a HTTP server is required to periodically contact the certificate authority.
+This directive caps the number of the processes spawn for collecting the information.
+</p>
+<p>
+The use and the update interval of OCSP can be configured using the <a href="configure/base_directives.html#listen-ssl">SSL attributes</a> of the <a href="configure/base_directives.html#listen"><code>listen</code></a> configuration directive.
+</p>
+? });
 
 <?
 $ctx->{directive}->(
@@ -296,6 +358,90 @@ On other platforms the default value is <code>0</code> (disabled).
 
 <?
 $ctx->{directive}->(
+    name     => "send-server-name",
+    levels   => [ qw(global) ],
+    since    => '2.0',
+    desc     => q{A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether if the <code>server</code> response header should be sent.},
+    default  => q{send-server-name: ON},
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#server-name"><code>server-name</code></a>
+EOT
+)->(sub {
+?>
+? })
+
+<?
+$ctx->{directive}->(
+    name => "server-name",
+    levels   => [ qw(global) ],
+    since    => '2.0',
+    desc     => q{Lets the user override the value of the <code>server</code> response header.},
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#send-server-name"><code>send-server-name</code></a>
+EOT
+)->(sub {
+?>
+The default value is <code>h2o/VERSION-NUMBER</code>.
+? })
+
+<?
+$ctx->{directive}->(
+    name     => "setenv",
+    levels   => [ qw(global host path extension) ],
+    since    => '2.0',
+    desc     => 'Sets one or more environment variables.',
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#unsetenv"><code>unsetenv</code></a>
+EOT
+)->(sub {
+?>
+<p>
+Environment variables are a set of key-value pairs containing arbitrary strings, that can be read from applications invoked by the standalone server (e.g. <a href="configure/fastcgi_directives.html">fastcgi handler</a>, <a href="configure/mruby_directives.html">mruby handler</a>) and the access logger.
+</p>
+<p>
+The directive is applied from outer-level to inner-level.
+At each level, the directive is applied after the <a href="configure/base_directives.html#unsetenv"><code>unsetenv</code></a> directive at the corresponding level is applied.
+</p>
+<p>
+Environment variables are retained through internal redirections.
+</p>
+<?= $ctx->{example}->('Setting an environment variable named <code>FOO</code>', <<'EOT')
+setenv:
+  FOO: "value_of_FOO"
+EOT
+?>
+? })
+
+<?
+$ctx->{directive}->(
+    name     => "unsetenv",
+    levels   => [ qw(global host path extension) ],
+    since    => '2.0',
+    desc     => 'Unsets one or more environment variables.',
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#setenv"><code>setenv</code></a>
+EOT
+)->(sub {
+?>
+<p>
+The directive can be used to have an exception for the paths that have an environment variable set, or can be used to reset variables after an internal redirection.
+</p>
+<?= $ctx->{example}->('Setting environment variable for <code>example.com</code> excluding <code>/specific-path</code>', <<'EOT')
+hosts:
+  example.com:
+    setenv:
+      FOO: "value_of_FOO"
+    paths:
+      /specific-path:
+        unsetenv:
+          - FOO
+      ...
+EOT
+?>
+? })
+
+<?
+$ctx->{directive}->(
     name   => "ssl-session-resumption",
     levels => [ qw(global) ],
     desc   => q{Configures cache-based and ticket-based session resumption.},
@@ -331,6 +477,7 @@ EOT
 <p>
 The <code>mode</code> attribute defines which methods should be used for resuming the TLS sessions.
 The value can be either of: <code>off</code>, <code>cache</code>, <code>ticket</code>, <code>all</code>.
+Default is <code>all</code>.
 </p>
 <p>
 If set to <code>off</code>, session resumption will be disabled, and all TLS connections will be established via full handshakes.
@@ -367,7 +514,7 @@ Ticket-based session resumption uses master secret(s) to encrypt the keys used f
 To achieve <a href="https://en.wikipedia.org/wiki/Forward_secrecy" target="_blank">forward-secrecy</a> (i.e. protect past communications from being decrypted in case a master secret gets obtained by a third party), it is essential to periodically change the secret and remove the old ones.
 </p>
 <p>
-Among the three types of stores supported for ticket-based session remusption, the <code>internal</code> store and <code>memcached</code> store implement automatic roll-over of the secrets.
+Among the three types of stores supported for ticket-based session resumption, the <code>internal</code> store and <code>memcached</code> store implement automatic roll-over of the secrets.
 A new master secret is created every 1/4 of the session lifetime (defined by the <code>lifetime</code> attribute), and they expire (and gets removed) after 5/4 of the session lifetime elapse.
 </p>
 <p>
@@ -413,7 +560,33 @@ Default value is <code>3600</code> (in seconds).
 <dd>
 specifies the location of memcached used by the <code>memcached</code> stores.
 The value must be a mapping with <code>host</code> attribute specifying the address of the memcached server, and optionally a <code>port</code> attribute specifying the port number (default is <code>11211</code>).
+By default, the memcached client uses the <a href="https://github.com/memcached/memcached/blob/master/doc/protocol-binary.xml">BINARY protocol</a>.
+Users can opt-in to using the legacy <a href="https://github.com/memcached/memcached/blob/master/doc/protocol.txt">ASCII protocol</a> by adding a <code>protocol</code> attribute set to <code>ASCII</code>.
 </dd>
+? })
+
+<?
+$ctx->{directive}->(
+    name     => "temp-buffer-path",
+    levels   => [ qw(global) ],
+    desc     => q{Directory in which temporary buffer files are created.},
+    default  => q{temp-buffer-path: "/tmp"},
+    since    => "2.0",
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#user"><code>user</code></a>
+EOT
+)->(sub {
+?>
+<p>
+H2O uses an internal structure called <code>h2o_buffer_t</code> for buffering various kinds of data (e.g. POST content, response from upstream HTTP or FastCGI server).
+When amount of the data allocated in the buffer exceeds 32MB, it starts allocating storage from the directory pointed to by the directive.
+</p>
+<p>
+By using the directive, users can set the directory to one within a memory-backed file system (e.g. <a href="https://en.wikipedia.org/wiki/Tmpfs">tmpfs</a>) for speed, or specify a disk-based file system to avoid memory pressure.
+</p>
+<p>
+Note that the directory must be writable by the running user of the server.
+</p>
 ? })
 
 <?

@@ -31,7 +31,7 @@ If the supplied argument is a mapping, its <code>path</code> property is conside
 <?= $ctx->{example}->('Emit access log to file using Common Log Format', <<'EOT')
 access-log:
     path: /path/to/access-log-file
-    format: "%h %l %u %t \"%r\" %>s %b"
+    format: "%h %l %u %t \"%r\" %s %b"
 EOT
 ?>
 
@@ -68,8 +68,10 @@ As an example, it is possible to log timestamps in millisecond resultion using <
 <tr><td><code>%v</code><td>canonical server name
 <tr><td><code>%{<i>HEADERNAME</i>}i</code><td>value of the given request header (e.g. <code>%{user-agent}i</code>)
 <tr><td><code>%{<i>HEADERNAME</i>}o</code><td>value of the given response header (e.g. <code>%{set-cookie}o</code>)
-<tr><td><code>%{<i>NAME</i>}x</code><td>various extensions.  <code>NAME</code> must be one of:
+<tr><td><code>%{<i>NAME</i>}x</code><td>various extensions.  <code>NAME</code> must be one listed in the following tables.  A dash (<code>-</code>) is emitted if the directive is not applicable to the request being logged.
 <table>
+<caption>Access Timings</caption>
+<tr><th>Name<th>Description
 <tr><td><code>connect-time</code><td>time spent to establish the connection (i.e. since connection gets <code>accept(2)</code>-ed until first octet of the request is received)
 <tr><td><code>request-header-time</code><td>time spent receiving request headers
 <tr><td><code>request-body-time</code><td>time spent receiving request body
@@ -78,10 +80,31 @@ As an example, it is possible to log timestamps in millisecond resultion using <
 <tr><td><code>response-time</code><td>time spent sending response
 <tr><td><code>duration</code><td>sum of <code>request-total-time</code>, <code>process-time</code>, <code>response-time</code>
 </table>
+<table>
+<caption>Connection (since v2.0)</caption>
+<tr><th>Name<th>Description
+<tr><td><code>connection-id</code><td>64-bit internal ID assigned to every client connection
+<tr><td><code>ssl.protocol-version</code><td>SSL protocol version obtained from <a href="https://www.openssl.org/docs/manmaster/ssl/SSL_get_version.html"><code>SSL_get_version</code></a>
+<tr><td><code>ssl.session-reused</code><td><code>1</code> if the <a href="configure/base_directives.html#ssl-session-resumption">SSL session was reused</a>, or <code>0</code> if not<?= $ctx->{note}->(q{A single SSL connection may transfer more than one HTTP request.}) ?>
+<tr><td><code>ssl.cipher</code><td>name of the <a href="https://tools.ietf.org/html/rfc5246#appendix-A.5">cipher suite</a> being used, obtained from <a href="https://www.openssl.org/docs/manmaster/ssl/SSL_CIPHER_get_name.html">SSL_CIPHER_get_name</a>
+<tr><td><code>ssl.cipher-bits</code><td>strength of the cipher suite in bits
+</table>
+<table>
+<caption>HTTP/2 (since v2.0)</caption>
+<tr><th>Name<th>Description
+<tr><td><code>http2.stream-id</code><td>stream ID
+<tr><td><code>http2.priority.received</code><td>colon-concatenated values of <i>exclusive</i>, <i>parent</i>, <i>weight</i>
+<tr><td><code>http2.priority.received.exclusive</code><td>exclusive bit of the most recent priority specified by the client
+<tr><td><code>http2.priority.received.parent</code><td>parent stream ID of the most recent priority specified by the client
+<tr><td><code>http2.priority.received.weight</code><td>weight of the most recent priority specified by the client
+</table>
 </table>
 
 <p>
 The default format is <code>%h %l %u %t "%r" %s %b "%{Referer}i" "%{User-agent}i"</code>, a.k.a. the <a href="http://httpd.apache.org/docs/2.4/mod/mod_log_config.html.en#examples" target="_blank">NCSA extended/combined log format</a>.
+</p>
+<p>
+Note that you may need to quote (and escape) the format string as required by YAML (see <a href="http://www.yaml.org/YAML_for_ruby.html#single-quoted_strings">Yaml Cookbook</a>).
 </p>
 ? })
 

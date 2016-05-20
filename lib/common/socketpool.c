@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/un.h>
 #include <netinet/in.h>
 #include "h2o/hostinfo.h"
 #include "h2o/linklist.h"
@@ -87,11 +88,13 @@ static void on_timeout(h2o_timeout_entry_t *timeout_entry)
     h2o_timeout_link(pool->_interval_cb.loop, &pool->_interval_cb.timeout, &pool->_interval_cb.entry);
 }
 
-static void common_init(h2o_socketpool_t *pool, h2o_socketpool_type_t type, size_t capacity)
+static void common_init(h2o_socketpool_t *pool, h2o_socketpool_type_t type, h2o_iovec_t host, int is_ssl, size_t capacity)
 {
     memset(pool, 0, sizeof(*pool));
 
     pool->type = type;
+    pool->peer.host = h2o_strdup(NULL, host.base, host.len);
+    pool->is_ssl = is_ssl;
     pool->capacity = capacity;
     pool->timeout = UINT64_MAX;
 
@@ -99,30 +102,40 @@ static void common_init(h2o_socketpool_t *pool, h2o_socketpool_type_t type, size
     h2o_linklist_init_anchor(&pool->_shared.sockets);
 }
 
-void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa, socklen_t salen, size_t capacity)
+void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa, socklen_t salen, int is_ssl, size_t capacity)
 {
+    char host[NI_MAXHOST];
+    size_t host_len;
+
     assert(salen <= sizeof(pool->peer.sockaddr.bytes));
 
-    common_init(pool, H2O_SOCKETPOOL_TYPE_SOCKADDR, capacity);
+    if ((host_len = h2o_socket_getnumerichost(sa, salen, host)) == SIZE_MAX) {
+        if (sa->sa_family != AF_UNIX)
+            h2o_fatal("failed to convert a non-unix socket address to a numerical representation");
+        /* use the sockaddr_un::sun_path as the SNI indicator (is that the right thing to do?) */
+        strcpy(host, ((struct sockaddr_un *)sa)->sun_path);
+        host_len = strlen(host);
+    }
+
+    common_init(pool, H2O_SOCKETPOOL_TYPE_SOCKADDR, h2o_iovec_init(host, host_len), is_ssl, capacity);
     memcpy(&pool->peer.sockaddr.bytes, sa, salen);
     pool->peer.sockaddr.len = salen;
 }
 
-void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, uint16_t port, size_t capacity)
+void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, uint16_t port, int is_ssl, size_t capacity)
 {
     struct sockaddr_in sin = {};
 
     if (h2o_hostinfo_aton(host, &sin.sin_addr) == 0) {
         sin.sin_family = AF_INET;
         sin.sin_port = htons(port);
-        h2o_socketpool_init_by_address(pool, (void *)&sin, sizeof(sin), capacity);
+        h2o_socketpool_init_by_address(pool, (void *)&sin, sizeof(sin), is_ssl, capacity);
         return;
     }
 
-    common_init(pool, H2O_SOCKETPOOL_TYPE_NAMED, capacity);
-    pool->peer.named.host = h2o_strdup(NULL, host.base, host.len);
-    pool->peer.named.port.base = h2o_mem_alloc(sizeof("65535"));
-    pool->peer.named.port.len = sprintf(pool->peer.named.port.base, "%u", (unsigned)port);
+    common_init(pool, H2O_SOCKETPOOL_TYPE_NAMED, host, is_ssl, capacity);
+    pool->peer.named_serv.base = h2o_mem_alloc(sizeof(H2O_UINT16_LONGEST_STR));
+    pool->peer.named_serv.len = sprintf(pool->peer.named_serv.base, "%u", (unsigned)port);
 }
 
 void h2o_socketpool_dispose(h2o_socketpool_t *pool)
@@ -140,10 +153,10 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
         h2o_timeout_unlink(&pool->_interval_cb.entry);
         h2o_timeout_dispose(pool->_interval_cb.loop, &pool->_interval_cb.timeout);
     }
+    free(pool->peer.host.base);
     switch (pool->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:
-        free(pool->peer.named.host.base);
-        free(pool->peer.named.port.base);
+        free(pool->peer.named_serv.base);
         break;
     case H2O_SOCKETPOOL_TYPE_SOCKADDR:
         break;
@@ -171,14 +184,14 @@ static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *e
     cb(sock, errstr, data);
 }
 
-static void on_connect(h2o_socket_t *sock, int status)
+static void on_connect(h2o_socket_t *sock, const char *err)
 {
     h2o_socketpool_connect_request_t *req = sock->data;
     const char *errstr = NULL;
 
     assert(req->sock == sock);
 
-    if (status != 0) {
+    if (err != NULL) {
         h2o_socket_close(sock);
         req->sock = NULL;
         errstr = "connection failed";
@@ -280,8 +293,8 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     switch (pool->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:
         /* resolve the name, and connect */
-        req->getaddr_req = h2o_hostinfo_getaddr(getaddr_receiver, pool->peer.named.host, pool->peer.named.port, AF_UNSPEC,
-                                                SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, req);
+        req->getaddr_req = h2o_hostinfo_getaddr(getaddr_receiver, pool->peer.host, pool->peer.named_serv, AF_UNSPEC, SOCK_STREAM,
+                                                IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, req);
         break;
     case H2O_SOCKETPOOL_TYPE_SOCKADDR:
         /* connect (using sockaddr_in) */
