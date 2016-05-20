@@ -39,7 +39,7 @@ static void expand_buf(h2o_mem_pool_t *pool, iovec_vector_t *bufs, int count) {
     assert(bufs->size < count);
     size_t i;
 
-    h2o_vector_reserve(pool, (void *)bufs, sizeof(bufs->entries[0]), count);
+    h2o_vector_reserve(pool, bufs, count);
 
     for (i = bufs->size; i < count; ++i) {
         bufs->entries[i] = h2o_iovec_init(h2o_mem_alloc_pool(pool, BUF_SIZE), 0);
