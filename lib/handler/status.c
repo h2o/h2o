@@ -38,7 +38,7 @@ struct st_h2o_status_context_t {
     h2o_multithread_receiver_t receiver;
 };
 
-struct status_ctx {
+struct st_status_ctx_t {
     int active;
     void *ctx;
 };
@@ -49,7 +49,7 @@ struct st_h2o_status_collector_t {
     } src;
     pthread_mutex_t mutex;
     size_t num_remaining_threads;
-    H2O_VECTOR(struct status_ctx) status_ctx;
+    H2O_VECTOR(struct st_status_ctx_t) status_ctx;
 };
 
 struct st_h2o_status_message_t {
@@ -193,14 +193,7 @@ static int on_req_json(struct st_h2o_root_status_handler_t *self, h2o_req_t *req
                 }
             }
             if (sh->init) {
-                h2o_iovec_t err = {NULL, 0};
-                void *p;
-                p = sh->init(&err);
-                if (!p) {
-                    h2o_send_error_400(req, "Invalid Request", err.base, 0);
-                    return 0;
-                }
-                collector->status_ctx.entries[collector->status_ctx.size].ctx = p;
+                collector->status_ctx.entries[collector->status_ctx.size].ctx = sh->init();
             }
             collector->status_ctx.entries[collector->status_ctx.size].active = 1;
 Skip:

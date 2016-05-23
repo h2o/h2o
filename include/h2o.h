@@ -278,7 +278,7 @@ typedef struct st_h2o_protocol_callbacks_t {
 typedef h2o_iovec_t (*final_status_handler_cb)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req);
 typedef struct st_h2o_status_handler_t {
     h2o_iovec_t name;
-    void *(*init)(h2o_iovec_t *error); /* optional call back, allocates a context that will be passed to per_thread() */
+    void *(*init)(void); /* optional callback, allocates a context that will be passed to per_thread() */
     void (*per_thread)(void *priv, h2o_context_t *ctx); /* optional callback, will be called for each thread */
     h2o_iovec_t (*final)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req); /* mandatory, will be passed the optional context */
 } h2o_status_handler_t;
@@ -431,24 +431,24 @@ typedef struct st_h2o_mimemap_type_t {
 #define H2O_HTTP2_ERROR_CONNECT -10
 #define H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM -11
 #define H2O_HTTP2_ERROR_INADEQUATE_SECURITY -12
+#define H2O_HTTP2_ERROR_MAX 13
 /* end of the HTT2-spec defined errors */
-#define H2O_HTTP2_ERROR_OTHER -13
-#define H2O_HTTP2_ERROR_MAX 14
 #define H2O_HTTP2_ERROR_INCOMPLETE -255 /* an internal value indicating that all data is not ready */
 #define H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY -256
 
 enum {
-    /* http1 */
-    E_HTTP_400 = 0,
-    E_HTTP_403,
-    E_HTTP_404,
-    E_HTTP_405,
-    E_HTTP_416,
-    E_HTTP_417,
-    E_HTTP_500,
-    E_HTTP_502,
-    E_HTTP_503,
-    E_HTTP_MAX,
+    /* http1 protocol errors */
+    H2O_STATUS_ERROR_400 = 0,
+    H2O_STATUS_ERROR_403,
+    H2O_STATUS_ERROR_404,
+    H2O_STATUS_ERROR_405,
+    H2O_STATUS_ERROR_413,
+    H2O_STATUS_ERROR_416,
+    H2O_STATUS_ERROR_417,
+    H2O_STATUS_ERROR_500,
+    H2O_STATUS_ERROR_502,
+    H2O_STATUS_ERROR_503,
+    H2O_STATUS_ERROR_MAX,
 };
 
 /**
@@ -519,10 +519,20 @@ struct st_h2o_context_t {
          * timeout entry used for graceful shutdown
          */
         h2o_timeout_entry_t _graceful_shutdown_timeout;
-        /**
-         * counter for http2 errors internally emitted by h2o
-         */
-        uint64_t emitted_errors[H2O_HTTP2_ERROR_MAX];
+        struct {
+            /**
+             * counter for http2 errors internally emitted by h2o
+             */
+            uint64_t protocol_level_errors[H2O_HTTP2_ERROR_MAX];
+            /**
+             * premature close on read
+             */
+            uint64_t read_closed;
+            /**
+             * premature close on write
+             */
+            uint64_t write_closed;
+        } events;
     } http2;
 
     struct {
@@ -550,7 +560,7 @@ struct st_h2o_context_t {
     /**
      * counter for http1 errors internally emitted by h2o
      */
-    unsigned long emitted_errors[E_HTTP_MAX];
+    uint64_t http1_status_errors[H2O_STATUS_ERROR_MAX];
 
     H2O_VECTOR(h2o_pathconf_t *) _pathconfs_inited;
 };
@@ -1286,22 +1296,22 @@ void h2o_send_inline(h2o_req_t *req, const char *body, size_t len);
  * sends the given information as an error response to the client
  */
 void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, const char *body, int flags);
-#define H2O_SEND_ERROR_XXX(status) \
+#define DECL_H2O_SEND_ERROR_XXX(status) \
     static inline void h2o_send_error_ ## status(h2o_req_t *req, const char *reason, const char *body, int flags) \
     { \
-        req->conn->ctx->emitted_errors[E_HTTP_ ## status]++; \
+        req->conn->ctx->http1_status_errors[H2O_STATUS_ERROR_ ## status]++; \
         h2o_send_error_generic(req, status, reason, body, flags); \
     }
 
-H2O_SEND_ERROR_XXX(400)
-H2O_SEND_ERROR_XXX(403)
-H2O_SEND_ERROR_XXX(404)
-H2O_SEND_ERROR_XXX(405)
-H2O_SEND_ERROR_XXX(416)
-H2O_SEND_ERROR_XXX(417)
-H2O_SEND_ERROR_XXX(500)
-H2O_SEND_ERROR_XXX(502)
-H2O_SEND_ERROR_XXX(503)
+DECL_H2O_SEND_ERROR_XXX(400)
+DECL_H2O_SEND_ERROR_XXX(403)
+DECL_H2O_SEND_ERROR_XXX(404)
+DECL_H2O_SEND_ERROR_XXX(405)
+DECL_H2O_SEND_ERROR_XXX(416)
+DECL_H2O_SEND_ERROR_XXX(417)
+DECL_H2O_SEND_ERROR_XXX(500)
+DECL_H2O_SEND_ERROR_XXX(502)
+DECL_H2O_SEND_ERROR_XXX(503)
 
 /**
  * sends error response using zero timeout; can be called by output filters while processing the headers

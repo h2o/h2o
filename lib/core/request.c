@@ -478,12 +478,12 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
     h2o_send_inline(req, body, SIZE_MAX);
 }
 
-#define SEND_ERROR_DEFERRED(status_) \
+#define DECL_SEND_ERROR_DEFERRED(status_) \
     static void send_error_deferred_cb_ ## status_ (h2o_timeout_entry_t *entry) \
 	{ \
 	    struct st_send_error_deferred_t *args = H2O_STRUCT_FROM_MEMBER(struct st_send_error_deferred_t, _timeout, entry); \
 	    reset_response(args->req); \
-	    args->req->conn->ctx->emitted_errors[E_HTTP_ ## status_]++; \
+	    args->req->conn->ctx->http1_status_errors[H2O_STATUS_ERROR_ ## status_]++; \
 	    h2o_send_error_generic(args->req, args->status, args->reason, args->body, args->flags); \
 	} \
  \
@@ -495,9 +495,9 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
 	    h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &args->_timeout); \
 	}
 
-SEND_ERROR_DEFERRED(502)
+DECL_SEND_ERROR_DEFERRED(502)
 
-#undef SEND_ERROR_DEFERRED
+#undef DECL_SEND_ERROR_DEFERRED
 
 void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
 {

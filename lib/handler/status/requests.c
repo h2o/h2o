@@ -22,9 +22,10 @@
 
 #include "h2o.h"
 
-struct requests_status_ctx {
+struct st_requests_status_ctx_t {
     h2o_logconf_t *logconf;
     h2o_iovec_t req_data;
+    h2o_iovec_t init_error;
     int first; /* used to know if a thread is the first one, we skip the leading
                 * coma in that case. */
 };
@@ -32,7 +33,7 @@ struct requests_status_ctx {
 struct st_collect_req_status_cbdata_t {
     h2o_logconf_t *logconf;
     h2o_buffer_t *buffer;
-    int first; /* see requests_status_ctx */
+    int first; /* see st_requests_status_ctx_t */
 };
 
 static int collect_req_status(h2o_req_t *req, void *_cbdata)
@@ -67,8 +68,13 @@ static int collect_req_status(h2o_req_t *req, void *_cbdata)
 
 static void requests_status_per_thread(void *priv, h2o_context_t *ctx)
 {
-    struct requests_status_ctx *rsc = priv;
+    struct st_requests_status_ctx_t *rsc = priv;
     struct st_collect_req_status_cbdata_t cbdata = {rsc->logconf};
+
+    /* we encountered an error at init() time, return early */
+    if (rsc->init_error.base) {
+        return;
+    }
 
     cbdata.first = rsc->first;
     if (rsc->first) {
@@ -87,10 +93,11 @@ static void requests_status_per_thread(void *priv, h2o_context_t *ctx)
     h2o_buffer_dispose(&cbdata.buffer);
 }
 
-static void *requests_status_init(h2o_iovec_t *error)
+static void *requests_status_init(void)
 {
-    struct requests_status_ctx *rsc;
+    struct st_requests_status_ctx_t *rsc;
     rsc = h2o_mem_alloc(sizeof(*rsc));
+    memset(rsc, 0, sizeof(*rsc));
     rsc->first = 1;
 
 #define ELEMENT(key, expr) "\"" key "\": \"" expr "\""
@@ -128,9 +135,8 @@ static void *requests_status_init(h2o_iovec_t *error)
         if ((rsc->logconf = h2o_logconf_compile(fmt, H2O_LOGCONF_ESCAPE_JSON, errbuf)) == NULL) {
             h2o_iovec_t resp = h2o_concat(NULL, h2o_iovec_init(H2O_STRLIT("failed to compile log format:")),
                     h2o_iovec_init(errbuf, strlen(errbuf)));
-            *error = resp;
-            free(rsc);
-            return NULL;
+            rsc->init_error = resp;
+            return rsc;
         }
     }
 
@@ -141,8 +147,13 @@ static void *requests_status_init(h2o_iovec_t *error)
 static h2o_iovec_t requests_status_final(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
 {
     h2o_iovec_t ret;
-    struct requests_status_ctx *rsc = priv;
+    struct st_requests_status_ctx_t *rsc = priv;
 
+    if (rsc->init_error.base) {
+        ret = h2o_strdup(&req->pool, rsc->init_error.base, rsc->init_error.len);
+        free(rsc->init_error.base);
+        goto out;
+    }
 #define JSON_FOOTER "\n ]"
 #define JSON_FOOTER_LEN 3
     ret.base = h2o_mem_alloc_pool(&req->pool, rsc->req_data.len + JSON_FOOTER_LEN);
@@ -154,6 +165,7 @@ static h2o_iovec_t requests_status_final(void *priv, h2o_globalconf_t *gconf, h2
 
     h2o_logconf_dispose(rsc->logconf);
     free(rsc->req_data.base);
+out:
     free(rsc);
     return ret;
 }
