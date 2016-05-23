@@ -1947,6 +1947,7 @@
 				);
 				HEADER_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/include",
+					deps/yaml/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
@@ -1957,7 +1958,6 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-luv",
@@ -2087,6 +2087,7 @@
 				GCC_PREPROCESSOR_DEFINITIONS = "H2O_UNITTEST=1";
 				HEADER_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/include",
+					deps/yaml/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
@@ -2097,7 +2098,6 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-luv",
@@ -2389,6 +2389,7 @@
 				);
 				HEADER_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/include",
+					deps/yaml/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
@@ -2399,7 +2400,6 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-lz",
@@ -2417,6 +2417,7 @@
 				);
 				HEADER_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/include",
+					deps/yaml/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
@@ -2427,7 +2428,6 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-lz",
