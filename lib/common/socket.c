@@ -386,7 +386,8 @@ void h2o_socket_close(h2o_socket_t *sock)
     }
 }
 
-#if defined(TCP_INFO) && defined(TCP_NOTSENT_LOWAT)
+#if defined(TCP_INFO) && defined(TCP_NOTSENT_LOWAT) && !H2O_USE_LIBUV
+
 static int fetch_tcp_info(h2o_socket_t *sock, struct tcp_info *info)
 {
     int fd = h2o_socket_get_fd(sock);

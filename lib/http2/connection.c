@@ -944,10 +944,13 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     if (h2o_timeout_is_linked(&conn->_write.timeout_entry))
         h2o_timeout_unlink(&conn->_write.timeout_entry);
 
-    if (conn->sock->_latency_optimization.mode == H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_NEEDS_UPDATE) {
-        h2o_socket_notify_write(conn->sock, on_notify_write);
+#if !H2O_USE_LIBUV
+    if (conn->state == H2O_HTTP2_CONN_STATE_OPEN) {
+        if (conn->_write.buf->size != 0 || h2o_http2_scheduler_is_active(&conn->scheduler))
+            h2o_socket_notify_write(sock, on_notify_write);
         return;
     }
+#endif
 
     /* write more, if possible */
     if (do_emit_writereq(conn))
