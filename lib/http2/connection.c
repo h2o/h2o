@@ -56,7 +56,7 @@ static const h2o_iovec_t SETTINGS_HOST_BIN = {H2O_STRLIT("\x00\x00\x0c"     /* f
 static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
 static void initiate_graceful_shutdown(h2o_context_t *ctx);
-static void close_connection(h2o_http2_conn_t *conn);
+static int close_connection(h2o_http2_conn_t *conn);
 static void send_stream_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum);
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
 static int do_emit_writereq(h2o_http2_conn_t *conn);
@@ -265,7 +265,7 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     free(conn);
 }
 
-void close_connection(h2o_http2_conn_t *conn)
+int close_connection(h2o_http2_conn_t *conn)
 {
     conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
 
@@ -273,7 +273,9 @@ void close_connection(h2o_http2_conn_t *conn)
         /* there is a pending write, let on_write_complete actually close the connection */
     } else {
         close_connection_now(conn);
+        return -1;
     }
+    return 0;
 }
 
 void send_stream_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum)
@@ -815,7 +817,7 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
     return CONNECTION_PREFACE.len;
 }
 
-static void parse_input(h2o_http2_conn_t *conn)
+static int parse_input(h2o_http2_conn_t *conn)
 {
     /* handle the input */
     while (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING && conn->sock->input->size != 0) {
@@ -829,12 +831,12 @@ static void parse_input(h2o_http2_conn_t *conn)
                 enqueue_goaway(conn, (int)ret,
                                err_desc != NULL ? (h2o_iovec_t){(char *)err_desc, strlen(err_desc)} : (h2o_iovec_t){});
             }
-            close_connection(conn);
-            return;
+            return close_connection(conn);
         }
         /* advance to the next frame */
         h2o_buffer_consume(&conn->sock->input, ret);
     }
+    return 0;
 }
 
 static void on_read(h2o_socket_t *sock, const char *err)
@@ -848,7 +850,8 @@ static void on_read(h2o_socket_t *sock, const char *err)
     }
 
     update_idle_timeout(conn);
-    parse_input(conn);
+    if (parse_input(conn) != 0)
+        return;
 
     /* write immediately, if there is no write in flight and if pending write exists */
     if (h2o_timeout_is_linked(&conn->_write.timeout_entry)) {
