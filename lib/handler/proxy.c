@@ -26,9 +26,27 @@
 struct rp_handler_t {
     h2o_handler_t super;
     h2o_url_t upstream;         /* host should be NULL-terminated */
-    h2o_socketpool_t *sockpool; /* non-NULL if config.use_keepalive == 1 */
+    h2o_url_t lcupstream;         /* same as upstream but lowercased, used for matching */
+    h2o_socketpool_t *sockpool; /* non-NULL if proxy.timeout.keepalive != 0 */
     h2o_proxy_config_vars_t config;
 };
+
+static h2o_socketpool_t *create_sockpool(h2o_url_t *upstream, h2o_proxy_config_vars_t *config)
+{
+    struct sockaddr_un sa;
+    const char *to_sa_err;
+    h2o_socketpool_t *sockpool;
+
+    sockpool = h2o_mem_alloc(sizeof(*sockpool));
+    int is_ssl = upstream->scheme == &H2O_URL_SCHEME_HTTPS;
+    if ((to_sa_err = h2o_url_host_to_sun(upstream->host, &sa)) == h2o_url_host_to_sun_err_is_not_unix_socket) {
+        h2o_socketpool_init_by_hostport(sockpool, upstream->host, h2o_url_get_port(upstream), is_ssl, SIZE_MAX /* FIXME */);
+    } else {
+        assert(to_sa_err == NULL);
+        h2o_socketpool_init_by_address(sockpool, (void *)&sa, sizeof(sa), is_ssl, SIZE_MAX /* FIXME */);
+    }
+    return sockpool;
+}
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
@@ -45,9 +63,24 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         overrides->hostport.host = self->upstream.host;
         overrides->hostport.port = h2o_url_get_port(&self->upstream);
     }
-    overrides->location_rewrite.match = &self->upstream;
+    overrides->location_rewrite.match = &self->lcupstream;
     overrides->location_rewrite.path_prefix = req->pathconf->path;
     overrides->client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
+
+    /* is there a per-frontend-socket socketpool ? */
+    if (self->config.per_client_pool && self->config.keepalive_timeout) {
+        h2o_socket_t *src_sock;
+        src_sock = req->conn->callbacks->get_socket(req->conn);
+        if (!src_sock->per_socket_pool) {
+            h2o_socketpool_t *sockpool;
+
+            sockpool = create_sockpool(&self->upstream, &self->config);
+            h2o_socketpool_set_timeout(sockpool, req->conn->ctx->loop, self->config.keepalive_timeout);
+            src_sock->per_socket_pool = sockpool;
+        }
+        assert(overrides->socketpool == NULL);
+        overrides->socketpool = src_sock->per_socket_pool;
+    }
 
     /* determine the scheme and authority */
     if (self->config.preserve_host) {
@@ -126,6 +159,8 @@ static void on_handler_dispose(h2o_handler_t *_self)
         SSL_CTX_free(self->config.ssl_ctx);
     free(self->upstream.host.base);
     free(self->upstream.path.base);
+    free(self->lcupstream.host.base);
+    free(self->lcupstream.path.base);
     if (self->sockpool != NULL) {
         h2o_socketpool_dispose(self->sockpool);
         free(self->sockpool);
@@ -139,21 +174,12 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
     self->super.on_context_dispose = on_context_dispose;
     self->super.dispose = on_handler_dispose;
     self->super.on_req = on_req;
-    if (config->keepalive_timeout != 0) {
-        self->sockpool = h2o_mem_alloc(sizeof(*self->sockpool));
-        struct sockaddr_un sa;
-        const char *to_sa_err;
-        int is_ssl = upstream->scheme == &H2O_URL_SCHEME_HTTPS;
-        if ((to_sa_err = h2o_url_host_to_sun(upstream->host, &sa)) == h2o_url_host_to_sun_err_is_not_unix_socket) {
-            h2o_socketpool_init_by_hostport(self->sockpool, upstream->host, h2o_url_get_port(upstream), is_ssl,
-                                            SIZE_MAX /* FIXME */);
-        } else {
-            assert(to_sa_err == NULL);
-            h2o_socketpool_init_by_address(self->sockpool, (void *)&sa, sizeof(sa), is_ssl, SIZE_MAX /* FIXME */);
-        }
+    if (config->keepalive_timeout != 0 && !config->per_client_pool) {
+        self->sockpool = create_sockpool(upstream, config);
     }
     h2o_url_copy(NULL, &self->upstream, upstream);
-    h2o_strtolower(self->upstream.host.base, self->upstream.host.len);
+    h2o_url_copy(NULL, &self->lcupstream, upstream);
+    h2o_strtolower(self->lcupstream.host.base, self->lcupstream.host.len);
     self->config = *config;
     if (self->config.ssl_ctx != NULL)
         CRYPTO_add(&self->config.ssl_ctx->references, 1, CRYPTO_LOCK_SSL_CTX);

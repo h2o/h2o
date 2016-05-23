@@ -123,6 +123,24 @@ The value should be set to something smaller than that being set at the upstream
 
 <?
 $ctx->{directive}->(
+    name    => "proxy.per_client_socket_pool",
+    levels  => [ qw(global host path) ],
+    default => q{proxy.per_client_socket_pool: 0},
+    desc    => 'Connection pooling is only done on a per-client socket basis.',
+)->(sub {
+?>
+<p>
+This option can be used to make sure that unrelated frontend h2 connections
+are not sharing the same backend http1 connection. It provides greater
+separation at the cost of less effective connection re-use.
+If the option is <code>ON</code>, each frontend connection will have
+it's own socket pool.
+</p>
+? })
+
+
+<?
+$ctx->{directive}->(
     name    => "proxy.websocket",
     levels  => [ qw(global host path) ],
     default => q{proxy.websocket: OFF},
