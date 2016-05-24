@@ -392,6 +392,9 @@ static void test_resolve(void)
     ok(h2o_url_get_port(&resolved) == 81);
     ok(h2o_memis(resolved.path.base, resolved.path.len, H2O_STRLIT("/icon.ico")));
 
+    final = h2o_url_stringify(&pool, &base);
+    ok(h2o_memis(final.base, final.len, H2O_STRLIT("http://example.com/dir/index.html")));
+
     h2o_mem_clear_pool(&pool);
 }
 
