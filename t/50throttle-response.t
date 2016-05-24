@@ -37,3 +37,5 @@ run_with_curl($server, sub {
                   cmp_ok($speed, '<=', 10000 * 1.3); # the implementation may cause response speed is a bit larger than the limitation, especially when file is not big enough.
                 };
 });
+
+done_testing();
