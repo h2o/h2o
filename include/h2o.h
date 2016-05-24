@@ -1411,15 +1411,15 @@ h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, int quali
  */
 void h2o_compress_register_configurator(h2o_globalconf_t *conf);
 
-/* lib/handler/traffic.c */
+/* lib/handler/throttle_resp.c */
 /**
- * registers the traffic shaping filter
+ * registers the throttle response filter
  */
-void h2o_traffic_register(h2o_pathconf_t *pathconf);
+void h2o_throttle_resp_register(h2o_pathconf_t *pathconf);
 /**
  * configurator
  */
-void h2o_traffic_register_configurator(h2o_globalconf_t *conf);
+void h2o_throttle_resp_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/errordoc.c */
 
