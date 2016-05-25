@@ -558,9 +558,9 @@ struct st_h2o_context_t {
     } _timestamp_cache;
 
     /**
-     * counter for http1 errors internally emitted by h2o
+     * counter for http1 error status internally emitted by h2o
      */
-    uint64_t http1_status_errors[H2O_STATUS_ERROR_MAX];
+    uint64_t emitted_error_status[H2O_STATUS_ERROR_MAX];
 
     H2O_VECTOR(h2o_pathconf_t *) _pathconfs_inited;
 };
@@ -1296,22 +1296,22 @@ void h2o_send_inline(h2o_req_t *req, const char *body, size_t len);
  * sends the given information as an error response to the client
  */
 void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, const char *body, int flags);
-#define DECL_H2O_SEND_ERROR_XXX(status) \
+#define H2O_SEND_ERROR_XXX(status) \
     static inline void h2o_send_error_ ## status(h2o_req_t *req, const char *reason, const char *body, int flags) \
     { \
-        req->conn->ctx->http1_status_errors[H2O_STATUS_ERROR_ ## status]++; \
+        req->conn->ctx->emitted_error_status[H2O_STATUS_ERROR_ ## status]++; \
         h2o_send_error_generic(req, status, reason, body, flags); \
     }
 
-DECL_H2O_SEND_ERROR_XXX(400)
-DECL_H2O_SEND_ERROR_XXX(403)
-DECL_H2O_SEND_ERROR_XXX(404)
-DECL_H2O_SEND_ERROR_XXX(405)
-DECL_H2O_SEND_ERROR_XXX(416)
-DECL_H2O_SEND_ERROR_XXX(417)
-DECL_H2O_SEND_ERROR_XXX(500)
-DECL_H2O_SEND_ERROR_XXX(502)
-DECL_H2O_SEND_ERROR_XXX(503)
+H2O_SEND_ERROR_XXX(400)
+H2O_SEND_ERROR_XXX(403)
+H2O_SEND_ERROR_XXX(404)
+H2O_SEND_ERROR_XXX(405)
+H2O_SEND_ERROR_XXX(416)
+H2O_SEND_ERROR_XXX(417)
+H2O_SEND_ERROR_XXX(500)
+H2O_SEND_ERROR_XXX(502)
+H2O_SEND_ERROR_XXX(503)
 
 /**
  * sends error response using zero timeout; can be called by output filters while processing the headers

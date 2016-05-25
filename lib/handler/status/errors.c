@@ -23,9 +23,9 @@
 #include "h2o.h"
 #include <inttypes.h>
 
-struct errors_status_ctx {
-    uint64_t agg_errors_http1[H2O_STATUS_ERROR_MAX];
-    uint64_t agg_errors_http2[H2O_HTTP2_ERROR_MAX];
+struct st_errors_status_ctx_t {
+    uint64_t emitted_status_errors[H2O_STATUS_ERROR_MAX];
+    uint64_t h2_protocol_level_errors[H2O_HTTP2_ERROR_MAX];
     uint64_t h2_read_closed;
     uint64_t h2_write_closed;
 };
@@ -33,12 +33,12 @@ struct errors_status_ctx {
 static void errors_status_per_thread(void *priv, h2o_context_t *ctx)
 {
     size_t i;
-    struct errors_status_ctx *esc = priv;
+    struct st_errors_status_ctx_t *esc = priv;
     for (i = 0; i < H2O_STATUS_ERROR_MAX; i++) {
-        esc->agg_errors_http1[i] += ctx->http1_status_errors[i];
+        esc->emitted_status_errors[i] += ctx->emitted_error_status[i];
     }
     for (i = 0; i < H2O_HTTP2_ERROR_MAX; i++) {
-        esc->agg_errors_http2[i] += ctx->http2.events.protocol_level_errors[i];
+        esc->h2_protocol_level_errors[i] += ctx->http2.events.protocol_level_errors[i];
     }
     esc->h2_read_closed += ctx->http2.events.read_closed;
     esc->h2_write_closed += ctx->http2.events.write_closed;
@@ -46,7 +46,7 @@ static void errors_status_per_thread(void *priv, h2o_context_t *ctx)
 
 static void *errors_status_init(void)
 {
-    struct errors_status_ctx *ret;
+    struct st_errors_status_ctx_t *ret;
 
     ret = h2o_mem_alloc(sizeof(*ret));
     memset(ret, 0, sizeof(*ret));
@@ -56,13 +56,13 @@ static void *errors_status_init(void)
 
 static h2o_iovec_t errors_status_final(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
 {
-    struct errors_status_ctx *esc = priv;
+    struct st_errors_status_ctx_t *esc = priv;
     h2o_iovec_t ret;
 
 #define H1_AGG_ERR(status_) \
-    esc->agg_errors_http1[H2O_STATUS_ERROR_ ## status_]
+    esc->emitted_status_errors[H2O_STATUS_ERROR_ ## status_]
 #define H2_AGG_ERR(err_) \
-    esc->agg_errors_http2[-H2O_HTTP2_ERROR_ ## err_]
+    esc->h2_protocol_level_errors[-H2O_HTTP2_ERROR_ ## err_]
 #define BUFSIZE (2*1024)
     ret.base = h2o_mem_alloc_pool(&req->pool, BUFSIZE);
     ret.len = snprintf(ret.base, BUFSIZE, ",\n"

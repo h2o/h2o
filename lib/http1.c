@@ -154,7 +154,7 @@ static void process_request(struct st_h2o_http1_conn_t *conn)
         set_timeout(conn, NULL, NULL); \
         h2o_socket_read_stop(conn->sock); \
         conn->req.http1_is_persistent = 0; \
-	    conn->super.ctx->http1_status_errors[H2O_STATUS_ERROR_ ## status_]++; \
+	    conn->super.ctx->emitted_error_status[H2O_STATUS_ERROR_ ## status_]++; \
         h2o_send_error_generic(&conn->req, status_, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION); \
     }
 
