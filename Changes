@@ -1,7 +1,7 @@
 Revision history for H2O.
 
 2.0.0-beta5 2016-05-26 02:32:00+0000
-	- [security fix][http2] fix use-after-free on premature connection close #920 (Frederik Deweerdt)
+	- [security fix][http2] fix use-after-free on premature connection close (CVE-2016-4817) #920 (Frederik Deweerdt)
 	- [core] fix SIGBUS when temporary disk space is full #910 (Kazuho Oku)
 	- [core] add directive for customizing the path of temporary buffer files #911 (Kazuho Oku)
 	- [http2] fix potential stall when http2-max-concurrent-requests-per-connection is set to a small number #912 (Kazuho Oku)
