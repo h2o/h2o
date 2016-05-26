@@ -1,5 +1,12 @@
 Revision history for H2O.
 
+1.7.3 TBD
+	- [core] fix SIGBUS when temporary disk space is full #910 (Kazuho Oku)
+	- [mruby] do not drop `link` header #913 (Kazuho Oku)
+	- [mruby] fix memory leak during initialization #906 (Frederik Deweerdt)
+	- [mruby] fix race condition in mruby regex handler #908 (Kazuho Oku)
+	- [libh2o] fix crash in h2o_url_stringify #918 (Kazuho OKu)
+
 1.7.2 2016-05-09 03:12:00+0000
 	- [core] fix crash when receiving SIGTERM during start-up #878 (Frederik Deweerdt)
 	- [core] spawn the configured number of DNS client threads #880 (Sean McArthur)
