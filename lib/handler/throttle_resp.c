@@ -43,12 +43,6 @@ static void real_send(throttle_resp_t *self) {
         h2o_timeout_unlink(&self->timeout_entry);
 }
 
-static inline void expand_buf(h2o_mem_pool_t *pool, iovec_vector_t *bufs, size_t count) {
-    assert(bufs->capacity < count);
-    h2o_vector_reserve(pool, bufs, count);
-    bufs->capacity = count;
-}
-
 static void add_token(h2o_timeout_entry_t *entry) {
     throttle_resp_t *self = H2O_STRUCT_FROM_MEMBER(throttle_resp_t, timeout_entry, entry);
 
@@ -64,10 +58,7 @@ static void on_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, s
     size_t i;
 
     /* I don't know if this is a proper way. */
-    if (self->state.bufs.capacity < inbufcnt) {
-        expand_buf(&req->pool, &self->state.bufs, inbufcnt);
-    }
-
+    h2o_vector_reserve(&req->pool, &self->state.bufs, inbufcnt);
     /* start to save state */
     for (i = 0; i < inbufcnt; ++i) {
         self->state.bufs.entries[i] = inbufs[i];

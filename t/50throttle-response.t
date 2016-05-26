@@ -2,6 +2,7 @@ use strict;
 use warnings;
 use Test::More;
 use t::Util;
+use Time::HiRes qw(time);
 
 plan skip_all => 'curl not found'
   unless prog_exists('curl');
@@ -20,7 +21,7 @@ hosts:
     paths:
       /:
         file.dir: @{[ DOC_ROOT ]}
-        header.add: "X-Traffic: 10000"
+        header.add: "X-Traffic: 100000"
 EOT
 
 run_with_curl($server, sub {
@@ -34,7 +35,7 @@ run_with_curl($server, sub {
                   my $end_time = time;
                   is $resp, $all_data;
                   my $speed = length($resp) / ($end_time - $start_time);
-                  cmp_ok($speed, '<=', 10000 * 1.3); # the implementation may cause response speed is a bit larger than the limitation, especially when file is not big enough.
+                  cmp_ok($speed, '<=', 100000 * 1.1); # the implementation may cause response speed is a bit larger than the limitation, especially when file is not big enough.
                 };
 });
 
