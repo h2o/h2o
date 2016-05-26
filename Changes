@@ -1,5 +1,15 @@
 Revision history for H2O.
 
+2.0.0-beta5 TBD
+	- [core] fix SIGBUS when temporary disk space is full #910 (Kazuho Oku)
+	- [core] add directive for customizing the path of temporary buffer files #911 (Kazuho Oku)
+	- [http2] fix potential stall when http2-max-concurrent-requests-per-connection is set to a small number #912 (Kazuho Oku)
+	- [http2] refuse push a single resource more than once #903 (Kazuho Oku)
+	- [mruby] do not drop `link` header #913 (Kazuho Oku)
+	- [mruby] fix memory leak during initialization #906 (Frederik Deweerdt)
+	- [mruby] fix race condition in mruby regex handler #908 (Kazuho Oku)
+	- [libh2o] fix crash in h2o_url_stringify #918 (Kazuho OKu)
+
 2.0.0-beta4 2016-05-09 20:20:00+0000
 	- [ssl] fix build issue on CentOS 7 (and others that have `tolower` defined as a macro) #901 (Kazuho Oku)
 
