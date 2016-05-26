@@ -56,7 +56,7 @@ static const h2o_iovec_t SETTINGS_HOST_BIN = {H2O_STRLIT("\x00\x00\x0c"     /* f
 static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
 static void initiate_graceful_shutdown(h2o_context_t *ctx);
-static void close_connection(h2o_http2_conn_t *conn);
+static int close_connection(h2o_http2_conn_t *conn);
 static void send_stream_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum);
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
 static int do_emit_writereq(h2o_http2_conn_t *conn);
@@ -254,6 +254,8 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     assert(!h2o_timeout_is_linked(&conn->_write.timeout_entry));
     if (conn->_headers_unparsed != NULL)
         h2o_buffer_dispose(&conn->_headers_unparsed);
+    if (conn->push_memo != NULL)
+        h2o_cache_destroy(conn->push_memo);
     if (conn->casper != NULL)
         h2o_http2_casper_destroy(conn->casper);
     h2o_linklist_unlink(&conn->_conns);
@@ -263,7 +265,7 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     free(conn);
 }
 
-void close_connection(h2o_http2_conn_t *conn)
+int close_connection(h2o_http2_conn_t *conn)
 {
     conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
 
@@ -271,7 +273,9 @@ void close_connection(h2o_http2_conn_t *conn)
         /* there is a pending write, let on_write_complete actually close the connection */
     } else {
         close_connection_now(conn);
+        return -1;
     }
+    return 0;
 }
 
 void send_stream_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum)
@@ -813,19 +817,10 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
     return CONNECTION_PREFACE.len;
 }
 
-static void parse_input(h2o_http2_conn_t *conn)
+static int parse_input(h2o_http2_conn_t *conn)
 {
-    size_t http2_max_concurrent_requests_per_connection = conn->super.ctx->globalconf->http2.max_concurrent_requests_per_connection;
-    int perform_early_exit = 0;
-
-    if (conn->num_streams.pull.half_closed + conn->num_streams.push.half_closed != http2_max_concurrent_requests_per_connection)
-        perform_early_exit = 1;
-
     /* handle the input */
     while (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING && conn->sock->input->size != 0) {
-        if (perform_early_exit == 1 &&
-            conn->num_streams.pull.half_closed + conn->num_streams.push.half_closed == http2_max_concurrent_requests_per_connection)
-            goto EarlyExit;
         /* process a frame */
         const char *err_desc = NULL;
         ssize_t ret = conn->_read_expect(conn, (uint8_t *)conn->sock->input->bytes, conn->sock->input->size, &err_desc);
@@ -836,20 +831,12 @@ static void parse_input(h2o_http2_conn_t *conn)
                 enqueue_goaway(conn, (int)ret,
                                err_desc != NULL ? (h2o_iovec_t){(char *)err_desc, strlen(err_desc)} : (h2o_iovec_t){});
             }
-            close_connection(conn);
-            return;
+            return close_connection(conn);
         }
         /* advance to the next frame */
         h2o_buffer_consume(&conn->sock->input, ret);
     }
-
-    if (!h2o_socket_is_reading(conn->sock))
-        h2o_socket_read_start(conn->sock, on_read);
-    return;
-
-EarlyExit:
-    if (h2o_socket_is_reading(conn->sock))
-        h2o_socket_read_stop(conn->sock);
+    return 0;
 }
 
 static void on_read(h2o_socket_t *sock, const char *err)
@@ -863,7 +850,8 @@ static void on_read(h2o_socket_t *sock, const char *err)
     }
 
     update_idle_timeout(conn);
-    parse_input(conn);
+    if (parse_input(conn) != 0)
+        return;
 
     /* write immediately, if there is no write in flight and if pending write exists */
     if (h2o_timeout_is_linked(&conn->_write.timeout_entry)) {
@@ -967,10 +955,6 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
         close_connection_now(conn);
         return;
     }
-
-    /* start receiving input if necessary, as well as parse the pending input */
-    if (conn->sock->input->size != 0)
-        parse_input(conn);
 }
 
 static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *still_is_active, void *cb_arg)
@@ -1170,6 +1154,18 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     return conn;
 }
 
+static int update_push_memo(h2o_http2_conn_t *conn, h2o_req_t *src_req, const char *abspath, size_t abspath_len)
+{
+
+    if (conn->push_memo == NULL)
+        conn->push_memo = h2o_cache_create(0, 1024, 1, NULL);
+
+    /* uses the hash as the key */
+    h2o_cache_hashcode_t url_hash = h2o_cache_calchash(src_req->input.scheme->name.base, src_req->input.scheme->name.len) ^
+        h2o_cache_calchash(src_req->input.authority.base, src_req->input.authority.len) ^ h2o_cache_calchash(abspath, abspath_len);
+    return h2o_cache_set(conn->push_memo, 0, h2o_iovec_init(&url_hash, sizeof(url_hash)), url_hash, h2o_iovec_init(NULL, 0));
+}
+
 static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_len)
 {
     h2o_http2_conn_t *conn = (void *)src_req->conn;
@@ -1213,6 +1209,10 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
             return;
         }
     }
+
+    /* update the push memo, and if it already pushed on the same connection, return */
+    if (update_push_memo(conn, src_req, abspath, abspath_len))
+        return;
 
     /* open the stream */
     conn->push_stream_ids.max_open += 2;

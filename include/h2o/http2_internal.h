@@ -25,6 +25,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include "khash.h"
+#include "h2o/cache.h"
 #include "h2o/http2_casper.h"
 #include "h2o/http2_scheduler.h"
 
@@ -239,6 +240,7 @@ struct st_h2o_http2_conn_t {
         h2o_timeout_entry_t timeout_entry;
         h2o_http2_window_t window;
     } _write;
+    h2o_cache_t *push_memo;
     h2o_http2_casper_t *casper;
 };
 

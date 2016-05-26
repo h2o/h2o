@@ -787,6 +787,39 @@ Users can opt-in to using the legacy <a href="https://github.com/memcached/memca
 <dd>global</dd>
 </dl>
 
+<div id="temp-buffer-path" class="directive-head">
+<div class="directive-since">since v2.0</div>
+<h3><a href="configure/base_directives.html#temp-buffer-path"><code>"temp-buffer-path"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Directory in which temporary buffer files are created.
+</p>
+
+<p>
+H2O uses an internal structure called <code>h2o_buffer_t</code> for buffering various kinds of data (e.g. POST content, response from upstream HTTP or FastCGI server).
+When amount of the data allocated in the buffer exceeds 32MB, it starts allocating storage from the directory pointed to by the directive.
+</p>
+<p>
+By using the directive, users can set the directory to one within a memory-backed file system (e.g. <a href="https://en.wikipedia.org/wiki/Tmpfs">tmpfs</a>) for speed, or specify a disk-based file system to avoid memory pressure.
+</p>
+<p>
+Note that the directory must be writable by the running user of the server.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>temp-buffer-path: &quot;/tmp&quot;</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/base_directives.html#user"><code>user</code></a>
+</dd>
+</dl>
+
 <div id="user" class="directive-head">
 <h3><a href="configure/base_directives.html#user"><code>"user"</code></a></h3>
 </div>

@@ -567,6 +567,30 @@ Users can opt-in to using the legacy <a href="https://github.com/memcached/memca
 
 <?
 $ctx->{directive}->(
+    name     => "temp-buffer-path",
+    levels   => [ qw(global) ],
+    desc     => q{Directory in which temporary buffer files are created.},
+    default  => q{temp-buffer-path: "/tmp"},
+    since    => "2.0",
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#user"><code>user</code></a>
+EOT
+)->(sub {
+?>
+<p>
+H2O uses an internal structure called <code>h2o_buffer_t</code> for buffering various kinds of data (e.g. POST content, response from upstream HTTP or FastCGI server).
+When amount of the data allocated in the buffer exceeds 32MB, it starts allocating storage from the directory pointed to by the directive.
+</p>
+<p>
+By using the directive, users can set the directory to one within a memory-backed file system (e.g. <a href="https://en.wikipedia.org/wiki/Tmpfs">tmpfs</a>) for speed, or specify a disk-based file system to avoid memory pressure.
+</p>
+<p>
+Note that the directory must be writable by the running user of the server.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
     name   => "user",
     levels => [ qw(global) ],
     desc   => q{Username under which the server should handle incoming requests.},

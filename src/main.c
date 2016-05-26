@@ -1101,6 +1101,20 @@ static int on_config_num_ocsp_updaters(h2o_configurator_command_t *cmd, h2o_conf
     return 0;
 }
 
+static int on_config_temp_buffer_path(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    char buf[sizeof(h2o_socket_buffer_mmap_settings.fn_template)];
+
+    int len = snprintf(buf, sizeof(buf), "%s%s", node->data.scalar, strrchr(h2o_socket_buffer_mmap_settings.fn_template, '/'));
+    if (len >= sizeof(buf)) {
+        h2o_configurator_errprintf(cmd, node, "path is too long");
+        return -1;
+    }
+    strcpy(h2o_socket_buffer_mmap_settings.fn_template, buf);
+
+    return 0;
+}
+
 static yoml_t *load_config(const char *fn)
 {
     FILE *fp;
@@ -1494,6 +1508,8 @@ static void setup_configurators(void)
                                         ssl_session_resumption_on_config);
         h2o_configurator_define_command(c, "num-ocsp-updaters", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_num_ocsp_updaters);
+        h2o_configurator_define_command(c, "temp-buffer-path", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_temp_buffer_path);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
