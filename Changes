@@ -1,7 +1,7 @@
 Revision history for H2O.
 
 1.7.3 2016-05-26 02:32:00+0000
-	- [security fix][http2] fix use-after-free on premature connection close #920 (Frederik Deweerdt)
+	- [security fix][http2] fix use-after-free on premature connection close (CVE-2016-4817) #920 (Frederik Deweerdt)
 	- [core] fix SIGBUS when temporary disk space is full #910 (Kazuho Oku)
 	- [mruby] do not drop `link` header #913 (Kazuho Oku)
 	- [mruby] fix memory leak during initialization #906 (Frederik Deweerdt)
