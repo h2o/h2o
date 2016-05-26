@@ -559,6 +559,7 @@
 		10BCF2FE1B1A892F0076939D /* fastcgi.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = fastcgi.c; sourceTree = "<group>"; };
 		10BCF3001B214C460076939D /* fastcgi.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = fastcgi.c; sourceTree = "<group>"; };
 		10C2117C1B8164B1005A9D02 /* 90root-fastcgi-php.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "90root-fastcgi-php.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		10C45D4C1CF720C10096DB06 /* 50reverse-proxy-rewrite-location-hostmatch.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-rewrite-location-hostmatch.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10C5A6311B268632006094A6 /* 50fastcgi.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50fastcgi.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10D0903919F0A51C0043D458 /* memory.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = memory.h; sourceTree = "<group>"; };
 		10D0903D19F0A8190043D458 /* socket.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = socket.h; sourceTree = "<group>"; };
@@ -1342,6 +1343,7 @@
 				108214FE1AAD34DD00D27E66 /* 50reverse-proxy-0.t */,
 				108102151C3DB05100C024CD /* 50reverse-proxy-disconnected-keepalive.t */,
 				104C65021A6DF36B000AC190 /* 50reverse-proxy-config.t */,
+				10C45D4C1CF720C10096DB06 /* 50reverse-proxy-rewrite-location-hostmatch.t */,
 				10AA2EB21A9479B4004322AC /* 50reverse-proxy-upstream-down.t */,
 				10DA969A1CCEF2C200679165 /* 50reverse-proxy-https.t */,
 				104B9A2B1A4BBDA4009EEE64 /* 50server-starter.t */,
