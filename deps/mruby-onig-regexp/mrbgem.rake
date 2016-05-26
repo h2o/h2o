@@ -52,9 +52,13 @@ MRuby::Gem::Specification.new('mruby-onig-regexp') do |spec|
           'LD' => "#{build.linker.command} #{build.linker.flags.join(' ')}",
           'AR' => build.archiver.command }
         unless ENV['OS'] == 'Windows_NT'
+          if build.kind_of? MRuby::CrossBuild
+            host = "--host #{build.name}"
+          end
+
           _pp 'autotools', oniguruma_dir
           run_command e, './autogen.sh' if File.exists? 'autogen.sh'
-          run_command e, './configure --disable-shared --enable-static'
+          run_command e, "./configure --disable-shared --enable-static --enable-multithread #{host}"
           run_command e, 'make'
         else
           run_command e, 'cmd /c "copy /Y win32 > NUL"'
@@ -74,8 +78,7 @@ MRuby::Gem::Specification.new('mruby-onig-regexp') do |spec|
   end
 
 
-  if build.kind_of? MRuby::CrossBuild or
-      (build.cc.respond_to? :search_header_path and build.cc.search_header_path 'oniguruma.h')
+  if build.cc.respond_to? :search_header_path and build.cc.search_header_path 'oniguruma.h'
     spec.linker.libraries << 'onig'
   else
     spec.bundle_onigmo

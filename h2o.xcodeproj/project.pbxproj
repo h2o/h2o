@@ -181,7 +181,6 @@
 		10AAAC631B6C7A7D004487C3 /* http2_casper.h in Headers */ = {isa = PBXBuildFile; fileRef = 10AAAC621B6C7A7D004487C3 /* http2_casper.h */; };
 		10AAAC651B6C9275004487C3 /* casper.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AAAC641B6C9275004487C3 /* casper.c */; };
 		10B38A721B8D34BB007DC191 /* mruby_.h in Headers */ = {isa = PBXBuildFile; fileRef = 10B38A711B8D34BB007DC191 /* mruby_.h */; };
-		10B38A741B8D3544007DC191 /* mruby.c in Sources */ = {isa = PBXBuildFile; fileRef = 10B38A731B8D3544007DC191 /* mruby.c */; };
 		10BA72AA19AAD6300059392A /* stream.c in Sources */ = {isa = PBXBuildFile; fileRef = 10BA72A919AAD6300059392A /* stream.c */; };
 		10BCF2FD1B168CAE0076939D /* fastcgi.c in Sources */ = {isa = PBXBuildFile; fileRef = 10BCF2FC1B168CAE0076939D /* fastcgi.c */; };
 		10BCF2FF1B1A892F0076939D /* fastcgi.c in Sources */ = {isa = PBXBuildFile; fileRef = 10BCF2FE1B1A892F0076939D /* fastcgi.c */; };
@@ -199,8 +198,12 @@
 		10D0906C19F395FC0043D458 /* socket-client.c in Sources */ = {isa = PBXBuildFile; fileRef = 10D0905219F0CB130043D458 /* socket-client.c */; };
 		10D0907019F494CC0043D458 /* test.c in Sources */ = {isa = PBXBuildFile; fileRef = 10D0906E19F494CC0043D458 /* test.c */; };
 		10D0907319F633B00043D458 /* proxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 10D0907219F633B00043D458 /* proxy.c */; };
+		10DA969C1CD2BF9000679165 /* cache.h in Headers */ = {isa = PBXBuildFile; fileRef = 10DA969B1CD2BF9000679165 /* cache.h */; };
+		10DA969E1CD2BFAC00679165 /* cache.c in Sources */ = {isa = PBXBuildFile; fileRef = 10DA969D1CD2BFAC00679165 /* cache.c */; };
+		10DA96A01CD2BFEE00679165 /* cache.c in Sources */ = {isa = PBXBuildFile; fileRef = 10DA969F1CD2BFEE00679165 /* cache.c */; };
 		10E299581A67E68500701AA6 /* scheduler.c in Sources */ = {isa = PBXBuildFile; fileRef = 10E299571A67E68500701AA6 /* scheduler.c */; };
 		10E2995A1A68D03100701AA6 /* scheduler.c in Sources */ = {isa = PBXBuildFile; fileRef = 10E299591A68D03100701AA6 /* scheduler.c */; };
+		10E598011CE1683A000D7B94 /* mruby.c in Sources */ = {isa = PBXBuildFile; fileRef = 10B38A731B8D3544007DC191 /* mruby.c */; };
 		10EC2A361A0B4D370083514F /* socketpool.h in Headers */ = {isa = PBXBuildFile; fileRef = 10EC2A351A0B4D370083514F /* socketpool.h */; };
 		10EC2A381A0B4DC70083514F /* socketpool.c in Sources */ = {isa = PBXBuildFile; fileRef = 10EC2A371A0B4DC70083514F /* socketpool.c */; };
 		10F417CC19C1907B00B6E31A /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
@@ -573,6 +576,9 @@
 		10D0906F19F494CC0043D458 /* test.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = test.h; sourceTree = "<group>"; };
 		10D0907219F633B00043D458 /* proxy.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = proxy.c; sourceTree = "<group>"; };
 		10DA969A1CCEF2C200679165 /* 50reverse-proxy-https.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-https.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		10DA969B1CD2BF9000679165 /* cache.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cache.h; sourceTree = "<group>"; };
+		10DA969D1CD2BFAC00679165 /* cache.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cache.c; sourceTree = "<group>"; };
+		10DA969F1CD2BFEE00679165 /* cache.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cache.c; sourceTree = "<group>"; };
 		10E299571A67E68500701AA6 /* scheduler.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = scheduler.c; sourceTree = "<group>"; };
 		10E299591A68D03100701AA6 /* scheduler.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = scheduler.c; sourceTree = "<group>"; };
 		10EC2A351A0B4D370083514F /* socketpool.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = socketpool.h; sourceTree = "<group>"; };
@@ -691,6 +697,7 @@
 		104B9A4A1A5FA7E5009EEE64 /* common */ = {
 			isa = PBXGroup;
 			children = (
+				10DA969D1CD2BFAC00679165 /* cache.c */,
 				107D4D541B5B30EE004A9B21 /* file.c */,
 				1044812F1BFD10450007863F /* filecache.c */,
 				1058C8891AA6E5E3008D6180 /* hostinfo.c */,
@@ -756,6 +763,7 @@
 		104B9A4D1A5FAA7B009EEE64 /* common */ = {
 			isa = PBXGroup;
 			children = (
+				10DA969F1CD2BFEE00679165 /* cache.c */,
 				10F9F2661AFC5F550056F26B /* hostinfo.c */,
 				10AA2EAD1A8E22DA004322AC /* multithread.c */,
 				104B9A271A4A5139009EEE64 /* serverutil.c */,
@@ -1063,6 +1071,7 @@
 		1079239F19A3215F00C52AD6 /* h2o */ = {
 			isa = PBXGroup;
 			children = (
+				10DA969B1CD2BF9000679165 /* cache.h */,
 				105534D71A3C785000627ECB /* configurator.h */,
 				107D4D521B5B2412004A9B21 /* file.h */,
 				1044812D1BFD0FBE0007863F /* filecache.h */,
@@ -1441,6 +1450,7 @@
 				10AA2E9F1A8807CF004322AC /* url.h in Headers */,
 				10B38A721B8D34BB007DC191 /* mruby_.h in Headers */,
 				10FCC13F1B2E4A4500F13674 /* cloexec.h in Headers */,
+				10DA969C1CD2BF9000679165 /* cache.h in Headers */,
 				1044812E1BFD0FBE0007863F /* filecache.h in Headers */,
 				107923A619A3215F00C52AD6 /* http2.h in Headers */,
 				107923A719A3215F00C52AD6 /* token.h in Headers */,
@@ -1642,6 +1652,7 @@
 				10A3D40A1B50DAB700327CF9 /* recv.c in Sources */,
 				101788B219B561AA0084C6D8 /* socket.c in Sources */,
 				10D0905519F102C70043D458 /* http1client.c in Sources */,
+				10DA969E1CD2BFAC00679165 /* cache.c in Sources */,
 				107923D219A3217300C52AD6 /* token.c in Sources */,
 				1058C88A1AA6E5E3008D6180 /* hostinfo.c in Sources */,
 				10AA2EBC1A9EEDF8004322AC /* proxy.c in Sources */,
@@ -1681,7 +1692,6 @@
 				107D4D551B5B30EE004A9B21 /* file.c in Sources */,
 				10D0907319F633B00043D458 /* proxy.c in Sources */,
 				10A3D3D21B4CDBDC00327CF9 /* memcached.c in Sources */,
-				10B38A741B8D3544007DC191 /* mruby.c in Sources */,
 				107923CF19A3217300C52AD6 /* request.c in Sources */,
 				1070866C1B787D06002B8F18 /* compress.c in Sources */,
 				107086721B798488002B8F18 /* compress.c in Sources */,
@@ -1781,6 +1791,7 @@
 				107D4D4A1B5880BC004A9B21 /* reader.c in Sources */,
 				1079244819A3265C00C52AD6 /* connection.c in Sources */,
 				1079244119A3264300C52AD6 /* picohttpparser.c in Sources */,
+				10DA96A01CD2BFEE00679165 /* cache.c in Sources */,
 				1070E1631B4508B0001CCAFA /* util.c in Sources */,
 				107E341D1C7FEE1000AEF5F8 /* literal_cost.cc in Sources */,
 				1058C87D1AA41789008D6180 /* headers.c in Sources */,
@@ -1824,6 +1835,7 @@
 				107E340A1C7EAF9300AEF5F8 /* utf8_util.cc in Sources */,
 				10FFEE0A1BB23A8C0087AD75 /* neverbleed.c in Sources */,
 				107E34041C7EAF9300AEF5F8 /* entropy_encode.cc in Sources */,
+				10E598011CE1683A000D7B94 /* mruby.c in Sources */,
 				107E33F71C7EAF5A00AEF5F8 /* compress_fragment_two_pass.cc in Sources */,
 				107E34081C7EAF9300AEF5F8 /* static_dict.cc in Sources */,
 				107E34091C7EAF9300AEF5F8 /* streams.cc in Sources */,
@@ -1935,6 +1947,7 @@
 				);
 				HEADER_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/include",
+					deps/yaml/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
@@ -1945,7 +1958,6 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-luv",
@@ -2075,6 +2087,7 @@
 				GCC_PREPROCESSOR_DEFINITIONS = "H2O_UNITTEST=1";
 				HEADER_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/include",
+					deps/yaml/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
@@ -2085,7 +2098,6 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-luv",
@@ -2377,6 +2389,7 @@
 				);
 				HEADER_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/include",
+					deps/yaml/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
@@ -2387,7 +2400,6 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-lz",
@@ -2405,6 +2417,7 @@
 				);
 				HEADER_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/include",
+					deps/yaml/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
@@ -2415,7 +2428,6 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-lz",
@@ -2638,6 +2650,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					deps/yaml/include,
 					deps/mruby/include,
 					"deps/mruby-input-stream/src",
 					"/usr/local/openssl-1.0.2/include",
@@ -2652,7 +2665,6 @@
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lmruby",
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-lz",
@@ -2671,6 +2683,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					deps/yaml/include,
 					deps/mruby/include,
 					"deps/mruby-input-stream/src",
 					"/usr/local/openssl-1.0.2/include",
@@ -2684,7 +2697,6 @@
 				);
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-luv",
@@ -2700,6 +2712,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					deps/yaml/include,
 					deps/mruby/include,
 					"deps/mruby-input-stream/src",
 					"/usr/local/openssl-1.0.2/include",
@@ -2714,7 +2727,6 @@
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lmruby",
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-lz",
@@ -2729,6 +2741,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					deps/yaml/include,
 					deps/mruby/include,
 					"deps/mruby-input-stream/src",
 					"/usr/local/openssl-1.0.2/include",
@@ -2742,7 +2755,6 @@
 				);
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-luv",
