@@ -23,17 +23,17 @@
 #include "h2o.h"
 #include <inttypes.h>
 
-struct st_errors_status_ctx_t {
+struct st_events_status_ctx_t {
     uint64_t emitted_status_errors[H2O_STATUS_ERROR_MAX];
     uint64_t h2_protocol_level_errors[H2O_HTTP2_ERROR_MAX];
     uint64_t h2_read_closed;
     uint64_t h2_write_closed;
 };
 
-static void errors_status_per_thread(void *priv, h2o_context_t *ctx)
+static void events_status_per_thread(void *priv, h2o_context_t *ctx)
 {
     size_t i;
-    struct st_errors_status_ctx_t *esc = priv;
+    struct st_events_status_ctx_t *esc = priv;
     for (i = 0; i < H2O_STATUS_ERROR_MAX; i++) {
         esc->emitted_status_errors[i] += ctx->emitted_error_status[i];
     }
@@ -44,9 +44,9 @@ static void errors_status_per_thread(void *priv, h2o_context_t *ctx)
     esc->h2_write_closed += ctx->http2.events.write_closed;
 }
 
-static void *errors_status_init(void)
+static void *events_status_init(void)
 {
-    struct st_errors_status_ctx_t *ret;
+    struct st_events_status_ctx_t *ret;
 
     ret = h2o_mem_alloc(sizeof(*ret));
     memset(ret, 0, sizeof(*ret));
@@ -54,9 +54,9 @@ static void *errors_status_init(void)
     return ret;
 }
 
-static h2o_iovec_t errors_status_final(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
+static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
 {
-    struct st_errors_status_ctx_t *esc = priv;
+    struct st_events_status_ctx_t *esc = priv;
     h2o_iovec_t ret;
 
 #define H1_AGG_ERR(status_) \
@@ -66,29 +66,29 @@ static h2o_iovec_t errors_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
 #define BUFSIZE (2*1024)
     ret.base = h2o_mem_alloc_pool(&req->pool, BUFSIZE);
     ret.len = snprintf(ret.base, BUFSIZE, ",\n"
-                                          " \"http1-errors-400\": %" PRIu64 ",\n"
-                                          " \"http1-errors-403\": %" PRIu64 ",\n"
-                                          " \"http1-errors-404\": %" PRIu64 ",\n"
-                                          " \"http1-errors-405\": %" PRIu64 ",\n"
-                                          " \"http1-errors-416\": %" PRIu64 ",\n"
-                                          " \"http1-errors-417\": %" PRIu64 ",\n"
-                                          " \"http1-errors-500\": %" PRIu64 ",\n"
-                                          " \"http1-errors-502\": %" PRIu64 ",\n"
-                                          " \"http1-errors-503\": %" PRIu64 ",\n"
-                                          " \"http2-errors-protocol\": %" PRIu64 ", \n"
-                                          " \"http2-errors-internal\": %" PRIu64 ", \n"
-                                          " \"http2-errors-flow_control\": %" PRIu64 ", \n"
-                                          " \"http2-errors-settings_timeout\": %" PRIu64 ", \n"
-                                          " \"http2-errors-stream_closed\": %" PRIu64 ", \n"
-                                          " \"http2-errors-frame_size\": %" PRIu64 ", \n"
-                                          " \"http2-errors-refused_stream\": %" PRIu64 ", \n"
-                                          " \"http2-errors-cancel\": %" PRIu64 ", \n"
-                                          " \"http2-errors-compression\": %" PRIu64 ", \n"
-                                          " \"http2-errors-connect\": %" PRIu64 ", \n"
-                                          " \"http2-errors-enhance_your_calm\": %" PRIu64 ", \n"
-                                          " \"http2-errors-inadequate_security\": %" PRIu64 ", \n"
-                                          " \"http2-read-closed\": %" PRIu64 ", \n"
-                                          " \"http2-write-closed\": %" PRIu64 "\n",
+                                          " \"http1-errors.400\": %" PRIu64 ",\n"
+                                          " \"http1-errors.403\": %" PRIu64 ",\n"
+                                          " \"http1-errors.404\": %" PRIu64 ",\n"
+                                          " \"http1-errors.405\": %" PRIu64 ",\n"
+                                          " \"http1-errors.416\": %" PRIu64 ",\n"
+                                          " \"http1-errors.417\": %" PRIu64 ",\n"
+                                          " \"http1-errors.500\": %" PRIu64 ",\n"
+                                          " \"http1-errors.502\": %" PRIu64 ",\n"
+                                          " \"http1-errors.503\": %" PRIu64 ",\n"
+                                          " \"http2-errors.protocol\": %" PRIu64 ", \n"
+                                          " \"http2-errors.internal\": %" PRIu64 ", \n"
+                                          " \"http2-errors.flow-control\": %" PRIu64 ", \n"
+                                          " \"http2-errors.settings-timeout\": %" PRIu64 ", \n"
+                                          " \"http2-errors.stream-closed\": %" PRIu64 ", \n"
+                                          " \"http2-errors.frame-size\": %" PRIu64 ", \n"
+                                          " \"http2-errors.refused-stream\": %" PRIu64 ", \n"
+                                          " \"http2-errors.cancel\": %" PRIu64 ", \n"
+                                          " \"http2-errors.compression\": %" PRIu64 ", \n"
+                                          " \"http2-errors.connect\": %" PRIu64 ", \n"
+                                          " \"http2-errors.enhance-your-calm\": %" PRIu64 ", \n"
+                                          " \"http2-errors.inadequate-security\": %" PRIu64 ", \n"
+                                          " \"http2.read-closed\": %" PRIu64 ", \n"
+                                          " \"http2.write-closed\": %" PRIu64 "\n",
                                           H1_AGG_ERR(400), H1_AGG_ERR(403), H1_AGG_ERR(404),
                                           H1_AGG_ERR(405), H1_AGG_ERR(416), H1_AGG_ERR(417),
                                           H1_AGG_ERR(500), H1_AGG_ERR(502), H1_AGG_ERR(503),
@@ -104,9 +104,9 @@ static h2o_iovec_t errors_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
 #undef H2_AGG_ERR
 }
 
-h2o_status_handler_t errors_status_handler = {
-    { H2O_STRLIT("errors") },
-    errors_status_init,
-    errors_status_per_thread,
-    errors_status_final,
+h2o_status_handler_t events_status_handler = {
+    { H2O_STRLIT("events") },
+    events_status_init,
+    events_status_per_thread,
+    events_status_final,
 };

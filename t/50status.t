@@ -36,11 +36,11 @@ hosts:
         status: ON
 EOT
 
-    my $resp = `curl --silent -o /dev/stderr 'http://127.0.0.1:$server->{port}/s/json?show=main,errors' 2>&1 > /dev/null`;
+    my $resp = `curl --silent -o /dev/stderr 'http://127.0.0.1:$server->{port}/s/json?show=main,events' 2>&1 > /dev/null`;
     my $jresp = decode_json("$resp");
     is $jresp->{'connections'}, 1, "One connection";
     is $jresp->{'requests'}, undef, "Requests not present";
-    is $jresp->{'http1-errors-404'}, 0, "Internal errors monitoring";
+    is $jresp->{'http1-errors.404'}, 0, "Internal errors monitoring";
 };
 
 subtest "json hander check 404 error counter" => sub {
@@ -54,11 +54,11 @@ hosts:
         status: ON
 EOT
     my $resp = `curl --silent -o /dev/stderr 'http://127.0.0.1:$server->{port}/beeb98fcf148317be5fe5d763c658bc9ea9c087a' 2>&1 > /dev/null`;
-    my $resp = `curl --silent -o /dev/stderr 'http://127.0.0.1:$server->{port}/s/json?show=errors' 2>&1 > /dev/null`;
+    my $resp = `curl --silent -o /dev/stderr 'http://127.0.0.1:$server->{port}/s/json?show=events' 2>&1 > /dev/null`;
     my $jresp = decode_json("$resp");
     is $jresp->{'connections'}, undef, "Connections not present";
     is $jresp->{'requests'}, undef, "Requests not present";
-    is $jresp->{'http1-errors-404'}, 1, "Found the 404 error";
+    is $jresp->{'http1-errors.404'}, 1, "Found the 404 error";
 };
 
 

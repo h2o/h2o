@@ -21,7 +21,7 @@
  */
 #include "h2o.h"
 
-extern h2o_status_handler_t errors_status_handler;
+extern h2o_status_handler_t events_status_handler;
 extern h2o_status_handler_t requests_status_handler;
 
 struct st_h2o_status_logger_t {
@@ -288,5 +288,5 @@ void h2o_status_register(h2o_pathconf_t *conf)
     self->super.on_context_dispose = on_context_dispose;
     self->super.on_req = on_req;
     h2o_config_register_status_handler(conf->global, requests_status_handler);
-    h2o_config_register_status_handler(conf->global, errors_status_handler);
+    h2o_config_register_status_handler(conf->global, events_status_handler);
 }
