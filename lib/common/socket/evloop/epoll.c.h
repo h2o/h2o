@@ -117,6 +117,9 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
     if (nevents == -1)
         return -1;
 
+    if (nevents != 0)
+        h2o_sliding_counter_start(&loop->super.exec_time_counter, loop->super._now);
+
     /* update readable flags, perform writes */
     for (i = 0; i != nevents; ++i) {
         struct st_h2o_evloop_socket_t *sock = events[i].data.ptr;

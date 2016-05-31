@@ -557,6 +557,11 @@ int h2o_evloop_run(h2o_evloop_t *loop)
     assert(loop->_pending_as_client == NULL);
     assert(loop->_pending_as_server == NULL);
 
+    if (h2o_sliding_counter_is_running(&loop->exec_time_counter)) {
+        update_now(loop);
+        h2o_sliding_counter_stop(&loop->exec_time_counter, loop->_now);
+    }
+
     return 0;
 }
 

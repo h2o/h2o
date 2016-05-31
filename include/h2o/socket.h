@@ -51,6 +51,22 @@ extern "C" {
 #define H2O_USE_NPN 0
 #endif
 
+typedef struct st_h2o_sliding_counter_t {
+    uint64_t average;
+    struct {
+        uint64_t sum;
+        uint64_t slots[8];
+        size_t index;
+    } prev;
+    struct {
+        uint64_t start_at;
+    } cur;
+} h2o_sliding_counter_t;
+
+static int h2o_sliding_counter_is_running(h2o_sliding_counter_t *counter);
+static void h2o_sliding_counter_start(h2o_sliding_counter_t *counter, uint64_t now);
+void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now);
+
 #define H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE 4096
 
 typedef struct st_h2o_socket_t h2o_socket_t;
@@ -319,6 +335,16 @@ inline h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t 
 {
     const char *s = h2o_socket_get_ssl_cipher(sock);
     return s != NULL ? h2o_iovec_init(s, strlen(s)) : h2o_iovec_init(H2O_STRLIT("-"));
+}
+
+inline int h2o_sliding_counter_is_running(h2o_sliding_counter_t *counter)
+{
+    return counter->cur.start_at != 0;
+}
+
+inline void h2o_sliding_counter_start(h2o_sliding_counter_t *counter, uint64_t now)
+{
+    counter->cur.start_at = now;
 }
 
 #ifdef __cplusplus

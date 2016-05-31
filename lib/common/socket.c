@@ -981,3 +981,27 @@ void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols)
 }
 
 #endif
+
+void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now)
+{
+    uint64_t elapsed;
+
+    assert(counter->cur.start_at != 0);
+
+    /* calculate the time used, and reset cur */
+    if (now <= counter->cur.start_at)
+        elapsed = 0;
+    else
+        elapsed = now - counter->cur.start_at;
+    counter->cur.start_at = 0;
+
+    /* adjust prev */
+    counter->prev.sum += elapsed;
+    counter->prev.sum -= counter->prev.slots[counter->prev.index];
+    counter->prev.slots[counter->prev.index] = elapsed;
+    if (++counter->prev.index >= sizeof(counter->prev.slots) / sizeof(counter->prev.slots[0]))
+        counter->prev.index = 0;
+
+    /* recalc average */
+    counter->average = counter->prev.sum / (sizeof(counter->prev.slots) / sizeof(counter->prev.slots[0]));
+}

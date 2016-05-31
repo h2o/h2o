@@ -46,7 +46,34 @@ static void test_on_alpn_select(void)
     ok(h2o_memis(out, outlen, H2O_STRLIT("h2-16")));
 }
 
+static void test_sliding_counter(void)
+{
+    h2o_sliding_counter_t counter = {};
+    size_t i;
+
+    h2o_sliding_counter_start(&counter, 100);
+    h2o_sliding_counter_stop(&counter, 80 + 100);
+    ok(counter.average == 10);
+
+    for (i = 0; i != 7; ++i) {
+        h2o_sliding_counter_start(&counter, 1);
+        h2o_sliding_counter_stop(&counter, 81);
+    }
+    ok(counter.average == 80);
+
+    h2o_sliding_counter_start(&counter, 1000);
+    h2o_sliding_counter_stop(&counter, 1000 + 1000 * 8 - 80 * 7);
+    ok(counter.average == 1000);
+
+    for (i = 0; i != 8; ++i) {
+        h2o_sliding_counter_start(&counter, 1);
+        h2o_sliding_counter_stop(&counter, 11);
+    }
+    ok(counter.average == 10);
+}
+
 void test_lib__common__socket_c(void)
 {
     subtest("on_alpn_select", test_on_alpn_select);
+    subtest("sliding_counter", test_sliding_counter);
 }
