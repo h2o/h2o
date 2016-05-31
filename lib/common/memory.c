@@ -358,6 +358,8 @@ void h2o_mem_swap(void *_x, void *_y, size_t len)
         memcpy(x, y, blocksz);
         memcpy(y, buf, blocksz);
         len -= blocksz;
+        x += blocksz;
+        y += blocksz;
     }
 }
 
