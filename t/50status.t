@@ -40,7 +40,7 @@ EOT
     my $jresp = decode_json("$resp");
     is $jresp->{'connections'}, 1, "One connection";
     is $jresp->{'requests'}, undef, "Requests not present";
-    is $jresp->{'http1-errors.404'}, 0, "Internal errors monitoring";
+    is $jresp->{'status-errors.404'}, 0, "Internal errors monitoring";
 };
 
 subtest "json hander check 404 error counter" => sub {
@@ -58,7 +58,7 @@ EOT
     my $jresp = decode_json("$resp");
     is $jresp->{'connections'}, undef, "Connections not present";
     is $jresp->{'requests'}, undef, "Requests not present";
-    is $jresp->{'http1-errors.404'}, 1, "Found the 404 error";
+    is $jresp->{'status-errors.404'}, 1, "Found the 404 error";
 };
 
 
