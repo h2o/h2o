@@ -196,6 +196,7 @@ static void *writer_main(void *_conn)
                 discard_req(req);
                 if (err != YRMCDS_OK)
                     goto Error;
+                break;
             default:
                 fprintf(stderr, "[lib/common/memcached.c] unknown type:%d\n", (int)req->type);
                 err = YRMCDS_NOT_IMPLEMENTED;
