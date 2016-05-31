@@ -161,7 +161,7 @@ void h2o_compress_register_configurator(h2o_globalconf_t *conf)
     c->super.enter = on_config_enter;
     c->super.exit = on_config_exit;
     h2o_configurator_define_command(&c->super, "compress", H2O_CONFIGURATOR_FLAG_ALL_LEVELS, on_config_compress);
-    h2o_configurator_define_command(&c->super, "compress-min-size",
+    h2o_configurator_define_command(&c->super, "compress-minimum-size",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_compress_min_size);
     h2o_configurator_define_command(&c->super, "gzip", H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,

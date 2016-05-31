@@ -65,8 +65,7 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
         h2o_req_fill_mime_attributes(req);
     if (!req->res.mime_attr->is_compressible)
         goto Next;
-    /* 100 is a rough estimate */
-    if (req->res.content_length <= self->args.min_size)
+    if (req->res.content_length < self->args.min_size)
         goto Next;
     /* skip if failed to gather the list of compressible types */
     if ((compressible_types = h2o_get_compressible_types(&req->headers)) == 0)
