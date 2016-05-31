@@ -51,6 +51,16 @@ EOT
             my $resp = `nghttp $opts -n --stat '$proto://127.0.0.1:$port/index.txt?resp:link=</index.txt.gz>\%3b\%20rel=preload'`;
             like $resp, qr{\nid\s*responseEnd\s.*\s/index\.txt\?.*\s/index\.txt.gz\n}is;
         };
+        subtest "push-1xx" => sub {
+            my $out = `nghttp $opts -n --stat '$proto://127.0.0.1:$port/1xx-push/'`;
+            # index.js arrives < 100ms, and /1xx-push/ arrives > 1sec
+            $out = (split /^.*?\nid *responseEnd .*?\n/s, $out, 2)[1];
+            chomp $out;
+            my @responses = split /\n/, $out;
+            is scalar(@responses), 2, "2 responses";
+            like $responses[0], qr{\+[0-9]{1,2}\.[0-9]*ms .* /index.js$}, "index.js arrives < 100ms";
+            like $responses[1], qr{\+1\.[0-9]*s .* /1xx-push/$}, "/1xx-push/ arrives >= 1sec";
+        };
         subtest 'push-while-sleep' => sub {
             my $resp = `nghttp $opts -n --stat '$proto://127.0.0.1:$port/mruby/sleep-and-respond?sleep=1'`;
             like $resp, qr{\nid\s*responseEnd\s.*\s/index\.txt\.gz\n.*\s/mruby/sleep-and-respond}is;

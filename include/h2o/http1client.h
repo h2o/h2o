@@ -40,6 +40,8 @@ typedef h2o_http1client_body_cb (*h2o_http1client_head_cb)(h2o_http1client_t *cl
                                                            size_t num_headers);
 typedef h2o_http1client_head_cb (*h2o_http1client_connect_cb)(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs,
                                                               size_t *reqbufcnt, int *method_is_head);
+typedef int (*h2o_http1client_informational_cb)(h2o_http1client_t *client, int minor_version, int status, h2o_iovec_t msg,
+                                                struct phr_header *headers, size_t num_headers);
 
 typedef struct st_h2o_http1client_ctx_t {
     h2o_loop_t *loop;
@@ -60,6 +62,7 @@ struct st_h2o_http1client_t {
     } ssl;
     h2o_socket_t *sock;
     void *data;
+    h2o_http1client_informational_cb informational_cb;
 };
 
 extern const char *const h2o_http1client_error_is_eos;
