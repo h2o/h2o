@@ -238,6 +238,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/proxy.c
     lib/handler/redirect.c
     lib/handler/reproxy.c
+    lib/handler/throttle_resp.c
     lib/handler/status.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/compress.c
@@ -249,6 +250,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
     lib/handler/configurator/reproxy.c
+    lib/handler/configurator/throttle_resp.c
     lib/handler/configurator/status.c
 
     lib/http1.c

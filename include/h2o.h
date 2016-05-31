@@ -428,6 +428,10 @@ struct st_h2o_context_t {
      */
     h2o_timeout_t one_sec_timeout;
     /**
+     * timeout structrue to be used for registering 100-milisecond timeout callbacks
+     */
+    h2o_timeout_t hundred_ms_timeout;
+    /**
      * pointer to the global configuration
      */
     h2o_globalconf_t *globalconf;
@@ -1406,6 +1410,16 @@ h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, int quali
  * registers the configurator for the gzip/brotli output filter
  */
 void h2o_compress_register_configurator(h2o_globalconf_t *conf);
+
+/* lib/handler/throttle_resp.c */
+/**
+ * registers the throttle response filter
+ */
+void h2o_throttle_resp_register(h2o_pathconf_t *pathconf);
+/**
+ * configurator
+ */
+void h2o_throttle_resp_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/errordoc.c */
 
