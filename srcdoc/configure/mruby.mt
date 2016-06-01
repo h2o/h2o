@@ -65,7 +65,7 @@ Support for <a href="configure/basic_auth.html">Basic Authentication</a> is also
 When enabled using the <a href="configure/reproxy_directives.html#reproxy"><code>reproxy</code></a> directive, it is possible to delegate the request from the mruby handler to any other handler.
 </p>
 <p>
-<?= $ctx->{example}->('Pushing asset files', <<'EOT')
+<?= $ctx->{example}->('Rewriting URL with delegation', <<'EOT')
 paths:
   "/":
     mruby.handler: |
