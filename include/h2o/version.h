@@ -22,14 +22,14 @@
 #ifndef h2o__version_h
 #define h2o__version_h
 
-#define H2O_VERSION "2.0.0-beta5"
+#define H2O_VERSION "2.0.0"
 
 #define H2O_VERSION_MAJOR 2
 #define H2O_VERSION_MINOR 0
 #define H2O_VERSION_PATCH 0
 
 #define H2O_LIBRARY_VERSION_MAJOR 0
-#define H2O_LIBRARY_VERSION_MINOR 10
+#define H2O_LIBRARY_VERSION_MINOR 11
 #define H2O_LIBRARY_VERSION_PATCH 0
 
 #endif
