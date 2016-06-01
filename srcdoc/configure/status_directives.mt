@@ -18,7 +18,16 @@ EOT
 ?>
 <p>
 Access to the handler should be <a href="configure/mruby.html#access-control">restricted</a>, considering the fact that the status includes the details of in-flight HTTP requests.
-The example below uses <a href="configure/basic_auth.html">Basic authentication</a>.
+The example below uses <a href="configure/basic_auth.html">Basic authentication</a>.</p>
+<p>The information returned by the <code>/json</code> handler can be filtered out using
+the optional <code>show=module1,module2</code> parameter.</p>
+
+<p>There are currently three modules defined:
+<ul>
+<li><code>requests</code>: displays the requests currently in-flight.</li>
+<li><code>errors</code>: displays counters for internally generated errors.</li>
+<li><code>main</code>: displays general daemon-wide stats.</li>
+</ul>
 </p>
 <?= $ctx->{example}->("Exposing status with Basic authentication", <<'EOT');
 paths:

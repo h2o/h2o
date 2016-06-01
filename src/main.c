@@ -134,7 +134,7 @@ static struct {
         h2o_context_t ctx;
         h2o_multithread_receiver_t server_notifications;
         h2o_multithread_receiver_t memcached;
-    } *threads;
+    } * threads;
     volatile sig_atomic_t shutdown_requested;
     volatile sig_atomic_t initialized_threads;
     struct {
@@ -1131,7 +1131,8 @@ static yoml_t *load_config(const char *fn)
     yoml = yoml_parse_document(&parser, NULL, NULL, fn);
 
     if (yoml == NULL)
-        fprintf(stderr, "failed to parse configuration file:%s:line %d:%s\n", fn, (int)parser.problem_mark.line + 1, parser.problem);
+        fprintf(stderr, "failed to parse configuration file:%s:line %d:%s\n", fn, (int)parser.problem_mark.line + 1,
+                parser.problem);
 
     yaml_parser_delete(&parser);
 
@@ -1368,7 +1369,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
 
 static char **build_server_starter_argv(const char *h2o_cmd, const char *config_file)
 {
-    H2O_VECTOR(char *)args = {};
+    H2O_VECTOR(char *) args = {};
     size_t i;
 
     h2o_vector_reserve(NULL, &args, 1);
@@ -1382,8 +1383,9 @@ static char **build_server_starter_argv(const char *h2o_cmd, const char *config_
     }
     if (conf.error_log != NULL) {
         h2o_vector_reserve(NULL, &args, args.size + 1);
-        args.entries[args.size++] = h2o_concat(NULL, h2o_iovec_init(H2O_STRLIT("--log-file=")),
-                                               h2o_iovec_init(conf.error_log, strlen(conf.error_log))).base;
+        args.entries[args.size++] =
+            h2o_concat(NULL, h2o_iovec_init(H2O_STRLIT("--log-file=")), h2o_iovec_init(conf.error_log, strlen(conf.error_log)))
+                .base;
     }
 
     switch (conf.run_mode) {
@@ -1442,7 +1444,7 @@ static int run_using_server_starter(const char *h2o_cmd, const char *config_file
     return EX_CONFIG;
 }
 
-static h2o_iovec_t on_extra_status(h2o_globalconf_t *_conf, h2o_mem_pool_t *pool)
+static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_req_t *req)
 {
 #define BUFSIZE 1024
     h2o_iovec_t ret;
@@ -1455,7 +1457,7 @@ static h2o_iovec_t on_extra_status(h2o_globalconf_t *_conf, h2o_mem_pool_t *pool
     if ((generation = getenv("SERVER_STARTER_GENERATION")) == NULL)
         generation = "null";
 
-    ret.base = h2o_mem_alloc_pool(pool, BUFSIZE);
+    ret.base = h2o_mem_alloc_pool(&req->pool, BUFSIZE);
     ret.len = snprintf(ret.base, BUFSIZE, ",\n"
                                           " \"server-version\": \"" H2O_VERSION "\",\n"
                                           " \"openssl-version\": \"%s\",\n"
@@ -1528,7 +1530,7 @@ static void setup_configurators(void)
     h2o_mruby_register_configurator(&conf.globalconf);
 #endif
 
-    conf.globalconf.status.extra_status = on_extra_status;
+    h2o_config_register_simple_status_handler(&conf.globalconf, (h2o_iovec_t){H2O_STRLIT("main")}, on_extra_status);
 }
 
 int main(int argc, char **argv)
@@ -1755,7 +1757,7 @@ int main(int argc, char **argv)
     { /* initialize SSL_CTXs for session resumption and ticket-based resumption (also starts memcached client threads for the
          purpose) */
         size_t i, j;
-        H2O_VECTOR(SSL_CTX *)ssl_contexts = {};
+        H2O_VECTOR(SSL_CTX *) ssl_contexts = {};
         for (i = 0; i != conf.num_listeners; ++i) {
             for (j = 0; j != conf.listeners[i]->ssl.size; ++j) {
                 h2o_vector_reserve(NULL, &ssl_contexts, ssl_contexts.size + 1);

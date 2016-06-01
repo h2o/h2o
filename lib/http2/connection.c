@@ -278,10 +278,17 @@ int close_connection(h2o_http2_conn_t *conn)
     return 0;
 }
 
+static inline void h2o_context_http2_protocol_error_count(h2o_context_t *ctx, int errnum)
+{
+    ctx->http2.events.protocol_level_errors[-errnum]++;
+}
+
 void send_stream_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum)
 {
     assert(stream_id != 0);
     assert(conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING);
+
+    h2o_context_http2_protocol_error_count(conn->super.ctx, -errnum);
 
     h2o_http2_encode_rst_stream_frame(&conn->_write.buf, stream_id, -errnum);
     h2o_http2_conn_request_write(conn);
@@ -844,6 +851,7 @@ static void on_read(h2o_socket_t *sock, const char *err)
     h2o_http2_conn_t *conn = sock->data;
 
     if (err != NULL) {
+        conn->super.ctx->http2.events.read_closed++;
         h2o_socket_read_stop(conn->sock);
         close_connection(conn);
         return;
@@ -918,6 +926,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
 
     /* close by error if necessary */
     if (err != NULL) {
+        conn->super.ctx->http2.events.write_closed++;
         close_connection_now(conn);
         return;
     }
@@ -1125,10 +1134,10 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         get_sockname, /* stringify address */
         get_peername, /* ditto */
         push_path,    /* HTTP2 push */
-        get_socket, /* get underlying socket */
+        get_socket,   /* get underlying socket */
         {{
             {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits}, /* ssl */
-            {}, /* http1 */
+            {},                                                                      /* http1 */
             {log_stream_id, log_priority_received, log_priority_received_exclusive, log_priority_received_parent,
              log_priority_received_weight, log_priority_actual, log_priority_actual_parent, log_priority_actual_weight} /* http2 */
         }} /* loggers */
@@ -1165,7 +1174,8 @@ static int update_push_memo(h2o_http2_conn_t *conn, h2o_req_t *src_req, const ch
 
     /* uses the hash as the key */
     h2o_cache_hashcode_t url_hash = h2o_cache_calchash(src_req->input.scheme->name.base, src_req->input.scheme->name.len) ^
-        h2o_cache_calchash(src_req->input.authority.base, src_req->input.authority.len) ^ h2o_cache_calchash(abspath, abspath_len);
+                                    h2o_cache_calchash(src_req->input.authority.base, src_req->input.authority.len) ^
+                                    h2o_cache_calchash(abspath, abspath_len);
     return h2o_cache_set(conn->push_memo, 0, h2o_iovec_init(&url_hash, sizeof(url_hash)), url_hash, h2o_iovec_init(NULL, 0));
 }
 
@@ -1305,7 +1315,8 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
         goto Error;
     }
     if ((settings_decoded = h2o_decode_base64url(&req->pool, req->headers.entries[settings_index].value.base,
-                                                 req->headers.entries[settings_index].value.len)).base == NULL) {
+                                                 req->headers.entries[settings_index].value.len))
+            .base == NULL) {
         goto Error;
     }
     if (h2o_http2_update_peer_settings(&http2conn->peer_settings, (uint8_t *)settings_decoded.base, settings_decoded.len,
