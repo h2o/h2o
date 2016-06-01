@@ -309,7 +309,7 @@ H2O_NORETURN static void *ticket_internal_updater(void *unused)
         update_tickets(&session_tickets.tickets, time(NULL));
         pthread_rwlock_unlock(&session_tickets.rwlock);
         /* sleep for certain amount of time */
-        sleep(120 - (rand() >> 16) % 7);
+        sleep(120 - (h2o_rand() >> 16) % 7);
     }
 }
 
