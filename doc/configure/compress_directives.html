@@ -117,6 +117,27 @@ compress: [ gzip ]
 </dd>
 </dl>
 
+<div id="compress-minimum-size" class="directive-head">
+<div class="directive-since">since v2.0</div>
+<h3><a href="configure/compress_directives.html#compress-minimum-size"><code>"compress-minimum-size"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Defines the minimum size a files needs to have in order for H2O to compress the request.
+
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extension</dd>
+<dt>Default:</dt>
+<dd><code><pre>compress-minimum-size: 100</pre></code>
+</dl>
+
+
 <div id="gzip" class="directive-head">
 <div class="directive-since">since v1.5</div>
 <h3><a href="configure/compress_directives.html#gzip"><code>"gzip"</code></a></h3>
