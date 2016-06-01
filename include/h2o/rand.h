@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 DeNA Co., Ltd.
+ * Copyright (c) 2016 David Carlier
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -21,17 +21,17 @@
  */
 #ifndef h2o__rand_h
 #define h2o__rand_h
-#include <sys/param.h>
 
-#ifdef  BSD
-#if OpenBSD >= 201405 || __NetBSD_vVersion__ > 700000000
+#include <stdlib.h>
+#include <unistd.h>
+
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #define h2o_srand()
 #define h2o_rand()      \
     arc4random()
-#endif
 #else
 #define h2o_srand()     \
-    srand(time(NULL))
+    srand(time(NULL) ^ getpid())
 #define h2o_rand()      \
     rand()
 #endif
