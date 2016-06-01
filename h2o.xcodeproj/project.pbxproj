@@ -187,6 +187,8 @@
 		10BCF3011B214C460076939D /* fastcgi.c in Sources */ = {isa = PBXBuildFile; fileRef = 10BCF3001B214C460076939D /* fastcgi.c */; };
 		10C45D4F1CFD15FA0096DB06 /* throttle_resp.c in Sources */ = {isa = PBXBuildFile; fileRef = 10C45D4E1CFD15FA0096DB06 /* throttle_resp.c */; };
 		10C45D511CFD160A0096DB06 /* throttle_resp.c in Sources */ = {isa = PBXBuildFile; fileRef = 10C45D501CFD160A0096DB06 /* throttle_resp.c */; };
+		10C45D551CFE9B300096DB06 /* events.c in Sources */ = {isa = PBXBuildFile; fileRef = 10C45D531CFE9B300096DB06 /* events.c */; };
+		10C45D561CFE9B300096DB06 /* requests.c in Sources */ = {isa = PBXBuildFile; fileRef = 10C45D541CFE9B300096DB06 /* requests.c */; };
 		10D0903A19F0A51C0043D458 /* memory.h in Headers */ = {isa = PBXBuildFile; fileRef = 10D0903919F0A51C0043D458 /* memory.h */; };
 		10D0903E19F0A8190043D458 /* socket.h in Headers */ = {isa = PBXBuildFile; fileRef = 10D0903D19F0A8190043D458 /* socket.h */; };
 		10D0904119F0B9CD0043D458 /* timeout.h in Headers */ = {isa = PBXBuildFile; fileRef = 10D0904019F0B9CD0043D458 /* timeout.h */; };
@@ -564,6 +566,9 @@
 		10C45D4D1CFD15890096DB06 /* 50throttle-response.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50throttle-response.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10C45D4E1CFD15FA0096DB06 /* throttle_resp.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = throttle_resp.c; sourceTree = "<group>"; };
 		10C45D501CFD160A0096DB06 /* throttle_resp.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = throttle_resp.c; sourceTree = "<group>"; };
+		10C45D531CFE9B300096DB06 /* events.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = events.c; sourceTree = "<group>"; };
+		10C45D541CFE9B300096DB06 /* requests.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = requests.c; sourceTree = "<group>"; };
+		10C45D571CFE9BB60096DB06 /* 50status.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 50status.t; sourceTree = "<group>"; };
 		10C5A6311B268632006094A6 /* 50fastcgi.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50fastcgi.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10D0903919F0A51C0043D458 /* memory.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = memory.h; sourceTree = "<group>"; };
 		10D0903D19F0A8190043D458 /* socket.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = socket.h; sourceTree = "<group>"; };
@@ -744,6 +749,7 @@
 				10AA2EA41A8D9999004322AC /* redirect.c */,
 				10AA2EC31AA0403A004322AC /* reproxy.c */,
 				10835E021C9A860000197E59 /* status.c */,
+				10C45D521CFE9B180096DB06 /* status */,
 				10C45D501CFD160A0096DB06 /* throttle_resp.c */,
 			);
 			path = handler;
@@ -1299,6 +1305,15 @@
 			path = libh2o;
 			sourceTree = "<group>";
 		};
+		10C45D521CFE9B180096DB06 /* status */ = {
+			isa = PBXGroup;
+			children = (
+				10C45D531CFE9B300096DB06 /* events.c */,
+				10C45D541CFE9B300096DB06 /* requests.c */,
+			);
+			path = status;
+			sourceTree = "<group>";
+		};
 		10D0903F19F0B90A0043D458 /* socket */ = {
 			isa = PBXGroup;
 			children = (
@@ -1353,6 +1368,7 @@
 				10DA969A1CCEF2C200679165 /* 50reverse-proxy-https.t */,
 				104B9A2B1A4BBDA4009EEE64 /* 50server-starter.t */,
 				105534FA1A460F4200627ECB /* 50sni.t */,
+				10C45D571CFE9BB60096DB06 /* 50status.t */,
 				10C45D4D1CFD15890096DB06 /* 50throttle-response.t */,
 				105534FE1A46134A00627ECB /* 80issues61.t */,
 				1092E0011BEB1DDC001074BF /* 80issues579.t */,
@@ -1662,6 +1678,7 @@
 				10D0905519F102C70043D458 /* http1client.c in Sources */,
 				10DA969E1CD2BFAC00679165 /* cache.c in Sources */,
 				107923D219A3217300C52AD6 /* token.c in Sources */,
+				10C45D551CFE9B300096DB06 /* events.c in Sources */,
 				1058C88A1AA6E5E3008D6180 /* hostinfo.c in Sources */,
 				10AA2EBC1A9EEDF8004322AC /* proxy.c in Sources */,
 				10AA2EC01AA019FC004322AC /* headers.c in Sources */,
@@ -1679,6 +1696,7 @@
 				10583BF11AE5A37B004A3AD6 /* Makefile in Sources */,
 				107923CD19A3217300C52AD6 /* memory.c in Sources */,
 				107923CC19A3217300C52AD6 /* context.c in Sources */,
+				10C45D561CFE9B300096DB06 /* requests.c in Sources */,
 				10A3D40C1B50DAB700327CF9 /* socket.c in Sources */,
 				10AA2EC21AA0402E004322AC /* reproxy.c in Sources */,
 				10835E011C9A6C2400197E59 /* logconf.c in Sources */,
