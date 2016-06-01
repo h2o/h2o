@@ -1386,6 +1386,7 @@ typedef struct st_h2o_compress_context_t {
 } h2o_compress_context_t;
 
 typedef struct st_h2o_compress_args_t {
+    size_t min_size;
     struct {
         int quality; /* -1 if disabled */
     } gzip;
