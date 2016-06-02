@@ -262,7 +262,11 @@ struct st_h2o_hostconf_t {
          * whether if blocking assets being pulled should be given highest priority in case of clients that do not implement
          * dependency-based prioritization
          */
-        int reprioritize_blocking_assets;
+        int reprioritize_blocking_assets : 1;
+        /**
+         * if server push should be used
+         */
+        int push_preload : 1;
         /**
          * casper settings
          */
