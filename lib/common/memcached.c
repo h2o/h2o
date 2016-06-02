@@ -25,6 +25,7 @@
 #include "yrmcds.h"
 #include "h2o/linklist.h"
 #include "h2o/memcached.h"
+#include "h2o/rand.h"
 #include "h2o/string_.h"
 
 struct st_h2o_memcached_context_t {
@@ -230,7 +231,7 @@ static void connect_to_server(h2o_memcached_context_t *ctx, yrmcds *yrmcds)
                     yrmcds_strerror(err));
         }
         ++failcnt;
-        usleep(2000000 + rand() % 3000000); /* sleep 2 to 5 seconds */
+        usleep(2000000 + h2o_rand() % 3000000); /* sleep 2 to 5 seconds */
     }
     /* connected */
     if (ctx->text_protocol)
