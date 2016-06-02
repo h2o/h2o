@@ -782,6 +782,10 @@ typedef struct st_h2o_req_overrides_t {
          */
         h2o_iovec_t path_prefix;
     } location_rewrite;
+    /**
+     * whether if the PROXY header should be sent
+     */
+    unsigned use_proxy_protocol : 1;
 } h2o_req_overrides_t;
 
 /**
@@ -1056,6 +1060,12 @@ void h2o_accept_setup_async_ssl_resumption(h2o_memcached_context_t *ctx, unsigne
  * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")
  */
 size_t h2o_stringify_protocol_version(char *dst, int version);
+/**
+ * builds the proxy header defined by the PROXY PROTOCOL
+ */
+size_t h2o_stringify_proxy_header(h2o_conn_t *conn, char *buf);
+#define H2O_PROXY_HEADER_MAX_LENGTH                                                                                                \
+    (sizeof("PROXY TCP6 ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 65535 65535\r\n") - 1)
 /**
  * extracts path to be pushed from `Link: rel=prelead` header, duplicating the chunk (or returns {NULL,0} if none)
  */
@@ -1663,7 +1673,8 @@ void h2o_headers_register_configurator(h2o_globalconf_t *conf);
 
 typedef struct st_h2o_proxy_config_vars_t {
     uint64_t io_timeout;
-    int preserve_host;
+    unsigned preserve_host : 1;
+    unsigned use_proxy_protocol : 1;
     uint64_t keepalive_timeout; /* in milliseconds; set to zero to disable keepalive */
     struct {
         int enabled;

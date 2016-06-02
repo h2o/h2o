@@ -47,6 +47,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     }
     overrides->location_rewrite.match = &self->upstream;
     overrides->location_rewrite.path_prefix = req->pathconf->path;
+    overrides->use_proxy_protocol = self->config.use_proxy_protocol;
     overrides->client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
 
     /* determine the scheme and authority */
