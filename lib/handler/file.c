@@ -498,7 +498,7 @@ static void gen_rand_string(h2o_iovec_t *s)
                                    "abcdefghijklmnopqrstuvwxyz";
 
     for (i = 0; i < s->len; ++i) {
-        s->base[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
+        s->base[i] = alphanum[h2o_rand() % (sizeof(alphanum) - 1)];
     }
 
     s->base[s->len] = 0;

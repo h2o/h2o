@@ -43,6 +43,7 @@ extern "C" {
 #include "h2o/http1client.h"
 #include "h2o/memory.h"
 #include "h2o/multithread.h"
+#include "h2o/rand.h"
 #include "h2o/socket.h"
 #include "h2o/string_.h"
 #include "h2o/time_.h"

@@ -1680,6 +1680,7 @@ int main(int argc, char **argv)
         }
     }
 
+    h2o_srand();
     /* handle run_mode == MASTER|TEST */
     switch (conf.run_mode) {
     case RUN_MODE_WORKER:
