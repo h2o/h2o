@@ -1188,7 +1188,8 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
     if (h2o_http2_stream_is_push(src_stream->stream_id))
         return;
 
-    if (!conn->peer_settings.enable_push || conn->num_streams.push.open >= conn->peer_settings.max_concurrent_streams)
+    if (!src_stream->req.hostconf->http2.push_preload || !conn->peer_settings.enable_push ||
+        conn->num_streams.push.open >= conn->peer_settings.max_concurrent_streams)
         return;
 
     if (conn->push_stream_ids.max_open >= 0x7ffffff0)
