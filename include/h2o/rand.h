@@ -27,12 +27,9 @@
 
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #define h2o_srand()
-#define h2o_rand()      \
-    arc4random()
+#define h2o_rand() arc4random()
 #else
-#define h2o_srand()     \
-    srand(time(NULL) ^ getpid())
-#define h2o_rand()      \
-    rand()
+#define h2o_srand() srand(time(NULL) ^ getpid())
+#define h2o_rand() rand()
 #endif
 #endif

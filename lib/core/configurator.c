@@ -27,7 +27,8 @@
 
 struct st_core_config_vars_t {
     struct {
-        int reprioritize_blocking_assets;
+        int reprioritize_blocking_assets : 1;
+        int push_preload : 1;
         h2o_casper_conf_t casper;
     } http2;
 };
@@ -78,6 +79,7 @@ static int on_core_exit(h2o_configurator_t *_self, h2o_configurator_context_t *c
     if (ctx->hostconf != NULL && ctx->pathconf == NULL) {
         /* exitting from host-level configuration */
         ctx->hostconf->http2.reprioritize_blocking_assets = self->vars->http2.reprioritize_blocking_assets;
+        ctx->hostconf->http2.push_preload = self->vars->http2.push_preload;
         ctx->hostconf->http2.casper = self->vars->http2.casper;
     }
 
@@ -367,6 +369,19 @@ static int on_config_http2_reprioritize_blocking_assets(h2o_configurator_command
 
     return 0;
 }
+
+static int on_config_http2_push_preload(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct st_core_configurator_t *self = (void *)cmd->configurator;
+    ssize_t on;
+
+    if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+    self->vars->http2.push_preload = (int)on;
+
+    return 0;
+}
+
 
 static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
@@ -735,6 +750,7 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         c->super.exit = on_core_exit;
         c->vars = c->_vars_stack;
         c->vars->http2.reprioritize_blocking_assets = 1; /* defaults to ON */
+        c->vars->http2.push_preload = 1; /* defaults to ON */
         h2o_configurator_define_command(&c->super, "limit-request-body",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_limit_request_body);
@@ -760,6 +776,10 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
                                             H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_reprioritize_blocking_assets);
+        h2o_configurator_define_command(&c->super, "http2-push-preload",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
+                                            H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http2_push_preload);
         h2o_configurator_define_command(&c->super, "http2-casper", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST,
                                         on_config_http2_casper);
         h2o_configurator_define_command(&c->super, "file.mime.settypes",
