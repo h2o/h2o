@@ -22,6 +22,17 @@
 #ifndef h2o__multithread_h
 #define h2o__multithread_h
 
+#if defined(__linux__) || defined(__FreeBSD__)
+#define h2o_has_cpu_affinity 1
+#if defined(__linux__)
+#include <sched.h>
+#else
+#include <sys/param.h>
+#include <sys/cpuset.h>
+#include <pthread_np.h>
+#endif
+#endif
+
 #include <pthread.h>
 #include "h2o/linklist.h"
 #include "h2o/socket.h"
@@ -56,6 +67,14 @@ typedef struct st_h2o_sem_t {
     ssize_t _cur;
     ssize_t _capacity;
 } h2o_sem_t;
+
+#if defined(h2o_has_cpu_affinity)
+#if defined(__linux__)
+#define h2o_cpuset_t cpu_set_t
+#else
+#define h2o_cpuset_t cpuset_t
+#endif
+#endif
 
 /**
  * creates a queue that is used for inter-thread communication
@@ -92,5 +111,12 @@ void h2o_sem_destroy(h2o_sem_t *sem);
 void h2o_sem_wait(h2o_sem_t *sem);
 void h2o_sem_post(h2o_sem_t *sem);
 void h2o_sem_set_capacity(h2o_sem_t *sem, ssize_t new_capacity);
+
+#if defined(h2o_has_cpu_affinity)
+void h2o_cpuset_zero(h2o_cpuset_t *cset);
+int h2o_cpuset_set(h2o_cpuset_t *cset, int cpu);
+int h2o_cpuset_count(h2o_cpuset_t *cset);
+int h2o_cpuset_csetaffinity(h2o_cpuset_t *cset, pid_t pid);
+#endif
 
 #endif

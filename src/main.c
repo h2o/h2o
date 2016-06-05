@@ -73,6 +73,14 @@
 
 #define H2O_DEFAULT_OCSP_UPDATER_MAX_THREADS 10
 
+#if defined(h2o_has_cpu_affinity)
+#define H2O_MASTER 0
+#define H2O_BACKTRACE 1
+#define H2O_CPUSETEND 2
+
+#define H2O_MAX_CPUSET H2O_CPUSETEND
+#endif
+
 struct listener_ssl_config_t {
     H2O_VECTOR(h2o_iovec_t) hostnames;
     char *certificate_file;
@@ -129,6 +137,9 @@ static struct {
     size_t num_threads;
     int tfo_queues;
     time_t launch_time;
+#if defined(h2o_has_cpu_affinity)
+    h2o_cpuset_t cset[H2O_MAX_CPUSET];
+#endif
     struct {
         pthread_t tid;
         h2o_context_t ctx;
@@ -155,6 +166,9 @@ static struct {
     0,               /* initialized in main() */
     0,               /* initialized in main() */
     0,               /* initialized in main() */
+#if defined(h2o_has_cpu_affinity)
+    {},              /* initialized in main() */
+#endif
     NULL,            /* thread_ids */
     0,               /* shutdown_requested */
     0,               /* initialized_threads */
@@ -162,6 +176,7 @@ static struct {
 };
 
 static neverbleed_t *neverbleed = NULL;
+static int numproc = 1;
 
 static void set_cloexec(int fd)
 {
@@ -1075,6 +1090,49 @@ static int on_config_num_name_resolution_threads(h2o_configurator_command_t *cmd
     return 0;
 }
 
+#if defined(h2o_has_cpu_affinity)
+static int on_config_to_cpu(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    yoml_t *ckey = NULL, *cvalue = NULL;
+    size_t i;
+
+    for (i = 0; i < node->data.mapping.size; i ++) {
+        ckey = node->data.mapping.elements[i].key;
+        cvalue = node->data.mapping.elements[i].value;
+        int index;
+        if (ckey->type == YOML_TYPE_SCALAR && cvalue->type == YOML_TYPE_SCALAR) {
+            char *p;
+            int v;
+            if (strcmp(ckey->data.scalar, "master") == 0) {
+                index = H2O_MASTER;
+            } else if (strcmp(ckey->data.scalar, "backtrace") == 0) {
+                index = H2O_BACKTRACE;
+            } else {
+                fprintf(stderr, "to-cpu: %s invalid process index\n", ckey->data.scalar);
+                return -1;
+            }
+
+            v = (int)strtol(cvalue->data.scalar, &p, 10);
+            if (*p != '\0' || v < 0 || v >= numproc) {
+                fprintf(stderr, "to-cpu: invalid cpu entry %d\n", v);
+                return -1;
+            }
+
+            int s = h2o_cpuset_set(&conf.cset[index], v);
+            fprintf(stderr, "[INFO] bind %s proc to cpu %d", ckey->data.scalar, v);
+            if (s == -1)
+                fprintf(stderr, " already set");
+            fprintf(stderr, "\n");
+        } else {
+            fprintf(stderr, "to-cpu: invalid configuration\n");
+            return -1;
+        }
+    }
+
+    return 0;
+}
+#endif
+
 static int on_config_tcp_fastopen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     if (h2o_configurator_scanf(cmd, node, "%d", &conf.tfo_queues) != 0)
@@ -1163,6 +1221,7 @@ static int popen_annotate_backtrace_symbols(void)
 {
     char *cmd_fullpath = h2o_configurator_get_cmd_path("share/h2o/annotate-backtrace-symbols"), *argv[] = {cmd_fullpath, NULL};
     int pipefds[2];
+    pid_t pid;
 
     /* create pipe */
     if (pipe(pipefds) != 0) {
@@ -1177,12 +1236,14 @@ static int popen_annotate_backtrace_symbols(void)
     int mapped_fds[] = {pipefds[0], 0, /* output of the pipe is connected to STDIN of the spawned process */
                         2, 1,          /* STDOUT of the spawned process in connected to STDERR of h2o */
                         -1};
-    if (h2o_spawnp(cmd_fullpath, argv, mapped_fds, 0) == -1) {
+    if ((pid = h2o_spawnp(cmd_fullpath, argv, mapped_fds, 0)) == -1) {
         /* silently ignore error */
         close(pipefds[0]);
         close(pipefds[1]);
         return -1;
     }
+    if (h2o_cpuset_count(&conf.cset[H2O_BACKTRACE]) > 0)
+        h2o_cpuset_csetaffinity(&conf.cset[H2O_BACKTRACE], pid);
     /* do the rest, and return the fd */
     close(pipefds[0]);
     return pipefds[1];
@@ -1504,6 +1565,10 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads);
         h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
                                         on_config_num_name_resolution_threads);
+#if defined(h2o_has_cpu_affinity)
+        h2o_configurator_define_command(c, "to-cpu", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
+                                        on_config_to_cpu);
+#endif
         h2o_configurator_define_command(c, "tcp-fastopen", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_tcp_fastopen);
         h2o_configurator_define_command(c, "ssl-session-resumption",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
@@ -1533,12 +1598,24 @@ static void setup_configurators(void)
     h2o_config_register_simple_status_handler(&conf.globalconf, (h2o_iovec_t){H2O_STRLIT("main")}, on_extra_status);
 }
 
+#if defined(h2o_has_cpu_affinity)
+static void init_cpusets(void)
+{
+    size_t i;
+    for (i = 0 ; i < sizeof(conf.cset) / sizeof(conf.cset[0]); i ++) {
+        h2o_cpuset_zero(&conf.cset[i]);
+    }
+}
+#endif
+
 int main(int argc, char **argv)
 {
     const char *cmd = argv[0], *opt_config_file = "h2o.conf";
     int error_log_fd = -1;
+    
+    numproc = h2o_numproc();
 
-    conf.num_threads = h2o_numproc();
+    conf.num_threads = numproc;
     conf.tfo_queues = H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE;
     conf.launch_time = time(NULL);
 
@@ -1548,7 +1625,9 @@ int main(int argc, char **argv)
 
     init_openssl();
     setup_configurators();
-
+#if defined(h2o_has_cpu_affinity)
+    init_cpusets();
+#endif
     { /* parse options */
         int ch;
         static struct option longopts[] = {{"conf", required_argument, NULL, 'c'},
@@ -1792,6 +1871,11 @@ int main(int argc, char **argv)
         close(error_log_fd);
         error_log_fd = -1;
     }
+
+#if defined(h2o_has_cpu_affinity)
+    if (h2o_cpuset_count(&conf.cset[H2O_MASTER]) > 0)
+        h2o_cpuset_csetaffinity(&conf.cset[H2O_MASTER], getpid());
+#endif
 
     fprintf(stderr, "h2o server (pid:%d) is ready to serve requests\n", (int)getpid());
 
