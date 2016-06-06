@@ -231,3 +231,41 @@ void h2o_sem_set_capacity(h2o_sem_t *sem, ssize_t new_capacity)
     pthread_cond_broadcast(&sem->_cond);
     pthread_mutex_unlock(&sem->_mutex);
 }
+
+#if defined(h2o_has_cpu_affinity)
+void h2o_cpuset_zero(h2o_cpuset_t *cset)
+{
+    CPU_ZERO(cset);
+}
+
+int h2o_cpuset_set(h2o_cpuset_t *cset, int cpu)
+{
+    if (!CPU_ISSET(cpu, cset)) {
+        CPU_SET(cpu, cset);
+        return 0;
+    }
+
+    return -1;
+}
+
+int h2o_cpuset_count(h2o_cpuset_t *cset)
+{
+    return CPU_COUNT(cset);
+}
+
+int h2o_cpuset_csetaffinity(h2o_cpuset_t *cset, pid_t pid)
+{
+    int ret;
+#if defined(__linux__)
+    ret = sched_setaffinity(pid, sizeof(*cset), cset);
+#else
+    ret = cpuset_setaffinity(CPU_LEVEL_WHICH, CPU_WHICH_PID, pid, sizeof(*cset), cset);
+#endif
+    if (ret == -1)
+        fprintf(stderr, "%s pid %d failed: %s\n", __FUNCTION__, pid, strerror(errno));
+    else
+        fprintf(stderr, "%s pid %d\n", __FUNCTION__, pid);
+
+    return ret;
+}
+#endif
