@@ -398,6 +398,14 @@ struct st_h2o_socket_tcp_info_t {
 };
 #endif
 
+static uint16_t calc_suggested_tls_payload_size(h2o_socket_t *sock, uint16_t suggested_tls_record_size)
+{
+    uint16_t ps = suggested_tls_record_size;
+    if (sock->ssl != NULL && sock->ssl->record_overhead < ps)
+        ps -= sock->ssl->record_overhead;
+    return ps;
+}
+
 static void prepare_for_latency_optimized_write(h2o_socket_t *sock, const h2o_socket_latency_optimization_conditions_t *conditions,
                                                 int (*fetch_tcp_info)(h2o_socket_t *, struct st_h2o_socket_tcp_info_t *),
                                                 int (*minimize_notsent_lowat)(h2o_socket_t *))
@@ -411,32 +419,33 @@ static void prepare_for_latency_optimized_write(h2o_socket_t *sock, const h2o_so
         goto Disable;
 
     /* mimimize tcp send buffer size if not yet being done */
-    if (sock->_latency_optimization.mode == H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_TBD) {
+    if (sock->_latency_optimization.state == H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD) {
         if (minimize_notsent_lowat(sock) != 0)
             goto Disable;
     }
 
     /* latency-optimization is enabled */
-    sock->_latency_optimization.mss = tcpi.tcpi_snd_mss;
+    sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED;
 
     /* no need to:
      *   1) adjust the write size if single_write_size << cwnd_size
      *   2) align TLS record boundary to TCP packet boundary if packet loss-rate is low and BW isn't small (implied by cwnd size)
      */
-    if (sock->_latency_optimization.mss * tcpi.tcpi_snd_cwnd >= conditions->max_cwnd) {
-        sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_LARGE_TLS_RECORDS;
+    if (tcpi.tcpi_snd_mss * tcpi.tcpi_snd_cwnd >= conditions->max_cwnd) {
+        sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED;
+        sock->_latency_optimization.suggested_tls_payload_size = calc_suggested_tls_payload_size(sock, 16384);
         sock->_latency_optimization.suggested_write_size = SIZE_MAX;
-        return;
+    } else {
+        size_t packets_sendable = tcpi.tcpi_snd_cwnd > tcpi.tcpi_unacked ? tcpi.tcpi_snd_cwnd - tcpi.tcpi_unacked : 0;
+        sock->_latency_optimization.suggested_tls_payload_size = calc_suggested_tls_payload_size(sock, tcpi.tcpi_snd_mss);
+        sock->_latency_optimization.suggested_write_size =
+            (packets_sendable + 1) * sock->_latency_optimization.suggested_tls_payload_size;
     }
-
-    sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_TINY_TLS_RECORDS;
-    size_t packets_sendable = tcpi.tcpi_snd_cwnd > tcpi.tcpi_unacked ? tcpi.tcpi_snd_cwnd - tcpi.tcpi_unacked : 0;
-    size_t tls_overhead = sock->ssl != NULL ? sock->ssl->record_overhead : 0;
-    sock->_latency_optimization.suggested_write_size = (packets_sendable + 1) * (sock->_latency_optimization.mss - tls_overhead);
     return;
 
 Disable:
-    sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_DISABLED;
+    sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED;
+    sock->_latency_optimization.suggested_tls_payload_size = calc_suggested_tls_payload_size(sock, 16384);
     sock->_latency_optimization.suggested_write_size = SIZE_MAX;
 }
 
@@ -474,7 +483,6 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
 {
     prepare_for_latency_optimized_write(sock, conditions, fetch_tcp_info, minimize_notsent_lowat);
     return sock->_latency_optimization.suggested_write_size;
-
 }
 
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
@@ -500,18 +508,12 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
         assert(sock->ssl->output.bufs.size == 0);
         /* fill in the data */
         size_t ssl_record_size;
-        switch (sock->_latency_optimization.mode) {
-        case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_TINY_TLS_RECORDS:
-        case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_NEEDS_UPDATE:
-            ssl_record_size = sock->_latency_optimization.mss;
-            sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_NEEDS_UPDATE;
-            break;
-        case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_LARGE_TLS_RECORDS:
-            ssl_record_size = 16384 - sock->ssl->record_overhead;
-            sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_NEEDS_UPDATE;
+        switch (sock->_latency_optimization.state) {
+        case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD:
+            ssl_record_size = 1400;
             break;
         default:
-            ssl_record_size = 1400;
+            ssl_record_size = sock->_latency_optimization.suggested_tls_payload_size;
             break;
         }
         for (; bufcnt != 0; ++bufs, --bufcnt) {

@@ -85,11 +85,10 @@ struct st_h2o_socket_peername_t {
 };
 
 enum {
-    H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_TBD = 0,
-    H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_DISABLED,
-    H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_NEEDS_UPDATE,
-    H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_TINY_TLS_RECORDS,
-    H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_LARGE_TLS_RECORDS
+    H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD = 0,
+    H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE,
+    H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED,
+    H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED
 };
 
 /**
@@ -110,8 +109,8 @@ struct st_h2o_socket_t {
     } _cb;
     struct st_h2o_socket_peername_t *_peername;
     struct {
-        uint8_t mode; /* one of H2O_SOCKET_LATENCY_MODE_* */
-        uint16_t mss;
+        uint8_t state; /* one of H2O_SOCKET_LATENCY_STATE_* */
+        uint16_t suggested_tls_payload_size;
         size_t suggested_write_size; /* SIZE_MAX if no need to optimize for latency */
     } _latency_optimization;
 };
@@ -317,9 +316,9 @@ inline int h2o_socket_is_reading(h2o_socket_t *sock)
 inline size_t h2o_socket_prepare_for_latency_optimized_write(h2o_socket_t *sock,
                                                              const h2o_socket_latency_optimization_conditions_t *conditions)
 {
-    switch (sock->_latency_optimization.mode) {
-    case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_TBD:
-    case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_NEEDS_UPDATE:
+    switch (sock->_latency_optimization.state) {
+    case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD:
+    case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE:
         return h2o_socket_do_prepare_for_latency_optimized_write(sock, conditions);
     default:
         return sock->_latency_optimization.suggested_write_size;
