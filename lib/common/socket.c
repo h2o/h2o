@@ -52,6 +52,7 @@
 struct st_h2o_socket_ssl_t {
     SSL *ssl;
     int *did_write_in_read; /* used for detecting and closing the connection upon renegotiation (FIXME implement renegotiation) */
+    size_t record_overhead;
     struct {
         h2o_socket_cb cb;
         union {
@@ -399,39 +400,13 @@ struct st_h2o_socket_tcp_info_t {
 
 static void prepare_for_latency_optimized_write(h2o_socket_t *sock, const h2o_socket_latency_optimization_conditions_t *conditions,
                                                 int (*fetch_tcp_info)(h2o_socket_t *, struct st_h2o_socket_tcp_info_t *),
-                                                int (*minimize_notsent_lowat)(h2o_socket_t *),
-                                                unsigned long (*get_cipher)(h2o_socket_t *))
+                                                int (*minimize_notsent_lowat)(h2o_socket_t *))
 {
     struct st_h2o_socket_tcp_info_t tcpi;
 
     switch (sock->_latency_optimization.mode) {
 
     case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_TBD:
-        switch (get_cipher(sock)) {
-        case 0: /* tls not used */
-            sock->_latency_optimization.tls_overhead = 0;
-            break;
-        case TLS1_CK_RSA_WITH_AES_128_GCM_SHA256:
-        case TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256:
-        case TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
-        case TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:
-        case TLS1_CK_RSA_WITH_AES_256_GCM_SHA384:
-        case TLS1_CK_DHE_RSA_WITH_AES_256_GCM_SHA384:
-        case TLS1_CK_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
-        case TLS1_CK_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:
-            sock->_latency_optimization.tls_overhead = 5 /* header */ + 8 /* record_iv_length (RFC 5288 3) */ + 16 /* tag (RFC 5116 5.1) */;
-            break;
-#if defined(TLS1_CK_DHE_RSA_CHACHA20_POLY1305)
-        case TLS1_CK_DHE_RSA_CHACHA20_POLY1305:
-        case TLS1_CK_ECDHE_RSA_CHACHA20_POLY1305:
-        case TLS1_CK_ECDHE_ECDSA_CHACHA20_POLY1305:
-            sock->_latency_optimization.tls_overhead = 5 /* header */ + 16 /* tag */;
-            break;
-#endif
-        default:
-            sock->_latency_optimization.tls_overhead = 32; /* sufficiently large value to hold most ciphers */
-            break;
-        }
         if (fetch_tcp_info(sock, &tcpi) != 0)
             goto Disable;
         if (tcpi.tcpi_rtt < conditions->min_rtt * 1000)
@@ -466,8 +441,8 @@ static void prepare_for_latency_optimized_write(h2o_socket_t *sock, const h2o_so
 
     sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_TINY_TLS_RECORDS;
     size_t packets_sendable = tcpi.tcpi_snd_cwnd > tcpi.tcpi_unacked ? tcpi.tcpi_snd_cwnd - tcpi.tcpi_unacked : 0;
-    sock->_latency_optimization.suggested_write_size =
-        (packets_sendable + 1) * (sock->_latency_optimization.mss - sock->_latency_optimization.tls_overhead);
+    size_t tls_overhead = sock->ssl != NULL ? sock->ssl->record_overhead : 0;
+    sock->_latency_optimization.suggested_write_size = (packets_sendable + 1) * (sock->_latency_optimization.mss - tls_overhead);
     return;
 
 Disable:
@@ -504,19 +479,10 @@ static int minimize_notsent_lowat(h2o_socket_t *sock)
 
 #endif
 
-static unsigned long get_cipher(h2o_socket_t *sock)
-{
-    if (sock->ssl != NULL) {
-        const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ssl);
-        return cipher->id;
-    }
-    return 0;
-}
-
 size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
                                                          const h2o_socket_latency_optimization_conditions_t *conditions)
 {
-    prepare_for_latency_optimized_write(sock, conditions, fetch_tcp_info, minimize_notsent_lowat, get_cipher);
+    prepare_for_latency_optimized_write(sock, conditions, fetch_tcp_info, minimize_notsent_lowat);
     return sock->_latency_optimization.suggested_write_size;
 
 }
@@ -551,7 +517,7 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
             sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_NEEDS_UPDATE;
             break;
         case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_LARGE_TLS_RECORDS:
-            ssl_record_size = 16384 - sock->_latency_optimization.tls_overhead;
+            ssl_record_size = 16384 - sock->ssl->record_overhead;
             sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_NEEDS_UPDATE;
             break;
         default:
@@ -775,6 +741,31 @@ static void on_async_resumption_remove(SSL_CTX *ssl_ctx, SSL_SESSION *session)
 
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
+    if (err == NULL) {
+        switch (SSL_get_current_cipher(sock->ssl->ssl)->id) {
+        case TLS1_CK_RSA_WITH_AES_128_GCM_SHA256:
+        case TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256:
+        case TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
+        case TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:
+        case TLS1_CK_RSA_WITH_AES_256_GCM_SHA384:
+        case TLS1_CK_DHE_RSA_WITH_AES_256_GCM_SHA384:
+        case TLS1_CK_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
+        case TLS1_CK_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:
+            sock->ssl->record_overhead = 5 /* header */ + 8 /* record_iv_length (RFC 5288 3) */ + 16 /* tag (RFC 5116 5.1) */;
+            break;
+#if defined(TLS1_CK_DHE_RSA_CHACHA20_POLY1305)
+        case TLS1_CK_DHE_RSA_CHACHA20_POLY1305:
+        case TLS1_CK_ECDHE_RSA_CHACHA20_POLY1305:
+        case TLS1_CK_ECDHE_ECDSA_CHACHA20_POLY1305:
+            sock->ssl->record_overhead = 5 /* header */ + 16 /* tag */;
+            break;
+#endif
+        default:
+            sock->ssl->record_overhead = 32; /* sufficiently large number that can hold most payloads */
+            break;
+        }
+    }
+
     h2o_socket_cb handshake_cb = sock->ssl->handshake.cb;
     sock->_cb.write = NULL;
     sock->ssl->handshake.cb = NULL;

@@ -105,21 +105,22 @@ static unsigned long test_get_cipher(h2o_socket_t *sock)
 
 static void test_prepare_for_latency_optimization(void)
 {
-    h2o_socket_t sock = {};
+    struct st_h2o_socket_ssl_t sock_ssl = {NULL, NULL, 5 + 8 + 16 /* GCM overhead */};
+    h2o_socket_t sock = {NULL, &sock_ssl};
     h2o_socket_latency_optimization_conditions_t cond = {UINT_MAX, 65535};
 
     /* feature unabled */
-    memset(&sock, 0, sizeof(sock));
+    memset(&sock._latency_optimization, 0, sizeof(sock._latency_optimization));
     memset(&cb_ret_vars, 0, sizeof(cb_ret_vars));
     cb_ret_vars.fetch_tcp_info.ret = -1;
     cb_ret_vars.minimize_notsent_lowat.ret = -1;
-    prepare_for_latency_optimized_write(&sock, &cond, test_fetch_tcp_info, test_minimize_notsent_lowat, test_get_cipher);
+    prepare_for_latency_optimized_write(&sock, &cond, test_fetch_tcp_info, test_minimize_notsent_lowat);
     ok(cb_ret_vars.minimize_notsent_lowat.call_cnt == 0);
     ok(sock._latency_optimization.mode == H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_DISABLED);
     ok(sock._latency_optimization.suggested_write_size == SIZE_MAX);
 
     /* option disabled, or if rtt is too small */
-    memset(&sock, 0, sizeof(sock));
+    memset(&sock._latency_optimization, 0, sizeof(sock._latency_optimization));
     memset(&cb_ret_vars, 0, sizeof(cb_ret_vars));
     cb_ret_vars.fetch_tcp_info.ret = 0;
     cb_ret_vars.fetch_tcp_info.tcp_info.tcpi_rtt = 50000; /* 50 ms */
@@ -127,49 +128,44 @@ static void test_prepare_for_latency_optimization(void)
     cb_ret_vars.fetch_tcp_info.tcp_info.tcpi_snd_cwnd = 10;
     cb_ret_vars.fetch_tcp_info.tcp_info.tcpi_unacked = 5;
     cb_ret_vars.get_cipher.ret = TLS1_CK_RSA_WITH_AES_128_GCM_SHA256;
-    prepare_for_latency_optimized_write(&sock, &cond, test_fetch_tcp_info, test_minimize_notsent_lowat, test_get_cipher);
+    prepare_for_latency_optimized_write(&sock, &cond, test_fetch_tcp_info, test_minimize_notsent_lowat);
     ok(sock._latency_optimization.mode == H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_DISABLED);
     ok(sock._latency_optimization.suggested_write_size == SIZE_MAX);
-    ok(sock._latency_optimization.tls_overhead == 5 + 8 + 16);
     ok(cb_ret_vars.minimize_notsent_lowat.call_cnt == 0);
 
     /* trigger optimiziation */
-    memset(&sock, 0, sizeof(sock));
+    memset(&sock._latency_optimization, 0, sizeof(sock._latency_optimization));
     cond.min_rtt = 25; /* 25 ms */
-    prepare_for_latency_optimized_write(&sock, &cond, test_fetch_tcp_info, test_minimize_notsent_lowat, test_get_cipher);
+    prepare_for_latency_optimized_write(&sock, &cond, test_fetch_tcp_info, test_minimize_notsent_lowat);
     ok(sock._latency_optimization.mode == H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_TINY_TLS_RECORDS);
     ok(sock._latency_optimization.suggested_write_size == (1400 - (5 + 8 + 16)) * (10 - 5 + 1));
-    ok(sock._latency_optimization.tls_overhead = 5 + 8 + 16);
     ok(cb_ret_vars.minimize_notsent_lowat.call_cnt == 1);
 
     /* recalculate with an updated cwnd,unacked */
     sock._latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_NEEDS_UPDATE;
     cb_ret_vars.fetch_tcp_info.tcp_info.tcpi_snd_cwnd = 14;
     cb_ret_vars.fetch_tcp_info.tcp_info.tcpi_unacked = 3;
-    prepare_for_latency_optimized_write(&sock, &cond, test_fetch_tcp_info, test_minimize_notsent_lowat, test_get_cipher);
+    prepare_for_latency_optimized_write(&sock, &cond, test_fetch_tcp_info, test_minimize_notsent_lowat);
     ok(sock._latency_optimization.mode == H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_TINY_TLS_RECORDS);
     ok(sock._latency_optimization.suggested_write_size == (1400 - (5 + 8 + 16)) * (14 - 3 + 1));
-    ok(sock._latency_optimization.tls_overhead == 5 + 8 + 16);
     ok(cb_ret_vars.minimize_notsent_lowat.call_cnt == 1);
 
     /* switches to B/W optimization when CWND becomes greater */
     sock._latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_NEEDS_UPDATE;
     cb_ret_vars.fetch_tcp_info.tcp_info.tcpi_snd_cwnd = (65535 / 1400) + 1;
     cb_ret_vars.fetch_tcp_info.tcp_info.tcpi_unacked = 3;
-    prepare_for_latency_optimized_write(&sock, &cond, test_fetch_tcp_info, test_minimize_notsent_lowat, test_get_cipher);
+    prepare_for_latency_optimized_write(&sock, &cond, test_fetch_tcp_info, test_minimize_notsent_lowat);
     ok(sock._latency_optimization.mode == H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_LARGE_TLS_RECORDS);
     ok(sock._latency_optimization.suggested_write_size == SIZE_MAX);
-    ok(sock._latency_optimization.tls_overhead == 5 + 8 + 16);
     ok(cb_ret_vars.minimize_notsent_lowat.call_cnt == 1);
 
     /* switches back to latency optimization when CWND becomes small */
     sock._latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_NEEDS_UPDATE;
     cb_ret_vars.fetch_tcp_info.tcp_info.tcpi_snd_cwnd = 8;
     cb_ret_vars.fetch_tcp_info.tcp_info.tcpi_unacked = 3;
-    prepare_for_latency_optimized_write(&sock, &cond, test_fetch_tcp_info, test_minimize_notsent_lowat, test_get_cipher);
+    prepare_for_latency_optimized_write(&sock, &cond, test_fetch_tcp_info, test_minimize_notsent_lowat);
     ok(sock._latency_optimization.mode == H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_TINY_TLS_RECORDS);
     ok(sock._latency_optimization.suggested_write_size == (1400 - (5 + 8 + 16)) * (8 - 3 + 1));
-    ok(sock._latency_optimization.tls_overhead == 5 + 8 + 16);
     ok(cb_ret_vars.minimize_notsent_lowat.call_cnt == 1);
 }
 

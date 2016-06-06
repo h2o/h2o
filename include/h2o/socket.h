@@ -111,7 +111,6 @@ struct st_h2o_socket_t {
     struct st_h2o_socket_peername_t *_peername;
     struct {
         uint8_t mode; /* one of H2O_SOCKET_LATENCY_MODE_* */
-        uint8_t tls_overhead;
         uint16_t mss;
         size_t suggested_write_size; /* SIZE_MAX if no need to optimize for latency */
     } _latency_optimization;
