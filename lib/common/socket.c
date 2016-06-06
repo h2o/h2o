@@ -404,30 +404,20 @@ static void prepare_for_latency_optimized_write(h2o_socket_t *sock, const h2o_so
 {
     struct st_h2o_socket_tcp_info_t tcpi;
 
-    switch (sock->_latency_optimization.mode) {
+    /* obtain TCP info check conditions, and turn off the feature unless necessary */
+    if (fetch_tcp_info(sock, &tcpi) != 0)
+        goto Disable;
+    if (tcpi.tcpi_rtt < conditions->min_rtt * 1000)
+        goto Disable;
 
-    case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_TBD:
-        if (fetch_tcp_info(sock, &tcpi) != 0)
-            goto Disable;
-        if (tcpi.tcpi_rtt < conditions->min_rtt * 1000)
-            goto Disable;
+    /* mimimize tcp send buffer size if not yet being done */
+    if (sock->_latency_optimization.mode == H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_TBD) {
         if (minimize_notsent_lowat(sock) != 0)
             goto Disable;
-        /* successfully set up.  Save the parameters */
-        sock->_latency_optimization.mss = tcpi.tcpi_snd_mss;
-        break;
-    case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_NEEDS_UPDATE:
-        /* re-fetch TCP_INFO */
-        if (fetch_tcp_info(sock, &tcpi) != 0)
-            goto Disable;
-        break;
-
-    default:
-        h2o_fatal("unexpected mode");
-        break;
     }
 
-    /* latency-optimization is enabled, and TCP_INFO is obtained */
+    /* latency-optimization is enabled */
+    sock->_latency_optimization.mss = tcpi.tcpi_snd_mss;
 
     /* no need to:
      *   1) adjust the write size if single_write_size << cwnd_size
