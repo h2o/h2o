@@ -386,66 +386,65 @@ void h2o_socket_close(h2o_socket_t *sock)
     }
 }
 
-#if defined(TCP_INFO) && defined(TCP_NOTSENT_LOWAT) && !H2O_USE_LIBUV
+#ifdef TCP_INFO
+#define st_h2o_socket_tcp_info_t tcp_info
+#else
+struct st_h2o_socket_tcp_info_t {
+    unsigned tcpi_rtt;
+    unsigned tcpi_snd_mss;
+    unsigned tcpi_snd_cwnd;
+    unsigned tcpi_unacked;
+};
+#endif
 
-static int fetch_tcp_info(h2o_socket_t *sock, struct tcp_info *info)
+static void prepare_for_latency_optimized_write(h2o_socket_t *sock, const h2o_socket_latency_optimization_conditions_t *conditions,
+                                                int (*fetch_tcp_info)(h2o_socket_t *, struct st_h2o_socket_tcp_info_t *),
+                                                int (*minimize_notsent_lowat)(h2o_socket_t *),
+                                                unsigned long (*get_cipher)(h2o_socket_t *))
 {
-    int fd = h2o_socket_get_fd(sock);
-    socklen_t sz = sizeof(*info);
-    return getsockopt(fd, IPPROTO_TCP, TCP_INFO, info, &sz);
-}
-
-size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
-                                                         const h2o_socket_latency_optimization_conditions_t *conditions)
-{
-    struct tcp_info tcpi;
+    struct st_h2o_socket_tcp_info_t tcpi;
 
     switch (sock->_latency_optimization.mode) {
 
-    case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_TBD: {
-        int16_t tls_overhead;
+    case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_TBD:
+        switch (get_cipher(sock)) {
+        case 0: /* tls not used */
+            sock->_latency_optimization.tls_overhead = 0;
+            break;
+        case TLS1_CK_RSA_WITH_AES_128_GCM_SHA256:
+        case TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256:
+        case TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
+        case TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:
+        case TLS1_CK_RSA_WITH_AES_256_GCM_SHA384:
+        case TLS1_CK_DHE_RSA_WITH_AES_256_GCM_SHA384:
+        case TLS1_CK_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
+        case TLS1_CK_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:
+            sock->_latency_optimization.tls_overhead = 5 /* header */ + 8 /* record_iv_length (RFC 5288 3) */ + 16 /* tag (RFC 5116 5.1) */;
+            break;
+#if defined(TLS1_CK_DHE_RSA_CHACHA20_POLY1305)
+        case TLS1_CK_DHE_RSA_CHACHA20_POLY1305:
+        case TLS1_CK_ECDHE_RSA_CHACHA20_POLY1305:
+        case TLS1_CK_ECDHE_ECDSA_CHACHA20_POLY1305:
+            sock->_latency_optimization.tls_overhead = 5 /* header */ + 16 /* tag */;
+            break;
+#endif
+        default:
+            sock->_latency_optimization.tls_overhead = 32; /* sufficiently large value to hold most ciphers */
+            break;
+        }
         if (fetch_tcp_info(sock, &tcpi) != 0)
             goto Disable;
         if (tcpi.tcpi_rtt < conditions->min_rtt * 1000)
             goto Disable;
-        if (sock->ssl != NULL) {
-            const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ssl);
-            switch (cipher->id) {
-            case TLS1_CK_RSA_WITH_AES_128_GCM_SHA256:
-            case TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256:
-            case TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
-            case TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:
-            case TLS1_CK_RSA_WITH_AES_256_GCM_SHA384:
-            case TLS1_CK_DHE_RSA_WITH_AES_256_GCM_SHA384:
-            case TLS1_CK_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
-            case TLS1_CK_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:
-                tls_overhead = 5 /* header */ + 8 /* record_iv_length (RFC 5288 3) */ + 16 /* tag (RFC 5116 5.1) */;
-                break;
-#if defined(TLS1_CK_DHE_RSA_CHACHA20_POLY1305)
-            case TLS1_CK_DHE_RSA_CHACHA20_POLY1305:
-            case TLS1_CK_ECDHE_RSA_CHACHA20_POLY1305:
-            case TLS1_CK_ECDHE_ECDSA_CHACHA20_POLY1305:
-                tls_overhead = 5 /* header */ + 16 /* tag */;
-                break;
-#endif
-            default:
-                goto Disable;
-            }
-        } else {
-            tls_overhead = 0;
-        }
-        int notsent_lowat = 1; /* cannot be set to zero on Linux */
-        if (setsockopt(h2o_socket_get_fd(sock), IPPROTO_TCP, TCP_NOTSENT_LOWAT, &notsent_lowat, sizeof(notsent_lowat)) != 0)
+        if (minimize_notsent_lowat(sock) != 0)
             goto Disable;
         /* successfully set up.  Save the parameters */
-        sock->_latency_optimization.tls_overhead = tls_overhead;
         sock->_latency_optimization.mss = tcpi.tcpi_snd_mss;
-    } break;
-
+        break;
     case H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_NEEDS_UPDATE:
         /* re-fetch TCP_INFO */
         if (fetch_tcp_info(sock, &tcpi) != 0)
-            return SIZE_MAX;
+            goto Disable;
         break;
 
     default:
@@ -461,30 +460,66 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
      */
     if (sock->_latency_optimization.mss * tcpi.tcpi_snd_cwnd >= conditions->max_cwnd) {
         sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_LARGE_TLS_RECORDS;
-        return SIZE_MAX;
+        sock->_latency_optimization.suggested_write_size = SIZE_MAX;
+        return;
     }
 
     sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_TINY_TLS_RECORDS;
     size_t packets_sendable = tcpi.tcpi_snd_cwnd > tcpi.tcpi_unacked ? tcpi.tcpi_snd_cwnd - tcpi.tcpi_unacked : 0;
     sock->_latency_optimization.suggested_write_size =
         (packets_sendable + 1) * (sock->_latency_optimization.mss - sock->_latency_optimization.tls_overhead);
-    return sock->_latency_optimization.suggested_write_size;
+    return;
 
 Disable:
     sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_DISABLED;
-    return SIZE_MAX;
+    sock->_latency_optimization.suggested_write_size = SIZE_MAX;
+}
+
+#if defined(TCP_INFO) && defined(TCP_NOTSENT_LOWAT) && !H2O_USE_LIBUV
+
+static int fetch_tcp_info(h2o_socket_t *sock, struct st_h2o_socket_tcp_info_t *info)
+{
+    int fd = h2o_socket_get_fd(sock);
+    socklen_t sz = sizeof(*info);
+    return getsockopt(fd, IPPROTO_TCP, TCP_INFO, info, &sz);
+}
+
+static int minimize_notsent_lowat(h2o_socket_t *sock)
+{
+    int notsent_lowat = 1; /* cannot be set to zero on Linux */
+    return setsockopt(h2o_socket_get_fd(sock), IPPROTO_TCP, TCP_NOTSENT_LOWAT, &notsent_lowat, sizeof(notsent_lowat));
 }
 
 #else
 
-size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
-                                                         const h2o_socket_latency_optimization_conditions_t *conditions)
+static int fetch_tcp_info(h2o_socket_t *sock, struct st_h2o_socket_tcp_info_t *info)
 {
-    sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_DISABLED;
-    return SIZE_MAX;
+    return -1;
+}
+
+static int minimize_notsent_lowat(h2o_socket_t *sock)
+{
+    return -1;
 }
 
 #endif
+
+static unsigned long get_cipher(h2o_socket_t *sock)
+{
+    if (sock->ssl != NULL) {
+        const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ssl);
+        return cipher->id;
+    }
+    return 0;
+}
+
+size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
+                                                         const h2o_socket_latency_optimization_conditions_t *conditions)
+{
+    prepare_for_latency_optimized_write(sock, conditions, fetch_tcp_info, minimize_notsent_lowat, get_cipher);
+    return sock->_latency_optimization.suggested_write_size;
+
+}
 
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
