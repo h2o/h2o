@@ -355,6 +355,18 @@ static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurat
     return h2o_configurator_scanf(cmd, node, "%zu", &ctx->globalconf->http2.max_concurrent_requests_per_connection);
 }
 
+static int on_config_http2_latency_optimization_min_rtt(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
+                                                        yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%u", &ctx->globalconf->http2.latency_optimization.min_rtt);
+}
+
+static int on_config_http2_latency_optimization_max_cwnd(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
+                                                         yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%u", &ctx->globalconf->http2.latency_optimization.max_cwnd);
+}
+
 static int on_config_http2_reprioritize_blocking_assets(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
                                                         yoml_t *node)
 {
@@ -756,6 +768,12 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "http2-max-concurrent-requests-per-connection",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_max_concurrent_requests_per_connection);
+        h2o_configurator_define_command(&c->super, "http2-latency-optimization-min-rtt",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http2_latency_optimization_min_rtt);
+        h2o_configurator_define_command(&c->super, "http2-latency-optimization-max-cwnd",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http2_latency_optimization_max_cwnd);
         h2o_configurator_define_command(&c->super, "http2-reprioritize-blocking-assets",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
                                             H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,

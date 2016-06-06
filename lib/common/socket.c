@@ -395,7 +395,8 @@ static int fetch_tcp_info(h2o_socket_t *sock, struct tcp_info *info)
     return getsockopt(fd, IPPROTO_TCP, TCP_INFO, info, &sz);
 }
 
-size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock, int minimum_rtt)
+size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
+                                                         const h2o_socket_latency_optimization_conditions_t *conditions)
 {
     struct tcp_info tcpi;
 
@@ -405,7 +406,7 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock, int
         int16_t tls_overhead;
         if (fetch_tcp_info(sock, &tcpi) != 0)
             goto Disable;
-        if (tcpi.tcpi_rtt < minimum_rtt)
+        if (tcpi.tcpi_rtt < conditions->min_rtt * 1000)
             goto Disable;
         if (sock->ssl != NULL) {
             const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ssl);
@@ -458,7 +459,7 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock, int
      *   1) adjust the write size if single_write_size << cwnd_size
      *   2) align TLS record boundary to TCP packet boundary if packet loss-rate is low and BW isn't small (implied by cwnd size)
      */
-    if (sock->_latency_optimization.mss * tcpi.tcpi_snd_cwnd >= 65536) {
+    if (sock->_latency_optimization.mss * tcpi.tcpi_snd_cwnd >= conditions->max_cwnd) {
         sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_USE_LARGE_TLS_RECORDS;
         return SIZE_MAX;
     }
@@ -476,7 +477,8 @@ Disable:
 
 #else
 
-size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock, int minimum_rtt)
+size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
+                                                         const h2o_socket_latency_optimization_conditions_t *conditions)
 {
     sock->_latency_optimization.mode = H2O_SOCKET_LATENCY_OPTIMIZATION_MODE_DISABLED;
     return SIZE_MAX;

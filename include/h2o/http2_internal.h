@@ -345,7 +345,8 @@ inline ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn)
     size_t capacity, cwnd_left;
 
     capacity = conn->_write.buf->capacity;
-    if ((cwnd_left = h2o_socket_prepare_for_latency_optimized_write(conn->sock, 20000)) < capacity) {
+    if ((cwnd_left = h2o_socket_prepare_for_latency_optimized_write(
+             conn->sock, &conn->super.ctx->globalconf->http2.latency_optimization)) < capacity) {
         capacity = cwnd_left;
         if (capacity < conn->_write.buf->size)
             return 0;
