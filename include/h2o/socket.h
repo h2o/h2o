@@ -130,6 +130,10 @@ typedef struct st_h2o_socket_latency_optimization_conditions_t {
      */
     unsigned min_rtt;
     /**
+     * percent ratio
+     */
+    unsigned max_additional_delay;
+    /**
      * in number of octets
      */
     unsigned max_cwnd;

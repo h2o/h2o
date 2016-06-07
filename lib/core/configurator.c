@@ -361,6 +361,20 @@ static int on_config_http2_latency_optimization_min_rtt(h2o_configurator_command
     return h2o_configurator_scanf(cmd, node, "%u", &ctx->globalconf->http2.latency_optimization.min_rtt);
 }
 
+static int on_config_http2_latency_optimization_max_additional_delay(h2o_configurator_command_t *cmd,
+                                                                     h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    double ratio;
+    if (h2o_configurator_scanf(cmd, node, "%lf", &ratio) != 0)
+        return -1;
+    if (!(0.0 < ratio)) {
+        h2o_configurator_errprintf(cmd, node, "ratio must be a positive number");
+        return -1;
+    }
+    ctx->globalconf->http2.latency_optimization.max_additional_delay = 100 * ratio;
+    return 0;
+}
+
 static int on_config_http2_latency_optimization_max_cwnd(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
                                                          yoml_t *node)
 {
@@ -771,6 +785,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "http2-latency-optimization-min-rtt",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_latency_optimization_min_rtt);
+        h2o_configurator_define_command(&c->super, "http2-latency-optimization-max-additional-delay",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http2_latency_optimization_max_additional_delay);
         h2o_configurator_define_command(&c->super, "http2-latency-optimization-max-cwnd",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_latency_optimization_max_cwnd);
