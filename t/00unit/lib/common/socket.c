@@ -85,7 +85,7 @@ static struct {
     } get_cipher;
 } cb_ret_vars;
 
-static int test_minimize_notsent_lowat(h2o_socket_t *sock)
+static int test_adjust_notsent_lowat(h2o_socket_t *sock, unsigned notsent_lowat)
 {
     ++cb_ret_vars.minimize_notsent_lowat.call_cnt;
     return cb_ret_vars.minimize_notsent_lowat.ret;
@@ -108,7 +108,7 @@ static void test_prepare_for_latency_optimization(void)
     tcpi.tcpi_snd_cwnd = 10;
     tcpi.tcpi_unacked = 5;
     cb_ret_vars.get_cipher.ret = TLS1_CK_RSA_WITH_AES_128_GCM_SHA256;
-    prepare_for_latency_optimized_write(&sock, &cond, &tcpi, 4, test_minimize_notsent_lowat);
+    prepare_for_latency_optimized_write(&sock, &cond, &tcpi, 4, test_adjust_notsent_lowat);
     ok(sock._latency_optimization.state == H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED);
     ok(sock._latency_optimization.suggested_tls_payload_size == (16384 - (5 + 8 + 16)));
     ok(sock._latency_optimization.suggested_write_size == SIZE_MAX);
@@ -117,7 +117,7 @@ static void test_prepare_for_latency_optimization(void)
     /* trigger optimiziation */
     memset(&sock._latency_optimization, 0, sizeof(sock._latency_optimization));
     cond.min_rtt = 25; /* 25 ms */
-    prepare_for_latency_optimized_write(&sock, &cond, &tcpi, 4, test_minimize_notsent_lowat);
+    prepare_for_latency_optimized_write(&sock, &cond, &tcpi, 4, test_adjust_notsent_lowat);
     ok(sock._latency_optimization.state == H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED);
     ok(sock._latency_optimization.suggested_tls_payload_size == 1400 - (5 + 8 + 16));
     ok(sock._latency_optimization.suggested_write_size == (1400 - (5 + 8 + 16)) * (10 - 5 + 1));
@@ -127,7 +127,7 @@ static void test_prepare_for_latency_optimization(void)
     sock._latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE;
     tcpi.tcpi_snd_cwnd = 14;
     tcpi.tcpi_unacked = 3;
-    prepare_for_latency_optimized_write(&sock, &cond, &tcpi, 4, test_minimize_notsent_lowat);
+    prepare_for_latency_optimized_write(&sock, &cond, &tcpi, 4, test_adjust_notsent_lowat);
     ok(sock._latency_optimization.state == H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED);
     ok(sock._latency_optimization.suggested_tls_payload_size == 1400 - (5 + 8 + 16));
     ok(sock._latency_optimization.suggested_write_size == (1400 - (5 + 8 + 16)) * (14 - 3 + 1));
@@ -137,7 +137,7 @@ static void test_prepare_for_latency_optimization(void)
     sock._latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE;
     tcpi.tcpi_snd_cwnd = (65535 / 1400) + 1;
     tcpi.tcpi_unacked = 3;
-    prepare_for_latency_optimized_write(&sock, &cond, &tcpi, 4, test_minimize_notsent_lowat);
+    prepare_for_latency_optimized_write(&sock, &cond, &tcpi, 4, test_adjust_notsent_lowat);
     ok(sock._latency_optimization.state == H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED);
     ok(sock._latency_optimization.suggested_tls_payload_size == 16384 - (5 + 8 + 16));
     ok(sock._latency_optimization.suggested_write_size == SIZE_MAX);
@@ -147,7 +147,7 @@ static void test_prepare_for_latency_optimization(void)
     sock._latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE;
     tcpi.tcpi_snd_cwnd = 8;
     tcpi.tcpi_unacked = 3;
-    prepare_for_latency_optimized_write(&sock, &cond, &tcpi, 4, test_minimize_notsent_lowat);
+    prepare_for_latency_optimized_write(&sock, &cond, &tcpi, 4, test_adjust_notsent_lowat);
     ok(sock._latency_optimization.state == H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED);
     ok(sock._latency_optimization.suggested_tls_payload_size == 1400 - (5 + 8 + 16));
     ok(sock._latency_optimization.suggested_write_size == (1400 - (5 + 8 + 16)) * (8 - 3 + 1));
@@ -157,11 +157,11 @@ static void test_prepare_for_latency_optimization(void)
     sock._latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE;
     tcpi.tcpi_snd_cwnd = 8;
     tcpi.tcpi_unacked = 3;
-    prepare_for_latency_optimized_write(&sock, &cond, &tcpi, 6, test_minimize_notsent_lowat);
+    prepare_for_latency_optimized_write(&sock, &cond, &tcpi, 6, test_adjust_notsent_lowat);
     ok(sock._latency_optimization.state == H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED);
     ok(sock._latency_optimization.suggested_tls_payload_size == 16384 - (5 + 8 + 16));
     ok(sock._latency_optimization.suggested_write_size == SIZE_MAX);
-    ok(cb_ret_vars.minimize_notsent_lowat.call_cnt == 1);
+    ok(cb_ret_vars.minimize_notsent_lowat.call_cnt == 2);
 }
 
 void test_lib__common__socket_c(void)

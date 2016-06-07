@@ -414,7 +414,7 @@ struct tcp_info {
 static inline void prepare_for_latency_optimized_write(h2o_socket_t *sock,
                                                        const h2o_socket_latency_optimization_conditions_t *conditions,
                                                        struct tcp_info *tcpi, uint64_t loop_time,
-                                                       int (*minimize_notsent_lowat)(h2o_socket_t *))
+                                                       int (*adjust_notsent_lowat)(h2o_socket_t *, unsigned))
 {
     /* check RTT */
     if (tcpi->tcpi_rtt < conditions->min_rtt * 1000)
@@ -424,7 +424,7 @@ static inline void prepare_for_latency_optimized_write(h2o_socket_t *sock,
 
     /* mimimize tcp send buffer size if not yet being done */
     if (sock->_latency_optimization.state == H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD) {
-        if (minimize_notsent_lowat(sock) != 0)
+        if (adjust_notsent_lowat(sock, 1 /* cannot be set to zero on Linux */) != 0)
             goto Disable;
     }
 
@@ -448,13 +448,14 @@ static inline void prepare_for_latency_optimized_write(h2o_socket_t *sock,
     return;
 
 Disable:
+    if (sock->_latency_optimization.state != H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD)
+        adjust_notsent_lowat(sock, UINT_MAX);
     disable_latency_optimized_write(sock);
 }
 
 #ifdef TCP_NOTSENT_LOWAT
-static inline int minimize_notsent_lowat(h2o_socket_t *sock)
+static inline int adjust_notsent_lowat(h2o_socket_t *sock, unsigned notsent_lowat)
 {
-    int notsent_lowat = 1; /* cannot be set to zero on Linux */
     return setsockopt(h2o_socket_get_fd(sock), IPPROTO_TCP, TCP_NOTSENT_LOWAT, &notsent_lowat, sizeof(notsent_lowat));
 }
 #endif
@@ -468,7 +469,7 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
 
     if (getsockopt(h2o_socket_get_fd(sock), IPPROTO_TCP, TCP_INFO, &tcpi, &tcpisz) == 0) {
         prepare_for_latency_optimized_write(sock, conditions, &tcpi, h2o_evloop_get_execution_time(h2o_socket_get_loop(sock)),
-                                            minimize_notsent_lowat);
+                                            adjust_notsent_lowat);
     } else
 #endif
         disable_latency_optimized_write(sock);
