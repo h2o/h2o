@@ -765,6 +765,7 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
         return -1;
     }
     if (mode != UINT_MAX && chmod(sa->sun_path, mode) != 0) {
+        close(fd);
         h2o_configurator_errprintf(NULL, node, "failed to chmod socket:%s to %o: %s", sa->sun_path, mode, strerror(errno));
         return -1;
     }
@@ -967,6 +968,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol);
                 listener_is_new = 1;
             } else if (listener->proxy_protocol != proxy_protocol) {
+                freeaddrinfo(res);
                 goto ProxyConflict;
             }
             if (listener_setup_ssl(cmd, ctx, node, ssl_node, listener, listener_is_new) != 0)
