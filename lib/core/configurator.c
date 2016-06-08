@@ -22,6 +22,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <inttypes.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
 
@@ -115,9 +116,9 @@ static int setup_configurators(h2o_configurator_context_t *ctx, int is_enter, yo
 
 static int config_timeout(h2o_configurator_command_t *cmd, yoml_t *node, uint64_t *slot)
 {
-    unsigned timeout_in_secs;
+    uint64_t timeout_in_secs;
 
-    if (h2o_configurator_scanf(cmd, node, "%u", &timeout_in_secs) != 0)
+    if (h2o_configurator_scanf(cmd, node, "%" PRIu64, &timeout_in_secs) != 0)
         return -1;
 
     *slot = timeout_in_secs * 1000;
