@@ -956,12 +956,15 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         if ((fd = find_listener_from_server_starter(ai->ai_addr)) == -1) {
                             h2o_configurator_errprintf(cmd, node, "tcp socket:%s:%s is not being bound to the server\n", hostname,
                                                        servname);
+                            freeaddrinfo(res);
                             return -1;
                         }
                     } else {
                         if ((fd = open_tcp_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
-                                                    ai->ai_addr, ai->ai_addrlen)) == -1)
+                                                    ai->ai_addr, ai->ai_addrlen)) == -1) {
+                            freeaddrinfo(res);
                             return -1;
+                        }
                     }
                     break;
                 default:
@@ -973,8 +976,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 freeaddrinfo(res);
                 goto ProxyConflict;
             }
-            if (listener_setup_ssl(cmd, ctx, node, ssl_node, listener, listener_is_new) != 0)
+            if (listener_setup_ssl(cmd, ctx, node, ssl_node, listener, listener_is_new) != 0) {
+                freeaddrinfo(res);
                 return -1;
+            }
             if (listener->hosts != NULL && ctx->hostconf != NULL)
                 h2o_append_to_null_terminated_list((void *)&listener->hosts, ctx->hostconf);
         }
