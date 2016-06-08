@@ -299,6 +299,7 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
         h2o_configurator_context_t *host_ctx = create_context(ctx, 0);
         if ((host_ctx->hostconf = h2o_config_register_host(host_ctx->globalconf, hostname, port)) == NULL) {
             h2o_configurator_errprintf(cmd, key, "duplicate host entry");
+            destroy_context(host_ctx);
             return -1;
         }
         host_ctx->mimemap = &host_ctx->hostconf->mimemap;
