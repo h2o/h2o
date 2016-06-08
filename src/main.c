@@ -715,7 +715,7 @@ Found:
 static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, struct sockaddr_un *sa)
 {
     struct stat st;
-    int fd;
+    int fd = -1;
     struct passwd *owner = NULL, pwbuf;
     char pwbuf_buf[65536];
     unsigned mode = UINT_MAX;
@@ -725,17 +725,17 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
     if ((t = yoml_get(node, "owner")) != NULL) {
         if (t->type != YOML_TYPE_SCALAR) {
             h2o_configurator_errprintf(cmd, t, "`owner` is not a scalar");
-            return -1;
+            goto ErrorExit;
         }
         if (getpwnam_r(t->data.scalar, &pwbuf, pwbuf_buf, sizeof(pwbuf_buf), &owner) != 0 || owner == NULL) {
             h2o_configurator_errprintf(cmd, t, "failed to obtain uid of user:%s: %s", t->data.scalar, strerror(errno));
-            return -1;
+            goto ErrorExit;
         }
     }
     if ((t = yoml_get(node, "permission")) != NULL) {
         if (t->type != YOML_TYPE_SCALAR || sscanf(t->data.scalar, "%o", &mode) != 1) {
             h2o_configurator_errprintf(cmd, t, "`permission` must be an octal number");
-            return -1;
+            goto ErrorExit;
         }
     }
 
@@ -745,16 +745,14 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
             unlink(sa->sun_path);
         } else {
             h2o_configurator_errprintf(cmd, node, "path:%s already exists and is not an unix socket.", sa->sun_path);
-            return -1;
+            goto ErrorExit;
         }
     }
 
     /* add new listener */
     if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1 || bind(fd, (void *)sa, sizeof(*sa)) != 0 || listen(fd, H2O_SOMAXCONN) != 0) {
-        if (fd != -1)
-            close(fd);
         h2o_configurator_errprintf(NULL, node, "failed to listen to socket:%s: %s", sa->sun_path, strerror(errno));
-        return -1;
+        goto ErrorExit;
     }
     set_cloexec(fd);
 
@@ -762,14 +760,19 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
     if (owner != NULL && chown(sa->sun_path, owner->pw_uid, owner->pw_gid) != 0) {
         h2o_configurator_errprintf(NULL, node, "failed to chown socket:%s to %s: %s", sa->sun_path, owner->pw_name,
                                    strerror(errno));
-        return -1;
+        goto ErrorExit;
     }
     if (mode != UINT_MAX && chmod(sa->sun_path, mode) != 0) {
         h2o_configurator_errprintf(NULL, node, "failed to chmod socket:%s to %o: %s", sa->sun_path, mode, strerror(errno));
-        return -1;
+        goto ErrorExit;
     }
 
     return fd;
+
+ErrorExit:
+    if (fd != -1)
+        close(fd);
+    return -1;
 }
 
 static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain,
@@ -953,12 +956,15 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         if ((fd = find_listener_from_server_starter(ai->ai_addr)) == -1) {
                             h2o_configurator_errprintf(cmd, node, "tcp socket:%s:%s is not being bound to the server\n", hostname,
                                                        servname);
+                            freeaddrinfo(res);
                             return -1;
                         }
                     } else {
                         if ((fd = open_tcp_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
-                                                    ai->ai_addr, ai->ai_addrlen)) == -1)
+                                                    ai->ai_addr, ai->ai_addrlen)) == -1) {
+                            freeaddrinfo(res);
                             return -1;
+                        }
                     }
                     break;
                 default:
@@ -967,10 +973,13 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol);
                 listener_is_new = 1;
             } else if (listener->proxy_protocol != proxy_protocol) {
+                freeaddrinfo(res);
                 goto ProxyConflict;
             }
-            if (listener_setup_ssl(cmd, ctx, node, ssl_node, listener, listener_is_new) != 0)
+            if (listener_setup_ssl(cmd, ctx, node, ssl_node, listener, listener_is_new) != 0) {
+                freeaddrinfo(res);
                 return -1;
+            }
             if (listener->hosts != NULL && ctx->hostconf != NULL)
                 h2o_append_to_null_terminated_list((void *)&listener->hosts, ctx->hostconf);
         }

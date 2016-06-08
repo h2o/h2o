@@ -285,7 +285,7 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *_bufs, size_t bufcnt, h2o_socket
         sock->_wreq.bufs = sock->_wreq.smallbufs;
     } else {
         sock->_wreq.bufs = h2o_mem_alloc(sizeof(h2o_iovec_t) * bufcnt);
-        sock->_wreq.alloced_ptr = sock->_wreq.bufs = sock->_wreq.bufs;
+        sock->_wreq.alloced_ptr = sock->_wreq.bufs;
     }
     memcpy(sock->_wreq.bufs, bufs, sizeof(h2o_iovec_t) * bufcnt);
     sock->_wreq.cnt = bufcnt;
