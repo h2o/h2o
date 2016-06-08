@@ -143,22 +143,24 @@ static struct {
         int _num_connections; /* should use atomic functions to update the value */
         char _unused2[32];
     } state;
+    char *crash_handler;
 } conf = {
-    {},              /* globalconf */
-    RUN_MODE_WORKER, /* dry-run */
-    {},              /* server_starter */
-    NULL,            /* listeners */
-    0,               /* num_listeners */
-    NULL,            /* pid_file */
-    NULL,            /* error_log */
-    1024,            /* max_connections */
-    0,               /* initialized in main() */
-    0,               /* initialized in main() */
-    0,               /* initialized in main() */
-    NULL,            /* thread_ids */
-    0,               /* shutdown_requested */
-    0,               /* initialized_threads */
-    {},              /* state */
+    {},                                     /* globalconf */
+    RUN_MODE_WORKER,                        /* dry-run */
+    {},                                     /* server_starter */
+    NULL,                                   /* listeners */
+    0,                                      /* num_listeners */
+    NULL,                                   /* pid_file */
+    NULL,                                   /* error_log */
+    1024,                                   /* max_connections */
+    0,                                      /* initialized in main() */
+    0,                                      /* initialized in main() */
+    0,                                      /* initialized in main() */
+    NULL,                                   /* thread_ids */
+    0,                                      /* shutdown_requested */
+    0,                                      /* initialized_threads */
+    {},                                     /* state */
+    "share/h2o/annotate-backtrace-symbols", /* crash_handler */
 };
 
 static neverbleed_t *neverbleed = NULL;
@@ -1124,6 +1126,12 @@ static int on_config_temp_buffer_path(h2o_configurator_command_t *cmd, h2o_confi
     return 0;
 }
 
+static int on_config_crash_handler(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    conf.crash_handler = h2o_strdup(NULL, node->data.scalar, SIZE_MAX).base;
+    return 0;
+}
+
 static yoml_t *load_config(const char *fn)
 {
     FILE *fp;
@@ -1168,9 +1176,9 @@ static void on_sigterm(int signo)
 }
 
 #ifdef __GLIBC__
-static int popen_annotate_backtrace_symbols(void)
+static int popen_crash_handler(void)
 {
-    char *cmd_fullpath = h2o_configurator_get_cmd_path("share/h2o/annotate-backtrace-symbols"), *argv[] = {cmd_fullpath, NULL};
+    char *cmd_fullpath = h2o_configurator_get_cmd_path(conf.crash_handler), *argv[] = {cmd_fullpath, NULL};
     int pipefds[2];
 
     /* create pipe */
@@ -1197,17 +1205,17 @@ static int popen_annotate_backtrace_symbols(void)
     return pipefds[1];
 }
 
-static int backtrace_symbols_to_fd = -1;
+static int crash_handler_fd = -1;
 
 static void on_sigfatal(int signo)
 {
-    fprintf(stderr, "received fatal signal %d; backtrace follows\n", signo);
+    fprintf(stderr, "received fatal signal %d\n", signo);
 
     h2o_set_signal_handler(signo, SIG_DFL);
 
     void *frames[128];
     int framecnt = backtrace(frames, sizeof(frames) / sizeof(frames[0]));
-    backtrace_symbols_fd(frames, framecnt, backtrace_symbols_to_fd);
+    backtrace_symbols_fd(frames, framecnt, crash_handler_fd);
 
     raise(signo);
 }
@@ -1218,8 +1226,8 @@ static void setup_signal_handlers(void)
     h2o_set_signal_handler(SIGTERM, on_sigterm);
     h2o_set_signal_handler(SIGPIPE, SIG_IGN);
 #ifdef __GLIBC__
-    if ((backtrace_symbols_to_fd = popen_annotate_backtrace_symbols()) == -1)
-        backtrace_symbols_to_fd = 2;
+    if ((crash_handler_fd = popen_crash_handler()) == -1)
+        crash_handler_fd = 2;
     h2o_set_signal_handler(SIGABRT, on_sigfatal);
     h2o_set_signal_handler(SIGBUS, on_sigfatal);
     h2o_set_signal_handler(SIGFPE, on_sigfatal);
@@ -1521,6 +1529,8 @@ static void setup_configurators(void)
                                         on_config_num_ocsp_updaters);
         h2o_configurator_define_command(c, "temp-buffer-path", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_temp_buffer_path);
+        h2o_configurator_define_command(c, "crash-handler", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_crash_handler);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);

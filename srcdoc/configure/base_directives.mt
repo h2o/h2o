@@ -601,4 +601,26 @@ If the directive is omitted and if the server is started under root privileges, 
 </p>
 ? })
 
+<?
+$ctx->{directive}->(
+    name   => "crash-handler",
+    levels => [ qw(global) ],
+    desc   => q{Script to invoke if <code>h2o</code> receives a fatal signal.},
+    default  => q{crash-handler: "${H2O_ROOT}/share/h2o/annotate-backtrace-symbols"},
+    since    => "2.1",
+)->(sub {
+?>
+<p>Note: this feature is only available when linking to the GNU libc.</p>
+
+<p>The script is invoked if one of the <code>SIGABRT</code>,
+<code>SIGBUS</code>, <code>SIGFPE</code>, <code>SIGILL</code> or
+<code>SIGSEGV</code> signals is received by <code>h2o</code>.</p>
+
+<p><code>h2o</code> writes the backtrace as provided by
+<code>backtrace()</code> and <code>backtrace_symbols_fd</code> to the
+standard input of the program.</p>
+
+<p>If the path is not absolute, it is prefixed with <code>${H2O_ROOT}/</code>.</p>
+? })
+
 ? })
