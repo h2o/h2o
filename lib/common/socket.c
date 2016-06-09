@@ -30,6 +30,9 @@
 #include <sys/un.h>
 #include <unistd.h>
 #include <openssl/err.h>
+#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+#include <sys/ioctl.h>
+#endif
 #include "h2o/socket.h"
 #include "h2o/timeout.h"
 
@@ -395,31 +398,26 @@ static uint16_t calc_suggested_tls_payload_size(h2o_socket_t *sock, uint16_t sug
     return ps;
 }
 
-static void disable_latency_optimized_write(h2o_socket_t *sock)
+static void disable_latency_optimized_write(h2o_socket_t *sock, int (*adjust_notsent_lowat)(h2o_socket_t *, unsigned))
 {
+#ifdef TCP_NOTSENT_LOWAT
+    if (sock->_latency_optimization.state != H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD)
+        adjust_notsent_lowat(sock, UINT_MAX);
+#endif
     sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED;
     sock->_latency_optimization.suggested_tls_payload_size = calc_suggested_tls_payload_size(sock, 16384);
     sock->_latency_optimization.suggested_write_size = SIZE_MAX;
 }
 
-#if !defined(TCP_INFO)
-struct tcp_info {
-    unsigned tcpi_rtt;
-    unsigned tcpi_snd_mss;
-    unsigned tcpi_snd_cwnd;
-    unsigned tcpi_unacked;
-};
-#endif
-
 static inline void prepare_for_latency_optimized_write(h2o_socket_t *sock,
-                                                       const h2o_socket_latency_optimization_conditions_t *conditions,
-                                                       struct tcp_info *tcpi, uint64_t loop_time,
+                                                       const h2o_socket_latency_optimization_conditions_t *conditions, uint32_t rtt,
+                                                       uint32_t mss, uint32_t cwnd_size, uint32_t cwnd_avail, uint64_t loop_time,
                                                        int (*adjust_notsent_lowat)(h2o_socket_t *, unsigned))
 {
     /* check RTT */
-    if (tcpi->tcpi_rtt < conditions->min_rtt * 1000)
+    if (rtt < conditions->min_rtt * 1000)
         goto Disable;
-    if (tcpi->tcpi_rtt * conditions->max_additional_delay < loop_time * 1000 * 100)
+    if (rtt * conditions->max_additional_delay < loop_time * 1000 * 100)
         goto Disable;
 
     /* mimimize tcp send buffer size if not yet being done */
@@ -435,45 +433,118 @@ static inline void prepare_for_latency_optimized_write(h2o_socket_t *sock,
      *   1) adjust the write size if single_write_size << cwnd_size
      *   2) align TLS record boundary to TCP packet boundary if packet loss-rate is low and BW isn't small (implied by cwnd size)
      */
-    if (tcpi->tcpi_snd_mss * tcpi->tcpi_snd_cwnd >= conditions->max_cwnd) {
+    if (mss * cwnd_size >= conditions->max_cwnd) {
         sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED;
         sock->_latency_optimization.suggested_tls_payload_size = calc_suggested_tls_payload_size(sock, 16384);
         sock->_latency_optimization.suggested_write_size = SIZE_MAX;
     } else {
-        size_t packets_sendable = tcpi->tcpi_snd_cwnd > tcpi->tcpi_unacked ? tcpi->tcpi_snd_cwnd - tcpi->tcpi_unacked : 0;
-        sock->_latency_optimization.suggested_tls_payload_size = calc_suggested_tls_payload_size(sock, tcpi->tcpi_snd_mss);
+        sock->_latency_optimization.suggested_tls_payload_size = calc_suggested_tls_payload_size(sock, mss);
         sock->_latency_optimization.suggested_write_size =
-            (packets_sendable + 1) * sock->_latency_optimization.suggested_tls_payload_size;
+            cwnd_avail * (size_t)sock->_latency_optimization.suggested_tls_payload_size;
     }
     return;
 
 Disable:
-    if (sock->_latency_optimization.state != H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD)
-        adjust_notsent_lowat(sock, UINT_MAX);
-    disable_latency_optimized_write(sock);
+    disable_latency_optimized_write(sock, adjust_notsent_lowat);
+}
+
+/**
+ * Obtains RTT, MSS, size of CWND (in the number of packets).
+ * Also writes to cwnd_avail minimum number of packets (of MSS size) sufficient to shut up poll-for-write under the precondition
+ * that TCP_NOTSENT_LOWAT is set to 1.
+ */
+static int obtain_tcp_info(int fd, uint32_t *rtt, uint32_t *mss, uint32_t *cwnd_size, uint32_t *cwnd_avail)
+{
+#define CALC_CWND_PAIR_FROM_BYTE_UNITS(cwnd_bytes, inflight_bytes) do { \
+    *cwnd_size = (cwnd_bytes + *mss / 2) / *mss; \
+    *cwnd_avail = cwnd_bytes > inflight_bytes ? (cwnd_bytes - inflight_bytes) / *mss + 1 : 1; \
+} while (0)
+
+#if defined(__linux__) && defined(TCP_INFO)
+
+    struct tcp_info tcpi;
+    socklen_t tcpisz = sizeof(tcpi);
+    if (getsockopt(fd, IPPROTO_TCP, TCP_INFO, &tcpi, &tcpisz) != 0)
+        return -1;
+    *rtt = tcpi.tcpi_rtt;
+    *mss = tcpi.tcpi_snd_mss;
+    *cwnd_size = tcpi.tcpi_snd_cwnd;
+    *cwnd_avail = tcpi.tcpi_snd_cwnd > tcpi.tcpi_unacked ? tcpi.tcpi_snd_cwnd - tcpi.tcpi_unacked + 1 : 1;
+    return 0;
+
+#elif (defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)) || defined(TCP_INFO)
+
+    struct tcp_info tcpi;
+    socklen_t tcpisz = sizeof(tcpi);
+    int bytes_inflight;
+    if (getsockopt(fd, IPPROTO_TCP, TCP_INFO, &tcpi, &tcpisz) != 0 || ioctl(fd, FIONWRITE, &bytes_inflight) == -1)
+        return -1;
+    *rtt = tcpi.tcpi_rtt;
+    *mss = tcpi.tcpi_snd_mss;
+    CALC_CWND_PAIR_FROM_BYTE_UNITS(tcpi.tcpi_snd_cwnd, bytes_inflight);
+    return 0;
+
+#elif defined(__APPLE__) && defined(TCP_CONNECTION_INFO)
+
+    struct tcp_connection_info tcpi;
+    socklen_t tcpisz = sizeof(tcpi);
+    if (getsockopt(fd, IPPROTO_TCP, TCP_CONNECTION_INFO, &tcpi, &tcpisz) != 0)
+        return -1;
+    *rtt = tcpi.tcpi_srtt * 1000;
+    *mss = tcpi.tcpi_maxseg;
+    CALC_CWND_PAIR_FROM_BYTE_UNITS(tcpi.tcpi_snd_cwnd, tcpi.tcpi_snd_sbbytes);
+    return 0;
+
+#else
+    return -1;
+#endif
+
+#undef CALC_CWND_PAIR_FROM_BYTE_UNITS
 }
 
 #ifdef TCP_NOTSENT_LOWAT
-static inline int adjust_notsent_lowat(h2o_socket_t *sock, unsigned notsent_lowat)
+static int adjust_notsent_lowat(h2o_socket_t *sock, unsigned notsent_lowat)
 {
     return setsockopt(h2o_socket_get_fd(sock), IPPROTO_TCP, TCP_NOTSENT_LOWAT, &notsent_lowat, sizeof(notsent_lowat));
 }
+#else
+#define adjust_notsent_lowat NULL
 #endif
 
 size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
                                                          const h2o_socket_latency_optimization_conditions_t *conditions)
 {
-#if defined(TCP_INFO) && defined(TCP_NOTSENT_LOWAT) && !H2O_USE_LIBUV
-    struct tcp_info tcpi;
-    socklen_t tcpisz = sizeof(tcpi);
+    uint32_t rtt = 0, mss = 0, cwnd_size = 0, cwnd_avail = 0;
+    uint64_t loop_time = UINT64_MAX;
+    int can_prepare = 1;
 
-    if (getsockopt(h2o_socket_get_fd(sock), IPPROTO_TCP, TCP_INFO, &tcpi, &tcpisz) == 0) {
-        prepare_for_latency_optimized_write(sock, conditions, &tcpi, h2o_evloop_get_execution_time(h2o_socket_get_loop(sock)),
-                                            adjust_notsent_lowat);
-    } else
+#if !defined(TCP_NOTSENT_LOWAT)
+    /* the feature cannot be setup unless TCP_NOTSENT_LOWAT is available */
+    can_prepare = 0;
 #endif
-        disable_latency_optimized_write(sock);
+
+#if H2O_USE_LIBUV
+    /* poll-then-write is impossible with libuv */
+    can_prepare = 0;
+#else
+    if (can_prepare)
+        loop_time = h2o_evloop_get_execution_time(h2o_socket_get_loop(sock));
+#endif
+
+    /* obtain TCP states */
+    if (can_prepare && obtain_tcp_info(h2o_socket_get_fd(sock), &rtt, &mss, &cwnd_size, &cwnd_avail) != 0)
+        can_prepare = 0;
+
+    /* determine suggested_write_size, suggested_tls_record_size and adjust TCP_NOTSENT_LOWAT based on the obtained information */
+    if (can_prepare) {
+        prepare_for_latency_optimized_write(sock, conditions, rtt, mss, cwnd_size, cwnd_avail, loop_time, adjust_notsent_lowat);
+    } else {
+        disable_latency_optimized_write(sock, adjust_notsent_lowat);
+    }
+
     return sock->_latency_optimization.suggested_write_size;
+
+#undef CALC_CWND_PAIR_FROM_BYTE_UNITS
 }
 
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
