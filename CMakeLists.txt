@@ -183,7 +183,8 @@ SET(BROTLI_SOURCE_FILES
     deps/brotli/enc/metablock.cc
     deps/brotli/enc/static_dict.cc
     deps/brotli/enc/streams.cc
-    deps/brotli/enc/utf8_util.cc)
+    deps/brotli/enc/utf8_util.cc
+    lib/handler/compress/brotli.cc)
 
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
@@ -227,7 +228,6 @@ SET(LIB_SOURCE_FILES
     lib/handler/chunked.c
     lib/handler/compress.c
     lib/handler/compress/gzip.c
-    lib/handler/compress/brotli.cc
     lib/handler/errordoc.c
     lib/handler/expires.c
     lib/handler/fastcgi.c
