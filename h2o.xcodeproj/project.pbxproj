@@ -2007,6 +2007,7 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
@@ -2018,7 +2019,6 @@
 				);
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-luv",
@@ -2036,6 +2036,7 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
@@ -2046,9 +2047,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lwslay",
-					"-lnettle",
 					"-lssl",
 					"-lcrypto",
 					"-luv",
@@ -2143,6 +2142,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
@@ -2154,7 +2154,6 @@
 				);
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-luv",
@@ -2168,6 +2167,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
@@ -2178,9 +2178,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lwslay",
-					"-lnettle",
 					"-lssl",
 					"-lcrypto",
 					"-luv",
@@ -2313,6 +2311,7 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
@@ -2324,7 +2323,6 @@
 				);
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-lz",
@@ -2337,6 +2335,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
@@ -2348,7 +2347,6 @@
 				);
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lssl",
 					"-lcrypto",
 					"-lz",
@@ -2365,6 +2363,7 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
@@ -2375,9 +2374,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lwslay",
-					"-lnettle",
 					"-lssl",
 					"-lcrypto",
 					"-lz",
@@ -2390,6 +2387,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
@@ -2400,9 +2398,7 @@
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
-					"-lmemcached",
 					"-lwslay",
-					"-lnettle",
 					"-lssl",
 					"-lcrypto",
 					"-lz",
@@ -2476,6 +2472,7 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
@@ -2503,6 +2500,7 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
@@ -2527,6 +2525,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
@@ -2550,6 +2549,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
