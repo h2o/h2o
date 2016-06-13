@@ -300,7 +300,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
     /* call the callback */
     client->_cb.on_body = client->_cb.on_head(&client->super, is_eos ? h2o_http1client_error_is_eos : NULL, minor_version,
-                                              http_status, h2o_iovec_init(msg, msg_len), headers, num_headers);
+                                              http_status, h2o_iovec_init(msg, msg_len), (void *)headers, num_headers);
     if (is_eos) {
         close_client(client);
         return;
