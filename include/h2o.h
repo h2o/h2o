@@ -1656,6 +1656,7 @@ void h2o_headers_register_configurator(h2o_globalconf_t *conf);
 typedef struct st_h2o_proxy_config_vars_t {
     uint64_t io_timeout;
     int preserve_host;
+    int per_client_pool;
     uint64_t keepalive_timeout; /* in milliseconds; set to zero to disable keepalive */
     struct {
         int enabled;

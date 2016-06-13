@@ -29,6 +29,7 @@
 #include <unistd.h>
 #include <openssl/err.h>
 #include "h2o/socket.h"
+#include "h2o/socketpool.h"
 #include "h2o/timeout.h"
 
 #if defined(__APPLE__) && defined(__clang__)
@@ -280,6 +281,12 @@ static void dispose_socket(h2o_socket_t *sock, const char *err)
 
     close_cb = sock->on_close.cb;
     close_cb_data = sock->on_close.data;
+
+    if (sock->per_socket_pool) {
+        h2o_socketpool_dispose(sock->per_socket_pool);
+        free(sock->per_socket_pool);
+        sock->per_socket_pool = NULL;
+    }
 
     do_dispose_socket(sock);
 

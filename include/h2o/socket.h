@@ -71,6 +71,7 @@ struct st_h2o_socket_peername_t {
 /**
  * abstraction layer for sockets (SSL vs. TCP)
  */
+struct st_h2o_socketpool_t;
 struct st_h2o_socket_t {
     void *data;
     struct st_h2o_socket_ssl_t *ssl;
@@ -85,6 +86,9 @@ struct st_h2o_socket_t {
         h2o_socket_cb write;
     } _cb;
     struct st_h2o_socket_peername_t *_peername;
+    /* when proxy.per_socket_pool is 'ON' each client socket will have a dedicated
+     * socket pool, and this will be non-NULL */
+    struct st_h2o_socketpool_t *per_socket_pool;
 };
 
 typedef struct st_h2o_socket_export_t {

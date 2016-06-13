@@ -81,6 +81,19 @@ builder {
             $content->rewind(),
         ];
     };
+    mount "/echo-port" => sub {
+        my $env = shift;
+        return [
+            200,
+            [
+                'content-type' => 'text/' . $env->{QUERY_STRING} ? $env->{QUERY_STRING} : 'html',
+                'x-remote-port' => $env->{REMOTE_PORT},
+            ],
+            [
+                '<html><head><link rel="stylesheet" type="text/css" href="/echo-port?css"><title>ok</title></head></html>',
+            ]
+        ];
+    };
     mount "/echo-headers" => sub {
         my $env = shift;
         return [
