@@ -83,8 +83,7 @@ static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *c
 
 const h2o_protocol_callbacks_t H2O_HTTP1_CALLBACKS = {
     NULL, /* graceful_shutdown (note: nothing special needs to be done for handling graceful shutdown) */
-    foreach_request
-};
+    foreach_request};
 
 static int is_msie(h2o_req_t *req)
 {
@@ -147,14 +146,19 @@ static void process_request(struct st_h2o_http1_conn_t *conn)
     h2o_process_request(&conn->req);
 }
 
-static void entity_read_send_error(struct st_h2o_http1_conn_t *conn, int status, const char *reason, const char *body)
-{
-    conn->_req_entity_reader = NULL;
-    set_timeout(conn, NULL, NULL);
-    h2o_socket_read_stop(conn->sock);
-    conn->req.http1_is_persistent = 0;
-    h2o_send_error(&conn->req, status, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
-}
+#define DECL_ENTITY_READ_SEND_ERROR_XXX(status_)                                                                                   \
+    static void entity_read_send_error_##status_(struct st_h2o_http1_conn_t *conn, const char *reason, const char *body)           \
+    {                                                                                                                              \
+        conn->_req_entity_reader = NULL;                                                                                           \
+        set_timeout(conn, NULL, NULL);                                                                                             \
+        h2o_socket_read_stop(conn->sock);                                                                                          \
+        conn->req.http1_is_persistent = 0;                                                                                         \
+        conn->super.ctx->emitted_error_status[H2O_STATUS_ERROR_##status_]++;                                                       \
+        h2o_send_error_generic(&conn->req, status_, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);                          \
+    }
+
+DECL_ENTITY_READ_SEND_ERROR_XXX(400)
+DECL_ENTITY_READ_SEND_ERROR_XXX(413)
 
 static void on_entity_read_complete(struct st_h2o_http1_conn_t *conn)
 {
@@ -178,7 +182,7 @@ static void handle_chunked_entity_read(struct st_h2o_http1_conn_t *conn)
     inbuf->size = reader->prev_input_size + bufsz;
     reader->prev_input_size = inbuf->size;
     if (ret != -1 && inbuf->size - conn->_reqsize >= conn->super.ctx->globalconf->max_request_entity_size) {
-        entity_read_send_error(conn, 413, "Request Entity Too Large", "request entity is too large");
+        entity_read_send_error_413(conn, "Request Entity Too Large", "request entity is too large");
         return;
     }
     if (ret < 0) {
@@ -187,7 +191,7 @@ static void handle_chunked_entity_read(struct st_h2o_http1_conn_t *conn)
             return;
         }
         /* error */
-        entity_read_send_error(conn, 400, "Invalid Request", "broken chunked-encoding");
+        entity_read_send_error_400(conn, "Invalid Request", "broken chunked-encoding");
         return;
     }
     /* complete */
@@ -242,7 +246,7 @@ static int create_entity_reader(struct st_h2o_http1_conn_t *conn, const struct p
     if (entity_header->name_len == sizeof("transfer-encoding") - 1) {
         /* transfer-encoding */
         if (!h2o_lcstris(entity_header->value, entity_header->value_len, H2O_STRLIT("chunked"))) {
-            entity_read_send_error(conn, 400, "Invalid Request", "unknown transfer-encoding");
+            entity_read_send_error_400(conn, "Invalid Request", "unknown transfer-encoding");
             return -1;
         }
         return create_chunked_entity_reader(conn);
@@ -250,11 +254,11 @@ static int create_entity_reader(struct st_h2o_http1_conn_t *conn, const struct p
         /* content-length */
         size_t content_length = h2o_strtosize(entity_header->value, entity_header->value_len);
         if (content_length == SIZE_MAX) {
-            entity_read_send_error(conn, 400, "Invalid Request", "broken content-length header");
+            entity_read_send_error_400(conn, "Invalid Request", "broken content-length header");
             return -1;
         }
         if (content_length > conn->super.ctx->globalconf->max_request_entity_size) {
-            entity_read_send_error(conn, 413, "Request Entity Too Large", "request entity is too large");
+            entity_read_send_error_413(conn, "Request Entity Too Large", "request entity is too large");
             return -1;
         }
         return create_content_length_entity_reader(conn, (size_t)content_length);
@@ -409,8 +413,8 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                 if (!h2o_lcstris(expect.base, expect.len, H2O_STRLIT("100-continue"))) {
                     set_timeout(conn, NULL, NULL);
                     h2o_socket_read_stop(conn->sock);
-                    h2o_send_error(&conn->req, 417, "Expectation Failed", "unknown expectation",
-                                   H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+                    h2o_send_error_417(&conn->req, "Expectation Failed", "unknown expectation",
+                                       H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
                     return;
                 }
                 static const h2o_iovec_t res = {H2O_STRLIT("HTTP/1.1 100 Continue\r\n\r\n")};
@@ -576,12 +580,11 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
 
     /* send essential headers with the first chars uppercased for max. interoperability (#72) */
     if (req->res.content_length != SIZE_MAX) {
-        dst +=
-            sprintf(dst, "HTTP/1.1 %d %s\r\nDate: %s\r\nConnection: %s\r\nContent-Length: %zu\r\n", req->res.status,
-                    req->res.reason, ts.str->rfc1123, connection, req->res.content_length);
+        dst += sprintf(dst, "HTTP/1.1 %d %s\r\nDate: %s\r\nConnection: %s\r\nContent-Length: %zu\r\n", req->res.status,
+                       req->res.reason, ts.str->rfc1123, connection, req->res.content_length);
     } else {
-        dst += sprintf(dst, "HTTP/1.1 %d %s\r\nDate: %s\r\nConnection: %s\r\n", req->res.status, req->res.reason,
-                       ts.str->rfc1123, connection);
+        dst += sprintf(dst, "HTTP/1.1 %d %s\r\nDate: %s\r\nConnection: %s\r\n", req->res.status, req->res.reason, ts.str->rfc1123,
+                       connection);
     }
     if (ctx->globalconf->server_name.len) {
         dst += sprintf(dst, "Server: %s\r\n", ctx->globalconf->server_name.base);
@@ -751,14 +754,14 @@ static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *c
 void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
     static const h2o_conn_callbacks_t callbacks = {
-        get_sockname,   /* stringify address */
-        get_peername,   /* ditto */
-        NULL,           /* push */
-        get_socket, /* get underlying socket */
+        get_sockname, /* stringify address */
+        get_peername, /* ditto */
+        NULL,         /* push */
+        get_socket,   /* get underlying socket */
         {{
-          {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits}, /* ssl */
-          {log_request_index},                                                     /* http1 */
-          {}                                                                       /* http2 */
+            {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits}, /* ssl */
+            {log_request_index},                                                     /* http1 */
+            {}                                                                       /* http2 */
         }}};
     struct st_h2o_http1_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx->ctx, ctx->hosts, connected_at, &callbacks);
 

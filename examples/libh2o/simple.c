@@ -141,11 +141,11 @@ Error:
 
 #else
 
-static void on_accept(h2o_socket_t *listener, int status)
+static void on_accept(h2o_socket_t *listener, const char *err)
 {
     h2o_socket_t *sock;
 
-    if (status == -1) {
+    if (err != NULL) {
         return;
     }
 

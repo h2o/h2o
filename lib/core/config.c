@@ -34,6 +34,7 @@ static h2o_hostconf_t *create_hostconf(h2o_globalconf_t *globalconf)
 {
     h2o_hostconf_t *hostconf = h2o_mem_alloc(sizeof(*hostconf));
     *hostconf = (h2o_hostconf_t){globalconf};
+    hostconf->http2.push_preload = 1; /* enabled by default */
     h2o_config_init_pathconf(&hostconf->fallback_path, globalconf, NULL, globalconf->mimemap);
     hostconf->mimemap = globalconf->mimemap;
     h2o_mem_addref_shared(hostconf->mimemap);
@@ -200,6 +201,23 @@ h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *p
     h2o_config_init_pathconf(pathconf, hostconf->global, path, hostconf->mimemap);
 
     return pathconf;
+}
+
+void h2o_config_register_status_handler(h2o_globalconf_t *config, h2o_status_handler_t status_handler)
+{
+    h2o_vector_reserve(NULL, &config->statuses, config->statuses.size + 1);
+    config->statuses.entries[config->statuses.size++] = status_handler;
+}
+
+void h2o_config_register_simple_status_handler(h2o_globalconf_t *config, h2o_iovec_t name, final_status_handler_cb status_handler)
+{
+    h2o_status_handler_t *sh;
+
+    h2o_vector_reserve(NULL, &config->statuses, config->statuses.size + 1);
+    sh = &config->statuses.entries[config->statuses.size++];
+    memset(sh, 0, sizeof(*sh));
+    sh->name = h2o_strdup(NULL, name.base, name.len);
+    sh->final = status_handler;
 }
 
 h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t host, uint16_t port)

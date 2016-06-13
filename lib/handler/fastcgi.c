@@ -461,7 +461,7 @@ static void errorclose(struct st_fcgi_generator_t *generator)
     } else {
         h2o_req_t *req = generator->req;
         close_generator(generator);
-        h2o_send_error(req, 503, "Internal Server Error", "Internal Server Error", 0);
+        h2o_send_error_503(req, "Internal Server Error", "Internal Server Error", 0);
     }
 }
 

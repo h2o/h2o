@@ -31,7 +31,7 @@ my $error_upstream_guard = spawn_server(
         "-e", 'sub { [200, [], [123]] }',
     ],
     is_ready =>  sub {
-        check_port($upstream);
+        check_port($error_upstream);
     },
 );
 

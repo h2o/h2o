@@ -24,12 +24,12 @@ CMAKE_POLICY(SET CMP0003 NEW)
 PROJECT(h2o)
 
 SET(VERSION_MAJOR "2")
-SET(VERSION_MINOR "0")
+SET(VERSION_MINOR "1")
 SET(VERSION_PATCH "0")
 SET(VERSION_PRERELEASE "-DEV")
 SET(VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}${VERSION_PRERELEASE}")
 SET(LIBRARY_VERSION_MAJOR "0")
-SET(LIBRARY_VERSION_MINOR "10")
+SET(LIBRARY_VERSION_MINOR "11")
 SET(LIBRARY_VERSION_PATCH "0")
 SET(LIBRARY_VERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}.${LIBRARY_VERSION_PATCH}${VERSION_PRERELEASE}")
 SET(LIBRARY_SOVERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}")
@@ -183,7 +183,8 @@ SET(BROTLI_SOURCE_FILES
     deps/brotli/enc/metablock.cc
     deps/brotli/enc/static_dict.cc
     deps/brotli/enc/streams.cc
-    deps/brotli/enc/utf8_util.cc)
+    deps/brotli/enc/utf8_util.cc
+    lib/handler/compress/brotli.cc)
 
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
@@ -227,7 +228,6 @@ SET(LIB_SOURCE_FILES
     lib/handler/chunked.c
     lib/handler/compress.c
     lib/handler/compress/gzip.c
-    lib/handler/compress/brotli.cc
     lib/handler/errordoc.c
     lib/handler/expires.c
     lib/handler/fastcgi.c
@@ -238,7 +238,10 @@ SET(LIB_SOURCE_FILES
     lib/handler/proxy.c
     lib/handler/redirect.c
     lib/handler/reproxy.c
+    lib/handler/throttle_resp.c
     lib/handler/status.c
+    lib/handler/status/events.c
+    lib/handler/status/requests.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/compress.c
     lib/handler/configurator/errordoc.c
@@ -249,6 +252,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
     lib/handler/configurator/reproxy.c
+    lib/handler/configurator/throttle_resp.c
     lib/handler/configurator/status.c
 
     lib/http1.c
@@ -320,16 +324,19 @@ IF (ZLIB_FOUND)
 ENDIF (ZLIB_FOUND)
 
 ADD_LIBRARY(libh2o ${LIB_SOURCE_FILES})
-ADD_LIBRARY(libh2o-evloop ${LIB_SOURCE_FILES})
 SET_TARGET_PROPERTIES(libh2o PROPERTIES
     OUTPUT_NAME h2o
     VERSION ${LIBRARY_VERSION}
     SOVERSION ${LIBRARY_SOVERSION})
+TARGET_LINK_LIBRARIES(libh2o ${LIBUV_LIBRARIES} ${EXTRA_LIBS})
+ADD_LIBRARY(libh2o-evloop ${LIB_SOURCE_FILES})
 SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES
     OUTPUT_NAME h2o-evloop
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0"
     VERSION ${LIBRARY_VERSION}
     SOVERSION ${LIBRARY_SOVERSION})
+TARGET_LINK_LIBRARIES(libh2o-evloop ${EXTRA_LIBS})
+
 IF (OPENSSL_FOUND)
     TARGET_INCLUDE_DIRECTORIES(libh2o PUBLIC ${OPENSSL_INCLUDE_DIR})
     TARGET_INCLUDE_DIRECTORIES(libh2o-evloop PUBLIC ${OPENSSL_INCLUDE_DIR})

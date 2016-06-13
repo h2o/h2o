@@ -29,6 +29,15 @@ paths:
     status: ON
 EOT
 ?>
+<p>
+The information returned by the <code>/json</code> handler can be filtered out using the optional <code>show=module1,module2</code> parameter.
+There are currently three modules defined:
+<ul>
+<li><code>requests</code>: displays the requests currently in-flight.</li>
+<li><code>errors</code>: displays counters for internally generated errors.</li>
+<li><code>main</code>: displays general daemon-wide stats.</li>
+</ul>
+</p>
 ? })
 
 ? })

@@ -304,9 +304,9 @@ h2o_iovec_t h2o_url_resolve(h2o_mem_pool_t *pool, const h2o_url_t *base, const h
 
     if (relative == NULL) {
         /* build URL using base copied to dest */
-        static const h2o_url_t fake_relative = {};
-        relative = &fake_relative;
         *dest = *base;
+        base_path = base->path;
+        relative_path = h2o_iovec_init(NULL, 0);
         goto Build;
     }
 

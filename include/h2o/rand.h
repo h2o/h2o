@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014,2015 DeNA Co., Ltd.
+ * Copyright (c) 2016 David Carlier
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -19,17 +19,17 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__version_h
-#define h2o__version_h
+#ifndef h2o__rand_h
+#define h2o__rand_h
 
-#define H2O_VERSION "2.1.0-DEV"
+#include <stdlib.h>
+#include <unistd.h>
 
-#define H2O_VERSION_MAJOR 2
-#define H2O_VERSION_MINOR 1
-#define H2O_VERSION_PATCH 0
-
-#define H2O_LIBRARY_VERSION_MAJOR 0
-#define H2O_LIBRARY_VERSION_MINOR 11
-#define H2O_LIBRARY_VERSION_PATCH 0
-
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+#define h2o_srand()
+#define h2o_rand() arc4random()
+#else
+#define h2o_srand() srand(time(NULL) ^ getpid())
+#define h2o_rand() rand()
+#endif
 #endif
