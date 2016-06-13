@@ -246,8 +246,8 @@ static void on_head(h2o_socket_t *sock, const char *err)
     /* handle 1xx response (except 101, which is handled by on_head callback) */
     if (100 <= http_status && http_status <= 199 && http_status != 101) {
         if (client->super.informational_cb != NULL &&
-            client->super.informational_cb(&client->super, minor_version, http_status, h2o_iovec_init(msg, msg_len), headers,
-                                           num_headers) != 0) {
+            client->super.informational_cb(&client->super, minor_version, http_status, h2o_iovec_init(msg, msg_len),
+                                           (void *)headers, num_headers) != 0) {
             close_client(client);
             return;
         }

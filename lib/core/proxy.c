@@ -327,7 +327,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
 }
 
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
-                                       h2o_iovec_t msg, struct phr_header *headers, size_t num_headers)
+                                       h2o_iovec_t msg, h2o_http1client_header_t *headers, size_t num_headers)
 {
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
@@ -411,7 +411,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     return on_body;
 }
 
-static int on_1xx(h2o_http1client_t *client, int minor_version, int status, h2o_iovec_t msg, struct phr_header *headers,
+static int on_1xx(h2o_http1client_t *client, int minor_version, int status, h2o_iovec_t msg, h2o_http1client_header_t *headers,
                   size_t num_headers)
 {
     struct rp_generator_t *self = client->data;
