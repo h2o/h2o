@@ -190,7 +190,7 @@ static void on_accept(h2o_socket_t *listener, const char *err)
     if ((sock = h2o_evloop_socket_accept(listener)) != NULL) {
         h2o_socket_close(listener);
         if (ssl_ctx != NULL) {
-            h2o_socket_ssl_handshake(sock, ssl_ctx, NULL, on_handshake_complete);
+            h2o_socket_ssl_handshake(sock, ssl_ctx, mode_server ? NULL : "blahblah", on_handshake_complete);
         } else {
             on_handshake_complete(sock, NULL);
         }
