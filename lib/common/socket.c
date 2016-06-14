@@ -577,6 +577,9 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
         case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD:
             ssl_record_size = 1400;
             break;
+        case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED:
+            sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE;
+            /* fallthru */
         default:
             ssl_record_size = sock->_latency_optimization.suggested_tls_payload_size;
             break;
