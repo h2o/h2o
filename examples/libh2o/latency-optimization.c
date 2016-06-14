@@ -64,18 +64,6 @@ static h2o_iovec_t prepare_write_buf(void)
     return buf;
 }
 
-static void server_on_read(h2o_socket_t *sock, const char *err)
-{
-    if (err != NULL) {
-        fprintf(stderr, "connection closed unexpectedly:%s\n", err);
-        exit(1);
-        return;
-    }
-
-    fprintf(stderr, "received the flag\n");
-    server_flag_received = 1;
-}
-
 static void server_on_write_ready(h2o_socket_t *sock, const char *err)
 {
     if (err != NULL) {
@@ -108,8 +96,30 @@ void server_write(h2o_socket_t *sock)
 
     fprintf(stderr, "writing %zu bytes\n", buf.len);
     h2o_socket_write(sock, &buf, 1, server_on_write_complete);
+}
 
-#undef BUF_SIZE
+static void server_on_read_second(h2o_socket_t *sock, const char *err)
+{
+    if (err != NULL) {
+        fprintf(stderr, "connection closed unexpectedly:%s\n", err);
+        exit(1);
+        return;
+    }
+
+    fprintf(stderr, "received the flag\n");
+    server_flag_received = 1;
+}
+
+static void server_on_read_first(h2o_socket_t *sock, const char *err)
+{
+    if (err != NULL) {
+        fprintf(stderr, "connection closed unexpectedly:%s\n", err);
+        exit(1);
+        return;
+    }
+
+    server_write(sock);
+    h2o_socket_read_start(sock, server_on_read_second);
 }
 
 static void client_on_write_complete(h2o_socket_t *sock, const char *err)
@@ -173,9 +183,10 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     }
 
     if (mode_server) {
-        h2o_socket_read_start(sock, server_on_read);
-        server_write(sock);
+        h2o_socket_read_start(sock, server_on_read_first);
     } else {
+        h2o_iovec_t buf = {H2O_STRLIT("0")};
+        h2o_socket_write(sock, &buf, 1, client_on_write_complete);
         h2o_socket_read_start(sock, client_on_read_first);
     }
 }
