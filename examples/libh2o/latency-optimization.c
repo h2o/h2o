@@ -31,10 +31,18 @@
 #include "h2o/socket.h"
 #include "h2o/string_.h"
 
-static h2o_loop_t *loop;
+/* configuration */
 static char *host, *port;
 static SSL_CTX *ssl_ctx;
 static int mode_server, server_flag_received;
+static h2o_socket_latency_optimization_conditions_t latopt_cond = {
+    .min_rtt              = 50,
+    .max_additional_delay = 10,
+    .max_cwnd             = 65535
+};
+
+/* globals */
+static h2o_loop_t *loop;
 static h2o_socket_t *sock;
 static struct {
     uint64_t ms;
@@ -78,11 +86,6 @@ void server_write(h2o_socket_t *sock)
 {
 #define BUF_SIZE 65536
 
-    static h2o_socket_latency_optimization_conditions_t cond = {
-        .min_rtt              = 50,
-        .max_additional_delay = 10,
-        .max_cwnd             = 65535,
-    };
     static char *buf;
 
     if (buf == NULL) {
@@ -92,10 +95,12 @@ void server_write(h2o_socket_t *sock)
     if (server_flag_received)
         buf[1] = '1';
 
-    size_t sz = h2o_socket_prepare_for_latency_optimized_write(sock, &cond);
+    size_t sz = h2o_socket_prepare_for_latency_optimized_write(sock, &latopt_cond);
     h2o_iovec_t warg = h2o_iovec_init(buf, sz < BUF_SIZE ? sz : BUF_SIZE);
     fprintf(stderr, "writing %zu bytes\n", warg.len);
     h2o_socket_write(sock, &warg, 1, server_on_write_complete);
+
+#undef BUF_SIZE
 }
 
 static void client_on_write_complete(h2o_socket_t *sock, const char *err)
@@ -123,6 +128,7 @@ static void client_on_read_second(h2o_socket_t *sock, const char *err)
             goto FoundSig;
         ++delay.octets;
     }
+    h2o_buffer_consume(&sock->input, sock->input->size);
     return;
 
 FoundSig:
@@ -199,7 +205,14 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 
 static void usage(const char *cmd)
 {
-    fprintf(stderr, "Usage: %s [--listen] [--reverse-role] [--tls] [<host>:]<port>\n", cmd);
+    fprintf(stderr, "Usage: %s [opts] [<host>:]<port>\n"
+                    "Options: --listen           if set, waits for incoming connection. Otherwise,\n"
+                    "                            connects to the server running at given address\n"
+                    "         --reverse-role     if set, reverses the role bet. server and the\n"
+                    "                            client once the connection is established\n"
+                    "         --tls              use TLS\n"
+                    "         --min-rtt=ms       minimum RTT to enable latency optimization\n"
+                    "         --max-cwnd=octets  maximum size of CWND to enable latency optimization\n", cmd);
     exit(1);
 }
 
@@ -209,13 +222,15 @@ int main(int argc, char **argv)
         {"listen", no_argument, NULL, 'l'},
         {"reverse-role", no_argument, NULL, 'r'},
         {"tls", no_argument, NULL, 't'},
+        {"min-rtt", required_argument, NULL, 'R'},
+        {"max-cwnd", required_argument, NULL, 'c'},
         {}
     };
     int opt_ch, mode_listen = 0, mode_reverse_role = 0, mode_tls = 0;
     struct addrinfo hints, *res = NULL;
     int err;
 
-    while ((opt_ch = getopt_long(argc, argv, "lrt", longopts, NULL)) != -1) {
+    while ((opt_ch = getopt_long(argc, argv, "lrtR:c:", longopts, NULL)) != -1) {
         switch (opt_ch) {
         case 'l':
             mode_listen = 1;
@@ -225,6 +240,18 @@ int main(int argc, char **argv)
             break;
         case 't':
             mode_tls = 1;
+            break;
+        case 'R':
+            if (sscanf(optarg, "%u", &latopt_cond.min_rtt) != 1) {
+                fprintf(stderr, "min RTT (-m) must be a non-negative number in milliseconds\n");
+                exit(1);
+            }
+            break;
+        case 'c':
+            if (sscanf(optarg, "%u", &latopt_cond.max_cwnd) != 1) {
+                fprintf(stderr, "max CWND size must be a non-negative number of octets\n");
+                exit(1);
+            }
             break;
         default:
             usage(argv[0]);
