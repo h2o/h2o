@@ -59,6 +59,7 @@ static void server_on_read(h2o_socket_t *sock, const char *err)
         return;
     }
 
+    fprintf(stderr, "received the flag\n");
     server_flag_received = 1;
 }
 
