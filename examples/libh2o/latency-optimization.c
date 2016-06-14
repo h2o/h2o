@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <openssl/err.h>
 #include <openssl/ssl.h>
 #include "h2o/socket.h"
 #include "h2o/string_.h"
@@ -150,6 +151,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     if (err != NULL && err != h2o_socket_error_ssl_cert_name_mismatch) {
         /* TLS handshake failed */
         fprintf(stderr, "TLS handshake failure:%s\n", err);
+        ERR_print_errors_fp(stderr);
         h2o_socket_close(sock);
         exit(1);
         return;
