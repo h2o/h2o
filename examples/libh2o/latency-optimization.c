@@ -40,6 +40,7 @@ static h2o_socket_latency_optimization_conditions_t latopt_cond = {
     .max_additional_delay = 10,
     .max_cwnd             = 65535
 };
+size_t write_block_size = 65536;
 
 /* globals */
 static h2o_loop_t *loop;
@@ -50,6 +51,17 @@ static struct {
 } delay;
 
 static void server_write(h2o_socket_t *sock);
+
+static h2o_iovec_t prepare_write_buf(void)
+{
+    static h2o_iovec_t buf;
+    if (buf.base == NULL) {
+        buf.base = h2o_mem_alloc(write_block_size);
+        buf.len = write_block_size;
+        memset(buf.base, '0', buf.len);
+    }
+    return buf;
+}
 
 static void server_on_read(h2o_socket_t *sock, const char *err)
 {
@@ -85,21 +97,16 @@ static void server_on_write_complete(h2o_socket_t *sock, const char *err)
 
 void server_write(h2o_socket_t *sock)
 {
-#define BUF_SIZE 65536
-
-    static char *buf;
-
-    if (buf == NULL) {
-        buf = h2o_mem_alloc(BUF_SIZE);
-        memset(buf, '0', BUF_SIZE);
-    }
-    if (server_flag_received)
-        buf[1] = '1';
-
     size_t sz = h2o_socket_prepare_for_latency_optimized_write(sock, &latopt_cond);
-    h2o_iovec_t warg = h2o_iovec_init(buf, sz < BUF_SIZE ? sz : BUF_SIZE);
-    fprintf(stderr, "writing %zu bytes\n", warg.len);
-    h2o_socket_write(sock, &warg, 1, server_on_write_complete);
+    h2o_iovec_t buf = prepare_write_buf();
+
+    if (server_flag_received)
+        buf.base[0] = '1';
+    if (sz < buf.len)
+        buf.len = sz;
+
+    fprintf(stderr, "writing %zu bytes\n", buf.len);
+    h2o_socket_write(sock, &buf, 1, server_on_write_complete);
 
 #undef BUF_SIZE
 }
@@ -207,13 +214,15 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 static void usage(const char *cmd)
 {
     fprintf(stderr, "Usage: %s [opts] [<host>:]<port>\n"
-                    "Options: --listen           if set, waits for incoming connection. Otherwise,\n"
-                    "                            connects to the server running at given address\n"
-                    "         --reverse-role     if set, reverses the role bet. server and the\n"
-                    "                            client once the connection is established\n"
-                    "         --tls              use TLS\n"
-                    "         --min-rtt=ms       minimum RTT to enable latency optimization\n"
-                    "         --max-cwnd=octets  maximum size of CWND to enable latency optimization\n", cmd);
+                    "Options: --listen             if set, waits for incoming connection. Otherwise,\n"
+                    "                              connects to the server running at given address\n"
+                    "         --reverse-role       if set, reverses the role bet. server and the\n"
+                    "                              client once the connection is established\n"
+                    "         --tls                use TLS\n"
+                    "         --block-size=octets  default write block size\n"
+                    "         --min-rtt=ms         minimum RTT to enable latency optimization\n"
+                    "         --max-cwnd=octets    maximum size of CWND to enable latency\n"
+                    "                              optimization\n", cmd);
     exit(1);
 }
 
@@ -223,6 +232,7 @@ int main(int argc, char **argv)
         {"listen", no_argument, NULL, 'l'},
         {"reverse-role", no_argument, NULL, 'r'},
         {"tls", no_argument, NULL, 't'},
+        {"block-size", no_argument, NULL, 'b'},
         {"min-rtt", required_argument, NULL, 'R'},
         {"max-cwnd", required_argument, NULL, 'c'},
         {}
@@ -231,7 +241,7 @@ int main(int argc, char **argv)
     struct addrinfo hints, *res = NULL;
     int err;
 
-    while ((opt_ch = getopt_long(argc, argv, "lrtR:c:", longopts, NULL)) != -1) {
+    while ((opt_ch = getopt_long(argc, argv, "lrtb:R:c:", longopts, NULL)) != -1) {
         switch (opt_ch) {
         case 'l':
             mode_listen = 1;
@@ -241,6 +251,12 @@ int main(int argc, char **argv)
             break;
         case 't':
             mode_tls = 1;
+            break;
+        case 'b':
+            if (sscanf(optarg, "%zu", &write_block_size) != 1) {
+                fprintf(stderr, "write block size (-b) must be a non-negative number of octets\n");
+                exit(1);
+            }
             break;
         case 'R':
             if (sscanf(optarg, "%u", &latopt_cond.min_rtt) != 1) {
