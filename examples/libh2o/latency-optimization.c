@@ -313,12 +313,22 @@ int main(int argc, char **argv)
         SSL_library_init();
         OpenSSL_add_all_algorithms();
         if (mode_server) {
-            ssl_ctx = SSL_CTX_new(TLSv1_server_method());
+            ssl_ctx = SSL_CTX_new(SSLv23_server_method());
             SSL_CTX_use_certificate_file(ssl_ctx, "examples/h2o/server.crt", SSL_FILETYPE_PEM);
             SSL_CTX_use_PrivateKey_file(ssl_ctx, "examples/h2o/server.key", SSL_FILETYPE_PEM);
         } else {
-            ssl_ctx = SSL_CTX_new(TLSv1_client_method());
+            ssl_ctx = SSL_CTX_new(SSLv23_client_method());
         }
+        int nid = NID_X9_62_prime256v1;
+        EC_KEY *key = EC_KEY_new_by_curve_name(nid);
+        if (key == NULL) {
+            fprintf(stderr, "Failed to create curve \"%s\"\n", OBJ_nid2sn(nid));
+            exit(1);
+        }
+        SSL_CTX_set_tmp_ecdh(ssl_ctx, key);
+        EC_KEY_free(key);
+        SSL_CTX_set_options(ssl_ctx, SSL_OP_ALL | SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
+        SSL_CTX_set_cipher_list(ssl_ctx, "ECDHE-RSA-AES128-GCM-SHA256");
     }
 
 #if H2O_USE_LIBUV
