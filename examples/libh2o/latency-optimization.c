@@ -174,7 +174,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     }
 
     if (ssl_ctx != NULL) {
-        h2o_socket_ssl_handshake(sock, ssl_ctx, mode_server ? NULL : host, on_handshake_complete);
+        h2o_socket_ssl_handshake(sock, ssl_ctx, mode_server ? NULL : "blahblah", on_handshake_complete);
     } else {
         on_handshake_complete(sock, NULL);
     }
