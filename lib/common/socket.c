@@ -472,7 +472,7 @@ static int obtain_tcp_info(int fd, uint32_t *rtt, uint32_t *mss, uint32_t *cwnd_
     *cwnd_avail = tcpi.tcpi_snd_cwnd > tcpi.tcpi_unacked ? tcpi.tcpi_snd_cwnd - tcpi.tcpi_unacked + 1 : 1;
     return 0;
 
-#elif defined(__FreeBSD__) && defined(TCP_INFO)
+#elif defined(__FreeBSD__) && defined(TCP_INFO) && 0 /* disabled since we wouldn't use it anyways; the OS lacks TCP_NOTSENT_LOWAT */
 
     struct tcp_info tcpi;
     socklen_t tcpisz = sizeof(tcpi);
