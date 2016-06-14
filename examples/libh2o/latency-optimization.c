@@ -254,7 +254,7 @@ int main(int argc, char **argv)
         SSL_load_error_strings();
         SSL_library_init();
         OpenSSL_add_all_algorithms();
-        if (mode_listen) {
+        if (mode_server) {
             ssl_ctx = SSL_CTX_new(TLSv1_server_method());
             SSL_CTX_use_certificate_file(ssl_ctx, H2O_TO_STR(H2O_ROOT) "/examples/h2o/server.crt", SSL_FILETYPE_PEM);
             SSL_CTX_use_PrivateKey_file(ssl_ctx, H2O_TO_STR(H2O_ROOT) "/examples/h2o/server.key", SSL_FILETYPE_PEM);
