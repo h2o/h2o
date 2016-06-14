@@ -24,10 +24,15 @@
 #include <inttypes.h>
 #include <limits.h>
 #include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <string.h>
 #include <sys/un.h>
 #include <unistd.h>
 #include <openssl/err.h>
+#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+#include <sys/ioctl.h>
+#endif
 #include "h2o/socket.h"
 #include "h2o/timeout.h"
 
@@ -39,12 +44,18 @@
 #define IOV_MAX UIO_MAXIOV
 #endif
 
+/* kernel-headers bundled with Ubuntu 14.04 does not have the constant defined in netinet/tcp.h */
+#if defined(__linux__) && !defined(TCP_NOTSENT_LOWAT)
+#define TCP_NOTSENT_LOWAT 25
+#endif
+
 #define OPENSSL_HOSTNAME_VALIDATION_LINKAGE static
 #include "../../deps/ssl-conservatory/openssl/openssl_hostname_validation.c"
 
 struct st_h2o_socket_ssl_t {
     SSL *ssl;
     int *did_write_in_read; /* used for detecting and closing the connection upon renegotiation (FIXME implement renegotiation) */
+    size_t record_overhead;
     struct {
         h2o_socket_cb cb;
         union {
@@ -379,6 +390,166 @@ void h2o_socket_close(h2o_socket_t *sock)
     }
 }
 
+static uint16_t calc_suggested_tls_payload_size(h2o_socket_t *sock, uint16_t suggested_tls_record_size)
+{
+    uint16_t ps = suggested_tls_record_size;
+    if (sock->ssl != NULL && sock->ssl->record_overhead < ps)
+        ps -= sock->ssl->record_overhead;
+    return ps;
+}
+
+static void disable_latency_optimized_write(h2o_socket_t *sock, int (*adjust_notsent_lowat)(h2o_socket_t *, unsigned))
+{
+#ifdef TCP_NOTSENT_LOWAT
+    if (sock->_latency_optimization.state != H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD)
+        adjust_notsent_lowat(sock, UINT_MAX);
+#endif
+    sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED;
+    sock->_latency_optimization.suggested_tls_payload_size = calc_suggested_tls_payload_size(sock, 16384);
+    sock->_latency_optimization.suggested_write_size = SIZE_MAX;
+}
+
+static inline void prepare_for_latency_optimized_write(h2o_socket_t *sock,
+                                                       const h2o_socket_latency_optimization_conditions_t *conditions, uint32_t rtt,
+                                                       uint32_t mss, uint32_t cwnd_size, uint32_t cwnd_avail, uint64_t loop_time,
+                                                       int (*adjust_notsent_lowat)(h2o_socket_t *, unsigned))
+{
+    /* check RTT */
+    if (rtt < conditions->min_rtt * 1000)
+        goto Disable;
+    if (rtt * conditions->max_additional_delay < loop_time * 1000 * 100)
+        goto Disable;
+
+    /* mimimize tcp send buffer size if not yet being done */
+    if (sock->_latency_optimization.state == H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD) {
+        if (adjust_notsent_lowat(sock, 1 /* cannot be set to zero on Linux */) != 0)
+            goto Disable;
+    }
+
+    /* latency-optimization is enabled */
+    sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED;
+
+    /* no need to:
+     *   1) adjust the write size if single_write_size << cwnd_size
+     *   2) align TLS record boundary to TCP packet boundary if packet loss-rate is low and BW isn't small (implied by cwnd size)
+     */
+    if (mss * cwnd_size >= conditions->max_cwnd) {
+        sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED;
+        sock->_latency_optimization.suggested_tls_payload_size = calc_suggested_tls_payload_size(sock, 16384);
+        sock->_latency_optimization.suggested_write_size = SIZE_MAX;
+    } else {
+        sock->_latency_optimization.suggested_tls_payload_size = calc_suggested_tls_payload_size(sock, mss);
+        sock->_latency_optimization.suggested_write_size =
+            cwnd_avail * (size_t)sock->_latency_optimization.suggested_tls_payload_size;
+    }
+    return;
+
+Disable:
+    disable_latency_optimized_write(sock, adjust_notsent_lowat);
+}
+
+/**
+ * Obtains RTT, MSS, size of CWND (in the number of packets).
+ * Also writes to cwnd_avail minimum number of packets (of MSS size) sufficient to shut up poll-for-write under the precondition
+ * that TCP_NOTSENT_LOWAT is set to 1.
+ */
+static int obtain_tcp_info(int fd, uint32_t *rtt, uint32_t *mss, uint32_t *cwnd_size, uint32_t *cwnd_avail)
+{
+#define CALC_CWND_PAIR_FROM_BYTE_UNITS(cwnd_bytes, inflight_bytes) do { \
+    *cwnd_size = (cwnd_bytes + *mss / 2) / *mss; \
+    *cwnd_avail = cwnd_bytes > inflight_bytes ? (cwnd_bytes - inflight_bytes) / *mss + 1 : 1; \
+} while (0)
+
+#if defined(__linux__) && defined(TCP_INFO)
+
+    struct tcp_info tcpi;
+    socklen_t tcpisz = sizeof(tcpi);
+    if (getsockopt(fd, IPPROTO_TCP, TCP_INFO, &tcpi, &tcpisz) != 0)
+        return -1;
+    *rtt = tcpi.tcpi_rtt;
+    *mss = tcpi.tcpi_snd_mss;
+    *cwnd_size = tcpi.tcpi_snd_cwnd;
+    *cwnd_avail = tcpi.tcpi_snd_cwnd > tcpi.tcpi_unacked ? tcpi.tcpi_snd_cwnd - tcpi.tcpi_unacked + 1 : 1;
+    return 0;
+
+#elif defined(__FreeBSD__) && defined(TCP_INFO)
+
+    struct tcp_info tcpi;
+    socklen_t tcpisz = sizeof(tcpi);
+    int bytes_inflight;
+    if (getsockopt(fd, IPPROTO_TCP, TCP_INFO, &tcpi, &tcpisz) != 0 || ioctl(fd, FIONWRITE, &bytes_inflight) == -1)
+        return -1;
+    *rtt = tcpi.tcpi_rtt;
+    *mss = tcpi.tcpi_snd_mss;
+    CALC_CWND_PAIR_FROM_BYTE_UNITS(tcpi.tcpi_snd_cwnd, bytes_inflight);
+    return 0;
+
+#elif defined(__APPLE__) && defined(TCP_CONNECTION_INFO)
+
+    struct tcp_connection_info tcpi;
+    socklen_t tcpisz = sizeof(tcpi);
+    if (getsockopt(fd, IPPROTO_TCP, TCP_CONNECTION_INFO, &tcpi, &tcpisz) != 0)
+        return -1;
+    *rtt = tcpi.tcpi_srtt * 1000;
+    *mss = tcpi.tcpi_maxseg;
+    CALC_CWND_PAIR_FROM_BYTE_UNITS(tcpi.tcpi_snd_cwnd, tcpi.tcpi_snd_sbbytes);
+    return 0;
+
+#else
+    /* TODO add support for NetBSD; note that the OS returns the number of packets for tcpi_snd_cwnd; see
+     * http://twitter.com/n_soda/status/740719125878575105
+     */
+    return -1;
+#endif
+
+#undef CALC_CWND_PAIR_FROM_BYTE_UNITS
+}
+
+#ifdef TCP_NOTSENT_LOWAT
+static int adjust_notsent_lowat(h2o_socket_t *sock, unsigned notsent_lowat)
+{
+    return setsockopt(h2o_socket_get_fd(sock), IPPROTO_TCP, TCP_NOTSENT_LOWAT, &notsent_lowat, sizeof(notsent_lowat));
+}
+#else
+#define adjust_notsent_lowat NULL
+#endif
+
+size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
+                                                         const h2o_socket_latency_optimization_conditions_t *conditions)
+{
+    uint32_t rtt = 0, mss = 0, cwnd_size = 0, cwnd_avail = 0;
+    uint64_t loop_time = UINT64_MAX;
+    int can_prepare = 1;
+
+#if !defined(TCP_NOTSENT_LOWAT)
+    /* the feature cannot be setup unless TCP_NOTSENT_LOWAT is available */
+    can_prepare = 0;
+#endif
+
+#if H2O_USE_LIBUV
+    /* poll-then-write is impossible with libuv */
+    can_prepare = 0;
+#else
+    if (can_prepare)
+        loop_time = h2o_evloop_get_execution_time(h2o_socket_get_loop(sock));
+#endif
+
+    /* obtain TCP states */
+    if (can_prepare && obtain_tcp_info(h2o_socket_get_fd(sock), &rtt, &mss, &cwnd_size, &cwnd_avail) != 0)
+        can_prepare = 0;
+
+    /* determine suggested_write_size, suggested_tls_record_size and adjust TCP_NOTSENT_LOWAT based on the obtained information */
+    if (can_prepare) {
+        prepare_for_latency_optimized_write(sock, conditions, rtt, mss, cwnd_size, cwnd_avail, loop_time, adjust_notsent_lowat);
+    } else {
+        disable_latency_optimized_write(sock, adjust_notsent_lowat);
+    }
+
+    return sock->_latency_optimization.suggested_write_size;
+
+#undef CALC_CWND_PAIR_FROM_BYTE_UNITS
+}
+
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
 #if H2O_SOCKET_DUMP_WRITE
@@ -401,13 +572,22 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
     } else {
         assert(sock->ssl->output.bufs.size == 0);
         /* fill in the data */
+        size_t ssl_record_size;
+        switch (sock->_latency_optimization.state) {
+        case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD:
+            ssl_record_size = 1400;
+            break;
+        default:
+            ssl_record_size = sock->_latency_optimization.suggested_tls_payload_size;
+            break;
+        }
         for (; bufcnt != 0; ++bufs, --bufcnt) {
             size_t off = 0;
             while (off != bufs[0].len) {
                 int ret;
                 size_t sz = bufs[0].len - off;
-                if (sz > 1400)
-                    sz = 1400;
+                if (sz > ssl_record_size)
+                    sz = ssl_record_size;
                 ret = SSL_write(sock->ssl->ssl, bufs[0].base + off, (int)sz);
                 if (ret != sz) {
                     /* The error happens if SSL_write is called after SSL_read returns a fatal error (e.g. due to corrupt TCP packet
@@ -618,6 +798,31 @@ static void on_async_resumption_remove(SSL_CTX *ssl_ctx, SSL_SESSION *session)
 
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
+    if (err == NULL) {
+        switch (SSL_get_current_cipher(sock->ssl->ssl)->id) {
+        case TLS1_CK_RSA_WITH_AES_128_GCM_SHA256:
+        case TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256:
+        case TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
+        case TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:
+        case TLS1_CK_RSA_WITH_AES_256_GCM_SHA384:
+        case TLS1_CK_DHE_RSA_WITH_AES_256_GCM_SHA384:
+        case TLS1_CK_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
+        case TLS1_CK_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:
+            sock->ssl->record_overhead = 5 /* header */ + 8 /* record_iv_length (RFC 5288 3) */ + 16 /* tag (RFC 5116 5.1) */;
+            break;
+#if defined(TLS1_CK_DHE_RSA_CHACHA20_POLY1305)
+        case TLS1_CK_DHE_RSA_CHACHA20_POLY1305:
+        case TLS1_CK_ECDHE_RSA_CHACHA20_POLY1305:
+        case TLS1_CK_ECDHE_ECDSA_CHACHA20_POLY1305:
+            sock->ssl->record_overhead = 5 /* header */ + 16 /* tag */;
+            break;
+#endif
+        default:
+            sock->ssl->record_overhead = 32; /* sufficiently large number that can hold most payloads */
+            break;
+        }
+    }
+
     h2o_socket_cb handshake_cb = sock->ssl->handshake.cb;
     sock->_cb.write = NULL;
     sock->ssl->handshake.cb = NULL;
@@ -861,3 +1066,27 @@ void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols)
 }
 
 #endif
+
+void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now)
+{
+    uint64_t elapsed;
+
+    assert(counter->cur.start_at != 0);
+
+    /* calculate the time used, and reset cur */
+    if (now <= counter->cur.start_at)
+        elapsed = 0;
+    else
+        elapsed = now - counter->cur.start_at;
+    counter->cur.start_at = 0;
+
+    /* adjust prev */
+    counter->prev.sum += elapsed;
+    counter->prev.sum -= counter->prev.slots[counter->prev.index];
+    counter->prev.slots[counter->prev.index] = elapsed;
+    if (++counter->prev.index >= sizeof(counter->prev.slots) / sizeof(counter->prev.slots[0]))
+        counter->prev.index = 0;
+
+    /* recalc average */
+    counter->average = counter->prev.sum / (sizeof(counter->prev.slots) / sizeof(counter->prev.slots[0]));
+}

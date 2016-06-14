@@ -325,8 +325,17 @@ inline int h2o_http2_stream_is_push(uint32_t stream_id)
 inline ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn)
 {
     ssize_t ret, winsz;
+    size_t capacity, cwnd_left;
 
-    ret = conn->_write.buf->capacity - conn->_write.buf->size;
+    capacity = conn->_write.buf->capacity;
+    if ((cwnd_left = h2o_socket_prepare_for_latency_optimized_write(
+             conn->sock, &conn->super.ctx->globalconf->http2.latency_optimization)) < capacity) {
+        capacity = cwnd_left;
+        if (capacity < conn->_write.buf->size)
+            return 0;
+    }
+
+    ret = capacity - conn->_write.buf->size;
     if (ret < H2O_HTTP2_FRAME_HEADER_SIZE)
         return 0;
     ret -= H2O_HTTP2_FRAME_HEADER_SIZE;

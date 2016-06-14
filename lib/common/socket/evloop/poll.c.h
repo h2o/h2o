@@ -110,6 +110,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
     /* update readable flags, perform writes */
     if (ret > 0) {
         size_t i;
+        h2o_sliding_counter_start(&loop->super.exec_time_counter, loop->super._now);
         for (i = 0; i != pollfds.size; ++i) {
             /* set read_ready flag before calling the write cb, since app. code invoked by the latter may close the socket, clearing
              * the former flag */

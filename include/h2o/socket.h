@@ -51,6 +51,22 @@ extern "C" {
 #define H2O_USE_NPN 0
 #endif
 
+typedef struct st_h2o_sliding_counter_t {
+    uint64_t average;
+    struct {
+        uint64_t sum;
+        uint64_t slots[8];
+        size_t index;
+    } prev;
+    struct {
+        uint64_t start_at;
+    } cur;
+} h2o_sliding_counter_t;
+
+static int h2o_sliding_counter_is_running(h2o_sliding_counter_t *counter);
+static void h2o_sliding_counter_start(h2o_sliding_counter_t *counter, uint64_t now);
+void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now);
+
 #define H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE 4096
 
 typedef struct st_h2o_socket_t h2o_socket_t;
@@ -66,6 +82,13 @@ typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
 struct st_h2o_socket_peername_t {
     socklen_t len;
     struct sockaddr addr;
+};
+
+enum {
+    H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD = 0,
+    H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE,
+    H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED,
+    H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED
 };
 
 /**
@@ -85,6 +108,11 @@ struct st_h2o_socket_t {
         h2o_socket_cb write;
     } _cb;
     struct st_h2o_socket_peername_t *_peername;
+    struct {
+        uint8_t state; /* one of H2O_SOCKET_LATENCY_STATE_* */
+        uint16_t suggested_tls_payload_size;
+        size_t suggested_write_size; /* SIZE_MAX if no need to optimize for latency */
+    } _latency_optimization;
 };
 
 typedef struct st_h2o_socket_export_t {
@@ -92,6 +120,24 @@ typedef struct st_h2o_socket_export_t {
     struct st_h2o_socket_ssl_t *ssl;
     h2o_buffer_t *input;
 } h2o_socket_export_t;
+
+/**
+ * sets the conditions to enable the optimization
+ */
+typedef struct st_h2o_socket_latency_optimization_conditions_t {
+    /**
+     * in milliseconds
+     */
+    unsigned min_rtt;
+    /**
+     * percent ratio
+     */
+    unsigned max_additional_delay;
+    /**
+     * in number of octets
+     */
+    unsigned max_cwnd;
+} h2o_socket_latency_optimization_conditions_t;
 
 typedef void (*h2o_socket_ssl_resumption_get_async_cb)(h2o_socket_t *sock, h2o_iovec_t session_id);
 typedef void (*h2o_socket_ssl_resumption_new_cb)(h2o_iovec_t session_id, h2o_iovec_t session_data);
@@ -147,6 +193,13 @@ void h2o_socket_dont_read(h2o_socket_t *sock, int dont_read);
  * connects to peer
  */
 h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb);
+/**
+ * prepares for latency-optimized write and returns the number of octets that should be written, or SIZE_MAX if failed to prepare
+ */
+static size_t h2o_socket_prepare_for_latency_optimized_write(h2o_socket_t *sock,
+                                                             const h2o_socket_latency_optimization_conditions_t *conditions);
+size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
+                                                         const h2o_socket_latency_optimization_conditions_t *conditions);
 /**
  * writes given data to socket
  * @param sock the socket
@@ -264,6 +317,18 @@ inline int h2o_socket_is_reading(h2o_socket_t *sock)
     return sock->_cb.read != NULL;
 }
 
+inline size_t h2o_socket_prepare_for_latency_optimized_write(h2o_socket_t *sock,
+                                                             const h2o_socket_latency_optimization_conditions_t *conditions)
+{
+    switch (sock->_latency_optimization.state) {
+    case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD:
+    case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE:
+        return h2o_socket_do_prepare_for_latency_optimized_write(sock, conditions);
+    default:
+        return sock->_latency_optimization.suggested_write_size;
+    }
+}
+
 inline h2o_iovec_t h2o_socket_log_ssl_protocol_version(h2o_socket_t *sock, h2o_mem_pool_t *pool)
 {
     const char *s = h2o_socket_get_ssl_protocol_version(sock);
@@ -286,6 +351,16 @@ inline h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t 
 {
     const char *s = h2o_socket_get_ssl_cipher(sock);
     return s != NULL ? h2o_iovec_init(s, strlen(s)) : h2o_iovec_init(H2O_STRLIT("-"));
+}
+
+inline int h2o_sliding_counter_is_running(h2o_sliding_counter_t *counter)
+{
+    return counter->cur.start_at != 0;
+}
+
+inline void h2o_sliding_counter_start(h2o_sliding_counter_t *counter, uint64_t now)
+{
+    counter->cur.start_at = now;
 }
 
 #ifdef __cplusplus
