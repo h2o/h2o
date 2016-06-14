@@ -490,7 +490,7 @@ static int obtain_tcp_info(int fd, uint32_t *rtt, uint32_t *mss, uint32_t *cwnd_
     socklen_t tcpisz = sizeof(tcpi);
     if (getsockopt(fd, IPPROTO_TCP, TCP_CONNECTION_INFO, &tcpi, &tcpisz) != 0)
         return -1;
-    *rtt = tcpi.tcpi_srtt * 1000;
+    *rtt = tcpi.tcpi_rttcur * 1000;
     *mss = tcpi.tcpi_maxseg;
     CALC_CWND_PAIR_FROM_BYTE_UNITS(tcpi.tcpi_snd_cwnd, tcpi.tcpi_snd_sbbytes);
     return 0;
@@ -577,6 +577,9 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
         case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD:
             ssl_record_size = 1400;
             break;
+        case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED:
+            sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE;
+            /* fallthru */
         default:
             ssl_record_size = sock->_latency_optimization.suggested_tls_payload_size;
             break;

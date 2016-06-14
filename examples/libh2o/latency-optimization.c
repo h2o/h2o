@@ -78,7 +78,7 @@ void server_write(h2o_socket_t *sock)
 #define BUF_SIZE 65536
 
     static h2o_socket_latency_optimization_conditions_t cond = {
-        .min_rtt              = 50000,
+        .min_rtt              = 50,
         .max_additional_delay = 10,
         .max_cwnd             = 65535,
     };
@@ -93,6 +93,7 @@ void server_write(h2o_socket_t *sock)
 
     size_t sz = h2o_socket_prepare_for_latency_optimized_write(sock, &cond);
     h2o_iovec_t warg = h2o_iovec_init(buf, sz < BUF_SIZE ? sz : BUF_SIZE);
+    fprintf(stderr, "writing %zu bytes\n", warg.len);
     h2o_socket_write(sock, &warg, 1, server_on_write_complete);
 }
 
@@ -146,7 +147,7 @@ static void client_on_read_first(h2o_socket_t *sock, const char *err)
 
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
-    if (err != NULL) {
+    if (err != NULL && err != h2o_socket_error_ssl_cert_name_mismatch) {
         /* TLS handshake failed */
         fprintf(stderr, "TLS handshake failure:%s\n", err);
         h2o_socket_close(sock);
@@ -253,9 +254,13 @@ int main(int argc, char **argv)
         SSL_load_error_strings();
         SSL_library_init();
         OpenSSL_add_all_algorithms();
-        ssl_ctx = SSL_CTX_new(TLSv1_client_method());
-        SSL_CTX_load_verify_locations(ssl_ctx, H2O_TO_STR(H2O_ROOT) "/share/h2o/ca-bundle.crt", NULL);
-        SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+        if (mode_listen) {
+            ssl_ctx = SSL_CTX_new(TLSv1_server_method());
+            SSL_CTX_use_certificate_file(ssl_ctx, H2O_TO_STR(H2O_ROOT) "/examples/h2o/server.crt", SSL_FILETYPE_PEM);
+            SSL_CTX_use_PrivateKey_file(ssl_ctx, H2O_TO_STR(H2O_ROOT) "/examples/h2o/server.key", SSL_FILETYPE_PEM);
+        } else {
+            ssl_ctx = SSL_CTX_new(TLSv1_client_method());
+        }
     }
 
 #if H2O_USE_LIBUV
@@ -275,9 +280,10 @@ int main(int argc, char **argv)
     }
 
     if (mode_listen) {
-        int fd;
-        if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1 || bind(fd, res->ai_addr, res->ai_addrlen) != 0 ||
-            listen(fd, SOMAXCONN) != 0) {
+        int fd, reuseaddr_flag = 1;
+        if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1 ||
+            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0 ||
+            bind(fd, res->ai_addr, res->ai_addrlen) != 0 || listen(fd, SOMAXCONN) != 0) {
             fprintf(stderr, "failed to listen to %s:%s:%s\n", host, port, strerror(errno));
             exit(1);
         }
