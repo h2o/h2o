@@ -218,7 +218,7 @@ int main(int argc, char **argv)
         case 'l':
             mode_listen = 1;
             break;
-        case 'i':
+        case 'r':
             mode_reverse_role = 1;
             break;
         case 't':
