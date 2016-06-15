@@ -401,8 +401,10 @@ static uint16_t calc_suggested_tls_payload_size(h2o_socket_t *sock, uint16_t sug
 static void disable_latency_optimized_write(h2o_socket_t *sock, int (*adjust_notsent_lowat)(h2o_socket_t *, unsigned))
 {
 #ifdef TCP_NOTSENT_LOWAT
-    if (sock->_latency_optimization.state != H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD)
-        adjust_notsent_lowat(sock, UINT_MAX);
+    if (sock->_latency_optimization.notsent_is_minimized) {
+        adjust_notsent_lowat(sock, 0);
+        sock->_latency_optimization.notsent_is_minimized = 0;
+    }
 #endif
     sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED;
     sock->_latency_optimization.suggested_tls_payload_size = calc_suggested_tls_payload_size(sock, 16384);
@@ -420,12 +422,6 @@ static inline void prepare_for_latency_optimized_write(h2o_socket_t *sock,
     if (rtt * conditions->max_additional_delay < loop_time * 1000 * 100)
         goto Disable;
 
-    /* mimimize tcp send buffer size if not yet being done */
-    if (sock->_latency_optimization.state == H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD) {
-        if (adjust_notsent_lowat(sock, 1 /* cannot be set to zero on Linux */) != 0)
-            goto Disable;
-    }
-
     /* latency-optimization is enabled */
     sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED;
 
@@ -433,14 +429,23 @@ static inline void prepare_for_latency_optimized_write(h2o_socket_t *sock,
      *   1) adjust the write size if single_write_size << cwnd_size
      *   2) align TLS record boundary to TCP packet boundary if packet loss-rate is low and BW isn't small (implied by cwnd size)
      */
-    if (mss * cwnd_size >= conditions->max_cwnd) {
-        sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED;
-        sock->_latency_optimization.suggested_tls_payload_size = calc_suggested_tls_payload_size(sock, 16384);
-        sock->_latency_optimization.suggested_write_size = SIZE_MAX;
-    } else {
+    if (mss * cwnd_size < conditions->max_cwnd) {
+        if (!sock->_latency_optimization.notsent_is_minimized) {
+            if (adjust_notsent_lowat(sock, 1 /* cannot be set to zero on Linux */) != 0)
+                goto Disable;
+            sock->_latency_optimization.notsent_is_minimized = 1;
+        }
         sock->_latency_optimization.suggested_tls_payload_size = calc_suggested_tls_payload_size(sock, mss);
         sock->_latency_optimization.suggested_write_size =
             cwnd_avail * (size_t)sock->_latency_optimization.suggested_tls_payload_size;
+    } else {
+        if (sock->_latency_optimization.notsent_is_minimized) {
+            if (adjust_notsent_lowat(sock, 0) != 0)
+                goto Disable;
+            sock->_latency_optimization.notsent_is_minimized = 0;
+        }
+        sock->_latency_optimization.suggested_tls_payload_size = calc_suggested_tls_payload_size(sock, 16384);
+        sock->_latency_optimization.suggested_write_size = SIZE_MAX;
     }
     return;
 
