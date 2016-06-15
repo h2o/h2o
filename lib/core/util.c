@@ -310,45 +310,22 @@ size_t h2o_stringify_protocol_version(char *dst, int version)
     return p - dst;
 }
 
-h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len, h2o_iovec_t base_path,
-                                                   const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
-                                                   const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority)
+static void push_one_path(h2o_mem_pool_t *pool, h2o_iovec_vector_t *paths_to_push, h2o_iovec_t *url,
+                          h2o_iovec_t base_path, const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
+                          const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority)
 {
-    h2o_iovec_t url;
     h2o_url_t parsed, resolved;
 
-    { /* extract URL value from: Link: </pushed.css>; rel=preload */
-        h2o_iovec_t iter = h2o_iovec_init(value, value_len), token_value;
-        const char *token;
-        size_t token_len;
-        /* first element should be <URL> */
-        if ((token = h2o_next_token(&iter, ';', &token_len, NULL)) == NULL)
-            goto None;
-        if (!(token_len >= 2 && token[0] == '<' && token[token_len - 1] == '>'))
-            goto None;
-        url = h2o_iovec_init(token + 1, token_len - 2);
-        /* find rel=preload */
-        int preload = 0;
-        while ((token = h2o_next_token(&iter, ';', &token_len, &token_value)) != NULL) {
-            if (h2o_lcstris(token, token_len, H2O_STRLIT("rel")) &&
-                h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload"))) {
-                preload++;
-            } else
-            if (h2o_lcstris(token, token_len, H2O_STRLIT("nopush"))) {
-                goto None;
-            }
-        }
-        if (!preload)
-            goto None;
-    }
-
     /* check the authority, and extract absolute path */
-    if (h2o_url_parse_relative(url.base, url.len, &parsed) != 0)
-        goto None;
+    if (h2o_url_parse_relative(url->base, url->len, &parsed) != 0)
+        return;
 
     /* fast-path for abspath form */
-    if (base_scheme == NULL && parsed.scheme == NULL && parsed.authority.base == NULL && url.len != 0 && url.base[0] == '/')
-        return h2o_strdup(pool, url.base, url.len);
+    if (base_scheme == NULL && parsed.scheme == NULL && parsed.authority.base == NULL && url->len != 0 && url->base[0] == '/') {
+        h2o_vector_reserve(pool, paths_to_push, paths_to_push->size + 1);
+        paths_to_push->entries[paths_to_push->size++] = h2o_strdup(pool, url->base, url->len);
+        return;
+    }
 
     /* check scheme and authority if given URL contains either of the two, or if base is specified */
     h2o_url_t base = {input_scheme, input_authority, {}, base_path, 65535};
@@ -358,13 +335,55 @@ h2o_iovec_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const c
     }
     h2o_url_resolve(pool, &base, &parsed, &resolved);
     if (input_scheme != resolved.scheme)
-        goto None;
+        return;
     if (!h2o_lcstris(input_authority.base, input_authority.len, resolved.authority.base, resolved.authority.len))
-        goto None;
-    return resolved.path;
+        return;
 
-None:
-    return (h2o_iovec_t){};
+    h2o_vector_reserve(pool, paths_to_push, paths_to_push->size + 1);
+    paths_to_push->entries[paths_to_push->size++] = resolved.path;
+}
+
+h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len, h2o_iovec_t base_path,
+                                                      const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
+                                                      const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority)
+{
+    h2o_iovec_vector_t paths_to_push;
+    h2o_iovec_t url;
+
+    paths_to_push = (h2o_iovec_vector_t){};
+
+    const char *coma_token;
+    size_t coma_token_len;
+    h2o_iovec_t coma_iter = h2o_iovec_init(value, value_len);
+
+    while ((coma_token = h2o_next_token(&coma_iter, ',', &coma_token_len, NULL)) != NULL) {
+        /* extract URL value from: Link: </pushed.css>; rel=preload */
+        h2o_iovec_t iter = h2o_iovec_init(coma_token, coma_token_len), token_value;
+        const char *token;
+        size_t token_len;
+        /* first element should be <URL> */
+        if ((token = h2o_next_token(&iter, ';', &token_len, NULL)) == NULL)
+            continue;
+        if (!(token_len >= 2 && token[0] == '<' && token[token_len - 1] == '>'))
+            continue;
+        url = h2o_iovec_init(token + 1, token_len - 2);
+        /* find rel=preload */
+        int preload = 0;
+        int nopush = 0;
+        while ((token = h2o_next_token(&iter, ';', &token_len, &token_value)) != NULL) {
+            if (h2o_lcstris(token, token_len, H2O_STRLIT("rel")) &&
+                    h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload"))) {
+                preload++;
+            } else if (h2o_lcstris(token, token_len, H2O_STRLIT("nopush"))) {
+                nopush++;
+            }
+        }
+        if (!nopush && preload) {
+            push_one_path(pool, &paths_to_push, &url, base_path, input_scheme, input_authority, base_scheme, base_authority);
+        }
+    }
+
+    return paths_to_push;
 }
 
 int h2o_get_compressible_types(const h2o_headers_t *headers)
