@@ -78,6 +78,7 @@ static struct {
     } fetch_tcp_info;
     struct {
         int ret;
+        unsigned cur;
         size_t call_cnt;
     } minimize_notsent_lowat;
     struct {
@@ -87,6 +88,7 @@ static struct {
 
 static int test_adjust_notsent_lowat(h2o_socket_t *sock, unsigned notsent_lowat)
 {
+    cb_ret_vars.minimize_notsent_lowat.cur = notsent_lowat;
     ++cb_ret_vars.minimize_notsent_lowat.call_cnt;
     return cb_ret_vars.minimize_notsent_lowat.ret;
 }
@@ -118,6 +120,7 @@ static void test_prepare_for_latency_optimization(void)
     ok(sock._latency_optimization.suggested_tls_payload_size == 1400 - (5 + 8 + 16));
     ok(sock._latency_optimization.suggested_write_size == (1400 - (5 + 8 + 16)) * (10 - 5 + 1));
     ok(cb_ret_vars.minimize_notsent_lowat.call_cnt == 1);
+    ok(cb_ret_vars.minimize_notsent_lowat.cur == 1);
 
     /* recalculate with an updated cwnd,unacked */
     sock._latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE;
@@ -127,6 +130,7 @@ static void test_prepare_for_latency_optimization(void)
     ok(sock._latency_optimization.suggested_tls_payload_size == 1400 - (5 + 8 + 16));
     ok(sock._latency_optimization.suggested_write_size == (1400 - (5 + 8 + 16)) * (14 - 3 + 1));
     ok(cb_ret_vars.minimize_notsent_lowat.call_cnt == 1);
+    ok(cb_ret_vars.minimize_notsent_lowat.cur == 1);
 
     /* switches to B/W optimization when CWND becomes greater */
     sock._latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE;
@@ -135,7 +139,8 @@ static void test_prepare_for_latency_optimization(void)
     ok(sock._latency_optimization.state == H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED);
     ok(sock._latency_optimization.suggested_tls_payload_size == 16384 - (5 + 8 + 16));
     ok(sock._latency_optimization.suggested_write_size == SIZE_MAX);
-    ok(cb_ret_vars.minimize_notsent_lowat.call_cnt == 1);
+    ok(cb_ret_vars.minimize_notsent_lowat.call_cnt == 2);
+    ok(cb_ret_vars.minimize_notsent_lowat.cur == 0);
 
     /* switches back to latency optimization when CWND becomes small */
     sock._latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE;
@@ -144,16 +149,18 @@ static void test_prepare_for_latency_optimization(void)
     ok(sock._latency_optimization.state == H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED);
     ok(sock._latency_optimization.suggested_tls_payload_size == 1400 - (5 + 8 + 16));
     ok(sock._latency_optimization.suggested_write_size == (1400 - (5 + 8 + 16)) * (8 - 3 + 1));
-    ok(cb_ret_vars.minimize_notsent_lowat.call_cnt == 1);
+    ok(cb_ret_vars.minimize_notsent_lowat.call_cnt == 3);
+    ok(cb_ret_vars.minimize_notsent_lowat.cur == 1);
 
-    /* switches back to latency optimization when CWND becomes small */
+    /* switches back to B/W optimization when loop time becomes greater than threshold */
     sock._latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE;
     prepare_for_latency_optimized_write(&sock, &cond, 50000 /* rtt */, 1400 /* mss */, 8 /* cwnd_size */, 6 /* cwnd_avail */, 6,
                                         test_adjust_notsent_lowat);
     ok(sock._latency_optimization.state == H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED);
     ok(sock._latency_optimization.suggested_tls_payload_size == 16384 - (5 + 8 + 16));
     ok(sock._latency_optimization.suggested_write_size == SIZE_MAX);
-    ok(cb_ret_vars.minimize_notsent_lowat.call_cnt == 2);
+    ok(cb_ret_vars.minimize_notsent_lowat.call_cnt == 4);
+    ok(cb_ret_vars.minimize_notsent_lowat.cur == 0);
 }
 
 void test_lib__common__socket_c(void)
