@@ -47,9 +47,11 @@ size_t write_block_size = 65536;
 static h2o_loop_t *loop;
 static h2o_socket_t *sock;
 static struct {
-    uint64_t ms;
-    uint64_t octets;
-} delay;
+    uint64_t resp_start_at;
+    uint64_t sig_received_at;
+    uint64_t bytes_received;
+    uint64_t bytes_before_sig;
+} client_stats;
 
 static void server_write(h2o_socket_t *sock);
 
@@ -142,18 +144,24 @@ static void client_on_read_second(h2o_socket_t *sock, const char *err)
         return;
     }
 
-    for (i = 0; i != sock->input->size; ++i) {
-        if (sock->input->bytes[i] != '0')
-            goto FoundSig;
-        ++delay.octets;
+    if (client_stats.sig_received_at == 0) {
+        for (i = 0; i != sock->input->size; ++i) {
+            if (sock->input->bytes[i] != '0') {
+                client_stats.sig_received_at = h2o_now(h2o_socket_get_loop(sock));
+                break;
+            }
+            ++client_stats.bytes_before_sig;
+        }
     }
+    client_stats.bytes_received += sock->input->size;
     h2o_buffer_consume(&sock->input, sock->input->size);
-    return;
 
-FoundSig:
-    delay.ms = h2o_now(h2o_socket_get_loop(sock)) - delay.ms;
-    printf("Delay: %" PRIu64 " ms, %" PRIu64 " octets\n", delay.ms, delay.octets);
-    exit(0);
+    if (client_stats.bytes_received >= 1024 * 1024) {
+        uint64_t now = h2o_now(h2o_socket_get_loop(sock));
+        printf("Delay: %" PRIu64 " octets, %" PRIu64 " ms\n", client_stats.bytes_before_sig, client_stats.sig_received_at - client_stats.resp_start_at);
+        printf("Total: %" PRIu64 " octets, %" PRIu64 " ms\n", client_stats.bytes_received, now - client_stats.resp_start_at);
+        exit(0);
+    }
 }
 
 static void client_on_read_first(h2o_socket_t *sock, const char *err)
@@ -164,8 +172,11 @@ static void client_on_read_first(h2o_socket_t *sock, const char *err)
         return;
     }
 
+    client_stats.resp_start_at = h2o_now(h2o_socket_get_loop(sock));
+    client_stats.bytes_before_sig = sock->input->size;
+    client_stats.bytes_received = sock->input->size;
     h2o_buffer_consume(&sock->input, sock->input->size);
-    delay.ms = h2o_now(h2o_socket_get_loop(sock));
+
     h2o_iovec_t data = {H2O_STRLIT("!")};
     h2o_socket_write(sock, &data, 1, client_on_write_complete);
     h2o_socket_read_start(sock, client_on_read_second);
