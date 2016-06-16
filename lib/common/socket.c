@@ -462,7 +462,7 @@ static int obtain_tcp_info(int fd, uint32_t *rtt, uint32_t *mss, uint32_t *cwnd_
 {
 #define CALC_CWND_PAIR_FROM_BYTE_UNITS(cwnd_bytes, inflight_bytes) do { \
     *cwnd_size = (cwnd_bytes + *mss / 2) / *mss; \
-    *cwnd_avail = cwnd_bytes > inflight_bytes ? (cwnd_bytes - inflight_bytes) / *mss + 1 : 1; \
+    *cwnd_avail = cwnd_bytes > inflight_bytes ? (cwnd_bytes - inflight_bytes) / *mss + 2 : 2; \
 } while (0)
 
 #if defined(__linux__) && defined(TCP_INFO)
@@ -474,7 +474,7 @@ static int obtain_tcp_info(int fd, uint32_t *rtt, uint32_t *mss, uint32_t *cwnd_
     *rtt = tcpi.tcpi_rtt;
     *mss = tcpi.tcpi_snd_mss;
     *cwnd_size = tcpi.tcpi_snd_cwnd;
-    *cwnd_avail = tcpi.tcpi_snd_cwnd > tcpi.tcpi_unacked ? tcpi.tcpi_snd_cwnd - tcpi.tcpi_unacked + 1 : 1;
+    *cwnd_avail = tcpi.tcpi_snd_cwnd > tcpi.tcpi_unacked ? tcpi.tcpi_snd_cwnd - tcpi.tcpi_unacked + 2 : 2;
     return 0;
 
 #elif defined(__FreeBSD__) && defined(TCP_INFO) && 0 /* disabled since we wouldn't use it anyways; the OS lacks TCP_NOTSENT_LOWAT */
