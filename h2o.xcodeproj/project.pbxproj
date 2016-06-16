@@ -209,6 +209,8 @@
 		10E299581A67E68500701AA6 /* scheduler.c in Sources */ = {isa = PBXBuildFile; fileRef = 10E299571A67E68500701AA6 /* scheduler.c */; };
 		10E2995A1A68D03100701AA6 /* scheduler.c in Sources */ = {isa = PBXBuildFile; fileRef = 10E299591A68D03100701AA6 /* scheduler.c */; };
 		10E598011CE1683A000D7B94 /* mruby.c in Sources */ = {isa = PBXBuildFile; fileRef = 10B38A731B8D3544007DC191 /* mruby.c */; };
+		10EA45D81D0949BF00769A2B /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
+		10EA45E11D094A1200769A2B /* latency-optimization.c in Sources */ = {isa = PBXBuildFile; fileRef = 10EA45E01D094A1200769A2B /* latency-optimization.c */; };
 		10EC2A361A0B4D370083514F /* socketpool.h in Headers */ = {isa = PBXBuildFile; fileRef = 10EC2A351A0B4D370083514F /* socketpool.h */; };
 		10EC2A381A0B4DC70083514F /* socketpool.c in Sources */ = {isa = PBXBuildFile; fileRef = 10EC2A371A0B4DC70083514F /* socketpool.c */; };
 		10F417CC19C1907B00B6E31A /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
@@ -241,6 +243,13 @@
 			remoteInfo = h2o;
 		};
 		10D0905E19F38B2E0043D458 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1079230D19A320A700C52AD6 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1079231419A320A700C52AD6;
+			remoteInfo = h2o;
+		};
+		10EA45D41D0949BF00769A2B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 1079230D19A320A700C52AD6 /* Project object */;
 			proxyType = 1;
@@ -294,6 +303,15 @@
 			runOnlyForDeploymentPostprocessing = 1;
 		};
 		10D0906319F38B2E0043D458 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+		10EA45D91D0949BF00769A2B /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = /usr/share/man/man1/;
@@ -593,6 +611,8 @@
 		10DA969F1CD2BFEE00679165 /* cache.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cache.c; sourceTree = "<group>"; };
 		10E299571A67E68500701AA6 /* scheduler.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = scheduler.c; sourceTree = "<group>"; };
 		10E299591A68D03100701AA6 /* scheduler.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = scheduler.c; sourceTree = "<group>"; };
+		10EA45DF1D0949BF00769A2B /* examples-latency-optimization */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "examples-latency-optimization"; sourceTree = BUILT_PRODUCTS_DIR; };
+		10EA45E01D094A1200769A2B /* latency-optimization.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "latency-optimization.c"; sourceTree = "<group>"; };
 		10EC2A351A0B4D370083514F /* socketpool.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = socketpool.h; sourceTree = "<group>"; };
 		10EC2A371A0B4DC70083514F /* socketpool.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = socketpool.c; sourceTree = "<group>"; };
 		10F417D319C1907B00B6E31A /* h2o */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = h2o; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -663,6 +683,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				10D0906219F38B2E0043D458 /* libh2o.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		10EA45D71D0949BF00769A2B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				10EA45D81D0949BF00769A2B /* libh2o.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1035,6 +1063,7 @@
 				10F417D319C1907B00B6E31A /* h2o */,
 				10D0905119F0CA9C0043D458 /* examples-socket-server */,
 				10D0906919F38B2E0043D458 /* examples-http1client */,
+				10EA45DF1D0949BF00769A2B /* examples-latency-optimization */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -1304,6 +1333,7 @@
 				10D0905219F0CB130043D458 /* socket-client.c */,
 				107923FC19A3238500C52AD6 /* simple.c */,
 				1079241319A324B400C52AD6 /* websocket.c */,
+				10EA45E01D094A1200769A2B /* latency-optimization.c */,
 			);
 			path = libh2o;
 			sourceTree = "<group>";
@@ -1620,6 +1650,24 @@
 			productReference = 10D0906919F38B2E0043D458 /* examples-http1client */;
 			productType = "com.apple.product-type.tool";
 		};
+		10EA45D21D0949BF00769A2B /* examples-latency-optimization */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 10EA45DA1D0949BF00769A2B /* Build configuration list for PBXNativeTarget "examples-latency-optimization" */;
+			buildPhases = (
+				10EA45D51D0949BF00769A2B /* Sources */,
+				10EA45D71D0949BF00769A2B /* Frameworks */,
+				10EA45D91D0949BF00769A2B /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				10EA45D31D0949BF00769A2B /* PBXTargetDependency */,
+			);
+			name = "examples-latency-optimization";
+			productName = simple;
+			productReference = 10EA45DF1D0949BF00769A2B /* examples-latency-optimization */;
+			productType = "com.apple.product-type.tool";
+		};
 		10F417C619C1907B00B6E31A /* server */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 10F417CE19C1907B00B6E31A /* Build configuration list for PBXNativeTarget "server" */;
@@ -1666,6 +1714,7 @@
 				1079240219A3247A00C52AD6 /* examples-websocket */,
 				10D0904419F0CA9C0043D458 /* examples-socket-client */,
 				10D0905C19F38B2E0043D458 /* examples-http1client */,
+				10EA45D21D0949BF00769A2B /* examples-latency-optimization */,
 			);
 		};
 /* End PBXProject section */
@@ -1848,6 +1897,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		10EA45D51D0949BF00769A2B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				10EA45E11D094A1200769A2B /* latency-optimization.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		10F417C919C1907B00B6E31A /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1902,6 +1959,11 @@
 			isa = PBXTargetDependency;
 			target = 1079231419A320A700C52AD6 /* h2o */;
 			targetProxy = 10D0905E19F38B2E0043D458 /* PBXContainerItemProxy */;
+		};
+		10EA45D31D0949BF00769A2B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1079231419A320A700C52AD6 /* h2o */;
+			targetProxy = 10EA45D41D0949BF00769A2B /* PBXContainerItemProxy */;
 		};
 		10F417C719C1907B00B6E31A /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -2676,6 +2738,112 @@
 			};
 			name = "libuv-release";
 		};
+		10EA45DB1D0949BF00769A2B /* evloop-debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"/usr/local/openssl-1.0.2/include",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-lz",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "evloop-debug";
+		};
+		10EA45DC1D0949BF00769A2B /* libuv-debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"/usr/local/openssl-1.0.2/include",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-luv",
+					"-lz",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "libuv-debug";
+		};
+		10EA45DD1D0949BF00769A2B /* evloop-release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"/usr/local/openssl-1.0.2/include",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-lz",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "evloop-release";
+		};
+		10EA45DE1D0949BF00769A2B /* libuv-release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"/usr/local/openssl-1.0.2/include",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-luv",
+					"-lz",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "libuv-release";
+		};
 		10F417CF19C1907B00B6E31A /* evloop-debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2876,6 +3044,17 @@
 				10D0906619F38B2E0043D458 /* libuv-debug */,
 				10D0906719F38B2E0043D458 /* evloop-release */,
 				10D0906819F38B2E0043D458 /* libuv-release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "evloop-release";
+		};
+		10EA45DA1D0949BF00769A2B /* Build configuration list for PBXNativeTarget "examples-latency-optimization" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				10EA45DB1D0949BF00769A2B /* evloop-debug */,
+				10EA45DC1D0949BF00769A2B /* libuv-debug */,
+				10EA45DD1D0949BF00769A2B /* evloop-release */,
+				10EA45DE1D0949BF00769A2B /* libuv-release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = "evloop-release";

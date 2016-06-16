@@ -382,6 +382,12 @@ SET_TARGET_PROPERTIES(examples-websocket PROPERTIES
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-websocket libh2o ${LIBUV_LIBRARIES} ${WSLAY_LIBRARIES} ${EXTRA_LIBS})
 
+ADD_EXECUTABLE(examples-latency-optimization examples/libh2o/latency-optimization.c)
+SET_TARGET_PROPERTIES(examples-latency-optimization PROPERTIES
+    COMPILE_FLAGS "-DH2O_USE_LIBUV=0"
+    EXCLUDE_FROM_ALL 1)
+TARGET_LINK_LIBRARIES(examples-latency-optimization libh2o-evloop ${EXTRA_LIBS})
+
 # standalone server directly links to libh2o using evloop
 SET(STANDALONE_SOURCE_FILES
     ${LIB_SOURCE_FILES}

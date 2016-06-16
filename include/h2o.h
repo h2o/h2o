@@ -351,6 +351,10 @@ struct st_h2o_globalconf_t {
          */
         size_t max_streams_for_priority;
         /**
+         * conditions for latency optimization
+         */
+        h2o_socket_latency_optimization_conditions_t latency_optimization;
+        /**
          * list of callbacks
          */
         h2o_protocol_callbacks_t callbacks;

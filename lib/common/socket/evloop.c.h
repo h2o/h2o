@@ -494,6 +494,11 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
         return;
     }
 
+    if ((sock->_flags & H2O_SOCKET_FLAG_IS_READ_READY) != 0) {
+        sock->_flags &= ~H2O_SOCKET_FLAG_IS_READ_READY;
+        read_on_ready(sock);
+    }
+
     if (sock->super._cb.write != NULL && sock->_wreq.cnt == 0) {
         const char *err = NULL;
         if ((sock->_flags & H2O_SOCKET_FLAG_DONT_WRITE) != 0) {
@@ -511,11 +516,6 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
                 err = h2o_socket_error_io;
         }
         on_write_complete(&sock->super, err);
-    }
-
-    if ((sock->_flags & H2O_SOCKET_FLAG_IS_READ_READY) != 0) {
-        sock->_flags &= ~H2O_SOCKET_FLAG_IS_READ_READY;
-        read_on_ready(sock);
     }
 }
 
@@ -556,6 +556,11 @@ int h2o_evloop_run(h2o_evloop_t *loop)
     /* assert h2o_timeout_run has called run_pending */
     assert(loop->_pending_as_client == NULL);
     assert(loop->_pending_as_server == NULL);
+
+    if (h2o_sliding_counter_is_running(&loop->exec_time_counter)) {
+        update_now(loop);
+        h2o_sliding_counter_stop(&loop->exec_time_counter, loop->_now);
+    }
 
     return 0;
 }
