@@ -557,21 +557,16 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
 
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
+    size_t i, prev_bytes_written = sock->bytes_written;
+
+    for (i = 0; i != bufcnt; ++i) {
+        sock->bytes_written = bufs[i].len;
 #if H2O_SOCKET_DUMP_WRITE
-    {
-        size_t i;
-        for (i = 0; i != bufcnt; ++i) {
-            fprintf(stderr, "writing %zu bytes to fd:%d\n", bufs[i].len,
-#if H2O_USE_LIBUV
-                    ((struct st_h2o_uv_socket_t *)sock)->uv.stream->io_watcher.fd
-#else
-                    ((struct st_h2o_evloop_socket_t *)sock)->fd
+        fprintf(stderr, "writing %zu bytes to fd:%d\n", bufs[i].len, h2o_socket_get_fd(sock));
+        h2o_dump_memory(stderr, bufs[i].base, bufs[i].len);
 #endif
-                    );
-            h2o_dump_memory(stderr, bufs[i].base, bufs[i].len);
-        }
     }
-#endif
+
     if (sock->ssl == NULL) {
         do_write(sock, bufs, bufcnt, cb);
     } else {
@@ -580,7 +575,8 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
         size_t ssl_record_size;
         switch (sock->_latency_optimization.state) {
         case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD:
-            ssl_record_size = 1400;
+        case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED:
+            ssl_record_size = prev_bytes_written < 200 * 1024 ? calc_suggested_tls_payload_size(sock, 1400) : 16384;
             break;
         case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED:
             sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE;

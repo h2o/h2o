@@ -98,7 +98,14 @@ struct st_h2o_socket_t {
     void *data;
     struct st_h2o_socket_ssl_t *ssl;
     h2o_buffer_t *input;
+    /**
+     * total bytes read (above the TLS layer)
+     */
     size_t bytes_read;
+    /**
+     * total bytes written (above the TLS layer)
+     */
+    size_t bytes_written;
     struct {
         void (*cb)(void *data);
         void *data;
