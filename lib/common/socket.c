@@ -407,7 +407,7 @@ static void disable_latency_optimized_write(h2o_socket_t *sock, int (*adjust_not
     }
 #endif
     sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED;
-    sock->_latency_optimization.suggested_tls_payload_size = calc_suggested_tls_payload_size(sock, 16384);
+    sock->_latency_optimization.suggested_tls_payload_size = 16384;
     sock->_latency_optimization.suggested_write_size = SIZE_MAX;
 }
 
@@ -444,7 +444,7 @@ static inline void prepare_for_latency_optimized_write(h2o_socket_t *sock,
                 goto Disable;
             sock->_latency_optimization.notsent_is_minimized = 0;
         }
-        sock->_latency_optimization.suggested_tls_payload_size = calc_suggested_tls_payload_size(sock, 16384);
+        sock->_latency_optimization.suggested_tls_payload_size = 16384;
         sock->_latency_optimization.suggested_write_size = SIZE_MAX;
     }
     return;
