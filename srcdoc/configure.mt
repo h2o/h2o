@@ -25,6 +25,7 @@
 <li><a href="configure/redirect_directives.html">Redirect</a>
 <li><a href="configure/reproxy_directives.html">Reproxy</a>
 <li><a href="configure/status_directives.html">Status</a>
+<li><a href="configure/throttle_directives.html">Response Throttle</a>
 </ul>
 </li>
 <li>How-To
