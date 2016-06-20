@@ -155,6 +155,52 @@ static void test_next_token2(void)
 #undef NEXT
 }
 
+static void test_next_token3(void)
+{
+    h2o_iovec_t iter, value;
+    const char *name;
+    size_t name_len;
+
+#define NEXT()                                                                                                                     \
+    if ((name = h2o_next_token(&iter, ';', &name_len, &value)) == NULL) {                                                          \
+        ok(0);                                                                                                                     \
+        return;                                                                                                                    \
+    }
+
+    iter = h2o_iovec_init(H2O_STRLIT("</foo.css>; rel=preload; xxx=,</bar.js>, </zzz.js>"));
+    NEXT();
+    ok(h2o_memis(name, name_len, H2O_STRLIT("</foo.css>")));
+    ok(value.base == NULL);
+    ok(value.len == 0);
+    NEXT();
+    ok(h2o_memis(name, name_len, H2O_STRLIT("rel")));
+    ok(h2o_memis(value.base, value.len, H2O_STRLIT("preload")));
+    NEXT();
+    ok(h2o_memis(name, name_len, H2O_STRLIT("xxx")));
+    ok(value.base != NULL); /* xxx _has_ a value! */
+    ok(value.len == 0);
+    NEXT();
+    ok(h2o_memis(name, name_len, H2O_STRLIT(",")));
+    ok(value.base == NULL);
+    ok(value.len == 0);
+    NEXT();
+    ok(h2o_memis(name, name_len, H2O_STRLIT("</bar.js>")));
+    ok(value.base == NULL);
+    ok(value.len == 0);
+    NEXT();
+    ok(h2o_memis(name, name_len, H2O_STRLIT(",")));
+    ok(value.base == NULL);
+    ok(value.len == 0);
+    NEXT();
+    ok(h2o_memis(name, name_len, H2O_STRLIT("</zzz.js>")));
+    ok(value.base == NULL);
+    ok(value.len == 0);
+    name = h2o_next_token(&iter, ',', &name_len, &value);
+    ok(name == NULL);
+
+#undef NEXT
+}
+
 static void test_decode_base64(void)
 {
     h2o_mem_pool_t pool;
@@ -258,6 +304,7 @@ void test_lib__common__string_c(void)
     subtest("get_filext", test_get_filext);
     subtest("next_token", test_next_token);
     subtest("next_token2", test_next_token2);
+    subtest("next_token3", test_next_token3);
     subtest("decode_base64", test_decode_base64);
     subtest("htmlescape", test_htmlescape);
     subtest("at_position", test_at_position);
