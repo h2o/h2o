@@ -422,6 +422,13 @@ const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len
             ++cur;
             break;
         }
+        if (*cur == ',') {
+            if (token_start == cur) {
+                ++cur;
+                token_end = cur;
+            }
+            break;
+        }
         if (value != NULL && *cur == '=') {
             ++cur;
             goto FindValue;
@@ -440,8 +447,13 @@ const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len
 FindValue:
     *iter = h2o_iovec_init(cur, end - cur);
     *element_len = token_end - token_start;
-    if ((value->base = (char *)h2o_next_token(iter, separator, &value->len, NULL)) == NULL)
+    if ((value->base = (char *)h2o_next_token(iter, separator, &value->len, NULL)) == NULL) {
         *value = (h2o_iovec_t){"", 0};
+    } else if (h2o_memis(value->base, value->len, H2O_STRLIT(","))) {
+        *value = (h2o_iovec_t){"", 0};
+        iter->base -= 1;
+        iter->len += 1;
+    }
     return token_start;
 }
 
