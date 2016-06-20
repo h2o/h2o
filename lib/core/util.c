@@ -347,30 +347,23 @@ h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, 
                                                       const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
                                                       const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority)
 {
-    h2o_iovec_vector_t paths_to_push;
-    h2o_iovec_t url;
+    h2o_iovec_vector_t paths_to_push = {};
+    h2o_iovec_t iter = h2o_iovec_init(value, value_len), token_value;
+    const char *token;
+    size_t token_len;
 
-    paths_to_push = (h2o_iovec_vector_t){};
-
-    const char *coma_token;
-    size_t coma_token_len;
-    h2o_iovec_t coma_iter = h2o_iovec_init(value, value_len);
-
-    while ((coma_token = h2o_next_token(&coma_iter, ',', &coma_token_len, NULL)) != NULL) {
-        /* extract URL value from: Link: </pushed.css>; rel=preload */
-        h2o_iovec_t iter = h2o_iovec_init(coma_token, coma_token_len), token_value;
-        const char *token;
-        size_t token_len;
-        /* first element should be <URL> */
+    /* extract URL values from Link: </pushed.css>; rel=preload */
+    do {
         if ((token = h2o_next_token(&iter, ';', &token_len, NULL)) == NULL)
-            continue;
+            break;
+        /* first element should be <URL> */
         if (!(token_len >= 2 && token[0] == '<' && token[token_len - 1] == '>'))
-            continue;
-        url = h2o_iovec_init(token + 1, token_len - 2);
+            break;
+        h2o_iovec_t url = h2o_iovec_init(token + 1, token_len - 2);
         /* find rel=preload */
-        int preload = 0;
-        int nopush = 0;
-        while ((token = h2o_next_token(&iter, ';', &token_len, &token_value)) != NULL) {
+        int preload = 0, nopush = 0;
+        while ((token = h2o_next_token(&iter, ';', &token_len, &token_value)) != NULL &&
+               !h2o_memis(token, token_len, H2O_STRLIT(","))) {
             if (h2o_lcstris(token, token_len, H2O_STRLIT("rel")) &&
                     h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload"))) {
                 preload++;
@@ -378,10 +371,9 @@ h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, 
                 nopush++;
             }
         }
-        if (!nopush && preload) {
+        if (!nopush && preload)
             push_one_path(pool, &paths_to_push, &url, base_path, input_scheme, input_authority, base_scheme, base_authority);
-        }
-    }
+    } while (token != NULL);
 
     return paths_to_push;
 }
