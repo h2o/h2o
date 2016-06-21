@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include "h2o.h"
 #include "h2o/http2.h"
 #include "h2o/http2_internal.h"
@@ -65,14 +66,53 @@ static h2o_iovec_t *alloc_buf(h2o_mem_pool_t *pool, size_t len)
     return buf;
 }
 
-static int contains_uppercase(const char *s, size_t len)
+/* validate a header value against https://tools.ietf.org/html/rfc7230#section-3.2 */
+static bool contains_invalid_field_value_char(const char *s, size_t len)
 {
+    /* all printable chars + horizontal tab */
+    static const bool valid_h2_field_value_char[] = {
+        0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /*    0-31 */
+        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /*   32-63 */
+        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /*   64-95 */
+        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /*  96-127 */
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 128-159 */
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 160-191 */
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 192-223 */
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 224-255 */
+    };
+
     for (; len != 0; ++s, --len) {
-        unsigned ch = *(unsigned char *)s;
-        if (ch - 'A' < 26U)
-            return 1;
+        unsigned char ch = (unsigned char)*s;
+        if (!valid_h2_field_value_char[ch]) {
+            return true;
+        }
     }
-    return 0;
+    return false;
+}
+
+/* validate a header name against https://tools.ietf.org/html/rfc7230#section-3.2,
+ * in addition to that, we disallow upper case chars as well. */
+static bool contains_invalid_field_name_char(const char *s, size_t len)
+{
+    /* all printable chars, except upper case and separator characters */
+    static const bool valid_h2_field_name_char[] = {
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /*    0-31 */
+        0,1,0,1,1,1,1,1,0,0,1,1,0,1,1,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0, /*   32-63 */
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1, /*   64-95 */
+        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0, /*  96-127 */
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 128-159 */
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 160-191 */
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 192-223 */
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 224-255 */
+    };
+
+    for (; len != 0; ++s, --len) {
+        unsigned char ch = (unsigned char)*s;
+        if (!valid_h2_field_name_char[ch]) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static int32_t decode_int(const uint8_t **src, const uint8_t *src_end, size_t prefix_bits)
@@ -284,7 +324,7 @@ Redo:
     }
 
     /* determine the header */
-    if (index != 0) {
+    if (index > 0) {
         /* existing name (and value?) */
         if (index < HEADER_TABLE_OFFSET) {
             result->name = (h2o_iovec_t *)h2o_hpack_static_table[index - 1].name;
@@ -308,8 +348,8 @@ Redo:
         const h2o_token_t *name_token;
         if ((result->name = decode_string(pool, src, src_end)) == NULL)
             return H2O_HTTP2_ERROR_COMPRESSION;
-        if (contains_uppercase(result->name->base, result->name->len)) {
-            *err_desc = "found an upper-case letter in header name";
+        if (contains_invalid_field_name_char(result->name->base, result->name->len)) {
+            *err_desc = "found an invalid character in header name";
             return H2O_HTTP2_ERROR_PROTOCOL;
         }
         /* predefined header names should be interned */
@@ -321,6 +361,10 @@ Redo:
     if (!value_is_indexed) {
         if ((result->value = decode_string(pool, src, src_end)) == NULL)
             return H2O_HTTP2_ERROR_COMPRESSION;
+        if (contains_invalid_field_value_char(result->value->base, result->value->len)) {
+            *err_desc = "found an invalid character in header value";
+            return H2O_HTTP2_ERROR_PROTOCOL;
+        }
     }
 
     /* add the decoded header to the header table if necessary */
