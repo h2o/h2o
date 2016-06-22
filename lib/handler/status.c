@@ -47,8 +47,7 @@ struct st_h2o_status_collector_t {
         h2o_req_t *req;
         h2o_multithread_receiver_t *receiver;
     } src;
-    pthread_mutex_t mutex;
-    size_t num_remaining_threads;
+    size_t num_remaining_threads_atomic;
     H2O_VECTOR(struct st_status_ctx_t) status_ctx;
 };
 
@@ -59,26 +58,16 @@ struct st_h2o_status_message_t {
 
 static void collect_reqs_of_context(struct st_h2o_status_collector_t *collector, h2o_context_t *ctx)
 {
-    int was_last_thread;
     int i;
 
-    pthread_mutex_lock(&collector->mutex);
-
     for (i = 0; i < ctx->globalconf->statuses.size; i++) {
-        h2o_status_handler_t *sh;
-        sh = &ctx->globalconf->statuses.entries[i];
-        if (!collector->status_ctx.entries[i].active) {
-            continue;
-        }
-        if (sh->per_thread) {
-            sh->per_thread(collector->status_ctx.entries[i].ctx, ctx);
-        }
+        struct st_status_ctx_t *sc = collector->status_ctx.entries + i;
+        h2o_status_handler_t *sh = ctx->globalconf->statuses.entries + i;
+        if (sc->active && sh->per_thread != NULL)
+            sh->per_thread(sc->ctx, ctx);
     }
 
-    was_last_thread = --collector->num_remaining_threads == 0;
-    pthread_mutex_unlock(&collector->mutex);
-
-    if (was_last_thread) {
+    if (__sync_sub_and_fetch(&collector->num_remaining_threads_atomic, 1) == 0) {
         struct st_h2o_status_message_t *message = h2o_mem_alloc(sizeof(*message));
         message->super = (h2o_multithread_message_t){};
         message->collector = collector;
@@ -137,17 +126,10 @@ static void on_collect_notify(h2o_multithread_receiver_t *receiver, h2o_linklist
     while (!h2o_linklist_is_empty(messages)) {
         struct st_h2o_status_message_t *message = H2O_STRUCT_FROM_MEMBER(struct st_h2o_status_message_t, super, messages->next);
         struct st_h2o_status_collector_t *collector = message->collector;
-        int do_collect;
         h2o_linklist_unlink(&message->super.link);
         free(message);
 
-        /* determine the action */
-        pthread_mutex_lock(&collector->mutex);
-        do_collect = collector->num_remaining_threads != 0;
-        pthread_mutex_unlock(&collector->mutex);
-
-        /* do it */
-        if (do_collect) {
+        if (__sync_add_and_fetch(&collector->num_remaining_threads_atomic, 0) != 0) {
             collect_reqs_of_context(collector, status_ctx->ctx);
         } else {
             send_response(collector);
@@ -157,9 +139,6 @@ static void on_collect_notify(h2o_multithread_receiver_t *receiver, h2o_linklist
 
 static void on_collector_dispose(void *_collector)
 {
-    struct st_h2o_status_collector_t *collector = _collector;
-
-    pthread_mutex_destroy(&collector->mutex);
 }
 
 static void on_req_close(void *p)
@@ -198,8 +177,7 @@ static int on_req_json(struct st_h2o_root_status_handler_t *self, h2o_req_t *req
         }
         collector->src.req = req;
         collector->src.receiver = &status_ctx->receiver;
-        pthread_mutex_init(&collector->mutex, NULL);
-        collector->num_remaining_threads = self->receivers.size;
+        collector->num_remaining_threads_atomic = self->receivers.size;
 
         for (i = 0; i != self->receivers.size; ++i) {
             struct st_h2o_status_message_t *message = h2o_mem_alloc(sizeof(*message));

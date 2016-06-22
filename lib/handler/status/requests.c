@@ -25,6 +25,7 @@
 struct st_requests_status_ctx_t {
     h2o_logconf_t *logconf;
     h2o_iovec_t req_data;
+    pthread_mutex_t mutex;
 };
 
 struct st_collect_req_status_cbdata_t {
@@ -69,11 +70,13 @@ static void requests_status_per_thread(void *priv, h2o_context_t *ctx)
 
     /* concat JSON elements */
     if (cbdata.buffer->size != 0) {
+        pthread_mutex_lock(&rsc->mutex);
         if (rsc->req_data.len == 0)
             h2o_buffer_consume(&cbdata.buffer, 1); /* skip preceeding comma */
         rsc->req_data.base = h2o_mem_realloc(rsc->req_data.base, rsc->req_data.len + cbdata.buffer->size);
         memcpy(rsc->req_data.base + rsc->req_data.len, cbdata.buffer->bytes, cbdata.buffer->size);
         rsc->req_data.len += cbdata.buffer->size;
+        pthread_mutex_unlock(&rsc->mutex);
     }
 
     h2o_buffer_dispose(&cbdata.buffer);
@@ -83,8 +86,6 @@ static void *requests_status_init(void)
 {
     struct st_requests_status_ctx_t *rsc = h2o_mem_alloc(sizeof(*rsc));
     char errbuf[256];
-
-    *rsc = (struct st_requests_status_ctx_t){};
 
 #define ELEMENT(key, expr) "\"" key "\": \"" expr "\""
 #define X_ELEMENT(id) ELEMENT(id, "%{" id "}x")
@@ -121,6 +122,9 @@ static void *requests_status_init(void)
         /* log format compilation error is an internal logic flaw, therefore we need not send the details to the client */
         fprintf(stderr, "[lib/handler/status/requests.c] failed to compile log format: %s", errbuf);
 
+    rsc->req_data = (h2o_iovec_t){};
+    pthread_mutex_init(&rsc->mutex, NULL);
+
     return rsc;
 }
 
@@ -133,8 +137,9 @@ static h2o_iovec_t requests_status_final(void *priv, h2o_globalconf_t *gconf, h2
         ret = h2o_concat(&req->pool, h2o_iovec_init(H2O_STRLIT(",\n \"requests\": [")), rsc->req_data,
                          h2o_iovec_init(H2O_STRLIT("\n ]")));
         h2o_logconf_dispose(rsc->logconf);
-        free(rsc->req_data.base);
     }
+    free(rsc->req_data.base);
+    pthread_mutex_destroy(&rsc->mutex);
 
     free(rsc);
     return ret;
