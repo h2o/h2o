@@ -26,14 +26,11 @@ struct st_requests_status_ctx_t {
     h2o_logconf_t *logconf;
     h2o_iovec_t req_data;
     h2o_iovec_t init_error;
-    int first; /* used to know if a thread is the first one, we skip the leading
-                * coma in that case. */
 };
 
 struct st_collect_req_status_cbdata_t {
     h2o_logconf_t *logconf;
     h2o_buffer_t *buffer;
-    int first; /* see st_requests_status_ctx_t */
 };
 
 static int collect_req_status(h2o_req_t *req, void *_cbdata)
@@ -44,19 +41,11 @@ static int collect_req_status(h2o_req_t *req, void *_cbdata)
     char buf[4096];
     size_t len = sizeof(buf);
     char *logline = h2o_log_request(cbdata->logconf, req, &len, buf);
-
-    /* append to buffer */
     assert(len != 0);
     --len; /* omit trailing LF */
-    if (cbdata->first) {
-        h2o_buffer_reserve(&cbdata->buffer, len + 3);
-        memcpy(cbdata->buffer->bytes + cbdata->buffer->size, "\n  ", 3);
-        cbdata->buffer->size += 3;
-    } else {
-        h2o_buffer_reserve(&cbdata->buffer, len + 4);
-        memcpy(cbdata->buffer->bytes + cbdata->buffer->size, ",\n  ", 4);
-        cbdata->buffer->size += 4;
-    }
+
+    /* append to buffer */
+    h2o_buffer_reserve(&cbdata->buffer, len + 3);
     memcpy(cbdata->buffer->bytes + cbdata->buffer->size, logline, len);
     cbdata->buffer->size += len;
 
@@ -76,15 +65,14 @@ static void requests_status_per_thread(void *priv, h2o_context_t *ctx)
         return;
     }
 
-    cbdata.first = rsc->first;
-    if (rsc->first) {
-        rsc->first = 0;
-    }
     h2o_buffer_init(&cbdata.buffer, &h2o_socket_buffer_prototype);
     ctx->globalconf->http1.callbacks.foreach_request(ctx, collect_req_status, &cbdata);
     ctx->globalconf->http2.callbacks.foreach_request(ctx, collect_req_status, &cbdata);
 
+    /* concat JSON elements */
     if (cbdata.buffer->size != 0) {
+        if (rsc->req_data.len == 0)
+            h2o_buffer_consume(&cbdata.buffer, 1); /* skip preceeding comma */
         rsc->req_data.base = h2o_mem_realloc(rsc->req_data.base, rsc->req_data.len + cbdata.buffer->size);
         memcpy(rsc->req_data.base + rsc->req_data.len, cbdata.buffer->bytes, cbdata.buffer->size);
         rsc->req_data.len += cbdata.buffer->size;
@@ -98,12 +86,11 @@ static void *requests_status_init(void)
     struct st_requests_status_ctx_t *rsc;
     rsc = h2o_mem_alloc(sizeof(*rsc));
     memset(rsc, 0, sizeof(*rsc));
-    rsc->first = 1;
 
 #define ELEMENT(key, expr) "\"" key "\": \"" expr "\""
 #define X_ELEMENT(id) ELEMENT(id, "%{" id "}x")
 #define SEPARATOR ", "
-    const char *fmt = "{"
+    const char *fmt = ",\n  {"
         /* combined_log */
         ELEMENT("host", "%h") SEPARATOR ELEMENT("user", "%u") SEPARATOR ELEMENT("at", "%{%Y%m%dT%H%M%S}t.%{usec_frac}t%{%z}t")
             SEPARATOR ELEMENT("method", "%m") SEPARATOR ELEMENT("path", "%U") SEPARATOR ELEMENT("query", "%q")
@@ -140,7 +127,6 @@ static void *requests_status_init(void)
         }
     }
 
-    rsc->req_data = h2o_strdup(NULL, ",\n \"requests\": [", SIZE_MAX);
     return rsc;
 }
 
@@ -154,14 +140,7 @@ static h2o_iovec_t requests_status_final(void *priv, h2o_globalconf_t *gconf, h2
         free(rsc->init_error.base);
         goto out;
     }
-#define JSON_FOOTER "\n ]"
-#define JSON_FOOTER_LEN 3
-    ret.base = h2o_mem_alloc_pool(&req->pool, rsc->req_data.len + JSON_FOOTER_LEN);
-    memcpy(ret.base, rsc->req_data.base, rsc->req_data.len);
-    memcpy(ret.base + rsc->req_data.len, JSON_FOOTER, JSON_FOOTER_LEN);
-    ret.len = rsc->req_data.len + JSON_FOOTER_LEN;
-#undef JSON_FOOTER
-#undef JSON_FOOTER_LEN
+    ret = h2o_concat(&req->pool, h2o_iovec_init(H2O_STRLIT(",\n \"requests\": [")), rsc->req_data, h2o_iovec_init(H2O_STRLIT("\n ]")));
 
     h2o_logconf_dispose(rsc->logconf);
     free(rsc->req_data.base);
