@@ -25,7 +25,6 @@
 struct st_requests_status_ctx_t {
     h2o_logconf_t *logconf;
     h2o_iovec_t req_data;
-    h2o_iovec_t init_error;
 };
 
 struct st_collect_req_status_cbdata_t {
@@ -61,9 +60,8 @@ static void requests_status_per_thread(void *priv, h2o_context_t *ctx)
     struct st_collect_req_status_cbdata_t cbdata = {rsc->logconf};
 
     /* we encountered an error at init() time, return early */
-    if (rsc->init_error.base) {
+    if (rsc->logconf == NULL)
         return;
-    }
 
     h2o_buffer_init(&cbdata.buffer, &h2o_socket_buffer_prototype);
     ctx->globalconf->http1.callbacks.foreach_request(ctx, collect_req_status, &cbdata);
@@ -83,9 +81,10 @@ static void requests_status_per_thread(void *priv, h2o_context_t *ctx)
 
 static void *requests_status_init(void)
 {
-    struct st_requests_status_ctx_t *rsc;
-    rsc = h2o_mem_alloc(sizeof(*rsc));
-    memset(rsc, 0, sizeof(*rsc));
+    struct st_requests_status_ctx_t *rsc = h2o_mem_alloc(sizeof(*rsc));
+    char errbuf[256];
+
+    *rsc = (struct st_requests_status_ctx_t){};
 
 #define ELEMENT(key, expr) "\"" key "\": \"" expr "\""
 #define X_ELEMENT(id) ELEMENT(id, "%{" id "}x")
@@ -117,34 +116,25 @@ static void *requests_status_init(void)
 #undef X_ELEMENT
 #undef SEPARATOR
 
-    { /* compile logconf */
-        char errbuf[256];
-        if ((rsc->logconf = h2o_logconf_compile(fmt, H2O_LOGCONF_ESCAPE_JSON, errbuf)) == NULL) {
-            h2o_iovec_t resp = h2o_concat(NULL, h2o_iovec_init(H2O_STRLIT("failed to compile log format:")),
-                                          h2o_iovec_init(errbuf, strlen(errbuf)));
-            rsc->init_error = resp;
-            return rsc;
-        }
-    }
+    /* compile logconf */
+    if ((rsc->logconf = h2o_logconf_compile(fmt, H2O_LOGCONF_ESCAPE_JSON, errbuf)) == NULL)
+        /* log format compilation error is an internal logic flaw, therefore we need not send the details to the client */
+        fprintf(stderr, "[lib/handler/status/requests.c] failed to compile log format: %s", errbuf);
 
     return rsc;
 }
 
 static h2o_iovec_t requests_status_final(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
 {
-    h2o_iovec_t ret;
+    h2o_iovec_t ret = {};
     struct st_requests_status_ctx_t *rsc = priv;
 
-    if (rsc->init_error.base) {
-        ret = h2o_strdup(&req->pool, rsc->init_error.base, rsc->init_error.len);
-        free(rsc->init_error.base);
-        goto out;
+    if (rsc->logconf != NULL) {
+        ret = h2o_concat(&req->pool, h2o_iovec_init(H2O_STRLIT(",\n \"requests\": [")), rsc->req_data, h2o_iovec_init(H2O_STRLIT("\n ]")));
+        h2o_logconf_dispose(rsc->logconf);
+        free(rsc->req_data.base);
     }
-    ret = h2o_concat(&req->pool, h2o_iovec_init(H2O_STRLIT(",\n \"requests\": [")), rsc->req_data, h2o_iovec_init(H2O_STRLIT("\n ]")));
 
-    h2o_logconf_dispose(rsc->logconf);
-    free(rsc->req_data.base);
-out:
     free(rsc);
     return ret;
 }
