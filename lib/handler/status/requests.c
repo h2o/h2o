@@ -70,9 +70,9 @@ static void requests_status_per_thread(void *priv, h2o_context_t *ctx)
 
     /* concat JSON elements */
     if (cbdata.buffer->size != 0) {
+        pthread_mutex_lock(&rsc->mutex);
         if (rsc->req_data.len == 0)
             h2o_buffer_consume(&cbdata.buffer, 1); /* skip preceeding comma */
-        pthread_mutex_lock(&rsc->mutex);
         rsc->req_data.base = h2o_mem_realloc(rsc->req_data.base, rsc->req_data.len + cbdata.buffer->size);
         memcpy(rsc->req_data.base + rsc->req_data.len, cbdata.buffer->bytes, cbdata.buffer->size);
         rsc->req_data.len += cbdata.buffer->size;
