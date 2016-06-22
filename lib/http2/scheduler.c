@@ -360,7 +360,7 @@ int h2o_http2_scheduler_run(h2o_http2_scheduler_node_t *root, h2o_http2_schedule
 
 int h2o_http2_scheduler_is_active(h2o_http2_scheduler_node_t *root)
 {
-    return root->_queue != NULL && root->_queue->bits != 0;
+    return root->_queue != NULL && !queue_is_empty(root->_queue);
 }
 
 
