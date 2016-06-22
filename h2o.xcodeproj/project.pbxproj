@@ -588,7 +588,7 @@
 		10C45D501CFD160A0096DB06 /* throttle_resp.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = throttle_resp.c; sourceTree = "<group>"; };
 		10C45D531CFE9B300096DB06 /* events.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = events.c; sourceTree = "<group>"; };
 		10C45D541CFE9B300096DB06 /* requests.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = requests.c; sourceTree = "<group>"; };
-		10C45D571CFE9BB60096DB06 /* 50status.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 50status.t; sourceTree = "<group>"; };
+		10C45D571CFE9BB60096DB06 /* 50status.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 50status.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10C5A6311B268632006094A6 /* 50fastcgi.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50fastcgi.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10D0903919F0A51C0043D458 /* memory.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = memory.h; sourceTree = "<group>"; };
 		10D0903D19F0A8190043D458 /* socket.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = socket.h; sourceTree = "<group>"; };
