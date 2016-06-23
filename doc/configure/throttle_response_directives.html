@@ -13,7 +13,7 @@
 
 <link rel="stylesheet" href="assets/style.css" type="text/css" />
 
-<title>Response Throttle Directives - Configure - H2O - the optimized HTTP/2 server</title>
+<title>Throttle Response Directives - Configure - H2O - the optimized HTTP/2 server</title>
 </head>
 <body>
 <div id="body">
@@ -54,12 +54,12 @@ the optimized HTTP/1.x, HTTP/2 server
 
 <h2>
 <a href="configure.html">Configure</a> &gt;
-Response Throttle Directives
+Throttle Response Directives
 </h2>
 
 
 <p>
-The response throttle handler performs per response traffic throttling, when an <code>X-Traffic</code> header exists in the response headers.
+The throttle response handler performs per response traffic throttling, when an <code>X-Traffic</code> header exists in the response headers.
 </p>
 <p>
 The value of <code>X-Traffic</code> header should be an integer that represents the speed you want in bytes per second. This header CAN be set with <a href="configure/headers_directives.html#header.add"><code>header.add</code></a> so that traffic for static assets can also be easily throttled.
@@ -70,7 +70,7 @@ The following are the configuration directives recognized by the handler.
 
 <div id="throttle-response" class="directive-head">
 <div class="directive-since">since v2.1</div>
-<h3><a href="configure/throttle_directives.html#throttle-response"><code>"throttle-response"</code></a></h3>
+<h3><a href="configure/throttle_response_directives.html#throttle-response"><code>"throttle-response"</code></a></h3>
 </div>
 
 <dl class="directive-desc">

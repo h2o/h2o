@@ -22,7 +22,7 @@ OUTPUT=\
     configure/redirect_directives.html \
     configure/reproxy_directives.html \
     configure/status_directives.html \
-    configure/throttle_directives.html \
+    configure/throttle_response_directives.html \
     configure/basic_auth.html \
     configure/cgi.html \
     configure/mruby.html \

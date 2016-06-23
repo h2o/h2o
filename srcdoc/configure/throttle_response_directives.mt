@@ -1,8 +1,8 @@
 ? my $ctx = $main::context;
-? $_mt->wrapper_file("wrapper.mt", "Configure", "Response Throttle Directives")->(sub {
+? $_mt->wrapper_file("wrapper.mt", "Configure", "Throttle Response Directives")->(sub {
 
 <p>
-The response throttle handler performs per response traffic throttling, when an <code>X-Traffic</code> header exists in the response headers.
+The throttle response handler performs per response traffic throttling, when an <code>X-Traffic</code> header exists in the response headers.
 </p>
 <p>
 The value of <code>X-Traffic</code> header should be an integer that represents the speed you want in bytes per second. This header CAN be set with <a href="configure/headers_directives.html#header.add"><code>header.add</code></a> so that traffic for static assets can also be easily throttled.
