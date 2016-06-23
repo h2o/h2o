@@ -1,5 +1,15 @@
 Revision history for H2O.
 
+2.1.0-beta1 TBD
+	- [http2][proxy] recognize link rel=preload headers in interim response as a trigger to push resources #916 (Kazuho Oku)
+	- [http2] add `http2-push-preload` directive to turn off H2 push being initiated by link rel=preload header #929 (Kazuho Oku)
+	- [http2][experimental] add feedback-based latency optimization mode #873 (Kazuho Oku)
+	- [status] collect and report HTTP statistics #893 (Frederik Deweerdt)
+	- [throttle] add new handler for throttling the response bandwidth #917 (Justin Zhu)
+	- [misc] provide `crash-handler` directive to customize crash logging #935 (Frederik Deweerdt)
+	- [libh2o] provide `h2o_rand` that calls the appropriate random function depending on the OS #927 (David CARLIER)
+	- [libh2o] do not require use of picohttpparser.h when using the HTTP/1 client #946 (Kazuho Oku)
+
 2.0.1 2016-06-23 22:00:00+0000
 	- [fastcgi] fix internal server error when PHP returns a huge header #958 (Kazuho Oku)
 	- [http2] recognize link header containing multiple links #950 (Frederik Deweerdt)
