@@ -39,6 +39,7 @@ EOT
 <p>When the HTTP/2 driver of H2O recognizes a <code>link</code> response header with <code>rel=preload</code> attribute set, and if all of the following conditions are met, the specified resource is pushed to the client.
 </p>
 <ul>
+<li>configuration directive <a href="configure/http2_directives.html#http2-push-preload">http2-push-preload</a> is not set to <code>OFF</code></li>
 <li>the <code>link</code> header does not have the <code>nopush</code> attribute set</li>
 <li>the <code>link</code> header is <i>not</i> part of a pushed response</li>
 <li>the client does not disable HTTP/2 push</li>
@@ -139,6 +140,19 @@ EOT
 <p>
 The value cannot exceed 256.
 </p>
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "http2-push-preload",
+    levels  => [ qw(global host) ],
+    since   => '2.1',
+    default => 'http2-push-preload: ON',
+    desc    => << 'EOT',
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether if the server should push resources when observing a <code>link: rel=preload</code> header.
+EOT
+)->(sub {
+?>
 ? })
 
 <?
