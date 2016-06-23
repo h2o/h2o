@@ -98,6 +98,7 @@ H2O recognizes <code>link</code> headers with <a href="https://w3c.github.io/pre
 <p>When the HTTP/2 driver of H2O recognizes a <code>link</code> response header with <code>rel=preload</code> attribute set, and if all of the following conditions are met, the specified resource is pushed to the client.
 </p>
 <ul>
+<li>configuration directive <a href="configure/http2_directives.html#http2-push-preload">http2-push-preload</a> is not set to <code>OFF</code></li>
 <li>the <code>link</code> header does not have the <code>nopush</code> attribute set</li>
 <li>the <code>link</code> header is <i>not</i> part of a pushed response</li>
 <li>the client does not disable HTTP/2 push</li>
@@ -119,6 +120,36 @@ It is also possible to log the value in the <a href="configure/access_log_direct
 See also:
 <ul>
 <li><a href="http://blog.kazuhooku.com/2015/12/optimizing-performance-of-multi-tiered.html">Optimizing performance of multi-tier web applications using HTTP/2 push</a>
+</ul>
+</p>
+
+<h3 id="latency-optimization">Latency Optimization</h3>
+
+<p>
+With HTTP/2, a client often issues a high-priority request (e.g. a request for a CSS file) while a lower-priority response (e.g. HTML) is in flight.
+In such case, it is desirable for a server to switch to sending the response of the high-priority request as soon as it observes the request.
+</p>
+<p>
+In order to do so, send buffer of the TCP/IP stack should be kept empty except for the packets in-flight, and size of the TLS records must be small enough to avoid head-of-line blocking.
+The downside is that it increases the interaction between the server process and kernel, which result in consumption of more CPU cycles and slightly increased latency.
+</p>
+<p>
+Starting from version 2.1, H2O provides experimental directives that lets the users tune how the TCP/IP stack is used depending on the observed RTT, CWND, and the additional latency imposed by the interaction between the server and the OS.
+</p>
+<p>
+For TCP/IP connections with greater RTT and smaller CWND than the configured threshold, the server will try to keep the size of HTTP/2 frames unsent as small as possible so that it can switch to sending a higher-priority response.
+Preliminary benchmarks suggest that users can expect in average 1 RTT reduction when this optimization is enabled.
+For connections that do not meet the criteria, the server will utilize the TCP/IP stack in ordinary ways.
+</p>
+<p>
+The optimization is supported only on Linux and OS X, the operating systems that provide access to <code>TCP_INFO</code> and an interface to adjust the size of the unsent buffer (<code>TCP_NOTSENT_LOWAT</code>).
+</p>
+<p>
+Please refer to the documentation of the directives below to configure the optimization:
+<ul>
+<li><a href="configure/http2_directives.html#http2-latency-optimization-min-rtt"><code>http2-latency-optimization-min-rtt</code></a></li>
+<li><a href="configure/http2_directives.html#http2-latency-optimization-max-additional-delay"><code>http2-latency-optimization-max-additional-delay</code></a></li>
+<li><a href="configure/http2_directives.html#http2-latency-optimization-max-cwnd"><code>http2-latency-optimization-max-cwnd</code></a></li>
 </ul>
 </p>
 
@@ -225,6 +256,107 @@ The value cannot exceed 256.
 <dd>global</dd>
 <dt>Default:</dt>
 <dd><code><pre>http2-max-concurrent-requests-per-connection: 100</pre></code>
+</dl>
+
+<div id="http2-latency-optimization-min-rtt" class="directive-head">
+<div class="directive-since">since v2.1</div>
+<h3><a href="configure/http2_directives.html#http2-latency-optimization-min-rtt"><code>"http2-latency-optimization-min-rtt"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Minimum RTT (in milliseconds) to enable <a href="configure/http2_directives.html#latency-optimization">latency optimization</a>.
+
+</p>
+
+<p>
+Latency optimization is disabled for TCP connections with smaller RTT (round-trip time) than the specified value.
+Otherwise, whether if the optimization is used depends on other parameters.
+</p>
+<p>
+The default value of the directive is <code>UINT_MAX</code> (4,294,967,295), which effectively disables the optimization.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+</dl>
+
+<div id="http2-latency-optimization-max-additional-delay" class="directive-head">
+<div class="directive-since">since v2.1</div>
+<h3><a href="configure/http2_directives.html#http2-latency-optimization-max-additional-delay"><code>"http2-latency-optimization-max-additional-delay"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Maximum additional delay (as the ratio to RTT) permitted to get <a href="configure/http2_directives.html#latency-optimization">latency optimization</a> activated.
+
+</p>
+
+<p>
+Latency optimization is disabled if the additional delay imposed by the interaction between the OS and the TCP/IP stack is estimated to be greater than the given threshold.
+Otherwise, whether if the optimization is used depends on other parameters.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>http2-latency-optimization-max-additional-delay: 0.1</pre></code>
+</dl>
+
+<div id="http2-latency-optimization-max-cwnd" class="directive-head">
+<div class="directive-since">since v2.1</div>
+<h3><a href="configure/http2_directives.html#http2-latency-optimization-max-cwnd"><code>"http2-latency-optimization-max-cwnd"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Maximum size (in octets) of CWND to get <a href="configure/http2_directives.html#latency-optimization">latency optimization</a> activated.
+
+</p>
+
+<p>
+CWND is a per-TCP-connection variable that represents the number of bytes that can be sent within 1 RTT.
+</p>
+<p>
+The server will not use or stop using latency optimization mode if CWND becomes greater than the configured value.
+In such case, average size of HTTP/2 frames buffered unsent will be slightly above the <a href="https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt" target="_blank"><code>tcp_notsent_lowat</code></a> sysctl value.
+</p>
+
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>http2-latency-optimization-max-cwnd: 65535</pre></code>
+</dl>
+
+<div id="http2-push-preload" class="directive-head">
+<div class="directive-since">since v2.1</div>
+<h3><a href="configure/http2_directives.html#http2-push-preload"><code>"http2-push-preload"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether if the server should push resources when observing a <code>link: rel=preload</code> header.
+
+</p>
+
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host</dd>
+<dt>Default:</dt>
+<dd><code><pre>http2-push-preload: ON</pre></code>
 </dl>
 
 <div id="http2-reprioritize-blocking-assets" class="directive-head">
