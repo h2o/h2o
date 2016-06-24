@@ -1761,6 +1761,10 @@ void h2o_reproxy_register_configurator(h2o_globalconf_t *conf);
  */
 void h2o_status_register(h2o_pathconf_t *pathconf);
 /**
+ * registers the duration handler
+ */
+void h2o_duration_stats_register(h2o_globalconf_t *conf);
+/**
  * registers the configurator
  */
 void h2o_status_register_configurator(h2o_globalconf_t *conf);
@@ -1915,6 +1919,11 @@ inline void **h2o_context_get_storage(h2o_context_t *ctx, size_t *key, void (*di
 
     ctx->storage.entries[*key].dispose = dispose_cb;
     return &ctx->storage.entries[*key].data;
+}
+
+static inline void h2o_context_set_logger_context(h2o_context_t *ctx, h2o_logger_t *logger, void *logger_ctx)
+{
+    ctx->_module_configs[logger->_config_slot] = logger_ctx;
 }
 
 static inline void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype)
