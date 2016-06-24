@@ -1,6 +1,6 @@
 Revision history for H2O.
 
-2.1.0-beta1 TBD
+2.1.0-beta1 2016-06-24 00:15:00+0000
 	- [http2][proxy] recognize link rel=preload headers in interim response as a trigger to push resources #916 (Kazuho Oku)
 	- [http2] add `http2-push-preload` directive to turn off H2 push being initiated by link rel=preload header #929 (Kazuho Oku)
 	- [http2][experimental] add feedback-based latency optimization mode #873 (Kazuho Oku)
