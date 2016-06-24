@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<base href="../" />
+
+<!-- oktavia -->
+<link rel="stylesheet" href="assets/searchstyle.css" type="text/css" />
+<script src="search/jquery-1.9.1.min.js"></script>
+<script src="search/oktavia-jquery-ui.js"></script>
+<script src="search/oktavia-english-search.js"></script>
+<!-- /oktavia -->
+
+<link rel="stylesheet" href="assets/style.css" type="text/css" />
+
+<title>Throttle Response Directives - Configure - H2O - the optimized HTTP/2 server</title>
+</head>
+<body>
+<div id="body">
+<div id="top">
+
+<h1>
+<a href="index.html">H2O</a>
+</h1>
+the optimized HTTP/1.x, HTTP/2 server
+
+<!-- oktavia -->
+<form id="searchform">
+<input class="search" type="search" name="search" id="search" results="5" value="" placeholder="Search" />
+<div id="searchresult_box">
+<div id="close_search_box">&times;</div>
+<div id="searchresult_summary"></div>
+<div id="searchresult"></div>
+<div id="searchresult_nav"></div>
+<span class="pr">Powered by <a href="https://github.com/shibukawa/oktavia">Oktavia</a></span>
+</div>
+</form>
+<!-- /oktavia -->
+
+</div>
+
+<table id="menu">
+<tr>
+<td><a href="index.html">Top</a></td>
+<td><a href="install.html">Install</a></td>
+<td class="selected">Configure</td>
+<td><a href="faq.html">FAQ</a></td>
+<td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
+<td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
+</tr>
+</table>
+
+<div id="main">
+
+<h2>
+<a href="configure.html">Configure</a> &gt;
+Throttle Response Directives
+</h2>
+
+
+<p>
+The throttle response handler performs per response traffic throttling, when an <code>X-Traffic</code> header exists in the response headers.
+</p>
+<p>
+The value of <code>X-Traffic</code> header should be an integer that represents the speed you want in bytes per second. This header CAN be set with <a href="configure/headers_directives.html#header.add"><code>header.add</code></a> so that traffic for static assets can also be easily throttled.
+</p>
+<p>
+The following are the configuration directives recognized by the handler.
+</p>
+
+<div id="throttle-response" class="directive-head">
+<div class="directive-since">since v2.1</div>
+<h3><a href="configure/throttle_response_directives.html#throttle-response"><code>"throttle-response"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Enables traffic throttle per HTTP response.
+
+</p>
+
+<p>
+If the argument is <code>ON</code>, the traffic per response is throttled as long as a legal <code>X-Traffic</code> header exists.
+If the argument is <code>OFF</code>, traffic throttle per response is disabled.
+</p>
+<div class="example">
+<div class="caption">Example. Enabling traffic throttle per response with static file configuration</div>
+<pre><code># enable throttle
+throttle-response: ON
+
+# an example host configuration that throttle traffic to ~100KB/s
+hosts:
+  default:
+    paths:
+      /:
+        file.dir: /path/to/assets
+        header.add: &quot;X-Traffic: 100000&quot;
+</code></pre>
+</div>
+
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extension</dd>
+<dt>Default:</dt>
+<dd><code><pre>throttle-response: OFF</pre></code>
+</dl>
+
+
+
+
+</div>
+<div id="footer">
+<p>
+Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+</p>
+</div>
+</body>
+</html>

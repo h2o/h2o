@@ -461,7 +461,7 @@ static void errorclose(struct st_fcgi_generator_t *generator)
     } else {
         h2o_req_t *req = generator->req;
         close_generator(generator);
-        h2o_send_error(req, 503, "Internal Server Error", "Internal Server Error", 0);
+        h2o_send_error_503(req, "Internal Server Error", "Internal Server Error", 0);
     }
 }
 
@@ -564,7 +564,7 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
     /* parse the headers using the input buffer (or keep it in response buffer and parse) */
     num_headers = sizeof(headers) / sizeof(headers[0]);
     if (generator->resp.receiving->size == 0) {
-        parse_result = phr_parse_headers(input->bytes + FCGI_RECORD_HEADER_SIZE, input->size, headers, &num_headers, 0);
+        parse_result = phr_parse_headers(input->bytes + FCGI_RECORD_HEADER_SIZE, header->contentLength, headers, &num_headers, 0);
     } else {
         size_t prevlen = generator->resp.receiving->size;
         memcpy(h2o_buffer_reserve(&generator->resp.receiving, header->contentLength).base, input->bytes + FCGI_RECORD_HEADER_SIZE,
@@ -576,6 +576,11 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
     if (parse_result < 0) {
         if (parse_result == -2) {
             /* incomplete */
+            if (generator->resp.receiving->size == 0) {
+                memcpy(h2o_buffer_reserve(&generator->resp.receiving, header->contentLength).base,
+                       input->bytes + FCGI_RECORD_HEADER_SIZE, header->contentLength);
+                generator->resp.receiving->size = header->contentLength;
+            }
             return 0;
         } else {
             h2o_req_log_error(generator->req, MODULE_NAME, "received broken response");

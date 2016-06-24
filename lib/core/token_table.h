@@ -79,8 +79,9 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, 1, 0, 0, 0, 0},
                              {{H2O_STRLIT("via")}, 60, 0, 0, 0, 0},
                              {{H2O_STRLIT("www-authenticate")}, 61, 0, 0, 0, 0},
                              {{H2O_STRLIT("x-forwarded-for")}, 0, 0, 0, 0, 0},
-                             {{H2O_STRLIT("x-reproxy-url")}, 0, 0, 0, 0, 0}};
-size_t h2o__num_tokens = 59;
+                             {{H2O_STRLIT("x-reproxy-url")}, 0, 0, 0, 0, 0},
+                             {{H2O_STRLIT("x-traffic")}, 0, 0, 0, 0, 0}};
+size_t h2o__num_tokens = 60;
 
 const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
 {
@@ -208,6 +209,14 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
         case 'n':
             if (memcmp(name, "locatio", 7) == 0)
                 return H2O_TOKEN_LOCATION;
+            break;
+        }
+        break;
+    case 9:
+        switch (name[8]) {
+        case 'c':
+            if (memcmp(name, "x-traffi", 8) == 0)
+                return H2O_TOKEN_X_TRAFFIC;
             break;
         }
         break;

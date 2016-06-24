@@ -35,23 +35,6 @@ typedef struct st_h2o_http2_stream_t h2o_http2_stream_t;
 /* connection flow control window + alpha */
 #define H2O_HTTP2_DEFAULT_OUTBUF_SIZE 81920
 
-/* defined as negated form of the error codes defined in HTTP2-spec section 7 */
-#define H2O_HTTP2_ERROR_NONE 0
-#define H2O_HTTP2_ERROR_PROTOCOL -1
-#define H2O_HTTP2_ERROR_INTERNAL -2
-#define H2O_HTTP2_ERROR_FLOW_CONTROL -3
-#define H2O_HTTP2_ERROR_SETTINGS_TIMEOUT -4
-#define H2O_HTTP2_ERROR_STREAM_CLOSED -5
-#define H2O_HTTP2_ERROR_FRAME_SIZE -6
-#define H2O_HTTP2_ERROR_REFUSED_STREAM -7
-#define H2O_HTTP2_ERROR_CANCEL -8
-#define H2O_HTTP2_ERROR_COMPRESSION -9
-#define H2O_HTTP2_ERROR_CONNECT -10
-#define H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM -11
-#define H2O_HTTP2_ERROR_INADEUATE_SECURITY -12
-#define H2O_HTTP2_ERROR_INCOMPLETE -255 /* an internal value indicating that all data is not ready */
-#define H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY -256
-
 /* hpack */
 
 #define H2O_HTTP2_ENCODE_INT_MAX_LENGTH 5
@@ -342,8 +325,17 @@ inline int h2o_http2_stream_is_push(uint32_t stream_id)
 inline ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn)
 {
     ssize_t ret, winsz;
+    size_t capacity, cwnd_left;
 
-    ret = conn->_write.buf->capacity - conn->_write.buf->size;
+    capacity = conn->_write.buf->capacity;
+    if ((cwnd_left = h2o_socket_prepare_for_latency_optimized_write(
+             conn->sock, &conn->super.ctx->globalconf->http2.latency_optimization)) < capacity) {
+        capacity = cwnd_left;
+        if (capacity < conn->_write.buf->size)
+            return 0;
+    }
+
+    ret = capacity - conn->_write.buf->size;
     if (ret < H2O_HTTP2_FRAME_HEADER_SIZE)
         return 0;
     ret -= H2O_HTTP2_FRAME_HEADER_SIZE;
