@@ -105,6 +105,22 @@ static bool contains_invalid_field_name_char(const char *s, size_t len)
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 192-223 */
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 224-255 */
     };
+    int i;
+
+    if (*s == ':') {
+        static const char * const valid_pseudo_headers[] = {
+            ":method", ":scheme", ":authority", ":path", ":status",
+        };
+        for (i = 0; i < sizeof(valid_pseudo_headers)/sizeof(valid_pseudo_headers[0]); i++) {
+            if (!strncmp(valid_pseudo_headers[i], s, len)) {
+                return false;
+            }
+        }
+        /* This is an unknown pseudo-header field, RFC 7540 says that
+         * "Endpoints MUST NOT generate pseudo-header fields other than
+         * those defined in this document." */
+        return true;
+    }
 
     for (; len != 0; ++s, --len) {
         unsigned char ch = (unsigned char)*s;
