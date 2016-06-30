@@ -493,7 +493,7 @@ static int obtain_tcp_info(int fd, uint32_t *rtt, uint32_t *mss, uint32_t *cwnd_
 
     struct tcp_connection_info tcpi;
     socklen_t tcpisz = sizeof(tcpi);
-    if (getsockopt(fd, IPPROTO_TCP, TCP_CONNECTION_INFO, &tcpi, &tcpisz) != 0)
+    if (getsockopt(fd, IPPROTO_TCP, TCP_CONNECTION_INFO, &tcpi, &tcpisz) != 0 || tcpi.tcpi_maxseg == 0)
         return -1;
     *rtt = tcpi.tcpi_srtt * 1000;
     *mss = tcpi.tcpi_maxseg;
