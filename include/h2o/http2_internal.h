@@ -27,6 +27,7 @@
 #include "khash.h"
 #include "h2o/cache.h"
 #include "h2o/http2_casper.h"
+#include "h2o/cache_digests.h"
 #include "h2o/http2_scheduler.h"
 
 typedef struct st_h2o_http2_conn_t h2o_http2_conn_t;
@@ -56,7 +57,8 @@ typedef struct st_h2o_hpack_header_table_t {
 
 void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table);
 int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len,
-                            int *pseudo_header_exists_map, size_t *content_length, const char **err_desc);
+                            int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
+                            const char **err_desc);
 size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len);
 void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
                                size_t max_frame_size, h2o_req_t *req, uint32_t parent_stream_id);
@@ -155,17 +157,14 @@ struct st_h2o_http2_stream_t {
     H2O_VECTOR(h2o_iovec_t) _data;
     h2o_ostream_pull_cb _pull_cb;
     h2o_http2_conn_num_streams_t *_num_streams_slot; /* points http2_conn_t::num_streams::* in which the stream is counted */
+    h2o_cache_digests_t *cache_digests;
     union {
         struct {
             uint32_t parent_stream_id;
             int promise_sent : 1;
         } push;
         struct {
-            enum {
-                H2O_HTTP2_STREAM_CASPER_STATE_TBD = 0,
-                H2O_HTTP2_STREAM_CASPER_READY,
-                H2O_HTTP2_STREAM_CASPER_DISABLED
-            } casper_state;
+            int casper_is_ready : 1;
         } pull;
     };
     /* references governed by connection.c for handling various things */

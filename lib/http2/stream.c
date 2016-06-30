@@ -67,6 +67,8 @@ void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     h2o_http2_conn_unregister_stream(conn, stream);
     if (stream->_req_body != NULL)
         h2o_buffer_dispose(&stream->_req_body);
+    if (stream->cache_digests != NULL)
+        h2o_cache_digests_destroy(stream->cache_digests);
     h2o_dispose_request(&stream->req);
     if (stream->stream_id == 1 && conn->_http1_req_input != NULL)
         h2o_buffer_dispose(&conn->_http1_req_input);
@@ -204,6 +206,15 @@ static int is_blocking_asset(h2o_req_t *req)
 static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     h2o_timestamp_t ts;
+    h2o_iovec_t etag = {NULL, SIZE_MAX};
+
+#define FIND_ETAG()                                                                                                                \
+    do {                                                                                                                           \
+        if (etag.len == SIZE_MAX) {                                                                                                \
+            ssize_t idx = h2o_find_header(&stream->req.headers, H2O_TOKEN_ETAG, -1);                                               \
+            etag = idx != -1 ? stream->req.headers.entries[idx].value : (h2o_iovec_t){};                                           \
+        }                                                                                                                          \
+    } while (0)
 
     h2o_get_timestamp(conn->super.ctx, &stream->req.pool, &ts);
 
@@ -211,14 +222,23 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     if (h2o_http2_stream_is_push(stream->stream_id)) {
         if (400 <= stream->req.res.status)
             goto CancelPush;
+        if (stream->cache_digests != NULL) {
+            FIND_ETAG();
+            if (etag.base != NULL) {
+                h2o_iovec_t url = h2o_concat(&stream->req.pool, stream->req.input.scheme->name, h2o_iovec_init(H2O_STRLIT("://")),
+                                             stream->req.input.authority, stream->req.input.path);
+                if (h2o_cache_digests_lookup_by_url_and_etag(stream->cache_digests, url.base, url.len, etag.base, etag.len) ==
+                    H2O_CACHE_DIGESTS_STATE_FRESH)
+                    goto CancelPush;
+            }
+        }
     }
 
     /* CASPER */
     if (conn->casper != NULL) {
         /* update casper if necessary */
         if (stream->req.hostconf->http2.casper.track_all_types || is_blocking_asset(&stream->req)) {
-            ssize_t etag_index = h2o_find_header(&stream->req.headers, H2O_TOKEN_ETAG, -1);
-            h2o_iovec_t etag = etag_index != -1 ? stream->req.headers.entries[etag_index].value : (h2o_iovec_t){};
+            FIND_ETAG();
             if (h2o_http2_casper_lookup(conn->casper, stream->req.path.base, stream->req.path.len, etag.base, etag.len, 1)) {
                 /* cancel if the pushed resource is already marked as cached */
                 if (h2o_http2_stream_is_push(stream->stream_id))
@@ -278,6 +298,8 @@ CancelPush:
         h2o_http2_conn_request_write(conn);
     }
     return -1;
+
+#undef FIND_ETAG
 }
 
 void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb)

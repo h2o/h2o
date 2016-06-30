@@ -317,7 +317,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
 
     header_exists_map = 0;
     if ((ret = h2o_hpack_parse_headers(&stream->req, &conn->_input_header_table, src, len, &header_exists_map,
-                                       &stream->_expected_content_length, err_desc)) != 0)
+                                       &stream->_expected_content_length, &stream->cache_digests, err_desc)) != 0)
         return ret;
 
 #define EXPECTED_MAP                                                                                                               \
@@ -355,7 +355,7 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
 
     assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_BODY);
 
-    if ((ret = h2o_hpack_parse_headers(&stream->req, &conn->_input_header_table, src, len, NULL, &dummy_content_length,
+    if ((ret = h2o_hpack_parse_headers(&stream->req, &conn->_input_header_table, src, len, NULL, &dummy_content_length, NULL,
                                        err_desc)) != 0)
         return ret;
 
@@ -1209,35 +1209,31 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
     if (!(h2o_linklist_is_empty(&conn->_pending_reqs) && can_run_requests(conn)))
         return;
 
-    /* casper-related code */
-    if (src_stream->req.hostconf->http2.casper.capacity_bits != 0) {
-        size_t header_index;
-        switch (src_stream->pull.casper_state) {
-        case H2O_HTTP2_STREAM_CASPER_STATE_TBD:
-            /* disable casper for this request if intermediary exists */
-            if (h2o_find_header(&src_stream->req.headers, H2O_TOKEN_X_FORWARDED_FOR, -1) != -1) {
-                src_stream->pull.casper_state = H2O_HTTP2_STREAM_CASPER_DISABLED;
-                return;
-            }
-            /* casper enabled for this request */
+    if (h2o_find_header(&src_stream->req.headers, H2O_TOKEN_X_FORWARDED_FOR, -1) != -1)
+        return;
+
+    if (src_stream->cache_digests != NULL) {
+        h2o_iovec_t url = h2o_concat(&src_stream->req.pool, src_stream->req.input.scheme->name, h2o_iovec_init(H2O_STRLIT("://")),
+                                     src_stream->req.input.authority, h2o_iovec_init(abspath, abspath_len));
+        if (h2o_cache_digests_lookup_by_url(src_stream->cache_digests, url.base, url.len) == H2O_CACHE_DIGESTS_STATE_FRESH)
+            return;
+    } else if (src_stream->req.hostconf->http2.casper.capacity_bits != 0) {
+        /* delayed initialization of casper (cookie-based), that MAY be used as a fallback to cache-digests */
+        if (!src_stream->pull.casper_is_ready) {
+            src_stream->pull.casper_is_ready = 1;
             if (conn->casper == NULL)
                 h2o_http2_conn_init_casper(conn, src_stream->req.hostconf->http2.casper.capacity_bits);
-            /* consume casper cookie */
+            ssize_t header_index;
             for (header_index = -1;
                  (header_index = h2o_find_header(&src_stream->req.headers, H2O_TOKEN_COOKIE, header_index)) != -1;) {
                 h2o_header_t *header = src_stream->req.headers.entries + header_index;
                 h2o_http2_casper_consume_cookie(conn->casper, header->value.base, header->value.len);
             }
-            src_stream->pull.casper_state = H2O_HTTP2_STREAM_CASPER_READY;
-        case H2O_HTTP2_STREAM_CASPER_READY:
-            break;
-        case H2O_HTTP2_STREAM_CASPER_DISABLED:
-            return;
         }
     }
 
     /* update the push memo, and if it already pushed on the same connection, return */
-    if (update_push_memo(conn, src_req, abspath, abspath_len))
+    if (update_push_memo(conn, &src_stream->req, abspath, abspath_len))
         return;
 
     /* open the stream */
