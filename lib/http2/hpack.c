@@ -404,7 +404,8 @@ void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table)
 }
 
 int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len,
-                            int *pseudo_header_exists_map, size_t *content_length, const char **err_desc)
+                            int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
+                            const char **err_desc)
 {
     const uint8_t *src_end = src + len;
 
@@ -465,6 +466,10 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                         } else {
                             return H2O_HTTP2_ERROR_PROTOCOL;
                         }
+                    }
+                    if (token == H2O_TOKEN_CACHE_DIGESTS && digests != NULL) {
+                        /* TODO cache the decoded result in HPACK, as well as delay the decoding of the digest until being used */
+                        h2o_cache_digests_load_header(digests, r.value->base, r.value->len);
                     }
                     h2o_add_header(&req->pool, &req->headers, token, r.value->base, r.value->len);
                 }

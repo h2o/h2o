@@ -38,7 +38,7 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     memset(&req, 0, sizeof(req));
     h2o_mem_init_pool(&req.pool);
     in = first_req;
-    r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len, &pseudo_headers_map, &content_length,
+    r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len, &pseudo_headers_map, &content_length, NULL,
                                 &err_desc);
     ok(r == 0);
     ok(req.input.authority.len == 15);
@@ -55,7 +55,7 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     memset(&req, 0, sizeof(req));
     h2o_mem_init_pool(&req.pool);
     in = second_req;
-    r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len, &pseudo_headers_map, &content_length,
+    r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len, &pseudo_headers_map, &content_length, NULL,
                                 &err_desc);
     ok(r == 0);
     ok(req.input.authority.len == 15);
@@ -74,7 +74,7 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     memset(&req, 0, sizeof(req));
     h2o_mem_init_pool(&req.pool);
     in = third_req;
-    r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len, &pseudo_headers_map, &content_length,
+    r = h2o_hpack_parse_headers(&req, &header_table, (const uint8_t *)in.base, in.len, &pseudo_headers_map, &content_length, NULL,
                                 &err_desc);
     ok(r == 0);
     ok(req.input.authority.len == 15);
@@ -320,7 +320,7 @@ static void parse_and_compare_request(h2o_hpack_header_table_t *ht, const char *
     size_t content_length = SIZE_MAX;
     const char *err_desc;
     int r = h2o_hpack_parse_headers(&req, ht, (void *)(promise_base + 13), promise_len - 13, &pseudo_header_exists_map,
-                                    &content_length, &err_desc);
+                                    &content_length, NULL, &err_desc);
     ok(r == 0);
     ok(h2o_memis(req.input.method.base, req.input.method.len, expected_method.base, expected_method.len));
     ok(req.input.scheme == expected_scheme);
