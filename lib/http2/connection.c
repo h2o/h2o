@@ -1217,8 +1217,10 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
                                      src_stream->req.input.authority, h2o_iovec_init(abspath, abspath_len));
         if (h2o_cache_digests_lookup_by_url(src_stream->cache_digests, url.base, url.len) == H2O_CACHE_DIGESTS_STATE_FRESH)
             return;
-    } else if (src_stream->req.hostconf->http2.casper.capacity_bits != 0) {
-        /* delayed initialization of casper (cookie-based), that MAY be used as a fallback to cache-digests */
+    }
+
+    /* delayed initialization of casper (cookie-based), that MAY be used together to cache-digests */
+    if (src_stream->req.hostconf->http2.casper.capacity_bits != 0) {
         if (!src_stream->pull.casper_is_ready) {
             src_stream->pull.casper_is_ready = 1;
             if (conn->casper == NULL)
