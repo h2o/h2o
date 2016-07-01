@@ -234,6 +234,12 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         }
     }
 
+    /* reset casper cookie in case cache-digests exist */
+    if (stream->cache_digests != NULL && stream->req.hostconf->http2.casper.capacity_bits != 0) {
+        h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE,
+                       H2O_STRLIT("h2o_casper=; Path=/; Expires=Sat, 01 Jan 2000 00:00:00 GMT"));
+    }
+
     /* CASPER */
     if (conn->casper != NULL) {
         /* update casper if necessary */
@@ -245,6 +251,8 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
                     goto CancelPush;
             }
         }
+        if (stream->cache_digests != NULL)
+            goto SkipCookie;
         /* browsers might ignore push responses, or they may process the responses in a different order than they were pushed.
          * Therefore H2O tries to include casper cookie only in the last stream that may be received by the client, or when the
          * value become stable; see also: https://github.com/h2o/h2o/issues/421
