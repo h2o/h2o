@@ -467,7 +467,7 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                             return H2O_HTTP2_ERROR_PROTOCOL;
                         }
                     }
-                    if (token == H2O_TOKEN_CACHE_DIGESTS && digests != NULL) {
+                    if (token == H2O_TOKEN_CACHE_DIGEST && digests != NULL) {
                         /* TODO cache the decoded result in HPACK, as well as delay the decoding of the digest until being used */
                         h2o_cache_digests_load_header(digests, r.value->base, r.value->len);
                     }
