@@ -133,6 +133,9 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
         }
         if ((events[i].events & (EPOLLOUT | EPOLLHUP | EPOLLERR)) != 0) {
             if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE) != 0) {
+                if (sock->super._cb.write == NULL) {
+                    fprintf(stderr, "got event %x for socket %d, flags:%x, read:%zu, written:%zu, latopt:%d\n", events[i].events, sock->fd, sock->_flags, sock->super.bytes_read, sock->super.bytes_written, (int)sock->super._latency_optimization.state);
+                }
                 write_pending(sock);
                 notified = 1;
             }
