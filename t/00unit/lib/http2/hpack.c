@@ -171,6 +171,19 @@ static void test_hpack(void)
     }
     h2o_mem_clear_pool(&pool);
 
+    note("decode_string_bogus");
+    {
+        char *str = "\x8c\xf1\xe3\xc2\xe5\xf2\x3a\x6b\xa0\xab\x90\xf4\xff";
+        const uint8_t *buf;
+        size_t len;
+        len = strlen(str);
+        buf = (const uint8_t *)str;
+        /* since we're only passing one byte, decode_string should fail */
+        h2o_iovec_t *decoded = decode_string(&pool, &buf, &buf[1]);
+        ok(decoded == NULL);
+    }
+    h2o_mem_clear_pool(&pool);
+
     note("decode_header (literal header field with indexing)");
     {
         struct st_h2o_decode_header_result_t result;
