@@ -423,7 +423,7 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
 
     /* append suffix path and query */
     parts[num_parts++] = h2o_uri_escape(
-        &req->pool, req->path_normalized.base + req->pathconf->path.len, req->path_normalized.len - req->pathconf->path.len, "/@");
+        &req->pool, req->path_normalized.base + req->pathconf->path.len, req->path_normalized.len - req->pathconf->path.len, "/@:");
     if (req->query_at != SIZE_MAX)
         parts[num_parts++] = h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at);
 
