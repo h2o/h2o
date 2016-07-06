@@ -192,13 +192,9 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
 {
     assert(sock->super._cb.write != NULL);
 
-    if ((sock->_flags & H2O_SOCKET_FLAG_DONT_WRITE) != 0) {
-        /* connection complete */
-        assert(sock->_wreq.cnt == 0);
+    /* DONT_WRITE poll */
+    if (sock->_wreq.cnt == 0)
         goto Complete;
-    }
-
-    assert(sock->_wreq.cnt != 0);
 
     /* write */
     if (write_core(sock->fd, &sock->_wreq.bufs, &sock->_wreq.cnt) == 0 && sock->_wreq.cnt != 0) {
@@ -208,13 +204,9 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
 
     /* either completed or failed */
     wreq_free_buffer_if_allocated(sock);
-    if (sock->_wreq.cnt != 0) {
-        /* pending data exists -> was an error */
-        sock->_wreq.cnt = 0; /* clear it ! */
-        sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_ERROR;
-    }
 
 Complete:
+    sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
     link_to_pending(sock);
     link_to_statechanged(sock); /* might need to disable the write polling */
 }
@@ -270,12 +262,17 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *_bufs, size_t bufcnt, h2o_socket
 
     /* try to write now */
     if (write_core(sock->fd, &bufs, &bufcnt) != 0) {
-        sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_ERROR;
+        /* fill in _wreq.bufs with fake data to indicate error */
+        sock->_wreq.bufs = sock->_wreq.smallbufs;
+        sock->_wreq.cnt = 1;
+        *sock->_wreq.bufs = h2o_iovec_init(H2O_STRLIT("deadbeef"));
+        sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
         link_to_pending(sock);
         return;
     }
     if (bufcnt == 0) {
         /* write complete, schedule the callback */
+        sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
         link_to_pending(sock);
         return;
     }
@@ -434,9 +431,8 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
         return NULL;
     }
 
-    sock = create_socket_set_nodelay(loop, fd, H2O_SOCKET_FLAG_DONT_WRITE);
-    sock->super._cb.write = cb;
-    link_to_statechanged(sock);
+    sock = create_socket_set_nodelay(loop, fd, H2O_SOCKET_FLAG_IS_CONNECTING);
+    h2o_socket_notify_write(&sock->super, cb);
     return &sock->super;
 }
 
@@ -481,9 +477,9 @@ void h2o_socket_notify_write(h2o_socket_t *_sock, h2o_socket_cb cb)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
     assert(sock->super._cb.write == NULL);
+    assert(sock->_wreq.cnt == 0);
 
     sock->super._cb.write = cb;
-    sock->_flags |= H2O_SOCKET_FLAG_DONT_WRITE;
     link_to_statechanged(sock);
 }
 
@@ -499,21 +495,23 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
         read_on_ready(sock);
     }
 
-    if (sock->super._cb.write != NULL && sock->_wreq.cnt == 0) {
+    if ((sock->_flags & H2O_SOCKET_FLAG_IS_WRITE_NOTIFY) != 0) {
         const char *err = NULL;
-        if ((sock->_flags & H2O_SOCKET_FLAG_DONT_WRITE) != 0) {
+        assert(sock->super._cb.write != NULL);
+        sock->_flags &= ~H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
+        if (sock->_wreq.cnt != 0) {
+            /* error */
+            err = h2o_socket_error_io;
+            sock->_wreq.cnt = 0;
+        } else if ((sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0) {
+            sock->_flags &= ~H2O_SOCKET_FLAG_IS_CONNECTING;
             int so_err = 0;
             socklen_t l = sizeof(so_err);
             so_err = 0;
-            getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &so_err, &l);
-            if (so_err != 0) {
+            if (getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &so_err, &l) != 0 || so_err != 0) {
                 /* FIXME lookup the error table */
                 err = h2o_socket_error_conn_fail;
             }
-            sock->_flags &= ~H2O_SOCKET_FLAG_DONT_WRITE;
-        } else {
-            if ((sock->_flags & H2O_SOCKET_FLAG_IS_WRITE_ERROR) != 0)
-                err = h2o_socket_error_io;
         }
         on_write_complete(&sock->super, err);
     }
