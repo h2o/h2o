@@ -502,6 +502,7 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
         if (sock->_wreq.cnt != 0) {
             /* error */
             err = h2o_socket_error_io;
+            sock->_wreq.cnt = 0;
         } else if ((sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0) {
             sock->_flags &= ~H2O_SOCKET_FLAG_IS_CONNECTING;
             int so_err = 0;
