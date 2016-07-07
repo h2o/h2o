@@ -19,9 +19,13 @@ my $resp = `nghttp -nv http://127.0.0.1:$server->{'port'}/ -H 'h\rost: host.exam
 like $resp, qr{.*error_code=PROTOCOL_ERROR.*}, "Got a protocol error for a bogus header name";
 
 $resp = `nghttp -nv http://127.0.0.1:$server->{'port'}/ -H 'host: host.\rexample.com' 2>&1`;
-like $resp, qr{.*error_code=PROTOCOL_ERROR.*}, "Got a protocol error for a bogus header value";
+like $resp, qr{.*error_code=NO_ERROR.*}, "No protocol error for a bogus header value";
+like $resp, qr{.*:status: 400}, "400 bad headers sent";
 
 $resp = `nghttp -nv http://127.0.0.1:$server->{'port'}/test/ -H 'host: host.example.com' 2>&1`;
 like $resp, qr{.*error_code=NO_ERROR.*}, "No error for no bogus error value";
+
+$resp = `nghttp -nv http://127.0.0.1:$server->{'port'}/test/ -H 'host: host.उदाहरण.com' 2>&1`;
+like $resp, qr{.*error_code=NO_ERROR.*}, "No error for utf-8 in value";
 
 done_testing();
