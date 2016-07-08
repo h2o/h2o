@@ -172,7 +172,7 @@ static void test_extract_push_path_from_link_header(void)
 
 void test_build_destination(void)
 {
-    h2o_pathconf_t conf_not_slashed = {NULL, {H2O_STRLIT("/abc")}}, conf_slashed = {NULL, {H2O_STRLIT("/abc")}};
+    h2o_pathconf_t conf_not_slashed = {NULL, {H2O_STRLIT("/abc")}}, conf_slashed = {NULL, {H2O_STRLIT("/abc/")}};
     h2o_req_t req;
     h2o_iovec_t dest;
 
