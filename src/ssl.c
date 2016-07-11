@@ -864,17 +864,48 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts)
 #endif
 }
 
-static pthread_mutex_t *mutexes;
+union st_anylock_t {
+     pthread_mutex_t lock;
+     pthread_rwlock_t rwlock;
+};
+
+static union st_anylock_t *locks;
 
 static void lock_callback(int mode, int n, const char *file, int line)
 {
-    if ((mode & CRYPTO_LOCK) != 0) {
-        pthread_mutex_lock(mutexes + n);
-    } else if ((mode & CRYPTO_UNLOCK) != 0) {
-        pthread_mutex_unlock(mutexes + n);
-    } else {
-        assert(!"unexpected mode");
+    switch (n) {
+    case CRYPTO_LOCK_EX_DATA:
+        if (mode & CRYPTO_WRITE) {
+            if (mode & CRYPTO_LOCK) {
+                pthread_rwlock_wrlock((pthread_rwlock_t *) (locks + n));
+            } else {
+                pthread_rwlock_unlock((pthread_rwlock_t *) (locks + n));
+            }
+        } else {
+            assert(mode & CRYPTO_READ);
+            if (mode & CRYPTO_LOCK) {
+                pthread_rwlock_rdlock((pthread_rwlock_t *) (locks + n));
+            } else {
+                pthread_rwlock_unlock((pthread_rwlock_t *) (locks + n));
+            }
+        }
+        break;
+    default:
+        if (mode & CRYPTO_LOCK) {
+            pthread_mutex_lock((pthread_mutex_t *) (locks + n));
+        } else {
+            pthread_mutex_unlock((pthread_mutex_t *) (locks + n));
+        }
+        break;
     }
+}
+
+static int add_lock_callback(int *num, int amount, int type, const char *file, int line) {
+    (void) type;
+    (void) file;
+    (void) line;
+
+    return __sync_add_and_fetch(num, amount);
 }
 
 static unsigned long thread_id_callback(void)
@@ -885,12 +916,21 @@ static unsigned long thread_id_callback(void)
 void init_openssl(void)
 {
     int nlocks = CRYPTO_num_locks(), i;
-    mutexes = h2o_mem_alloc(sizeof(*mutexes) * nlocks);
-    for (i = 0; i != nlocks; ++i)
-        pthread_mutex_init(mutexes + i, NULL);
+    locks = h2o_mem_alloc(sizeof(*locks) * nlocks);
+    for (i = 0; i < nlocks; ++i)
+        switch (i) {
+        case CRYPTO_LOCK_EX_DATA:
+            pthread_rwlock_init((pthread_rwlock_t *) (locks + i), NULL);
+            break;
+        default:
+            pthread_mutex_init((pthread_mutex_t *) (locks + i), NULL);
+            break;
+        }
+
     CRYPTO_set_locking_callback(lock_callback);
     CRYPTO_set_id_callback(thread_id_callback);
-    /* TODO [OpenSSL] set dynlock callbacks for better performance */
+    CRYPTO_set_add_lock_callback(add_lock_callback);
+
     SSL_load_error_strings();
     SSL_library_init();
     OpenSSL_add_all_algorithms();
