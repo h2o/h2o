@@ -401,7 +401,7 @@ int h2o_get_compressible_types(const h2o_headers_t *headers)
     return compressible_types;
 }
 
-h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t prefix_len)
+h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t prefix_len, int escape)
 {
     h2o_iovec_t parts[4];
     size_t num_parts = 0;
@@ -422,10 +422,26 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
     }
 
     /* append suffix path and query */
-    parts[num_parts++] = h2o_uri_escape(
-        &req->pool, req->path_normalized.base + req->pathconf->path.len, req->path_normalized.len - req->pathconf->path.len, "/@:");
-    if (req->query_at != SIZE_MAX)
-        parts[num_parts++] = h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at);
+
+    if (escape || req->res_is_delegated) {
+        /* When proxying, we don't want to modify the input URL, unless the url
+           has been rewritten already */
+        parts[num_parts++] = h2o_uri_escape(&req->pool, req->path_normalized.base + req->pathconf->path.len,
+                                            req->path_normalized.len - req->pathconf->path.len, "/@:");
+        if (req->query_at != SIZE_MAX) {
+            parts[num_parts++] = h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at);
+        }
+    } else {
+        if (req->input.path.len > 1) {
+            size_t to_skip;
+            if (req->norm_indexes) {
+                to_skip = req->norm_indexes[req->pathconf->path.len - 1];
+            } else {
+                to_skip = req->pathconf->path.len;
+            }
+            parts[num_parts++] = (h2o_iovec_t){req->input.path.base + to_skip, req->input.path.len - to_skip};
+        }
+    }
 
     return h2o_concat_list(&req->pool, parts, num_parts);
 }
