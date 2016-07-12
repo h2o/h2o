@@ -892,6 +892,15 @@ static unsigned long thread_id_callback(void)
     return (unsigned long)pthread_self();
 }
 
+static int add_lock_callback(int *num, int amount, int type, const char *file, int line)
+{
+    (void) type;
+    (void) file;
+    (void) line;
+
+    return __sync_add_and_fetch(num, amount);
+}
+
 void init_openssl(void)
 {
     int nlocks = CRYPTO_num_locks(), i;
@@ -900,7 +909,10 @@ void init_openssl(void)
         pthread_mutex_init(mutexes + i, NULL);
     CRYPTO_set_locking_callback(lock_callback);
     CRYPTO_set_id_callback(thread_id_callback);
-    /* TODO [OpenSSL] set dynlock callbacks for better performance */
+    CRYPTO_set_add_lock_callback(add_lock_callback);
+
+    /* Dynamic locks are only used by the CHIL engine at this time */
+
     SSL_load_error_strings();
     SSL_library_init();
     OpenSSL_add_all_algorithms();
