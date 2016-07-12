@@ -34,12 +34,11 @@ struct st_h2o_http2_casper_t {
     h2o_iovec_t cookie_cache;
 };
 
-static unsigned calc_key(h2o_http2_casper_t *casper, const char *path, size_t path_len, const char *etag, size_t etag_len)
+static unsigned calc_key(h2o_http2_casper_t *casper, const char *path, size_t path_len)
 {
     SHA_CTX ctx;
     SHA1_Init(&ctx);
     SHA1_Update(&ctx, path, path_len);
-    SHA1_Update(&ctx, etag, etag_len);
 
     union {
         unsigned key;
@@ -74,10 +73,9 @@ size_t h2o_http2_casper_num_entries(h2o_http2_casper_t *casper)
     return casper->keys.size;
 }
 
-int h2o_http2_casper_lookup(h2o_http2_casper_t *casper, const char *path, size_t path_len, const char *etag, size_t etag_len,
-                            int set)
+int h2o_http2_casper_lookup(h2o_http2_casper_t *casper, const char *path, size_t path_len, int set)
 {
-    unsigned key = calc_key(casper, path, path_len, etag, etag_len);
+    unsigned key = calc_key(casper, path, path_len);
     size_t i;
 
     /* FIXME use binary search */
