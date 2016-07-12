@@ -881,32 +881,50 @@ union st_anylock_t {
 
 static union st_anylock_t *locks;
 
-static void lock_callback(int mode, int n, const char *file, int line)
+/* CRYPTO locks we enable RW locks for */
+static int is_rw_lock(int n)
 {
     switch (n) {
-    case CRYPTO_LOCK_EX_DATA:
-        if (mode & CRYPTO_WRITE) {
-            if (mode & CRYPTO_LOCK) {
-                pthread_rwlock_wrlock((pthread_rwlock_t *) (locks + n));
-            } else {
-                pthread_rwlock_unlock((pthread_rwlock_t *) (locks + n));
-            }
-        } else {
-            assert(mode & CRYPTO_READ);
-            if (mode & CRYPTO_LOCK) {
-                pthread_rwlock_rdlock((pthread_rwlock_t *) (locks + n));
-            } else {
-                pthread_rwlock_unlock((pthread_rwlock_t *) (locks + n));
-            }
-        }
-        break;
-    default:
-        if (mode & CRYPTO_LOCK) {
-            pthread_mutex_lock((pthread_mutex_t *) (locks + n));
-        } else {
-            pthread_mutex_unlock((pthread_mutex_t *) (locks + n));
-        }
-        break;
+        case CRYPTO_LOCK_DH:
+        case CRYPTO_LOCK_DSA:
+        case CRYPTO_LOCK_EC:
+        case CRYPTO_LOCK_ERR:
+        case CRYPTO_LOCK_EX_DATA:
+        case CRYPTO_LOCK_MALLOC:
+        case CRYPTO_LOCK_RAND2:
+        case CRYPTO_LOCK_RSA:
+        case CRYPTO_LOCK_SSL:
+        case CRYPTO_LOCK_SSL_CTX:
+        case CRYPTO_LOCK_X509_STORE:
+        	return 1;
+        	break;
+        default:
+        	break;
+    }
+
+    return 0;
+}
+
+static void lock_callback(int mode, int n, const char *file, int line)
+{
+    if (is_rw_lock(n)) {
+    	if (mode & CRYPTO_READ) {
+    		if (mode & CRYPTO_LOCK) {
+    			pthread_rwlock_rdlock(&locks[n].rwlock);
+    		} else {
+    			pthread_rwlock_unlock(&locks[n].rwlock);
+    		}
+    	} else { /* CRYPTO_WRITE */
+    		if (mode & CRYPTO_LOCK) {
+    			pthread_rwlock_wrlock(&locks[n].rwlock);
+    		} else {
+    			pthread_rwlock_unlock(&locks[n].rwlock);
+    		}
+    	}
+    } else if (mode & CRYPTO_LOCK) {
+    	pthread_mutex_lock(&locks[n].lock);
+    } else {
+    	pthread_mutex_unlock(&locks[n].lock);
     }
 }
 
@@ -929,12 +947,11 @@ void init_openssl(void)
     int nlocks = CRYPTO_num_locks(), i;
     locks = h2o_mem_alloc(sizeof(*locks) * nlocks);
     for (i = 0; i < nlocks; ++i)
-        switch (i) {
-        case CRYPTO_LOCK_EX_DATA:
-            pthread_rwlock_init((pthread_rwlock_t *) (locks + i), NULL);
+    	if(is_rw_lock(i)) {
+            pthread_rwlock_init(&locks[i].rwlock, NULL);
             break;
-        default:
-            pthread_mutex_init((pthread_mutex_t *) (locks + i), NULL);
+    	} else {
+            pthread_mutex_init(&locks[i].lock, NULL);
             break;
         }
 
