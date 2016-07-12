@@ -70,27 +70,33 @@ subtest "memcached" => sub {
     plan skip_all => "memcached not found"
         unless prog_exists("memcached");
     my $memc_port = empty_port();
-    my $memc_guard = spawn_server(
-        argv     => [ qw(memcached -l 127.0.0.1 -p), $memc_port ],
-        is_ready => sub {
-            check_port($memc_port);
-        },
-    );
-    my $conf =<< "EOT";
+    my $doit = sub {
+        my $memc_proto = shift;
+        my $memc_guard = spawn_server(
+            argv     => [ qw(memcached -l 127.0.0.1 -p), $memc_port, "-B", $memc_proto ],
+            is_ready => sub {
+                check_port($memc_port);
+            },
+        );
+        my $conf =<< "EOT";
   mode: ticket
   ticket-store: memcached
   memcached:
     host: 127.0.0.1
     port: $memc_port
+    protocol: $memc_proto
 EOT
-    spawn_with($conf, sub {
-        is test(), "New";
-        is test(), "Reused";
-        is test(), "Reused";
-    });
-    spawn_with($conf, sub {
-        is test(), "Reused";
-    });
+        spawn_with($conf, sub {
+            is test(), "New";
+            is test(), "Reused";
+            is test(), "Reused";
+        });
+        spawn_with($conf, sub {
+            is test(), "Reused";
+        });
+    };
+    $doit->("binary");
+    $doit->("ascii");
 };
 
 done_testing;

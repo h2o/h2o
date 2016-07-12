@@ -76,7 +76,7 @@ static void redirect_internally(h2o_redirect_handler_t *self, h2o_req_t *req, h2
     return;
 
 SendInternalError:
-    h2o_send_error(req, 503, "Internal Server Error", "internal server error", 0);
+    h2o_send_error_503(req, "Internal Server Error", "internal server error", 0);
 }
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)

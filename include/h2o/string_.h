@@ -31,9 +31,6 @@ extern "C" {
 #include <time.h>
 #include "h2o/memory.h"
 
-#define H2O_TO__STR(n) #n
-#define H2O_TO_STR(n) H2O_TO__STR(n)
-
 #define H2O_STRLIT(s) (s), sizeof(s) - 1
 
 #define H2O_INT16_LONGEST_STR "-32768"
@@ -51,6 +48,10 @@ extern "C" {
  * @return buffer pointing to the duplicated string (buf is NUL-terminated but the length does not include the NUL char)
  */
 h2o_iovec_t h2o_strdup(h2o_mem_pool_t *pool, const char *s, size_t len);
+/**
+ * variant of h2o_strdup that calls h2o_mem_alloc_shared
+ */
+h2o_iovec_t h2o_strdup_shared(h2o_mem_pool_t *pool, const char *s, size_t len);
 /**
  * duplicates given string appending '/' to the tail if not found
  */

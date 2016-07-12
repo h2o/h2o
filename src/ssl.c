@@ -69,6 +69,7 @@ static struct {
     struct {
         char *host;
         uint16_t port;
+        int text_protocol;
     } memcached;
 } conf;
 
@@ -118,8 +119,9 @@ static void setup_cache_internal(SSL_CTX **contexts, size_t num_contexts)
 
 static void setup_cache_memcached(SSL_CTX **contexts, size_t num_contexts)
 {
-    h2o_memcached_context_t *memc_ctx = h2o_memcached_create_context(
-        conf.memcached.host, conf.memcached.port, conf.cache.vars.memcached.num_threads, conf.cache.vars.memcached.prefix);
+    h2o_memcached_context_t *memc_ctx =
+        h2o_memcached_create_context(conf.memcached.host, conf.memcached.port, conf.memcached.text_protocol,
+                                     conf.cache.vars.memcached.num_threads, conf.cache.vars.memcached.prefix);
     h2o_accept_setup_async_ssl_resumption(memc_ctx, conf.lifetime);
     size_t i;
     for (i = 0; i != num_contexts; ++i) {
@@ -307,7 +309,7 @@ H2O_NORETURN static void *ticket_internal_updater(void *unused)
         update_tickets(&session_tickets.tickets, time(NULL));
         pthread_rwlock_unlock(&session_tickets.rwlock);
         /* sleep for certain amount of time */
-        sleep(120 - (rand() >> 16) % 7);
+        sleep(120 - (h2o_rand() >> 16) % 7);
     }
 }
 
@@ -562,6 +564,8 @@ H2O_NORETURN static void *ticket_memcached_updater(void *unused)
                         conf.memcached.port, yrmcds_strerror(err));
             sleep(10);
         }
+        if (conf.memcached.text_protocol)
+            yrmcds_text_mode(&conn);
         /* connected */
         while (ticket_memcached_update_tickets(&conn, conf.ticket.vars.memcached.key, time(NULL)))
             ;
@@ -786,6 +790,7 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
     if ((t = yoml_get(node, "memcached")) != NULL) {
         conf.memcached.host = NULL;
         conf.memcached.port = 11211;
+        conf.memcached.text_protocol = 0;
         size_t index;
         for (index = 0; index != t->data.mapping.size; ++index) {
             yoml_t *key = t->data.mapping.elements[index].key;
@@ -807,6 +812,11 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
                     h2o_configurator_errprintf(cmd, value, "`port` must be a number");
                     return -1;
                 }
+            } else if (strcmp(key->data.scalar, "protocol") == 0) {
+                ssize_t sel = h2o_configurator_get_one_of(cmd, value, "BINARY,ASCII");
+                if (sel == -1)
+                    return -1;
+                conf.memcached.text_protocol = (int)sel;
             } else {
                 h2o_configurator_errprintf(cmd, key, "unknown attribute: %s", key->data.scalar);
                 return -1;
@@ -900,17 +910,18 @@ static void lock_callback(int mode, int n, const char *file, int line)
     }
 }
 
-static int add_lock_callback(int *num, int amount, int type, const char *file, int line) {
+static unsigned long thread_id_callback(void)
+{
+    return (unsigned long)pthread_self();
+}
+
+static int add_lock_callback(int *num, int amount, int type, const char *file, int line)
+{
     (void) type;
     (void) file;
     (void) line;
 
     return __sync_add_and_fetch(num, amount);
-}
-
-static unsigned long thread_id_callback(void)
-{
-    return (unsigned long)pthread_self();
 }
 
 void init_openssl(void)
@@ -930,6 +941,8 @@ void init_openssl(void)
     CRYPTO_set_locking_callback(lock_callback);
     CRYPTO_set_id_callback(thread_id_callback);
     CRYPTO_set_add_lock_callback(add_lock_callback);
+
+    /* Dynamic locks are only used by the CHIL engine at this time */
 
     SSL_load_error_strings();
     SSL_library_init();

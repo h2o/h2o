@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 DeNA Co., Ltd.
+ * Copyright (c) 2014-2016 DeNA Co., Ltd., Kazuho Oku, Fastly, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -80,7 +80,7 @@ static int32_t decode_int(const uint8_t **src, const uint8_t *src_end, size_t pr
     int32_t value, mult;
     uint8_t prefix_max = (1 << prefix_bits) - 1;
 
-    if (*src == src_end)
+    if (*src >= src_end)
         return -1;
 
     value = (uint8_t) * (*src)++ & prefix_max;
@@ -94,7 +94,7 @@ static int32_t decode_int(const uint8_t **src, const uint8_t *src_end, size_t pr
 
     value = prefix_max;
     for (mult = 1;; mult *= 128) {
-        if (*src == src_end)
+        if (*src >= src_end)
             return -1;
         value += (**src & 127) * mult;
         if ((*(*src)++ & 128) == 0)
@@ -125,7 +125,7 @@ static h2o_iovec_t *decode_huffman(h2o_mem_pool_t *pool, const uint8_t *src, siz
     h2o_iovec_t *dst_buf = alloc_buf(pool, len * 2); /* max compression ratio is >= 0.5 */
 
     dst = dst_buf->base;
-    for (; src != src_end; src++) {
+    for (; src < src_end; src++) {
         if ((dst = huffdecode4(dst, *src >> 4, &state, &maybe_eos)) == NULL)
             return NULL;
         if ((dst = huffdecode4(dst, *src & 0xf, &state, &maybe_eos)) == NULL)
@@ -146,7 +146,7 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, con
     int is_huffman;
     int32_t len;
 
-    if (*src == src_end)
+    if (*src >= src_end)
         return NULL;
 
     is_huffman = (**src & 0x80) != 0;
@@ -154,6 +154,8 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, con
         return NULL;
 
     if (is_huffman) {
+        if (*src + len > src_end)
+            return NULL;
         if ((ret = decode_huffman(pool, *src, len)) == NULL)
             return NULL;
     } else {
@@ -241,7 +243,7 @@ static int decode_header(h2o_mem_pool_t *pool, struct st_h2o_decode_header_resul
     int value_is_indexed = 0, do_index = 0;
 
 Redo:
-    if (*src == src_end)
+    if (*src >= src_end)
         return H2O_HTTP2_ERROR_COMPRESSION;
 
     /* determine the mode and handle accordingly */
@@ -404,7 +406,8 @@ void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table)
 }
 
 int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len,
-                            int *pseudo_header_exists_map, size_t *content_length, const char **err_desc)
+                            int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
+                            const char **err_desc)
 {
     const uint8_t *src_end = src + len;
 
@@ -465,6 +468,10 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                         } else {
                             return H2O_HTTP2_ERROR_PROTOCOL;
                         }
+                    }
+                    if (token == H2O_TOKEN_CACHE_DIGEST && digests != NULL) {
+                        /* TODO cache the decoded result in HPACK, as well as delay the decoding of the digest until being used */
+                        h2o_cache_digests_load_header(digests, r.value->base, r.value->len);
                     }
                     h2o_add_header(&req->pool, &req->headers, token, r.value->base, r.value->len);
                 }
@@ -773,7 +780,9 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
     capacity += STATUS_HEADER_MAX_SIZE;      /* for :status: */
 #ifndef H2O_UNITTEST
     capacity += 2 + H2O_TIMESTR_RFC1123_LEN; /* for Date: */
-    capacity += 5 + server_name->len;        /* for Server: */
+    if (server_name->len) {
+        capacity += 5 + server_name->len;        /* for Server: */
+    }
 #endif
     if (content_length != SIZE_MAX)
         capacity += CONTENT_LENGTH_HEADER_MAX_SIZE; /* for content-length: UINT64_MAX (with huffman compression applied) */
@@ -785,7 +794,9 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
     dst = encode_status(dst, res->status);
 #ifndef H2O_UNITTEST
     /* TODO keep some kind of reference to the indexed headers of Server and Date, and reuse them */
-    dst = encode_header(header_table, dst, &H2O_TOKEN_SERVER->buf, server_name);
+    if (server_name->len) {
+        dst = encode_header(header_table, dst, &H2O_TOKEN_SERVER->buf, server_name);
+    }
     h2o_iovec_t date_value = {ts->str->rfc1123, H2O_TIMESTR_RFC1123_LEN};
     dst = encode_header(header_table, dst, &H2O_TOKEN_DATE->buf, &date_value);
 #endif

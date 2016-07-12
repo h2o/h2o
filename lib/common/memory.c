@@ -31,6 +31,16 @@
 #include <unistd.h>
 #include "h2o/memory.h"
 
+#if defined(__linux__)
+#define USE_POSIX_FALLOCATE 1
+#elif __FreeBSD__ >= 9
+#define USE_POSIX_FALLOCATE 1
+#elif __NetBSD__ >= 7
+#define USE_POSIX_FALLOCATE 1
+#else
+#define USE_POSIX_FALLOCATE 0
+#endif
+
 struct st_h2o_mem_recycle_chunk_t {
     struct st_h2o_mem_recycle_chunk_t *next;
 };
@@ -56,7 +66,7 @@ void *(*h2o_mem__set_secure)(void *, int, size_t) = memset;
 
 static __thread h2o_mem_recycle_t mempool_allocator = {16};
 
-void h2o_fatal(const char *msg)
+void h2o__fatal(const char *msg)
 {
     fprintf(stderr, "fatal:%s\n", msg);
     abort();
@@ -241,7 +251,13 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                 } else {
                     fd = inbuf->_fd;
                 }
-                if (ftruncate(fd, new_allocsize) != 0) {
+                int fallocate_ret;
+#if USE_POSIX_FALLOCATE
+                fallocate_ret = posix_fallocate(fd, 0, new_allocsize);
+#else
+                fallocate_ret = ftruncate(fd, new_allocsize);
+#endif
+                if (fallocate_ret != 0) {
                     perror("failed to resize temporary file");
                     goto MapError;
                 }
@@ -342,6 +358,8 @@ void h2o_mem_swap(void *_x, void *_y, size_t len)
         memcpy(x, y, blocksz);
         memcpy(y, buf, blocksz);
         len -= blocksz;
+        x += blocksz;
+        y += blocksz;
     }
 }
 

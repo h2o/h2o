@@ -26,7 +26,7 @@
 
 #define H2O_SOCKET_FLAG_IS_DISPOSED 0x1
 #define H2O_SOCKET_FLAG_IS_READ_READY 0x2
-#define H2O_SOCKET_FLAG_IS_WRITE_ERROR 0x4
+#define H2O_SOCKET_FLAG_IS_WRITE_NOTIFY 0x4
 #define H2O_SOCKET_FLAG_IS_POLLED_FOR_READ 0x8
 #define H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE 0x10
 #define H2O_SOCKET_FLAG_DONT_READ 0x20
@@ -43,6 +43,7 @@ typedef struct st_h2o_evloop_t {
     } _statechanged;
     uint64_t _now;
     h2o_linklist_t _timeouts; /* list of h2o_timeout_t */
+    h2o_sliding_counter_t exec_time_counter;
 } h2o_evloop_t;
 
 typedef h2o_evloop_t h2o_loop_t;
@@ -58,9 +59,16 @@ h2o_evloop_t *h2o_evloop_create(void);
 void h2o_evloop_destroy(h2o_evloop_t *loop);
 int h2o_evloop_run(h2o_evloop_t *loop);
 
+/* inline definitions */
+
 static inline uint64_t h2o_now(h2o_evloop_t *loop)
 {
     return loop->_now;
+}
+
+static inline uint64_t h2o_evloop_get_execution_time(h2o_evloop_t *loop)
+{
+    return loop->exec_time_counter.average;
 }
 
 #endif

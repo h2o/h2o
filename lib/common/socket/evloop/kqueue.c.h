@@ -84,8 +84,7 @@ static int collect_status(struct st_h2o_socket_loop_kqueue_t *loop, struct keven
                     SET_AND_UPDATE(EVFILT_READ, EV_DELETE);
                 }
             }
-            if (h2o_socket_is_writing(&sock->super) &&
-                (sock->_wreq.cnt != 0 || (sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0)) {
+            if (h2o_socket_is_writing(&sock->super)) {
                 if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE) == 0) {
                     sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE;
                     SET_AND_UPDATE(EVFILT_WRITE, EV_ADD);
@@ -127,6 +126,9 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
     update_now(&loop->super);
     if (nevents == -1)
         return -1;
+
+    if (nevents != 0)
+        h2o_sliding_counter_start(&loop->super.exec_time_counter, loop->super._now);
 
     /* update readable flags, perform writes */
     for (i = 0; i != nevents; ++i) {

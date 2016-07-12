@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016 DeNA Co., Ltd., Kazuho Oku, Justin Zhu
+ * Copyright (c) 2014-2016 DeNA Co., Ltd., Kazuho Oku, Justin Zhu, Fastly, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -38,6 +38,20 @@ h2o_iovec_t h2o_strdup(h2o_mem_pool_t *pool, const char *s, size_t slen)
     } else {
         ret.base = h2o_mem_alloc(slen + 1);
     }
+    memcpy(ret.base, s, slen);
+    ret.base[slen] = '\0';
+    ret.len = slen;
+    return ret;
+}
+
+h2o_iovec_t h2o_strdup_shared(h2o_mem_pool_t *pool, const char *s, size_t slen)
+{
+    h2o_iovec_t ret;
+
+    if (slen == SIZE_MAX)
+        slen = strlen(s);
+
+    ret.base = h2o_mem_alloc_shared(pool, slen + 1, NULL);
     memcpy(ret.base, s, slen);
     ret.base[slen] = '\0';
     ret.len = slen;
@@ -218,7 +232,7 @@ h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t l
     return decoded;
 
 Error:
-    if(pool == NULL)
+    if (pool == NULL)
         free(decoded.base);
     return h2o_iovec_init(NULL, 0);
 }
@@ -408,6 +422,13 @@ const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len
             ++cur;
             break;
         }
+        if (*cur == ',') {
+            if (token_start == cur) {
+                ++cur;
+                token_end = cur;
+            }
+            break;
+        }
         if (value != NULL && *cur == '=') {
             ++cur;
             goto FindValue;
@@ -426,8 +447,13 @@ const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len
 FindValue:
     *iter = h2o_iovec_init(cur, end - cur);
     *element_len = token_end - token_start;
-    if ((value->base = (char *)h2o_next_token(iter, separator, &value->len, NULL)) == NULL)
+    if ((value->base = (char *)h2o_next_token(iter, separator, &value->len, NULL)) == NULL) {
         *value = (h2o_iovec_t){"", 0};
+    } else if (h2o_memis(value->base, value->len, H2O_STRLIT(","))) {
+        *value = (h2o_iovec_t){"", 0};
+        iter->base -= 1;
+        iter->len += 1;
+    }
     return token_start;
 }
 

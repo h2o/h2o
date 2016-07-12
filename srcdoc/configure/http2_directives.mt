@@ -31,11 +31,27 @@ See also:
 <p>
 H2O recognizes <code>link</code> headers with <a href="https://w3c.github.io/preload/">preload</a> keyword sent by a backend application server (reverse proxy or FastCGI) or an mruby handler, and pushes the designated resource to a client.
 </p>
-<p>
-When pushing the resources, the priority is determined using the <a href="configure/file_directives.html#file.mime.addtypes"><code>priority</code> attribute</a> of the MIME-type configuration.  If the priority is set to <code>highest</code> then the resource will be sent to the client before anything else; otherwise the resource will be sent to client after the main content, as per defined by the HTTP/2 specification.
+<?= $ctx->{example}->('A link response header triggering HTTP/2 push', <<'EOT')
+link: </assets/jquery.js>; rel=preload
+EOT
+?>
+
+<p>When the HTTP/2 driver of H2O recognizes a <code>link</code> response header with <code>rel=preload</code> attribute set, and if all of the following conditions are met, the specified resource is pushed to the client.
 </p>
+<ul>
+<li>configuration directive <a href="configure/http2_directives.html#http2-push-preload">http2-push-preload</a> is not set to <code>OFF</code></li>
+<li>the <code>link</code> header does not have the <code>nopush</code> attribute set</li>
+<li>the <code>link</code> header is <i>not</i> part of a pushed response</li>
+<li>the client does not disable HTTP/2 push</li>
+<li>number of the pushed responses in-flight is below the negotiated threshold</li>
+<li>authority of the resource specified is equivalent to the request that tried to trigger the push</li>
+<li>(for handlers that return the status code synchronously) the status code of the response to be pushed does not indicate an error (i.e. 4xx or 5xx)</li>
+</ul>
 <p>
 The server also provides a mechanism to track the clients' cache state via cookies, and to push the resources specified with the <code>link</code> header only when it does not exist within the clients' cache.  For details, please refer to the documentation of <a href="configure/http2_directives.html#http2-casper"><code>http2-casper</code></a> configuration directive.
+</p>
+<p>
+When a resource is pushed, the priority is determined using the <a href="configure/file_directives.html#file.mime.addtypes"><code>priority</code> attribute</a> of the MIME-type configuration.  If the priority is set to <code>highest</code> then the resource will be sent to the client before anything else; otherwise the resource will be sent to client after the main content, as per defined by the HTTP/2 specification.
 </p>
 <p>
 Pushed responses will have <code>x-http2-push: pushed</code> header set; by looking for the header, it is possible to determine if a resource has been pushed.
@@ -45,6 +61,36 @@ It is also possible to log the value in the <a href="configure/access_log_direct
 See also:
 <ul>
 <li><a href="http://blog.kazuhooku.com/2015/12/optimizing-performance-of-multi-tiered.html">Optimizing performance of multi-tier web applications using HTTP/2 push</a>
+</ul>
+</p>
+
+<h3 id="latency-optimization">Latency Optimization</h3>
+
+<p>
+With HTTP/2, a client often issues a high-priority request (e.g. a request for a CSS file) while a lower-priority response (e.g. HTML) is in flight.
+In such case, it is desirable for a server to switch to sending the response of the high-priority request as soon as it observes the request.
+</p>
+<p>
+In order to do so, send buffer of the TCP/IP stack should be kept empty except for the packets in-flight, and size of the TLS records must be small enough to avoid head-of-line blocking.
+The downside is that it increases the interaction between the server process and kernel, which result in consumption of more CPU cycles and slightly increased latency.
+</p>
+<p>
+Starting from version 2.1, H2O provides experimental directives that lets the users tune how the TCP/IP stack is used depending on the observed RTT, CWND, and the additional latency imposed by the interaction between the server and the OS.
+</p>
+<p>
+For TCP/IP connections with greater RTT and smaller CWND than the configured threshold, the server will try to keep the size of HTTP/2 frames unsent as small as possible so that it can switch to sending a higher-priority response.
+Preliminary benchmarks suggest that users can expect in average 1 RTT reduction when this optimization is enabled.
+For connections that do not meet the criteria, the server will utilize the TCP/IP stack in ordinary ways.
+</p>
+<p>
+The optimization is supported only on Linux and OS X, the operating systems that provide access to <code>TCP_INFO</code> and an interface to adjust the size of the unsent buffer (<code>TCP_NOTSENT_LOWAT</code>).
+</p>
+<p>
+Please refer to the documentation of the directives below to configure the optimization:
+<ul>
+<li><a href="configure/http2_directives.html#http2-latency-optimization-min-rtt"><code>http2-latency-optimization-min-rtt</code></a></li>
+<li><a href="configure/http2_directives.html#http2-latency-optimization-max-additional-delay"><code>http2-latency-optimization-max-additional-delay</code></a></li>
+<li><a href="configure/http2_directives.html#http2-latency-optimization-max-cwnd"><code>http2-latency-optimization-max-cwnd</code></a></li>
 </ul>
 </p>
 
@@ -124,6 +170,76 @@ EOT
 <p>
 The value cannot exceed 256.
 </p>
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "http2-latency-optimization-min-rtt",
+    levels  => [ qw(global) ],
+    since   => '2.1',
+    desc    => << 'EOT',
+Minimum RTT (in milliseconds) to enable <a href="configure/http2_directives.html#latency-optimization">latency optimization</a>.
+EOT
+)->(sub {
+?>
+<p>
+Latency optimization is disabled for TCP connections with smaller RTT (round-trip time) than the specified value.
+Otherwise, whether if the optimization is used depends on other parameters.
+</p>
+<p>
+The default value of the directive is <code>UINT_MAX</code> (4,294,967,295), which effectively disables the optimization.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "http2-latency-optimization-max-additional-delay",
+    levels  => [ qw(global) ],
+    since   => '2.1',
+    default => 'http2-latency-optimization-max-additional-delay: 0.1',
+    desc    => << 'EOT',
+Maximum additional delay (as the ratio to RTT) permitted to get <a href="configure/http2_directives.html#latency-optimization">latency optimization</a> activated.
+EOT
+)->(sub {
+?>
+<p>
+Latency optimization is disabled if the additional delay imposed by the interaction between the OS and the TCP/IP stack is estimated to be greater than the given threshold.
+Otherwise, whether if the optimization is used depends on other parameters.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "http2-latency-optimization-max-cwnd",
+    levels  => [ qw(global) ],
+    since   => '2.1',
+    default => 'http2-latency-optimization-max-cwnd: 65535',
+    desc    => << 'EOT',
+Maximum size (in octets) of CWND to get <a href="configure/http2_directives.html#latency-optimization">latency optimization</a> activated.
+EOT
+)->(sub {
+?>
+<p>
+CWND is a per-TCP-connection variable that represents the number of bytes that can be sent within 1 RTT.
+</p>
+<p>
+The server will not use or stop using latency optimization mode if CWND becomes greater than the configured value.
+In such case, average size of HTTP/2 frames buffered unsent will be slightly above the <a href="https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt" target="_blank"><code>tcp_notsent_lowat</code></a> sysctl value.
+</p>
+?>
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "http2-push-preload",
+    levels  => [ qw(global host) ],
+    since   => '2.1',
+    default => 'http2-push-preload: ON',
+    desc    => << 'EOT',
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether if the server should push resources when observing a <code>link: rel=preload</code> header.
+EOT
+)->(sub {
+?>
 ? })
 
 <?

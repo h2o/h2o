@@ -43,22 +43,22 @@ static void on_close(h2o_websocket_conn_t *conn)
     (*conn->cb)(conn, NULL);
 }
 
-static void on_recv(h2o_socket_t *sock, int status)
+static void on_recv(h2o_socket_t *sock, const char *err)
 {
     h2o_websocket_conn_t *conn = sock->data;
 
-    if (status == -1) {
+    if (err != NULL) {
         on_close(conn);
         return;
     }
     h2o_websocket_proceed(conn);
 }
 
-static void on_write_complete(h2o_socket_t *sock, int status)
+static void on_write_complete(h2o_socket_t *sock, const char *err)
 {
     h2o_websocket_conn_t *conn = sock->data;
 
-    if (status == -1) {
+    if (err != NULL) {
         on_close(conn);
         return;
     }

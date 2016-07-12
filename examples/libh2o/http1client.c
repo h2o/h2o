@@ -21,7 +21,6 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
-#include "picohttpparser.h"
 #include "h2o/hostinfo.h"
 #include "h2o/socketpool.h"
 #include "h2o/string_.h"
@@ -36,12 +35,13 @@ static int cnt_left = 3;
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
                                           int *method_is_head);
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
-                                       h2o_iovec_t msg, struct phr_header *headers, size_t num_headers);
+                                       h2o_iovec_t msg, h2o_http1client_header_t *headers, size_t num_headers);
 
 static void start_request(h2o_http1client_ctx_t *ctx)
 {
     h2o_url_t url_parsed;
     h2o_iovec_t *req;
+    int is_ssl;
 
     /* clear memory pool */
     h2o_mem_clear_pool(&pool);
@@ -51,10 +51,7 @@ static void start_request(h2o_http1client_ctx_t *ctx)
         fprintf(stderr, "unrecognized type of URL: %s\n", url);
         exit(1);
     }
-    if (url_parsed.scheme == &H2O_URL_SCHEME_HTTPS) {
-        fprintf(stderr, "https is not (yet) supported\n");
-        exit(1);
-    }
+    is_ssl = url_parsed.scheme == &H2O_URL_SCHEME_HTTPS;
 
     /* build request */
     req = h2o_mem_alloc_pool(&pool, sizeof(*req));
@@ -67,12 +64,12 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     if (1) {
         if (sockpool == NULL) {
             sockpool = h2o_mem_alloc(sizeof(*sockpool));
-            h2o_socketpool_init_by_hostport(sockpool, url_parsed.host, h2o_url_get_port(&url_parsed), 10);
+            h2o_socketpool_init_by_hostport(sockpool, url_parsed.host, h2o_url_get_port(&url_parsed), is_ssl, 10);
             h2o_socketpool_set_timeout(sockpool, ctx->loop, 5000 /* in msec */);
         }
         h2o_http1client_connect_with_pool(NULL, req, ctx, sockpool, on_connect);
     } else {
-        h2o_http1client_connect(NULL, req, ctx, url_parsed.host, h2o_url_get_port(&url_parsed), on_connect);
+        h2o_http1client_connect(NULL, req, ctx, url_parsed.host, h2o_url_get_port(&url_parsed), is_ssl, on_connect);
     }
 }
 
@@ -99,7 +96,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
 }
 
 h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
-                                struct phr_header *headers, size_t num_headers)
+                                h2o_http1client_header_t *headers, size_t num_headers)
 {
     size_t i;
 
@@ -145,6 +142,13 @@ int main(int argc, char **argv)
     h2o_multithread_receiver_t getaddr_receiver;
     h2o_timeout_t io_timeout;
     h2o_http1client_ctx_t ctx = {NULL, &getaddr_receiver, &io_timeout};
+
+    SSL_load_error_strings();
+    SSL_library_init();
+    OpenSSL_add_all_algorithms();
+    ctx.ssl_ctx = SSL_CTX_new(TLSv1_client_method());
+    SSL_CTX_load_verify_locations(ctx.ssl_ctx, H2O_TO_STR(H2O_ROOT) "/share/h2o/ca-bundle.crt", NULL);
+    SSL_CTX_set_verify(ctx.ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
 
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <url>\n", argv[0]);

@@ -24,6 +24,10 @@ const char* yrmcds_strerror(yrmcds_error e) {
         return "Received malformed packet";
     case YRMCDS_NOT_IMPLEMENTED:
         return "Not implemented";
+    case YRMCDS_IN_BINARY:
+        return "Connection is fixed for binary protocol";
+    case YRMCDS_BAD_KEY:
+        return "Bad key";
     default:
         return "Unknown error";
     };

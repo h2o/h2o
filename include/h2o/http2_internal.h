@@ -25,7 +25,9 @@
 #include <assert.h>
 #include <stdint.h>
 #include "khash.h"
+#include "h2o/cache.h"
 #include "h2o/http2_casper.h"
+#include "h2o/cache_digests.h"
 #include "h2o/http2_scheduler.h"
 
 typedef struct st_h2o_http2_conn_t h2o_http2_conn_t;
@@ -33,23 +35,6 @@ typedef struct st_h2o_http2_stream_t h2o_http2_stream_t;
 
 /* connection flow control window + alpha */
 #define H2O_HTTP2_DEFAULT_OUTBUF_SIZE 81920
-
-/* defined as negated form of the error codes defined in HTTP2-spec section 7 */
-#define H2O_HTTP2_ERROR_NONE 0
-#define H2O_HTTP2_ERROR_PROTOCOL -1
-#define H2O_HTTP2_ERROR_INTERNAL -2
-#define H2O_HTTP2_ERROR_FLOW_CONTROL -3
-#define H2O_HTTP2_ERROR_SETTINGS_TIMEOUT -4
-#define H2O_HTTP2_ERROR_STREAM_CLOSED -5
-#define H2O_HTTP2_ERROR_FRAME_SIZE -6
-#define H2O_HTTP2_ERROR_REFUSED_STREAM -7
-#define H2O_HTTP2_ERROR_CANCEL -8
-#define H2O_HTTP2_ERROR_COMPRESSION -9
-#define H2O_HTTP2_ERROR_CONNECT -10
-#define H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM -11
-#define H2O_HTTP2_ERROR_INADEUATE_SECURITY -12
-#define H2O_HTTP2_ERROR_INCOMPLETE -255 /* an internal value indicating that all data is not ready */
-#define H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY -256
 
 /* hpack */
 
@@ -72,7 +57,8 @@ typedef struct st_h2o_hpack_header_table_t {
 
 void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table);
 int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len,
-                            int *pseudo_header_exists_map, size_t *content_length, const char **err_desc);
+                            int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
+                            const char **err_desc);
 size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len);
 void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
                                size_t max_frame_size, h2o_req_t *req, uint32_t parent_stream_id);
@@ -171,17 +157,14 @@ struct st_h2o_http2_stream_t {
     H2O_VECTOR(h2o_iovec_t) _data;
     h2o_ostream_pull_cb _pull_cb;
     h2o_http2_conn_num_streams_t *_num_streams_slot; /* points http2_conn_t::num_streams::* in which the stream is counted */
+    h2o_cache_digests_t *cache_digests;
     union {
         struct {
             uint32_t parent_stream_id;
             int promise_sent : 1;
         } push;
         struct {
-            enum {
-                H2O_HTTP2_STREAM_CASPER_STATE_TBD = 0,
-                H2O_HTTP2_STREAM_CASPER_READY,
-                H2O_HTTP2_STREAM_CASPER_DISABLED
-            } casper_state;
+            int casper_is_ready : 1;
         } pull;
     };
     /* references governed by connection.c for handling various things */
@@ -239,6 +222,7 @@ struct st_h2o_http2_conn_t {
         h2o_timeout_entry_t timeout_entry;
         h2o_http2_window_t window;
     } _write;
+    h2o_cache_t *push_memo;
     h2o_http2_casper_t *casper;
 };
 
@@ -340,8 +324,17 @@ inline int h2o_http2_stream_is_push(uint32_t stream_id)
 inline ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn)
 {
     ssize_t ret, winsz;
+    size_t capacity, cwnd_left;
 
-    ret = conn->_write.buf->capacity - conn->_write.buf->size;
+    capacity = conn->_write.buf->capacity;
+    if ((cwnd_left = h2o_socket_prepare_for_latency_optimized_write(
+             conn->sock, &conn->super.ctx->globalconf->http2.latency_optimization)) < capacity) {
+        capacity = cwnd_left;
+        if (capacity < conn->_write.buf->size)
+            return 0;
+    }
+
+    ret = capacity - conn->_write.buf->size;
     if (ret < H2O_HTTP2_FRAME_HEADER_SIZE)
         return 0;
     ret -= H2O_HTTP2_FRAME_HEADER_SIZE;

@@ -107,6 +107,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
     struct sockaddr_storage ss;
     socklen_t sslen;
     h2o_iovec_t cookie_buf = {}, xff_buf = {}, via_buf = {};
+    int preserve_x_forwarded_proto = req->conn->ctx->globalconf->proxy.preserve_x_forwarded_proto;
 
     /* for x-f-f */
     if ((sslen = req->conn->callbacks->get_peername(req->conn, (void *)&ss)) != 0)
@@ -173,6 +174,8 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
                 const h2o_token_t *token = (void *)h->name;
                 if (token->proxy_should_drop) {
                     continue;
+                } else if (token == H2O_TOKEN_HOST) {
+                    continue;
                 } else if (token == H2O_TOKEN_COOKIE) {
                     /* merge the cookie headers; see HTTP/2 8.1.2.5 and HTTP/1 (RFC6265 5.4) */
                     /* FIXME current algorithm is O(n^2) against the number of cookie headers */
@@ -186,7 +189,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
                     continue;
                 }
             }
-            if (h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-proto")))
+            if (!preserve_x_forwarded_proto && h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-proto")))
                 continue;
             RESERVE(h->name->len + h->value.len + 2);
             APPEND(h->name->base, h->name->len);
@@ -202,9 +205,11 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
         buf.base[offset++] = '\r';
         buf.base[offset++] = '\n';
     }
-    FLATTEN_PREFIXED_VALUE("x-forwarded-proto: ", req->input.scheme->name, 0);
-    buf.base[offset++] = '\r';
-    buf.base[offset++] = '\n';
+    if (!preserve_x_forwarded_proto) {
+        FLATTEN_PREFIXED_VALUE("x-forwarded-proto: ", req->input.scheme->name, 0);
+        buf.base[offset++] = '\r';
+        buf.base[offset++] = '\n';
+    }
     if (remote_addr_len != SIZE_MAX) {
         FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, remote_addr_len);
         APPEND(remote_addr, remote_addr_len);
@@ -309,6 +314,9 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     /* FIXME should there be a way to notify error downstream? */
 
     if (errstr != NULL) {
+        if (errstr != h2o_http1client_error_is_eos) {
+            h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
+        }
         /* detach the content */
         self->last_content_before_send = self->client->sock->input;
         h2o_buffer_init(&self->client->sock->input, &h2o_socket_buffer_prototype);
@@ -321,7 +329,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
 }
 
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
-                                       h2o_iovec_t msg, struct phr_header *headers, size_t num_headers)
+                                       h2o_iovec_t msg, h2o_http1client_header_t *headers, size_t num_headers)
 {
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
@@ -330,7 +338,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
         self->client = NULL;
         h2o_req_log_error(req, "lib/core/proxy.c", "%s", errstr);
-        h2o_send_error(req, 502, "Gateway Error", errstr, 0);
+        h2o_send_error_502(req, "Gateway Error", errstr, 0);
         return NULL;
     }
 
@@ -349,7 +357,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                     (req->res.content_length = h2o_strtosize(headers[i].value, headers[i].value_len)) == SIZE_MAX) {
                     self->client = NULL;
                     h2o_req_log_error(req, "lib/core/proxy.c", "%s", "invalid response from upstream (malformed content-length)");
-                    h2o_send_error(req, 502, "Gateway Error", "invalid response from upstream", 0);
+                    h2o_send_error_502(req, "Gateway Error", "invalid response from upstream", 0);
                     return NULL;
                 }
                 goto Skip;
@@ -369,7 +377,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 }
                 goto AddHeaderDuped;
             } else if (token == H2O_TOKEN_LINK) {
-                h2o_puth_path_in_link_header(req, headers[i].value, headers[i].value_len);
+                h2o_push_path_in_link_header(req, headers[i].value, headers[i].value_len);
             }
         /* default behaviour, transfer the header downstream */
         AddHeaderDuped:
@@ -405,6 +413,20 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     return on_body;
 }
 
+static int on_1xx(h2o_http1client_t *client, int minor_version, int status, h2o_iovec_t msg, h2o_http1client_header_t *headers,
+                  size_t num_headers)
+{
+    struct rp_generator_t *self = client->data;
+    size_t i;
+
+    for (i = 0; i != num_headers; ++i) {
+        if (h2o_memis(headers[i].name, headers[i].name_len, H2O_STRLIT("link")))
+            h2o_push_path_in_link_header(self->src_req, headers[i].value, headers[i].value_len);
+    }
+
+    return 0;
+}
+
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
                                           int *method_is_head)
 {
@@ -413,13 +435,14 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     if (errstr != NULL) {
         self->client = NULL;
         h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
-        h2o_send_error(self->src_req, 502, "Gateway Error", errstr, 0);
+        h2o_send_error_502(self->src_req, "Gateway Error", errstr, 0);
         return NULL;
     }
 
     *reqbufs = self->up_req.bufs;
     *reqbufcnt = self->up_req.bufs[1].base != NULL ? 2 : 1;
     *method_is_head = self->up_req.is_head;
+    self->client->informational_cb = on_1xx;
     return on_head;
 }
 
@@ -471,25 +494,24 @@ void h2o__proxy_process_request(h2o_req_t *req)
         } else if (overrides->hostport.host.base != NULL) {
             self = proxy_send_prepare(req, 0);
             h2o_http1client_connect(&self->client, self, client_ctx, req->overrides->hostport.host, req->overrides->hostport.port,
-                                    on_connect);
+                                    0, on_connect);
             return;
         }
     }
     { /* default logic */
         h2o_iovec_t host;
         uint16_t port;
-        if (req->scheme != &H2O_URL_SCHEME_HTTP ||
-            h2o_url_parse_hostport(req->authority.base, req->authority.len, &host, &port) == NULL) {
+        if (h2o_url_parse_hostport(req->authority.base, req->authority.len, &host, &port) == NULL) {
             h2o_req_log_error(req, "lib/core/proxy.c", "invalid URL supplied for internal redirection:%s://%.*s%.*s",
                               req->scheme->name.base, (int)req->authority.len, req->authority.base, (int)req->path.len,
                               req->path.base);
-            h2o_send_error(req, 502, "Gateway Error", "internal error", 0);
+            h2o_send_error_502(req, "Gateway Error", "internal error", 0);
             return;
         }
         if (port == 65535)
-            port = 80;
+            port = req->scheme->default_port;
         self = proxy_send_prepare(req, 0);
-        h2o_http1client_connect(&self->client, self, client_ctx, host, port, on_connect);
+        h2o_http1client_connect(&self->client, self, client_ctx, host, port, req->scheme == &H2O_URL_SCHEME_HTTPS, on_connect);
         return;
     }
 }

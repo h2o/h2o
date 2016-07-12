@@ -109,6 +109,10 @@ void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref);
  * weight.
  */
 int h2o_http2_scheduler_run(h2o_http2_scheduler_node_t *root, h2o_http2_scheduler_run_cb cb, void *cb_arg);
+/**
+ * returns if there are any active entries nodes in the scheduler (may have false positives, but no false negatives)
+ */
+int h2o_http2_scheduler_is_active(h2o_http2_scheduler_node_t *root);
 
 /* inline definitions */
 

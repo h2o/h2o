@@ -25,6 +25,7 @@
 #include "yrmcds.h"
 #include "h2o/linklist.h"
 #include "h2o/memcached.h"
+#include "h2o/rand.h"
 #include "h2o/string_.h"
 
 struct st_h2o_memcached_context_t {
@@ -34,6 +35,7 @@ struct st_h2o_memcached_context_t {
     size_t num_threads_connected;
     char *host;
     uint16_t port;
+    int text_protocol;
     h2o_iovec_t prefix;
 };
 
@@ -130,23 +132,35 @@ static void discard_req(h2o_memcached_req_t *req)
 static h2o_memcached_req_t *pop_inflight(struct st_h2o_memcached_conn_t *conn, uint32_t serial)
 {
     h2o_memcached_req_t *req;
-    h2o_linklist_t *node;
 
     pthread_mutex_lock(&conn->mutex);
 
-    for (node = conn->inflight.next; node != &conn->inflight; node = node->next) {
-        req = H2O_STRUCT_FROM_MEMBER(h2o_memcached_req_t, inflight, node);
-        assert(req->type == REQ_TYPE_GET);
-        if (req->data.get.serial == serial) {
-            h2o_linklist_unlink(&req->inflight);
-            goto Found;
+    if (conn->yrmcds.text_mode) {
+        /* in text mode, responses are returned in order (and we may receive responses for commands other than GET) */
+        if (!h2o_linklist_is_empty(&conn->inflight)) {
+            req = H2O_STRUCT_FROM_MEMBER(h2o_memcached_req_t, inflight, conn->inflight.next);
+            assert(req->type == REQ_TYPE_GET);
+            if (req->data.get.serial == serial)
+                goto Found;
+        }
+    } else {
+        /* in binary mode, responses are received out-of-order (and we would only recieve responses for GET) */
+        h2o_linklist_t *node;
+        for (node = conn->inflight.next; node != &conn->inflight; node = node->next) {
+            req = H2O_STRUCT_FROM_MEMBER(h2o_memcached_req_t, inflight, node);
+            assert(req->type == REQ_TYPE_GET);
+            if (req->data.get.serial == serial)
+                goto Found;
         }
     }
-    req = NULL;
-Found:
 
+    /* not found */
     pthread_mutex_unlock(&conn->mutex);
+    return NULL;
 
+Found:
+    h2o_linklist_unlink(&req->inflight);
+    pthread_mutex_unlock(&conn->mutex);
     return req;
 }
 
@@ -172,12 +186,16 @@ static void *writer_main(void *_conn)
                     goto Error;
                 break;
             case REQ_TYPE_SET:
-                if ((err = yrmcds_set(&conn->yrmcds, req->key.base, req->key.len, req->data.set.value.base, req->data.set.value.len,
-                                      0, req->data.set.expiration, 0, 1, NULL)) != YRMCDS_OK)
+                err = yrmcds_set(&conn->yrmcds, req->key.base, req->key.len, req->data.set.value.base, req->data.set.value.len, 0,
+                                 req->data.set.expiration, 0, !conn->yrmcds.text_mode, NULL);
+                discard_req(req);
+                if (err != YRMCDS_OK)
                     goto Error;
                 break;
             case REQ_TYPE_DELETE:
-                if ((err = yrmcds_remove(&conn->yrmcds, req->key.base, req->key.len, 1, NULL)) != YRMCDS_OK)
+                err = yrmcds_remove(&conn->yrmcds, req->key.base, req->key.len, !conn->yrmcds.text_mode, NULL);
+                discard_req(req);
+                if (err != YRMCDS_OK)
                     goto Error;
                 break;
             default:
@@ -213,9 +231,11 @@ static void connect_to_server(h2o_memcached_context_t *ctx, yrmcds *yrmcds)
                     yrmcds_strerror(err));
         }
         ++failcnt;
-        usleep(2000000 + rand() % 3000000); /* sleep 2 to 5 seconds */
+        usleep(2000000 + h2o_rand() % 3000000); /* sleep 2 to 5 seconds */
     }
     /* connected */
+    if (ctx->text_protocol)
+        yrmcds_text_mode(yrmcds);
     fprintf(stderr, "[lib/common/memcached.c] connected to memcached at %s:%" PRIu16 "\n", ctx->host, ctx->port);
 }
 
@@ -242,6 +262,8 @@ static void reader_main(h2o_memcached_context_t *ctx)
         }
         h2o_memcached_req_t *req = pop_inflight(&conn, resp.serial);
         if (req == NULL) {
+            if (conn.yrmcds.text_mode)
+                continue;
             fprintf(stderr, "[lib/common/memcached.c] received unexpected serial\n");
             break;
         }
@@ -375,7 +397,8 @@ void h2o_memcached_delete(h2o_memcached_context_t *ctx, h2o_iovec_t key, int fla
     dispatch(ctx, req);
 }
 
-h2o_memcached_context_t *h2o_memcached_create_context(const char *host, uint16_t port, size_t num_threads, const char *prefix)
+h2o_memcached_context_t *h2o_memcached_create_context(const char *host, uint16_t port, int text_protocol, size_t num_threads,
+                                                      const char *prefix)
 {
     h2o_memcached_context_t *ctx = h2o_mem_alloc(sizeof(*ctx));
 
@@ -385,6 +408,7 @@ h2o_memcached_context_t *h2o_memcached_create_context(const char *host, uint16_t
     ctx->num_threads_connected = 0;
     ctx->host = h2o_strdup(NULL, host, SIZE_MAX).base;
     ctx->port = port;
+    ctx->text_protocol = text_protocol;
     ctx->prefix = h2o_strdup(NULL, prefix, SIZE_MAX);
 
     { /* start the threads */

@@ -141,11 +141,11 @@ Error:
 
 #else
 
-static void on_accept(h2o_socket_t *listener, int status)
+static void on_accept(h2o_socket_t *listener, const char *err)
 {
     h2o_socket_t *sock;
 
-    if (status == -1) {
+    if (err != NULL) {
         return;
     }
 
@@ -190,7 +190,7 @@ static int setup_ssl(const char *cert_file, const char *key_file)
 
     if (USE_MEMCACHED) {
         accept_ctx.libmemcached_receiver = &libmemcached_receiver;
-        h2o_accept_setup_async_ssl_resumption(h2o_memcached_create_context("127.0.0.1", 11211, 1, "h2o:ssl-resumption:"), 86400);
+        h2o_accept_setup_async_ssl_resumption(h2o_memcached_create_context("127.0.0.1", 11211, 0, 1, "h2o:ssl-resumption:"), 86400);
         h2o_socket_ssl_async_resumption_setup_ctx(accept_ctx.ssl_ctx);
     }
 

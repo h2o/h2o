@@ -65,7 +65,7 @@ Support for <a href="configure/basic_auth.html">Basic Authentication</a> is also
 When enabled using the <a href="configure/reproxy_directives.html#reproxy"><code>reproxy</code></a> directive, it is possible to delegate the request from the mruby handler to any other handler.
 </p>
 <p>
-<?= $ctx->{example}->('Pushing asset files', <<'EOT')
+<?= $ctx->{example}->('Rewriting URL with delegation', <<'EOT')
 paths:
   "/":
     mruby.handler: |
@@ -163,6 +163,9 @@ The response header and the response body object returned by the <code>#join</co
 </p>
 <p>
 Since the API provides an asynchronous HTTP client, it is possible to effectively issue multiple HTTP requests concurrently and merge them into a single response.
+</p>
+<p>
+When HTTPS is used, servers are verified using the properties of <a href="configure/proxy_directives.html#proxy.ssl.cafile"><code>proxy.ssl.cafile</code></a> and <a href="configure/proxy_directives.html#proxy.ssl.verify-peer"><code>proxy.ssl.verify-peer</code></a> specified at the global level.
 </p>
 
 ? })

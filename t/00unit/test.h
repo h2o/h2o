@@ -48,6 +48,7 @@ extern h2o_loop_t *test_loop;
 
 char *sha1sum(const void *src, size_t len);
 
+void test_lib__common__cache_c(void);
 void test_lib__common__hostinfo_c(void);
 void test_lib__common__multithread_c(void);
 void test_lib__common__serverutil_c(void);
@@ -67,6 +68,7 @@ void test_lib__handler__redirect_c(void);
 void test_lib__http2__hpack(void);
 void test_lib__http2__scheduler(void);
 void test_lib__http2__casper(void);
+void test_lib__http2__cache_digests(void);
 void test_src__ssl_c(void);
 void test_issues293(void);
 

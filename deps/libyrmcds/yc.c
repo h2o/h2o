@@ -3,7 +3,6 @@
 #include "yrmcds.h"
 
 #include <errno.h>
-#include <error.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -23,11 +22,12 @@ static void version() {
 
 static void usage() {
     printf("Usage: yc "
-           "[-h] [-v] [-d] [-s SERVER] [-p PORT] [-c COMPRESS] COMMAND ...\n\n"
+           "[-h] [-v] [-d] [-t] [-s SERVER] [-p PORT] [-c COMPRESS] COMMAND ...\n\n"
            "Options:\n"
            "  -h      print help and exit.\n"
            "  -v      print version information.\n"
            "  -d      turn on debug messages.\n"
+           "  -t      turn on text protocol mode.\n"
            "  -q      Use quiet commands, if possible.\n"
            "  -s      connect to SERVER.      Default: localhost\n"
            "  -p      TCP port number.        Default: 11211\n"
@@ -84,6 +84,8 @@ static void usage() {
            "          flush all unlocked items immediately or after DELAY seconds.\n"
            "  stat [settings|items|sizes]\n"
            "          obtain general or specified statistics.\n"
+           "  keys [PREFIX]\n"
+           "          dump keys matching PREFIX.\n"
            "  version\n"
            "          shows the server version.\n"
            "  quit\n"
@@ -167,7 +169,7 @@ static size_t read_data(const char* filename, char** pdata) {
 #define CHECK_ERROR(e)                                                  \
     if( e != 0 ) {                                                      \
         if( e == YRMCDS_SYSTEM_ERROR ) {                                \
-            error(0, errno, "system error");                            \
+            fprintf(stderr, "system error: %s\n", strerror(errno));     \
         } else {                                                        \
             fprintf(stderr, "yrmcds error: %s\n", yrmcds_strerror(e));  \
         }                                                               \
@@ -925,6 +927,34 @@ int cmd_stat(int argc, char** argv, yrmcds* s) {
     return 0;
 }
 
+int cmd_keys(int argc, char** argv, yrmcds* s) {
+    const char* prefix = NULL;
+    size_t prefix_len = 0;
+    if( argc == 1 ) {
+        prefix = argv[0];
+        prefix_len = strlen(prefix);
+    }
+    yrmcds_response r[1];
+    uint32_t serial;
+    yrmcds_error e = yrmcds_keys(s, prefix, prefix_len, &serial);
+    CHECK_ERROR(e);
+    if( debug )
+        fprintf(stderr, "request serial = %u\n", serial);
+    while( 1 ) {
+        e = yrmcds_recv(s, r);
+        CHECK_ERROR(e);
+        if( debug )
+            print_response(r);
+        CHECK_RESPONSE(r);
+        if( r->serial != serial )
+            continue;
+        if( r->key_len == 0 )
+            break;
+        printf("%.*s\n", (int)r->key_len, r->key);
+    }
+    return 0;
+}
+
 int cmd_version(int argc, char** argv, yrmcds* s) {
     yrmcds_response r[1];
     uint32_t serial;
@@ -960,10 +990,11 @@ int main(int argc, char** argv) {
     const char* server = DEFAULT_SERVER;
     uint16_t port = DEFAULT_PORT;
     size_t compression = DEFAULT_COMPRESS;
+    int text_mode = 0;
 
     while( 1 ) {
         int n;
-        int c = getopt(argc, argv, "s:p:c:dqvh");
+        int c = getopt(argc, argv, "s:p:c:dtqvh");
         if( c == -1 ) break;
         switch( c ) {
         case 's':
@@ -987,6 +1018,9 @@ int main(int argc, char** argv) {
             break;
         case 'd':
             debug = 1;
+            break;
+        case 't':
+            text_mode = 1;
             break;
         case 'q':
             quiet = 1;
@@ -1014,6 +1048,10 @@ int main(int argc, char** argv) {
     yrmcds s[1];
     yrmcds_error e = yrmcds_connect(s, server, port);
     CHECK_ERROR(e);
+    if( text_mode ) {
+        e = yrmcds_text_mode(s);
+        CHECK_ERROR(e);
+    }
     e = yrmcds_set_compression(s, compression);
     if( e != 0 && e != YRMCDS_NOT_IMPLEMENTED ) {
         yrmcds_close(s);
@@ -1049,6 +1087,7 @@ int main(int argc, char** argv) {
     do_cmd(unlockall);
     do_cmd(flush);
     do_cmd(stat);
+    do_cmd(keys);
     do_cmd(version);
     do_cmd(quit);
 

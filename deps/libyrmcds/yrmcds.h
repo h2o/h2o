@@ -1,6 +1,6 @@
 /** @file yrmcds.h
  * libyrmcds public API.
- * (C) 2013-2015 Cybozu.
+ * (C) 2013-2016 Cybozu.
  */
 
 #pragma once
@@ -8,8 +8,11 @@
 #ifndef YRMCDS_H_INCLUDED
 #define YRMCDS_H_INCLUDED
 
-#define LIBYRMCDS_VERSION        "1.2.0"
-#define LIBYRMCDS_VERSION_NUMBER  10200
+/// Library version string such as "1.3.0".
+#define LIBYRMCDS_VERSION        "1.3.0"
+
+/// Library version number such as 10201.
+#define LIBYRMCDS_VERSION_NUMBER  10300
 
 #include <pthread.h>
 #include <stddef.h>
@@ -37,6 +40,10 @@ typedef struct {
     size_t last_size;       ///< size of the last response.
     char*  decompressed;    ///< decompressed data.
     int    invalid;         ///< invalid flag.
+
+    /* for text mode */
+    int      text_mode;     ///< text mode flag.
+    uint32_t rserial;       ///< serial emulation.
 } yrmcds;
 
 
@@ -55,6 +62,8 @@ typedef enum {
     YRMCDS_STATUS_NOTLOCKED = 0x0011,
     YRMCDS_STATUS_UNKNOWNCOMMAND = 0x0081,
     YRMCDS_STATUS_OUTOFMEMORY = 0x0082,
+
+    YRMCDS_STATUS_OTHER = 0xffff,    ///< unknown error in text protocol.
 } yrmcds_status;
 
 
@@ -108,6 +117,8 @@ typedef enum {
     YRMCDS_CMD_RAU        = '\x4a',
     YRMCDS_CMD_RAUQ       = '\x4b',
 
+    YRMCDS_CMD_KEYS       = '\x50',
+
     YRMCDS_CMD_BOTTOM     // place this at the bottom.
 } yrmcds_command;
 
@@ -144,6 +155,8 @@ typedef enum {
     YRMCDS_COMPRESS_FAILED,   ///< LZ4 compression failed.
     YRMCDS_PROTOCOL_ERROR,    ///< received malformed packet.
     YRMCDS_NOT_IMPLEMENTED,   ///< the function is not available.
+    YRMCDS_IN_BINARY,         ///< connection is fixed for binary protocol.
+    YRMCDS_BAD_KEY,           ///< bad key.
 } yrmcds_error;
 
 
@@ -204,6 +217,21 @@ yrmcds_error yrmcds_close(yrmcds* c);
  * \see https://github.com/cybozu/libyrmcds/issues/8
  */
 yrmcds_error yrmcds_shutdown(yrmcds* c);
+
+
+/**
+ * Turn on text protocol mode.
+ * @param  c  A pointer to ::yrmcds.
+ * @return 0 if succeeded.  Other values indicate an error.
+ *
+ * This function puts the connection into text protocol mode.
+ * \p c should be a newly connected object; if any (binary) request
+ * has been sent, this function will return an error.
+ *
+ * Text protocol mode has overheads and limitations; most notably,
+ * \p quiet option for command sending functions cannot be enabled.
+ */
+yrmcds_error yrmcds_text_mode(yrmcds* c);
 
 
 /**
@@ -750,6 +778,19 @@ yrmcds_error yrmcds_stat_sizes(yrmcds* c, uint32_t* serial);
 
 
 /**
+ * Send Keys command to list all keys matching the given prefix.
+ * To retrieve all keys, pass \p NULL and 0 as \p prefix and \p prefix_len.
+ * @param  c          A pointer to ::yrmcds.
+ * @param  prefix     Prefix data.
+ * @param  prefix_len Length of \p prefix.
+ * @param  serial     A pointer to \p uint32_t, or \p NULL.
+ * @return 0 if succeeded.  Other values indicate an error.
+ */
+yrmcds_error yrmcds_keys(yrmcds* c, const char* prefix, size_t prefix_len,
+                         uint32_t* serial);
+
+
+/**
  * Send Version command.
  * @param  c         A pointer to ::yrmcds.
  * @param  serial    A pointer to \p uint32_t, or \p NULL.
@@ -800,7 +841,7 @@ typedef struct {
  */
 typedef struct {
     pthread_mutex_t lock;        ///< guard lock to serialize sends.
-    yrmcds_cnt_statistics stats; /// the result of `stats` command.
+    yrmcds_cnt_statistics stats; ///< the result of `stats` command.
     char* recvbuf;               ///< received data buffer.
     size_t capacity;             ///< buffer capacity.
     size_t used;                 ///< used bytes.

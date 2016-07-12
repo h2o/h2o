@@ -28,7 +28,7 @@
 #define COOKIE_ATTRIBUTES "; Path=/; Expires=Tue, 01 Jan 2030 00:00:00 GMT"
 
 struct st_h2o_http2_casper_t {
-    H2O_VECTOR(unsigned) keys;
+    H2O_VECTOR(uint64_t) keys;
     unsigned capacity_bits;
     unsigned remainder_bits;
     h2o_iovec_t cookie_cache;
@@ -102,7 +102,7 @@ int h2o_http2_casper_lookup(h2o_http2_casper_t *casper, const char *path, size_t
 void h2o_http2_casper_consume_cookie(h2o_http2_casper_t *casper, const char *cookie, size_t cookie_len)
 {
     h2o_iovec_t binary = {};
-    unsigned tiny_keys_buf[128], *keys = tiny_keys_buf;
+    uint64_t tiny_keys_buf[128], *keys = tiny_keys_buf;
 
     /* check the name of the cookie */
     if (!(cookie_len > sizeof(COOKIE_NAME "=") - 1 && memcmp(cookie, H2O_STRLIT(COOKIE_NAME "=")) == 0))
@@ -134,7 +134,7 @@ void h2o_http2_casper_consume_cookie(h2o_http2_casper_t *casper, const char *coo
         memcpy(casper->keys.entries, keys, num_keys * sizeof(*keys));
         casper->keys.size = num_keys;
     } else {
-        unsigned *orig_keys = casper->keys.entries;
+        uint64_t *orig_keys = casper->keys.entries;
         size_t num_orig_keys = casper->keys.size, orig_index = 0, new_index = 0;
         memset(&casper->keys, 0, sizeof(casper->keys));
         h2o_vector_reserve(NULL, &casper->keys, num_keys + num_orig_keys);

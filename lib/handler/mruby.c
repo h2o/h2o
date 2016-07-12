@@ -53,12 +53,15 @@ void h2o_mruby__assert_failed(mrb_state *mrb, const char *file, int line)
     abort();
 }
 
-static void set_h2o_root(mrb_state *mrb)
+static void setup_globals(mrb_state *mrb)
 {
     const char *root = getenv("H2O_ROOT");
     if (root == NULL)
         root = H2O_TO_STR(H2O_ROOT);
     mrb_gv_set(mrb, mrb_intern_lit(mrb, "$H2O_ROOT"), mrb_str_new(mrb, root, strlen(root)));
+
+    h2o_mruby_eval_expr(mrb, "$LOAD_PATH << \"#{$H2O_ROOT}/share/h2o/mruby\"");
+    h2o_mruby_assert(mrb);
 }
 
 mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v)
@@ -113,7 +116,7 @@ mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config
     struct RProc *proc = NULL;
     mrb_value result = mrb_nil_value();
 
-    set_h2o_root(mrb);
+    setup_globals(mrb);
 
     /* parse */
     if ((cxt = mrbc_context_new(mrb)) == NULL) {
@@ -458,9 +461,13 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
         if (!mrb_nil_p(p))
             mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_REMOTE_PORT), p);
     }
-    if (generator->req->remote_user.base != NULL)
-        mrb_hash_set(mrb, env, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_LIT_REMOTE_USER),
-                     mrb_str_new(mrb, generator->req->remote_user.base, generator->req->remote_user.len));
+    {
+        size_t i;
+        for (i = 0; i != generator->req->env.size; i += 2) {
+            h2o_iovec_t *name = generator->req->env.entries + i, *value = name + 1;
+            mrb_hash_set(mrb, env, mrb_str_new(mrb, name->base, name->len), mrb_str_new(mrb, value->base, value->len));
+        }
+    }
 
     { /* headers */
         h2o_header_t *headers_sorted = alloca(sizeof(*headers_sorted) * generator->req->headers.size);
@@ -528,19 +535,22 @@ static int handle_response_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
             /* skip */
         } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
             req->res.content_length = h2o_strtosize(value.base, value.len);
-        } else if (token == H2O_TOKEN_LINK && h2o_puth_path_in_link_header(req, value.base, value.len)) {
-            /* do not send the link header that is going to be pushed */
         } else {
+            if (token == H2O_TOKEN_LINK)
+                h2o_push_path_in_link_header(req, value.base, value.len);
             value = h2o_strdup(&req->pool, value.base, value.len);
             h2o_add_header(&req->pool, &req->res.headers, token, value.base, value.len);
         }
     } else if (name.len > fallthru_set_prefix.len &&
                h2o_memis(name.base, fallthru_set_prefix.len, fallthru_set_prefix.base, fallthru_set_prefix.len)) {
-        /* register additional request header if status is fallthru, otherwise discard */
-        if (req->res.status == STATUS_FALLTHRU) {
-            if (h2o_memis(name.base + fallthru_set_prefix.len, name.len - fallthru_set_prefix.len, H2O_STRLIT("remote-user")))
-                req->remote_user = h2o_strdup(&req->pool, value.base, value.len);
-        }
+        /* register environment variables (with the name converted to uppercase, and using `_`) */
+        size_t i;
+        name.base += fallthru_set_prefix.len;
+        name.len -= fallthru_set_prefix.len;
+        for (i = 0; i != name.len; ++i)
+            name.base[i] = name.base[i] == '-' ? '_' : h2o_toupper(name.base[i]);
+        h2o_iovec_t *slot = h2o_req_getenv(req, name.base, name.len, 1);
+        *slot = h2o_strdup(&req->pool, value.base, value.len);
     } else {
         value = h2o_strdup(&req->pool, value.base, value.len);
         h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, value.base, value.len);
@@ -671,7 +681,7 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
 
 GotException:
     report_exception(generator->req, mrb);
-    h2o_send_error(generator->req, 500, "Internal Server Error", "Internal Server Error", 0);
+    h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
 }
 
 void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value input, int *is_delegate)
@@ -768,7 +778,7 @@ GotException:
     if (generator->req != NULL) {
         report_exception(generator->req, mrb);
         if (generator->req->_generator == NULL) {
-            h2o_send_error(generator->req, 500, "Internal Server Error", "Internal Server Error", 0);
+            h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
         } else {
             h2o_mruby_send_chunked_close(generator);
         }

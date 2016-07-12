@@ -151,6 +151,7 @@ int main(int argc, char **argv)
     init_openssl();
 
     { /* library tests */
+        subtest("lib/cache.c", test_lib__common__cache_c);
         subtest("lib/common/multithread.c", test_lib__common__multithread_c);
         subtest("lib/common/hostinfo.c", test_lib__common__hostinfo_c);
         subtest("lib/common/serverutil.c", test_lib__common__serverutil_c);
@@ -166,6 +167,7 @@ int main(int argc, char **argv)
         subtest("lib/http2/hpack.c", test_lib__http2__hpack);
         subtest("lib/http2/scheduler.c", test_lib__http2__scheduler);
         subtest("lib/http2/casper.c", test_lib__http2__casper);
+        subtest("lib/http2/cache_digests.c", test_lib__http2__cache_digests);
     }
 
     { /* tests that use the run loop */

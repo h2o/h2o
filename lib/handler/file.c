@@ -288,7 +288,7 @@ static void add_headers_unconditional(struct st_h2o_sendfile_generator_t *self, 
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ETAG, self->header_bufs.etag, etag_len);
     }
     if (self->send_vary)
-        h2o_add_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
+        h2o_set_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
 }
 
 static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *req, int status, const char *reason,
@@ -498,7 +498,7 @@ static void gen_rand_string(h2o_iovec_t *s)
                                    "abcdefghijklmnopqrstuvwxyz";
 
     for (i = 0; i < s->len; ++i) {
-        s->base[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
+        s->base[i] = alphanum[h2o_rand() % (sizeof(alphanum) - 1)];
     }
 
     s->base[s->len] = 0;
@@ -516,7 +516,7 @@ static int delegate_dynamic_request(h2o_req_t *req, size_t url_path_len, const c
     filereq->url_path_len = url_path_len;
     filereq->local_path = h2o_strdup(&req->pool, local_path, local_path_len);
 
-    req->pathconf = &mime_type->data.dynamic.pathconf;
+    h2o_req_bind_conf(req, req->hostconf, &mime_type->data.dynamic.pathconf);
     req->filereq = filereq;
 
     handler = mime_type->data.dynamic.pathconf.handlers.entries[0];
@@ -562,7 +562,7 @@ static int try_dynamic_request(h2o_file_handler_t *self, h2o_req_t *req, char *r
 static void send_method_not_allowed(h2o_req_t *req)
 {
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ALLOW, H2O_STRLIT("GET, HEAD"));
-    h2o_send_error(req, 405, "Method Not Allowed", "method not allowed", H2O_SEND_ERROR_KEEP_HEADERS);
+    h2o_send_error_405(req, "Method Not Allowed", "method not allowed", H2O_SEND_ERROR_KEEP_HEADERS);
 }
 
 static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h2o_req_t *req, const char *rpath, size_t rpath_len,
@@ -622,8 +622,8 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
             content_range.base = h2o_mem_alloc_pool(&req->pool, 32);
             content_range.len = sprintf(content_range.base, "bytes */%zu", generator->bytesleft);
             h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_RANGE, content_range.base, content_range.len);
-            h2o_send_error(req, 416, "Request Range Not Satisfiable", "requested range not satisfiable",
-                           H2O_SEND_ERROR_KEEP_HEADERS);
+            h2o_send_error_416(req, "Request Range Not Satisfiable", "requested range not satisfiable",
+                               H2O_SEND_ERROR_KEEP_HEADERS);
             goto Close;
         }
         generator->ranged.range_count = range_count;
@@ -767,14 +767,14 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     /* failed to open */
 
     if (errno == ENFILE || errno == EMFILE) {
-        h2o_send_error(req, 503, "Service Unavailable", "please try again later", 0);
+        h2o_send_error_503(req, "Service Unavailable", "please try again later", 0);
     } else {
         if (h2o_mimemap_has_dynamic_type(self->mimemap) && try_dynamic_request(self, req, rpath, rpath_len) == 0)
             return 0;
         if (errno == ENOENT || errno == ENOTDIR) {
             return -1;
         } else {
-            h2o_send_error(req, 403, "Access Forbidden", "access forbidden", 0);
+            h2o_send_error_403(req, "Access Forbidden", "access forbidden", 0);
         }
     }
     return 0;
@@ -888,13 +888,13 @@ static int specific_handler_on_req(h2o_handler_t *_self, h2o_req_t *req)
     /* open file (or send error or return -1) */
     if ((generator = create_generator(req, self->real_path.base, self->real_path.len, &is_dir, self->flags)) == NULL) {
         if (is_dir) {
-            h2o_send_error(req, 403, "Access Forbidden", "access forbidden", 0);
+            h2o_send_error_403(req, "Access Forbidden", "access forbidden", 0);
         } else if (errno == ENOENT) {
             return -1;
         } else if (errno == ENFILE || errno == EMFILE) {
-            h2o_send_error(req, 503, "Service Unavailable", "please try again later", 0);
+            h2o_send_error_503(req, "Service Unavailable", "please try again later", 0);
         } else {
-            h2o_send_error(req, 403, "Access Forbidden", "access forbidden", 0);
+            h2o_send_error_403(req, "Access Forbidden", "access forbidden", 0);
         }
         return 0;
     }

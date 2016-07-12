@@ -42,4 +42,13 @@ subtest 'server-push' => sub {
     $doit->('https', $server->{tls_port});
 };
 
+subtest 'huge-headers' => sub {
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my $resp = `$curl --silent --dump-header /dev/stderr --max-redirs 0 $proto://127.0.0.1:$port/issues/951.php 2>&1 > /dev/null`;
+        like $resp, qr{^HTTP/[^ ]* 302 ?}is;
+        like $resp, qr{^set-cookie: ?}im;
+    });
+};
+
 done_testing();

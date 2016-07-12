@@ -65,8 +65,7 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
         h2o_req_fill_mime_attributes(req);
     if (!req->res.mime_attr->is_compressible)
         goto Next;
-    /* 100 is a rough estimate */
-    if (req->res.content_length <= 100)
+    if (req->res.content_length < self->args.min_size)
         goto Next;
     /* skip if failed to gather the list of compressible types */
     if ((compressible_types = h2o_get_compressible_types(&req->headers)) == 0)
@@ -100,7 +99,7 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     /* adjust the response headers */
     req->res.content_length = SIZE_MAX;
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_ENCODING, compressor->name.base, compressor->name.len);
-    h2o_add_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
+    h2o_set_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
     if (accept_ranges_header_index != -1) {
         req->res.headers.entries[accept_ranges_header_index].value = h2o_iovec_init(H2O_STRLIT("none"));
     } else {

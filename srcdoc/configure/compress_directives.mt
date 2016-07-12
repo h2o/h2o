@@ -51,6 +51,18 @@ EOT
 
 <?
 $ctx->{directive}->(
+    name     => "compress-minimum-size",
+    levels   => [ qw(global host path extension) ],
+    default  => "compress-minimum-size: 100",
+    since    => '2.0',
+    desc     => <<'EOT',
+Defines the minimum size a files needs to have in order for H2O to compress the request.
+EOT
+)->(sub {});
+?>
+
+<?
+$ctx->{directive}->(
     name     => "gzip",
     levels   => [ qw(global host path extension) ],
     default  => "gzip: OFF",

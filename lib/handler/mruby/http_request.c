@@ -19,7 +19,6 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include "picohttpparser.h"
 #include <mruby.h>
 #include <mruby/array.h>
 #include <mruby/error.h>
@@ -107,8 +106,8 @@ static void on_dispose(void *_ctx)
     }
 }
 
-static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int status, const struct phr_header *headers_sorted,
-                          size_t num_headers)
+static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int status,
+                          const h2o_http1client_header_t *headers_sorted, size_t num_headers)
 {
     mrb_state *mrb = ctx->generator->ctx->mrb;
     int gc_arena = mrb_gc_arena_save(mrb);
@@ -162,7 +161,8 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
 
 static void post_error(struct st_h2o_mruby_http_request_context_t *ctx, const char *errstr)
 {
-    static const struct phr_header headers_sorted[] = {{H2O_STRLIT("content-type"), H2O_STRLIT("text/plain; charset=utf-8")}};
+    static const h2o_http1client_header_t headers_sorted[] = {
+        {H2O_STRLIT("content-type"), H2O_STRLIT("text/plain; charset=utf-8")}};
 
     ctx->client = NULL;
     size_t errstr_len = strlen(errstr);
@@ -227,7 +227,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
 
 static int headers_sort_cb(const void *_x, const void *_y)
 {
-    const struct phr_header *x = _x, *y = _y;
+    const h2o_http1client_header_t *x = _x, *y = _y;
 
     if (x->name_len < y->name_len)
         return -1;
@@ -237,7 +237,7 @@ static int headers_sort_cb(const void *_x, const void *_y)
 }
 
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
-                                       h2o_iovec_t msg, struct phr_header *headers, size_t num_headers)
+                                       h2o_iovec_t msg, h2o_http1client_header_t *headers, size_t num_headers)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
@@ -400,7 +400,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
 
     /* build request and connect */
     h2o_http1client_connect(&ctx->client, ctx, &generator->req->conn->ctx->proxy.client_ctx, url.host, h2o_url_get_port(&url),
-                            on_connect);
+                            url.scheme == &H2O_URL_SCHEME_HTTPS, on_connect);
 
     ctx->refs.request = h2o_mruby_create_data_instance(mrb, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_HTTP_REQUEST_CLASS),
                                                        ctx, &request_type);
