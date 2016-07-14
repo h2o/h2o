@@ -23,7 +23,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include "h2o.h"
 #include "h2o/http2.h"
 #include "h2o/http2_internal.h"
@@ -67,10 +66,10 @@ static h2o_iovec_t *alloc_buf(h2o_mem_pool_t *pool, size_t len)
 }
 
 /* validate a header value against https://tools.ietf.org/html/rfc7230#section-3.2 */
-static bool contains_invalid_field_value_char(const char *s, size_t len)
+static int contains_invalid_field_value_char(const char *s, size_t len)
 {
     /* all printable chars + horizontal tab */
-    static const bool valid_h2_field_value_char[] = {
+    static const char valid_h2_field_value_char[] = {
         0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /*    0-31 */
         1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /*   32-63 */
         1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /*   64-95 */
@@ -84,18 +83,18 @@ static bool contains_invalid_field_value_char(const char *s, size_t len)
     for (; len != 0; ++s, --len) {
         unsigned char ch = (unsigned char)*s;
         if (!valid_h2_field_value_char[ch]) {
-            return true;
+            return 1;
         }
     }
-    return false;
+    return 0;
 }
 
 /* validate a header name against https://tools.ietf.org/html/rfc7230#section-3.2,
  * in addition to that, we disallow upper case chars as well. */
-static bool contains_invalid_field_name_char(const char *s, size_t len)
+static int contains_invalid_field_name_char(const char *s, size_t len)
 {
     /* all printable chars, except upper case and separator characters */
-    static const bool valid_h2_field_name_char[] = {
+    static const char valid_h2_field_name_char[] = {
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /*    0-31 */
         0,1,0,1,1,1,1,1,0,0,1,1,0,1,1,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0, /*   32-63 */
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1, /*   64-95 */
@@ -105,30 +104,14 @@ static bool contains_invalid_field_name_char(const char *s, size_t len)
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 192-223 */
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 224-255 */
     };
-    int i;
-
-    if (*s == ':') {
-        static const char * const valid_pseudo_headers[] = {
-            ":method", ":scheme", ":authority", ":path", ":status",
-        };
-        for (i = 0; i < sizeof(valid_pseudo_headers)/sizeof(valid_pseudo_headers[0]); i++) {
-            if (!strncmp(valid_pseudo_headers[i], s, len)) {
-                return false;
-            }
-        }
-        /* This is an unknown pseudo-header field, RFC 7540 says that
-         * "Endpoints MUST NOT generate pseudo-header fields other than
-         * those defined in this document." */
-        return true;
-    }
 
     for (; len != 0; ++s, --len) {
         unsigned char ch = (unsigned char)*s;
         if (!valid_h2_field_name_char[ch]) {
-            return true;
+            return 1;
         }
     }
-    return false;
+    return 0;
 }
 
 static int32_t decode_int(const uint8_t **src, const uint8_t *src_end, size_t prefix_bits)
@@ -198,11 +181,7 @@ static h2o_iovec_t *decode_huffman(h2o_mem_pool_t *pool, const uint8_t *src, siz
     return dst_buf;
 }
 
-#define H2O_HUFF_INVALID_FOR_HEADER_NAME (1 << 1)
-#define H2O_HUFF_INVALID_FOR_HEADER_VALUE (1 << 2)
-#define H2O_HUFF_ENCODED (1 << 3)
-
-static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, const uint8_t *src_end, uint8_t *seen_char_types)
+static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, const uint8_t *src_end, int is_header_name, const char **err_desc)
 {
     h2o_iovec_t *ret;
     int is_huffman;
@@ -221,16 +200,31 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, con
             return NULL;
         if ((ret = decode_huffman(pool, *src, len, &hflags)) == NULL)
             return NULL;
-        if (hflags & NGHTTP2_HUFF_INVALID_FOR_HEADER_NAME) {
-            *seen_char_types |= H2O_HUFF_INVALID_FOR_HEADER_NAME;
+        /* pseudo-headers are checked later in `decode_header` */
+        if (is_header_name && ret->base[0] != ':') {
+            if (hflags & NGHTTP2_HUFF_INVALID_FOR_HEADER_NAME) {
+                *err_desc = "found an invalid character in header name";
+                return NULL;
+            }
         }
-        if (hflags & NGHTTP2_HUFF_INVALID_FOR_HEADER_VALUE) {
-            *seen_char_types |= H2O_HUFF_INVALID_FOR_HEADER_VALUE;
+        if (hflags & NGHTTP2_HUFF_INVALID_FOR_HEADER_VALUE && !is_header_name) {
+            *err_desc = "found an invalid character in header value";
+            return NULL;
         }
-        *seen_char_types |= H2O_HUFF_ENCODED;
     } else {
         if (*src + len > src_end)
             return NULL;
+        /* pseudo-headers are checked later in `decode_header` */
+        if (is_header_name && **src != (uint8_t)':') {
+            if (contains_invalid_field_name_char((char *)*src, len)) {
+                *err_desc = "found an invalid character in header name";
+                return NULL;
+            }
+        }
+        if (!is_header_name && contains_invalid_field_value_char((char *)*src, len)) {
+            *err_desc = "found an invalid character in header value";
+            return NULL;
+        }
         ret = alloc_buf(pool, len);
         memcpy(ret->base, *src, len);
         ret->base[len] = '\0';
@@ -376,23 +370,11 @@ Redo:
     } else {
         /* non-existing name */
         const h2o_token_t *name_token;
-        uint8_t flags = 0;
-        if ((result->name = decode_string(pool, src, src_end, &flags)) == NULL)
-            return H2O_HTTP2_ERROR_COMPRESSION;
-        /* for pseudo-headers, the validation is done in decode_header,
-           only deal with the other headers */
-        if (result->name->base[0] != ':') {
-            if (flags & H2O_HUFF_ENCODED) {
-                if (flags & H2O_HUFF_INVALID_FOR_HEADER_NAME) {
-                    *err_desc = "found an invalid character in header name";
-                    return H2O_HTTP2_ERROR_PROTOCOL;
-                }
-            } else {
-                if (contains_invalid_field_name_char(result->name->base, result->name->len)) {
-                    *err_desc = "found an invalid character in header name";
-                    return H2O_HTTP2_ERROR_PROTOCOL;
-                }
+        if ((result->name = decode_string(pool, src, src_end, 1, err_desc)) == NULL) {
+            if (*err_desc) {
+                return H2O_HTTP2_ERROR_INVALID_HEADER_NAME;
             }
+            return H2O_HTTP2_ERROR_COMPRESSION;
         }
         /* predefined header names should be interned */
         if ((name_token = h2o_lookup_token(result->name->base, result->name->len)) != NULL)
@@ -401,20 +383,11 @@ Redo:
 
     /* determine the value (if necessary) */
     if (!value_is_indexed) {
-        uint8_t flags = 0;
-        if ((result->value = decode_string(pool, src, src_end, &flags)) == NULL) {
+        if ((result->value = decode_string(pool, src, src_end, 0, err_desc)) == NULL) {
+            if (*err_desc) {
+                return H2O_HTTP2_ERROR_INVALID_HEADER_VALUE;
+            }
             return H2O_HTTP2_ERROR_COMPRESSION;
-        }
-        if (flags & H2O_HUFF_ENCODED) {
-            if (flags & H2O_HUFF_INVALID_FOR_HEADER_VALUE) {
-                *err_desc = "found an invalid character in header value";
-                return H2O_HTTP2_ERROR_INVALID_HEADER_VALUE;
-            }
-        } else {
-            if (contains_invalid_field_value_char(result->value->base, result->value->len)) {
-                *err_desc = "found an invalid character in header value";
-                return H2O_HTTP2_ERROR_INVALID_HEADER_VALUE;
-            }
         }
     }
 

@@ -177,12 +177,12 @@ static void test_hpack(void)
     {
         char *str = "\x8c\xf1\xe3\xc2\xe5\xf2\x3a\x6b\xa0\xab\x90\xf4\xff";
         const uint8_t *buf;
-        uint8_t flags;
+        const char *errstr = NULL;
         size_t len;
         len = strlen(str);
         buf = (const uint8_t *)str;
         /* since we're only passing one byte, decode_string should fail */
-        h2o_iovec_t *decoded = decode_string(&pool, &buf, &buf[1], &flags);
+        h2o_iovec_t *decoded = decode_string(&pool, &buf, &buf[1], 0, &errstr);
         ok(decoded == NULL);
     }
     h2o_mem_clear_pool(&pool);
