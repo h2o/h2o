@@ -1065,7 +1065,7 @@ int h2o_get_compressible_types(const h2o_headers_t *headers);
 /**
  * builds destination URL or path, by contatenating the prefix and path_info of the request
  */
-h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t prefix_len, int escape);
+h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t prefix_len, int use_path_normalized);
 
 extern uint64_t h2o_connection_id;
 

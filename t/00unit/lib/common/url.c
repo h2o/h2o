@@ -29,7 +29,7 @@ static void test_normalize_path(void)
     h2o_mem_init_pool(&pool);
 
     size_t q;
-    size_t *norm_indexes;
+    size_t *norm_indexes = NULL;
     h2o_iovec_t input;
     h2o_iovec_t b;
 
