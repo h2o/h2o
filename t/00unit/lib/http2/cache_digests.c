@@ -25,15 +25,15 @@
 
 static void test_calc_hash(void)
 {
-    ok(calc_hash(H2O_STRLIT("https://example.com/style.css"), H2O_STRLIT("")) == 0x05d425d64668ab6b);
-    ok(calc_hash(H2O_STRLIT("https://example.com/style.css"), H2O_STRLIT("\"deadbeef\"")) == 0x194b8b243a9094d0);
+    ok(calc_hash(H2O_STRLIT("https://example.com/style.css"), H2O_STRLIT("")) == 0xbaf9e86f03330860);
+    ok(calc_hash(H2O_STRLIT("https://example.com/style.css"), H2O_STRLIT("\"deadbeef\"")) == 0xa53eb398509042d7);
 }
 
 static void test_decode(void)
 {
     h2o_cache_digests_t *digests = NULL;
 
-    h2o_cache_digests_load_header(&digests, H2O_STRLIT("AeyA"));
+    h2o_cache_digests_load_header(&digests, H2O_STRLIT("AeLA"));
     ok(digests != NULL);
     if (digests == NULL)
         return;
@@ -41,7 +41,7 @@ static void test_decode(void)
     ok(digests->fresh.url_and_etag.size == 0);
     ok(digests->fresh.url_only.entries[0].capacity_bits == 7);
     ok(digests->fresh.url_only.entries[0].keys.size == 1);
-    ok(digests->fresh.url_only.entries[0].keys.entries[0] == 0x32);
+    ok(digests->fresh.url_only.entries[0].keys.entries[0] == 0x0b);
     ok(!digests->fresh.complete);
 
     ok(h2o_cache_digests_lookup_by_url(digests, H2O_STRLIT("https://127.0.0.1.xip.io:8081/cache-digests.cgi/hello.js")) ==
