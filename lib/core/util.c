@@ -434,7 +434,7 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
     } else {
         if (req->path.len > 1) {
             size_t to_skip;
-            if (req->norm_indexes) {
+            if (req->norm_indexes && req->pathconf->path.len > 1) {
                 to_skip = req->norm_indexes[req->pathconf->path.len - 1];
             } else {
                 to_skip = req->pathconf->path.len;

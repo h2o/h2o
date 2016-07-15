@@ -86,17 +86,19 @@ static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *path, size_t l
         if (decoded == '/') {
             size_t part_size = dst - last_slash;
             if (part_size == 2 && dst[-1] == '.') {
-                dst-=2;
-                nindexes-=2;
+                dst-=1;
+                nindexes-=1;
+                last_slash = dst - 1;
+                continue;
             } else if (part_size == 3 && dst[-2] == '.' && dst[-1] == '.') {
                 dst -= 2;
                 nindexes-=2;
-                if (ret.base != dst - 1) {
+                if (dst - 1 > ret.base) {
                     for (--dst, --nindexes; dst[-1] != '/'; --dst, --nindexes)
                         ;
                 }
-                dst--;
-                nindexes--;
+                last_slash = dst - 1;
+                continue;
             }
             last_slash = dst;
         }

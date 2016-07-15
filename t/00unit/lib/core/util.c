@@ -223,35 +223,52 @@ void test_build_destination(void)
 
 void test_build_destination_escaping(void)
 {
-    h2o_pathconf_t conf = {NULL, {H2O_STRLIT("/abc")}};
     h2o_req_t req;
     h2o_iovec_t dest;
     int escape = 0;
     int i;
     struct {
+        char *pathconf;
+        char *dest;
         char *input;
         char *output;
     } tests[] = {
-        { "/abc/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
-        { "/%61bc/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
-        { "/%61%62c/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
-        { "/%61%62%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
-        { "/./%61%62%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
-        { "/../%61%62%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
-        { "/././%61%62%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
-        { "/./.././%61%62%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
-        { "/./../blah/../%61%62%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
-        { "/./../blah/.././%61%62c/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
-        { "/./../blah/.././../../%61b%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
+        { "/abc", "/def", "/abc/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
+        { "/abc", "/def", "/%61bc/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
+        { "/abc", "/def", "/%61%62c/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
+        { "/abc", "/def", "/%61%62%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
+        { "/abc", "/def", "/./%61%62%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
+        { "/abc", "/def", "/../%61%62%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
+        { "/abc", "/def", "/././%61%62%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
+        { "/abc", "/def", "/./.././%61%62%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
+        { "/abc", "/def", "/./../blah/../%61%62%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
+        { "/abc", "/def", "/./../blah/.././%61%62c/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
+        { "/abc", "/def", "/./../blah/.././../../%61b%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o", },
+        { "/abc", "/def", "/abc/xyz/?query&m=n/o", "/def/xyz/?query&m=n/o", },
+        { "/abc", "/def", "/abc/xyz/.?query&m=n/o", "/def/xyz/.?query&m=n/o", },
+        { "/abc", "/def", "/abc/xyz/./?query&m=n/o", "/def/xyz/./?query&m=n/o", },
+        { "/abc", "/def", "/abc/xyz/..?query&m=n/o", "/def/xyz/..?query&m=n/o", },
+        { "/abc", "/def", "/abc/xyz/../?query&m=n/o", "/def/xyz/../?query&m=n/o", },
+        { "/abc", "/def", "/abc/xyz/../a?query&m=n/o", "/def/xyz/../a?query&m=n/o", },
+        { "/abc", "/def", "/abc/%yz/?query&m=n/o", "/def/%yz/?query&m=n/o", },
+        { "/abc", "/def", "/abc/%78yz/?query&m=n/o", "/def/%78yz/?query&m=n/o", },
+        { "/", "/", "/xyz/../mno", "/xyz/../mno", },
+        { "/", "/", "/xyz/../mno/..", "/xyz/../mno/..", },
+        { "/", "/def", "/xyz/../mno", "/def/xyz/../mno", },
+        { "/", "/def/", "/xyz/../mno", "/def/xyz/../mno", },
+        { "/", "/def", "/xyz/../", "/def/xyz/../", },
+        { "/", "/def/", "/xyz/..", "/def/xyz/..", },
     };
     h2o_init_request(&req, NULL, NULL);
 
 
     for (i = 0; i < sizeof(tests)/sizeof(tests[0]); i++) {
+        h2o_pathconf_t conf = {NULL, {tests[i].pathconf, strlen(tests[i].pathconf)}};
         req.pathconf = &conf;
         req.path = req.input.path = h2o_iovec_init(tests[i].input, strlen(tests[i].input));
+        req.norm_indexes = NULL;
         req.path_normalized = h2o_url_normalize_path(&req.pool, req.path.base, req.path.len, &req.query_at, &req.norm_indexes);
-        dest = h2o_build_destination(&req, H2O_STRLIT("/def"), escape);
+        dest = h2o_build_destination(&req, tests[i].dest, strlen(tests[i].dest), escape);
         note("%s: %d", tests[i].input, i);
         ok(dest.len == strlen(tests[i].output));
         ok(h2o_memis(dest.base, dest.len, tests[i].output, strlen(tests[i].output)));
