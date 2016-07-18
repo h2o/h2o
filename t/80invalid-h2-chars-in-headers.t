@@ -25,8 +25,15 @@ like $resp, qr{.*error_code=NO_ERROR.*}, "No protocol error for a bogus header v
 like $resp, qr{.*:status: 400}, "400 bad headers sent";
 like $resp, qr{found an invalid character in header value}, "Found expected error message";
 
-$resp = `nghttp -nv http://127.0.0.1:$server->{'port'}/test/ -H 'host: host.example.com' 2>&1`;
+$resp = `nghttp -nv http://127.0.0.1:$server->{'port'}/test/ -H 'host: host.example.com' -H'blah:1' -H'blah:2' -H'blah:3' 2>&1`;
 like $resp, qr{.*error_code=NO_ERROR.*}, "No error for no bogus error value";
+
+$resp = `nghttp -nv http://127.0.0.1:$server->{'port'}/test/ -H 'host: host.example.com' -H'bl\ah:1' -H'bl\ah:2' -H'bl\ah:3' 2>&1`;
+like $resp, qr{.*error_code=NO_ERROR.*}, "No protocol error for repeated bogus headers";
+like $resp, qr{.*:status: 400}, "400 bad headers sent";
+
+$resp = `nghttp -nv http://127.0.0.1:$server->{'port'}/ -H ':bad: 1234' -H'x-reproxy-url: http://www.example.com' 2>&1`;
+like $resp, qr{.*error_code=PROTOCOL_ERROR.*}, "Error for an invalid pseudo-header";
 
 $resp = `nghttp -nv http://127.0.0.1:$server->{'port'}/test/ -H 'host: host.उदाहरण.com' 2>&1`;
 like $resp, qr{.*error_code=NO_ERROR.*}, "No error for utf-8 in value";

@@ -30,7 +30,7 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     h2o_iovec_t in;
     int r, pseudo_headers_map;
     size_t content_length;
-    const char *err_desc;
+    const char *err_desc = NULL;
 
     memset(&header_table, 0, sizeof(header_table));
     header_table.hpack_capacity = 4096;
