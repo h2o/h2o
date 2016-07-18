@@ -874,17 +874,25 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts)
 #endif
 }
 
-union st_anylock_t {
-     pthread_mutex_t lock;
-     pthread_rwlock_t rwlock;
+struct st_anylock_t {
+    int is_rw;
+    union {
+        pthread_mutex_t lock;
+        pthread_rwlock_t rwlock;
+    } u;
 };
 
-static union st_anylock_t *locks;
+static struct st_anylock_t *locks;
 
 /* CRYPTO locks we enable RW locks for */
-static int is_rw_lock(int n)
+static void init_locks(void)
 {
-    switch (n) {
+    int nlocks = CRYPTO_num_locks();
+    locks = h2o_mem_alloc(sizeof(*locks) * nlocks);
+
+    unsigned i;
+    for (i = 0; i < nlocks; ++i) {
+        switch (i) {
         case CRYPTO_LOCK_DH:
         case CRYPTO_LOCK_DSA:
         case CRYPTO_LOCK_EC:
@@ -896,35 +904,37 @@ static int is_rw_lock(int n)
         case CRYPTO_LOCK_SSL:
         case CRYPTO_LOCK_SSL_CTX:
         case CRYPTO_LOCK_X509_STORE:
-        	return 1;
-        	break;
+            pthread_rwlock_init(&locks[i].u.rwlock, NULL);
+            locks[i].is_rw = 1;
+            break;
         default:
-        	break;
+            pthread_mutex_init(&locks[i].u.lock, NULL);
+            locks[i].is_rw = 0;
+            break;
+        }
     }
-
-    return 0;
 }
 
 static void lock_callback(int mode, int n, const char *file, int line)
 {
-    if (is_rw_lock(n)) {
-    	if (mode & CRYPTO_READ) {
-    		if (mode & CRYPTO_LOCK) {
-    			pthread_rwlock_rdlock(&locks[n].rwlock);
-    		} else {
-    			pthread_rwlock_unlock(&locks[n].rwlock);
-    		}
-    	} else { /* CRYPTO_WRITE */
-    		if (mode & CRYPTO_LOCK) {
-    			pthread_rwlock_wrlock(&locks[n].rwlock);
-    		} else {
-    			pthread_rwlock_unlock(&locks[n].rwlock);
-    		}
-    	}
+    if (locks[n].is_rw) {
+        if (mode & CRYPTO_READ) {
+            if (mode & CRYPTO_LOCK) {
+                pthread_rwlock_rdlock(&locks[n].u.rwlock);
+            } else {
+                pthread_rwlock_unlock(&locks[n].u.rwlock);
+            }
+        } else { /* CRYPTO_WRITE */
+            if (mode & CRYPTO_LOCK) {
+                pthread_rwlock_wrlock(&locks[n].u.rwlock);
+            } else {
+                pthread_rwlock_unlock(&locks[n].u.rwlock);
+            }
+        }
     } else if (mode & CRYPTO_LOCK) {
-    	pthread_mutex_lock(&locks[n].lock);
+        pthread_mutex_lock(&locks[n].u.lock);
     } else {
-    	pthread_mutex_unlock(&locks[n].lock);
+        pthread_mutex_unlock(&locks[n].u.lock);
     }
 }
 
@@ -944,16 +954,7 @@ static int add_lock_callback(int *num, int amount, int type, const char *file, i
 
 void init_openssl(void)
 {
-    int nlocks = CRYPTO_num_locks(), i;
-    locks = h2o_mem_alloc(sizeof(*locks) * nlocks);
-    for (i = 0; i < nlocks; ++i)
-    	if(is_rw_lock(i)) {
-            pthread_rwlock_init(&locks[i].rwlock, NULL);
-            break;
-    	} else {
-            pthread_mutex_init(&locks[i].lock, NULL);
-            break;
-        }
+    init_locks();
 
     CRYPTO_set_locking_callback(lock_callback);
     CRYPTO_set_id_callback(thread_id_callback);
