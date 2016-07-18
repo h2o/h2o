@@ -424,8 +424,6 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
     /* append suffix path and query */
 
     if (use_path_normalized) {
-        /* When proxying, we don't want to modify the input URL, unless the url
-           has been rewritten already */
         parts[num_parts++] = h2o_uri_escape(&req->pool, req->path_normalized.base + req->pathconf->path.len,
                                             req->path_normalized.len - req->pathconf->path.len, "/@:");
         if (req->query_at != SIZE_MAX) {
@@ -433,13 +431,18 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
         }
     } else {
         if (req->path.len > 1) {
-            size_t to_skip;
+            /*
+             * When proxying, we want to modify the input URL as little
+             * as possible. We use norm_indexes to find the start of
+             * the path we want to forward.
+             */
+            size_t next_unnormalized;
             if (req->norm_indexes && req->pathconf->path.len > 1) {
-                to_skip = req->norm_indexes[req->pathconf->path.len - 1];
+                next_unnormalized = req->norm_indexes[req->pathconf->path.len - 1];
             } else {
-                to_skip = req->pathconf->path.len;
+                next_unnormalized = req->pathconf->path.len;
             }
-            parts[num_parts++] = (h2o_iovec_t){req->path.base + to_skip, req->path.len - to_skip};
+            parts[num_parts++] = (h2o_iovec_t){req->path.base + next_unnormalized, req->path.len - next_unnormalized};
         }
     }
 
