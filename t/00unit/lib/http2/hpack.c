@@ -334,7 +334,7 @@ static void parse_and_compare_request(h2o_hpack_header_table_t *ht, const char *
 
     int pseudo_header_exists_map = 0;
     size_t content_length = SIZE_MAX;
-    const char *err_desc;
+    const char *err_desc = NULL;
     int r = h2o_hpack_parse_headers(&req, ht, (void *)(promise_base + 13), promise_len - 13, &pseudo_header_exists_map,
                                     &content_length, NULL, &err_desc);
     ok(r == 0);
