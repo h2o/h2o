@@ -442,8 +442,7 @@ typedef struct st_h2o_mimemap_type_t {
 #define H2O_HTTP2_ERROR_INADEQUATE_SECURITY -12
 #define H2O_HTTP2_ERROR_MAX 13
 /* end of the HTT2-spec defined errors */
-#define H2O_HTTP2_ERROR_INVALID_HEADER_NAME -253 /* an internal value indicating that invalid characters were found in the header name */
-#define H2O_HTTP2_ERROR_INVALID_HEADER_VALUE -254 /* an internal value indicating that invalid characters were found in the header value */
+#define H2O_HTTP2_ERROR_INVALID_HEADER_CHAR -254 /* an internal value indicating that invalid characters were found in the header name or value */
 #define H2O_HTTP2_ERROR_INCOMPLETE -255 /* an internal value indicating that all data is not ready */
 #define H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY -256
 
