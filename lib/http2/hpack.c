@@ -41,7 +41,6 @@ struct st_h2o_hpack_static_table_entry_t {
 struct st_h2o_hpack_header_table_entry_t {
     h2o_iovec_t *name;
     h2o_iovec_t *value;
-    int decode_return_value; /* record the soft error for bad chars in headers */
     const char *err_desc; /* the recorded soft error description */
 };
 
@@ -306,7 +305,7 @@ static int decode_header(h2o_mem_pool_t *pool, struct st_h2o_decode_header_resul
                          const char **err_desc)
 {
     int32_t index = 0;
-    int value_is_indexed = 0, do_index = 0, ret = 0;
+    int value_is_indexed = 0, do_index = 0;
 
 Redo:
     if (*src >= src_end)
@@ -359,7 +358,6 @@ Redo:
             }
         } else if (index - HEADER_TABLE_OFFSET < hpack_header_table->num_entries) {
             struct st_h2o_hpack_header_table_entry_t *entry = header_table_get(hpack_header_table, index - HEADER_TABLE_OFFSET);
-            ret = entry->decode_return_value;
             *err_desc = entry->err_desc;
             result->name = entry->name;
             if (!h2o_iovec_is_token(result->name))
@@ -376,9 +374,7 @@ Redo:
         const h2o_token_t *name_token;
         if ((result->name = decode_string(pool, src, src_end, 1, err_desc)) == NULL)
             return H2O_HTTP2_ERROR_COMPRESSION;
-        if (*err_desc) {
-            ret = H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
-        } else {
+        if (!*err_desc) {
             /* predefined header names should be interned */
             if ((name_token = h2o_lookup_token(result->name->base, result->name->len)) != NULL) {
                 result->name = (h2o_iovec_t *)&name_token->buf;
@@ -391,16 +387,12 @@ Redo:
         if ((result->value = decode_string(pool, src, src_end, 0, err_desc)) == NULL) {
             return H2O_HTTP2_ERROR_COMPRESSION;
         }
-        if (*err_desc) {
-            ret = H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
-        }
     }
 
     /* add the decoded header to the header table if necessary */
     if (do_index) {
         struct st_h2o_hpack_header_table_entry_t *entry =
             header_table_add(hpack_header_table, result->name->len + result->value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET, SIZE_MAX);
-        entry->decode_return_value = ret;
         entry->err_desc = *err_desc;
         if (entry != NULL) {
             entry->name = result->name;
@@ -412,7 +404,7 @@ Redo:
         }
     }
 
-    return ret;
+    return *err_desc ? H2O_HTTP2_ERROR_INVALID_HEADER_CHAR : 0;
 }
 
 static uint8_t *encode_status(uint8_t *dst, int status)
@@ -485,17 +477,19 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                             const char **err_desc)
 {
     const uint8_t *src_end = src + len;
-    int parsing_ret = 0;
+    const char *invalid_header_char_err = NULL;
 
     *content_length = SIZE_MAX;
 
     while (src != src_end) {
         struct st_h2o_decode_header_result_t r;
-        int ret = decode_header(&req->pool, &r, header_table, &src, src_end, err_desc);
+        const char *decode_err = NULL;
+        int ret = decode_header(&req->pool, &r, header_table, &src, src_end, &decode_err);
         if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
-            parsing_ret = H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
+            /* this is a soft error, continue parsing */
+            invalid_header_char_err = decode_err;
         } else if (ret != 0) {
-                return ret;
+            return ret;
         }
         if (r.name->base[0] == ':') {
             if (pseudo_header_exists_map != NULL) {
@@ -560,7 +554,11 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
         }
     }
 
-    return parsing_ret;
+    if (invalid_header_char_err) {
+        *err_desc = invalid_header_char_err;
+        return H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
+    }
+    return 0;
 }
 
 static inline int encode_int_is_onebyte(uint32_t value, size_t prefix_bits)
