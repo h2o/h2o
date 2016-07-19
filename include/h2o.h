@@ -248,6 +248,10 @@ struct st_h2o_hostconf_t {
      */
     H2O_VECTOR(h2o_pathconf_t) paths;
     /**
+     * List of user agents to block
+     */
+    h2o_iovec_vector_t blocked_agents;
+    /**
      * catch-all path configuration
      */
     h2o_pathconf_t fallback_path;
