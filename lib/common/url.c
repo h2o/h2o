@@ -40,24 +40,21 @@ static int decode_hex(int ch)
     return -1;
 }
 
-static size_t handle_special_paths(const char * const start, char ** const dst, const char * const last_slash)
+static size_t handle_special_paths(const char * const start, const char *dst, const char * const last_slash)
 {
-    size_t part_size = *dst - last_slash;
-    size_t rewind = 0;
+    size_t part_size = dst - last_slash;
+    const char *orig_dst = dst;
 
-    if (part_size == 2 && (*dst)[-1] == '.') {
-        (*dst)--;
-        return 1;
-    } else if (part_size == 3 && (*dst)[-2] == '.' && (*dst)[-1] == '.') {
-        *dst -= 2;
-        rewind += 2;
-        if (*dst - 1 > start) {
-            for (--(*dst), ++rewind; (*dst)[-1] != '/'; --(*dst), ++rewind)
+    if (part_size == 2 && dst[-1] == '.') {
+        dst--;
+    } else if (part_size == 3 && dst[-2] == '.' && dst[-1] == '.') {
+        dst -= 2;
+        if (dst - 1 > start) {
+            for (--dst; dst[-1] != '/'; --dst)
                 ;
         }
-        return rewind;
     }
-    return 0;
+    return orig_dst - dst;
 }
 
 /* Perform path normalization and URL decoding in one pass.
@@ -71,6 +68,7 @@ static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *path, size_t l
     char *dst;
     const char *last_slash;
     size_t *nindexes;
+    size_t rewind;
 
     { /* locate '?', and set len to the end of input path */
         const char *q = memchr(path, '?', len);
@@ -104,9 +102,10 @@ static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *path, size_t l
             decoded = s[i++];
         }
         if (decoded == '/') {
-            size_t rewind = handle_special_paths(ret.base, &dst, last_slash);
+            rewind = handle_special_paths(ret.base, dst, last_slash);
             if (rewind > 0) {
-                nindexes-=rewind;
+                nindexes -= rewind;
+                dst -= rewind;
                 last_slash = dst - 1;
                 continue;
             }
@@ -115,7 +114,8 @@ static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *path, size_t l
         *dst++ = decoded;
         *nindexes++ = &s[i] - path;
     }
-    handle_special_paths(ret.base, &dst, last_slash);
+    rewind = handle_special_paths(ret.base, dst, last_slash);
+    dst -= rewind;
 
     ret.len = dst - ret.base;
 
