@@ -463,7 +463,10 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                 } else {
                     /* reject headers as defined in draft-16 8.1.2.2 */
                     if (token->http2_should_reject) {
-                        if (token == H2O_TOKEN_TE && h2o_lcstris(r.value->base, r.value->len, H2O_STRLIT("trailers"))) {
+                        if (token == H2O_TOKEN_HOST) {
+                            /* just skip (and :authority is used) */
+                            goto Next;
+                        } else if (token == H2O_TOKEN_TE && h2o_lcstris(r.value->base, r.value->len, H2O_STRLIT("trailers"))) {
                             /* do not reject */
                         } else {
                             return H2O_HTTP2_ERROR_PROTOCOL;
@@ -479,6 +482,8 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                 h2o_add_header_by_str(&req->pool, &req->headers, r.name->base, r.name->len, 0, r.value->base, r.value->len);
             }
         }
+    Next:
+        ;
     }
 
     return 0;
