@@ -174,8 +174,6 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
                 const h2o_token_t *token = (void *)h->name;
                 if (token->proxy_should_drop) {
                     continue;
-                } else if (token == H2O_TOKEN_HOST) {
-                    continue;
                 } else if (token == H2O_TOKEN_COOKIE) {
                     /* merge the cookie headers; see HTTP/2 8.1.2.5 and HTTP/1 (RFC6265 5.4) */
                     /* FIXME current algorithm is O(n^2) against the number of cookie headers */
