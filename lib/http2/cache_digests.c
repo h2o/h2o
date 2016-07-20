@@ -142,19 +142,20 @@ void h2o_cache_digests_load_header(h2o_cache_digests_t **digests, const char *va
 static uint64_t calc_hash(const char *url, size_t url_len, const char *etag, size_t etag_len)
 {
     SHA256_CTX ctx;
-    unsigned char md[SHA256_DIGEST_LENGTH];
-    uint64_t key;
+    union {
+        unsigned char bytes[SHA256_DIGEST_LENGTH];
+        uint64_t u64;
+    } md;
 
     SHA256_Init(&ctx);
     SHA256_Update(&ctx, url, url_len);
     SHA256_Update(&ctx, etag, etag_len);
-    SHA256_Final(md, &ctx);
+    SHA256_Final(md.bytes, &ctx);
 
-    memcpy(&key, md + sizeof(md) - sizeof(key), sizeof(key));
-    if (*(uint16_t *)"\xde\xad" != 0xdead)
-        key = __builtin_bswap64(key);
-
-    return key;
+    if (*(uint16_t *)"\xde\xad" == 0xdead)
+        return md.u64;
+    else
+        return __builtin_bswap64(md.u64);
 }
 
 static int cmp_key(const void *_x, const void *_y)
@@ -178,7 +179,7 @@ static int lookup(h2o_cache_digests_frame_vector_t *vector, const char *url, siz
         size_t i = 0;
         do {
             h2o_cache_digests_frame_t *frame = vector->entries + i;
-            uint64_t key = hash & (((uint64_t)1 << frame->capacity_bits) - 1);
+            uint64_t key = hash >> (64 - frame->capacity_bits);
             if (bsearch(&key, frame->keys.entries, frame->keys.size, sizeof(frame->keys.entries[0]), cmp_key) != NULL)
                 return is_fresh ? H2O_CACHE_DIGESTS_STATE_FRESH : H2O_CACHE_DIGESTS_STATE_STALE;
         } while (++i != vector->size);

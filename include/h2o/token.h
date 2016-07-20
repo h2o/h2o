@@ -39,7 +39,7 @@
 #define H2O_TOKEN_ALLOW (h2o__tokens + 12)
 #define H2O_TOKEN_AUTHORIZATION (h2o__tokens + 13)
 #define H2O_TOKEN_CACHE_CONTROL (h2o__tokens + 14)
-#define H2O_TOKEN_CACHE_DIGESTS (h2o__tokens + 15)
+#define H2O_TOKEN_CACHE_DIGEST (h2o__tokens + 15)
 #define H2O_TOKEN_CONNECTION (h2o__tokens + 16)
 #define H2O_TOKEN_CONTENT_DISPOSITION (h2o__tokens + 17)
 #define H2O_TOKEN_CONTENT_ENCODING (h2o__tokens + 18)

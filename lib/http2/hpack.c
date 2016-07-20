@@ -80,7 +80,7 @@ static int32_t decode_int(const uint8_t **src, const uint8_t *src_end, size_t pr
     int32_t value, mult;
     uint8_t prefix_max = (1 << prefix_bits) - 1;
 
-    if (*src == src_end)
+    if (*src >= src_end)
         return -1;
 
     value = (uint8_t) * (*src)++ & prefix_max;
@@ -94,7 +94,7 @@ static int32_t decode_int(const uint8_t **src, const uint8_t *src_end, size_t pr
 
     value = prefix_max;
     for (mult = 1;; mult *= 128) {
-        if (*src == src_end)
+        if (*src >= src_end)
             return -1;
         value += (**src & 127) * mult;
         if ((*(*src)++ & 128) == 0)
@@ -125,7 +125,7 @@ static h2o_iovec_t *decode_huffman(h2o_mem_pool_t *pool, const uint8_t *src, siz
     h2o_iovec_t *dst_buf = alloc_buf(pool, len * 2); /* max compression ratio is >= 0.5 */
 
     dst = dst_buf->base;
-    for (; src != src_end; src++) {
+    for (; src < src_end; src++) {
         if ((dst = huffdecode4(dst, *src >> 4, &state, &maybe_eos)) == NULL)
             return NULL;
         if ((dst = huffdecode4(dst, *src & 0xf, &state, &maybe_eos)) == NULL)
@@ -146,7 +146,7 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, con
     int is_huffman;
     int32_t len;
 
-    if (*src == src_end)
+    if (*src >= src_end)
         return NULL;
 
     is_huffman = (**src & 0x80) != 0;
@@ -154,6 +154,8 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, con
         return NULL;
 
     if (is_huffman) {
+        if (*src + len > src_end)
+            return NULL;
         if ((ret = decode_huffman(pool, *src, len)) == NULL)
             return NULL;
     } else {
@@ -241,7 +243,7 @@ static int decode_header(h2o_mem_pool_t *pool, struct st_h2o_decode_header_resul
     int value_is_indexed = 0, do_index = 0;
 
 Redo:
-    if (*src == src_end)
+    if (*src >= src_end)
         return H2O_HTTP2_ERROR_COMPRESSION;
 
     /* determine the mode and handle accordingly */
@@ -467,7 +469,7 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                             return H2O_HTTP2_ERROR_PROTOCOL;
                         }
                     }
-                    if (token == H2O_TOKEN_CACHE_DIGESTS && digests != NULL) {
+                    if (token == H2O_TOKEN_CACHE_DIGEST && digests != NULL) {
                         /* TODO cache the decoded result in HPACK, as well as delay the decoding of the digest until being used */
                         h2o_cache_digests_load_header(digests, r.value->base, r.value->len);
                     }

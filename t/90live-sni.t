@@ -13,6 +13,9 @@ plan skip_all => 'wget not found'
 plan skip_all => 'only wget >= 1.14 supports SNI'
     unless `wget --version` =~ /^GNU Wget 1\.([0-9]+)/ && $1 >= 14;
 
+plan skip_all => "skipping live tests (setenv LIVE_TESTS=1 to run them)"
+    unless $ENV{LIVE_TESTS};
+
 subtest "basic" => sub {
     my $server = spawn_h2o(sub {
         my ($port, $tls_port) = @_;

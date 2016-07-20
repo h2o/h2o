@@ -219,4 +219,4 @@ __DATA__
 0 1 0 0 0 keep-alive
 0 0 0 0 0 x-forwarded-for
 0 0 0 0 0 x-traffic
-0 0 0 0 0 cache-digests
+0 0 0 0 0 cache-digest
