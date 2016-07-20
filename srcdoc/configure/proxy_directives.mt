@@ -67,6 +67,20 @@ However in case H2O is run behind a trusted HTTPS proxy, such protection might n
 
 <?
 $ctx->{directive}->(
+    name    => "proxy.emit-x-forwarded-headers",
+    levels  => [ qw(global) ],
+    since   => "2.1",
+    default => q{proxy.emit-x-forwarded-headers: ON},
+    desc    => "A boolean flag(<code>ON</code> or <code>OFF</code>) indicating if the server will append or add the <code>x-forwarded-proto</code> and <code>x-forwarded-for</code> request headers.",
+)->(sub {
+?>
+<p>
+By default, when forwarding an HTTP request H2O sends its own <code>x-forwarded-proto</code> and <code>x-forwarded-for</code> request headers (or might append its value in the <code>x-forwarded-proto</code> case, see <code>proxy.preserve-x-forwarded-proto</code>). This might not be always desirable. Please keep in mind security implications when setting this of <code>OFF</code>, since it might allow an attacker to spoof the originator or the protocol of a request.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
     name    => "proxy.ssl.cafile",
     levels  => [ qw(global host path) ],
     since   => "2.0",
