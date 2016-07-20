@@ -199,6 +199,7 @@ static void test_hpack(void)
         in = h2o_iovec_init(
             H2O_STRLIT("\x40\x0a\x63\x75\x73\x74\x6f\x6d\x2d\x6b\x65\x79\x0d\x63\x75\x73\x74\x6f\x6d\x2d\x68\x65\x61\x64\x65\x72"));
         const uint8_t *p = (const uint8_t *)in.base;
+        err_desc = NULL;
         r = decode_header(&pool, &result, &header_table, &p, p + in.len, &err_desc);
         ok(r == 0);
         ok(result.name->len == 10);
@@ -220,6 +221,7 @@ static void test_hpack(void)
         header_table.hpack_capacity = 4096;
         in = h2o_iovec_init(H2O_STRLIT("\x04\x0c\x2f\x73\x61\x6d\x70\x6c\x65\x2f\x70\x61\x74\x68"));
         const uint8_t *p = (const uint8_t *)in.base;
+        err_desc = NULL;
         r = decode_header(&pool, &result, &header_table, &p, p + in.len, &err_desc);
         ok(r == 0);
         ok(result.name == &H2O_TOKEN_PATH->buf);
@@ -240,6 +242,7 @@ static void test_hpack(void)
         header_table.hpack_capacity = 4096;
         in = h2o_iovec_init(H2O_STRLIT("\x10\x08\x70\x61\x73\x73\x77\x6f\x72\x64\x06\x73\x65\x63\x72\x65\x74"));
         const uint8_t *p = (const uint8_t *)in.base;
+        err_desc = NULL;
         r = decode_header(&pool, &result, &header_table, &p, p + in.len, &err_desc);
         ok(r == 0);
         ok(result.name->len == 8);
@@ -261,6 +264,7 @@ static void test_hpack(void)
         header_table.hpack_capacity = 4096;
         in = h2o_iovec_init(H2O_STRLIT("\x82"));
         const uint8_t *p = (const uint8_t *)in.base;
+        err_desc = NULL;
         r = decode_header(&pool, &result, &header_table, &p, p + in.len, &err_desc);
         ok(r == 0);
         ok(result.name == &H2O_TOKEN_METHOD->buf);

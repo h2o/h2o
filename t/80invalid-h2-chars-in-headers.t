@@ -35,6 +35,9 @@ like $resp, qr{.*:status: 400}, "400 bad headers sent";
 $resp = `nghttp -nv http://127.0.0.1:$server->{'port'}/ -H ':bad: 1234' -H'x-reproxy-url: http://www.example.com' 2>&1`;
 like $resp, qr{.*error_code=PROTOCOL_ERROR.*}, "Error for an invalid pseudo-header";
 
+$resp = `nghttp -nv http://127.0.0.1:$server->{'port'}/test/ -H 'host: host.example.com' -H'bl\ah:1' -H':badpseudo:2' 2>&1`;
+like $resp, qr{.*error_code=PROTOCOL_ERROR.*}, "Protocol error for an invalid pseudo-header, even when a bad header was present";
+
 $resp = `nghttp -nv http://127.0.0.1:$server->{'port'}/test/ -H 'host: host.उदाहरण.com' 2>&1`;
 like $resp, qr{.*error_code=NO_ERROR.*}, "No error for utf-8 in value";
 

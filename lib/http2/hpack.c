@@ -477,7 +477,6 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                             const char **err_desc)
 {
     const uint8_t *src_end = src + len;
-    const char *invalid_header_char_err = NULL;
 
     *content_length = SIZE_MAX;
 
@@ -485,11 +484,16 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
         struct st_h2o_decode_header_result_t r;
         const char *decode_err = NULL;
         int ret = decode_header(&req->pool, &r, header_table, &src, src_end, &decode_err);
-        if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
-            /* this is a soft error, continue parsing */
-            invalid_header_char_err = decode_err;
-        } else if (ret != 0) {
-            return ret;
+        if (ret != 0) {
+            if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
+                /* this is a soft error, we continue parsing, but register only the first error */
+                if (*err_desc == NULL) {
+                    *err_desc = decode_err;
+                }
+            } else {
+                *err_desc = decode_err;
+                return ret;
+            }
         }
         if (r.name->base[0] == ':') {
             if (pseudo_header_exists_map != NULL) {
@@ -554,8 +558,7 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
         }
     }
 
-    if (invalid_header_char_err) {
-        *err_desc = invalid_header_char_err;
+    if (*err_desc) {
         return H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
     }
     return 0;
