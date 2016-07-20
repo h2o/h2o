@@ -429,7 +429,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                     if (strstr(user_agent, blocked_agent) != NULL) {
                         set_timeout(conn, NULL, NULL);
                         h2o_socket_read_stop(conn->sock);
-                        h2o_send_error_403(&conn->req, "Access Forbidden", "We don't appreciate your kind here.", 0);
+                        /* h2o_send_error_403(&conn->req, "Access Forbidden", "We don't appreciate your kind here.", 0); */
                         free(user_agent);
                         return;
                     }
