@@ -204,6 +204,20 @@ static void append_address_info(h2o_req_t *req, iovec_vector_t *vecs, const char
     }
 }
 
+static int envname_is_headername(const h2o_iovec_t *env, const h2o_iovec_t *header)
+{
+    const char *ep , *hp, *hend;
+
+    if (env->len != 5 + header->len)
+        return 0;
+    if (memcmp(env->base, "HTTP_", 5) != 0)
+        return 0;
+    for (ep = env->base + 5, hp = header->base, hend = hp + header->len; hp < hend; ++ep, ++hp)
+        if (*ep != h2o_toupper(*hp))
+            return 0;
+    return 1;
+}
+
 static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_config_vars_t *config)
 {
     h2o_iovec_t path_info = {};
@@ -289,6 +303,12 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
                 /* accumulate the length of the cookie, together with the separator */
                 cookie_length += h->value.len + 1;
             } else {
+                size_t i;
+                for (i = 0; i != req->env.size; i += 2) {
+                    h2o_iovec_t *envname = req->env.entries + i;
+                    if (envname_is_headername(envname, h->name))
+                        goto NextHeader;
+                }
                 char *dst = append_pair(&req->pool, vecs, NULL, h->name->len + sizeof("HTTP_") - 1, h->value.base, h->value.len);
                 const char *src = h->name->base, *src_end = src + h->name->len;
                 *dst++ = 'H';
@@ -299,6 +319,8 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
                 for (; src != src_end; ++src)
                     *dst++ = *src == '-' ? '_' : h2o_toupper(*src);
             }
+        NextHeader:
+            ;
         }
         if (cookie_length != 0) {
             /* emit the cookie merged */
