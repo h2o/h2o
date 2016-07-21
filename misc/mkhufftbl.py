@@ -396,6 +396,7 @@ NGHTTP2_HUFF_SYM = 1 << 1
 NGHTTP2_HUFF_FAIL = 1 << 2
 NGHTTP2_HUFF_INVALID_FOR_HEADER_NAME = 1 << 3
 NGHTTP2_HUFF_INVALID_FOR_HEADER_VALUE = 1 << 4
+NGHTTP2_HUFF_UPPER_CASE_CHAR = 1 << 5
 
 def _print_transition_table(node):
     if node.term is not None:
@@ -413,6 +414,8 @@ def _print_transition_table(node):
                 flags |= NGHTTP2_HUFF_INVALID_FOR_HEADER_NAME
             if not valid_h2_field_value_char[sym]:
                 flags |= NGHTTP2_HUFF_INVALID_FOR_HEADER_VALUE
+            if sym >= ord('A') and sym <= ord('Z'):
+                flags |= NGHTTP2_HUFF_UPPER_CASE_CHAR
         if nd is None:
             id = 0
             flags |= NGHTTP2_HUFF_FAIL
