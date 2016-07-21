@@ -108,6 +108,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
     socklen_t sslen;
     h2o_iovec_t cookie_buf = {}, xff_buf = {}, via_buf = {};
     int preserve_x_forwarded_proto = req->conn->ctx->globalconf->proxy.preserve_x_forwarded_proto;
+    int emit_x_forwarded_headers = req->conn->ctx->globalconf->proxy.emit_x_forwarded_headers;
 
     /* for x-f-f */
     if ((sslen = req->conn->callbacks->get_peername(req->conn, (void *)&ss)) != 0)
@@ -185,12 +186,16 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
                     via_buf = build_request_merge_headers(&req->pool, via_buf, h->value, ',');
                     continue;
                 } else if (token == H2O_TOKEN_X_FORWARDED_FOR) {
+                    if (!emit_x_forwarded_headers) {
+                        goto AddHeader;
+                    }
                     xff_buf = build_request_merge_headers(&req->pool, xff_buf, h->value, ',');
                     continue;
                 }
             }
             if (!preserve_x_forwarded_proto && h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-proto")))
                 continue;
+AddHeader:
             RESERVE(h->name->len + h->value.len + 2);
             APPEND(h->name->base, h->name->len);
             buf.base[offset++] = ':';
@@ -205,19 +210,21 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
         buf.base[offset++] = '\r';
         buf.base[offset++] = '\n';
     }
-    if (!preserve_x_forwarded_proto) {
-        FLATTEN_PREFIXED_VALUE("x-forwarded-proto: ", req->input.scheme->name, 0);
+    if (emit_x_forwarded_headers) {
+        if (!preserve_x_forwarded_proto) {
+            FLATTEN_PREFIXED_VALUE("x-forwarded-proto: ", req->input.scheme->name, 0);
+            buf.base[offset++] = '\r';
+            buf.base[offset++] = '\n';
+        }
+        if (remote_addr_len != SIZE_MAX) {
+            FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, remote_addr_len);
+            APPEND(remote_addr, remote_addr_len);
+        } else {
+            FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, 0);
+        }
         buf.base[offset++] = '\r';
         buf.base[offset++] = '\n';
     }
-    if (remote_addr_len != SIZE_MAX) {
-        FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, remote_addr_len);
-        APPEND(remote_addr, remote_addr_len);
-    } else {
-        FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, 0);
-    }
-    buf.base[offset++] = '\r';
-    buf.base[offset++] = '\n';
     FLATTEN_PREFIXED_VALUE("via: ", via_buf, sizeof("1.1 ") - 1 + req->input.authority.len);
     if (req->version < 0x200) {
         buf.base[offset++] = '1';
