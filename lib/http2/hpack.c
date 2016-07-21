@@ -90,9 +90,16 @@ static int contains_invalid_field_value_char(const char *s, size_t len)
     return 0;
 }
 
+static const char *err_found_upper_case_in_header_name = "found an upper-case letter in header name";
+static const char *soft_err_found_invalid_char_in_header_name = "found an invalid character in header name";
+static const char *soft_err_found_invalid_char_in_header_value = "found an invalid character in header value";
+
 /* validate a header name against https://tools.ietf.org/html/rfc7230#section-3.2,
- * in addition to that, we disallow upper case chars as well. */
-static int contains_invalid_field_name_char(const char *s, size_t len)
+ * in addition to that, we disallow upper case chars as well.
+ * This sets @err_desc for all invalid characters, but only returns true
+ * for upper case characters, this is because we return a protocol error
+ * in that case. */
+static int contains_invalid_field_name_char(const char *s, size_t len, const char **err_desc)
 {
     /* all printable chars, except upper case and separator characters */
     static const char valid_h2_field_name_char[] = {
@@ -109,7 +116,11 @@ static int contains_invalid_field_name_char(const char *s, size_t len)
     for (; len != 0; ++s, --len) {
         unsigned char ch = (unsigned char)*s;
         if (!valid_h2_field_name_char[ch]) {
-            return 1;
+            if (ch - 'A' < 26U) {
+                *err_desc = err_found_upper_case_in_header_name;
+                return 1;
+            }
+            *err_desc = soft_err_found_invalid_char_in_header_name;
         }
     }
     return 0;
@@ -207,11 +218,16 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, con
             }
             /* pseudo-headers are checked later in `decode_header` */
             if (hflags & NGHTTP2_HUFF_INVALID_FOR_HEADER_NAME && ret->base[0] != ':') {
-                *err_desc = "found an invalid character in header name";
+                if (hflags & NGHTTP2_HUFF_UPPER_CASE_CHAR) {
+                    *err_desc = err_found_upper_case_in_header_name;
+                    return NULL;
+                } else {
+                    *err_desc = soft_err_found_invalid_char_in_header_name;
+                }
             }
         } else {
             if (hflags & NGHTTP2_HUFF_INVALID_FOR_HEADER_VALUE) {
-                *err_desc = "found an invalid character in header value";
+                *err_desc = soft_err_found_invalid_char_in_header_value;
             }
         }
     } else {
@@ -219,12 +235,12 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, con
             return NULL;
         if (is_header_name) {
             /* pseudo-headers are checked later in `decode_header` */
-            if (contains_invalid_field_name_char((char *)*src, len) && **src != (uint8_t)':') {
-                *err_desc = "found an invalid character in header name";
+            if (**src != (uint8_t)':' && contains_invalid_field_name_char((char *)*src, len, err_desc)) {
+                return NULL;
             }
         } else {
             if (contains_invalid_field_value_char((char *)*src, len)) {
-                *err_desc = "found an invalid character in header value";
+                *err_desc = soft_err_found_invalid_char_in_header_value;
             }
         }
         ret = alloc_buf(pool, len);
@@ -372,8 +388,12 @@ Redo:
     } else {
         /* non-existing name */
         const h2o_token_t *name_token;
-        if ((result->name = decode_string(pool, src, src_end, 1, err_desc)) == NULL)
+        if ((result->name = decode_string(pool, src, src_end, 1, err_desc)) == NULL) {
+            if (*err_desc == err_found_upper_case_in_header_name) {
+                return H2O_HTTP2_ERROR_PROTOCOL;
+            }
             return H2O_HTTP2_ERROR_COMPRESSION;
+        }
         if (!*err_desc) {
             /* predefined header names should be interned */
             if ((name_token = h2o_lookup_token(result->name->base, result->name->len)) != NULL) {
