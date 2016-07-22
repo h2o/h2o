@@ -99,10 +99,11 @@ static const char *soft_err_found_invalid_char_in_header_value = "found an inval
  * This sets @err_desc for all invalid characters, but only returns true
  * for upper case characters, this is because we return a protocol error
  * in that case. */
-static int contains_invalid_field_name_char(const char *s, size_t len, const char **err_desc)
+static const char *validate_header_name(const char *s, size_t len)
 {
+    const char *ret = NULL;
     /* all printable chars, except upper case and separator characters */
-    static const char valid_h2_field_name_char[] = {
+    static const char valid_h2_header_name_char[] = {
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /*    0-31 */
         0,1,0,1,1,1,1,1,0,0,1,1,0,1,1,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0, /*   32-63 */
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1, /*   64-95 */
@@ -115,15 +116,14 @@ static int contains_invalid_field_name_char(const char *s, size_t len, const cha
 
     for (; len != 0; ++s, --len) {
         unsigned char ch = (unsigned char)*s;
-        if (!valid_h2_field_name_char[ch]) {
+        if (!valid_h2_header_name_char[ch]) {
             if (ch - 'A' < 26U) {
-                *err_desc = err_found_upper_case_in_header_name;
-                return 1;
+                return err_found_upper_case_in_header_name;
             }
-            *err_desc = soft_err_found_invalid_char_in_header_name;
+            ret = soft_err_found_invalid_char_in_header_name;
         }
     }
-    return 0;
+    return ret;
 }
 
 static int32_t decode_int(const uint8_t **src, const uint8_t *src_end, size_t prefix_bits)
@@ -235,8 +235,11 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, con
             return NULL;
         if (is_header_name) {
             /* pseudo-headers are checked later in `decode_header` */
-            if (**src != (uint8_t)':' && contains_invalid_field_name_char((char *)*src, len, err_desc)) {
-                return NULL;
+            if (**src != (uint8_t)':') {
+                *err_desc = validate_header_name((char *)*src, len);
+                if(*err_desc == err_found_upper_case_in_header_name) {
+                    return NULL;
+                }
             }
         } else {
             if (contains_invalid_field_value_char((char *)*src, len)) {
