@@ -61,7 +61,7 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
         free(logline);
 }
 
-void on_dispose_handle(void *_fh)
+static void on_dispose_handle(void *_fh)
 {
     h2o_access_log_filehandle_t *fh = _fh;
 

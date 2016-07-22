@@ -400,7 +400,7 @@ static void on_rack_input_free(mrb_state *mrb, const char *base, mrb_int len, vo
     *input_stream = mrb_nil_value();
 }
 
-int build_env_sort_header_cb(const void *_x, const void *_y)
+static int build_env_sort_header_cb(const void *_x, const void *_y)
 {
     const h2o_header_t *x = (const h2o_header_t *)_x, *y = (const h2o_header_t *)_y;
     if (x->name->len < y->name->len)
