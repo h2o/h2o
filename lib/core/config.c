@@ -56,6 +56,10 @@ static void destroy_hostconf(h2o_hostconf_t *hostconf)
     h2o_config_dispose_pathconf(&hostconf->fallback_path);
     h2o_mem_release_shared(hostconf->mimemap);
 
+    for (i = 0; i != hostconf->blocked_agents.size; ++i)
+        h2o_mem_release_shared(hostconf->blocked_agents.entries[i].base);
+    free(hostconf->blocked_agents.entries);
+
     free(hostconf);
 }
 

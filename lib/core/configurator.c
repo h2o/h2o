@@ -736,6 +736,41 @@ static int on_config_unsetenv(h2o_configurator_command_t *cmd, h2o_configurator_
     return 0;
 }
 
+static int on_config_blocked_agents(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    size_t len;
+    size_t i;
+
+    switch (node->type) {
+    case YOML_TYPE_SCALAR:
+        h2o_vector_reserve(NULL, &(ctx->hostconf->blocked_agents), 1);
+        len = strlen(node->data.scalar);
+        ctx->hostconf->blocked_agents.entries[0] = h2o_strdup_shared(NULL, node->data.scalar, len);
+        h2o_strtolower(ctx->hostconf->blocked_agents.entries[0].base, len);
+        break;
+    case YOML_TYPE_SEQUENCE: {
+        h2o_vector_reserve(NULL, &(ctx->hostconf->blocked_agents), node->data.sequence.size);
+        ctx->hostconf->blocked_agents.size = node->data.sequence.size;
+        for (i = 0; i != node->data.sequence.size; i++) {
+            yoml_t *element = node->data.sequence.elements[i];
+            if (element->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, element, "argument to blocked-agents must be a list of strings");
+                return -1;
+            }
+            len = strlen(element->data.scalar);
+            ctx->hostconf->blocked_agents.entries[i] = h2o_strdup_shared(NULL, element->data.scalar, len);
+            h2o_strtolower(ctx->hostconf->blocked_agents.entries[i].base, len);
+        }
+
+    } break;
+    default:
+        h2o_configurator_errprintf(cmd, node, "argument to blocked-agents must be a string or a list of strings");
+        return -1;
+    }
+
+    return 0;
+}
+
 static int on_config_server_name(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     ctx->globalconf->server_name = h2o_strdup(NULL, node->data.scalar, SIZE_MAX);
@@ -847,6 +882,8 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "send-server-name",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
                                         H2O_CONFIGURATOR_FLAG_DEFERRED , on_config_send_server_name);
+        h2o_configurator_define_command(&c->super, "blocked-agents",
+                                        H2O_CONFIGURATOR_FLAG_HOST, on_config_blocked_agents);
     }
 }
 

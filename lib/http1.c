@@ -394,6 +394,8 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
     size_t num_headers = H2O_MAX_HEADERS;
     ssize_t entity_body_header_index;
     h2o_iovec_t expect;
+    int i;
+    char* user_agent = NULL;
 
     /* need to set request_begin_at here for keep-alive connection */
     if (conn->req.timestamps.request_begin_at.tv_sec == 0)
@@ -406,6 +408,38 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
 
     switch (reqlen) {
     default: // parse complete
+        for (i = 0; i < num_headers; i++) {
+            // lower cases in place
+            h2o_strtolower((char*) headers[i].name, headers[i].name_len);
+            if (strncmp(headers[i].name, "user-agent", headers[i].name_len) == 0) {
+                user_agent = malloc(headers[i].value_len + 1);
+                strncpy(user_agent, headers[i].value, headers[i].value_len);
+
+                h2o_strtolower(user_agent, headers[i].value_len);
+                break;
+            }
+        }
+        if (user_agent != NULL) {
+            h2o_hostconf_t** host_confs = conn->super.hosts;
+            while (*host_confs != NULL) {
+                h2o_hostconf_t* host_conf = *host_confs;
+                int num_blocked_agents = host_conf->blocked_agents.size;
+                for (i = 0; i < num_blocked_agents; i++) {
+                    char* blocked_agent = host_conf->blocked_agents.entries[i].base;
+                    if (strstr(user_agent, blocked_agent) != NULL) {
+                        set_timeout(conn, NULL, NULL);
+                        h2o_socket_read_stop(conn->sock);
+                        h2o_send_error_403(&conn->req, "Access Forbidden", "We don't appreciate your kind here.", 0);
+                        free(user_agent);
+                        return;
+                    }
+                }
+                host_confs++;
+            }
+            free(user_agent);
+            user_agent = NULL;
+        }
+
         conn->_reqsize = reqlen;
         if ((entity_body_header_index = fixup_request(conn, headers, num_headers, minor_version, &expect)) != -1) {
             conn->req.timestamps.request_body_begin_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
