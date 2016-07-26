@@ -12,7 +12,7 @@ before_install:
   - if [ "$CXX" = "g++" ]; then export CXX="g++-4.8"; fi
   - $CXX --version
   # for speed, pre-install deps installed in `before_script` section as ubuntu packages
-  - sudo apt-get install -qq cpanminus libipc-signal-perl liblist-moreutils-perl libplack-perl libtest-tcp-perl libscope-guard-perl libwww-perl libio-socket-ssl-perl zlib1g-dev
+  - sudo apt-get install -qq cpanminus libipc-signal-perl liblist-moreutils-perl libwww-perl libio-socket-ssl-perl zlib1g-dev
 
 before_script:
   # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
@@ -22,6 +22,9 @@ before_script:
   - misc/install-perl-module.pl Digest::SHA1
   - misc/install-perl-module.pl Net::EmptyPort
   - misc/install-perl-module.pl Scope::Guard
+  - misc/install-perl-module.pl Plack
+  - misc/install-perl-module.pl FCGI
+  - misc/install-perl-module.pl FCGI::ProcManager
   - misc/install-perl-module.pl Starlet
   - misc/install-perl-module.pl JSON
   # install the `ab` command (a.k.a. ApacheBench; optionally required for running some of the tests)
