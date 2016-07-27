@@ -3,7 +3,9 @@
 
 <h3>Syntax</h3>
 
+<p>
 H2O uses <a href="http://www.yaml.org/">YAML</a> 1.1 as the syntax of its configuration file.
+</p>
 
 <h3 id="config_levels">Levels of Configuration</h3>
 

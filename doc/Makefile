@@ -28,7 +28,7 @@ OUTPUT=\
     configure/mruby.html \
     faq.html \
 
-%.html: %.mt
+%.html: %.mt snippets/directive.mt snippets/wrapper.mt
 	../misc/makedoc.pl $< $@
 
 all: mkdir html search/searchindex.js

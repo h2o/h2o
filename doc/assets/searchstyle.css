@@ -1,7 +1,7 @@
 .search {
     position: absolute;
     right: 10px;
-    top: 95px;
+    bottom: 20px;
     width: 240px;
 }
 
@@ -10,7 +10,7 @@
     position: absolute;
     top: 135px;
     right: 0px;
-    width: 500px;
+    max-width: 500px;
     padding: 10px;
     background-color: #ffffff;
     -moz-border-radius: 8px;
