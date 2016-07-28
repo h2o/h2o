@@ -40,7 +40,7 @@ static int decode_hex(int ch)
     return -1;
 }
 
-static size_t handle_special_paths(const char * const start, const char *dst, const char * const last_slash)
+static size_t handle_special_paths(const char *const start, const char *dst, const char *const last_slash)
 {
     size_t part_size = dst - last_slash;
     const char *orig_dst = dst;

@@ -310,9 +310,9 @@ size_t h2o_stringify_protocol_version(char *dst, int version)
     return p - dst;
 }
 
-static void push_one_path(h2o_mem_pool_t *pool, h2o_iovec_vector_t *paths_to_push, h2o_iovec_t *url,
-                          h2o_iovec_t base_path, const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
-                          const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority)
+static void push_one_path(h2o_mem_pool_t *pool, h2o_iovec_vector_t *paths_to_push, h2o_iovec_t *url, h2o_iovec_t base_path,
+                          const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority, const h2o_url_scheme_t *base_scheme,
+                          h2o_iovec_t *base_authority)
 {
     h2o_url_t parsed, resolved;
 
@@ -343,9 +343,10 @@ static void push_one_path(h2o_mem_pool_t *pool, h2o_iovec_vector_t *paths_to_pus
     paths_to_push->entries[paths_to_push->size++] = resolved.path;
 }
 
-h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len, h2o_iovec_t base_path,
-                                                      const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
-                                                      const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority)
+h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
+                                                          h2o_iovec_t base_path, const h2o_url_scheme_t *input_scheme,
+                                                          h2o_iovec_t input_authority, const h2o_url_scheme_t *base_scheme,
+                                                          h2o_iovec_t *base_authority)
 {
     h2o_iovec_vector_t paths_to_push = {};
     h2o_iovec_t iter = h2o_iovec_init(value, value_len), token_value;
@@ -365,7 +366,7 @@ h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, 
         while ((token = h2o_next_token(&iter, ';', &token_len, &token_value)) != NULL &&
                !h2o_memis(token, token_len, H2O_STRLIT(","))) {
             if (h2o_lcstris(token, token_len, H2O_STRLIT("rel")) &&
-                    h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload"))) {
+                h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload"))) {
                 preload++;
             } else if (h2o_lcstris(token, token_len, H2O_STRLIT("nopush"))) {
                 nopush++;

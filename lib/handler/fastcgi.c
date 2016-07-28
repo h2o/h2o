@@ -206,7 +206,7 @@ static void append_address_info(h2o_req_t *req, iovec_vector_t *vecs, const char
 
 static int envname_is_headername(const h2o_iovec_t *env, const h2o_iovec_t *header)
 {
-    const char *ep , *hp, *hend;
+    const char *ep, *hp, *hend;
 
     if (env->len != 5 + header->len)
         return 0;
@@ -319,8 +319,7 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
                 for (; src != src_end; ++src)
                     *dst++ = *src == '-' ? '_' : h2o_toupper(*src);
             }
-        NextHeader:
-            ;
+        NextHeader:;
         }
         if (cookie_length != 0) {
             /* emit the cookie merged */

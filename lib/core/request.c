@@ -114,7 +114,8 @@ static h2o_hostconf_t *setup_before_processing(h2o_req_t *req)
     req->method = req->input.method;
     req->authority = req->input.authority;
     req->path = req->input.path;
-    req->path_normalized = h2o_url_normalize_path(&req->pool, req->input.path.base, req->input.path.len, &req->query_at, &req->norm_indexes);
+    req->path_normalized =
+        h2o_url_normalize_path(&req->pool, req->input.path.base, req->input.path.len, &req->query_at, &req->norm_indexes);
     req->input.query_at = req->query_at; /* we can do this since input.path == path */
 
     return hostconf;
@@ -604,9 +605,9 @@ int h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value
     if (req->conn->callbacks->push_path == NULL)
         return -1;
 
-    h2o_iovec_vector_t paths = h2o_extract_push_path_from_link_header(&req->pool, value, value_len, req->path_normalized, req->input.scheme,
-                                                                      req->input.authority, req->res_is_delegated ? req->scheme : NULL,
-                                                                      req->res_is_delegated ? &req->authority : NULL);
+    h2o_iovec_vector_t paths = h2o_extract_push_path_from_link_header(
+        &req->pool, value, value_len, req->path_normalized, req->input.scheme, req->input.authority,
+        req->res_is_delegated ? req->scheme : NULL, req->res_is_delegated ? &req->authority : NULL);
     if (paths.size == 0)
         return -1;
 

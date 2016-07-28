@@ -257,8 +257,7 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         }
         h2o_iovec_t cookie = h2o_http2_casper_get_cookie(conn->casper);
         h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, cookie.base, cookie.len);
-    SkipCookie:
-        ;
+    SkipCookie:;
     }
 
     if (h2o_http2_stream_is_push(stream->stream_id)) {

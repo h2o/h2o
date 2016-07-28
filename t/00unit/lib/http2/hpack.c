@@ -367,8 +367,8 @@ static void parse_and_compare_request(h2o_hpack_header_table_t *ht, const char *
 static void test_hpack_push(void)
 {
     const static h2o_iovec_t method = {H2O_STRLIT("GET")}, authority = {H2O_STRLIT("example.com")},
-                             user_agent = {
-                                 H2O_STRLIT("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:40.0) Gecko/20100101 Firefox/40.0")},
+                             user_agent = {H2O_STRLIT(
+                                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:40.0) Gecko/20100101 Firefox/40.0")},
                              accept_root = {H2O_STRLIT("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")},
                              accept_images = {H2O_STRLIT("image/png,image/*;q=0.8,*/*;q=0.5")},
                              accept_language = {H2O_STRLIT("ja,en-US;q=0.7,en;q=0.3")},

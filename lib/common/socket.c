@@ -460,10 +460,11 @@ Disable:
  */
 static int obtain_tcp_info(int fd, uint32_t *rtt, uint32_t *mss, uint32_t *cwnd_size, uint32_t *cwnd_avail)
 {
-#define CALC_CWND_PAIR_FROM_BYTE_UNITS(cwnd_bytes, inflight_bytes) do { \
-    *cwnd_size = (cwnd_bytes + *mss / 2) / *mss; \
-    *cwnd_avail = cwnd_bytes > inflight_bytes ? (cwnd_bytes - inflight_bytes) / *mss + 2 : 2; \
-} while (0)
+#define CALC_CWND_PAIR_FROM_BYTE_UNITS(cwnd_bytes, inflight_bytes)                                                                 \
+    do {                                                                                                                           \
+        *cwnd_size = (cwnd_bytes + *mss / 2) / *mss;                                                                               \
+        *cwnd_avail = cwnd_bytes > inflight_bytes ? (cwnd_bytes - inflight_bytes) / *mss + 2 : 2;                                  \
+    } while (0)
 
 #if defined(__linux__) && defined(TCP_INFO)
 
@@ -477,7 +478,7 @@ static int obtain_tcp_info(int fd, uint32_t *rtt, uint32_t *mss, uint32_t *cwnd_
     *cwnd_avail = tcpi.tcpi_snd_cwnd > tcpi.tcpi_unacked ? tcpi.tcpi_snd_cwnd - tcpi.tcpi_unacked + 2 : 2;
     return 0;
 
-#elif defined(__FreeBSD__) && defined(TCP_INFO) && 0 /* disabled since we wouldn't use it anyways; the OS lacks TCP_NOTSENT_LOWAT */
+#elif defined(__FreeBSD__) && defined(TCP_INFO) && 0 /* disabled since we wouldn't use it anyways; OS lacks TCP_NOTSENT_LOWAT */
 
     struct tcp_info tcpi;
     socklen_t tcpisz = sizeof(tcpi);
@@ -580,7 +581,7 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
             break;
         case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED:
             sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE;
-            /* fallthru */
+        /* fallthru */
         default:
             ssl_record_size = sock->_latency_optimization.suggested_tls_payload_size;
             break;

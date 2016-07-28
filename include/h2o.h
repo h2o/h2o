@@ -285,7 +285,7 @@ typedef struct st_h2o_status_handler_t {
     h2o_iovec_t name;
     void *(*init)(void); /* optional callback, allocates a context that will be passed to per_thread() */
     void (*per_thread)(void *priv, h2o_context_t *ctx); /* optional callback, will be called for each thread */
-    h2o_iovec_t (*final)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req); /* mandatory, will be passed the optional context */
+    h2o_iovec_t (* final)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req); /* mandatory, will be passed the optional context */
 } h2o_status_handler_t;
 
 typedef H2O_VECTOR(h2o_status_handler_t) h2o_status_callbacks_t;
@@ -446,7 +446,8 @@ typedef struct st_h2o_mimemap_type_t {
 #define H2O_HTTP2_ERROR_INADEQUATE_SECURITY -12
 #define H2O_HTTP2_ERROR_MAX 13
 /* end of the HTT2-spec defined errors */
-#define H2O_HTTP2_ERROR_INVALID_HEADER_CHAR -254 /* an internal value indicating that invalid characters were found in the header name or value */
+#define H2O_HTTP2_ERROR_INVALID_HEADER_CHAR                                                                                        \
+    -254 /* an internal value indicating that invalid characters were found in the header name or value */
 #define H2O_HTTP2_ERROR_INCOMPLETE -255 /* an internal value indicating that all data is not ready */
 #define H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY -256
 
@@ -1058,9 +1059,10 @@ size_t h2o_stringify_protocol_version(char *dst, int version);
 /**
  * extracts path to be pushed from `Link: rel=prelead` header, duplicating the chunk (or returns {NULL,0} if none)
  */
-h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len, h2o_iovec_t base_path,
-                                                          const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
-                                                          const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority);
+h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
+                                                          h2o_iovec_t base_path, const h2o_url_scheme_t *input_scheme,
+                                                          h2o_iovec_t input_authority, const h2o_url_scheme_t *base_scheme,
+                                                          h2o_iovec_t *base_authority);
 /**
  * return a bitmap of compressible types, by parsing the `accept-encoding` header
  */
@@ -1362,10 +1364,7 @@ void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
 
 /* log */
 
-enum {
-    H2O_LOGCONF_ESCAPE_APACHE,
-    H2O_LOGCONF_ESCAPE_JSON
-};
+enum { H2O_LOGCONF_ESCAPE_APACHE, H2O_LOGCONF_ESCAPE_JSON };
 
 /**
  * compiles a log configuration
@@ -1462,11 +1461,7 @@ void h2o_chunked_register(h2o_pathconf_t *pathconf);
 
 /* lib/compress.c */
 
-enum {
-    H2O_COMPRESS_FLAG_PARTIAL,
-    H2O_COMPRESS_FLAG_FLUSH,
-    H2O_COMPRESS_FLAG_EOS
-};
+enum { H2O_COMPRESS_FLAG_PARTIAL, H2O_COMPRESS_FLAG_FLUSH, H2O_COMPRESS_FLAG_EOS };
 
 /**
  * compressor context

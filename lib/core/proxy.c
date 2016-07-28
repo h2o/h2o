@@ -193,7 +193,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
             }
             if (!preserve_x_forwarded_proto && h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-proto")))
                 continue;
-AddHeader:
+        AddHeader:
             RESERVE(h->name->len + h->value.len + 2);
             APPEND(h->name->base, h->name->len);
             buf.base[offset++] = ':';
@@ -389,8 +389,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
             value = h2o_strdup(&req->pool, headers[i].value, headers[i].value_len);
         AddHeader:
             h2o_add_header(&req->pool, &req->res.headers, token, value.base, value.len);
-        Skip:
-            ;
+        Skip:;
         } else {
             h2o_iovec_t name = h2o_strdup(&req->pool, headers[i].name, headers[i].name_len);
             h2o_iovec_t value = h2o_strdup(&req->pool, headers[i].value, headers[i].value_len);
