@@ -295,7 +295,7 @@ Exit:
     return ret;
 }
 
-size_t h2o_numproc()
+size_t h2o_numproc(void)
 {
 #if defined(_SC_NPROCESSORS_ONLN)
     return (size_t)sysconf(_SC_NPROCESSORS_ONLN);

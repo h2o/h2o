@@ -169,7 +169,7 @@ static struct {
     {} /* tickets */
 };
 
-struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EVP_MD *md, uint64_t not_before, uint64_t not_after,
+static struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EVP_MD *md, uint64_t not_before, uint64_t not_after,
                                        int fill_in)
 {
     struct st_session_ticket_t *ticket = h2o_mem_alloc(sizeof(*ticket) + cipher->key_len + md->block_size);
