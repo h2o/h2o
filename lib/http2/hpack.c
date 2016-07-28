@@ -41,6 +41,7 @@ struct st_h2o_hpack_static_table_entry_t {
 struct st_h2o_hpack_header_table_entry_t {
     h2o_iovec_t *name;
     h2o_iovec_t *value;
+    const char *err_desc; /* the recorded soft error description */
 };
 
 struct st_h2o_decode_header_result_t {
@@ -65,14 +66,64 @@ static h2o_iovec_t *alloc_buf(h2o_mem_pool_t *pool, size_t len)
     return buf;
 }
 
-static int contains_uppercase(const char *s, size_t len)
+/* validate a header value against https://tools.ietf.org/html/rfc7230#section-3.2 */
+static int contains_invalid_field_value_char(const char *s, size_t len)
 {
+    /* all printable chars + horizontal tab */
+    static const char valid_h2_field_value_char[] = {
+        0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /*    0-31 */
+        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /*   32-63 */
+        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /*   64-95 */
+        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0, /*  96-127 */
+        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* 128-159 */
+        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* 160-191 */
+        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* 192-223 */
+        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* 224-255 */
+    };
+
     for (; len != 0; ++s, --len) {
-        unsigned ch = *(unsigned char *)s;
-        if (ch - 'A' < 26U)
+        unsigned char ch = (unsigned char)*s;
+        if (!valid_h2_field_value_char[ch]) {
             return 1;
+        }
     }
     return 0;
+}
+
+static const char *err_found_upper_case_in_header_name = "found an upper-case letter in header name";
+static const char *soft_err_found_invalid_char_in_header_name = "found an invalid character in header name";
+static const char *soft_err_found_invalid_char_in_header_value = "found an invalid character in header value";
+
+/* validate a header name against https://tools.ietf.org/html/rfc7230#section-3.2,
+ * in addition to that, we disallow upper case chars as well.
+ * This sets @err_desc for all invalid characters, but only returns true
+ * for upper case characters, this is because we return a protocol error
+ * in that case. */
+static const char *validate_header_name(const char *s, size_t len)
+{
+    const char *ret = NULL;
+    /* all printable chars, except upper case and separator characters */
+    static const char valid_h2_header_name_char[] = {
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /*    0-31 */
+        0,1,0,1,1,1,1,1,0,0,1,1,0,1,1,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0, /*   32-63 */
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1, /*   64-95 */
+        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0, /*  96-127 */
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 128-159 */
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 160-191 */
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 192-223 */
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 224-255 */
+    };
+
+    for (; len != 0; ++s, --len) {
+        unsigned char ch = (unsigned char)*s;
+        if (!valid_h2_header_name_char[ch]) {
+            if (ch - 'A' < 26U) {
+                return err_found_upper_case_in_header_name;
+            }
+            ret = soft_err_found_invalid_char_in_header_name;
+        }
+    }
+    return ret;
 }
 
 static int32_t decode_int(const uint8_t **src, const uint8_t *src_end, size_t prefix_bits)
@@ -102,21 +153,23 @@ static int32_t decode_int(const uint8_t **src, const uint8_t *src_end, size_t pr
     }
 }
 
-static char *huffdecode4(char *dst, uint8_t in, uint8_t *state, int *maybe_eos)
+static char *huffdecode4(char *dst, uint8_t in, uint8_t *state, int *maybe_eos, uint8_t *seen_char_types)
 {
     const nghttp2_huff_decode *entry = huff_decode_table[*state] + in;
 
     if ((entry->flags & NGHTTP2_HUFF_FAIL) != 0)
         return NULL;
-    if ((entry->flags & NGHTTP2_HUFF_SYM) != 0)
+    if ((entry->flags & NGHTTP2_HUFF_SYM) != 0) {
         *dst++ = entry->sym;
+        *seen_char_types |= (entry->flags & NGHTTP2_HUFF_INVALID_CHARS);
+    }
     *state = entry->state;
     *maybe_eos = (entry->flags & NGHTTP2_HUFF_ACCEPTED) != 0;
 
     return dst;
 }
 
-static h2o_iovec_t *decode_huffman(h2o_mem_pool_t *pool, const uint8_t *src, size_t len)
+static h2o_iovec_t *decode_huffman(h2o_mem_pool_t *pool, const uint8_t *src, size_t len, uint8_t *seen_char_types)
 {
     const uint8_t *src_end = src + len;
     char *dst;
@@ -126,9 +179,9 @@ static h2o_iovec_t *decode_huffman(h2o_mem_pool_t *pool, const uint8_t *src, siz
 
     dst = dst_buf->base;
     for (; src < src_end; src++) {
-        if ((dst = huffdecode4(dst, *src >> 4, &state, &maybe_eos)) == NULL)
+        if ((dst = huffdecode4(dst, *src >> 4, &state, &maybe_eos, seen_char_types)) == NULL)
             return NULL;
-        if ((dst = huffdecode4(dst, *src & 0xf, &state, &maybe_eos)) == NULL)
+        if ((dst = huffdecode4(dst, *src & 0xf, &state, &maybe_eos, seen_char_types)) == NULL)
             return NULL;
     }
 
@@ -140,7 +193,7 @@ static h2o_iovec_t *decode_huffman(h2o_mem_pool_t *pool, const uint8_t *src, siz
     return dst_buf;
 }
 
-static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, const uint8_t *src_end)
+static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, const uint8_t *src_end, int is_header_name, const char **err_desc)
 {
     h2o_iovec_t *ret;
     int is_huffman;
@@ -154,13 +207,45 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, con
         return NULL;
 
     if (is_huffman) {
+        uint8_t hflags = 0;
         if (*src + len > src_end)
             return NULL;
-        if ((ret = decode_huffman(pool, *src, len)) == NULL)
+        if ((ret = decode_huffman(pool, *src, len, &hflags)) == NULL)
             return NULL;
+        if (is_header_name) {
+            if (ret->len <= 0) {
+                return NULL;
+            }
+            /* pseudo-headers are checked later in `decode_header` */
+            if (hflags & NGHTTP2_HUFF_INVALID_FOR_HEADER_NAME && ret->base[0] != ':') {
+                if (hflags & NGHTTP2_HUFF_UPPER_CASE_CHAR) {
+                    *err_desc = err_found_upper_case_in_header_name;
+                    return NULL;
+                } else {
+                    *err_desc = soft_err_found_invalid_char_in_header_name;
+                }
+            }
+        } else {
+            if (hflags & NGHTTP2_HUFF_INVALID_FOR_HEADER_VALUE) {
+                *err_desc = soft_err_found_invalid_char_in_header_value;
+            }
+        }
     } else {
         if (*src + len > src_end)
             return NULL;
+        if (is_header_name) {
+            /* pseudo-headers are checked later in `decode_header` */
+            if (**src != (uint8_t)':') {
+                *err_desc = validate_header_name((char *)*src, len);
+                if(*err_desc == err_found_upper_case_in_header_name) {
+                    return NULL;
+                }
+            }
+        } else {
+            if (contains_invalid_field_value_char((char *)*src, len)) {
+                *err_desc = soft_err_found_invalid_char_in_header_value;
+            }
+        }
         ret = alloc_buf(pool, len);
         memcpy(ret->base, *src, len);
         ret->base[len] = '\0';
@@ -189,8 +274,7 @@ static void header_table_evict_one(h2o_hpack_header_table_t *table)
         h2o_mem_release_shared(entry->name);
     if (!value_is_part_of_static_table(entry->value))
         h2o_mem_release_shared(entry->value);
-    entry->name = NULL;
-    entry->value = NULL;
+    memset(entry, 0, sizeof(*entry));
 }
 
 static struct st_h2o_hpack_header_table_entry_t *header_table_add(h2o_hpack_header_table_t *table, size_t size_add,
@@ -284,7 +368,7 @@ Redo:
     }
 
     /* determine the header */
-    if (index != 0) {
+    if (index > 0) {
         /* existing name (and value?) */
         if (index < HEADER_TABLE_OFFSET) {
             result->name = (h2o_iovec_t *)h2o_hpack_static_table[index - 1].name;
@@ -293,6 +377,7 @@ Redo:
             }
         } else if (index - HEADER_TABLE_OFFSET < hpack_header_table->num_entries) {
             struct st_h2o_hpack_header_table_entry_t *entry = header_table_get(hpack_header_table, index - HEADER_TABLE_OFFSET);
+            *err_desc = entry->err_desc;
             result->name = entry->name;
             if (!h2o_iovec_is_token(result->name))
                 h2o_mem_link_shared(pool, result->name);
@@ -306,27 +391,32 @@ Redo:
     } else {
         /* non-existing name */
         const h2o_token_t *name_token;
-        if ((result->name = decode_string(pool, src, src_end)) == NULL)
+        if ((result->name = decode_string(pool, src, src_end, 1, err_desc)) == NULL) {
+            if (*err_desc == err_found_upper_case_in_header_name) {
+                return H2O_HTTP2_ERROR_PROTOCOL;
+            }
             return H2O_HTTP2_ERROR_COMPRESSION;
-        if (contains_uppercase(result->name->base, result->name->len)) {
-            *err_desc = "found an upper-case letter in header name";
-            return H2O_HTTP2_ERROR_PROTOCOL;
         }
-        /* predefined header names should be interned */
-        if ((name_token = h2o_lookup_token(result->name->base, result->name->len)) != NULL)
-            result->name = (h2o_iovec_t *)&name_token->buf;
+        if (!*err_desc) {
+            /* predefined header names should be interned */
+            if ((name_token = h2o_lookup_token(result->name->base, result->name->len)) != NULL) {
+                result->name = (h2o_iovec_t *)&name_token->buf;
+            }
+        }
     }
 
     /* determine the value (if necessary) */
     if (!value_is_indexed) {
-        if ((result->value = decode_string(pool, src, src_end)) == NULL)
+        if ((result->value = decode_string(pool, src, src_end, 0, err_desc)) == NULL) {
             return H2O_HTTP2_ERROR_COMPRESSION;
+        }
     }
 
     /* add the decoded header to the header table if necessary */
     if (do_index) {
         struct st_h2o_hpack_header_table_entry_t *entry =
             header_table_add(hpack_header_table, result->name->len + result->value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET, SIZE_MAX);
+        entry->err_desc = *err_desc;
         if (entry != NULL) {
             entry->name = result->name;
             if (!h2o_iovec_is_token(entry->name))
@@ -337,7 +427,7 @@ Redo:
         }
     }
 
-    return 0;
+    return *err_desc ? H2O_HTTP2_ERROR_INVALID_HEADER_CHAR : 0;
 }
 
 static uint8_t *encode_status(uint8_t *dst, int status)
@@ -415,9 +505,19 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
 
     while (src != src_end) {
         struct st_h2o_decode_header_result_t r;
-        int ret = decode_header(&req->pool, &r, header_table, &src, src_end, err_desc);
-        if (ret != 0)
-            return ret;
+        const char *decode_err = NULL;
+        int ret = decode_header(&req->pool, &r, header_table, &src, src_end, &decode_err);
+        if (ret != 0) {
+            if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
+                /* this is a soft error, we continue parsing, but register only the first error */
+                if (*err_desc == NULL) {
+                    *err_desc = decode_err;
+                }
+            } else {
+                *err_desc = decode_err;
+                return ret;
+            }
+        }
         if (r.name->base[0] == ':') {
             if (pseudo_header_exists_map != NULL) {
                 /* FIXME validate the chars in the value (e.g. reject SP in path) */
@@ -486,6 +586,9 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
         ;
     }
 
+    if (*err_desc) {
+        return H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
+    }
     return 0;
 }
 
