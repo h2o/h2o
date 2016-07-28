@@ -114,7 +114,7 @@ static h2o_hostconf_t *setup_before_processing(h2o_req_t *req)
     req->method = req->input.method;
     req->authority = req->input.authority;
     req->path = req->input.path;
-    req->path_normalized = h2o_url_normalize_path(&req->pool, req->input.path.base, req->input.path.len, &req->query_at);
+    req->path_normalized = h2o_url_normalize_path(&req->pool, req->input.path.base, req->input.path.len, &req->query_at, &req->norm_indexes);
     req->input.query_at = req->query_at; /* we can do this since input.path == path */
 
     return hostconf;
@@ -295,7 +295,7 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
     req->scheme = scheme;
     req->authority = authority;
     req->path = path;
-    req->path_normalized = h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at);
+    req->path_normalized = h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at, &req->norm_indexes);
     req->overrides = overrides;
     req->res_is_delegated |= is_delegated;
     reset_response(req);
