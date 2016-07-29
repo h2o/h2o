@@ -20,6 +20,7 @@ my $create_tab = sub {
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
 ? my $base = "../" x (scalar(split '/', $main::context->{filename}) - 1);
 ? if ($base ne '') {
 <base href="<?= $base ?>" />
@@ -43,7 +44,7 @@ my $create_tab = sub {
 <h1>
 <a href="index.html">H2O</a>
 </h1>
-the optimized HTTP/1.x, HTTP/2 server
+<p class="description">the optimized HTTP/1.x, HTTP/2 server</p>
 
 <!-- oktavia -->
 <form id="searchform">
