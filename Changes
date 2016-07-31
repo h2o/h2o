@@ -1,5 +1,10 @@
 Revision history for H2O.
 
+2.0.2 2016-07-31 20:00:00+0000
+	- [fastcgi] setenv should displace HTTP headers #996 (Kazuho Oku)
+	- [http2] fix buffer overrun #972 (Frederik Deweerdt)
+	- [misc] fix build error when libuv is not found (nextgenthemes) #1008
+
 2.0.1 2016-06-23 22:00:00+0000
 	- [fastcgi] fix internal server error when PHP returns a huge header #958 (Kazuho Oku)
 	- [http2] recognize link header containing multiple links #950 (Frederik Deweerdt)
