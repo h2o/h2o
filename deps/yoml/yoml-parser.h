@@ -196,7 +196,7 @@ static inline int yoml__merge(yoml_t **dest, size_t offset, yoml_t *src)
     return 0;
 }
 
-static inline int yoml__resolve_alias(yoml_t **target, yoml_t *doc, yaml_parser_t *parser, void *(*mem_set)(void *, int, size_t))
+static inline int yoml__resolve_merge(yoml_t **target, yaml_parser_t *parser, void *(*mem_set)(void *, int, size_t))
 {
     size_t i, j;
 
@@ -205,20 +205,19 @@ static inline int yoml__resolve_alias(yoml_t **target, yoml_t *doc, yaml_parser_
         break;
     case YOML_TYPE_SEQUENCE:
         for (i = 0; i != (*target)->data.sequence.size; ++i) {
-            if (yoml__resolve_alias((*target)->data.sequence.elements + i, doc, parser, mem_set) != 0)
+            if (yoml__resolve_merge((*target)->data.sequence.elements + i, parser, mem_set) != 0)
                 return -1;
         }
         break;
     case YOML_TYPE_MAPPING:
-        /* traverse in descending order (for ease of merge) */
         if ((*target)->data.mapping.size != 0) {
             i = (*target)->data.mapping.size;
             do {
                 --i;
-                /* merge the value */
-                if (yoml__resolve_alias(&(*target)->data.mapping.elements[i].value, doc, parser, mem_set) != 0)
+                if (yoml__resolve_merge(&(*target)->data.mapping.elements[i].key, parser, mem_set) != 0)
                     return -1;
-                /* merge the keys or resolve the alias */
+                if (yoml__resolve_merge(&(*target)->data.mapping.elements[i].value, parser, mem_set) != 0)
+                    return -1;
                 if ((*target)->data.mapping.elements[i].key->type == YOML_TYPE_SCALAR &&
                     strcmp((*target)->data.mapping.elements[i].key->data.scalar, "<<") == 0) {
                     /* erase the slot (as well as preserving the values) */
@@ -245,10 +244,38 @@ static inline int yoml__resolve_alias(yoml_t **target, yoml_t *doc, yaml_parser_
                     /* cleanup */
                     yoml_free(src.key, mem_set);
                     yoml_free(src.value, mem_set);
-                } else if (yoml__resolve_alias(&(*target)->data.mapping.elements[i].key, doc, parser, mem_set) != 0) {
-                    return -1;
                 }
             } while (i != 0);
+        }
+        break;
+    case YOML__TYPE_UNRESOLVED_ALIAS:
+        assert(!"unreachable");
+        break;
+    }
+
+    return 0;
+}
+
+
+static inline int yoml__resolve_alias(yoml_t **target, yoml_t *doc, yaml_parser_t *parser, void *(*mem_set)(void *, int, size_t))
+{
+    size_t i;
+
+    switch ((*target)->type) {
+    case YOML_TYPE_SCALAR:
+        break;
+    case YOML_TYPE_SEQUENCE:
+        for (i = 0; i != (*target)->data.sequence.size; ++i) {
+            if (yoml__resolve_alias((*target)->data.sequence.elements + i, doc, parser, mem_set) != 0)
+                return -1;
+        }
+        break;
+    case YOML_TYPE_MAPPING:
+        for (i = 0; i != (*target)->data.mapping.size; ++i) {
+            if (yoml__resolve_alias(&(*target)->data.mapping.elements[i].key, doc, parser, mem_set) != 0)
+                return -1;
+            if (yoml__resolve_alias(&(*target)->data.mapping.elements[i].value, doc, parser, mem_set) != 0)
+                return -1;
         }
         break;
     case YOML__TYPE_UNRESOLVED_ALIAS: {
@@ -282,8 +309,8 @@ static inline yoml_t *yoml_parse_document(yaml_parser_t *parser, yaml_event_type
     if (unhandled != NULL)
         *unhandled = YAML_NO_EVENT;
 
-    /* resolve aliases */
-    if (yoml__resolve_alias(&doc, doc, parser, mem_set) != 0) {
+    /* resolve aliases and merge */
+    if (yoml__resolve_alias(&doc, doc, parser, mem_set) != 0 || yoml__resolve_merge(&doc, parser, mem_set) != 0) {
         yoml_free(doc, mem_set);
         doc = NULL;
     }
