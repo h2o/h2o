@@ -38,6 +38,8 @@
 #include <unistd.h>
 #include <openssl/rand.h>
 #include <openssl/ssl.h>
+#include <openssl/rsa.h>
+#include <openssl/bn.h>
 #ifdef __linux__
 #include <sys/prctl.h>
 #endif
@@ -224,7 +226,7 @@ static void *expbuf_shift_bytes(struct expbuf_t *buf, size_t *l)
 
 static int expbuf_write(struct expbuf_t *buf, int fd)
 {
-    struct iovec vecs[2] = {};
+    struct iovec vecs[2] = {{NULL}};
     size_t bufsz = expbuf_size(buf);
     int vecindex;
     ssize_t r;
@@ -245,7 +247,7 @@ static int expbuf_write(struct expbuf_t *buf, int fd)
             ++vecindex;
         }
         if (r != 0) {
-            vecs[vecindex].iov_base += r;
+            vecs[vecindex].iov_base = (char *)vecs[vecindex].iov_base + r;
             vecs[vecindex].iov_len -= r;
         }
     }
@@ -381,7 +383,7 @@ static int priv_encdec_proxy(const char *cmd, int flen, const unsigned char *fro
 {
     struct st_neverbleed_rsa_exdata_t *exdata;
     struct st_neverbleed_thread_data_t *thdata;
-    struct expbuf_t buf = {};
+    struct expbuf_t buf = {NULL};
     size_t ret;
     unsigned char *to;
     size_t tolen;
@@ -463,7 +465,7 @@ static int sign_proxy(int type, const unsigned char *m, unsigned int m_len, unsi
 {
     struct st_neverbleed_rsa_exdata_t *exdata;
     struct st_neverbleed_thread_data_t *thdata;
-    struct expbuf_t buf = {};
+    struct expbuf_t buf = {NULL};
     size_t ret, siglen;
     unsigned char *sigret;
 
@@ -553,7 +555,7 @@ static EVP_PKEY *create_pkey(neverbleed_t *nb, size_t key_index, const char *ebu
 int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char *fn, char *errbuf)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
-    struct expbuf_t buf = {};
+    struct expbuf_t buf = {NULL};
     size_t ret, key_index;
     char *estr, *nstr, *errstr;
     EVP_PKEY *pkey;
@@ -634,7 +636,7 @@ Respond:
 int neverbleed_setuidgid(neverbleed_t *nb, const char *user, int change_socket_ownership)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
-    struct expbuf_t buf = {};
+    struct expbuf_t buf = {NULL};
     size_t ret;
 
     expbuf_push_str(&buf, "setuidgid");
@@ -733,7 +735,7 @@ Redo:
 static void *daemon_conn_thread(void *_sock_fd)
 {
     int sock_fd = (int)((char *)_sock_fd - (char *)NULL);
-    struct expbuf_t buf = {};
+    struct expbuf_t buf = {NULL};
     unsigned char auth_token[NEVERBLEED_AUTH_TOKEN_SIZE];
 
     /* authenticate */
@@ -830,7 +832,11 @@ static RSA_METHOD rsa_method = {
     NULL,                 /* bn_mod_exp */
     NULL,                 /* init */
     NULL,                 /* finish */
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x10100001L
+    0,                    /* flags */
+#else
     RSA_FLAG_SIGN_VER,    /* flags */
+#endif
     NULL,                 /* app data */
     sign_proxy,           /* rsa_sign */
     NULL,                 /* rsa_verify */
@@ -842,7 +848,11 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
     int pipe_fds[2] = {-1, -1}, listen_fd = -1;
     char *tempdir = NULL;
 
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x10100001L
+    const RSA_METHOD *default_method = RSA_PKCS1_OpenSSL();
+#else
     const RSA_METHOD *default_method = RSA_PKCS1_SSLeay();
+#endif
     rsa_method.rsa_pub_enc = default_method->rsa_pub_enc;
     rsa_method.rsa_pub_dec = default_method->rsa_pub_dec;
     rsa_method.rsa_verify = default_method->rsa_verify;
