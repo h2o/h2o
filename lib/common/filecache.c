@@ -28,7 +28,7 @@
 #include "h2o/memory.h"
 #include "h2o/filecache.h"
 
-KHASH_SET_INIT_STR(opencache_set);
+KHASH_SET_INIT_STR(opencache_set)
 
 struct st_h2o_filecache_t {
     khash_t(opencache_set) * hash;
