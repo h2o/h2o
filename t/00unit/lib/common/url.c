@@ -624,6 +624,26 @@ static void test_resolve(void)
     h2o_mem_clear_pool(&pool);
 }
 
+static void test_rebase(void)
+{
+    h2o_url_t upstream;
+    h2o_mem_pool_t pool;
+    h2o_iovec_t ret;
+
+    h2o_url_parse(H2O_STRLIT("http://realhost:81/real/"), &upstream);
+
+    h2o_mem_init_pool(&pool);
+
+    ret = h2o_url_rebase(&pool, H2O_STRLIT("http://realhost:81/real/abc"), &upstream, &H2O_URL_SCHEME_HTTPS,
+                         h2o_iovec_init(H2O_STRLIT("vhost:8443")), h2o_iovec_init(H2O_STRLIT("/virtual/")));
+    ok(h2o_memis(ret.base, ret.len, H2O_STRLIT("https://vhost:8443/virtual/abc")));
+    ret = h2o_url_rebase(&pool, H2O_STRLIT("http://realhost:81/other/abc"), &upstream, &H2O_URL_SCHEME_HTTPS,
+                         h2o_iovec_init(H2O_STRLIT("vhost:8443")), h2o_iovec_init(H2O_STRLIT("/virtual/")));
+    ok(h2o_memis(ret.base, ret.len, H2O_STRLIT("http://realhost:81/other/abc")));
+
+    h2o_mem_clear_pool(&pool);
+}
+
 void test_lib__common__url_c(void)
 {
     subtest("normalize_path", test_normalize_path);
@@ -631,4 +651,5 @@ void test_lib__common__url_c(void)
     subtest("parse", test_parse);
     subtest("parse_relative", test_parse_relative);
     subtest("resolve", test_resolve);
+    subtest("rebase", test_rebase);
 }

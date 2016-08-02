@@ -97,6 +97,11 @@ void h2o_url_copy(h2o_mem_pool_t *pool, h2o_url_t *dest, const h2o_url_t *src);
  */
 const char *h2o_url_host_to_sun(h2o_iovec_t host, struct sockaddr_un *sa);
 extern const char *h2o_url_host_to_sun_err_is_not_unix_socket;
+/**
+ * rebases a given URL (always dup'ed using the pool), rebasing the URL if it matches to the given URL
+ */
+h2o_iovec_t h2o_url_rebase(h2o_mem_pool_t *pool, const char *url, size_t url_len, h2o_url_t *match,
+                           const h2o_url_scheme_t *new_scheme, h2o_iovec_t new_authority, h2o_iovec_t new_basepath);
 
 /* inline definitions */
 
