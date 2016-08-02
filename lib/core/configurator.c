@@ -253,7 +253,7 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
         }
     }
     qsort(node->data.mapping.elements, node->data.mapping.size, sizeof(node->data.mapping.elements[0]),
-          (void *)sort_from_longer_paths);
+          (int (*)(const void *, const void *))sort_from_longer_paths);
 
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key;
