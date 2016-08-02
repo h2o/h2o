@@ -72,7 +72,7 @@ static size_t compress_chunk(struct st_gzip_context_t *self, const void *src, si
                 expand_buf(&self->bufs);
             self->bufs.entries[bufindex].len = 0;
         }
-        self->zs.next_out = (void *)self->bufs.entries[bufindex].base + self->bufs.entries[bufindex].len;
+        self->zs.next_out = (void *)(self->bufs.entries[bufindex].base + self->bufs.entries[bufindex].len);
         self->zs.avail_out = (unsigned)(BUF_SIZE - self->bufs.entries[bufindex].len);
         ret = deflate(&self->zs, flush);
         assert(ret == Z_OK || ret == Z_STREAM_END);
