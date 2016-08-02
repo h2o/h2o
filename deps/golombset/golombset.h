@@ -122,7 +122,7 @@ static int golombset_decode_value(struct st_golombset_decode_t *ctx, unsigned fi
 
 static int golombset_encode(unsigned fixed_bits, uint64_t *keys, size_t num_keys, void *buf, size_t *bufsize)
 {
-    struct st_golombset_encode_t ctx = {buf - 1, buf + *bufsize};
+    struct st_golombset_encode_t ctx = {(unsigned char *)buf - 1, (unsigned char *)buf + *bufsize};
     size_t i;
     uint64_t next_min = 0;
 
@@ -139,7 +139,7 @@ static int golombset_encode(unsigned fixed_bits, uint64_t *keys, size_t num_keys
 
 static int golombset_decode(unsigned fixed_bits, const void *buf, size_t bufsize, uint64_t *keys, size_t *num_keys)
 {
-    struct st_golombset_decode_t ctx = {buf, buf + bufsize, 8};
+    struct st_golombset_decode_t ctx = {buf, (unsigned char *)buf + bufsize, 8};
     size_t index = 0;
     uint64_t next_min = 0;
 
