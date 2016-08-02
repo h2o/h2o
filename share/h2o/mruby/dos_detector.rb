@@ -44,7 +44,7 @@ class DoSDetector
       @cache.set(ip, client)
     end
 
-    detected, vars = @strategy.detect(client, now, env)
+    detected, vars = @strategy.detect?(client, now, env)
     if detected
       vars = { :ip => client[:ip] }.merge(vars || {})
       return @callback.call(vars)
@@ -68,7 +68,7 @@ class DoSDetector
       raise "ban_period must not be negative" if @ban_period < 0
     end
 
-    def detect(client, now, env)
+    def detect?(client, now, env)
       count = countup(client, now)
 
       banned_until = client[:banned_until] || 0
