@@ -279,8 +279,8 @@ int h2o_url_parse_relative(const char *url, size_t url_len, h2o_url_t *parsed)
         return parse_authority_and_path(p + 2, url_end, parsed);
 
     /* reset authority, host, port, and set path */
-    parsed->authority = (h2o_iovec_t){};
-    parsed->host = (h2o_iovec_t){};
+    parsed->authority = (h2o_iovec_t){NULL};
+    parsed->host = (h2o_iovec_t){NULL};
     parsed->_port = 65535;
     parsed->path = h2o_iovec_init(p, url_end - p);
 
@@ -326,7 +326,7 @@ h2o_iovec_t h2o_url_resolve(h2o_mem_pool_t *pool, const h2o_url_t *base, const h
         h2o_url_resolve_path(&base_path, &relative_path);
     } else {
         assert(relative->path.len == 0);
-        relative_path = (h2o_iovec_t){};
+        relative_path = (h2o_iovec_t){NULL};
     }
 
 Build:

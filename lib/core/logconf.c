@@ -92,7 +92,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
     const char *pt = fmt;
     size_t fmt_len = strlen(fmt);
 
-    *logconf = (h2o_logconf_t){{}, escape};
+    *logconf = (h2o_logconf_t){{NULL}, escape};
 
 #define LAST_ELEMENT() (logconf->elements.entries + logconf->elements.size - 1)
 /* suffix buffer is always guaranteed to be larger than the fmt + (sizeof('\n') - 1) (so that they would be no buffer overruns) */
@@ -100,7 +100,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
     do {                                                                                                                           \
         h2o_vector_reserve(NULL, &logconf->elements, logconf->elements.size + 1);                                                  \
         logconf->elements.size++;                                                                                                  \
-        *LAST_ELEMENT() = (struct log_element_t){};                                                                                \
+        *LAST_ELEMENT() = (struct log_element_t){0};                                                                               \
         LAST_ELEMENT()->type = ty;                                                                                                 \
         LAST_ELEMENT()->suffix.base = h2o_mem_alloc(fmt_len + 1);                                                                  \
     } while (0)
@@ -412,7 +412,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
     char *line = buf, *pos = line, *line_end = line + *len;
     char *(*append_unsafe_string)(char *pos, const char *src, size_t len);
     size_t element_index, unsafe_factor;
-    struct tm localt = {};
+    struct tm localt = {0};
     int should_realloc_on_expand = 0;
 
     switch (logconf->escape) {

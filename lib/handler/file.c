@@ -252,7 +252,7 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
     }
     if ((fileref = h2o_filecache_open_file(req->conn->ctx->filecache, path, O_RDONLY | O_CLOEXEC)) == NULL)
         return NULL;
-    content_encoding = (h2o_iovec_t){};
+    content_encoding = (h2o_iovec_t){NULL};
 
 Opened:
     if (S_ISDIR(fileref->st.st_mode)) {
@@ -414,7 +414,7 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
     size_t range_start = SIZE_MAX, range_count = 0;
     char *buf = range_value->base, *buf_end = buf + range_value->len;
     int needs_comma = 0;
-    H2O_VECTOR(size_t) ranges = {};
+    H2O_VECTOR(size_t) ranges = {NULL};
 
     if (range_value->len < 6 || memcmp(buf, "bytes=", 6) != 0)
         return NULL;

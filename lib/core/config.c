@@ -78,7 +78,7 @@ static void on_dispose_envconf(void *_envconf)
 h2o_envconf_t *h2o_config_create_envconf(h2o_envconf_t *parent)
 {
     h2o_envconf_t *envconf = h2o_mem_alloc_shared(NULL, sizeof(*envconf), on_dispose_envconf);
-    *envconf = (h2o_envconf_t){};
+    *envconf = (h2o_envconf_t){NULL};
 
     if (parent != NULL) {
         envconf->parent = parent;
@@ -243,7 +243,7 @@ h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t h
     /* create hostconf */
     hostconf = create_hostconf(config);
     hostconf->authority.host = host_lc;
-    host_lc = (h2o_iovec_t){};
+    host_lc = (h2o_iovec_t){NULL};
     hostconf->authority.port = port;
     if (hostconf->authority.port == 65535) {
         hostconf->authority.hostport = hostconf->authority.host;

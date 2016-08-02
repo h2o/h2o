@@ -191,10 +191,10 @@ void h2o_http2_scheduler_open(h2o_http2_scheduler_openref_t *ref, h2o_http2_sche
 {
     init_node(&ref->node, parent);
     ref->weight = weight;
-    ref->_all_link = (h2o_linklist_t){};
+    ref->_all_link = (h2o_linklist_t){NULL};
     ref->_active_cnt = 0;
     ref->_self_is_active = 0;
-    ref->_queue_node = (h2o_http2_scheduler_queue_node_t){};
+    ref->_queue_node = (h2o_http2_scheduler_queue_node_t){{NULL}};
 
     h2o_linklist_insert(&parent->_all_refs, &ref->_all_link);
 

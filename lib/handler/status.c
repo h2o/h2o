@@ -69,7 +69,7 @@ static void collect_reqs_of_context(struct st_h2o_status_collector_t *collector,
 
     if (__sync_sub_and_fetch(&collector->num_remaining_threads_atomic, 1) == 0) {
         struct st_h2o_status_message_t *message = h2o_mem_alloc(sizeof(*message));
-        message->super = (h2o_multithread_message_t){};
+        message->super = (h2o_multithread_message_t){{NULL}};
         message->collector = collector;
         h2o_multithread_send_message(collector->src.receiver, &message->super);
     }
@@ -181,7 +181,7 @@ static int on_req_json(struct st_h2o_root_status_handler_t *self, h2o_req_t *req
 
         for (i = 0; i != self->receivers.size; ++i) {
             struct st_h2o_status_message_t *message = h2o_mem_alloc(sizeof(*message));
-            *message = (struct st_h2o_status_message_t){{}, collector};
+            *message = (struct st_h2o_status_message_t){{{NULL}}, collector};
             h2o_multithread_send_message(self->receivers.entries[i], &message->super);
         }
 

@@ -89,7 +89,7 @@ static void graceful_shutdown_resend_goaway(h2o_timeout_entry_t *entry)
     for (node = ctx->http2._conns.next; node != &ctx->http2._conns; node = node->next) {
         h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _conns, node);
         if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED)
-            enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, (h2o_iovec_t){});
+            enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, (h2o_iovec_t){NULL});
     }
 }
 
@@ -837,7 +837,7 @@ static int parse_input(h2o_http2_conn_t *conn)
         } else if (ret < 0) {
             if (ret != H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY) {
                 enqueue_goaway(conn, (int)ret,
-                               err_desc != NULL ? (h2o_iovec_t){(char *)err_desc, strlen(err_desc)} : (h2o_iovec_t){});
+                               err_desc != NULL ? (h2o_iovec_t){(char *)err_desc, strlen(err_desc)} : (h2o_iovec_t){NULL});
             }
             return close_connection(conn);
         }
@@ -1157,7 +1157,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         get_socket,   /* get underlying socket */
         {{
             {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits}, /* ssl */
-            {},                                                                      /* http1 */
+            {NULL},                                                                  /* http1 */
             {log_stream_id, log_priority_received, log_priority_received_exclusive, log_priority_received_parent,
              log_priority_received_weight, log_priority_actual, log_priority_actual_parent, log_priority_actual_weight} /* http2 */
         }} /* loggers */

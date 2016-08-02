@@ -178,7 +178,7 @@ static void close_generator_and_filters(h2o_req_t *req)
 
 static void reset_response(h2o_req_t *req)
 {
-    req->res = (h2o_res_t){0, NULL, SIZE_MAX, {}};
+    req->res = (h2o_res_t){0, NULL, SIZE_MAX};
     req->res.reason = "OK";
     req->_next_filter_index = 0;
     req->bytes_sent = 0;
@@ -552,7 +552,7 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
     }
     req->res.status = status;
     req->res.reason = reason;
-    req->res.headers = (h2o_headers_t){};
+    req->res.headers = (h2o_headers_t){NULL};
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LOCATION, url, url_len);
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/html; charset=utf-8"));
     h2o_start_response(req, &generator);

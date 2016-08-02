@@ -166,7 +166,7 @@ static struct {
     PTHREAD_RWLOCK_INITIALIZER
 #endif
     ,
-    {} /* tickets */
+    {NULL} /* tickets */
 };
 
 static struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EVP_MD *md, uint64_t not_before, uint64_t not_after,
@@ -427,7 +427,7 @@ static int parse_tickets(session_ticket_vector_t *tickets, const void *src, size
     yoml_t *doc;
     size_t i;
 
-    *tickets = (session_ticket_vector_t){};
+    *tickets = (session_ticket_vector_t){NULL};
     yaml_parser_initialize(&parser);
 
     yaml_parser_set_input_string(&parser, src, len);
@@ -479,7 +479,7 @@ static h2o_iovec_t serialize_tickets(session_ticket_vector_t *tickets)
     return data;
 Error:
     free(data.base);
-    return (h2o_iovec_t){};
+    return (h2o_iovec_t){NULL};
 }
 
 static int ticket_memcached_update_tickets(yrmcds *conn, h2o_iovec_t key, time_t now)
@@ -487,8 +487,8 @@ static int ticket_memcached_update_tickets(yrmcds *conn, h2o_iovec_t key, time_t
     yrmcds_response resp;
     yrmcds_error err;
     uint32_t serial;
-    session_ticket_vector_t tickets = {};
-    h2o_iovec_t tickets_serialized = {};
+    session_ticket_vector_t tickets = {NULL};
+    h2o_iovec_t tickets_serialized = {NULL};
     int retry = 0;
     char errbuf[256];
 
@@ -579,8 +579,8 @@ static int load_tickets_file(const char *fn)
 {
 #define ERR_PREFIX "failed to load session ticket secrets from file:%s:"
 
-    h2o_iovec_t data = {};
-    session_ticket_vector_t tickets = {};
+    h2o_iovec_t data = {NULL};
+    session_ticket_vector_t tickets = {NULL};
     char errbuf[256];
     int ret = -1;
 

@@ -605,7 +605,7 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
 {
     mrb_state *mrb = generator->ctx->mrb;
     mrb_value body;
-    h2o_iovec_t content = {};
+    h2o_iovec_t content = {NULL};
 
     /* set status */
     generator->req->res.status = (int)status;

@@ -138,7 +138,7 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     throttle->req = req;
     throttle->state.bufs.capacity = 0;
     throttle->state.bufs.size = 0;
-    throttle->timeout_entry = (h2o_timeout_entry_t){};
+    throttle->timeout_entry = (h2o_timeout_entry_t){0};
     throttle->timeout_entry.cb = add_token;
     throttle->tokens = throttle->token_inc;
     slot = &throttle->super.next;

@@ -25,7 +25,7 @@
 static int headers_are(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *s, size_t len)
 {
     size_t i;
-    h2o_iovec_t flattened = {};
+    h2o_iovec_t flattened = {NULL};
 
     for (i = 0; i != headers->size; ++i) {
         flattened = h2o_concat(pool, flattened, *headers->entries[i].name, h2o_iovec_init(H2O_STRLIT(": ")),
@@ -37,7 +37,7 @@ static int headers_are(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char 
 
 static void setup_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers)
 {
-    *headers = (h2o_headers_t){};
+    *headers = (h2o_headers_t){NULL};
     h2o_add_header(pool, headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
     h2o_add_header(pool, headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("public, max-age=86400"));
     h2o_add_header(pool, headers, H2O_TOKEN_SET_COOKIE, H2O_STRLIT("a=b"));

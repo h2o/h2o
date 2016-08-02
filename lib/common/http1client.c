@@ -461,7 +461,7 @@ static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_c
 {
     struct st_h2o_http1client_private_t *client = h2o_mem_alloc(sizeof(*client));
 
-    *client = (struct st_h2o_http1client_private_t){{ctx, {}}};
+    *client = (struct st_h2o_http1client_private_t){{ctx}};
     if (ssl_server_name.base != NULL)
         client->super.ssl.server_name = h2o_strdup(NULL, ssl_server_name.base, ssl_server_name.len).base;
     client->super.data = data;
@@ -487,7 +487,8 @@ void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1c
     h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);
 
     { /* directly call connect(2) if `host` is an IP address */
-        struct sockaddr_in sin = {};
+        struct sockaddr_in sin;
+        memset(&sin, 0, sizeof(sin));
         if (h2o_hostinfo_aton(host, &sin.sin_addr) == 0) {
             sin.sin_family = AF_INET;
             sin.sin_port = htons(port);

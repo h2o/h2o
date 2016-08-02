@@ -113,7 +113,7 @@ h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, h2o_socket_t *sock1, h2o_
     h2o_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
     tunnel->ctx = ctx;
     tunnel->timeout = timeout;
-    tunnel->timeout_entry = (h2o_timeout_entry_t){};
+    tunnel->timeout_entry = (h2o_timeout_entry_t){0};
     tunnel->timeout_entry.cb = on_timeout;
     tunnel->sock[0] = sock1;
     tunnel->sock[1] = sock2;

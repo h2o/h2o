@@ -323,7 +323,7 @@ static void test_if_modified_since(void)
 
 static void test_if_match(void)
 {
-    h2o_iovec_t etag = {};
+    h2o_iovec_t etag = {NULL};
 
     { /* obtain etag */
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
@@ -532,7 +532,7 @@ static void test_range_req(void)
     { /* multiple ranges */
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         ssize_t content_type_index;
-        h2o_iovec_t content_type, expected[2] = {};
+        h2o_iovec_t content_type, expected[2] = {{NULL}};
         char boundary[BOUNDARY_SIZE + 1];
         size_t mimebaselen = strlen("multipart/byteranges; boundary=");
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
@@ -562,7 +562,7 @@ static void test_range_req(void)
     { /* multiple ranges with plenty of WS and COMMA */
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         ssize_t content_type_index;
-        h2o_iovec_t content_type, expected[2] = {};
+        h2o_iovec_t content_type, expected[2] = {{NULL}};
         char boundary[BOUNDARY_SIZE + 1];
         size_t mimebaselen = strlen("multipart/byteranges; boundary=");
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));

@@ -104,7 +104,7 @@ static void init_async(h2o_multithread_queue_t *queue, h2o_loop_t *loop)
 h2o_multithread_queue_t *h2o_multithread_create_queue(h2o_loop_t *loop)
 {
     h2o_multithread_queue_t *queue = h2o_mem_alloc(sizeof(*queue));
-    *queue = (h2o_multithread_queue_t){};
+    memset(queue, 0, sizeof(*queue));
 
 #if H2O_USE_LIBUV
     uv_async_init(loop, &queue->async, (void *)queue_cb);
@@ -136,7 +136,7 @@ void h2o_multithread_register_receiver(h2o_multithread_queue_t *queue, h2o_multi
                                        h2o_multithread_receiver_cb cb)
 {
     receiver->queue = queue;
-    receiver->_link = (h2o_linklist_t){};
+    receiver->_link = (h2o_linklist_t){NULL};
     h2o_linklist_init_anchor(&receiver->_messages);
     receiver->cb = cb;
 

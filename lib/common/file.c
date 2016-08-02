@@ -33,7 +33,7 @@ h2o_iovec_t h2o_file_read(const char *fn)
 {
     int fd;
     struct stat st;
-    h2o_iovec_t ret = {};
+    h2o_iovec_t ret = {NULL};
 
     /* open */
     if ((fd = open(fn, O_RDONLY | O_CLOEXEC)) == -1)
@@ -63,5 +63,5 @@ Error:
     if (fd != -1)
         close(fd);
     free(ret.base);
-    return (h2o_iovec_t){};
+    return (h2o_iovec_t){NULL};
 }

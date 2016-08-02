@@ -43,7 +43,7 @@ static inline int mimemap_type_equals(h2o_mimemap_type_t *x, h2o_mimemap_type_t 
 
 KHASH_INIT(typeset, h2o_mimemap_type_t *, char, 0, hash_mimemap_type, mimemap_type_equals)
 
-h2o_mime_attributes_t h2o_mime_attributes_as_is = {};
+h2o_mime_attributes_t h2o_mime_attributes_as_is;
 
 struct st_h2o_mimemap_t {
     khash_t(extmap) * extmap;
@@ -387,7 +387,7 @@ void h2o_mimemap_get_default_attributes(const char *_mime, h2o_mime_attributes_t
     if ((type_end_at = strchr(mime, ';')) == NULL)
         type_end_at = mime + strlen(mime);
 
-    *attr = (h2o_mime_attributes_t){};
+    *attr = (h2o_mime_attributes_t){0};
 
     if (strncmp(mime, "text/", 5) == 0 || h2o_strstr(mime, type_end_at - mime, H2O_STRLIT("+xml")) != SIZE_MAX)
         attr->is_compressible = 1;

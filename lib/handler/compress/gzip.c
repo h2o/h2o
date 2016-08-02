@@ -136,7 +136,7 @@ h2o_compress_context_t *h2o_compress_gzip_open(h2o_mem_pool_t *pool, int quality
     /* Z_BEST_SPEED for on-the-fly compression, memlevel set to 8 as suggested by the manual */
     deflateInit2(&self->zs, quality, Z_DEFLATED, WINDOW_BITS, 8, Z_DEFAULT_STRATEGY);
     self->zs_is_open = 1;
-    self->bufs = (iovec_vector_t){};
+    self->bufs = (iovec_vector_t){NULL};
     expand_buf(&self->bufs);
 
     return &self->super;
