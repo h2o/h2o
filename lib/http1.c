@@ -199,7 +199,7 @@ static void handle_chunked_entity_read(struct st_h2o_http1_conn_t *conn)
     conn->_reqsize = inbuf->size;
     inbuf->size += ret; /* restore the number of extra bytes */
 
-    return on_entity_read_complete(conn);
+    on_entity_read_complete(conn);
 }
 
 static int create_chunked_entity_reader(struct st_h2o_http1_conn_t *conn)
