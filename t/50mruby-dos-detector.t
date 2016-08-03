@@ -82,8 +82,12 @@ hosts:
           require "share/h2o/mruby/dos_detector.rb"
           DoSDetector.new({
             :strategy => DoSDetector::CountingStrategy.new({ :period => 1000, :threshold => 2, :ban_period => 1 << 32 }),
-            :callback => Proc.new do |vars|
-              [503, {}, ["Service Unavailable"]]
+            :callback => Proc.new do |detected, ip|
+              if detected
+                [503, {}, ["Service Unavailable"]]
+              else
+                [399, {}, []]
+              end
             end
           })
         mruby.handler:

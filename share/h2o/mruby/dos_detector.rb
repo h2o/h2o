@@ -1,3 +1,23 @@
+# Copyright (c) 2016 DeNA Co., Ltd., Ichito Nagata
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to
+# deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
+#
 require "lru_cache.rb"
 
 class DoSDetector
@@ -19,15 +39,24 @@ class DoSDetector
   end
 
   def self.default_callback
-    Proc.new do |vars|
-      [ 403, { "Content-Type" => "text/plain" }, [ "Forbidden" ] ]
+    Proc.new do |detected, ip|
+      if detected
+        [ 403, { "Content-Type" => "text/plain" }, [ "Forbidden" ] ]
+      else
+        [ 399, {}, [] ]
+      end
     end
   end
 
   def self.fallthrough_callback
-    Proc.new do |vars|
-      env_headers = vars.map { |k, v| [ "x-fallthru-set-dos-#{k}", v.to_s ] }.to_h
-      [ 399, env_headers, [] ]
+    Proc.new do |detected, ip, vars|
+      if detected
+        vars ||= {}
+        env_headers = vars.merge({:ip => ip}).map { |k, v| [ "x-fallthru-set-dos-#{k}", v.to_s ] }.to_h
+        [ 399, env_headers, [] ]
+      else
+        [ 399, {}, [] ]
+      end
     end
   end
 
@@ -44,12 +73,8 @@ class DoSDetector
       @cache.set(ip, client)
     end
 
-    detected, vars = @strategy.detect?(client, now, env)
-    if detected
-      vars = { :ip => client[:ip] }.merge(vars || {})
-      return @callback.call(vars)
-    end
-    return [ 399, {}, [] ]
+    detected, *args = @strategy.detect?(client, now, env)
+    return @callback.call(detected, ip, *args)
   end
 
   class CountingStrategy
