@@ -39,7 +39,7 @@ class DoSDetector
   end
 
   def self.default_callback
-    Proc.new do |detected, ip|
+    Proc.new do |env, detected, ip|
       if detected
         [ 403, { "Content-Type" => "text/plain" }, [ "Forbidden" ] ]
       else
@@ -49,7 +49,7 @@ class DoSDetector
   end
 
   def self.fallthrough_callback
-    Proc.new do |detected, ip, vars|
+    Proc.new do |env, detected, ip, vars|
       if detected
         vars ||= {}
         env_headers = vars.merge({:ip => ip}).map { |k, v| [ "x-fallthru-set-dos-#{k}", v.to_s ] }.to_h
@@ -74,7 +74,7 @@ class DoSDetector
     end
 
     detected, *args = @strategy.detect?(client, now, env)
-    return @callback.call(detected, ip, *args)
+    return @callback.call(env, detected, ip, *args)
   end
 
   class CountingStrategy
