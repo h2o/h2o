@@ -310,9 +310,9 @@ size_t h2o_stringify_protocol_version(char *dst, int version)
     return p - dst;
 }
 
-static void push_one_path(h2o_mem_pool_t *pool, h2o_iovec_vector_t *paths_to_push, h2o_iovec_t *url,
-                          h2o_iovec_t base_path, const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
-                          const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority)
+static void push_one_path(h2o_mem_pool_t *pool, h2o_iovec_vector_t *paths_to_push, h2o_iovec_t *url, h2o_iovec_t base_path,
+                          const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority, const h2o_url_scheme_t *base_scheme,
+                          h2o_iovec_t *base_authority)
 {
     h2o_url_t parsed, resolved;
 
@@ -343,9 +343,10 @@ static void push_one_path(h2o_mem_pool_t *pool, h2o_iovec_vector_t *paths_to_pus
     paths_to_push->entries[paths_to_push->size++] = resolved.path;
 }
 
-h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len, h2o_iovec_t base_path,
-                                                      const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
-                                                      const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority)
+h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
+                                                          h2o_iovec_t base_path, const h2o_url_scheme_t *input_scheme,
+                                                          h2o_iovec_t input_authority, const h2o_url_scheme_t *base_scheme,
+                                                          h2o_iovec_t *base_authority)
 {
     h2o_iovec_vector_t paths_to_push = {};
     h2o_iovec_t iter = h2o_iovec_init(value, value_len), token_value;
@@ -365,7 +366,7 @@ h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, 
         while ((token = h2o_next_token(&iter, ';', &token_len, &token_value)) != NULL &&
                !h2o_memis(token, token_len, H2O_STRLIT(","))) {
             if (h2o_lcstris(token, token_len, H2O_STRLIT("rel")) &&
-                    h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload"))) {
+                h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload"))) {
                 preload++;
             } else if (h2o_lcstris(token, token_len, H2O_STRLIT("nopush"))) {
                 nopush++;
@@ -401,7 +402,7 @@ int h2o_get_compressible_types(const h2o_headers_t *headers)
     return compressible_types;
 }
 
-h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t prefix_len)
+h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t prefix_len, int use_path_normalized)
 {
     h2o_iovec_t parts[4];
     size_t num_parts = 0;
@@ -422,10 +423,29 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
     }
 
     /* append suffix path and query */
-    parts[num_parts++] = h2o_uri_escape(
-        &req->pool, req->path_normalized.base + req->pathconf->path.len, req->path_normalized.len - req->pathconf->path.len, "/@:");
-    if (req->query_at != SIZE_MAX)
-        parts[num_parts++] = h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at);
+
+    if (use_path_normalized) {
+        parts[num_parts++] = h2o_uri_escape(&req->pool, req->path_normalized.base + req->pathconf->path.len,
+                                            req->path_normalized.len - req->pathconf->path.len, "/@:");
+        if (req->query_at != SIZE_MAX) {
+            parts[num_parts++] = h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at);
+        }
+    } else {
+        if (req->path.len > 1) {
+            /*
+             * When proxying, we want to modify the input URL as little
+             * as possible. We use norm_indexes to find the start of
+             * the path we want to forward.
+             */
+            size_t next_unnormalized;
+            if (req->norm_indexes && req->pathconf->path.len > 1) {
+                next_unnormalized = req->norm_indexes[req->pathconf->path.len - 1];
+            } else {
+                next_unnormalized = req->pathconf->path.len;
+            }
+            parts[num_parts++] = (h2o_iovec_t){req->path.base + next_unnormalized, req->path.len - next_unnormalized};
+        }
+    }
 
     return h2o_concat_list(&req->pool, parts, num_parts);
 }

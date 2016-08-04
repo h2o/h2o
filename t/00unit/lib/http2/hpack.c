@@ -30,7 +30,7 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     h2o_iovec_t in;
     int r, pseudo_headers_map;
     size_t content_length;
-    const char *err_desc;
+    const char *err_desc = NULL;
 
     memset(&header_table, 0, sizeof(header_table));
     header_table.hpack_capacity = 4096;
@@ -165,9 +165,11 @@ static void test_hpack(void)
     note("decode_huffman");
     {
         h2o_iovec_t huffcode = {H2O_STRLIT("\xf1\xe3\xc2\xe5\xf2\x3a\x6b\xa0\xab\x90\xf4\xff")};
-        h2o_iovec_t *decoded = decode_huffman(&pool, (const uint8_t *)huffcode.base, huffcode.len);
+        uint8_t flags = 0;
+        h2o_iovec_t *decoded = decode_huffman(&pool, (const uint8_t *)huffcode.base, huffcode.len, &flags);
         ok(decoded->len == sizeof("www.example.com") - 1);
         ok(strcmp(decoded->base, "www.example.com") == 0);
+        ok(flags == 0);
     }
     h2o_mem_clear_pool(&pool);
 
@@ -175,11 +177,12 @@ static void test_hpack(void)
     {
         char *str = "\x8c\xf1\xe3\xc2\xe5\xf2\x3a\x6b\xa0\xab\x90\xf4\xff";
         const uint8_t *buf;
+        const char *errstr = NULL;
         size_t len;
         len = strlen(str);
         buf = (const uint8_t *)str;
         /* since we're only passing one byte, decode_string should fail */
-        h2o_iovec_t *decoded = decode_string(&pool, &buf, &buf[1]);
+        h2o_iovec_t *decoded = decode_string(&pool, &buf, &buf[1], 0, &errstr);
         ok(decoded == NULL);
     }
     h2o_mem_clear_pool(&pool);
@@ -196,6 +199,7 @@ static void test_hpack(void)
         in = h2o_iovec_init(
             H2O_STRLIT("\x40\x0a\x63\x75\x73\x74\x6f\x6d\x2d\x6b\x65\x79\x0d\x63\x75\x73\x74\x6f\x6d\x2d\x68\x65\x61\x64\x65\x72"));
         const uint8_t *p = (const uint8_t *)in.base;
+        err_desc = NULL;
         r = decode_header(&pool, &result, &header_table, &p, p + in.len, &err_desc);
         ok(r == 0);
         ok(result.name->len == 10);
@@ -217,6 +221,7 @@ static void test_hpack(void)
         header_table.hpack_capacity = 4096;
         in = h2o_iovec_init(H2O_STRLIT("\x04\x0c\x2f\x73\x61\x6d\x70\x6c\x65\x2f\x70\x61\x74\x68"));
         const uint8_t *p = (const uint8_t *)in.base;
+        err_desc = NULL;
         r = decode_header(&pool, &result, &header_table, &p, p + in.len, &err_desc);
         ok(r == 0);
         ok(result.name == &H2O_TOKEN_PATH->buf);
@@ -237,6 +242,7 @@ static void test_hpack(void)
         header_table.hpack_capacity = 4096;
         in = h2o_iovec_init(H2O_STRLIT("\x10\x08\x70\x61\x73\x73\x77\x6f\x72\x64\x06\x73\x65\x63\x72\x65\x74"));
         const uint8_t *p = (const uint8_t *)in.base;
+        err_desc = NULL;
         r = decode_header(&pool, &result, &header_table, &p, p + in.len, &err_desc);
         ok(r == 0);
         ok(result.name->len == 8);
@@ -258,6 +264,7 @@ static void test_hpack(void)
         header_table.hpack_capacity = 4096;
         in = h2o_iovec_init(H2O_STRLIT("\x82"));
         const uint8_t *p = (const uint8_t *)in.base;
+        err_desc = NULL;
         r = decode_header(&pool, &result, &header_table, &p, p + in.len, &err_desc);
         ok(r == 0);
         ok(result.name == &H2O_TOKEN_METHOD->buf);
@@ -331,7 +338,7 @@ static void parse_and_compare_request(h2o_hpack_header_table_t *ht, const char *
 
     int pseudo_header_exists_map = 0;
     size_t content_length = SIZE_MAX;
-    const char *err_desc;
+    const char *err_desc = NULL;
     int r = h2o_hpack_parse_headers(&req, ht, (void *)(promise_base + 13), promise_len - 13, &pseudo_header_exists_map,
                                     &content_length, NULL, &err_desc);
     ok(r == 0);
@@ -360,8 +367,8 @@ static void parse_and_compare_request(h2o_hpack_header_table_t *ht, const char *
 static void test_hpack_push(void)
 {
     const static h2o_iovec_t method = {H2O_STRLIT("GET")}, authority = {H2O_STRLIT("example.com")},
-                             user_agent = {
-                                 H2O_STRLIT("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:40.0) Gecko/20100101 Firefox/40.0")},
+                             user_agent = {H2O_STRLIT(
+                                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:40.0) Gecko/20100101 Firefox/40.0")},
                              accept_root = {H2O_STRLIT("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")},
                              accept_images = {H2O_STRLIT("image/png,image/*;q=0.8,*/*;q=0.5")},
                              accept_language = {H2O_STRLIT("ja,en-US;q=0.7,en;q=0.3")},

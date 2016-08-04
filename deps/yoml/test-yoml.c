@@ -250,5 +250,29 @@ int main(int argc, char **argv)
     ok(doc->data.sequence.elements[1]->data.mapping.elements[2].value->type == YOML_TYPE_SCALAR);
     ok(strcmp(doc->data.sequence.elements[1]->data.mapping.elements[2].value->data.scalar, "2") == 0);
 
+    doc = parse(
+        "foo.yaml",
+        "a: &link1\n"
+        " x: 1\n"
+        "b: &link2\n"
+        " <<: *link1\n"
+        " y: 2\n"
+        "c:\n"
+        " <<: *link2\n"
+    );
+    ok(doc != NULL);
+    ok(doc->type == YOML_TYPE_MAPPING);
+    ok(doc->data.mapping.size == 3);
+    ok(doc->data.mapping.elements[2].value->type == YOML_TYPE_MAPPING);
+    ok(doc->data.mapping.elements[2].value->data.mapping.size == 2);
+    ok(doc->data.mapping.elements[2].value->data.mapping.elements[0].key->type == YOML_TYPE_SCALAR);
+    ok(strcmp(doc->data.mapping.elements[2].value->data.mapping.elements[0].key->data.scalar, "x") == 0);
+    ok(doc->data.mapping.elements[2].value->data.mapping.elements[0].value->type == YOML_TYPE_SCALAR);
+    ok(strcmp(doc->data.mapping.elements[2].value->data.mapping.elements[0].value->data.scalar, "1") == 0);
+    ok(doc->data.mapping.elements[2].value->data.mapping.elements[1].key->type == YOML_TYPE_SCALAR);
+    ok(strcmp(doc->data.mapping.elements[2].value->data.mapping.elements[1].key->data.scalar, "y") == 0);
+    ok(doc->data.mapping.elements[2].value->data.mapping.elements[1].value->type == YOML_TYPE_SCALAR);
+    ok(strcmp(doc->data.mapping.elements[2].value->data.mapping.elements[1].value->data.scalar, "2") == 0);
+
     return done_testing();
 }

@@ -205,8 +205,7 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
             if (cmd->cb(cmd, ctx, value) != 0)
                 goto Exit;
         }
-    SkipCommand:
-        ;
+    SkipCommand:;
     }
     for (i = 0; i != semi_deferred.size; ++i) {
         struct st_cmd_value_t *pair = semi_deferred.entries + i;
@@ -409,7 +408,6 @@ static int on_config_http2_push_preload(h2o_configurator_command_t *cmd, h2o_con
 
     return 0;
 }
-
 
 static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
@@ -778,7 +776,7 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         c->super.exit = on_core_exit;
         c->vars = c->_vars_stack;
         c->vars->http2.reprioritize_blocking_assets = 1; /* defaults to ON */
-        c->vars->http2.push_preload = 1; /* defaults to ON */
+        c->vars->http2.push_preload = 1;                 /* defaults to ON */
         h2o_configurator_define_command(&c->super, "limit-request-body",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_limit_request_body);
@@ -813,9 +811,8 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
                                             H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_reprioritize_blocking_assets);
-        h2o_configurator_define_command(&c->super, "http2-push-preload",
-                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
-                                            H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        h2o_configurator_define_command(&c->super, "http2-push-preload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
+                                                                             H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_push_preload);
         h2o_configurator_define_command(&c->super, "http2-casper", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST,
                                         on_config_http2_casper);
@@ -846,7 +843,8 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_server_name);
         h2o_configurator_define_command(&c->super, "send-server-name",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
-                                        H2O_CONFIGURATOR_FLAG_DEFERRED , on_config_send_server_name);
+                                            H2O_CONFIGURATOR_FLAG_DEFERRED,
+                                        on_config_send_server_name);
     }
 }
 

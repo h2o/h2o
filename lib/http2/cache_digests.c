@@ -77,7 +77,7 @@ static void load_digest(h2o_cache_digests_t **digests, const char *gcs_base64, s
     uint64_t value = UINT64_MAX, decoded;
     while (golombset_decode_value(&ctx, (unsigned)pbits, &decoded) == 0) {
         value += decoded + 1;
-        if (value >= (uint64_t) 1 << frame.capacity_bits)
+        if (value >= (uint64_t)1 << frame.capacity_bits)
             goto Exit;
         h2o_vector_reserve(NULL, &frame.keys, frame.keys.size + 1);
         frame.keys.entries[frame.keys.size++] = value;

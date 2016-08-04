@@ -312,7 +312,6 @@ void do_read_stop(h2o_socket_t *_sock)
     link_to_statechanged(sock);
 }
 
-
 void h2o_socket_dont_read(h2o_socket_t *_sock, int dont_read)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
@@ -367,7 +366,7 @@ socklen_t get_peername_uncached(h2o_socket_t *_sock, struct sockaddr *sa)
     return len;
 }
 
-struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, int flags)
+static struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, int flags)
 {
     struct st_h2o_evloop_socket_t *sock;
 

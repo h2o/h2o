@@ -223,8 +223,7 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
             }
         }
         ctx_index = 0;
-    Found:
-        ;
+    Found:;
     }
 
     if (SSL_get_SSL_CTX(ssl) != listener->ssl.entries[ctx_index]->ctx)
@@ -478,8 +477,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 #endif
 #undef MAP
             h2o_configurator_errprintf(cmd, minimum_version, "unknown protocol version: %s", minimum_version->data.scalar);
-        VersionFound:
-            ;
+        VersionFound:;
         } else {
             /* default is >= TLSv1 */
             ssl_options |= SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
@@ -1570,12 +1568,9 @@ int main(int argc, char **argv)
 
     { /* parse options */
         int ch;
-        static struct option longopts[] = {{"conf", required_argument, NULL, 'c'},
-                                           {"mode", required_argument, NULL, 'm'},
-                                           {"test", no_argument, NULL, 't'},
-                                           {"version", no_argument, NULL, 'v'},
-                                           {"help", no_argument, NULL, 'h'},
-                                           {NULL, 0, NULL, 0}};
+        static struct option longopts[] = {{"conf", required_argument, NULL, 'c'}, {"mode", required_argument, NULL, 'm'},
+                                           {"test", no_argument, NULL, 't'},       {"version", no_argument, NULL, 'v'},
+                                           {"help", no_argument, NULL, 'h'},       {NULL}};
         while ((ch = getopt_long(argc, argv, "c:m:tvh", longopts, NULL)) != -1) {
             switch (ch) {
             case 'c':

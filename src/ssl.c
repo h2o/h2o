@@ -169,8 +169,8 @@ static struct {
     {} /* tickets */
 };
 
-struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EVP_MD *md, uint64_t not_before, uint64_t not_after,
-                                       int fill_in)
+static struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EVP_MD *md, uint64_t not_before, uint64_t not_after,
+                                              int fill_in)
 {
     struct st_session_ticket_t *ticket = h2o_mem_alloc(sizeof(*ticket) + cipher->key_len + md->block_size);
 
@@ -894,9 +894,9 @@ static unsigned long thread_id_callback(void)
 
 static int add_lock_callback(int *num, int amount, int type, const char *file, int line)
 {
-    (void) type;
-    (void) file;
-    (void) line;
+    (void)type;
+    (void)file;
+    (void)line;
 
     return __sync_add_and_fetch(num, amount);
 }

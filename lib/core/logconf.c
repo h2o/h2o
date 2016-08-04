@@ -572,7 +572,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         if (index == -1)                                                                                                           \
             goto EmitDash;                                                                                                         \
         const h2o_header_t *header = (headers)->entries + index;                                                                   \
-        RESERVE(header->value.len * unsafe_factor);                                                                                            \
+        RESERVE(header->value.len *unsafe_factor);                                                                                 \
         pos = append_unsafe_string(pos, header->value.base, header->value.len);                                                    \
     } while (0)
         case ELEMENT_TYPE_IN_HEADER_TOKEN:

@@ -389,8 +389,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
             value = h2o_strdup(&req->pool, headers[i].value, headers[i].value_len);
         AddHeader:
             h2o_add_header(&req->pool, &req->res.headers, token, value.base, value.len);
-        Skip:
-            ;
+        Skip:;
         } else {
             h2o_iovec_t name = h2o_strdup(&req->pool, headers[i].name, headers[i].name_len);
             h2o_iovec_t value = h2o_strdup(&req->pool, headers[i].value, headers[i].value_len);

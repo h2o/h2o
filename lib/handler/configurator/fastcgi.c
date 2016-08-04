@@ -213,7 +213,7 @@ Error:
     return -1;
 }
 
-void spawnproc_on_dispose(h2o_fastcgi_handler_t *handler, void *data)
+static void spawnproc_on_dispose(h2o_fastcgi_handler_t *handler, void *data)
 {
     int pipe_fd = (int)((char *)data - (char *)NULL);
     close(pipe_fd);
