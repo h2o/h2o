@@ -199,7 +199,7 @@ static void handle_chunked_entity_read(struct st_h2o_http1_conn_t *conn)
     conn->_reqsize = inbuf->size;
     inbuf->size += ret; /* restore the number of extra bytes */
 
-    return on_entity_read_complete(conn);
+    on_entity_read_complete(conn);
 }
 
 static int create_chunked_entity_reader(struct st_h2o_http1_conn_t *conn)
@@ -761,7 +761,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
         {{
             {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits}, /* ssl */
             {log_request_index},                                                     /* http1 */
-            {}                                                                       /* http2 */
+            {NULL}                                                                   /* http2 */
         }}};
     struct st_h2o_http1_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx->ctx, ctx->hosts, connected_at, &callbacks);
 

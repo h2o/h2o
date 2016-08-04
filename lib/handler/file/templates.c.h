@@ -33,7 +33,7 @@ static int cmpstrptr(const void *_x, const void *_y)
 
 static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t path_normalized, DIR *dp)
 {
-    H2O_VECTOR(char *) files = {};
+    H2O_VECTOR(char *) files = {NULL};
 
     { /* build list of files */
         struct dirent dent, *dentp;

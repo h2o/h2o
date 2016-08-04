@@ -216,7 +216,7 @@ int h2o_cache_set(h2o_cache_t *cache, uint64_t now, h2o_iovec_t key, h2o_cache_h
 
     /* create newref */
     newref = h2o_mem_alloc(sizeof(*newref));
-    *newref = (h2o_cache_ref_t){h2o_strdup(NULL, key.base, key.len), keyhash, now, value, 0, {}, {}, 1};
+    *newref = (h2o_cache_ref_t){h2o_strdup(NULL, key.base, key.len), keyhash, now, value, 0, {NULL}, {NULL}, 1};
 
     lock_cache(cache);
 

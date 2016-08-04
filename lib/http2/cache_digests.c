@@ -54,9 +54,9 @@ void h2o_cache_digests_destroy(h2o_cache_digests_t *digests)
 static void load_digest(h2o_cache_digests_t **digests, const char *gcs_base64, size_t gcs_base64_len, int with_validators,
                         int complete)
 {
-    h2o_cache_digests_frame_t frame = {};
+    h2o_cache_digests_frame_t frame = {{NULL}};
     h2o_iovec_t gcs_bin;
-    struct st_golombset_decode_t ctx = {};
+    struct st_golombset_decode_t ctx = {NULL};
     uint64_t nbits, pbits;
 
     /* decode base64 */
@@ -86,12 +86,12 @@ static void load_digest(h2o_cache_digests_t **digests, const char *gcs_base64, s
     /* store the result */
     if (*digests == NULL) {
         *digests = h2o_mem_alloc(sizeof(**digests));
-        **digests = (h2o_cache_digests_t){};
+        **digests = (h2o_cache_digests_t){{{NULL}}};
     }
     h2o_cache_digests_frame_vector_t *target = with_validators ? &(*digests)->fresh.url_and_etag : &(*digests)->fresh.url_only;
     h2o_vector_reserve(NULL, target, target->size + 1);
     target->entries[target->size++] = frame;
-    frame = (h2o_cache_digests_frame_t){};
+    frame = (h2o_cache_digests_frame_t){{NULL}};
     (*digests)->fresh.complete = complete;
 
 Exit:

@@ -38,7 +38,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     h2o_iovec_t *authority;
 
     /* setup overrides */
-    *overrides = (h2o_req_overrides_t){};
+    *overrides = (h2o_req_overrides_t){NULL};
     if (self->sockpool != NULL) {
         overrides->socketpool = self->sockpool;
     } else if (self->config.preserve_host) {

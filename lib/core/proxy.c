@@ -78,7 +78,7 @@ static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, 
                       h2o_iovec_init(loc_parsed.path.base + match->path.len, loc_parsed.path.len - match->path.len));
 
 NoRewrite:
-    return (h2o_iovec_t){};
+    return (h2o_iovec_t){NULL};
 }
 
 static h2o_iovec_t build_request_merge_headers(h2o_mem_pool_t *pool, h2o_iovec_t merged, h2o_iovec_t added, int seperator)
@@ -106,7 +106,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
     char remote_addr[NI_MAXHOST];
     struct sockaddr_storage ss;
     socklen_t sslen;
-    h2o_iovec_t cookie_buf = {}, xff_buf = {}, via_buf = {};
+    h2o_iovec_t cookie_buf = {NULL}, xff_buf = {NULL}, via_buf = {NULL};
     int preserve_x_forwarded_proto = req->conn->ctx->globalconf->proxy.preserve_x_forwarded_proto;
     int emit_x_forwarded_headers = req->conn->ctx->globalconf->proxy.emit_x_forwarded_headers;
 

@@ -73,7 +73,7 @@ static int on_config_mruby_handler_file(h2o_configurator_command_t *cmd, h2o_con
 {
     struct mruby_configurator_t *self = (void *)cmd->configurator;
     FILE *fp = NULL;
-    h2o_iovec_t buf = {};
+    h2o_iovec_t buf = {NULL};
     int ret = -1;
 
     /* open and read file */

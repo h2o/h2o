@@ -344,7 +344,7 @@ void h2o_socket_dispose_export(h2o_socket_export_t *info)
 
 int h2o_socket_export(h2o_socket_t *sock, h2o_socket_export_t *info)
 {
-    static h2o_buffer_prototype_t nonpooling_prototype = {};
+    static h2o_buffer_prototype_t nonpooling_prototype;
 
     assert(!h2o_socket_is_writing(sock));
 
@@ -837,7 +837,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 
 static void proceed_handshake(h2o_socket_t *sock, const char *err)
 {
-    h2o_iovec_t first_input = {};
+    h2o_iovec_t first_input = {NULL};
     int ret;
 
     sock->_cb.write = NULL;

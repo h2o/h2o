@@ -78,7 +78,8 @@ int dumb_https_server(unsigned short port, SSL_CTX *ctx)
         SSL_set_fd(ssl, conn_fd);
         if (SSL_accept(ssl) == 1) {
             SSL_read(ssl, buf, sizeof(buf));
-            const char *resp = "HTTP/1.0 200 OK\r\nContent-Length: 6\r\nConnection: close\r\nContent-Type: text/plain\r\n\r\nhello\n";
+            const char *resp =
+                "HTTP/1.0 200 OK\r\nContent-Length: 6\r\nConnection: close\r\nContent-Type: text/plain\r\n\r\nhello\n";
             SSL_write(ssl, resp, strlen(resp));
             SSL_shutdown(ssl);
         } else {
@@ -136,10 +137,10 @@ int main(int argc, char **argv)
             return 111;
         }
     } else {
-       if (SSL_CTX_use_PrivateKey_file(ctx, argv[4], SSL_FILETYPE_PEM) != 1) {
-           fprintf(stderr, "failed to load private key from file:%s\n", argv[4]);
-           return 111;
-       }
+        if (SSL_CTX_use_PrivateKey_file(ctx, argv[4], SSL_FILETYPE_PEM) != 1) {
+            fprintf(stderr, "failed to load private key from file:%s\n", argv[4]);
+            return 111;
+        }
     }
 
     /* start the httpd */

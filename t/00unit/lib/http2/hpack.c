@@ -333,7 +333,7 @@ static void parse_and_compare_request(h2o_hpack_header_table_t *ht, const char *
                                       h2o_iovec_t expected_method, const h2o_url_scheme_t *expected_scheme,
                                       h2o_iovec_t expected_authority, h2o_iovec_t expected_path, ...)
 {
-    h2o_req_t req = {};
+    h2o_req_t req = {NULL};
     h2o_mem_init_pool(&req.pool);
 
     int pseudo_header_exists_map = 0;
@@ -374,9 +374,9 @@ static void test_hpack_push(void)
                              accept_language = {H2O_STRLIT("ja,en-US;q=0.7,en;q=0.3")},
                              accept_encoding = {H2O_STRLIT("gzip, deflate")}, referer = {H2O_STRLIT("https://example.com/")};
 
-    h2o_hpack_header_table_t encode_table = {}, decode_table = {};
+    h2o_hpack_header_table_t encode_table = {NULL}, decode_table = {NULL};
     encode_table.hpack_capacity = decode_table.hpack_capacity = 4096;
-    h2o_req_t req = {};
+    h2o_req_t req = {NULL};
     h2o_mem_init_pool(&req.pool);
     h2o_buffer_t *buf;
     h2o_buffer_init(&buf, &h2o_socket_buffer_prototype);
@@ -396,12 +396,12 @@ static void test_hpack_push(void)
     parse_and_compare_request(&decode_table, buf->bytes, buf->size, method, &H2O_URL_SCHEME_HTTPS, authority,
                               h2o_iovec_init(H2O_STRLIT("/")), H2O_TOKEN_USER_AGENT->buf, user_agent, H2O_TOKEN_ACCEPT->buf,
                               accept_root, H2O_TOKEN_ACCEPT_LANGUAGE->buf, accept_language, H2O_TOKEN_ACCEPT_ENCODING->buf,
-                              accept_encoding, (h2o_iovec_t){});
+                              accept_encoding, (h2o_iovec_t){NULL});
     h2o_buffer_consume(&buf, buf->size);
 
     /* setup second request */
     req.input.path = h2o_iovec_init(H2O_STRLIT("/banner.jpg"));
-    req.headers = (h2o_headers_t){};
+    req.headers = (h2o_headers_t){NULL};
     h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_USER_AGENT, user_agent.base, user_agent.len);
     h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT, accept_images.base, accept_images.len);
     h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT_LANGUAGE, accept_language.base, accept_language.len);
@@ -413,7 +413,8 @@ static void test_hpack_push(void)
     parse_and_compare_request(&decode_table, buf->bytes, buf->size, method, &H2O_URL_SCHEME_HTTPS, authority,
                               h2o_iovec_init(H2O_STRLIT("/banner.jpg")), H2O_TOKEN_USER_AGENT->buf, user_agent,
                               H2O_TOKEN_ACCEPT->buf, accept_images, H2O_TOKEN_ACCEPT_LANGUAGE->buf, accept_language,
-                              H2O_TOKEN_ACCEPT_ENCODING->buf, accept_encoding, H2O_TOKEN_REFERER->buf, referer, (h2o_iovec_t){});
+                              H2O_TOKEN_ACCEPT_ENCODING->buf, accept_encoding, H2O_TOKEN_REFERER->buf, referer,
+                              (h2o_iovec_t){NULL});
     h2o_buffer_consume(&buf, buf->size);
 
     /* setup third request (headers are the same) */
@@ -424,7 +425,7 @@ static void test_hpack_push(void)
     parse_and_compare_request(&decode_table, buf->bytes, buf->size, method, &H2O_URL_SCHEME_HTTPS, authority,
                               h2o_iovec_init(H2O_STRLIT("/icon.png")), H2O_TOKEN_USER_AGENT->buf, user_agent, H2O_TOKEN_ACCEPT->buf,
                               accept_images, H2O_TOKEN_ACCEPT_LANGUAGE->buf, accept_language, H2O_TOKEN_ACCEPT_ENCODING->buf,
-                              accept_encoding, H2O_TOKEN_REFERER->buf, referer, (h2o_iovec_t){});
+                              accept_encoding, H2O_TOKEN_REFERER->buf, referer, (h2o_iovec_t){NULL});
     h2o_buffer_consume(&buf, buf->size);
 
     h2o_buffer_dispose(&buf);
@@ -476,9 +477,9 @@ void test_token_wo_hpack_id(void)
 {
     h2o_mem_pool_t pool;
     h2o_mem_init_pool(&pool);
-    h2o_hpack_header_table_t table = {};
+    h2o_hpack_header_table_t table = {NULL};
     table.hpack_capacity = 4096;
-    h2o_res_t res = {};
+    h2o_res_t res = {0};
     h2o_buffer_t *buf;
     h2o_buffer_init(&buf, &h2o_socket_buffer_prototype);
 

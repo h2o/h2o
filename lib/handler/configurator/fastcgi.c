@@ -123,7 +123,8 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
 
     if (strcmp(type, "unix") == 0) {
         /* unix socket */
-        struct sockaddr_un sa = {};
+        struct sockaddr_un sa;
+        memset(&sa, 0, sizeof(sa));
         if (strlen(servname) >= sizeof(sa.sun_path)) {
             h2o_configurator_errprintf(cmd, node, "path:%s is too long as a unix socket name", servname);
             return -1;
@@ -227,11 +228,13 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
     char dirname[] = "/tmp/h2o.fcgisock.XXXXXX";
     char *argv[10];
     int spawner_fd;
-    struct sockaddr_un sa = {};
+    struct sockaddr_un sa;
     h2o_fastcgi_config_vars_t config_vars;
     int ret = -1;
     struct passwd spawn_pwbuf, *spawn_pw;
     char spawn_buf[65536];
+
+    memset(&sa, 0, sizeof(sa));
 
     switch (node->type) {
     case YOML_TYPE_SCALAR:

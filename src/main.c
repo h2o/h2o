@@ -145,9 +145,9 @@ static struct {
     } state;
     char *crash_handler;
 } conf = {
-    {},                                     /* globalconf */
+    {NULL},                                 /* globalconf */
     RUN_MODE_WORKER,                        /* dry-run */
-    {},                                     /* server_starter */
+    {NULL},                                 /* server_starter */
     NULL,                                   /* listeners */
     0,                                      /* num_listeners */
     NULL,                                   /* pid_file */
@@ -159,7 +159,7 @@ static struct {
     NULL,                                   /* thread_ids */
     0,                                      /* shutdown_requested */
     0,                                      /* initialized_threads */
-    {},                                     /* state */
+    {{0}},                                  /* state */
     "share/h2o/annotate-backtrace-symbols", /* crash_handler */
 };
 
@@ -888,10 +888,11 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     if (strcmp(type, "unix") == 0) {
 
         /* unix socket */
-        struct sockaddr_un sa = {};
+        struct sockaddr_un sa;
         int listener_is_new;
         struct listener_config_t *listener;
         /* build sockaddr */
+        memset(&sa, 0, sizeof(sa));
         if (strlen(servname) >= sizeof(sa.sun_path)) {
             h2o_configurator_errprintf(cmd, node, "path:%s is too long as a unix socket name", servname);
             return -1;
@@ -1384,7 +1385,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
 
 static char **build_server_starter_argv(const char *h2o_cmd, const char *config_file)
 {
-    H2O_VECTOR(char *) args = {};
+    H2O_VECTOR(char *) args = {NULL};
     size_t i;
 
     h2o_vector_reserve(NULL, &args, 1);
@@ -1772,7 +1773,7 @@ int main(int argc, char **argv)
     { /* initialize SSL_CTXs for session resumption and ticket-based resumption (also starts memcached client threads for the
          purpose) */
         size_t i, j;
-        H2O_VECTOR(SSL_CTX *) ssl_contexts = {};
+        H2O_VECTOR(SSL_CTX *) ssl_contexts = {NULL};
         for (i = 0; i != conf.num_listeners; ++i) {
             for (j = 0; j != conf.listeners[i]->ssl.size; ++j) {
                 h2o_vector_reserve(NULL, &ssl_contexts, ssl_contexts.size + 1);

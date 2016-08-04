@@ -38,13 +38,11 @@ struct st_h2o_socket_loop_kqueue_t {
 
 static void ev_set(struct kevent *ev, int fd, int filter, int flags, struct st_h2o_evloop_socket_t *sock)
 {
-    EV_SET(ev, fd, filter, flags, 0, 0,
 #ifdef __NetBSD__
-           (intptr_t)sock
+    EV_SET(ev, fd, filter, flags, 0, 0, (intptr_t)sock);
 #else
-           sock
+    EV_SET(ev, fd, filter, flags, 0, 0, sock);
 #endif
-           );
 }
 
 static int collect_status(struct st_h2o_socket_loop_kqueue_t *loop, struct kevent *changelist, int changelist_capacity)

@@ -80,8 +80,8 @@ static h2o_memcached_req_t *create_req(h2o_memcached_context_t *ctx, enum en_h2o
     h2o_memcached_req_t *req = h2o_mem_alloc(offsetof(h2o_memcached_req_t, key.base) + ctx->prefix.len +
                                              (encode_key ? (key.len + 2) / 3 * 4 + 1 : key.len));
     req->type = type;
-    req->pending = (h2o_linklist_t){};
-    req->inflight = (h2o_linklist_t){};
+    req->pending = (h2o_linklist_t){NULL};
+    req->inflight = (h2o_linklist_t){NULL};
     memset(&req->data, 0, sizeof(req->data));
     if (ctx->prefix.len != 0)
         memcpy(req->key.base, ctx->prefix.base, ctx->prefix.len);
@@ -241,7 +241,7 @@ static void connect_to_server(h2o_memcached_context_t *ctx, yrmcds *yrmcds)
 
 static void reader_main(h2o_memcached_context_t *ctx)
 {
-    struct st_h2o_memcached_conn_t conn = {ctx, {}, PTHREAD_MUTEX_INITIALIZER, {&conn.inflight, &conn.inflight}, 0};
+    struct st_h2o_memcached_conn_t conn = {ctx, {0}, PTHREAD_MUTEX_INITIALIZER, {&conn.inflight, &conn.inflight}, 0};
     pthread_t writer_thread;
     yrmcds_response resp;
     yrmcds_error err;

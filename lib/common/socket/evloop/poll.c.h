@@ -74,7 +74,7 @@ static void update_socks(struct st_h2o_evloop_poll_t *loop)
 int evloop_do_proceed(h2o_evloop_t *_loop)
 {
     struct st_h2o_evloop_poll_t *loop = (struct st_h2o_evloop_poll_t *)_loop;
-    H2O_VECTOR(struct pollfd) pollfds = {};
+    H2O_VECTOR(struct pollfd) pollfds = {NULL};
     int fd, ret;
 
     /* update status */

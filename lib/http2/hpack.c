@@ -855,7 +855,7 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
     capacity += calc_capacity(H2O_TOKEN_PATH->buf.len, req->input.path.len);
 
     size_t start_at = (*buf)->size;
-    uint8_t *dst = (void *)h2o_buffer_reserve(buf, capacity).base + H2O_HTTP2_FRAME_HEADER_SIZE;
+    uint8_t *dst = (void *)(h2o_buffer_reserve(buf, capacity).base + H2O_HTTP2_FRAME_HEADER_SIZE);
 
     /* encode */
     dst = h2o_http2_encode32u(dst, stream_id);
@@ -896,7 +896,7 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
         capacity += CONTENT_LENGTH_HEADER_MAX_SIZE; /* for content-length: UINT64_MAX (with huffman compression applied) */
 
     size_t start_at = (*buf)->size;
-    uint8_t *dst = (void *)h2o_buffer_reserve(buf, capacity).base + H2O_HTTP2_FRAME_HEADER_SIZE; /* skip frame header */
+    uint8_t *dst = (void *)(h2o_buffer_reserve(buf, capacity).base + H2O_HTTP2_FRAME_HEADER_SIZE); /* skip frame header */
 
     /* encode */
     dst = encode_status(dst, res->status);

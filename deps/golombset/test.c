@@ -19,13 +19,14 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 #include "golombset.h"
 
 int main(int argc, char **argv)
 {
-    const unsigned keys[] = {151, 192,  208,  269,  461,  512,  526,  591,  662,  806,  831,  866,  890,
+    uint64_t keys[] = {151, 192,  208,  269,  461,  512,  526,  591,  662,  806,  831,  866,  890,
                        997, 1005, 1017, 1134, 1207, 1231, 1327, 1378, 1393, 1418, 1525, 1627, 1630};
     const size_t num_keys = sizeof(keys) / sizeof(keys[0]);
     unsigned char buf[1024];
@@ -37,7 +38,7 @@ int main(int argc, char **argv)
     }
     printf("encoded %zu entries into %zu bytes\n", num_keys, bufsize);
     
-    unsigned decoded_keys[num_keys];
+    uint64_t decoded_keys[num_keys];
     size_t num_decoded_keys = num_keys;
     if (golombset_decode(6, buf, bufsize, decoded_keys, &num_decoded_keys) != 0) {
         fprintf(stderr, "golombset_decode failed\n");

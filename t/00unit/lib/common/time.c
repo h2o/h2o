@@ -37,7 +37,7 @@ void test_lib__common__time_c(void)
 
     h2o_time2str_rfc1123(buf, &tm);
     ok(strcmp(buf, "Wed, 04 Feb 2015 12:34:56 GMT") == 0);
-    tm = (struct tm){};
+    tm = (struct tm){0};
     h2o_time_parse_rfc1123(buf, H2O_TIMESTR_RFC1123_LEN, &tm);
     ok(tm.tm_year == 115);
     ok(tm.tm_mon == 1);

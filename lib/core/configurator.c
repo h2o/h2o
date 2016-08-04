@@ -28,8 +28,8 @@
 
 struct st_core_config_vars_t {
     struct {
-        int reprioritize_blocking_assets : 1;
-        int push_preload : 1;
+        unsigned reprioritize_blocking_assets : 1;
+        unsigned push_preload : 1;
         h2o_casper_conf_t casper;
     } http2;
 };
@@ -43,7 +43,7 @@ static h2o_configurator_context_t *create_context(h2o_configurator_context_t *pa
 {
     h2o_configurator_context_t *ctx = h2o_mem_alloc(sizeof(*ctx));
     if (parent == NULL) {
-        *ctx = (h2o_configurator_context_t){};
+        *ctx = (h2o_configurator_context_t){NULL};
         return ctx;
     }
     *ctx = *parent;
@@ -131,7 +131,7 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
         h2o_configurator_command_t *cmd;
         yoml_t *value;
     };
-    H2O_VECTOR(struct st_cmd_value_t) deferred = {}, semi_deferred = {};
+    H2O_VECTOR(struct st_cmd_value_t) deferred = {NULL}, semi_deferred = {NULL};
     size_t i;
     int ret = -1;
 
@@ -253,7 +253,7 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
         }
     }
     qsort(node->data.mapping.elements, node->data.mapping.size, sizeof(node->data.mapping.elements[0]),
-          (void *)sort_from_longer_paths);
+          (int (*)(const void *, const void *))sort_from_longer_paths);
 
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key;
@@ -421,7 +421,7 @@ static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configura
     switch (node->type) {
     case YOML_TYPE_SCALAR:
         if (strcasecmp(node->data.scalar, "OFF") == 0) {
-            self->vars->http2.casper = (h2o_casper_conf_t){};
+            self->vars->http2.casper = (h2o_casper_conf_t){0};
         } else if (strcasecmp(node->data.scalar, "ON") == 0) {
             self->vars->http2.casper = defaults;
         }
