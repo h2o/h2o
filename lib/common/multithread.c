@@ -107,7 +107,7 @@ h2o_multithread_queue_t *h2o_multithread_create_queue(h2o_loop_t *loop)
     memset(queue, 0, sizeof(*queue));
 
 #if H2O_USE_LIBUV
-    uv_async_init(loop, &queue->async, (void *)queue_cb);
+    uv_async_init(loop, &queue->async, (uv_async_cb)queue_cb);
 #else
     init_async(queue, loop);
 #endif
@@ -123,7 +123,7 @@ void h2o_multithread_destroy_queue(h2o_multithread_queue_t *queue)
     assert(h2o_linklist_is_empty(&queue->receivers.active));
     assert(h2o_linklist_is_empty(&queue->receivers.inactive));
 #if H2O_USE_LIBUV
-    uv_close((uv_handle_t *)&queue->async, (void *)free);
+    uv_close((uv_handle_t *)&queue->async, (uv_close_cb)free);
 #else
     h2o_socket_read_stop(queue->async.read);
     h2o_socket_close(queue->async.read);

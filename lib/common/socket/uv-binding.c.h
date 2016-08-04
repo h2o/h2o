@@ -149,7 +149,7 @@ static struct st_h2o_uv_socket_t *create_socket(h2o_loop_t *loop)
         free(tcp);
         return NULL;
     }
-    return (void *)h2o_uv_socket_create((void *)tcp, (void *)free);
+    return (void *)h2o_uv_socket_create((void *)tcp, (uv_close_cb)free);
 }
 
 int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info)
