@@ -161,10 +161,10 @@ struct st_h2o_http2_stream_t {
     union {
         struct {
             uint32_t parent_stream_id;
-            int promise_sent : 1;
+            unsigned promise_sent : 1;
         } push;
         struct {
-            int casper_is_ready : 1;
+            unsigned casper_is_ready : 1;
         } pull;
     };
     /* references governed by connection.c for handling various things */

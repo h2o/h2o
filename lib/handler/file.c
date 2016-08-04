@@ -47,8 +47,8 @@ struct st_h2o_sendfile_generator_t {
     h2o_req_t *req;
     size_t bytesleft;
     h2o_iovec_t content_encoding;
-    int send_vary : 1;
-    int send_etag : 1;
+    unsigned send_vary : 1;
+    unsigned send_etag : 1;
     char *buf;
     struct {
         size_t filesize;

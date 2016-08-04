@@ -103,10 +103,10 @@ typedef struct st_h2o_logconf_t h2o_logconf_t;
 typedef struct st_h2o_token_t {
     h2o_iovec_t buf;
     char http2_static_table_name_index; /* non-zero if any */
-    char proxy_should_drop : 1;
-    char is_init_header_special : 1;
-    char http2_should_reject : 1;
-    char copy_for_push_request : 1;
+    unsigned char proxy_should_drop : 1;
+    unsigned char is_init_header_special : 1;
+    unsigned char http2_should_reject : 1;
+    unsigned char copy_for_push_request : 1;
 } h2o_token_t;
 
 #include "h2o/token.h"
@@ -263,11 +263,11 @@ struct st_h2o_hostconf_t {
          * whether if blocking assets being pulled should be given highest priority in case of clients that do not implement
          * dependency-based prioritization
          */
-        int reprioritize_blocking_assets : 1;
+        unsigned reprioritize_blocking_assets : 1;
         /**
          * if server push should be used
          */
-        int push_preload : 1;
+        unsigned push_preload : 1;
         /**
          * casper settings
          */

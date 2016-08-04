@@ -34,8 +34,8 @@ struct st_h2o_mruby_http_request_context_t {
     struct {
         h2o_buffer_t *buf;
         h2o_iovec_t body; /* body.base != NULL indicates that post content exists (and the length MAY be zero) */
-        int method_is_head : 1;
-        int has_transfer_encoding : 1;
+        unsigned method_is_head : 1;
+        unsigned has_transfer_encoding : 1;
     } req;
     struct {
         h2o_buffer_t *after_closed; /* when client becomes NULL, rest of the data will be stored to this pointer */

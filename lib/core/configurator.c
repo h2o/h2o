@@ -28,8 +28,8 @@
 
 struct st_core_config_vars_t {
     struct {
-        int reprioritize_blocking_assets : 1;
-        int push_preload : 1;
+        unsigned reprioritize_blocking_assets : 1;
+        unsigned push_preload : 1;
         h2o_casper_conf_t casper;
     } http2;
 };
