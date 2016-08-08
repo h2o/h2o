@@ -66,10 +66,14 @@ sub exec_unittest {
 }
 
 sub exec_mruby_unittest {
+    plan skip_all => 'mruby support is off'
+        unless server_features()->{mruby};
+
     my $test_dir = path('t/00unit.mruby');
-    my $bin = path(bindir(), 'mruby-test/host/bin/mruby');
-    plan skip_all => "unit test:mruby binary $bin does not exist. Please build mruby for testing by `make mruby-test in your build directory`"
-        if ! -e $bin;
+    my $bin = path(bindir(), 'mruby/host/bin/mruby');
+    unless (-e $bin) {
+        die "unit test: mruby binary $bin does not exist";
+    }
 
 	my $k = 0;
     $test_dir->visit(sub {

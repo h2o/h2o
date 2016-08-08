@@ -1,3 +1,4 @@
+require 'misc/mruby-mtest/mrblib/mtest_unit.rb'
 require 'share/h2o/mruby/acl.rb'
 
 class ACLTest < MTest::Unit::TestCase
