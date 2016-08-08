@@ -1553,7 +1553,7 @@ static void setup_configurators(void)
 
 int main(int argc, char **argv)
 {
-    const char *cmd = argv[0], *opt_config_file = "h2o.conf";
+    const char *cmd = argv[0], *opt_config_file = H2O_TO_STR(H2O_CONFIG_PATH);
     int error_log_fd = -1;
 
     conf.num_threads = h2o_numproc();
