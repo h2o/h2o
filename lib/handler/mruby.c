@@ -64,9 +64,9 @@ static void setup_globals(mrb_state *mrb)
     h2o_mruby_assert(mrb);
 
     /* require and include built-in libraries */
-    h2o_mruby_eval_expr(mrb, "require \"acl.rb\"\n"
-                             "include H2O::ACL\n"
-                             "$ACL = 0");
+    h2o_mruby_eval_expr(mrb, "require \"h2o.rb\"\n"
+                             "require \"acl.rb\"\n"
+                             "include H2O::ACL\n");
     h2o_mruby_assert(mrb);
 }
 
@@ -168,6 +168,17 @@ mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config
         goto Exit;
     } else if (mrb_nil_p(result)) {
         snprintf(errbuf, 256, "returned value is not callable");
+        goto Exit;
+    }
+
+    /* validate proc by calling H2O.validate_handler method */
+    mrb_funcall_argv(mrb, h2o_mruby_eval_expr(mrb, "H2O"), mrb_intern_lit(mrb, "validate_handler"), 1, &result);
+    if (mrb->exc != NULL) {
+        mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
+        struct RString *error = mrb_str_ptr(obj);
+        snprintf(errbuf, 256, "%s", error->as.heap.ptr);
+        mrb->exc = 0;
+        result = mrb_nil_value();
         goto Exit;
     }
 
@@ -313,30 +324,6 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
     return ary;
 }
 
-static void validate_proc(mrb_state *mrb, mrb_value proc)
-{
-    /* check acl usage */
-    {
-        mrb_value acl = mrb_gv_get(mrb, mrb_intern_lit(mrb, "$ACL"));
-        if (!mrb_fixnum_p(acl)) {
-            fprintf(stderr, "invalid $ACL value is set\n");
-            abort();
-        }
-        mrb_int count = mrb_fixnum(acl);
-        if (count > 1) {
-            fprintf(stderr, "acl can be called only once\n");
-            abort();
-        }
-        if (count == 1) {
-            const char *class_name = mrb_obj_classname(mrb, proc);
-            if (strcmp(class_name, "H2O::ACL::ACLHandler") != 0) {
-                fprintf(stderr, "you must return acl handler when using acl\n");
-                abort();
-            }
-        }
-    }
-}
-
 static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
 {
     h2o_mruby_handler_t *handler = (void *)_handler;
@@ -363,7 +350,6 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
     /* compile code (must be done for each thread) */
     int arena = mrb_gc_arena_save(handler_ctx->mrb);
     mrb_value proc = h2o_mruby_compile_code(handler_ctx->mrb, &handler->config, NULL);
-    validate_proc(handler_ctx->mrb, proc);
 
     handler_ctx->proc = mrb_funcall_argv(handler_ctx->mrb, mrb_ary_entry(handler_ctx->constants, H2O_MRUBY_PROC_APP_TO_FIBER),
                                          handler_ctx->symbols.sym_call, 1, &proc);

@@ -18,25 +18,26 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 #
+require "h2o.rb"
+
 module H2O
 
   module ACL
 
     def acl(&block)
-      $ACL += 1
-      return ACLBlock.new._to_handler(&block)
+      if @acl_handler then
+        raise "acl can be called only once for each handler configuration"
+      end
+      @acl_handler = ACLHandler.new(&block)
+      H2O.add_handler_validator(proc {|handler|
+        if handler != @acl_handler
+          raise "acl configuration is ignored"
+        end
+      })
+      return @acl_handler
     end
 
     class ACLHandler
-      def initialize(p)
-        @proc = p
-      end
-      def call(env)
-        return @proc.call(env)
-      end
-    end
-
-    class ACLBlock
 
       class ConditionalHandler
         def initialize(handler, cond)
@@ -54,19 +55,17 @@ module H2O
         end
       end
 
-      def initialize
+      def initialize(&block)
         @acl = []
+        @returned = instance_eval(&block)
       end
 
-      def _to_handler(&block)
-        returned = instance_eval(&block)
-        return ACLHandler.new(lambda {|env|
-          @acl.each {|ac|
-            return ac.call(env) if ac.satisfy?(env)
-          }
-          return [399, {}, []] if returned.nil?
-          return returned.call(env)
-        })
+      def call(env)
+        @acl.each {|ac|
+          return ac.call(env) if ac.satisfy?(env)
+        }
+        return [399, {}, []] if @returned.nil?
+        return @returned.call(env)
       end
 
       def use(handler, &cond)
@@ -75,20 +74,20 @@ module H2O
         return ch
       end
 
-      def response(status, header={}, body=[], &cond)
+      def respond(status, header={}, body=[], &cond)
         return use(proc {|env| [status, header, body] }, &cond)
       end
 
       def deny(&cond)
-        return response(403, {}, ["Forbidden"], &cond)
+        return respond(403, {}, ["Forbidden"], &cond)
       end
 
       def allow(&cond)
-        return response(399, {}, [], &cond)
+        return respond(399, {}, [], &cond)
       end
 
       def redirect(location, status=302, &cond)
-        return response(status, { "Location" => location }, [], &cond)
+        return respond(status, { "Location" => location }, [], &cond)
       end
 
       class MatchingBlock
@@ -129,5 +128,3 @@ module H2O
   end
 
 end
-
-

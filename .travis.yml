@@ -28,6 +28,7 @@ before_script:
   - misc/install-perl-module.pl Starlet
   - misc/install-perl-module.pl JSON
   - misc/install-perl-module.pl Path::Tiny
+  - misc/install-perl-module.pl Test::Exception
   # install the `ab` command (a.k.a. ApacheBench; optionally required for running some of the tests)
   - sudo apt-get install -qq apache2-utils
   # install nghttp2 with `--enable-app` (optionally required for running HTTP/2 tests)
