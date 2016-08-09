@@ -249,6 +249,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/status.c
     lib/handler/status/events.c
     lib/handler/status/requests.c
+    lib/handler/debug_state.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/compress.c
     lib/handler/configurator/errordoc.c
@@ -261,6 +262,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/reproxy.c
     lib/handler/configurator/throttle_resp.c
     lib/handler/configurator/status.c
+    lib/handler/configurator/debug_state.c
 
     lib/http1.c
 

@@ -38,12 +38,6 @@ struct st_h2o_hpack_static_table_entry_t {
     const h2o_iovec_t value;
 };
 
-struct st_h2o_hpack_header_table_entry_t {
-    h2o_iovec_t *name;
-    h2o_iovec_t *value;
-    const char *err_desc; /* the recorded soft error description */
-};
-
 struct st_h2o_decode_header_result_t {
     h2o_iovec_t *name;
     h2o_iovec_t *value;
@@ -262,6 +256,11 @@ static inline struct st_h2o_hpack_header_table_entry_t *header_table_get(h2o_hpa
     struct st_h2o_hpack_header_table_entry_t *entry = table->entries + entry_index;
     assert(entry->name != NULL);
     return entry;
+}
+
+inline h2o_hpack_header_table_entry_t *h2o_hpack_header_table_get(h2o_hpack_header_table_t *header_table, size_t index)
+{
+    return (h2o_hpack_header_table_entry_t*)(header_table_get(header_table, index));
 }
 
 static void header_table_evict_one(h2o_hpack_header_table_t *table)

@@ -1722,6 +1722,17 @@ void h2o_status_register(h2o_pathconf_t *pathconf);
  */
 void h2o_status_register_configurator(h2o_globalconf_t *conf);
 
+/* lib/handler/status.c */
+
+/**
+ * registers the debug state handler
+ */
+void h2o_debug_state_register(h2o_hostconf_t *hostconf);
+/**
+ * registers the configurator
+ */
+void h2o_debug_state_register_configurator(h2o_globalconf_t *conf);
+
 /* inline defs */
 
 inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,

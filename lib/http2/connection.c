@@ -77,6 +77,7 @@ static void enqueue_goaway(h2o_http2_conn_t *conn, int errnum, h2o_iovec_t addit
         /* http2 spec allows sending GOAWAY more than once (for one reason since errors may arise after sending the first one) */
         h2o_http2_encode_goaway_frame(&conn->_write.buf, conn->pull_stream_ids.max_open, errnum, additional_data);
         h2o_http2_conn_request_write(conn);
+        conn->_sent_goaway = 1;
         conn->state = H2O_HTTP2_CONN_STATE_HALF_CLOSED;
     }
 }
@@ -114,6 +115,7 @@ static void initiate_graceful_shutdown(h2o_context_t *ctx)
             h2o_http2_encode_goaway_frame(&conn->_write.buf, INT32_MAX, H2O_HTTP2_ERROR_NONE,
                                           (h2o_iovec_t){H2O_STRLIT("graceful shutdown")});
             h2o_http2_conn_request_write(conn);
+            conn->_sent_goaway = 1;
         }
     }
     h2o_timeout_link(ctx->loop, &ctx->one_sec_timeout, &ctx->http2._graceful_shutdown_timeout);

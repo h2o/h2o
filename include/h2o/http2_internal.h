@@ -50,6 +50,12 @@ typedef struct st_h2o_hpack_header_table_t {
     size_t hpack_max_capacity; /* the value set by SETTINGS_HEADER_TABLE_SIZE */
 } h2o_hpack_header_table_t;
 
+typedef struct st_h2o_hpack_header_table_entry_t {
+    h2o_iovec_t *name;
+    h2o_iovec_t *value;
+    const char *err_desc; /* the recorded soft error description */
+} h2o_hpack_header_table_entry_t;
+
 #define H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS 1
 #define H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS 2
 #define H2O_HPACK_PARSE_HEADERS_PATH_EXISTS 4
@@ -65,6 +71,8 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
 void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
                                 size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t *ts, const h2o_iovec_t *server_name,
                                 size_t content_length);
+
+h2o_hpack_header_table_entry_t *h2o_hpack_header_table_get(h2o_hpack_header_table_t *header_table, size_t index);
 
 /* frames */
 
@@ -224,6 +232,7 @@ struct st_h2o_http2_conn_t {
     } _write;
     h2o_cache_t *push_memo;
     h2o_http2_casper_t *casper;
+    int _sent_goaway;
 };
 
 int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t *src, size_t len, const char **err_desc);

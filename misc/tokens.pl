@@ -220,3 +220,5 @@ __DATA__
 0 0 0 0 0 x-forwarded-for
 0 0 0 0 0 x-traffic
 0 0 0 0 0 cache-digest
+0 0 0 0 0 conn-flow-in
+0 0 0 0 0 conn-flow-out
