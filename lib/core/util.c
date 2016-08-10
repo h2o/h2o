@@ -464,10 +464,10 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
     "\x05"                                                                                                                         \
     "h2-14"
 
-static const h2o_iovec_t http2_alpn_protocols[] = {ALPN_PROTOCOLS_CORE};
+static const h2o_iovec_t http2_alpn_protocols[] = {ALPN_PROTOCOLS_CORE, {NULL}};
 const h2o_iovec_t *h2o_http2_alpn_protocols = http2_alpn_protocols;
 
-static const h2o_iovec_t alpn_protocols[] = {ALPN_PROTOCOLS_CORE, {H2O_STRLIT("http/1.1")}};
+static const h2o_iovec_t alpn_protocols[] = {ALPN_PROTOCOLS_CORE, {H2O_STRLIT("http/1.1")}, {NULL}};
 const h2o_iovec_t *h2o_alpn_protocols = alpn_protocols;
 
 const char *h2o_http2_npn_protocols = NPN_PROTOCOLS_CORE;
