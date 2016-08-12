@@ -1727,7 +1727,7 @@ void h2o_status_register_configurator(h2o_globalconf_t *conf);
 /**
  * registers the debug state handler
  */
-void h2o_debug_state_register(h2o_hostconf_t *hostconf);
+void h2o_debug_state_register(h2o_hostconf_t *hostconf, int hpack_enabled);
 /**
  * registers the configurator
  */

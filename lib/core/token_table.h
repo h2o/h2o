@@ -38,8 +38,6 @@ h2o_token_t h2o__tokens[] = {
     { { H2O_STRLIT("authorization") }, 23, 0, 0, 0, 0 },
     { { H2O_STRLIT("cache-control") }, 24, 0, 0, 0, 0 },
     { { H2O_STRLIT("cache-digest") }, 0, 0, 0, 0, 0 },
-    { { H2O_STRLIT("conn-flow-in") }, 0, 0, 0, 0, 0 },
-    { { H2O_STRLIT("conn-flow-out") }, 0, 0, 0, 0, 0 },
     { { H2O_STRLIT("connection") }, 0, 1, 0, 1, 0 },
     { { H2O_STRLIT("content-disposition") }, 25, 0, 0, 0, 0 },
     { { H2O_STRLIT("content-encoding") }, 26, 0, 0, 0, 0 },
@@ -86,7 +84,7 @@ h2o_token_t h2o__tokens[] = {
     { { H2O_STRLIT("x-reproxy-url") }, 0, 0, 0, 0, 0 },
     { { H2O_STRLIT("x-traffic") }, 0, 0, 0, 0, 0 }
 };
-size_t h2o__num_tokens = 63;
+size_t h2o__num_tokens = 61;
 
 const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
 {
@@ -261,10 +259,6 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
             if (memcmp(name, "content-typ", 11) == 0)
                 return H2O_TOKEN_CONTENT_TYPE;
             break;
-        case 'n':
-            if (memcmp(name, "conn-flow-i", 11) == 0)
-                return H2O_TOKEN_CONN_FLOW_IN;
-            break;
         case 's':
             if (memcmp(name, "max-forward", 11) == 0)
                 return H2O_TOKEN_MAX_FORWARDS;
@@ -302,10 +296,6 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
         case 's':
             if (memcmp(name, "accept-range", 12) == 0)
                 return H2O_TOKEN_ACCEPT_RANGES;
-            break;
-        case 't':
-            if (memcmp(name, "conn-flow-ou", 12) == 0)
-                return H2O_TOKEN_CONN_FLOW_OUT;
             break;
         }
         break;

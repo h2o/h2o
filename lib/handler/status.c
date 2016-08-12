@@ -96,17 +96,17 @@ static void send_response(struct st_h2o_status_collector_t *collector)
     memset(resp, 0, sizeof(resp[0]) * nr_resp);
     resp[cur_resp++] = (h2o_iovec_t){H2O_STRLIT("{\n")};
 
-    int coma_removed = 0;
+    int comma_removed = 0;
     for (i = 0; i < req->conn->ctx->globalconf->statuses.size; i++) {
         h2o_status_handler_t *sh = &req->conn->ctx->globalconf->statuses.entries[i];
         if (!collector->status_ctx.entries[i].active) {
             continue;
         }
         resp[cur_resp++] = sh->final(collector->status_ctx.entries[i].ctx, req->conn->ctx->globalconf, req);
-        if (resp[cur_resp - 1].len > 0 && !coma_removed) {
-            /* requests come in with a leading coma, replace if with a space */
+        if (resp[cur_resp - 1].len > 0 && !comma_removed) {
+            /* requests come in with a leading comma, replace if with a space */
             resp[cur_resp - 1].base[0] = ' ';
-            coma_removed = 1;
+            comma_removed = 1;
         }
     }
     resp[cur_resp++] = (h2o_iovec_t){H2O_STRLIT("\n}\n")};

@@ -60,6 +60,15 @@ extern const h2o_http2_priority_t h2o_http2_default_priority;
 void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at);
 int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at);
 
+/* debug state */
+typedef struct st_h2o_http2_debug_state_t{
+    h2o_iovec_vector_t json;
+    ssize_t conn_flow_in;
+    ssize_t conn_flow_out;
+} h2o_http2_debug_state_t;
+
+h2o_http2_debug_state_t *h2o_get_http2_debug_state(h2o_req_t *req, int hpack_enabled);
+
 #ifdef __cplusplus
 }
 #endif

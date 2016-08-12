@@ -9,7 +9,6 @@ plan skip_all => 'curl not found'
     unless prog_exists('curl');
 
 my $server = spawn_h2o(<< "EOT");
-throttle-response: ON
 hosts:
   default:
     debug-state: ON
@@ -20,13 +19,12 @@ hosts:
             [399, { "link" => "</halfdome.jpg>; rel=preload" }, [] ]
           }
         file.dir: @{[ DOC_ROOT ]}
-        header.add: "X-Traffic: 100000"
 EOT
 
 run_with_curl($server, sub {
     my ($proto, $port, $curl_cmd) = @_;
     $curl_cmd .= " --silent --show-error";
-    my $debug_state_url = "$proto://127.0.0.1:$port/.well-known/h2interop/state";
+    my $debug_state_url = "$proto://127.0.0.1:$port/.well-known/h2/state";
 
     if ($curl_cmd =~ /--http2/) {
         subtest "single stream itself" => sub {
