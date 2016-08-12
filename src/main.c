@@ -51,7 +51,6 @@
 #include <execinfo.h>
 #endif
 #include "cloexec.h"
-#include "yoml-parser.h"
 #include "neverbleed.h"
 #include "h2o.h"
 #include "h2o/configurator.h"
@@ -1131,32 +1130,6 @@ static int on_config_crash_handler(h2o_configurator_command_t *cmd, h2o_configur
     return 0;
 }
 
-static yoml_t *load_config(const char *fn)
-{
-    FILE *fp;
-    yaml_parser_t parser;
-    yoml_t *yoml;
-
-    if ((fp = fopen(fn, "rb")) == NULL) {
-        fprintf(stderr, "could not open configuration file:%s:%s\n", fn, strerror(errno));
-        return NULL;
-    }
-    yaml_parser_initialize(&parser);
-    yaml_parser_set_input_file(&parser, fp);
-
-    yoml = yoml_parse_document(&parser, NULL, NULL, fn);
-
-    if (yoml == NULL)
-        fprintf(stderr, "failed to parse configuration file:%s:line %d:%s\n", fn, (int)parser.problem_mark.line + 1,
-                parser.problem);
-
-    yaml_parser_delete(&parser);
-
-    fclose(fp);
-
-    return yoml;
-}
-
 static void notify_all_threads(void)
 {
     unsigned i;
@@ -1670,7 +1643,7 @@ int main(int argc, char **argv)
 
     { /* configure */
         yoml_t *yoml;
-        if ((yoml = load_config(opt_config_file)) == NULL)
+        if ((yoml = h2o_configurator_load_config_file(opt_config_file)) == NULL)
             exit(EX_CONFIG);
         if (h2o_configurator_apply(&conf.globalconf, yoml, conf.run_mode != RUN_MODE_WORKER) != 0)
             exit(EX_CONFIG);

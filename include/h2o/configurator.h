@@ -139,6 +139,10 @@ int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node, int dry_run);
 /**
  *
  */
+yoml_t *h2o_configurator_load_config_file(const char *config_file);
+/**
+ *
+ */
 int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *node, int flags_mask, const char **ignore_commands);
 /**
  * emits configuration error
