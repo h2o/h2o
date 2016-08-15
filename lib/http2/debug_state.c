@@ -97,15 +97,11 @@ static void append_header_table_lines(h2o_mem_pool_t *pool, h2o_iovec_vector_t *
     }
 }
 
-h2o_http2_debug_state_t *h2o_get_http2_debug_state(h2o_req_t *req, int hpack_enabled)
+h2o_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_enabled)
 {
-    /* if the request is sent via HTTP/1, return 404 response */
-    if (req->version < 0x200)
-        return NULL;
-
     h2o_http2_conn_t *conn = (h2o_http2_conn_t*)req->conn;
-    struct st_h2o_http2_debug_state_t *state = h2o_mem_alloc_pool(&req->pool, sizeof(*state));
-    *state = (struct st_h2o_http2_debug_state_t){{NULL}};
+    struct st_h2o_debug_state_t *state = h2o_mem_alloc_pool(&req->pool, sizeof(*state));
+    *state = (struct st_h2o_debug_state_t){{NULL}};
 
     state->conn_flow_in = conn->_write.window._avail;
     state->conn_flow_out = conn->_write.window._avail;

@@ -758,6 +758,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
         get_peername, /* ditto */
         NULL,         /* push */
         get_socket,   /* get underlying socket */
+        NULL,         /* get debug state */
         {{
             {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits}, /* ssl */
             {log_request_index},                                                     /* http1 */

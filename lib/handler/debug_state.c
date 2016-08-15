@@ -22,7 +22,6 @@
 #include "h2o.h"
 
 #include <inttypes.h>
-#include "h2o/http2.h"
 
 struct st_h2o_debug_state_handler_t {
     h2o_handler_t super;
@@ -35,8 +34,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
     static h2o_generator_t generator = {NULL, NULL};
 
-    h2o_http2_debug_state_t *debug_state = h2o_get_http2_debug_state(req, self->hpack_enabled);
-    if (debug_state == NULL) {
+    if (req->conn->callbacks->get_debug_state == NULL) {
         req->res.status = 404;
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("no-cache, no-store"));
@@ -44,6 +42,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         h2o_send(req, NULL, 0, 1);
         return 0;
     }
+
+    h2o_debug_state_t *debug_state = req->conn->callbacks->get_debug_state(req, self->hpack_enabled);
 
     // stringify these variables to embed in Debug Header
     h2o_iovec_t conn_flow_in, conn_flow_out;
