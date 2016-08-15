@@ -48,11 +48,12 @@ const char *get_debug_state_string(h2o_http2_stream_t *stream)
         switch (stream->state) {
         case H2O_HTTP2_STREAM_STATE_RECV_HEADERS:
         case H2O_HTTP2_STREAM_STATE_RECV_BODY:
+            return debug_state_string_open;
         case H2O_HTTP2_STREAM_STATE_REQ_PENDING:
         case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
         case H2O_HTTP2_STREAM_STATE_SEND_BODY:
         case H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL:
-            return debug_state_string_open;
+            return debug_state_string_half_closed_remote;
         case H2O_HTTP2_STREAM_STATE_IDLE:
         case H2O_HTTP2_STREAM_STATE_END_STREAM:
             return NULL;

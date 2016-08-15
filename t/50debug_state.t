@@ -32,7 +32,7 @@ run_with_curl($server, sub {
             like($headers, qr!^HTTP/2 200!);
             my $data;
             lives_ok { $data = decode_json($body) };
-            is($data->{streams}->{1}->{state}, 'OPEN');
+            is($data->{streams}->{1}->{state}, 'HALF_CLOSED_REMOTE');
         };
     } else {
         subtest "return_404_when_http1" => sub {
