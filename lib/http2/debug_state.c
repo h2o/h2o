@@ -61,6 +61,42 @@ const char *get_debug_state_string(h2o_http2_stream_t *stream)
     return NULL;
 }
 
+static void append_line(h2o_mem_pool_t *pool, h2o_iovec_vector_t *lines, const char *fmt, ...)
+{
+    char check[1]; /* for only checking the size of output */
+    va_list args;
+
+    va_start(args, fmt);
+    int size = vsnprintf(check, 1, fmt, args);
+    va_end(args);
+
+    h2o_iovec_t v;
+    v.base = h2o_mem_alloc_pool(pool, size + 1);
+
+    va_start(args, fmt);
+    v.len = vsnprintf(v.base, size + 1, fmt, args);
+    va_end(args);
+
+    lines->entries[lines->size++] = v;
+}
+
+static void append_header_table_lines(h2o_mem_pool_t *pool, h2o_iovec_vector_t *lines, h2o_hpack_header_table_t *header_table)
+{
+    int i, comma_removed = 0;
+    for (i = 0; i < header_table->num_entries; i++) {
+        h2o_hpack_header_table_entry_t *entry = h2o_hpack_header_table_get(header_table, i);
+        append_line(pool, lines,
+                    ",\n"
+                    "      [ \"%.*s\", \"%.*s\" ]",
+                    (int)entry->name->len, entry->name->base,
+                    (int)entry->value->len, entry->value->base);
+        if (lines->entries[lines->size - 1].len > 0 && !comma_removed) {
+            lines->entries[lines->size - 1].base[0] = ' ';
+            comma_removed = 1;
+        }
+    }
+}
+
 h2o_http2_debug_state_t *h2o_get_http2_debug_state(h2o_req_t *req, int hpack_enabled)
 {
     /* if the request is sent via HTTP/1, return 404 response */
@@ -82,36 +118,7 @@ h2o_http2_debug_state_t *h2o_get_http2_debug_state(h2o_req_t *req, int hpack_ena
     }
     h2o_vector_reserve(&req->pool, &state->json, nr_resp);
 
-    char check[1]; /* for only checking the size of output */
-
-#define OUTPUT(_fmt, ...)                                        \
-    do {                                                         \
-        int size = snprintf(check, 1, _fmt, __VA_ARGS__);        \
-        h2o_iovec_t v;                                           \
-        v.base = h2o_mem_alloc_pool(&req->pool, size + 1);             \
-        v.len = snprintf(v.base, size + 1, _fmt, __VA_ARGS__);   \
-        state->json.entries[state->json.size++] = v; \
-    } while (0)
-
-#define OUTPUT_HEADER_TABLE(ht)                                                                  \
-    do {                                                                                         \
-        h2o_hpack_header_table_t *header_table = ht;                                             \
-        int i, comma_removed = 0;                                                                \
-        for (i = 0; i < header_table->num_entries; i++) {                                        \
-            h2o_hpack_header_table_entry_t *entry = h2o_hpack_header_table_get(header_table, i); \
-            OUTPUT(                                                                              \
-                   ",\n"                                                                         \
-                   "      [ \"%.*s\", \"%.*s\" ]",                                               \
-                   (int)entry->name->len, entry->name->base,                                     \
-                   (int)entry->value->len, entry->value->base);                                  \
-            if (state->json.entries[state->json.size - 1].len > 0 && !comma_removed) {           \
-                state->json.entries[state->json.size - 1].base[0] = ' ';                         \
-                comma_removed = 1;                                                               \
-            }                                                                                    \
-        }                                                                                        \
-    } while (0)
-
-    OUTPUT("{\n"
+    append_line(&req->pool, &state->json, "{\n"
            "  \"version\": \"draft-01\",\n"
            "  \"settings\": {\n"
            "    \"SETTINGS_HEADER_TABLE_SIZE\": %" PRIu32 ",\n"
@@ -152,7 +159,7 @@ h2o_http2_debug_state_t *h2o_get_http2_debug_state(h2o_req_t *req, int hpack_ena
             if (state_string == NULL)
                 continue;
 
-            OUTPUT(",\n"
+            append_line(&req->pool, &state->json, ",\n"
                    "    \"%" PRIu32 "\": {\n"
                    "      \"state\": \"%s\",\n"
                    "      \"flowIn\": %zd,\n"
@@ -176,35 +183,38 @@ h2o_http2_debug_state_t *h2o_get_http2_debug_state(h2o_req_t *req, int hpack_ena
         });
     }
 
-    OUTPUT("\n"
-           "  },\n%s", "");
+    append_line(&req->pool, &state->json,
+           "\n"
+           "  },\n");
 
     if (hpack_enabled) {
         /* encode inbound header table */
-        OUTPUT("  \"hpack\": {\n"
+        append_line(&req->pool, &state->json,
+               "  \"hpack\": {\n"
                "    \"inboundTableSize\": %zd,\n"
                "    \"inboundDynamicHeaderTable\": [",
                conn->_input_header_table.num_entries);
-        OUTPUT_HEADER_TABLE(&conn->_input_header_table);
+        append_header_table_lines(&req->pool, &state->json, &conn->_input_header_table);
 
         /* encode outbound header table */
-        OUTPUT("\n"
+        append_line(&req->pool, &state->json,
+               "\n"
                "    ],\n"
                "    \"outboundTableSize\": %zd,\n"
                "    \"outboundDynamicHeaderTable\": [",
                conn->_output_header_table.num_entries);
-        OUTPUT_HEADER_TABLE(&conn->_output_header_table);
+        append_header_table_lines(&req->pool, &state->json, &conn->_output_header_table);
 
-        OUTPUT("\n"
+        append_line(&req->pool, &state->json,
+               "\n"
                "    ]\n"
-               "  },\n%s", "");
+               "  },\n");
     }
 
-    OUTPUT("  \"sentGoAway\": %s\n"
+    append_line(&req->pool, &state->json,
+           "  \"sentGoAway\": %s\n"
            "}\n",
            (conn->_sent_goaway ? "true" : "false"));
 
     return state;
-#undef OUTPUT
-#undef OUTPUT_HEADER_TABLE
 }
