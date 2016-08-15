@@ -36,6 +36,9 @@ static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_c
     size_t i;
     yoml_t *key, *value;
 
+    if (ctx->filter(ctx, &hash) != 0)
+        return -1;
+
     for (i = 0; i != hash->data.mapping.size; ++i) {
         key = hash->data.mapping.elements[i].key;
         value = hash->data.mapping.elements[i].value;

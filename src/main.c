@@ -51,6 +51,7 @@
 #include <execinfo.h>
 #endif
 #include "cloexec.h"
+#include "yoml-parser.h"
 #include "neverbleed.h"
 #include "h2o.h"
 #include "h2o/configurator.h"
@@ -396,6 +397,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         h2o_configurator_errprintf(cmd, ssl_node, "`ssl` is not a mapping");
         return -1;
     }
+
+    if (ctx->filter(ctx, &ssl_node) != 0)
+        return -1;
 
     { /* parse */
         size_t i;
@@ -838,6 +842,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         servname = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING: {
+        if (ctx->filter(ctx, &node) != 0)
+            return -1;
+
         yoml_t *t;
         if ((t = yoml_get(node, "host")) != NULL) {
             if (t->type != YOML_TYPE_SCALAR) {
@@ -1127,6 +1134,89 @@ static int on_config_temp_buffer_path(h2o_configurator_command_t *cmd, h2o_confi
 static int on_config_crash_handler(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     conf.crash_handler = h2o_strdup(NULL, node->data.scalar, SIZE_MAX).base;
+    return 0;
+}
+
+static yoml_t *load_config(const char *fn)
+{
+    FILE *fp;
+    yaml_parser_t parser;
+    yoml_t *yoml;
+
+    if ((fp = fopen(fn, "rb")) == NULL) {
+        fprintf(stderr, "could not open configuration file:%s:%s\n", fn, strerror(errno));
+        return NULL;
+    }
+    yaml_parser_initialize(&parser);
+    yaml_parser_set_input_file(&parser, fp);
+
+    yoml = yoml_parse_document(&parser, NULL, NULL, fn);
+
+    if (yoml == NULL)
+        fprintf(stderr, "failed to parse configuration file:%s:line %d:%s\n", fn, (int)parser.problem_mark.line + 1,
+                parser.problem);
+
+    yaml_parser_delete(&parser);
+
+    fclose(fp);
+
+    return yoml;
+}
+
+static int filter_config_node(h2o_configurator_context_t *ctx, yoml_t **node)
+{
+    size_t i, j;
+
+    if ((*node)->type != YOML_TYPE_MAPPING)
+        return -1;
+
+    i = (*node)->data.mapping.size;
+    do {
+        --i;
+        if ((*node)->data.mapping.elements[i].key->type == YOML_TYPE_SCALAR &&
+            strcmp((*node)->data.mapping.elements[i].key->data.scalar, "include") == 0) {
+
+            yoml_mapping_element_t src = (*node)->data.mapping.elements[i];
+            if (src.value->type != YOML_TYPE_SCALAR)
+                return -1;
+            yoml_t *included = load_config(src.value->data.scalar);
+            if (included == NULL)
+                return -1;
+            if (included->type != YOML_TYPE_MAPPING) {
+                h2o_configurator_errprintf(NULL, included, "node must be a MAPPING");
+                return -1;
+            }
+
+            /* include recursively */
+            if (filter_config_node(ctx, &included) != 0)
+                return -1;
+
+            if (included->data.mapping.size > 1) {
+                /* expand elements preserving the values */
+                *node = realloc(*node, offsetof(yoml_t, data.mapping.elements) +
+                                ((*node)->data.mapping.size - 1 + included->data.mapping.size) * sizeof((*node)->data.mapping.elements[0]));
+                memmove((*node)->data.mapping.elements + i + included->data.mapping.size, (*node)->data.mapping.elements + i + 1,
+                        ((*node)->data.mapping.size - i - 1) * sizeof((*node)->data.mapping.elements[0]));
+                (*node)->data.mapping.size += included->data.mapping.size - 1;
+            }
+
+            for (j = 0; j != included->data.mapping.size; ++j) {
+                yoml_t *key = included->data.mapping.elements[j].key;
+                yoml_t *value = included->data.mapping.elements[j].value;
+
+                (*node)->data.mapping.elements[i + j].key = key;
+                ++key->_refcnt;
+                (*node)->data.mapping.elements[i + j].value = value;
+                ++value->_refcnt;
+            }
+
+            /* cleanup */
+            yoml_free(src.key, NULL);
+            yoml_free(src.value, NULL);
+            yoml_free(included, NULL);
+        }
+    } while (i != 0);
+
     return 0;
 }
 
@@ -1643,9 +1733,9 @@ int main(int argc, char **argv)
 
     { /* configure */
         yoml_t *yoml;
-        if ((yoml = h2o_configurator_load_config_file(opt_config_file)) == NULL)
+        if ((yoml = load_config(opt_config_file)) == NULL)
             exit(EX_CONFIG);
-        if (h2o_configurator_apply(&conf.globalconf, yoml, conf.run_mode != RUN_MODE_WORKER) != 0)
+        if (h2o_configurator_apply(&conf.globalconf, yoml, filter_config_node, conf.run_mode != RUN_MODE_WORKER) != 0)
             exit(EX_CONFIG);
         yoml_free(yoml, NULL);
     }

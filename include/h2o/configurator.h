@@ -40,7 +40,11 @@ enum {
 
 #define H2O_CONFIGURATOR_NUM_LEVELS 4
 
-typedef struct st_h2o_configurator_context_t {
+typedef struct st_h2o_configurator_context_t h2o_configurator_context_t;
+
+typedef int(*h2o_configurator_filter_cb)(h2o_configurator_context_t *ctx, yoml_t **node);
+
+struct st_h2o_configurator_context_t {
     /**
      * pointer to globalconf
      */
@@ -69,7 +73,13 @@ typedef struct st_h2o_configurator_context_t {
      * parent context (or NULL if the context is at global level)
      */
     struct st_h2o_configurator_context_t *parent;
-} h2o_configurator_context_t;
+    /**
+     * filter (convert) node
+     */
+    h2o_configurator_filter_cb filter;
+};
+
+
 
 typedef int (*h2o_configurator_dispose_cb)(h2o_configurator_t *configurator);
 typedef int (*h2o_configurator_enter_cb)(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, yoml_t *node);
@@ -135,11 +145,7 @@ h2o_configurator_command_t *h2o_configurator_get_command(h2o_globalconf_t *conf,
  * applies the configuration to the context
  * @return 0 if successful, -1 if not
  */
-int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node, int dry_run);
-/**
- *
- */
-yoml_t *h2o_configurator_load_config_file(const char *config_file);
+int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node, h2o_configurator_filter_cb filter, int dry_run);
 /**
  *
  */

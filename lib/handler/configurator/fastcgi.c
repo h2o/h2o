@@ -90,6 +90,9 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
         servname = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING: {
+        if (ctx->filter(ctx, &node) != 0)
+            return -1;
+
         yoml_t *t;
         if ((t = yoml_get(node, "host")) != NULL) {
             if (t->type != YOML_TYPE_SCALAR) {
@@ -242,6 +245,9 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
         spawn_cmd = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING: {
+        if (ctx->filter(ctx, &node) != 0)
+            return -1;
+
         yoml_t *t;
         if ((t = yoml_get(node, "command")) == NULL) {
             h2o_configurator_errprintf(cmd, node, "mandatory attribute `command` does not exist");

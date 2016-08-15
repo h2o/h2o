@@ -657,6 +657,9 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
     int modes = -1, uses_memcached;
     yoml_t *t;
 
+    if (ctx->filter(ctx, &node) != 0)
+        return -1;
+
     if ((t = yoml_get(node, "mode")) == NULL) {
         h2o_configurator_errprintf(cmd, node, "mandatory attribute `mode` is missing");
         return -1;
@@ -788,6 +791,9 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
     }
 
     if ((t = yoml_get(node, "memcached")) != NULL) {
+        if (ctx->filter(ctx, &t) != 0)
+            return -1;
+
         conf.memcached.host = NULL;
         conf.memcached.port = 11211;
         conf.memcached.text_protocol = 0;

@@ -104,6 +104,9 @@ static int on_config_compress(h2o_configurator_command_t *cmd, h2o_configurator_
         }
         break;
     case YOML_TYPE_MAPPING:
+        if (ctx->filter(ctx, &node) != 0)
+            return -1;
+
         *self->vars = all_off;
         for (i = 0; i != node->data.mapping.size; ++i) {
             yoml_t *key = node->data.mapping.elements[i].key;
