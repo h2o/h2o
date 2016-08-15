@@ -94,48 +94,6 @@ class ACLTest < MTest::Unit::TestCase
         assert_equal(399, act)
     end
 
-    def test_with_return_value1
-        act = acl {
-            respond(200) { true }
-            proc {|env| [404, {}, []]}
-        }.call({})[0]
-        assert_equal(200, act)
-    end
-
-    def test_with_return_value2
-        act = acl {
-            respond(200) { false }
-            proc {|env| [404, {}, []]}
-        }.call({})[0]
-        assert_equal(404, act)
-    end
-
-    def test_with_return_value3
-        act = acl {
-            proc {|env| [404, {}, []]}
-            respond(200) { true }
-        }.call({})[0]
-        assert_equal(200, act, "Of course ignored")
-    end
-
-    def test_with_return_value4
-        act = acl {
-            p = proc {|env| [404, {}, []]}
-            respond(200) { true }
-            p
-        }.call({})[0]
-        assert_equal(200, act, "not ignored, but respond(200) matches condition")
-    end
-
-    def test_with_return_value5
-        act = acl {
-            p = proc {|env| [404, {}, []]}
-            respond(200) { false }
-            p
-        }.call({})[0]
-        assert_equal(404, act, "respond(200) doesn't matches condition, so return value used")
-    end
-
     def test_acl_restriction1
         acl { respond(200) }
         assert_raise(RuntimeError, "must raise exception if acl method is called more than once") {

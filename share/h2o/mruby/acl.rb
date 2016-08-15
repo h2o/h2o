@@ -57,37 +57,35 @@ module H2O
 
       def initialize(&block)
         @acl = []
-        @returned = instance_eval(&block)
+        instance_eval(&block)
       end
 
       def call(env)
         @acl.each {|ac|
           return ac.call(env) if ac.satisfy?(env)
         }
-        return [399, {}, []] if @returned.nil?
-        return @returned.call(env)
+        return [399, {}, []]
       end
 
       def use(handler, &cond)
         ch = ConditionalHandler.new(handler, cond)
         @acl << ch
-        return ch
       end
 
       def respond(status, header={}, body=[], &cond)
-        return use(proc {|env| [status, header, body] }, &cond)
+        use(proc {|env| [status, header, body] }, &cond)
       end
 
       def deny(&cond)
-        return respond(403, {}, ["Forbidden"], &cond)
+        respond(403, {}, ["Forbidden"], &cond)
       end
 
       def allow(&cond)
-        return respond(399, {}, [], &cond)
+        respond(399, {}, [], &cond)
       end
 
       def redirect(location, status=302, &cond)
-        return respond(status, { "Location" => location }, [], &cond)
+        respond(status, { "Location" => location }, [], &cond)
       end
 
       class MatchingBlock
