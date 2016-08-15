@@ -181,11 +181,12 @@ h2o_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_enabled)
 
     append_line(&req->pool, &state->json,
            "\n"
-           "  },\n");
+           "  }");
 
     if (hpack_enabled) {
         /* encode inbound header table */
         append_line(&req->pool, &state->json,
+               ",\n"
                "  \"hpack\": {\n"
                "    \"inboundTableSize\": %zd,\n"
                "    \"inboundDynamicHeaderTable\": [",
@@ -204,13 +205,12 @@ h2o_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_enabled)
         append_line(&req->pool, &state->json,
                "\n"
                "    ]\n"
-               "  },\n");
+               "  }");
     }
 
     append_line(&req->pool, &state->json,
-           "  \"sentGoAway\": %s\n"
-           "}\n",
-           (conn->_sent_goaway ? "true" : "false"));
+           "\n"
+           "}\n");
 
     return state;
 }
