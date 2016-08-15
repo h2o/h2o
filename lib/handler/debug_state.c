@@ -45,9 +45,6 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         return 0;
     }
 
-    const h2o_token_t conn_flow_in_token = { { H2O_STRLIT("conn-flow-in") } };
-    const h2o_token_t conn_flow_out_token = { { H2O_STRLIT("conn-flow-out") } };
-
     // stringify these variables to embed in Debug Header
     h2o_iovec_t conn_flow_in, conn_flow_out;
     conn_flow_in.base = h2o_mem_alloc_pool(&req->pool, sizeof(H2O_INT64_LONGEST_STR));
@@ -58,8 +55,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     req->res.status = 200;
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("application/json; charset=utf-8"));
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("no-cache, no-store"));
-    h2o_add_header(&req->pool, &req->res.headers, &conn_flow_in_token, conn_flow_in.base, conn_flow_in.len);
-    h2o_add_header(&req->pool, &req->res.headers, &conn_flow_out_token, conn_flow_out.base, conn_flow_out.len);
+    h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("conn-flow-in"), 0, conn_flow_in.base, conn_flow_in.len);
+    h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("conn-flow-out"), 0, conn_flow_out.base, conn_flow_out.len);
 
     h2o_start_response(req, &generator);
     h2o_send(req, debug_state->json.entries, h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")) ? 0 : debug_state->json.size, 1);
