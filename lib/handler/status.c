@@ -96,23 +96,23 @@ static void send_response(struct st_h2o_status_collector_t *collector)
     memset(resp, 0, sizeof(resp[0]) * nr_resp);
     resp[cur_resp++] = (h2o_iovec_t){H2O_STRLIT("{\n")};
 
-    int comma_removed = 0;
+    int coma_removed = 0;
     for (i = 0; i < req->conn->ctx->globalconf->statuses.size; i++) {
         h2o_status_handler_t *sh = &req->conn->ctx->globalconf->statuses.entries[i];
         if (!collector->status_ctx.entries[i].active) {
             continue;
         }
         resp[cur_resp++] = sh->final(collector->status_ctx.entries[i].ctx, req->conn->ctx->globalconf, req);
-        if (resp[cur_resp - 1].len > 0 && !comma_removed) {
-            /* requests come in with a leading comma, replace if with a space */
+        if (resp[cur_resp - 1].len > 0 && !coma_removed) {
+            /* requests come in with a leading coma, replace if with a space */
             resp[cur_resp - 1].base[0] = ' ';
-            comma_removed = 1;
+            coma_removed = 1;
         }
     }
     resp[cur_resp++] = (h2o_iovec_t){H2O_STRLIT("\n}\n")};
 
     req->res.status = 200;
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("application/json; charset=utf-8"));
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("no-cache, no-store"));
     h2o_start_response(req, &generator);
     h2o_send(req, resp, h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")) ? 0 : nr_resp, 1);
