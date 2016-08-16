@@ -62,7 +62,8 @@ const char *get_debug_state_string(h2o_http2_stream_t *stream)
     return NULL;
 }
 
-static void append_line(h2o_mem_pool_t *pool, h2o_iovec_vector_t *lines, const char *fmt, ...)
+__attribute__((format(printf, 3, 4))) static void append_line(h2o_mem_pool_t *pool, h2o_iovec_vector_t *lines, const char *fmt, ...)
+
 {
     char check[1]; /* for only checking the size of output */
     va_list args;
