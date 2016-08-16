@@ -677,13 +677,11 @@ typedef struct st_h2o_res_t {
 /**
  * debug state (currently only for HTTP/2)
  */
-typedef struct st_h2o_debug_state_t{
+typedef struct st_h2o_http2_debug_state_t{
     h2o_iovec_vector_t json;
     ssize_t conn_flow_in;
     ssize_t conn_flow_out;
-} h2o_debug_state_t;
-
-h2o_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_enabled);
+} h2o_http2_debug_state_t;
 
 typedef struct st_h2o_conn_callbacks_t {
     /**
@@ -705,7 +703,7 @@ typedef struct st_h2o_conn_callbacks_t {
     /**
      * debug state callback (may be NULL)
      */
-    h2o_debug_state_t *(*get_debug_state)(h2o_req_t *req, int hpack_enabled);
+    h2o_http2_debug_state_t *(*get_debug_state)(h2o_req_t *req, int hpack_enabled);
     /**
      * logging callbacks (may be NULL)
      */

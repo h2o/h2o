@@ -290,6 +290,8 @@ static uint32_t h2o_http2_decode32u(const uint8_t *src);
 static uint8_t *h2o_http2_encode24u(uint8_t *dst, uint32_t value);
 static uint8_t *h2o_http2_encode32u(uint8_t *dst, uint32_t value);
 
+h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_enabled);
+
 /* inline definitions */
 
 inline void h2o_http2_window_init(h2o_http2_window_t *window, const h2o_http2_settings_t *peer_settings)
