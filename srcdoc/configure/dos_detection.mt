@@ -2,7 +2,7 @@
 ? $_mt->wrapper_file("wrapper.mt", "Configure", "Using DoS Detection")->(sub {
 
 <p>
-Starting from version 2.2, H2O comes with a mruby script named <a href="https://github.com/h2o/h2o/blob/master/share/h2o/mruby/dos_detector.rb">dos_detector.rb</a> that implements DoS Detection feature.
+Starting from version 2.1, H2O comes with a mruby script named <a href="https://github.com/h2o/h2o/blob/master/share/h2o/mruby/dos_detector.rb">dos_detector.rb</a> that implements DoS Detection feature.
 The script provides a Rack handler that detects HTTP flooding attacks based on the client's IP address. 
 </p>
 
