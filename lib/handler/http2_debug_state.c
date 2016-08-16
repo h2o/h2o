@@ -19,9 +19,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include "h2o.h"
-
 #include <inttypes.h>
+#include "h2o.h"
 
 struct st_h2o_http2_debug_state_handler_t {
     h2o_handler_t super;
