@@ -8,39 +8,61 @@ use JSON;
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
 
-my $server = spawn_h2o(<< "EOT");
+subtest 'minimum' => sub {
+    my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
-    debug-state: ON
+    debug-state: minimum
     paths:
       /:
-        mruby.handler: |
-          proc {|env|
-            [399, { "link" => "</halfdome.jpg>; rel=preload" }, [] ]
-          }
+        mruby.handler: proc {|env| [399, {}, [] ] }
         file.dir: @{[ DOC_ROOT ]}
 EOT
 
-run_with_curl($server, sub {
-    my ($proto, $port, $curl_cmd) = @_;
-    $curl_cmd .= " --silent --show-error";
-    my $debug_state_url = "$proto://127.0.0.1:$port/.well-known/h2/state";
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl_cmd) = @_;
+        $curl_cmd .= " --silent --show-error";
+        my $url = "$proto://127.0.0.1:$port/.well-known/h2/state";
 
-    if ($curl_cmd =~ /--http2/) {
-        subtest "single stream itself" => sub {
-            my ($headers, $body) = run_prog("$curl_cmd --dump-header /dev/stderr $debug_state_url");
-            like($headers, qr!^HTTP/2 200!);
-            my $data;
-            lives_ok { $data = decode_json($body) };
-            is($data->{streams}->{1}->{state}, 'HALF_CLOSED_REMOTE');
-        };
-    } else {
-        subtest "return_404_when_http1" => sub {
-            my ($headers, $body) = run_prog("$curl_cmd --dump-header /dev/stderr $debug_state_url");
-            like($headers, qr!^HTTP/1.1 404!);
-        };
-    }
+        if ($curl_cmd =~ /--http2/) {
+            subtest "single stream itself" => sub {
+                my ($headers, $body) = run_prog("$curl_cmd --dump-header /dev/stderr $url");
+                like($headers, qr!^HTTP/2 200!);
+                my $data;
+                lives_ok { $data = decode_json($body) };
+                is($data->{streams}->{1}->{state}, 'HALF_CLOSED_REMOTE');
+            };
+        } else {
+            subtest "return_404_when_http1" => sub {
+                my ($headers, $body) = run_prog("$curl_cmd --dump-header /dev/stderr $url");
+                like($headers, qr!^HTTP/1.1 404!);
+            };
+        }
+    });
+};
 
-});
+subtest 'hpack' => sub {
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    debug-state: hpack
+    paths:
+      /:
+        mruby.handler: proc {|env| [399, {}, [] ] }
+        file.dir: @{[ DOC_ROOT ]}
+EOT
+
+    my ($proto, $port) = ('https', $server->{tls_port});
+    my $curl_cmd = 'curl --insecure --http2 --silent --show-error --dump-header /dev/stderr';
+    my $url = "$proto://127.0.0.1:$port/.well-known/h2/state";
+
+    subtest "with hpack state" => sub {
+        my ($headers, $body) = run_prog("$curl_cmd $url");
+        like($headers, qr!^HTTP/2 200!);
+        my $data;
+        lives_ok { $data = decode_json($body) };
+        ok(exists $data->{hpack});
+    };
+};
 
 done_testing();
