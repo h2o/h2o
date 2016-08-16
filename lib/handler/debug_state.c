@@ -35,12 +35,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     static h2o_generator_t generator = {NULL, NULL};
 
     if (req->conn->callbacks->get_debug_state == NULL) {
-        req->res.status = 404;
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("no-cache, no-store"));
-        h2o_start_response(req, &generator);
-        h2o_send(req, NULL, 0, 1);
-        return 0;
+        return -1;
     }
 
     h2o_http2_debug_state_t *debug_state = req->conn->callbacks->get_debug_state(req, self->hpack_enabled);
