@@ -54,6 +54,7 @@ struct st_yoml_t {
     size_t line;
     size_t column;
     char *anchor;
+    char *tag;
     size_t _refcnt;
     union {
         char *scalar;
@@ -73,6 +74,7 @@ static inline void yoml_free(yoml_t *node, void *(*mem_set)(void *, int, size_t)
     if (--node->_refcnt == 0) {
         free(node->filename);
         free(node->anchor);
+        free(node->tag);
         switch (node->type) {
         case YOML_TYPE_SCALAR:
             if (mem_set != NULL)

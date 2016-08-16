@@ -140,9 +140,6 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
         goto Exit;
     }
 
-    if (ctx->filter(ctx, &node) != 0)
-        goto Exit;
-
     /* call on_enter of every configurator */
     if (setup_configurators(ctx, 1, node) != 0)
         goto Exit;
@@ -430,9 +427,6 @@ static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configura
         }
         break;
     case YOML_TYPE_MAPPING: {
-        if (ctx->filter(ctx, &node) != 0)
-            return -1;
-
         /* set to default */
         self->vars->http2.casper = defaults;
         /* override the attributes defined */
@@ -631,10 +625,6 @@ static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configu
         h2o_configurator_errprintf(cmd, node, "argument must be a MAPPING");
         return -1;
     }
-
-    if (ctx->filter(ctx, &node) != 0)
-        return -1;
-
     if ((ext_node = yoml_get(node, "extension")) == NULL) {
         h2o_configurator_errprintf(cmd, node, "mandatory key `extension` is missing");
         return -1;
@@ -698,9 +688,6 @@ static void inherit_env_if_necessary(h2o_configurator_context_t *ctx)
 static int on_config_setenv(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     size_t i;
-
-    if (ctx->filter(ctx, &node) != 0)
-        return -1;
 
     inherit_env_if_necessary(ctx);
 
@@ -915,21 +902,12 @@ h2o_configurator_command_t *h2o_configurator_get_command(h2o_globalconf_t *conf,
     return NULL;
 }
 
-int empty_filter(h2o_configurator_context_t *ctx, yoml_t **node)
+int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node, int dry_run)
 {
-    return 0;
-}
-
-int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node, h2o_configurator_filter_cb filter, int dry_run)
-{
-    if (filter == NULL)
-        filter = empty_filter;
-
     h2o_configurator_context_t *ctx = create_context(NULL, 0);
     ctx->globalconf = config;
     ctx->mimemap = &ctx->globalconf->mimemap;
     ctx->dry_run = dry_run;
-    ctx->filter = filter;
     int cmd_ret = h2o_configurator_apply_commands(ctx, node, H2O_CONFIGURATOR_FLAG_GLOBAL, NULL);
     destroy_context(ctx);
 

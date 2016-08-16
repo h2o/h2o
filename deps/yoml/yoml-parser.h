@@ -33,6 +33,25 @@ extern "C" {
 #include <yaml.h>
 #include "yoml.h"
 
+#define YOML_PARSER_TAG_RESOLVER_INITIAL_STACK_SIZE 4
+
+typedef struct st_yoml_tag_resolver_stack_t {
+    char **start;
+    char **end;
+    char **top;
+} yoml_tag_resolver_stack_t;
+
+typedef struct st_yoml_tag_resolver_t {
+    struct {
+        yoml_t *(*cb)(struct st_yoml_tag_resolver_t *tag_resolver, yoml_t *node);
+        yoml_tag_resolver_stack_t stack;
+    } file;
+} yoml_tag_resolver_t;
+
+static int stack_init(yoml_tag_resolver_stack_t *stack, size_t size);
+static int stack_push(yoml_tag_resolver_stack_t *stack, char *value);
+static char *stack_pop(yoml_tag_resolver_stack_t *stack);
+
 static yoml_t *yoml__parse_node(yaml_parser_t *parser, yaml_event_type_t *last_event, void *(*mem_set)(void *, int, size_t),
                                 const char *filename);
 
@@ -41,7 +60,7 @@ static inline char *yoml__strdup(yaml_char_t *s)
     return strdup((char *)s);
 }
 
-static inline yoml_t *yoml__new_node(const char *filename, yoml_type_t type, size_t sz, yaml_char_t *anchor, yaml_event_t *event)
+static inline yoml_t *yoml__new_node(const char *filename, yoml_type_t type, size_t sz, yaml_char_t *anchor, yaml_char_t *tag, yaml_event_t *event)
 {
     yoml_t *node = malloc(sz);
     node->filename = filename != NULL ? strdup(filename) : NULL;
@@ -49,6 +68,7 @@ static inline yoml_t *yoml__new_node(const char *filename, yoml_type_t type, siz
     node->line = event->start_mark.line;
     node->column = event->start_mark.column;
     node->anchor = anchor != NULL ? yoml__strdup(anchor) : NULL;
+    node->tag = tag != NULL ? yoml__strdup(tag) : NULL;
     node->_refcnt = 1;
     return node;
 }
@@ -57,7 +77,7 @@ static inline yoml_t *yoml__parse_sequence(yaml_parser_t *parser, yaml_event_t *
                                            const char *filename)
 {
     yoml_t *seq = yoml__new_node(filename, YOML_TYPE_SEQUENCE, offsetof(yoml_t, data.sequence.elements),
-                                 event->data.sequence_start.anchor, event);
+                                 event->data.sequence_start.anchor, event->data.sequence_start.tag, event);
 
     seq->data.sequence.size = 0;
 
@@ -84,7 +104,7 @@ static inline yoml_t *yoml__parse_mapping(yaml_parser_t *parser, yaml_event_t *e
                                           const char *filename)
 {
     yoml_t *map = yoml__new_node(filename, YOML_TYPE_MAPPING, offsetof(yoml_t, data.mapping.elements),
-                                 event->data.mapping_start.anchor, event);
+                                event->data.mapping_start.anchor, event->data.mapping_start.tag, event);
 
     map->data.mapping.size = 0;
 
@@ -134,11 +154,11 @@ static yoml_t *yoml__parse_node(yaml_parser_t *parser, yaml_event_type_t *unhand
 
     switch (event.type) {
     case YAML_ALIAS_EVENT:
-        node = yoml__new_node(filename, YOML__TYPE_UNRESOLVED_ALIAS, sizeof(*node), NULL, &event);
+        node = yoml__new_node(filename, YOML__TYPE_UNRESOLVED_ALIAS, sizeof(*node), NULL, NULL, &event);
         node->data.alias = yoml__strdup(event.data.alias.anchor);
         break;
     case YAML_SCALAR_EVENT:
-        node = yoml__new_node(filename, YOML_TYPE_SCALAR, sizeof(*node), event.data.scalar.anchor, &event);
+        node = yoml__new_node(filename, YOML_TYPE_SCALAR, sizeof(*node), event.data.scalar.anchor, event.data.scalar.tag, &event);
         node->data.scalar = yoml__strdup(event.data.scalar.value);
         if (mem_set != NULL)
             mem_set(event.data.scalar.value, 'A', strlen(node->data.scalar));
@@ -297,8 +317,83 @@ static inline int yoml__resolve_alias(yoml_t **target, yoml_t *doc, yaml_parser_
     return 0;
 }
 
+static inline int yoml__resolve_tag(yoml_t **target, yaml_parser_t *parser, void *(*mem_set)(void *, int, size_t), yoml_tag_resolver_t *tag_resolver)
+{
+    size_t i;
+    char *tag;
+    char **f;
+    int root = tag_resolver->file.stack.start == NULL;
+
+    if (root)
+        stack_init(&tag_resolver->file.stack, YOML_PARSER_TAG_RESOLVER_INITIAL_STACK_SIZE);
+
+    if ((tag = (*target)->tag) != NULL) {
+        if (strcmp(tag, "!file") == 0) {
+            if ((*target)->type != YOML_TYPE_SCALAR) {
+                if (parser != NULL) {
+                    parser->problem = "value of the !file node must be a scalar";
+                    parser->problem_mark.line = (*target)->line;
+                    parser->problem_mark.column = (*target)->column;
+                }
+                goto Error;
+            }
+
+            /* check circular reference */
+            for (f = tag_resolver->file.stack.start; f != tag_resolver->file.stack.top; f++) {
+                if (strcmp(*f, (*target)->filename) == 0) {
+                    if (parser != NULL) {
+                        parser->problem = "circular reference detected";
+                        parser->problem_mark.line = (*target)->line;
+                        parser->problem_mark.column = (*target)->column;
+                    }
+                    goto Error;
+                }
+            }
+
+            stack_push(&tag_resolver->file.stack, (*target)->filename);
+            yoml_t *node = tag_resolver->file.cb(tag_resolver, *target);
+            stack_pop(&tag_resolver->file.stack);
+
+            if (node == NULL)
+                goto Error;
+            yoml_free(*target, mem_set);
+            *target = node;
+        }
+    }
+
+    switch ((*target)->type) {
+        case YOML_TYPE_SCALAR:
+            break;
+        case YOML_TYPE_SEQUENCE:
+            for (i = 0; i != (*target)->data.sequence.size; ++i) {
+                if (yoml__resolve_merge((*target)->data.sequence.elements + i, parser, mem_set) != 0)
+                    goto Error;
+            }
+            break;
+        case YOML_TYPE_MAPPING:
+            for (i = 0; i != (*target)->data.mapping.size; i++) {
+                if (yoml__resolve_tag(&(*target)->data.mapping.elements[i].key, parser, mem_set, tag_resolver) != 0)
+                    goto Error;
+                if (yoml__resolve_tag(&(*target)->data.mapping.elements[i].value, parser, mem_set, tag_resolver) != 0)
+                    goto Error;
+            }
+            break;
+        case YOML__TYPE_UNRESOLVED_ALIAS:
+            break;
+    }
+
+    if (root)
+        free(tag_resolver->file.stack.start);
+    return 0;
+
+Error:
+    if (root)
+        free(tag_resolver->file.stack.start);
+    return -1;
+}
+
 static inline yoml_t *yoml_parse_document(yaml_parser_t *parser, yaml_event_type_t *unhandled,
-                                          void *(*mem_set)(void *, int, size_t), const char *filename)
+                                          void *(*mem_set)(void *, int, size_t), const char *filename, yoml_tag_resolver_t *tag_resolver)
 {
     yoml_t *doc;
 
@@ -309,13 +404,51 @@ static inline yoml_t *yoml_parse_document(yaml_parser_t *parser, yaml_event_type
     if (unhandled != NULL)
         *unhandled = YAML_NO_EVENT;
 
-    /* resolve aliases and merge */
-    if (yoml__resolve_alias(&doc, doc, parser, mem_set) != 0 || yoml__resolve_merge(&doc, parser, mem_set) != 0) {
-        yoml_free(doc, mem_set);
-        doc = NULL;
-    }
+    /* resolve tags, aliases and merge */
+    if (tag_resolver != NULL && yoml__resolve_tag(&doc, parser, mem_set, tag_resolver) != 0)
+        goto Error;
+    if (yoml__resolve_alias(&doc, doc, parser, mem_set) != 0)
+        goto Error;
+    if (yoml__resolve_merge(&doc, parser, mem_set) != 0)
+        goto Error;
 
     return doc;
+
+Error:
+    yoml_free(doc, mem_set);
+    return NULL;
+}
+
+
+/* stack operations */
+static int stack_init(yoml_tag_resolver_stack_t *stack, size_t size)
+{
+    stack->start = malloc(sizeof(*stack->start) * size);
+    if (!stack->start)
+        return -1;
+    stack->top = stack->start;
+    stack->end = stack->start + size;
+    return 0;
+}
+
+static int stack_push(yoml_tag_resolver_stack_t *stack, char *value)
+{
+    if (stack->top == stack->end) {
+        size_t new_size = (stack->end - stack->start) * sizeof(*stack->start) * 2;
+        void *new_start = realloc(stack->start, new_size);
+        if (!new_start)
+            return -1;
+        stack->top = new_start + (stack->top - stack->start) * sizeof(*stack->start);
+        stack->end = new_start + new_size;
+        stack->start = new_start;
+    }
+
+    *(stack->top++) = value;
+    return 0;
+}
+static char *stack_pop(yoml_tag_resolver_stack_t *stack)
+{
+    return *(--stack->top);
 }
 
 #ifdef __cplusplus

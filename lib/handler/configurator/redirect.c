@@ -34,9 +34,6 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
         dest = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING:
-        if (ctx->filter(ctx, &node) != 0)
-            return -1;
-
         if ((t = yoml_get(node, "url")) == NULL) {
             h2o_configurator_errprintf(cmd, node, "mandatory property `url` is missing");
             return -1;
