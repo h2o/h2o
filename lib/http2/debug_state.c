@@ -28,7 +28,7 @@ static const char *debug_state_string_open = "OPEN";
 static const char *debug_state_string_half_closed_remote = "HALF_CLOSED_REMOTE";
 static const char *debug_state_string_reserved_local = "RESERVED_LOCAL";
 
-const char *get_debug_state_string(h2o_http2_stream_t *stream)
+static const char *get_debug_state_string(h2o_http2_stream_t *stream)
 {
     if (h2o_http2_stream_is_push(stream->stream_id)) {
         switch (stream->state) {
@@ -62,7 +62,7 @@ const char *get_debug_state_string(h2o_http2_stream_t *stream)
     return NULL;
 }
 
-__attribute__((format(printf, 3, 4))) static void append_line(h2o_mem_pool_t *pool, h2o_iovec_vector_t *lines, const char *fmt, ...)
+__attribute__((format(printf, 3, 4))) static void append_chunk(h2o_mem_pool_t *pool, h2o_iovec_vector_t *chunks, const char *fmt, ...)
 
 {
     va_list args;
@@ -71,6 +71,8 @@ __attribute__((format(printf, 3, 4))) static void append_line(h2o_mem_pool_t *po
     int size = vsnprintf(NULL, 0, fmt, args);
     va_end(args);
 
+    assert(size > 0);
+
     h2o_iovec_t v;
     v.base = h2o_mem_alloc_pool(pool, size + 1);
 
@@ -78,22 +80,22 @@ __attribute__((format(printf, 3, 4))) static void append_line(h2o_mem_pool_t *po
     v.len = vsnprintf(v.base, size + 1, fmt, args);
     va_end(args);
 
-    h2o_vector_reserve(pool, lines, lines->size + 1);
-    lines->entries[lines->size++] = v;
+    h2o_vector_reserve(pool, chunks, chunks->size + 1);
+    chunks->entries[chunks->size++] = v;
 }
 
-static void append_header_table_lines(h2o_mem_pool_t *pool, h2o_iovec_vector_t *lines, h2o_hpack_header_table_t *header_table)
+static void append_header_table_chunks(h2o_mem_pool_t *pool, h2o_iovec_vector_t *chunks, h2o_hpack_header_table_t *header_table)
 {
     int i, comma_removed = 0;
     for (i = 0; i < header_table->num_entries; i++) {
         h2o_hpack_header_table_entry_t *entry = h2o_hpack_header_table_get(header_table, i);
-        append_line(pool, lines,
+        append_chunk(pool, chunks,
                     ",\n"
                     "      [ \"%.*s\", \"%.*s\" ]",
                     (int)entry->name->len, entry->name->base,
                     (int)entry->value->len, entry->value->base);
-        if (lines->entries[lines->size - 1].len > 0 && !comma_removed) {
-            lines->entries[lines->size - 1].base[0] = ' ';
+        if (!comma_removed) {
+            chunks->entries[chunks->size - 1].base[0] = ' ';
             comma_removed = 1;
         }
     }
@@ -108,7 +110,7 @@ h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_ena
     state->conn_flow_in = conn->_write.window._avail;
     state->conn_flow_out = conn->_write.window._avail;
 
-    append_line(&req->pool, &state->json, "{\n"
+    append_chunk(&req->pool, &state->json, "{\n"
            "  \"version\": \"draft-01\",\n"
            "  \"settings\": {\n"
            "    \"SETTINGS_HEADER_TABLE_SIZE\": %" PRIu32 ",\n"
@@ -149,7 +151,7 @@ h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_ena
             if (state_string == NULL)
                 continue;
 
-            append_line(&req->pool, &state->json, ",\n"
+            append_chunk(&req->pool, &state->json, ",\n"
                    "    \"%" PRIu32 "\": {\n"
                    "      \"state\": \"%s\",\n"
                    "      \"flowIn\": %zd,\n"
@@ -173,36 +175,36 @@ h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_ena
         });
     }
 
-    append_line(&req->pool, &state->json,
+    append_chunk(&req->pool, &state->json,
            "\n"
            "  }");
 
     if (hpack_enabled) {
         /* encode inbound header table */
-        append_line(&req->pool, &state->json,
+        append_chunk(&req->pool, &state->json,
                ",\n"
                "  \"hpack\": {\n"
                "    \"inboundTableSize\": %zd,\n"
                "    \"inboundDynamicHeaderTable\": [",
                conn->_input_header_table.num_entries);
-        append_header_table_lines(&req->pool, &state->json, &conn->_input_header_table);
+        append_header_table_chunks(&req->pool, &state->json, &conn->_input_header_table);
 
         /* encode outbound header table */
-        append_line(&req->pool, &state->json,
+        append_chunk(&req->pool, &state->json,
                "\n"
                "    ],\n"
                "    \"outboundTableSize\": %zd,\n"
                "    \"outboundDynamicHeaderTable\": [",
                conn->_output_header_table.num_entries);
-        append_header_table_lines(&req->pool, &state->json, &conn->_output_header_table);
+        append_header_table_chunks(&req->pool, &state->json, &conn->_output_header_table);
 
-        append_line(&req->pool, &state->json,
+        append_chunk(&req->pool, &state->json,
                "\n"
                "    ]\n"
                "  }");
     }
 
-    append_line(&req->pool, &state->json,
+    append_chunk(&req->pool, &state->json,
            "\n"
            "}\n");
 
