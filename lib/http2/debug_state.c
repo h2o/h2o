@@ -65,11 +65,10 @@ const char *get_debug_state_string(h2o_http2_stream_t *stream)
 __attribute__((format(printf, 3, 4))) static void append_line(h2o_mem_pool_t *pool, h2o_iovec_vector_t *lines, const char *fmt, ...)
 
 {
-    char check[1]; /* for only checking the size of output */
     va_list args;
 
     va_start(args, fmt);
-    int size = vsnprintf(check, 1, fmt, args);
+    int size = vsnprintf(NULL, 0, fmt, args);
     va_end(args);
 
     h2o_iovec_t v;
