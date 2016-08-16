@@ -78,6 +78,7 @@ __attribute__((format(printf, 3, 4))) static void append_line(h2o_mem_pool_t *po
     v.len = vsnprintf(v.base, size + 1, fmt, args);
     va_end(args);
 
+    h2o_vector_reserve(pool, lines, lines->size + 1);
     lines->entries[lines->size++] = v;
 }
 
@@ -106,14 +107,6 @@ h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_ena
 
     state->conn_flow_in = conn->_write.window._avail;
     state->conn_flow_out = conn->_write.window._avail;
-
-    /* calculate total number of JSON lines */
-    size_t nr_resp = 3;
-    nr_resp += conn->num_streams.pull.open + conn->num_streams.push.open; // streams
-    if (hpack_enabled) {
-        nr_resp += 3 + conn->_input_header_table.num_entries + conn->_output_header_table.num_entries; // hpack
-    }
-    h2o_vector_reserve(&req->pool, &state->json, nr_resp);
 
     append_line(&req->pool, &state->json, "{\n"
            "  \"version\": \"draft-01\",\n"
