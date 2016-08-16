@@ -63,10 +63,8 @@ static void setup_globals(mrb_state *mrb)
     h2o_mruby_eval_expr(mrb, "$LOAD_PATH << \"#{$H2O_ROOT}/share/h2o/mruby\"");
     h2o_mruby_assert(mrb);
 
-    /* require and include built-in libraries */
-    h2o_mruby_eval_expr(mrb, "require \"h2o.rb\"\n"
-                             "require \"acl.rb\"\n"
-                             "include H2O::ACL\n");
+    /* require core modules and include built-in libraries */
+    h2o_mruby_eval_expr(mrb, "require \"bootstrap.rb\"");
     h2o_mruby_assert(mrb);
 }
 
