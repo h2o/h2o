@@ -7,9 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		080D35EB1D5E060D0029B7E5 /* debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 080D35EA1D5E060D0029B7E5 /* debug_state.c */; };
-		084FC7C11D54B90D00E89F66 /* debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 084FC7C01D54B90D00E89F66 /* debug_state.c */; };
-		084FC7C51D54BB9200E89F66 /* debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 084FC7C31D54BB9200E89F66 /* debug_state.c */; };
+		080D35EB1D5E060D0029B7E5 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 080D35EA1D5E060D0029B7E5 /* http2_debug_state.c */; };
+		084FC7C11D54B90D00E89F66 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 084FC7C01D54B90D00E89F66 /* http2_debug_state.c */; };
+		084FC7C51D54BB9200E89F66 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 084FC7C31D54BB9200E89F66 /* http2_debug_state.c */; };
 		100A55101C2BB15600C4E3E0 /* http_request.c in Sources */ = {isa = PBXBuildFile; fileRef = 100A550E1C2BB15100C4E3E0 /* http_request.c */; };
 		100A55151C30C5BC00C4E3E0 /* chunked.c in Sources */ = {isa = PBXBuildFile; fileRef = 100A55141C30C5BC00C4E3E0 /* chunked.c */; };
 		101788B219B561AA0084C6D8 /* socket.c in Sources */ = {isa = PBXBuildFile; fileRef = 101788B119B561AA0084C6D8 /* socket.c */; };
@@ -338,9 +338,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		080D35EA1D5E060D0029B7E5 /* debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = debug_state.c; sourceTree = "<group>"; };
-		084FC7C01D54B90D00E89F66 /* debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = debug_state.c; sourceTree = "<group>"; };
-		084FC7C31D54BB9200E89F66 /* debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = debug_state.c; sourceTree = "<group>"; };
+		080D35EA1D5E060D0029B7E5 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
+		084FC7C01D54B90D00E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
+		084FC7C31D54BB9200E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		100A550C1C22857B00C4E3E0 /* 50mruby-htpasswd.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-htpasswd.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		100A550E1C2BB15100C4E3E0 /* http_request.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http_request.c; sourceTree = "<group>"; };
 		100A55131C2E5FAC00C4E3E0 /* 50mruby-http-request.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-http-request.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -794,7 +794,7 @@
 				10835E021C9A860000197E59 /* status.c */,
 				10C45D521CFE9B180096DB06 /* status */,
 				10C45D501CFD160A0096DB06 /* throttle_resp.c */,
-				084FC7C01D54B90D00E89F66 /* debug_state.c */,
+				084FC7C01D54B90D00E89F66 /* http2_debug_state.c */,
 			);
 			path = handler;
 			sourceTree = "<group>";
@@ -904,7 +904,7 @@
 				10AA2EC11AA0402E004322AC /* reproxy.c */,
 				10835E041C9B3C6200197E59 /* status.c */,
 				10C45D4E1CFD15FA0096DB06 /* throttle_resp.c */,
-				084FC7C31D54BB9200E89F66 /* debug_state.c */,
+				084FC7C31D54BB9200E89F66 /* http2_debug_state.c */,
 			);
 			path = configurator;
 			sourceTree = "<group>";
@@ -1208,7 +1208,7 @@
 				107923B419A3217300C52AD6 /* hpack.c */,
 				10BA72A919AAD6300059392A /* stream.c */,
 				10E299571A67E68500701AA6 /* scheduler.c */,
-				080D35EA1D5E060D0029B7E5 /* debug_state.c */,
+				080D35EA1D5E060D0029B7E5 /* http2_debug_state.c */,
 			);
 			path = http2;
 			sourceTree = "<group>";
@@ -1762,11 +1762,11 @@
 				107923CE19A3217300C52AD6 /* mimemap.c in Sources */,
 				107923C619A3217300C52AD6 /* connection.c in Sources */,
 				1022E7C31CA8BCCE00CE2A05 /* text_mode.c in Sources */,
-				080D35EB1D5E060D0029B7E5 /* debug_state.c in Sources */,
+				080D35EB1D5E060D0029B7E5 /* http2_debug_state.c in Sources */,
 				10835E051C9B3C6200197E59 /* status.c in Sources */,
 				1058C87E1AA41A1F008D6180 /* headers.c in Sources */,
 				10835E031C9A860000197E59 /* status.c in Sources */,
-				084FC7C51D54BB9200E89F66 /* debug_state.c in Sources */,
+				084FC7C51D54BB9200E89F66 /* http2_debug_state.c in Sources */,
 				10AA2E961A80A612004322AC /* time.c in Sources */,
 				107923C319A3217300C52AD6 /* file.c in Sources */,
 				106C22F81C040F6400405689 /* tunnel.c in Sources */,
@@ -1816,7 +1816,7 @@
 				104481301BFD10450007863F /* filecache.c in Sources */,
 				10583BF21AE5A37B004A3AD6 /* README.md in Sources */,
 				10BCF2FD1B168CAE0076939D /* fastcgi.c in Sources */,
-				084FC7C11D54B90D00E89F66 /* debug_state.c in Sources */,
+				084FC7C11D54B90D00E89F66 /* http2_debug_state.c in Sources */,
 				10A3D40B1B50DAB700327CF9 /* send.c in Sources */,
 				106C23011C0544CE00405689 /* errordoc.c in Sources */,
 				10FCC13E1B2E4A4500F13674 /* cloexec.c in Sources */,
