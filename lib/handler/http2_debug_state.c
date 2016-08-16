@@ -24,7 +24,7 @@
 
 struct st_h2o_http2_debug_state_handler_t {
     h2o_handler_t super;
-    int hpack_enabled : 1;
+    int hpack_enabled;
 };
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)

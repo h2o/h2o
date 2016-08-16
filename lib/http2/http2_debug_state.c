@@ -86,19 +86,19 @@ __attribute__((format(printf, 3, 4))) static void append_chunk(h2o_mem_pool_t *p
 
 static void append_header_table_chunks(h2o_mem_pool_t *pool, h2o_iovec_vector_t *chunks, h2o_hpack_header_table_t *header_table)
 {
-    int i, comma_removed = 0;
+    int i;
     for (i = 0; i < header_table->num_entries; i++) {
         h2o_hpack_header_table_entry_t *entry = h2o_hpack_header_table_get(header_table, i);
         append_chunk(pool, chunks,
-                    ",\n"
-                    "      [ \"%.*s\", \"%.*s\" ]",
+                    "\n"
+                    "      [ \"%.*s\", \"%.*s\" ],",
                     (int)entry->name->len, entry->name->base,
                     (int)entry->value->len, entry->value->base);
-        if (!comma_removed) {
-            chunks->entries[chunks->size - 1].base[0] = ' ';
-            comma_removed = 1;
-        }
     }
+
+    if (i > 0)
+        // remove the last commna
+        --chunks->entries[chunks->size - 1].len;
 }
 
 h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_enabled)
@@ -144,14 +144,13 @@ h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_ena
 
     /* encode streams */
     {
-        int comma_removed = 0;
         h2o_http2_stream_t *stream;
         kh_foreach_value(conn->streams, stream, {
             const char *state_string = get_debug_state_string(stream);
             if (state_string == NULL)
                 continue;
 
-            append_chunk(&req->pool, &state->json, ",\n"
+            append_chunk(&req->pool, &state->json, "\n"
                    "    \"%" PRIu32 "\": {\n"
                    "      \"state\": \"%s\",\n"
                    "      \"flowIn\": %zd,\n"
@@ -159,7 +158,7 @@ h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_ena
                    "      \"dataIn\": %zu,\n"
                    "      \"dataOut\": %zu,\n"
                    "      \"created\": %lu\n"
-                   "    }",
+                   "    },",
                    stream->stream_id,
                    state_string,
                    stream->input_window._avail,
@@ -167,12 +166,11 @@ h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_ena
                    (stream->_req_body == NULL ? 0 : stream->_req_body->size),
                    stream->req.bytes_sent,
                    stream->req.timestamps.request_begin_at.tv_sec);
-
-            if (state->json.entries[state->json.size - 1].len > 0 && !comma_removed) {
-                state->json.entries[state->json.size - 1].base[0] = ' ';
-                comma_removed = 1;
-            }
         });
+
+        if (conn->streams->size > 0)
+            // remove the last commna
+            --state->json.entries[state->json.size - 1].len;
     }
 
     append_chunk(&req->pool, &state->json,
