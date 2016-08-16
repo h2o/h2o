@@ -23,14 +23,14 @@
 
 #include <inttypes.h>
 
-struct st_h2o_debug_state_handler_t {
+struct st_h2o_http2_debug_state_handler_t {
     h2o_handler_t super;
     int hpack_enabled : 1;
 };
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
-    struct st_h2o_debug_state_handler_t *self = (void *)_self;
+    struct st_h2o_http2_debug_state_handler_t *self = (void *)_self;
 
     static h2o_generator_t generator = {NULL, NULL};
 
@@ -58,10 +58,10 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     return 0;
 }
 
-void h2o_debug_state_register(h2o_hostconf_t *conf, int hpack_enabled)
+void h2o_http2_debug_state_register(h2o_hostconf_t *conf, int hpack_enabled)
 {
     h2o_pathconf_t *pathconf = h2o_config_register_path(conf, "/.well-known/h2/state", 0);
-    struct st_h2o_debug_state_handler_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
+    struct st_h2o_http2_debug_state_handler_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
     self->super.on_req = on_req;
     self->hpack_enabled = hpack_enabled;
 }

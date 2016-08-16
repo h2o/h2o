@@ -26,20 +26,20 @@ static int on_config_debug_state(h2o_configurator_command_t *cmd, h2o_configurat
 {
     switch (h2o_configurator_get_one_of(cmd, node, "minimum,hpack")) {
     case 0: /* minimum */
-        h2o_debug_state_register(ctx->hostconf, 0);
+        h2o_http2_debug_state_register(ctx->hostconf, 0);
     case 1: /* with hpack state*/
-        h2o_debug_state_register(ctx->hostconf, 1);
+        h2o_http2_debug_state_register(ctx->hostconf, 1);
         return 0;
     default: /* error */
         return -1;
     }
 }
 
-void h2o_debug_state_register_configurator(h2o_globalconf_t *conf)
+void h2o_http2_debug_state_register_configurator(h2o_globalconf_t *conf)
 {
     struct st_h2o_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
 
-    h2o_configurator_define_command(c, "debug-state", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_DEFERRED |
+    h2o_configurator_define_command(c, "http2-debug-state", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_DEFERRED |
                                                       H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_debug_state);
 }

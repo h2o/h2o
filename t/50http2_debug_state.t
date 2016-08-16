@@ -12,7 +12,7 @@ subtest 'minimum' => sub {
     my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
-    debug-state: minimum
+    http2-debug-state: minimum
     paths:
       /:
         mruby.handler: proc {|env| [399, {}, [] ] }
@@ -45,7 +45,7 @@ subtest 'hpack' => sub {
     my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
-    debug-state: hpack
+    http2-debug-state: hpack
     paths:
       /:
         mruby.handler: proc {|env| [399, {}, [] ] }

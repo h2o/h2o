@@ -1739,13 +1739,13 @@ void h2o_status_register_configurator(h2o_globalconf_t *conf);
 /* lib/handler/status.c */
 
 /**
- * registers the debug state handler
+ * registers the http2 debug state handler
  */
-void h2o_debug_state_register(h2o_hostconf_t *hostconf, int hpack_enabled);
+void h2o_http2_debug_state_register(h2o_hostconf_t *hostconf, int hpack_enabled);
 /**
  * registers the configurator
  */
-void h2o_debug_state_register_configurator(h2o_globalconf_t *conf);
+void h2o_http2_debug_state_register_configurator(h2o_globalconf_t *conf);
 
 /* inline defs */
 
