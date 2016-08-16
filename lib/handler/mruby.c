@@ -64,7 +64,7 @@ static void setup_globals(mrb_state *mrb)
     h2o_mruby_assert(mrb);
 
     /* require core modules and include built-in libraries */
-    h2o_mruby_eval_expr(mrb, "require \"bootstrap.rb\"");
+    h2o_mruby_eval_expr(mrb, "require \"preloads.rb\"");
     h2o_mruby_assert(mrb);
 }
 
