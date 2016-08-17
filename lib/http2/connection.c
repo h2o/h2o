@@ -57,7 +57,6 @@ static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{16}, {H2O_HTTP2
 
 static void initiate_graceful_shutdown(h2o_context_t *ctx);
 static int close_connection(h2o_http2_conn_t *conn);
-static void send_stream_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum);
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
 static int do_emit_writereq(h2o_http2_conn_t *conn);
 static void on_read(h2o_socket_t *sock, const char *err);
@@ -164,7 +163,7 @@ static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_
 
     if (stream->_req_body != NULL && stream->_expected_content_length != SIZE_MAX &&
         stream->_req_body->size != stream->_expected_content_length) {
-        send_stream_error(conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
+        h2o_http2_stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
         h2o_http2_stream_reset(conn, stream);
         return;
     }
@@ -278,7 +277,7 @@ int close_connection(h2o_http2_conn_t *conn)
     return 0;
 }
 
-void send_stream_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum)
+void h2o_http2_stream_send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum)
 {
     assert(stream_id != 0);
     assert(conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING);
@@ -351,7 +350,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     return 0;
 
 SendRSTStream:
-    send_stream_error(conn, stream->stream_id, ret);
+    h2o_http2_stream_send_error(conn, stream->stream_id, ret);
     h2o_http2_stream_reset(conn, stream);
     return 0;
 }
@@ -416,7 +415,7 @@ static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn, const uint
         }
     } else {
         /* request is too large (TODO log) */
-        send_stream_error(conn, stream->stream_id, H2O_HTTP2_ERROR_REFUSED_STREAM);
+        h2o_http2_stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_REFUSED_STREAM);
         h2o_http2_stream_reset(conn, stream);
     }
 
@@ -483,17 +482,17 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
     /* save the input in the request body buffer, or send error (and close the stream) */
     if (stream == NULL) {
         if (frame->stream_id <= conn->pull_stream_ids.max_open) {
-            send_stream_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
+            h2o_http2_stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
         } else {
             *err_desc = "invalid DATA frame";
             return H2O_HTTP2_ERROR_PROTOCOL;
         }
     } else if (stream->state != H2O_HTTP2_STREAM_STATE_RECV_BODY) {
-        send_stream_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
+        h2o_http2_stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
         h2o_http2_stream_reset(conn, stream);
         stream = NULL;
     } else if (stream->_req_body->size + payload.length > conn->super.ctx->globalconf->max_request_entity_size) {
-        send_stream_error(conn, frame->stream_id, H2O_HTTP2_ERROR_REFUSED_STREAM);
+        h2o_http2_stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_REFUSED_STREAM);
         h2o_http2_stream_reset(conn, stream);
         stream = NULL;
     } else {
@@ -509,7 +508,7 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
             }
         } else {
             /* memory allocation failed */
-            send_stream_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
+            h2o_http2_stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
             h2o_http2_stream_reset(conn, stream);
             stream = NULL;
         }
@@ -685,7 +684,7 @@ static int handle_window_update_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t 
             h2o_http2_stream_t *stream = h2o_http2_conn_get_stream(conn, frame->stream_id);
             if (stream != NULL)
                 h2o_http2_stream_reset(conn, stream);
-            send_stream_error(conn, frame->stream_id, ret);
+            h2o_http2_stream_send_error(conn, frame->stream_id, ret);
             return 0;
         } else {
             return ret;
@@ -702,7 +701,7 @@ static int handle_window_update_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t 
         if (stream != NULL) {
             if (update_stream_output_window(stream, payload.window_size_increment) != 0) {
                 h2o_http2_stream_reset(conn, stream);
-                send_stream_error(conn, frame->stream_id, H2O_HTTP2_ERROR_FLOW_CONTROL);
+                h2o_http2_stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_FLOW_CONTROL);
                 return 0;
             }
         }

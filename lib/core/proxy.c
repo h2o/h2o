@@ -27,6 +27,8 @@
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http1client.h"
+#include "h2o/http2.h"
+#include "h2o/http2_internal.h"
 #include "h2o/tunnel.h"
 
 struct rp_generator_t {
@@ -321,16 +323,24 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
 {
     struct rp_generator_t *self = client->data;
 
-    /* FIXME should there be a way to notify error downstream? */
-
     if (errstr != NULL) {
-        if (errstr != h2o_http1client_error_is_eos) {
-            h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
-        }
         /* detach the content */
         self->last_content_before_send = self->client->sock->input;
         h2o_buffer_init(&self->client->sock->input, &h2o_socket_buffer_prototype);
         self->client = NULL;
+        if (errstr != h2o_http1client_error_is_eos) {
+            h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
+            /*
+             * if the frontend connection is h2, we need to reset the stream,
+             * otherwise the client will not see that a truncation happened.
+             */
+            if (self->src_req->version >= 0x200) {
+                h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, self->src_req);
+                h2o_http2_stream_send_error((h2o_http2_conn_t *)self->src_req->conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
+                h2o_http2_stream_reset((h2o_http2_conn_t *)self->src_req->conn, stream);
+                return 0;
+            }
+        }
     }
     if (self->sending.bytes_inflight == 0)
         do_send(self);
