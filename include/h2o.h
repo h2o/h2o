@@ -96,6 +96,9 @@ typedef struct st_h2o_hostconf_t h2o_hostconf_t;
 typedef struct st_h2o_globalconf_t h2o_globalconf_t;
 typedef struct st_h2o_mimemap_t h2o_mimemap_t;
 typedef struct st_h2o_logconf_t h2o_logconf_t;
+#if H2O_USE_MRUBY
+typedef struct st_h2o_mruby_shared_context_t h2o_mruby_shared_context_t;
+#endif
 
 /**
  * a predefined, read-only, fast variant of h2o_iovec_t, defined in h2o/token.h
@@ -504,6 +507,12 @@ struct st_h2o_context_t {
      * open file cache
      */
     h2o_filecache_t *filecache;
+#if H2O_USE_MRUBY
+    /**
+     * shared mruby context (will be lazily initialized)
+     */
+    h2o_mruby_shared_context_t *mruby_shared_context;
+#endif
     /**
      * flag indicating if shutdown has been requested
      */

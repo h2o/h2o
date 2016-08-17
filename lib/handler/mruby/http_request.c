@@ -99,7 +99,7 @@ static void on_dispose(void *_ctx)
 
     /* notify the app, if it is waiting to hear from us */
     if (!mrb_nil_p(ctx->receiver)) {
-        mrb_state *mrb = ctx->generator->ctx->mrb;
+        mrb_state *mrb = ctx->generator->ctx->shared->mrb;
         int gc_arena = mrb_gc_arena_save(mrb);
         h2o_mruby_run_fiber(ctx->generator, detach_receiver(ctx), create_downstream_closed_exception(mrb), NULL);
         mrb_gc_arena_restore(mrb, gc_arena);
@@ -109,7 +109,7 @@ static void on_dispose(void *_ctx)
 static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int status,
                           const h2o_http1client_header_t *headers_sorted, size_t num_headers)
 {
-    mrb_state *mrb = ctx->generator->ctx->mrb;
+    mrb_state *mrb = ctx->generator->ctx->shared->mrb;
     int gc_arena = mrb_gc_arena_save(mrb);
     size_t i;
 
@@ -141,7 +141,7 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
     /* set input stream */
     assert(mrb_nil_p(ctx->refs.input_stream));
     ctx->refs.input_stream = h2o_mruby_create_data_instance(
-        mrb, mrb_ary_entry(ctx->generator->ctx->constants, H2O_MRUBY_HTTP_INPUT_STREAM_CLASS), ctx, &input_stream_type);
+        mrb, mrb_ary_entry(ctx->generator->ctx->shared->constants, H2O_MRUBY_HTTP_INPUT_STREAM_CLASS), ctx, &input_stream_type);
     mrb_ary_set(mrb, resp, 2, ctx->refs.input_stream);
 
     if (mrb_nil_p(ctx->receiver)) {
@@ -182,14 +182,14 @@ static mrb_value build_chunk(struct st_h2o_mruby_http_request_context_t *ctx)
 
     if (ctx->client != NULL) {
         assert(ctx->client->sock->input->size != 0);
-        chunk = mrb_str_new(ctx->generator->ctx->mrb, ctx->client->sock->input->bytes, ctx->client->sock->input->size);
+        chunk = mrb_str_new(ctx->generator->ctx->shared->mrb, ctx->client->sock->input->bytes, ctx->client->sock->input->size);
         h2o_buffer_consume(&ctx->client->sock->input, ctx->client->sock->input->size);
         ctx->resp.has_content = 0;
     } else {
         if (ctx->resp.after_closed->size == 0) {
             chunk = mrb_nil_value();
         } else {
-            chunk = mrb_str_new(ctx->generator->ctx->mrb, ctx->resp.after_closed->bytes, ctx->resp.after_closed->size);
+            chunk = mrb_str_new(ctx->generator->ctx->shared->mrb, ctx->resp.after_closed->bytes, ctx->resp.after_closed->size);
             h2o_buffer_consume(&ctx->resp.after_closed, ctx->resp.after_closed->size);
         }
         /* has_content is retained as true, so that repeated calls will return nil immediately */
@@ -216,10 +216,10 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
         if (ctx->shortcut_notify_cb != NULL) {
             ctx->shortcut_notify_cb(ctx->generator);
         } else if (!mrb_nil_p(ctx->receiver)) {
-            int gc_arena = mrb_gc_arena_save(ctx->generator->ctx->mrb);
+            int gc_arena = mrb_gc_arena_save(ctx->generator->ctx->shared->mrb);
             mrb_value chunk = build_chunk(ctx);
             h2o_mruby_run_fiber(ctx->generator, detach_receiver(ctx), chunk, NULL);
-            mrb_gc_arena_restore(ctx->generator->ctx->mrb, gc_arena);
+            mrb_gc_arena_restore(ctx->generator->ctx->shared->mrb, gc_arena);
         }
     }
     return 0;
@@ -338,7 +338,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     /* method */
     method = h2o_iovec_init(H2O_STRLIT("GET"));
     if (mrb_hash_p(arg_hash)) {
-        mrb_value t = mrb_hash_get(mrb, arg_hash, mrb_symbol_value(generator->ctx->symbols.sym_method));
+        mrb_value t = mrb_hash_get(mrb, arg_hash, mrb_symbol_value(generator->ctx->shared->symbols.sym_method));
         if (!mrb_nil_p(t)) {
             t = mrb_str_to_str(mrb, t);
             method = h2o_iovec_init(RSTRING_PTR(t), RSTRING_LEN(t));
@@ -358,7 +358,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
 
     /* headers */
     if (mrb_hash_p(arg_hash)) {
-        mrb_value headers = mrb_hash_get(mrb, arg_hash, mrb_symbol_value(generator->ctx->symbols.sym_headers));
+        mrb_value headers = mrb_hash_get(mrb, arg_hash, mrb_symbol_value(generator->ctx->shared->symbols.sym_headers));
         if (!mrb_nil_p(headers)) {
             if (h2o_mruby_iterate_headers(generator->ctx, headers, flatten_request_header, ctx) != 0) {
                 mrb_value exc = mrb_obj_value(mrb->exc);
@@ -369,7 +369,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     }
     /* body */
     if (mrb_hash_p(arg_hash)) {
-        mrb_value body = mrb_hash_get(mrb, arg_hash, mrb_symbol_value(generator->ctx->symbols.sym_body));
+        mrb_value body = mrb_hash_get(mrb, arg_hash, mrb_symbol_value(generator->ctx->shared->symbols.sym_body));
         if (!mrb_nil_p(body)) {
             if (mrb_obj_eq(mrb, body, generator->rack_input)) {
                 /* fast path */
@@ -402,15 +402,15 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     h2o_http1client_connect(&ctx->client, ctx, &generator->req->conn->ctx->proxy.client_ctx, url.host, h2o_url_get_port(&url),
                             url.scheme == &H2O_URL_SCHEME_HTTPS, on_connect);
 
-    ctx->refs.request = h2o_mruby_create_data_instance(mrb, mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_HTTP_REQUEST_CLASS),
-                                                       ctx, &request_type);
+    ctx->refs.request = h2o_mruby_create_data_instance(
+        mrb, mrb_ary_entry(generator->ctx->shared->constants, H2O_MRUBY_HTTP_REQUEST_CLASS), ctx, &request_type);
     return ctx->refs.request;
 }
 
 mrb_value h2o_mruby_http_join_response_callback(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value args,
                                                 int *next_action)
 {
-    mrb_state *mrb = generator->ctx->mrb;
+    mrb_state *mrb = generator->ctx->shared->mrb;
     struct st_h2o_mruby_http_request_context_t *ctx;
 
     if (generator->req == NULL)
@@ -427,7 +427,7 @@ mrb_value h2o_mruby_http_join_response_callback(h2o_mruby_generator_t *generator
 mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value args,
                                               int *next_action)
 {
-    mrb_state *mrb = generator->ctx->mrb;
+    mrb_state *mrb = generator->ctx->shared->mrb;
     struct st_h2o_mruby_http_request_context_t *ctx;
     mrb_value ret;
 
@@ -464,7 +464,7 @@ h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx
     return ctx->client != NULL && ctx->resp.has_content ? &ctx->client->sock->input : &ctx->resp.after_closed;
 }
 
-void h2o_mruby_http_request_init_context(h2o_mruby_context_t *ctx)
+void h2o_mruby_http_request_init_context(h2o_mruby_shared_context_t *ctx)
 {
     mrb_state *mrb = ctx->mrb;
     struct RClass *module, *klass;

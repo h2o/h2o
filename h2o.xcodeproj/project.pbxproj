@@ -2051,6 +2051,7 @@
 					"/usr/local/openssl-1.0.2/include",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
+					deps/mruby/include,
 				);
 				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -2194,6 +2195,7 @@
 					"/usr/local/openssl-1.0.2/include",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
+					deps/mruby/include,
 				);
 				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -2369,6 +2371,7 @@
 					"/usr/local/openssl-1.0.2/include",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
+					deps/mruby/include,
 				);
 				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -2385,6 +2388,7 @@
 					"/usr/local/openssl-1.0.2/include",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
+					deps/mruby/include,
 				);
 				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
 				PRODUCT_NAME = "$(TARGET_NAME)";

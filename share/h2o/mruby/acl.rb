@@ -29,10 +29,11 @@ module H2O
         raise "acl can be called only once for each handler configuration"
       end
       @acl_handler = ACLHandler.new(&block)
-      H2O.add_handler_validator(proc {|handler|
+      H2O.add_after_generate_handler_hook(proc {|handler|
         if handler != @acl_handler
           raise "acl configuration is ignored"
         end
+        @acl_handler = nil
       })
       return @acl_handler
     end

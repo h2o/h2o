@@ -1,16 +1,24 @@
 module H2O
 
-  @@handler_validators = []
+  @@hooks = {
+    :after_generate_handler => [],
+  }
 
-  def self.validate_handler(handler)
-    @@handler_validators.each do |validator|
-      # will raise exception if handler is not valid
-      validator.call(handler)
-    end
+  def self.after_generate_handler(handler)
+    _call_hooks(:after_generate_handler, handler)
   end
 
-  def self.add_handler_validator(validator)
-    @@handler_validators << validator
+  def self.add_after_generate_handler_hook(hook)
+    _add_hook(:after_generate_handler, hook)
+  end
+
+  def self._call_hooks(type, *args)
+    @@hooks[type].each {|hook| hook.call(*args) }
+    @@hooks[type].clear
+  end
+
+  def self._add_hook(type, hook)
+    @@hooks[type] << hook
   end
 
 end
