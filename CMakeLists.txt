@@ -249,6 +249,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/status.c
     lib/handler/status/events.c
     lib/handler/status/requests.c
+    lib/handler/http2_debug_state.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/compress.c
     lib/handler/configurator/errordoc.c
@@ -261,6 +262,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/reproxy.c
     lib/handler/configurator/throttle_resp.c
     lib/handler/configurator/status.c
+    lib/handler/configurator/http2_debug_state.c
 
     lib/http1.c
 
@@ -272,7 +274,8 @@ SET(LIB_SOURCE_FILES
     lib/http2/frame.c
     lib/http2/hpack.c
     lib/http2/scheduler.c
-    lib/http2/stream.c)
+    lib/http2/stream.c
+    lib/http2/http2_debug_state.c)
 
 SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}
