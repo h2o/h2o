@@ -96,9 +96,10 @@ static void append_header_table_chunks(h2o_mem_pool_t *pool, h2o_iovec_vector_t 
                     (int)entry->value->len, entry->value->base);
     }
 
-    if (i > 0)
+    if (i > 0) {
         // remove the last commna
         --chunks->entries[chunks->size - 1].len;
+    }
 }
 
 h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_enabled)
@@ -168,9 +169,10 @@ h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_ena
                    stream->req.timestamps.request_begin_at.tv_sec);
         });
 
-        if (conn->streams->size > 0)
+        if (conn->streams->size > 0) {
             // remove the last commna
             --state->json.entries[state->json.size - 1].len;
+        }
     }
 
     append_chunk(&req->pool, &state->json,
