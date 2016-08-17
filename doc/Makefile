@@ -26,6 +26,7 @@ OUTPUT=\
     configure/basic_auth.html \
     configure/cgi.html \
     configure/mruby.html \
+    configure/dos_detection.html \
     faq.html \
 
 %.html: %.mt snippets/directive.mt snippets/wrapper.mt

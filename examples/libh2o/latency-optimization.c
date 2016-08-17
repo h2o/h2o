@@ -36,11 +36,7 @@
 static char *host, *port;
 static SSL_CTX *ssl_ctx;
 static int mode_server, server_flag_received;
-static h2o_socket_latency_optimization_conditions_t latopt_cond = {
-    .min_rtt              = 50,
-    .max_additional_delay = 10,
-    .max_cwnd             = 65535
-};
+static h2o_socket_latency_optimization_conditions_t latopt_cond = {.min_rtt = 50, .max_additional_delay = 10, .max_cwnd = 65535};
 size_t write_block_size = 65536;
 
 /* globals */
@@ -158,7 +154,8 @@ static void client_on_read_second(h2o_socket_t *sock, const char *err)
 
     if (client_stats.bytes_received >= 1024 * 1024) {
         uint64_t now = h2o_now(h2o_socket_get_loop(sock));
-        printf("Delay: %" PRIu64 " octets, %" PRIu64 " ms\n", client_stats.bytes_before_sig, client_stats.sig_received_at - client_stats.resp_start_at);
+        printf("Delay: %" PRIu64 " octets, %" PRIu64 " ms\n", client_stats.bytes_before_sig,
+               client_stats.sig_received_at - client_stats.resp_start_at);
         printf("Total: %" PRIu64 " octets, %" PRIu64 " ms\n", client_stats.bytes_received, now - client_stats.resp_start_at);
         exit(0);
     }
@@ -245,21 +242,20 @@ static void usage(const char *cmd)
                     "         --block-size=octets  default write block size\n"
                     "         --min-rtt=ms         minimum RTT to enable latency optimization\n"
                     "         --max-cwnd=octets    maximum size of CWND to enable latency\n"
-                    "                              optimization\n", cmd);
+                    "                              optimization\n",
+            cmd);
     exit(1);
 }
 
 int main(int argc, char **argv)
 {
-    static const struct option longopts[] = {
-        {"listen", no_argument, NULL, 'l'},
-        {"reverse-role", no_argument, NULL, 'r'},
-        {"tls", no_argument, NULL, 't'},
-        {"block-size", no_argument, NULL, 'b'},
-        {"min-rtt", required_argument, NULL, 'R'},
-        {"max-cwnd", required_argument, NULL, 'c'},
-        {}
-    };
+    static const struct option longopts[] = {{"listen", no_argument, NULL, 'l'},
+                                             {"reverse-role", no_argument, NULL, 'r'},
+                                             {"tls", no_argument, NULL, 't'},
+                                             {"block-size", no_argument, NULL, 'b'},
+                                             {"min-rtt", required_argument, NULL, 'R'},
+                                             {"max-cwnd", required_argument, NULL, 'c'},
+                                             {}};
     int opt_ch, mode_listen = 0, mode_reverse_role = 0, mode_tls = 0;
     struct addrinfo hints, *res = NULL;
     int err;
