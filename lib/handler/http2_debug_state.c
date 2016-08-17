@@ -53,7 +53,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("conn-flow-out"), 0, conn_flow_out.base, conn_flow_out.len);
 
     h2o_start_response(req, &generator);
-    h2o_send(req, debug_state->json.entries, h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")) ? 0 : debug_state->json.size, 1);
+    h2o_send(req, debug_state->json.entries,
+             h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")) ? 0 : debug_state->json.size, 1);
     return 0;
 }
 

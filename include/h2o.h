@@ -673,11 +673,10 @@ typedef struct st_h2o_res_t {
     h2o_mime_attributes_t *mime_attr;
 } h2o_res_t;
 
-
 /**
  * debug state (currently only for HTTP/2)
  */
-typedef struct st_h2o_http2_debug_state_t{
+typedef struct st_h2o_http2_debug_state_t {
     h2o_iovec_vector_t json;
     ssize_t conn_flow_in;
     ssize_t conn_flow_out;

@@ -363,7 +363,8 @@ Redo:
                 result->value = (h2o_iovec_t *)&h2o_hpack_static_table[index - 1].value;
             }
         } else if (index - HEADER_TABLE_OFFSET < hpack_header_table->num_entries) {
-            struct st_h2o_hpack_header_table_entry_t *entry = h2o_hpack_header_table_get(hpack_header_table, index - HEADER_TABLE_OFFSET);
+            struct st_h2o_hpack_header_table_entry_t *entry =
+                h2o_hpack_header_table_get(hpack_header_table, index - HEADER_TABLE_OFFSET);
             *err_desc = entry->err_desc;
             result->name = entry->name;
             if (!h2o_iovec_is_token(result->name))
