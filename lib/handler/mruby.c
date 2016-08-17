@@ -62,6 +62,15 @@ static void setup_globals(mrb_state *mrb)
 
     h2o_mruby_eval_expr(mrb, "$LOAD_PATH << \"#{$H2O_ROOT}/share/h2o/mruby\"");
     h2o_mruby_assert(mrb);
+
+    /* require core modules and include built-in libraries */
+    h2o_mruby_eval_expr(mrb, "require \"preloads.rb\"");
+    if (mrb->exc != NULL) {
+        mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
+        struct RString *error = mrb_str_ptr(obj);
+        fprintf(stderr, "an error occurred while loading %s/%s: %s", root, "share/h2o/mruby/preloads.rb", error->as.heap.ptr);
+        abort();
+    }
 }
 
 mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v)
@@ -162,6 +171,17 @@ mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config
         goto Exit;
     } else if (mrb_nil_p(result)) {
         snprintf(errbuf, 256, "returned value is not callable");
+        goto Exit;
+    }
+
+    /* validate proc by calling H2O.validate_handler method */
+    mrb_funcall_argv(mrb, h2o_mruby_eval_expr(mrb, "H2O"), mrb_intern_lit(mrb, "validate_handler"), 1, &result);
+    if (mrb->exc != NULL) {
+        mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
+        struct RString *error = mrb_str_ptr(obj);
+        snprintf(errbuf, 256, "%s", error->as.heap.ptr);
+        mrb->exc = 0;
+        result = mrb_nil_value();
         goto Exit;
     }
 
@@ -333,6 +353,7 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
     /* compile code (must be done for each thread) */
     int arena = mrb_gc_arena_save(handler_ctx->mrb);
     mrb_value proc = h2o_mruby_compile_code(handler_ctx->mrb, &handler->config, NULL);
+
     handler_ctx->proc = mrb_funcall_argv(handler_ctx->mrb, mrb_ary_entry(handler_ctx->constants, H2O_MRUBY_PROC_APP_TO_FIBER),
                                          handler_ctx->symbols.sym_call, 1, &proc);
     h2o_mruby_assert(handler_ctx->mrb);
