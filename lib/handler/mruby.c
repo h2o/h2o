@@ -65,7 +65,12 @@ static void setup_globals(mrb_state *mrb)
 
     /* require core modules and include built-in libraries */
     h2o_mruby_eval_expr(mrb, "require \"preloads.rb\"");
-    h2o_mruby_assert(mrb);
+    if (mrb->exc != NULL) {
+        mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
+        struct RString *error = mrb_str_ptr(obj);
+        fprintf(stderr, "an error occurred while loading %s/%s: %s", root, "share/h2o/mruby/preloads.rb", error->as.heap.ptr);
+        abort();
+    }
 }
 
 mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v)
