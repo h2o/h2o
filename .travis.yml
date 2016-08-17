@@ -3,6 +3,11 @@ language: cpp
 compiler:
   - gcc
 
+addons:
+  hosts:
+    - 127.0.0.1.xip.io
+    - alternate.127.0.0.1.xip.io
+
 before_install:
   # upgrade g++ and libstdc++ to build nghttp2
   - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
