@@ -1735,7 +1735,7 @@ void h2o_status_register(h2o_pathconf_t *pathconf);
  */
 void h2o_status_register_configurator(h2o_globalconf_t *conf);
 
-/* lib/handler/status.c */
+/* lib/handler/http2_debug_state.c */
 
 /**
  * registers the http2 debug state handler
