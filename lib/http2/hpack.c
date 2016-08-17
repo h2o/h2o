@@ -250,14 +250,6 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, con
     return ret;
 }
 
-h2o_hpack_header_table_entry_t *h2o_hpack_header_table_get(h2o_hpack_header_table_t *table, size_t index)
-{
-    size_t entry_index = (index + table->entry_start_index) % table->entry_capacity;
-    struct st_h2o_hpack_header_table_entry_t *entry = table->entries + entry_index;
-    assert(entry->name != NULL);
-    return entry;
-}
-
 static void header_table_evict_one(h2o_hpack_header_table_t *table)
 {
     struct st_h2o_hpack_header_table_entry_t *entry;

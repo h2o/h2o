@@ -71,8 +71,7 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
 void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
                                 size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t *ts, const h2o_iovec_t *server_name,
                                 size_t content_length);
-
-h2o_hpack_header_table_entry_t *h2o_hpack_header_table_get(h2o_hpack_header_table_t *header_table, size_t index);
+static h2o_hpack_header_table_entry_t *h2o_hpack_header_table_get(h2o_hpack_header_table_t *table, size_t index);
 
 /* frames */
 
@@ -481,6 +480,14 @@ inline uint8_t *h2o_http2_encode32u(uint8_t *dst, uint32_t value)
     *dst++ = value >> 8;
     *dst++ = value;
     return dst;
+}
+
+inline h2o_hpack_header_table_entry_t *h2o_hpack_header_table_get(h2o_hpack_header_table_t *table, size_t index)
+{
+    size_t entry_index = (index + table->entry_start_index) % table->entry_capacity;
+    struct st_h2o_hpack_header_table_entry_t *entry = table->entries + entry_index;
+    assert(entry->name != NULL);
+    return entry;
 }
 
 #endif
