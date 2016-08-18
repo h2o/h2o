@@ -348,18 +348,34 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
     return shared_ctx;
 }
 
+static void dispose_storage_item(struct st_h2o_context_storage_item_t *self, h2o_context_t *ctx);
+
+static h2o_mruby_shared_context_t *get_shared_context(h2o_context_t *ctx)
+{
+    static size_t key = SIZE_MAX;
+    h2o_context_get_storage_index(ctx, &key);
+    if (ctx->storage.entries[key] == NULL) {
+        h2o_context_storage_item_t *item = h2o_mem_alloc(sizeof(*item));
+        item->data = create_shared_context(ctx);
+        item->dispose = dispose_storage_item;
+        ctx->storage.entries[key] = item;
+    }
+    return ctx->storage.entries[key]->data;
+}
+
+static void dispose_storage_item(struct st_h2o_context_storage_item_t *self, h2o_context_t *ctx)
+{
+    mrb_state *mrb = get_shared_context(ctx)->mrb;
+    mrb_close(mrb);
+}
+
 static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
 {
     h2o_mruby_handler_t *handler = (void *)_handler;
     h2o_mruby_context_t *handler_ctx = h2o_mem_alloc(sizeof(*handler_ctx));
 
     handler_ctx->handler = handler;
-
-    /* lazy initialize shared context */
-    if (ctx->mruby_shared_context == NULL) {
-        ctx->mruby_shared_context = create_shared_context(ctx);
-    }
-    handler_ctx->shared = ctx->mruby_shared_context;
+    handler_ctx->shared = get_shared_context(ctx);
 
     /* compile code (must be done for each thread) */
     int arena = mrb_gc_arena_save(handler_ctx->shared->mrb);
@@ -612,7 +628,7 @@ static void on_generator_dispose(void *_generator)
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 {
     h2o_mruby_handler_t *handler = (void *)_handler;
-    h2o_mruby_shared_context_t *shared = req->conn->ctx->mruby_shared_context;
+    h2o_mruby_shared_context_t *shared = get_shared_context(req->conn->ctx);
     int gc_arena = mrb_gc_arena_save(shared->mrb);
 
     h2o_mruby_generator_t *generator = h2o_mem_alloc_shared(&req->pool, sizeof(*generator), on_generator_dispose);

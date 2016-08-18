@@ -77,13 +77,7 @@ typedef struct st_h2o_mruby_handler_t {
     h2o_mruby_config_vars_t config;
 } h2o_mruby_handler_t;
 
-typedef struct st_h2o_mruby_context_t {
-    h2o_mruby_handler_t *handler;
-    mrb_value proc;
-    h2o_mruby_shared_context_t *shared;
-} h2o_mruby_context_t;
-
-struct st_h2o_mruby_shared_context_t {
+typedef struct st_h2o_mruby_shared_context_t {
     mrb_state *mrb;
     mrb_value constants;
     struct {
@@ -94,7 +88,13 @@ struct st_h2o_mruby_shared_context_t {
         mrb_sym sym_body;
         mrb_sym sym_async;
     } symbols;
-};
+} h2o_mruby_shared_context_t;
+
+typedef struct st_h2o_mruby_context_t {
+    h2o_mruby_handler_t *handler;
+    mrb_value proc;
+    h2o_mruby_shared_context_t *shared;
+} h2o_mruby_context_t;
 
 typedef struct st_h2o_mruby_chunked_t h2o_mruby_chunked_t;
 typedef struct st_h2o_mruby_http_request_context_t h2o_mruby_http_request_context_t;

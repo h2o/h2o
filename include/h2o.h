@@ -96,9 +96,6 @@ typedef struct st_h2o_hostconf_t h2o_hostconf_t;
 typedef struct st_h2o_globalconf_t h2o_globalconf_t;
 typedef struct st_h2o_mimemap_t h2o_mimemap_t;
 typedef struct st_h2o_logconf_t h2o_logconf_t;
-#if H2O_USE_MRUBY
-typedef struct st_h2o_mruby_shared_context_t h2o_mruby_shared_context_t;
-#endif
 
 /**
  * a predefined, read-only, fast variant of h2o_iovec_t, defined in h2o/token.h
@@ -470,6 +467,16 @@ enum {
 };
 
 /**
+ * holds various data related to the context
+ */
+typedef struct st_h2o_context_storage_item_t {
+    void (*dispose)(struct st_h2o_context_storage_item_t *self, h2o_context_t *ctx);
+    void *data;
+} h2o_context_storage_item_t;
+
+typedef H2O_VECTOR(h2o_context_storage_item_t *) h2o_context_storage_t;
+
+/**
  * context of the http server.
  */
 struct st_h2o_context_t {
@@ -507,12 +514,10 @@ struct st_h2o_context_t {
      * open file cache
      */
     h2o_filecache_t *filecache;
-#if H2O_USE_MRUBY
     /**
-     * shared mruby context (will be lazily initialized)
+     * context scope storage for general use
      */
-    h2o_mruby_shared_context_t *mruby_shared_context;
-#endif
+    h2o_context_storage_t storage;
     /**
      * flag indicating if shutdown has been requested
      */
@@ -1321,6 +1326,11 @@ static void h2o_context_set_filter_context(h2o_context_t *ctx, h2o_filter_t *fil
  * returns per-module context set by the on_context_init callback
  */
 static void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *logger);
+/*
+ * assign and set the index of the context storage
+ */
+static void h2o_context_get_storage_index(h2o_context_t *ctx, size_t *key);
+
 /* built-in generators */
 
 enum {
@@ -1878,6 +1888,16 @@ inline void h2o_context_set_filter_context(h2o_context_t *ctx, h2o_filter_t *fil
 inline void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *logger)
 {
     return ctx->_module_configs[logger->_config_slot];
+}
+
+inline void h2o_context_get_storage_index(h2o_context_t *ctx, size_t *key)
+{
+    if (*key == SIZE_MAX)
+        *key = ctx->storage.size;
+    if (ctx->storage.size <= *key) {
+        h2o_vector_reserve(NULL, &ctx->storage, *key + 1);
+        ctx->storage.size = *key + 1;
+    }
 }
 
 static inline void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype)

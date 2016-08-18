@@ -24,9 +24,6 @@
 #include <sys/time.h>
 #include "h2o.h"
 #include "h2o/memcached.h"
-#if H2O_USE_MRUBY
-#include "h2o/mruby_.h"
-#endif
 
 void h2o_context_init_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pathconf)
 {
@@ -153,10 +150,17 @@ void h2o_context_dispose(h2o_context_t *ctx)
     h2o_filecache_destroy(ctx->filecache);
     ctx->filecache = NULL;
 
-#if H2O_USE_MRUBY
-    mrb_close(ctx->mruby_shared_context->mrb);
-    ctx->mruby_shared_context = NULL;
-#endif
+    /* clear storage */
+    for (i = 0; i != ctx->storage.size; ++i) {
+        h2o_context_storage_item_t *item = ctx->storage.entries[i];
+        if (item != NULL) {
+            if (item->dispose != NULL) {
+                item->dispose(item, ctx);
+            }
+            free(item);
+        }
+    }
+    free(ctx->storage.entries);
 
     /* TODO assert that the all the getaddrinfo threads are idle */
     h2o_multithread_unregister_receiver(ctx->queue, &ctx->receivers.hostinfo_getaddr);
