@@ -470,7 +470,7 @@ enum {
  * holds various data related to the context
  */
 typedef struct st_h2o_context_storage_item_t {
-    void (*dispose)(struct st_h2o_context_storage_item_t *self, h2o_context_t *ctx);
+    void (*dispose)(void *data);
     void *data;
 } h2o_context_storage_item_t;
 

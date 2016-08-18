@@ -348,7 +348,7 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
     return shared_ctx;
 }
 
-static void dispose_storage_item(struct st_h2o_context_storage_item_t *self, h2o_context_t *ctx);
+static void dispose_storage_item(void *data);
 
 static h2o_mruby_shared_context_t *get_shared_context(h2o_context_t *ctx)
 {
@@ -363,10 +363,10 @@ static h2o_mruby_shared_context_t *get_shared_context(h2o_context_t *ctx)
     return ctx->storage.entries[key]->data;
 }
 
-static void dispose_storage_item(struct st_h2o_context_storage_item_t *self, h2o_context_t *ctx)
+static void dispose_storage_item(void *data)
 {
-    mrb_state *mrb = get_shared_context(ctx)->mrb;
-    mrb_close(mrb);
+    h2o_mruby_shared_context_t *shared_ctx = (h2o_mruby_shared_context_t *)data;
+    mrb_close(shared_ctx->mrb);
 }
 
 static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
