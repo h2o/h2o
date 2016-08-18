@@ -1327,9 +1327,9 @@ static void h2o_context_set_filter_context(h2o_context_t *ctx, h2o_filter_t *fil
  */
 static void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *logger);
 /*
- * assign and set the index of the context storage
+ * return the address associated with the key in the context storage
  */
-static void h2o_context_get_storage_index(h2o_context_t *ctx, size_t *key);
+static void **h2o_context_get_storage(h2o_context_t *ctx, size_t *key, void (*dispose_cb)(void *));
 
 /* built-in generators */
 
@@ -1890,7 +1890,8 @@ inline void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *lo
     return ctx->_module_configs[logger->_config_slot];
 }
 
-inline void h2o_context_get_storage_index(h2o_context_t *ctx, size_t *key)
+inline void **h2o_context_get_storage(h2o_context_t *ctx, size_t *key, void (*dispose_cb)(void *))
+//inline void h2o_context_get_storage_index(h2o_context_t *ctx, size_t *key)
 {
     if (*key == SIZE_MAX)
         *key = ctx->storage.size;
@@ -1899,6 +1900,10 @@ inline void h2o_context_get_storage_index(h2o_context_t *ctx, size_t *key)
         memset(ctx->storage.entries + ctx->storage.size, 0, (*key + 1 - ctx->storage.size) * sizeof(ctx->storage.entries[0]));
         ctx->storage.size = *key + 1;
     }
+
+    ctx->storage.entries[*key].dispose = dispose_cb;
+    return &ctx->storage.entries[*key].data;
+
 }
 
 static inline void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype)
