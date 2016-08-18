@@ -41,7 +41,7 @@ static int compile_test(mrb_state *mrb, h2o_mruby_config_vars_t *config, char *e
     return ok;
 }
 
-static mrb_state *maybe_init_mrb(struct mruby_configurator_t *self)
+static mrb_state *get_mrb(struct mruby_configurator_t *self)
 {
     if (self->mrb == NULL) {
         self->mrb = mrb_open();
@@ -65,7 +65,7 @@ static int on_config_mruby_handler(h2o_configurator_command_t *cmd, h2o_configur
 
     /* check if there is any error in source */
     char errbuf[1024];
-    if (!compile_test(maybe_init_mrb(self), self->vars, errbuf)) {
+    if (!compile_test(get_mrb(self), self->vars, errbuf)) {
         h2o_configurator_errprintf(cmd, node, "ruby compile error:%s", errbuf);
         return -1;
     }
@@ -106,7 +106,7 @@ static int on_config_mruby_handler_file(h2o_configurator_command_t *cmd, h2o_con
 
     /* check if there is any error in source */
     char errbuf[1024];
-    if (!compile_test(maybe_init_mrb(self), self->vars, errbuf)) {
+    if (!compile_test(get_mrb(self), self->vars, errbuf)) {
         h2o_configurator_errprintf(cmd, node, "failed to compile file:%s:%s", node->data.scalar, errbuf);
         goto Exit;
     }
