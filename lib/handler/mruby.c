@@ -354,13 +354,13 @@ static h2o_mruby_shared_context_t *get_shared_context(h2o_context_t *ctx)
 {
     static size_t key = SIZE_MAX;
     h2o_context_get_storage_index(ctx, &key);
-    if (ctx->storage.entries[key] == NULL) {
-        h2o_context_storage_item_t *item = h2o_mem_alloc(sizeof(*item));
-        item->data = create_shared_context(ctx);
-        item->dispose = dispose_storage_item;
+    if (ctx->storage.entries[key].data == NULL) {
+        h2o_context_storage_item_t item = {NULL};
+        item.data = create_shared_context(ctx);
+        item.dispose = dispose_storage_item;
         ctx->storage.entries[key] = item;
     }
-    return ctx->storage.entries[key]->data;
+    return ctx->storage.entries[key].data;
 }
 
 static void dispose_storage_item(void *data)

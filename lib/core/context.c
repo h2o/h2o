@@ -152,12 +152,11 @@ void h2o_context_dispose(h2o_context_t *ctx)
 
     /* clear storage */
     for (i = 0; i != ctx->storage.size; ++i) {
-        h2o_context_storage_item_t *item = ctx->storage.entries[i];
-        if (item != NULL) {
-            if (item->dispose != NULL) {
-                item->dispose(item->data);
+        h2o_context_storage_item_t item = ctx->storage.entries[i];
+        if (item.data != NULL) {
+            if (item.dispose != NULL) {
+                item.dispose(item.data);
             }
-            free(item);
         }
     }
     free(ctx->storage.entries);

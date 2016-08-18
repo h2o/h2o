@@ -474,7 +474,7 @@ typedef struct st_h2o_context_storage_item_t {
     void *data;
 } h2o_context_storage_item_t;
 
-typedef H2O_VECTOR(h2o_context_storage_item_t *) h2o_context_storage_t;
+typedef H2O_VECTOR(h2o_context_storage_item_t) h2o_context_storage_t;
 
 /**
  * context of the http server.
@@ -1896,6 +1896,7 @@ inline void h2o_context_get_storage_index(h2o_context_t *ctx, size_t *key)
         *key = ctx->storage.size;
     if (ctx->storage.size <= *key) {
         h2o_vector_reserve(NULL, &ctx->storage, *key + 1);
+        memset(ctx->storage.entries + ctx->storage.size, 0, (*key + 1 - ctx->storage.size) * sizeof(ctx->storage.entries[0]));
         ctx->storage.size = *key + 1;
     }
 }
