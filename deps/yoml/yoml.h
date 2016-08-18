@@ -64,6 +64,11 @@ struct st_yoml_t {
     } data;
 };
 
+typedef struct st_yoml_node_vector_t {
+    size_t size;
+    yoml_t **entries;
+} yoml_node_vector_t;
+
 static inline void yoml_free(yoml_t *node, void *(*mem_set)(void *, int, size_t))
 {
     size_t i;
