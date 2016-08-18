@@ -410,11 +410,10 @@ static void test_hpack_push(void)
 
     /* serialize, deserialize, and compare */
     h2o_hpack_flatten_request(&buf, &encode_table, 0, 16384, &req, 0);
-    parse_and_compare_request(&decode_table, buf->bytes, buf->size, method, &H2O_URL_SCHEME_HTTPS, authority,
-                              h2o_iovec_init(H2O_STRLIT("/banner.jpg")), H2O_TOKEN_USER_AGENT->buf, user_agent,
-                              H2O_TOKEN_ACCEPT->buf, accept_images, H2O_TOKEN_ACCEPT_LANGUAGE->buf, accept_language,
-                              H2O_TOKEN_ACCEPT_ENCODING->buf, accept_encoding, H2O_TOKEN_REFERER->buf, referer,
-                              (h2o_iovec_t){NULL});
+    parse_and_compare_request(
+        &decode_table, buf->bytes, buf->size, method, &H2O_URL_SCHEME_HTTPS, authority, h2o_iovec_init(H2O_STRLIT("/banner.jpg")),
+        H2O_TOKEN_USER_AGENT->buf, user_agent, H2O_TOKEN_ACCEPT->buf, accept_images, H2O_TOKEN_ACCEPT_LANGUAGE->buf,
+        accept_language, H2O_TOKEN_ACCEPT_ENCODING->buf, accept_encoding, H2O_TOKEN_REFERER->buf, referer, (h2o_iovec_t){NULL});
     h2o_buffer_consume(&buf, buf->size);
 
     /* setup third request (headers are the same) */

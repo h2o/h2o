@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+<base href="../" />
+
+<!-- oktavia -->
+<link rel="stylesheet" href="assets/searchstyle.css" type="text/css" />
+<script src="search/jquery-1.9.1.min.js"></script>
+<script src="search/oktavia-jquery-ui.js"></script>
+<script src="search/oktavia-english-search.js"></script>
+<!-- /oktavia -->
+
+<link rel="stylesheet" href="assets/style.css" type="text/css" />
+
+<title>Using DoS Detection - Configure - H2O - the optimized HTTP/2 server</title>
+</head>
+<body>
+<div id="body">
+<div id="top">
+
+<h1>
+<a href="index.html">H2O</a>
+</h1>
+<p class="description">the optimized HTTP/1.x, HTTP/2 server</p>
+
+<!-- oktavia -->
+<form id="searchform">
+<input class="search" type="search" name="search" id="search" results="5" value="" placeholder="Search" />
+<div id="searchresult_box">
+<div id="close_search_box">&times;</div>
+<div id="searchresult_summary"></div>
+<div id="searchresult"></div>
+<div id="searchresult_nav"></div>
+<span class="pr">Powered by <a href="https://github.com/shibukawa/oktavia">Oktavia</a></span>
+</div>
+</form>
+<!-- /oktavia -->
+
+</div>
+
+<table id="menu">
+<tr>
+<td><a href="index.html">Top</a></td>
+<td><a href="install.html">Install</a></td>
+<td class="selected">Configure</td>
+<td><a href="faq.html">FAQ</a></td>
+<td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
+<td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
+</tr>
+</table>
+
+<div id="main">
+
+<h2>
+<a href="configure.html">Configure</a> &gt;
+Using DoS Detection
+</h2>
+
+
+<p>
+Starting from version 2.1, H2O comes with a mruby script named <a href="https://github.com/h2o/h2o/blob/master/share/h2o/mruby/dos_detector.rb">dos_detector.rb</a> that implements DoS Detection feature.
+The script provides a Rack handler that detects HTTP flooding attacks based on the client's IP address. 
+</p>
+
+<h3 id="basic-usage">Basic Usage</h3>
+
+<p>
+Below example uses the mruby script to detect DoS attacks.
+The default detecting strategy is simply counting requests within configured period.
+If the count exceeds configured threshold, the handler returns a <code>403 Forbidden</code> response.
+Otherwise, the handler returns a <code>399</code> response, and the request is <a href="configure/mruby.html#delegating-request">delegated</a> internally to the next handler.
+</p>
+
+<div class="example">
+<div class="caption">Example. Configuring DoS Detection</div>
+<pre><code>paths:
+  &quot;/&quot;:
+    mruby.handler: |
+      require &quot;dos_detector.rb&quot;
+      DoSDetector.new({
+        :strategy =&gt; DoSDetector.CountingStrategy.new({
+          :period     =&gt; 10,  # default
+          :threshold  =&gt; 100, # default
+          :ban_period =&gt; 300, # default
+        }),
+      })
+    file.dir: /path/to/doc_root
+</code></pre>
+</div>
+
+
+<p>
+In the example above, the handler countup the requests within 10 seconds for each IP address, and when the count exceeds 100,
+it returns a <code>403 Forbidden</code> response for the request and marks the client as "Banned" for 300 seconds. While marked as "Banned", the handler returns a <code>403 Forbidden</code> to all requests from the same IP address.
+</p>
+
+<h3 id="configuring-details">Configuring Details</h3>
+
+<p>
+You can pass the following parameters to <code>DoSDetector.new</code> .
+<ul>
+<li><code>:strategy</code>
+  <p>The algorithm to detect DoS attacks. You can write and pass your own strategies if needed. The default strategy is <code>DoSDetector.CountingStrategy</code> which takes the following parameters:</p>
+  <ul>
+    <li><code>:period</code>
+      <p>Time window in seconds to count requests. The default value is 10.</p>
+    </li>
+    <li><code>:threshold</code>
+      <p>Threshold count of request. The default value is 100.</p>
+    </li>
+    <li><code>:ban_period</code>
+      <p>Duration in seconds in which "Banned" client continues to be restricted. The default value is 300.</p>
+    </li>
+  </ul>
+</li>
+<li><code>:callback</code>
+  <p>The callback which is called by the handler with detecting result. You can define your own callback to return arbitrary response, set response headers, etc. The default callback returns <code>403 Forbidden</code> if DoS detected, otherwise delegate the request to the next handler.</p>
+</li>
+<li><code>:forwarded</code>
+  <p>
+    If set true, the handler uses X-HTTP-Forwarded-For header to get client's IP address if the header exists. The default value is true.
+  </p>
+</li>
+<li><code>:cache_size</code>
+  <p>
+    The capacity of the LRU cache which preserves client's IP address and associated request count. The default value is 128.
+  </p>
+</li>
+</ul>
+<div class="example">
+<div class="caption">Example. Configuring Details</div>
+<pre><code>paths:
+  &quot;/&quot;:
+    mruby.handler: |
+      require &quot;dos_detector.rb&quot;
+      DoSDetector.new({
+        :strategy =&gt; DoSDetector.CountingStrategy.new,
+        :forwarded =&gt; false,
+        :cache_size =&gt; 2048,
+        :callback =&gt; proc {|env, detected, ip|
+          if detected &amp;&amp; ! ip.start_with?(&quot;192.168.&quot;)
+            [503, {}, [&quot;Service Unavailable&quot;]]
+          else
+            [399, {}, []]
+          end
+        }
+      })
+    file.dir: /path/to/doc_root
+</code></pre>
+</div>
+
+</p>
+
+<h3 id="points-to-notice">Points to Notice</h3>
+<ul>
+<li>
+  For now, counting requests is "per-thread" and not shared between multiple threads.
+</li>
+</ul>
+
+
+
+
+</div>
+<div id="footer">
+<p>
+Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+</p>
+</div>
+</body>
+</html>

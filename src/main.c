@@ -1552,6 +1552,7 @@ static void setup_configurators(void)
     h2o_reproxy_register_configurator(&conf.globalconf);
     h2o_redirect_register_configurator(&conf.globalconf);
     h2o_status_register_configurator(&conf.globalconf);
+    h2o_http2_debug_state_register_configurator(&conf.globalconf);
 #if H2O_USE_MRUBY
     h2o_mruby_register_configurator(&conf.globalconf);
 #endif

@@ -227,7 +227,7 @@ $ctx->{directive}->(
     levels   => [ qw(global host path) ],
     desc     => <<'EOT',
 Obsoleted in 2.0.
-Synonym of <a href="configure/file_directives.html#send-compressed"><code>send-compressed</code></a>.
+Synonym of <a href="configure/file_directives.html#file.send-compressed"><code>file.send-compressed</code></a>.
 EOT
 )->(sub {})
 ?>

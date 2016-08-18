@@ -673,6 +673,15 @@ typedef struct st_h2o_res_t {
     h2o_mime_attributes_t *mime_attr;
 } h2o_res_t;
 
+/**
+ * debug state (currently only for HTTP/2)
+ */
+typedef struct st_h2o_http2_debug_state_t {
+    h2o_iovec_vector_t json;
+    ssize_t conn_flow_in;
+    ssize_t conn_flow_out;
+} h2o_http2_debug_state_t;
+
 typedef struct st_h2o_conn_callbacks_t {
     /**
      * getsockname (return size of the obtained address, or 0 if failed)
@@ -690,6 +699,10 @@ typedef struct st_h2o_conn_callbacks_t {
      * Return the underlying socket struct
      */
     h2o_socket_t *(*get_socket)(h2o_conn_t *_conn);
+    /**
+     * debug state callback (may be NULL)
+     */
+    h2o_http2_debug_state_t *(*get_debug_state)(h2o_req_t *req, int hpack_enabled);
     /**
      * logging callbacks (may be NULL)
      */
@@ -1721,6 +1734,17 @@ void h2o_status_register(h2o_pathconf_t *pathconf);
  * registers the configurator
  */
 void h2o_status_register_configurator(h2o_globalconf_t *conf);
+
+/* lib/handler/http2_debug_state.c */
+
+/**
+ * registers the http2 debug state handler
+ */
+void h2o_http2_debug_state_register(h2o_hostconf_t *hostconf, int hpack_enabled);
+/**
+ * registers the configurator
+ */
+void h2o_http2_debug_state_register_configurator(h2o_globalconf_t *conf);
 
 /* inline defs */
 
