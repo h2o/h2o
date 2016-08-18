@@ -1891,9 +1891,10 @@ inline void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *lo
 }
 
 inline void **h2o_context_get_storage(h2o_context_t *ctx, size_t *key, void (*dispose_cb)(void *))
-//inline void h2o_context_get_storage_index(h2o_context_t *ctx, size_t *key)
 {
-    if (*key == SIZE_MAX)
+    /* SIZE_MAX might not be available in case the file is included from a C++ source file */
+    size_t size_max = (size_t) - 1;
+    if (*key == size_max)
         *key = ctx->storage.size;
     if (ctx->storage.size <= *key) {
         h2o_vector_reserve(NULL, &ctx->storage, *key + 1);
