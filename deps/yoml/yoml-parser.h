@@ -41,7 +41,6 @@ typedef struct st_yoml_tag_resolver_t {
     unsigned int depth;
 } yoml_tag_resolver_t;
 
-
 static yoml_t *yoml__parse_node(yaml_parser_t *parser, yaml_event_type_t *last_event, void *(*mem_set)(void *, int, size_t),
                                 const char *filename);
 
@@ -345,11 +344,10 @@ static inline int yoml__resolve_file_tag(yoml_t **target, yaml_parser_t *parser,
     if (cached_nodes->entries == NULL) {
         cached_nodes->entries = malloc(sizeof(yoml_t *));
     } else {
-        cached_nodes->entries = realloc(cached_nodes->entries, cached_nodes->size + 1);
+        cached_nodes->entries = realloc(cached_nodes->entries, (cached_nodes->size + 1) * sizeof(yoml_t *));
     }
     if (cached_nodes->entries == NULL)
         return -1;
-
     cached_nodes->entries[cached_nodes->size++] = node;
 
 NodeFound:
