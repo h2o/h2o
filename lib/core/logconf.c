@@ -353,16 +353,11 @@ Fail:
     return pos;
 }
 
-static inline int timeval_is_null(struct timeval *tv)
-{
-    return tv->tv_sec == 0;
-}
-
 #define DURATION_MAX_LEN (sizeof(H2O_INT32_LONGEST_STR ".999999") - 1)
 
 static char *append_duration(char *pos, struct timeval *from, struct timeval *until)
 {
-    if (timeval_is_null(from) || timeval_is_null(until)) {
+    if (h2o_timeval_is_null(from) || h2o_timeval_is_null(until)) {
         *pos++ = '-';
     } else {
         int32_t delta_sec = (int32_t)until->tv_sec - (int32_t)from->tv_sec;
@@ -490,7 +485,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             pos += sprintf(pos, "%" PRId32, (int32_t)req->res.status);
             break;
         case ELEMENT_TYPE_TIMESTAMP: /* %t */
-            if (timeval_is_null(&req->processed_at.at))
+            if (h2o_timeval_is_null(&req->processed_at.at))
                 goto EmitDash;
             RESERVE(H2O_TIMESTR_LOG_LEN + 2);
             *pos++ = '[';
@@ -498,7 +493,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             *pos++ = ']';
             break;
         case ELEMENT_TYPE_TIMESTAMP_STRFTIME: /* %{...}t */
-            if (timeval_is_null(&req->processed_at.at))
+            if (h2o_timeval_is_null(&req->processed_at.at))
                 goto EmitDash;
             {
                 size_t bufsz, len;
@@ -513,33 +508,33 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             }
             break;
         case ELEMENT_TYPE_TIMESTAMP_SEC_SINCE_EPOCH: /* %{sec}t */
-            if (timeval_is_null(&req->processed_at.at))
+            if (h2o_timeval_is_null(&req->processed_at.at))
                 goto EmitDash;
             RESERVE(sizeof(H2O_UINT32_LONGEST_STR) - 1);
             pos += sprintf(pos, "%" PRIu32, (uint32_t)req->processed_at.at.tv_sec);
             break;
         case ELEMENT_TYPE_TIMESTAMP_MSEC_SINCE_EPOCH: /* %{msec}t */
-            if (timeval_is_null(&req->processed_at.at))
+            if (h2o_timeval_is_null(&req->processed_at.at))
                 goto EmitDash;
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
             pos += sprintf(pos, "%" PRIu64,
                            (uint64_t)req->processed_at.at.tv_sec * 1000 + (uint64_t)req->processed_at.at.tv_usec / 1000);
             break;
         case ELEMENT_TYPE_TIMESTAMP_USEC_SINCE_EPOCH: /* %{usec}t */
-            if (timeval_is_null(&req->processed_at.at))
+            if (h2o_timeval_is_null(&req->processed_at.at))
                 goto EmitDash;
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
             pos +=
                 sprintf(pos, "%" PRIu64, (uint64_t)req->processed_at.at.tv_sec * 1000000 + (uint64_t)req->processed_at.at.tv_usec);
             break;
         case ELEMENT_TYPE_TIMESTAMP_MSEC_FRAC: /* %{msec_frac}t */
-            if (timeval_is_null(&req->processed_at.at))
+            if (h2o_timeval_is_null(&req->processed_at.at))
                 goto EmitDash;
             RESERVE(3);
             pos += sprintf(pos, "%03u", (unsigned)(req->processed_at.at.tv_usec / 1000));
             break;
         case ELEMENT_TYPE_TIMESTAMP_USEC_FRAC: /* %{usec_frac}t */
-            if (timeval_is_null(&req->processed_at.at))
+            if (h2o_timeval_is_null(&req->processed_at.at))
                 goto EmitDash;
             RESERVE(6);
             pos += sprintf(pos, "%06u", (unsigned)req->processed_at.at.tv_usec);
@@ -602,7 +597,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
 
         case ELEMENT_TYPE_REQUEST_HEADER_TIME:
             RESERVE(DURATION_MAX_LEN);
-            pos = append_duration(pos, &req->timestamps.request_begin_at, timeval_is_null(&req->timestamps.request_body_begin_at)
+            pos = append_duration(pos, &req->timestamps.request_begin_at, h2o_timeval_is_null(&req->timestamps.request_body_begin_at)
                                                                               ? &req->processed_at.at
                                                                               : &req->timestamps.request_body_begin_at);
             break;

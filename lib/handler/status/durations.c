@@ -141,20 +141,6 @@ static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h
     return ret;
 }
 
-static int64_t diff_timeval(struct timeval *from, struct timeval *until)
-{
-    int32_t delta_sec = (int32_t)until->tv_sec - (int32_t)from->tv_sec;
-    int32_t delta_usec = (int32_t)until->tv_usec - (int32_t)from->tv_usec;
-    int64_t delta = (int64_t)(delta_sec * 1000*1000L) + delta_usec;
-
-    return delta;
-}
-
-static inline int timeval_is_null(struct timeval *tv)
-{
-        return tv->tv_sec == 0;
-}
-
 static void stat_access(h2o_logger_t *_self, h2o_req_t *req)
 {
     struct st_duration_stats_t *ctx_stats = h2o_context_get_logger_context(req->conn->ctx, _self);
@@ -168,15 +154,15 @@ static void stat_access(h2o_logger_t *_self, h2o_req_t *req)
         if (!((until)->tv_sec + (until)->tv_usec)) { \
             break; \
         } \
-        int64_t dur = diff_timeval((from), (until)); \
+        int64_t dur = h2o_timeval_substract((from), (until)); \
         gkc_insert_value(ctx_stats->x, dur); \
     } while(0)
 
     ADD_OBSERVATION(connect_time, &req->conn->connected_at, &req->timestamps.request_begin_at);
-    ADD_OBSERVATION(header_time, &req->timestamps.request_begin_at, timeval_is_null(&req->timestamps.request_body_begin_at)
+    ADD_OBSERVATION(header_time, &req->timestamps.request_begin_at, h2o_timeval_is_null(&req->timestamps.request_body_begin_at)
             ? &req->processed_at.at
             : &req->timestamps.request_body_begin_at);
-    ADD_OBSERVATION(body_time, timeval_is_null(&req->timestamps.request_body_begin_at)
+    ADD_OBSERVATION(body_time, h2o_timeval_is_null(&req->timestamps.request_body_begin_at)
             ? &req->processed_at.at
             : &req->timestamps.request_body_begin_at, &req->processed_at.at);
     ADD_OBSERVATION(request_total_time, &req->timestamps.request_begin_at, &req->processed_at.at);
