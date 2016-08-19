@@ -116,7 +116,7 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
     size_t rlen;
     ssize_t rret;
     h2o_iovec_t vec;
-    int is_final;
+    enum h2o_stream_send_state stream_state;
 
     /* read the file */
     rlen = self->bytesleft;
@@ -126,19 +126,23 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
         ;
     if (rret == -1) {
         req->http1_is_persistent = 0; /* FIXME need a better interface to dispose an errored response w. content-length */
-        h2o_send(req, NULL, 0, 1);
+        h2o_send(req, NULL, 0, H2O_STREAM_SEND_STATE_FINAL);
         do_close(&self->super, req);
         return;
     }
     self->file.off += rret;
     self->bytesleft -= rret;
-    is_final = self->bytesleft == 0;
+    if (self->bytesleft == 0) {
+        stream_state = H2O_STREAM_SEND_STATE_FINAL;
+    } else {
+        stream_state = H2O_STREAM_SEND_STATE_IN_PROGRESS;
+    }
 
     /* send (and close if done) */
     vec.base = self->buf;
     vec.len = rret;
-    h2o_send(req, &vec, 1, is_final);
-    if (is_final)
+    h2o_send(req, &vec, 1, stream_state);
+    if (stream_state == H2O_STREAM_SEND_STATE_FINAL)
         do_close(&self->super, req);
 }
 
@@ -148,7 +152,7 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
     size_t rlen, used_buf = 0;
     ssize_t rret, vecarrsize;
     h2o_iovec_t vec[2];
-    int is_finished;
+    enum h2o_stream_send_state stream_state;
 
     if (self->bytesleft == 0) {
         size_t *range_cur = self->ranged.range_infos + 2 * self->ranged.current_range;
@@ -181,24 +185,24 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
         vec[1].base = h2o_mem_alloc_pool(&req->pool, sizeof("\r\n--") - 1 + BOUNDARY_SIZE + sizeof("--\r\n"));
         vec[1].len = sprintf(vec[1].base, "\r\n--%s--\r\n", self->ranged.boundary.base);
         vecarrsize = 2;
-        is_finished = 1;
+        stream_state = H2O_STREAM_SEND_STATE_FINAL;
     } else {
         vecarrsize = 1;
-        is_finished = 0;
+        stream_state = H2O_STREAM_SEND_STATE_IN_PROGRESS;
     }
-    h2o_send(req, vec, vecarrsize, is_finished);
-    if (is_finished)
+    h2o_send(req, vec, vecarrsize, stream_state);
+    if (stream_state == H2O_STREAM_SEND_STATE_FINAL)
         do_close(&self->super, req);
     return;
 
 Error:
     req->http1_is_persistent = 0;
-    h2o_send(req, NULL, 0, 1);
+    h2o_send(req, NULL, 0, H2O_STREAM_SEND_STATE_ERROR);
     do_close(&self->super, req);
     return;
 }
 
-static int do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_t *buf)
+static enum h2o_stream_send_state do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_t *buf)
 {
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
     ssize_t rret;
@@ -218,9 +222,9 @@ static int do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_t *buf)
     }
 
     if (self->bytesleft != 0)
-        return 0;
+        return H2O_STREAM_SEND_STATE_IN_PROGRESS;
     do_close(&self->super, req);
-    return 1;
+    return H2O_STREAM_SEND_STATE_FINAL;
 }
 
 static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, const char *path, size_t path_len, int *is_dir,
@@ -329,7 +333,7 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     if (!is_get || self->bytesleft == 0) {
         static h2o_generator_t generator = {NULL, NULL};
         h2o_start_response(req, &generator);
-        h2o_send(req, NULL, 0, 1);
+        h2o_send(req, NULL, 0, H2O_STREAM_SEND_STATE_FINAL);
         do_close(&self->super, req);
         return;
     }
@@ -397,7 +401,7 @@ static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len, i
 
     /* send data */
     h2o_start_response(req, &generator);
-    h2o_send(req, &bodyvec, 1, 1);
+    h2o_send(req, &bodyvec, 1, H2O_STREAM_SEND_STATE_FINAL);
     return 0;
 }
 

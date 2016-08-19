@@ -632,8 +632,18 @@ typedef struct st_h2o_generator_t {
     void (*stop)(struct st_h2o_generator_t *self, h2o_req_t *req);
 } h2o_generator_t;
 
-typedef int (*h2o_ostream_pull_cb)(h2o_generator_t *generator, h2o_req_t *req, h2o_iovec_t *buf);
+enum h2o_stream_send_state {
+    H2O_STREAM_SEND_STATE_IN_PROGRESS,
+    H2O_STREAM_SEND_STATE_FINAL,
+    H2O_STREAM_SEND_STATE_ERROR,
+};
 
+typedef enum h2o_stream_send_state (*h2o_ostream_pull_cb)(h2o_generator_t *generator, h2o_req_t *req, h2o_iovec_t *buf);
+
+static inline int h2o_stream_send_state_is_final(enum h2o_stream_send_state s)
+{
+    return s == H2O_STREAM_SEND_STATE_FINAL || s == H2O_STREAM_SEND_STATE_ERROR;
+}
 /**
  * an output stream that may alter the output.
  * The object is typically constructed by filters calling the h2o_prepend_ostream function.
@@ -648,7 +658,7 @@ struct st_h2o_ostream_t {
      * Intermediary output streams should process the given output and call the h2o_ostream_send_next function if any data can be
      * sent.
      */
-    void (*do_send)(struct st_h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final);
+    void (*do_send)(struct st_h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, enum h2o_stream_send_state state);
     /**
      * called by the core when there is a need to terminate the response abruptly
      */
@@ -1173,13 +1183,13 @@ void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t 
  * @param req the request
  * @param bufs an array of buffers
  * @param bufcnt length of the buffers array
- * @param is_final if the output is final
+ * @param state describes if the output is final, has an error, or is in progress
  */
-void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final);
+void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, enum h2o_stream_send_state state);
 /**
  * called by the connection layer to pull the content from generator (if pull mode is being used)
  */
-static int h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf);
+static enum h2o_stream_send_state h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf);
 /**
  * creates an uninitialized prefilter and returns pointer to it
  */
@@ -1200,9 +1210,9 @@ static void h2o_setup_next_ostream(h2o_req_t *req, h2o_ostream_t **slot);
  * @param req the request
  * @param bufs an array of buffers
  * @param bufcnt length of the buffers array
- * @param is_final if the output is final
+ * @param state whether the output is in progress, final, or in error
  */
-void h2o_ostream_send_next(h2o_ostream_t *ostr, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final);
+void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, enum h2o_stream_send_state state);
 /**
  * called by the connection layer to request additional data to the generator
  */
@@ -1516,7 +1526,7 @@ typedef struct st_h2o_compress_context_t {
     /**
      * compress
      */
-    void (*compress)(struct st_h2o_compress_context_t *self, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final,
+    void (*compress)(struct st_h2o_compress_context_t *self, h2o_iovec_t *inbufs, size_t inbufcnt, enum h2o_stream_send_state state,
                      h2o_iovec_t **outbufs, size_t *outbufcnt);
 } h2o_compress_context_t;
 
@@ -1797,7 +1807,7 @@ inline void h2o_proceed_response(h2o_req_t *req)
     if (req->_generator != NULL) {
         req->_generator->proceed(req->_generator, req);
     } else {
-        req->_ostr_top->do_send(req->_ostr_top, req, NULL, 0, 1);
+        req->_ostr_top->do_send(req->_ostr_top, req, NULL, 0, H2O_STREAM_SEND_STATE_FINAL);
     }
 }
 
@@ -1828,15 +1838,15 @@ Found:
     req->env.size -= 2;
 }
 
-inline int h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf)
+inline enum h2o_stream_send_state h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf)
 {
-    int is_final;
+    enum h2o_stream_send_state stream_state;
     assert(req->_generator != NULL);
-    is_final = cb(req->_generator, req, buf);
+    stream_state = cb(req->_generator, req, buf);
     req->bytes_sent += buf->len;
-    if (is_final)
+    if (h2o_stream_send_state_is_final(stream_state))
         req->_generator = NULL;
-    return is_final;
+    return stream_state;
 }
 
 inline void h2o_setup_next_ostream(h2o_req_t *req, h2o_ostream_t **slot)

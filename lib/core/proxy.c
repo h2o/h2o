@@ -27,8 +27,6 @@
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http1client.h"
-#include "h2o/http2.h"
-#include "h2o/http2_internal.h"
 #include "h2o/tunnel.h"
 
 struct rp_generator_t {
@@ -42,6 +40,7 @@ struct rp_generator_t {
     h2o_buffer_t *last_content_before_send;
     h2o_doublebuffer_t sending;
     int is_websocket_handshake;
+    int had_body_error; /* set if an error happened while fetching the body so that we can propagate the error */
 };
 
 struct rp_ws_upgrade_info_t {
@@ -285,7 +284,17 @@ static void do_send(struct rp_generator_t *self)
         veccnt = 1;
         is_eos = 0;
     }
-    h2o_send(self->src_req, vecs, veccnt, is_eos);
+    enum h2o_stream_send_state ststate;
+    if (self->had_body_error) {
+        ststate = H2O_STREAM_SEND_STATE_ERROR;
+    } else {
+        if (is_eos) {
+            ststate = H2O_STREAM_SEND_STATE_FINAL;
+        } else {
+            ststate = H2O_STREAM_SEND_STATE_IN_PROGRESS;
+        }
+    }
+    h2o_send(self->src_req, vecs, veccnt, ststate);
 }
 
 static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
@@ -330,16 +339,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
         self->client = NULL;
         if (errstr != h2o_http1client_error_is_eos) {
             h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
-            /*
-             * if the frontend connection is h2, we need to reset the stream,
-             * otherwise the client will not see that a truncation happened.
-             */
-            if (self->src_req->version >= 0x200) {
-                h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, self->src_req);
-                h2o_http2_stream_send_error((h2o_http2_conn_t *)self->src_req->conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
-                h2o_http2_stream_reset((h2o_http2_conn_t *)self->src_req->conn, stream);
-                return 0;
-            }
+            self->had_body_error = 1;
         }
     }
     if (self->sending.bytes_inflight == 0)
@@ -425,7 +425,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 
     if (errstr == h2o_http1client_error_is_eos) {
         self->client = NULL;
-        h2o_send(req, NULL, 0, 1);
+        h2o_send(req, NULL, 0, H2O_STREAM_SEND_STATE_FINAL);
         return NULL;
     }
 
@@ -490,6 +490,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, int keepalive, 
     } else {
         self->is_websocket_handshake = 0;
     }
+    self->had_body_error = 0;
     self->up_req.bufs[0] = build_request(req, keepalive, self->is_websocket_handshake, use_proxy_protocol);
     self->up_req.bufs[1] = req->entity;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
