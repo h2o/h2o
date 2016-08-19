@@ -56,6 +56,16 @@ static int on_config_preserve_host(h2o_configurator_command_t *cmd, h2o_configur
     return 0;
 }
 
+static int on_config_proxy_protocol(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
+    if (ret == -1)
+        return -1;
+    self->vars->use_proxy_protocol = (int)ret;
+    return 0;
+}
+
 static int on_config_websocket_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
@@ -141,6 +151,12 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         h2o_configurator_errprintf(cmd, node, "failed to parse URL: %s\n", node->data.scalar);
         return -1;
     }
+    if (self->vars->keepalive_timeout != 0 && self->vars->use_proxy_protocol) {
+        h2o_configurator_errprintf(cmd, node, "please either set `proxy.use-proxy-protocol` to `OFF` or disable keep-alive by "
+                                              "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
+        return -1;
+    }
+
     /* register */
     h2o_proxy_register_reverse_proxy(ctx->pathconf, &parsed, self->vars);
 
@@ -224,6 +240,9 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.preserve-host",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_preserve_host);
+    h2o_configurator_define_command(&c->super, "proxy.proxy-protocol",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_proxy_protocol);
     h2o_configurator_define_command(&c->super, "proxy.timeout.io",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_timeout_io);
     h2o_configurator_define_command(&c->super, "proxy.timeout.keepalive",

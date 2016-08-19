@@ -647,6 +647,7 @@
 		10FCC1411B2FCC6B00F13674 /* kill-on-close */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = "kill-on-close"; sourceTree = "<group>"; };
 		10FCC1421B300A6800F13674 /* 50fastcgi-php.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50fastcgi-php.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10FCC1431B31408B00F13674 /* fastcgi_directives.mt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = fastcgi_directives.mt; sourceTree = "<group>"; };
+		10FEF2441D6444E900E11B1D /* 50reverse-proxy-proxy-protocol.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-proxy-protocol.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10FFEE081BB23A8C0087AD75 /* neverbleed.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = neverbleed.c; sourceTree = "<group>"; };
 		10FFEE091BB23A8C0087AD75 /* neverbleed.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = neverbleed.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -1417,6 +1418,7 @@
 				108214FE1AAD34DD00D27E66 /* 50reverse-proxy-0.t */,
 				108102151C3DB05100C024CD /* 50reverse-proxy-disconnected-keepalive.t */,
 				104C65021A6DF36B000AC190 /* 50reverse-proxy-config.t */,
+				10FEF2441D6444E900E11B1D /* 50reverse-proxy-proxy-protocol.t */,
 				10AA2EB21A9479B4004322AC /* 50reverse-proxy-upstream-down.t */,
 				10DA969A1CCEF2C200679165 /* 50reverse-proxy-https.t */,
 				104B9A2B1A4BBDA4009EEE64 /* 50server-starter.t */,
