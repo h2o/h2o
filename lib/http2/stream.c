@@ -340,8 +340,6 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL);
         } else if (state == H2O_STREAM_SEND_STATE_ERROR) {
             h2o_http2_stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
-            h2o_http2_stream_reset(conn, stream);
-            return;
         }
         break;
     case H2O_HTTP2_STREAM_STATE_END_STREAM:
