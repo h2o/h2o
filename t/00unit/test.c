@@ -24,7 +24,7 @@
 #include "../../src/standalone.h"
 #include "./test.h"
 
-static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
+static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, enum h2o_stream_send_state stream_state)
 {
     h2o_loopback_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_loopback_conn_t, _ostr_final, self);
     size_t i;
@@ -35,7 +35,7 @@ static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *i
         conn->body->size += inbufs[i].len;
     }
 
-    if (is_final)
+    if (h2o_stream_send_state_is_final(stream_state))
         conn->_is_complete = 1;
     else
         h2o_proceed_response(&conn->req);
