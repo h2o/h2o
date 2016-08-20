@@ -59,6 +59,7 @@ static inline int h2o_timeval_is_null(struct timeval *tv)
         return tv->tv_sec == 0;
 }
 
+
 #ifdef __cplusplus
 }
 #endif

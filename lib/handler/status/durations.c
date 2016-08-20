@@ -146,16 +146,11 @@ static void stat_access(h2o_logger_t *_self, h2o_req_t *req)
     struct st_duration_stats_t *ctx_stats = h2o_context_get_logger_context(req->conn->ctx, _self);
 #define ADD_OBSERVATION(x, from, until) \
     do { \
-        /* skip zero values: this happens in h2 if a request is reset \
-         * before being sent */ \
-        if (!((from)->tv_sec + (from)->tv_usec)) { \
-            break; \
+        int ok; \
+        int64_t dur = h2o_time_compute_##x##_usec(req, &ok); \
+        if (ok) { \
+            gkc_insert_value(ctx_stats->x, dur); \
         } \
-        if (!((until)->tv_sec + (until)->tv_usec)) { \
-            break; \
-        } \
-        int64_t dur = h2o_timeval_substract((from), (until)); \
-        gkc_insert_value(ctx_stats->x, dur); \
     } while(0)
 
     ADD_OBSERVATION(connect_time, &req->conn->connected_at, &req->timestamps.request_begin_at);

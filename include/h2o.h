@@ -1961,6 +1961,44 @@ static inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
     db->bytes_inflight = 0;
 }
 
+#define COMPUTE_DURATION(name, from, until) \
+        static inline int h2o_time_compute_##name##_sec_usec(struct st_h2o_req_t *req, int32_t *delta_sec, int32_t *delta_usec) \
+        { \
+            if (h2o_timeval_is_null((from)) || h2o_timeval_is_null((until))) { \
+                return 0; \
+            } \
+            *delta_sec = (int32_t)(until)->tv_sec - (int32_t)(from)->tv_sec; \
+            *delta_usec = (int32_t)(until)->tv_usec - (int32_t)(from)->tv_usec; \
+            if (*delta_usec < 0) { \
+                *delta_sec -= 1; \
+                *delta_usec += 1000000; \
+            } \
+            return 1; \
+        } \
+        static inline int64_t h2o_time_compute_##name##_usec(struct st_h2o_req_t *req, int *okp) \
+        { \
+            if (h2o_timeval_is_null((from)) || h2o_timeval_is_null((until))) { \
+                *okp = 0; \
+                return 0; \
+            } \
+            *okp = 1; \
+            return h2o_timeval_substract((from), (until)); \
+        } \
+
+ COMPUTE_DURATION(connect_time, &req->conn->connected_at, &req->timestamps.request_begin_at);
+ COMPUTE_DURATION(header_time, &req->timestamps.request_begin_at, h2o_timeval_is_null(&req->timestamps.request_body_begin_at)
+                        ? &req->processed_at.at
+                        : &req->timestamps.request_body_begin_at);
+ COMPUTE_DURATION(body_time, h2o_timeval_is_null(&req->timestamps.request_body_begin_at)
+                    ? &req->processed_at.at
+                    : &req->timestamps.request_body_begin_at, &req->processed_at.at);
+ COMPUTE_DURATION(request_total_time, &req->timestamps.request_begin_at, &req->processed_at.at);
+ COMPUTE_DURATION(process_time, &req->processed_at.at, &req->timestamps.response_start_at);
+ COMPUTE_DURATION(response_time, &req->timestamps.response_start_at, &req->timestamps.response_end_at);
+ COMPUTE_DURATION(duration, &req->timestamps.request_begin_at, &req->timestamps.response_end_at);
+
+#undef COMPUTE_DURATION
+
 #ifdef __cplusplus
 }
 #endif

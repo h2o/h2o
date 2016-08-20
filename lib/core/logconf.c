@@ -355,6 +355,25 @@ Fail:
 
 #define DURATION_MAX_LEN (sizeof(H2O_INT32_LONGEST_STR ".999999") - 1)
 
+#define APPEND_DURATION(pos, name) \
+    do { \
+        int32_t delta_sec, delta_usec; \
+        if (!h2o_time_compute_##name##_sec_usec(req, &delta_sec, &delta_usec)) { \
+            *pos++ = '-'; \
+        } else { \
+            pos += sprintf(pos, "%" PRId32, delta_sec); \
+            if (delta_usec != 0) { \
+                int i; \
+                *pos++ = '.'; \
+                for (i = 5; i >= 0; --i) { \
+                    pos[i] = '0' + delta_usec % 10; \
+                    delta_usec /= 10; \
+                } \
+                pos += 6; \
+            } \
+        } \
+    } while(0);
+
 static char *append_duration(char *pos, struct timeval *from, struct timeval *until)
 {
     if (h2o_timeval_is_null(from) || h2o_timeval_is_null(until)) {
@@ -592,39 +611,38 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
 
         case ELEMENT_TYPE_CONNECT_TIME:
             RESERVE(DURATION_MAX_LEN);
-            pos = append_duration(pos, &req->conn->connected_at, &req->timestamps.request_begin_at);
+            APPEND_DURATION(pos, connect_time);
             break;
 
         case ELEMENT_TYPE_REQUEST_HEADER_TIME:
             RESERVE(DURATION_MAX_LEN);
-            pos = append_duration(pos, &req->timestamps.request_begin_at, h2o_timeval_is_null(&req->timestamps.request_body_begin_at)
-                                                                              ? &req->processed_at.at
-                                                                              : &req->timestamps.request_body_begin_at);
+            APPEND_DURATION(pos, header_time);
             break;
 
         case ELEMENT_TYPE_REQUEST_BODY_TIME:
             RESERVE(DURATION_MAX_LEN);
-            pos = append_duration(pos, &req->timestamps.request_body_begin_at, &req->processed_at.at);
+            APPEND_DURATION(pos, body_time);
             break;
 
         case ELEMENT_TYPE_REQUEST_TOTAL_TIME:
             RESERVE(DURATION_MAX_LEN);
+            APPEND_DURATION(pos, request_total_time);
             pos = append_duration(pos, &req->timestamps.request_begin_at, &req->processed_at.at);
             break;
 
         case ELEMENT_TYPE_PROCESS_TIME:
             RESERVE(DURATION_MAX_LEN);
-            pos = append_duration(pos, &req->processed_at.at, &req->timestamps.response_start_at);
+            APPEND_DURATION(pos, process_time);
             break;
 
         case ELEMENT_TYPE_RESPONSE_TIME:
             RESERVE(DURATION_MAX_LEN);
-            pos = append_duration(pos, &req->timestamps.response_start_at, &req->timestamps.response_end_at);
+            APPEND_DURATION(pos, response_time);
             break;
 
         case ELEMENT_TYPE_DURATION:
             RESERVE(DURATION_MAX_LEN);
-            pos = append_duration(pos, &req->timestamps.request_begin_at, &req->timestamps.response_end_at);
+            APPEND_DURATION(pos, duration);
             break;
 
         case ELEMENT_TYPE_PROTOCOL_SPECIFIC: {
