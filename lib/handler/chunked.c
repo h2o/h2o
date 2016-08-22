@@ -29,7 +29,7 @@ typedef struct st_chunked_encoder_t {
     char buf[64];
 } chunked_encoder_t;
 
-static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, enum h2o_stream_send_state state)
+static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
     chunked_encoder_t *self = (void *)_self;
     h2o_iovec_t *outbufs = alloca(sizeof(h2o_iovec_t) * (inbufcnt + 2));
@@ -49,9 +49,9 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
         memcpy(outbufs + outbufcnt, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
         outbufcnt += inbufcnt;
         outbufs[outbufcnt].base = "\r\n0\r\n\r\n";
-        outbufs[outbufcnt].len = state == H2O_STREAM_SEND_STATE_FINAL ? 7 : 2;
+        outbufs[outbufcnt].len = state == H2O_SEND_STATE_FINAL ? 7 : 2;
         outbufcnt++;
-    } else if (state == H2O_STREAM_SEND_STATE_FINAL) {
+    } else if (state == H2O_SEND_STATE_FINAL) {
         outbufs[outbufcnt].base = "0\r\n\r\n";
         outbufs[outbufcnt].len = 5;
         outbufcnt++;

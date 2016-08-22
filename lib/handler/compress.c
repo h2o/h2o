@@ -37,7 +37,7 @@ struct st_compress_encoder_t {
     h2o_compress_context_t *compressor;
 };
 
-static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, enum h2o_stream_send_state state)
+static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
     struct st_compress_encoder_t *self = (void *)_self;
     h2o_iovec_t *outbufs;

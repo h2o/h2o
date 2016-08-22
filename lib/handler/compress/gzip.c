@@ -82,7 +82,7 @@ static size_t compress_chunk(struct st_gzip_context_t *self, const void *src, si
     return bufindex;
 }
 
-static void do_compress(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t inbufcnt, enum h2o_stream_send_state state, h2o_iovec_t **outbufs,
+static void do_compress(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state, h2o_iovec_t **outbufs,
                         size_t *outbufcnt)
 {
     struct st_gzip_context_t *self = (void *)_self;

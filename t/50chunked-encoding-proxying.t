@@ -34,7 +34,8 @@ EOT
 sub doit {
     my $chunk = shift;
     my $data = shift;
-    open(NGHTTP, "nghttp -v http://127.0.0.1:$server->{'port'}/ -H 'host: host.example.com' 2>&1 |");
+    my $stream_window_bits = shift;
+    open(NGHTTP, "nghttp -w $stream_window_bits -v http://127.0.0.1:$server->{'port'}/ -H 'host: host.example.com' 2>&1 |");
 
     my $req;
     $client_socket = $socket->accept();
@@ -56,7 +57,9 @@ sub doit {
     ok($found_data == 1, "Found the expected data");
 }
 
-doit("5\r\nHello\r\n5\r\nThere\r\n", "HelloThere");
-doit("5\r\nHello\r\n50\r\nThere", "HelloThere");
+doit("5\r\nHello\r\n5\r\nThere\r\n", "HelloThere", 14);
+doit("5\r\nHello\r\n50\r\nThere", "HelloThere", 14);
+doit("5\r\nHello\r\n50\r\nThere", "HelloThere", 1);
+
 $socket->close();
 done_testing();

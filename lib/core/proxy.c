@@ -284,14 +284,14 @@ static void do_send(struct rp_generator_t *self)
         veccnt = 1;
         is_eos = 0;
     }
-    enum h2o_stream_send_state ststate;
+    h2o_send_state_t ststate;
     if (self->had_body_error) {
-        ststate = H2O_STREAM_SEND_STATE_ERROR;
+        ststate = H2O_SEND_STATE_ERROR;
     } else {
         if (is_eos) {
-            ststate = H2O_STREAM_SEND_STATE_FINAL;
+            ststate = H2O_SEND_STATE_FINAL;
         } else {
-            ststate = H2O_STREAM_SEND_STATE_IN_PROGRESS;
+            ststate = H2O_SEND_STATE_IN_PROGRESS;
         }
     }
     h2o_send(self->src_req, vecs, veccnt, ststate);
@@ -425,7 +425,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 
     if (errstr == h2o_http1client_error_is_eos) {
         self->client = NULL;
-        h2o_send(req, NULL, 0, H2O_STREAM_SEND_STATE_FINAL);
+        h2o_send(req, NULL, 0, H2O_SEND_STATE_FINAL);
         return NULL;
     }
 

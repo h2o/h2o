@@ -41,7 +41,7 @@ typedef struct st_throttle_resp_t {
     h2o_req_t *req;
     struct {
         iovec_vector_t bufs;
-        enum h2o_stream_send_state stream_state;
+        h2o_send_state_t stream_state;
     } state;
 } throttle_resp_t;
 
@@ -75,7 +75,7 @@ static void add_token(h2o_timeout_entry_t *entry)
         real_send(self);
 }
 
-static void on_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, enum h2o_stream_send_state state)
+static void on_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
     throttle_resp_t *self = (void *)_self;
     size_t i;

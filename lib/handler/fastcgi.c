@@ -457,7 +457,7 @@ static void do_send(struct st_fcgi_generator_t *generator)
             return;
         is_final = 0;
     }
-    h2o_send(generator->req, vecs, veccnt, is_final ? H2O_STREAM_SEND_STATE_FINAL : H2O_STREAM_SEND_STATE_IN_PROGRESS);
+    h2o_send(generator->req, vecs, veccnt, is_final ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
 }
 
 static void send_eos_and_close(struct st_fcgi_generator_t *generator, int can_keepalive)

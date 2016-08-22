@@ -24,7 +24,7 @@
 #include "h2o/http2_internal.h"
 
 static void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb);
-static void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, enum h2o_stream_send_state state);
+static void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
 
 static size_t sz_min(size_t x, size_t y)
 {
@@ -122,11 +122,11 @@ static void encode_data_header_and_consume_window(h2o_http2_conn_t *conn, h2o_ht
     h2o_http2_window_consume_window(&stream->output_window, length);
 }
 
-static enum h2o_stream_send_state send_data_pull(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+static h2o_send_state_t send_data_pull(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     size_t max_payload_size;
     h2o_iovec_t cbuf;
-    enum h2o_stream_send_state stream_state = H2O_STREAM_SEND_STATE_IN_PROGRESS;
+    h2o_send_state_t send_state = H2O_SEND_STATE_IN_PROGRESS;
 
     if ((max_payload_size = calc_max_payload_size(conn, stream)) == 0)
         goto Exit;
@@ -135,15 +135,15 @@ static enum h2o_stream_send_state send_data_pull(h2o_http2_conn_t *conn, h2o_htt
     /* obtain content */
     cbuf.base = conn->_write.buf->bytes + conn->_write.buf->size + H2O_HTTP2_FRAME_HEADER_SIZE;
     cbuf.len = max_payload_size;
-    stream_state = h2o_pull(&stream->req, stream->_pull_cb, &cbuf);
+    send_state = h2o_pull(&stream->req, stream->_pull_cb, &cbuf);
     /* write the header */
     encode_data_header_and_consume_window(conn, stream, (void *)(conn->_write.buf->bytes + conn->_write.buf->size), cbuf.len,
-                                          h2o_stream_send_state_is_final(stream_state));
+                                          send_state == H2O_SEND_STATE_FINAL);
     /* adjust the write buf size */
     conn->_write.buf->size += H2O_HTTP2_FRAME_HEADER_SIZE + cbuf.len;
 
 Exit:
-    return stream_state;
+    return send_state;
 }
 
 static h2o_iovec_t *send_data_push(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_iovec_t *bufs, size_t bufcnt,
@@ -322,7 +322,7 @@ void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb)
     h2o_http2_conn_register_for_proceed_callback(conn, stream);
 }
 
-void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, enum h2o_stream_send_state state)
+void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _ostr_final, self);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)req->conn;
@@ -336,7 +336,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
             return;
     /* fallthru */
     case H2O_HTTP2_STREAM_STATE_SEND_BODY:
-        if (state == H2O_STREAM_SEND_STATE_FINAL) {
+        if (state != H2O_SEND_STATE_IN_PROGRESS) {
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL);
         } else if (state == H2O_STREAM_SEND_STATE_ERROR) {
             h2o_http2_stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
@@ -365,9 +365,11 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
         return;
 
     if (stream->_pull_cb != NULL) {
+        h2o_send_state_t send_state;
         /* pull mode */
         assert(stream->state != H2O_HTTP2_STREAM_STATE_END_STREAM);
-        if (h2o_stream_send_state_is_final(send_data_pull(conn, stream))) {
+        send_state = send_data_pull(conn, stream);
+        if (send_state != H2O_SEND_STATE_IN_PROGRESS) {
             /* sent all data */
             stream->_data.size = 0;
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
