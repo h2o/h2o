@@ -160,7 +160,7 @@ mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config
     }
 
     /* reset configuration context */
-    h2o_mruby_eval_expr(mrb, "H2O::ConfigurationContext.instance = H2O::ConfigurationContext.new");
+    h2o_mruby_eval_expr(mrb, "H2O::ConfigurationContext.reset");
     h2o_mruby_assert(mrb);
 
     /* run code and generate handler */

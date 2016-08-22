@@ -4,8 +4,8 @@ module H2O
     def self.instance()
       @@instance
     end
-    def self.instance=(instance)
-      @@instance = instance
+    def self.reset()
+      @@instance = self.new()
     end
     def initialize()
       @values = {}

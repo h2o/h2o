@@ -5,7 +5,7 @@ require 'acl.rb'
 class ACLTest < MTest::Unit::TestCase
     include H2O::ACL
     def setup
-        H2O::ConfigurationContext.instance = H2O::ConfigurationContext.new
+        H2O::ConfigurationContext.reset
     end
 
     def test_use
