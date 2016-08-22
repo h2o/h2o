@@ -33,16 +33,16 @@ extern "C" {
 #include <yaml.h>
 #include "yoml.h"
 
-typedef struct st_yoml_tag_resolver_t {
+typedef struct st_yoml_parse_args_t {
+    const char *filename;
+    void *(*mem_set)(void *, int, size_t);
     struct {
-        yoml_t *(*cb)(struct st_yoml_tag_resolver_t *tag_resolver, yoml_t *node);
-        yoml_node_vector_t cached_nodes;
-    } file;
-    unsigned int depth;
-} yoml_tag_resolver_t;
+        yoml_t *(*cb)(const char *tag, yoml_t *node, void *cb_arg);
+        void *cb_arg;
+    } resolve_tag;
+} yoml_parse_args_t;
 
-static yoml_t *yoml__parse_node(yaml_parser_t *parser, yaml_event_type_t *last_event, void *(*mem_set)(void *, int, size_t),
-                                const char *filename);
+static yoml_t *yoml__parse_node(yaml_parser_t *parser, yaml_event_type_t *last_event, yoml_parse_args_t *parse_args);
 
 static inline char *yoml__strdup(yaml_char_t *s)
 {
@@ -62,10 +62,9 @@ static inline yoml_t *yoml__new_node(const char *filename, yoml_type_t type, siz
     return node;
 }
 
-static inline yoml_t *yoml__parse_sequence(yaml_parser_t *parser, yaml_event_t *event, void *(*mem_set)(void *, int, size_t),
-                                           const char *filename)
+static inline yoml_t *yoml__parse_sequence(yaml_parser_t *parser, yaml_event_t *event, yoml_parse_args_t *parse_args)
 {
-    yoml_t *seq = yoml__new_node(filename, YOML_TYPE_SEQUENCE, offsetof(yoml_t, data.sequence.elements),
+    yoml_t *seq = yoml__new_node(parse_args->filename, YOML_TYPE_SEQUENCE, offsetof(yoml_t, data.sequence.elements),
                                  event->data.sequence_start.anchor, event->data.sequence_start.tag, event);
 
     seq->data.sequence.size = 0;
@@ -73,11 +72,11 @@ static inline yoml_t *yoml__parse_sequence(yaml_parser_t *parser, yaml_event_t *
     while (1) {
         yoml_t *new_node;
         yaml_event_type_t unhandled;
-        if ((new_node = yoml__parse_node(parser, &unhandled, mem_set, filename)) == NULL) {
+        if ((new_node = yoml__parse_node(parser, &unhandled, parse_args)) == NULL) {
             if (unhandled == YAML_SEQUENCE_END_EVENT) {
                 break;
             } else {
-                yoml_free(seq, mem_set);
+                yoml_free(seq, parse_args->mem_set);
                 seq = NULL;
                 break;
             }
@@ -89,10 +88,9 @@ static inline yoml_t *yoml__parse_sequence(yaml_parser_t *parser, yaml_event_t *
     return seq;
 }
 
-static inline yoml_t *yoml__parse_mapping(yaml_parser_t *parser, yaml_event_t *event, void *(*mem_set)(void *, int, size_t),
-                                          const char *filename)
+static inline yoml_t *yoml__parse_mapping(yaml_parser_t *parser, yaml_event_t *event, yoml_parse_args_t *parse_args)
 {
-    yoml_t *map = yoml__new_node(filename, YOML_TYPE_MAPPING, offsetof(yoml_t, data.mapping.elements),
+    yoml_t *map = yoml__new_node(parse_args->filename, YOML_TYPE_MAPPING, offsetof(yoml_t, data.mapping.elements),
                                 event->data.mapping_start.anchor, event->data.mapping_start.tag, event);
 
     map->data.mapping.size = 0;
@@ -100,17 +98,17 @@ static inline yoml_t *yoml__parse_mapping(yaml_parser_t *parser, yaml_event_t *e
     while (1) {
         yoml_t *key, *value;
         yaml_event_type_t unhandled;
-        if ((key = yoml__parse_node(parser, &unhandled, mem_set, filename)) == NULL) {
+        if ((key = yoml__parse_node(parser, &unhandled, parse_args)) == NULL) {
             if (unhandled == YAML_MAPPING_END_EVENT) {
                 break;
             } else {
-                yoml_free(map, mem_set);
+                yoml_free(map, parse_args->mem_set);
                 map = NULL;
                 break;
             }
         }
-        if ((value = yoml__parse_node(parser, NULL, mem_set, filename)) == NULL) {
-            yoml_free(map, mem_set);
+        if ((value = yoml__parse_node(parser, NULL, parse_args)) == NULL) {
+            yoml_free(map, parse_args->mem_set);
             map = NULL;
             break;
         }
@@ -123,8 +121,7 @@ static inline yoml_t *yoml__parse_mapping(yaml_parser_t *parser, yaml_event_t *e
     return map;
 }
 
-static yoml_t *yoml__parse_node(yaml_parser_t *parser, yaml_event_type_t *unhandled, void *(*mem_set)(void *, int, size_t),
-                                const char *filename)
+static yoml_t *yoml__parse_node(yaml_parser_t *parser, yaml_event_type_t *unhandled, yoml_parse_args_t *parse_args)
 {
     yoml_t *node;
     yaml_event_t event;
@@ -143,20 +140,20 @@ static yoml_t *yoml__parse_node(yaml_parser_t *parser, yaml_event_type_t *unhand
 
     switch (event.type) {
     case YAML_ALIAS_EVENT:
-        node = yoml__new_node(filename, YOML__TYPE_UNRESOLVED_ALIAS, sizeof(*node), NULL, NULL, &event);
+        node = yoml__new_node(parse_args->filename, YOML__TYPE_UNRESOLVED_ALIAS, sizeof(*node), NULL, NULL, &event);
         node->data.alias = yoml__strdup(event.data.alias.anchor);
         break;
     case YAML_SCALAR_EVENT:
-        node = yoml__new_node(filename, YOML_TYPE_SCALAR, sizeof(*node), event.data.scalar.anchor, event.data.scalar.tag, &event);
+        node = yoml__new_node(parse_args->filename, YOML_TYPE_SCALAR, sizeof(*node), event.data.scalar.anchor, event.data.scalar.tag, &event);
         node->data.scalar = yoml__strdup(event.data.scalar.value);
-        if (mem_set != NULL)
-            mem_set(event.data.scalar.value, 'A', strlen(node->data.scalar));
+        if (parse_args->mem_set != NULL)
+            parse_args->mem_set(event.data.scalar.value, 'A', strlen(node->data.scalar));
         break;
     case YAML_SEQUENCE_START_EVENT:
-        node = yoml__parse_sequence(parser, &event, mem_set, filename);
+        node = yoml__parse_sequence(parser, &event, parse_args);
         break;
     case YAML_MAPPING_START_EVENT:
-        node = yoml__parse_mapping(parser, &event, mem_set, filename);
+        node = yoml__parse_mapping(parser, &event, parse_args);
         break;
     default:
         node = NULL;
@@ -205,7 +202,7 @@ static inline int yoml__merge(yoml_t **dest, size_t offset, yoml_t *src)
     return 0;
 }
 
-static inline int yoml__resolve_merge(yoml_t **target, yaml_parser_t *parser, void *(*mem_set)(void *, int, size_t))
+static inline int yoml__resolve_merge(yoml_t **target, yaml_parser_t *parser, yoml_parse_args_t *parse_args)
 {
     size_t i, j;
 
@@ -214,7 +211,7 @@ static inline int yoml__resolve_merge(yoml_t **target, yaml_parser_t *parser, vo
         break;
     case YOML_TYPE_SEQUENCE:
         for (i = 0; i != (*target)->data.sequence.size; ++i) {
-            if (yoml__resolve_merge((*target)->data.sequence.elements + i, parser, mem_set) != 0)
+            if (yoml__resolve_merge((*target)->data.sequence.elements + i, parser, parse_args) != 0)
                 return -1;
         }
         break;
@@ -223,9 +220,9 @@ static inline int yoml__resolve_merge(yoml_t **target, yaml_parser_t *parser, vo
             i = (*target)->data.mapping.size;
             do {
                 --i;
-                if (yoml__resolve_merge(&(*target)->data.mapping.elements[i].key, parser, mem_set) != 0)
+                if (yoml__resolve_merge(&(*target)->data.mapping.elements[i].key, parser, parse_args) != 0)
                     return -1;
-                if (yoml__resolve_merge(&(*target)->data.mapping.elements[i].value, parser, mem_set) != 0)
+                if (yoml__resolve_merge(&(*target)->data.mapping.elements[i].value, parser, parse_args) != 0)
                     return -1;
                 if ((*target)->data.mapping.elements[i].key->type == YOML_TYPE_SCALAR &&
                     strcmp((*target)->data.mapping.elements[i].key->data.scalar, "<<") == 0) {
@@ -251,8 +248,8 @@ static inline int yoml__resolve_merge(yoml_t **target, yaml_parser_t *parser, vo
                             goto MergeError;
                     }
                     /* cleanup */
-                    yoml_free(src.key, mem_set);
-                    yoml_free(src.value, mem_set);
+                    yoml_free(src.key, parse_args->mem_set);
+                    yoml_free(src.value, parse_args->mem_set);
                 }
             } while (i != 0);
         }
@@ -266,7 +263,7 @@ static inline int yoml__resolve_merge(yoml_t **target, yaml_parser_t *parser, vo
 }
 
 
-static inline int yoml__resolve_alias(yoml_t **target, yoml_t *doc, yaml_parser_t *parser, void *(*mem_set)(void *, int, size_t))
+static inline int yoml__resolve_alias(yoml_t **target, yoml_t *doc, yaml_parser_t *parser, yoml_parse_args_t *parse_args)
 {
     size_t i;
 
@@ -275,15 +272,15 @@ static inline int yoml__resolve_alias(yoml_t **target, yoml_t *doc, yaml_parser_
         break;
     case YOML_TYPE_SEQUENCE:
         for (i = 0; i != (*target)->data.sequence.size; ++i) {
-            if (yoml__resolve_alias((*target)->data.sequence.elements + i, doc, parser, mem_set) != 0)
+            if (yoml__resolve_alias((*target)->data.sequence.elements + i, doc, parser, parse_args) != 0)
                 return -1;
         }
         break;
     case YOML_TYPE_MAPPING:
         for (i = 0; i != (*target)->data.mapping.size; ++i) {
-            if (yoml__resolve_alias(&(*target)->data.mapping.elements[i].key, doc, parser, mem_set) != 0)
+            if (yoml__resolve_alias(&(*target)->data.mapping.elements[i].key, doc, parser, parse_args) != 0)
                 return -1;
-            if (yoml__resolve_alias(&(*target)->data.mapping.elements[i].value, doc, parser, mem_set) != 0)
+            if (yoml__resolve_alias(&(*target)->data.mapping.elements[i].value, doc, parser, parse_args) != 0)
                 return -1;
         }
         break;
@@ -297,7 +294,7 @@ static inline int yoml__resolve_alias(yoml_t **target, yoml_t *doc, yaml_parser_
             }
             return -1;
         }
-        yoml_free(*target, mem_set);
+        yoml_free(*target, parse_args->mem_set);
         *target = node;
         ++node->_refcnt;
     } break;
@@ -306,71 +303,26 @@ static inline int yoml__resolve_alias(yoml_t **target, yoml_t *doc, yaml_parser_
     return 0;
 }
 
-static inline int yoml__resolve_file_tag(yoml_t **target, yaml_parser_t *parser, void *(*mem_set)(void *, int, size_t), yoml_tag_resolver_t *tag_resolver)
+static inline int yoml__resolve_tag(yoml_t **target, yaml_parser_t *parser, yoml_parse_args_t *parse_args)
 {
     size_t i;
 
-    if ((*target)->type != YOML_TYPE_SCALAR) {
-        if (parser != NULL) {
-            parser->problem = "value of the !file node must be a scalar";
-            parser->problem_mark.line = (*target)->line;
-            parser->problem_mark.column = (*target)->column;
-        }
-        return -1;
-    }
+    if (parse_args->resolve_tag.cb == NULL)
+        return 0;
 
-    yoml_t *node;
-    yoml_node_vector_t *cached_nodes = &tag_resolver->file.cached_nodes;
-
-    for (i = 0; i != cached_nodes->size; ++i) {
-        yoml_t *cached_node = cached_nodes->entries[i];
-        if (strcmp(cached_node->filename, (*target)->data.scalar) == 0) {
-            node = cached_node;
-            ++node->_refcnt;
-            goto NodeFound;
-        }
-    }
-
-    node = tag_resolver->file.cb(tag_resolver, *target);
-    if (node == NULL) {
-        if (parser != NULL) {
-            parser->problem = "an error occured while including file";
-            parser->problem_mark.line = (*target)->line;
-            parser->problem_mark.column = (*target)->column;
-        }
-        return -1;
-    }
-
-    if (cached_nodes->entries == NULL) {
-        cached_nodes->entries = malloc(sizeof(yoml_t *));
-    } else {
-        cached_nodes->entries = realloc(cached_nodes->entries, (cached_nodes->size + 1) * sizeof(yoml_t *));
-    }
-    if (cached_nodes->entries == NULL)
-        return -1;
-    cached_nodes->entries[cached_nodes->size++] = node;
-
-NodeFound:
-    yoml_free(*target, mem_set);
-    *target = node;
-
-    return 0;
-}
-
-static inline int yoml__resolve_tag(yoml_t **target, yaml_parser_t *parser, void *(*mem_set)(void *, int, size_t), yoml_tag_resolver_t *tag_resolver)
-{
-    size_t i;
-    char *tag;
-    ++tag_resolver->depth;
-
-    int ret = 0;
-
-    if ((tag = (*target)->tag) != NULL) {
-        /* !file tag */
-        if (tag_resolver->file.cb != NULL && strcmp(tag, "!file") == 0) {
-            if (yoml__resolve_file_tag(target, parser, mem_set, tag_resolver) != 0) {
-                goto Error;
+    if ((*target)->tag != NULL) {
+        yoml_t *resolved = parse_args->resolve_tag.cb((*target)->tag, *target, parse_args->resolve_tag.cb_arg);
+        if (resolved == NULL) {
+            if (parser != NULL) {
+                parser->problem = "could not resolve tag";
+                parser->problem_mark.line = (*target)->line;
+                parser->problem_mark.column = (*target)->column;
             }
+            return -1;
+        }
+        if (resolved != *target) {
+            yoml_free(*target, parse_args->mem_set);
+            *target = resolved;
         }
     }
 
@@ -379,59 +331,48 @@ static inline int yoml__resolve_tag(yoml_t **target, yaml_parser_t *parser, void
             break;
         case YOML_TYPE_SEQUENCE:
             for (i = 0; i != (*target)->data.sequence.size; ++i) {
-                if (yoml__resolve_merge((*target)->data.sequence.elements + i, parser, mem_set) != 0)
-                    goto Error;
+                if (yoml__resolve_tag((*target)->data.sequence.elements + i, parser, parse_args) != 0)
+                    return -1;
             }
             break;
         case YOML_TYPE_MAPPING:
             for (i = 0; i != (*target)->data.mapping.size; ++i) {
-                if (yoml__resolve_tag(&(*target)->data.mapping.elements[i].key, parser, mem_set, tag_resolver) != 0)
-                    goto Error;
-                if (yoml__resolve_tag(&(*target)->data.mapping.elements[i].value, parser, mem_set, tag_resolver) != 0)
-                    goto Error;
+                if (yoml__resolve_tag(&(*target)->data.mapping.elements[i].key, parser, parse_args) != 0)
+                    return -1;
+                if (yoml__resolve_tag(&(*target)->data.mapping.elements[i].value, parser, parse_args) != 0)
+                    return -1;
             }
             break;
         case YOML__TYPE_UNRESOLVED_ALIAS:
             break;
     }
 
-    goto Exit;
-
-Error:
-    ret = -1;
-
-Exit:
-    if (--tag_resolver->depth == 0) {
-        if (tag_resolver->file.cached_nodes.entries != NULL)
-            free(tag_resolver->file.cached_nodes.entries);
-    }
-    return ret;
+    return 0;
 }
 
-static inline yoml_t *yoml_parse_document(yaml_parser_t *parser, yaml_event_type_t *unhandled,
-                                          void *(*mem_set)(void *, int, size_t), const char *filename, yoml_tag_resolver_t *tag_resolver)
+static inline yoml_t *yoml_parse_document(yaml_parser_t *parser, yaml_event_type_t *unhandled, yoml_parse_args_t *parse_args)
 {
     yoml_t *doc;
 
     /* parse */
-    if ((doc = yoml__parse_node(parser, unhandled, mem_set, filename)) == NULL) {
+    if ((doc = yoml__parse_node(parser, unhandled, parse_args)) == NULL) {
         return NULL;
     }
     if (unhandled != NULL)
         *unhandled = YAML_NO_EVENT;
 
     /* resolve tags, aliases and merge */
-    if (tag_resolver != NULL && yoml__resolve_tag(&doc, parser, mem_set, tag_resolver) != 0)
+    if (yoml__resolve_tag(&doc, parser, parse_args) != 0)
         goto Error;
-    if (yoml__resolve_alias(&doc, doc, parser, mem_set) != 0)
+    if (yoml__resolve_alias(&doc, doc, parser, parse_args) != 0)
         goto Error;
-    if (yoml__resolve_merge(&doc, parser, mem_set) != 0)
+    if (yoml__resolve_merge(&doc, parser, parse_args) != 0)
         goto Error;
 
     return doc;
 
 Error:
-    yoml_free(doc, mem_set);
+    yoml_free(doc, parse_args->mem_set);
     return NULL;
 }
 

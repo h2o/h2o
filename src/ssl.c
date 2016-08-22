@@ -431,7 +431,8 @@ static int parse_tickets(session_ticket_vector_t *tickets, const void *src, size
     yaml_parser_initialize(&parser);
 
     yaml_parser_set_input_string(&parser, src, len);
-    if ((doc = yoml_parse_document(&parser, NULL, h2o_mem_set_secure, NULL, NULL)) == NULL) {
+    yoml_parse_args_t parse_args = {NULL, h2o_mem_set_secure};
+    if ((doc = yoml_parse_document(&parser, NULL, &parse_args)) == NULL) {
         sprintf(errstr, "parse error at line %d:%s\n", (int)parser.problem_mark.line, parser.problem);
         goto Error;
     }
