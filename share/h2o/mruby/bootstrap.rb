@@ -23,7 +23,7 @@ module H2O
     def add_post_handler_generation_hook(hook)
       @post_handler_generation_hooks << hook
     end
-    def post_handler_generation(handler)
+    def call_post_handler_generation_hooks(handler)
       @post_handler_generation_hooks.each {|hook| hook.call(handler) }
     end
   end

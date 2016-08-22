@@ -178,7 +178,8 @@ mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config
     }
 
     /* call post_handler_generation hooks */
-    mrb_funcall_argv(mrb, h2o_mruby_eval_expr(mrb, "H2O::ConfigurationContext.instance"), mrb_intern_lit(mrb, "post_handler_generation"), 1, &result);
+    mrb_funcall_argv(mrb, h2o_mruby_eval_expr(mrb, "H2O::ConfigurationContext.instance"),
+                     mrb_intern_lit(mrb, "call_post_handler_generation_hooks"), 1, &result);
     if (mrb->exc != NULL) {
         mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
         struct RString *error = mrb_str_ptr(obj);

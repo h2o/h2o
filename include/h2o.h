@@ -1893,7 +1893,7 @@ inline void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *lo
 inline void **h2o_context_get_storage(h2o_context_t *ctx, size_t *key, void (*dispose_cb)(void *))
 {
     /* SIZE_MAX might not be available in case the file is included from a C++ source file */
-    size_t size_max = (size_t) - 1;
+    size_t size_max = (size_t)-1;
     if (*key == size_max)
         *key = ctx->storage.size;
     if (ctx->storage.size <= *key) {
@@ -1904,7 +1904,6 @@ inline void **h2o_context_get_storage(h2o_context_t *ctx, size_t *key, void (*di
 
     ctx->storage.entries[*key].dispose = dispose_cb;
     return &ctx->storage.entries[*key].data;
-
 }
 
 static inline void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype)
