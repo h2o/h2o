@@ -1,24 +1,31 @@
 module H2O
 
-  @@hooks = {
-    :after_generate_handler => [],
-  }
-
-  def self.after_generate_handler(handler)
-    _call_hooks(:after_generate_handler, handler)
-  end
-
-  def self.add_after_generate_handler_hook(hook)
-    _add_hook(:after_generate_handler, hook)
-  end
-
-  def self._call_hooks(type, *args)
-    @@hooks[type].each {|hook| hook.call(*args) }
-    @@hooks[type].clear
-  end
-
-  def self._add_hook(type, hook)
-    @@hooks[type] << hook
+  class ConfigurationContext
+    def self.instance()
+      @@instance
+    end
+    def self.instance=(instance)
+      @@instance = instance
+    end
+    def initialize()
+      @values = {}
+      @post_handler_generation_hooks = []
+    end
+    def get_value(key)
+      @values[key]
+    end
+    def set_value(key, value)
+      @values[key] = value
+    end
+    def delete_value(key)
+      @values[key].delete
+    end
+    def add_post_handler_generation_hook(hook)
+      @post_handler_generation_hooks << hook
+    end
+    def post_handler_generation(handler)
+      @post_handler_generation_hooks.each {|hook| hook.call(handler) }
+    end
   end
 
 end
