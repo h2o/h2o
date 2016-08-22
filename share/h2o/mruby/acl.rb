@@ -25,16 +25,18 @@ module H2O
   module ACL
 
     def acl(&block)
-      if @acl_handler then
+      context = H2O::ConfigurationContext.instance
+      if context.get_value(:acl_handler) then
         raise "acl can be called only once for each handler configuration"
       end
-      @acl_handler = ACLHandler.new(&block)
-      H2O.add_handler_validator(proc {|handler|
-        if handler != @acl_handler
+      acl_handler = ACLHandler.new(&block)
+      context.set_value(:acl_handler, acl_handler)
+      context.add_post_handler_generation_hook(proc {|handler|
+        if handler != acl_handler
           raise "acl configuration is ignored"
         end
       })
-      return @acl_handler
+      return acl_handler
     end
 
     class ACLHandler

@@ -1,16 +1,31 @@
 module H2O
 
-  @@handler_validators = []
-
-  def self.validate_handler(handler)
-    @@handler_validators.each do |validator|
-      # will raise exception if handler is not valid
-      validator.call(handler)
+  class ConfigurationContext
+    def self.instance()
+      @@instance
     end
-  end
-
-  def self.add_handler_validator(validator)
-    @@handler_validators << validator
+    def self.reset()
+      @@instance = self.new()
+    end
+    def initialize()
+      @values = {}
+      @post_handler_generation_hooks = []
+    end
+    def get_value(key)
+      @values[key]
+    end
+    def set_value(key, value)
+      @values[key] = value
+    end
+    def delete_value(key)
+      @values[key].delete
+    end
+    def add_post_handler_generation_hook(hook)
+      @post_handler_generation_hooks << hook
+    end
+    def call_post_handler_generation_hooks(handler)
+      @post_handler_generation_hooks.each {|hook| hook.call(handler) }
+    end
   end
 
 end

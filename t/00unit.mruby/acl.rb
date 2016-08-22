@@ -5,10 +5,7 @@ require 'acl.rb'
 class ACLTest < MTest::Unit::TestCase
     include H2O::ACL
     def setup
-        $ACL = 0
-    end
-    def teardown
-        $ACL = nil
+        H2O::ConfigurationContext.reset
     end
 
     def test_use

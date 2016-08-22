@@ -467,6 +467,16 @@ enum {
 };
 
 /**
+ * holds various data related to the context
+ */
+typedef struct st_h2o_context_storage_item_t {
+    void (*dispose)(void *data);
+    void *data;
+} h2o_context_storage_item_t;
+
+typedef H2O_VECTOR(h2o_context_storage_item_t) h2o_context_storage_t;
+
+/**
  * context of the http server.
  */
 struct st_h2o_context_t {
@@ -504,6 +514,10 @@ struct st_h2o_context_t {
      * open file cache
      */
     h2o_filecache_t *filecache;
+    /**
+     * context scope storage for general use
+     */
+    h2o_context_storage_t storage;
     /**
      * flag indicating if shutdown has been requested
      */
@@ -1322,6 +1336,11 @@ static void h2o_context_set_filter_context(h2o_context_t *ctx, h2o_filter_t *fil
  * returns per-module context set by the on_context_init callback
  */
 static void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *logger);
+/*
+ * return the address associated with the key in the context storage
+ */
+static void **h2o_context_get_storage(h2o_context_t *ctx, size_t *key, void (*dispose_cb)(void *));
+
 /* built-in generators */
 
 enum {
@@ -1880,6 +1899,22 @@ inline void h2o_context_set_filter_context(h2o_context_t *ctx, h2o_filter_t *fil
 inline void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *logger)
 {
     return ctx->_module_configs[logger->_config_slot];
+}
+
+inline void **h2o_context_get_storage(h2o_context_t *ctx, size_t *key, void (*dispose_cb)(void *))
+{
+    /* SIZE_MAX might not be available in case the file is included from a C++ source file */
+    size_t size_max = (size_t)-1;
+    if (*key == size_max)
+        *key = ctx->storage.size;
+    if (ctx->storage.size <= *key) {
+        h2o_vector_reserve(NULL, &ctx->storage, *key + 1);
+        memset(ctx->storage.entries + ctx->storage.size, 0, (*key + 1 - ctx->storage.size) * sizeof(ctx->storage.entries[0]));
+        ctx->storage.size = *key + 1;
+    }
+
+    ctx->storage.entries[*key].dispose = dispose_cb;
+    return &ctx->storage.entries[*key].data;
 }
 
 static inline void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype)
