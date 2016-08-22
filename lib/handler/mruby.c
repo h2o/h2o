@@ -350,6 +350,8 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
 
 static void dispose_storage_item(void *data)
 {
+    if (data == NULL)
+        return;
     h2o_mruby_shared_context_t *shared_ctx = (h2o_mruby_shared_context_t *)data;
     mrb_close(shared_ctx->mrb);
 }
