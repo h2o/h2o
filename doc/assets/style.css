@@ -245,6 +245,10 @@ a {
     max-width: 100%;
 }
 
+#main .section-head {
+    border-bottom: 1px solid gray;
+}
+
 #main .directive-head {
     margin: 2em 0 1em 0;
     border-bottom: 1px solid #999;
@@ -278,6 +282,39 @@ a {
     margin-top: 0.3em;
 }
 
+#main .mruby-method-head {
+    margin: 2em 0 1em 0;
+    border-bottom: 1px solid #999;
+}
+
+#main .mruby-method-head h3 {
+    margin: 0;
+    font-size: 120%;
+}
+
+#main .mruby-method-head h3 a {
+    color: black;
+    text-decoration: none;
+}
+
+#main .mruby-method-since {
+    margin: 0;
+    font-size: 80%;
+    float: right;
+}
+
+#main .mruby-method-desc dt {
+    margin: 0.5em 0 0.3em 0;
+}
+
+#main .mruby-method-desc dd {
+    margin: 0.5em 0 1em 0;
+}
+
+#main .mruby-method-desc dd :first-child {
+    margin-top: 0.3em;
+}
+
 @media screen and (max-width: 800px) {
     #main h2,
     #main h3,
@@ -291,6 +328,11 @@ a {
     #main .notes,
     #main .directive-head,
     #main .directive-desc {
+        margin-left: 25px;
+        margin-right: 25px
+    }
+    #main .mruby-method-head,
+    #main .mruby-method-desc {
         margin-left: 25px;
         margin-right: 25px
     }
