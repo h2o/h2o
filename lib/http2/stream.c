@@ -188,7 +188,7 @@ static h2o_iovec_t *send_data_push(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     if (dst.len != max_payload_size || is_final) {
         size_t payload_len = max_payload_size - dst.len;
         encode_data_header_and_consume_window(conn, stream, (uint8_t *)conn->_write.buf->bytes + conn->_write.buf->size,
-                                              payload_len, is_final && bufcnt == 0);
+                                              payload_len, !stream->send_rst_stream_on_close && is_final && bufcnt == 0);
         conn->_write.buf->size += H2O_HTTP2_FRAME_HEADER_SIZE + payload_len;
     }
 
@@ -337,9 +337,18 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
     /* fallthru */
     case H2O_HTTP2_STREAM_STATE_SEND_BODY:
         if (state != H2O_SEND_STATE_IN_PROGRESS) {
-            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL);
-        } else if (state == H2O_STREAM_SEND_STATE_ERROR) {
-            h2o_http2_stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
+            if (state == H2O_SEND_STATE_FINAL) {
+                h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL);
+            } else {
+                /* state == H2O_SEND_STATE_ERROR */
+                if (h2o_http2_stream_has_pending_data(stream)) {
+                    h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL);
+                } else {
+                    h2o_http2_stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
+                    h2o_http2_stream_reset(conn, stream);
+                    return;
+                }
+            }
         }
         break;
     case H2O_HTTP2_STREAM_STATE_END_STREAM:
@@ -395,6 +404,11 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
 void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
+        if (stream->send_rst_stream_on_close) {
+            h2o_http2_stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
+            h2o_http2_stream_reset(conn, stream);
+            return;
+        }
         h2o_http2_stream_close(conn, stream);
     } else {
         h2o_proceed_response(&stream->req);

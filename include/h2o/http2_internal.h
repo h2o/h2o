@@ -179,6 +179,7 @@ struct st_h2o_http2_stream_t {
         h2o_linklist_t link;
         h2o_http2_scheduler_openref_t scheduler;
     } _refs;
+    unsigned send_rst_stream_on_close : 1;
     /* placed at last since it is large and has it's own ctor */
     h2o_req_t req;
 };
