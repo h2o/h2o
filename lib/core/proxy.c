@@ -267,7 +267,7 @@ static void do_send(struct rp_generator_t *self)
 {
     h2o_iovec_t vecs[1];
     size_t veccnt;
-    int is_eos;
+    h2o_send_state_t ststate;
 
     assert(self->sending.bytes_inflight == 0);
 
@@ -277,23 +277,17 @@ static void do_send(struct rp_generator_t *self)
 
     if (self->client == NULL && vecs[0].len == self->sending.buf->size && self->last_content_before_send->size == 0) {
         veccnt = vecs[0].len != 0 ? 1 : 0;
-        is_eos = 1;
+        ststate = H2O_SEND_STATE_FINAL;
     } else {
         if (vecs[0].len == 0)
             return;
         veccnt = 1;
-        is_eos = 0;
+        ststate = H2O_SEND_STATE_IN_PROGRESS;
     }
-    h2o_send_state_t ststate;
-    if (self->had_body_error) {
+
+    if (self->had_body_error)
         ststate = H2O_SEND_STATE_ERROR;
-    } else {
-        if (is_eos) {
-            ststate = H2O_SEND_STATE_FINAL;
-        } else {
-            ststate = H2O_SEND_STATE_IN_PROGRESS;
-        }
-    }
+
     h2o_send(self->src_req, vecs, veccnt, ststate);
 }
 
