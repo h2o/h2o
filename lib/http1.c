@@ -634,7 +634,7 @@ static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled)
     }
 
     /* write */
-    h2o_socket_write(conn->sock, &buf, 1, h2o_stream_send_state_is_final(send_state) ? on_send_complete : on_send_next_pull);
+    h2o_socket_write(conn->sock, &buf, 1, h2o_send_state_is_in_progress(send_state) ? on_send_next_pull : on_send_complete);
 }
 
 static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb)
@@ -692,7 +692,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
     bufcnt += inbufcnt;
 
     if (bufcnt != 0) {
-        h2o_socket_write(conn->sock, bufs, bufcnt, h2o_stream_send_state_is_final(state) ? on_send_complete : on_send_next_push);
+        h2o_socket_write(conn->sock, bufs, bufcnt, h2o_send_state_is_in_progress(state) ? on_send_next_push : on_send_complete);
     } else {
         on_send_complete(conn->sock, 0);
     }

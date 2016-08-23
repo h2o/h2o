@@ -341,7 +341,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
                 h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL);
             } else {
                 /* state == H2O_SEND_STATE_ERROR */
-                if (h2o_http2_stream_has_pending_data(stream)) {
+                if (h2o_http2_stream_has_pending_data(stream) || bufcnt != 0) {
                     h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL);
                 } else {
                     h2o_http2_stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);

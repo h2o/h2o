@@ -60,7 +60,7 @@ static void real_send(throttle_resp_t *self)
     self->tokens -= token_consume;
 
     h2o_ostream_send_next(&self->super, self->req, self->state.bufs.entries, self->state.bufs.size, self->state.stream_state);
-    if (h2o_stream_send_state_is_final(self->state.stream_state))
+    if (!h2o_send_state_is_in_progress(self->state.stream_state))
         h2o_timeout_unlink(&self->timeout_entry);
 }
 

@@ -100,12 +100,12 @@ static void do_compress(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size
     } else {
         last_buf = h2o_iovec_init(NULL, 0);
     }
-    outbufindex = compress_chunk(self, last_buf.base, last_buf.len, h2o_stream_send_state_is_final(state) ? Z_FINISH : Z_SYNC_FLUSH, outbufindex);
+    outbufindex = compress_chunk(self, last_buf.base, last_buf.len, h2o_send_state_is_in_progress(state) ? Z_SYNC_FLUSH : Z_FINISH, outbufindex);
 
     *outbufs = self->bufs.entries;
     *outbufcnt = outbufindex + 1;
 
-    if (h2o_stream_send_state_is_final(state)) {
+    if (!h2o_send_state_is_in_progress(state)) {
         deflateEnd(&self->zs);
         self->zs_is_open = 0;
     }

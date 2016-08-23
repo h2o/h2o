@@ -363,7 +363,7 @@ void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t
 
     assert(req->_generator != NULL);
 
-    if (h2o_stream_send_state_is_final(state))
+    if (!h2o_send_state_is_in_progress(state))
         req->_generator = NULL;
 
     for (i = 0; i != bufcnt; ++i)
@@ -415,7 +415,7 @@ void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t 
 
 void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
-    if (h2o_stream_send_state_is_final(state)) {
+    if (!h2o_send_state_is_in_progress(state)) {
         assert(req->_ostr_top == ostream);
         req->_ostr_top = ostream->next;
     } else if (bufcnt == 0) {

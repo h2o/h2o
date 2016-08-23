@@ -640,7 +640,7 @@ typedef enum h2o_send_state {
 
 typedef h2o_send_state_t (*h2o_ostream_pull_cb)(h2o_generator_t *generator, h2o_req_t *req, h2o_iovec_t *buf);
 
-static inline int h2o_stream_send_state_is_final(h2o_send_state_t s)
+static inline int h2o_send_state_is_in_progress(h2o_send_state_t s)
 {
     return s != H2O_SEND_STATE_IN_PROGRESS;
 }
@@ -1844,7 +1844,7 @@ inline h2o_send_state_t h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iov
     assert(req->_generator != NULL);
     send_state = cb(req->_generator, req, buf);
     req->bytes_sent += buf->len;
-    if (h2o_stream_send_state_is_final(send_state))
+    if (!h2o_send_state_is_in_progress(send_state))
         req->_generator = NULL;
     return send_state;
 }

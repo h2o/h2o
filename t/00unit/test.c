@@ -35,10 +35,10 @@ static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *i
         conn->body->size += inbufs[i].len;
     }
 
-    if (h2o_stream_send_state_is_final(send_state))
-        conn->_is_complete = 1;
-    else
+    if (h2o_send_state_is_in_progress(send_state))
         h2o_proceed_response(&conn->req);
+    else
+        conn->_is_complete = 1;
 }
 
 static socklen_t get_sockname(h2o_conn_t *conn, struct sockaddr *sa)
