@@ -2,7 +2,7 @@
 ? $_mt->wrapper_file("wrapper.mt", "Configure", "Access Control")->(sub {
 
 <p>
-Starting from version 2.1, H2O comes with a DSL-like mruby library which make it easy to write access control list (ACL).
+Starting from version 2.1, H2O comes with a DSL-like mruby library which makes it easy to write access control list (ACL).
 </p>
 
 <h2 id="example" class="section-head">Example</h2>
@@ -27,10 +27,10 @@ EOT
 ?>
 
 <p>
-In the example above, the handler you got by calling <code>acl</code> method will do the following:
+In the example, the handler you get by calling <code>acl</code> method will do the following:
 <ul>
   <li>
-    if the remote IP address is exactly equal to "127.0.0.1", the request will be delegated to the next handler (i.e. serve files under /path/to/doc_root) and all following acl settings is ignored
+    if the remote IP address is exactly equal to "127.0.0.1", the request will be delegated to the next handler (i.e. serve files under /path/to/doc_root) and all following acl settings are ignored
   </li>
   <li>
     otherwise, if the user agent string includes "curl" and the remote IP address doesn't start with "192.168.", this handler immediately returns <code>403 Forbidden</code> response
@@ -42,7 +42,7 @@ In the example above, the handler you got by calling <code>acl</code> method wil
     otherwise, if the request path matches with the pattern <code>/moved/i</code>, this handler immediately redirects the client to <code>"https://example.com"</code> with <code>301</code> status code
   </li>
   <li>
-    otherwise, if the request path starts with <code>/admin</code>, apply Basic Authentication to the request. (for details of Basic Authentication, see <a href="configure/basic_auth.html">here</a>)
+    otherwise, if the request path starts with <code>/admin</code>, apply Basic Authentication to the request (for details of Basic Authentication, see <a href="configure/basic_auth.html">here</a>).
   </li>
   <li>
     otherwise, the request will be delegated to the next handler (i.e. serve files under /path/to/doc_root)
@@ -71,7 +71,7 @@ If none of the conditions matches the request, the handler returns <code>399</co
 <?
 $ctx->{mruby_method}->(
     name    => "allow",
-    desc    => q{Adds a filter which delegates the request to the next handler if the request matches the provided condition},
+    desc    => q{ Adds a filter which delegates the request to the next handler if the request matches the provided condition. },
 )->(sub {
 ?>
 <pre><code>allow { ..condition.. }</code></pre>
@@ -80,7 +80,7 @@ $ctx->{mruby_method}->(
 <?
 $ctx->{mruby_method}->(
     name    => "deny",
-    desc    => q{Adds a filter which returns <code>403 Forbidden</code> if the request matches the provided condition},
+    desc    => q{ Adds a filter which returns <code>403 Forbidden</code> if the request matches the provided condition. },
 )->(sub {
 ?>
 <pre><code>deny { ..condition.. }</code></pre>
@@ -93,7 +93,7 @@ $ctx->{mruby_method}->(
         { label => 'location', desc => 'Location to which the client will be redirected. Required.' },
         { label => 'status',   desc => 'Status code of the response. Default value: 302' },
     ],
-    desc    => q{Adds a filter which redirects the client if the request matches the provided condition},
+    desc    => q{ Adds a filter which redirects the client if the request matches the provided condition. },
 )->(sub {
 ?>
 <pre><code>redirect(location, status) { ..condition.. }</code></pre>
@@ -107,7 +107,7 @@ $ctx->{mruby_method}->(
         { label => 'header', desc => 'Header key-value pairs of the response. Default value: {}' },
         { label => 'body',   desc => 'Body array of the response. Default value: []' },
     ],
-    desc    => q{Adds a filter which returns arbitrary response if the request matches the provided condition},
+    desc    => q{ Adds a filter which returns arbitrary response if the request matches the provided condition. },
 )->(sub {
 ?>
 <pre><code>respond(status, header, body) { ..condition.. }</code></pre>
@@ -119,7 +119,7 @@ $ctx->{mruby_method}->(
     params  => [
         { label => 'proc', desc => 'Callable object that should be applied' },
     ],
-    desc    => q{Adds a filter which applies the provided handler (callable object) if the request matches the provided condition},
+    desc    => q{ Adds a filter which applies the provided handler (callable object) if the request matches the provided condition. },
 )->(sub {
 ?>
 <pre><code>use(proc) { ..condition.. }</code></pre>
@@ -138,7 +138,7 @@ $ctx->{mruby_method}->(
     params  => [
         { label => 'forwarded', desc => 'If true, returns the value of X-Forwarded-For header if it exists. Default value: true' },
     ],
-    desc    => q{ Returns the remote IP address of the request},
+    desc    => q{ Returns the remote IP address of the request. },
 )->(sub {
 ?>
 <pre><code>addr(forwarded)</code></pre>
@@ -147,7 +147,7 @@ $ctx->{mruby_method}->(
 <?
 $ctx->{mruby_method}->(
     name    => "path",
-    desc    => q{ Returns the requested path string of the request},
+    desc    => q{ Returns the requested path string of the request. },
 )->(sub {
 ?>
 <pre><code>path()</code></pre>
@@ -156,7 +156,7 @@ $ctx->{mruby_method}->(
 <?
 $ctx->{mruby_method}->(
     name    => "method",
-    desc    => q{ Returns the HTTP method of the request},
+    desc    => q{ Returns the HTTP method of the request. },
 )->(sub {
 ?>
 <pre><code>method()</code></pre>
@@ -168,7 +168,7 @@ $ctx->{mruby_method}->(
     params  => [
         { label => 'name', desc => 'Case-insensitive header name. Required.' },
     ],
-    desc    => q{ Returns the header value of the request associated with the provided name},
+    desc    => q{ Returns the header value of the request associated with the provided name. },
 )->(sub {
 ?>
 <pre><code>header(name)</code></pre>
@@ -177,7 +177,7 @@ $ctx->{mruby_method}->(
 <?
 $ctx->{mruby_method}->(
     name    => "user_agent",
-    desc    => q{ Shortcut for header("user-agent")},
+    desc    => q{ Shortcut for header("user-agent"). },
 )->(sub {
 ?>
 <pre><code>user_agent()</code></pre>
@@ -195,7 +195,7 @@ If a configuration violates these restrictions, the server will detect it and re
 </p>
 
 <p>
-For example, both of the following examples violates the restrictions above, so the server will refuse to start up.
+For example, both of the following examples violate the restrictions above, so the server will refuse to start up.
 </p>
 
 <?= $ctx->{example}->('Misconfiguration Example 1', <<'EOT');
