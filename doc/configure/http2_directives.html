@@ -415,7 +415,7 @@ A string enum value used to enable <a href="https://tools.ietf.org/html/draft-be
 <p>
 This experimental feature serves a JSON document at the fixed path <code>/.well-known/h2/state</code>, which describes an internal HTTP/2 state of the H2O server.
 To know the details about the response fields, please see <a href=\"$spec_url\">the spec</a>.
-This feature is only for developping and debugging use, so it's highly recommended that you disable this setting in the production environment.
+This feature is only for developing and debugging use, so it's highly recommended that you disable this setting in the production environment.
 </p>
 
 <p>
@@ -425,7 +425,7 @@ If <code>minimum</code> is specified, the response doesn't contain the internal 
 </p>
 
 <p>
-In some circumstances, there may be a risk of information leekage on providing an internal hpack state. For example, the case that some proxies exist between the client and the server, and they share the connections among the clients.
+In some circumstances, there may be a risk of information leakage on providing an internal hpack state. For example, the case that some proxies exist between the client and the server, and they share the connections among the clients.
 Therefore, you should specify <code>hpack</code> only when the server runs in the environments you can completely control.
 </p>
 
