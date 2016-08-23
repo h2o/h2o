@@ -48,11 +48,20 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
         outbufcnt++;
         memcpy(outbufs + outbufcnt, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
         outbufcnt += inbufcnt;
-        outbufs[outbufcnt].base = "\r\n0\r\n\r\n";
-        outbufs[outbufcnt].len = state == H2O_SEND_STATE_FINAL ? 7 : 2;
-        outbufcnt++;
+        if (state != H2O_SEND_STATE_ERROR) {
+            outbufs[outbufcnt].base = "\r\n0\r\n\r\n";
+            outbufs[outbufcnt].len = state == H2O_SEND_STATE_FINAL ? 7 : 2;
+            outbufcnt++;
+        }
     } else if (state == H2O_SEND_STATE_FINAL) {
         outbufs[outbufcnt].base = "0\r\n\r\n";
+        outbufs[outbufcnt].len = 5;
+        outbufcnt++;
+    }
+
+    /* if state is error, send a broken chunk to pass the error down to the browser */
+    if (state == H2O_SEND_STATE_ERROR) {
+        outbufs[outbufcnt].base = "\r\n1\r\n";
         outbufs[outbufcnt].len = 5;
         outbufcnt++;
     }

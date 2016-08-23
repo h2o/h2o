@@ -628,6 +628,9 @@ static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled)
     if (buf.len < MAX_PULL_BUF_SZ) {
         h2o_iovec_t cbuf = {buf.base + buf.len, MAX_PULL_BUF_SZ - buf.len};
         send_state = h2o_pull(&conn->req, conn->_ostr_final.pull.cb, &cbuf);
+        if (send_state == H2O_SEND_STATE_ERROR) {
+            conn->req.http1_is_persistent = 0;
+        }
         buf.len += cbuf.len;
     } else {
         send_state = H2O_SEND_STATE_IN_PROGRESS;
@@ -669,7 +672,7 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
     proceed_pull(conn, headers_len);
 }
 
-void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
+void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t send_state)
 {
     struct st_h2o_http1_finalostream_t *self = (void *)_self;
     struct st_h2o_http1_conn_t *conn = (struct st_h2o_http1_conn_t *)req->conn;
@@ -691,8 +694,12 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
     memcpy(bufs + bufcnt, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
     bufcnt += inbufcnt;
 
+    if (send_state == H2O_SEND_STATE_ERROR) {
+        conn->req.http1_is_persistent = 0;
+    }
+
     if (bufcnt != 0) {
-        h2o_socket_write(conn->sock, bufs, bufcnt, h2o_send_state_is_in_progress(state) ? on_send_next_push : on_send_complete);
+        h2o_socket_write(conn->sock, bufs, bufcnt, h2o_send_state_is_in_progress(send_state) ? on_send_next_push : on_send_complete);
     } else {
         on_send_complete(conn->sock, 0);
     }
