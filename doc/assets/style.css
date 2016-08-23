@@ -315,6 +315,10 @@ a {
     margin-top: 0.3em;
 }
 
+#main .mruby-method-parameters {
+    margin-left: 1.5em;
+}
+
 @media screen and (max-width: 800px) {
     #main h2,
     #main h3,

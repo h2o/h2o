@@ -176,14 +176,12 @@ Adds a filter which redirects the client if the request matches the provided con
 </dd>
 <dt>Parameters:</dt>
 <dd>
-<ul>
-  <li>location
-    <ul><li>Location to which the client will be redirected. Required.</ul>
-  </li>
-  <li>status
-    <ul><li>Status code of the response. Default value: 302</ul>
-  </li>
-</ul>
+<dl class="mruby-method-parameters">
+  <dt>location</dt>
+  <dd>Location to which the client will be redirected. Required.</dd>
+  <dt>status</dt>
+  <dd>Status code of the response. Default value: 302</dd>
+</dl>
 </dd>
 </dl>
 
@@ -203,17 +201,14 @@ Adds a filter which returns arbitrary response if the request matches the provid
 </dd>
 <dt>Parameters:</dt>
 <dd>
-<ul>
-  <li>status
-    <ul><li>Status code of the response. Requied.</ul>
-  </li>
-  <li>header
-    <ul><li>Header key-value pairs of the response. Default value: {}</ul>
-  </li>
-  <li>body
-    <ul><li>Body array of the response. Default value: []</ul>
-  </li>
-</ul>
+<dl class="mruby-method-parameters">
+  <dt>status</dt>
+  <dd>Status code of the response. Requied.</dd>
+  <dt>header</dt>
+  <dd>Header key-value pairs of the response. Default value: {}</dd>
+  <dt>body</dt>
+  <dd>Body array of the response. Default value: []</dd>
+</dl>
 </dd>
 </dl>
 
@@ -233,11 +228,10 @@ Adds a filter which applies the provided handler (callable object) if the reques
 </dd>
 <dt>Parameters:</dt>
 <dd>
-<ul>
-  <li>proc
-    <ul><li>Callable object that should be applied</ul>
-  </li>
-</ul>
+<dl class="mruby-method-parameters">
+  <dt>proc</dt>
+  <dd>Callable object that should be applied</dd>
+</dl>
 </dd>
 </dl>
 
@@ -264,11 +258,10 @@ Matching methods can only be used in a condition block of the ACL methods.
 </dd>
 <dt>Parameters:</dt>
 <dd>
-<ul>
-  <li>forwarded
-    <ul><li>If true, returns the value of X-Forwarded-For header if it exists. Default value: true</ul>
-  </li>
-</ul>
+<dl class="mruby-method-parameters">
+  <dt>forwarded</dt>
+  <dd>If true, returns the value of X-Forwarded-For header if it exists. Default value: true</dd>
+</dl>
 </dd>
 </dl>
 
@@ -320,11 +313,10 @@ Matching methods can only be used in a condition block of the ACL methods.
 </dd>
 <dt>Parameters:</dt>
 <dd>
-<ul>
-  <li>name
-    <ul><li>Case-insensitive header name. Required.</ul>
-  </li>
-</ul>
+<dl class="mruby-method-parameters">
+  <dt>name</dt>
+  <dd>Case-insensitive header name. Required.</dd>
+</dl>
 </dd>
 </dl>
 

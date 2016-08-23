@@ -18,13 +18,12 @@
 ? if (@{$args->{params} || []}) {
 <dt>Parameters:</dt>
 <dd>
-<ul>
+<dl class="mruby-method-parameters">
 ? for my $param (@{ $args->{params} }) {
-  <li><?= $param->{label} ?>
-    <ul><li><?= $param->{desc} ?></ul>
-  </li>
+  <dt><?= $param->{label} ?></dt>
+  <dd><?= $param->{desc} ?></dd>
 ? }
-</ul>
+</dl>
 </dd>
 ? }
 ? if ($args->{see_also}) {
