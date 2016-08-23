@@ -1962,28 +1962,14 @@ static inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
 }
 
 #define COMPUTE_DURATION(name, from, until) \
-        static inline int h2o_time_compute_##name##_sec_usec(struct st_h2o_req_t *req, int32_t *delta_sec, int32_t *delta_usec) \
+        static inline int h2o_time_compute_##name(struct st_h2o_req_t *req, int64_t *delta_usec) \
         { \
             if (h2o_timeval_is_null((from)) || h2o_timeval_is_null((until))) { \
                 return 0; \
             } \
-            *delta_sec = (int32_t)(until)->tv_sec - (int32_t)(from)->tv_sec; \
-            *delta_usec = (int32_t)(until)->tv_usec - (int32_t)(from)->tv_usec; \
-            if (*delta_usec < 0) { \
-                *delta_sec -= 1; \
-                *delta_usec += 1000000; \
-            } \
+            *delta_usec = h2o_timeval_subtract((from), (until)); \
             return 1; \
-        } \
-        static inline int64_t h2o_time_compute_##name##_usec(struct st_h2o_req_t *req, int *okp) \
-        { \
-            if (h2o_timeval_is_null((from)) || h2o_timeval_is_null((until))) { \
-                *okp = 0; \
-                return 0; \
-            } \
-            *okp = 1; \
-            return h2o_timeval_subtract((from), (until)); \
-        } \
+        }
 
  COMPUTE_DURATION(connect_time, &req->conn->connected_at, &req->timestamps.request_begin_at);
  COMPUTE_DURATION(header_time, &req->timestamps.request_begin_at, h2o_timeval_is_null(&req->timestamps.request_body_begin_at)

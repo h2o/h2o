@@ -146,9 +146,8 @@ static void stat_access(h2o_logger_t *_self, h2o_req_t *req)
     struct st_duration_stats_t *ctx_stats = h2o_context_get_logger_context(req->conn->ctx, _self);
 #define ADD_OBSERVATION(x, from, until) \
     do { \
-        int ok; \
-        int64_t dur = h2o_time_compute_##x##_usec(req, &ok); \
-        if (ok) { \
+        int64_t dur; \
+        if (h2o_time_compute_##x(req, &dur)) { \
             gkc_insert_value(ctx_stats->x, dur); \
         } \
     } while(0)
