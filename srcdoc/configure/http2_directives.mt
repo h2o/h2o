@@ -289,7 +289,7 @@ EOT
 
 <p>
 This experimental feature serves a JSON document at the fixed path <code>/.well-known/h2/state</code>, which describes an internal HTTP/2 state of the H2O server.
-To know the details about the response fields, please see <a href=\"$spec_url\">the spec</a>.
+To know the details about the response fields, please see <a href="<?= $spec_url ?>">the spec</a>.
 This feature is only for developing and debugging use, so it's highly recommended that you disable this setting in the production environment.
 </p>
 
