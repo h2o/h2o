@@ -2,7 +2,7 @@
 ? $_mt->wrapper_file("wrapper.mt", "Configure", "Using Mruby")->(sub {
 
 <p>
-<a href="https://github.com/mruby/mruby">mruby</a> is a lightweight implemenation of the Ruby programming language.
+<a href="https://github.com/mruby/mruby">mruby</a> is a lightweight implementation of the Ruby programming language.
 With H2O, users can implement their own request handling logic using mruby, either to generate responses or to fix-up the request / response.
 </p>
 
@@ -149,7 +149,7 @@ EOT
 <p>
 The method takes two arguments.
 First argument is the target URI.
-Second argument is an optional hash; <code>method</code> (defaults to <code>GET</code>), <code>header</code>, <code>body</code> atttributes are recognized.
+Second argument is an optional hash; <code>method</code> (defaults to <code>GET</code>), <code>header</code>, <code>body</code> attributes are recognized.
 </p>
 <p>
 The method returns a promise object.

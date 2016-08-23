@@ -113,7 +113,7 @@ EOT
 )->(sub {
 ?>
 <p>
-When enabled, H2O maintains a fingerprint of the web browser cache, and cancels server-push suggested by the handlers if the client is known to be in possention of the content.
+When enabled, H2O maintains a fingerprint of the web browser cache, and cancels server-push suggested by the handlers if the client is known to be in possession of the content.
 The fingerprint is stored in a cookie named <code>h2o_casper</code> using <a href="https://www.imperialviolet.org/2011/04/29/filters.html">Golomb-compressed sets</a> (a compressed encoding of <a href="https://en.wikipedia.org/wiki/Bloom_filter">Bloom filter</a>).
 </p>
 <p>
@@ -133,7 +133,7 @@ If set to <code>all</code>, tracks all responses.
 </dl>
 </p>
 It should be noted that the size of the cookie will be <code>log2(P) * number-of-assets-being-tracked</code> bits multiplied by the overhead of Base 64 encoding (<code>4/3</code>).
-Therefore with current cookie-based implementation, it is necessary in many cases to restrict the resources being tracked to those have significant effect to user-percieved response time.
+Therefore with current cookie-based implementation, it is necessary in many cases to restrict the resources being tracked to those have significant effect to user-perceived response time.
 </p>
 
 <?= $ctx->{example}->('Enabling CASPer', <<'EOT')
@@ -257,7 +257,7 @@ EOT
 )->(sub {
 ?>
 <p>
-To maximize the user-perceived reponsiveness of a web page, it is essential for the web server to send blocking assets (i.e. CSS and JavaScript files in <code>&lt;HEAD&gt;</code>) before any other files such as images.
+To maximize the user-perceived responsiveness of a web page, it is essential for the web server to send blocking assets (i.e. CSS and JavaScript files in <code>&lt;HEAD&gt;</code>) before any other files such as images.
 HTTP/2 provides a way for web browsers to specify such priorities to the web server.
 However, as of Sep. 2015, no major web browsers except Mozilla Firefox take advantage of the feature.
 </p>
