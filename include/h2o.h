@@ -642,7 +642,7 @@ typedef h2o_send_state_t (*h2o_ostream_pull_cb)(h2o_generator_t *generator, h2o_
 
 static inline int h2o_send_state_is_in_progress(h2o_send_state_t s)
 {
-    return s != H2O_SEND_STATE_IN_PROGRESS;
+    return s == H2O_SEND_STATE_IN_PROGRESS;
 }
 /**
  * an output stream that may alter the output.
