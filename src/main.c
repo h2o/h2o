@@ -1197,10 +1197,11 @@ static yoml_t *resolve_file_tag(yoml_t *node, resolve_tag_arg_t *arg)
     loaded = load_config(&parse_args);
 
     if (loaded != NULL) {
-        /* cache included node */
+        /* cache newly loaded node */
         h2o_vector_reserve(NULL, &arg->node_cache, arg->node_cache.size + 1);
         resolve_tag_node_cache_entry_t entry = {h2o_strdup(NULL, filename, SIZE_MAX), loaded};
         arg->node_cache.entries[arg->node_cache.size++] = entry;
+        ++loaded->_refcnt;
     }
 
     return loaded;
@@ -1215,6 +1216,7 @@ static yoml_t *resolve_tag(const char *tag, yoml_t *node, void *cb_arg)
     }
 
     /* otherwise, return the node itself */
+    ++node->_refcnt;
     return node;
 }
 
@@ -1224,6 +1226,7 @@ static void dispose_resolve_tag_arg(resolve_tag_arg_t *arg)
     for (i = 0; i != arg->node_cache.size; ++i) {
         resolve_tag_node_cache_entry_t *cached = arg->node_cache.entries + i;
         free(cached->filename.base);
+        yoml_free(cached->node, NULL);
     }
     free(arg->node_cache.entries);
 }

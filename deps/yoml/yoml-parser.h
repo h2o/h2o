@@ -320,10 +320,8 @@ static inline int yoml__resolve_tag(yoml_t **target, yaml_parser_t *parser, yoml
             }
             return -1;
         }
-        if (resolved != *target) {
-            yoml_free(*target, parse_args->mem_set);
-            *target = resolved;
-        }
+        yoml_free(*target, parse_args->mem_set);
+        *target = resolved;
     }
 
     switch ((*target)->type) {
