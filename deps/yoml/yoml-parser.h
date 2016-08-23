@@ -314,7 +314,7 @@ static inline int yoml__resolve_tag(yoml_t **target, yaml_parser_t *parser, yoml
         yoml_t *resolved = parse_args->resolve_tag.cb((*target)->tag, *target, parse_args->resolve_tag.cb_arg);
         if (resolved == NULL) {
             if (parser != NULL) {
-                parser->problem = "could not resolve tag";
+                parser->problem = "tag resolution failed";
                 parser->problem_mark.line = (*target)->line;
                 parser->problem_mark.column = (*target)->column;
             }

@@ -1147,7 +1147,7 @@ static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
     yoml_t *yoml;
 
     if ((fp = fopen(parse_args->filename, "rb")) == NULL) {
-        fprintf(stderr, "could not open configuration file:%s:%s\n", parse_args->filename, strerror(errno));
+        fprintf(stderr, "could not open configuration file %s: %s\n", parse_args->filename, strerror(errno));
         return NULL;
     }
 
@@ -1157,12 +1157,11 @@ static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
     yoml = yoml_parse_document(&parser, NULL, parse_args);
 
     if (yoml == NULL) {
-        fprintf(stderr, "failed to parse configuration file:%s:line %d:%s", parse_args->filename,
-                (int)parser.problem_mark.line + 1, parser.problem);
+        fprintf(stderr, "failed to parse configuration file %s line %d", parse_args->filename, (int)parser.problem_mark.line + 1);
         if (source != NULL) {
-            fprintf(stderr, " (included from file:%s:line %d)", source->filename, (int)source->line + 1);
+            fprintf(stderr, " (included from file %s line %d)", source->filename, (int)source->line + 1);
         }
-        fprintf(stderr, "\n");
+        fprintf(stderr, ": %s\n", parser.problem);
     }
 
     yaml_parser_delete(&parser);
