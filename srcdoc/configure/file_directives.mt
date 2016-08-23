@@ -107,7 +107,7 @@ EOT
 )->(sub {
 ?>
 <p>
-The sequence of filenames afer search from left to right, and the first file that existed is sent to the client.
+The sequence of filenames are searched from left to right, and the first file that existed is sent to the client.
 </p>
 ? })
 
@@ -134,7 +134,7 @@ The default mappings is hard-coded in <a href="https://github.com/h2o/h2o/blob/m
 </p>
 <p>
 It is also possible to set certain attributes for a MIME type.
-The example below maps <code>.css</code> files to <code>text/css</code> type, seting <code>is_compressible</code> flag to <code>ON</code> and <code>priority</code> to highest.
+The example below maps <code>.css</code> files to <code>text/css</code> type, setting <code>is_compressible</code> flag to <code>ON</code> and <code>priority</code> to highest.
 </p>
 
 <?= $ctx->{example}->('Setting MIME attributes', <<'EOT')

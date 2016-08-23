@@ -60,7 +60,7 @@ $ctx->{directive}->(
 )->(sub {
 ?>
 <p>
-By default, when transmitting a HTTP request to an upstream HTTP server, H2O removes the received <code>x-forwarded-proto</code> request header and sends its own, as a precautios measure to prevent an attacker connecting through HTTP to lie that they are connected via HTTPS.
+By default, when transmitting a HTTP request to an upstream HTTP server, H2O removes the received <code>x-forwarded-proto</code> request header and sends its own, as a precaution measure to prevent an attacker connecting through HTTP to lie that they are connected via HTTPS.
 However in case H2O is run behind a trusted HTTPS proxy, such protection might not be desirable, and this configuration directive can be used to modify the behaviour.
 </p>
 ? })
