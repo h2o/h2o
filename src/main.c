@@ -1140,7 +1140,7 @@ static int on_config_crash_handler(h2o_configurator_command_t *cmd, h2o_configur
     return 0;
 }
 
-static yoml_t *load_config(yoml_parse_args_t *parse_args)
+static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
 {
     FILE *fp;
     yaml_parser_t parser;
@@ -1156,9 +1156,14 @@ static yoml_t *load_config(yoml_parse_args_t *parse_args)
 
     yoml = yoml_parse_document(&parser, NULL, parse_args);
 
-    if (yoml == NULL)
-        fprintf(stderr, "failed to parse configuration file:%s:line %d:%s\n", parse_args->filename,
+    if (yoml == NULL) {
+        fprintf(stderr, "failed to parse configuration file:%s:line %d:%s", parse_args->filename,
                 (int)parser.problem_mark.line + 1, parser.problem);
+        if (source != NULL) {
+            fprintf(stderr, " (included from file:%s:line %d)", source->filename, (int)source->line + 1);
+        }
+        fprintf(stderr, "\n");
+    }
 
     yaml_parser_delete(&parser);
 
@@ -1194,7 +1199,7 @@ static yoml_t *resolve_file_tag(yoml_t *node, resolve_tag_arg_t *arg)
         NULL,              /* mem_set */
         {resolve_tag, arg} /* resolve_tag */
     };
-    loaded = load_config(&parse_args);
+    loaded = load_config(&parse_args, node);
 
     if (loaded != NULL) {
         /* cache newly loaded node */
@@ -1751,7 +1756,7 @@ int main(int argc, char **argv)
             NULL,                           /* mem_set */
             {resolve_tag, &resolve_tag_arg} /* resolve_tag */
         };
-        if ((yoml = load_config(&parse_args)) == NULL)
+        if ((yoml = load_config(&parse_args, NULL)) == NULL)
             exit(EX_CONFIG);
         if (h2o_configurator_apply(&conf.globalconf, yoml, conf.run_mode != RUN_MODE_WORKER) != 0)
             exit(EX_CONFIG);
