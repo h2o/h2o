@@ -1982,7 +1982,7 @@ static inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
                 return 0; \
             } \
             *okp = 1; \
-            return h2o_timeval_substract((from), (until)); \
+            return h2o_timeval_subtract((from), (until)); \
         } \
 
  COMPUTE_DURATION(connect_time, &req->conn->connected_at, &req->timestamps.request_begin_at);

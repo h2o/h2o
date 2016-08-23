@@ -45,7 +45,7 @@ int h2o_time_parse_rfc1123(const char *s, size_t len, struct tm *tm);
  */
 void h2o_time2str_log(char *buf, time_t time);
 
-static inline int64_t h2o_timeval_substract(struct timeval *from, struct timeval *until)
+static inline int64_t h2o_timeval_subtract(struct timeval *from, struct timeval *until)
 {
     int32_t delta_sec = (int32_t)until->tv_sec - (int32_t)from->tv_sec;
     int32_t delta_usec = (int32_t)until->tv_usec - (int32_t)from->tv_usec;
