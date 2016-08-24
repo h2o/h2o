@@ -70,6 +70,8 @@ extern "C" {
 #define H2O_TO__STR(n) #n
 #define H2O_TO_STR(n) H2O_TO__STR(n)
 
+#define H2O_BUILD_ASSERT(condition) ((void)sizeof(char[2*!!(!__builtin_constant_p(condition) || (condition)) - 1]))
+
 typedef struct st_h2o_buffer_prototype_t h2o_buffer_prototype_t;
 
 /**

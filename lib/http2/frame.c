@@ -81,7 +81,7 @@ static uint8_t *allocate_frame(h2o_buffer_t **buf, size_t length, uint8_t type, 
     return h2o_http2_encode_frame_header((uint8_t *)alloced.base, length, type, flags, stream_id);
 }
 
-void h2o_http2_encode_rst_stream_frame_(h2o_buffer_t **buf, uint32_t stream_id, int errnum)
+void h2o_http2__encode_rst_stream_frame(h2o_buffer_t **buf, uint32_t stream_id, int errnum)
 {
     uint8_t *dst = allocate_frame(buf, 4, H2O_HTTP2_FRAME_TYPE_RST_STREAM, 0, stream_id);
     dst = h2o_http2_encode32u(dst, errnum);
