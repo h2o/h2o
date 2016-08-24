@@ -26,6 +26,12 @@ class TrieAddrTest < MTest::Unit::TestCase
     assert_false(addr.match("12.34.56.79"))
   end
 
+  def test_ipv6_addr
+    addr = TrieAddr.new
+    assert_raise(ArgumentError, "ipv6 is currently not supported") { addr.add("::1") }
+    assert_false(addr.match("::1"), "always returns false")
+  end
+
   # taken from https://github.com/hirose31/p5-net-ip-match-trie/blob/master/t/10_match_ip_PP.t
   def test_nimt_cases
     addr = TrieAddr.new
