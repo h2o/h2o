@@ -65,7 +65,7 @@ class TrieAddr
     return self
   end
 
-  def match(ip)
+  def match?(ip)
     s = ip.split(".", 4)
     ! ((((@root[s[0].to_i]||REJECT)[s[1].to_i]||REJECT)[s[2].to_i]||REJECT)[s[3].to_i]||REJECT).equal?(REJECT)
   end

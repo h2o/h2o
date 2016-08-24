@@ -8,12 +8,12 @@ class TrieAddrTest < MTest::Unit::TestCase
     addr.add("10.0.0.0/12")
     addr.add("10.255.0.0/12")
 
-    assert_true(addr.match("10.10.0.0"))
-    assert_false(addr.match("10.128.0.0"))
-    assert_true(addr.match("10.250.0.0"))
+    assert_true(addr.match?("10.10.0.0"))
+    assert_false(addr.match?("10.128.0.0"))
+    assert_true(addr.match?("10.250.0.0"))
 
     addr.add("10.255.0.0/8")
-    assert_true(addr.match("10.128.0.0"))
+    assert_true(addr.match?("10.128.0.0"))
 
   end
 
@@ -21,18 +21,18 @@ class TrieAddrTest < MTest::Unit::TestCase
     addr = TrieAddr.new
     addr.add("12.34.56.78")
 
-    assert_false(addr.match("12.34.56.77"))
-    assert_true(addr.match("12.34.56.78"))
-    assert_false(addr.match("12.34.56.79"))
+    assert_false(addr.match?("12.34.56.77"))
+    assert_true(addr.match?("12.34.56.78"))
+    assert_false(addr.match?("12.34.56.79"))
   end
 
   def test_ipv6_addr
     addr = TrieAddr.new
     assert_raise(ArgumentError, "ipv6 is currently not supported") { addr.add("::1") }
-    assert_false(addr.match("::1"), "always returns false")
+    assert_false(addr.match?("::1"), "always returns false")
   end
 
-  # taken from https://github.com/hirose31/p5-net-ip-match-trie/blob/master/t/10_match_ip_PP.t
+  # taken from https://github.com/hirose31/p5-net-ip-match?-trie/blob/master/t/10_match?_ip_PP.t
   def test_nimt_cases
     addr = TrieAddr.new
     addr.add(["10.0.0.0/24", "10.0.1.0/24", "11.0.0.0/16", "10.1.0.0/28", "10.0.0.0/8", "10.2.0.0/24"])
@@ -50,7 +50,7 @@ class TrieAddrTest < MTest::Unit::TestCase
       { :name => "big",             :input => "10.255.255.255",  :expected => true },
     ]
     cases.each {|c|
-      assert_equal(addr.match(c[:input]), c[:expected], c[:name])
+      assert_equal(addr.match?(c[:input]), c[:expected], c[:name])
     }
   end
 end
