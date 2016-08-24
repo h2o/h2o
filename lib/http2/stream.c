@@ -343,12 +343,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
     /* fallthru */
     case H2O_HTTP2_STREAM_STATE_SEND_BODY:
         if (state != H2O_SEND_STATE_IN_PROGRESS) {
-            if (state == H2O_SEND_STATE_FINAL) {
-                h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL);
-            } else {
-                /* state == H2O_SEND_STATE_ERROR */
-                h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL);
-            }
+            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL);
         }
         break;
     case H2O_HTTP2_STREAM_STATE_END_STREAM:
