@@ -240,6 +240,50 @@ static int sort_from_longer_paths(const yoml_mapping_element_t *x, const yoml_ma
     return strcmp(x->key->data.scalar, y->key->data.scalar);
 }
 
+static yoml_t *convert_path_config_node(h2o_configurator_command_t *cmd, yoml_t *node)
+{
+    size_t i, j;
+
+    switch (node->type) {
+    case YOML_TYPE_MAPPING:
+        break;
+    case YOML_TYPE_SEQUENCE: {
+        /* convert to mapping */
+        yoml_t *map = h2o_mem_alloc(offsetof(yoml_t, data.mapping.elements));
+        map->type = YOML_TYPE_MAPPING;
+        map->_refcnt = 1;
+        map->data.mapping.size = 0;
+
+        for (i = 0; i != node->data.sequence.size; ++i) {
+            yoml_t *elem = node->data.sequence.elements[i];
+            if (elem->type != YOML_TYPE_MAPPING) {
+                yoml_free(map, NULL);
+                goto Error;
+            }
+            for (j = 0; j != elem->data.mapping.size; ++j) {
+                yoml_t *elemkey = elem->data.mapping.elements[j].key;
+                yoml_t *elemvalue = elem->data.mapping.elements[j].value;
+                map = h2o_mem_realloc(map, offsetof(yoml_t, data.mapping.elements) +
+                                               sizeof(yoml_mapping_element_t) * (map->data.mapping.size + 1));
+                map->data.mapping.elements[map->data.mapping.size].key = elemkey;
+                map->data.mapping.elements[map->data.mapping.size].value = elemvalue;
+                ++map->data.mapping.size;
+                ++elemkey->_refcnt;
+                ++elemvalue->_refcnt;
+            }
+        }
+        return map;
+    } break;
+    default:
+    Error:
+        h2o_configurator_errprintf(cmd, node, "value must be a mapping or sequence of mapping");
+        return NULL;
+    }
+
+    ++node->_refcnt;
+    return node;
+}
+
 static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     size_t i;
@@ -261,8 +305,15 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
         h2o_configurator_context_t *path_ctx = create_context(ctx, 0);
         path_ctx->pathconf = h2o_config_register_path(path_ctx->hostconf, key->data.scalar, 0);
         path_ctx->mimemap = &path_ctx->pathconf->mimemap;
-        int cmd_ret = h2o_configurator_apply_commands(path_ctx, value, H2O_CONFIGURATOR_FLAG_PATH, NULL);
+
+        yoml_t *config_node = convert_path_config_node(cmd, value);
+        if (config_node == NULL)
+            return -1;
+
+        int cmd_ret = h2o_configurator_apply_commands(path_ctx, config_node, H2O_CONFIGURATOR_FLAG_PATH, NULL);
         destroy_context(path_ctx);
+        yoml_free(config_node, NULL);
+
         if (cmd_ret != 0)
             return cmd_ret;
     }
