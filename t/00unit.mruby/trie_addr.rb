@@ -32,6 +32,12 @@ class TrieAddrTest < MTest::Unit::TestCase
     assert_false(addr.match?("::1"), "always returns false")
   end
 
+  def test_invalid_addr
+    addr = TrieAddr.new
+    addr.add("0.0.0.0/8")
+    assert_false(addr.match?("hogehoge"))
+  end
+
   # taken from https://github.com/hirose31/p5-net-ip-match?-trie/blob/master/t/10_match?_ip_PP.t
   def test_nimt_cases
     addr = TrieAddr.new
@@ -50,7 +56,7 @@ class TrieAddrTest < MTest::Unit::TestCase
       { :name => "big",             :input => "10.255.255.255",  :expected => true },
     ]
     cases.each {|c|
-      assert_equal(addr.match?(c[:input]), c[:expected], c[:name])
+      assert_equal(c[:expected], addr.match?(c[:input]), c[:name])
     }
   end
 end

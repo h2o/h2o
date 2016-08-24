@@ -19,16 +19,17 @@
 # IN THE SOFTWARE.
 #
 class TrieAddr
-  def self.generate_leaf
-    leaf = Array.new(256);
-    leaf.fill(leaf);
+  def self.generate_leaf(default=nil)
+    leaf = Hash.new
+    leaf.default = default || leaf
+    (0..255).each {|i| leaf[i.to_s] = leaf }
     return leaf
   end
   REJECT  = self.generate_leaf
-  FULFILL = self.generate_leaf
+  FULFILL = self.generate_leaf(REJECT)
 
   def initialize
-    @root = Array.new(256, REJECT)
+    @root = Hash.new(REJECT)
   end
 
   def add(cidr)
@@ -50,10 +51,10 @@ class TrieAddr
 
     cur = @root
     while length > 8 do
-      octet = (nip >> 24) & 0xff
+      octet = ((nip >> 24) & 0xff).to_s
       return self if cur[octet].equal?(FULFILL)
       if !cur[octet] || cur[octet].equal?(REJECT)
-        cur[octet] = Array.new(256, REJECT)
+        cur[octet] = Hash.new(REJECT)
       end
       cur = cur[octet]
       nip <<= 8
@@ -61,12 +62,12 @@ class TrieAddr
     end
     lower = (nip >> 24) & 0xff
     upper = lower + (1 << (8 - length)) - 1;
-    cur.fill(FULFILL, lower..upper)
+    (lower..upper).each {|t| cur[t.to_s] = FULFILL }
     return self
   end
 
   def match?(ip)
     s = ip.split(".", 4)
-    ! ((((@root[s[0].to_i]||REJECT)[s[1].to_i]||REJECT)[s[2].to_i]||REJECT)[s[3].to_i]||REJECT).equal?(REJECT)
+    @root[s[0]][s[1]][s[2]][s[3]].equal?(FULFILL)
   end
 end
