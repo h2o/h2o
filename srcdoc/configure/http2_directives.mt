@@ -149,6 +149,44 @@ EOT
 ? });
 
 <?
+my $spec_url = "https://tools.ietf.org/html/draft-benfield-http2-debug-state-01";
+$ctx->{directive}->(
+    name    => "http2-debug-state",
+    levels  => [ qw(host) ],
+    see_also => render_mt(<<"EOT"),
+<a href=\"$spec_url\">HTTP/2 Implementation Debug State (draft-01)</a>
+EOT
+    desc    => <<"EOT",
+A directive to turn on the <a href=\"$spec_url\">HTTP/2 Implementation Debug State</a>.
+EOT
+)->(sub {
+?>
+
+<p>
+This experimental feature serves a JSON document at the fixed path <code>/.well-known/h2/state</code>, which describes an internal HTTP/2 state of the H2O server.
+To know the details about the response fields, please see <a href="<?= $spec_url ?>">the spec</a>.
+This feature is only for developing and debugging use, so it's highly recommended that you disable this setting in the production environment.
+</p>
+
+<p>
+The value of this directive specifies the property set contained in the response. Available values are <code>minimum</code> or <code>hpack</code>.
+If <code>hpack</code> is specified, the response will contain the internal hpack state of the same connection.
+If <code>minimum</code> is specified, the response doesn't contain the internal hpack state.
+</p>
+
+<p>
+In some circumstances, there may be a risk of information leakage on providing an internal hpack state. For example, the case that some proxies exist between the client and the server, and they share the connections among the clients.
+Therefore, you should specify <code>hpack</code> only when the server runs in the environments you can completely control.
+</p>
+
+<p>
+This feature is considered experimental yet.
+For now, the implementation conforms to the version draft-01 of the specification.
+</p>
+
+? });
+
+<?
 $ctx->{directive}->(
     name    => "http2-idle-timeout",
     levels  => [ qw(global) ],

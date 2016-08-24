@@ -218,6 +218,50 @@ Therefore with current cookie-based implementation, it is necessary in many case
 </dd>
 </dl>
 
+<div id="http2-debug-state" class="directive-head">
+<h3><a href="configure/http2_directives.html#http2-debug-state"><code>"http2-debug-state"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A directive to turn on the <a href="https://tools.ietf.org/html/draft-benfield-http2-debug-state-01">HTTP/2 Implementation Debug State</a>.
+
+</p>
+
+
+<p>
+This experimental feature serves a JSON document at the fixed path <code>/.well-known/h2/state</code>, which describes an internal HTTP/2 state of the H2O server.
+To know the details about the response fields, please see <a href="https://tools.ietf.org/html/draft-benfield-http2-debug-state-01">the spec</a>.
+This feature is only for developing and debugging use, so it's highly recommended that you disable this setting in the production environment.
+</p>
+
+<p>
+The value of this directive specifies the property set contained in the response. Available values are <code>minimum</code> or <code>hpack</code>.
+If <code>hpack</code> is specified, the response will contain the internal hpack state of the same connection.
+If <code>minimum</code> is specified, the response doesn't contain the internal hpack state.
+</p>
+
+<p>
+In some circumstances, there may be a risk of information leakage on providing an internal hpack state. For example, the case that some proxies exist between the client and the server, and they share the connections among the clients.
+Therefore, you should specify <code>hpack</code> only when the server runs in the environments you can completely control.
+</p>
+
+<p>
+This feature is considered experimental yet.
+For now, the implementation conforms to the version draft-01 of the specification.
+</p>
+
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>host</dd>
+<dt>See also:</dt>
+<dd><a href="https://tools.ietf.org/html/draft-benfield-http2-debug-state-01">HTTP/2 Implementation Debug State (draft-01)</a>
+</dd>
+</dl>
+
 <div id="http2-idle-timeout" class="directive-head">
 <h3><a href="configure/http2_directives.html#http2-idle-timeout"><code>"http2-idle-timeout"</code></a></h3>
 </div>
