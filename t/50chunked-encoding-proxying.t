@@ -72,7 +72,7 @@ sub doit {
     ok($found_data eq $data, "Found the expected data");
 }
 
-for my $w (2 .. 5) {
+for my $w (1 .. 5) {
     doit("5\r\nHello\r\n50\r\nThere", "HelloThere", $w, 0, 1);
     doit("5\r\nHello\r\n50\r\nThere", "HelloThere", $w, 1, 1);
 }
