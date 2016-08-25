@@ -39,7 +39,7 @@ sub doit {
     my $stream_window_bits = shift;
     my $defer_close = shift;
     my $expect_rst_stream = shift;
-    open(NGHTTP, "nghttp -w $stream_window_bits -v http://127.0.0.1:$server->{'port'}/ -H 'host: host.example.com' 2>&1 |");
+    open my $nghttp, "-|", "nghttp -w $stream_window_bits -v http://127.0.0.1:$server->{'port'}/ -H 'host: host.example.com' 2>&1";
 
     my $req;
     $client_socket = $socket->accept();
@@ -52,7 +52,7 @@ sub doit {
 
     my $found_rst_stream=0;
     my $found_data="";
-    while(<NGHTTP>) {
+    while(<$nghttp>) {
         if (/^[\[|\s]/) {
             if (/RST_STREAM/) {
                 $found_rst_stream = 1;
