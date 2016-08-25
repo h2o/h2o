@@ -39,11 +39,11 @@ class TrieAddr
     end
 
     ip, length = cidr.split('/', 2)
-    length = (length || 32).to_i
     s = ip.split(".", 4).map {|o| o.to_i}
     if s.length != 4
-      raise ArgumentError, "invalid IPv4 format"
+      raise ArgumentError, "invalid IPv4 address: #{ip}"
     end
+    length = (length || 32).to_i
 
     netmask = ~((1 << (32 - length)) - 1) & 0xffffffff
     nip = (s[0] << 24) + (s[1] << 16) + (s[2] << 8) + s[3]
