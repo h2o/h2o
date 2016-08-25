@@ -464,8 +464,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
         return;
     case -2: // incomplete
         if (inreqlen == H2O_MAX_REQLEN) {
-            // request is too long (TODO notify)
-            close_connection(conn, 1);
+            send_bad_request(conn);
         }
         return;
     case -1: // error
