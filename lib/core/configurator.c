@@ -251,6 +251,10 @@ static yoml_t *convert_path_config_node(h2o_configurator_command_t *cmd, yoml_t 
         /* convert to mapping */
         yoml_t *map = h2o_mem_alloc(offsetof(yoml_t, data.mapping.elements));
         map->type = YOML_TYPE_MAPPING;
+        map->filename = node->filename != NULL ? strdup(node->filename) : NULL;
+        map->line = node->line;
+        map->column = node->column;
+        map->anchor = node->anchor != NULL ? strdup(node->anchor) : NULL;
         map->_refcnt = 1;
         map->data.mapping.size = 0;
 
