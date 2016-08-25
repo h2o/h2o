@@ -105,6 +105,15 @@ struct listener_ctx_t {
     h2o_socket_t *sock;
 };
 
+typedef struct st_resolve_tag_node_cache_entry_t {
+    h2o_iovec_t filename;
+    yoml_t *node;
+} resolve_tag_node_cache_entry_t;
+
+typedef struct st_resolve_tag_arg_t {
+    H2O_VECTOR(resolve_tag_node_cache_entry_t) node_cache;
+} resolve_tag_arg_t;
+
 typedef enum en_run_mode_t {
     RUN_MODE_WORKER = 0,
     RUN_MODE_MASTER,
@@ -1133,30 +1142,99 @@ static int on_config_crash_handler(h2o_configurator_command_t *cmd, h2o_configur
     return 0;
 }
 
-static yoml_t *load_config(const char *fn)
+static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
 {
     FILE *fp;
     yaml_parser_t parser;
     yoml_t *yoml;
 
-    if ((fp = fopen(fn, "rb")) == NULL) {
-        fprintf(stderr, "could not open configuration file:%s:%s\n", fn, strerror(errno));
+    if ((fp = fopen(parse_args->filename, "rb")) == NULL) {
+        fprintf(stderr, "could not open configuration file %s: %s\n", parse_args->filename, strerror(errno));
         return NULL;
     }
+
     yaml_parser_initialize(&parser);
     yaml_parser_set_input_file(&parser, fp);
 
-    yoml = yoml_parse_document(&parser, NULL, NULL, fn);
+    yoml = yoml_parse_document(&parser, NULL, parse_args);
 
-    if (yoml == NULL)
-        fprintf(stderr, "failed to parse configuration file:%s:line %d:%s\n", fn, (int)parser.problem_mark.line + 1,
-                parser.problem);
+    if (yoml == NULL) {
+        fprintf(stderr, "failed to parse configuration file %s line %d", parse_args->filename, (int)parser.problem_mark.line + 1);
+        if (source != NULL) {
+            fprintf(stderr, " (included from file %s line %d)", source->filename, (int)source->line + 1);
+        }
+        fprintf(stderr, ": %s\n", parser.problem);
+    }
 
     yaml_parser_delete(&parser);
 
     fclose(fp);
 
     return yoml;
+}
+
+static yoml_t *resolve_tag(const char *tag, yoml_t *node, void *cb_arg);
+static yoml_t *resolve_file_tag(yoml_t *node, resolve_tag_arg_t *arg)
+{
+    size_t i;
+    yoml_t *loaded;
+
+    if (node->type != YOML_TYPE_SCALAR) {
+        fprintf(stderr, "value of the !file node must be a scalar");
+        return NULL;
+    }
+
+    char *filename = node->data.scalar;
+
+    /* check cache */
+    for (i = 0; i != arg->node_cache.size; ++i) {
+        resolve_tag_node_cache_entry_t *cached = arg->node_cache.entries + i;
+        if (strcmp(filename, cached->filename.base) == 0) {
+            ++cached->node->_refcnt;
+            return cached->node;
+        }
+    }
+
+    yoml_parse_args_t parse_args = {
+        filename,          /* filename */
+        NULL,              /* mem_set */
+        {resolve_tag, arg} /* resolve_tag */
+    };
+    loaded = load_config(&parse_args, node);
+
+    if (loaded != NULL) {
+        /* cache newly loaded node */
+        h2o_vector_reserve(NULL, &arg->node_cache, arg->node_cache.size + 1);
+        resolve_tag_node_cache_entry_t entry = {h2o_strdup(NULL, filename, SIZE_MAX), loaded};
+        arg->node_cache.entries[arg->node_cache.size++] = entry;
+        ++loaded->_refcnt;
+    }
+
+    return loaded;
+}
+
+static yoml_t *resolve_tag(const char *tag, yoml_t *node, void *cb_arg)
+{
+    resolve_tag_arg_t *arg = (resolve_tag_arg_t *)cb_arg;
+
+    if (strcmp(tag, "!file") == 0) {
+        return resolve_file_tag(node, arg);
+    }
+
+    /* otherwise, return the node itself */
+    ++node->_refcnt;
+    return node;
+}
+
+static void dispose_resolve_tag_arg(resolve_tag_arg_t *arg)
+{
+    size_t i;
+    for (i = 0; i != arg->node_cache.size; ++i) {
+        resolve_tag_node_cache_entry_t *cached = arg->node_cache.entries + i;
+        free(cached->filename.base);
+        yoml_free(cached->node, NULL);
+    }
+    free(arg->node_cache.entries);
 }
 
 static void notify_all_threads(void)
@@ -1786,10 +1864,18 @@ int main(int argc, char **argv)
 
     { /* configure */
         yoml_t *yoml;
-        if ((yoml = load_config(opt_config_file)) == NULL)
+        resolve_tag_arg_t resolve_tag_arg = {{NULL}};
+        yoml_parse_args_t parse_args = {
+            opt_config_file,                /* filename */
+            NULL,                           /* mem_set */
+            {resolve_tag, &resolve_tag_arg} /* resolve_tag */
+        };
+        if ((yoml = load_config(&parse_args, NULL)) == NULL)
             exit(EX_CONFIG);
         if (h2o_configurator_apply(&conf.globalconf, yoml, conf.run_mode != RUN_MODE_WORKER) != 0)
             exit(EX_CONFIG);
+
+        dispose_resolve_tag_arg(&resolve_tag_arg);
         yoml_free(yoml, NULL);
     }
     /* calculate defaults (note: open file cached is purged once every loop) */
