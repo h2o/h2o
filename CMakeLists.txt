@@ -98,6 +98,7 @@ INCLUDE_DIRECTORIES(
     deps/cloexec
     deps/brotli/enc
     deps/golombset
+    deps/libgkc
     deps/libyrmcds
     deps/klib
     deps/neverbleed
@@ -195,6 +196,7 @@ SET(BROTLI_SOURCE_FILES
 
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
+    deps/libgkc/gkc.c
     deps/libyrmcds/close.c
     deps/libyrmcds/connect.c
     deps/libyrmcds/recv.c
@@ -250,6 +252,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/status/events.c
     lib/handler/status/requests.c
     lib/handler/http2_debug_state.c
+    lib/handler/status/durations.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/compress.c
     lib/handler/configurator/errordoc.c

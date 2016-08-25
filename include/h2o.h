@@ -1761,6 +1761,10 @@ void h2o_reproxy_register_configurator(h2o_globalconf_t *conf);
  */
 void h2o_status_register(h2o_pathconf_t *pathconf);
 /**
+ * registers the duration handler
+ */
+void h2o_duration_stats_register(h2o_globalconf_t *conf);
+/**
  * registers the configurator
  */
 void h2o_status_register_configurator(h2o_globalconf_t *conf);
@@ -1917,6 +1921,11 @@ inline void **h2o_context_get_storage(h2o_context_t *ctx, size_t *key, void (*di
     return &ctx->storage.entries[*key].data;
 }
 
+static inline void h2o_context_set_logger_context(h2o_context_t *ctx, h2o_logger_t *logger, void *logger_ctx)
+{
+    ctx->_module_configs[logger->_config_slot] = logger_ctx;
+}
+
 static inline void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype)
 {
     h2o_buffer_init(&db->buf, prototype);
@@ -1951,6 +1960,30 @@ static inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
     h2o_buffer_consume(&db->buf, db->bytes_inflight);
     db->bytes_inflight = 0;
 }
+
+#define COMPUTE_DURATION(name, from, until) \
+        static inline int h2o_time_compute_##name(struct st_h2o_req_t *req, int64_t *delta_usec) \
+        { \
+            if (h2o_timeval_is_null((from)) || h2o_timeval_is_null((until))) { \
+                return 0; \
+            } \
+            *delta_usec = h2o_timeval_subtract((from), (until)); \
+            return 1; \
+        }
+
+ COMPUTE_DURATION(connect_time, &req->conn->connected_at, &req->timestamps.request_begin_at);
+ COMPUTE_DURATION(header_time, &req->timestamps.request_begin_at, h2o_timeval_is_null(&req->timestamps.request_body_begin_at)
+                        ? &req->processed_at.at
+                        : &req->timestamps.request_body_begin_at);
+ COMPUTE_DURATION(body_time, h2o_timeval_is_null(&req->timestamps.request_body_begin_at)
+                    ? &req->processed_at.at
+                    : &req->timestamps.request_body_begin_at, &req->processed_at.at);
+ COMPUTE_DURATION(request_total_time, &req->timestamps.request_begin_at, &req->processed_at.at);
+ COMPUTE_DURATION(process_time, &req->processed_at.at, &req->timestamps.response_start_at);
+ COMPUTE_DURATION(response_time, &req->timestamps.response_start_at, &req->timestamps.response_end_at);
+ COMPUTE_DURATION(duration, &req->timestamps.request_begin_at, &req->timestamps.response_end_at);
+
+#undef COMPUTE_DURATION
 
 #ifdef __cplusplus
 }

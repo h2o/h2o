@@ -218,7 +218,7 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
             goto Exit;
     }
 
-    /* call on_enter of every configurator */
+    /* call on_exit of every configurator */
     if (setup_configurators(ctx, 0, node) != 0)
         goto Exit;
 
