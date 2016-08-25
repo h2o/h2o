@@ -125,8 +125,7 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
     while ((rret = pread(self->file.ref->fd, self->buf, rlen, self->file.off)) == -1 && errno == EINTR)
         ;
     if (rret == -1) {
-        req->http1_is_persistent = 0; /* FIXME need a better interface to dispose an errored response w. content-length */
-        h2o_send(req, NULL, 0, H2O_SEND_STATE_FINAL);
+        h2o_send(req, NULL, 0, H2O_SEND_STATE_ERROR);
         do_close(&self->super, req);
         return;
     }
@@ -196,7 +195,6 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
     return;
 
 Error:
-    req->http1_is_persistent = 0;
     h2o_send(req, NULL, 0, H2O_SEND_STATE_ERROR);
     do_close(&self->super, req);
     return;
@@ -212,9 +210,12 @@ static h2o_send_state_t do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iove
     while ((rret = pread(self->file.ref->fd, buf->base, buf->len, self->file.off)) == -1 && errno == EINTR)
         ;
     if (rret <= 0) {
-        req->http1_is_persistent = 0; /* FIXME need a better interface to dispose an errored response w. content-length */
         buf->len = 0;
         self->bytesleft = 0;
+        if (rret < 0) {
+            do_close(&self->super, req);
+            return H2O_SEND_STATE_ERROR;
+        }
     } else {
         buf->len = rret;
         self->file.off += rret;
