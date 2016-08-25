@@ -386,6 +386,33 @@ static void on_continue_sent(h2o_socket_t *sock, const char *err)
     conn->_req_entity_reader->handle_incoming_entity(conn);
 }
 
+static int contains_crlf_only(const char *s, size_t len)
+{
+    for (; len !=0; ++s, --len)
+        if (!(*s == '\r' || *s == '\n'))
+            return 0;
+    return 1;
+}
+
+static void send_bad_request_on_complete(h2o_socket_t *sock, const char *err)
+{
+    struct st_h2o_http1_conn_t *conn = sock->data;
+    close_connection(conn, 1);
+}
+
+static void send_bad_request(struct st_h2o_http1_conn_t *conn)
+{
+    const static h2o_iovec_t resp = {H2O_STRLIT("HTTP/1.1 400 Bad Request\r\n"
+                                                "Content-Type: text/plain; charset=utf-8\r\n"
+                                                "Connection: close\r\n"
+                                                "Content-Length: 11\r\n"
+                                                "\r\n"
+                                                "Bad Request")};
+
+    assert(conn->req.version == 0 && "request has not been parsed successfully");
+    h2o_socket_write(conn->sock, (h2o_iovec_t *)&resp, 1, send_bad_request_on_complete);
+}
+
 static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
 {
     size_t inreqlen = conn->sock->input->size < H2O_MAX_REQLEN ? conn->sock->input->size : H2O_MAX_REQLEN;
@@ -458,7 +485,11 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                 return;
             }
         }
-        close_connection(conn, 1);
+        if (inreqlen <= 4 && contains_crlf_only(conn->sock->input->bytes, inreqlen)) {
+            close_connection(conn, 1);
+        } else {
+            send_bad_request(conn);
+        }
         return;
     }
 }
