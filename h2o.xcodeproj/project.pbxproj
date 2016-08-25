@@ -648,6 +648,7 @@
 		10FCC1421B300A6800F13674 /* 50fastcgi-php.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50fastcgi-php.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10FCC1431B31408B00F13674 /* fastcgi_directives.mt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = fastcgi_directives.mt; sourceTree = "<group>"; };
 		10FEF2441D6444E900E11B1D /* 50reverse-proxy-proxy-protocol.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-proxy-protocol.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		10FEF2481D6EC30800E11B1D /* 40bad-request.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40bad-request.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10FFEE081BB23A8C0087AD75 /* neverbleed.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = neverbleed.c; sourceTree = "<group>"; };
 		10FFEE091BB23A8C0087AD75 /* neverbleed.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = neverbleed.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -1385,6 +1386,7 @@
 				105534F31A460EF600627ECB /* 00unit.libuv.t */,
 				104B9A331A59E594009EEE64 /* 01cxx-compile.t */,
 				105534F41A460EF600627ECB /* 10http1client.t */,
+				10FEF2481D6EC30800E11B1D /* 40bad-request.t */,
 				104CD5021CC465AF0057C62F /* 40env.t */,
 				104B9A301A58F55E009EEE64 /* 40max-connections.t */,
 				10A3D3D71B4F4D0900327CF9 /* 40memcached-session-resumption.t */,
