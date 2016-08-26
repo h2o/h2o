@@ -125,10 +125,10 @@ hosts:
 EOT
 ?>
 
-<h3 id="include_other_files">Using Inclusion</h3>
+<h3 id="including_files">Including Files</h3>
 
 <p>
-Since version 2.1, H2O makes it possible to include other config files using <code>!file</code> custom YAML tag.
+Starting from version 2.1, it is possible to include a YAML file from the configuration file using <code>!file</code> custom YAML tag.
 The following example extracts the TLS configuration into <code>default_ssl.conf</code> and include it multiple times in <code>h2o.conf</code>.
 </p>
 
