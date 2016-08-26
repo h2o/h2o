@@ -22,8 +22,9 @@
 #ifndef h2o__time_h
 #define h2o__time_h
 
-#include <time.h>
 #include <stdint.h>
+#include <sys/time.h>
+#include <time.h>
 
 #ifdef __cplusplus
 extern "C" {
