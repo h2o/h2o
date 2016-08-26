@@ -31,15 +31,12 @@ static int cmpstrptr(const void *_x, const void *_y)
     return strcmp(x, y);
 }
 
-#ifdef __GLIBC__
-#  if __GLIBC__ >= 2 && __GLIBC_MINOR__ >= 24
-#    define FOREACH_DIRENT(dp, dent) \
+#ifdef __linux__
+/* readdir_r(3) is deprecated by glibc > 2.24 */
+#  define FOREACH_DIRENT(dp, dent) \
         struct dirent *dent; \
         while ((dent = readdir(dp)) != NULL)
-#  endif
-#endif
-
-#ifndef FOREACH_DIRENT
+#else
 #  define FOREACH_DIRENT(dp, dent) \
         struct dirent dent_, *dentp, *dent = &dent_; \
         int ret; \
