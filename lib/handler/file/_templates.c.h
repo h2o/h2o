@@ -31,6 +31,21 @@ static int cmpstrptr(const void *_x, const void *_y)
     return strcmp(x, y);
 }
 
+#ifdef __GLIBC__
+#  if __GLIBC__ >= 2 && __GLIBC_MINOR__ >= 24
+#    define FOREACH_DIRENT(dp, dent) \
+        struct dirent *dent; \
+        while ((dent = readdir(dp)) != NULL)
+#  endif
+#endif
+
+#ifndef FOREACH_DIRENT
+#  define FOREACH_DIRENT(dp, dent) \
+        struct dirent dent_, *dentp, *dent = &dent_; \
+        int ret; \
+        while ((ret = readdir_r(dp, dent, &dentp)) == 0 && dentp != NULL)
+#endif /* FOREACH_DIRENT */
+
 static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t path_normalized, DIR* dp)
 {
     H2O_VECTOR(char *) files = {NULL};
@@ -38,11 +53,11 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
     { /* build list of files */
         struct dirent dent, *dentp;
         int ret;
-        while ((ret = readdir_r(dp, &dent, &dentp)) == 0 && dentp != NULL) {
-            if (strcmp(dent.d_name, ".") == 0 || strcmp(dent.d_name, "..") == 0)
+        FOREACH_DIRENT(dp, dent) {
+            if (strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0)
                 continue;
             h2o_vector_reserve(pool, &files, files.size + 1);
-            files.entries[files.size++] = h2o_strdup(pool, dent.d_name, SIZE_MAX).base;
+            files.entries[files.size++] = h2o_strdup(pool, dent->d_name, SIZE_MAX).base;
         }
         if (files.size > 1)
             qsort(files.entries, files.size, sizeof(files.entries[0]), cmpstrptr);
