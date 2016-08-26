@@ -40,6 +40,7 @@ struct rp_generator_t {
     h2o_buffer_t *last_content_before_send;
     h2o_doublebuffer_t sending;
     int is_websocket_handshake;
+    int had_body_error; /* set if an error happened while fetching the body so that we can propagate the error */
 };
 
 struct rp_ws_upgrade_info_t {
@@ -266,7 +267,7 @@ static void do_send(struct rp_generator_t *self)
 {
     h2o_iovec_t vecs[1];
     size_t veccnt;
-    int is_eos;
+    h2o_send_state_t ststate;
 
     assert(self->sending.bytes_inflight == 0);
 
@@ -276,14 +277,18 @@ static void do_send(struct rp_generator_t *self)
 
     if (self->client == NULL && vecs[0].len == self->sending.buf->size && self->last_content_before_send->size == 0) {
         veccnt = vecs[0].len != 0 ? 1 : 0;
-        is_eos = 1;
+        ststate = H2O_SEND_STATE_FINAL;
     } else {
         if (vecs[0].len == 0)
             return;
         veccnt = 1;
-        is_eos = 0;
+        ststate = H2O_SEND_STATE_IN_PROGRESS;
     }
-    h2o_send(self->src_req, vecs, veccnt, is_eos);
+
+    if (self->had_body_error)
+        ststate = H2O_SEND_STATE_ERROR;
+
+    h2o_send(self->src_req, vecs, veccnt, ststate);
 }
 
 static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
@@ -321,16 +326,15 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
 {
     struct rp_generator_t *self = client->data;
 
-    /* FIXME should there be a way to notify error downstream? */
-
     if (errstr != NULL) {
-        if (errstr != h2o_http1client_error_is_eos) {
-            h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
-        }
         /* detach the content */
         self->last_content_before_send = self->client->sock->input;
         h2o_buffer_init(&self->client->sock->input, &h2o_socket_buffer_prototype);
         self->client = NULL;
+        if (errstr != h2o_http1client_error_is_eos) {
+            h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
+            self->had_body_error = 1;
+        }
     }
     if (self->sending.bytes_inflight == 0)
         do_send(self);
@@ -415,7 +419,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 
     if (errstr == h2o_http1client_error_is_eos) {
         self->client = NULL;
-        h2o_send(req, NULL, 0, 1);
+        h2o_send(req, NULL, 0, H2O_SEND_STATE_FINAL);
         return NULL;
     }
 
@@ -480,6 +484,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, int keepalive, 
     } else {
         self->is_websocket_handshake = 0;
     }
+    self->had_body_error = 0;
     self->up_req.bufs[0] = build_request(req, keepalive, self->is_websocket_handshake, use_proxy_protocol);
     self->up_req.bufs[1] = req->entity;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));

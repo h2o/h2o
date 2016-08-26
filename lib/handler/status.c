@@ -116,7 +116,7 @@ static void send_response(struct st_h2o_status_collector_t *collector)
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("no-cache, no-store"));
     h2o_start_response(req, &generator);
-    h2o_send(req, resp, h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")) ? 0 : nr_resp, 1);
+    h2o_send(req, resp, h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")) ? 0 : nr_resp, H2O_SEND_STATE_FINAL);
     h2o_mem_release_shared(collector);
 }
 

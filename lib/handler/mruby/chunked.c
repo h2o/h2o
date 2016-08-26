@@ -63,7 +63,7 @@ static void do_send(h2o_mruby_generator_t *generator, h2o_buffer_t **input, int 
         is_final = 0;
     }
 
-    h2o_send(generator->req, &buf, bufcnt, is_final);
+    h2o_send(generator->req, &buf, bufcnt, is_final?H2O_SEND_STATE_FINAL:H2O_SEND_STATE_IN_PROGRESS);
 }
 
 static void do_proceed(h2o_generator_t *_generator, h2o_req_t *req)

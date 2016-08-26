@@ -54,7 +54,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
     h2o_start_response(req, &generator);
     h2o_send(req, debug_state->json.entries,
-             h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")) ? 0 : debug_state->json.size, 1);
+             h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")) ? 0 : debug_state->json.size, H2O_SEND_STATE_FINAL);
     return 0;
 }
 
