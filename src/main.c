@@ -1619,7 +1619,7 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
                                           " \"max-connections\": %d,\n"
                                           " \"listeners\": %zu,\n"
                                           " \"worker-threads\": %zu,\n"
-                                          " \"num-sessions\": %" PRIu64,
+                                          " \"num-sessions\": %lu",
                        SSLeay_version(SSLEAY_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
                        num_connections(0), conf.max_connections, conf.num_listeners, conf.num_threads, num_sessions(0));
     assert(ret.len < BUFSIZE);
