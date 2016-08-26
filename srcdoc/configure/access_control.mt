@@ -243,16 +243,16 @@ EOT
 
 <h2 id="how-to" class="section-head">How-To</h2>
 
-<h3 id="cidr">IP Address Matching Against CIDR list</h3>
+<h3 id="matching-ip-address-blocks">Matching IP Address Blocks</h3>
 
 <p>
-You can match an IP address against predefined CIDR list using a script named <a href="">trie_addr.rb</a>.
+You can match an IP address against predefined list of address blocks using a script named <a href="">trie_addr.rb</a>.
 </p>
 <p>
 Below is an example.
 </p>
 
-<?= $ctx->{example}->('CIDR-based Address Matching Example', <<'EOT');
+<?= $ctx->{example}->('Address Block Matching Example', <<'EOT');
 paths:
   "/":
     mruby.handler: |
@@ -267,7 +267,7 @@ EOT
 ?>
 
 <p>
-This library currently supports only IPv4 addresses. If you passed an invalid IPv4 address including IPv6 addresses, <code>TrieAddr#match?</code> returns <code>false</code>.
+This library currently supports only IPv4 addresses. <code>TrieAddr#match?</code> returns <code>false</code> when it receives an invalid IPv4 address (including an IPv6 address) as an argument..
 </p>
 
 ? })
