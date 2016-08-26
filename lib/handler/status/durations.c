@@ -107,14 +107,18 @@ static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h
     h2o_iovec_t ret;
 
 #define BUFSIZE 16384
+#define DURATION_FMT(x) \
+            " \"" H2O_TO_STR(x) "-0\": %" PRIu64 ",\n" \
+            " \"" H2O_TO_STR(x) "-25\": %" PRIu64 ",\n" \
+            " \"" H2O_TO_STR(x) "-50\": %" PRIu64 ",\n" \
+            " \"" H2O_TO_STR(x) "-75\": %" PRIu64 ",\n" \
+            " \"" H2O_TO_STR(x) "-99\": %" PRIu64 "\n"
+#define DURATION_VALS(x) gkc_query(agg_stats->stats.x, 0), gkc_query(agg_stats->stats.x, 0.25), \
+                        gkc_query(agg_stats->stats.x, 0.5), gkc_query(agg_stats->stats.x, 0.75), \
+                        gkc_query(agg_stats->stats.x, 0.99)
+
     ret.base = h2o_mem_alloc_pool(&req->pool, BUFSIZE);
     ret.len = snprintf(ret.base, BUFSIZE, ",\n"
-#define DURATION_FMT(x) \
-            " \"" #x "-0\": %" PRIu64 ",\n" \
-            " \"" #x "-25\": %" PRIu64 ",\n" \
-            " \"" #x "-50\": %" PRIu64 ",\n" \
-            " \"" #x "-75\": %" PRIu64 ",\n" \
-            " \"" #x "-99\": %" PRIu64 "\n"
             DURATION_FMT(connect-time) ","
             DURATION_FMT(header-time) ","
             DURATION_FMT(body-time) ","
@@ -122,17 +126,14 @@ static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h
             DURATION_FMT(process-time) ","
             DURATION_FMT(response-time) ","
             DURATION_FMT(duration),
-#undef DURATION_FMT
-#define DURATION_VALS(x) gkc_query(agg_stats->stats.x, 0), gkc_query(agg_stats->stats.x, 0.25), \
-                        gkc_query(agg_stats->stats.x, 0.5), gkc_query(agg_stats->stats.x, 0.75), \
-                        gkc_query(agg_stats->stats.x, 0.99)
+            DURATION_VALS(connect_time), DURATION_VALS(header_time),
+            DURATION_VALS(body_time), DURATION_VALS(request_total_time),
+            DURATION_VALS(process_time), DURATION_VALS(response_time),
+            DURATION_VALS(duration));
 
-                        DURATION_VALS(connect_time), DURATION_VALS(header_time),
-                        DURATION_VALS(body_time), DURATION_VALS(request_total_time),
-                        DURATION_VALS(process_time), DURATION_VALS(response_time),
-                        DURATION_VALS(duration));
-#undef DURATION_VALS
 #undef BUFSIZE
+#undef DURATION_FMT
+#undef DURATION_VALS
 
     duration_stats_free(&agg_stats->stats);
     pthread_mutex_destroy(&agg_stats->mutex);
