@@ -108,11 +108,11 @@ static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h
 
 #define BUFSIZE 16384
 #define DURATION_FMT(x) \
-            " \"" H2O_TO_STR(x) "-0\": %" PRIu64 ",\n" \
-            " \"" H2O_TO_STR(x) "-25\": %" PRIu64 ",\n" \
-            " \"" H2O_TO_STR(x) "-50\": %" PRIu64 ",\n" \
-            " \"" H2O_TO_STR(x) "-75\": %" PRIu64 ",\n" \
-            " \"" H2O_TO_STR(x) "-99\": %" PRIu64 "\n"
+            " \"" H2O_TO_STR(x) "-0\": %lu,\n" \
+            " \"" H2O_TO_STR(x) "-25\": %lu,\n" \
+            " \"" H2O_TO_STR(x) "-50\": %lu,\n" \
+            " \"" H2O_TO_STR(x) "-75\": %lu,\n" \
+            " \"" H2O_TO_STR(x) "-99\": %lu\n"
 #define DURATION_VALS(x) gkc_query(agg_stats->stats.x, 0), gkc_query(agg_stats->stats.x, 0.25), \
                         gkc_query(agg_stats->stats.x, 0.5), gkc_query(agg_stats->stats.x, 0.75), \
                         gkc_query(agg_stats->stats.x, 0.99)
