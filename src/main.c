@@ -149,9 +149,11 @@ static struct {
     struct {
         /* unused buffers exist to avoid false sharing of the cache line */
         char _unused1_avoir_false_sharing[32];
-        int _num_connections;       /* number of currently handled incoming connections, should use atomic functions to update the value */
+        int _num_connections; /* number of currently handled incoming connections, should use atomic functions to update the value
+                                 */
         char _unused2_avoir_false_sharing[32];
-        unsigned long _num_sessions;    /* total number of opened incoming connections, should use atomic functions to update the value */
+        unsigned long
+            _num_sessions; /* total number of opened incoming connections, should use atomic functions to update the value */
         char _unused3_avoir_false_sharing[32];
     } state;
     char *crash_handler;
@@ -1567,17 +1569,24 @@ static void extra_status_jemalloc_cb(void *ctx, const char *stats)
     cur_len = out->written;
 
     i = 0;
-    while(cur_len < outbuf.len && stats[i]) {
+    while (cur_len < outbuf.len && stats[i]) {
         switch (stats[i]) {
-#define JSON_ESCAPE(x, y)        case x: outbuf.base[cur_len++] = '\\'; if (cur_len >= outbuf.len) { goto err; } outbuf.base[cur_len] = y; break;
-        JSON_ESCAPE('\b', 'b');
-        JSON_ESCAPE('\f', 'f');
-        JSON_ESCAPE('\n', 'n');
-        JSON_ESCAPE('\r', 'r')
-        JSON_ESCAPE('\t', 't');
-        JSON_ESCAPE('/', '/');
-        JSON_ESCAPE('"', '"');
-        JSON_ESCAPE('\\', '\\');
+#define JSON_ESCAPE(x, y)                                                                                                          \
+    case x:                                                                                                                        \
+        outbuf.base[cur_len++] = '\\';                                                                                             \
+        if (cur_len >= outbuf.len) {                                                                                               \
+            goto err;                                                                                                              \
+        }                                                                                                                          \
+        outbuf.base[cur_len] = y;                                                                                                  \
+        break;
+            JSON_ESCAPE('\b', 'b');
+            JSON_ESCAPE('\f', 'f');
+            JSON_ESCAPE('\n', 'n');
+            JSON_ESCAPE('\r', 'r')
+            JSON_ESCAPE('\t', 't');
+            JSON_ESCAPE('/', '/');
+            JSON_ESCAPE('"', '"');
+            JSON_ESCAPE('\\', '\\');
 #undef JSON_ESCAPE
         default:
             outbuf.base[cur_len] = stats[i];
@@ -1597,10 +1606,11 @@ err:
 
 static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_req_t *req)
 {
-#define BUFSIZE (16*1024)
+#define BUFSIZE (16 * 1024)
     h2o_iovec_t ret;
     char current_time[H2O_TIMESTR_LOG_LEN + 1], restart_time[H2O_TIMESTR_LOG_LEN + 1];
-    const char *generation; time_t now = time(NULL);
+    const char *generation;
+    time_t now = time(NULL);
 
     h2o_time2str_log(current_time, now);
     h2o_time2str_log(restart_time, conf.launch_time);
@@ -1629,16 +1639,15 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
     size_t sz, allocated, active, metadata, resident, mapped;
     uint64_t epoch = 1;
     /* internal jemalloc interface */
-    void malloc_stats_print(void (*write_cb) (void *, const char *), void *cbopaque, const char *opts);
+    void malloc_stats_print(void (*write_cb)(void *, const char *), void *cbopaque, const char *opts);
     int mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
 
     arg.outbuf = h2o_iovec_init(alloca(BUFSIZE - ret.len), BUFSIZE - ret.len);
     arg.err = 0;
     arg.written = snprintf(arg.outbuf.base, arg.outbuf.len, ",\n"
-            " \"jemalloc\": {\n"
-            "   \"jemalloc-raw\": \"");
-    malloc_stats_print(extra_status_jemalloc_cb, &arg,
-            "ga" /* omit general info, only aggregated stats */ );
+                                                            " \"jemalloc\": {\n"
+                                                            "   \"jemalloc-raw\": \"");
+    malloc_stats_print(extra_status_jemalloc_cb, &arg, "ga" /* omit general info, only aggregated stats */);
 
     if (arg.err || arg.written + 1 >= arg.outbuf.len) {
         goto jemalloc_err;
@@ -1654,18 +1663,16 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
     mallctl("epoch", &epoch, &sz, &epoch, sz);
 
     sz = sizeof(size_t);
-    if (!mallctl("stats.allocated", &allocated, &sz, NULL, 0)
-            && !mallctl("stats.active", &active, &sz, NULL, 0)
-            && !mallctl("stats.metadata", &metadata, &sz, NULL, 0)
-            && !mallctl("stats.resident", &resident, &sz, NULL, 0)
-            && !mallctl("stats.mapped", &mapped, &sz, NULL, 0)) {
+    if (!mallctl("stats.allocated", &allocated, &sz, NULL, 0) && !mallctl("stats.active", &active, &sz, NULL, 0) &&
+        !mallctl("stats.metadata", &metadata, &sz, NULL, 0) && !mallctl("stats.resident", &resident, &sz, NULL, 0) &&
+        !mallctl("stats.mapped", &mapped, &sz, NULL, 0)) {
         arg.written += snprintf(&arg.outbuf.base[arg.written], arg.outbuf.len - arg.written, ",\n"
-                "   \"allocated\": %zu,\n"
-                "   \"active\": %zu,\n"
-                "   \"metadata\": %zu,\n"
-                "   \"resident\": %zu,\n"
-                "   \"mapped\": %zu }",
-                allocated, active, metadata, resident, mapped);
+                                                                                             "   \"allocated\": %zu,\n"
+                                                                                             "   \"active\": %zu,\n"
+                                                                                             "   \"metadata\": %zu,\n"
+                                                                                             "   \"resident\": %zu,\n"
+                                                                                             "   \"mapped\": %zu }",
+                                allocated, active, metadata, resident, mapped);
     }
     if (arg.written + 1 >= arg.outbuf.len) {
         goto jemalloc_err;

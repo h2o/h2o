@@ -57,14 +57,14 @@ static int on_config_duration_stats(h2o_configurator_command_t *cmd, h2o_configu
 
 int on_enter_status(h2o_configurator_t *_conf, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_status_configurator *c= (void *)_conf;
+    struct st_status_configurator *c = (void *)_conf;
     c->stack++;
     return 0;
 }
 
 int on_exit_status(h2o_configurator_t *_conf, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    struct st_status_configurator *c= (void *)_conf;
+    struct st_status_configurator *c = (void *)_conf;
     c->stack--;
     if (!c->stack && c->duration_stats) {
         h2o_duration_stats_register(ctx->globalconf);
@@ -79,7 +79,7 @@ void h2o_status_register_configurator(h2o_globalconf_t *conf)
     c->super.exit = on_exit_status;
 
     h2o_configurator_define_command(&c->super, "status", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED |
-                                                     H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                                             H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_status);
 
     h2o_configurator_define_command(&c->super, "duration-stats", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,

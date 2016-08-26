@@ -49,12 +49,13 @@ static void durations_status_per_thread(void *priv, h2o_context_t *ctx)
     if (durations_logger) {
         struct st_duration_stats_t *ctx_stats = h2o_context_get_logger_context(ctx, durations_logger);
         pthread_mutex_lock(&agg_stats->mutex);
-#define ADD_DURATION(x) do { \
-        struct gkc_summary *tmp; \
-        tmp = gkc_combine(agg_stats->stats.x, ctx_stats->x); \
-        gkc_summary_free(agg_stats->stats.x); \
-        agg_stats->stats.x = tmp; \
-} while(0)
+#define ADD_DURATION(x)                                                                                                            \
+    do {                                                                                                                           \
+        struct gkc_summary *tmp;                                                                                                   \
+        tmp = gkc_combine(agg_stats->stats.x, ctx_stats->x);                                                                       \
+        gkc_summary_free(agg_stats->stats.x);                                                                                      \
+        agg_stats->stats.x = tmp;                                                                                                  \
+    } while (0)
         ADD_DURATION(connect_time);
         ADD_DURATION(header_time);
         ADD_DURATION(body_time);
@@ -107,29 +108,23 @@ static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h
     h2o_iovec_t ret;
 
 #define BUFSIZE 16384
-#define DURATION_FMT(x) \
-            " \"" H2O_TO_STR(x) "-0\": %lu,\n" \
-            " \"" H2O_TO_STR(x) "-25\": %lu,\n" \
-            " \"" H2O_TO_STR(x) "-50\": %lu,\n" \
-            " \"" H2O_TO_STR(x) "-75\": %lu,\n" \
-            " \"" H2O_TO_STR(x) "-99\": %lu\n"
-#define DURATION_VALS(x) gkc_query(agg_stats->stats.x, 0), gkc_query(agg_stats->stats.x, 0.25), \
-                        gkc_query(agg_stats->stats.x, 0.5), gkc_query(agg_stats->stats.x, 0.75), \
-                        gkc_query(agg_stats->stats.x, 0.99)
+#define DURATION_FMT(x)                                                                                                            \
+    " \"" H2O_TO_STR(x) "-0\": %lu,\n"                                                                                             \
+                        " \"" H2O_TO_STR(x) "-25\": %lu,\n"                                                                        \
+                                            " \"" H2O_TO_STR(x) "-50\": %lu,\n"                                                    \
+                                                                " \"" H2O_TO_STR(x) "-75\": %lu,\n"                                \
+                                                                                    " \"" H2O_TO_STR(x) "-99\": %lu\n"
+#define DURATION_VALS(x)                                                                                                           \
+    gkc_query(agg_stats->stats.x, 0), gkc_query(agg_stats->stats.x, 0.25), gkc_query(agg_stats->stats.x, 0.5),                     \
+        gkc_query(agg_stats->stats.x, 0.75), gkc_query(agg_stats->stats.x, 0.99)
 
     ret.base = h2o_mem_alloc_pool(&req->pool, BUFSIZE);
-    ret.len = snprintf(ret.base, BUFSIZE, ",\n"
-            DURATION_FMT(connect-time) ","
-            DURATION_FMT(header-time) ","
-            DURATION_FMT(body-time) ","
-            DURATION_FMT(request-total-time) ","
-            DURATION_FMT(process-time) ","
-            DURATION_FMT(response-time) ","
-            DURATION_FMT(duration),
-            DURATION_VALS(connect_time), DURATION_VALS(header_time),
-            DURATION_VALS(body_time), DURATION_VALS(request_total_time),
-            DURATION_VALS(process_time), DURATION_VALS(response_time),
-            DURATION_VALS(duration));
+    ret.len = snprintf(
+        ret.base, BUFSIZE,
+        ",\n" DURATION_FMT(connect - time) "," DURATION_FMT(header - time) "," DURATION_FMT(body - time) "," DURATION_FMT(
+            request - total - time) "," DURATION_FMT(process - time) "," DURATION_FMT(response - time) "," DURATION_FMT(duration),
+        DURATION_VALS(connect_time), DURATION_VALS(header_time), DURATION_VALS(body_time), DURATION_VALS(request_total_time),
+        DURATION_VALS(process_time), DURATION_VALS(response_time), DURATION_VALS(duration));
 
 #undef BUFSIZE
 #undef DURATION_FMT
@@ -145,21 +140,21 @@ static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h
 static void stat_access(h2o_logger_t *_self, h2o_req_t *req)
 {
     struct st_duration_stats_t *ctx_stats = h2o_context_get_logger_context(req->conn->ctx, _self);
-#define ADD_OBSERVATION(x, from, until) \
-    do { \
-        int64_t dur; \
-        if (h2o_time_compute_##x(req, &dur)) { \
-            gkc_insert_value(ctx_stats->x, dur); \
-        } \
-    } while(0)
+#define ADD_OBSERVATION(x, from, until)                                                                                            \
+    do {                                                                                                                           \
+        int64_t dur;                                                                                                               \
+        if (h2o_time_compute_##x(req, &dur)) {                                                                                     \
+            gkc_insert_value(ctx_stats->x, dur);                                                                                   \
+        }                                                                                                                          \
+    } while (0)
 
     ADD_OBSERVATION(connect_time, &req->conn->connected_at, &req->timestamps.request_begin_at);
     ADD_OBSERVATION(header_time, &req->timestamps.request_begin_at, h2o_timeval_is_null(&req->timestamps.request_body_begin_at)
-            ? &req->processed_at.at
-            : &req->timestamps.request_body_begin_at);
-    ADD_OBSERVATION(body_time, h2o_timeval_is_null(&req->timestamps.request_body_begin_at)
-            ? &req->processed_at.at
-            : &req->timestamps.request_body_begin_at, &req->processed_at.at);
+                                                                        ? &req->processed_at.at
+                                                                        : &req->timestamps.request_body_begin_at);
+    ADD_OBSERVATION(body_time, h2o_timeval_is_null(&req->timestamps.request_body_begin_at) ? &req->processed_at.at
+                                                                                           : &req->timestamps.request_body_begin_at,
+                    &req->processed_at.at);
     ADD_OBSERVATION(request_total_time, &req->timestamps.request_begin_at, &req->processed_at.at);
     ADD_OBSERVATION(process_time, &req->processed_at.at, &req->timestamps.response_start_at);
     ADD_OBSERVATION(response_time, &req->timestamps.response_start_at, &req->timestamps.response_end_at);

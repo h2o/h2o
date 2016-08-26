@@ -112,15 +112,14 @@ static size_t calc_max_payload_size(h2o_http2_conn_t *conn, h2o_http2_stream_t *
     return sz_min(sz_min(conn_max, stream_max), conn->peer_settings.max_frame_size);
 }
 
-static void commit_data_header(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_buffer_t **outbuf,
-                               size_t length, h2o_send_state_t send_state)
+static void commit_data_header(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_buffer_t **outbuf, size_t length,
+                               h2o_send_state_t send_state)
 {
     assert(outbuf != NULL);
     /* send a DATA frame if there's data or the END_STREAM flag to send */
     if (length || send_state == H2O_SEND_STATE_FINAL) {
-        h2o_http2_encode_frame_header((void *)((*outbuf)->bytes + (*outbuf)->size), length,
-                                      H2O_HTTP2_FRAME_TYPE_DATA, send_state == H2O_SEND_STATE_FINAL ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0,
-                                      stream->stream_id);
+        h2o_http2_encode_frame_header((void *)((*outbuf)->bytes + (*outbuf)->size), length, H2O_HTTP2_FRAME_TYPE_DATA,
+                                      send_state == H2O_SEND_STATE_FINAL ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0, stream->stream_id);
         h2o_http2_window_consume_window(&conn->_write.window, length);
         h2o_http2_window_consume_window(&stream->output_window, length);
         (*outbuf)->size += length + H2O_HTTP2_FRAME_HEADER_SIZE;

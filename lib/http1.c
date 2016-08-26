@@ -388,7 +388,7 @@ static void on_continue_sent(h2o_socket_t *sock, const char *err)
 
 static int contains_crlf_only(const char *s, size_t len)
 {
-    for (; len !=0; ++s, --len)
+    for (; len != 0; ++s, --len)
         if (!(*s == '\r' || *s == '\n'))
             return 0;
     return 1;
@@ -729,7 +729,8 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
     }
 
     if (bufcnt != 0) {
-        h2o_socket_write(conn->sock, bufs, bufcnt, h2o_send_state_is_in_progress(send_state) ? on_send_next_push : on_send_complete);
+        h2o_socket_write(conn->sock, bufs, bufcnt,
+                         h2o_send_state_is_in_progress(send_state) ? on_send_next_push : on_send_complete);
     } else {
         on_send_complete(conn->sock, 0);
     }

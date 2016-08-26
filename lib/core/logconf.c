@@ -355,26 +355,26 @@ Fail:
 
 #define DURATION_MAX_LEN (sizeof(H2O_INT32_LONGEST_STR ".999999") - 1)
 
-#define APPEND_DURATION(pos, name) \
-    do { \
-        int64_t delta_usec; \
-        if (!h2o_time_compute_##name(req, &delta_usec)) { \
-            *pos++ = '-'; \
-        } else { \
-            int32_t delta_sec = delta_usec / (1000*1000); \
-            delta_usec -= ((int64_t)delta_sec * (1000 * 1000)); \
-            pos += sprintf(pos, "%" PRId32, delta_sec); \
-            if (delta_usec != 0) { \
-                int i; \
-                *pos++ = '.'; \
-                for (i = 5; i >= 0; --i) { \
-                    pos[i] = '0' + delta_usec % 10; \
-                    delta_usec /= 10; \
-                } \
-                pos += 6; \
-            } \
-        } \
-    } while(0);
+#define APPEND_DURATION(pos, name)                                                                                                 \
+    do {                                                                                                                           \
+        int64_t delta_usec;                                                                                                        \
+        if (!h2o_time_compute_##name(req, &delta_usec)) {                                                                          \
+            *pos++ = '-';                                                                                                          \
+        } else {                                                                                                                   \
+            int32_t delta_sec = delta_usec / (1000 * 1000);                                                                        \
+            delta_usec -= ((int64_t)delta_sec * (1000 * 1000));                                                                    \
+            pos += sprintf(pos, "%" PRId32, delta_sec);                                                                            \
+            if (delta_usec != 0) {                                                                                                 \
+                int i;                                                                                                             \
+                *pos++ = '.';                                                                                                      \
+                for (i = 5; i >= 0; --i) {                                                                                         \
+                    pos[i] = '0' + delta_usec % 10;                                                                                \
+                    delta_usec /= 10;                                                                                              \
+                }                                                                                                                  \
+                pos += 6;                                                                                                          \
+            }                                                                                                                      \
+        }                                                                                                                          \
+    } while (0);
 
 static char *append_duration(char *pos, struct timeval *from, struct timeval *until)
 {

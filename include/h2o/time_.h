@@ -50,16 +50,15 @@ static inline int64_t h2o_timeval_subtract(struct timeval *from, struct timeval 
 {
     int32_t delta_sec = (int32_t)until->tv_sec - (int32_t)from->tv_sec;
     int32_t delta_usec = (int32_t)until->tv_usec - (int32_t)from->tv_usec;
-    int64_t delta = (int64_t)((int64_t)delta_sec * 1000*1000L) + delta_usec;
+    int64_t delta = (int64_t)((int64_t)delta_sec * 1000 * 1000L) + delta_usec;
 
     return delta;
 }
 
 static inline int h2o_timeval_is_null(struct timeval *tv)
 {
-        return tv->tv_sec == 0;
+    return tv->tv_sec == 0;
 }
-
 
 #ifdef __cplusplus
 }
