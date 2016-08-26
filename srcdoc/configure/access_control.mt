@@ -241,4 +241,33 @@ paths:
 EOT
 ?>
 
+<h2 id="how-to" class="section-head">How-To</h2>
+
+<h3 id="matching-ip-address-blocks">Matching IP Address Blocks</h3>
+
+<p>
+You can match an IP address against predefined list of address blocks using a script named <a href="">trie_addr.rb</a>.
+</p>
+<p>
+Below is an example.
+</p>
+
+<?= $ctx->{example}->('Address Block Matching Example', <<'EOT');
+paths:
+  "/":
+    mruby.handler: |
+      require "trie_addr.rb"
+      trie = TrieAddr.new.add(["192.168.0.0/16", "172.16.0.0/12"])
+      acl {
+        allow { trie.match?(addr) }
+        deny
+      }
+    file.dir: /path/to/doc_root
+EOT
+?>
+
+<p>
+This library currently supports only IPv4 addresses. <code>TrieAddr#match?</code> returns <code>false</code> when it receives an invalid IPv4 address (including an IPv6 address) as an argument..
+</p>
+
 ? })
