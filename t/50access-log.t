@@ -6,6 +6,8 @@ use t::Util;
 
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
+plan skip_all => 'skip due to travis ci osx file system issue'
+    if travis_os_name() eq 'osx';
 
 my $tempdir = tempdir(CLEANUP => 1);
 
