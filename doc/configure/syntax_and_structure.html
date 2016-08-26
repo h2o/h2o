@@ -177,6 +177,45 @@ The following example reuses the TLS configuration of <code>example.com</code> i
       ...
 </code></pre>
 
+<h3 id="include_other_files">Using Inclusion</h3>
+
+<p>
+Since version 2.1, H2O makes it possible to include other config files using <code>!file</code> custom YAML tag.
+The following example extracts the TLS configuration into <code>default_ssl.conf</code> and include it multiple times in <code>h2o.conf</code>.
+</p>
+
+<div class="example">
+<div class="caption">Example. default_ssl.conf</div>
+<pre><code>minimum-version: TLSv1.2
+cipher-suite: ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256
+certificate-file: /path/to/example.com.crt
+key-file:         /path/to/example.com.crt
+</code></pre>
+</div>
+
+
+<div class="example">
+<div class="caption">Example. h2o.conf</div>
+<pre><code>hosts:
+  &quot;example.com&quot;:
+    listen:
+      port: 443
+      ssl: !file default_ssl.conf
+    paths:
+      ...
+  &quot;example.org&quot;:
+    listen:
+      port: 443
+      ssl:
+        &lt;&lt;: !file default_ssl.conf
+        certificate-file: /path/to/example.org.crt
+        key-file:         /path/to/example.org.crt
+    paths:
+      ...
+</code></pre>
+</div>
+
+
 
 
 <div class="notes">

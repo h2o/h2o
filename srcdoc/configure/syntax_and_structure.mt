@@ -125,4 +125,39 @@ hosts:
 EOT
 ?>
 
+<h3 id="include_other_files">Using Inclusion</h3>
+
+<p>
+Since version 2.1, H2O makes it possible to include other config files using <code>!file</code> custom YAML tag.
+The following example extracts the TLS configuration into <code>default_ssl.conf</code> and include it multiple times in <code>h2o.conf</code>.
+</p>
+
+<?= $ctx->{example}->('default_ssl.conf', << 'EOT')
+minimum-version: TLSv1.2
+cipher-suite: ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256
+certificate-file: /path/to/example.com.crt
+key-file:         /path/to/example.com.crt
+EOT
+?>
+
+<?= $ctx->{example}->('h2o.conf', << 'EOT')
+hosts:
+  "example.com":
+    listen:
+      port: 443
+      ssl: !file default_ssl.conf
+    paths:
+      ...
+  "example.org":
+    listen:
+      port: 443
+      ssl:
+        <<: !file default_ssl.conf
+        certificate-file: /path/to/example.org.crt
+        key-file:         /path/to/example.org.crt
+    paths:
+      ...
+EOT
+?>
+
 ? })
