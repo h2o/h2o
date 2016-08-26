@@ -23,6 +23,7 @@
 
 extern h2o_status_handler_t events_status_handler;
 extern h2o_status_handler_t requests_status_handler;
+extern h2o_status_handler_t durations_status_handler;
 
 struct st_h2o_status_logger_t {
     h2o_logger_t super;
@@ -115,7 +116,7 @@ static void send_response(struct st_h2o_status_collector_t *collector)
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("no-cache, no-store"));
     h2o_start_response(req, &generator);
-    h2o_send(req, resp, h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")) ? 0 : nr_resp, 1);
+    h2o_send(req, resp, h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")) ? 0 : nr_resp, H2O_SEND_STATE_FINAL);
     h2o_mem_release_shared(collector);
 }
 
@@ -264,4 +265,5 @@ void h2o_status_register(h2o_pathconf_t *conf)
     self->super.on_req = on_req;
     h2o_config_register_status_handler(conf->global, requests_status_handler);
     h2o_config_register_status_handler(conf->global, events_status_handler);
+    h2o_config_register_status_handler(conf->global, durations_status_handler);
 }

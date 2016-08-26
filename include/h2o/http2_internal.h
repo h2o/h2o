@@ -179,6 +179,7 @@ struct st_h2o_http2_stream_t {
         h2o_linklist_t link;
         h2o_http2_scheduler_openref_t scheduler;
     } _refs;
+    h2o_send_state_t send_state; /* steate of the ostream, only used in push mode */
     /* placed at last since it is large and has it's own ctor */
     h2o_req_t req;
 };
@@ -237,7 +238,11 @@ int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t
 
 /* frames */
 uint8_t *h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type, uint8_t flags, int32_t stream_id);
-void h2o_http2_encode_rst_stream_frame(h2o_buffer_t **buf, uint32_t stream_id, int errnum);
+
+#define h2o_http2_encode_rst_stream_frame(buf, stream_id, errnum) \
+    h2o_http2__encode_rst_stream_frame(buf, stream_id, (H2O_BUILD_ASSERT((errnum) > 0), errnum))
+
+void h2o_http2__encode_rst_stream_frame(h2o_buffer_t **buf, uint32_t stream_id, int errnum);
 void h2o_http2_encode_ping_frame(h2o_buffer_t **buf, int is_ack, const uint8_t *data);
 void h2o_http2_encode_goaway_frame(h2o_buffer_t **buf, uint32_t last_stream_id, int errnum, h2o_iovec_t additional_data);
 void h2o_http2_encode_window_update_frame(h2o_buffer_t **buf, uint32_t stream_id, int32_t window_size_increment);

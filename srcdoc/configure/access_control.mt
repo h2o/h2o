@@ -103,7 +103,7 @@ $ctx->{mruby_method}->(
 $ctx->{mruby_method}->(
     name    => "respond",
     params  => [
-        { label => 'status', desc => 'Status code of the response. Requied.' },
+        { label => 'status', desc => 'Status code of the response. Required.' },
         { label => 'header', desc => 'Header key-value pairs of the response. Default value: {}' },
         { label => 'body',   desc => 'Body array of the response. Default value: []' },
     ],

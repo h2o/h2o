@@ -105,6 +105,15 @@ struct listener_ctx_t {
     h2o_socket_t *sock;
 };
 
+typedef struct st_resolve_tag_node_cache_entry_t {
+    h2o_iovec_t filename;
+    yoml_t *node;
+} resolve_tag_node_cache_entry_t;
+
+typedef struct st_resolve_tag_arg_t {
+    H2O_VECTOR(resolve_tag_node_cache_entry_t) node_cache;
+} resolve_tag_arg_t;
+
 typedef enum en_run_mode_t {
     RUN_MODE_WORKER = 0,
     RUN_MODE_MASTER,
@@ -139,9 +148,11 @@ static struct {
     volatile sig_atomic_t initialized_threads;
     struct {
         /* unused buffers exist to avoid false sharing of the cache line */
-        char _unused1[32];
-        int _num_connections; /* should use atomic functions to update the value */
-        char _unused2[32];
+        char _unused1_avoir_false_sharing[32];
+        int _num_connections;       /* number of currently handled incoming connections, should use atomic functions to update the value */
+        char _unused2_avoir_false_sharing[32];
+        unsigned long _num_sessions;    /* total number of opened incoming connections, should use atomic functions to update the value */
+        char _unused3_avoir_false_sharing[32];
     } state;
     char *crash_handler;
 } conf = {
@@ -1131,30 +1142,99 @@ static int on_config_crash_handler(h2o_configurator_command_t *cmd, h2o_configur
     return 0;
 }
 
-static yoml_t *load_config(const char *fn)
+static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
 {
     FILE *fp;
     yaml_parser_t parser;
     yoml_t *yoml;
 
-    if ((fp = fopen(fn, "rb")) == NULL) {
-        fprintf(stderr, "could not open configuration file:%s:%s\n", fn, strerror(errno));
+    if ((fp = fopen(parse_args->filename, "rb")) == NULL) {
+        fprintf(stderr, "could not open configuration file %s: %s\n", parse_args->filename, strerror(errno));
         return NULL;
     }
+
     yaml_parser_initialize(&parser);
     yaml_parser_set_input_file(&parser, fp);
 
-    yoml = yoml_parse_document(&parser, NULL, NULL, fn);
+    yoml = yoml_parse_document(&parser, NULL, parse_args);
 
-    if (yoml == NULL)
-        fprintf(stderr, "failed to parse configuration file:%s:line %d:%s\n", fn, (int)parser.problem_mark.line + 1,
-                parser.problem);
+    if (yoml == NULL) {
+        fprintf(stderr, "failed to parse configuration file %s line %d", parse_args->filename, (int)parser.problem_mark.line + 1);
+        if (source != NULL) {
+            fprintf(stderr, " (included from file %s line %d)", source->filename, (int)source->line + 1);
+        }
+        fprintf(stderr, ": %s\n", parser.problem);
+    }
 
     yaml_parser_delete(&parser);
 
     fclose(fp);
 
     return yoml;
+}
+
+static yoml_t *resolve_tag(const char *tag, yoml_t *node, void *cb_arg);
+static yoml_t *resolve_file_tag(yoml_t *node, resolve_tag_arg_t *arg)
+{
+    size_t i;
+    yoml_t *loaded;
+
+    if (node->type != YOML_TYPE_SCALAR) {
+        fprintf(stderr, "value of the !file node must be a scalar");
+        return NULL;
+    }
+
+    char *filename = node->data.scalar;
+
+    /* check cache */
+    for (i = 0; i != arg->node_cache.size; ++i) {
+        resolve_tag_node_cache_entry_t *cached = arg->node_cache.entries + i;
+        if (strcmp(filename, cached->filename.base) == 0) {
+            ++cached->node->_refcnt;
+            return cached->node;
+        }
+    }
+
+    yoml_parse_args_t parse_args = {
+        filename,          /* filename */
+        NULL,              /* mem_set */
+        {resolve_tag, arg} /* resolve_tag */
+    };
+    loaded = load_config(&parse_args, node);
+
+    if (loaded != NULL) {
+        /* cache newly loaded node */
+        h2o_vector_reserve(NULL, &arg->node_cache, arg->node_cache.size + 1);
+        resolve_tag_node_cache_entry_t entry = {h2o_strdup(NULL, filename, SIZE_MAX), loaded};
+        arg->node_cache.entries[arg->node_cache.size++] = entry;
+        ++loaded->_refcnt;
+    }
+
+    return loaded;
+}
+
+static yoml_t *resolve_tag(const char *tag, yoml_t *node, void *cb_arg)
+{
+    resolve_tag_arg_t *arg = (resolve_tag_arg_t *)cb_arg;
+
+    if (strcmp(tag, "!file") == 0) {
+        return resolve_file_tag(node, arg);
+    }
+
+    /* otherwise, return the node itself */
+    ++node->_refcnt;
+    return node;
+}
+
+static void dispose_resolve_tag_arg(resolve_tag_arg_t *arg)
+{
+    size_t i;
+    for (i = 0; i != arg->node_cache.size; ++i) {
+        resolve_tag_node_cache_entry_t *cached = arg->node_cache.entries + i;
+        free(cached->filename.base);
+        yoml_free(cached->node, NULL);
+    }
+    free(arg->node_cache.entries);
 }
 
 static void notify_all_threads(void)
@@ -1240,6 +1320,11 @@ static int num_connections(int delta)
     return __sync_fetch_and_add(&conf.state._num_connections, delta);
 }
 
+static unsigned long num_sessions(int delta)
+{
+    return __sync_fetch_and_add(&conf.state._num_sessions, delta);
+}
+
 static void on_socketclose(void *data)
 {
     int prev_num_connections = num_connections(-1);
@@ -1275,6 +1360,7 @@ static void on_accept(h2o_socket_t *listener, const char *err)
             break;
         }
         num_connections(1);
+        num_sessions(1);
 
         sock->on_close.cb = on_socketclose;
         sock->on_close.data = ctx->accept_ctx.ctx;
@@ -1460,13 +1546,61 @@ static int run_using_server_starter(const char *h2o_cmd, const char *config_file
     return EX_CONFIG;
 }
 
+/* make jemalloc linkage optional by marking the functions as 'weak',
+ * since upstream doesn't rely on it. */
+struct extra_status_jemalloc_cb_arg {
+    h2o_iovec_t outbuf;
+    int err;
+    size_t written;
+};
+
+static void extra_status_jemalloc_cb(void *ctx, const char *stats)
+{
+    size_t cur_len;
+    struct extra_status_jemalloc_cb_arg *out = ctx;
+    h2o_iovec_t outbuf = out->outbuf;
+    int i;
+
+    if (out->written >= out->outbuf.len || out->err) {
+        return;
+    }
+    cur_len = out->written;
+
+    i = 0;
+    while(cur_len < outbuf.len && stats[i]) {
+        switch (stats[i]) {
+#define JSON_ESCAPE(x, y)        case x: outbuf.base[cur_len++] = '\\'; if (cur_len >= outbuf.len) { goto err; } outbuf.base[cur_len] = y; break;
+        JSON_ESCAPE('\b', 'b');
+        JSON_ESCAPE('\f', 'f');
+        JSON_ESCAPE('\n', 'n');
+        JSON_ESCAPE('\r', 'r')
+        JSON_ESCAPE('\t', 't');
+        JSON_ESCAPE('/', '/');
+        JSON_ESCAPE('"', '"');
+        JSON_ESCAPE('\\', '\\');
+#undef JSON_ESCAPE
+        default:
+            outbuf.base[cur_len] = stats[i];
+        }
+        i++;
+        cur_len++;
+    }
+    if (cur_len < outbuf.len) {
+        out->written = cur_len;
+        return;
+    }
+
+err:
+    out->err = 1;
+    return;
+}
+
 static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_req_t *req)
 {
-#define BUFSIZE 1024
+#define BUFSIZE (16*1024)
     h2o_iovec_t ret;
     char current_time[H2O_TIMESTR_LOG_LEN + 1], restart_time[H2O_TIMESTR_LOG_LEN + 1];
-    const char *generation;
-    time_t now = time(NULL);
+    const char *generation; time_t now = time(NULL);
 
     h2o_time2str_log(current_time, now);
     h2o_time2str_log(restart_time, conf.launch_time);
@@ -1484,13 +1618,72 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
                                           " \"connections\": %d,\n"
                                           " \"max-connections\": %d,\n"
                                           " \"listeners\": %zu,\n"
-                                          " \"worker-threads\": %zu",
+                                          " \"worker-threads\": %zu,\n"
+                                          " \"num-sessions\": %" PRIu64,
                        SSLeay_version(SSLEAY_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
-                       num_connections(0), conf.max_connections, conf.num_listeners, conf.num_threads);
+                       num_connections(0), conf.max_connections, conf.num_listeners, conf.num_threads, num_sessions(0));
     assert(ret.len < BUFSIZE);
 
+#if JEMALLOC_STATS == 1
+    struct extra_status_jemalloc_cb_arg arg;
+    size_t sz, allocated, active, metadata, resident, mapped;
+    uint64_t epoch = 1;
+    /* internal jemalloc interface */
+    void malloc_stats_print(void (*write_cb) (void *, const char *), void *cbopaque, const char *opts);
+    int mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
+
+    arg.outbuf = h2o_iovec_init(alloca(BUFSIZE - ret.len), BUFSIZE - ret.len);
+    arg.err = 0;
+    arg.written = snprintf(arg.outbuf.base, arg.outbuf.len, ",\n"
+            " \"jemalloc\": {\n"
+            "   \"jemalloc-raw\": \"");
+    malloc_stats_print(extra_status_jemalloc_cb, &arg,
+            "ga" /* omit general info, only aggregated stats */ );
+
+    if (arg.err || arg.written + 1 >= arg.outbuf.len) {
+        goto jemalloc_err;
+    }
+
+    /* terminate the jemalloc-raw json string */
+    arg.written += snprintf(&arg.outbuf.base[arg.written], arg.outbuf.len - arg.written, "\"");
+    if (arg.written + 1 >= arg.outbuf.len) {
+        goto jemalloc_err;
+    }
+
+    sz = sizeof(epoch);
+    mallctl("epoch", &epoch, &sz, &epoch, sz);
+
+    sz = sizeof(size_t);
+    if (!mallctl("stats.allocated", &allocated, &sz, NULL, 0)
+            && !mallctl("stats.active", &active, &sz, NULL, 0)
+            && !mallctl("stats.metadata", &metadata, &sz, NULL, 0)
+            && !mallctl("stats.resident", &resident, &sz, NULL, 0)
+            && !mallctl("stats.mapped", &mapped, &sz, NULL, 0)) {
+        arg.written += snprintf(&arg.outbuf.base[arg.written], arg.outbuf.len - arg.written, ",\n"
+                "   \"allocated\": %zu,\n"
+                "   \"active\": %zu,\n"
+                "   \"metadata\": %zu,\n"
+                "   \"resident\": %zu,\n"
+                "   \"mapped\": %zu }",
+                allocated, active, metadata, resident, mapped);
+    }
+    if (arg.written + 1 >= arg.outbuf.len) {
+        goto jemalloc_err;
+    }
+
+    strncpy(&ret.base[ret.len], arg.outbuf.base, arg.written);
+    ret.base[ret.len + arg.written] = '\0';
+    ret.len += arg.written;
     return ret;
 #undef BUFSIZE
+
+jemalloc_err:
+    /* couldn't fit the jemalloc output, exiting */
+    ret.base[ret.len] = '\0';
+
+#endif /* JEMALLOC_STATS == 1 */
+
+    return ret;
 }
 
 static void setup_configurators(void)
@@ -1671,10 +1864,18 @@ int main(int argc, char **argv)
 
     { /* configure */
         yoml_t *yoml;
-        if ((yoml = load_config(opt_config_file)) == NULL)
+        resolve_tag_arg_t resolve_tag_arg = {{NULL}};
+        yoml_parse_args_t parse_args = {
+            opt_config_file,                /* filename */
+            NULL,                           /* mem_set */
+            {resolve_tag, &resolve_tag_arg} /* resolve_tag */
+        };
+        if ((yoml = load_config(&parse_args, NULL)) == NULL)
             exit(EX_CONFIG);
         if (h2o_configurator_apply(&conf.globalconf, yoml, conf.run_mode != RUN_MODE_WORKER) != 0)
             exit(EX_CONFIG);
+
+        dispose_resolve_tag_arg(&resolve_tag_arg);
         yoml_free(yoml, NULL);
     }
     /* calculate defaults (note: open file cached is purged once every loop) */

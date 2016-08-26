@@ -230,6 +230,9 @@
 		10FCC13E1B2E4A4500F13674 /* cloexec.c in Sources */ = {isa = PBXBuildFile; fileRef = 10FCC13C1B2E4A4500F13674 /* cloexec.c */; };
 		10FCC13F1B2E4A4500F13674 /* cloexec.h in Headers */ = {isa = PBXBuildFile; fileRef = 10FCC13D1B2E4A4500F13674 /* cloexec.h */; };
 		10FCC1401B2E59E600F13674 /* cloexec.c in Sources */ = {isa = PBXBuildFile; fileRef = 10FCC13C1B2E4A4500F13674 /* cloexec.c */; };
+		10FEF24A1D6FC6F600E11B1D /* durations.c in Sources */ = {isa = PBXBuildFile; fileRef = 10FEF2491D6FC6F600E11B1D /* durations.c */; };
+		10FEF24E1D6FC8E200E11B1D /* gkc.c in Sources */ = {isa = PBXBuildFile; fileRef = 10FEF24C1D6FC8E200E11B1D /* gkc.c */; };
+		10FEF24F1D6FC8E200E11B1D /* gkc.h in Headers */ = {isa = PBXBuildFile; fileRef = 10FEF24D1D6FC8E200E11B1D /* gkc.h */; };
 		10FFEE0A1BB23A8C0087AD75 /* neverbleed.c in Sources */ = {isa = PBXBuildFile; fileRef = 10FFEE081BB23A8C0087AD75 /* neverbleed.c */; };
 /* End PBXBuildFile section */
 
@@ -648,6 +651,10 @@
 		10FCC1421B300A6800F13674 /* 50fastcgi-php.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50fastcgi-php.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10FCC1431B31408B00F13674 /* fastcgi_directives.mt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = fastcgi_directives.mt; sourceTree = "<group>"; };
 		10FEF2441D6444E900E11B1D /* 50reverse-proxy-proxy-protocol.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-proxy-protocol.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		10FEF2481D6EC30800E11B1D /* 40bad-request.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40bad-request.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		10FEF2491D6FC6F600E11B1D /* durations.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = durations.c; sourceTree = "<group>"; };
+		10FEF24C1D6FC8E200E11B1D /* gkc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = gkc.c; sourceTree = "<group>"; };
+		10FEF24D1D6FC8E200E11B1D /* gkc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = gkc.h; sourceTree = "<group>"; };
 		10FFEE081BB23A8C0087AD75 /* neverbleed.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = neverbleed.c; sourceTree = "<group>"; };
 		10FFEE091BB23A8C0087AD75 /* neverbleed.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = neverbleed.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -1092,6 +1099,7 @@
 				107E33ED1C7EAECD00AEF5F8 /* brotli */,
 				10FCC13B1B2E4A2C00F13674 /* cloexec */,
 				10F4197E1B64E6C300BEAEAC /* golombset */,
+				10FEF24B1D6FC8C800E11B1D /* libgkc */,
 				1079231F19A3210D00C52AD6 /* klib */,
 				10A3D3DC1B4FAA5900327CF9 /* libyrmcds */,
 				10FFEE071BB23A730087AD75 /* neverbleed */,
@@ -1362,6 +1370,7 @@
 		10C45D521CFE9B180096DB06 /* status */ = {
 			isa = PBXGroup;
 			children = (
+				10FEF2491D6FC6F600E11B1D /* durations.c */,
 				10C45D531CFE9B300096DB06 /* events.c */,
 				10C45D541CFE9B300096DB06 /* requests.c */,
 			);
@@ -1385,6 +1394,7 @@
 				105534F31A460EF600627ECB /* 00unit.libuv.t */,
 				104B9A331A59E594009EEE64 /* 01cxx-compile.t */,
 				105534F41A460EF600627ECB /* 10http1client.t */,
+				10FEF2481D6EC30800E11B1D /* 40bad-request.t */,
 				104CD5021CC465AF0057C62F /* 40env.t */,
 				104B9A301A58F55E009EEE64 /* 40max-connections.t */,
 				10A3D3D71B4F4D0900327CF9 /* 40memcached-session-resumption.t */,
@@ -1500,6 +1510,15 @@
 			path = cloexec;
 			sourceTree = "<group>";
 		};
+		10FEF24B1D6FC8C800E11B1D /* libgkc */ = {
+			isa = PBXGroup;
+			children = (
+				10FEF24C1D6FC8E200E11B1D /* gkc.c */,
+				10FEF24D1D6FC8E200E11B1D /* gkc.h */,
+			);
+			path = libgkc;
+			sourceTree = "<group>";
+		};
 		10FFEE071BB23A730087AD75 /* neverbleed */ = {
 			isa = PBXGroup;
 			children = (
@@ -1546,6 +1565,7 @@
 				10D0903A19F0A51C0043D458 /* memory.h in Headers */,
 				104B9A2D1A4BE029009EEE64 /* version.h in Headers */,
 				10D0905919F22FA10043D458 /* string_.h in Headers */,
+				10FEF24F1D6FC8E200E11B1D /* gkc.h in Headers */,
 				10D0904119F0B9CD0043D458 /* timeout.h in Headers */,
 				10AA2EB71A970EFC004322AC /* http2_internal.h in Headers */,
 				10F419801B64E70D00BEAEAC /* golombset.h in Headers */,
@@ -1781,6 +1801,7 @@
 				10835E011C9A6C2400197E59 /* logconf.c in Sources */,
 				107923C519A3217300C52AD6 /* http1.c in Sources */,
 				10AA2EA71A8DA93C004322AC /* redirect.c in Sources */,
+				10FEF24A1D6FC6F600E11B1D /* durations.c in Sources */,
 				10AA2EA11A88082E004322AC /* url.c in Sources */,
 				10EC2A381A0B4DC70083514F /* socketpool.c in Sources */,
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
@@ -1789,6 +1810,7 @@
 				10AA2EAC1A8DE0AE004322AC /* multithread.c in Sources */,
 				1065E6F919BEBAC600686E72 /* timeout.c in Sources */,
 				10F4180519CA75C500B6E31A /* configurator.c in Sources */,
+				10FEF24E1D6FC8E200E11B1D /* gkc.c in Sources */,
 				104B9A461A5F608A009EEE64 /* serverutil.c in Sources */,
 				1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */,
 				10C45D511CFD160A0096DB06 /* throttle_resp.c in Sources */,

@@ -357,19 +357,19 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
     }
 }
 
-void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
+void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
     size_t i;
 
     assert(req->_generator != NULL);
 
-    if (is_final)
+    if (!h2o_send_state_is_in_progress(state))
         req->_generator = NULL;
 
     for (i = 0; i != bufcnt; ++i)
         req->bytes_sent += bufs[i].len;
 
-    req->_ostr_top->do_send(req->_ostr_top, req, bufs, bufcnt, is_final);
+    req->_ostr_top->do_send(req->_ostr_top, req, bufs, bufcnt, state);
 }
 
 h2o_req_prefilter_t *h2o_add_prefilter(h2o_req_t *req, size_t sz)
@@ -413,16 +413,16 @@ void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t 
         apply_env(req, pathconf->env);
 }
 
-void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
+void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
-    if (is_final) {
+    if (!h2o_send_state_is_in_progress(state)) {
         assert(req->_ostr_top == ostream);
         req->_ostr_top = ostream->next;
     } else if (bufcnt == 0) {
         h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &req->_timeout_entry);
         return;
     }
-    ostream->next->do_send(ostream->next, req, bufs, bufcnt, is_final);
+    ostream->next->do_send(ostream->next, req, bufs, bufcnt, state);
 }
 
 void h2o_req_fill_mime_attributes(h2o_req_t *req)
@@ -452,9 +452,9 @@ void h2o_send_inline(h2o_req_t *req, const char *body, size_t len)
     h2o_start_response(req, &generator);
 
     if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")))
-        h2o_send(req, NULL, 0, 1);
+        h2o_send(req, NULL, 0, H2O_SEND_STATE_FINAL);
     else
-        h2o_send(req, &buf, 1, 1);
+        h2o_send(req, &buf, 1, H2O_SEND_STATE_FINAL);
 }
 
 void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, const char *body, int flags)
@@ -556,7 +556,7 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LOCATION, url, url_len);
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/html; charset=utf-8"));
     h2o_start_response(req, &generator);
-    h2o_send(req, bufs, bufcnt, 1);
+    h2o_send(req, bufs, bufcnt, H2O_SEND_STATE_FINAL);
 }
 
 void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *url_str, size_t url_len, int preserve_overrides)

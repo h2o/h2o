@@ -163,7 +163,18 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
     h2o_timeout_unlink(&client->_timeout);
 
     if (err != NULL) {
-        on_body_error(client, "I/O error (body; chunked)");
+        if (err == h2o_socket_error_closed && !phr_decode_chunked_is_in_data(&client->_body_decoder.chunked.decoder)) {
+            /*
+             * if the peer closed after a full chunk, treat this
+             * as if the transfer had complete, browsers appear to ignore
+             * a missing 0\r\n chunk
+             */
+            client->_can_keepalive = 0;
+            client->_cb.on_body(&client->super, h2o_http1client_error_is_eos);
+            close_client(client);
+        } else {
+            on_body_error(client, "I/O error (body; chunked)");
+        }
         return;
     }
 
