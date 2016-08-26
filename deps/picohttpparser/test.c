@@ -94,13 +94,7 @@ static void test_request(void)
     ok(headers[2].name == NULL);
     ok(bufis(headers[2].value, headers[2].value_len, "  \tc"));
 
-    PARSE("GET / HTTP/1.0\r\nfoo : ab\r\n\r\n", 0, 0, "parse header name with trailing space");
-    ok(num_headers == 1);
-    ok(bufis(method, method_len, "GET"));
-    ok(bufis(path, path_len, "/"));
-    ok(minor_version == 0);
-    ok(bufis(headers[0].name, headers[0].name_len, "foo "));
-    ok(bufis(headers[0].value, headers[0].value_len, "ab"));
+    PARSE("GET / HTTP/1.0\r\nfoo : ab\r\n\r\n", 0, -1, "parse header name with trailing space");
 
     PARSE("GET", 0, -2, "incomplete 1");
     ok(method == NULL);
@@ -130,6 +124,7 @@ static void test_request(void)
     PARSE("GET / HTTP/1.0\r\nab: c\0d\r\n\r\n", 0, -1, "NUL in header value");
     PARSE("GET / HTTP/1.0\r\na\033b: c\r\n\r\n", 0, -1, "CTL in header name");
     PARSE("GET / HTTP/1.0\r\nab: c\033\r\n\r\n", 0, -1, "CTL in header value");
+    PARSE("GET / HTTP/1.0\r\n/: 1\r\n\r\n", 0, -1, "invalid char in header value");
     PARSE("GET /\xa0 HTTP/1.0\r\nh: c\xa2y\r\n\r\n", 0, 0, "accept MSB chars");
     ok(num_headers == 1);
     ok(bufis(method, method_len, "GET"));
@@ -137,6 +132,13 @@ static void test_request(void)
     ok(minor_version == 0);
     ok(bufis(headers[0].name, headers[0].name_len, "h"));
     ok(bufis(headers[0].value, headers[0].value_len, "c\xa2y"));
+
+    PARSE("GET / HTTP/1.0\r\n\x7c\x7e: 1\r\n\r\n", 0, 0, "accept |~ (though forbidden by SSE)");
+    ok(num_headers == 1);
+    ok(bufis(headers[0].name, headers[0].name_len, "\x7c\x7e"));
+    ok(bufis(headers[0].value, headers[0].value_len, "1"));
+
+    PARSE("GET / HTTP/1.0\r\n\x7b: 1\r\n\r\n", 0, -1, "disallow {");
 
 #undef PARSE
 }

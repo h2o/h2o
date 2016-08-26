@@ -163,7 +163,7 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
     h2o_timeout_unlink(&client->_timeout);
 
     if (err != NULL) {
-        if (err == h2o_socket_error_closed && !phr_decoder_in_data(&client->_body_decoder.chunked.decoder)) {
+        if (err == h2o_socket_error_closed && !phr_decode_chunked_is_in_data(&client->_body_decoder.chunked.decoder)) {
             /*
              * if the peer closed after a full chunk, treat this
              * as if the transfer had complete, browsers appear to ignore

@@ -93,7 +93,7 @@
     } while (0)
 
 static const char *token_char_map = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
-                                    "\0\1\1\1\1\1\1\1\0\0\1\1\0\1\1\0\1\1\1\1\1\1\1\1\1\1\0\0\0\0\0\0"
+                                    "\0\1\0\1\1\1\1\1\0\0\1\1\0\1\1\0\1\1\1\1\1\1\1\1\1\1\0\0\0\0\0\0"
                                     "\0\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\0\0\0\1\1"
                                     "\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\1\0\1\0\1\0"
                                     "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
@@ -279,15 +279,18 @@ static const char *parse_headers(const char *buf, const char *buf_end, struct ph
             return NULL;
         }
         if (!(*num_headers != 0 && (*buf == ' ' || *buf == '\t'))) {
-            static const char ALIGNED(16) ranges1[] = "::\x00\037";
-            int found;
-            if (!token_char_map[(unsigned char)*buf]) {
-                *ret = -1;
-                return NULL;
-            }
             /* parsing name, but do not discard SP before colon, see
              * http://www.mozilla.org/security/announce/2006/mfsa2006-33.html */
             headers[*num_headers].name = buf;
+            static const char ranges1[] __attribute__((aligned(16))) = "\x00 "  /* control chars and up to SP */
+                                                                       "\"\""   /* 0x22 */
+                                                                       "()"     /* 0x28,0x29 */
+                                                                       ",,"     /* 0x2c */
+                                                                       "//"     /* 0x2f */
+                                                                       ":@"     /* 0x3a-0x40 */
+                                                                       "[]"     /* 0x5b-0x5d */
+                                                                       "{\377"; /* 0x7b-0xff */
+            int found;
             buf = findchar_fast(buf, buf_end, ranges1, sizeof(ranges1) - 1, &found);
             if (!found) {
                 CHECK_EOF();
@@ -295,14 +298,17 @@ static const char *parse_headers(const char *buf, const char *buf_end, struct ph
             while (1) {
                 if (*buf == ':') {
                     break;
-                } else if (*buf < ' ') {
+                } else if (!token_char_map[(unsigned char)*buf]) {
                     *ret = -1;
                     return NULL;
                 }
                 ++buf;
                 CHECK_EOF();
             }
-            headers[*num_headers].name_len = buf - headers[*num_headers].name;
+            if ((headers[*num_headers].name_len = buf - headers[*num_headers].name) == 0) {
+                *ret = -1;
+                return NULL;
+            }
             ++buf;
             for (;; ++buf) {
                 CHECK_EOF();
@@ -596,7 +602,7 @@ Exit:
     return ret;
 }
 
-int phr_decoder_in_data(struct phr_chunked_decoder *decoder)
+int phr_decode_chunked_is_in_data(struct phr_chunked_decoder *decoder)
 {
     return decoder->_state == CHUNKED_IN_CHUNK_DATA;
 }
