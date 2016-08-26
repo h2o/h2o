@@ -112,8 +112,8 @@ static size_t calc_max_payload_size(h2o_http2_conn_t *conn, h2o_http2_stream_t *
     return sz_min(sz_min(conn_max, stream_max), conn->peer_settings.max_frame_size);
 }
 
-static void encode_data_header_and_consume_window(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_buffer_t **outbuf,
-                                                  size_t length, h2o_send_state_t send_state)
+static void commit_data_header(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_buffer_t **outbuf,
+                               size_t length, h2o_send_state_t send_state)
 {
     assert(outbuf != NULL);
     /* send a DATA frame if there's data or the END_STREAM flag to send */
@@ -146,7 +146,7 @@ static h2o_send_state_t send_data_pull(h2o_http2_conn_t *conn, h2o_http2_stream_
     cbuf.len = max_payload_size;
     send_state = h2o_pull(&stream->req, stream->_pull_cb, &cbuf);
     /* write the header */
-    encode_data_header_and_consume_window(conn, stream, &conn->_write.buf, cbuf.len, send_state);
+    commit_data_header(conn, stream, &conn->_write.buf, cbuf.len, send_state);
 
 Exit:
     return send_state;
@@ -193,10 +193,10 @@ static h2o_iovec_t *send_data_push(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     /* commit the DATA frame if we have actually emitted payload */
     if (dst.len != max_payload_size || !h2o_send_state_is_in_progress(send_state)) {
         size_t payload_len = max_payload_size - dst.len;
-        if (bufcnt != 0 && send_state == H2O_SEND_STATE_FINAL) {
+        if (bufcnt != 0) {
             send_state = H2O_SEND_STATE_IN_PROGRESS;
         }
-        encode_data_header_and_consume_window(conn, stream, &conn->_write.buf, payload_len, send_state);
+        commit_data_header(conn, stream, &conn->_write.buf, payload_len, send_state);
     }
 
 Exit:

@@ -212,10 +212,8 @@ static h2o_send_state_t do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iove
     if (rret <= 0) {
         buf->len = 0;
         self->bytesleft = 0;
-        if (rret < 0) {
-            do_close(&self->super, req);
-            return H2O_SEND_STATE_ERROR;
-        }
+        do_close(&self->super, req);
+        return H2O_SEND_STATE_ERROR;
     } else {
         buf->len = rret;
         self->file.off += rret;
