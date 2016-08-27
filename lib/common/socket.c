@@ -417,7 +417,7 @@ static inline void prepare_for_latency_optimized_write(h2o_socket_t *sock,
                                                        int (*adjust_notsent_lowat)(h2o_socket_t *, unsigned))
 {
     /* check RTT */
-    if (rtt < conditions->min_rtt * 1000)
+    if (rtt < conditions->min_rtt * (uint64_t)1000)
         goto Disable;
     if (rtt * conditions->max_additional_delay < loop_time * 1000 * 100)
         goto Disable;
