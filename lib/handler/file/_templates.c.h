@@ -33,14 +33,14 @@ static int cmpstrptr(const void *_x, const void *_y)
 
 #ifdef __linux__
 /* readdir_r(3) is deprecated by glibc > 2.24 */
-#  define FOREACH_DIRENT(dp, dent) \
-        struct dirent *dent; \
-        while ((dent = readdir(dp)) != NULL)
+#define FOREACH_DIRENT(dp, dent)                                                                                                   \
+    struct dirent *dent;                                                                                                           \
+    while ((dent = readdir(dp)) != NULL)
 #else
-#  define FOREACH_DIRENT(dp, dent) \
-        struct dirent dent_, *dentp, *dent = &dent_; \
-        int ret; \
-        while ((ret = readdir_r(dp, dent, &dentp)) == 0 && dentp != NULL)
+#define FOREACH_DIRENT(dp, dent)                                                                                                   \
+    struct dirent dent_, *dentp, *dent = &dent_;                                                                                   \
+    int ret;                                                                                                                       \
+    while ((ret = readdir_r(dp, dent, &dentp)) == 0 && dentp != NULL)
 #endif /* FOREACH_DIRENT */
 
 static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t path_normalized, DIR* dp)
@@ -48,7 +48,8 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
     H2O_VECTOR(char *) files = {NULL};
 
     { /* build list of files */
-        FOREACH_DIRENT(dp, dent) {
+        FOREACH_DIRENT(dp, dent)
+        {
             if (strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0)
                 continue;
             h2o_vector_reserve(pool, &files, files.size + 1);
