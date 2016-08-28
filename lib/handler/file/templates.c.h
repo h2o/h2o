@@ -24,6 +24,8 @@
  *   picotemplate.pl --conf=misc/picotemplate-conf.pl lib/file/_templates.c.h
  */
 
+#include <limits.h>
+
 static int cmpstrptr(const void *_x, const void *_y)
 {
     const char *x = *(const char **)_x;
@@ -31,8 +33,9 @@ static int cmpstrptr(const void *_x, const void *_y)
     return strcmp(x, y);
 }
 
-#ifdef __linux__
-/* readdir_r(3) is deprecated by glibc > 2.24 */
+#if !defined(NAME_MAX) || defined(__linux__)
+/* readdir(3) is known to be thread-safe on Linux and should be thread-safe on a platform that does not have a predefined value for
+   NAME_MAX */
 #define FOREACH_DIRENT(dp, dent)                                                                                                   \
     struct dirent *dent;                                                                                                           \
     while ((dent = readdir(dp)) != NULL)
