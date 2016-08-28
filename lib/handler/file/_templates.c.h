@@ -41,7 +41,11 @@ static int cmpstrptr(const void *_x, const void *_y)
     while ((dent = readdir(dp)) != NULL)
 #else
 #define FOREACH_DIRENT(dp, dent)                                                                                                   \
-    struct dirent dent_, *dentp, *dent = &dent_;                                                                                   \
+    struct {                                                                                                                       \
+        struct dirent d;                                                                                                           \
+        char s[NAME_MAX + 1];                                                                                                      \
+    } dent_;                                                                                                                       \
+    struct dirent *dentp, *dent = &dent_.d;                                                                                        \
     int ret;                                                                                                                       \
     while ((ret = readdir_r(dp, dent, &dentp)) == 0 && dentp != NULL)
 #endif /* FOREACH_DIRENT */
