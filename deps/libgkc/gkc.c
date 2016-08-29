@@ -48,6 +48,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <inttypes.h>
 
 struct list {
     struct list *prev, *next;
@@ -56,8 +57,8 @@ struct list {
 struct gkc_summary {
     size_t nr_elems;
     double epsilon;
-    unsigned long alloced;
-    unsigned long max_alloced;
+    uint64_t alloced;
+    uint64_t max_alloced;
     struct list head;
     struct freelist *fl;
 };
@@ -107,11 +108,11 @@ struct freelist {
     struct freelist *next;
 };
 
-static unsigned long ullog2(unsigned long x)
+static uint64_t ullog2(uint64_t x)
 {
-    static const unsigned long debruijn_magic = 0x022fdd63cc95386d;
+    static const uint64_t debruijn_magic = 0x022fdd63cc95386dULL;
 
-    static const unsigned long magic_table[] = {
+    static const uint64_t magic_table[] = {
         0, 1, 2, 53, 3, 7, 54, 27, 4, 38, 41, 8, 34, 55, 48, 28,
         62, 5, 39, 46, 44, 42, 22, 9, 24, 35, 59, 56, 49, 18, 29, 11,
         63, 52, 6, 26, 37, 40, 33, 47, 61, 45, 43, 21, 23, 58, 17, 10,
@@ -128,9 +129,9 @@ static unsigned long ullog2(unsigned long x)
 }
 
 struct gkc_tuple {
-    unsigned long value;
+    uint64_t value;
     double g;
-    unsigned long delta;
+    uint64_t delta;
     struct list node;
 };
 #define list_to_tuple(ln) (container_of((ln), struct gkc_tuple, node))
@@ -154,7 +155,7 @@ struct gkc_summary *gkc_summary_alloc(double epsilon)
 /* debug only, checks a number of properties that s must satisfy at all times */
 void gkc_sanity_check(struct gkc_summary *s)
 {
-    unsigned long nr_elems, nr_alloced;
+    uint64_t nr_elems, nr_alloced;
     struct list *cur;
     struct gkc_tuple *tcur;
 
@@ -223,7 +224,7 @@ void gkc_summary_free(struct gkc_summary *s)
     free(s);
 }
 
-unsigned long gkc_query(struct gkc_summary *s, double q)
+uint64_t gkc_query(struct gkc_summary *s, double q)
 {
     struct list *cur, *next;
     int rank;
@@ -260,9 +261,9 @@ unsigned long gkc_query(struct gkc_summary *s, double q)
     }
 }
 
-static unsigned long band(struct gkc_summary *s, unsigned long delta)
+static uint64_t band(struct gkc_summary *s, uint64_t delta)
 {
-    unsigned long diff;
+    uint64_t diff;
 
     diff = 1 + (s->epsilon * s->nr_elems * 2) - delta;
 
@@ -278,7 +279,7 @@ static void gkc_compress(struct gkc_summary *s)
     int max_compress;
     struct list *cur, *prev;
     struct gkc_tuple *tcur, *tprev;
-    unsigned long bi, b_plus_1;
+    uint64_t bi, b_plus_1;
 
     max_compress = 2 * s->epsilon * s->nr_elems;
     if (s->nr_elems < 2) {
@@ -363,7 +364,7 @@ void gkc_print_summary(struct gkc_summary *s)
     struct gkc_tuple *tcur;
     struct list *cur;
 
-    fprintf(stderr, "nr_elems: %lu, epsilon: %.02f, alloced: %lu, overfilled: %.02f, max_alloced: %lu\n",
+    fprintf(stderr, "nr_elems: %zu, epsilon: %.02f, alloced: %" PRIu64 ", overfilled: %.02f, max_alloced: %" PRIu64 "\n",
             s->nr_elems, s->epsilon, s->alloced, 2 * s->epsilon * s->nr_elems, s->max_alloced);
     if (list_empty(&s->head)) {
         fprintf(stderr, "Empty summary\n");
@@ -373,7 +374,7 @@ void gkc_print_summary(struct gkc_summary *s)
     cur = s->head.next;
     while (cur != &s->head) {
         tcur = list_to_tuple(cur);
-        fprintf(stderr, "(v: %lu, g: %.02f, d: %lu) ", tcur->value, tcur->g, tcur->delta);
+        fprintf(stderr, "(v: %" PRIu64 ", g: %.02f, d: %" PRIu64 ") ", tcur->value, tcur->g, tcur->delta);
         cur = cur->next;
     }
     fprintf(stderr, "\n");
