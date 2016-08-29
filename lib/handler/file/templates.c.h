@@ -24,6 +24,8 @@
  *   picotemplate.pl --conf=misc/picotemplate-conf.pl lib/file/_templates.c.h
  */
 
+#include <limits.h>
+
 static int cmpstrptr(const void *_x, const void *_y)
 {
     const char *x = *(const char **)_x;
@@ -31,30 +33,37 @@ static int cmpstrptr(const void *_x, const void *_y)
     return strcmp(x, y);
 }
 
-#ifdef __linux__
-/* readdir_r(3) is deprecated by glibc > 2.24 */
-#  define FOREACH_DIRENT(dp, dent) \
-        struct dirent *dent; \
-        while ((dent = readdir(dp)) != NULL)
+#if !defined(NAME_MAX) || defined(__linux__)
+/* readdir(3) is known to be thread-safe on Linux and should be thread-safe on a platform that does not have a predefined value for
+   NAME_MAX */
+#define FOREACH_DIRENT(dp, dent)                                                                                                   \
+    struct dirent *dent;                                                                                                           \
+    while ((dent = readdir(dp)) != NULL)
 #else
-#  define FOREACH_DIRENT(dp, dent) \
-        struct dirent dent_, *dentp, *dent = &dent_; \
-        int ret; \
-        while ((ret = readdir_r(dp, dent, &dentp)) == 0 && dentp != NULL)
+#define FOREACH_DIRENT(dp, dent)                                                                                                   \
+    struct {                                                                                                                       \
+        struct dirent d;                                                                                                           \
+        char s[NAME_MAX + 1];                                                                                                      \
+    } dent_;                                                                                                                       \
+    struct dirent *dentp, *dent = &dent_.d;                                                                                        \
+    int ret;                                                                                                                       \
+    while ((ret = readdir_r(dp, dent, &dentp)) == 0 && dentp != NULL)
 #endif /* FOREACH_DIRENT */
 
 static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t path_normalized, DIR *dp)
 {
-    H2O_VECTOR(char *)files = {};
+    H2O_VECTOR(char *) files = {NULL};
 
     { /* build list of files */
-        FOREACH_DIRENT(dp, dent) {
+        FOREACH_DIRENT(dp, dent)
+        {
             if (strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0)
                 continue;
             h2o_vector_reserve(pool, &files, files.size + 1);
             files.entries[files.size++] = h2o_strdup(pool, dent->d_name, SIZE_MAX).base;
         }
-        qsort(files.entries, files.size, sizeof(files.entries[0]), cmpstrptr);
+        if (files.size > 1)
+            qsort(files.entries, files.size, sizeof(files.entries[0]), cmpstrptr);
     }
 
     h2o_buffer_t *_;
