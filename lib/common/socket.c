@@ -693,6 +693,14 @@ h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *p
     }
 }
 
+SSL_SESSION *h2o_socket_get_ssl_session(h2o_socket_t *sock)
+{
+    if (sock->ssl == NULL)
+        return NULL;
+    SSL_SESSION *session = SSL_get1_session(sock->ssl->ssl);
+    return session;
+}
+
 int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y)
 {
 #define CMP(a, b)                                                                                                                  \
@@ -934,7 +942,7 @@ Complete:
     on_handshake_complete(sock, err);
 }
 
-void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_socket_cb handshake_cb)
+void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, SSL_SESSION *session, h2o_socket_cb handshake_cb)
 {
     sock->ssl = h2o_mem_alloc(sizeof(*sock->ssl));
     memset(sock->ssl, 0, offsetof(struct st_h2o_socket_ssl_t, output.pool));
@@ -960,6 +968,9 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
         else
             h2o_socket_read_start(sock, proceed_handshake);
     } else {
+        if (session != NULL) {
+            SSL_set_session(sock->ssl->ssl, session);
+        }
         sock->ssl->handshake.client.server_name = h2o_strdup(NULL, server_name, SIZE_MAX).base;
         SSL_set_tlsext_host_name(sock->ssl->ssl, sock->ssl->handshake.client.server_name);
         proceed_handshake(sock, 0);

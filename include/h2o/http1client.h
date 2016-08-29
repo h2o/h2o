@@ -30,6 +30,7 @@ extern "C" {
 #include "h2o/socket.h"
 #include "h2o/socketpool.h"
 #include "h2o/timeout.h"
+#include "h2o/cache.h"
 
 struct phr_header;
 typedef struct st_h2o_http1client_t h2o_http1client_t;
@@ -57,6 +58,7 @@ typedef struct st_h2o_http1client_ctx_t {
     h2o_timeout_t *io_timeout;
     h2o_timeout_t *websocket_timeout; /* NULL if upgrade to websocket is not allowed */
     SSL_CTX *ssl_ctx;
+    h2o_cache_t *ssl_session_cache;
 } h2o_http1client_ctx_t;
 
 struct st_h2o_http1client_t {
@@ -67,6 +69,8 @@ struct st_h2o_http1client_t {
     } sockpool;
     struct {
         char *server_name; /* non-null if ssl is to be used */
+        h2o_iovec_t session_cache_key;
+        h2o_cache_hashcode_t session_cache_key_hash;
     } ssl;
     h2o_socket_t *sock;
     void *data;

@@ -29,6 +29,7 @@ extern "C" {
 #include <stdint.h>
 #include <sys/socket.h>
 #include <openssl/ssl.h>
+#include "h2o/cache.h"
 #include "h2o/memory.h"
 #include "h2o/string_.h"
 
@@ -258,6 +259,7 @@ const char *h2o_socket_get_ssl_protocol_version(h2o_socket_t *sock);
 int h2o_socket_get_ssl_session_reused(h2o_socket_t *sock);
 const char *h2o_socket_get_ssl_cipher(h2o_socket_t *sock);
 int h2o_socket_get_ssl_cipher_bits(h2o_socket_t *sock);
+SSL_SESSION *h2o_socket_get_ssl_session(h2o_socket_t *sock);
 static h2o_iovec_t h2o_socket_log_ssl_protocol_version(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 static h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 static h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t *pool);
@@ -278,9 +280,10 @@ int32_t h2o_socket_getport(struct sockaddr *sa);
  * performs SSL handshake on a socket
  * @param sock the socket
  * @param ssl_ctx SSL context
+ * @param session cached SSL session (maybe empty)
  * @param handshake_cb callback to be called when handshake is complete
  */
-void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_socket_cb handshake_cb);
+void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, SSL_SESSION *session, h2o_socket_cb handshake_cb);
 /**
  * resumes SSL handshake with given session data
  * @param sock the socket
