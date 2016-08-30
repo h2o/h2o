@@ -24,7 +24,6 @@ before_script:
   - curl -L https://github.com/libuv/libuv/archive/v1.0.0.tar.gz | tar xzf -
   - (cd libuv-1.0.0 && ./autogen.sh && ./configure --prefix=/usr && make && sudo make install)
   # install perl modules (mandatory for testing)
-  - misc/install-perl-module.pl Digest::SHA1
   - misc/install-perl-module.pl Net::EmptyPort
   - misc/install-perl-module.pl Scope::Guard
   - misc/install-perl-module.pl Plack
