@@ -400,12 +400,10 @@ static uint16_t calc_suggested_tls_payload_size(h2o_socket_t *sock, uint16_t sug
 
 static void disable_latency_optimized_write(h2o_socket_t *sock, int (*adjust_notsent_lowat)(h2o_socket_t *, unsigned))
 {
-#ifdef TCP_NOTSENT_LOWAT
     if (sock->_latency_optimization.notsent_is_minimized) {
         adjust_notsent_lowat(sock, 0);
         sock->_latency_optimization.notsent_is_minimized = 0;
     }
-#endif
     sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED;
     sock->_latency_optimization.suggested_tls_payload_size = 16384;
     sock->_latency_optimization.suggested_write_size = SIZE_MAX;
