@@ -80,24 +80,6 @@ void h2o_context_dispose_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pa
 #undef DOIT
 }
 
-static void on_session_cache_entry_destroy(h2o_iovec_t value)
-{
-    SSL_SESSION *session = (SSL_SESSION*)value.base;
-    SSL_SESSION_free(session);
-}
-
-static h2o_cache_t *get_ssl_session_cache()
-{
-    static h2o_cache_t *shared_session_cache;
-    static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-    pthread_mutex_lock(&mutex);
-    if (shared_session_cache == NULL)
-        shared_session_cache = h2o_cache_create(H2O_CACHE_FLAG_MULTITHREADED, 1024, 7200 * 1000, on_session_cache_entry_destroy);
-    pthread_mutex_unlock(&mutex);
-
-    return shared_session_cache;
-}
-
 void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *config)
 {
     size_t i, j;
@@ -124,7 +106,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     ctx->proxy.client_ctx.getaddr_receiver = &ctx->receivers.hostinfo_getaddr;
     ctx->proxy.client_ctx.io_timeout = &ctx->proxy.io_timeout;
     ctx->proxy.client_ctx.ssl_ctx = config->proxy.ssl_ctx;
-    ctx->proxy.client_ctx.ssl_session_cache = get_ssl_session_cache();
+    ctx->proxy.client_ctx.ssl_session_cache = config->proxy.ssl_session_cache;
 
     ctx->_module_configs = h2o_mem_alloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
     memset(ctx->_module_configs, 0, sizeof(*ctx->_module_configs) * config->_num_config_slots);
