@@ -384,7 +384,7 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
 
 SSL_SESSION *fetch_ssl_session_cache(h2o_http1client_t *client)
 {
-    h2o_cache_ref_t *ref = h2o_cache_fetch(client->ctx->ssl_session_cache, client->ctx->loop->_now, client->ssl.session_cache_key, client->ssl.session_cache_key_hash);
+    h2o_cache_ref_t *ref = h2o_cache_fetch(client->ctx->ssl_session_cache, h2o_now(client->ctx->loop), client->ssl.session_cache_key, client->ssl.session_cache_key_hash);
     if (ref == NULL)
         return NULL;
 
@@ -393,12 +393,12 @@ SSL_SESSION *fetch_ssl_session_cache(h2o_http1client_t *client)
 
 void set_ssl_session_cache(h2o_http1client_t *client, SSL_SESSION *session)
 {
-    h2o_cache_set(client->ctx->ssl_session_cache, client->ctx->loop->_now, client->ssl.session_cache_key, client->ssl.session_cache_key_hash, h2o_iovec_init(session, 1));
+    h2o_cache_set(client->ctx->ssl_session_cache, h2o_now(client->ctx->loop), client->ssl.session_cache_key, client->ssl.session_cache_key_hash, h2o_iovec_init(session, 1));
 }
 
 void delete_ssl_session_cache(h2o_http1client_t *client)
 {
-    h2o_cache_delete(client->ctx->ssl_session_cache, client->ctx->loop->_now, client->ssl.session_cache_key, client->ssl.session_cache_key_hash);
+    h2o_cache_delete(client->ctx->ssl_session_cache, h2o_now(client->ctx->loop), client->ssl.session_cache_key, client->ssl.session_cache_key_hash);
 }
 
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
