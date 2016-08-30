@@ -42,6 +42,9 @@ EOT
 };
 
 subtest 'hpack' => sub {
+    plan skip_all => "curl does not support HTTP/2"
+        unless curl_supports_http2();
+
     my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
