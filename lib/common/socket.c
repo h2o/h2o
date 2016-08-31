@@ -833,15 +833,12 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
         }
     }
 
-    if (sock->ssl->handshake.client.session_cache) {
-        if (err == NULL || err == h2o_socket_error_ssl_cert_name_mismatch) {
-            SSL_SESSION *session = SSL_get1_session(sock->ssl->ssl);
+    if (sock->ssl->handshake.client.session_cache != NULL) {
+        SSL_SESSION *session = SSL_get1_session(sock->ssl->ssl);
+        if (session != NULL) {
             h2o_cache_set(sock->ssl->handshake.client.session_cache, h2o_now(h2o_socket_get_loop(sock)),
                           sock->ssl->handshake.client.session_cache_key, sock->ssl->handshake.client.session_cache_key_hash,
                           h2o_iovec_init(session, 1));
-        } else {
-            h2o_cache_delete(sock->ssl->handshake.client.session_cache, h2o_now(h2o_socket_get_loop(sock)),
-                             sock->ssl->handshake.client.session_cache_key, sock->ssl->handshake.client.session_cache_key_hash);
         }
     }
 
