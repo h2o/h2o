@@ -69,8 +69,6 @@ struct st_h2o_http1client_t {
     } sockpool;
     struct {
         char *server_name; /* non-null if ssl is to be used */
-        h2o_iovec_t session_cache_key;
-        h2o_cache_hashcode_t session_cache_key_hash;
     } ssl;
     h2o_socket_t *sock;
     void *data;
@@ -85,7 +83,6 @@ void h2o_http1client_connect_with_pool(h2o_http1client_t **client, void *data, h
                                        h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb);
 void h2o_http1client_cancel(h2o_http1client_t *client);
 h2o_socket_t *h2o_http1client_steal_socket(h2o_http1client_t *client);
-h2o_cache_t *h2o_http1client_create_ssl_session_cache(int flags, size_t capacity, uint64_t duration);
 
 #ifdef __cplusplus
 }

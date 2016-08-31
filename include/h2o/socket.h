@@ -259,7 +259,6 @@ const char *h2o_socket_get_ssl_protocol_version(h2o_socket_t *sock);
 int h2o_socket_get_ssl_session_reused(h2o_socket_t *sock);
 const char *h2o_socket_get_ssl_cipher(h2o_socket_t *sock);
 int h2o_socket_get_ssl_cipher_bits(h2o_socket_t *sock);
-SSL_SESSION *h2o_socket_get_ssl_session(h2o_socket_t *sock);
 static h2o_iovec_t h2o_socket_log_ssl_protocol_version(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 static h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 static h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t *pool);
@@ -280,10 +279,10 @@ int32_t h2o_socket_getport(struct sockaddr *sa);
  * performs SSL handshake on a socket
  * @param sock the socket
  * @param ssl_ctx SSL context
- * @param session cached SSL session (maybe empty)
+ * @param session_cache SSL session cache (maybe NULL)
  * @param handshake_cb callback to be called when handshake is complete
  */
-void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, SSL_SESSION *session,
+void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_cache_t *session_cache,
                               h2o_socket_cb handshake_cb);
 /**
  * resumes SSL handshake with given session data
@@ -305,6 +304,10 @@ void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx);
  * @param sock the socket
  */
 h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock);
+/**
+ *
+ */
+h2o_cache_t *h2o_socket_ssl_create_session_cache(int flags, size_t capacity, uint64_t duration);
 /**
  * registers the protocol list to be used for ALPN
  */

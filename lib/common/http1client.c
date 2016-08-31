@@ -61,8 +61,6 @@ static void close_client(struct st_h2o_http1client_private_t *client)
     }
     if (client->super.ssl.server_name != NULL)
         free(client->super.ssl.server_name);
-    if (client->super.ssl.session_cache_key.base != NULL)
-        free(client->super.ssl.session_cache_key.base);
     if (client->super.sock != NULL) {
         if (client->super.sockpool.pool != NULL && client->_can_keepalive) {
             /* we do not send pipelined requests, and thus can trash all the received input at the end of the request */
@@ -382,28 +380,6 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
     h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
 }
 
-SSL_SESSION *fetch_ssl_session_cache(h2o_http1client_t *client)
-{
-    h2o_cache_ref_t *ref = h2o_cache_fetch(client->ctx->ssl_session_cache, h2o_now(client->ctx->loop),
-                                           client->ssl.session_cache_key, client->ssl.session_cache_key_hash);
-    if (ref == NULL)
-        return NULL;
-
-    return (SSL_SESSION *)ref->value.base;
-}
-
-void set_ssl_session_cache(h2o_http1client_t *client, SSL_SESSION *session)
-{
-    h2o_cache_set(client->ctx->ssl_session_cache, h2o_now(client->ctx->loop), client->ssl.session_cache_key,
-                  client->ssl.session_cache_key_hash, h2o_iovec_init(session, 1));
-}
-
-void delete_ssl_session_cache(h2o_http1client_t *client)
-{
-    h2o_cache_delete(client->ctx->ssl_session_cache, h2o_now(client->ctx->loop), client->ssl.session_cache_key,
-                     client->ssl.session_cache_key_hash);
-}
-
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_private_t *client = sock->data;
@@ -415,18 +391,8 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     } else if (err == h2o_socket_error_ssl_cert_name_mismatch && (client->super.ctx->ssl_ctx->verify_mode & SSL_VERIFY_PEER) == 0) {
         /* peer verification skipped */
     } else {
-        if (client->super.ctx->ssl_session_cache != NULL) {
-            delete_ssl_session_cache(&client->super);
-        }
         on_connect_error(client, err);
         return;
-    }
-
-    if (client->super.ctx->ssl_session_cache != NULL) {
-        SSL_SESSION *session = h2o_socket_get_ssl_session(sock);
-        if (session != NULL) {
-            set_ssl_session_cache(&client->super, session);
-        }
     }
 
     on_connection_ready(client);
@@ -442,11 +408,8 @@ static void on_connect(h2o_socket_t *sock, const char *err)
         return;
     }
     if (client->super.ssl.server_name != NULL && client->super.sock->ssl == NULL) {
-        SSL_SESSION *cached_session = NULL;
-        if (client->super.ctx->ssl_session_cache != NULL)
-            cached_session = fetch_ssl_session_cache(&client->super);
-        h2o_socket_ssl_handshake(client->super.sock, client->super.ctx->ssl_ctx, client->super.ssl.server_name, cached_session,
-                                 on_handshake_complete);
+        h2o_socket_ssl_handshake(client->super.sock, client->super.ctx->ssl_ctx, client->super.ssl.server_name,
+                                 client->super.ctx->ssl_session_cache, on_handshake_complete);
         return;
     }
 
@@ -505,18 +468,13 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
 }
 
 static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
-                                                          h2o_iovec_t ssl_server_name, h2o_iovec_t ssl_session_cache_key,
-                                                          h2o_http1client_connect_cb cb)
+                                                          h2o_iovec_t ssl_server_name, h2o_http1client_connect_cb cb)
 {
     struct st_h2o_http1client_private_t *client = h2o_mem_alloc(sizeof(*client));
 
     *client = (struct st_h2o_http1client_private_t){{ctx}};
     if (ssl_server_name.base != NULL)
         client->super.ssl.server_name = h2o_strdup(NULL, ssl_server_name.base, ssl_server_name.len).base;
-    if (ssl_session_cache_key.base != NULL) {
-        client->super.ssl.session_cache_key = ssl_session_cache_key;
-        client->super.ssl.session_cache_key_hash = h2o_cache_calchash(ssl_session_cache_key.base, ssl_session_cache_key.len);
-    }
     client->super.data = data;
     client->_cb.on_connect = cb;
     /* caller needs to setup _cb, timeout.cb, sock, and sock->data */
@@ -524,33 +482,6 @@ static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_c
     if (_client != NULL)
         *_client = &client->super;
     return client;
-}
-
-h2o_iovec_t get_session_cache_key_from_host_port(h2o_iovec_t host, uint16_t port)
-{
-    h2o_iovec_t key;
-    size_t len = host.len + sizeof(H2O_UINT16_LONGEST_STR) + 1;
-    key.base = h2o_mem_alloc(len + 1);
-    key.len = snprintf(key.base, len + 1, "%.*s:%u", (int)host.len, host.base, port);
-    return key;
-}
-
-h2o_iovec_t get_session_cache_key_from_socket_pool(h2o_socketpool_t *sockpool)
-{
-    switch (sockpool->type) {
-    case H2O_SOCKETPOOL_TYPE_NAMED: {
-        h2o_iovec_t key;
-        size_t len = sizeof(H2O_UINT64_LONGEST_STR) + sockpool->peer.host.len + sockpool->peer.named_serv.len + 1;
-        key.base = h2o_mem_alloc(len + 1);
-        key.len = snprintf(key.base, len + 1, "%.*s:%.*s", (int)sockpool->peer.host.len, sockpool->peer.host.base,
-                           (int)sockpool->peer.named_serv.len, sockpool->peer.named_serv.base);
-        return key;
-    } break;
-    case H2O_SOCKETPOOL_TYPE_SOCKADDR: {
-        struct sockaddr_in *sin = (struct sockaddr_in *)&sockpool->peer.sockaddr.bytes;
-        return get_session_cache_key_from_host_port(sockpool->peer.host, ntohs(sin->sin_port));
-    } break;
-    }
 }
 
 const char *const h2o_http1client_error_is_eos = "end of stream";
@@ -562,13 +493,7 @@ void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1c
     char serv[sizeof("65536")];
 
     /* setup */
-    if (is_ssl) {
-        h2o_iovec_t session_cache_key =
-            ctx->ssl_session_cache != NULL ? get_session_cache_key_from_host_port(host, port) : (h2o_iovec_t){NULL};
-        client = create_client(_client, data, ctx, host, session_cache_key, cb);
-    } else {
-        client = create_client(_client, data, ctx, h2o_iovec_init(NULL, 0), h2o_iovec_init(NULL, 0), cb);
-    }
+    client = create_client(_client, data, ctx, is_ssl ? host : h2o_iovec_init(NULL, 0), cb);
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);
 
@@ -604,15 +529,8 @@ void h2o_http1client_connect_with_pool(h2o_http1client_t **_client, void *data, 
                                        h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb)
 {
 
-    struct st_h2o_http1client_private_t *client;
-    if (sockpool->is_ssl) {
-        h2o_iovec_t session_cache_key =
-            ctx->ssl_session_cache != NULL ? get_session_cache_key_from_socket_pool(sockpool) : (h2o_iovec_t){NULL};
-        client = create_client(_client, data, ctx, sockpool->peer.host, session_cache_key, cb);
-    } else {
-        client = create_client(_client, data, ctx, h2o_iovec_init(NULL, 0), h2o_iovec_init(NULL, 0), cb);
-    }
-
+    struct st_h2o_http1client_private_t *client =
+        create_client(_client, data, ctx, sockpool->is_ssl ? sockpool->peer.host : h2o_iovec_init(NULL, 9), cb);
     client->super.sockpool.pool = sockpool;
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);
@@ -634,15 +552,4 @@ h2o_socket_t *h2o_http1client_steal_socket(h2o_http1client_t *_client)
     h2o_socket_read_stop(sock);
     client->super.sock = NULL;
     return sock;
-}
-
-static void on_session_cache_entry_destroy(h2o_iovec_t value)
-{
-    SSL_SESSION *session = (SSL_SESSION *)value.base;
-    SSL_SESSION_free(session);
-}
-
-h2o_cache_t *h2o_http1client_create_ssl_session_cache(int flags, size_t capacity, uint64_t duration)
-{
-    return h2o_cache_create(flags, capacity, duration, on_session_cache_entry_destroy);
 }
