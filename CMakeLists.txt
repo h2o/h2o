@@ -99,6 +99,7 @@ INCLUDE_DIRECTORIES(
     deps/cloexec
     deps/brotli/enc
     deps/golombset
+    deps/hiredis
     deps/libgkc
     deps/libyrmcds
     deps/klib
@@ -196,6 +197,11 @@ SET(BROTLI_SOURCE_FILES
 
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
+    deps/hiredis/async.c
+    deps/hiredis/hiredis.c
+    deps/hiredis/net.c
+    deps/hiredis/read.c
+    deps/hiredis/sds.c
     deps/libgkc/gkc.c
     deps/libyrmcds/close.c
     deps/libyrmcds/connect.c
@@ -215,6 +221,7 @@ SET(LIB_SOURCE_FILES
     lib/common/memcached.c
     lib/common/memory.c
     lib/common/multithread.c
+    lib/common/redis.c
     lib/common/serverutil.c
     lib/common/socket.c
     lib/common/socketpool.c
