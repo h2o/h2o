@@ -1044,15 +1044,10 @@ void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx)
     /* if necessary, it is the responsibility of the caller to disable the internal cache */
 }
 
-static void on_session_cache_entry_destroy(h2o_iovec_t value)
+void h2o_socket_ssl_destroy_session_cache_entry(h2o_iovec_t value)
 {
     SSL_SESSION *session = (SSL_SESSION *)value.base;
     SSL_SESSION_free(session);
-}
-
-h2o_cache_t *h2o_socket_ssl_create_session_cache(int flags, size_t capacity, uint64_t duration)
-{
-    return h2o_cache_create(flags, capacity, duration, on_session_cache_entry_destroy);
 }
 
 h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)

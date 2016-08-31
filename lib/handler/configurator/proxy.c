@@ -213,7 +213,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
         ctx->globalconf->proxy.io_timeout = self->vars->io_timeout;
         ctx->globalconf->proxy.ssl_ctx = self->vars->ssl_ctx;
         ctx->globalconf->proxy.ssl_session_cache =
-            h2o_socket_ssl_create_session_cache(H2O_CACHE_FLAG_MULTITHREADED, 4096, 86400 * 1000);
+            h2o_cache_create(H2O_CACHE_FLAG_MULTITHREADED, 4096, 86400 * 1000, h2o_socket_ssl_destroy_session_cache_entry);
     } else {
         SSL_CTX_free(self->vars->ssl_ctx);
     }

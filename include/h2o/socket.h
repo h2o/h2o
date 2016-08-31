@@ -307,7 +307,7 @@ h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock);
 /**
  *
  */
-h2o_cache_t *h2o_socket_ssl_create_session_cache(int flags, size_t capacity, uint64_t duration);
+void h2o_socket_ssl_destroy_session_cache_entry(h2o_iovec_t value);
 /**
  * registers the protocol list to be used for ALPN
  */

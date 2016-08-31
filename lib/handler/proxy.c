@@ -96,7 +96,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
         client_ctx->websocket_timeout = NULL;
     }
     client_ctx->ssl_ctx = self->config.ssl_ctx;
-    client_ctx->ssl_session_cache = h2o_socket_ssl_create_session_cache(0, 4096, 86400 * 1000);
+    client_ctx->ssl_session_cache = h2o_cache_create(0, 4096, 86400 * 1000, h2o_socket_ssl_destroy_session_cache_entry);
 
     h2o_context_set_handler_context(ctx, &self->super, client_ctx);
 }
