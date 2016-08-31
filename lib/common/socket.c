@@ -948,19 +948,6 @@ Complete:
     on_handshake_complete(sock, err);
 }
 
-static h2o_iovec_t get_ssl_session_cache_key(h2o_socket_t *sock, const char *server_name)
-{
-    struct sockaddr sa;
-    h2o_socket_getpeername(sock, &sa);
-    uint16_t port = ntohs(((struct sockaddr_in *)&sa)->sin_port);
-
-    h2o_iovec_t key;
-    size_t len = strlen(server_name) + sizeof(H2O_UINT16_LONGEST_STR) + 1;
-    key.base = h2o_mem_alloc(len + 1);
-    key.len = snprintf(key.base, len + 1, "%s:%" PRIu16, server_name, port);
-    return key;
-}
-
 void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_cache_t *session_cache,
                               h2o_socket_cb handshake_cb)
 {
@@ -989,17 +976,27 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
             h2o_socket_read_start(sock, proceed_handshake);
     } else {
         if (session_cache != NULL) {
-            sock->ssl->handshake.client.session_cache = session_cache;
-            h2o_iovec_t session_cache_key = get_ssl_session_cache_key(sock, server_name);
-            sock->ssl->handshake.client.session_cache_key = session_cache_key;
-            sock->ssl->handshake.client.session_cache_key_hash = h2o_cache_calchash(session_cache_key.base, session_cache_key.len);
+            struct sockaddr sa;
+            uint16_t port;
+            if (h2o_socket_getpeername(sock, &sa) != 0 && (port = h2o_socket_getport(&sa)) > 0) {
+                /* session cache is available */
+                h2o_iovec_t session_cache_key;
+                size_t len = strlen(server_name) + sizeof(H2O_UINT16_LONGEST_STR) + 1;
+                session_cache_key.base = h2o_mem_alloc(len + 1);
+                session_cache_key.len = snprintf(session_cache_key.base, len + 1, "%s:%" PRIu16, server_name, port);
+                sock->ssl->handshake.client.session_cache = session_cache;
+                sock->ssl->handshake.client.session_cache_key = session_cache_key;
+                sock->ssl->handshake.client.session_cache_key_hash =
+                    h2o_cache_calchash(session_cache_key.base, session_cache_key.len);
 
-            h2o_cache_ref_t *cacheref =
-                h2o_cache_fetch(session_cache, h2o_now(h2o_socket_get_loop(sock)), sock->ssl->handshake.client.session_cache_key,
-                                sock->ssl->handshake.client.session_cache_key_hash);
-            if (cacheref != NULL) {
-                SSL_set_session(sock->ssl->ssl, (SSL_SESSION *)cacheref->value.base);
-                h2o_cache_release(session_cache, cacheref);
+                /* fetch from session cache */
+                h2o_cache_ref_t *cacheref = h2o_cache_fetch(session_cache, h2o_now(h2o_socket_get_loop(sock)),
+                                                            sock->ssl->handshake.client.session_cache_key,
+                                                            sock->ssl->handshake.client.session_cache_key_hash);
+                if (cacheref != NULL) {
+                    SSL_set_session(sock->ssl->ssl, (SSL_SESSION *)cacheref->value.base);
+                    h2o_cache_release(session_cache, cacheref);
+                }
             }
         }
         sock->ssl->handshake.client.server_name = h2o_strdup(NULL, server_name, SIZE_MAX).base;
