@@ -15,7 +15,6 @@ hosts:
     http2-debug-state: minimum
     paths:
       /:
-        mruby.handler: proc {|env| [399, {}, [] ] }
         file.dir: @{[ DOC_ROOT ]}
 EOT
 
@@ -51,7 +50,6 @@ hosts:
     http2-debug-state: hpack
     paths:
       /:
-        mruby.handler: proc {|env| [399, {}, [] ] }
         file.dir: @{[ DOC_ROOT ]}
 EOT
 
