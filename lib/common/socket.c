@@ -951,7 +951,7 @@ Complete:
     on_handshake_complete(sock, err);
 }
 
-h2o_iovec_t get_ssl_session_cache_key(h2o_socket_t *sock, const char *server_name)
+static h2o_iovec_t get_ssl_session_cache_key(h2o_socket_t *sock, const char *server_name)
 {
     struct sockaddr sa;
     h2o_socket_getpeername(sock, &sa);
@@ -960,7 +960,7 @@ h2o_iovec_t get_ssl_session_cache_key(h2o_socket_t *sock, const char *server_nam
     h2o_iovec_t key;
     size_t len = strlen(server_name) + sizeof(H2O_UINT16_LONGEST_STR) + 1;
     key.base = h2o_mem_alloc(len + 1);
-    key.len = snprintf(key.base, len + 1, "%s:%u", server_name, port);
+    key.len = snprintf(key.base, len + 1, "%s:%" PRIu16, server_name, port);
     return key;
 }
 
@@ -996,13 +996,13 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
             h2o_iovec_t session_cache_key = get_ssl_session_cache_key(sock, server_name);
             sock->ssl->handshake.client.session_cache_key = session_cache_key;
             sock->ssl->handshake.client.session_cache_key_hash = h2o_cache_calchash(session_cache_key.base, session_cache_key.len);
-            fprintf(stderr, "@@@ session_cache_key: %s\n", session_cache_key.base); // FIXME: nagata
 
             h2o_cache_ref_t *cacheref =
                 h2o_cache_fetch(session_cache, h2o_now(h2o_socket_get_loop(sock)), sock->ssl->handshake.client.session_cache_key,
                                 sock->ssl->handshake.client.session_cache_key_hash);
             if (cacheref != NULL) {
                 SSL_set_session(sock->ssl->ssl, (SSL_SESSION *)cacheref->value.base);
+                h2o_cache_release(session_cache, cacheref);
             }
         }
         sock->ssl->handshake.client.server_name = h2o_strdup(NULL, server_name, SIZE_MAX).base;
