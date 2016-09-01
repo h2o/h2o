@@ -154,6 +154,8 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
             self->vars->session_cache.capacity = 0;
         } else if (strcasecmp(node->data.scalar, "ON") == 0) {
             /* use default values */
+            self->vars->session_cache.capacity = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY;
+            self->vars->session_cache.lifetime = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_LIFETIME;
         } else {
             h2o_configurator_errprintf(cmd, node, "scalar argument must be either of: `OFF`, `ON`");
             return -1;
@@ -281,8 +283,8 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->vars->keepalive_timeout = 2000;
     c->vars->websocket.enabled = 0; /* have websocket proxying disabled by default; until it becomes non-experimental */
     c->vars->websocket.timeout = H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT;
-    c->vars->session_cache.capacity = 4096;
-    c->vars->session_cache.lifetime = 86400; /* 24 hours */
+    c->vars->session_cache.capacity = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY;
+    c->vars->session_cache.lifetime = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_LIFETIME;
 
     /* setup handlers */
     c->super.enter = on_config_enter;
