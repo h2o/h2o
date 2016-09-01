@@ -831,11 +831,10 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
             sock->ssl->record_overhead = 32; /* sufficiently large number that can hold most payloads */
             break;
         }
-    }
 
-    if (sock->ssl->handshake.client.session_cache != NULL) {
-        SSL_SESSION *session = SSL_get1_session(sock->ssl->ssl);
-        if (session != NULL) {
+        /* set ssl session into the cache */
+        if (sock->ssl->handshake.client.session_cache != NULL) {
+            SSL_SESSION *session = SSL_get1_session(sock->ssl->ssl);
             h2o_cache_set(sock->ssl->handshake.client.session_cache, h2o_now(h2o_socket_get_loop(sock)),
                           sock->ssl->handshake.client.session_cache_key, sock->ssl->handshake.client.session_cache_key_hash,
                           h2o_iovec_init(session, 1));
