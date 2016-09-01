@@ -173,11 +173,11 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
                     if (h2o_configurator_scanf(cmd, value, "%" PRIu32, &self->vars->session_cache.lifetime) != 0)
                         return -1;
                 } else {
-                    goto InvalidKey;
+                    h2o_configurator_errprintf(cmd, key, "key must be either of: `capacity`, `lifetime`");
+                    return -1;
                 }
             } else {
-            InvalidKey:
-                h2o_configurator_errprintf(cmd, key, "key must be either of: `capacity`, `lifetime`");
+                h2o_configurator_errprintf(cmd, key, "key must be a scalar");
                 return -1;
             }
         }
