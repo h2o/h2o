@@ -142,6 +142,52 @@ static int on_config_ssl_cafile(h2o_configurator_command_t *cmd, h2o_configurato
     return ret;
 }
 
+static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    size_t i;
+
+    switch (node->type) {
+    case YOML_TYPE_SCALAR:
+        if (strcasecmp(node->data.scalar, "OFF") == 0) {
+            /* disabled */
+            self->vars->session_cache.capacity = 0;
+        } else if (strcasecmp(node->data.scalar, "ON") == 0) {
+            /* use default values */
+        } else {
+            h2o_configurator_errprintf(cmd, node, "scalar argument must be either of: `OFF`, `ON`");
+            return -1;
+        }
+        break;
+    case YOML_TYPE_MAPPING:
+        for (i = 0; i != node->data.mapping.size; ++i) {
+            yoml_t *key = node->data.mapping.elements[i].key;
+            yoml_t *value = node->data.mapping.elements[i].value;
+            if (key->type == YOML_TYPE_SCALAR) {
+                if (strcasecmp(key->data.scalar, "capacity") == 0) {
+                    if (h2o_configurator_scanf(cmd, value, "%" PRIu64, &self->vars->session_cache.capacity) != 0)
+                        return -1;
+                } else if (strcasecmp(key->data.scalar, "lifetime") == 0) {
+                    if (h2o_configurator_scanf(cmd, value, "%" PRIu32, &self->vars->session_cache.lifetime) != 0)
+                        return -1;
+                } else {
+                    goto InvalidKey;
+                }
+            } else {
+            InvalidKey:
+                h2o_configurator_errprintf(cmd, key, "key must be either of: `capacity`, `lifetime`");
+                return -1;
+            }
+        }
+        break;
+    default:
+        h2o_configurator_errprintf(cmd, node, "node must be a scalar or a mapping");
+        return -1;
+    }
+
+    return 0;
+}
+
 static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
@@ -212,8 +258,11 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
         /* is global conf */
         ctx->globalconf->proxy.io_timeout = self->vars->io_timeout;
         ctx->globalconf->proxy.ssl_ctx = self->vars->ssl_ctx;
-        ctx->globalconf->proxy.ssl_session_cache =
-            h2o_cache_create(H2O_CACHE_FLAG_MULTITHREADED, 4096, 86400 * 1000, h2o_socket_ssl_destroy_session_cache_entry);
+        if (self->vars->session_cache.capacity != 0 && self->vars->session_cache.lifetime != 0) {
+            ctx->globalconf->proxy.ssl_session_cache =
+                h2o_cache_create(H2O_CACHE_FLAG_MULTITHREADED, self->vars->session_cache.capacity,
+                                 self->vars->session_cache.lifetime * 1000, h2o_socket_ssl_destroy_session_cache_entry);
+        }
     } else {
         SSL_CTX_free(self->vars->ssl_ctx);
     }
@@ -232,6 +281,8 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->vars->keepalive_timeout = 2000;
     c->vars->websocket.enabled = 0; /* have websocket proxying disabled by default; until it becomes non-experimental */
     c->vars->websocket.timeout = H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT;
+    c->vars->session_cache.capacity = 4096;
+    c->vars->session_cache.lifetime = 86400; /* 24 hours */
 
     /* setup handlers */
     c->super.enter = on_config_enter;
@@ -260,6 +311,8 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
                                     on_config_ssl_verify_peer);
     h2o_configurator_define_command(&c->super, "proxy.ssl.cafile",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_ssl_cafile);
+    h2o_configurator_define_command(&c->super, "proxy.ssl.session-cache", H2O_CONFIGURATOR_FLAG_ALL_LEVELS,
+                                    on_config_ssl_session_cache);
     h2o_configurator_define_command(&c->super, "proxy.preserve-x-forwarded-proto",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_preserve_x_forwarded_proto);
