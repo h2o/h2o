@@ -20,7 +20,6 @@ addons:
 
 before_install:
   - source ./misc/travis/export_env
-  - alias cache_version="./misc/travis/cache_version.pl"
   # debug
   - cat ${INSTALL_DIR}/cache_manifest.json || echo "cache manifest not found"
 
@@ -53,6 +52,8 @@ before_install:
     esac
 
 before_script:
+  - alias cache_version="./misc/travis/cache_version.pl"
+
   # install perl modules (mandatory for testing)
   - misc/install-perl-module.pl Net::EmptyPort
   - misc/install-perl-module.pl Scope::Guard
@@ -63,7 +64,6 @@ before_script:
   - misc/install-perl-module.pl JSON
   - misc/install-perl-module.pl Path::Tiny
   - misc/install-perl-module.pl Test::Exception
-
   # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
   - |
     case "${TRAVIS_OS_NAME}" in
