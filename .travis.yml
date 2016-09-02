@@ -20,6 +20,9 @@ addons:
 
 before_install:
   - source ./misc/travis/export_env
+  - alias cache_version="./misc/travis/cache_version.pl"
+  # debug
+  - cat ${INSTALL_DIR}/cache_manifest.json || echo "cache manifest not found"
 
   # get latest version of cpanminus
   - |
@@ -50,21 +53,6 @@ before_install:
     esac
 
 before_script:
-  # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
-  - |
-    case "${TRAVIS_OS_NAME}" in
-      "linux" )
-        if [[ ! -e "${INSTALL_DIR}/lib/libuv.a" ]]; then
-          curl -L https://github.com/libuv/libuv/archive/v1.0.0.tar.gz | tar xzf -
-          (cd libuv-1.0.0 && ./autogen.sh && ./configure --prefix=${INSTALL_DIR} && make && make install)
-        fi
-        ;;
-      "osx"   )
-        brew install --quiet libuv
-        brew link libuv
-        ;;
-    esac
-
   # install perl modules (mandatory for testing)
   - misc/install-perl-module.pl Net::EmptyPort
   - misc/install-perl-module.pl Scope::Guard
@@ -75,6 +63,24 @@ before_script:
   - misc/install-perl-module.pl JSON
   - misc/install-perl-module.pl Path::Tiny
   - misc/install-perl-module.pl Test::Exception
+
+  # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
+  - |
+    case "${TRAVIS_OS_NAME}" in
+      "linux" )
+        LIBUV_VERSION=1.0.0
+        if ! cache_version check libuv ${LIBUV_VERSION}; then
+          curl -L https://github.com/libuv/libuv/archive/v${LIBUV_VERSION}.tar.gz | tar xzf -
+          (cd libuv-${LIBUV_VERSION} && ./autogen.sh && ./configure --prefix=${INSTALL_DIR} && make && make install)
+           cache_version save libuv ${LIBUV_VERSION}
+        fi
+        ;;
+      "osx"   )
+        brew install --quiet libuv
+        brew link libuv
+        ;;
+    esac
+
   # install the `ab` command (a.k.a. ApacheBench; optionally required for running some of the tests)
   - |
     case "${TRAVIS_OS_NAME}" in
@@ -88,25 +94,37 @@ before_script:
       "osx"   ) brew install --quiet libev ;;
     esac
   - |
-    if [[ ! -e "${INSTALL_DIR}/bin/nghttp" ]]; then
+    SPDYLAY_VERSION=1.3.2
+    JANSSON_VERSION=2.7
+    NGHTTP2_VERSION=1.4.0
+    CURL_VERSION=7.50.0
+    if ! cache_version check nghttp2 ${NGHTTP2_VERSION}; then
       case "${TRAVIS_OS_NAME}" in
         "osx"   )
-          echo "# install spdylay"
-          curl -L https://github.com/tatsuhiro-t/spdylay/releases/download/v1.3.2/spdylay-1.3.2.tar.gz | tar xzf -
-          (cd spdylay-1.3.2 && ./configure --prefix=${INSTALL_DIR} --disable-shared && make && make install) || cat ./spdylay-1.3.2/config.log && error
-          echo "# install jansson"
-          curl http://www.digip.org/jansson/releases/jansson-2.7.tar.gz | tar xzf -
-          (cd jansson-2.7 && ./configure --prefix=${INSTALL_DIR} --disable-shared && make && make install)
+          if ! cache_version check spdylay ${SPDYLAY_VERSION}; then
+            curl -L https://github.com/tatsuhiro-t/spdylay/releases/download/v${SPDYLAY_VERSION}/spdylay-${SPDYLAY_VERSION}.tar.gz | tar xzf -
+            (cd spdylay-${SPDYLAY_VERSION} && ./configure --prefix=${INSTALL_DIR} --disable-shared && make && make install)
+            cache_version save spdylay ${SPDYLAY_VERSION}
+          fi
+          if ! cache_version check jansson ${JANSSON_VERSION}; then
+            curl http://www.digip.org/jansson/releases/jansson-${JANSSON_VERSION}.tar.gz | tar xzf -
+            (cd jansson-${JANSSON_VERSION} && ./configure --prefix=${INSTALL_DIR} --disable-shared && make && make install)
+            cache_version save jansson ${JANSSON_VERSION}
+          fi
           ;;
       esac
-      curl -L https://github.com/tatsuhiro-t/nghttp2/releases/download/v1.4.0/nghttp2-1.4.0.tar.gz | tar xzf -
-      (cd nghttp2-1.4.0 && ./configure --prefix=${INSTALL_DIR} --disable-threads --enable-app --disable-shared && make && make install)
+      curl -L https://github.com/tatsuhiro-t/nghttp2/releases/download/v1.4.0/nghttp2-${NGHTTP2_VERSION}.tar.gz | tar xzf -
+      (cd nghttp2-${NGHTTP2_VERSION} && ./configure --prefix=${INSTALL_DIR} --disable-threads --enable-app --disable-shared && make && make install)
+      cache_version save nghttp2 ${NGHTTP2_VERSION}
     fi
   - |
-    if [[ ! -e "${INSTALL_DIR}/bin/curl" ]]; then
-      curl -L https://curl.haxx.se/download/curl-7.50.0.tar.gz | tar xzf -
-      (cd curl-7.50.0 && ./configure --prefix=${INSTALL_DIR} --with-nghttp2=${INSTALL_DIR} --disable-shared && make && make install)
+    if ! cache_version check curl ${CURL_VERSION}; then
+      curl -L https://curl.haxx.se/download/curl-${CURL_VERSION}.tar.gz | tar xzf -
+      (cd curl-${CURL_VERSION} && ./configure --prefix=${INSTALL_DIR} --with-nghttp2=${INSTALL_DIR} --disable-shared && make && make install)
+      cache_version save curl ${CURL_VERSION}; then
     fi
+  # debug
+  - cat ${INSTALL_DIR}/cache_manifest.json || echo "cache manifest not found"
 
 script:
   - cmake -DWITH_MRUBY=ON .
