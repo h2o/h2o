@@ -44,18 +44,8 @@ before_install:
         brew update
         brew tap homebrew/dupes
         brew install openssl homebrew/dupes/zlib
-        brew link zlib --force
-
-        # # install openssl-1.0.2
-        # if [[ ! -e "${INSTALL_DIR}/lib/libssl.a" ]]; then
-        #   curl -L https://www.openssl.org/source/openssl-1.0.2h.tar.gz | tar xzf -
-        #   (cd openssl-1.0.2h && ./Configure darwin64-x86_64-cc --prefix=${INSTALL_DIR} no-shared && make && make install)
-        # fi
-        # # install zlib-1.2.8
-        # if [[ ! -e "${INSTALL_DIR}/lib/libz.a" ]]; then
-        #   curl -L http://zlib.net/zlib-1.2.8.tar.gz | tar xzf -
-        #   (cd zlib-1.2.8 && ./configure --prefix=${INSTALL_DIR} --static && make && make install)
-        # fi
+        brew link --force openssl
+        brew link --force zlib
         ;;
     esac
 
