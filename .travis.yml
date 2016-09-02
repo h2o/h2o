@@ -43,7 +43,7 @@ before_install:
       "osx"   )
         brew update
         brew tap homebrew/dupes
-        brew install --quiet openssl homebrew/dupes/zlib libuv
+        brew install --quiet openssl homebrew/dupes/zlib
         brew link --force openssl
         brew link --force zlib
         ;;
