@@ -44,6 +44,16 @@ before_install:
         brew update
         brew tap homebrew/dupes
         brew install openssl homebrew/dupes/zlib
+
+        brew info homebrew/dupes/zlib
+
+        # debug
+        find /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform -name "zlib.h" | xargs grep "define ZLIB_VERSION"
+        ls -al /usr/lib/libz.*
+        ls -al /usr/local/lib/libz.*
+
+        # ln -s /usr/local/Cellar/zlib/1.2.8/lib/pkgconfig/zlib.pc ${PKG_CONFIG_PATH}
+
         # # install openssl-1.0.2
         # if [[ ! -e "${INSTALL_DIR}/lib/libssl.a" ]]; then
         #   curl -L https://www.openssl.org/source/openssl-1.0.2h.tar.gz | tar xzf -
