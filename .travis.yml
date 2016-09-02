@@ -20,8 +20,7 @@ addons:
 
 before_install:
   - source ./misc/travis/export_env
-  # debug
-  - cat ${INSTALL_DIR}/cache_manifest.json || echo "cache manifest not found"
+  - cat ${INSTALL_DIR}/cache_manifest.json 2>/dev/null || echo "cache manifest not found"
 
   # get latest version of cpanminus
   - |
@@ -119,10 +118,9 @@ before_script:
     if ! misc/travis/cache_version.pl check curl ${CURL_VERSION}; then
       curl -L https://curl.haxx.se/download/curl-${CURL_VERSION}.tar.gz | tar xzf -
       (cd curl-${CURL_VERSION} && ./configure --prefix=${INSTALL_DIR} --with-nghttp2=${INSTALL_DIR} --disable-shared && make && make install)
-      misc/travis/cache_version.pl save curl ${CURL_VERSION}; then
+      misc/travis/cache_version.pl save curl ${CURL_VERSION}
     fi
-  # debug
-  - cat ${INSTALL_DIR}/cache_manifest.json || echo "cache manifest not found"
+  - cat ${INSTALL_DIR}/cache_manifest.json
 
 script:
   - cmake -DWITH_MRUBY=ON .
