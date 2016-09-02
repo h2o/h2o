@@ -20,6 +20,7 @@ addons:
 
 before_install:
   - source ./misc/travis/export_env
+  - cat ${INSTALL_DIR}/cache_manifest.json 2>/dev/null || echo "cache manifest not found"
 
   # get latest version of cpanminus
   - |
@@ -42,27 +43,14 @@ before_install:
         ;;
       "osx"   )
         brew update
-        ls -al ${INSTALL_DIR}/lib/
-        # install openssl-1.0.2
-        if [[ ! -e "${INSTALL_DIR}/lib/libssl.a" ]]; then
-          curl -L https://www.openssl.org/source/openssl-1.0.2h.tar.gz | tar xzf -
-          (cd openssl-1.0.2h && ./Configure darwin64-x86_64-cc --prefix=${INSTALL_DIR} no-shared && make && make install)
-        fi
-        # install zlib-1.2.8
-        if [[ ! -e "${INSTALL_DIR}/lib/libz.a" ]]; then
-          curl -L http://zlib.net/zlib-1.2.8.tar.gz | tar xzf -
-          (cd zlib-1.2.8 && ./configure --prefix=${INSTALL_DIR} --static && make && make install)
-        fi
+        brew tap homebrew/dupes
+        brew install --quiet openssl homebrew/dupes/zlib
+        brew link --force openssl
+        brew link --force zlib
         ;;
     esac
 
 before_script:
-  # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
-  - |
-    if [[ ! -e "${INSTALL_DIR}/lib/libuv.a" ]]; then
-      curl -L https://github.com/libuv/libuv/archive/v1.0.0.tar.gz | tar xzf -
-      (cd libuv-1.0.0 && ./autogen.sh && ./configure --prefix=${INSTALL_DIR} && make && make install)
-    fi
   # install perl modules (mandatory for testing)
   - misc/install-perl-module.pl Net::EmptyPort
   - misc/install-perl-module.pl Scope::Guard
@@ -73,6 +61,23 @@ before_script:
   - misc/install-perl-module.pl JSON
   - misc/install-perl-module.pl Path::Tiny
   - misc/install-perl-module.pl Test::Exception
+  # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
+  - |
+    case "${TRAVIS_OS_NAME}" in
+      "linux" )
+        LIBUV_VERSION=1.0.0
+        if ! misc/travis/cache_version.pl check libuv ${LIBUV_VERSION}; then
+          curl -L https://github.com/libuv/libuv/archive/v${LIBUV_VERSION}.tar.gz | tar xzf -
+          (cd libuv-${LIBUV_VERSION} && ./autogen.sh && ./configure --prefix=${INSTALL_DIR} && make && make install)
+           misc/travis/cache_version.pl save libuv ${LIBUV_VERSION}
+        fi
+        ;;
+      "osx"   )
+        brew install --quiet libuv
+        brew link libuv
+        ;;
+    esac
+
   # install the `ab` command (a.k.a. ApacheBench; optionally required for running some of the tests)
   - |
     case "${TRAVIS_OS_NAME}" in
@@ -86,25 +91,36 @@ before_script:
       "osx"   ) brew install --quiet libev ;;
     esac
   - |
-    if [[ ! -e "${INSTALL_DIR}/bin/nghttp" ]]; then
+    SPDYLAY_VERSION=1.3.2
+    JANSSON_VERSION=2.7
+    NGHTTP2_VERSION=1.4.0
+    CURL_VERSION=7.50.0
+    if ! misc/travis/cache_version.pl check nghttp2 ${NGHTTP2_VERSION}; then
       case "${TRAVIS_OS_NAME}" in
         "osx"   )
-          echo "# install spdylay"
-          curl -L https://github.com/tatsuhiro-t/spdylay/releases/download/v1.3.2/spdylay-1.3.2.tar.gz | tar xzf -
-          (cd spdylay-1.3.2 && ./configure --prefix=${INSTALL_DIR} --disable-shared && make && make install)
-          echo "# install jansson"
-          curl http://www.digip.org/jansson/releases/jansson-2.7.tar.gz | tar xzf -
-          (cd jansson-2.7 && ./configure --prefix=${INSTALL_DIR} --disable-shared && make && make install)
+          if ! misc/travis/cache_version.pl check spdylay ${SPDYLAY_VERSION}; then
+            curl -L https://github.com/tatsuhiro-t/spdylay/releases/download/v${SPDYLAY_VERSION}/spdylay-${SPDYLAY_VERSION}.tar.gz | tar xzf -
+            (cd spdylay-${SPDYLAY_VERSION} && ./configure --prefix=${INSTALL_DIR} --disable-shared && make && make install)
+            misc/travis/cache_version.pl save spdylay ${SPDYLAY_VERSION}
+          fi
+          if ! misc/travis/cache_version.pl check jansson ${JANSSON_VERSION}; then
+            curl http://www.digip.org/jansson/releases/jansson-${JANSSON_VERSION}.tar.gz | tar xzf -
+            (cd jansson-${JANSSON_VERSION} && ./configure --prefix=${INSTALL_DIR} --disable-shared && make && make install)
+            misc/travis/cache_version.pl save jansson ${JANSSON_VERSION}
+          fi
           ;;
       esac
-      curl -L https://github.com/tatsuhiro-t/nghttp2/releases/download/v1.4.0/nghttp2-1.4.0.tar.gz | tar xzf -
-      (cd nghttp2-1.4.0 && ./configure --prefix=${INSTALL_DIR} --disable-threads --enable-app --disable-shared && make && make install)
+      curl -L https://github.com/tatsuhiro-t/nghttp2/releases/download/v1.4.0/nghttp2-${NGHTTP2_VERSION}.tar.gz | tar xzf -
+      (cd nghttp2-${NGHTTP2_VERSION} && ./configure --prefix=${INSTALL_DIR} --disable-threads --enable-app --disable-shared && make && make install)
+      misc/travis/cache_version.pl save nghttp2 ${NGHTTP2_VERSION}
     fi
   - |
-    if [[ ! -e "${INSTALL_DIR}/bin/curl" ]]; then
-      curl -L https://curl.haxx.se/download/curl-7.50.0.tar.gz | tar xzf -
-      (cd curl-7.50.0 && ./configure --prefix=${INSTALL_DIR} --with-nghttp2=${INSTALL_DIR} --disable-shared && make && make install)
+    if ! misc/travis/cache_version.pl check curl ${CURL_VERSION}; then
+      curl -L https://curl.haxx.se/download/curl-${CURL_VERSION}.tar.gz | tar xzf -
+      (cd curl-${CURL_VERSION} && ./configure --prefix=${INSTALL_DIR} --with-nghttp2=${INSTALL_DIR} --disable-shared && make && make install)
+      misc/travis/cache_version.pl save curl ${CURL_VERSION}
     fi
+  - cat ${INSTALL_DIR}/cache_manifest.json
 
 script:
   - cmake -DWITH_MRUBY=ON .
