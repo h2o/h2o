@@ -45,12 +45,10 @@ before_install:
         brew tap homebrew/dupes
         brew install openssl homebrew/dupes/zlib
 
-        brew info homebrew/dupes/zlib
-
-        # debug
-        find /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform -name "zlib.h" | xargs grep "define ZLIB_VERSION"
-        ls -al /usr/lib/libz.*
-        ls -al /usr/local/lib/libz.*
+        # brew info homebrew/dupes/zlib
+        # find /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform -name "zlib.h" | xargs grep "define ZLIB_VERSION"
+        # ls -al /usr/lib/libz.*
+        # ls -al /usr/local/lib/libz.*
 
         # ln -s /usr/local/Cellar/zlib/1.2.8/lib/pkgconfig/zlib.pc ${PKG_CONFIG_PATH}
 
@@ -102,7 +100,7 @@ before_script:
         "osx"   )
           echo "# install spdylay"
           curl -L https://github.com/tatsuhiro-t/spdylay/releases/download/v1.3.2/spdylay-1.3.2.tar.gz | tar xzf -
-          (cd spdylay-1.3.2 && ./configure --prefix=${INSTALL_DIR} --disable-shared && make && make install) || cat ./config.log && error
+          (cd spdylay-1.3.2 && ./configure --prefix=${INSTALL_DIR} --disable-shared && make && make install) || cat ./spdylay-1.3.2/config.log && error
           echo "# install jansson"
           curl http://www.digip.org/jansson/releases/jansson-2.7.tar.gz | tar xzf -
           (cd jansson-2.7 && ./configure --prefix=${INSTALL_DIR} --disable-shared && make && make install)
