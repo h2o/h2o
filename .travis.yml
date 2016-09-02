@@ -43,7 +43,7 @@ before_install:
       "osx"   )
         brew update
         brew tap homebrew/dupes
-        brew install openssl homebrew/dupes/zlib
+        brew install --quiet openssl homebrew/dupes/zlib libuv
         brew link --force openssl
         brew link --force zlib
         ;;
@@ -52,10 +52,19 @@ before_install:
 before_script:
   # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
   - |
-    if [[ ! -e "${INSTALL_DIR}/lib/libuv.a" ]]; then
-      curl -L https://github.com/libuv/libuv/archive/v1.0.0.tar.gz | tar xzf -
-      (cd libuv-1.0.0 && ./autogen.sh && ./configure --prefix=${INSTALL_DIR} && make && make install)
-    fi
+    case "${TRAVIS_OS_NAME}" in
+      "linux" )
+        if [[ ! -e "${INSTALL_DIR}/lib/libuv.a" ]]; then
+          curl -L https://github.com/libuv/libuv/archive/v1.0.0.tar.gz | tar xzf -
+          (cd libuv-1.0.0 && ./autogen.sh && ./configure --prefix=${INSTALL_DIR} && make && make install)
+        fi
+        ;;
+      "osx"   )
+        brew install --quiet libuv
+        brew link libuv
+        ;;
+    esac
+
   # install perl modules (mandatory for testing)
   - misc/install-perl-module.pl Net::EmptyPort
   - misc/install-perl-module.pl Scope::Guard
