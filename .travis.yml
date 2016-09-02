@@ -52,7 +52,7 @@ before_install:
     esac
 
 before_script:
-  - alias cache_version="./misc/travis/cache_version.pl"
+  - ln -s ./misc/travis/cache_version.pl ./cache_version
 
   # install perl modules (mandatory for testing)
   - misc/install-perl-module.pl Net::EmptyPort
