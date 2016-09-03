@@ -399,11 +399,11 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
 
     /* build request and connect */
+    ctx->refs.request = h2o_mruby_create_data_instance(
+        mrb, mrb_ary_entry(generator->ctx->shared->constants, H2O_MRUBY_HTTP_REQUEST_CLASS), ctx, &request_type);
     h2o_http1client_connect(&ctx->client, ctx, &generator->req->conn->ctx->proxy.client_ctx, url.host, h2o_url_get_port(&url),
                             url.scheme == &H2O_URL_SCHEME_HTTPS, on_connect);
 
-    ctx->refs.request = h2o_mruby_create_data_instance(
-        mrb, mrb_ary_entry(generator->ctx->shared->constants, H2O_MRUBY_HTTP_REQUEST_CLASS), ctx, &request_type);
     return ctx->refs.request;
 }
 

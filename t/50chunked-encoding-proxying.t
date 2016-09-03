@@ -5,9 +5,11 @@ use Test::More;
 use t::Util;
 use Time::HiRes qw(usleep);
 
-
 plan skip_all => 'nc not found'
     unless prog_exists('nc');
+
+plan skip_all => 'nghttp not found'
+    unless prog_exists('nghttp');
 
 my $upstream_port = empty_port();
 $| = 1;
