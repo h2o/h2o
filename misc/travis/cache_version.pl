@@ -10,13 +10,19 @@ use Path::Tiny;
 my $MANIFEST_FILE = $ENV{INSTALL_DIR} . '/cache_manifest.json';
 
 sub usage_exit {
-    die "Usage: $0 <check|save> <libname> <version>\n";
+    die "Usage: $0 <check|save|show> <libname> <version>\n";
+}
+
+sub load_file {
+    my $path = path($MANIFEST_FILE);
+    return undef unless $path->exists;
+    return path($MANIFEST_FILE)->slurp;
 }
 
 sub load_manifest {
-    my $path = path($MANIFEST_FILE);
-    return +{} unless $path->exists;
-    return decode_json(path($MANIFEST_FILE)->slurp);
+    my $data = load_file();
+    return +{} unless $data;
+    return decode_json($data);
 }
 
 sub save_manifest {
@@ -41,19 +47,28 @@ sub save {
     return 0;
 }
 
-sub main {
-    usage_exit() if @ARGV < 3;
+sub show {
+    my $content = load_file();
+    return 1 unless $content;
+    print $content;
+    return 0;
+}
 
-    my ($command, $libname, $expected_version) = @ARGV;
+sub main {
+    my $command = shift || '';
 
     my $ret;
     if ($command eq 'check') {
-        return check($libname, $expected_version);
+        usage_exit() if @_ < 2;
+        return check(@_);
     } elsif ($command eq 'save') {
-        return save($libname, $expected_version);
+        usage_exit() if @_ < 2;
+        return save(@_);
+    } elsif ($command eq 'show') {
+        return show();
     } else {
         usage_exit();
     }
 }
 
-exit main();
+exit main(@ARGV);

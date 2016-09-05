@@ -20,8 +20,6 @@ addons:
 
 before_install:
   - source ./misc/travis/export_env
-  - cat ${INSTALL_DIR}/cache_manifest.json 2>/dev/null || echo "cache manifest not found"
-
   # get latest version of cpanminus
   - |
     if [[ ! -e "${INSTALL_DIR}/bin/cpanm" ]]; then
@@ -61,6 +59,7 @@ before_script:
   - misc/install-perl-module.pl JSON
   - misc/install-perl-module.pl Path::Tiny
   - misc/install-perl-module.pl Test::Exception
+  - misc/travis/cache_version.pl show || echo "cache manifest not found"
   # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
   - |
     case "${TRAVIS_OS_NAME}" in
@@ -120,7 +119,7 @@ before_script:
       (cd curl-${CURL_VERSION} && ./configure --prefix=${INSTALL_DIR} --with-nghttp2=${INSTALL_DIR} --disable-shared && make && make install)
       misc/travis/cache_version.pl save curl ${CURL_VERSION}
     fi
-  - cat ${INSTALL_DIR}/cache_manifest.json
+  - misc/travis/cache_version.pl show
 
 script:
   - cmake -DWITH_MRUBY=ON .

@@ -1,7 +1,7 @@
 #! /bin/sh
 export INSTALL_DIR=${HOME}/local
 export CPANM_DIR=${HOME}/cpanm
-export PATH=${PATH}:${INSTALL_DIR}/bin:${CPANM_DIR}/bin
+export PATH=$(misc/travis/insert_path.pl ${INSTALL_DIR}/bin ${CPANM_DIR}/bin)
 export PKG_CONFIG_PATH=${INSTALL_DIR}/lib/pkgconfig:/usr/local/opt/openssl/lib/pkgconfig
 export PERL5LIB=${CPANM_DIR}/lib/perl5
 export PERL_CPANM_OPT="--local-lib=${CPANM_DIR}"
