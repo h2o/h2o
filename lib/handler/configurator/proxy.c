@@ -149,16 +149,16 @@ static int on_config_ssl_cafile(h2o_configurator_command_t *cmd, h2o_configurato
     return ret;
 }
 
-static h2o_cache_t *create_ssl_session_cache(uint64_t capacity, unsigned lifetime)
+static h2o_cache_t *create_ssl_session_cache(size_t capacity, unsigned lifetime)
 {
-    return h2o_cache_create(H2O_CACHE_FLAG_MULTITHREADED, capacity, lifetime * 1000, h2o_socket_ssl_destroy_session_cache_entry);
+    return h2o_cache_create(H2O_CACHE_FLAG_MULTITHREADED, capacity, (uint64_t)lifetime * 1000, h2o_socket_ssl_destroy_session_cache_entry);
 }
 
 static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
     size_t i;
-    uint64_t capacity = self->vars->ssl_session_cache.capacity;
+    size_t capacity = self->vars->ssl_session_cache.capacity;
     unsigned lifetime = self->vars->ssl_session_cache.lifetime;
     if (capacity == 0 || lifetime == 0) {
         capacity = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY;
@@ -186,10 +186,10 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
             yoml_t *value = node->data.mapping.elements[i].value;
             if (key->type == YOML_TYPE_SCALAR) {
                 if (strcasecmp(key->data.scalar, "capacity") == 0) {
-                    if (h2o_configurator_scanf(cmd, value, "%" PRIu64, &capacity) != 0)
+                    if (h2o_configurator_scanf(cmd, value, "%zu", &capacity) != 0)
                         return -1;
                 } else if (strcasecmp(key->data.scalar, "lifetime") == 0) {
-                    if (h2o_configurator_scanf(cmd, value, "%" PRIu32, &lifetime) != 0)
+                    if (h2o_configurator_scanf(cmd, value, "%u", &lifetime) != 0)
                         return -1;
                 } else {
                     h2o_configurator_errprintf(cmd, key, "key must be either of: `capacity`, `lifetime`");

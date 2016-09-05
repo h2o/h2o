@@ -1730,7 +1730,7 @@ typedef struct st_h2o_proxy_config_vars_t {
     } websocket;
     SSL_CTX *ssl_ctx; /* optional */
     struct {
-        uint64_t capacity;
+        size_t capacity;
         unsigned lifetime;
     } ssl_session_cache;
 } h2o_proxy_config_vars_t;

@@ -1048,9 +1048,11 @@ static void on_dispose_ssl_ctx_ex_data(void *parent, void *ptr, CRYPTO_EX_DATA *
 
 static int get_ssl_session_cache_index()
 {
-    static int index = INT_MAX;
-    if (index == INT_MAX)
+    static int index = -1;
+    if (index == -1) {
         index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, on_dispose_ssl_ctx_ex_data);
+        assert(index != -1);
+    }
     return index;
 }
 
