@@ -30,6 +30,7 @@ extern "C" {
 #include <sys/socket.h>
 #include <openssl/ssl.h>
 #include "h2o/memory.h"
+#include "h2o/openssl_backport.h"
 #include "h2o/string_.h"
 
 #ifndef H2O_USE_LIBUV

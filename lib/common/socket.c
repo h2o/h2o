@@ -133,7 +133,7 @@ static void (*resumption_remove)(h2o_iovec_t session_id);
 
 static int read_bio(BIO *b, char *out, int len)
 {
-    h2o_socket_t *sock = b->ptr;
+    h2o_socket_t *sock = BIO_get_data(b);
 
     if (len == 0)
         return 0;
@@ -154,7 +154,7 @@ static int read_bio(BIO *b, char *out, int len)
 
 static int write_bio(BIO *b, const char *in, int len)
 {
-    h2o_socket_t *sock = b->ptr;
+    h2o_socket_t *sock = BIO_get_data(b);
     void *bytes_alloced;
 
     /* FIXME no support for SSL renegotiation (yet) */
@@ -184,9 +184,9 @@ static long ctrl_bio(BIO *b, int cmd, long num, void *ptr)
 {
     switch (cmd) {
     case BIO_CTRL_GET_CLOSE:
-        return b->shutdown;
+        return BIO_get_shutdown(b);
     case BIO_CTRL_SET_CLOSE:
-        b->shutdown = (int)num;
+        BIO_set_shutdown(b, (int)num);
         return 1;
     case BIO_CTRL_FLUSH:
         return 1;
@@ -195,27 +195,26 @@ static long ctrl_bio(BIO *b, int cmd, long num, void *ptr)
     }
 }
 
-static int new_bio(BIO *b)
-{
-    b->init = 0;
-    b->num = 0;
-    b->ptr = NULL;
-    b->flags = 0;
-    return 1;
-}
-
-static int free_bio(BIO *b)
-{
-    return b != NULL;
-}
-
 static void setup_bio(h2o_socket_t *sock)
 {
-    static BIO_METHOD bio_methods = {BIO_TYPE_FD, "h2o_socket", write_bio, read_bio, puts_bio,
-                                     NULL,        ctrl_bio,     new_bio,   free_bio, NULL};
-    BIO *bio = BIO_new(&bio_methods);
-    bio->ptr = sock;
-    bio->init = 1;
+    static BIO_METHOD *bio_methods = NULL;
+    if (bio_methods == NULL) {
+        static pthread_mutex_t init_lock = PTHREAD_MUTEX_INITIALIZER;
+        pthread_mutex_lock(&init_lock);
+        if (bio_methods == NULL) {
+            BIO_METHOD *biom = BIO_meth_new(BIO_TYPE_FD, "h2o_socket");
+            BIO_meth_set_write(biom, write_bio);
+            BIO_meth_set_read(biom, read_bio);
+            BIO_meth_set_puts(biom, puts_bio);
+            BIO_meth_set_ctrl(biom, ctrl_bio);
+            __sync_synchronize();
+            bio_methods = biom;
+        }
+    }
+
+    BIO *bio = BIO_new(bio_methods);
+    BIO_set_data(bio, sock);
+    BIO_set_init(bio, 1);
     SSL_set_bio(sock->ssl->ssl, bio, bio);
 }
 
@@ -265,7 +264,7 @@ static void clear_output_buffer(struct st_h2o_socket_ssl_t *ssl)
 
 static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
 {
-    if (!ssl->ssl->server)
+    if (!SSL_is_server(ssl->ssl))
         free(ssl->handshake.client.server_name);
     SSL_free(ssl->ssl);
     ssl->ssl = NULL;
@@ -757,9 +756,13 @@ static void create_ssl(h2o_socket_t *sock, SSL_CTX *ssl_ctx)
     setup_bio(sock);
 }
 
-static SSL_SESSION *on_async_resumption_get(SSL *ssl, unsigned char *data, int len, int *copy)
+static SSL_SESSION *on_async_resumption_get(SSL *ssl,
+#if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)
+    const
+#endif
+    unsigned char *data, int len, int *copy)
 {
-    h2o_socket_t *sock = SSL_get_rbio(ssl)->ptr;
+    h2o_socket_t *sock = BIO_get_data(SSL_get_rbio(ssl));
 
     switch (sock->ssl->handshake.server.async_resumption.state) {
     case ASYNC_RESUMPTION_STATE_RECORD:
@@ -795,14 +798,16 @@ static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
 
 static void on_async_resumption_remove(SSL_CTX *ssl_ctx, SSL_SESSION *session)
 {
-    h2o_iovec_t session_id = h2o_iovec_init(session->session_id, session->session_id_length);
-    resumption_remove(session_id);
+    unsigned idlen;
+    const unsigned char *id = SSL_SESSION_get_id(session, &idlen);
+    resumption_remove(h2o_iovec_init(id, idlen));
 }
 
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
     if (err == NULL) {
-        switch (SSL_get_current_cipher(sock->ssl->ssl)->id) {
+        const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ssl);
+        switch (SSL_CIPHER_get_id(cipher)) {
         case TLS1_CK_RSA_WITH_AES_128_GCM_SHA256:
         case TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256:
         case TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
@@ -855,7 +860,7 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
     }
 
 Redo:
-    if (sock->ssl->ssl->server) {
+    if (SSL_is_server(sock->ssl->ssl)) {
         ret = SSL_accept(sock->ssl->ssl);
     } else {
         ret = SSL_connect(sock->ssl->ssl);
@@ -900,7 +905,7 @@ Redo:
         flush_pending_ssl(sock, ret == 1 ? on_handshake_complete : proceed_handshake);
     } else {
         if (ret == 1) {
-            if (!sock->ssl->ssl->server) {
+            if (!SSL_is_server(sock->ssl->ssl)) {
                 X509 *cert = SSL_get_peer_certificate(sock->ssl->ssl);
                 if (cert != NULL) {
                     switch (validate_hostname(sock->ssl->handshake.client.server_name, cert)) {

@@ -109,9 +109,9 @@ static void test_serialize_tickets(void)
 #define OK_MEMCMP(n, s) ok(memcmp(parsed.entries[i]->n, orig.entries[i]->n, (s)) == 0)
         OK_MEMCMP(name, sizeof(parsed.entries[i]->name));
         OK_VALUE(cipher.cipher);
-        OK_MEMCMP(cipher.key, parsed.entries[i]->cipher.cipher->key_len);
+        OK_MEMCMP(cipher.key, EVP_CIPHER_key_length(parsed.entries[i]->cipher.cipher));
         OK_VALUE(hmac.md);
-        OK_MEMCMP(hmac.key, parsed.entries[i]->hmac.md->block_size);
+        OK_MEMCMP(hmac.key, EVP_MD_block_size(parsed.entries[i]->hmac.md));
         OK_VALUE(not_before);
         OK_VALUE(not_after);
 #undef OK_VALUE
