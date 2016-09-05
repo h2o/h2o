@@ -1049,10 +1049,13 @@ static void on_dispose_ssl_ctx_ex_data(void *parent, void *ptr, CRYPTO_EX_DATA *
 static int get_ssl_session_cache_index(void)
 {
     static int index = -1;
+    static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_lock(&mutex);
     if (index == -1) {
         index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, on_dispose_ssl_ctx_ex_data);
         assert(index != -1);
     }
+    pthread_mutex_unlock(&mutex);
     return index;
 }
 
