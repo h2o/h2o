@@ -361,7 +361,7 @@ Fail:
         if (!h2o_time_compute_##name(req, &delta_usec)) {                                                                          \
             *pos++ = '-';                                                                                                          \
         } else {                                                                                                                   \
-            int32_t delta_sec = delta_usec / (1000 * 1000);                                                                        \
+            int32_t delta_sec = (int32_t)(delta_usec / (1000 * 1000));                                                             \
             delta_usec -= ((int64_t)delta_sec * (1000 * 1000));                                                                    \
             pos += sprintf(pos, "%" PRId32, delta_sec);                                                                            \
             if (delta_usec != 0) {                                                                                                 \
