@@ -2,12 +2,11 @@ use strict;
 use warnings;
 use File::Temp qw(tempdir);
 use Test::More;
+use Time::HiRes;
 use t::Util;
 
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
-plan skip_all => 'skip due to travis ci osx file system issue'
-    if travis_os_name() eq 'osx';
 
 my $tempdir = tempdir(CLEANUP => 1);
 
@@ -28,6 +27,7 @@ hosts:
 EOT
 
     $cmd->($server);
+    Time::HiRes::sleep(0.1);
 
     my @log = do {
         open my $fh, "<", "$tempdir/access_log"
