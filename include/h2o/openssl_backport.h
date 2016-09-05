@@ -24,6 +24,7 @@
 
 #include <stdlib.h>
 
+/* backports for OpenSSL 1.0.2 */
 #if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
 
 #define BIO_get_data(bio) ((bio)->ptr)
@@ -52,6 +53,13 @@ static inline BIO_METHOD *BIO_meth_new(int type, const char *name)
 #define SSL_CTX_up_ref(ctx) CRYPTO_add(&(ctx)->references, 1, CRYPTO_LOCK_SSL_CTX)
 
 #define X509_STORE_up_ref(store) CRYPTO_add(&(store)->references, 1, CRYPTO_LOCK_X509_STORE)
+
+#endif
+
+/* backports for OpenSSL 1.0.1 and LibreSSL */
+#if OPENSSL_VERSION_NUMBER < 0x10002000L || defined(LIBRESSL_VERSION_NUMBER)
+
+#define SSL_is_server(ssl) ((ssl)->server)
 
 #endif
 
