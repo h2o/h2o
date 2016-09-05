@@ -96,13 +96,6 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
         client_ctx->websocket_timeout = NULL;
     }
     client_ctx->ssl_ctx = self->config.ssl_ctx;
-    if (self->config.session_cache.capacity != 0 && self->config.session_cache.lifetime != 0) {
-        client_ctx->ssl_session_cache =
-            h2o_cache_create(0, self->config.session_cache.capacity, self->config.session_cache.lifetime * 1000,
-                             h2o_socket_ssl_destroy_session_cache_entry);
-    } else {
-        client_ctx->ssl_session_cache = NULL;
-    }
 
     h2o_context_set_handler_context(ctx, &self->super, client_ctx);
 }
@@ -123,7 +116,6 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
         h2o_timeout_dispose(client_ctx->loop, client_ctx->websocket_timeout);
         free(client_ctx->websocket_timeout);
     }
-    h2o_cache_destroy(client_ctx->ssl_session_cache);
     free(client_ctx);
 }
 

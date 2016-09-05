@@ -1728,11 +1728,11 @@ typedef struct st_h2o_proxy_config_vars_t {
         int enabled;
         uint64_t timeout;
     } websocket;
+    SSL_CTX *ssl_ctx; /* optional */
     struct {
         uint64_t capacity;
         unsigned lifetime;
-    } session_cache;
-    SSL_CTX *ssl_ctx; /* optional */
+    } ssl_session_cache;
 } h2o_proxy_config_vars_t;
 
 /**

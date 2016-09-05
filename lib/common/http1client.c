@@ -409,7 +409,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     }
     if (client->super.ssl.server_name != NULL && client->super.sock->ssl == NULL) {
         h2o_socket_ssl_handshake(client->super.sock, client->super.ctx->ssl_ctx, client->super.ssl.server_name,
-                                 client->super.ctx->ssl_session_cache, on_handshake_complete);
+                                 on_handshake_complete);
         return;
     }
 

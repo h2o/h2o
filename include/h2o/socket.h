@@ -279,11 +279,9 @@ int32_t h2o_socket_getport(struct sockaddr *sa);
  * performs SSL handshake on a socket
  * @param sock the socket
  * @param ssl_ctx SSL context
- * @param session_cache SSL session cache containing SSL_SESSION* as values (maybe NULL)
  * @param handshake_cb callback to be called when handshake is complete
  */
-void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_cache_t *session_cache,
-                              h2o_socket_cb handshake_cb);
+void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_socket_cb handshake_cb);
 /**
  * resumes SSL handshake with given session data
  * @param sock the socket
@@ -304,6 +302,14 @@ void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx);
  * @param sock the socket
  */
 h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock);
+/**
+ *
+ */
+h2o_cache_t *h2o_socket_ssl_get_session_cache(SSL_CTX *ctx);
+/**
+ *
+ */
+void h2o_socket_ssl_set_session_cache(SSL_CTX *ctx, h2o_cache_t *cache);
 /**
  *
  */

@@ -949,8 +949,7 @@ Complete:
     on_handshake_complete(sock, err);
 }
 
-void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_cache_t *session_cache,
-                              h2o_socket_cb handshake_cb)
+void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_socket_cb handshake_cb)
 {
     sock->ssl = h2o_mem_alloc(sizeof(*sock->ssl));
     memset(sock->ssl, 0, offsetof(struct st_h2o_socket_ssl_t, output.pool));
@@ -976,6 +975,7 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
         else
             h2o_socket_read_start(sock, proceed_handshake);
     } else {
+        h2o_cache_t *session_cache = h2o_socket_ssl_get_session_cache(ssl_ctx);
         if (session_cache != NULL) {
             struct sockaddr sa;
             int32_t port;
@@ -1037,6 +1037,31 @@ void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx)
     SSL_CTX_sess_set_new_cb(ctx, on_async_resumption_new);
     SSL_CTX_sess_set_remove_cb(ctx, on_async_resumption_remove);
     /* if necessary, it is the responsibility of the caller to disable the internal cache */
+}
+
+static void on_dispose_ssl_ctx_ex_data(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl, void *argp)
+{
+    h2o_cache_t *ssl_session_cache = (h2o_cache_t *)ptr;
+    if (ssl_session_cache != NULL)
+        h2o_cache_destroy(ssl_session_cache);
+}
+
+static int get_ssl_session_cache_index()
+{
+    static int index = INT_MAX;
+    if (index == INT_MAX)
+        index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, on_dispose_ssl_ctx_ex_data);
+    return index;
+}
+
+h2o_cache_t *h2o_socket_ssl_get_session_cache(SSL_CTX *ctx)
+{
+    return (h2o_cache_t *)SSL_CTX_get_ex_data(ctx, get_ssl_session_cache_index());
+}
+
+void h2o_socket_ssl_set_session_cache(SSL_CTX *ctx, h2o_cache_t *cache)
+{
+    SSL_CTX_set_ex_data(ctx, get_ssl_session_cache_index(), cache);
 }
 
 void h2o_socket_ssl_destroy_session_cache_entry(h2o_iovec_t value)
