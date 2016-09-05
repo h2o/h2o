@@ -1046,7 +1046,7 @@ static void on_dispose_ssl_ctx_ex_data(void *parent, void *ptr, CRYPTO_EX_DATA *
         h2o_cache_destroy(ssl_session_cache);
 }
 
-static int get_ssl_session_cache_index()
+static int get_ssl_session_cache_index(void)
 {
     static int index = -1;
     if (index == -1) {
