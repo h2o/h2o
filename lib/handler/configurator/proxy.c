@@ -158,13 +158,19 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
     size_t i;
-    uint64_t capacity = 0;
-    unsigned lifetime = 0;
+    uint64_t capacity = self->vars->ssl_session_cache.capacity;
+    unsigned lifetime = self->vars->ssl_session_cache.lifetime;
+    if (capacity == 0 || lifetime == 0) {
+        capacity = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY;
+        lifetime = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_LIFETIME;
+    }
 
     switch (node->type) {
     case YOML_TYPE_SCALAR:
         if (strcasecmp(node->data.scalar, "OFF") == 0) {
             /* disabled */
+            capacity = 0;
+            lifetime = 0;
         } else if (strcasecmp(node->data.scalar, "ON") == 0) {
             /* use default values */
             capacity = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY;
