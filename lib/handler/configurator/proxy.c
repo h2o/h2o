@@ -102,7 +102,10 @@ static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mod
         verify_mode = (*ctx)->verify_mode;
     if (session_cache == NULL && delete_session_cache == 0) {
         session_cache = h2o_socket_ssl_get_session_cache(*ctx);
-        h2o_socket_ssl_set_session_cache(*ctx, NULL); /* prevent the cache from being disposed */
+    }
+    if ((*ctx)->references == 1) {
+        /* ctx will be disposed, but prevent the cache from being disposed by setting NULL to reuse it later*/
+        h2o_socket_ssl_set_session_cache(*ctx, NULL);
     }
 
     /* free the existing context */

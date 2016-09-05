@@ -155,4 +155,29 @@ EOC
     ], +{ upstream => $upstream });
 };
 
+subtest 'multiple-hosts' => sub {
+    doit(sub {
+        my ($upstream) = @_;
+        return <<"EOC";
+proxy.ssl.verify-peer: OFF
+proxy.timeout.keepalive: 0
+proxy.ssl.session-cache: ON
+hosts:
+  default:
+    paths:
+      /:
+        proxy.reverse.url: https://127.0.0.1:@{[$upstream->{tls_port}]}
+  example.com:
+    paths:
+      /:
+        proxy.reverse.url: https://127.0.0.1:@{[$upstream->{tls_port}]}
+        proxy.ssl.verify-peer: ON
+        proxy.ssl.session-cache: OFF
+EOC
+    }, [
+        +{},
+        +{ expected => 1 },
+    ]);
+};
+
 done_testing();
