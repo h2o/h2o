@@ -89,8 +89,14 @@ static SSL_CTX *create_ssl_ctx(void)
     return ctx;
 }
 
-static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mode, h2o_cache_t *session_cache,
-                           int delete_session_cache)
+static h2o_cache_t *create_ssl_session_cache(size_t capacity, unsigned lifetime)
+{
+    return h2o_cache_create(H2O_CACHE_FLAG_MULTITHREADED, capacity, (uint64_t)lifetime * 1000,
+                            h2o_socket_ssl_destroy_session_cache_entry);
+}
+
+static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mode, size_t session_cache_capacity,
+                           unsigned session_cache_lifetime)
 {
     assert(*ctx != NULL);
 
@@ -100,13 +106,6 @@ static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mod
     CRYPTO_add(&cert_store->references, 1, CRYPTO_LOCK_X509_STORE);
     if (verify_mode == -1)
         verify_mode = (*ctx)->verify_mode;
-    if (session_cache == NULL && delete_session_cache == 0) {
-        session_cache = h2o_socket_ssl_get_session_cache(*ctx);
-    }
-    if ((*ctx)->references == 1) {
-        /* ctx will be disposed, but prevent the cache from being disposed by setting NULL to reuse it later*/
-        h2o_socket_ssl_set_session_cache(*ctx, NULL);
-    }
 
     /* free the existing context */
     if (*ctx != NULL)
@@ -118,7 +117,11 @@ static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mod
         X509_STORE_free((*ctx)->cert_store);
     (*ctx)->cert_store = cert_store;
     SSL_CTX_set_verify(*ctx, verify_mode, NULL);
-    h2o_socket_ssl_set_session_cache(*ctx, session_cache);
+
+    if (session_cache_capacity != 0 && session_cache_lifetime != 0) {
+        h2o_cache_t *session_cache = create_ssl_session_cache(session_cache_capacity, session_cache_lifetime);
+        h2o_socket_ssl_set_session_cache(*ctx, session_cache);
+    }
 }
 
 static int on_config_ssl_verify_peer(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -128,8 +131,8 @@ static int on_config_ssl_verify_peer(h2o_configurator_command_t *cmd, h2o_config
     if (ret == -1)
         return -1;
 
-    update_ssl_ctx(&self->vars->ssl_ctx, NULL, ret != 0 ? SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT : SSL_VERIFY_NONE, NULL,
-                   0);
+    update_ssl_ctx(&self->vars->ssl_ctx, NULL, ret != 0 ? SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT : SSL_VERIFY_NONE,
+                   self->vars->ssl_session_cache.capacity, self->vars->ssl_session_cache.lifetime);
 
     return 0;
 }
@@ -141,7 +144,8 @@ static int on_config_ssl_cafile(h2o_configurator_command_t *cmd, h2o_configurato
     int ret = -1;
 
     if (X509_STORE_load_locations(store, node->data.scalar, NULL) == 1) {
-        update_ssl_ctx(&self->vars->ssl_ctx, store, -1, NULL, 0);
+        update_ssl_ctx(&self->vars->ssl_ctx, store, -1, self->vars->ssl_session_cache.capacity,
+                       self->vars->ssl_session_cache.lifetime);
         ret = 0;
     } else {
         h2o_configurator_errprintf(cmd, node, "failed to load certificates file:%s", node->data.scalar);
@@ -150,11 +154,6 @@ static int on_config_ssl_cafile(h2o_configurator_command_t *cmd, h2o_configurato
 
     X509_STORE_free(store);
     return ret;
-}
-
-static h2o_cache_t *create_ssl_session_cache(size_t capacity, unsigned lifetime)
-{
-    return h2o_cache_create(H2O_CACHE_FLAG_MULTITHREADED, capacity, (uint64_t)lifetime * 1000, h2o_socket_ssl_destroy_session_cache_entry);
 }
 
 static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -212,12 +211,8 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
     if (capacity != self->vars->ssl_session_cache.capacity || lifetime != self->vars->ssl_session_cache.lifetime) {
         self->vars->ssl_session_cache.capacity = capacity;
         self->vars->ssl_session_cache.lifetime = lifetime;
-        if (capacity != 0 && lifetime != 0) {
-            h2o_cache_t *cache = create_ssl_session_cache(capacity, lifetime);
-            update_ssl_ctx(&self->vars->ssl_ctx, NULL, -1, cache, 0);
-        } else {
-            update_ssl_ctx(&self->vars->ssl_ctx, NULL, -1, NULL, 1);
-        }
+        update_ssl_ctx(&self->vars->ssl_ctx, NULL, -1, self->vars->ssl_session_cache.capacity,
+                       self->vars->ssl_session_cache.lifetime);
     }
 
     return 0;
