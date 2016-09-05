@@ -40,7 +40,7 @@ static int on_config_expires(h2o_configurator_command_t *cmd, h2o_configurator_c
     if (strcasecmp(node->data.scalar, "OFF") == 0) {
         free(*self->args);
         *self->args = NULL;
-    } else if (sscanf(node->data.scalar, "%" PRIu64 " %31s", &value, unit) == 2) {
+    } else if (sscanf(node->data.scalar, "%" SCNu64 " %31s", &value, unit) == 2) {
         /* convert value to seconds depending on the unit */
         if (strncasecmp(unit, H2O_STRLIT("second")) == 0) {
             /* ok */
