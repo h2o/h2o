@@ -372,10 +372,6 @@ struct st_h2o_globalconf_t {
          */
         SSL_CTX *ssl_ctx;
         /**
-         * SSL session cache (optional, governed by the application)
-         */
-        h2o_cache_t *ssl_session_cache;
-        /**
          * a boolean flag if set to true, instructs the proxy to preserve the x-forwarded-proto header passed by the client
          */
         int preserve_x_forwarded_proto;

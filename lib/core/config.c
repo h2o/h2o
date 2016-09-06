@@ -277,9 +277,6 @@ void h2o_config_dispose(h2o_globalconf_t *config)
     free(config->hosts);
 
     h2o_mem_release_shared(config->mimemap);
-    if (config->proxy.ssl_session_cache != NULL) {
-        h2o_cache_destroy(config->proxy.ssl_session_cache);
-    }
     h2o_configurator__dispose_configurators(config);
 }
 
