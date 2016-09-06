@@ -12,7 +12,7 @@ use Test::More;
 use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists travis_os_name run_prog openssl_can_negotiate curl_supports_http2 run_with_curl);
+our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
@@ -237,10 +237,6 @@ sub md5_file {
 sub prog_exists {
     my $prog = shift;
     system("which $prog > /dev/null 2>&1") == 0;
-}
-
-sub travis_os_name {
-    return $ENV{TRAVIS_OS_NAME} || '';
 }
 
 sub run_prog {
