@@ -816,19 +816,27 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, cons
             goto Error;
     }
 #endif
-    /* set TCP_FASTOPEN; when tfo_queues is zero TFO is always disabled */
-    if (conf.tfo_queues > 0) {
-#ifdef TCP_FASTOPEN
-        if (setsockopt(fd, IPPROTO_TCP, TCP_FASTOPEN, (const void *)&conf.tfo_queues, sizeof(conf.tfo_queues)) != 0)
-            fprintf(stderr, "[warning] failed to set TCP_FASTOPEN:%s\n", strerror(errno));
-#else
-        assert(!"conf.tfo_queues not zero on platform without TCP_FASTOPEN");
-#endif
-    }
     if (bind(fd, addr, addrlen) != 0)
         goto Error;
     if (listen(fd, H2O_SOMAXCONN) != 0)
         goto Error;
+
+    /* set TCP_FASTOPEN; when tfo_queues is zero TFO is always disabled */
+    if (conf.tfo_queues > 0) {
+#ifdef TCP_FASTOPEN
+        int tfo_ret = setsockopt(fd, IPPROTO_TCP, TCP_FASTOPEN, (const void *)&conf.tfo_queues, sizeof(conf.tfo_queues));
+        if (tfo_ret != 0 && errno == EINVAL) {
+            /* Fallback to 1 because, in OS X values greater than 1 are treated as invalid for TCP_FASTOPEN option */
+            int fallback = 1;
+            tfo_ret = setsockopt(fd, IPPROTO_TCP, TCP_FASTOPEN, (const void *)&fallback, sizeof(fallback));
+        }
+        if (tfo_ret != 0) {
+            fprintf(stderr, "[warning] failed to set TCP_FASTOPEN:%s\n", strerror(errno));
+        }
+#else
+        assert(!"conf.tfo_queues not zero on platform without TCP_FASTOPEN");
+#endif
+    }
 
     return fd;
 
