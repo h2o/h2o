@@ -19,7 +19,15 @@ addons:
     - alternate.127.0.0.1.xip.io
 
 before_install:
-  - source ./misc/travis/export_env
+  # setup variables
+  - export INSTALL_DIR=${HOME}/local
+  - export CPANM_DIR=${HOME}/cpanm
+  - export PATH=`echo -n "$PATH" | sed -E "s~(:/usr(/local/bin|/bin):)~:${INSTALL_DIR}/bin:${CPANM_DIR}/bin\1~"`
+  - export PKG_CONFIG_PATH=${INSTALL_DIR}/lib/pkgconfig:/usr/local/opt/openssl/lib/pkgconfig
+  - export PERL5LIB=${CPANM_DIR}/lib/perl5
+  - export PERL_CPANM_OPT="--local-lib=${CPANM_DIR}"
+  - export PERL_MB_OPT="--install_base ${CPANM_DIR}"
+  - export PERL_MM_OPT="INSTALL_BASE=${CPANM_DIR}"
   # get latest version of cpanminus
   - |
     if [[ ! -e "${INSTALL_DIR}/bin/cpanm" ]]; then
