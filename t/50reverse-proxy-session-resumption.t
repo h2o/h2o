@@ -8,6 +8,8 @@ use t::Util;
 
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
+plan skip_all => 'Starlet not found'
+    unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 
 my $tempdir = tempdir(CLEANUP => 1);
 
@@ -130,16 +132,18 @@ EOC
 subtest 'reproxy' => sub {
     my $upstream = create_upstream();
     my $upstream_port = $upstream->{tls_port};
-    my $app_server = spawn_h2o(<< "EOT");
-num-threads: 2
-hosts:
-  default:
-    paths:
-      /:
-        header.add: "X-Reproxy-URL: https://127.0.0.1:$upstream_port"
-        file.dir: @{[ DOC_ROOT ]}
-EOT
-    my $app_port = $app_server->{port};
+    my $app_port = empty_port();
+    my $app_server = spawn_server(
+        argv => [
+            qw(
+                plackup -s Starlet --max-workers=1 --port
+            ),
+            $app_port, "-e sub { [200, ['X-Reproxy-URL' => 'https://127.0.0.1:$upstream_port/'], []] }"
+        ],
+        is_ready => sub {
+            check_port($app_port);
+        },
+    );
 
     doit(sub {
         return <<"EOC";
