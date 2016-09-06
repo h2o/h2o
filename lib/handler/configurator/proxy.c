@@ -190,9 +190,17 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
                 if (strcasecmp(key->data.scalar, "capacity") == 0) {
                     if (h2o_configurator_scanf(cmd, value, "%zu", &capacity) != 0)
                         return -1;
+                    if (capacity == 0) {
+                        h2o_configurator_errprintf(cmd, key, "capacity must be greater than zero");
+                        return -1;
+                    }
                 } else if (strcasecmp(key->data.scalar, "lifetime") == 0) {
                     if (h2o_configurator_scanf(cmd, value, "%u", &lifetime) != 0)
                         return -1;
+                    if (lifetime == 0) {
+                        h2o_configurator_errprintf(cmd, key, "lifetime must be greater than zero");
+                        return -1;
+                    }
                 } else {
                     h2o_configurator_errprintf(cmd, key, "key must be either of: `capacity`, `lifetime`");
                     return -1;
