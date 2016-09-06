@@ -979,7 +979,8 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
         if (session_cache != NULL) {
             struct sockaddr_storage sa;
             int32_t port;
-            if (h2o_socket_getpeername(sock, (struct sockaddr *)&sa) != 0 && (port = h2o_socket_getport((struct sockaddr *)&sa)) != -1) {
+            if (h2o_socket_getpeername(sock, (struct sockaddr *)&sa) != 0 &&
+                (port = h2o_socket_getport((struct sockaddr *)&sa)) != -1) {
                 /* session cache is available */
                 h2o_iovec_t session_cache_key;
                 size_t len = strlen(server_name) + sizeof(":" H2O_UINT16_LONGEST_STR);
