@@ -89,14 +89,13 @@ static SSL_CTX *create_ssl_ctx(void)
     return ctx;
 }
 
-static h2o_cache_t *create_ssl_session_cache(size_t capacity, unsigned lifetime)
+static h2o_cache_t *null_session_cache = (h2o_cache_t *){0}; /* indicate to make session cache empty */
+static h2o_cache_t *create_ssl_session_cache(size_t capacity, uint64_t duration)
 {
-    return h2o_cache_create(H2O_CACHE_FLAG_MULTITHREADED, capacity, (uint64_t)lifetime * 1000,
-                            h2o_socket_ssl_destroy_session_cache_entry);
+    return h2o_cache_create(H2O_CACHE_FLAG_MULTITHREADED, capacity, duration, h2o_socket_ssl_destroy_session_cache_entry);
 }
 
-static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mode, size_t session_cache_capacity,
-                           unsigned session_cache_lifetime)
+static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mode, h2o_cache_t *session_cache)
 {
     assert(*ctx != NULL);
 
@@ -106,6 +105,11 @@ static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mod
     CRYPTO_add(&cert_store->references, 1, CRYPTO_LOCK_X509_STORE);
     if (verify_mode == -1)
         verify_mode = (*ctx)->verify_mode;
+    if (session_cache == NULL) {
+        h2o_cache_t *current_session_cache = h2o_socket_ssl_get_session_cache(*ctx);
+        session_cache =
+            create_ssl_session_cache(h2o_cache_get_capacity(current_session_cache), h2o_cache_get_duration(current_session_cache));
+    }
 
     /* free the existing context */
     if (*ctx != NULL)
@@ -117,11 +121,8 @@ static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mod
         X509_STORE_free((*ctx)->cert_store);
     (*ctx)->cert_store = cert_store;
     SSL_CTX_set_verify(*ctx, verify_mode, NULL);
-
-    if (session_cache_capacity != 0 && session_cache_lifetime != 0) {
-        h2o_cache_t *session_cache = create_ssl_session_cache(session_cache_capacity, session_cache_lifetime);
+    if (session_cache && session_cache != null_session_cache)
         h2o_socket_ssl_set_session_cache(*ctx, session_cache);
-    }
 }
 
 static int on_config_ssl_verify_peer(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -132,7 +133,7 @@ static int on_config_ssl_verify_peer(h2o_configurator_command_t *cmd, h2o_config
         return -1;
 
     update_ssl_ctx(&self->vars->ssl_ctx, NULL, ret != 0 ? SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT : SSL_VERIFY_NONE,
-                   self->vars->ssl_session_cache.capacity, self->vars->ssl_session_cache.lifetime);
+                   NULL);
 
     return 0;
 }
@@ -144,8 +145,7 @@ static int on_config_ssl_cafile(h2o_configurator_command_t *cmd, h2o_configurato
     int ret = -1;
 
     if (X509_STORE_load_locations(store, node->data.scalar, NULL) == 1) {
-        update_ssl_ctx(&self->vars->ssl_ctx, store, -1, self->vars->ssl_session_cache.capacity,
-                       self->vars->ssl_session_cache.lifetime);
+        update_ssl_ctx(&self->vars->ssl_ctx, store, -1, NULL);
         ret = 0;
     } else {
         h2o_configurator_errprintf(cmd, node, "failed to load certificates file:%s", node->data.scalar);
@@ -160,23 +160,29 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
     size_t i;
-    size_t capacity = self->vars->ssl_session_cache.capacity;
-    unsigned lifetime = self->vars->ssl_session_cache.lifetime;
-    if (capacity == 0 || lifetime == 0) {
-        capacity = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY;
-        lifetime = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_LIFETIME;
+
+    size_t capacity = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY;
+    uint64_t duration = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_DURATION;
+    size_t current_capacity = 0;
+    uint64_t current_duration = 0;
+    h2o_cache_t *current_cache = h2o_socket_ssl_get_session_cache(self->vars->ssl_ctx);
+    if (current_cache) {
+        current_capacity = capacity = h2o_cache_get_capacity(current_cache);
+        current_duration = duration = h2o_cache_get_duration(current_cache);
     }
 
     switch (node->type) {
     case YOML_TYPE_SCALAR:
         if (strcasecmp(node->data.scalar, "OFF") == 0) {
-            /* disabled */
-            capacity = 0;
-            lifetime = 0;
+            if (current_cache != NULL) {
+                // clear session cache
+                update_ssl_ctx(&self->vars->ssl_ctx, NULL, -1, null_session_cache);
+            }
+            return 0;
         } else if (strcasecmp(node->data.scalar, "ON") == 0) {
             /* use default values */
             capacity = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY;
-            lifetime = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_LIFETIME;
+            duration = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_DURATION;
         } else {
             h2o_configurator_errprintf(cmd, node, "scalar argument must be either of: `OFF`, `ON`");
             return -1;
@@ -195,12 +201,14 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
                         return -1;
                     }
                 } else if (strcasecmp(key->data.scalar, "lifetime") == 0) {
+                    unsigned lifetime = 0;
                     if (h2o_configurator_scanf(cmd, value, "%u", &lifetime) != 0)
                         return -1;
                     if (lifetime == 0) {
                         h2o_configurator_errprintf(cmd, key, "lifetime must be greater than zero");
                         return -1;
                     }
+                    duration = (uint64_t)lifetime * 1000;
                 } else {
                     h2o_configurator_errprintf(cmd, key, "key must be either of: `capacity`, `lifetime`");
                     return -1;
@@ -216,11 +224,9 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
         return -1;
     }
 
-    if (capacity != self->vars->ssl_session_cache.capacity || lifetime != self->vars->ssl_session_cache.lifetime) {
-        self->vars->ssl_session_cache.capacity = capacity;
-        self->vars->ssl_session_cache.lifetime = lifetime;
-        update_ssl_ctx(&self->vars->ssl_ctx, NULL, -1, self->vars->ssl_session_cache.capacity,
-                       self->vars->ssl_session_cache.lifetime);
+    if (capacity != current_capacity || duration != current_duration) {
+        h2o_cache_t *cache = create_ssl_session_cache(capacity, duration);
+        update_ssl_ctx(&self->vars->ssl_ctx, NULL, -1, cache);
     }
 
     return 0;
@@ -282,7 +288,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
         free(ca_bundle);
         SSL_CTX_set_verify(self->vars->ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
         h2o_cache_t *ssl_session_cache =
-            create_ssl_session_cache(self->vars->ssl_session_cache.capacity, self->vars->ssl_session_cache.lifetime);
+            create_ssl_session_cache(H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY, H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_DURATION);
         h2o_socket_ssl_set_session_cache(self->vars->ssl_ctx, ssl_session_cache);
     } else {
         CRYPTO_add(&self->vars->ssl_ctx->references, 1, CRYPTO_LOCK_SSL_CTX);
@@ -317,8 +323,6 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->vars->keepalive_timeout = 2000;
     c->vars->websocket.enabled = 0; /* have websocket proxying disabled by default; until it becomes non-experimental */
     c->vars->websocket.timeout = H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT;
-    c->vars->ssl_session_cache.capacity = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY;
-    c->vars->ssl_session_cache.lifetime = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_LIFETIME;
 
     /* setup handlers */
     c->super.enter = on_config_enter;
