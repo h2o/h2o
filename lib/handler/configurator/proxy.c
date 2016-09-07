@@ -107,7 +107,8 @@ static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mod
     h2o_cache_t *new_session_cache;
     if (session_cache == NULL) {
         h2o_cache_t *current = h2o_socket_ssl_get_session_cache(*ctx);
-        new_session_cache = create_ssl_session_cache(h2o_cache_get_capacity(current), h2o_cache_get_duration(current));
+        new_session_cache =
+            current == NULL ? NULL : create_ssl_session_cache(h2o_cache_get_capacity(current), h2o_cache_get_duration(current));
     } else {
         new_session_cache = *session_cache;
     }

@@ -80,6 +80,25 @@ EOC
     ]);
 };
 
+subtest 'off' => sub {
+    doit(sub {
+        my ($upstream) = @_;
+        return <<"EOC";
+proxy.timeout.keepalive: 0
+proxy.ssl.session-cache: OFF
+hosts:
+  default:
+    paths:
+      /:
+        proxy.ssl.verify-peer: OFF
+        proxy.reverse.url: https://127.0.0.1:@{[$upstream->{tls_port}]}
+EOC
+    }, [
+        +{},
+        +{ expected => 0 },
+    ]);
+};
+
 subtest 'lifetime' => sub {
     doit(sub {
         my ($upstream) = @_;
