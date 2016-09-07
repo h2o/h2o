@@ -92,6 +92,7 @@ hosts:
       /:
         proxy.reverse.url: https://127.0.0.1:@{[$upstream->{tls_port}]}
         proxy.ssl.session-cache:
+          capacity: 4096
           lifetime: 2
 EOC
     }, [
@@ -117,6 +118,7 @@ hosts:
       /sample.txt:
         proxy.reverse.url: https://127.0.0.1:@{[$upstream->{tls_port}]}
         proxy.ssl.session-cache:
+          capacity: 4096
           lifetime: 2
        
 EOC

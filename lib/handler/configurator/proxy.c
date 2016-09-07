@@ -161,26 +161,13 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
     size_t i;
-
-    size_t capacity = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY;
-    uint64_t duration = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_DURATION;
-    size_t current_capacity = 0;
-    uint64_t current_duration = 0;
-    h2o_cache_t *current_cache = h2o_socket_ssl_get_session_cache(self->vars->ssl_ctx);
-    if (current_cache) {
-        current_capacity = capacity = h2o_cache_get_capacity(current_cache);
-        current_duration = duration = h2o_cache_get_duration(current_cache);
-    }
+    size_t capacity = 0;
+    uint64_t duration = 0;
 
     switch (node->type) {
     case YOML_TYPE_SCALAR:
         if (strcasecmp(node->data.scalar, "OFF") == 0) {
-            if (current_cache != NULL) {
-                // clear session cache
-                h2o_cache_t *cache = NULL;
-                update_ssl_ctx(&self->vars->ssl_ctx, NULL, -1, &cache);
-            }
-            return 0;
+            /* disabled */
         } else if (strcasecmp(node->data.scalar, "ON") == 0) {
             /* use default values */
             capacity = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY;
@@ -190,47 +177,64 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
             return -1;
         }
         break;
-    case YOML_TYPE_MAPPING:
+    case YOML_TYPE_MAPPING: {
         for (i = 0; i != node->data.mapping.size; ++i) {
             yoml_t *key = node->data.mapping.elements[i].key;
             yoml_t *value = node->data.mapping.elements[i].value;
-            if (key->type == YOML_TYPE_SCALAR) {
-                if (strcasecmp(key->data.scalar, "capacity") == 0) {
-                    if (h2o_configurator_scanf(cmd, value, "%zu", &capacity) != 0)
-                        return -1;
-                    if (capacity == 0) {
-                        h2o_configurator_errprintf(cmd, key, "capacity must be greater than zero");
-                        return -1;
-                    }
-                } else if (strcasecmp(key->data.scalar, "lifetime") == 0) {
-                    unsigned lifetime = 0;
-                    if (h2o_configurator_scanf(cmd, value, "%u", &lifetime) != 0)
-                        return -1;
-                    if (lifetime == 0) {
-                        h2o_configurator_errprintf(cmd, key, "lifetime must be greater than zero");
-                        return -1;
-                    }
-                    duration = (uint64_t)lifetime * 1000;
-                } else {
-                    h2o_configurator_errprintf(cmd, key, "key must be either of: `capacity`, `lifetime`");
-                    return -1;
-                }
-            } else {
+            if (key->type != YOML_TYPE_SCALAR) {
                 h2o_configurator_errprintf(cmd, key, "key must be a scalar");
                 return -1;
             }
+            if (strcasecmp(key->data.scalar, "capacity") == 0) {
+                if (h2o_configurator_scanf(cmd, value, "%zu", &capacity) != 0)
+                    return -1;
+                if (capacity == 0) {
+                    h2o_configurator_errprintf(cmd, key, "capacity must be greater than zero");
+                    return -1;
+                }
+            } else if (strcasecmp(key->data.scalar, "lifetime") == 0) {
+                unsigned lifetime = 0;
+                if (h2o_configurator_scanf(cmd, value, "%u", &lifetime) != 0)
+                    return -1;
+                if (lifetime == 0) {
+                    h2o_configurator_errprintf(cmd, key, "lifetime must be greater than zero");
+                    return -1;
+                }
+                duration = (uint64_t)lifetime * 1000;
+            } else {
+                h2o_configurator_errprintf(cmd, key, "key must be either of: `capacity`, `lifetime`");
+                return -1;
+            }
         }
-        break;
+        if (capacity == 0 || duration == 0) {
+            h2o_configurator_errprintf(cmd, node, "`capacity` and `lifetime` are required");
+            return -1;
+        }
+    } break;
     default:
         h2o_configurator_errprintf(cmd, node, "node must be a scalar or a mapping");
         return -1;
     }
 
-    if (capacity != current_capacity || duration != current_duration) {
-        h2o_cache_t *cache = create_ssl_session_cache(capacity, duration);
-        update_ssl_ctx(&self->vars->ssl_ctx, NULL, -1, &cache);
+    h2o_cache_t *current_cache = h2o_socket_ssl_get_session_cache(self->vars->ssl_ctx);
+    h2o_cache_t *new_cache;
+    if (current_cache == NULL) {
+        if (capacity != 0) {
+            new_cache = create_ssl_session_cache(capacity, duration);
+        } else {
+            return 0;
+        }
+    } else {
+        size_t current_capacity = h2o_cache_get_capacity(current_cache);
+        uint64_t current_duration = h2o_cache_get_duration(current_cache);
+        if (capacity != current_capacity || duration != current_duration) {
+            new_cache = create_ssl_session_cache(capacity, duration);
+        } else {
+            return 0;
+        }
     }
 
+    update_ssl_ctx(&self->vars->ssl_ctx, NULL, -1, &new_cache);
     return 0;
 }
 
