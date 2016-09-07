@@ -25,7 +25,7 @@
 
 static void test_on_alpn_select(void)
 {
-    static const h2o_iovec_t protocols[] = {{H2O_STRLIT("h2")}, {H2O_STRLIT("h2-16")}, {H2O_STRLIT("h2-14")}, {}};
+    static const h2o_iovec_t protocols[] = {{H2O_STRLIT("h2")}, {H2O_STRLIT("h2-16")}, {H2O_STRLIT("h2-14")}, {NULL}};
     const unsigned char *out;
     unsigned char outlen;
     int ret;
@@ -48,7 +48,7 @@ static void test_on_alpn_select(void)
 
 static void test_sliding_counter(void)
 {
-    h2o_sliding_counter_t counter = {};
+    h2o_sliding_counter_t counter = {0};
     size_t i;
 
     h2o_sliding_counter_start(&counter, 100);

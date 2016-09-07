@@ -28,8 +28,8 @@
 
 struct st_core_config_vars_t {
     struct {
-        int reprioritize_blocking_assets : 1;
-        int push_preload : 1;
+        unsigned reprioritize_blocking_assets : 1;
+        unsigned push_preload : 1;
         h2o_casper_conf_t casper;
     } http2;
 };
@@ -43,7 +43,7 @@ static h2o_configurator_context_t *create_context(h2o_configurator_context_t *pa
 {
     h2o_configurator_context_t *ctx = h2o_mem_alloc(sizeof(*ctx));
     if (parent == NULL) {
-        *ctx = (h2o_configurator_context_t){};
+        *ctx = (h2o_configurator_context_t){NULL};
         return ctx;
     }
     *ctx = *parent;
@@ -118,7 +118,7 @@ static int config_timeout(h2o_configurator_command_t *cmd, yoml_t *node, uint64_
 {
     uint64_t timeout_in_secs;
 
-    if (h2o_configurator_scanf(cmd, node, "%" PRIu64, &timeout_in_secs) != 0)
+    if (h2o_configurator_scanf(cmd, node, "%" SCNu64, &timeout_in_secs) != 0)
         return -1;
 
     *slot = timeout_in_secs * 1000;
@@ -131,7 +131,7 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
         h2o_configurator_command_t *cmd;
         yoml_t *value;
     };
-    H2O_VECTOR(struct st_cmd_value_t) deferred = {}, semi_deferred = {};
+    H2O_VECTOR(struct st_cmd_value_t) deferred = {NULL}, semi_deferred = {NULL};
     size_t i;
     int ret = -1;
 
@@ -205,8 +205,7 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
             if (cmd->cb(cmd, ctx, value) != 0)
                 goto Exit;
         }
-    SkipCommand:
-        ;
+    SkipCommand:;
     }
     for (i = 0; i != semi_deferred.size; ++i) {
         struct st_cmd_value_t *pair = semi_deferred.entries + i;
@@ -219,7 +218,7 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
             goto Exit;
     }
 
-    /* call on_enter of every configurator */
+    /* call on_exit of every configurator */
     if (setup_configurators(ctx, 0, node) != 0)
         goto Exit;
 
@@ -241,6 +240,55 @@ static int sort_from_longer_paths(const yoml_mapping_element_t *x, const yoml_ma
     return strcmp(x->key->data.scalar, y->key->data.scalar);
 }
 
+static yoml_t *convert_path_config_node(h2o_configurator_command_t *cmd, yoml_t *node)
+{
+    size_t i, j;
+
+    switch (node->type) {
+    case YOML_TYPE_MAPPING:
+        break;
+    case YOML_TYPE_SEQUENCE: {
+        /* convert to mapping */
+        yoml_t *map = h2o_mem_alloc(sizeof(yoml_t));
+        *map = (yoml_t){YOML_TYPE_MAPPING};
+        if (node->filename != NULL)
+            map->filename = h2o_strdup(NULL, node->filename, SIZE_MAX).base;
+        map->line = node->line;
+        map->column = node->column;
+        if (node->anchor != NULL)
+            map->anchor = h2o_strdup(NULL, node->anchor, SIZE_MAX).base;
+        map->_refcnt = 1;
+
+        for (i = 0; i != node->data.sequence.size; ++i) {
+            yoml_t *elem = node->data.sequence.elements[i];
+            if (elem->type != YOML_TYPE_MAPPING) {
+                yoml_free(map, NULL);
+                goto Error;
+            }
+            for (j = 0; j != elem->data.mapping.size; ++j) {
+                yoml_t *elemkey = elem->data.mapping.elements[j].key;
+                yoml_t *elemvalue = elem->data.mapping.elements[j].value;
+                map = h2o_mem_realloc(map, offsetof(yoml_t, data.mapping.elements) +
+                                               sizeof(yoml_mapping_element_t) * (map->data.mapping.size + 1));
+                map->data.mapping.elements[map->data.mapping.size].key = elemkey;
+                map->data.mapping.elements[map->data.mapping.size].value = elemvalue;
+                ++map->data.mapping.size;
+                ++elemkey->_refcnt;
+                ++elemvalue->_refcnt;
+            }
+        }
+        return map;
+    } break;
+    default:
+    Error:
+        h2o_configurator_errprintf(cmd, node, "value must be a mapping or sequence of mapping");
+        return NULL;
+    }
+
+    ++node->_refcnt;
+    return node;
+}
+
 static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     size_t i;
@@ -254,7 +302,7 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
         }
     }
     qsort(node->data.mapping.elements, node->data.mapping.size, sizeof(node->data.mapping.elements[0]),
-          (void *)sort_from_longer_paths);
+          (int (*)(const void *, const void *))sort_from_longer_paths);
 
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key;
@@ -262,8 +310,15 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
         h2o_configurator_context_t *path_ctx = create_context(ctx, 0);
         path_ctx->pathconf = h2o_config_register_path(path_ctx->hostconf, key->data.scalar, 0);
         path_ctx->mimemap = &path_ctx->pathconf->mimemap;
-        int cmd_ret = h2o_configurator_apply_commands(path_ctx, value, H2O_CONFIGURATOR_FLAG_PATH, NULL);
+
+        yoml_t *config_node = convert_path_config_node(cmd, value);
+        if (config_node == NULL)
+            return -1;
+
+        int cmd_ret = h2o_configurator_apply_commands(path_ctx, config_node, H2O_CONFIGURATOR_FLAG_PATH, NULL);
         destroy_context(path_ctx);
+        yoml_free(config_node, NULL);
+
         if (cmd_ret != 0)
             return cmd_ret;
     }
@@ -410,7 +465,6 @@ static int on_config_http2_push_preload(h2o_configurator_command_t *cmd, h2o_con
     return 0;
 }
 
-
 static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     static const h2o_casper_conf_t defaults = {
@@ -423,7 +477,7 @@ static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configura
     switch (node->type) {
     case YOML_TYPE_SCALAR:
         if (strcasecmp(node->data.scalar, "OFF") == 0) {
-            self->vars->http2.casper = (h2o_casper_conf_t){};
+            self->vars->http2.casper = (h2o_casper_conf_t){0};
         } else if (strcasecmp(node->data.scalar, "ON") == 0) {
             self->vars->http2.casper = defaults;
         }
@@ -778,7 +832,7 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         c->super.exit = on_core_exit;
         c->vars = c->_vars_stack;
         c->vars->http2.reprioritize_blocking_assets = 1; /* defaults to ON */
-        c->vars->http2.push_preload = 1; /* defaults to ON */
+        c->vars->http2.push_preload = 1;                 /* defaults to ON */
         h2o_configurator_define_command(&c->super, "limit-request-body",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_limit_request_body);
@@ -813,9 +867,8 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
                                             H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_reprioritize_blocking_assets);
-        h2o_configurator_define_command(&c->super, "http2-push-preload",
-                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
-                                            H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        h2o_configurator_define_command(&c->super, "http2-push-preload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
+                                                                             H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_push_preload);
         h2o_configurator_define_command(&c->super, "http2-casper", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST,
                                         on_config_http2_casper);
@@ -846,7 +899,8 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_server_name);
         h2o_configurator_define_command(&c->super, "send-server-name",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
-                                        H2O_CONFIGURATOR_FLAG_DEFERRED , on_config_send_server_name);
+                                            H2O_CONFIGURATOR_FLAG_DEFERRED,
+                                        on_config_send_server_name);
     }
 }
 

@@ -133,7 +133,7 @@ static void (*resumption_remove)(h2o_iovec_t session_id);
 
 static int read_bio(BIO *b, char *out, int len)
 {
-    h2o_socket_t *sock = b->ptr;
+    h2o_socket_t *sock = BIO_get_data(b);
 
     if (len == 0)
         return 0;
@@ -154,7 +154,7 @@ static int read_bio(BIO *b, char *out, int len)
 
 static int write_bio(BIO *b, const char *in, int len)
 {
-    h2o_socket_t *sock = b->ptr;
+    h2o_socket_t *sock = BIO_get_data(b);
     void *bytes_alloced;
 
     /* FIXME no support for SSL renegotiation (yet) */
@@ -184,9 +184,9 @@ static long ctrl_bio(BIO *b, int cmd, long num, void *ptr)
 {
     switch (cmd) {
     case BIO_CTRL_GET_CLOSE:
-        return b->shutdown;
+        return BIO_get_shutdown(b);
     case BIO_CTRL_SET_CLOSE:
-        b->shutdown = (int)num;
+        BIO_set_shutdown(b, (int)num);
         return 1;
     case BIO_CTRL_FLUSH:
         return 1;
@@ -195,27 +195,26 @@ static long ctrl_bio(BIO *b, int cmd, long num, void *ptr)
     }
 }
 
-static int new_bio(BIO *b)
-{
-    b->init = 0;
-    b->num = 0;
-    b->ptr = NULL;
-    b->flags = 0;
-    return 1;
-}
-
-static int free_bio(BIO *b)
-{
-    return b != NULL;
-}
-
 static void setup_bio(h2o_socket_t *sock)
 {
-    static BIO_METHOD bio_methods = {BIO_TYPE_FD, "h2o_socket", write_bio, read_bio, puts_bio,
-                                     NULL,        ctrl_bio,     new_bio,   free_bio, NULL};
-    BIO *bio = BIO_new(&bio_methods);
-    bio->ptr = sock;
-    bio->init = 1;
+    static BIO_METHOD *bio_methods = NULL;
+    if (bio_methods == NULL) {
+        static pthread_mutex_t init_lock = PTHREAD_MUTEX_INITIALIZER;
+        pthread_mutex_lock(&init_lock);
+        if (bio_methods == NULL) {
+            BIO_METHOD *biom = BIO_meth_new(BIO_TYPE_FD, "h2o_socket");
+            BIO_meth_set_write(biom, write_bio);
+            BIO_meth_set_read(biom, read_bio);
+            BIO_meth_set_puts(biom, puts_bio);
+            BIO_meth_set_ctrl(biom, ctrl_bio);
+            __sync_synchronize();
+            bio_methods = biom;
+        }
+    }
+
+    BIO *bio = BIO_new(bio_methods);
+    BIO_set_data(bio, sock);
+    BIO_set_init(bio, 1);
     SSL_set_bio(sock->ssl->ssl, bio, bio);
 }
 
@@ -265,7 +264,7 @@ static void clear_output_buffer(struct st_h2o_socket_ssl_t *ssl)
 
 static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
 {
-    if (!ssl->ssl->server)
+    if (!SSL_is_server(ssl->ssl))
         free(ssl->handshake.client.server_name);
     SSL_free(ssl->ssl);
     ssl->ssl = NULL;
@@ -344,7 +343,7 @@ void h2o_socket_dispose_export(h2o_socket_export_t *info)
 
 int h2o_socket_export(h2o_socket_t *sock, h2o_socket_export_t *info)
 {
-    static h2o_buffer_prototype_t nonpooling_prototype = {};
+    static h2o_buffer_prototype_t nonpooling_prototype;
 
     assert(!h2o_socket_is_writing(sock));
 
@@ -400,12 +399,10 @@ static uint16_t calc_suggested_tls_payload_size(h2o_socket_t *sock, uint16_t sug
 
 static void disable_latency_optimized_write(h2o_socket_t *sock, int (*adjust_notsent_lowat)(h2o_socket_t *, unsigned))
 {
-#ifdef TCP_NOTSENT_LOWAT
     if (sock->_latency_optimization.notsent_is_minimized) {
         adjust_notsent_lowat(sock, 0);
         sock->_latency_optimization.notsent_is_minimized = 0;
     }
-#endif
     sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED;
     sock->_latency_optimization.suggested_tls_payload_size = 16384;
     sock->_latency_optimization.suggested_write_size = SIZE_MAX;
@@ -417,7 +414,7 @@ static inline void prepare_for_latency_optimized_write(h2o_socket_t *sock,
                                                        int (*adjust_notsent_lowat)(h2o_socket_t *, unsigned))
 {
     /* check RTT */
-    if (rtt < conditions->min_rtt * 1000)
+    if (rtt < conditions->min_rtt * (uint64_t)1000)
         goto Disable;
     if (rtt * conditions->max_additional_delay < loop_time * 1000 * 100)
         goto Disable;
@@ -460,10 +457,11 @@ Disable:
  */
 static int obtain_tcp_info(int fd, uint32_t *rtt, uint32_t *mss, uint32_t *cwnd_size, uint32_t *cwnd_avail)
 {
-#define CALC_CWND_PAIR_FROM_BYTE_UNITS(cwnd_bytes, inflight_bytes) do { \
-    *cwnd_size = (cwnd_bytes + *mss / 2) / *mss; \
-    *cwnd_avail = cwnd_bytes > inflight_bytes ? (cwnd_bytes - inflight_bytes) / *mss + 2 : 2; \
-} while (0)
+#define CALC_CWND_PAIR_FROM_BYTE_UNITS(cwnd_bytes, inflight_bytes)                                                                 \
+    do {                                                                                                                           \
+        *cwnd_size = (cwnd_bytes + *mss / 2) / *mss;                                                                               \
+        *cwnd_avail = cwnd_bytes > inflight_bytes ? (cwnd_bytes - inflight_bytes) / *mss + 2 : 2;                                  \
+    } while (0)
 
 #if defined(__linux__) && defined(TCP_INFO)
 
@@ -477,7 +475,7 @@ static int obtain_tcp_info(int fd, uint32_t *rtt, uint32_t *mss, uint32_t *cwnd_
     *cwnd_avail = tcpi.tcpi_snd_cwnd > tcpi.tcpi_unacked ? tcpi.tcpi_snd_cwnd - tcpi.tcpi_unacked + 2 : 2;
     return 0;
 
-#elif defined(__FreeBSD__) && defined(TCP_INFO) && 0 /* disabled since we wouldn't use it anyways; the OS lacks TCP_NOTSENT_LOWAT */
+#elif defined(__FreeBSD__) && defined(TCP_INFO) && 0 /* disabled since we wouldn't use it anyways; OS lacks TCP_NOTSENT_LOWAT */
 
     struct tcp_info tcpi;
     socklen_t tcpisz = sizeof(tcpi);
@@ -493,7 +491,7 @@ static int obtain_tcp_info(int fd, uint32_t *rtt, uint32_t *mss, uint32_t *cwnd_
 
     struct tcp_connection_info tcpi;
     socklen_t tcpisz = sizeof(tcpi);
-    if (getsockopt(fd, IPPROTO_TCP, TCP_CONNECTION_INFO, &tcpi, &tcpisz) != 0)
+    if (getsockopt(fd, IPPROTO_TCP, TCP_CONNECTION_INFO, &tcpi, &tcpisz) != 0 || tcpi.tcpi_maxseg == 0)
         return -1;
     *rtt = tcpi.tcpi_srtt * 1000;
     *mss = tcpi.tcpi_maxseg;
@@ -580,7 +578,7 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
             break;
         case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED:
             sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE;
-            /* fallthru */
+        /* fallthru */
         default:
             ssl_record_size = sock->_latency_optimization.suggested_tls_payload_size;
             break;
@@ -758,9 +756,13 @@ static void create_ssl(h2o_socket_t *sock, SSL_CTX *ssl_ctx)
     setup_bio(sock);
 }
 
-static SSL_SESSION *on_async_resumption_get(SSL *ssl, unsigned char *data, int len, int *copy)
+static SSL_SESSION *on_async_resumption_get(SSL *ssl,
+#if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)
+    const
+#endif
+    unsigned char *data, int len, int *copy)
 {
-    h2o_socket_t *sock = SSL_get_rbio(ssl)->ptr;
+    h2o_socket_t *sock = BIO_get_data(SSL_get_rbio(ssl));
 
     switch (sock->ssl->handshake.server.async_resumption.state) {
     case ASYNC_RESUMPTION_STATE_RECORD:
@@ -796,14 +798,16 @@ static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
 
 static void on_async_resumption_remove(SSL_CTX *ssl_ctx, SSL_SESSION *session)
 {
-    h2o_iovec_t session_id = h2o_iovec_init(session->session_id, session->session_id_length);
-    resumption_remove(session_id);
+    unsigned idlen;
+    const unsigned char *id = SSL_SESSION_get_id(session, &idlen);
+    resumption_remove(h2o_iovec_init(id, idlen));
 }
 
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
     if (err == NULL) {
-        switch (SSL_get_current_cipher(sock->ssl->ssl)->id) {
+        const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ssl);
+        switch (SSL_CIPHER_get_id(cipher)) {
         case TLS1_CK_RSA_WITH_AES_128_GCM_SHA256:
         case TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256:
         case TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
@@ -836,7 +840,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 
 static void proceed_handshake(h2o_socket_t *sock, const char *err)
 {
-    h2o_iovec_t first_input = {};
+    h2o_iovec_t first_input = {NULL};
     int ret;
 
     sock->_cb.write = NULL;
@@ -856,7 +860,7 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
     }
 
 Redo:
-    if (sock->ssl->ssl->server) {
+    if (SSL_is_server(sock->ssl->ssl)) {
         ret = SSL_accept(sock->ssl->ssl);
     } else {
         ret = SSL_connect(sock->ssl->ssl);
@@ -901,7 +905,7 @@ Redo:
         flush_pending_ssl(sock, ret == 1 ? on_handshake_complete : proceed_handshake);
     } else {
         if (ret == 1) {
-            if (!sock->ssl->ssl->server) {
+            if (!SSL_is_server(sock->ssl->ssl)) {
                 X509 *cert = SSL_get_peer_certificate(sock->ssl->ssl);
                 if (cert != NULL) {
                     switch (validate_hostname(sock->ssl->handshake.client.server_name, cert)) {

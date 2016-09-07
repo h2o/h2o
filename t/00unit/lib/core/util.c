@@ -78,7 +78,8 @@ static void test_extract_push_path_from_link_header(void)
 #define INPUT base_path, &H2O_URL_SCHEME_HTTP, input_authority
     h2o_mem_init_pool(&pool);
 
-    paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http://basehost/otherpath>; rel=preload"), INPUT, NULL, NULL);
+    paths =
+        h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http://basehost/otherpath>; rel=preload"), INPUT, NULL, NULL);
     ok(paths.size == 1);
     path = paths.entries[0];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/otherpath")));
@@ -115,20 +116,20 @@ static void test_extract_push_path_from_link_header(void)
     ok(paths.size == 0);
 
     paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</otherpath>; rel=preload"), INPUT, &H2O_URL_SCHEME_HTTPS,
-                                                  &input_authority);
+                                                   &input_authority);
     ok(paths.size == 0);
     paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</otherpath>; rel=preload"), INPUT, &H2O_URL_SCHEME_HTTP,
-                                                  &input_authority);
+                                                   &input_authority);
     ok(paths.size == 1);
     path = paths.entries[0];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/otherpath")));
 
     paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</otherpath>; rel=preload"), INPUT, &H2O_URL_SCHEME_HTTP,
-                                                  &other_authority);
+                                                   &other_authority);
     ok(paths.entries == 0);
 
     paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http://basehost/otherpath>; rel=preload"), INPUT,
-                                                  &H2O_URL_SCHEME_HTTP, &other_authority);
+                                                   &H2O_URL_SCHEME_HTTP, &other_authority);
     ok(paths.size == 1);
     path = paths.entries[0];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/otherpath")));
@@ -136,30 +137,34 @@ static void test_extract_push_path_from_link_header(void)
     paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http:otherpath>; rel=preload; nopush"), INPUT, NULL, NULL);
     ok(paths.entries == 0);
 
-    paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</firstpath>; rel=preload, </secondpath>; rel=preload"), INPUT, &H2O_URL_SCHEME_HTTP,
-                                                  &input_authority);
+    paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</firstpath>; rel=preload, </secondpath>; rel=preload"),
+                                                   INPUT, &H2O_URL_SCHEME_HTTP, &input_authority);
     ok(paths.size == 2);
     path = paths.entries[0];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/firstpath")));
     path = paths.entries[1];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/secondpath")));
 
-    paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</firstpath>; rel=preload; nopush, </secondpath>; rel=preload"), INPUT, &H2O_URL_SCHEME_HTTP,
-                                                  &input_authority);
+    paths =
+        h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</firstpath>; rel=preload; nopush, </secondpath>; rel=preload"),
+                                               INPUT, &H2O_URL_SCHEME_HTTP, &input_authority);
     ok(paths.size == 1);
     path = paths.entries[0];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/secondpath")));
 
-    paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</firstpath>; rel=preload; nopush, </secondpath>; nopush; rel=preload; </thirdpath>"), INPUT, &H2O_URL_SCHEME_HTTP,
-                                                  &input_authority);
+    paths = h2o_extract_push_path_from_link_header(
+        &pool, H2O_STRLIT("</firstpath>; rel=preload; nopush, </secondpath>; nopush; rel=preload; </thirdpath>"), INPUT,
+        &H2O_URL_SCHEME_HTTP, &input_authority);
     ok(paths.size == 0);
 
-    paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</firstpath>; rel=preload; nopush, <secondpath>; rel=notpreload"), INPUT, &H2O_URL_SCHEME_HTTP,
-                                                  &input_authority);
+    paths =
+        h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</firstpath>; rel=preload; nopush, <secondpath>; rel=notpreload"),
+                                               INPUT, &H2O_URL_SCHEME_HTTP, &input_authority);
     ok(paths.size == 0);
 
-    paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</firstpath>; rel=preload, </secondpath>; rel=preload; nopush, </thirdpath>; rel=preload"), INPUT, &H2O_URL_SCHEME_HTTP,
-                                                  &input_authority);
+    paths = h2o_extract_push_path_from_link_header(
+        &pool, H2O_STRLIT("</firstpath>; rel=preload, </secondpath>; rel=preload; nopush, </thirdpath>; rel=preload"), INPUT,
+        &H2O_URL_SCHEME_HTTP, &input_authority);
     ok(paths.size == 2);
     path = paths.entries[0];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/firstpath")));
@@ -172,42 +177,105 @@ static void test_extract_push_path_from_link_header(void)
 
 void test_build_destination(void)
 {
-    h2o_pathconf_t conf_not_slashed = {NULL, {H2O_STRLIT("/abc")}}, conf_slashed = {NULL, {H2O_STRLIT("/abc")}};
+    h2o_pathconf_t conf_not_slashed = {NULL, {H2O_STRLIT("/abc")}}, conf_slashed = {NULL, {H2O_STRLIT("/abc/")}};
     h2o_req_t req;
     h2o_iovec_t dest;
+    int escape;
 
+    for (escape = 0; escape <= 1; escape++) {
+        h2o_init_request(&req, NULL, NULL);
+
+        note("escaping: %s", escape ? "on" : "off");
+        req.path_normalized = h2o_iovec_init(H2O_STRLIT("/abc/xyz"));
+        req.query_at = req.path_normalized.len;
+        req.input.path = req.path = h2o_concat(&req.pool, req.path_normalized, h2o_iovec_init(H2O_STRLIT("?q")));
+
+        /* basic pattern */
+        req.pathconf = &conf_not_slashed;
+        dest = h2o_build_destination(&req, H2O_STRLIT("/def"), escape);
+        ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz?q")));
+        dest = h2o_build_destination(&req, H2O_STRLIT("/def/"), escape);
+        ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz?q")));
+        req.pathconf = &conf_slashed;
+        dest = h2o_build_destination(&req, H2O_STRLIT("/def"), escape);
+        ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz?q")));
+        dest = h2o_build_destination(&req, H2O_STRLIT("/def/"), escape);
+        ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz?q")));
+
+        /* test wo. query */
+        if (escape) {
+            req.pathconf = &conf_not_slashed;
+            req.query_at = SIZE_MAX;
+            dest = h2o_build_destination(&req, H2O_STRLIT("/def"), escape);
+            ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz")));
+        }
+
+        /* no trailing */
+        req.path_normalized = h2o_iovec_init(H2O_STRLIT("/abc"));
+        req.query_at = req.path_normalized.len;
+        req.input.path = req.path = h2o_concat(&req.pool, req.path_normalized, h2o_iovec_init(H2O_STRLIT("?q")));
+
+        req.pathconf = &conf_not_slashed;
+        dest = h2o_build_destination(&req, H2O_STRLIT("/def"), escape);
+        ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def?q")));
+        dest = h2o_build_destination(&req, H2O_STRLIT("/def/"), escape);
+        ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/?q")));
+    }
+
+    h2o_mem_clear_pool(&req.pool);
+}
+
+void test_build_destination_escaping(void)
+{
+    h2o_req_t req;
+    h2o_iovec_t dest;
+    int escape = 0;
+    int i;
+    struct {
+        char *pathconf;
+        char *dest;
+        char *input;
+        char *output;
+    } tests[] = {
+        {"/abc", "/def", "/abc/xyz?query&m=n/o", "/def/xyz?query&m=n/o"},
+        {"/abc", "/def", "/%61bc/xyz?query&m=n/o", "/def/xyz?query&m=n/o"},
+        {"/abc", "/def", "/%61%62c/xyz?query&m=n/o", "/def/xyz?query&m=n/o"},
+        {"/abc", "/def", "/%61%62%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o"},
+        {"/abc", "/def", "/./%61%62%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o"},
+        {"/abc", "/def", "/../%61%62%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o"},
+        {"/abc", "/def", "/././%61%62%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o"},
+        {"/abc", "/def", "/./.././%61%62%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o"},
+        {"/abc", "/def", "/./../blah/../%61%62%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o"},
+        {"/abc", "/def", "/./../blah/.././%61%62c/xyz?query&m=n/o", "/def/xyz?query&m=n/o"},
+        {"/abc", "/def", "/./../blah/.././../../%61b%63/xyz?query&m=n/o", "/def/xyz?query&m=n/o"},
+        {"/abc", "/def", "/abc/xyz/?query&m=n/o", "/def/xyz/?query&m=n/o"},
+        {"/abc", "/def", "/abc/xyz/.?query&m=n/o", "/def/xyz/.?query&m=n/o"},
+        {"/abc", "/def", "/abc/xyz/./?query&m=n/o", "/def/xyz/./?query&m=n/o"},
+        {"/abc", "/def", "/abc/xyz/..?query&m=n/o", "/def/xyz/..?query&m=n/o"},
+        {"/abc", "/def", "/abc/xyz/../?query&m=n/o", "/def/xyz/../?query&m=n/o"},
+        {"/abc", "/def", "/abc/xyz/../a?query&m=n/o", "/def/xyz/../a?query&m=n/o"},
+        {"/abc", "/def", "/abc/%yz/?query&m=n/o", "/def/%yz/?query&m=n/o"},
+        {"/abc", "/def", "/abc/%78yz/?query&m=n/o", "/def/%78yz/?query&m=n/o"},
+        {"/", "/", "/xyz/../mno", "/xyz/../mno"},
+        {"/", "/", "/xyz/../mno/..", "/xyz/../mno/.."},
+        {"/", "/def", "/xyz/../mno", "/def/xyz/../mno"},
+        {"/", "/def/", "/xyz/../mno", "/def/xyz/../mno"},
+        {"/", "/def", "/xyz/../", "/def/xyz/../"},
+        {"/", "/def/", "/xyz/..", "/def/xyz/.."},
+    };
     h2o_init_request(&req, NULL, NULL);
 
-    /* basic pattern */
-    req.path_normalized = h2o_iovec_init(H2O_STRLIT("/abc/xyz"));
-    req.query_at = req.path_normalized.len;
-    req.path = h2o_concat(&req.pool, req.path_normalized, h2o_iovec_init(H2O_STRLIT("?q")));
-    req.pathconf = &conf_not_slashed;
-    dest = h2o_build_destination(&req, H2O_STRLIT("/def"));
-    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz?q")));
-    dest = h2o_build_destination(&req, H2O_STRLIT("/def/"));
-    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz?q")));
-    req.pathconf = &conf_slashed;
-    dest = h2o_build_destination(&req, H2O_STRLIT("/def"));
-    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz?q")));
-    dest = h2o_build_destination(&req, H2O_STRLIT("/def/"));
-    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz?q")));
-
-    /* test wo. query */
-    req.pathconf = &conf_not_slashed;
-    req.query_at = SIZE_MAX;
-    dest = h2o_build_destination(&req, H2O_STRLIT("/def"));
-    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/xyz")));
-
-    /* no trailing */
-    req.path_normalized = h2o_iovec_init(H2O_STRLIT("/abc"));
-    req.query_at = req.path_normalized.len;
-    req.path = h2o_concat(&req.pool, req.path_normalized, h2o_iovec_init(H2O_STRLIT("?q")));
-    req.pathconf = &conf_not_slashed;
-    dest = h2o_build_destination(&req, H2O_STRLIT("/def"));
-    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def?q")));
-    dest = h2o_build_destination(&req, H2O_STRLIT("/def/"));
-    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/?q")));
+    for (i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
+        h2o_pathconf_t conf = {NULL, {tests[i].pathconf, strlen(tests[i].pathconf)}};
+        req.pathconf = &conf;
+        req.path = req.input.path = h2o_iovec_init(tests[i].input, strlen(tests[i].input));
+        req.norm_indexes = NULL;
+        req.path_normalized = h2o_url_normalize_path(&req.pool, req.path.base, req.path.len, &req.query_at, &req.norm_indexes);
+        dest = h2o_build_destination(&req, tests[i].dest, strlen(tests[i].dest), escape);
+        note("%s: %d", tests[i].input, i);
+        ok(dest.len == strlen(tests[i].output));
+        ok(h2o_memis(dest.base, dest.len, tests[i].output, strlen(tests[i].output)));
+    }
 
     h2o_mem_clear_pool(&req.pool);
 }
@@ -217,4 +285,5 @@ void test_lib__core__util_c()
     subtest("parse_proxy_line", test_parse_proxy_line);
     subtest("extract_push_path_from_link_header", test_extract_push_path_from_link_header);
     subtest("test_build_destination", test_build_destination);
+    subtest("test_build_destination_escaping", test_build_destination_escaping);
 }

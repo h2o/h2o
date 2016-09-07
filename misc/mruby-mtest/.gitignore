@@ -1,0 +1,11 @@
+# mrbgems
+*.tmp
+*.ctmp
+*.rbtmp
+*.o
+*.a
+gem_mixlib.c
+gem_mrblib.c
+gem_srclib.c
+.*.swp
+/tmp

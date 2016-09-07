@@ -113,7 +113,7 @@ EOT
 )->(sub {
 ?>
 <p>
-When enabled, H2O maintains a fingerprint of the web browser cache, and cancels server-push suggested by the handlers if the client is known to be in possention of the content.
+When enabled, H2O maintains a fingerprint of the web browser cache, and cancels server-push suggested by the handlers if the client is known to be in possession of the content.
 The fingerprint is stored in a cookie named <code>h2o_casper</code> using <a href="https://www.imperialviolet.org/2011/04/29/filters.html">Golomb-compressed sets</a> (a compressed encoding of <a href="https://en.wikipedia.org/wiki/Bloom_filter">Bloom filter</a>).
 </p>
 <p>
@@ -133,7 +133,7 @@ If set to <code>all</code>, tracks all responses.
 </dl>
 </p>
 It should be noted that the size of the cookie will be <code>log2(P) * number-of-assets-being-tracked</code> bits multiplied by the overhead of Base 64 encoding (<code>4/3</code>).
-Therefore with current cookie-based implementation, it is necessary in many cases to restrict the resources being tracked to those have significant effect to user-percieved response time.
+Therefore with current cookie-based implementation, it is necessary in many cases to restrict the resources being tracked to those have significant effect to user-perceived response time.
 </p>
 
 <?= $ctx->{example}->('Enabling CASPer', <<'EOT')
@@ -145,6 +145,44 @@ http2-casper: ON
 #   tracking-types: blocking-assets
 EOT
 ?>
+
+? });
+
+<?
+my $spec_url = "https://tools.ietf.org/html/draft-benfield-http2-debug-state-01";
+$ctx->{directive}->(
+    name    => "http2-debug-state",
+    levels  => [ qw(host) ],
+    see_also => render_mt(<<"EOT"),
+<a href=\"$spec_url\">HTTP/2 Implementation Debug State (draft-01)</a>
+EOT
+    desc    => <<"EOT",
+A directive to turn on the <a href=\"$spec_url\">HTTP/2 Implementation Debug State</a>.
+EOT
+)->(sub {
+?>
+
+<p>
+This experimental feature serves a JSON document at the fixed path <code>/.well-known/h2/state</code>, which describes an internal HTTP/2 state of the H2O server.
+To know the details about the response fields, please see <a href="<?= $spec_url ?>">the spec</a>.
+This feature is only for developing and debugging use, so it's highly recommended that you disable this setting in the production environment.
+</p>
+
+<p>
+The value of this directive specifies the property set contained in the response. Available values are <code>minimum</code> or <code>hpack</code>.
+If <code>hpack</code> is specified, the response will contain the internal hpack state of the same connection.
+If <code>minimum</code> is specified, the response doesn't contain the internal hpack state.
+</p>
+
+<p>
+In some circumstances, there may be a risk of information leakage on providing an internal hpack state. For example, the case that some proxies exist between the client and the server, and they share the connections among the clients.
+Therefore, you should specify <code>hpack</code> only when the server runs in the environments you can completely control.
+</p>
+
+<p>
+This feature is considered experimental yet.
+For now, the implementation conforms to the version draft-01 of the specification.
+</p>
 
 ? });
 
@@ -257,7 +295,7 @@ EOT
 )->(sub {
 ?>
 <p>
-To maximize the user-perceived reponsiveness of a web page, it is essential for the web server to send blocking assets (i.e. CSS and JavaScript files in <code>&lt;HEAD&gt;</code>) before any other files such as images.
+To maximize the user-perceived responsiveness of a web page, it is essential for the web server to send blocking assets (i.e. CSS and JavaScript files in <code>&lt;HEAD&gt;</code>) before any other files such as images.
 HTTP/2 provides a way for web browsers to specify such priorities to the web server.
 However, as of Sep. 2015, no major web browsers except Mozilla Firefox take advantage of the feature.
 </p>

@@ -2,6 +2,7 @@
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
 <base href="../" />
 
 <!-- oktavia -->
@@ -22,7 +23,7 @@
 <h1>
 <a href="index.html">H2O</a>
 </h1>
-the optimized HTTP/1.x, HTTP/2 server
+<p class="description">the optimized HTTP/1.x, HTTP/2 server</p>
 
 <!-- oktavia -->
 <form id="searchform">
@@ -126,9 +127,9 @@ The list of format strings recognized by H2O is as follows.
 <tr><td><code>msec</code><td>number of milliseconds since Epoch
 <tr><td><code>usec</code><td>number of microseconds since Epoch
 <tr><td><code>msec_frac</code><td>millisecond fraction
-<tr><td><code>usec_frac</code><td>microsecond fration
+<tr><td><code>usec_frac</code><td>microsecond fraction
 </table>
-As an example, it is possible to log timestamps in millisecond resultion using <code>%{%Y/%m/%d:%H:%M:%S}t.%{msec_frac}t</code>, which results in a timestamp like <code>2006-01-02:15:04:05.000</code>.
+As an example, it is possible to log timestamps in millisecond resolution using <code>%{%Y/%m/%d:%H:%M:%S}t.%{msec_frac}t</code>, which results in a timestamp like <code>2006-01-02:15:04:05.000</code>.
 <tr><td><code>%U</code><td>requested URL path, not including the query string
 <tr><td><code>%u</code><td>remote user if the request was authenticated (always <code>-</code>)
 <tr><td><code>%V</code><td>requested server name (or the default server name if not specified by the client)

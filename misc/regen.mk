@@ -5,10 +5,13 @@ exec $${H2O_PERL:-perl} -x $$0 "$$@"
 endef
 export FATPACK_SHEBANG
 
-all: tokens lib/handler/file/templates.c.h clang-format-all share/h2o/start_server share/h2o/fastcgi-cgi share/h2o/ca-bundle.crt
+all: tokens lib/http2/hpack_huffman_table.h lib/handler/file/templates.c.h clang-format-all share/h2o/start_server share/h2o/fastcgi-cgi share/h2o/ca-bundle.crt
 
 tokens:
 	misc/tokens.pl
+
+lib/http2/hpack_huffman_table.h: misc/mkhufftbl.py
+	python misc/mkhufftbl.py > $@
 
 lib/handler/file/templates.c.h: misc/picotemplate-conf.pl lib/handler/file/_templates.c.h
 	misc/picotemplate/picotemplate.pl --conf misc/picotemplate-conf.pl lib/handler/file/_templates.c.h || exit 1

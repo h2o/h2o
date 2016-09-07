@@ -37,13 +37,13 @@ struct proxy_configurator_t {
 static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%" PRIu64, &self->vars->io_timeout);
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->io_timeout);
 }
 
 static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%" PRIu64, &self->vars->keepalive_timeout);
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->keepalive_timeout);
 }
 
 static int on_config_preserve_host(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -56,10 +56,20 @@ static int on_config_preserve_host(h2o_configurator_command_t *cmd, h2o_configur
     return 0;
 }
 
+static int on_config_proxy_protocol(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
+    if (ret == -1)
+        return -1;
+    self->vars->use_proxy_protocol = (int)ret;
+    return 0;
+}
+
 static int on_config_websocket_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%" PRIu64, &self->vars->websocket.timeout);
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->websocket.timeout);
 }
 
 static int on_config_websocket(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -85,10 +95,10 @@ static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mod
 
     /* inherit the properties that weren't specified */
     if (cert_store == NULL)
-        cert_store = (*ctx)->cert_store;
-    CRYPTO_add(&cert_store->references, 1, CRYPTO_LOCK_X509_STORE);
+        cert_store = SSL_CTX_get_cert_store(*ctx);
+    X509_STORE_up_ref(cert_store);
     if (verify_mode == -1)
-        verify_mode = (*ctx)->verify_mode;
+        verify_mode = SSL_CTX_get_verify_mode(*ctx);
 
     /* free the existing context */
     if (*ctx != NULL)
@@ -96,9 +106,7 @@ static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mod
 
     /* create new ctx */
     *ctx = create_ssl_ctx();
-    if ((*ctx)->cert_store != NULL)
-        X509_STORE_free((*ctx)->cert_store);
-    (*ctx)->cert_store = cert_store;
+    SSL_CTX_set_cert_store(*ctx, cert_store);
     SSL_CTX_set_verify(*ctx, verify_mode, NULL);
 }
 
@@ -141,9 +149,24 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         h2o_configurator_errprintf(cmd, node, "failed to parse URL: %s\n", node->data.scalar);
         return -1;
     }
+    if (self->vars->keepalive_timeout != 0 && self->vars->use_proxy_protocol) {
+        h2o_configurator_errprintf(cmd, node, "please either set `proxy.use-proxy-protocol` to `OFF` or disable keep-alive by "
+                                              "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
+        return -1;
+    }
+
     /* register */
     h2o_proxy_register_reverse_proxy(ctx->pathconf, &parsed, self->vars);
 
+    return 0;
+}
+
+static int on_config_emit_x_forwarded_headers(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
+    if (ret == -1)
+        return -1;
+    ctx->globalconf->proxy.emit_x_forwarded_headers = (int)ret;
     return 0;
 }
 
@@ -173,7 +196,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
         free(ca_bundle);
         SSL_CTX_set_verify(self->vars->ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
     } else {
-        CRYPTO_add(&self->vars->ssl_ctx->references, 1, CRYPTO_LOCK_SSL_CTX);
+        SSL_CTX_up_ref(self->vars->ssl_ctx);
     }
 
     return 0;
@@ -215,6 +238,9 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.preserve-host",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_preserve_host);
+    h2o_configurator_define_command(&c->super, "proxy.proxy-protocol",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_proxy_protocol);
     h2o_configurator_define_command(&c->super, "proxy.timeout.io",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_timeout_io);
     h2o_configurator_define_command(&c->super, "proxy.timeout.keepalive",
@@ -233,4 +259,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.preserve-x-forwarded-proto",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_preserve_x_forwarded_proto);
+    h2o_configurator_define_command(&c->super, "proxy.emit-x-forwarded-headers",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_emit_x_forwarded_headers);
 }

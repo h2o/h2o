@@ -26,9 +26,11 @@ OUTPUT=\
     configure/basic_auth.html \
     configure/cgi.html \
     configure/mruby.html \
+    configure/dos_detection.html \
+    configure/access_control.html \
     faq.html \
 
-%.html: %.mt
+%.html: %.mt snippets/directive.mt snippets/wrapper.mt
 	../misc/makedoc.pl $< $@
 
 all: mkdir html search/searchindex.js

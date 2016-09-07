@@ -166,24 +166,25 @@ static struct {
     PTHREAD_RWLOCK_INITIALIZER
 #endif
     ,
-    {} /* tickets */
+    {NULL} /* tickets */
 };
 
-struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EVP_MD *md, uint64_t not_before, uint64_t not_after,
-                                       int fill_in)
+static struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EVP_MD *md, uint64_t not_before, uint64_t not_after,
+                                              int fill_in)
 {
-    struct st_session_ticket_t *ticket = h2o_mem_alloc(sizeof(*ticket) + cipher->key_len + md->block_size);
+    int key_len = EVP_CIPHER_key_length(cipher), block_size = EVP_MD_block_size(md);
+    struct st_session_ticket_t *ticket = h2o_mem_alloc(sizeof(*ticket) + key_len + block_size);
 
     ticket->cipher.cipher = cipher;
     ticket->cipher.key = (unsigned char *)ticket + sizeof(*ticket);
     ticket->hmac.md = md;
-    ticket->hmac.key = ticket->cipher.key + cipher->key_len;
+    ticket->hmac.key = ticket->cipher.key + key_len;
     ticket->not_before = not_before;
     ticket->not_after = not_after;
     if (fill_in) {
         RAND_bytes(ticket->name, sizeof(ticket->name));
-        RAND_bytes(ticket->cipher.key, ticket->cipher.cipher->key_len);
-        RAND_bytes(ticket->hmac.key, ticket->hmac.md->block_size);
+        RAND_bytes(ticket->cipher.key, key_len);
+        RAND_bytes(ticket->hmac.key, block_size);
     }
 
     return ticket;
@@ -191,7 +192,8 @@ struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EVP_MD *m
 
 static void free_ticket(struct st_session_ticket_t *ticket)
 {
-    h2o_mem_set_secure(ticket, 0, sizeof(*ticket) + ticket->cipher.cipher->key_len + ticket->hmac.md->block_size);
+    int key_len = EVP_CIPHER_key_length(ticket->cipher.cipher), block_size = EVP_MD_block_size(ticket->hmac.md);
+    h2o_mem_set_secure(ticket, 0, sizeof(*ticket) + key_len + block_size);
     free(ticket);
 }
 
@@ -246,7 +248,7 @@ static int ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char 
         }
         memcpy(key_name, ticket->name, sizeof(ticket->name));
         EVP_EncryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, iv);
-        HMAC_Init_ex(hctx, ticket->hmac.key, ticket->hmac.md->block_size, ticket->hmac.md, NULL);
+        HMAC_Init_ex(hctx, ticket->hmac.key, EVP_MD_block_size(ticket->hmac.md), ticket->hmac.md, NULL);
         if (temp_ticket != NULL)
             free_ticket(ticket);
         ret = 1;
@@ -263,7 +265,7 @@ static int ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char 
         goto Exit;
     Found:
         EVP_DecryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, iv);
-        HMAC_Init_ex(hctx, ticket->hmac.key, ticket->hmac.md->block_size, ticket->hmac.md, NULL);
+        HMAC_Init_ex(hctx, ticket->hmac.key, EVP_MD_block_size(ticket->hmac.md), ticket->hmac.md, NULL);
         ret = i == 0 ? 1 : 2; /* request renew if the key is not the newest one */
     }
 
@@ -317,9 +319,10 @@ static int serialize_ticket_entry(char *buf, size_t bufsz, struct st_session_tic
 {
     char *name_buf = alloca(sizeof(ticket->name) * 2 + 1);
     h2o_hex_encode(name_buf, ticket->name, sizeof(ticket->name));
-    char *key_buf = alloca((ticket->cipher.cipher->key_len + ticket->hmac.md->block_size) * 2 + 1);
-    h2o_hex_encode(key_buf, ticket->cipher.key, ticket->cipher.cipher->key_len);
-    h2o_hex_encode(key_buf + (ticket->cipher.cipher->key_len) * 2, ticket->hmac.key, ticket->hmac.md->block_size);
+    int key_len = EVP_CIPHER_key_length(ticket->cipher.cipher), block_size = EVP_MD_block_size(ticket->hmac.md);
+    char *key_buf = alloca((key_len + block_size) * 2 + 1);
+    h2o_hex_encode(key_buf, ticket->cipher.key, key_len);
+    h2o_hex_encode(key_buf + key_len * 2, ticket->hmac.key, block_size);
 
     return snprintf(buf, bufsz, "- name: %s\n"
                                 "  cipher: %s\n"
@@ -383,7 +386,7 @@ static struct st_session_ticket_t *parse_ticket_entry(yoml_t *element, char *err
         }
     });
     FETCH("key", {
-        size_t keylen = cipher->key_len + hash->block_size;
+        size_t keylen = EVP_CIPHER_key_length(cipher) + EVP_MD_block_size(hash);
         if (strlen(t->data.scalar) != keylen * 2) {
             sprintf(errstr, "length of the `key` attribute is incorrect (is %zu, must be %zu)\n", strlen(t->data.scalar),
                     keylen * 2);
@@ -416,8 +419,8 @@ static struct st_session_ticket_t *parse_ticket_entry(yoml_t *element, char *err
 
     ticket = new_ticket(cipher, hash, not_before, not_after, 0);
     memcpy(ticket->name, name, sizeof(ticket->name));
-    memcpy(ticket->cipher.key, key, cipher->key_len);
-    memcpy(ticket->hmac.key, key + cipher->key_len, hash->block_size);
+    memcpy(ticket->cipher.key, key, EVP_CIPHER_key_length(cipher));
+    memcpy(ticket->hmac.key, key + EVP_CIPHER_key_length(cipher), EVP_MD_block_size(hash));
     return ticket;
 }
 
@@ -427,11 +430,12 @@ static int parse_tickets(session_ticket_vector_t *tickets, const void *src, size
     yoml_t *doc;
     size_t i;
 
-    *tickets = (session_ticket_vector_t){};
+    *tickets = (session_ticket_vector_t){NULL};
     yaml_parser_initialize(&parser);
 
     yaml_parser_set_input_string(&parser, src, len);
-    if ((doc = yoml_parse_document(&parser, NULL, h2o_mem_set_secure, NULL)) == NULL) {
+    yoml_parse_args_t parse_args = {NULL, h2o_mem_set_secure};
+    if ((doc = yoml_parse_document(&parser, NULL, &parse_args)) == NULL) {
         sprintf(errstr, "parse error at line %d:%s\n", (int)parser.problem_mark.line, parser.problem);
         goto Error;
     }
@@ -479,7 +483,7 @@ static h2o_iovec_t serialize_tickets(session_ticket_vector_t *tickets)
     return data;
 Error:
     free(data.base);
-    return (h2o_iovec_t){};
+    return (h2o_iovec_t){NULL};
 }
 
 static int ticket_memcached_update_tickets(yrmcds *conn, h2o_iovec_t key, time_t now)
@@ -487,8 +491,8 @@ static int ticket_memcached_update_tickets(yrmcds *conn, h2o_iovec_t key, time_t
     yrmcds_response resp;
     yrmcds_error err;
     uint32_t serial;
-    session_ticket_vector_t tickets = {};
-    h2o_iovec_t tickets_serialized = {};
+    session_ticket_vector_t tickets = {NULL};
+    h2o_iovec_t tickets_serialized = {NULL};
     int retry = 0;
     char errbuf[256];
 
@@ -579,8 +583,8 @@ static int load_tickets_file(const char *fn)
 {
 #define ERR_PREFIX "failed to load session ticket secrets from file:%s:"
 
-    h2o_iovec_t data = {};
-    session_ticket_vector_t tickets = {};
+    h2o_iovec_t data = {NULL};
+    session_ticket_vector_t tickets = {NULL};
     char errbuf[256];
     int ret = -1;
 
@@ -892,6 +896,15 @@ static unsigned long thread_id_callback(void)
     return (unsigned long)pthread_self();
 }
 
+static int add_lock_callback(int *num, int amount, int type, const char *file, int line)
+{
+    (void)type;
+    (void)file;
+    (void)line;
+
+    return __sync_add_and_fetch(num, amount);
+}
+
 void init_openssl(void)
 {
     int nlocks = CRYPTO_num_locks(), i;
@@ -900,7 +913,10 @@ void init_openssl(void)
         pthread_mutex_init(mutexes + i, NULL);
     CRYPTO_set_locking_callback(lock_callback);
     CRYPTO_set_id_callback(thread_id_callback);
-    /* TODO [OpenSSL] set dynlock callbacks for better performance */
+    CRYPTO_set_add_lock_callback(add_lock_callback);
+
+    /* Dynamic locks are only used by the CHIL engine at this time */
+
     SSL_load_error_strings();
     SSL_library_init();
     OpenSSL_add_all_algorithms();

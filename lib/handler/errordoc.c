@@ -45,7 +45,7 @@ static void add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_h
 static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)
 {
     struct st_errordoc_prefilter_t *self = (void *)_self;
-    h2o_headers_t headers_merged = {};
+    h2o_headers_t headers_merged = {NULL};
     size_t i;
 
     /* restore request headers (for logging) and response status */
@@ -67,7 +67,7 @@ static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req
     h2o_setup_next_prefilter(&self->super, req, slot);
 }
 
-static void on_ostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
+static void on_ostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
     /* nothing to do */
 }
@@ -110,7 +110,7 @@ Found:
     prefilter->req_headers = req->headers;
     prefilter->status = req->res.status;
     prefilter->reason = req->res.reason;
-    prefilter->res_headers = (h2o_headers_t){};
+    prefilter->res_headers = (h2o_headers_t){NULL};
     for (i = 0; i != req->res.headers.size; ++i) {
         const h2o_header_t *header = req->res.headers.entries + i;
         if (!(header->name == &H2O_TOKEN_CONTENT_TYPE->buf || header->name == &H2O_TOKEN_CONTENT_LANGUAGE->buf))
@@ -120,8 +120,8 @@ Found:
     method = req->method;
     if (h2o_memis(method.base, method.len, H2O_STRLIT("POST")))
         method = h2o_iovec_init(H2O_STRLIT("GET"));
-    req->headers = (h2o_headers_t){};
-    req->res.headers = (h2o_headers_t){};
+    req->headers = (h2o_headers_t){NULL};
+    req->res.headers = (h2o_headers_t){NULL};
     h2o_send_redirect_internal(req, method, errordoc->url.base, errordoc->url.len, 0);
     /* create fake ostream that swallows the contents emitted by the generator */
     ostream = h2o_add_ostream(req, sizeof(*ostream), slot);

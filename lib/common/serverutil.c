@@ -85,7 +85,7 @@ size_t h2o_server_starter_get_fds(int **_fds)
 {
     const char *ports_env, *start, *end, *eq;
     size_t t;
-    H2O_VECTOR(int)fds = {};
+    H2O_VECTOR(int) fds = {NULL};
 
     if ((ports_env = getenv("SERVER_STARTER_PORT")) == NULL)
         return 0;
@@ -295,7 +295,7 @@ Exit:
     return ret;
 }
 
-size_t h2o_numproc()
+size_t h2o_numproc(void)
 {
 #if defined(_SC_NPROCESSORS_ONLN)
     return (size_t)sysconf(_SC_NPROCESSORS_ONLN);

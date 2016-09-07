@@ -38,10 +38,16 @@
 #include <unistd.h>
 #include <openssl/rand.h>
 #include <openssl/ssl.h>
+#include <openssl/rsa.h>
+#include <openssl/bn.h>
 #ifdef __linux__
 #include <sys/prctl.h>
 #endif
 #include "neverbleed.h"
+
+#define OPENSSL_1_1_API (!defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x1010000fL)
+
+enum neverbleed_type { NEVERBLEED_TYPE_ERROR, NEVERBLEED_TYPE_RSA, NEVERBLEED_TYPE_ECDSA };
 
 struct expbuf_t {
     char *buf;
@@ -224,7 +230,7 @@ static void *expbuf_shift_bytes(struct expbuf_t *buf, size_t *l)
 
 static int expbuf_write(struct expbuf_t *buf, int fd)
 {
-    struct iovec vecs[2] = {};
+    struct iovec vecs[2] = {{NULL}};
     size_t bufsz = expbuf_size(buf);
     int vecindex;
     ssize_t r;
@@ -245,7 +251,7 @@ static int expbuf_write(struct expbuf_t *buf, int fd)
             ++vecindex;
         }
         if (r != 0) {
-            vecs[vecindex].iov_base += r;
+            vecs[vecindex].iov_base = (char *)vecs[vecindex].iov_base + r;
             vecs[vecindex].iov_len -= r;
         }
     }
@@ -346,6 +352,8 @@ static struct {
         pthread_mutex_t lock;
         size_t size;
         RSA **keys;
+        size_t ecdsa_size;
+        EC_KEY **ecdsa_keys;
     } keys;
     neverbleed_t *nb;
 } daemon_vars = {{PTHREAD_MUTEX_INITIALIZER}};
@@ -381,7 +389,7 @@ static int priv_encdec_proxy(const char *cmd, int flen, const unsigned char *fro
 {
     struct st_neverbleed_rsa_exdata_t *exdata;
     struct st_neverbleed_thread_data_t *thdata;
-    struct expbuf_t buf = {};
+    struct expbuf_t buf = {NULL};
     size_t ret;
     unsigned char *to;
     size_t tolen;
@@ -463,7 +471,7 @@ static int sign_proxy(int type, const unsigned char *m, unsigned int m_len, unsi
 {
     struct st_neverbleed_rsa_exdata_t *exdata;
     struct st_neverbleed_thread_data_t *thdata;
-    struct expbuf_t buf = {};
+    struct expbuf_t buf = {NULL};
     size_t ret, siglen;
     unsigned char *sigret;
 
@@ -518,11 +526,51 @@ static int sign_stub(struct expbuf_t *buf)
     return 0;
 }
 
+#if !OPENSSL_1_1_API
+
+static void RSA_get0_key(const RSA *rsa, const BIGNUM **n, const BIGNUM **e, const BIGNUM **d)
+{
+    if (n) {
+        *n = rsa->n;
+    }
+
+    if (e) {
+        *e = rsa->e;
+    }
+
+    if (d) {
+        *d = rsa->d;
+    }
+}
+
+static int RSA_set0_key(RSA *rsa, BIGNUM *n, BIGNUM *e, BIGNUM *d)
+{
+    if (n == NULL || e == NULL) {
+        return 0;
+    }
+
+    BN_free(rsa->n);
+    BN_free(rsa->e);
+    BN_free(rsa->d);
+    rsa->n = n;
+    rsa->e = e;
+    rsa->d = d;
+
+    return 1;
+}
+
+static void RSA_set_flags(RSA *r, int flags)
+{
+    r->flags |= flags;
+}
+#endif
+
 static EVP_PKEY *create_pkey(neverbleed_t *nb, size_t key_index, const char *ebuf, const char *nbuf)
 {
     struct st_neverbleed_rsa_exdata_t *exdata;
     RSA *rsa;
     EVP_PKEY *pkey;
+    BIGNUM *e = NULL, *n = NULL;
 
     if ((exdata = malloc(sizeof(*exdata))) == NULL) {
         fprintf(stderr, "no memory\n");
@@ -533,15 +581,16 @@ static EVP_PKEY *create_pkey(neverbleed_t *nb, size_t key_index, const char *ebu
 
     rsa = RSA_new_method(nb->engine);
     RSA_set_ex_data(rsa, 0, exdata);
-    if (BN_hex2bn(&rsa->e, ebuf) == 0) {
+    if (BN_hex2bn(&e, ebuf) == 0) {
         fprintf(stderr, "failed to parse e:%s\n", ebuf);
         abort();
     }
-    if (BN_hex2bn(&rsa->n, nbuf) == 0) {
+    if (BN_hex2bn(&n, nbuf) == 0) {
         fprintf(stderr, "failed to parse n:%s\n", nbuf);
         abort();
     }
-    rsa->flags |= RSA_FLAG_EXT_PKEY;
+    RSA_set0_key(rsa, n, e, NULL);
+    RSA_set_flags(rsa, RSA_FLAG_EXT_PKEY);
 
     pkey = EVP_PKEY_new();
     EVP_PKEY_set1_RSA(pkey, rsa);
@@ -550,12 +599,173 @@ static EVP_PKEY *create_pkey(neverbleed_t *nb, size_t key_index, const char *ebu
     return pkey;
 }
 
+#if OPENSSL_1_1_API
+
+static EC_KEY *daemon_get_ecdsa(size_t key_index)
+{
+    EC_KEY *ec_key;
+
+    pthread_mutex_lock(&daemon_vars.keys.lock);
+    ec_key = daemon_vars.keys.ecdsa_keys[key_index];
+    pthread_mutex_unlock(&daemon_vars.keys.lock);
+
+    return ec_key;
+}
+
+static size_t daemon_set_ecdsa(EC_KEY *ec_key)
+{
+    size_t index;
+
+    pthread_mutex_lock(&daemon_vars.keys.lock);
+    if ((daemon_vars.keys.ecdsa_keys = realloc(daemon_vars.keys.ecdsa_keys,
+                                               sizeof(*daemon_vars.keys.ecdsa_keys) * (daemon_vars.keys.ecdsa_size + 1))) == NULL)
+        dief("no memory");
+    index = daemon_vars.keys.ecdsa_size++;
+    daemon_vars.keys.ecdsa_keys[index] = ec_key;
+    EC_KEY_up_ref(ec_key);
+    pthread_mutex_unlock(&daemon_vars.keys.lock);
+
+    return index;
+}
+
+static int ecdsa_sign_stub(struct expbuf_t *buf)
+{
+    unsigned char *m, sigret[4096];
+    size_t type, m_len, key_index;
+    EC_KEY *ec_key;
+    unsigned siglen = 0;
+    int ret;
+
+    if (expbuf_shift_num(buf, &type) != 0 || (m = expbuf_shift_bytes(buf, &m_len)) == NULL ||
+        expbuf_shift_num(buf, &key_index) != 0) {
+        errno = 0;
+        warnf("%s: failed to parse request", __FUNCTION__);
+        return -1;
+    }
+    if ((ec_key = daemon_get_ecdsa(key_index)) == NULL) {
+        errno = 0;
+        warnf("%s: invalid key index:%zu", __FUNCTION__, key_index);
+        return -1;
+    }
+
+    ret = ECDSA_sign((int)type, m, (unsigned)m_len, sigret, &siglen, ec_key);
+    expbuf_dispose(buf);
+
+    expbuf_push_num(buf, ret);
+    expbuf_push_bytes(buf, sigret, ret == 1 ? siglen : 0);
+
+    return 0;
+}
+
+static void ecdsa_get_privsep_data(const EC_KEY *ec_key, struct st_neverbleed_rsa_exdata_t **exdata,
+                                   struct st_neverbleed_thread_data_t **thdata)
+{
+    *exdata = EC_KEY_get_ex_data(ec_key, 0);
+    if (*exdata == NULL) {
+        errno = 0;
+        dief("invalid internal ref");
+    }
+    *thdata = get_thread_data((*exdata)->nb);
+}
+
+static int ecdsa_sign_proxy(int type, const unsigned char *m, int m_len, unsigned char *_sigret, unsigned int *_siglen,
+                            const BIGNUM *kinv, const BIGNUM *rp, EC_KEY *ec_key)
+{
+    struct st_neverbleed_rsa_exdata_t *exdata;
+    struct st_neverbleed_thread_data_t *thdata;
+    struct expbuf_t buf = {};
+    size_t ret, siglen;
+    unsigned char *sigret;
+
+    ecdsa_get_privsep_data(ec_key, &exdata, &thdata);
+
+    /* as far as I've tested so far, kinv and rp are always NULL.
+       Looks like setup_sign will precompute this, but it is only
+       called sign_sig, and it seems to be not used in TLS ECDSA */
+    if (kinv != NULL || rp != NULL) {
+        errno = 0;
+        dief("unexpected non-NULL kinv and rp");
+    }
+
+    expbuf_push_str(&buf, "ecdsa_sign");
+    expbuf_push_num(&buf, type);
+    expbuf_push_bytes(&buf, m, m_len);
+    expbuf_push_num(&buf, exdata->key_index);
+    if (expbuf_write(&buf, thdata->fd) != 0)
+        dief(errno != 0 ? "write error" : "connection closed by daemon");
+    expbuf_dispose(&buf);
+
+    if (expbuf_read(&buf, thdata->fd) != 0)
+        dief(errno != 0 ? "read error" : "connection closed by daemon");
+    if (expbuf_shift_num(&buf, &ret) != 0 || (sigret = expbuf_shift_bytes(&buf, &siglen)) == NULL) {
+        errno = 0;
+        dief("failed to parse response");
+    }
+    memcpy(_sigret, sigret, siglen);
+    *_siglen = (unsigned)siglen;
+    expbuf_dispose(&buf);
+
+    return (int)ret;
+}
+
+static EVP_PKEY *ecdsa_create_pkey(neverbleed_t *nb, size_t key_index, int curve_name, const char *ec_pubkeybuf)
+{
+    struct st_neverbleed_rsa_exdata_t *exdata;
+    EC_KEY *ec_key;
+    EC_GROUP *ec_group;
+    BIGNUM *ec_pubkeybn = NULL;
+    EC_POINT *ec_pubkey;
+    EVP_PKEY *pkey;
+
+    if ((exdata = malloc(sizeof(*exdata))) == NULL) {
+        fprintf(stderr, "no memory\n");
+        abort();
+    }
+    exdata->nb = nb;
+    exdata->key_index = key_index;
+
+    ec_key = EC_KEY_new_method(nb->engine);
+    EC_KEY_set_ex_data(ec_key, 0, exdata);
+
+    ec_group = EC_GROUP_new_by_curve_name(curve_name);
+    if (!ec_group) {
+        fprintf(stderr, "could not create EC_GROUP\n");
+        abort();
+    }
+
+    EC_KEY_set_group(ec_key, ec_group);
+
+    if (BN_hex2bn(&ec_pubkeybn, ec_pubkeybuf) == 0) {
+        fprintf(stderr, "failed to parse ECDSA ephemeral public key:%s\n", ec_pubkeybuf);
+        abort();
+    }
+
+    if ((ec_pubkey = EC_POINT_bn2point(ec_group, ec_pubkeybn, NULL, NULL)) == NULL) {
+        fprintf(stderr, "failed to get ECDSA ephemeral public key from BIGNUM\n");
+        abort();
+    }
+
+    EC_KEY_set_public_key(ec_key, ec_pubkey);
+
+    pkey = EVP_PKEY_new();
+    EVP_PKEY_set1_EC_KEY(pkey, ec_key);
+
+    EC_POINT_free(ec_pubkey);
+    BN_free(ec_pubkeybn);
+    EC_GROUP_free(ec_group);
+    EC_KEY_free(ec_key);
+
+    return pkey;
+}
+
+#endif
+
 int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char *fn, char *errbuf)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
-    struct expbuf_t buf = {};
-    size_t ret, key_index;
-    char *estr, *nstr, *errstr;
+    struct expbuf_t buf = {NULL};
+    int ret = 1;
+    size_t key_index, type;
     EVP_PKEY *pkey;
 
     expbuf_push_str(&buf, "load_key");
@@ -566,25 +776,58 @@ int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char 
 
     if (expbuf_read(&buf, thdata->fd) != 0)
         dief(errno != 0 ? "read error" : "connection closed by daemon");
-    if (expbuf_shift_num(&buf, &ret) != 0 || expbuf_shift_num(&buf, &key_index) != 0 || (estr = expbuf_shift_str(&buf)) == NULL ||
-        (nstr = expbuf_shift_str(&buf)) == NULL || (errstr = expbuf_shift_str(&buf)) == NULL) {
+    if (expbuf_shift_num(&buf, &type) != 0 || expbuf_shift_num(&buf, &key_index) != 0) {
         errno = 0;
         dief("failed to parse response");
     }
 
-    if (ret != 1) {
+    switch (type) {
+    case NEVERBLEED_TYPE_RSA: {
+        char *estr, *nstr;
+
+        if ((estr = expbuf_shift_str(&buf)) == NULL || (nstr = expbuf_shift_str(&buf)) == NULL) {
+            errno = 0;
+            dief("failed to parse response");
+        }
+        pkey = create_pkey(nb, key_index, estr, nstr);
+        break;
+    }
+#if OPENSSL_1_1_API
+    case NEVERBLEED_TYPE_ECDSA: {
+        char *ec_pubkeystr;
+        size_t curve_name;
+
+        if (expbuf_shift_num(&buf, &curve_name) != 0 || (ec_pubkeystr = expbuf_shift_str(&buf)) == NULL) {
+            errno = 0;
+            dief("failed to parse response");
+        }
+        pkey = ecdsa_create_pkey(nb, key_index, curve_name, ec_pubkeystr);
+        break;
+    }
+#endif
+    default: {
+        char *errstr;
+
+        if ((errstr = expbuf_shift_str(&buf)) == NULL) {
+            errno = 0;
+            dief("failed to parse response");
+        }
+
         snprintf(errbuf, NEVERBLEED_ERRBUF_SIZE, "%s", errstr);
         return -1;
     }
+    }
+
+    expbuf_dispose(&buf);
 
     /* success */
-    pkey = create_pkey(nb, key_index, estr, nstr);
     if (SSL_CTX_use_PrivateKey(ctx, pkey) != 1) {
         snprintf(errbuf, NEVERBLEED_ERRBUF_SIZE, "SSL_CTX_use_PrivateKey failed");
         ret = 0;
     }
+
     EVP_PKEY_free(pkey);
-    return (int)ret;
+    return ret;
 }
 
 static int load_key_stub(struct expbuf_t *buf)
@@ -594,6 +837,11 @@ static int load_key_stub(struct expbuf_t *buf)
     RSA *rsa = NULL;
     size_t key_index = SIZE_MAX;
     char *estr = NULL, *nstr = NULL, errbuf[NEVERBLEED_ERRBUF_SIZE] = "";
+    size_t type = NEVERBLEED_TYPE_ERROR;
+    EVP_PKEY *pkey = NULL;
+    const EC_GROUP *ec_group;
+    BIGNUM *ec_pubkeybn = NULL;
+    char *ec_pubkeystr = NULL;
 
     if ((fn = expbuf_shift_str(buf)) == NULL) {
         warnf("%s: failed to parse request", __FUNCTION__);
@@ -604,27 +852,80 @@ static int load_key_stub(struct expbuf_t *buf)
         strerror_r(errno, errbuf, sizeof(errbuf));
         goto Respond;
     }
-    if ((rsa = PEM_read_RSAPrivateKey(fp, NULL, NULL, NULL)) == NULL) {
+
+    if ((pkey = PEM_read_PrivateKey(fp, NULL, NULL, NULL)) == NULL) {
         snprintf(errbuf, sizeof(errbuf), "failed to parse the private key");
         goto Respond;
     }
-    key_index = daemon_set_rsa(rsa);
-    estr = BN_bn2hex(rsa->e);
-    nstr = BN_bn2hex(rsa->n);
+
+    switch (EVP_PKEY_base_id(pkey)) {
+    case EVP_PKEY_RSA: {
+        const BIGNUM *e, *n;
+
+        rsa = EVP_PKEY_get1_RSA(pkey);
+        type = NEVERBLEED_TYPE_RSA;
+        key_index = daemon_set_rsa(rsa);
+        RSA_get0_key(rsa, &n, &e, NULL);
+        estr = BN_bn2hex(e);
+        nstr = BN_bn2hex(n);
+        break;
+    }
+    case EVP_PKEY_EC: {
+#if OPENSSL_1_1_API
+        const EC_POINT *ec_pubkey;
+        EC_KEY *ec_key;
+
+        ec_key = EVP_PKEY_get0_EC_KEY(pkey);
+        type = NEVERBLEED_TYPE_ECDSA;
+        key_index = daemon_set_ecdsa(ec_key);
+        ec_group = EC_KEY_get0_group(ec_key);
+        ec_pubkey = EC_KEY_get0_public_key(ec_key);
+        ec_pubkeybn = BN_new();
+        if (!EC_POINT_point2bn(ec_group, ec_pubkey, POINT_CONVERSION_COMPRESSED, ec_pubkeybn, NULL)) {
+            type = NEVERBLEED_TYPE_ERROR;
+            snprintf(errbuf, sizeof(errbuf), "failed to convert ECDSA public key to BIGNUM");
+            goto Respond;
+        }
+        ec_pubkeystr = BN_bn2hex(ec_pubkeybn);
+        break;
+#else
+        snprintf(errbuf, sizeof(errbuf), "ECDSA support requires OpenSSL >= 1.1.0");
+        goto Respond;
+#endif
+    }
+    default:
+        snprintf(errbuf, sizeof(errbuf), "unsupported private key: %d", EVP_PKEY_base_id(pkey));
+        goto Respond;
+    }
 
 Respond:
     expbuf_dispose(buf);
-    expbuf_push_num(buf, rsa != NULL);
+    expbuf_push_num(buf, type);
     expbuf_push_num(buf, key_index);
-    expbuf_push_str(buf, estr != NULL ? estr : "");
-    expbuf_push_str(buf, nstr != NULL ? nstr : "");
-    expbuf_push_str(buf, errbuf);
+    switch (type) {
+    case NEVERBLEED_TYPE_RSA:
+        expbuf_push_str(buf, estr != NULL ? estr : "");
+        expbuf_push_str(buf, nstr != NULL ? nstr : "");
+        break;
+    case NEVERBLEED_TYPE_ECDSA:
+        expbuf_push_num(buf, EC_GROUP_get_curve_name(ec_group));
+        expbuf_push_str(buf, ec_pubkeystr);
+        break;
+    default:
+        expbuf_push_str(buf, errbuf);
+    }
     if (rsa != NULL)
         RSA_free(rsa);
+    if (pkey != NULL)
+        EVP_PKEY_free(pkey);
     if (estr != NULL)
         OPENSSL_free(estr);
     if (nstr != NULL)
         OPENSSL_free(nstr);
+    if (ec_pubkeystr != NULL)
+        OPENSSL_free(ec_pubkeystr);
+    if (ec_pubkeybn != NULL)
+        BN_free(ec_pubkeybn);
     if (fp != NULL)
         fclose(fp);
 
@@ -634,7 +935,7 @@ Respond:
 int neverbleed_setuidgid(neverbleed_t *nb, const char *user, int change_socket_ownership)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
-    struct expbuf_t buf = {};
+    struct expbuf_t buf = {NULL};
     size_t ret;
 
     expbuf_push_str(&buf, "setuidgid");
@@ -733,7 +1034,7 @@ Redo:
 static void *daemon_conn_thread(void *_sock_fd)
 {
     int sock_fd = (int)((char *)_sock_fd - (char *)NULL);
-    struct expbuf_t buf = {};
+    struct expbuf_t buf = {NULL};
     unsigned char auth_token[NEVERBLEED_AUTH_TOKEN_SIZE];
 
     /* authenticate */
@@ -767,6 +1068,11 @@ static void *daemon_conn_thread(void *_sock_fd)
         } else if (strcmp(cmd, "sign") == 0) {
             if (sign_stub(&buf) != 0)
                 break;
+#if OPENSSL_1_1_API
+        } else if (strcmp(cmd, "ecdsa_sign") == 0) {
+            if (ecdsa_sign_stub(&buf) != 0)
+                break;
+#endif
         } else if (strcmp(cmd, "load_key") == 0) {
             if (load_key_stub(&buf) != 0)
                 break;
@@ -820,7 +1126,9 @@ __attribute__((noreturn)) static void daemon_main(int listen_fd, int close_notif
     }
 }
 
-static RSA_METHOD rsa_method = {
+#if !OPENSSL_1_1_API
+
+static RSA_METHOD static_rsa_method = {
     "privsep RSA method", /* name */
     NULL,                 /* rsa_pub_enc */
     NULL,                 /* rsa_pub_dec */
@@ -837,15 +1145,42 @@ static RSA_METHOD rsa_method = {
     NULL                  /* rsa_keygen */
 };
 
+#endif
+
 int neverbleed_init(neverbleed_t *nb, char *errbuf)
 {
     int pipe_fds[2] = {-1, -1}, listen_fd = -1;
     char *tempdir = NULL;
+#if OPENSSL_1_1_API
+    const RSA_METHOD *default_method = RSA_PKCS1_OpenSSL();
+    EC_KEY_METHOD *ecdsa_method;
+    const EC_KEY_METHOD *ecdsa_default_method;
+    RSA_METHOD *rsa_method = RSA_meth_new("privsep RSA method", 0);
 
+    RSA_meth_set_priv_enc(rsa_method, priv_enc_proxy);
+    RSA_meth_set_priv_dec(rsa_method, priv_dec_proxy);
+    RSA_meth_set_sign(rsa_method, sign_proxy);
+
+    RSA_meth_set_pub_enc(rsa_method, RSA_meth_get_pub_enc(default_method));
+    RSA_meth_set_pub_dec(rsa_method, RSA_meth_get_pub_dec(default_method));
+    RSA_meth_set_verify(rsa_method, RSA_meth_get_verify(default_method));
+
+    /* setup EC_KEY_METHOD for ECDSA */
+    ecdsa_default_method = EC_KEY_get_default_method();
+    ecdsa_method = EC_KEY_METHOD_new(ecdsa_default_method);
+
+    EC_KEY_METHOD_set_keygen(ecdsa_method, NULL);
+    EC_KEY_METHOD_set_compute_key(ecdsa_method, NULL);
+    /* it seems sign_sig and sign_setup is not used in TLS ECDSA. */
+    EC_KEY_METHOD_set_sign(ecdsa_method, ecdsa_sign_proxy, NULL, NULL);
+#else
     const RSA_METHOD *default_method = RSA_PKCS1_SSLeay();
-    rsa_method.rsa_pub_enc = default_method->rsa_pub_enc;
-    rsa_method.rsa_pub_dec = default_method->rsa_pub_dec;
-    rsa_method.rsa_verify = default_method->rsa_verify;
+    RSA_METHOD *rsa_method = &static_rsa_method;
+
+    rsa_method->rsa_pub_enc = default_method->rsa_pub_enc;
+    rsa_method->rsa_pub_dec = default_method->rsa_pub_dec;
+    rsa_method->rsa_verify = default_method->rsa_verify;
+#endif
 
     /* setup the daemon */
     if (pipe(pipe_fds) != 0) {
@@ -900,7 +1235,11 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
 
     /* setup engine */
     if ((nb->engine = ENGINE_new()) == NULL || !ENGINE_set_id(nb->engine, "neverbleed") ||
-        !ENGINE_set_name(nb->engine, "privilege separation software engine") || !ENGINE_set_RSA(nb->engine, &rsa_method)) {
+        !ENGINE_set_name(nb->engine, "privilege separation software engine") || !ENGINE_set_RSA(nb->engine, rsa_method)
+#if OPENSSL_1_1_API
+        || !ENGINE_set_EC(nb->engine, ecdsa_method)
+#endif
+            ) {
         snprintf(errbuf, NEVERBLEED_ERRBUF_SIZE, "failed to initialize the OpenSSL engine");
         goto Fail;
     }

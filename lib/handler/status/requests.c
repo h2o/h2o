@@ -122,7 +122,7 @@ static void *requests_status_init(void)
         /* log format compilation error is an internal logic flaw, therefore we need not send the details to the client */
         fprintf(stderr, "[lib/handler/status/requests.c] failed to compile log format: %s", errbuf);
 
-    rsc->req_data = (h2o_iovec_t){};
+    rsc->req_data = (h2o_iovec_t){NULL};
     pthread_mutex_init(&rsc->mutex, NULL);
 
     return rsc;
@@ -130,7 +130,7 @@ static void *requests_status_init(void)
 
 static h2o_iovec_t requests_status_final(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
 {
-    h2o_iovec_t ret = {};
+    h2o_iovec_t ret = {NULL};
     struct st_requests_status_ctx_t *rsc = priv;
 
     if (rsc->logconf != NULL) {

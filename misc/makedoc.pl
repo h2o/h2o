@@ -35,6 +35,10 @@ EOT
         my %args = @_;
         $mt->wrapper_file("directive.mt", \%args);
     },
+    mruby_method => sub {
+        my %args = @_;
+        $mt->wrapper_file("mruby_method.mt", \%args);
+    },
     notes    => [],
     note     => sub {
         my ($index, $html);

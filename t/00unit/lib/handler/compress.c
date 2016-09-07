@@ -28,9 +28,10 @@
 
 static void check_result(h2o_iovec_t *vecs, size_t num_vecs, const char *expected, size_t expectedlen)
 {
-    z_stream zs = {};
+    z_stream zs;
     char decbuf[expectedlen + 1];
 
+    memset(&zs, 0, sizeof(zs));
     zs.zalloc = alloc_cb;
     zs.zfree = free_cb;
     zs.next_out = (void *)decbuf;

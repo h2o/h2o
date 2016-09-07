@@ -20,6 +20,7 @@
  * IN THE SOFTWARE.
  */
 #include <assert.h>
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,7 +46,7 @@ static struct st_h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2
 
     data->ctx = ctx;
     data->sock = sock;
-    data->timeout = (h2o_timeout_entry_t){};
+    data->timeout = (h2o_timeout_entry_t){0};
     data->timeout.cb = on_accept_timeout;
     h2o_timeout_link(ctx->ctx->loop, &ctx->ctx->handshake_timeout, &data->timeout);
     data->async_resumption_get_req = NULL;
@@ -184,14 +185,14 @@ static ssize_t parse_proxy_line(char *src, size_t len, struct sockaddr *sa, sock
     switch (*p++) {
     case '4':
         *salen = sizeof(struct sockaddr_in);
-        *((struct sockaddr_in *)sa) = (struct sockaddr_in){};
+        memset(sa, 0, sizeof(struct sockaddr_in));
         sa->sa_family = AF_INET;
         addr = &((struct sockaddr_in *)sa)->sin_addr;
         port = &((struct sockaddr_in *)sa)->sin_port;
         break;
     case '6':
         *salen = sizeof(struct sockaddr_in6);
-        *((struct sockaddr_in6 *)sa) = (struct sockaddr_in6){};
+        memset(sa, 0, sizeof(struct sockaddr_in6));
         sa->sa_family = AF_INET6;
         addr = &((struct sockaddr_in6 *)sa)->sin6_addr;
         port = &((struct sockaddr_in6 *)sa)->sin6_port;
@@ -310,9 +311,54 @@ size_t h2o_stringify_protocol_version(char *dst, int version)
     return p - dst;
 }
 
-static void push_one_path(h2o_mem_pool_t *pool, h2o_iovec_vector_t *paths_to_push, h2o_iovec_t *url,
-                          h2o_iovec_t base_path, const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
-                          const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority)
+size_t h2o_stringify_proxy_header(h2o_conn_t *conn, char *buf)
+{
+    struct sockaddr_storage ss;
+    socklen_t sslen;
+    size_t strlen;
+    uint16_t peerport;
+    char *dst = buf;
+
+    if ((sslen = conn->callbacks->get_peername(conn, (void *)&ss)) == 0)
+        goto Unknown;
+    switch (ss.ss_family) {
+    case AF_INET:
+        memcpy(dst, "PROXY TCP4 ", 11);
+        dst += 11;
+        break;
+    case AF_INET6:
+        memcpy(dst, "PROXY TCP6 ", 11);
+        dst += 11;
+        break;
+    default:
+        goto Unknown;
+    }
+    if ((strlen = h2o_socket_getnumerichost((void *)&ss, sslen, dst)) == SIZE_MAX)
+        goto Unknown;
+    dst += strlen;
+    *dst++ = ' ';
+
+    peerport = h2o_socket_getport((void *)&ss);
+
+    if ((sslen = conn->callbacks->get_sockname(conn, (void *)&ss)) == 0)
+        goto Unknown;
+    if ((strlen = h2o_socket_getnumerichost((void *)&ss, sslen, dst)) == SIZE_MAX)
+        goto Unknown;
+    dst += strlen;
+    *dst++ = ' ';
+
+    dst += sprintf(dst, "%" PRIu16 " %" PRIu16 "\r\n", peerport, (uint16_t)h2o_socket_getport((void *)&ss));
+
+    return dst - buf;
+
+Unknown:
+    memcpy(buf, "PROXY UNKNOWN\r\n", 15);
+    return 15;
+}
+
+static void push_one_path(h2o_mem_pool_t *pool, h2o_iovec_vector_t *paths_to_push, h2o_iovec_t *url, h2o_iovec_t base_path,
+                          const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority, const h2o_url_scheme_t *base_scheme,
+                          h2o_iovec_t *base_authority)
 {
     h2o_url_t parsed, resolved;
 
@@ -328,7 +374,7 @@ static void push_one_path(h2o_mem_pool_t *pool, h2o_iovec_vector_t *paths_to_pus
     }
 
     /* check scheme and authority if given URL contains either of the two, or if base is specified */
-    h2o_url_t base = {input_scheme, input_authority, {}, base_path, 65535};
+    h2o_url_t base = {input_scheme, input_authority, {NULL}, base_path, 65535};
     if (base_scheme != NULL) {
         base.scheme = base_scheme;
         base.authority = *base_authority;
@@ -343,11 +389,12 @@ static void push_one_path(h2o_mem_pool_t *pool, h2o_iovec_vector_t *paths_to_pus
     paths_to_push->entries[paths_to_push->size++] = resolved.path;
 }
 
-h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len, h2o_iovec_t base_path,
-                                                      const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
-                                                      const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority)
+h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
+                                                          h2o_iovec_t base_path, const h2o_url_scheme_t *input_scheme,
+                                                          h2o_iovec_t input_authority, const h2o_url_scheme_t *base_scheme,
+                                                          h2o_iovec_t *base_authority)
 {
-    h2o_iovec_vector_t paths_to_push = {};
+    h2o_iovec_vector_t paths_to_push = {NULL};
     h2o_iovec_t iter = h2o_iovec_init(value, value_len), token_value;
     const char *token;
     size_t token_len;
@@ -365,7 +412,7 @@ h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, 
         while ((token = h2o_next_token(&iter, ';', &token_len, &token_value)) != NULL &&
                !h2o_memis(token, token_len, H2O_STRLIT(","))) {
             if (h2o_lcstris(token, token_len, H2O_STRLIT("rel")) &&
-                    h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload"))) {
+                h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload"))) {
                 preload++;
             } else if (h2o_lcstris(token, token_len, H2O_STRLIT("nopush"))) {
                 nopush++;
@@ -401,7 +448,7 @@ int h2o_get_compressible_types(const h2o_headers_t *headers)
     return compressible_types;
 }
 
-h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t prefix_len)
+h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t prefix_len, int use_path_normalized)
 {
     h2o_iovec_t parts[4];
     size_t num_parts = 0;
@@ -422,10 +469,29 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
     }
 
     /* append suffix path and query */
-    parts[num_parts++] = h2o_uri_escape(
-        &req->pool, req->path_normalized.base + req->pathconf->path.len, req->path_normalized.len - req->pathconf->path.len, "/@");
-    if (req->query_at != SIZE_MAX)
-        parts[num_parts++] = h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at);
+
+    if (use_path_normalized) {
+        parts[num_parts++] = h2o_uri_escape(&req->pool, req->path_normalized.base + req->pathconf->path.len,
+                                            req->path_normalized.len - req->pathconf->path.len, "/@:");
+        if (req->query_at != SIZE_MAX) {
+            parts[num_parts++] = h2o_iovec_init(req->path.base + req->query_at, req->path.len - req->query_at);
+        }
+    } else {
+        if (req->path.len > 1) {
+            /*
+             * When proxying, we want to modify the input URL as little
+             * as possible. We use norm_indexes to find the start of
+             * the path we want to forward.
+             */
+            size_t next_unnormalized;
+            if (req->norm_indexes && req->pathconf->path.len > 1) {
+                next_unnormalized = req->norm_indexes[req->pathconf->path.len - 1];
+            } else {
+                next_unnormalized = req->pathconf->path.len;
+            }
+            parts[num_parts++] = (h2o_iovec_t){req->path.base + next_unnormalized, req->path.len - next_unnormalized};
+        }
+    }
 
     return h2o_concat_list(&req->pool, parts, num_parts);
 }
@@ -444,10 +510,10 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
     "\x05"                                                                                                                         \
     "h2-14"
 
-static const h2o_iovec_t http2_alpn_protocols[] = {ALPN_PROTOCOLS_CORE, {}};
+static const h2o_iovec_t http2_alpn_protocols[] = {ALPN_PROTOCOLS_CORE, {NULL}};
 const h2o_iovec_t *h2o_http2_alpn_protocols = http2_alpn_protocols;
 
-static const h2o_iovec_t alpn_protocols[] = {ALPN_PROTOCOLS_CORE, {H2O_STRLIT("http/1.1")}, {}};
+static const h2o_iovec_t alpn_protocols[] = {ALPN_PROTOCOLS_CORE, {H2O_STRLIT("http/1.1")}, {NULL}};
 const h2o_iovec_t *h2o_alpn_protocols = alpn_protocols;
 
 const char *h2o_http2_npn_protocols = NPN_PROTOCOLS_CORE;

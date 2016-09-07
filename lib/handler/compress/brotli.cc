@@ -52,9 +52,9 @@ namespace {
         void _clear_bufs();
         void _emit(bool is_last, bool force_flush);
         void _compress(h2o_iovec_t *inbufs, size_t inbufcnt, int is_final, h2o_iovec_t **outbufs, size_t *outbufcnt);
-        static void _compress(h2o_compress_context_t *self, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final,
+        static void _compress(h2o_compress_context_t *self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
                               h2o_iovec_t **outbufs, size_t *outbufcnt) {
-            static_cast<brotli_context*>(self)->_compress(inbufs, inbufcnt, is_final, outbufs, outbufcnt);
+            static_cast<brotli_context*>(self)->_compress(inbufs, inbufcnt, !h2o_send_state_is_in_progress(state), outbufs, outbufcnt);
         }
         static void _update_lgwin(brotli::BrotliParams &params, size_t estimated_content_length);
     };

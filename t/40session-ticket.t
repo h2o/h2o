@@ -48,6 +48,7 @@ EOT
   ticket-file: $tickets_file
 EOT
     sub {
+        sleep 1;
         is test(), "Reused";
     });
 };
@@ -92,6 +93,7 @@ EOT
             is test(), "Reused";
         });
         spawn_with($conf, sub {
+            sleep 1;
             is test(), "Reused";
         });
     };

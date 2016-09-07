@@ -77,7 +77,7 @@ struct st_h2o_http1_chunked_entity_reader {
 
 static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled);
 static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb);
-static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final);
+static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state);
 static void reqread_on_read(h2o_socket_t *sock, const char *err);
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 
@@ -199,7 +199,7 @@ static void handle_chunked_entity_read(struct st_h2o_http1_conn_t *conn)
     conn->_reqsize = inbuf->size;
     inbuf->size += ret; /* restore the number of extra bytes */
 
-    return on_entity_read_complete(conn);
+    on_entity_read_complete(conn);
 }
 
 static int create_chunked_entity_reader(struct st_h2o_http1_conn_t *conn)
@@ -386,6 +386,33 @@ static void on_continue_sent(h2o_socket_t *sock, const char *err)
     conn->_req_entity_reader->handle_incoming_entity(conn);
 }
 
+static int contains_crlf_only(const char *s, size_t len)
+{
+    for (; len != 0; ++s, --len)
+        if (!(*s == '\r' || *s == '\n'))
+            return 0;
+    return 1;
+}
+
+static void send_bad_request_on_complete(h2o_socket_t *sock, const char *err)
+{
+    struct st_h2o_http1_conn_t *conn = sock->data;
+    close_connection(conn, 1);
+}
+
+static void send_bad_request(struct st_h2o_http1_conn_t *conn)
+{
+    const static h2o_iovec_t resp = {H2O_STRLIT("HTTP/1.1 400 Bad Request\r\n"
+                                                "Content-Type: text/plain; charset=utf-8\r\n"
+                                                "Connection: close\r\n"
+                                                "Content-Length: 11\r\n"
+                                                "\r\n"
+                                                "Bad Request")};
+
+    assert(conn->req.version == 0 && "request has not been parsed successfully");
+    h2o_socket_write(conn->sock, (h2o_iovec_t *)&resp, 1, send_bad_request_on_complete);
+}
+
 static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
 {
     size_t inreqlen = conn->sock->input->size < H2O_MAX_REQLEN ? conn->sock->input->size : H2O_MAX_REQLEN;
@@ -437,8 +464,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
         return;
     case -2: // incomplete
         if (inreqlen == H2O_MAX_REQLEN) {
-            // request is too long (TODO notify)
-            close_connection(conn, 1);
+            send_bad_request(conn);
         }
         return;
     case -1: // error
@@ -458,7 +484,11 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                 return;
             }
         }
-        close_connection(conn, 1);
+        if (inreqlen <= 4 && contains_crlf_only(conn->sock->input->bytes, inreqlen)) {
+            close_connection(conn, 1);
+        } else {
+            send_bad_request(conn);
+        }
         return;
     }
 }
@@ -623,18 +653,21 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
 static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled)
 {
     h2o_iovec_t buf = {conn->_ostr_final.pull.buf, nfilled};
-    int is_final;
+    h2o_send_state_t send_state;
 
     if (buf.len < MAX_PULL_BUF_SZ) {
         h2o_iovec_t cbuf = {buf.base + buf.len, MAX_PULL_BUF_SZ - buf.len};
-        is_final = h2o_pull(&conn->req, conn->_ostr_final.pull.cb, &cbuf);
+        send_state = h2o_pull(&conn->req, conn->_ostr_final.pull.cb, &cbuf);
+        if (send_state == H2O_SEND_STATE_ERROR) {
+            conn->req.http1_is_persistent = 0;
+        }
         buf.len += cbuf.len;
     } else {
-        is_final = 0;
+        send_state = H2O_SEND_STATE_IN_PROGRESS;
     }
 
     /* write */
-    h2o_socket_write(conn->sock, &buf, 1, is_final ? on_send_complete : on_send_next_pull);
+    h2o_socket_write(conn->sock, &buf, 1, h2o_send_state_is_in_progress(send_state) ? on_send_next_pull : on_send_complete);
 }
 
 static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb)
@@ -669,7 +702,7 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
     proceed_pull(conn, headers_len);
 }
 
-void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
+void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t send_state)
 {
     struct st_h2o_http1_finalostream_t *self = (void *)_self;
     struct st_h2o_http1_conn_t *conn = (struct st_h2o_http1_conn_t *)req->conn;
@@ -691,8 +724,13 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
     memcpy(bufs + bufcnt, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
     bufcnt += inbufcnt;
 
+    if (send_state == H2O_SEND_STATE_ERROR) {
+        conn->req.http1_is_persistent = 0;
+    }
+
     if (bufcnt != 0) {
-        h2o_socket_write(conn->sock, bufs, bufcnt, is_final ? on_send_complete : on_send_next_push);
+        h2o_socket_write(conn->sock, bufs, bufcnt,
+                         h2o_send_state_is_in_progress(send_state) ? on_send_next_push : on_send_complete);
     } else {
         on_send_complete(conn->sock, 0);
     }
@@ -758,10 +796,11 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
         get_peername, /* ditto */
         NULL,         /* push */
         get_socket,   /* get underlying socket */
+        NULL,         /* get debug state */
         {{
             {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits}, /* ssl */
             {log_request_index},                                                     /* http1 */
-            {}                                                                       /* http2 */
+            {NULL}                                                                   /* http2 */
         }}};
     struct st_h2o_http1_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx->ctx, ctx->hosts, connected_at, &callbacks);
 

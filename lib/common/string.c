@@ -441,7 +441,7 @@ const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len
     *iter = h2o_iovec_init(cur, end - cur);
     *element_len = token_end - token_start;
     if (value != NULL)
-        *value = (h2o_iovec_t){};
+        *value = (h2o_iovec_t){NULL};
     return token_start;
 
 FindValue:

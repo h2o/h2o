@@ -60,8 +60,22 @@ $ctx->{directive}->(
 )->(sub {
 ?>
 <p>
-By default, when transmitting a HTTP request to an upstream HTTP server, H2O removes the received <code>x-forwarded-proto</code> request header and sends its own, as a precautios measure to prevent an attacker connecting through HTTP to lie that they are connected via HTTPS.
+By default, when transmitting a HTTP request to an upstream HTTP server, H2O removes the received <code>x-forwarded-proto</code> request header and sends its own, as a precaution measure to prevent an attacker connecting through HTTP to lie that they are connected via HTTPS.
 However in case H2O is run behind a trusted HTTPS proxy, such protection might not be desirable, and this configuration directive can be used to modify the behaviour.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "proxy.emit-x-forwarded-headers",
+    levels  => [ qw(global) ],
+    since   => "2.1",
+    default => q{proxy.emit-x-forwarded-headers: ON},
+    desc    => "A boolean flag(<code>ON</code> or <code>OFF</code>) indicating if the server will append or add the <code>x-forwarded-proto</code> and <code>x-forwarded-for</code> request headers.",
+)->(sub {
+?>
+<p>
+By default, when forwarding an HTTP request H2O sends its own <code>x-forwarded-proto</code> and <code>x-forwarded-for</code> request headers (or might append its value in the <code>x-forwarded-proto</code> case, see <code>proxy.preserve-x-forwarded-proto</code>). This might not be always desirable. Please keep in mind security implications when setting this of <code>OFF</code>, since it might allow an attacker to spoof the originator or the protocol of a request.
 </p>
 ? })
 

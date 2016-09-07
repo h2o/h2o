@@ -36,6 +36,7 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, 1, 0, 0, 0, 0},
                              {{H2O_STRLIT("allow")}, 22, 0, 0, 0, 0},
                              {{H2O_STRLIT("authorization")}, 23, 0, 0, 0, 0},
                              {{H2O_STRLIT("cache-control")}, 24, 0, 0, 0, 0},
+                             {{H2O_STRLIT("cache-digest")}, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("connection")}, 0, 1, 0, 1, 0},
                              {{H2O_STRLIT("content-disposition")}, 25, 0, 0, 0, 0},
                              {{H2O_STRLIT("content-encoding")}, 26, 0, 0, 0, 0},
@@ -50,7 +51,7 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, 1, 0, 0, 0, 0},
                              {{H2O_STRLIT("expect")}, 35, 0, 1, 0, 0},
                              {{H2O_STRLIT("expires")}, 36, 0, 0, 0, 0},
                              {{H2O_STRLIT("from")}, 37, 0, 0, 0, 0},
-                             {{H2O_STRLIT("host")}, 38, 0, 1, 0, 0},
+                             {{H2O_STRLIT("host")}, 38, 0, 1, 1, 0},
                              {{H2O_STRLIT("http2-settings")}, 0, 1, 0, 1, 0},
                              {{H2O_STRLIT("if-match")}, 39, 0, 0, 0, 0},
                              {{H2O_STRLIT("if-modified-since")}, 40, 0, 0, 0, 0},
@@ -81,7 +82,7 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, 1, 0, 0, 0, 0},
                              {{H2O_STRLIT("x-forwarded-for")}, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("x-reproxy-url")}, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("x-traffic")}, 0, 0, 0, 0, 0}};
-size_t h2o__num_tokens = 60;
+size_t h2o__num_tokens = 61;
 
 const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
 {
@@ -259,6 +260,10 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
         case 's':
             if (memcmp(name, "max-forward", 11) == 0)
                 return H2O_TOKEN_MAX_FORWARDS;
+            break;
+        case 't':
+            if (memcmp(name, "cache-diges", 11) == 0)
+                return H2O_TOKEN_CACHE_DIGEST;
             break;
         }
         break;

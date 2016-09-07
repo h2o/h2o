@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Digest::SHA1 qw(sha1_base64);
+use Digest::SHA qw(sha1_base64);
 use Plack::App::File;
 use Plack::Builder;
 use Plack::Request;

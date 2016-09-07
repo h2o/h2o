@@ -35,11 +35,53 @@ static int on_config_status(h2o_configurator_command_t *cmd, h2o_configurator_co
     }
 }
 
+struct st_status_configurator {
+    h2o_configurator_t super;
+    int stack;
+    int duration_stats;
+};
+
+static int on_config_duration_stats(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct st_status_configurator *c = (void *)cmd->configurator;
+    ssize_t ret;
+    switch (ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
+    case 0: /* OFF */
+    case 1: /* ON */
+        c->duration_stats = (int)ret;
+        return 0;
+    default: /* error */
+        return -1;
+    }
+}
+
+int on_enter_status(h2o_configurator_t *_conf, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct st_status_configurator *c = (void *)_conf;
+    c->stack++;
+    return 0;
+}
+
+int on_exit_status(h2o_configurator_t *_conf, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct st_status_configurator *c = (void *)_conf;
+    c->stack--;
+    if (!c->stack && c->duration_stats) {
+        h2o_duration_stats_register(ctx->globalconf);
+    }
+    return 0;
+}
+
 void h2o_status_register_configurator(h2o_globalconf_t *conf)
 {
-    h2o_configurator_t *c = h2o_configurator_create(conf, sizeof(*c));
+    struct st_status_configurator *c = (void *)h2o_configurator_create(conf, sizeof(*c));
+    c->super.enter = on_enter_status;
+    c->super.exit = on_exit_status;
 
-    h2o_configurator_define_command(c, "status", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED |
-                                                     H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+    h2o_configurator_define_command(&c->super, "status", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED |
+                                                             H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_status);
+
+    h2o_configurator_define_command(&c->super, "duration-stats", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_duration_stats);
 }
