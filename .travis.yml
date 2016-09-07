@@ -22,7 +22,7 @@ before_install:
   # setup variables
   - export INSTALL_DIR=${HOME}/local
   - export CPANM_DIR=${HOME}/cpanm
-  - export PATH=`echo -n "$PATH" | sed -E "s~(:/usr(/local/bin|/bin):)~:${INSTALL_DIR}/bin:${CPANM_DIR}/bin\1~"`
+  - export PATH=`echo -n "$PATH" | sed -E "s#(:/usr(/local/bin|/bin):)#:${INSTALL_DIR}/bin:${CPANM_DIR}/bin\1#"`
   - export PKG_CONFIG_PATH=${INSTALL_DIR}/lib/pkgconfig:/usr/local/opt/openssl/lib/pkgconfig
   - export PERL5LIB=${CPANM_DIR}/lib/perl5
   - export PERL_CPANM_OPT="--local-lib=${CPANM_DIR}"
