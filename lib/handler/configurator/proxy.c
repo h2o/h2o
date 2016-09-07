@@ -95,10 +95,10 @@ static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mod
 
     /* inherit the properties that weren't specified */
     if (cert_store == NULL)
-        cert_store = (*ctx)->cert_store;
-    CRYPTO_add(&cert_store->references, 1, CRYPTO_LOCK_X509_STORE);
+        cert_store = SSL_CTX_get_cert_store(*ctx);
+    X509_STORE_up_ref(cert_store);
     if (verify_mode == -1)
-        verify_mode = (*ctx)->verify_mode;
+        verify_mode = SSL_CTX_get_verify_mode(*ctx);
 
     /* free the existing context */
     if (*ctx != NULL)
@@ -106,9 +106,7 @@ static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mod
 
     /* create new ctx */
     *ctx = create_ssl_ctx();
-    if ((*ctx)->cert_store != NULL)
-        X509_STORE_free((*ctx)->cert_store);
-    (*ctx)->cert_store = cert_store;
+    SSL_CTX_set_cert_store(*ctx, cert_store);
     SSL_CTX_set_verify(*ctx, verify_mode, NULL);
 }
 
@@ -198,7 +196,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
         free(ca_bundle);
         SSL_CTX_set_verify(self->vars->ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
     } else {
-        CRYPTO_add(&self->vars->ssl_ctx->references, 1, CRYPTO_LOCK_SSL_CTX);
+        SSL_CTX_up_ref(self->vars->ssl_ctx);
     }
 
     return 0;

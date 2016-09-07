@@ -172,18 +172,19 @@ static struct {
 static struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EVP_MD *md, uint64_t not_before, uint64_t not_after,
                                               int fill_in)
 {
-    struct st_session_ticket_t *ticket = h2o_mem_alloc(sizeof(*ticket) + cipher->key_len + md->block_size);
+    int key_len = EVP_CIPHER_key_length(cipher), block_size = EVP_MD_block_size(md);
+    struct st_session_ticket_t *ticket = h2o_mem_alloc(sizeof(*ticket) + key_len + block_size);
 
     ticket->cipher.cipher = cipher;
     ticket->cipher.key = (unsigned char *)ticket + sizeof(*ticket);
     ticket->hmac.md = md;
-    ticket->hmac.key = ticket->cipher.key + cipher->key_len;
+    ticket->hmac.key = ticket->cipher.key + key_len;
     ticket->not_before = not_before;
     ticket->not_after = not_after;
     if (fill_in) {
         RAND_bytes(ticket->name, sizeof(ticket->name));
-        RAND_bytes(ticket->cipher.key, ticket->cipher.cipher->key_len);
-        RAND_bytes(ticket->hmac.key, ticket->hmac.md->block_size);
+        RAND_bytes(ticket->cipher.key, key_len);
+        RAND_bytes(ticket->hmac.key, block_size);
     }
 
     return ticket;
@@ -191,7 +192,8 @@ static struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EV
 
 static void free_ticket(struct st_session_ticket_t *ticket)
 {
-    h2o_mem_set_secure(ticket, 0, sizeof(*ticket) + ticket->cipher.cipher->key_len + ticket->hmac.md->block_size);
+    int key_len = EVP_CIPHER_key_length(ticket->cipher.cipher), block_size = EVP_MD_block_size(ticket->hmac.md);
+    h2o_mem_set_secure(ticket, 0, sizeof(*ticket) + key_len + block_size);
     free(ticket);
 }
 
@@ -246,7 +248,7 @@ static int ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char 
         }
         memcpy(key_name, ticket->name, sizeof(ticket->name));
         EVP_EncryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, iv);
-        HMAC_Init_ex(hctx, ticket->hmac.key, ticket->hmac.md->block_size, ticket->hmac.md, NULL);
+        HMAC_Init_ex(hctx, ticket->hmac.key, EVP_MD_block_size(ticket->hmac.md), ticket->hmac.md, NULL);
         if (temp_ticket != NULL)
             free_ticket(ticket);
         ret = 1;
@@ -263,7 +265,7 @@ static int ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char 
         goto Exit;
     Found:
         EVP_DecryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, iv);
-        HMAC_Init_ex(hctx, ticket->hmac.key, ticket->hmac.md->block_size, ticket->hmac.md, NULL);
+        HMAC_Init_ex(hctx, ticket->hmac.key, EVP_MD_block_size(ticket->hmac.md), ticket->hmac.md, NULL);
         ret = i == 0 ? 1 : 2; /* request renew if the key is not the newest one */
     }
 
@@ -317,9 +319,10 @@ static int serialize_ticket_entry(char *buf, size_t bufsz, struct st_session_tic
 {
     char *name_buf = alloca(sizeof(ticket->name) * 2 + 1);
     h2o_hex_encode(name_buf, ticket->name, sizeof(ticket->name));
-    char *key_buf = alloca((ticket->cipher.cipher->key_len + ticket->hmac.md->block_size) * 2 + 1);
-    h2o_hex_encode(key_buf, ticket->cipher.key, ticket->cipher.cipher->key_len);
-    h2o_hex_encode(key_buf + (ticket->cipher.cipher->key_len) * 2, ticket->hmac.key, ticket->hmac.md->block_size);
+    int key_len = EVP_CIPHER_key_length(ticket->cipher.cipher), block_size = EVP_MD_block_size(ticket->hmac.md);
+    char *key_buf = alloca((key_len + block_size) * 2 + 1);
+    h2o_hex_encode(key_buf, ticket->cipher.key, key_len);
+    h2o_hex_encode(key_buf + key_len * 2, ticket->hmac.key, block_size);
 
     return snprintf(buf, bufsz, "- name: %s\n"
                                 "  cipher: %s\n"
@@ -383,7 +386,7 @@ static struct st_session_ticket_t *parse_ticket_entry(yoml_t *element, char *err
         }
     });
     FETCH("key", {
-        size_t keylen = cipher->key_len + hash->block_size;
+        size_t keylen = EVP_CIPHER_key_length(cipher) + EVP_MD_block_size(hash);
         if (strlen(t->data.scalar) != keylen * 2) {
             sprintf(errstr, "length of the `key` attribute is incorrect (is %zu, must be %zu)\n", strlen(t->data.scalar),
                     keylen * 2);
@@ -416,8 +419,8 @@ static struct st_session_ticket_t *parse_ticket_entry(yoml_t *element, char *err
 
     ticket = new_ticket(cipher, hash, not_before, not_after, 0);
     memcpy(ticket->name, name, sizeof(ticket->name));
-    memcpy(ticket->cipher.key, key, cipher->key_len);
-    memcpy(ticket->hmac.key, key + cipher->key_len, hash->block_size);
+    memcpy(ticket->cipher.key, key, EVP_CIPHER_key_length(cipher));
+    memcpy(ticket->hmac.key, key + EVP_CIPHER_key_length(cipher), EVP_MD_block_size(hash));
     return ticket;
 }
 
