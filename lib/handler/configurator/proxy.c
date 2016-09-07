@@ -37,13 +37,13 @@ struct proxy_configurator_t {
 static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%" PRIu64, &self->vars->io_timeout);
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->io_timeout);
 }
 
 static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%" PRIu64, &self->vars->keepalive_timeout);
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->keepalive_timeout);
 }
 
 static int on_config_preserve_host(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -69,7 +69,7 @@ static int on_config_proxy_protocol(h2o_configurator_command_t *cmd, h2o_configu
 static int on_config_websocket_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%" PRIu64, &self->vars->websocket.timeout);
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->websocket.timeout);
 }
 
 static int on_config_websocket(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -100,10 +100,10 @@ static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mod
 
     /* inherit the properties that weren't specified */
     if (cert_store == NULL)
-        cert_store = (*ctx)->cert_store;
-    CRYPTO_add(&cert_store->references, 1, CRYPTO_LOCK_X509_STORE);
+        cert_store = SSL_CTX_get_cert_store(*ctx);
+    X509_STORE_up_ref(cert_store);
     if (verify_mode == -1)
-        verify_mode = (*ctx)->verify_mode;
+        verify_mode = SSL_CTX_get_verify_mode(*ctx);
     h2o_cache_t *new_session_cache;
     if (session_cache == NULL) {
         h2o_cache_t *current = h2o_socket_ssl_get_session_cache(*ctx);
@@ -119,9 +119,7 @@ static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mod
 
     /* create new ctx */
     *ctx = create_ssl_ctx();
-    if ((*ctx)->cert_store != NULL)
-        X509_STORE_free((*ctx)->cert_store);
-    (*ctx)->cert_store = cert_store;
+    SSL_CTX_set_cert_store(*ctx, cert_store);
     SSL_CTX_set_verify(*ctx, verify_mode, NULL);
     if (new_session_cache != NULL)
         h2o_socket_ssl_set_session_cache(*ctx, new_session_cache);
@@ -296,7 +294,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
             create_ssl_session_cache(H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY, H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_DURATION);
         h2o_socket_ssl_set_session_cache(self->vars->ssl_ctx, ssl_session_cache);
     } else {
-        CRYPTO_add(&self->vars->ssl_ctx->references, 1, CRYPTO_LOCK_SSL_CTX);
+        SSL_CTX_up_ref(self->vars->ssl_ctx);
     }
 
     return 0;

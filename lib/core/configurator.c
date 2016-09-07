@@ -118,7 +118,7 @@ static int config_timeout(h2o_configurator_command_t *cmd, yoml_t *node, uint64_
 {
     uint64_t timeout_in_secs;
 
-    if (h2o_configurator_scanf(cmd, node, "%" PRIu64, &timeout_in_secs) != 0)
+    if (h2o_configurator_scanf(cmd, node, "%" SCNu64, &timeout_in_secs) != 0)
         return -1;
 
     *slot = timeout_in_secs * 1000;
