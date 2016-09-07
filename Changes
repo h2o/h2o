@@ -1,5 +1,12 @@
 Revision history for H2O.
 
+2.0.3 2016-09-07 22:03:00+0000
+	- [file] don't use `readdir_r` on Linux, Solaris #1046 #1052 (Frederik Deweerdt, Kazuho Oku)
+	- [http2] fix negative error code sent when cancelling a pushed stream #1039 (Frederik Deweerdt)
+	- [http2] fix a bug that may cause a stream to stall #1040 (Frederik Deweerdt)
+	- [http2] fix a bug that reset the stream when receiving HEADERS after PRIORITY #1043 (Frederik Deweerdt)
+	- [mruby] fix mruby handler becoming unusable after failed connection in http_request on FreeBSD #1062 (Kazuho Oku)
+
 2.0.2 2016-08-01 20:36:00+0000
 	- [fastcgi] setenv should displace HTTP headers #996 (Kazuho Oku)
 	- [http2] fix buffer overrun #972 (Frederik Deweerdt)
