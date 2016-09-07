@@ -163,11 +163,17 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
     size_t i;
     size_t capacity = 0;
     uint64_t duration = 0;
+    h2o_cache_t *current_cache = h2o_socket_ssl_get_session_cache(self->vars->ssl_ctx);
 
     switch (node->type) {
     case YOML_TYPE_SCALAR:
         if (strcasecmp(node->data.scalar, "OFF") == 0) {
-            /* disabled */
+            if (current_cache) {
+                /* set the cache NULL */
+                h2o_cache_t *empty_cache = NULL;
+                update_ssl_ctx(&self->vars->ssl_ctx, NULL, -1, &empty_cache);
+            }
+            return 0;
         } else if (strcasecmp(node->data.scalar, "ON") == 0) {
             /* use default values */
             capacity = H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY;
@@ -216,24 +222,16 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
         return -1;
     }
 
-    h2o_cache_t *current_cache = h2o_socket_ssl_get_session_cache(self->vars->ssl_ctx);
-    h2o_cache_t *new_cache;
-    if (current_cache == NULL) {
-        if (capacity != 0) {
-            new_cache = create_ssl_session_cache(capacity, duration);
-        } else {
-            return 0;
-        }
-    } else {
+    if (current_cache != NULL) {
         size_t current_capacity = h2o_cache_get_capacity(current_cache);
         uint64_t current_duration = h2o_cache_get_duration(current_cache);
-        if (capacity != current_capacity || duration != current_duration) {
-            new_cache = create_ssl_session_cache(capacity, duration);
-        } else {
+        if (capacity == current_capacity && duration == current_duration) {
+            /* parameters aren't changed, so reuse it */
             return 0;
         }
     }
 
+    h2o_cache_t *new_cache = create_ssl_session_cache(capacity, duration);
     update_ssl_ctx(&self->vars->ssl_ctx, NULL, -1, &new_cache);
     return 0;
 }
