@@ -89,13 +89,12 @@ static SSL_CTX *create_ssl_ctx(void)
     return ctx;
 }
 
-static h2o_cache_t *null_session_cache = (h2o_cache_t *){0}; /* indicate to make session cache empty */
 static h2o_cache_t *create_ssl_session_cache(size_t capacity, uint64_t duration)
 {
     return h2o_cache_create(H2O_CACHE_FLAG_MULTITHREADED, capacity, duration, h2o_socket_ssl_destroy_session_cache_entry);
 }
 
-static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mode, h2o_cache_t *session_cache)
+static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mode, h2o_cache_t **session_cache)
 {
     assert(*ctx != NULL);
 
@@ -105,10 +104,12 @@ static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mod
     CRYPTO_add(&cert_store->references, 1, CRYPTO_LOCK_X509_STORE);
     if (verify_mode == -1)
         verify_mode = (*ctx)->verify_mode;
+    h2o_cache_t *new_session_cache;
     if (session_cache == NULL) {
-        h2o_cache_t *current_session_cache = h2o_socket_ssl_get_session_cache(*ctx);
-        session_cache =
-            create_ssl_session_cache(h2o_cache_get_capacity(current_session_cache), h2o_cache_get_duration(current_session_cache));
+        h2o_cache_t *current = h2o_socket_ssl_get_session_cache(*ctx);
+        new_session_cache = create_ssl_session_cache(h2o_cache_get_capacity(current), h2o_cache_get_duration(current));
+    } else {
+        new_session_cache = *session_cache;
     }
 
     /* free the existing context */
@@ -121,8 +122,8 @@ static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mod
         X509_STORE_free((*ctx)->cert_store);
     (*ctx)->cert_store = cert_store;
     SSL_CTX_set_verify(*ctx, verify_mode, NULL);
-    if (session_cache && session_cache != null_session_cache)
-        h2o_socket_ssl_set_session_cache(*ctx, session_cache);
+    if (new_session_cache != NULL)
+        h2o_socket_ssl_set_session_cache(*ctx, new_session_cache);
 }
 
 static int on_config_ssl_verify_peer(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -176,7 +177,8 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
         if (strcasecmp(node->data.scalar, "OFF") == 0) {
             if (current_cache != NULL) {
                 // clear session cache
-                update_ssl_ctx(&self->vars->ssl_ctx, NULL, -1, null_session_cache);
+                h2o_cache_t *cache = NULL;
+                update_ssl_ctx(&self->vars->ssl_ctx, NULL, -1, &cache);
             }
             return 0;
         } else if (strcasecmp(node->data.scalar, "ON") == 0) {
@@ -226,7 +228,7 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
 
     if (capacity != current_capacity || duration != current_duration) {
         h2o_cache_t *cache = create_ssl_session_cache(capacity, duration);
-        update_ssl_ctx(&self->vars->ssl_ctx, NULL, -1, cache);
+        update_ssl_ctx(&self->vars->ssl_ctx, NULL, -1, &cache);
     }
 
     return 0;
