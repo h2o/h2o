@@ -266,14 +266,31 @@ static int expbuf_read(struct expbuf_t *buf, int fd)
     return 0;
 }
 
+#if !defined(NAME_MAX) || defined(__linux__)
+/* readdir(3) is known to be thread-safe on Linux and should be thread-safe on a platform that does not have a predefined value for
+   NAME_MAX */
+#define FOREACH_DIRENT(dp, dent)                                                                                                   \
+    struct dirent *dent;                                                                                                           \
+    while ((dent = readdir(dp)) != NULL)
+#else
+#define FOREACH_DIRENT(dp, dent)                                                                                                   \
+    struct {                                                                                                                       \
+        struct dirent d;                                                                                                           \
+        char s[NAME_MAX + 1];                                                                                                      \
+    } dent_;                                                                                                                       \
+    struct dirent *dentp, *dent = &dent_.d;                                                                                        \
+    int ret;                                                                                                                       \
+    while ((ret = readdir_r(dp, dent, &dentp)) == 0 && dentp != NULL)
+#endif /* FOREACH_DIRENT */
+
 static void unlink_dir(const char *path)
 {
     DIR *dp;
     char buf[PATH_MAX];
 
     if ((dp = opendir(path)) != NULL) {
-        struct dirent entbuf, *entp;
-        while (readdir_r(dp, &entbuf, &entp) == 0 && entp != NULL) {
+        FOREACH_DIRENT(dp, entp)
+        {
             if (strcmp(entp->d_name, ".") == 0 || strcmp(entp->d_name, "..") == 0)
                 continue;
             snprintf(buf, sizeof(buf), "%s/%s", path, entp->d_name);
