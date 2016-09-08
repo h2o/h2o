@@ -124,7 +124,7 @@ typedef struct st_h2o_configurator_parse_attribute_t {
      */
     const char *name;
     /**
-     * parsed value (left unmodified if not found)
+     * parsed value (*value is set to the corresponding value or to NULL if not found)
      */
     yoml_t **value;
 } h2o_configurator_parse_attribute_t;
