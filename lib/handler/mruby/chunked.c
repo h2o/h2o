@@ -63,7 +63,7 @@ static void do_send(h2o_mruby_generator_t *generator, h2o_buffer_t **input, int 
         is_final = 0;
     }
 
-    h2o_send(generator->req, &buf, bufcnt, is_final);
+    h2o_send(generator->req, &buf, bufcnt, is_final ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
 }
 
 static void do_proceed(h2o_generator_t *_generator, h2o_req_t *req)
@@ -122,12 +122,12 @@ static void on_shortcut_notify(h2o_mruby_generator_t *generator)
 static void close_body_obj(h2o_mruby_generator_t *generator)
 {
     h2o_mruby_chunked_t *chunked = generator->chunked;
-    mrb_state *mrb = generator->ctx->mrb;
+    mrb_state *mrb = generator->ctx->shared->mrb;
 
     if (!mrb_nil_p(chunked->callback.body_obj)) {
         /* call close and throw away error */
-        if (mrb_respond_to(mrb, chunked->callback.body_obj, generator->ctx->symbols.sym_close))
-            mrb_funcall_argv(generator->ctx->mrb, chunked->callback.body_obj, generator->ctx->symbols.sym_close, 0, NULL);
+        if (mrb_respond_to(mrb, chunked->callback.body_obj, generator->ctx->shared->symbols.sym_close))
+            mrb_funcall_argv(mrb, chunked->callback.body_obj, generator->ctx->shared->symbols.sym_close, 0, NULL);
         mrb->exc = NULL;
         mrb_gc_unregister(mrb, chunked->callback.body_obj);
         chunked->callback.body_obj = mrb_nil_value();
@@ -144,7 +144,7 @@ mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator, mrb_valu
     generator->super.proceed = do_proceed;
     generator->chunked = chunked;
 
-    if ((chunked->shortcut.client = h2o_mruby_http_set_shortcut(generator->ctx->mrb, body, on_shortcut_notify)) != NULL) {
+    if ((chunked->shortcut.client = h2o_mruby_http_set_shortcut(generator->ctx->shared->mrb, body, on_shortcut_notify)) != NULL) {
         chunked->type = H2O_MRUBY_CHUNKED_TYPE_SHORTCUT;
         chunked->shortcut.remaining = NULL;
         on_shortcut_notify(generator);
@@ -152,9 +152,9 @@ mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator, mrb_valu
     } else {
         chunked->type = H2O_MRUBY_CHUNKED_TYPE_CALLBACK;
         h2o_buffer_init(&chunked->callback.receiving, &h2o_socket_buffer_prototype);
-        mrb_gc_register(generator->ctx->mrb, body);
+        mrb_gc_register(generator->ctx->shared->mrb, body);
         chunked->callback.body_obj = body;
-        return mrb_ary_entry(generator->ctx->constants, H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER);
+        return mrb_ary_entry(generator->ctx->shared->constants, H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER);
     }
 }
 
@@ -224,7 +224,7 @@ static mrb_value send_chunked_method(mrb_state *mrb, mrb_value self)
 mrb_value h2o_mruby_send_chunked_eos_callback(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value input,
                                               int *next_action)
 {
-    mrb_state *mrb = generator->ctx->mrb;
+    mrb_state *mrb = generator->ctx->shared->mrb;
 
     { /* precond check */
         mrb_value exc = check_precond(mrb, generator);
@@ -251,20 +251,21 @@ void h2o_mruby_send_chunked_close(h2o_mruby_generator_t *generator)
         do_send(generator, &chunked->callback.receiving, 1);
 }
 
-void h2o_mruby_send_chunked_init_context(h2o_mruby_context_t *ctx)
+void h2o_mruby_send_chunked_init_context(h2o_mruby_shared_context_t *shared_ctx)
 {
-    mrb_state *mrb = ctx->mrb;
+    mrb_state *mrb = shared_ctx->mrb;
 
     mrb_define_method(mrb, mrb->kernel_module, "_h2o_send_chunk", send_chunked_method, MRB_ARGS_ARG(1, 0));
     h2o_mruby_define_callback(mrb, "_h2o_send_chunk_eos", H2O_MRUBY_CALLBACK_ID_SEND_CHUNKED_EOS);
-    mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER, h2o_mruby_eval_expr(mrb, "Proc.new do |src|\n"
-                                                                                                    "  fiber = Fiber.new do\n"
-                                                                                                    "    src.each do |chunk|\n"
-                                                                                                    "      _h2o_send_chunk(chunk)\n"
-                                                                                                    "    end\n"
-                                                                                                    "    _h2o_send_chunk_eos()\n"
-                                                                                                    "  end\n"
-                                                                                                    "  fiber.resume\n"
-                                                                                                    "end"));
+    mrb_ary_set(mrb, shared_ctx->constants, H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER,
+                h2o_mruby_eval_expr(mrb, "Proc.new do |src|\n"
+                                         "  fiber = Fiber.new do\n"
+                                         "    src.each do |chunk|\n"
+                                         "      _h2o_send_chunk(chunk)\n"
+                                         "    end\n"
+                                         "    _h2o_send_chunk_eos()\n"
+                                         "  end\n"
+                                         "  fiber.resume\n"
+                                         "end"));
     h2o_mruby_assert(mrb);
 }

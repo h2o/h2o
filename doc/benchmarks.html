@@ -2,6 +2,7 @@
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
 
 <!-- oktavia -->
 <link rel="stylesheet" href="assets/searchstyle.css" type="text/css" />
@@ -22,7 +23,7 @@
 <a href="index.html">H2O</a>
 <iframe align="right" valign="baseline" src="https://ghbtns.com/github-btn.html?user=h2o&repo=h2o&type=star&count=true" frameborder="0" scrolling="0" width="100px" height="30px" style="padding-top: 30px"></iframe>
 </h1>
-the optimized HTTP/1.x, HTTP/2 server
+<p class="description">the optimized HTTP/1.x, HTTP/2 server</p>
 
 <!-- oktavia -->
 <form id="searchform">
@@ -65,7 +66,7 @@ Providing quick response to user is more important than anything else in web per
 According to a research conducted by Microsoft, 500msec slowdown in Bing causes their revenue go down by 1.2%<sup><a href="#note_1" id="#cite_1" title="Velocity and the Bottom Line - O&#39;Reilly Radar">1</sup></a></sup>.
 </p>
 <p>
-The chart below compares the first-paint times and download completion times of different web browsers / HTTP servers on a simulated network of 8Mbps bandwidth with 100ms latency, which is typcial for today's mobile networks<sup><a href="#note_2" id="#cite_2" title="A fork of http2rulez.com was used as the target website; bandwidth and latency were induced to local network using qdisc, specifically by running tc qdisc replace dev eth1 root handle 1:0 tbf rate 8192kbit burst 2048 latency 100ms; sudo tc qdisc add dev eth1 parent 1:1 netem delay 100ms, and sysctl -w net.ipv4.tcp_no_metrics_save=1.">2</sup></a></sup>.
+The chart below compares the first-paint times and download completion times of different web browsers / HTTP servers on a simulated network of 8Mbps bandwidth with 100ms latency, which is typical for today's mobile networks<sup><a href="#note_2" id="#cite_2" title="A fork of http2rulez.com was used as the target website; bandwidth and latency were induced to local network using qdisc, specifically by running tc qdisc replace dev eth1 root handle 1:0 tbf rate 8192kbit burst 2048 latency 100ms; sudo tc qdisc add dev eth1 parent 1:1 netem delay 100ms, and sysctl -w net.ipv4.tcp_no_metrics_save=1.">2</sup></a></sup>.
 </p>
 <div align="center">
 <a href="assets/8mbps100msec-nginx195-h2o150.png" target="_blank"><img src="assets/8mbps100msec-nginx195-h2o150.png" height="300"></a>

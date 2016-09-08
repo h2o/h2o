@@ -2,6 +2,7 @@
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
 <base href="../" />
 
 <!-- oktavia -->
@@ -23,7 +24,7 @@
 <a href="index.html">H2O</a>
 <iframe align="right" valign="baseline" src="https://ghbtns.com/github-btn.html?user=h2o&repo=h2o&type=star&count=true" frameborder="0" scrolling="0" width="100px" height="30px" style="padding-top: 30px"></iframe>
 </h1>
-the optimized HTTP/1.x, HTTP/2 server
+<p class="description">the optimized HTTP/1.x, HTTP/2 server</p>
 
 <!-- oktavia -->
 <form id="searchform">
@@ -154,7 +155,7 @@ When H2O receives a request that exactly matches to an entry in paths that does 
 </p>
 <p>
 Since 2.0, it depends on the handler of the path whether if a 301 redirect that appends a slash is returned.
-Server administartors can take advantage of this change to define per-path configurations (see the examples in <a href="configure/file_directives.html#file.file"><code>file.file</code></a> and the <a href="configure/fastcgi_directives.html">FastCGI handler</a>).
+Server administrators can take advantage of this change to define per-path configurations (see the examples in <a href="configure/file_directives.html#file.file"><code>file.file</code></a> and the <a href="configure/fastcgi_directives.html">FastCGI handler</a>).
 <a href="configure/file_directives.html#file.dir"><code>file.dir</code></a> is an exception that continues to perform the redirection; in case of the example above, access to <code>/assets</code> is redirected to <code>/assets/</code>.
 </p>
 
@@ -265,7 +266,7 @@ Default is <code>client</code>.
 </dd>
 <dt id="dh-file">dh-file:</dt>
 <dd>
-path of a PEM file containing the Diffie-Hellman paratemers to be used.
+path of a PEM file containing the Diffie-Hellman parameters to be used.
 Use of the file is recommended for servers using Diffie-Hellman key agreement.
 (optional)
 </dd>
@@ -281,7 +282,7 @@ Default is 3.
 </dd>
 <dt id="neverbleed">neverbleed:</dt>
 <dd>
-unless set to <code>OFF</code>, H2O isolates RSA private key operations to an islotated process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
+unless set to <code>OFF</code>, H2O isolates RSA private key operations to an isolated process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
 Default is <code>ON</code>.
 </dl>
 <p>
@@ -312,7 +313,7 @@ If omitted, the socket file will be owned by the launching user.
 </dd>
 <dt>permission</dt>
 <dd>
-an octal number specifying the permission of the sokcet file.
+an octal number specifying the permission of the socket file.
 Many operating systems require write permission for connecting to the socket file.
 If omitted, the permission of the socket file will reflect the umask of the calling process.
 </dd>

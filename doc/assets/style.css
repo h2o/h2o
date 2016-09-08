@@ -15,28 +15,41 @@ a {
     background: #fff;
     margin: 0 auto;
     padding: 0;
-    width: 800px;
+    width: 100%;
+    max-width: 800px;
     text-align: justify;
 }
 
 #top {
     background: #336;
     color: #eee;
-    width: 740px;
+    width: 100%;
+    padding: 0 0;
     margin: 0 0;
-    padding: 35px 10px 20px 50px;
     position: relative;
 }
 
 #top h1 {
     font-size: 60px;
-    margin: 0;
+    padding: 35px 10px 0 50px;
+    margin: 0 0;
     line-height: 1em;
 }
 
 #top h1 a {
     color: #fff;
     text-decoration: none;
+}
+
+#top .description {
+  padding: 0 10px 20px 50px;
+  margin: 0 0;
+}
+
+@media screen and (max-width: 800px) {
+    #top .description {
+        padding-bottom: 45px;
+    }
 }
 
 #top ul {
@@ -57,7 +70,7 @@ a {
 }
 
 #menu {
-    width: 800px;
+    width: 100%;
     background: #fff;
     padding: 0;
     border-collapse: collapse;
@@ -70,12 +83,31 @@ a {
     background: #ddd;
 }
 
+@media screen and (max-width: 800px) {
+    #menu td {
+      word-break: break-word;
+    }
+
+    #menu td:first-child,
+    #menu td:last-child {
+        border-left: none;
+        border-right: none;
+    }
+}
+
 #menu td a {
     display: block;
     padding: 0.4em;
     color: #333;
     font-weight: bold;
     text-decoration: none;
+}
+
+@media screen and (max-width: 800px) {
+    #menu td a {
+        padding-left: 0;
+        padding-right: 0;
+    }
 }
 
 #menu .selected {
@@ -100,6 +132,16 @@ a {
     display: inline-block;
     border: 1px solid #aaa;
     border-top: none;
+}
+
+@media screen and (max-width: 800px) {
+    #main {
+        width: 100%;
+        padding-left: 0;
+        padding-right: 0;
+        border-left: none;
+        border-right: none;
+    }
 }
 
 #main h2 {
@@ -198,6 +240,15 @@ a {
     text-decoration: none;
 }
 
+#main img {
+    height: auto;
+    max-width: 100%;
+}
+
+#main .section-head {
+    border-bottom: 1px solid gray;
+}
+
 #main .directive-head {
     margin: 2em 0 1em 0;
     border-bottom: 1px solid #999;
@@ -224,11 +275,80 @@ a {
 }
 
 #main .directive-desc dd {
-    margin-top: 0.5em 0 1em 0;
+    margin: 0.5em 0 1em 0;
 }
 
 #main .directive-desc dd :first-child {
     margin-top: 0.3em;
+}
+
+#main .mruby-method-head {
+    margin: 2em 0 1em 0;
+    border-bottom: 1px solid #999;
+}
+
+#main .mruby-method-head h3 {
+    margin: 0;
+    font-size: 120%;
+}
+
+#main .mruby-method-head h3 a {
+    color: black;
+    text-decoration: none;
+}
+
+#main .mruby-method-since {
+    margin: 0;
+    font-size: 80%;
+    float: right;
+}
+
+#main .mruby-method-desc dt {
+    margin: 0.5em 0 0.3em 0;
+}
+
+#main .mruby-method-desc dd {
+    margin: 0.5em 0 1em 0;
+}
+
+#main .mruby-method-desc dd :first-child {
+    margin-top: 0.3em;
+}
+
+#main .mruby-method-parameters {
+    margin-left: 1.5em;
+}
+
+@media screen and (max-width: 800px) {
+    #main h2,
+    #main h3,
+    #main h4,
+    #main div,
+    #main p,
+    #main dt,
+    #main ul,
+    #main pre,
+    #main table,
+    #main .notes,
+    #main .directive-head,
+    #main .directive-desc {
+        margin-left: 25px;
+        margin-right: 25px
+    }
+    #main .mruby-method-head,
+    #main .mruby-method-desc {
+        margin-left: 25px;
+        margin-right: 25px
+    }
+
+    #main * div,
+    #main * p,
+    #main * table,
+    #main * ul,
+    #main * pre {
+        margin-left: 0;
+        margin-right: 0;
+    }
 }
 
 #footer {
@@ -237,4 +357,11 @@ a {
     border-color: #aaa;
     padding: 1em 50px 1em 50px;
     text-align: center;
+}
+
+@media screen and (max-width: 800px) {
+    #footer {
+        border-right: none;
+        border-left: none;
+    }
 }

@@ -1,0 +1,7 @@
+project picohttpparser ;
+
+lib picohttpparser : picohttpparser.c ;
+
+unit-test test
+	: picohttpparser picotest/picotest.c test.c
+	: <testing.launcher>prove ;

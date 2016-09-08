@@ -33,6 +33,8 @@
 <li><a href="configure/basic_auth.html">Using Basic Authentication</a></li>
 <li><a href="configure/cgi.html">Using CGI</a></li>
 <li><a href="configure/mruby.html">Using Mruby</a></li>
+<li><a href="configure/dos_detection.html">Using DoS Detection</a></li>
+<li><a href="configure/access_control.html">Access Control</a></li>
 </ul>
 </li>
 <li><a href="https://github.com/h2o/h2o/wiki#configuration-examples" target="_blank">Configuration Examples (Wiki)</a>

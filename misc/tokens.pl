@@ -187,7 +187,7 @@ __DATA__
 35 0 1 0 0 expect
 36 0 0 0 0 expires
 37 0 0 0 0 from
-38 0 1 0 0 host
+38 0 1 1 0 host
 39 0 0 0 0 if-match
 40 0 0 0 0 if-modified-since
 41 0 0 0 0 if-none-match
@@ -219,3 +219,4 @@ __DATA__
 0 1 0 0 0 keep-alive
 0 0 0 0 0 x-forwarded-for
 0 0 0 0 0 x-traffic
+0 0 0 0 0 cache-digest

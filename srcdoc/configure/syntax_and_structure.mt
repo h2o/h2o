@@ -3,7 +3,9 @@
 
 <h3>Syntax</h3>
 
+<p>
 H2O uses <a href="http://www.yaml.org/">YAML</a> 1.1 as the syntax of its configuration file.
+</p>
 
 <h3 id="config_levels">Levels of Configuration</h3>
 
@@ -116,6 +118,41 @@ hosts:
       port: 443
       ssl:
         <<: *default_ssl
+        certificate-file: /path/to/example.org.crt
+        key-file:         /path/to/example.org.crt
+    paths:
+      ...
+EOT
+?>
+
+<h3 id="including_files">Including Files</h3>
+
+<p>
+Starting from version 2.1, it is possible to include a YAML file from the configuration file using <code>!file</code> custom YAML tag.
+The following example extracts the TLS configuration into <code>default_ssl.conf</code> and include it multiple times in <code>h2o.conf</code>.
+</p>
+
+<?= $ctx->{example}->('default_ssl.conf', << 'EOT')
+minimum-version: TLSv1.2
+cipher-suite: ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256
+certificate-file: /path/to/example.com.crt
+key-file:         /path/to/example.com.crt
+EOT
+?>
+
+<?= $ctx->{example}->('h2o.conf', << 'EOT')
+hosts:
+  "example.com":
+    listen:
+      port: 443
+      ssl: !file default_ssl.conf
+    paths:
+      ...
+  "example.org":
+    listen:
+      port: 443
+      ssl:
+        <<: !file default_ssl.conf
         certificate-file: /path/to/example.org.crt
         key-file:         /path/to/example.org.crt
     paths:

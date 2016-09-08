@@ -150,6 +150,15 @@ void h2o_context_dispose(h2o_context_t *ctx)
     h2o_filecache_destroy(ctx->filecache);
     ctx->filecache = NULL;
 
+    /* clear storage */
+    for (i = 0; i != ctx->storage.size; ++i) {
+        h2o_context_storage_item_t *item = ctx->storage.entries + i;
+        if (item->dispose != NULL) {
+            item->dispose(item->data);
+        }
+    }
+    free(ctx->storage.entries);
+
     /* TODO assert that the all the getaddrinfo threads are idle */
     h2o_multithread_unregister_receiver(ctx->queue, &ctx->receivers.hostinfo_getaddr);
     h2o_multithread_destroy_queue(ctx->queue);

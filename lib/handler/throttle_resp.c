@@ -41,7 +41,7 @@ typedef struct st_throttle_resp_t {
     h2o_req_t *req;
     struct {
         iovec_vector_t bufs;
-        int is_final;
+        h2o_send_state_t stream_state;
     } state;
 } throttle_resp_t;
 
@@ -59,8 +59,8 @@ static void real_send(throttle_resp_t *self)
 
     self->tokens -= token_consume;
 
-    h2o_ostream_send_next(&self->super, self->req, self->state.bufs.entries, self->state.bufs.size, self->state.is_final);
-    if (self->state.is_final)
+    h2o_ostream_send_next(&self->super, self->req, self->state.bufs.entries, self->state.bufs.size, self->state.stream_state);
+    if (!h2o_send_state_is_in_progress(self->state.stream_state))
         h2o_timeout_unlink(&self->timeout_entry);
 }
 
@@ -75,7 +75,7 @@ static void add_token(h2o_timeout_entry_t *entry)
         real_send(self);
 }
 
-static void on_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
+static void on_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
     throttle_resp_t *self = (void *)_self;
     size_t i;
@@ -87,7 +87,7 @@ static void on_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, s
         self->state.bufs.entries[i] = inbufs[i];
     }
     self->state.bufs.size = inbufcnt;
-    self->state.is_final = is_final;
+    self->state.stream_state = state;
 
     /* if there's token, we try to send */
     if (self->tokens > 0)
@@ -138,7 +138,7 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     throttle->req = req;
     throttle->state.bufs.capacity = 0;
     throttle->state.bufs.size = 0;
-    throttle->timeout_entry = (h2o_timeout_entry_t){};
+    throttle->timeout_entry = (h2o_timeout_entry_t){0};
     throttle->timeout_entry.cb = add_token;
     throttle->tokens = throttle->token_inc;
     slot = &throttle->super.next;

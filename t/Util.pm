@@ -6,12 +6,13 @@ use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempfile);
 use Net::EmptyPort qw(check_port empty_port);
 use POSIX ":sys_wait_h";
+use Path::Tiny;
 use Scope::Guard qw(scope_guard);
 use Test::More;
 use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl);
+our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
@@ -62,6 +63,49 @@ sub exec_unittest {
 
     exec $fn;
     die "failed to exec $fn:$!";
+}
+
+sub exec_mruby_unittest {
+    plan skip_all => 'mruby support is off'
+        unless server_features()->{mruby};
+
+    my $test_dir = path('t/00unit.mruby');
+    my $bin = path(bindir(), 'mruby/host/bin/mruby');
+    unless (-e $bin) {
+        die "unit test: mruby binary $bin does not exist";
+    }
+
+	my $k = 0;
+    $test_dir->visit(sub {
+        my ($path) = @_;
+        return unless $path =~ /\.rb$/;
+
+        my $fn = "$bin $path";
+        my $output = `$fn`;
+
+		# parse mruby test output
+		$output =~ /# Running tests:\n\n([SFE\.]+)\n/
+			or die "cannot parse test output for $path";
+		my ($i, $j) = (0, 0);
+		my @results = map { +{ type => $_, index => ++$i, failed => ($_ eq 'F' || $_ eq 'E') } } split(//, $1);
+		while ($output =~ /\d\) (Skipped|Failure|Error):\n([^\n]+)/g) {
+			my ($type, $detail) = (substr($1, 0, 1), $2);
+			while ($results[$j]->{type} ne $type) { $j++; }
+			$results[$j++]->{detail} = $detail;
+		}
+
+		# print TAP compatible output
+		printf("%s %s\n", $path, '.' x (51 - length($path)));
+		for my $r (@results) {
+			printf("    %s %d - %s\n", $r->{failed} ? 'not ok' : 'ok', $r->{index}, $r->{detail} || '');
+			printf STDERR ("# Error - %s\n", $r->{detail}) if $r->{failed};
+		}
+		printf("    1..%d\n", scalar(@results));
+		printf("%s %d - %s\n", (grep { $_->{failed} } @results) ? 'not ok' : 'ok', ++$k, $path);
+
+    }, +{ recurse => 1 });
+
+	printf("1..%d\n", $k);
 }
 
 # spawns a child process and returns a guard object that kills the process when destroyed

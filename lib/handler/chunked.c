@@ -29,7 +29,7 @@ typedef struct st_chunked_encoder_t {
     char buf[64];
 } chunked_encoder_t;
 
-static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
+static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
     chunked_encoder_t *self = (void *)_self;
     h2o_iovec_t *outbufs = alloca(sizeof(h2o_iovec_t) * (inbufcnt + 2));
@@ -48,16 +48,25 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
         outbufcnt++;
         memcpy(outbufs + outbufcnt, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
         outbufcnt += inbufcnt;
-        outbufs[outbufcnt].base = "\r\n0\r\n\r\n";
-        outbufs[outbufcnt].len = is_final ? 7 : 2;
-        outbufcnt++;
-    } else if (is_final) {
+        if (state != H2O_SEND_STATE_ERROR) {
+            outbufs[outbufcnt].base = "\r\n0\r\n\r\n";
+            outbufs[outbufcnt].len = state == H2O_SEND_STATE_FINAL ? 7 : 2;
+            outbufcnt++;
+        }
+    } else if (state == H2O_SEND_STATE_FINAL) {
         outbufs[outbufcnt].base = "0\r\n\r\n";
         outbufs[outbufcnt].len = 5;
         outbufcnt++;
     }
 
-    h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, is_final);
+    /* if state is error, send a broken chunk to pass the error down to the browser */
+    if (state == H2O_SEND_STATE_ERROR) {
+        outbufs[outbufcnt].base = "\r\n1\r\n";
+        outbufs[outbufcnt].len = 5;
+        outbufcnt++;
+    }
+
+    h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, state);
 }
 
 static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)

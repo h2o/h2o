@@ -2,6 +2,7 @@
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
 <base href="../" />
 
 <!-- oktavia -->
@@ -23,7 +24,7 @@
 <a href="index.html">H2O</a>
 <iframe align="right" valign="baseline" src="https://ghbtns.com/github-btn.html?user=h2o&repo=h2o&type=star&count=true" frameborder="0" scrolling="0" width="100px" height="30px" style="padding-top: 30px"></iframe>
 </h1>
-the optimized HTTP/1.x, HTTP/2 server
+<p class="description">the optimized HTTP/1.x, HTTP/2 server</p>
 
 <!-- oktavia -->
 <form id="searchform">
@@ -61,7 +62,9 @@ Syntax and Structure
 
 <h3>Syntax</h3>
 
+<p>
 H2O uses <a href="http://www.yaml.org/">YAML</a> 1.1 as the syntax of its configuration file.
+</p>
 
 <h3 id="config_levels">Levels of Configuration</h3>
 
@@ -174,6 +177,45 @@ The following example reuses the TLS configuration of <code>example.com</code> i
     paths:
       ...
 </code></pre>
+
+<h3 id="including_files">Including Files</h3>
+
+<p>
+Starting from version 2.1, it is possible to include a YAML file from the configuration file using <code>!file</code> custom YAML tag.
+The following example extracts the TLS configuration into <code>default_ssl.conf</code> and include it multiple times in <code>h2o.conf</code>.
+</p>
+
+<div class="example">
+<div class="caption">Example. default_ssl.conf</div>
+<pre><code>minimum-version: TLSv1.2
+cipher-suite: ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256
+certificate-file: /path/to/example.com.crt
+key-file:         /path/to/example.com.crt
+</code></pre>
+</div>
+
+
+<div class="example">
+<div class="caption">Example. h2o.conf</div>
+<pre><code>hosts:
+  &quot;example.com&quot;:
+    listen:
+      port: 443
+      ssl: !file default_ssl.conf
+    paths:
+      ...
+  &quot;example.org&quot;:
+    listen:
+      port: 443
+      ssl:
+        &lt;&lt;: !file default_ssl.conf
+        certificate-file: /path/to/example.org.crt
+        key-file:         /path/to/example.org.crt
+    paths:
+      ...
+</code></pre>
+</div>
+
 
 
 

@@ -28,7 +28,7 @@
 #include "h2o/memory.h"
 #include "h2o/filecache.h"
 
-KHASH_SET_INIT_STR(opencache_set);
+KHASH_SET_INIT_STR(opencache_set)
 
 struct st_h2o_filecache_t {
     khash_t(opencache_set) * hash;
@@ -96,7 +96,7 @@ h2o_filecache_ref_t *h2o_filecache_open_file(h2o_filecache_t *cache, const char 
     /* create a new cache entry */
     ref = h2o_mem_alloc(offsetof(h2o_filecache_ref_t, _path) + strlen(path) + 1);
     ref->_refcnt = 1;
-    ref->_lru = (h2o_linklist_t){};
+    ref->_lru = (h2o_linklist_t){NULL};
     strcpy(ref->_path, path);
 
     /* if cache is used, then... */

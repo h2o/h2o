@@ -2,6 +2,7 @@
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
 <base href="../" />
 
 <!-- oktavia -->
@@ -23,7 +24,7 @@
 <a href="index.html">H2O</a>
 <iframe align="right" valign="baseline" src="https://ghbtns.com/github-btn.html?user=h2o&repo=h2o&type=star&count=true" frameborder="0" scrolling="0" width="100px" height="30px" style="padding-top: 30px"></iframe>
 </h1>
-the optimized HTTP/1.x, HTTP/2 server
+<p class="description">the optimized HTTP/1.x, HTTP/2 server</p>
 
 <!-- oktavia -->
 <form id="searchform">
@@ -141,7 +142,7 @@ A boolean flag(<code>ON</code> or <code>OFF</code>) indicating if the server pre
 </p>
 
 <p>
-By default, when transmitting a HTTP request to an upstream HTTP server, H2O removes the received <code>x-forwarded-proto</code> request header and sends its own, as a precautios measure to prevent an attacker connecting through HTTP to lie that they are connected via HTTPS.
+By default, when transmitting a HTTP request to an upstream HTTP server, H2O removes the received <code>x-forwarded-proto</code> request header and sends its own, as a precaution measure to prevent an attacker connecting through HTTP to lie that they are connected via HTTPS.
 However in case H2O is run behind a trusted HTTPS proxy, such protection might not be desirable, and this configuration directive can be used to modify the behaviour.
 </p>
 
@@ -150,6 +151,29 @@ However in case H2O is run behind a trusted HTTPS proxy, such protection might n
 <dd>global</dd>
 <dt>Default:</dt>
 <dd><code><pre>proxy.preserve-x-forwarded-proto: OFF</pre></code>
+</dl>
+
+<div id="proxy.emit-x-forwarded-headers" class="directive-head">
+<div class="directive-since">since v2.1</div>
+<h3><a href="configure/proxy_directives.html#proxy.emit-x-forwarded-headers"><code>"proxy.emit-x-forwarded-headers"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag(<code>ON</code> or <code>OFF</code>) indicating if the server will append or add the <code>x-forwarded-proto</code> and <code>x-forwarded-for</code> request headers.
+</p>
+
+<p>
+By default, when forwarding an HTTP request H2O sends its own <code>x-forwarded-proto</code> and <code>x-forwarded-for</code> request headers (or might append its value in the <code>x-forwarded-proto</code> case, see <code>proxy.preserve-x-forwarded-proto</code>). This might not be always desirable. Please keep in mind security implications when setting this of <code>OFF</code>, since it might allow an attacker to spoof the originator or the protocol of a request.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.emit-x-forwarded-headers: ON</pre></code>
 </dl>
 
 <div id="proxy.ssl.cafile" class="directive-head">

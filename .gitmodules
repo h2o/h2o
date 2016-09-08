@@ -7,3 +7,6 @@
 [submodule "misc/oktavia"]
 	path = misc/oktavia
 	url = https://github.com/shibukawa/oktavia.git
+[submodule "misc/cache-digest.js"]
+	path = misc/cache-digest.js
+	url = https://github.com/h2o/cache-digest.js.git

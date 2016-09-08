@@ -38,7 +38,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     h2o_iovec_t *authority;
 
     /* setup overrides */
-    *overrides = (h2o_req_overrides_t){};
+    *overrides = (h2o_req_overrides_t){NULL};
     if (self->sockpool != NULL) {
         overrides->socketpool = self->sockpool;
     } else if (self->config.preserve_host) {
@@ -47,6 +47,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     }
     overrides->location_rewrite.match = &self->upstream;
     overrides->location_rewrite.path_prefix = req->pathconf->path;
+    overrides->use_proxy_protocol = self->config.use_proxy_protocol;
     overrides->client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
 
     /* determine the scheme and authority */
@@ -60,7 +61,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
     /* request reprocess */
     h2o_reprocess_request(req, req->method, scheme, *authority,
-                          h2o_build_destination(req, self->upstream.path.base, self->upstream.path.len), overrides, 0);
+                          h2o_build_destination(req, self->upstream.path.base, self->upstream.path.len, 0), overrides, 0);
 
     return 0;
 }
@@ -156,5 +157,5 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
     h2o_strtolower(self->upstream.host.base, self->upstream.host.len);
     self->config = *config;
     if (self->config.ssl_ctx != NULL)
-        CRYPTO_add(&self->config.ssl_ctx->references, 1, CRYPTO_LOCK_SSL_CTX);
+        SSL_CTX_up_ref(self->config.ssl_ctx);
 }

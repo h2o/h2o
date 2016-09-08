@@ -23,6 +23,7 @@ my $create_tab = sub {
 ? if ($main::context->{filename} eq 'index.html') {
 <link rel="canonical" href="./" />
 ? }
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
 ? my $base = "../" x (scalar(split '/', $main::context->{filename}) - 1);
 ? if ($base ne '') {
 <base href="<?= $base ?>" />
@@ -47,7 +48,7 @@ my $create_tab = sub {
 <a href="index.html">H2O</a>
 <iframe align="right" valign="baseline" src="https://ghbtns.com/github-btn.html?user=h2o&repo=h2o&type=star&count=true" frameborder="0" scrolling="0" width="100px" height="30px" style="padding-top: 30px"></iframe>
 </h1>
-the optimized HTTP/1.x, HTTP/2 server
+<p class="description">the optimized HTTP/1.x, HTTP/2 server</p>
 
 <!-- oktavia -->
 <form id="searchform">

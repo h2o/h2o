@@ -47,7 +47,7 @@ struct {
 static void send_empty_message(h2o_multithread_receiver_t *receiver)
 {
     h2o_multithread_message_t *message = h2o_mem_alloc(sizeof(*message));
-    *message = (h2o_multithread_message_t){};
+    *message = (h2o_multithread_message_t){{NULL}};
     h2o_multithread_send_message(receiver, message);
 }
 

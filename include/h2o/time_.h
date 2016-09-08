@@ -22,6 +22,8 @@
 #ifndef h2o__time_h
 #define h2o__time_h
 
+#include <stdint.h>
+#include <sys/time.h>
 #include <time.h>
 
 #ifdef __cplusplus
@@ -43,6 +45,20 @@ int h2o_time_parse_rfc1123(const char *s, size_t len, struct tm *tm);
  * builds an Apache log-style date string
  */
 void h2o_time2str_log(char *buf, time_t time);
+
+static inline int64_t h2o_timeval_subtract(struct timeval *from, struct timeval *until)
+{
+    int32_t delta_sec = (int32_t)until->tv_sec - (int32_t)from->tv_sec;
+    int32_t delta_usec = (int32_t)until->tv_usec - (int32_t)from->tv_usec;
+    int64_t delta = (int64_t)((int64_t)delta_sec * 1000 * 1000L) + delta_usec;
+
+    return delta;
+}
+
+static inline int h2o_timeval_is_null(struct timeval *tv)
+{
+    return tv->tv_sec == 0;
+}
 
 #ifdef __cplusplus
 }

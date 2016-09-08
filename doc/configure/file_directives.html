@@ -2,6 +2,7 @@
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
 <base href="../" />
 
 <!-- oktavia -->
@@ -23,7 +24,7 @@
 <a href="index.html">H2O</a>
 <iframe align="right" valign="baseline" src="https://ghbtns.com/github-btn.html?user=h2o&repo=h2o&type=star&count=true" frameborder="0" scrolling="0" width="100px" height="30px" style="padding-top: 30px"></iframe>
 </h1>
-the optimized HTTP/1.x, HTTP/2 server
+<p class="description">the optimized HTTP/1.x, HTTP/2 server</p>
 
 <!-- oktavia -->
 <form id="searchform">
@@ -213,7 +214,7 @@ Specifies the names of the files that should be served when the client sends a r
 </p>
 
 <p>
-The sequence of filenames afer search from left to right, and the first file that existed is sent to the client.
+The sequence of filenames are searched from left to right, and the first file that existed is sent to the client.
 </p>
 
 </dd>
@@ -250,7 +251,7 @@ The default mappings is hard-coded in <a href="https://github.com/h2o/h2o/blob/m
 </p>
 <p>
 It is also possible to set certain attributes for a MIME type.
-The example below maps <code>.css</code> files to <code>text/css</code> type, seting <code>is_compressible</code> flag to <code>ON</code> and <code>priority</code> to highest.
+The example below maps <code>.css</code> files to <code>text/css</code> type, setting <code>is_compressible</code> flag to <code>ON</code> and <code>priority</code> to highest.
 </p>
 
 <div class="example">
@@ -395,7 +396,7 @@ For example, if a client requests a file named <code>index.html</code> with <cod
 <dd>
 <p>
 Obsoleted in 2.0.
-Synonym of <a href="configure/file_directives.html#send-compressed"><code>send-compressed</code></a>.
+Synonym of <a href="configure/file_directives.html#file.send-compressed"><code>file.send-compressed</code></a>.
 
 </p>
 

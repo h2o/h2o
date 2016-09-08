@@ -92,4 +92,48 @@ doit(1, 0);
 doit(1, 1);
 doit(1, 1);
 
+subtest 'httpoxy' => sub {
+    my $doit = sub {
+        my ($drop, $cb) = @_;
+        unlink "$tempdir/fcgi.sock";
+        my $upstream = spawn_server(
+            argv => [
+                qw(plackup -s FCGI --access-log /dev/null --listen),
+                "$tempdir/fcgi.sock",
+                ASSETS_DIR . "/upstream.psgi",
+            ],
+            is_ready => sub {
+                -e "$tempdir/fcgi.sock";
+            },
+        );
+        # spawn h2o
+        my $dropconf = $drop ? << 'EOT' : "";
+        setenv:
+          HTTP_PROXY: ""
+EOT
+        my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      "/":
+        fastcgi.connect:
+          port: $tempdir/fcgi.sock
+          type: unix
+$dropconf
+EOT
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            my $content = `$curl --silent --show-error -H proxy:foobar $proto://127.0.0.1:$port/echo-headers`;
+            $cb->($content);
+        });
+    };
+    $doit->(undef, sub {
+        like $_[0], qr{^proxy: foobar$}mi, "keep";
+    });
+    $doit->(1, sub {
+        like $_[0], qr{^proxy: $}mi, "drop";
+    });
+};
+
+
 done_testing();

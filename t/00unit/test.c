@@ -24,7 +24,7 @@
 #include "../../src/standalone.h"
 #include "./test.h"
 
-static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final)
+static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t send_state)
 {
     h2o_loopback_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_loopback_conn_t, _ostr_final, self);
     size_t i;
@@ -35,10 +35,10 @@ static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *i
         conn->body->size += inbufs[i].len;
     }
 
-    if (is_final)
-        conn->_is_complete = 1;
-    else
+    if (h2o_send_state_is_in_progress(send_state))
         h2o_proceed_response(&conn->req);
+    else
+        conn->_is_complete = 1;
 }
 
 static socklen_t get_sockname(h2o_conn_t *conn, struct sockaddr *sa)
@@ -62,7 +62,7 @@ static socklen_t get_peername(h2o_conn_t *conn, struct sockaddr *sa)
 h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx, h2o_hostconf_t **hosts)
 {
     static const h2o_conn_callbacks_t callbacks = {get_sockname, get_peername};
-    h2o_loopback_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx, hosts, (struct timeval){}, &callbacks);
+    h2o_loopback_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx, hosts, (struct timeval){0}, &callbacks);
 
     memset((char *)conn + sizeof(conn->super), 0, offsetof(struct st_h2o_loopback_conn_t, req) - sizeof(conn->super));
     conn->super.ctx = ctx;
@@ -167,6 +167,7 @@ int main(int argc, char **argv)
         subtest("lib/http2/hpack.c", test_lib__http2__hpack);
         subtest("lib/http2/scheduler.c", test_lib__http2__scheduler);
         subtest("lib/http2/casper.c", test_lib__http2__casper);
+        subtest("lib/http2/cache_digests.c", test_lib__http2__cache_digests);
     }
 
     { /* tests that use the run loop */

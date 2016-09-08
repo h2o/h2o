@@ -72,7 +72,7 @@ static size_t compress_chunk(struct st_gzip_context_t *self, const void *src, si
                 expand_buf(&self->bufs);
             self->bufs.entries[bufindex].len = 0;
         }
-        self->zs.next_out = (void *)self->bufs.entries[bufindex].base + self->bufs.entries[bufindex].len;
+        self->zs.next_out = (void *)(self->bufs.entries[bufindex].base + self->bufs.entries[bufindex].len);
         self->zs.avail_out = (unsigned)(BUF_SIZE - self->bufs.entries[bufindex].len);
         ret = deflate(&self->zs, flush);
         assert(ret == Z_OK || ret == Z_STREAM_END);
@@ -82,8 +82,8 @@ static size_t compress_chunk(struct st_gzip_context_t *self, const void *src, si
     return bufindex;
 }
 
-static void do_compress(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t inbufcnt, int is_final, h2o_iovec_t **outbufs,
-                        size_t *outbufcnt)
+static void do_compress(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                        h2o_iovec_t **outbufs, size_t *outbufcnt)
 {
     struct st_gzip_context_t *self = (void *)_self;
     size_t outbufindex;
@@ -100,12 +100,13 @@ static void do_compress(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size
     } else {
         last_buf = h2o_iovec_init(NULL, 0);
     }
-    outbufindex = compress_chunk(self, last_buf.base, last_buf.len, is_final ? Z_FINISH : Z_SYNC_FLUSH, outbufindex);
+    outbufindex = compress_chunk(self, last_buf.base, last_buf.len, h2o_send_state_is_in_progress(state) ? Z_SYNC_FLUSH : Z_FINISH,
+                                 outbufindex);
 
     *outbufs = self->bufs.entries;
     *outbufcnt = outbufindex + 1;
 
-    if (is_final) {
+    if (!h2o_send_state_is_in_progress(state)) {
         deflateEnd(&self->zs);
         self->zs_is_open = 0;
     }
@@ -136,7 +137,7 @@ h2o_compress_context_t *h2o_compress_gzip_open(h2o_mem_pool_t *pool, int quality
     /* Z_BEST_SPEED for on-the-fly compression, memlevel set to 8 as suggested by the manual */
     deflateInit2(&self->zs, quality, Z_DEFLATED, WINDOW_BITS, 8, Z_DEFAULT_STRATEGY);
     self->zs_is_open = 1;
-    self->bufs = (iovec_vector_t){};
+    self->bufs = (iovec_vector_t){NULL};
     expand_buf(&self->bufs);
 
     return &self->super;

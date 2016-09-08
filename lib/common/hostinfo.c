@@ -55,7 +55,7 @@ static void lookup_and_respond(h2o_hostinfo_getaddr_req_t *req)
     struct addrinfo *res;
 
     int ret = getaddrinfo(req->_in.name, req->_in.serv, &req->_in.hints, &res);
-    req->_out.message = (h2o_multithread_message_t){};
+    req->_out.message = (h2o_multithread_message_t){{NULL}};
     if (ret != 0) {
         req->_out.errstr = gai_strerror(ret);
         req->_out.ai = NULL;
@@ -119,7 +119,7 @@ h2o_hostinfo_getaddr_req_t *h2o_hostinfo_getaddr(h2o_multithread_receiver_t *rec
     req->_receiver = receiver;
     req->_cb = cb;
     req->cbdata = cbdata;
-    req->_pending = (h2o_linklist_t){};
+    req->_pending = (h2o_linklist_t){NULL};
     req->_in.name = (char *)req + sizeof(*req);
     memcpy(req->_in.name, name.base, name.len);
     req->_in.name[name.len] = '\0';

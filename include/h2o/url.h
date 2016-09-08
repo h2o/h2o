@@ -50,9 +50,10 @@ static uint16_t h2o_url_get_port(const h2o_url_t *url);
  * @param path source path
  * @param len source length
  * @param returns offset of '?' within `path` if found, or SIZE_MAX if not
+ * @param indexes mapping the normalized version to the input version
  * @return buffer pointing to source, or buffer pointing to an allocated chunk with normalized representation of the given path
  */
-h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t len, size_t *query_at);
+h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t len, size_t *query_at, size_t **norm_indexes);
 /**
  * initializes URL object given scheme, authority, and path
  * @param the output

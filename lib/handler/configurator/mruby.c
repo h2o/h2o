@@ -31,20 +31,27 @@ struct mruby_configurator_t {
     h2o_configurator_t super;
     h2o_mruby_config_vars_t *vars;
     h2o_mruby_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+    mrb_state *mrb; /* will be lazily initialized */
 };
 
-static int compile_test(h2o_mruby_config_vars_t *config, char *errbuf)
+static int compile_test(mrb_state *mrb, h2o_mruby_config_vars_t *config, char *errbuf)
 {
-    mrb_state *mrb;
-
-    if ((mrb = mrb_open()) == NULL) {
-        fprintf(stderr, "%s: no memory\n", H2O_MRUBY_MODULE_NAME);
-        abort();
-    }
-    int ok = !mrb_nil_p(h2o_mruby_compile_code(mrb, config, errbuf));
-    mrb_close(mrb);
-
+    mrb_value result = h2o_mruby_compile_code(mrb, config, errbuf);
+    int ok = !mrb_nil_p(result);
     return ok;
+}
+
+static mrb_state *get_mrb(struct mruby_configurator_t *self)
+{
+    if (self->mrb == NULL) {
+        self->mrb = mrb_open();
+        if (self->mrb == NULL) {
+            fprintf(stderr, "%s: no memory\n", H2O_MRUBY_MODULE_NAME);
+            abort();
+        }
+        h2o_mruby_setup_globals(self->mrb);
+    }
+    return self->mrb;
 }
 
 static int on_config_mruby_handler(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -58,7 +65,7 @@ static int on_config_mruby_handler(h2o_configurator_command_t *cmd, h2o_configur
 
     /* check if there is any error in source */
     char errbuf[1024];
-    if (!compile_test(self->vars, errbuf)) {
+    if (!compile_test(get_mrb(self), self->vars, errbuf)) {
         h2o_configurator_errprintf(cmd, node, "ruby compile error:%s", errbuf);
         return -1;
     }
@@ -73,7 +80,7 @@ static int on_config_mruby_handler_file(h2o_configurator_command_t *cmd, h2o_con
 {
     struct mruby_configurator_t *self = (void *)cmd->configurator;
     FILE *fp = NULL;
-    h2o_iovec_t buf = {};
+    h2o_iovec_t buf = {NULL};
     int ret = -1;
 
     /* open and read file */
@@ -99,7 +106,7 @@ static int on_config_mruby_handler_file(h2o_configurator_command_t *cmd, h2o_con
 
     /* check if there is any error in source */
     char errbuf[1024];
-    if (!compile_test(self->vars, errbuf)) {
+    if (!compile_test(get_mrb(self), self->vars, errbuf)) {
         h2o_configurator_errprintf(cmd, node, "failed to compile file:%s:%s", node->data.scalar, errbuf);
         goto Exit;
     }
@@ -141,6 +148,13 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
         free(self->vars->source.base);
 
     --self->vars;
+
+    /* release mrb only when global configuration exited */
+    if (self->mrb != NULL && ctx->parent == NULL) {
+        mrb_close(self->mrb);
+        self->mrb = NULL;
+    }
+
     return 0;
 }
 

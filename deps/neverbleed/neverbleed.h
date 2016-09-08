@@ -46,7 +46,7 @@ typedef struct st_neverbleed_t {
  */
 int neverbleed_init(neverbleed_t *nb, char *errbuf);
 /**
- * loads a private key file (returns 0 if successful, -1 if failed)
+ * loads a private key file (returns 1 if successful)
  */
 int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char *fn, char *errbuf);
 /**

@@ -25,7 +25,7 @@
 static void test_set_header_token(void)
 {
     h2o_mem_pool_t pool;
-    h2o_headers_t headers = {};
+    h2o_headers_t headers = {NULL};
 
     h2o_mem_init_pool(&pool);
 

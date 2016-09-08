@@ -31,7 +31,7 @@ run("curl --silent --show-error --location $repo/archive/$commit.tar.gz | (cd $d
     or die "failed to extract $repo/archive/$commit.tar.gz to $dest";
 run("git add -f `find $rm_path -type f`") == 0
     or die "failed to add files under $dest";
-run("git commit -m 'extract $repo @ $commit @{[defined $path ? qq{($path)} : '']} at $dest' $dest") == 0
+run("git commit --allow-empty -m 'extract $repo @ $commit @{[defined $path ? qq{($path)} : '']} at $dest' $dest") == 0
     or die "failed to commit";
 
 sub run {
