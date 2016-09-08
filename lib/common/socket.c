@@ -986,8 +986,7 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
                 (port = h2o_socket_getport((struct sockaddr *)&sa)) != -1) {
                 /* session cache is available */
                 h2o_iovec_t session_cache_key;
-                size_t len = strlen(server_name) + sizeof(":" H2O_UINT16_LONGEST_STR);
-                session_cache_key.base = h2o_mem_alloc(len + 1);
+                session_cache_key.base = h2o_mem_alloc(strlen(server_name) + sizeof(":" H2O_UINT16_LONGEST_STR));
                 session_cache_key.len = sprintf(session_cache_key.base, "%s:%" PRIu16, server_name, (uint16_t)port);
                 sock->ssl->handshake.client.session_cache = session_cache;
                 sock->ssl->handshake.client.session_cache_key = session_cache_key;
