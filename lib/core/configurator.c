@@ -483,24 +483,30 @@ static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configura
         }
         break;
     case YOML_TYPE_MAPPING: {
+        yoml_t *capacity_bits, *tracking_types;
+        if (h2o_configurator_parse_attributes(cmd, node, (h2o_configurator_parse_attribute_t[]){{"capacity-bits", &capacity_bits},
+                                                                                                {"tracking-types", &tracking_types},
+                                                                                                {NULL}}) != 0)
+            return -1;
         /* set to default */
         self->vars->http2.casper = defaults;
         /* override the attributes defined */
-        yoml_t *t;
-        if ((t = yoml_get(node, "capacity-bits")) != NULL) {
-            if (!(t->type == YOML_TYPE_SCALAR && sscanf(t->data.scalar, "%u", &self->vars->http2.casper.capacity_bits) == 1 &&
+        if (capacity_bits != NULL) {
+            if (!(capacity_bits->type == YOML_TYPE_SCALAR &&
+                  sscanf(capacity_bits->data.scalar, "%u", &self->vars->http2.casper.capacity_bits) == 1 &&
                   self->vars->http2.casper.capacity_bits < 16)) {
-                h2o_configurator_errprintf(cmd, t, "value of `capacity-bits` must be an integer between 0 to 15");
+                h2o_configurator_errprintf(cmd, capacity_bits, "value of `capacity-bits` must be an integer between 0 to 15");
                 return -1;
             }
         }
-        if ((t = yoml_get(node, "tracking-types")) != NULL) {
-            if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "blocking-assets") == 0) {
+        if (tracking_types != NULL) {
+            if (tracking_types->type == YOML_TYPE_SCALAR && strcasecmp(tracking_types->data.scalar, "blocking-assets") == 0) {
                 self->vars->http2.casper.track_all_types = 0;
-            } else if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "all") == 0) {
+            } else if (tracking_types->type == YOML_TYPE_SCALAR && strcasecmp(tracking_types->data.scalar, "all") == 0) {
                 self->vars->http2.casper.track_all_types = 1;
             } else {
-                h2o_configurator_errprintf(cmd, t, "value of `tracking-types` must be either of: `blocking-assets` or `all`");
+                h2o_configurator_errprintf(cmd, tracking_types,
+                                           "value of `tracking-types` must be either of: `blocking-assets` or `all`");
                 return -1;
             }
         }
@@ -565,39 +571,47 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
             }
             break;
         case YOML_TYPE_MAPPING: {
-            yoml_t *t;
+            yoml_t *is_compressible, *priority, *extensions;
+            if (h2o_configurator_parse_attributes(cmd, value,
+                                                  (h2o_configurator_parse_attribute_t[]){{"is-compressible", &is_compressible},
+                                                                                         {"is_compressioble", &is_compressible},
+                                                                                         {"priority", &priority},
+                                                                                         {"extensions", &extensions},
+                                                                                         {NULL}}) != 0)
+                return -1;
             h2o_mime_attributes_t attr;
             h2o_mimemap_get_default_attributes(key->data.scalar, &attr);
-            if ((t = yoml_get(value, "is_compressible")) != NULL) {
-                if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "YES") == 0) {
+            if (is_compressible != NULL) {
+                if (is_compressible->type == YOML_TYPE_SCALAR && strcasecmp(is_compressible->data.scalar, "YES") == 0) {
                     attr.is_compressible = 1;
-                } else if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "NO") == 0) {
+                } else if (is_compressible->type == YOML_TYPE_SCALAR && strcasecmp(is_compressible->data.scalar, "NO") == 0) {
                     attr.is_compressible = 0;
                 } else {
-                    h2o_configurator_errprintf(cmd, t, "`is_compressible` attribute must be either of: `YES` or `NO`");
+                    h2o_configurator_errprintf(cmd, is_compressible,
+                                               "`is_compressible` attribute must be either of: `YES` or `NO`");
                     return -1;
                 }
             }
-            if ((t = yoml_get(value, "priority")) != NULL) {
-                if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "normal") == 0) {
+            if (priority != NULL) {
+                if (priority->type == YOML_TYPE_SCALAR && strcasecmp(priority->data.scalar, "normal") == 0) {
                     attr.priority = H2O_MIME_ATTRIBUTE_PRIORITY_NORMAL;
-                } else if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "highest") == 0) {
+                } else if (priority->type == YOML_TYPE_SCALAR && strcasecmp(priority->data.scalar, "highest") == 0) {
                     attr.priority = H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
                 } else {
-                    h2o_configurator_errprintf(cmd, t, "`priority` attribute must be either of: `normal` or `highest`");
+                    h2o_configurator_errprintf(cmd, priority, "`priority` attribute must be either of: `normal` or `highest`");
                     return -1;
                 }
             }
-            if ((t = yoml_get(value, "extensions")) == NULL) {
+            if (extensions == NULL) {
                 h2o_configurator_errprintf(cmd, value, "cannot find mandatory attribute `extensions`");
                 return -1;
             }
-            if (t->type != YOML_TYPE_SEQUENCE) {
-                h2o_configurator_errprintf(cmd, t, "`extensions` attribute must be a sequence of scalars");
+            if (extensions->type != YOML_TYPE_SEQUENCE) {
+                h2o_configurator_errprintf(cmd, extensions, "`extensions` attribute must be a sequence of scalars");
                 return -1;
             }
-            for (j = 0; j != t->data.sequence.size; ++j) {
-                yoml_t *ext_node = t->data.sequence.elements[j];
+            for (j = 0; j != extensions->data.sequence.size; ++j) {
+                yoml_t *ext_node = extensions->data.sequence.elements[j];
                 if (assert_is_extension(cmd, ext_node) != 0)
                     return -1;
                 h2o_mimemap_define_mimetype(mimemap, ext_node->data.scalar + 1, key->data.scalar, &attr);

@@ -31,62 +31,39 @@ struct errordoc_configurator_t {
 static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *hash)
 {
     struct errordoc_configurator_t *self = (void *)cmd->configurator;
-    int status = -1;
-    const char *url = NULL;
-    size_t i;
-    yoml_t *key, *value;
+    yoml_t *status_node, *url;
+    int status;
 
-    for (i = 0; i != hash->data.mapping.size; ++i) {
-        key = hash->data.mapping.elements[i].key;
-        value = hash->data.mapping.elements[i].value;
-        if (key->type != YOML_TYPE_SCALAR)
-            goto UnknownKeyError;
-        if (strcmp(key->data.scalar, "status") == 0) {
-            if (status != -1)
-                goto KeyAlreadyDefinedError;
-            if (h2o_configurator_scanf(cmd, value, "%d", &status) != 0)
-                return -1;
-            if (!(400 <= status && status <= 599)) {
-                h2o_configurator_errprintf(cmd, value, "status must be within range of 400 to 599");
-                return -1;
-            }
-        } else if (strcmp(key->data.scalar, "url") == 0) {
-            if (url != NULL)
-                goto KeyAlreadyDefinedError;
-            if (value->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, value, "URL must be a scalar");
-                return -1;
-            }
-            url = value->data.scalar;
-        } else {
-            goto UnknownKeyError;
-        }
-    }
+    if (h2o_configurator_parse_attributes(
+            cmd, hash, (h2o_configurator_parse_attribute_t[]){{"status", &status_node}, {"url", &url}, {NULL}}) != 0)
+        return -1;
 
-    if (status == -1) {
+    if (status_node == NULL) {
         h2o_configurator_errprintf(cmd, hash, "mandatory key `status` is not defined");
         return -1;
     }
+    if (h2o_configurator_scanf(cmd, status_node, "%d", &status) != 0)
+        return -1;
+    if (!(400 <= status && status <= 599)) {
+        h2o_configurator_errprintf(cmd, status_node, "status must be within range of 400 to 599");
+        return -1;
+    }
+
     if (url == NULL) {
         h2o_configurator_errprintf(cmd, hash, "mandatory key `url` is not defined");
         return -1;
     }
-
-    { /* register */
-        h2o_vector_reserve(&self->pool, self->vars, self->vars->size + 1);
-        h2o_errordoc_t *errordoc = self->vars->entries + self->vars->size++;
-        errordoc->status = status;
-        errordoc->url = h2o_strdup(&self->pool, url, SIZE_MAX);
+    if (url->type != YOML_TYPE_SCALAR) {
+        h2o_configurator_errprintf(cmd, url, "URL must be a scalar");
+        return -1;
     }
 
+    /* register */
+    h2o_vector_reserve(&self->pool, self->vars, self->vars->size + 1);
+    h2o_errordoc_t *errordoc = self->vars->entries + self->vars->size++;
+    errordoc->status = status;
+    errordoc->url = h2o_strdup(&self->pool, url->data.scalar, SIZE_MAX);
     return 0;
-
-UnknownKeyError:
-    h2o_configurator_errprintf(cmd, key, "key must be either of: `status`, `url`");
-    return -1;
-KeyAlreadyDefinedError:
-    h2o_configurator_errprintf(cmd, key, "the key cannot be defined more than once");
-    return -1;
 }
 
 static int on_config_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)

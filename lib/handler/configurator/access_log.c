@@ -33,41 +33,40 @@ struct st_h2o_access_log_configurator_t {
 static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_h2o_access_log_configurator_t *self = (void *)cmd->configurator;
-    const char *path, *fmt = NULL;
+    yoml_t *path, *format;
     h2o_access_log_filehandle_t *fh;
 
     switch (node->type) {
     case YOML_TYPE_SCALAR:
-        path = node->data.scalar;
+        path = node;
+        format = NULL;
         break;
-    case YOML_TYPE_MAPPING: {
-        yoml_t *t;
-        /* get path */
-        if ((t = yoml_get(node, "path")) == NULL) {
-            h2o_configurator_errprintf(cmd, node, "could not find mandatory key `path`");
+    case YOML_TYPE_MAPPING:
+        if (h2o_configurator_parse_attributes(
+                cmd, node, (h2o_configurator_parse_attribute_t[]){{"path", &path}, {"format", &format}, {NULL}}) != 0)
+            return -1;
+        if (path == NULL) {
+            h2o_configurator_errprintf(cmd, node, "could not find mandatory attribute `path`");
             return -1;
         }
-        if (t->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, t, "`path` must be scalar");
+        if (path->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, path, "`path` must be scalar");
             return -1;
         }
-        path = t->data.scalar;
-        /* get format */
-        if ((t = yoml_get(node, "format")) != NULL) {
-            if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, t, "`format` must be a scalar");
+        if (format != NULL) {
+            if (format->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, format, "`format` must be a scalar");
                 return -1;
             }
-            fmt = t->data.scalar;
         }
-    } break;
+        break;
     default:
         h2o_configurator_errprintf(cmd, node, "node must be a scalar or a mapping");
         return -1;
     }
 
     if (!ctx->dry_run) {
-        if ((fh = h2o_access_log_open_handle(path, fmt)) == NULL)
+        if ((fh = h2o_access_log_open_handle(path->data.scalar, format != NULL ? format->data.scalar : NULL)) == NULL)
             return -1;
         h2o_vector_reserve(NULL, self->handles, self->handles->size + 1);
         self->handles->entries[self->handles->size++] = fh;

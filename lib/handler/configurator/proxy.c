@@ -182,39 +182,29 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
         }
         break;
     case YOML_TYPE_MAPPING: {
-        size_t i;
-        for (i = 0; i != node->data.mapping.size; ++i) {
-            yoml_t *key = node->data.mapping.elements[i].key;
-            yoml_t *value = node->data.mapping.elements[i].value;
-            if (key->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, key, "key must be a scalar");
-                return -1;
-            }
-            if (strcasecmp(key->data.scalar, "capacity") == 0) {
-                if (h2o_configurator_scanf(cmd, value, "%zu", &capacity) != 0)
-                    return -1;
-                if (capacity == 0) {
-                    h2o_configurator_errprintf(cmd, key, "capacity must be greater than zero");
-                    return -1;
-                }
-            } else if (strcasecmp(key->data.scalar, "lifetime") == 0) {
-                unsigned lifetime = 0;
-                if (h2o_configurator_scanf(cmd, value, "%u", &lifetime) != 0)
-                    return -1;
-                if (lifetime == 0) {
-                    h2o_configurator_errprintf(cmd, key, "lifetime must be greater than zero");
-                    return -1;
-                }
-                duration = (uint64_t)lifetime * 1000;
-            } else {
-                h2o_configurator_errprintf(cmd, key, "key must be either of: `capacity`, `lifetime`");
-                return -1;
-            }
-        }
-        if (capacity == 0 || duration == 0) {
-            h2o_configurator_errprintf(cmd, node, "`capacity` and `lifetime` are required");
+        yoml_t *capacity_node, *lifetime_node;
+        if (h2o_configurator_parse_attributes(
+                cmd, node,
+                (h2o_configurator_parse_attribute_t[]){{"capacity", &capacity_node}, {"lifetime", &lifetime_node}, {NULL}}) != 0)
+            return -1;
+        if (!(capacity_node != NULL && lifetime_node != NULL)) {
+            h2o_configurator_errprintf(cmd, node, "`capacity` and `lifetime` attributes must be set");
             return -1;
         }
+        if (h2o_configurator_scanf(cmd, capacity_node, "%zu", &capacity) != 0)
+            return -1;
+        if (capacity == 0) {
+            h2o_configurator_errprintf(cmd, capacity_node, "capacity must be greater than zero");
+            return -1;
+        }
+        unsigned lifetime = 0;
+        if (h2o_configurator_scanf(cmd, lifetime_node, "%u", &lifetime) != 0)
+            return -1;
+        if (lifetime == 0) {
+            h2o_configurator_errprintf(cmd, lifetime_node, "lifetime must be greater than zero");
+            return -1;
+        }
+        duration = (uint64_t)lifetime * 1000;
     } break;
     default:
         h2o_configurator_errprintf(cmd, node, "node must be a scalar or a mapping");
