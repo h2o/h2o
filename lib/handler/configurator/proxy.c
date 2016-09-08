@@ -159,7 +159,6 @@ static int on_config_ssl_cafile(h2o_configurator_command_t *cmd, h2o_configurato
 static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    size_t i;
     size_t capacity = 0;
     uint64_t duration = 0;
     h2o_cache_t *current_cache = h2o_socket_ssl_get_session_cache(self->vars->ssl_ctx);
@@ -167,7 +166,7 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
     switch (node->type) {
     case YOML_TYPE_SCALAR:
         if (strcasecmp(node->data.scalar, "OFF") == 0) {
-            if (current_cache) {
+            if (current_cache != NULL) {
                 /* set the cache NULL */
                 h2o_cache_t *empty_cache = NULL;
                 update_ssl_ctx(&self->vars->ssl_ctx, NULL, -1, &empty_cache);
@@ -183,6 +182,7 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
         }
         break;
     case YOML_TYPE_MAPPING: {
+        size_t i;
         for (i = 0; i != node->data.mapping.size; ++i) {
             yoml_t *key = node->data.mapping.elements[i].key;
             yoml_t *value = node->data.mapping.elements[i].value;
