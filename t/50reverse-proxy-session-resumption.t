@@ -16,7 +16,6 @@ my $tempdir = tempdir(CLEANUP => 1);
 sub create_upstream {
     unlink "$tempdir/access_log";
     return spawn_h2o(<< "EOT");
-num-threads: 2
 hosts:
   default:
     paths:
