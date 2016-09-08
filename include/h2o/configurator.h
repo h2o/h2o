@@ -118,6 +118,17 @@ struct st_h2o_configurator_t {
     H2O_VECTOR(h2o_configurator_command_t) commands;
 };
 
+typedef struct st_h2o_configurator_parse_attribute_t {
+    /**
+     * name af the attribute (NULL to indicate end of the attribute list)
+     */
+    const char *name;
+    /**
+     * parsed value (left unmodified if not found)
+     */
+    yoml_t **value;
+} h2o_configurator_parse_attribute_t;
+
 /**
  * registers a configurator
  */
@@ -163,6 +174,11 @@ int h2o_configurator_scanf(h2o_configurator_command_t *cmd, yoml_t *node, const 
  * @return index of the matched string within the given list, or -1 if none of them matched
  */
 ssize_t h2o_configurator_get_one_of(h2o_configurator_command_t *cmd, yoml_t *node, const char *candidates);
+/**
+ * extracts values from yoml-mapping to a NULL-terminated name-value list
+ */
+int h2o_configurator_parse_attributes(h2o_configurator_command_t *cmd, yoml_t *node,
+                                      h2o_configurator_parse_attribute_t *attributes);
 /**
  * returns the absolute paths of supplementary commands
  */

@@ -1038,6 +1038,39 @@ Error:
     return -1;
 }
 
+int h2o_configurator_parse_attributes(h2o_configurator_command_t *cmd, yoml_t *node, h2o_configurator_parse_attribute_t *attributes)
+{
+    h2o_configurator_parse_attribute_t *a;
+    size_t i;
+
+    assert(node->type == YOML_TYPE_MAPPING);
+
+    for (a = attributes; a->name != NULL; ++a)
+        *a->value = NULL;
+
+    for (i = 0; i != node->data.mapping.size; ++i) {
+        yoml_t *key = node->data.mapping.elements[i].key, *value = node->data.mapping.elements[i].value;
+        if (key->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, key, "attribute name must be a scalar");
+            return -1;
+        }
+        for (a = attributes; a->name != NULL; ++a)
+            if (strcasecmp(key->data.scalar, a->name) == 0)
+                break;
+        if (a->name == NULL) {
+            h2o_configurator_errprintf(cmd, key, "unknown attribute: %s", key->data.scalar);
+            return -1;
+        }
+        if (*a->value != NULL) {
+            h2o_configurator_errprintf(cmd, key, "attribute with same key cannot be defined more than once");
+            return -1;
+        }
+        *a->value = value;
+    }
+
+    return 0;
+}
+
 char *h2o_configurator_get_cmd_path(const char *cmd)
 {
     char *root, *cmd_fullpath;
