@@ -24,27 +24,26 @@
 
 static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    yoml_t *dest;
+    yoml_t *url;
     int status = 302; /* default is temporary redirect */
     int internal = 0; /* default is external redirect */
-    yoml_t *t;
 
     switch (node->type) {
     case YOML_TYPE_SCALAR:
-        dest = node;
+        url = node;
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t *status_node, *internal_node;
         if (h2o_configurator_parse_attributes(
                 cmd, node, (h2o_configurator_parse_attribute_t[]){
-                               {"url", &dest}, {"status", &status_node}, {"internal", &internal_node}, {NULL}}) != 0)
+                               {"url", &url}, {"status", &status_node}, {"internal", &internal_node}, {NULL}}) != 0)
             return -1;
-        if (dest == NULL) {
+        if (url == NULL) {
             h2o_configurator_errprintf(cmd, node, "mandatory property `url` is missing");
             return -1;
         }
-        if (dest->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, t, "property `url` must be a string");
+        if (url->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, url, "property `url` must be a string");
             return -1;
         }
         if (status_node != NULL) {
@@ -67,7 +66,7 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
         return -1;
     }
 
-    h2o_redirect_register(ctx->pathconf, internal, status, dest->data.scalar);
+    h2o_redirect_register(ctx->pathconf, internal, status, url->data.scalar);
 
     return 0;
 }
