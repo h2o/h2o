@@ -336,7 +336,7 @@ h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l, const 
         if (ch >= 0x80 || ('A' <= ch && ch <= 'Z') || ('a' <= ch && ch <= 'z') || ('0' <= ch && ch <= '9') || ch == '-' ||
             ch == '.' || ch == '_' || ch == '~' || ch == '!' || ch == '$' || ch == '&' || ch == '\'' || ch == '(' || ch == ')' ||
             ch == '*' || ch == '+' || ch == ',' || ch == ';' || ch == '=' ||
-            (preserve_chars != NULL && strchr(preserve_chars, ch) != NULL)) {
+            (ch != '\0' && preserve_chars != NULL && strchr(preserve_chars, ch) != NULL)) {
             encoded.base[encoded.len++] = ch;
         } else {
             encoded.base[encoded.len++] = '%';
