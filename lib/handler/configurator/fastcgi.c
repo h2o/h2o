@@ -91,9 +91,7 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t *host_node, *port_node, *type_node;
-        if (h2o_configurator_parse_attributes(cmd, node,
-                                              (h2o_configurator_parse_attribute_t[]){
-                                                  {"host", &host_node}, {"port", &port_node}, {"type", &type_node}, {NULL}}) != 0)
+        if (h2o_configurator_parse_attributes(cmd, node, {"host", &host_node}, {"port", &port_node}, {"type", &type_node}) != 0)
             return -1;
         if (host_node != NULL) {
             if (host_node->type != YOML_TYPE_SCALAR) {
@@ -247,8 +245,7 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t *command_node, *user_node;
-        if (h2o_configurator_parse_attributes(
-                cmd, node, (h2o_configurator_parse_attribute_t[]){{"command", &command_node}, {"user", &user_node}, {NULL}}) != 0)
+        if (h2o_configurator_parse_attributes(cmd, node, {"command", &command_node}, {"user", &user_node}) != 0)
             return -1;
         if (command_node == NULL) {
             h2o_configurator_errprintf(cmd, node, "mandatory attribute `command` does not exist");

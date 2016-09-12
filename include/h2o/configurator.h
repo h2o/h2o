@@ -177,8 +177,12 @@ ssize_t h2o_configurator_get_one_of(h2o_configurator_command_t *cmd, yoml_t *nod
 /**
  * extracts values from yoml-mapping to a NULL-terminated name-value list
  */
-int h2o_configurator_parse_attributes(h2o_configurator_command_t *cmd, yoml_t *node,
-                                      h2o_configurator_parse_attribute_t *attributes);
+#define h2o_configurator_parse_attributes(cmd, node, ...)                                                                          \
+    h2o_configurator__do_parse_attributes((cmd), (node), (h2o_configurator_parse_attribute_t[]){__VA_ARGS__},                      \
+                                          sizeof((h2o_configurator_parse_attribute_t[]){__VA_ARGS__}) /                            \
+                                              sizeof(h2o_configurator_parse_attribute_t))
+int h2o_configurator__do_parse_attributes(h2o_configurator_command_t *cmd, yoml_t *node, h2o_configurator_parse_attribute_t *attrs,
+                                          size_t numattr);
 /**
  * returns the absolute paths of supplementary commands
  */

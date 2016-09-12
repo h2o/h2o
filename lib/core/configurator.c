@@ -484,9 +484,8 @@ static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configura
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t *capacity_bits, *tracking_types;
-        if (h2o_configurator_parse_attributes(cmd, node, (h2o_configurator_parse_attribute_t[]){{"capacity-bits", &capacity_bits},
-                                                                                                {"tracking-types", &tracking_types},
-                                                                                                {NULL}}) != 0)
+        if (h2o_configurator_parse_attributes(cmd, node, {"capacity-bits", &capacity_bits}, {"tracking-types", &tracking_types}) !=
+            0)
             return -1;
         /* set to default */
         self->vars->http2.casper = defaults;
@@ -572,12 +571,9 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
             break;
         case YOML_TYPE_MAPPING: {
             yoml_t *is_compressible, *priority, *extensions;
-            if (h2o_configurator_parse_attributes(cmd, value,
-                                                  (h2o_configurator_parse_attribute_t[]){{"is-compressible", &is_compressible},
-                                                                                         {"is_compressioble", &is_compressible},
-                                                                                         {"priority", &priority},
-                                                                                         {"extensions", &extensions},
-                                                                                         {NULL}}) != 0)
+            if (h2o_configurator_parse_attributes(cmd, value, {"is-compressible", &is_compressible},
+                                                  {"is_compressioble", &is_compressible}, {"priority", &priority},
+                                                  {"extensions", &extensions}) != 0)
                 return -1;
             h2o_mime_attributes_t attr;
             h2o_mimemap_get_default_attributes(key->data.scalar, &attr);
@@ -1052,15 +1048,15 @@ Error:
     return -1;
 }
 
-int h2o_configurator_parse_attributes(h2o_configurator_command_t *cmd, yoml_t *node, h2o_configurator_parse_attribute_t *attributes)
+int h2o_configurator__do_parse_attributes(h2o_configurator_command_t *cmd, yoml_t *node, h2o_configurator_parse_attribute_t *attrs,
+                                          size_t numattr)
 {
-    h2o_configurator_parse_attribute_t *a;
-    size_t i;
+    size_t i, j;
 
     assert(node->type == YOML_TYPE_MAPPING);
 
-    for (a = attributes; a->name != NULL; ++a)
-        *a->value = NULL;
+    for (i = 0; i != numattr; ++i)
+        *attrs[i].value = NULL;
 
     for (i = 0; i != node->data.mapping.size; ++i) {
         yoml_t *key = node->data.mapping.elements[i].key, *value = node->data.mapping.elements[i].value;
@@ -1068,18 +1064,18 @@ int h2o_configurator_parse_attributes(h2o_configurator_command_t *cmd, yoml_t *n
             h2o_configurator_errprintf(cmd, key, "attribute name must be a scalar");
             return -1;
         }
-        for (a = attributes; a->name != NULL; ++a)
-            if (strcasecmp(key->data.scalar, a->name) == 0)
+        for (j = 0; j != numattr; ++j)
+            if (strcasecmp(key->data.scalar, attrs[j].name) == 0)
                 break;
-        if (a->name == NULL) {
+        if (j == numattr) {
             h2o_configurator_errprintf(cmd, key, "unknown attribute: %s", key->data.scalar);
             return -1;
         }
-        if (*a->value != NULL) {
+        if (*attrs[j].value != NULL) {
             h2o_configurator_errprintf(cmd, key, "attribute with same key cannot be defined more than once");
             return -1;
         }
-        *a->value = value;
+        *attrs[j].value = value;
     }
 
     return 0;

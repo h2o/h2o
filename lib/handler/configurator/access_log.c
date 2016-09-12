@@ -42,8 +42,7 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
         format = NULL;
         break;
     case YOML_TYPE_MAPPING:
-        if (h2o_configurator_parse_attributes(
-                cmd, node, (h2o_configurator_parse_attribute_t[]){{"path", &path}, {"format", &format}, {NULL}}) != 0)
+        if (h2o_configurator_parse_attributes(cmd, node, {"path", &path}, {"format", &format}) != 0)
             return -1;
         if (path == NULL) {
             h2o_configurator_errprintf(cmd, node, "could not find mandatory attribute `path`");

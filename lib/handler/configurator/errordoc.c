@@ -34,8 +34,7 @@ static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_c
     yoml_t *status_node, *url;
     int status;
 
-    if (h2o_configurator_parse_attributes(
-            cmd, hash, (h2o_configurator_parse_attribute_t[]){{"status", &status_node}, {"url", &url}, {NULL}}) != 0)
+    if (h2o_configurator_parse_attributes(cmd, hash, {"status", &status_node}, {"url", &url}) != 0)
         return -1;
 
     if (status_node == NULL) {

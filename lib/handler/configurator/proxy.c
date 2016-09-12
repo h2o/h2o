@@ -183,9 +183,7 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t *capacity_node, *lifetime_node;
-        if (h2o_configurator_parse_attributes(
-                cmd, node,
-                (h2o_configurator_parse_attribute_t[]){{"capacity", &capacity_node}, {"lifetime", &lifetime_node}, {NULL}}) != 0)
+        if (h2o_configurator_parse_attributes(cmd, node, {"capacity", &capacity_node}, {"lifetime", &lifetime_node}) != 0)
             return -1;
         if (!(capacity_node != NULL && lifetime_node != NULL)) {
             h2o_configurator_errprintf(cmd, node, "`capacity` and `lifetime` attributes must be set");
