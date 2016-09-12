@@ -100,7 +100,7 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
             }
             hostname = host_node->data.scalar;
         }
-        if (port_node != NULL) {
+        if (port_node == NULL) {
             h2o_configurator_errprintf(cmd, node, "cannot find mandatory property `port`");
             return -1;
         }

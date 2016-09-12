@@ -572,7 +572,7 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
         case YOML_TYPE_MAPPING: {
             yoml_t *is_compressible, *priority, *extensions;
             if (h2o_configurator_parse_attributes(cmd, value, {"is-compressible", &is_compressible},
-                                                  {"is_compressioble", &is_compressible}, {"priority", &priority},
+                                                  {"is_compressible", &is_compressible}, {"priority", &priority},
                                                   {"extensions", &extensions}) != 0)
                 return -1;
             h2o_mime_attributes_t attr;

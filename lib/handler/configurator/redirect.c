@@ -45,7 +45,7 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
             h2o_configurator_errprintf(cmd, url, "property `url` must be a string");
             return -1;
         }
-        if (status_node != NULL) {
+        if (status_node == NULL) {
             h2o_configurator_errprintf(cmd, node, "mandatory property `status` is missing");
             return -1;
         }
