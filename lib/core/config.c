@@ -138,6 +138,7 @@ void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *global
         pathconf->path = h2o_strdup(NULL, path, SIZE_MAX);
     h2o_mem_addref_shared(mimemap);
     pathconf->mimemap = mimemap;
+    pathconf->error_log.emit_request_errors = 1;
 }
 
 void h2o_config_dispose_pathconf(h2o_pathconf_t *pathconf)

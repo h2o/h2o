@@ -531,8 +531,7 @@ void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
     h2o_vector_reserve(&req->pool, &req->error_logs, req->error_logs.size + 1);
     req->error_logs.entries[req->error_logs.size++] = (h2o_req_error_log_t){module, h2o_iovec_init(errbuf, errlen)};
 
-    /* we may want to disable logging to STDERR */
-    if (1) {
+    if (req->pathconf->error_log.emit_request_errors) {
         /* build prefix */
         char *prefix = alloca(sizeof("[] in request::") + 32 + strlen(module)), *p = prefix;
         p += sprintf(p, "[%s] in request:", module);

@@ -221,6 +221,15 @@ typedef struct st_h2o_pathconf_t {
      * env
      */
     h2o_envconf_t *env;
+    /**
+     * error-log
+     */
+    struct {
+        /**
+         * if request-level errors should be emitted to stderr
+         */
+        unsigned emit_request_errors : 1;
+    } error_log;
 } h2o_pathconf_t;
 
 struct st_h2o_hostconf_t {

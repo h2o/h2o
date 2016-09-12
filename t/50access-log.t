@@ -24,6 +24,7 @@ hosts:
         fastcgi.connect:
           port: /nonexistent
           type: unix
+        error-log.emit-request-errors: OFF
     access-log:
       format: "$format"
       path: $tempdir/access_log
