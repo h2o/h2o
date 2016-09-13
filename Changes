@@ -1,5 +1,9 @@
 Revision history for H2O.
 
+2.0.4 2016-09-14 08:00:00+0000
+	- [security fix][core] fix DoS attack vector CVE-2016-4864 (Frederik Deweerdt, Kazuho Oku)
+	- [libh2o] fix crash on connect timeout #960 (disigma)
+
 2.0.3 2016-09-07 22:03:00+0000
 	- [file] don't use `readdir_r` on Linux, Solaris #1046 #1052 (Frederik Deweerdt, Kazuho Oku)
 	- [http2] fix negative error code sent when cancelling a pushed stream #1039 (Frederik Deweerdt)
