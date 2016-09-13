@@ -72,6 +72,9 @@ struct st_h2o_socket_ssl_t {
             } server;
             struct {
                 char *server_name;
+                h2o_cache_t *session_cache;
+                h2o_iovec_t session_cache_key;
+                h2o_cache_hashcode_t session_cache_key_hash;
             } client;
         };
     } handshake;
@@ -264,8 +267,10 @@ static void clear_output_buffer(struct st_h2o_socket_ssl_t *ssl)
 
 static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
 {
-    if (!SSL_is_server(ssl->ssl))
+    if (!SSL_is_server(ssl->ssl)) {
         free(ssl->handshake.client.server_name);
+        free(ssl->handshake.client.session_cache_key.base);
+    }
     SSL_free(ssl->ssl);
     ssl->ssl = NULL;
     h2o_buffer_dispose(&ssl->input.encrypted);
@@ -831,6 +836,16 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
         }
     }
 
+    /* set ssl session into the cache */
+    if (sock->ssl->handshake.client.session_cache != NULL) {
+        if (err == NULL || err == h2o_socket_error_ssl_cert_name_mismatch) {
+            SSL_SESSION *session = SSL_get1_session(sock->ssl->ssl);
+            h2o_cache_set(sock->ssl->handshake.client.session_cache, h2o_now(h2o_socket_get_loop(sock)),
+                          sock->ssl->handshake.client.session_cache_key, sock->ssl->handshake.client.session_cache_key_hash,
+                          h2o_iovec_init(session, 1));
+        }
+    }
+
     h2o_socket_cb handshake_cb = sock->ssl->handshake.cb;
     sock->_cb.write = NULL;
     sock->ssl->handshake.cb = NULL;
@@ -963,6 +978,31 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
         else
             h2o_socket_read_start(sock, proceed_handshake);
     } else {
+        h2o_cache_t *session_cache = h2o_socket_ssl_get_session_cache(ssl_ctx);
+        if (session_cache != NULL) {
+            struct sockaddr_storage sa;
+            int32_t port;
+            if (h2o_socket_getpeername(sock, (struct sockaddr *)&sa) != 0 &&
+                (port = h2o_socket_getport((struct sockaddr *)&sa)) != -1) {
+                /* session cache is available */
+                h2o_iovec_t session_cache_key;
+                session_cache_key.base = h2o_mem_alloc(strlen(server_name) + sizeof(":" H2O_UINT16_LONGEST_STR));
+                session_cache_key.len = sprintf(session_cache_key.base, "%s:%" PRIu16, server_name, (uint16_t)port);
+                sock->ssl->handshake.client.session_cache = session_cache;
+                sock->ssl->handshake.client.session_cache_key = session_cache_key;
+                sock->ssl->handshake.client.session_cache_key_hash =
+                    h2o_cache_calchash(session_cache_key.base, session_cache_key.len);
+
+                /* fetch from session cache */
+                h2o_cache_ref_t *cacheref = h2o_cache_fetch(session_cache, h2o_now(h2o_socket_get_loop(sock)),
+                                                            sock->ssl->handshake.client.session_cache_key,
+                                                            sock->ssl->handshake.client.session_cache_key_hash);
+                if (cacheref != NULL) {
+                    SSL_set_session(sock->ssl->ssl, (SSL_SESSION *)cacheref->value.base);
+                    h2o_cache_release(session_cache, cacheref);
+                }
+            }
+        }
         sock->ssl->handshake.client.server_name = h2o_strdup(NULL, server_name, SIZE_MAX).base;
         SSL_set_tlsext_host_name(sock->ssl->ssl, sock->ssl->handshake.client.server_name);
         proceed_handshake(sock, 0);
@@ -1000,6 +1040,42 @@ void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx)
     SSL_CTX_sess_set_new_cb(ctx, on_async_resumption_new);
     SSL_CTX_sess_set_remove_cb(ctx, on_async_resumption_remove);
     /* if necessary, it is the responsibility of the caller to disable the internal cache */
+}
+
+static void on_dispose_ssl_ctx_ex_data(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl, void *argp)
+{
+    h2o_cache_t *ssl_session_cache = (h2o_cache_t *)ptr;
+    if (ssl_session_cache != NULL)
+        h2o_cache_destroy(ssl_session_cache);
+}
+
+static int get_ssl_session_cache_index(void)
+{
+    static int index = -1;
+    static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_lock(&mutex);
+    if (index == -1) {
+        index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, on_dispose_ssl_ctx_ex_data);
+        assert(index != -1);
+    }
+    pthread_mutex_unlock(&mutex);
+    return index;
+}
+
+h2o_cache_t *h2o_socket_ssl_get_session_cache(SSL_CTX *ctx)
+{
+    return (h2o_cache_t *)SSL_CTX_get_ex_data(ctx, get_ssl_session_cache_index());
+}
+
+void h2o_socket_ssl_set_session_cache(SSL_CTX *ctx, h2o_cache_t *cache)
+{
+    SSL_CTX_set_ex_data(ctx, get_ssl_session_cache_index(), cache);
+}
+
+void h2o_socket_ssl_destroy_session_cache_entry(h2o_iovec_t value)
+{
+    SSL_SESSION *session = (SSL_SESSION *)value.base;
+    SSL_SESSION_free(session);
 }
 
 h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)

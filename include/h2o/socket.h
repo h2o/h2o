@@ -29,6 +29,7 @@ extern "C" {
 #include <stdint.h>
 #include <sys/socket.h>
 #include <openssl/ssl.h>
+#include "h2o/cache.h"
 #include "h2o/memory.h"
 #include "h2o/openssl_backport.h"
 #include "h2o/string_.h"
@@ -302,6 +303,18 @@ void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx);
  * @param sock the socket
  */
 h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock);
+/**
+ *
+ */
+h2o_cache_t *h2o_socket_ssl_get_session_cache(SSL_CTX *ctx);
+/**
+ *
+ */
+void h2o_socket_ssl_set_session_cache(SSL_CTX *ctx, h2o_cache_t *cache);
+/**
+ *
+ */
+void h2o_socket_ssl_destroy_session_cache_entry(h2o_iovec_t value);
 /**
  * registers the protocol list to be used for ALPN
  */

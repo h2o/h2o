@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014,2015 DeNA Co., Ltd.
+ * Copyright (c) 2016 DeNA Co., Fastly, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -19,17 +19,29 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__version_h
-#define h2o__version_h
 
-#define H2O_VERSION "2.1.0-DEV"
+#include <inttypes.h>
+#include <stdio.h>
+#include "../test.h"
 
-#define H2O_VERSION_MAJOR 2
-#define H2O_VERSION_MINOR 1
-#define H2O_VERSION_PATCH 0
+void test_percent_encode_zero_byte(void)
+{
+    h2o_pathconf_t pathconf = {NULL, {H2O_STRLIT("/abc")}};
+    h2o_req_t req;
+    h2o_iovec_t dest;
 
-#define H2O_LIBRARY_VERSION_MAJOR 0
-#define H2O_LIBRARY_VERSION_MINOR 12
-#define H2O_LIBRARY_VERSION_PATCH 0
+    h2o_init_request(&req, NULL, NULL);
 
-#endif
+    /* basic pattern */
+    req.path_normalized = h2o_iovec_init(H2O_STRLIT("/abc/mno\0xyz"));
+    req.query_at = req.path_normalized.len;
+    req.path = h2o_concat(&req.pool, req.path_normalized, h2o_iovec_init(H2O_STRLIT("?q")));
+    req.pathconf = &pathconf;
+    dest = h2o_build_destination(&req, H2O_STRLIT("/def"), 1);
+    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/mno%00xyz?q")));
+    dest = h2o_build_destination(&req, H2O_STRLIT("/def/"), 1);
+    ok(h2o_memis(dest.base, dest.len, H2O_STRLIT("/def/mno%00xyz?q")));
+
+    h2o_mem_clear_pool(&req.pool);
+}
+

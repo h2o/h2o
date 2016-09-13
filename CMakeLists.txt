@@ -27,7 +27,7 @@ PROJECT(h2o)
 SET(VERSION_MAJOR "2")
 SET(VERSION_MINOR "1")
 SET(VERSION_PATCH "0")
-SET(VERSION_PRERELEASE "-beta2")
+SET(VERSION_PRERELEASE "-DEV")
 SET(VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}${VERSION_PRERELEASE}")
 SET(LIBRARY_VERSION_MAJOR "0")
 SET(LIBRARY_VERSION_MINOR "12")
@@ -308,7 +308,8 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/http2/hpack.c
     t/00unit/lib/http2/scheduler.c
     t/00unit/src/ssl.c
-    t/00unit/issues/293.c)
+    t/00unit/issues/293.c
+    t/00unit/issues/percent-encode-zero-byte.c)
 LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/cache.c
     lib/common/hostinfo.c

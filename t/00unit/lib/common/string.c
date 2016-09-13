@@ -238,6 +238,29 @@ static void test_htmlescape(void)
     h2o_mem_clear_pool(&pool);
 }
 
+static void test_uri_escape(void)
+{
+    h2o_mem_pool_t pool;
+    h2o_mem_init_pool(&pool);
+
+#define TEST(src, preserve, expected)                                                                                              \
+    do {                                                                                                                           \
+        h2o_iovec_t escaped = h2o_uri_escape(&pool, H2O_STRLIT(src), preserve);                                                    \
+        ok(h2o_memis(escaped.base, escaped.len, H2O_STRLIT(expected)));                                                            \
+    } while (0)
+
+    TEST("abc", NULL, "abc");
+    TEST("a/c", NULL, "a%2Fc");
+    TEST("a/c", "/", "a/c");
+    TEST("\xe3\x81\x82", NULL, "%E3%81%82");
+    TEST("a\0!", NULL, "a%00!");
+    TEST("a/\0!", "/", "a/%00!");
+
+#undef TEST
+
+    h2o_mem_clear_pool(&pool);
+}
+
 static void test_at_position(void)
 {
     char buf[160];
@@ -307,5 +330,6 @@ void test_lib__common__string_c(void)
     subtest("next_token3", test_next_token3);
     subtest("decode_base64", test_decode_base64);
     subtest("htmlescape", test_htmlescape);
+    subtest("uri_escape", test_uri_escape);
     subtest("at_position", test_at_position);
 }

@@ -1,5 +1,15 @@
 Revision history for H2O.
 
+2.1.0-beta3 TBD
+	- [core] enable TCP latency optimization by default #873 #1076 (Kazuho Oku)
+	- [core] fix broken support for TCP Fast Open in OS X #1065 (Ichito Nagata)
+	- [access-log] provide directive to emit request-level errors #1075 (Kazuho Oku)
+	- [proxy] cache TLS session used for upstream connections #1053 (Ichito Nagata)
+	- [proxy] escape NUL when rebuilding an URL #985 (Frederik Deweerdt)
+	- [misc] add font/woff2 to the default mime-type mapping #1066 (Andy Davies)
+	- [misc] mark JavaScript and JSON files as compressible by default #1067 (Kazuho Oku)
+	- [libh2o] fix crash on connect timeout #960 (disigma)
+
 2.1.0-beta2 2016-09-07 22:03:00+0000
 	- [core] accept sequence of mappings for path-level configuration #1042 (Ichito Nagata)
 	- [core] provide tag to include other YAML files from the configuration file #1022 (Ichito Nagata)

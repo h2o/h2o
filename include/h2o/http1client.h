@@ -30,6 +30,7 @@ extern "C" {
 #include "h2o/socket.h"
 #include "h2o/socketpool.h"
 #include "h2o/timeout.h"
+#include "h2o/cache.h"
 
 struct phr_header;
 typedef struct st_h2o_http1client_t h2o_http1client_t;
