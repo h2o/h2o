@@ -20,6 +20,11 @@ hosts:
     paths:
       /:
         file.dir: @{[ DOC_ROOT ]}
+      /fastcgi:
+        fastcgi.connect:
+          port: /nonexistent
+          type: unix
+        error-log.emit-request-errors: OFF
     access-log:
       format: "$format"
       path: $tempdir/access_log
@@ -164,6 +169,17 @@ subtest 'extensions' => sub {
             }
             @expected;
         },
+    );
+};
+
+subtest 'error' => sub {
+    doit(
+        sub {
+            my $server = shift;
+            system("curl --silent http://127.0.0.1:$server->{port}/fastcgi > /dev/null");
+        },
+        '%{error}x',
+        qr{^\[lib/handler/fastcgi\.c\] connection failed:}s,
     );
 };
 

@@ -221,6 +221,15 @@ typedef struct st_h2o_pathconf_t {
      * env
      */
     h2o_envconf_t *env;
+    /**
+     * error-log
+     */
+    struct {
+        /**
+         * if request-level errors should be emitted to stderr
+         */
+        unsigned emit_request_errors : 1;
+    } error_log;
 } h2o_pathconf_t;
 
 struct st_h2o_hostconf_t {
@@ -836,6 +845,14 @@ typedef struct st_h2o_filereq_t {
 } h2o_filereq_t;
 
 /**
+ * error message associated to a request
+ */
+typedef struct st_h2o_req_error_log_t {
+    const char *module;
+    h2o_iovec_t msg;
+} h2o_req_error_log_t;
+
+/**
  * a HTTP request
  */
 struct st_h2o_req_t {
@@ -962,6 +979,11 @@ struct st_h2o_req_t {
      * environment variables
      */
     h2o_iovec_vector_t env;
+
+    /**
+     * error logs
+     */
+    H2O_VECTOR(h2o_req_error_log_t) error_logs;
 
     /* flags */
 
