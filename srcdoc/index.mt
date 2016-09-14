@@ -45,12 +45,11 @@ Explanation of the benchmark charts can be found in the <a href="benchmarks.html
 <h3 id="news">News</h3>
 
 <ul>
+<li>Version <a href="https://github.com/h2o/h2o/releases/tag/v2.0.4">2.0.4</a> and <a href="https://github.com/h2o/h2o/releases/tag/v2.1.0-beta3">2.1.0-beta3</a> have been released with <a href="https://github.com/h2o/h2o/issue/xxx">a vulnerability fix for CVE-2016-4864</a> (Sep 14 2016)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v2.0.3">2.0.3</a> and <a href="https://github.com/h2o/h2o/releases/tag/v2.1.0-beta2">2.1.0-beta2</a> are now available (Sep 8 2016)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v2.0.2">2.0.2</a> is now available (Aug 2 2016)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v2.0.1">2.0.1</a> and <a href="https://github.com/h2o/h2o/releases/tag/v2.1.0-beta1">2.1.0-beta1</a> are now available (Jun 24 2016)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v2.0.0">2.0.0</a> is now available (Jun 1 2016)</li>
-<li>Version <a href="https://github.com/h2o/h2o/releases/tag/v1.7.3">1.7.3</a> and <a href="https://github.com/h2o/h2o/releases/tag/v2.0.0-beta5">2.0.0-beta5</a> have been released with <a href="https://github.com/h2o/h2o/pull/920">a vulnerability fix for CVE-2016-4817 (May 26 2016)</a></li>
-<li>Version <a href="https://github.com/h2o/h2o/releases/tag/v1.7.2">1.7.2</a> is now available including <a href="https://www.openssl.org/news/secadv/20160503.txt">a vulnerability fix in LibreSSL</a> (May 9 2016)</li>
 </ul>
 
 <p>
