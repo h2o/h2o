@@ -261,3 +261,13 @@ void h2o_cache_delete(h2o_cache_t *cache, uint64_t now, h2o_iovec_t key, h2o_cac
 
     unlock_cache(cache);
 }
+
+size_t h2o_cache_get_capacity(h2o_cache_t *cache)
+{
+    return cache->capacity;
+}
+
+uint64_t h2o_cache_get_duration(h2o_cache_t *cache)
+{
+    return cache->duration;
+}

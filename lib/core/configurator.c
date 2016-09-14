@@ -32,6 +32,9 @@ struct st_core_config_vars_t {
         unsigned push_preload : 1;
         h2o_casper_conf_t casper;
     } http2;
+    struct {
+        unsigned emit_request_errors : 1;
+    } error_log;
 };
 
 struct st_core_configurator_t {
@@ -82,6 +85,9 @@ static int on_core_exit(h2o_configurator_t *_self, h2o_configurator_context_t *c
         ctx->hostconf->http2.reprioritize_blocking_assets = self->vars->http2.reprioritize_blocking_assets;
         ctx->hostconf->http2.push_preload = self->vars->http2.push_preload;
         ctx->hostconf->http2.casper = self->vars->http2.casper;
+    } else if (ctx->pathconf != NULL) {
+        /* exitting from path or extension-level configuration */
+        ctx->pathconf->error_log.emit_request_errors = self->vars->error_log.emit_request_errors;
     }
 
     --self->vars;
@@ -810,6 +816,18 @@ static int on_config_send_server_name(h2o_configurator_command_t *cmd, h2o_confi
     return 0;
 }
 
+static int on_config_error_log_emit_request_errors(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct st_core_configurator_t *self = (void *)cmd->configurator;
+    ssize_t on;
+
+    if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+
+    self->vars->error_log.emit_request_errors = (int)on;
+    return 0;
+}
+
 void h2o_configurator__init_core(h2o_globalconf_t *conf)
 {
     /* check if already initialized */
@@ -833,6 +851,7 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         c->vars = c->_vars_stack;
         c->vars->http2.reprioritize_blocking_assets = 1; /* defaults to ON */
         c->vars->http2.push_preload = 1;                 /* defaults to ON */
+        c->vars->error_log.emit_request_errors = 1;      /* defaults to ON */
         h2o_configurator_define_command(&c->super, "limit-request-body",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_limit_request_body);
@@ -901,6 +920,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
                                             H2O_CONFIGURATOR_FLAG_DEFERRED,
                                         on_config_send_server_name);
+        h2o_configurator_define_command(&c->super, "error-log.emit-request-errors",
+                                        H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_error_log_emit_request_errors);
     }
 }
 

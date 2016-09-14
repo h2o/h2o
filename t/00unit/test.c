@@ -184,6 +184,7 @@ int main(int argc, char **argv)
         subtest("lib/gzip.c", test_lib__handler__gzip_c);
         subtest("lib/redirect.c", test_lib__handler__redirect_c);
         subtest("issues/293.c", test_issues293);
+        subtest("issues/percent-encode-zero-byte.c", test_percent_encode_zero_byte);
 
 #if H2O_USE_LIBUV
         uv_loop_close(test_loop);
