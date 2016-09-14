@@ -45,7 +45,7 @@ Explanation of the benchmark charts can be found in the <a href="benchmarks.html
 <h3 id="news">News</h3>
 
 <ul>
-<li>Version <a href="https://github.com/h2o/h2o/releases/tag/v2.0.4">2.0.4</a> and <a href="https://github.com/h2o/h2o/releases/tag/v2.1.0-beta3">2.1.0-beta3</a> have been released with <a href="https://github.com/h2o/h2o/issue/xxx">a vulnerability fix for CVE-2016-4864</a> (Sep 14 2016)</li>
+<li>Version <a href="https://github.com/h2o/h2o/releases/tag/v2.0.4">2.0.4</a> and <a href="https://github.com/h2o/h2o/releases/tag/v2.1.0-beta3">2.1.0-beta3</a> have been released with <a href="https://github.com/h2o/h2o/issues/1077">a vulnerability fix for CVE-2016-4864</a> (Sep 14 2016)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v2.0.3">2.0.3</a> and <a href="https://github.com/h2o/h2o/releases/tag/v2.1.0-beta2">2.1.0-beta2</a> are now available (Sep 8 2016)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v2.0.2">2.0.2</a> is now available (Aug 2 2016)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v2.0.1">2.0.1</a> and <a href="https://github.com/h2o/h2o/releases/tag/v2.1.0-beta1">2.1.0-beta1</a> are now available (Jun 24 2016)</li>
