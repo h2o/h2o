@@ -101,11 +101,10 @@ static h2o_iovec_t build_request_merge_headers(h2o_mem_pool_t *pool, h2o_iovec_t
 }
 
 /*
- * https://tools.ietf.org/html/rfc7230#section-3.3.2:
+ * A request without neither Content-Length or Transfer-Encoding header implies a zero-length request body (see 6th rule of RFC 7230
+ * 3.3.3).
+ * OTOH, section 3.3.3 states:
  *
- *   A sender MUST NOT send a Content-Length header field in any message
- *   that contains a Transfer-Encoding header field.
-
  *   A user agent SHOULD send a Content-Length in a request message when
  *   no Transfer-Encoding is sent and the request method defines a meaning
  *   for an enclosed payload body.  For example, a Content-Length header
@@ -118,6 +117,8 @@ static h2o_iovec_t build_request_merge_headers(h2o_mem_pool_t *pool, h2o_iovec_t
  * PUT and POST define a meaning for the payload body, let's emit a
  * Content-Length header if it doesn't exist already, since the server
  * might send a '411 Length Required' response.
+ *
+ * see also: ML thread starting at https://lists.w3.org/Archives/Public/ietf-http-wg/2016JulSep/0580.html
  */
 static int req_requires_content_length(h2o_req_t *req)
 {
