@@ -91,10 +91,9 @@ before_script:
     case "${TRAVIS_OS_NAME}" in
       "linux" ) sudo apt-get install -qq apache2-utils ;;
       "osx"   )
+        # workaround for link issue like https://github.com/Homebrew/homebrew-apache/issues/75
+        ln -s /usr/local/Cellar/apr/1.5.2_3 /usr/local/Cellar/apr/1.5.2_2
         brew install --quiet homebrew/apache/ab
-        # to debug
-        sudo find /usr/local/Cellar/ -name "libapr*"
-        exit 1
         ;;
     esac
   # install nghttp2 with `--enable-app` (optionally required for running HTTP/2 tests)
