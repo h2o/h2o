@@ -92,7 +92,7 @@ before_script:
       "linux" ) sudo apt-get install -qq apache2-utils ;;
       "osx"   )
         brew install --quiet apr
-        # workaround for link issue like https://github.com/Homebrew/homebrew-apache/issues/75
+        # workaround for a linking issue, perhaps like https://github.com/Homebrew/homebrew-apache/issues/75
         ln -s /usr/local/Cellar/apr/1.5.2_3 /usr/local/Cellar/apr/1.5.2_2
         brew install --quiet homebrew/apache/ab
         ;;
