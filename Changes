@@ -1,6 +1,7 @@
 Revision history for H2O.
 
-2.1.0-beta3 TBD
+2.1.0-beta3 2016-09-14 08:00:00+0000
+	- [security fix][core] fix DoS attack vector CVE-2016-4864 (Frederik Deweerdt, Kazuho Oku)
 	- [core] enable TCP latency optimization by default #873 #1076 (Kazuho Oku)
 	- [core] fix broken support for TCP Fast Open in OS X #1065 (Ichito Nagata)
 	- [access-log] provide directive to emit request-level errors #1075 (Kazuho Oku)
