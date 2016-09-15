@@ -59,6 +59,7 @@ before_install:
     esac
 
 before_script:
+  - "set -e"
   # install perl modules (mandatory for testing)
   - misc/install-perl-module.pl Net::EmptyPort
   - misc/install-perl-module.pl Scope::Guard
