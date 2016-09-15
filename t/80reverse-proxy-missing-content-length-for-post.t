@@ -6,6 +6,8 @@ use t::Util;
 
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
+plan skip_all => 'curl does not support HTTP/2'
+    unless curl_supports_http2();
 
 my $upstream_port = empty_port();
 $| = 1;
