@@ -51,10 +51,8 @@ before_install:
         ;;
       "osx"   )
         brew update
-        brew tap homebrew/dupes
-        brew install --quiet openssl homebrew/dupes/zlib
+        brew install --quiet openssl
         brew link --force openssl
-        brew link --force zlib
         ;;
     esac
 
