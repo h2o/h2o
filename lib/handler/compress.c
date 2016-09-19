@@ -93,6 +93,8 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     if (self->args.gzip.quality != -1 && (compressible_types & H2O_COMPRESSIBLE_GZIP) != 0) {
         compressor = h2o_compress_gzip_open(&req->pool, self->args.gzip.quality);
     } else {
+        /* let proxies know that we looked at accept-encoding when deciding not to compress */
+        h2o_set_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
         goto Next;
     }
 
