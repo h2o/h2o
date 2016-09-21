@@ -421,6 +421,10 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 goto AddHeaderDuped;
             } else if (token == H2O_TOKEN_LINK) {
                 h2o_push_path_in_link_header(req, headers[i].value, headers[i].value_len);
+            } else if (token == H2O_TOKEN_X_COMPRESS) {
+                req->compression_hint =
+                    h2o_strtosize(headers[i].value, headers[i].value_len) ? H2O_COMPRESS_HINT_ENABLE : H2O_COMPRESS_HINT_DISABLE;
+                goto Skip;
             }
         /* default behaviour, transfer the header downstream */
         AddHeaderDuped:

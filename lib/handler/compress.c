@@ -61,12 +61,19 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
         goto Next;
     if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")))
         goto Next;
-    if (req->res.mime_attr == NULL)
-        h2o_req_fill_mime_attributes(req);
-    if (!req->res.mime_attr->is_compressible)
+    /* compression was explicitely disabled, skip */
+    if (req->compression_hint == H2O_COMPRESS_HINT_DISABLE)
         goto Next;
-    if (req->res.content_length < self->args.min_size)
-        goto Next;
+    if (req->compression_hint == H2O_COMPRESS_HINT_NONE) {
+        /* no hint from the producer, decide whether to compress based
+           on the configuration */
+        if (req->res.mime_attr == NULL)
+            h2o_req_fill_mime_attributes(req);
+        if (!req->res.mime_attr->is_compressible)
+            goto Next;
+        if (req->res.content_length < self->args.min_size)
+            goto Next;
+    }
     /* skip if failed to gather the list of compressible types */
     if ((compressible_types = h2o_get_compressible_types(&req->headers)) == 0)
         goto Next;

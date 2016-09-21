@@ -82,8 +82,9 @@
 #define H2O_TOKEN_VARY (h2o__tokens + 55)
 #define H2O_TOKEN_VIA (h2o__tokens + 56)
 #define H2O_TOKEN_WWW_AUTHENTICATE (h2o__tokens + 57)
-#define H2O_TOKEN_X_FORWARDED_FOR (h2o__tokens + 58)
-#define H2O_TOKEN_X_REPROXY_URL (h2o__tokens + 59)
-#define H2O_TOKEN_X_TRAFFIC (h2o__tokens + 60)
+#define H2O_TOKEN_X_COMPRESS (h2o__tokens + 58)
+#define H2O_TOKEN_X_FORWARDED_FOR (h2o__tokens + 59)
+#define H2O_TOKEN_X_REPROXY_URL (h2o__tokens + 60)
+#define H2O_TOKEN_X_TRAFFIC (h2o__tokens + 61)
 
 #endif
