@@ -114,6 +114,28 @@ By default, H2O uses <code>share/h2o/ca-bundle.crt</code>.  The file contains a 
 
 <?
 $ctx->{directive}->(
+    name    => "proxy.ssl.session-cache",
+    levels  => [ qw(global host path extension) ],
+    since   => "2.1",
+    default => "proxy.ssl.session-cache: ON",
+    desc    => "Specifies whether if and how a session cache should be used for TLS connections to the application server.",
+)->(sub {
+?>
+<p>
+Since version 2.1, result of the TLS handshakes to the application server is memoized and later used to resume the connection, unless set to <code>OFF</code> using this directive.
+If the value is a mapping, then the following two attributes must be specified:
+<dl>
+<dt>lifetime:</dt>
+<dd>validity of session cache entries in seconds</dd>
+<dt>capacity:</dt>
+<dd>maxmum number of entries to be kept in the session cache</dd>
+</dl>
+If set to <code>ON</code>, <code>lifetime</code> and <code>capacity</code> will be set to 86,400 (one day) and 4,096.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
     name    => "proxy.ssl.verify-peer",
     levels  => [ qw(global host path extension) ],
     since   => "2.0",
