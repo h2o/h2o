@@ -54,6 +54,27 @@ The server also provides a mechanism to track the clients' cache state via cooki
 When a resource is pushed, the priority is determined using the <a href="configure/file_directives.html#file.mime.addtypes"><code>priority</code> attribute</a> of the MIME-type configuration.  If the priority is set to <code>highest</code> then the resource will be sent to the client before anything else; otherwise the resource will be sent to client after the main content, as per defined by the HTTP/2 specification.
 </p>
 <p>
+HTTP/1.1 allows a server to send an informational response (see <a href="https://tools.ietf.org/html/rfc7231#section-6.2" target="_blank">RFC 7230 section 6.2</a>) before sending the final response.
+Starting from version 2.1, web applications can take advantage of the informational response to initiate HTTP/2 pushes before starting to process the request.
+The following example shows how such responses would look like.
+</p>
+<?= $ctx->{example}->('100 response with link headers', <<'EOT')
+HTTP/1.1 100 Continue
+Link: </assets/style.css>; rel=preload
+Link: </assets/jquery.js>; rel=preload
+
+HTTP/1.1 200 OK
+Content-Type: text/html; charset=utf-8
+
+<!doctype html>
+<html>
+<head>
+<link rel="stylesheet" type="text/css" href="/assets/style.css">
+<script type="text/javascript" src="/assets/jquery.js"></scrrpt>
+...
+EOT
+?>
+<p>
 Pushed responses will have <code>x-http2-push: pushed</code> header set; by looking for the header, it is possible to determine if a resource has been pushed.
 It is also possible to log the value in the <a href="configure/access_log_directives.html#access-log">access log</a> by specifying <code>%{x-http2-push}o</code>, push responses but cancelled by CASPER will have the value of the header logged as <code>cancelled</code>.
 </p>
