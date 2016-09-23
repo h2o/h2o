@@ -67,6 +67,23 @@ However in case H2O is run behind a trusted HTTPS proxy, such protection might n
 
 <?
 $ctx->{directive}->(
+    name     => "proxy.proxy-protocol",
+    levels   => [ qw(global host path extension) ],
+    since    => "2.1",
+    see_also => render_mt(<<'EOT'),
+<a href="configure/proxy_directives.html#proxy.timeout.keepalive"><code>proxy.timeout.keepalive</code></a>
+EOT
+    default  => q{proxy.proxy-protocol: OFF},
+    desc     => q{A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if <a href="http://www.haproxy.org/download/1.5/doc/proxy-protocol.txt" target="_blank">PROXY protocol</a> should be used when connecting to the application server.},
+)->(sub {
+?>
+<p>
+When using the PROXY protocol, connections to the application server cannot be persistent (i.e. <a href="configure/proxy_directives.html#proxy.timeout.keepalive"><code>proxy.timeout.keepalive</code></a> must be set to zero).
+</p>
+? })
+
+<?
+$ctx->{directive}->(
     name    => "proxy.emit-x-forwarded-headers",
     levels  => [ qw(global) ],
     since   => "2.1",
