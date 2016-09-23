@@ -44,7 +44,7 @@ Path to the unix socket should be surrounded by square brackets, and prefixed wi
 <?
 $ctx->{directive}->(
     name    => "proxy.preserve-host",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     default => q{proxy.preserve-host: OFF},
     desc    => q{A boolean flag (<code>ON</code> or <code>OFF</code>) designating whether or not to pass <code>Host</code> header from incoming request to upstream.},
 )->(sub {});
@@ -99,7 +99,7 @@ By default, when forwarding an HTTP request H2O sends its own <code>x-forwarded-
 <?
 $ctx->{directive}->(
     name    => "proxy.ssl.cafile",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     since   => "2.0",
     desc    => "Specifies the file storing the list of trusted root certificates.",
     see_also => render_mt(<<'EOT'),
@@ -115,7 +115,7 @@ By default, H2O uses <code>share/h2o/ca-bundle.crt</code>.  The file contains a 
 <?
 $ctx->{directive}->(
     name    => "proxy.ssl.verify-peer",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     since   => "2.0",
     desc    => "A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if the server certificate and hostname should be verified.",
     default => q{proxy.ssl.verify-peer: ON},
@@ -132,7 +132,7 @@ If set to <code>ON</code>, the HTTP client implementation of H2O verifies the pe
 <?
 $ctx->{directive}->(
     name    => "proxy.timeout.io",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     default => q{proxy.timeout.io: 30000},
     desc    => q{Sets the upstream I/O timeout in milliseconds.},
 )->(sub {});
@@ -141,7 +141,7 @@ $ctx->{directive}->(
 <?
 $ctx->{directive}->(
     name    => "proxy.timeout.keepalive",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     default => q{proxy.timeout.keepalive: 2000},
     desc    => 'Sets the upstream timeout for idle connections in milliseconds.',
 )->(sub {
@@ -155,7 +155,7 @@ The value should be set to something smaller than that being set at the upstream
 <?
 $ctx->{directive}->(
     name    => "proxy.websocket",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     default => q{proxy.websocket: OFF},
     desc    => q{A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not to allow upgrading the proxied connection to <a href="https://tools.ietf.org/html/rfc6455">the WebSocket protocol</a>.},
 )->(sub {
@@ -171,7 +171,7 @@ Support for WebSocket is considered experimental for the time being and therefor
 <?
 $ctx->{directive}->(
     name    => "proxy.websocket.timeout",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     default => q{proxy.websocket.timeout: 300000},
     desc    => q{Sets idle timeout of a WebSocket connection being proxied.},
 )->(sub {})
