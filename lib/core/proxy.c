@@ -371,6 +371,17 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     return 0;
 }
 
+static char compress_hint_to_enum(const char *val, size_t len)
+{
+    if (!strncasecmp("ON", val, len)) {
+        return H2O_COMPRESS_HINT_ENABLE;
+    }
+    if (!strncasecmp("OFF", val, len)) {
+        return H2O_COMPRESS_HINT_DISABLE;
+    }
+    return H2O_COMPRESS_HINT_AUTO;
+}
+
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
                                        h2o_iovec_t msg, h2o_http1client_header_t *headers, size_t num_headers)
 {
@@ -421,9 +432,8 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 goto AddHeaderDuped;
             } else if (token == H2O_TOKEN_LINK) {
                 h2o_push_path_in_link_header(req, headers[i].value, headers[i].value_len);
-            } else if (token == H2O_TOKEN_X_COMPRESS) {
-                req->compression_hint =
-                    h2o_strtosize(headers[i].value, headers[i].value_len) ? H2O_COMPRESS_HINT_ENABLE : H2O_COMPRESS_HINT_DISABLE;
+            } else if (token == H2O_TOKEN_COMPRESS_HINT) {
+                req->compress_hint = compress_hint_to_enum(headers[i].value, headers[i].value_len);
                 goto Skip;
             }
         /* default behaviour, transfer the header downstream */

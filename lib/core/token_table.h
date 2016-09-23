@@ -37,6 +37,7 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, 1, 0, 0, 0, 0},
                              {{H2O_STRLIT("authorization")}, 23, 0, 0, 0, 0},
                              {{H2O_STRLIT("cache-control")}, 24, 0, 0, 0, 0},
                              {{H2O_STRLIT("cache-digest")}, 0, 0, 0, 0, 0},
+                             {{H2O_STRLIT("compress-hint")}, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("connection")}, 0, 1, 0, 1, 0},
                              {{H2O_STRLIT("content-disposition")}, 25, 0, 0, 0, 0},
                              {{H2O_STRLIT("content-encoding")}, 26, 0, 0, 0, 0},
@@ -79,7 +80,6 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, 1, 0, 0, 0, 0},
                              {{H2O_STRLIT("vary")}, 59, 0, 0, 0, 0},
                              {{H2O_STRLIT("via")}, 60, 0, 0, 0, 0},
                              {{H2O_STRLIT("www-authenticate")}, 61, 0, 0, 0, 0},
-                             {{H2O_STRLIT("x-compress")}, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("x-forwarded-for")}, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("x-reproxy-url")}, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("x-traffic")}, 0, 0, 0, 0, 0}};
@@ -234,10 +234,6 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
             if (memcmp(name, "connectio", 9) == 0)
                 return H2O_TOKEN_CONNECTION;
             break;
-        case 's':
-            if (memcmp(name, "x-compres", 9) == 0)
-                return H2O_TOKEN_X_COMPRESS;
-            break;
         case 't':
             if (memcmp(name, "user-agen", 9) == 0)
                 return H2O_TOKEN_USER_AGENT;
@@ -299,6 +295,10 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
         case 's':
             if (memcmp(name, "accept-range", 12) == 0)
                 return H2O_TOKEN_ACCEPT_RANGES;
+            break;
+        case 't':
+            if (memcmp(name, "compress-hin", 12) == 0)
+                return H2O_TOKEN_COMPRESS_HINT;
             break;
         }
         break;

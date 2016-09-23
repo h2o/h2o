@@ -70,16 +70,19 @@ sub doit {
 }
 
 doit("This is large enough to be compressed", "", 1, 1);
-doit("This is large enough to be compressed", "x-compress: 1\r\n", 1, 1);
-doit("This is large enough to be compressed", "x-compress: 0\r\n", 0, 1);
+doit("This is large enough to be compressed", "compress-hint: auto\r\n", 1, 1);
+doit("This is large enough to be compressed", "compress-hint: on\r\n", 1, 1);
+doit("This is large enough to be compressed", "compress-hint: off\r\n", 0, 1);
 
 doit("too small", "", 0, 1);
-doit("too small", "x-compress: 1\r\n", 1, 1);
-doit("too small", "x-compress: 0\r\n", 0, 1);
+doit("too small", "compress-hint: auto\r\n", 0, 1);
+doit("too small", "compress-hint: on\r\n", 1, 1);
+doit("too small", "compress-hint: off\r\n", 0, 1);
 
 doit("This is large enough to be compressed", "", 0, 0);
-doit("This is large enough to be compressed", "x-compress: 1\r\n", 0, 0);
-doit("This is large enough to be compressed", "x-compress: 0\r\n", 0, 0);
+doit("This is large enough to be compressed", "compress-hint: auto\r\n", 0, 0);
+doit("This is large enough to be compressed", "compress-hint: on\r\n", 0, 0);
+doit("This is large enough to be compressed", "compress-hint: off\r\n", 0, 0);
 
 $socket->close();
 done_testing();
