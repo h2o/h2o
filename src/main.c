@@ -1829,7 +1829,7 @@ int main(int argc, char **argv)
                        "  h2o [options]\n"
                        "\n"
                        "Options:\n"
-                       "  -c, --conf FILE    configuration file (default: h2o.conf)\n"
+                       "  -c, --conf FILE    configuration file (default: %s)\n"
                        "  -m, --mode <mode>  specifies one of the following mode\n"
                        "                     - worker: invoked process handles incoming connections\n"
                        "                               (default)\n"
@@ -1849,7 +1849,8 @@ int main(int argc, char **argv)
                        "\n"
                        "Please refer to the documentation under `share/doc/h2o` (or available online at\n"
                        "http://h2o.examp1e.net/) for how to configure the server.\n"
-                       "\n");
+                       "\n",
+                       H2O_TO_STR(H2O_CONFIG_PATH));
                 exit(0);
                 break;
             case ':':
