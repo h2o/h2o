@@ -1,5 +1,8 @@
 Revision history for H2O.
 
+2.1.0-beta4 TBD
+	- [compress] set `vary: accept-encoding` upon negotiation failure of the compression method #1083 (Frederik Deweerdt)
+
 2.1.0-beta3 2016-09-14 08:00:00+0000
 	- [security fix][core] fix DoS attack vector CVE-2016-4864 (Frederik Deweerdt, Kazuho Oku)
 	- [core] enable TCP latency optimization by default #873 #1076 (Kazuho Oku)
