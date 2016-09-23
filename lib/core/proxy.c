@@ -432,7 +432,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 goto AddHeaderDuped;
             } else if (token == H2O_TOKEN_LINK) {
                 h2o_push_path_in_link_header(req, headers[i].value, headers[i].value_len);
-            } else if (token == H2O_TOKEN_COMPRESS_HINT) {
+            } else if (token == H2O_TOKEN_X_COMPRESS_HINT) {
                 req->compress_hint = compress_hint_to_enum(headers[i].value, headers[i].value_len);
                 goto Skip;
             }
