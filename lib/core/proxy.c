@@ -373,10 +373,10 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
 
 static char compress_hint_to_enum(const char *val, size_t len)
 {
-    if (h2o_lcstris(H2O_STRLIT("on"), val, len)) {
+    if (h2o_lcstris(val, len, H2O_STRLIT("on"))) {
         return H2O_COMPRESS_HINT_ENABLE;
     }
-    if (h2o_lcstris(H2O_STRLIT("off"), val, len)) {
+    if (h2o_lcstris(val, len, H2O_STRLIT("off"))) {
         return H2O_COMPRESS_HINT_DISABLE;
     }
     return H2O_COMPRESS_HINT_AUTO;
