@@ -54,6 +54,27 @@ The server also provides a mechanism to track the clients' cache state via cooki
 When a resource is pushed, the priority is determined using the <a href="configure/file_directives.html#file.mime.addtypes"><code>priority</code> attribute</a> of the MIME-type configuration.  If the priority is set to <code>highest</code> then the resource will be sent to the client before anything else; otherwise the resource will be sent to client after the main content, as per defined by the HTTP/2 specification.
 </p>
 <p>
+HTTP/1.1 allows a server to send an informational response (see <a href="https://tools.ietf.org/html/rfc7231#section-6.2" target="_blank">RFC 7230 section 6.2</a>) before sending the final response.
+Starting from version 2.1, web applications can take advantage of the informational response to initiate HTTP/2 pushes before starting to process the request.
+The following example shows how such responses would look like.
+</p>
+<?= $ctx->{example}->('100 response with link headers', <<'EOT')
+HTTP/1.1 100 Continue
+Link: </assets/style.css>; rel=preload
+Link: </assets/jquery.js>; rel=preload
+
+HTTP/1.1 200 OK
+Content-Type: text/html; charset=utf-8
+
+<!doctype html>
+<html>
+<head>
+<link rel="stylesheet" type="text/css" href="/assets/style.css">
+<script type="text/javascript" src="/assets/jquery.js"></scrrpt>
+...
+EOT
+?>
+<p>
 Pushed responses will have <code>x-http2-push: pushed</code> header set; by looking for the header, it is possible to determine if a resource has been pushed.
 It is also possible to log the value in the <a href="configure/access_log_directives.html#access-log">access log</a> by specifying <code>%{x-http2-push}o</code>, push responses but cancelled by CASPER will have the value of the header logged as <code>cancelled</code>.
 </p>
@@ -67,23 +88,23 @@ See also:
 <h3 id="latency-optimization">Latency Optimization</h3>
 
 <p>
-With HTTP/2, a client often issues a high-priority request (e.g. a request for a CSS file) while a lower-priority response (e.g. HTML) is in flight.
-In such case, it is desirable for a server to switch to sending the response of the high-priority request as soon as it observes the request.
+When using HTTP/2, a client often issues high-priority requests (e.g. requests for CSS and JavaScript files that block the rendering) while a lower-priority response (e.g. HTML) is in flight.
+In such case, it is desirable for a server to switch to sending the response of the high-priority requests as soon as it observes the requests.
 </p>
 <p>
 In order to do so, send buffer of the TCP/IP stack should be kept empty except for the packets in-flight, and size of the TLS records must be small enough to avoid head-of-line blocking.
-The downside is that it increases the interaction between the server process and kernel, which result in consumption of more CPU cycles and slightly increased latency.
+The downside is that obeying the requirement increases the interaction between the server process and kernel, which result in consumption of more CPU cycles and slightly increased latency.
 </p>
 <p>
-Starting from version 2.1, H2O provides experimental directives that lets the users tune how the TCP/IP stack is used depending on the observed RTT, CWND, and the additional latency imposed by the interaction between the server and the OS.
+Starting from version 2.1, H2O provides directives that lets the users tune how the TCP/IP stack is used depending on the observed RTT, CWND, and the additional latency imposed by the interaction between the server and the OS.
 </p>
 <p>
-For TCP/IP connections with greater RTT and smaller CWND than the configured threshold, the server will try to keep the size of HTTP/2 frames unsent as small as possible so that it can switch to sending a higher-priority response.
-Preliminary benchmarks suggest that users can expect in average 1 RTT reduction when this optimization is enabled.
+For TCP/IP connections with greater RTT and smaller CWND than the configured threshold (i.e. a long-distance TCP connection during slow start), the server will try to keep the size of HTTP/2 frames unsent as small as possible so that it can switch to sending a higher-priority response.
+Benchmarks suggest that users can expect in average 1 RTT reduction when this optimization is enabled.
 For connections that do not meet the criteria, the server will utilize the TCP/IP stack in ordinary ways.
 </p>
 <p>
-The optimization is supported only on Linux and OS X, the operating systems that provide access to <code>TCP_INFO</code> and an interface to adjust the size of the unsent buffer (<code>TCP_NOTSENT_LOWAT</code>).
+The optimization is supported only on Linux and OS X, the two operating systems that provide access to <code>TCP_INFO</code> and an interface to adjust the size of the unsent buffer (<code>TCP_NOTSENT_LOWAT</code>).
 </p>
 <p>
 Please refer to the documentation of the directives below to configure the optimization:
@@ -215,6 +236,7 @@ $ctx->{directive}->(
     name    => "http2-latency-optimization-min-rtt",
     levels  => [ qw(global) ],
     since   => '2.1',
+    default => 'http2-latency-optimization-min-rtt: 50',
     desc    => << 'EOT',
 Minimum RTT (in milliseconds) to enable <a href="configure/http2_directives.html#latency-optimization">latency optimization</a>.
 EOT
@@ -225,7 +247,7 @@ Latency optimization is disabled for TCP connections with smaller RTT (round-tri
 Otherwise, whether if the optimization is used depends on other parameters.
 </p>
 <p>
-The default value of the directive is <code>UINT_MAX</code> (4,294,967,295), which effectively disables the optimization.
+Setting this value to 4294967295 (i.e. <code>UINT_MAX</code>) effectively disables the optimization.
 </p>
 ? })
 

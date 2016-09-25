@@ -245,6 +245,9 @@ EOT
 $ctx->{directive}->(
     name   => "error-log",
     levels => [ qw(global) ],
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#error-log.emit-request-errors"><code>error-log.emit-request-errors</code></a>
+EOT
     desc   => q{Path of the file to which error logs should be appended.},
 )->(sub {
 ?>
@@ -262,6 +265,22 @@ EOT
 error-log: "| rotatelogs /path/to/error-log-file.%Y%m%d 86400"
 EOT
 ?>
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "error-log.emit-request-errors",
+    levels  => [ qw(global host path extension) ],
+    since   => "2.1",
+    see_also => render_mt(<<'EOT'),
+<a href="configure/access_log_directives.html#access-log"><code>access-log</code></a>
+<a href="configure/base_directives.html#error-log"><code>error-log</code></a>
+EOT
+    default => "error-log.emit-request-errors: ON",
+    desc    => q{Sets whether if request-level errors should be emitted to the error log.},
+)->(sub {
+?>
+By setting the value to <code>OFF</code> and by using the <code>%{error}x</code> specifier of the <a href="configure/access_log_directives.html">access-log</a> directive, it is possible to log request-level errors only to the access log.
 ? })
 
 <?

@@ -366,6 +366,34 @@ If the path starts with <code>|</code>, the rest of the path is considered as a 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
+<dt>See also:</dt>
+<dd><a href="configure/base_directives.html#error-log.emit-request-errors"><code>error-log.emit-request-errors</code></a>
+</dd>
+</dl>
+
+<div id="error-log.emit-request-errors" class="directive-head">
+<div class="directive-since">since v2.1</div>
+<h3><a href="configure/base_directives.html#error-log.emit-request-errors"><code>"error-log.emit-request-errors"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Sets whether if request-level errors should be emitted to the error log.
+</p>
+
+By setting the value to <code>OFF</code> and by using the <code>%{error}x</code> specifier of the <a href="configure/access_log_directives.html">access-log</a> directive, it is possible to log request-level errors only to the access log.
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extension</dd>
+<dt>Default:</dt>
+<dd><code><pre>error-log.emit-request-errors: ON</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/access_log_directives.html#access-log"><code>access-log</code></a>
+<a href="configure/base_directives.html#error-log"><code>error-log</code></a>
+</dd>
 </dl>
 
 <div id="limit-request-body" class="directive-head">
