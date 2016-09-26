@@ -39,7 +39,6 @@ struct st_h2o_redis_context_t {
     char *host;
     uint16_t port;
     h2o_loop_t *loop;
-    pthread_mutex_t mutex;
     struct {
         h2o_redis_connect_cb connect;
         h2o_redis_disconnect_cb disconnect;
@@ -114,7 +113,6 @@ h2o_redis_context_t *h2o_redis_create_context(h2o_loop_t *loop, const char *host
     h2o_redis_context_t *ctx = h2o_mem_alloc(sizeof(*ctx));
     *ctx = (h2o_redis_context_t){NULL};
 
-    pthread_mutex_init(&ctx->mutex, NULL);
     ctx->host = h2o_strdup(NULL, host, SIZE_MAX).base;
     ctx->port = port;
     ctx->loop = loop;
@@ -126,7 +124,6 @@ int h2o_redis_connect(h2o_redis_context_t *ctx, h2o_redis_connect_cb on_connect,
 {
     redisAsyncContext *redis = NULL;
 
-    pthread_mutex_lock(&ctx->mutex);
     if (ctx->redis != NULL) {
         goto Error;
     }
@@ -152,14 +149,12 @@ int h2o_redis_connect(h2o_redis_context_t *ctx, h2o_redis_connect_cb on_connect,
     ctx->cb.disconnect = on_disconnect;
     redis->data = ctx;
 
-    pthread_mutex_unlock(&ctx->mutex);
     return 0;
 
 Error:
     if (redis != NULL)
         redisAsyncFree(redis);
     ctx->redis = NULL;
-    pthread_mutex_unlock(&ctx->mutex);
     return -1;
 }
 
