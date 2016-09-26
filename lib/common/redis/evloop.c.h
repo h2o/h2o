@@ -21,71 +21,69 @@
  */
 
 
-typedef struct redisSocketEvents {
+typedef struct redisEvloopEvents {
     redisAsyncContext* context;
     h2o_socket_t       *socket;
-} redisSocketEvents;
+} redisEvloopEvents;
 
 
 static void on_read(h2o_socket_t* sock, const char *err)
 {
-    redisSocketEvents* p = (redisSocketEvents*)sock->data;
+    redisEvloopEvents* p = (redisEvloopEvents*)sock->data;
     redisAsyncHandleRead(p->context);
 }
 
 static void on_write(h2o_socket_t *sock, const char *err)
 {
-    redisSocketEvents* p = (redisSocketEvents*)sock->data;
+    redisEvloopEvents* p = (redisEvloopEvents*)sock->data;
     redisAsyncHandleWrite(p->context);
 }
 
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
 
-static void redisSocketAddRead(void *privdata) {
-    redisSocketEvents* p = (redisSocketEvents*)privdata;
+static void redisEvloopAddRead(void *privdata) {
+    redisEvloopEvents* p = (redisEvloopEvents*)privdata;
     h2o_socket_read_start(p->socket, on_read);
 }
 
 
-static void redisSocketDelRead(void *privdata) {
-    redisSocketEvents* p = (redisSocketEvents*)privdata;
+static void redisEvloopDelRead(void *privdata) {
+    redisEvloopEvents* p = (redisEvloopEvents*)privdata;
     h2o_socket_read_stop(p->socket);
 }
 
 
-static void redisSocketAddWrite(void *privdata) {
-    redisSocketEvents* p = (redisSocketEvents*)privdata;
+static void redisEvloopAddWrite(void *privdata) {
+    redisEvloopEvents* p = (redisEvloopEvents*)privdata;
     if (! h2o_socket_is_writing(p->socket)) {
         h2o_socket_notify_write(p->socket, on_write);
     }
 }
 
-static void redisSocketCleanup(void *privdata) {
-    redisSocketEvents* p = (redisSocketEvents*)privdata;
+static void redisEvloopCleanup(void *privdata) {
+    redisEvloopEvents* p = (redisEvloopEvents*)privdata;
     h2o_socket_close(p->socket);
     p->context->c.fd = -1; /* prevent hiredis from closing fd twice */
     free(p);
 }
 
 
-static int redisSocketAttach(redisAsyncContext* ac, h2o_evloop_t* loop) {
+static int redisEvloopAttach(redisAsyncContext* ac, h2o_evloop_t* loop) {
     redisContext *c = &(ac->c);
 
     if (ac->ev.data != NULL) {
         return REDIS_ERR;
     }
 
-    ac->ev.addRead  = redisSocketAddRead;
-    ac->ev.delRead  = redisSocketDelRead;
-    ac->ev.addWrite = redisSocketAddWrite;
-    ac->ev.cleanup  = redisSocketCleanup;
+    ac->ev.addRead  = redisEvloopAddRead;
+    ac->ev.delRead  = redisEvloopDelRead;
+    ac->ev.addWrite = redisEvloopAddWrite;
+    ac->ev.cleanup  = redisEvloopCleanup;
 
-    redisSocketEvents* p = (redisSocketEvents*)malloc(sizeof(*p));
-
+    redisEvloopEvents* p = (redisEvloopEvents*)malloc(sizeof(*p));
     if (!p) {
         return REDIS_ERR;
     }
-
     memset(p, 0, sizeof(*p));
 
     ac->ev.data = p;

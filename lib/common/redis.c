@@ -138,7 +138,7 @@ int h2o_redis_connect(h2o_redis_context_t *ctx, h2o_redis_connect_cb on_connect,
 #if H2O_USE_LIBUV
     redisLibuvAttach(redis, ctx->loop);
 #else
-    redisSocketAttach(redis, ctx->loop);
+    redisEvloopAttach(redis, ctx->loop);
 #endif
 
     if (redisAsyncSetConnectCallback(redis, on_redis_connect) != REDIS_OK) {
