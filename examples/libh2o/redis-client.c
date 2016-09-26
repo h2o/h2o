@@ -25,7 +25,7 @@
 
 static h2o_loop_t *loop;
 static int exit_loop;
-
+h2o_redis_context_t *ctx;
 
 static void usage(const char *cmd)
 {
@@ -66,7 +66,7 @@ static void dump_reply(redisReply *reply, unsigned indent)
     }
 }
 
-static void on_redis_command(h2o_redis_context_t *ctx, redisReply *reply, void *cb_data)
+static void on_redis_command(redisReply *reply, void *cb_data)
 {
     if (reply == NULL) {
         fprintf(stderr, "redis command error\n");
@@ -75,10 +75,10 @@ static void on_redis_command(h2o_redis_context_t *ctx, redisReply *reply, void *
     dump_reply(reply, 0);
 }
 
-static void on_redis_connect(h2o_redis_context_t *ctx, const char *errstr);
-static void on_redis_disconnect(h2o_redis_context_t *ctx, const char *errstr);
+static void on_redis_connect(const char *errstr);
+static void on_redis_disconnect(const char *errstr);
 
-static void on_redis_connect(h2o_redis_context_t *ctx, const char *errstr)
+static void on_redis_connect(const char *errstr)
 {
     if (errstr != NULL) {
         fprintf(stderr, "redis error in connect: %s\n", errstr);
@@ -92,7 +92,7 @@ static void on_redis_connect(h2o_redis_context_t *ctx, const char *errstr)
     h2o_redis_command(ctx, on_redis_command, NULL, "INFO");
 }
 
-static void on_redis_disconnect(h2o_redis_context_t *ctx, const char *errstr)
+static void on_redis_disconnect(const char *errstr)
 {
     if (errstr != NULL) {
         fprintf(stderr, "redis error on disconnect: %s\n", errstr);
@@ -104,7 +104,6 @@ static void on_redis_disconnect(h2o_redis_context_t *ctx, const char *errstr)
     }
     fprintf(stderr, "disconnected from redis\n");
 }
-
 
 int main(int argc, char **argv)
 {
@@ -127,7 +126,7 @@ int main(int argc, char **argv)
     uint16_t port;
     sscanf(_port, "%" SCNu16, &port);
 
-    h2o_redis_context_t *ctx = h2o_redis_create_context(loop, host, port);
+    ctx = h2o_redis_create_context(loop, host, port);
     if (h2o_redis_connect(ctx, on_redis_connect, on_redis_disconnect) != 0) {
         goto Exit;
     }

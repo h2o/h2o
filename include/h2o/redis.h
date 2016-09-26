@@ -27,9 +27,9 @@
 #include "h2o/memory.h"
 
 typedef struct st_h2o_redis_context_t h2o_redis_context_t;
-typedef void (*h2o_redis_command_cb)(h2o_redis_context_t *ctx, redisReply *reply, void *cb_data);
-typedef void (*h2o_redis_connect_cb)(h2o_redis_context_t *ctx, const char *errstr);
-typedef void (*h2o_redis_disconnect_cb)(h2o_redis_context_t *ctx, const char *errstr);
+typedef void (*h2o_redis_command_cb)(redisReply *reply, void *cb_data);
+typedef void (*h2o_redis_connect_cb)(const char *errstr);
+typedef void (*h2o_redis_disconnect_cb)(const char *errstr);
 
 h2o_redis_context_t *h2o_redis_create_context(h2o_loop_t *loop, const char *host, uint16_t port);
 int h2o_redis_connect(h2o_redis_context_t *ctx, h2o_redis_connect_cb on_connect, h2o_redis_disconnect_cb on_disconnect);

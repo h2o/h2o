@@ -53,10 +53,9 @@ struct st_h2o_redis_callback_args_t {
 
 void on_command(redisAsyncContext *redis, void *reply, void *privdata)
 {
-    h2o_redis_context_t *ctx = (h2o_redis_context_t *)redis->data;
     struct st_h2o_redis_callback_args_t *args = (struct st_h2o_redis_callback_args_t *)privdata;
     if (args != NULL) {
-        args->cb(ctx, (redisReply *)reply, args->data);
+        args->cb((redisReply *)reply, args->data);
         free(args);
     }
 }
@@ -94,7 +93,7 @@ static void on_redis_connect(const redisAsyncContext *redis, int status)
     }
 
     if (ctx->cb.connect) {
-        ctx->cb.connect(ctx, status == REDIS_OK ? NULL : redis->errstr);
+        ctx->cb.connect(status == REDIS_OK ? NULL : redis->errstr);
     }
 }
 
@@ -104,7 +103,7 @@ static void on_redis_disconnect(const redisAsyncContext *redis, int status)
     ctx->redis = NULL;
 
     if (ctx->cb.disconnect) {
-        ctx->cb.disconnect(ctx, status == REDIS_OK ? NULL : redis->errstr);
+        ctx->cb.disconnect(status == REDIS_OK ? NULL : redis->errstr);
     }
 }
 
