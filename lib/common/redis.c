@@ -35,10 +35,7 @@
 #include "redis/evloop.c.h"
 #endif
 
-struct st_h2o_redis_context_t {
-    char *host;
-    uint16_t port;
-    h2o_loop_t *loop;
+struct st_h2o_redis_conn_t {
     struct {
         h2o_redis_connect_cb on_connect;
         h2o_redis_disconnect_cb on_disconnect;
@@ -60,12 +57,8 @@ void on_command(redisAsyncContext *redis, void *reply, void *privdata)
     }
 }
 
-int h2o_redis_command(h2o_redis_context_t *ctx, h2o_redis_command_cb cb, void *cb_data, const char *format, ...)
+int h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, const char *format, ...)
 {
-    if (ctx->redis == NULL) {
-        return -1;
-    }
-
     va_list ap;
 
     struct st_h2o_redis_callback_args_t *args = NULL;
@@ -77,7 +70,7 @@ int h2o_redis_command(h2o_redis_context_t *ctx, h2o_redis_command_cb cb, void *c
 
     int ret = 0;
     va_start(ap, format);
-    if (redisvAsyncCommand(ctx->redis, on_command, args, format, ap) != REDIS_OK) {
+    if (redisvAsyncCommand(conn->redis, on_command, args, format, ap) != REDIS_OK) {
         ret = -1;
     }
     va_end(ap);
@@ -87,54 +80,36 @@ int h2o_redis_command(h2o_redis_context_t *ctx, h2o_redis_command_cb cb, void *c
 
 static void on_redis_connect(const redisAsyncContext *redis, int status)
 {
-    h2o_redis_context_t *ctx = (h2o_redis_context_t *)redis->data;
-    if (status != REDIS_OK) {
-        ctx->redis = NULL;
+    h2o_redis_conn_t *conn = (h2o_redis_conn_t *)redis->data;
+    if (conn->cb.on_connect) {
+        conn->cb.on_connect(status == REDIS_OK ? NULL : redis->errstr);
     }
-
-    if (ctx->cb.on_connect) {
-        ctx->cb.on_connect(status == REDIS_OK ? NULL : redis->errstr);
-    }
+    if (status != REDIS_OK)
+        free(conn);
 }
 
 static void on_redis_disconnect(const redisAsyncContext *redis, int status)
 {
-    h2o_redis_context_t *ctx = (h2o_redis_context_t *)redis->data;
-    ctx->redis = NULL;
-
-    if (ctx->cb.on_disconnect) {
-        ctx->cb.on_disconnect(status == REDIS_OK ? NULL : redis->errstr);
+    h2o_redis_conn_t *conn = (h2o_redis_conn_t *)redis->data;
+    if (conn->cb.on_disconnect) {
+        conn->cb.on_disconnect(status == REDIS_OK ? NULL : redis->errstr);
     }
+    free(conn);
 }
 
-h2o_redis_context_t *h2o_redis_create_context(h2o_loop_t *loop, const char *host, uint16_t port)
+h2o_redis_conn_t *h2o_redis_connect(h2o_loop_t *loop, const char *host, uint16_t port, h2o_redis_connect_cb on_connect, h2o_redis_disconnect_cb on_disconnect)
 {
-    h2o_redis_context_t *ctx = h2o_mem_alloc(sizeof(*ctx));
-    *ctx = (h2o_redis_context_t){NULL};
+    h2o_redis_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
+    *conn = (h2o_redis_conn_t){NULL};
 
-    ctx->host = h2o_strdup(NULL, host, SIZE_MAX).base;
-    ctx->port = port;
-    ctx->loop = loop;
-
-    return ctx;
-}
-
-int h2o_redis_connect(h2o_redis_context_t *ctx, h2o_redis_connect_cb on_connect, h2o_redis_disconnect_cb on_disconnect)
-{
-    redisAsyncContext *redis = NULL;
-
-    if (ctx->redis != NULL) {
-        goto Error;
-    }
-
-    redis = redisAsyncConnect(ctx->host, ctx->port);
+    redisAsyncContext *redis = redisAsyncConnect(host, port);
     if (redis == NULL || redis->err != REDIS_OK) {
         goto Error;
     }
 #if H2O_USE_LIBUV
-    redisLibuvAttach(redis, ctx->loop);
+    redisLibuvAttach(redis, loop);
 #else
-    redisEvloopAttach(redis, ctx->loop);
+    redisEvloopAttach(redis, loop);
 #endif
 
     if (redisAsyncSetConnectCallback(redis, on_redis_connect) != REDIS_OK) {
@@ -143,25 +118,26 @@ int h2o_redis_connect(h2o_redis_context_t *ctx, h2o_redis_connect_cb on_connect,
     if (redisAsyncSetDisconnectCallback(redis, on_redis_disconnect) != REDIS_OK) {
         goto Error;
     }
-    ctx->redis = redis;
-    ctx->cb.on_connect = on_connect;
-    ctx->cb.on_disconnect = on_disconnect;
-    redis->data = ctx;
 
-    return 0;
+    conn->redis = redis;
+    conn->cb.on_connect = on_connect;
+    conn->cb.on_disconnect = on_disconnect;
+    redis->data = conn;
+
+    return conn;
 
 Error:
     if (redis != NULL)
         redisAsyncFree(redis);
-    ctx->redis = NULL;
-    return -1;
+    free(conn);
+    return NULL;
 }
 
-int h2o_redis_disconnect(h2o_redis_context_t *ctx)
+int h2o_redis_disconnect(h2o_redis_conn_t *conn)
 {
-    if (ctx->redis == NULL) {
+    if (conn->redis == NULL) {
         return -1;
     }
-    redisAsyncDisconnect(ctx->redis);
+    redisAsyncDisconnect(conn->redis);
     return 0;
 }

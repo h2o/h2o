@@ -25,7 +25,10 @@
 
 static h2o_loop_t *loop;
 static int exit_loop;
-h2o_redis_context_t *ctx;
+const char *host;
+uint16_t port;
+h2o_redis_conn_t *conn;
+
 
 static void usage(const char *cmd)
 {
@@ -83,13 +86,13 @@ static void on_redis_connect(const char *errstr)
     if (errstr != NULL) {
         fprintf(stderr, "redis error in connect: %s\n", errstr);
         usleep(1000000);
-        if (h2o_redis_connect(ctx, on_redis_connect, on_redis_disconnect) != 0) {
+        if ((conn = h2o_redis_connect(loop, host, port, on_redis_connect, on_redis_disconnect)) == NULL) {
             exit_loop = 1;
         }
         return;
     }
     fprintf(stderr, "connected to redis\n");
-    h2o_redis_command(ctx, on_redis_command, NULL, "INFO");
+    h2o_redis_command(conn, on_redis_command, NULL, "INFO");
 }
 
 static void on_redis_disconnect(const char *errstr)
@@ -97,7 +100,7 @@ static void on_redis_disconnect(const char *errstr)
     if (errstr != NULL) {
         fprintf(stderr, "redis error on disconnect: %s\n", errstr);
         usleep(1000000);
-        if (h2o_redis_connect(ctx, on_redis_connect, on_redis_disconnect) != 0) {
+        if ((conn = h2o_redis_connect(loop, host, port, on_redis_connect, on_redis_disconnect)) == NULL) {
             exit_loop = 1;
         }
         return;
@@ -114,8 +117,11 @@ int main(int argc, char **argv)
         usage(cmd);
     if (argc != 2)
         usage(cmd);
-    const char *host = (--argc, *argv++);
+    host = (--argc, *argv++);
     const char *_port = (--argc, *argv++);
+    if (sscanf(_port, "%" SCNu16, &port) != 1) {
+        goto Exit;
+    }
 
 #if H2O_USE_LIBUV
     loop = uv_loop_new();
@@ -123,14 +129,11 @@ int main(int argc, char **argv)
     loop = h2o_evloop_create();
 #endif
 
-    uint16_t port;
-    sscanf(_port, "%" SCNu16, &port);
 
-    ctx = h2o_redis_create_context(loop, host, port);
-    if (h2o_redis_connect(ctx, on_redis_connect, on_redis_disconnect) != 0) {
+    if ((conn = h2o_redis_connect(loop, host, port, on_redis_connect, on_redis_disconnect)) == NULL) {
         goto Exit;
     }
-    h2o_redis_command(ctx, on_redis_command, NULL, "KEYS *");
+    h2o_redis_command(conn, on_redis_command, NULL, "KEYS *");
 
 
     while (!exit_loop) {
