@@ -40,8 +40,8 @@ struct st_h2o_redis_context_t {
     uint16_t port;
     h2o_loop_t *loop;
     struct {
-        h2o_redis_connect_cb connect;
-        h2o_redis_disconnect_cb disconnect;
+        h2o_redis_connect_cb on_connect;
+        h2o_redis_disconnect_cb on_disconnect;
     } cb;
     redisAsyncContext *redis;
 };
@@ -92,8 +92,8 @@ static void on_redis_connect(const redisAsyncContext *redis, int status)
         ctx->redis = NULL;
     }
 
-    if (ctx->cb.connect) {
-        ctx->cb.connect(status == REDIS_OK ? NULL : redis->errstr);
+    if (ctx->cb.on_connect) {
+        ctx->cb.on_connect(status == REDIS_OK ? NULL : redis->errstr);
     }
 }
 
@@ -102,8 +102,8 @@ static void on_redis_disconnect(const redisAsyncContext *redis, int status)
     h2o_redis_context_t *ctx = (h2o_redis_context_t *)redis->data;
     ctx->redis = NULL;
 
-    if (ctx->cb.disconnect) {
-        ctx->cb.disconnect(status == REDIS_OK ? NULL : redis->errstr);
+    if (ctx->cb.on_disconnect) {
+        ctx->cb.on_disconnect(status == REDIS_OK ? NULL : redis->errstr);
     }
 }
 
@@ -144,8 +144,8 @@ int h2o_redis_connect(h2o_redis_context_t *ctx, h2o_redis_connect_cb on_connect,
         goto Error;
     }
     ctx->redis = redis;
-    ctx->cb.connect = on_connect;
-    ctx->cb.disconnect = on_disconnect;
+    ctx->cb.on_connect = on_connect;
+    ctx->cb.on_disconnect = on_disconnect;
     redis->data = ctx;
 
     return 0;
