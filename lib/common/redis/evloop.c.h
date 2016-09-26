@@ -60,11 +60,6 @@ static void redisSocketAddWrite(void *privdata) {
     }
 }
 
-static void redisSocketDelWrite(void *privdata)
-{
-    // TODO: do what?
-}
-
 static void redisSocketCleanup(void *privdata) {
     redisSocketEvents* p = (redisSocketEvents*)privdata;
     h2o_socket_close(p->socket);
@@ -83,7 +78,6 @@ static int redisSocketAttach(redisAsyncContext* ac, h2o_evloop_t* loop) {
     ac->ev.addRead  = redisSocketAddRead;
     ac->ev.delRead  = redisSocketDelRead;
     ac->ev.addWrite = redisSocketAddWrite;
-    ac->ev.delWrite = redisSocketDelWrite;
     ac->ev.cleanup  = redisSocketCleanup;
 
     redisSocketEvents* p = (redisSocketEvents*)malloc(sizeof(*p));
