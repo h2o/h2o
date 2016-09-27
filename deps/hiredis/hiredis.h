@@ -98,7 +98,7 @@
          * then GNU strerror_r returned an internal static buffer and we       \
          * need to copy the result into our private buffer. */                 \
         if (err_str != (buf)) {                                                \
-            buf[(len)] = '\0';                                                 \
+            (buf)[(len)] = '\0';                                                 \
             strncat((buf), err_str, ((len) - 1));                              \
         }                                                                      \
     } while (0)
