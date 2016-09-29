@@ -157,6 +157,7 @@ static struct {
         char _unused3_avoir_false_sharing[32];
     } state;
     char *crash_handler;
+    int crash_handler_wait_pipe_close;
 } conf = {
     {NULL},                                 /* globalconf */
     RUN_MODE_WORKER,                        /* dry-run */
@@ -174,6 +175,7 @@ static struct {
     0,                                      /* initialized_threads */
     {{0}},                                  /* state */
     "share/h2o/annotate-backtrace-symbols", /* crash_handler */
+    0,                                      /* crash_handler_wait_pipe_close */
 };
 
 static neverbleed_t *neverbleed = NULL;
@@ -1152,6 +1154,22 @@ static int on_config_crash_handler(h2o_configurator_command_t *cmd, h2o_configur
     return 0;
 }
 
+static int on_config_crash_handler_wait_pipe_close(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
+        case 0: /* off */
+            conf.crash_handler_wait_pipe_close = 0;
+            break;
+        case 1: /* on */
+            conf.crash_handler_wait_pipe_close = 1;
+            break;
+        default: /* error */
+            return -1;
+    }
+
+    return 0;
+}
+
 static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
 {
     FILE *fp;
@@ -1279,6 +1297,7 @@ static int popen_crash_handler(void)
         perror("failed to set FD_CLOEXEC on pipefds[1]");
         return -1;
     }
+
     /* spawn the logger */
     int mapped_fds[] = {pipefds[0], 0, /* output of the pipe is connected to STDIN of the spawned process */
                         2, 1,          /* STDOUT of the spawned process in connected to STDERR of h2o */
@@ -1305,6 +1324,11 @@ static void on_sigfatal(int signo)
     void *frames[128];
     int framecnt = backtrace(frames, sizeof(frames) / sizeof(frames[0]));
     backtrace_symbols_fd(frames, framecnt, crash_handler_fd);
+
+    if (conf.crash_handler_wait_pipe_close) {
+        while (write(crash_handler_fd, "", 1) != -1)
+            ;
+    }
 
     raise(signo);
 }
@@ -1738,6 +1762,8 @@ static void setup_configurators(void)
                                         on_config_temp_buffer_path);
         h2o_configurator_define_command(c, "crash-handler", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_crash_handler);
+        h2o_configurator_define_command(c, "crash-handler.wait-pipe-close", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_crash_handler_wait_pipe_close);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
