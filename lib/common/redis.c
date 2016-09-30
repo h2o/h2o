@@ -28,12 +28,7 @@
 #include "h2o/redis.h"
 #include "h2o/string_.h"
 #include "h2o/socket.h"
-
-#if H2O_USE_LIBUV
-#include "libuv.h"
-#else
-#include "redis/evloop.c.h"
-#endif
+#include "redis/socket.c.h"
 
 struct st_h2o_redis_conn_t {
     struct {
@@ -100,17 +95,13 @@ static void on_redis_disconnect(const redisAsyncContext *redis, int status)
 h2o_redis_conn_t *h2o_redis_connect(h2o_loop_t *loop, const char *host, uint16_t port, h2o_redis_connect_cb on_connect, h2o_redis_disconnect_cb on_disconnect)
 {
     h2o_redis_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
-    *conn = (h2o_redis_conn_t){NULL};
+    *conn = (h2o_redis_conn_t){{NULL}};
 
     redisAsyncContext *redis = redisAsyncConnect(host, port);
     if (redis == NULL || redis->err != REDIS_OK) {
         goto Error;
     }
-#if H2O_USE_LIBUV
-    redisLibuvAttach(redis, loop);
-#else
-    redisEvloopAttach(redis, loop);
-#endif
+    redisSocketAttach(redis, loop);
 
     if (redisAsyncSetConnectCallback(redis, on_redis_connect) != REDIS_OK) {
         goto Error;
