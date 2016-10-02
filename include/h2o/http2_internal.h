@@ -60,6 +60,7 @@ typedef struct st_h2o_hpack_header_table_entry_t {
 #define H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS 2
 #define H2O_HPACK_PARSE_HEADERS_PATH_EXISTS 4
 #define H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS 8
+#define H2O_HPACK_PARSE_HEADERS_STATUS_EXISTS 16
 
 void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table);
 int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len,
