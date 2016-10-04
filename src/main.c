@@ -31,6 +31,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <poll.h>
 #include <pthread.h>
 #include <pwd.h>
 #include <signal.h>
@@ -1326,8 +1327,10 @@ static void on_sigfatal(int signo)
     backtrace_symbols_fd(frames, framecnt, crash_handler_fd);
 
     if (conf.crash_handler_wait_pipe_close) {
-        while (write(crash_handler_fd, "", 1) != -1)
-            ;
+        struct pollfd pfd[1];
+        pfd[0].fd = crash_handler_fd;
+        pfd[0].events = POLLERR | POLLHUP;
+        poll(pfd, 1, -1);
     }
 
     raise(signo);
