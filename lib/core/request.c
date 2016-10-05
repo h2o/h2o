@@ -546,7 +546,7 @@ void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
         }
         *p++ = ':';
         /* use writev(2) to emit error atomically */
-        struct iovec vecs[] = {{prefix, p - prefix}, {errbuf, errlen}};
+        struct iovec vecs[] = {{prefix, p - prefix}, {errbuf, errlen}, {"\n", 1}};
         H2O_BUILD_ASSERT(sizeof(vecs) / sizeof(vecs[0]) < IOV_MAX);
         writev(2, vecs, sizeof(vecs) / sizeof(vecs[0]));
     }
