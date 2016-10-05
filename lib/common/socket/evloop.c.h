@@ -535,6 +535,11 @@ static void run_pending(h2o_evloop_t *loop)
     }
 }
 
+void h2o_evloop_update_status(h2o_evloop_t *loop)
+{
+    evloop_update_status(loop);
+}
+
 int h2o_evloop_run(h2o_evloop_t *loop)
 {
     h2o_linklist_t *node;

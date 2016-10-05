@@ -102,6 +102,10 @@ static int collect_status(struct st_h2o_socket_loop_kqueue_t *loop, struct keven
 #undef SET_AND_UPDATE
 }
 
+void evloop_update_status(h2o_evloop_t *_loop)
+{
+}
+
 int evloop_do_proceed(h2o_evloop_t *_loop)
 {
     struct st_h2o_socket_loop_kqueue_t *loop = (struct st_h2o_socket_loop_kqueue_t *)_loop;

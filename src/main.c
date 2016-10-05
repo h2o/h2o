@@ -1462,7 +1462,11 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     if (thread_index == 0)
         fprintf(stderr, "received SIGTERM, gracefully shutting down\n");
 
-    /* shutdown requested, close the listeners, notify the protocol handlers */
+    /* shutdown requested, unregister, close the listeners and notify the protocol handlers */
+    for (i = 0; i != conf.num_listeners; ++i) {
+        h2o_socket_read_stop(listeners[i].sock);
+        h2o_evloop_update_status(conf.threads[thread_index].ctx.loop);
+    }
     for (i = 0; i != conf.num_listeners; ++i) {
         h2o_socket_close(listeners[i].sock);
         listeners[i].sock = NULL;

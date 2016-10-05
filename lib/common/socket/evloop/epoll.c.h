@@ -100,6 +100,12 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
     return 0;
 }
 
+void evloop_update_status(h2o_evloop_t *_loop)
+{
+    struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)_loop;
+    update_status(loop);
+}
+
 int evloop_do_proceed(h2o_evloop_t *_loop)
 {
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)_loop;
