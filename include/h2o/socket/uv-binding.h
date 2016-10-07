@@ -35,7 +35,7 @@ struct st_h2o_timeout_backend_properties_t {
 };
 
 h2o_socket_t *h2o_uv_socket_create(uv_stream_t *stream, uv_close_cb close_cb);
-h2o_socket_t *h2o_uv_poll_create(h2o_loop_t *loop, int fd, uv_close_cb close_cb);
+h2o_socket_t *h2o_uv__poll_create(h2o_loop_t *loop, int fd, uv_close_cb close_cb);
 
 static inline uint64_t h2o_now(uv_loop_t *loop)
 {

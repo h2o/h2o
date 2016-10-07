@@ -163,7 +163,7 @@ void do_read_start(h2o_socket_t *_sock)
         uv_poll_start((uv_poll_t *)sock->handle, sock->poll.events, on_poll);
         break;
     default:
-        assert(!"FIXME");
+        h2o_fatal("unexpected handle type");
     }
 }
 
@@ -180,7 +180,7 @@ void do_read_stop(h2o_socket_t *_sock)
         update_poll(sock);
         break;
     default:
-        assert(!"FIXME");
+        h2o_fatal("unexpected handle type");
     }
 }
 
@@ -249,7 +249,7 @@ h2o_socket_t *do_import(h2o_loop_t *loop, h2o_socket_export_t *info)
     return &sock->super;
 }
 
-h2o_socket_t *h2o_uv_poll_create(h2o_loop_t *loop, int fd, uv_close_cb close_cb)
+h2o_socket_t *h2o_uv__poll_create(h2o_loop_t *loop, int fd, uv_close_cb close_cb)
 {
     struct st_h2o_uv_socket_t *sock = h2o_mem_alloc(sizeof(*sock));
     memset(sock, 0, sizeof(*sock));

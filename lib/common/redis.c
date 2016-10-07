@@ -86,7 +86,7 @@ static void on_redis_connect(const redisAsyncContext *redis, int status)
 static void on_redis_disconnect(const redisAsyncContext *redis, int status)
 {
     h2o_redis_conn_t *conn = (h2o_redis_conn_t *)redis->data;
-    if (conn->cb.on_disconnect) {
+    if (conn->cb.on_disconnect != NULL) {
         conn->cb.on_disconnect(status == REDIS_OK ? NULL : redis->errstr);
     }
     free(conn);

@@ -88,7 +88,7 @@ static int redisSocketAttach(redisAsyncContext* ac, h2o_loop_t* loop) {
 
     ac->ev.data = p;
 #if H2O_USE_LIBUV
-    p->socket = h2o_uv_poll_create(loop, c->fd, (uv_close_cb)free);
+    p->socket = h2o_uv__poll_create(loop, c->fd, (uv_close_cb)free);
 #else
     p->socket = h2o_evloop_socket_create(loop, c->fd, H2O_SOCKET_FLAG_DONT_READ);
 #endif

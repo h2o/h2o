@@ -23,7 +23,7 @@
 #define h2o__redis_h
 
 #include "hiredis.h"
-#include "socket.h"
+#include "h2o/socket.h"
 
 typedef struct st_h2o_redis_conn_t h2o_redis_conn_t;
 typedef void (*h2o_redis_command_cb)(redisReply *reply, void *cb_data);
