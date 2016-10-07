@@ -28,7 +28,8 @@
 #include "h2o/redis.h"
 #include "h2o/string_.h"
 #include "h2o/socket.h"
-#include "redis/socket.c.h"
+
+static int attach_loop(redisAsyncContext* ac, h2o_loop_t* loop);
 
 struct st_h2o_redis_conn_t {
     struct {
@@ -101,7 +102,9 @@ h2o_redis_conn_t *h2o_redis_connect(h2o_loop_t *loop, const char *host, uint16_t
     if (redis == NULL || redis->err != REDIS_OK) {
         goto Error;
     }
-    redisSocketAttach(redis, loop);
+    if (attach_loop(redis, loop) != 0) {
+        goto Error;
+    }
 
     if (redisAsyncSetConnectCallback(redis, on_redis_connect) != REDIS_OK) {
         goto Error;
@@ -130,5 +133,81 @@ int h2o_redis_disconnect(h2o_redis_conn_t *conn)
         return -1;
     }
     redisAsyncDisconnect(conn->redis);
+    return 0;
+}
+
+/* redis socket adapter */
+
+struct st_redis_socket_data {
+    redisAsyncContext *context;
+    h2o_socket_t *socket;
+};
+
+static void on_read(h2o_socket_t* sock, const char *err)
+{
+    struct st_redis_socket_data *p = (struct st_redis_socket_data *)sock->data;
+    redisAsyncHandleRead(p->context);
+}
+
+static void on_write(h2o_socket_t *sock, const char *err)
+{
+    struct st_redis_socket_data *p = (struct st_redis_socket_data *)sock->data;
+    redisAsyncHandleWrite(p->context);
+}
+
+static void socket_add_read(void *privdata) {
+    struct st_redis_socket_data *p = (struct st_redis_socket_data *)privdata;
+    h2o_socket_read_start(p->socket, on_read);
+}
+
+
+static void socket_del_read(void *privdata) {
+    struct st_redis_socket_data *p = (struct st_redis_socket_data *)privdata;
+    h2o_socket_read_stop(p->socket);
+}
+
+
+static void socket_add_write(void *privdata) {
+    struct st_redis_socket_data *p = (struct st_redis_socket_data *)privdata;
+    if (! h2o_socket_is_writing(p->socket)) {
+        h2o_socket_notify_write(p->socket, on_write);
+    }
+}
+
+static void socket_cleanup(void *privdata) {
+    struct st_redis_socket_data *p = (struct st_redis_socket_data *)privdata;
+    h2o_socket_close(p->socket);
+    p->context->c.fd = -1; /* prevent hiredis from closing fd twice */
+    free(p);
+}
+
+static int attach_loop(redisAsyncContext* ac, h2o_loop_t* loop) {
+    redisContext *c = &(ac->c);
+
+    if (ac->ev.data != NULL) {
+        return -1;
+    }
+
+    ac->ev.addRead  = socket_add_read;
+    ac->ev.delRead  = socket_del_read;
+    ac->ev.addWrite = socket_add_write;
+    ac->ev.cleanup  = socket_cleanup;
+
+    struct st_redis_socket_data *p = (struct st_redis_socket_data *)malloc(sizeof(*p));
+    if (p == NULL) {
+        return -1;
+    }
+    memset(p, 0, sizeof(*p));
+
+    ac->ev.data = p;
+#if H2O_USE_LIBUV
+    p->socket = h2o_uv__poll_create(loop, c->fd, (uv_close_cb)free);
+#else
+    p->socket = h2o_evloop_socket_create(loop, c->fd, H2O_SOCKET_FLAG_DONT_READ);
+#endif
+
+    p->socket->data = p;
+    p->context = ac;
+
     return 0;
 }
