@@ -70,7 +70,6 @@ static struct {
     struct {
         h2o_iovec_t host;
         uint16_t port;
-        h2o_redis_conn_t *(*get_conn)(void);
     } redis;
     unsigned expiration;
 } async_resumption_context;
@@ -138,20 +137,13 @@ static void redis_resumption_new(h2o_socket_t *sock, h2o_iovec_t session_id, h2o
     h2o_redis_command(conn, NULL, NULL, "SETEX %s %d %s", session_id.base, async_resumption_context.expiration, session_data.base);
 }
 
-static void redis_resumption_remove(h2o_iovec_t session_id)
-{
-    h2o_redis_conn_t *conn = async_resumption_context.redis.get_conn();
-    h2o_redis_command(conn, NULL, NULL, "DEL %s", session_id.base);
-}
-
-void h2o_accept_setup_redis_ssl_resumption(h2o_iovec_t host, uint16_t port, unsigned expiration, h2o_redis_conn_t *(*get_conn)(void))
+void h2o_accept_setup_redis_ssl_resumption(h2o_iovec_t host, uint16_t port, unsigned expiration)
 {
     async_resumption_context.redis.host = host;
     async_resumption_context.redis.port = port;
     async_resumption_context.expiration = expiration;
-    async_resumption_context.redis.get_conn = get_conn;
 
-    h2o_socket_ssl_async_resumption_init(redis_resumption_get, redis_resumption_new, redis_resumption_remove);
+    h2o_socket_ssl_async_resumption_init(redis_resumption_get, redis_resumption_new, NULL);
 }
 
 

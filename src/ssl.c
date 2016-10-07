@@ -142,33 +142,10 @@ static void setup_cache_memcached(SSL_CTX **contexts, size_t num_contexts)
     spawn_cache_cleanup_thread(contexts, num_contexts);
 }
 
-static h2o_redis_conn_t *redis_remove_connection;
-static h2o_redis_conn_t *get_redis_remove_connection(void)
-{
-    return redis_remove_connection;
-}
-
-static void *redis_cache_remove_thread(void *data)
-{
-    h2o_evloop_t *loop = h2o_evloop_create();
-    h2o_redis_connect(loop, conf.redis.host, conf.redis.port, NULL, NULL); // FIXME: on_connect and on_disconnect
-    h2o_evloop_run(loop);
-    return 0;
-}
-
-static void spawn_redis_cache_remove_thread(void)
-{
-    pthread_t tid;
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, 1);
-    h2o_multithread_create_thread(&tid, &attr, redis_cache_remove_thread, NULL);
-}
-
 static void setup_cache_redis(SSL_CTX **contexts, size_t num_contexts)
 {
 
-    h2o_accept_setup_redis_ssl_resumption(h2o_iovec_init(H2O_STRLIT(conf.redis.host)), conf.redis.port, conf.lifetime, get_redis_remove_connection);
+    h2o_accept_setup_redis_ssl_resumption(h2o_iovec_init(H2O_STRLIT(conf.redis.host)), conf.redis.port, conf.lifetime);
 
     size_t i;
     for (i = 0; i != num_contexts; ++i) {
@@ -177,10 +154,7 @@ static void setup_cache_redis(SSL_CTX **contexts, size_t num_contexts)
         h2o_socket_ssl_async_resumption_setup_ctx(contexts[i]);
     }
     spawn_cache_cleanup_thread(contexts, num_contexts);
-    spawn_redis_cache_remove_thread();
 }
-
-
 
 static void cache_init_defaults(void)
 {

@@ -112,7 +112,7 @@ static void on_accept(uv_stream_t *listener, int status)
         return;
     }
 
-    sock = h2o_uv_socket_create((uv_stream_t *)conn, (uv_close_cb)free);
+    sock = h2o_uv_socket_create((uv_handle_t *)conn, (uv_close_cb)free);
     h2o_accept(&accept_ctx, sock);
 }
 
