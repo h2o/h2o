@@ -101,7 +101,7 @@ void h2o_accept_setup_memcached_ssl_resumption(h2o_memcached_context_t *memc, un
 {
     async_resumption_context.memcached.ctx = memc;
     async_resumption_context.expiration = expiration;
-    h2o_socket_ssl_async_resumption_init(async_resumption_get, async_resumption_new);
+    h2o_socket_ssl_async_resumption_init(memcached_resumption_get, memcached_resumption_new);
 }
 
 static h2o_redis_conn_t *get_redis_connection(h2o_socket_t *sock)
