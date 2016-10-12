@@ -1136,9 +1136,14 @@ static h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
  */
 void h2o_accept_setup_memcached_ssl_resumption(h2o_memcached_context_t *ctx, unsigned expiration);
 /**
- * setups accept context for memcached SSL resumption
+ * setups accept context for redis SSL resumption
  */
 void h2o_accept_setup_redis_ssl_resumption(h2o_iovec_t host, uint16_t port, unsigned expiration);
+/**
+ * connects asynchronously to redis for SSL resumption
+ */
+h2o_redis_conn_t *h2o__accept_prepare_redis_connection(h2o_context_t *ctx);
+
 /**
  * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")
  */

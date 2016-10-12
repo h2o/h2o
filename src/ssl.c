@@ -48,6 +48,7 @@ struct st_session_ticket_file_updater_conf_t {
 static struct {
     struct {
         void (*setup)(SSL_CTX **contexts, size_t num_contexts);
+        void (*setup_per_context)(h2o_context_t *ctx);
         union {
             struct {
                 size_t num_threads;
@@ -144,7 +145,6 @@ static void setup_cache_memcached(SSL_CTX **contexts, size_t num_contexts)
 
 static void setup_cache_redis(SSL_CTX **contexts, size_t num_contexts)
 {
-
     h2o_accept_setup_redis_ssl_resumption(h2o_iovec_init(H2O_STRLIT(conf.redis.host)), conf.redis.port, conf.lifetime);
 
     size_t i;
@@ -154,6 +154,11 @@ static void setup_cache_redis(SSL_CTX **contexts, size_t num_contexts)
         h2o_socket_ssl_async_resumption_setup_ctx(contexts[i]);
     }
     spawn_cache_cleanup_thread(contexts, num_contexts);
+}
+
+static void setup_cache_redis_per_context(h2o_context_t *ctx)
+{
+    h2o__accept_prepare_redis_connection(ctx);
 }
 
 static void cache_init_defaults(void)
@@ -788,6 +793,7 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
                     t = NULL;
                 } else if (strcasecmp(t->data.scalar, "redis") == 0) {
                     conf.cache.setup = setup_cache_redis;
+                    conf.cache.setup_per_context = setup_cache_redis_per_context;
                     t = NULL;
                 }
             }
@@ -1002,7 +1008,7 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
     return 0;
 }
 
-void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts)
+void ssl_session_resumption_setup(SSL_CTX **contexts, size_t num_contexts)
 {
     if (conf.cache.setup != NULL)
         conf.cache.setup(contexts, num_contexts);
@@ -1027,6 +1033,12 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts)
             SSL_CTX_set_options(contexts[i], SSL_CTX_get_options(contexts[i]) | SSL_OP_NO_TICKET);
     }
 #endif
+}
+
+void ssl_session_resumption_setup_per_context(h2o_context_t *ctx)
+{
+    if (conf.cache.setup_per_context != NULL)
+        conf.cache.setup_per_context(ctx);
 }
 
 static pthread_mutex_t *mutexes;

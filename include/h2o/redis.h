@@ -31,7 +31,7 @@ typedef void (*h2o_redis_connect_cb)(const char *errstr);
 typedef void (*h2o_redis_disconnect_cb)(const char *errstr);
 
 h2o_redis_conn_t *h2o_redis_connect(h2o_loop_t *loop, const char *host, uint16_t port, h2o_redis_connect_cb on_connect, h2o_redis_disconnect_cb on_disconnect);
-int h2o_redis_disconnect(h2o_redis_conn_t *ctx);
-int h2o_redis_command(h2o_redis_conn_t *ctx, h2o_redis_command_cb cb, void *cb_data, const char *format, ...);
+int h2o_redis_disconnect(h2o_redis_conn_t *conn);
+int h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, const char *format, ...);
 
 #endif

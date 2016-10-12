@@ -1444,6 +1444,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                                       h2o_memcached_receiver);
     conf.threads[thread_index].tid = pthread_self();
 
+    ssl_session_resumption_setup_per_context(&conf.threads[thread_index].ctx);
+
     /* setup listeners */
     for (i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];
@@ -2029,7 +2031,7 @@ int main(int argc, char **argv)
                 ssl_contexts.entries[ssl_contexts.size++] = conf.listeners[i]->ssl.entries[j]->ctx;
             }
         }
-        ssl_setup_session_resumption(ssl_contexts.entries, ssl_contexts.size);
+        ssl_session_resumption_setup(ssl_contexts.entries, ssl_contexts.size);
         free(ssl_contexts.entries);
     }
 
