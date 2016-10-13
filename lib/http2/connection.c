@@ -614,6 +614,14 @@ static int handle_priority_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
         if (h2o_http2_scheduler_get_weight(&stream->_refs.scheduler) != 257)
             set_priority(conn, stream, &payload, 1);
     } else {
+        if (h2o_http2_stream_is_push(frame->stream_id)) {
+            /* Ignore PRIORITY frames for closed or idle pushed streams */
+            return 0;
+        } else {
+            /* Ignore PRIORITY frames for closed pull streams */
+            if (frame->stream_id <= conn->pull_stream_ids.max_open)
+                return 0;
+        }
         if (conn->num_streams.priority.open >= conn->super.ctx->globalconf->http2.max_streams_for_priority) {
             *err_desc = "too many streams in idle/closed state";
             /* RFC 7540 10.5: An endpoint MAY treat activity that is suspicious as a connection error (Section 5.4.1) of type
