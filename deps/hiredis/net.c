@@ -327,6 +327,8 @@ addrretry:
             continue;
 
         c->fd = s;
+        if (redisSetTcpNoDelay(c) != REDIS_OK)
+            goto error;
         if (redisSetBlocking(c,0) != REDIS_OK)
             goto error;
         if (c->tcp.source_addr) {
@@ -379,8 +381,6 @@ addrretry:
             }
         }
         if (blocking && redisSetBlocking(c,1) != REDIS_OK)
-            goto error;
-        if (redisSetTcpNoDelay(c) != REDIS_OK)
             goto error;
 
         c->flags |= REDIS_CONNECTED;
