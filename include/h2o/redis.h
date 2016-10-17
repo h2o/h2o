@@ -34,7 +34,7 @@ typedef struct st_h2o_redis_callbacks_t {
 typedef void (*h2o_redis_command_cb)(redisReply *reply, void *cb_data);
 
 h2o_redis_conn_t *h2o_redis_connect(h2o_loop_t *loop, const char *host, uint16_t port, h2o_redis_callbacks_t cb, void *cb_data);
-int h2o_redis_disconnect(h2o_redis_conn_t *conn);
-int h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, const char *format, ...);
+void h2o_redis_free(h2o_redis_conn_t *conn);
+void h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, const char *format, ...);
 
 #endif

@@ -51,8 +51,15 @@ void on_command(redisAsyncContext *redis, void *reply, void *privdata)
     }
 }
 
-int h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, const char *format, ...)
+void h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, const char *format, ...)
 {
+    if (conn->redis == NULL) {
+        if (conn->cb.on_connection_failure != NULL) {
+            conn->cb.on_connection_failure("redis connection has been closed", conn->cb_data);
+        }
+        return;
+    }
+
     va_list ap;
 
     struct st_h2o_redis_callback_args_t *args = NULL;
@@ -69,8 +76,6 @@ int h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_
         on_command(conn->redis, NULL, args);
     }
     va_end(ap);
-
-    return 0;
 }
 
 static void on_redis_connect(const redisAsyncContext *redis, int status)
@@ -81,10 +86,10 @@ static void on_redis_connect(const redisAsyncContext *redis, int status)
             conn->cb.on_connect(conn->cb_data);
         }
     } else {
+        conn->redis = NULL;
         if (conn->cb.on_connection_failure != NULL) {
             conn->cb.on_connection_failure(redis->errstr, conn->cb_data);
         }
-        free(conn);
     }
 }
 
@@ -96,10 +101,10 @@ static void on_redis_disconnect(const redisAsyncContext *redis, int status)
             conn->cb.on_disconnect(conn->cb_data);
         }
     } else {
+        conn->redis = NULL;
         if (conn->cb.on_connection_failure != NULL) {
             conn->cb.on_connection_failure(redis->errstr, conn->cb_data);
         }
-        free(conn);
     }
 }
 
@@ -115,17 +120,21 @@ h2o_redis_conn_t *h2o_redis_connect(h2o_loop_t *loop, const char *host, uint16_t
         goto Error;
     }
 
-    redisAsyncSetConnectCallback(redis, on_redis_connect);
-    redisAsyncSetDisconnectCallback(redis, on_redis_disconnect);
-
-    conn->redis = redis;
     conn->cb = cb;
     conn->cb_data = cb_data;
-    redis->data = conn;
 
-    if (redis->err != REDIS_OK && conn->cb.on_connection_failure != NULL) {
+    if (redis->err == REDIS_OK) {
+        conn->redis = redis;
+        conn->redis->data = conn;
+        redisAsyncSetConnectCallback(redis, on_redis_connect);
+        redisAsyncSetDisconnectCallback(redis, on_redis_disconnect);
+    } else {
         /* some connection failures can be detected at this time */
-        conn->cb.on_connection_failure(redis->errstr, conn->cb_data);
+        conn->redis = NULL;
+        if (conn->cb.on_connection_failure != NULL) {
+            conn->cb.on_connection_failure(redis->errstr, conn->cb_data);
+        }
+        redisAsyncFree(redis);
     }
 
     return conn;
@@ -137,13 +146,12 @@ Error:
     return NULL;
 }
 
-int h2o_redis_disconnect(h2o_redis_conn_t *conn)
+void h2o_redis_free(h2o_redis_conn_t *conn)
 {
-    if (conn->redis == NULL) {
-        return -1;
+    if (conn->redis != NULL) {
+        redisAsyncDisconnect(conn->redis);
     }
-    redisAsyncDisconnect(conn->redis);
-    return 0;
+    free(conn);
 }
 
 /* redis socket adapter */

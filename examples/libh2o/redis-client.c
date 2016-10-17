@@ -91,6 +91,8 @@ h2o_redis_callbacks_t redis_callbacks = {
 static void on_redis_connection_failure(const char *errstr, void *data)
 {
     fprintf(stderr, "redis connection failure: %s\n", errstr);
+    h2o_redis_free(conn);
+    conn = NULL;
 
     /* try to reconnect after 1 second */
     usleep(1000000);
@@ -98,13 +100,6 @@ static void on_redis_connection_failure(const char *errstr, void *data)
         exit_loop = 1;
     }
 }
-
-typedef struct st_h2o_redis_command_t {
-    char *fmt;
-    va_list fuck;
-    h2o_redis_command_cb cb;
-    void *cb_data;
-} h2o_redis_command_t;
 
 static void on_redis_connect(void *data)
 {

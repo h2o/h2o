@@ -107,7 +107,7 @@ void h2o_accept_setup_memcached_ssl_resumption(h2o_memcached_context_t *memc, un
 
 static void dispose_redis_connection(void *conn)
 {
-    h2o_redis_disconnect((h2o_redis_conn_t *)conn);
+    h2o_redis_free((h2o_redis_conn_t *)conn);
 }
 
 h2o_redis_conn_t **redis_connection_for_context(h2o_context_t *ctx)
@@ -133,6 +133,7 @@ static void on_redis_connection_failure(const char *errstr, void *data)
     /* clear storage by setting NULL */
     h2o_context_t *ctx = data;
     h2o_redis_conn_t **conn = redis_connection_for_context(ctx);
+    h2o_redis_free(*conn);
     *conn = NULL;
 }
 
