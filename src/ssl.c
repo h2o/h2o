@@ -50,9 +50,12 @@ static struct {
         void (*setup)(SSL_CTX **contexts, size_t num_contexts);
         union {
             struct {
-                size_t num_threads;
                 char *prefix;
+                size_t num_threads;
             } memcached;
+            struct {
+                char *prefix;
+            } redis;
         } vars;
     } cache;
     struct {
@@ -144,7 +147,7 @@ static void setup_cache_memcached(SSL_CTX **contexts, size_t num_contexts)
 
 static void setup_cache_redis(SSL_CTX **contexts, size_t num_contexts)
 {
-    h2o_accept_setup_redis_ssl_resumption(h2o_iovec_init(H2O_STRLIT(conf.redis.host)), conf.redis.port, conf.lifetime);
+    h2o_accept_setup_redis_ssl_resumption(conf.redis.host, conf.redis.port, conf.lifetime, conf.cache.vars.redis.prefix);
     setup_cache_enable(contexts, num_contexts, 1);
 }
 
@@ -804,6 +807,15 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
                     return -1;
                 }
                 conf.cache.vars.memcached.prefix = h2o_strdup(NULL, t->data.scalar, SIZE_MAX).base;
+            }
+        } else if (conf.cache.setup == setup_cache_redis) {
+            conf.cache.vars.redis.prefix = "h2o:ssl-session-cache:";
+            if ((t = yoml_get(node, "cache-redis-prefix")) != NULL) {
+                if (t->type != YOML_TYPE_SCALAR) {
+                    h2o_configurator_errprintf(cmd, t, "`cache-redis-prefix` must be a string");
+                    return -1;
+                }
+                conf.cache.vars.redis.prefix = h2o_strdup(NULL, t->data.scalar, SIZE_MAX).base;
             }
         }
     } else {

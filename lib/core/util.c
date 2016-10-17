@@ -70,6 +70,7 @@ static struct {
     struct {
         h2o_iovec_t host;
         uint16_t port;
+        h2o_iovec_t prefix;
     } redis;
     unsigned expiration;
 } async_resumption_context;
@@ -150,11 +151,15 @@ static h2o_redis_conn_t *get_redis_connection(h2o_context_t *ctx)
     return *conn;
 }
 
-static h2o_iovec_t base64_encode(h2o_iovec_t str)
+static h2o_iovec_t base64_encode(h2o_iovec_t str, h2o_iovec_t prefix)
 {
     h2o_iovec_t encoded;
-    encoded.base = h2o_mem_alloc((str.len + 2) / 3 * 4 + 1);
-    encoded.len = h2o_base64_encode(encoded.base, str.base, str.len, 1);
+    encoded.base =  h2o_mem_alloc(prefix.len + (str.len + 2) / 3 * 4 + 1);
+    if (prefix.len != 0) {
+        memcpy(encoded.base, prefix.base, prefix.len);
+    }
+    encoded.len = prefix.len;
+    encoded.len += h2o_base64_encode(encoded.base + encoded.len, str.base, str.len, 1);
     return encoded;
 }
 
@@ -179,7 +184,7 @@ static void redis_resumption_get(h2o_socket_t *sock, h2o_iovec_t session_id)
 {
     struct st_h2o_accept_data_t *accept_data = sock->data;
     h2o_redis_conn_t *conn = get_redis_connection(accept_data->ctx->ctx);
-    h2o_iovec_t key = base64_encode(session_id);
+    h2o_iovec_t key = base64_encode(session_id, async_resumption_context.redis.prefix);
     h2o_redis_command(conn, redis_resumption_on_get, accept_data, "GET %s", key.base);
     free(key.base);
 }
@@ -188,17 +193,18 @@ static void redis_resumption_new(h2o_socket_t *sock, h2o_iovec_t session_id, h2o
 {
     struct st_h2o_accept_data_t *accept_data = sock->data;
     h2o_redis_conn_t *conn = get_redis_connection(accept_data->ctx->ctx);
-    h2o_iovec_t key = base64_encode(session_id);
-    h2o_iovec_t value = base64_encode(session_data);
+    h2o_iovec_t key = base64_encode(session_id, async_resumption_context.redis.prefix);
+    h2o_iovec_t value = base64_encode(session_data, h2o_iovec_init(NULL, 0));
     h2o_redis_command(conn, NULL, NULL, "SETEX %s %d %s", key.base, async_resumption_context.expiration, value.base);
     free(key.base);
     free(value.base);
 }
 
-void h2o_accept_setup_redis_ssl_resumption(h2o_iovec_t host, uint16_t port, unsigned expiration)
+void h2o_accept_setup_redis_ssl_resumption(const char *host, uint16_t port, unsigned expiration, const char *prefix)
 {
-    async_resumption_context.redis.host = host;
+    async_resumption_context.redis.host = h2o_strdup(NULL, host, SIZE_MAX);
     async_resumption_context.redis.port = port;
+    async_resumption_context.redis.prefix = h2o_strdup(NULL, prefix, SIZE_MAX);
     async_resumption_context.expiration = expiration;
 
     h2o_socket_ssl_async_resumption_init(redis_resumption_get, redis_resumption_new, NULL);
