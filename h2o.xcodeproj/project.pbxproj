@@ -12,7 +12,6 @@
 		0812AB211D7FCFEB00004F23 /* async.h in Headers */ = {isa = PBXBuildFile; fileRef = 0812AB1D1D7FCFEB00004F23 /* async.h */; };
 		0812AB221D7FCFEB00004F23 /* hiredis.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812AB1E1D7FCFEB00004F23 /* hiredis.c */; };
 		0812AB231D7FCFEB00004F23 /* hiredis.h in Headers */ = {isa = PBXBuildFile; fileRef = 0812AB1F1D7FCFEB00004F23 /* hiredis.h */; };
-		0812AB261D7FCFF500004F23 /* libuv.h in Headers */ = {isa = PBXBuildFile; fileRef = 0812AB241D7FCFF500004F23 /* libuv.h */; };
 		0812AB2B1D7FD54700004F23 /* read.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812AB291D7FD54700004F23 /* read.c */; };
 		0812AB2C1D7FD54700004F23 /* read.h in Headers */ = {isa = PBXBuildFile; fileRef = 0812AB2A1D7FD54700004F23 /* read.h */; };
 		084FC7C11D54B90D00E89F66 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 084FC7C01D54B90D00E89F66 /* http2_debug_state.c */; };
@@ -383,7 +382,6 @@
 		0812AB1D1D7FCFEB00004F23 /* async.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = async.h; sourceTree = "<group>"; };
 		0812AB1E1D7FCFEB00004F23 /* hiredis.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hiredis.c; sourceTree = "<group>"; };
 		0812AB1F1D7FCFEB00004F23 /* hiredis.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hiredis.h; sourceTree = "<group>"; };
-		0812AB241D7FCFF500004F23 /* libuv.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = libuv.h; sourceTree = "<group>"; };
 		0812AB291D7FD54700004F23 /* read.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = read.c; sourceTree = "<group>"; };
 		0812AB2A1D7FD54700004F23 /* read.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = read.h; sourceTree = "<group>"; };
 		084FC7C01D54B90D00E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
@@ -805,18 +803,9 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		0812AB191D7FCF9500004F23 /* adapters */ = {
-			isa = PBXGroup;
-			children = (
-				0812AB241D7FCFF500004F23 /* libuv.h */,
-			);
-			path = adapters;
-			sourceTree = "<group>";
-		};
 		08B4D4391D75A2950079DFB5 /* hiredis */ = {
 			isa = PBXGroup;
 			children = (
-				0812AB191D7FCF9500004F23 /* adapters */,
 				0812AB1C1D7FCFEB00004F23 /* async.c */,
 				0812AB1D1D7FCFEB00004F23 /* async.h */,
 				0812AB1E1D7FCFEB00004F23 /* hiredis.c */,
@@ -1665,7 +1654,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				107923C919A3217300C52AD6 /* hpack_static_table.h in Headers */,
-				0812AB261D7FCFF500004F23 /* libuv.h in Headers */,
 				10AAAC631B6C7A7D004487C3 /* http2_casper.h in Headers */,
 				08E9CC4E1E41F6660049DD26 /* embedded.c.h in Headers */,
 				1022E7C61CA8BCEB00CE2A05 /* yrmcds_portability.h in Headers */,

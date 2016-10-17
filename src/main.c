@@ -2029,7 +2029,7 @@ int main(int argc, char **argv)
                 ssl_contexts.entries[ssl_contexts.size++] = conf.listeners[i]->ssl.entries[j]->ctx;
             }
         }
-        ssl_session_resumption_setup(ssl_contexts.entries, ssl_contexts.size);
+        ssl_setup_session_resumption(ssl_contexts.entries, ssl_contexts.size);
         free(ssl_contexts.entries);
     }
 

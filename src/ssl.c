@@ -1006,7 +1006,7 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
     return 0;
 }
 
-void ssl_session_resumption_setup(SSL_CTX **contexts, size_t num_contexts)
+void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts)
 {
     if (conf.cache.setup != NULL)
         conf.cache.setup(contexts, num_contexts);

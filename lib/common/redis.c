@@ -19,22 +19,16 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <errno.h>
-#include <inttypes.h>
-#include <pthread.h>
-#include <unistd.h>
 #include "async.h"
-#include "h2o/linklist.h"
 #include "h2o/redis.h"
-#include "h2o/string_.h"
 #include "h2o/socket.h"
 
 static int attach_loop(redisAsyncContext* ac, h2o_loop_t* loop);
 
 struct st_h2o_redis_conn_t {
+    redisAsyncContext *redis;
     h2o_redis_callbacks_t cb;
     void *cb_data;
-    redisAsyncContext *redis;
 };
 
 struct st_h2o_redis_callback_args_t {
@@ -60,8 +54,6 @@ void h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb
         return;
     }
 
-    va_list ap;
-
     struct st_h2o_redis_callback_args_t *args = NULL;
     if (cb != NULL) {
         args = h2o_mem_alloc(sizeof(struct st_h2o_redis_callback_args_t));
@@ -69,6 +61,7 @@ void h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb
         args->data = cb_data;
     }
 
+    va_list ap;
     va_start(ap, format);
     if (redisvAsyncCommand(conn->redis, on_command, args, format, ap) != REDIS_OK) {
         /* the case that redisAsyncContext is disconnecting or freeing */
@@ -111,7 +104,7 @@ static void on_redis_disconnect(const redisAsyncContext *redis, int status)
 h2o_redis_conn_t *h2o_redis_connect(h2o_loop_t *loop, const char *host, uint16_t port, h2o_redis_callbacks_t cb, void *cb_data)
 {
     h2o_redis_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
-    *conn = (h2o_redis_conn_t){{NULL}};
+    *conn = (h2o_redis_conn_t){NULL};
 
     redisAsyncContext *redis = redisAsyncConnect(host, port);
 
@@ -130,7 +123,6 @@ h2o_redis_conn_t *h2o_redis_connect(h2o_loop_t *loop, const char *host, uint16_t
         redisAsyncSetDisconnectCallback(redis, on_redis_disconnect);
     } else {
         /* some connection failures can be detected at this time */
-        conn->redis = NULL;
         if (conn->cb.on_connection_failure != NULL) {
             conn->cb.on_connection_failure(redis->errstr, conn->cb_data);
         }
@@ -202,18 +194,18 @@ static void socket_cleanup(void *privdata) {
 static int attach_loop(redisAsyncContext* ac, h2o_loop_t* loop) {
     redisContext *c = &(ac->c);
 
-    ac->ev.addRead  = socket_add_read;
-    ac->ev.delRead  = socket_del_read;
-    ac->ev.addWrite = socket_add_write;
-    ac->ev.cleanup  = socket_cleanup;
-
     struct st_redis_socket_data *p = (struct st_redis_socket_data *)malloc(sizeof(*p));
     if (p == NULL) {
         return -1;
     }
     memset(p, 0, sizeof(*p));
 
+    ac->ev.addRead  = socket_add_read;
+    ac->ev.delRead  = socket_del_read;
+    ac->ev.addWrite = socket_add_write;
+    ac->ev.cleanup  = socket_cleanup;
     ac->ev.data = p;
+
 #if H2O_USE_LIBUV
     p->socket = h2o_uv__poll_create(loop, c->fd, (uv_close_cb)free);
 #else
