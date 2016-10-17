@@ -1444,8 +1444,6 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                                       h2o_memcached_receiver);
     conf.threads[thread_index].tid = pthread_self();
 
-    ssl_session_resumption_setup_per_context(&conf.threads[thread_index].ctx);
-
     /* setup listeners */
     for (i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];

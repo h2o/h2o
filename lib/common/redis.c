@@ -32,10 +32,8 @@
 static int attach_loop(redisAsyncContext* ac, h2o_loop_t* loop);
 
 struct st_h2o_redis_conn_t {
-    struct {
-        h2o_redis_connect_cb on_connect;
-        h2o_redis_disconnect_cb on_disconnect;
-    } cb;
+    h2o_redis_callbacks_t cb;
+    void *cb_data;
     redisAsyncContext *redis;
 };
 
@@ -64,59 +62,71 @@ int h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_
         args->data = cb_data;
     }
 
-    int ret = 0;
     va_start(ap, format);
     if (redisvAsyncCommand(conn->redis, on_command, args, format, ap) != REDIS_OK) {
-        ret = -1;
+        /* the case that redisAsyncContext is disconnecting or freeing */
+        /* call the callback immediately with NULL reply */
+        on_command(conn->redis, NULL, args);
     }
     va_end(ap);
 
-    return -1;
+    return 0;
 }
 
 static void on_redis_connect(const redisAsyncContext *redis, int status)
 {
     h2o_redis_conn_t *conn = (h2o_redis_conn_t *)redis->data;
-    if (conn->cb.on_connect) {
-        conn->cb.on_connect(status == REDIS_OK ? NULL : redis->errstr);
-    }
-    if (status != REDIS_OK)
+    if (status == REDIS_OK) {
+        if (conn->cb.on_connect != NULL) {
+            conn->cb.on_connect(conn->cb_data);
+        }
+    } else {
+        if (conn->cb.on_connection_failure != NULL) {
+            conn->cb.on_connection_failure(redis->errstr, conn->cb_data);
+        }
         free(conn);
+    }
 }
 
 static void on_redis_disconnect(const redisAsyncContext *redis, int status)
 {
     h2o_redis_conn_t *conn = (h2o_redis_conn_t *)redis->data;
-    if (conn->cb.on_disconnect != NULL) {
-        conn->cb.on_disconnect(status == REDIS_OK ? NULL : redis->errstr);
+    if (status == REDIS_OK) {
+        if (conn->cb.on_disconnect != NULL) {
+            conn->cb.on_disconnect(conn->cb_data);
+        }
+    } else {
+        if (conn->cb.on_connection_failure != NULL) {
+            conn->cb.on_connection_failure(redis->errstr, conn->cb_data);
+        }
+        free(conn);
     }
-    free(conn);
 }
 
-h2o_redis_conn_t *h2o_redis_connect(h2o_loop_t *loop, const char *host, uint16_t port, h2o_redis_connect_cb on_connect, h2o_redis_disconnect_cb on_disconnect)
+h2o_redis_conn_t *h2o_redis_connect(h2o_loop_t *loop, const char *host, uint16_t port, h2o_redis_callbacks_t cb, void *cb_data)
 {
     h2o_redis_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
     *conn = (h2o_redis_conn_t){{NULL}};
 
     redisAsyncContext *redis = redisAsyncConnect(host, port);
-    if (redis == NULL || redis->err != REDIS_OK) {
-        goto Error;
-    }
-    if (attach_loop(redis, loop) != 0) {
+
+    if (redis == NULL || attach_loop(redis, loop) != 0) {
+        /* failed to allocate memory */
         goto Error;
     }
 
-    if (redisAsyncSetConnectCallback(redis, on_redis_connect) != REDIS_OK) {
-        goto Error;
-    }
-    if (redisAsyncSetDisconnectCallback(redis, on_redis_disconnect) != REDIS_OK) {
-        goto Error;
-    }
+    redisAsyncSetConnectCallback(redis, on_redis_connect);
+    redisAsyncSetDisconnectCallback(redis, on_redis_disconnect);
 
     conn->redis = redis;
-    conn->cb.on_connect = on_connect;
-    conn->cb.on_disconnect = on_disconnect;
+    conn->cb = cb;
+    conn->cb_data = cb_data;
     redis->data = conn;
+
+    if (redis->err != REDIS_OK && conn->cb.on_connection_failure != NULL) {
+        /* some connection failures can be detected at this time */
+        conn->cb.on_connection_failure(redis->errstr, conn->cb_data);
+    }
 
     return conn;
 
@@ -183,10 +193,6 @@ static void socket_cleanup(void *privdata) {
 
 static int attach_loop(redisAsyncContext* ac, h2o_loop_t* loop) {
     redisContext *c = &(ac->c);
-
-    if (ac->ev.data != NULL) {
-        return -1;
-    }
 
     ac->ev.addRead  = socket_add_read;
     ac->ev.delRead  = socket_del_read;

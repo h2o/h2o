@@ -109,30 +109,45 @@ static void dispose_redis_connection(void *conn)
     h2o_redis_disconnect((h2o_redis_conn_t *)conn);
 }
 
-static void on_redis_connect(const char *errstr)
-{
-    if (errstr) {
-        // TODO: retry to connect?
-        fprintf(stderr, "failure to connected to redis : %s\n", errstr);
-    }
-}
-
-static void on_redis_disconnect(const char *errstr)
-{
-    if (errstr) {
-        // TODO: retry to connect?
-        fprintf(stderr, "failure to disconnect to redis : %s\n", errstr);
-    }
-}
-
-h2o_redis_conn_t *h2o__accept_prepare_redis_connection(h2o_context_t *ctx)
+h2o_redis_conn_t **redis_connection_for_context(h2o_context_t *ctx)
 {
     static size_t key = SIZE_MAX;
-    void **data = h2o_context_get_storage(ctx, &key, dispose_redis_connection);
-    if (*data == NULL) {
-        *data = h2o_redis_connect(ctx->loop, async_resumption_context.redis.host.base, async_resumption_context.redis.port, on_redis_connect, on_redis_disconnect);
+    return (h2o_redis_conn_t **)h2o_context_get_storage(ctx, &key, dispose_redis_connection);
+}
+
+static void on_redis_connect(void *data)
+{
+    fprintf(stderr, "connected to redis at %s:%" PRIu16 "\n", async_resumption_context.redis.host.base, async_resumption_context.redis.port);
+}
+
+static void on_redis_disconnect(void *data)
+{
+    fprintf(stderr, "disconnected from redis at %s:%" PRIu16 "\n", async_resumption_context.redis.host.base, async_resumption_context.redis.port);
+}
+
+static void on_redis_connection_failure(const char *errstr, void *data)
+{
+    fprintf(stderr, "redis connection failure: %s\n", errstr);
+
+    /* clear storage by setting NULL */
+    h2o_context_t *ctx = data;
+    h2o_redis_conn_t **conn = redis_connection_for_context(ctx);
+    *conn = NULL;
+}
+
+static h2o_redis_conn_t *get_redis_connection(h2o_context_t *ctx)
+{
+    h2o_redis_conn_t **conn = redis_connection_for_context(ctx);
+    if (*conn == NULL) {
+        h2o_redis_callbacks_t callbacks = (h2o_redis_callbacks_t){
+            on_redis_connect,
+            on_redis_disconnect,
+            on_redis_connection_failure,
+        };
+        *conn = h2o_redis_connect(ctx->loop, async_resumption_context.redis.host.base, async_resumption_context.redis.port, callbacks, ctx);
     }
-    return *data;
+
+    return *conn;
 }
 
 static h2o_iovec_t base64_encode(h2o_iovec_t str)
@@ -155,13 +170,15 @@ static void redis_resumption_on_get(redisReply *reply, void *_accept_data)
     }
 
     h2o_socket_ssl_resume_server_handshake(accept_data->sock, session_data);
-    free(session_data.base);
+
+    if (session_data.base != NULL)
+        free(session_data.base);
 }
 
 static void redis_resumption_get(h2o_socket_t *sock, h2o_iovec_t session_id)
 {
     struct st_h2o_accept_data_t *accept_data = sock->data;
-    h2o_redis_conn_t *conn = h2o__accept_prepare_redis_connection(accept_data->ctx->ctx);
+    h2o_redis_conn_t *conn = get_redis_connection(accept_data->ctx->ctx);
     h2o_iovec_t key = base64_encode(session_id);
     h2o_redis_command(conn, redis_resumption_on_get, accept_data, "GET %s", key.base);
     free(key.base);
@@ -170,7 +187,7 @@ static void redis_resumption_get(h2o_socket_t *sock, h2o_iovec_t session_id)
 static void redis_resumption_new(h2o_socket_t *sock, h2o_iovec_t session_id, h2o_iovec_t session_data)
 {
     struct st_h2o_accept_data_t *accept_data = sock->data;
-    h2o_redis_conn_t *conn = h2o__accept_prepare_redis_connection(accept_data->ctx->ctx);
+    h2o_redis_conn_t *conn = get_redis_connection(accept_data->ctx->ctx);
     h2o_iovec_t key = base64_encode(session_id);
     h2o_iovec_t value = base64_encode(session_data);
     h2o_redis_command(conn, NULL, NULL, "SETEX %s %d %s", key.base, async_resumption_context.expiration, value.base);

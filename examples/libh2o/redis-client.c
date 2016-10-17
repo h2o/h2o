@@ -69,42 +69,51 @@ static void dump_reply(redisReply *reply, unsigned indent)
     }
 }
 
+static void on_redis_connect(void *data);
+static void on_redis_disconnect(void *data);
+static void on_redis_connection_failure(const char *errstr, void *data);
+
 static void on_redis_command(redisReply *reply, void *cb_data)
 {
     if (reply == NULL) {
-        fprintf(stderr, "redis command error\n");
+        fprintf(stderr, "redis command failed due to some connection problems\n");
         return;
     }
     dump_reply(reply, 0);
 }
 
-static void on_redis_connect(const char *errstr);
-static void on_redis_disconnect(const char *errstr);
+h2o_redis_callbacks_t redis_callbacks = {
+    on_redis_connect,
+    on_redis_disconnect,
+    on_redis_connection_failure,
+};
 
-static void on_redis_connect(const char *errstr)
+static void on_redis_connection_failure(const char *errstr, void *data)
 {
-    if (errstr != NULL) {
-        fprintf(stderr, "redis error in connect: %s\n", errstr);
-        usleep(1000000);
-        if ((conn = h2o_redis_connect(loop, host, port, on_redis_connect, on_redis_disconnect)) == NULL) {
-            exit_loop = 1;
-        }
-        return;
+    fprintf(stderr, "redis connection failure: %s\n", errstr);
+
+    /* try to reconnect after 1 second */
+    usleep(1000000);
+    if ((conn = h2o_redis_connect(loop, host, port, redis_callbacks, NULL)) == NULL) {
+        exit_loop = 1;
     }
-    fprintf(stderr, "connected to redis\n");
-    h2o_redis_command(conn, on_redis_command, NULL, "INFO");
 }
 
-static void on_redis_disconnect(const char *errstr)
+typedef struct st_h2o_redis_command_t {
+    char *fmt;
+    va_list fuck;
+    h2o_redis_command_cb cb;
+    void *cb_data;
+} h2o_redis_command_t;
+
+static void on_redis_connect(void *data)
 {
-    if (errstr != NULL) {
-        fprintf(stderr, "redis error on disconnect: %s\n", errstr);
-        usleep(1000000);
-        if ((conn = h2o_redis_connect(loop, host, port, on_redis_connect, on_redis_disconnect)) == NULL) {
-            exit_loop = 1;
-        }
-        return;
-    }
+    fprintf(stderr, "connected to redis\n");
+    h2o_redis_command(conn, on_redis_command, "get server info", "INFO");
+}
+
+static void on_redis_disconnect(void *data)
+{
     fprintf(stderr, "disconnected from redis\n");
 }
 
@@ -130,10 +139,10 @@ int main(int argc, char **argv)
 #endif
 
 
-    if ((conn = h2o_redis_connect(loop, host, port, on_redis_connect, on_redis_disconnect)) == NULL) {
+    if ((conn = h2o_redis_connect(loop, host, port, redis_callbacks, NULL)) == NULL) {
         goto Exit;
     }
-    h2o_redis_command(conn, on_redis_command, NULL, "KEYS *");
+    h2o_redis_command(conn, on_redis_command, "list all keys", "KEYS *");
 
 
     while (!exit_loop) {
