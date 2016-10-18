@@ -1564,6 +1564,7 @@ struct extra_status_jemalloc_cb_arg {
     size_t written;
 };
 
+#if JEMALLOC_STATS == 1
 static void extra_status_jemalloc_cb(void *ctx, const char *stats)
 {
     size_t cur_len;
@@ -1611,6 +1612,7 @@ err:
     out->err = 1;
     return;
 }
+#endif
 
 static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_req_t *req)
 {
@@ -1690,7 +1692,6 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
     ret.base[ret.len + arg.written] = '\0';
     ret.len += arg.written;
     return ret;
-#undef BUFSIZE
 
 jemalloc_err:
     /* couldn't fit the jemalloc output, exiting */
@@ -1699,6 +1700,7 @@ jemalloc_err:
 #endif /* JEMALLOC_STATS == 1 */
 
     return ret;
+#undef BUFSIZE
 }
 
 static void setup_configurators(void)
