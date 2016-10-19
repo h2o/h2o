@@ -152,17 +152,29 @@ static h2o_redis_conn_t *get_redis_connection(h2o_context_t *ctx)
     return *conn;
 }
 
-static h2o_iovec_t base64_encode(h2o_iovec_t str, h2o_iovec_t prefix)
+#define BASE64_LENGTH(len) (((len) + 2) / 3 * 4 + 1)
+
+static h2o_iovec_t build_redis_key(h2o_iovec_t session_id, h2o_iovec_t prefix)
 {
-    h2o_iovec_t encoded;
-    encoded.base =  h2o_mem_alloc(prefix.len + (str.len + 2) / 3 * 4 + 1);
+    h2o_iovec_t key;
+    key.base =  h2o_mem_alloc(prefix.len + BASE64_LENGTH(session_id.len));
     if (prefix.len != 0) {
-        memcpy(encoded.base, prefix.base, prefix.len);
+        memcpy(key.base, prefix.base, prefix.len);
     }
-    encoded.len = prefix.len;
-    encoded.len += h2o_base64_encode(encoded.base + encoded.len, str.base, str.len, 1);
-    return encoded;
+    key.len = prefix.len;
+    key.len += h2o_base64_encode(key.base + key.len, session_id.base, session_id.len, 1);
+    return key;
 }
+
+static h2o_iovec_t build_redis_value(h2o_iovec_t session_data)
+{
+    h2o_iovec_t value;
+    value.base =  h2o_mem_alloc(BASE64_LENGTH(session_data.len));
+    value.len = h2o_base64_encode(value.base, session_data.base, session_data.len, 1);
+    return value;
+}
+
+#undef BASE64_LENGTH
 
 static void redis_resumption_on_get(redisReply *reply, void *_accept_data)
 {
@@ -185,7 +197,7 @@ static void redis_resumption_get(h2o_socket_t *sock, h2o_iovec_t session_id)
 {
     struct st_h2o_accept_data_t *accept_data = sock->data;
     h2o_redis_conn_t *conn = get_redis_connection(accept_data->ctx->ctx);
-    h2o_iovec_t key = base64_encode(session_id, async_resumption_context.redis.prefix);
+    h2o_iovec_t key = build_redis_key(session_id, async_resumption_context.redis.prefix);
     h2o_redis_command(conn, redis_resumption_on_get, accept_data, "GET %s", key.base);
     free(key.base);
 }
@@ -194,8 +206,8 @@ static void redis_resumption_new(h2o_socket_t *sock, h2o_iovec_t session_id, h2o
 {
     struct st_h2o_accept_data_t *accept_data = sock->data;
     h2o_redis_conn_t *conn = get_redis_connection(accept_data->ctx->ctx);
-    h2o_iovec_t key = base64_encode(session_id, async_resumption_context.redis.prefix);
-    h2o_iovec_t value = base64_encode(session_data, h2o_iovec_init(NULL, 0));
+    h2o_iovec_t key = build_redis_key(session_id, async_resumption_context.redis.prefix);
+    h2o_iovec_t value = build_redis_value(session_data);
     h2o_redis_command(conn, NULL, NULL, "SETEX %s %d %s", key.base, async_resumption_context.expiration, value.base);
     free(key.base);
     free(value.base);
