@@ -23,14 +23,7 @@
 #define h2o__redis_h
 
 #include "hiredis.h"
-#include "h2o/socket.h"
-
-typedef struct st_h2o_redis_conn_t h2o_redis_conn_t;
-typedef struct st_h2o_redis_callbacks_t {
-    void (*on_connect)(void *cb_data);
-    void (*on_close)(const char *errstr, void *cb_data);
-} h2o_redis_callbacks_t;
-typedef void (*h2o_redis_command_cb)(redisReply *reply, void *cb_data);
+#include "h2o/timeout.h"
 
 typedef enum {
     H2O_REDIS_CONNECTION_STATE_CLOSED = 0,
@@ -38,12 +31,23 @@ typedef enum {
     H2O_REDIS_CONNECTION_STATE_CONNECTED,
 } h2o_redis_connection_state_t;
 
-h2o_redis_conn_t *h2o_redis_create_connection(h2o_loop_t *loop, h2o_redis_callbacks_t cb, void *cb_data);
+typedef struct st_h2o_redis_conn_t {
+    h2o_loop_t *loop;
+    h2o_redis_connection_state_t state;
+    void (*on_connect)(void);
+    void (*on_close)(const char *errstr);
+
+    struct redisAsyncContext *_redis;
+    h2o_timeout_t _defer_timeout;
+    h2o_timeout_entry_t _timeout_entry;
+} h2o_redis_conn_t;
+
+typedef void (*h2o_redis_command_cb)(redisReply *reply, void *cb_data);
+
+h2o_redis_conn_t *h2o_redis_create_connection(h2o_loop_t *loop, size_t sz);
 void h2o_redis_connect(h2o_redis_conn_t *conn, const char *host, uint16_t port);
 void h2o_redis_disconnect(h2o_redis_conn_t *conn);
 void h2o_redis_free(h2o_redis_conn_t *conn);
-
-h2o_redis_connection_state_t h2o_redis_get_connection_state(h2o_redis_conn_t *conn);
 
 void h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, const char *format, ...);
 
