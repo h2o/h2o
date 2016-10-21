@@ -69,10 +69,6 @@ static void dump_reply(redisReply *reply, unsigned indent)
     }
 }
 
-static void on_redis_connect(void *data);
-static void on_redis_disconnect(void *data);
-static void on_redis_connection_failure(const char *errstr, void *data);
-
 static void on_redis_command(redisReply *reply, void *cb_data)
 {
     if (reply == NULL) {
@@ -82,34 +78,22 @@ static void on_redis_command(redisReply *reply, void *cb_data)
     dump_reply(reply, 0);
 }
 
-h2o_redis_callbacks_t redis_callbacks = {
-    on_redis_connect,
-    on_redis_disconnect,
-    on_redis_connection_failure,
-};
-
-static void on_redis_connection_failure(const char *errstr, void *data)
-{
-    fprintf(stderr, "redis connection failure: %s\n", errstr);
-    h2o_redis_free(conn);
-    conn = NULL;
-
-    /* try to reconnect after 1 second */
-    usleep(1000000);
-    if ((conn = h2o_redis_connect(loop, host, port, redis_callbacks, NULL)) == NULL) {
-        exit_loop = 1;
-    }
-}
-
-static void on_redis_connect(void *data)
+static void on_redis_connect(void)
 {
     fprintf(stderr, "connected to redis\n");
     h2o_redis_command(conn, on_redis_command, "get server info", "INFO");
 }
 
-static void on_redis_disconnect(void *data)
+static void on_redis_close(const char *errstr)
 {
-    fprintf(stderr, "disconnected from redis\n");
+    if (errstr == NULL) {
+        fprintf(stderr, "disconnected from redis\n");
+    } else {
+        fprintf(stderr, "redis connection failure: %s\n", errstr);
+        /* try to reconnect after 1 second */
+        usleep(1000000);
+        h2o_redis_connect(conn, host, port);
+    }
 }
 
 int main(int argc, char **argv)
@@ -134,9 +118,11 @@ int main(int argc, char **argv)
 #endif
 
 
-    if ((conn = h2o_redis_connect(loop, host, port, redis_callbacks, NULL)) == NULL) {
-        goto Exit;
-    }
+    conn = h2o_redis_create_connection(loop, sizeof(*conn));
+    conn->on_connect = on_redis_connect;
+    conn->on_close = on_redis_close;
+
+    h2o_redis_connect(conn, host, port);
     h2o_redis_command(conn, on_redis_command, "list all keys", "KEYS *");
 
 
@@ -151,6 +137,9 @@ int main(int argc, char **argv)
     ret = 0;
 
 Exit:
+
+    h2o_redis_free(conn);
+
     if (loop != NULL) {
 #if H2O_USE_LIBUV
         uv_loop_delete(loop);
