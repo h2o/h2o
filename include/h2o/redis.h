@@ -44,11 +44,18 @@ typedef struct st_h2o_redis_conn_t {
 
 typedef void (*h2o_redis_command_cb)(redisReply *reply, void *cb_data);
 
+typedef struct st_h2o_redis_command_t {
+    h2o_redis_conn_t *conn;
+    h2o_redis_command_cb cb;
+    void *data;
+    h2o_timeout_entry_t _timeout_entry;
+} h2o_redis_command_t;
+
 h2o_redis_conn_t *h2o_redis_create_connection(h2o_loop_t *loop, size_t sz);
 void h2o_redis_connect(h2o_redis_conn_t *conn, const char *host, uint16_t port);
 void h2o_redis_disconnect(h2o_redis_conn_t *conn);
 void h2o_redis_free(h2o_redis_conn_t *conn);
 
-void h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, const char *format, ...);
+h2o_redis_command_t *h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, const char *format, ...);
 
 #endif
