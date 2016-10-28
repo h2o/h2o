@@ -71,6 +71,12 @@ static void update_socks(struct st_h2o_evloop_poll_t *loop)
     loop->super._statechanged.tail_ref = &loop->super._statechanged.head;
 }
 
+void evloop_update_status(h2o_evloop_t *_loop)
+{
+    struct st_h2o_evloop_poll_t *loop = (struct st_h2o_evloop_poll_t *)_loop;
+    update_socks(loop);
+}
+
 int evloop_do_proceed(h2o_evloop_t *_loop)
 {
     struct st_h2o_evloop_poll_t *loop = (struct st_h2o_evloop_poll_t *)_loop;
