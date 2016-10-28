@@ -120,9 +120,8 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
     max_wait = adjust_max_wait(&loop->super, max_wait);
     ts.tv_sec = max_wait / 1000;
     ts.tv_nsec = max_wait % 1000 * 1000 * 1000;
-    while ((nevents = kevent(loop->kq, changelist, nchanges, events, sizeof(events) / sizeof(events[0]), &ts)) == -1 &&
-           errno == EINTR)
-        ;
+    nevents = kevent(loop->kq, changelist, nchanges, events, sizeof(events) / sizeof(events[0]), &ts);
+
     update_now(&loop->super);
     if (nevents == -1)
         return -1;
