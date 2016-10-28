@@ -32,7 +32,7 @@ proxy.reverse.url: "http://127.0.0.1:8080/"
 EOT
 ?>
 <p>
-If you want load balancing multiple backends, replace 127.0.0.1 with hostname witch returns IP addresses via DNS or /etc/hosts.
+If you want load balancing multiple backends, replace 127.0.0.1 with hostname which returns IP addresses via DNS or /etc/hosts.
 </p>
 <p>
 In addition to TCP/IP over IPv4 and IPv6, the proxy handler can also connect to an HTTP server listening to a Unix socket.
