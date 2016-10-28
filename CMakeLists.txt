@@ -542,6 +542,9 @@ ELSEIF ("${CMAKE_SYSTEM_NAME}" MATCHES "SunOS")
     IF (LIBUV_FOUND)
         TARGET_LINK_LIBRARIES(t-00unit-libuv.t "socket" "nsl")
     ENDIF (LIBUV_FOUND)
+ELSE ()
+    # for FreeBSD, etc.
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
 ENDIF ()
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}")
