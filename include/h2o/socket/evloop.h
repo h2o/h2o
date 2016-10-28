@@ -57,7 +57,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *listener);
 
 h2o_evloop_t *h2o_evloop_create(void);
 void h2o_evloop_destroy(h2o_evloop_t *loop);
-int h2o_evloop_run(h2o_evloop_t *loop);
+int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait);
 
 /* inline definitions */
 

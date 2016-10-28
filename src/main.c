@@ -1455,7 +1455,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             break;
         update_listener_state(listeners);
         /* run the loop once */
-        h2o_evloop_run(conf.threads[thread_index].ctx.loop);
+        h2o_evloop_run(conf.threads[thread_index].ctx.loop, INT32_MAX);
         h2o_filecache_clear(conf.threads[thread_index].ctx.filecache);
     }
 
@@ -1471,7 +1471,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
 
     /* wait until all the connection gets closed */
     while (num_connections(0) != 0)
-        h2o_evloop_run(conf.threads[thread_index].ctx.loop);
+        h2o_evloop_run(conf.threads[thread_index].ctx.loop, INT32_MAX);
 
     /* the process that detects num_connections becoming zero performs the last cleanup */
     if (conf.pid_file != NULL)
