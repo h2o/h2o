@@ -1330,7 +1330,7 @@ static void on_sigfatal(int signo)
         struct pollfd pfd[1];
         pfd[0].fd = crash_handler_fd;
         pfd[0].events = POLLERR | POLLHUP;
-        poll(pfd, 1, -1);
+        while (poll(pfd, 1, -1) == -1 && errno == EINTR);
     }
 
     raise(signo);
