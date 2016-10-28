@@ -110,10 +110,11 @@ static void graceful_shutdown_resend_goaway(h2o_timeout_entry_t *entry)
         }
     }
 
-    /* after waiting a second, we still had active connections, wait one more second */
-    if (do_close_stragglers) {
+    /* After waiting a second, we still had active connections. If configured, wait one
+     * final timeout before closing the connections */
+    if (do_close_stragglers && ctx->globalconf->http2.graceful_shutdown_timeout) {
         ctx->http2._graceful_shutdown_timeout.cb = graceful_shutdown_close_stragglers;
-        h2o_timeout_link(ctx->loop, &ctx->one_sec_timeout, &ctx->http2._graceful_shutdown_timeout);
+        h2o_timeout_link(ctx->loop, &ctx->http2.graceful_shutdown_timeout, &ctx->http2._graceful_shutdown_timeout);
     }
 }
 
