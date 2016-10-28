@@ -74,15 +74,17 @@ static struct {
         } vars;
     } ticket;
     unsigned lifetime;
-    struct {
-        char *host;
-        uint16_t port;
-        int text_protocol;
-    } memcached;
-    struct {
-        char *host;
-        uint16_t port;
-    } redis;
+    union {
+        struct {
+            char *host;
+            uint16_t port;
+            int text_protocol;
+        } memcached;
+        struct {
+            char *host;
+            uint16_t port;
+        } redis;
+    } store;
 } conf;
 
 H2O_NORETURN static void *cache_cleanup_thread(void *_contexts)
@@ -139,7 +141,7 @@ static void setup_cache_internal(SSL_CTX **contexts, size_t num_contexts)
 static void setup_cache_memcached(SSL_CTX **contexts, size_t num_contexts)
 {
     h2o_memcached_context_t *memc_ctx =
-        h2o_memcached_create_context(conf.memcached.host, conf.memcached.port, conf.memcached.text_protocol,
+        h2o_memcached_create_context(conf.store.memcached.host, conf.store.memcached.port, conf.store.memcached.text_protocol,
                                      conf.cache.vars.memcached.num_threads, conf.cache.vars.memcached.prefix);
     h2o_accept_setup_memcached_ssl_resumption(memc_ctx, conf.lifetime);
     setup_cache_enable(contexts, num_contexts, 1);
@@ -147,7 +149,7 @@ static void setup_cache_memcached(SSL_CTX **contexts, size_t num_contexts)
 
 static void setup_cache_redis(SSL_CTX **contexts, size_t num_contexts)
 {
-    h2o_accept_setup_redis_ssl_resumption(conf.redis.host, conf.redis.port, conf.lifetime, conf.cache.vars.redis.prefix);
+    h2o_accept_setup_redis_ssl_resumption(conf.store.redis.host, conf.store.redis.port, conf.lifetime, conf.cache.vars.redis.prefix);
     setup_cache_enable(contexts, num_contexts, 1);
 }
 
@@ -581,13 +583,13 @@ H2O_NORETURN static void *ticket_memcached_updater(void *unused)
         yrmcds conn;
         yrmcds_error err;
         size_t failcnt;
-        for (failcnt = 0; (err = yrmcds_connect(&conn, conf.memcached.host, conf.memcached.port)) != YRMCDS_OK; ++failcnt) {
+        for (failcnt = 0; (err = yrmcds_connect(&conn, conf.store.memcached.host, conf.store.memcached.port)) != YRMCDS_OK; ++failcnt) {
             if (failcnt == 0)
-                fprintf(stderr, "[src/ssl.c] failed to connect to memcached at %s:%" PRIu16 ", %s\n", conf.memcached.host,
-                        conf.memcached.port, yrmcds_strerror(err));
+                fprintf(stderr, "[src/ssl.c] failed to connect to memcached at %s:%" PRIu16 ", %s\n", conf.store.memcached.host,
+                        conf.store.memcached.port, yrmcds_strerror(err));
             sleep(10);
         }
-        if (conf.memcached.text_protocol)
+        if (conf.store.memcached.text_protocol)
             yrmcds_text_mode(&conn);
         /* connected */
         while (ticket_memcached_update_tickets(&conn, conf.ticket.vars.memcached.key, time(NULL)))
@@ -650,10 +652,10 @@ H2O_NORETURN static void *ticket_redis_updater(void *unused)
         /* connect */
         redisContext *ctx;
         size_t failcnt;
-        for (failcnt = 0; (ctx = redisConnect(conf.redis.host, conf.redis.port)) == NULL || ctx->err != 0; ++failcnt) {
+        for (failcnt = 0; (ctx = redisConnect(conf.store.redis.host, conf.store.redis.port)) == NULL || ctx->err != 0; ++failcnt) {
             if (failcnt == 0)
-                fprintf(stderr, "[src/ssl.c] failed to connect to redis at %s:%" PRIu16 ", %s\n", conf.redis.host,
-                        conf.redis.port, ctx == NULL ? "redis context allocation failed" : ctx->errstr);
+                fprintf(stderr, "[src/ssl.c] failed to connect to redis at %s:%" PRIu16 ", %s\n", conf.store.redis.host,
+                        conf.store.redis.port, ctx == NULL ? "redis context allocation failed" : ctx->errstr);
             sleep(10);
         }
         /* connected */
@@ -903,9 +905,9 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
     }
 
     if ((t = yoml_get(node, "memcached")) != NULL) {
-        conf.memcached.host = NULL;
-        conf.memcached.port = 11211;
-        conf.memcached.text_protocol = 0;
+        conf.store.memcached.host = NULL;
+        conf.store.memcached.port = 11211;
+        conf.store.memcached.text_protocol = 0;
         size_t index;
         for (index = 0; index != t->data.mapping.size; ++index) {
             yoml_t *key = t->data.mapping.elements[index].key;
@@ -921,9 +923,9 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
                     h2o_configurator_errprintf(cmd, value, "`host` must be a string");
                     return -1;
                 }
-                conf.memcached.host = h2o_strdup(NULL, value->data.scalar, SIZE_MAX).base;
+                conf.store.memcached.host = h2o_strdup(NULL, value->data.scalar, SIZE_MAX).base;
             } else if (strcmp(key->data.scalar, "port") == 0) {
-                if (!(value->type == YOML_TYPE_SCALAR && sscanf(value->data.scalar, "%" SCNu16, &conf.memcached.port) == 1)) {
+                if (!(value->type == YOML_TYPE_SCALAR && sscanf(value->data.scalar, "%" SCNu16, &conf.store.memcached.port) == 1)) {
                     h2o_configurator_errprintf(cmd, value, "`port` must be a number");
                     return -1;
                 }
@@ -931,21 +933,21 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
                 ssize_t sel = h2o_configurator_get_one_of(cmd, value, "BINARY,ASCII");
                 if (sel == -1)
                     return -1;
-                conf.memcached.text_protocol = (int)sel;
+                conf.store.memcached.text_protocol = (int)sel;
             } else {
                 h2o_configurator_errprintf(cmd, key, "unknown attribute: %s", key->data.scalar);
                 return -1;
             }
         }
-        if (conf.memcached.host == NULL) {
+        if (conf.store.memcached.host == NULL) {
             h2o_configurator_errprintf(cmd, t, "mandatory attribute `host` is missing");
             return -1;
         }
     }
 
     if ((t = yoml_get(node, "redis")) != NULL) {
-        conf.redis.host = NULL;
-        conf.redis.port = 6379;
+        conf.store.redis.host = NULL;
+        conf.store.redis.port = 6379;
         size_t index;
         for (index = 0; index != t->data.mapping.size; ++index) {
             yoml_t *key = t->data.mapping.elements[index].key;
@@ -961,9 +963,9 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
                     h2o_configurator_errprintf(cmd, value, "`host` must be a string");
                     return -1;
                 }
-                conf.redis.host = h2o_strdup(NULL, value->data.scalar, SIZE_MAX).base;
+                conf.store.redis.host = h2o_strdup(NULL, value->data.scalar, SIZE_MAX).base;
             } else if (strcmp(key->data.scalar, "port") == 0) {
-                if (!(value->type == YOML_TYPE_SCALAR && sscanf(value->data.scalar, "%" SCNu16, &conf.redis.port) == 1)) {
+                if (!(value->type == YOML_TYPE_SCALAR && sscanf(value->data.scalar, "%" SCNu16, &conf.store.redis.port) == 1)) {
                     h2o_configurator_errprintf(cmd, value, "`port` must be a number");
                     return -1;
                 }
@@ -972,7 +974,7 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
                 return -1;
             }
         }
-        if (conf.redis.host == NULL) {
+        if (conf.store.redis.host == NULL) {
             h2o_configurator_errprintf(cmd, t, "mandatory attribute `host` is missing");
             return -1;
         }
@@ -982,7 +984,7 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
 #if H2O_USE_SESSION_TICKETS
     uses_memcached = (uses_memcached || conf.ticket.update_thread == ticket_memcached_updater);
 #endif
-    if (uses_memcached && conf.memcached.host == NULL) {
+    if (uses_memcached && conf.store.memcached.host == NULL) {
         h2o_configurator_errprintf(cmd, node, "configuration of memcached is missing");
         return -1;
     }
@@ -991,7 +993,7 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
 #if H2O_USE_SESSION_TICKETS
     uses_redis = (uses_redis || conf.ticket.update_thread == ticket_redis_updater);
 #endif
-    if (uses_redis && conf.redis.host == NULL) {
+    if (uses_redis && conf.store.redis.host == NULL) {
         h2o_configurator_errprintf(cmd, node, "configuration of redis is missing");
         return -1;
     }
