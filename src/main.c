@@ -1351,14 +1351,17 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             break;
         update_listener_state(listeners);
         /* run the loop once */
-        h2o_evloop_run(conf.threads[thread_index].ctx.loop);
+        h2o_evloop_run(conf.threads[thread_index].ctx.loop, INT32_MAX);
         h2o_filecache_clear(conf.threads[thread_index].ctx.filecache);
     }
 
     if (thread_index == 0)
         fprintf(stderr, "received SIGTERM, gracefully shutting down\n");
 
-    /* shutdown requested, close the listeners, notify the protocol handlers */
+    /* shutdown requested, unregister, close the listeners and notify the protocol handlers */
+    for (i = 0; i != conf.num_listeners; ++i)
+        h2o_socket_read_stop(listeners[i].sock);
+    h2o_evloop_run(conf.threads[thread_index].ctx.loop, 0);
     for (i = 0; i != conf.num_listeners; ++i) {
         h2o_socket_close(listeners[i].sock);
         listeners[i].sock = NULL;
@@ -1367,7 +1370,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
 
     /* wait until all the connection gets closed */
     while (num_connections(0) != 0)
-        h2o_evloop_run(conf.threads[thread_index].ctx.loop);
+        h2o_evloop_run(conf.threads[thread_index].ctx.loop, INT32_MAX);
 
     /* the process that detects num_connections becoming zero performs the last cleanup */
     if (conf.pid_file != NULL)

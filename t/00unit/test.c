@@ -96,7 +96,7 @@ void h2o_loopback_run_loop(h2o_loopback_conn_t *conn)
 #if H2O_USE_LIBUV
         uv_run(conn->super.ctx->loop, UV_RUN_ONCE);
 #else
-        h2o_evloop_run(conn->super.ctx->loop);
+        h2o_evloop_run(conn->super.ctx->loop, INT32_MAX);
 #endif
     }
 }

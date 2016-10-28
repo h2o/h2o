@@ -144,7 +144,7 @@ int main(int argc, char **argv)
 #if H2O_USE_LIBUV
         uv_run(loop, UV_RUN_DEFAULT);
 #else
-        h2o_evloop_run(loop);
+        h2o_evloop_run(loop, INT32_MAX);
 #endif
     }
 

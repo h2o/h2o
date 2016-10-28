@@ -72,7 +72,7 @@ static void update_socks(struct st_h2o_evloop_poll_t *loop)
     loop->super._statechanged.tail_ref = &loop->super._statechanged.head;
 }
 
-int evloop_do_proceed(h2o_evloop_t *_loop)
+int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
 {
     struct st_h2o_evloop_poll_t *loop = (struct st_h2o_evloop_poll_t *)_loop;
     H2O_VECTOR(struct pollfd) pollfds = {};
@@ -101,7 +101,8 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
     }
 
     /* call */
-    ret = poll(pollfds.entries, (nfds_t)pollfds.size, get_max_wait(&loop->super));
+    max_wait = adjust_max_wait(&loop->super, max_wait);
+    ret = poll(pollfds.entries, (nfds_t)pollfds.size, max_wait);
     update_now(&loop->super);
     if (ret == -1)
         goto Exit;

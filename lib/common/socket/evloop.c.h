@@ -59,10 +59,10 @@ static void link_to_pending(struct st_h2o_evloop_socket_t *sock);
 static void write_pending(struct st_h2o_evloop_socket_t *sock);
 static h2o_evloop_t *create_evloop(size_t sz);
 static void update_now(h2o_evloop_t *loop);
-static int32_t get_max_wait(h2o_evloop_t *loop);
+static int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait);
 
 /* functions to be defined in the backends */
-static int evloop_do_proceed(h2o_evloop_t *loop);
+static int evloop_do_proceed(h2o_evloop_t *loop, int32_t max_wait);
 static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock);
 static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock);
 static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
@@ -460,21 +460,21 @@ void update_now(h2o_evloop_t *loop)
     loop->_now = (uint64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }
 
-int32_t get_max_wait(h2o_evloop_t *loop)
+int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait)
 {
-    uint64_t wake_at = h2o_timeout_get_wake_at(&loop->_timeouts), max_wait;
+    uint64_t wake_at = h2o_timeout_get_wake_at(&loop->_timeouts);
 
     update_now(loop);
 
     if (wake_at <= loop->_now) {
         max_wait = 0;
     } else {
-        max_wait = wake_at - loop->_now;
-        if (max_wait > INT32_MAX)
-            max_wait = INT32_MAX;
+        uint64_t delta = wake_at - loop->_now;
+        if (delta < max_wait)
+            max_wait = (int32_t)delta;
     }
 
-    return (int32_t)max_wait;
+    return max_wait;
 }
 
 void h2o_socket_notify_write(h2o_socket_t *_sock, h2o_socket_cb cb)
@@ -537,12 +537,12 @@ static void run_pending(h2o_evloop_t *loop)
     }
 }
 
-int h2o_evloop_run(h2o_evloop_t *loop)
+int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
 {
     h2o_linklist_t *node;
 
     /* update socket states, poll, set readable flags, perform pending writes */
-    if (evloop_do_proceed(loop) != 0)
+    if (evloop_do_proceed(loop, max_wait) != 0)
         return -1;
 
     /* run the pending callbacks */
