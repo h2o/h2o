@@ -34,7 +34,6 @@ struct st_h2o_accept_data_t {
     h2o_accept_ctx_t *ctx;
     h2o_socket_t *sock;
     h2o_timeout_entry_t timeout;
-    h2o_timeout_entry_t resumption_failure_timeout;
     h2o_memcached_req_t *memcached_resumption_get_req;
     h2o_redis_command_t *redis_resumption_get_command;
     struct timeval connected_at;
@@ -52,8 +51,6 @@ static struct st_h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2
     data->timeout = (h2o_timeout_entry_t){0};
     data->timeout.cb = on_accept_timeout;
     h2o_timeout_link(ctx->ctx->loop, &ctx->ctx->handshake_timeout, &data->timeout);
-    data->resumption_failure_timeout = (h2o_timeout_entry_t){0};
-    data->resumption_failure_timeout.cb = on_redis_resumption_get_failed;
     data->memcached_resumption_get_req = NULL;
     data->redis_resumption_get_command = NULL;
     data->connected_at = connected_at;
@@ -187,7 +184,7 @@ static void redis_resumption_on_get(redisReply *reply, void *_accept_data)
 
 static void on_redis_resumption_get_failed(h2o_timeout_entry_t *timeout_entry)
 {
-    struct st_h2o_accept_data_t *accept_data = H2O_STRUCT_FROM_MEMBER(struct st_h2o_accept_data_t, resumption_failure_timeout, timeout_entry);
+    struct st_h2o_accept_data_t *accept_data = H2O_STRUCT_FROM_MEMBER(struct st_h2o_accept_data_t, timeout, timeout_entry);
     accept_data->redis_resumption_get_command = NULL;
     h2o_socket_ssl_resume_server_handshake(accept_data->sock, h2o_iovec_init(NULL, 0));
     h2o_timeout_unlink(timeout_entry);
@@ -208,7 +205,9 @@ static void redis_resumption_get(h2o_socket_t *sock, h2o_iovec_t session_id)
             h2o_redis_connect(conn, async_resumption_context.redis.host.base, async_resumption_context.redis.port);
         }
         // abort resumption
-        h2o_timeout_link(accept_data->ctx->ctx->loop, &accept_data->ctx->ctx->zero_timeout, &accept_data->resumption_failure_timeout);
+        h2o_timeout_unlink(&accept_data->timeout);
+        accept_data->timeout.cb = on_redis_resumption_get_failed;
+        h2o_timeout_link(accept_data->ctx->ctx->loop, &accept_data->ctx->ctx->zero_timeout, &accept_data->timeout);
     }
 }
 
