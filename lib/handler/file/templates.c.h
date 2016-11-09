@@ -158,6 +158,14 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
             _->size += _s.len;
         }
     }
+    {
+        h2o_iovec_t _s = (h2o_iovec_init(H2O_STRLIT("</UL>\n")));
+        if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
+            --_s.len;
+        h2o_buffer_reserve(&_, _s.len);
+        memcpy(_->bytes + _->size, _s.base, _s.len);
+        _->size += _s.len;
+    }
 
     return _;
 }
