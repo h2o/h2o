@@ -320,6 +320,7 @@ static void *ocsp_updater_thread(void *_ssl_conf)
             }
             break;
         default: /* permanent failure */
+            update_ocsp_stapling(ssl_conf, NULL);
             fprintf(stderr, "[OCSP Stapling] disabled for certificate file:%s\n", ssl_conf->certificate_file);
             goto Exit;
         }
