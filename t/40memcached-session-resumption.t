@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
@@ -22,7 +22,7 @@ sub doit {
     my $memc_proto = shift;
     subtest $memc_proto => sub {
         # start memcached
-        my $memc_port = empty_port();
+        my $memc_port = safe_empty_port();
         my $memc_guard = spawn_server(
             argv     => [ qw(memcached -l 127.0.0.1 -p), $memc_port, "-B", $memc_proto ],
             is_ready => sub {
@@ -58,5 +58,6 @@ EOT
         };
         $spawn_and_connect->("-sess_out $tempdir/session", "New");
         $spawn_and_connect->("-sess_in $tempdir/session", "Reused");
+        safe_empty_port_release($memc_port);
     };
 }

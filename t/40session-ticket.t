@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
@@ -70,7 +70,7 @@ EOT
 subtest "memcached" => sub {
     plan skip_all => "memcached not found"
         unless prog_exists("memcached");
-    my $memc_port = empty_port();
+    my $memc_port = safe_empty_port();
     my $doit = sub {
         my $memc_proto = shift;
         my $memc_guard = spawn_server(
@@ -99,6 +99,7 @@ EOT
     };
     $doit->("binary");
     $doit->("ascii");
+    safe_empty_port_release($memc_port);
 };
 
 done_testing;

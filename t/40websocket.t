@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use IO::Socket::INET;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
@@ -11,7 +11,7 @@ plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 
 # spawn upstream
-my $upstream_port = empty_port();
+my $upstream_port = safe_empty_port();
 my $upstream = spawn_server(
     argv     => [
         qw(plackup -s Starlet --access-log /dev/null -p), $upstream_port, ASSETS_DIR . "/upstream.psgi",
@@ -109,5 +109,7 @@ EOT
     ) or die "failed to connect to 127.0.0.1:$server->{port}:$!";
     doit($conn);
 };
+
+safe_empty_port_release($upstream_port);
 
 done_testing;

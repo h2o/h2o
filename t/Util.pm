@@ -3,6 +3,8 @@ package t::Util;
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
+use Errno qw(EEXIST);
+use File::Path qw(rmtree);
 use File::Temp qw(tempfile);
 use Net::EmptyPort qw(check_port empty_port);
 use POSIX ":sys_wait_h";
@@ -10,12 +12,99 @@ use Path::Tiny;
 use Scope::Guard qw(scope_guard);
 use Test::More;
 use Time::HiRes qw(sleep);
+use Fcntl qw(:flock O_RDWR O_CREAT O_EXCL);
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl);
+our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl safe_empty_port safe_empty_port_release);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
+
+sub safe_empty_port_release {
+    my $epdir = $ENV{'SAFE_EMPTY_PORT_DIR'};
+    return unless $epdir;
+    my $port = shift;
+    safe_empty_port_lock();
+    unlink("${epdir}/${port}");
+    safe_empty_port_unlock();
+}
+
+sub safe_empty_port {
+    my $port;
+    safe_empty_port_lock();
+    my $tries = 0;
+    do {
+        if ($tries++ > 0xffff) {
+            die "Failed to allocate an empty port";
+        }
+        $port = empty_port();
+    } while (!safe_empty_port_acquire($port));
+    safe_empty_port_unlock();
+    return $port;
+}
+
+sub empty_ports {
+    my $n = shift;
+    my @ports;
+    while (@ports < $n) {
+        my $t = safe_empty_port();
+        push @ports, $t;
+    }
+    return @ports;
+}
+
+sub safe_empty_port_acquire {
+    my $epdir = $ENV{'SAFE_EMPTY_PORT_DIR'};
+    return 1 unless $epdir;
+
+    my $port = shift;
+    my $file_name = "${epdir}/${port}";
+
+    if (-e "${file_name}") {
+        return 0;
+    }
+
+    open(my $fh, '>', ${file_name}) or die "Failed to create aquisition file '${file_name}': $!";
+    close($fh);
+
+    return 1;
+}
+
+sub safe_empty_port_lock {
+    my $epdir = $ENV{'SAFE_EMPTY_PORT_DIR'};
+    return unless $epdir;
+    my $path = "${epdir}/.lock";
+    my $ret = 0;
+    while (1) {
+        unless(sysopen(my $fh, $path, O_RDWR|O_CREAT|O_EXCL)) {
+            if ($!{EEXIST}) {
+                sleep 0.01;
+                next;
+            }
+            die "Error opening '$path': $!";
+        };
+        last;
+    }
+}
+
+sub safe_empty_port_check {
+    my $epdir = $ENV{'SAFE_EMPTY_PORT_DIR'};
+    return 0 unless $epdir;
+    my $count;
+    opendir(my $dh, $epdir) or die "Can't open directory '$epdir': $!";
+    while (my $de = readdir($dh)) {
+        next if $de == "." or $de == "..";
+        $count++;
+    }
+    closedir($dh);
+    return $count;
+}
+
+sub safe_empty_port_unlock {
+    my $epdir = $ENV{'SAFE_EMPTY_PORT_DIR'};
+    return unless $epdir;
+    unlink("${epdir}/.lock");
+}
 
 sub bindir {
     $ENV{BINARY_DIR} || '.';
@@ -192,30 +281,30 @@ listen:
 EOT
 
     # spawn the server
-    my ($guard, $pid) = spawn_server(
-        argv     => [ bindir() . "/h2o", "-c", $conffn, @opts ],
-        is_ready => sub {
-            check_port($port) && check_port($tls_port);
-        },
-    );
+    my ($guard, $pid) = eval {
+        spawn_server(
+            argv     => [ bindir() . "/h2o", "-c", $conffn, @opts ],
+            is_ready => sub {
+                check_port($port) && check_port($tls_port);
+            },
+        );
+    };
+    if ($@) {
+        safe_empty_port_release($port);
+        safe_empty_port_release($tls_port);
+        die $@;
+    }
     my $ret = {
-        port     => $port,
-        tls_port => $tls_port,
-        guard    => $guard,
-        pid      => $pid,
+        port             => $port,
+        tls_port         => $tls_port,
+        guard            => $guard,
+        pid              => $pid,
+        release_ports    => scope_guard(sub {
+            safe_empty_port_release($port);
+            safe_empty_port_release($tls_port);
+        }),
     };
     return $ret;
-}
-
-sub empty_ports {
-    my $n = shift;
-    my @ports;
-    while (@ports < $n) {
-        my $t = empty_port();
-        push @ports, $t
-            unless grep { $_ == $t } @ports;
-    }
-    return @ports;
 }
 
 sub create_data_file {

@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
-use Net::EmptyPort qw(empty_port check_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
@@ -17,7 +17,8 @@ plan skip_all => 'plackup not found'
 plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 
-my $upstream_hostport = "127.0.0.1:@{[empty_port()]}";
+my $upstream_port = safe_empty_port();
+my $upstream_hostport = "127.0.0.1:@{[$upstream_port]}";
 
 sub create_upstream {
     my @args = (
@@ -222,5 +223,7 @@ run_with_curl($server, sub {
         };
     };
 });
+
+safe_empty_port_release($upstream_port);
 
 done_testing();

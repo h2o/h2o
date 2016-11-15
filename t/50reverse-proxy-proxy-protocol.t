@@ -2,12 +2,12 @@ use strict;
 use warnings;
 use IO::Socket::INET;
 use Test::TCP;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use Scope::Guard qw(guard);
 use t::Util;
 
-my $upstream_port = empty_port();
+my $upstream_port = safe_empty_port();
 
 my $listen = IO::Socket::INET->new(
     LocalAddr => '127.0.0.1',
@@ -51,5 +51,7 @@ run_with_curl($server, sub {
     my $resp = `$curl_cmd --silent $proto://127.0.0.1:$port/hello`;
     like $resp, qr{^PROXY TCP4 127\.0\.0\.1 127\.0\.0\.1 [0-9]{1,5} $port\r\nGET /hello HTTP/1\.}is;
 });
+
+safe_empty_port_release($upstream_port);
 
 done_testing;

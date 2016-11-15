@@ -3,12 +3,12 @@ use warnings;
 use File::Temp qw(tempdir);
 use IO::Socket::INET;
 use IO::Socket::SSL;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
 my $tempdir = tempdir(CLEANUP => 1);
-my $port = empty_port();
+my $port = safe_empty_port();
 
 sub spawn_h2o {
     my ($proxy_protocol, $ssl) = @_;
@@ -149,5 +149,7 @@ subtest "https handshake timeout" => sub {
     my $guard = spawn_h2o(0, 1);
     test_timeout();
 };
+
+safe_empty_port_release($port);
 
 done_testing;

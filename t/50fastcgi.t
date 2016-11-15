@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
@@ -14,7 +14,7 @@ plan skip_all => 'cannot run perl -MPlack::Handler::FCGI'
     if system("perl -MPlack::Handler::FCGI /dev/null > /dev/null 2>&1") != 0;
 
 my $tempdir = tempdir(CLEANUP => 1);
-my $fcgi_port = empty_port();
+my $fcgi_port = safe_empty_port();
 
 # gather information of test data
 my %files = map { do {
@@ -135,5 +135,7 @@ EOT
     });
 };
 
+
+safe_empty_port_release($fcgi_port);
 
 done_testing();

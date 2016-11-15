@@ -1,13 +1,13 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
 plan skip_all => 'plackup not found'
     unless prog_exists('plackup');
 
-my $upstream_port = empty_port();
+my $upstream_port = safe_empty_port();
 my $upstream = spawn_server(
     argv => [
         qw(
@@ -66,5 +66,7 @@ EOT
         like $resp, qr{^hello$}m;
     });
 };
+
+safe_empty_port_release($upstream_port);
 
 done_testing();

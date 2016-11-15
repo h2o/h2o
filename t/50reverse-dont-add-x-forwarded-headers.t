@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
@@ -11,7 +11,7 @@ plan skip_all => 'plackup not found'
 plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 
-my $upstream_port = empty_port();
+my $upstream_port = safe_empty_port();
 
 my $guard = spawn_server(
     argv     => [ qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen), $upstream_port, ASSETS_DIR . "/upstream.psgi" ],
@@ -56,5 +56,7 @@ EOT
 
 test_xff(1);
 test_xff(0);
+
+safe_empty_port_release($upstream_port);
 
 done_testing();
