@@ -26,7 +26,7 @@ EOT
         if ($curl_cmd =~ /--http2/) {
             subtest "single stream itself" => sub {
                 my ($headers, $body) = run_prog("$curl_cmd --dump-header /dev/stderr $url");
-                like($headers, qr!^HTTP/2 200!);
+                like($headers, qr!^HTTP/2(.0)? 200!);
                 my $data;
                 lives_ok { $data = decode_json($body) };
                 is($data->{streams}->{1}->{state}, 'HALF_CLOSED_REMOTE');
@@ -59,7 +59,7 @@ EOT
 
     subtest "with hpack state" => sub {
         my ($headers, $body) = run_prog("$curl_cmd $url");
-        like($headers, qr!^HTTP/2 200!);
+        like($headers, qr!^HTTP/2(.0)? 200!);
         my $data;
         lives_ok { $data = decode_json($body) };
         ok(exists $data->{hpack});
