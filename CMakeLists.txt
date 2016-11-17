@@ -241,7 +241,6 @@ SET(LIB_SOURCE_FILES
     lib/handler/expires.c
     lib/handler/fastcgi.c
     lib/handler/file.c
-    lib/handler/compress.c
     lib/handler/headers.c
     lib/handler/mimemap.c
     lib/handler/proxy.c
