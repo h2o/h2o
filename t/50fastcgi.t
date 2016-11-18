@@ -89,7 +89,7 @@ EOT
 
 doit(0, 0);
 doit(1, 0);
-doit(1, 1);
+doit(0, 1);
 doit(1, 1);
 
 subtest 'httpoxy' => sub {
