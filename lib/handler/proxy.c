@@ -30,6 +30,26 @@ struct rp_handler_t {
     h2o_proxy_config_vars_t config;
 };
 
+/* again, copied from headers since cannot be directly reused, need better approach */
+static void rewrite_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_headers_command_t *cmd)
+{
+    switch (cmd->cmd) {
+    case H2O_HEADERS_CMD_ADD:
+        goto AddHeader;
+    }
+
+    assert(!"FIXME");
+    return;
+
+AddHeader:
+    if (h2o_iovec_is_token(cmd->name)) {
+        h2o_add_header(pool, headers, (void *)cmd->name, cmd->value.base, cmd->value.len);
+    } else {
+        h2o_add_header_by_str(pool, headers, cmd->name->base, cmd->name->len, 0, cmd->value.base, cmd->value.len);
+    }
+    return;
+}
+
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     struct rp_handler_t *self = (void *)_self;
@@ -57,6 +77,13 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     } else {
         scheme = self->upstream.scheme;
         authority = &self->upstream.authority;
+    }
+
+    /* rewrite headers */
+    if (self->config.header_cmds.size != 0) {
+        h2o_headers_command_t *cmd;
+        for (cmd = self->config.header_cmds.entries; cmd->cmd != H2O_HEADERS_CMD_NULL; ++cmd)
+            rewrite_headers(&req->pool, &req->headers, cmd);
     }
 
     /* request reprocess */

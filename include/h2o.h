@@ -1757,6 +1757,7 @@ typedef struct st_h2o_proxy_config_vars_t {
         int enabled;
         uint64_t timeout;
     } websocket;
+    H2O_VECTOR(h2o_headers_command_t) header_cmds;
     SSL_CTX *ssl_ctx; /* optional */
 } h2o_proxy_config_vars_t;
 

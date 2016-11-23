@@ -274,11 +274,101 @@ static int on_config_preserve_x_forwarded_proto(h2o_configurator_command_t *cmd,
     return 0;
 }
 
+/*
+ * So here starts the logic for supporting header configuration, copied from header configurator.
+ * Since headers is a filter, not a handler, so it cannot be directly reused in this case.
+ * Need some advice to make it better.
+ */
+static int extract_name(const char *src, size_t len, h2o_iovec_t **_name)
+{
+    h2o_iovec_t name;
+    const h2o_token_t *name_token;
+
+    name = h2o_str_stripws(src, len);
+    if (name.len == 0)
+        return -1;
+
+    name = h2o_strdup(NULL, name.base, name.len);
+    h2o_strtolower(name.base, name.len);
+
+    if ((name_token = h2o_lookup_token(name.base, name.len)) != NULL) {
+        *_name = (h2o_iovec_t *)&name_token->buf;
+        free(name.base);
+    } else {
+        *_name = h2o_mem_alloc(sizeof(**_name));
+        **_name = name;
+    }
+
+    return 0;
+}
+
+static int extract_name_value(const char *src, h2o_iovec_t **name, h2o_iovec_t *value)
+{
+    const char *colon = strchr(src, ':');
+
+    if (colon == NULL)
+        return -1;
+
+    if (extract_name(src, colon - src, name) != 0)
+        return -1;
+    *value = h2o_str_stripws(colon + 1, strlen(colon + 1));
+    *value = h2o_strdup(NULL, value->base, value->len);
+
+    return 0;
+}
+
+static int add_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2o_iovec_t *name, h2o_iovec_t value)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+
+    if (h2o_iovec_is_token(name)) {
+        const h2o_token_t *token = (void *)name;
+        if (h2o_headers_is_prohibited_name(token)) {
+            h2o_configurator_errprintf(cmd, node, "the named header cannot be rewritten");
+            return -1;
+        }
+    }
+
+    h2o_vector_reserve(NULL, &self->vars->header_cmds, self->vars->header_cmds.size + 1);
+    self->vars->header_cmds.entries[self->vars->header_cmds.size++] = (h2o_headers_command_t){cmd_id, name, value};
+    return 0;
+}
+
+static int on_config_header_2arg(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, int cmd_id, yoml_t *node)
+{
+    h2o_iovec_t *name, value;
+
+    if (extract_name_value(node->data.scalar, &name, &value) != 0) {
+        h2o_configurator_errprintf(cmd, node, "failed to parse the value; should be in form of `name: value`");
+        return -1;
+    }
+    if (add_cmd(cmd, node, cmd_id, name, value) != 0) {
+        if (!h2o_iovec_is_token(name))
+            free(name->base);
+        free(value.base);
+        return -1;
+    }
+    return 0;
+}
+
+static int on_config_add_header(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return on_config_header_2arg(cmd, ctx, H2O_HEADERS_CMD_ADD, node);
+}
+
+/* header related changes end */
+
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)_self;
 
     memcpy(self->vars + 1, self->vars, sizeof(*self->vars));
+    /* header related */
+    h2o_vector_reserve(NULL, &self->vars[1].header_cmds, self->vars->header_cmds.size);
+    memcpy(self->vars[1].header_cmds.entries, self->vars->header_cmds.entries,
+           sizeof(self->vars->header_cmds.entries[0]) * self->vars->header_cmds.size);
+    self->vars[1].header_cmds.size = self->vars->header_cmds.size;
+    /* ends */
     ++self->vars;
 
     if (ctx->pathconf == NULL && ctx->hostconf == NULL) {
@@ -312,6 +402,15 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
         SSL_CTX_free(self->vars->ssl_ctx);
     }
 
+    /* header related */
+    if (ctx->pathconf != NULL && self->vars->header_cmds.size != 0) {
+        h2o_vector_reserve(NULL, &self->vars->header_cmds, self->vars->header_cmds.size + 1);
+        self->vars->header_cmds.entries[self->vars->header_cmds.size] =(h2o_headers_command_t){H2O_HEADERS_CMD_NULL};
+    } else {
+        free(self->vars->header_cmds.entries);
+    }
+    /* header related changes end */
+
     --self->vars;
     return 0;
 }
@@ -326,6 +425,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->vars->keepalive_timeout = 2000;
     c->vars->websocket.enabled = 0; /* have websocket proxying disabled by default; until it becomes non-experimental */
     c->vars->websocket.timeout = H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT;
+    memset(&c->vars->header_cmds, 0, sizeof(c->vars->header_cmds)); /* header related */
 
     /* setup handlers */
     c->super.enter = on_config_enter;
@@ -362,4 +462,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.emit-x-forwarded-headers",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_emit_x_forwarded_headers);
+    h2o_configurator_define_command(&c->super, "proxy.header.add",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_add_header);
 }
