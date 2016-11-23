@@ -21,11 +21,11 @@ subtest "basic" => sub {
         my ($port, $tls_port) = @_;
         return << "EOT";
 hosts:
-  "127.0.0.1.xip.io:$tls_port":
+  "127.0.0.1.examp1e.net:$tls_port":
     paths:
       /:
         file.dir: examples/doc_root
-  "alternate.127.0.0.1.xip.io:$tls_port":
+  "alternate.127.0.0.1.examp1e.net:$tls_port":
     listen:
       port: $tls_port
       ssl:
@@ -38,12 +38,12 @@ EOT
     });
 
     do_test(
-        "127.0.0.1.xip.io:$server->{tls_port}",
+        "127.0.0.1.examp1e.net:$server->{tls_port}",
         md5_file("examples/doc_root/index.html"),
     );
 
     do_test(
-        "alternate.127.0.0.1.xip.io:$server->{tls_port}",
+        "alternate.127.0.0.1.examp1e.net:$server->{tls_port}",
         md5_file("examples/doc_root.alternate/index.txt"),
     );
 };
@@ -53,11 +53,11 @@ subtest "wildcard" => sub {
         my ($port, $tls_port) = @_;
         return << "EOT";
 hosts:
-  "127.0.0.1.xip.io:$tls_port":
+  "127.0.0.1.examp1e.net:$tls_port":
     paths:
       /:
         file.dir: examples/doc_root
-  "*.127.0.0.1.xip.io:$tls_port":
+  "*.127.0.0.1.examp1e.net:$tls_port":
     listen:
       port: $tls_port
       ssl:
@@ -70,12 +70,12 @@ EOT
     });
 
     do_test(
-        "127.0.0.1.xip.io:$server->{tls_port}",
+        "127.0.0.1.examp1e.net:$server->{tls_port}",
         md5_file("examples/doc_root/index.html"),
     );
 
     do_test(
-        "alternate.127.0.0.1.xip.io:$server->{tls_port}",
+        "alternate.127.0.0.1.examp1e.net:$server->{tls_port}",
         md5_file("examples/doc_root.alternate/index.txt"),
     );
 };
