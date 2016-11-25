@@ -1,7 +1,19 @@
 Revision history for H2O.
 
 2.1.0-beta4 TBD
+	- [core] fix busy loop after receiving SIGTERM (linux) #1100 (Kazuho Oku, Frederik Deweerdt)
+	- [core] don't try to register kevent changes more than once (*BSD, OS X) #1113 (Ichito Nagata)
 	- [compress] set `vary: accept-encoding` upon negotiation failure of the compression method #1083 (Frederik Deweerdt)
+	- [fastcgi] fix connection failure when `fastcgi.spawn` is used with an uid #1119 (Kazuho Oku)
+	- [file] more pre-defined MIME types #1103 (Joe Duarte)
+	- [file] add missing `</ul>` #1106 (Kazuho Oku)
+	- [http2] fix a bug that left connections open #1090 (Kazuho Oku)
+	- [http2] ignore PRIORITY frames that reference closed pushed streams #1105 (Frederik Deweerdt)
+	- [proxy] set `content-length: 0` when receiving a zero-byte POST or PUT #1081 (Frederik Deweerdt)
+	- [proxy] turn on/off on-the-fly compression based on the `x-compress-hint` header #1085 (Frederik Deweerdt)
+	- [ssl] update libressl to 2.4.4 #1127 (Kazuho Oku)
+	- [ssl] erase OCSP stapling data when the stapling updater returns a permanent failure #1117 (Kazuho Oku)
+	- [libh2o] install library files to the correct location #1116 (Frederik Deweerdt)
 
 2.1.0-beta3 2016-09-14 08:00:00+0000
 	- [security fix][core] fix DoS attack vector CVE-2016-4864 (Frederik Deweerdt, Kazuho Oku)
