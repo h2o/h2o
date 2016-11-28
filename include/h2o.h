@@ -1814,6 +1814,13 @@ void h2o_duration_stats_register(h2o_globalconf_t *conf);
  * registers the configurator
  */
 void h2o_status_register_configurator(h2o_globalconf_t *conf);
+    
+/* lib/handler/util.c */
+
+/**
+ * rewrite headers by the command provided
+ */
+void h2o_rewrite_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_headers_command_t *cmd);
 
 /* lib/handler/http2_debug_state.c */
 
