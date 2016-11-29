@@ -168,6 +168,13 @@ ssize_t h2o_configurator_get_one_of(h2o_configurator_command_t *cmd, yoml_t *nod
  */
 char *h2o_configurator_get_cmd_path(const char *cmd);
 
+/**
+ * lib/handler/configurator/util.c
+ */
+int h2o_on_config_header_2arg(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, int cmd_id, yoml_t *node, void *header_cmd_vector);
+
+int h2o_on_config_header_unset(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node, void *header_cmd_vector);
+
 void h2o_configurator__init_core(h2o_globalconf_t *conf);
 void h2o_configurator__dispose_configurators(h2o_globalconf_t *conf);
 
