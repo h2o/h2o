@@ -149,7 +149,8 @@ static void setup_cache_memcached(SSL_CTX **contexts, size_t num_contexts)
 
 static void setup_cache_redis(SSL_CTX **contexts, size_t num_contexts)
 {
-    h2o_accept_setup_redis_ssl_resumption(conf.store.redis.host, conf.store.redis.port, conf.lifetime, conf.cache.vars.redis.prefix);
+    h2o_accept_setup_redis_ssl_resumption(conf.store.redis.host, conf.store.redis.port, conf.lifetime,
+                                          conf.cache.vars.redis.prefix);
     setup_cache_enable(contexts, num_contexts, 1);
 }
 
@@ -583,7 +584,8 @@ H2O_NORETURN static void *ticket_memcached_updater(void *unused)
         yrmcds conn;
         yrmcds_error err;
         size_t failcnt;
-        for (failcnt = 0; (err = yrmcds_connect(&conn, conf.store.memcached.host, conf.store.memcached.port)) != YRMCDS_OK; ++failcnt) {
+        for (failcnt = 0; (err = yrmcds_connect(&conn, conf.store.memcached.host, conf.store.memcached.port)) != YRMCDS_OK;
+             ++failcnt) {
             if (failcnt == 0)
                 fprintf(stderr, "[src/ssl.c] failed to connect to memcached at %s:%" PRIu16 ", %s\n", conf.store.memcached.host,
                         conf.store.memcached.port, yrmcds_strerror(err));
@@ -848,7 +850,8 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
                 return -1;
             }
         }
-        if (conf.ticket.update_thread == ticket_internal_updater || conf.ticket.update_thread == ticket_memcached_updater || conf.ticket.update_thread == ticket_redis_updater) {
+        if (conf.ticket.update_thread == ticket_internal_updater || conf.ticket.update_thread == ticket_memcached_updater ||
+            conf.ticket.update_thread == ticket_redis_updater) {
             /* generating updater takes two arguments: cipher, hash */
             if ((t = yoml_get(node, "ticket-cipher")) != NULL) {
                 if (t->type != YOML_TYPE_SCALAR ||

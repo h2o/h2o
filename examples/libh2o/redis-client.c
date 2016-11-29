@@ -29,7 +29,6 @@ const char *host;
 uint16_t port;
 h2o_redis_conn_t *conn;
 
-
 static void usage(const char *cmd)
 {
     fprintf(stderr, "Usage: %s <host> <port>\n", cmd);
@@ -42,30 +41,30 @@ static void dump_reply(redisReply *reply, unsigned indent)
         fprintf(stderr, "  ");
 
     switch (reply->type) {
-        case REDIS_REPLY_STRING:
+    case REDIS_REPLY_STRING:
 
-            fprintf(stderr, "string: %.*s\n", reply->len, reply->str);
-            break;
-        case REDIS_REPLY_ARRAY:
-            fprintf(stderr, "array: %zu\n", reply->elements);
-            for (size_t i = 0; i != reply->elements; ++i) {
-                dump_reply(reply->element[i], indent + 1);
-            }
-            break;
-        case REDIS_REPLY_NIL:
-            fprintf(stderr, "nil");
-            break;
-        case REDIS_REPLY_INTEGER:
-            fprintf(stderr, "integer: %lld\n", reply->integer);
-            break;
-        case REDIS_REPLY_STATUS:
-            fprintf(stderr, "status: %.*s\n", reply->len, reply->str);
-            break;
-        case REDIS_REPLY_ERROR:
-            fprintf(stderr, "error: %.*s\n", reply->len, reply->str);
-            break;
-        default:
-            fprintf(stderr, "invalid reply type: %d\n", reply->type);
+        fprintf(stderr, "string: %.*s\n", reply->len, reply->str);
+        break;
+    case REDIS_REPLY_ARRAY:
+        fprintf(stderr, "array: %zu\n", reply->elements);
+        for (size_t i = 0; i != reply->elements; ++i) {
+            dump_reply(reply->element[i], indent + 1);
+        }
+        break;
+    case REDIS_REPLY_NIL:
+        fprintf(stderr, "nil");
+        break;
+    case REDIS_REPLY_INTEGER:
+        fprintf(stderr, "integer: %lld\n", reply->integer);
+        break;
+    case REDIS_REPLY_STATUS:
+        fprintf(stderr, "status: %.*s\n", reply->len, reply->str);
+        break;
+    case REDIS_REPLY_ERROR:
+        fprintf(stderr, "error: %.*s\n", reply->len, reply->str);
+        break;
+    default:
+        fprintf(stderr, "invalid reply type: %d\n", reply->type);
     }
 }
 
@@ -117,14 +116,12 @@ int main(int argc, char **argv)
     loop = h2o_evloop_create();
 #endif
 
-
     conn = h2o_redis_create_connection(loop, sizeof(*conn));
     conn->on_connect = on_redis_connect;
     conn->on_close = on_redis_close;
 
     h2o_redis_connect(conn, host, port);
     h2o_redis_command(conn, on_redis_command, "list all keys", "KEYS *");
-
 
     while (!exit_loop) {
 #if H2O_USE_LIBUV
