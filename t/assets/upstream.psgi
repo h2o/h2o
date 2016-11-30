@@ -119,6 +119,17 @@ builder {
             ],
         ];
     };
+    mount "/infinite-stream" => sub {
+        my $env = shift;
+        return sub {
+            my $responder = shift;
+            my $writer = $responder->([ 200, [ 'content-type' => 'text/plain' ] ]);
+            while ($writer->write("lorem ipsum dolor sit amet")) {
+                sleep 0.1;
+            }
+            $writer->close;
+        };
+    };
     mount "/infinite-redirect" => sub {
         my $env = shift;
         return [
