@@ -106,8 +106,22 @@ INCLUDE_DIRECTORIES(
     deps/picohttpparser
     deps/picotest
     deps/yaml/include
+    deps/librdkafka
     deps/yoml)
 
+
+IF (PKG_CONFIG_FOUND)
+    PKG_CHECK_MODULES(RDKAFKA rdkafka>=0.9.0)
+    IF (RDKAFKA_FOUND)
+        INCLUDE_DIRECTORIES(${RDKAFKA_INCLUDE_DIRS})
+        LINK_DIRECTORIES(${RDKAFKA_LIBRARY_DIRS})
+    ENDIF (RDKAFKA_FOUND)
+ENDIF (PKG_CONFIG_FOUND)
+IF (PKG_CONFIG_FOUND)
+    IF (NOT RDKAFKA_FOUND)
+        MESSAGE(STATUS "rdkafka not found")
+    ENDIF (NOT RDKAFKA_FOUND)
+ENDIF (PKG_CONFIG_FOUND)
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBUV libuv>=1.0.0)
     IF (LIBUV_FOUND)
@@ -234,6 +248,7 @@ SET(LIB_SOURCE_FILES
     lib/core/util.c
 
     lib/handler/access_log.c
+    lib/handler/kafka_log.c
     lib/handler/chunked.c
     lib/handler/compress.c
     lib/handler/compress/gzip.c
@@ -253,6 +268,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/http2_debug_state.c
     lib/handler/status/durations.c
     lib/handler/configurator/access_log.c
+    lib/handler/configurator/kafka_log.c
     lib/handler/configurator/compress.c
     lib/handler/configurator/errordoc.c
     lib/handler/configurator/expires.c
@@ -351,7 +367,7 @@ SET_TARGET_PROPERTIES(libh2o PROPERTIES
     OUTPUT_NAME h2o
     VERSION ${LIBRARY_VERSION}
     SOVERSION ${LIBRARY_SOVERSION})
-TARGET_LINK_LIBRARIES(libh2o ${LIBUV_LIBRARIES} ${EXTRA_LIBS})
+TARGET_LINK_LIBRARIES(libh2o ${LIBUV_LIBRARIES} ${RDKAFKA_LIBRARIES} ${EXTRA_LIBS})
 SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES
     OUTPUT_NAME h2o-evloop
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0"
@@ -455,7 +471,7 @@ IF (WITH_MRUBY)
         "m")
     ADD_DEPENDENCIES(h2o mruby)
 ENDIF (WITH_MRUBY)
-TARGET_LINK_LIBRARIES(h2o ${EXTRA_LIBS})
+TARGET_LINK_LIBRARIES(h2o ${RDKAFKA_LIBRARIES} ${EXTRA_LIBS})
 
 INSTALL(TARGETS h2o
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
