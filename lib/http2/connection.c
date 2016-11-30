@@ -90,9 +90,7 @@ static void graceful_shutdown_close_stragglers(h2o_timeout_entry_t *entry)
     for (node = ctx->http2._conns.next; node != &ctx->http2._conns; node = next) {
         h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _conns, node);
         next = node->next;
-        if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
-            close_connection(conn);
-        }
+        close_connection(conn);
     }
 }
 
