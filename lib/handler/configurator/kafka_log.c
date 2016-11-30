@@ -78,7 +78,7 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
             yoml_t *key = node->data.mapping.elements[i].key;
             if (
                     key->type == YOML_TYPE_SCALAR && 
-                    strcmp(key->data.scalar, "format") &&
+                    strcmp(key->data.scalar, "message") &&
                     strcmp(key->data.scalar, "topic")
                 )
             {
@@ -128,10 +128,10 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
                     return -1;
             }
         }
-        /* get format */
-        if ((t = yoml_get(node, "format")) != NULL) {
+        /* get message */
+        if ((t = yoml_get(node, "message")) != NULL) {
             if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, t, "`format` must be a scalar");
+                h2o_configurator_errprintf(cmd, t, "`message` must be a scalar");
                 return -1;
             }
             fmt = t->data.scalar;
