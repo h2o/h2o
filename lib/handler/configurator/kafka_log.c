@@ -77,8 +77,7 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
         for (size_t i = 0; i != node->data.mapping.size; ++i) {
             yoml_t *key = node->data.mapping.elements[i].key;
             if (
-                    key->type == YOML_TYPE_SCALAR && 
-                    strcmp(key->data.scalar, "message") &&
+                    key->type == YOML_TYPE_SCALAR &&
                     strcmp(key->data.scalar, "topic")
                 )
             {
@@ -92,19 +91,21 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
             switch (t->type)
             {
                 case YOML_TYPE_MAPPING:
-                    for (size_t i = 0; i != t->data.mapping.size; ++i) {
+                    for (size_t i = 0; i != t->data.mapping.size; ++i)
+                    {
                         yoml_t *key = t->data.mapping.elements[i].key;
                         if (
                                 key->type == YOML_TYPE_SCALAR && 
                                 strcmp(key->data.scalar, "name") &&
-                                strcmp(key->data.scalar, "partition")
+                                strcmp(key->data.scalar, "partition") &&
+                                strcmp(key->data.scalar, "message")
                             )
                         {
                             kafka_topic_conf_set(rkt_conf, key->data.scalar, t->data.mapping.elements[i].value->data.scalar);
                         }
                     }
-                    /* get partition */
                     yoml_t *y;
+                    /* get name */
                     if ((y = yoml_get(t, "name")) != NULL) {
                         if (y->type != YOML_TYPE_SCALAR) {
                             h2o_configurator_errprintf(cmd, y, "`name` must be scalar");
@@ -112,12 +113,21 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
                         }
                         topic = y->data.scalar;
                     }
+                    /* get partition */
                     if ((y = yoml_get(t, "partition")) != NULL) {
                         if (y->type != YOML_TYPE_SCALAR) {
                             h2o_configurator_errprintf(cmd, y, "`partition` must be scalar");
                             return -1;
                         }
                         partition = atoi(y->data.scalar);
+                    }
+                    /* get message */
+                    if ((y = yoml_get(node, "message")) != NULL) {
+                        if (y->type != YOML_TYPE_SCALAR) {
+                            h2o_configurator_errprintf(cmd, y, "`message` must be a scalar");
+                            return -1;
+                        }
+                        fmt = y->data.scalar;
                     }
                     break;
                 case YOML_TYPE_SCALAR:
@@ -127,14 +137,6 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
                     h2o_configurator_errprintf(cmd, t, "`topic` must be scalar");
                     return -1;
             }
-        }
-        /* get message */
-        if ((t = yoml_get(node, "message")) != NULL) {
-            if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, t, "`message` must be a scalar");
-                return -1;
-            }
-            fmt = t->data.scalar;
         }
     } break;
     default:
