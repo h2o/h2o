@@ -75,7 +75,7 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
         {
             continue;
         }
-        if (key->type != YOML_TYPE_SCALAR)
+        if (value->type != YOML_TYPE_SCALAR)
         {
             h2o_configurator_errprintf(cmd, value, "kafka configuration must be scalar");
             return -1;
@@ -91,7 +91,7 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
         {
             continue;
         }
-        if (key->type != YOML_TYPE_MAPPING)
+        if (value->type != YOML_TYPE_MAPPING)
         {
             h2o_configurator_errprintf(cmd, value, "`topic` must be map");
             return -1;
@@ -104,7 +104,7 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
         {
             yoml_t *topic_key = value->data.mapping.elements[i].key;
             yoml_t *topic_value = value->data.mapping.elements[i].value;
-            if(topic_key->type != YOML_TYPE_SCALAR)
+            if(topic_value->type != YOML_TYPE_SCALAR)
             {
                 h2o_configurator_errprintf(cmd, value, "kafka.topic configuration must be scalar");
                 return -1;
