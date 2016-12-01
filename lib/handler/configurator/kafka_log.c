@@ -139,7 +139,7 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
         }
         if(topic == NULL)
         {
-            h2o_configurator_errprintf(cmd, value, "`topic->name` must be a declared");
+            h2o_configurator_errprintf(cmd, value, "`topic->name` must be declared");
             return -1;
         }
         if (!ctx->dry_run)
