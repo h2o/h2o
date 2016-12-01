@@ -59,98 +59,98 @@ void kafka_topic_conf_set(rd_kafka_topic_conf_t *rk_conf, const char* key, const
 static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct st_h2o_kafka_log_configurator_t *self = (void *)cmd->configurator;
-    h2o_kafka_log_handle_t *kh;
-    char* topic = "h2o";
     rd_kafka_conf_t* rk_conf = NULL;
-    rd_kafka_topic_conf_t* rkt_conf = NULL;
-    int32_t partition = RD_KAFKA_PARTITION_UA;
-    const char *fmt = NULL;
 
-    switch (node->type) {
-    // case YOML_TYPE_SCALAR:
-    //     break;
-    case YOML_TYPE_MAPPING: {
-        rk_conf = rd_kafka_conf_new();
-        rkt_conf = rd_kafka_topic_conf_new();
-        // kafka_conf_set(rk_conf, "metadata.broker.list", "localhost");
-        // kafka_conf_set(rk_conf, "group.id", "rdkafkad");
-        for (size_t i = 0; i != node->data.mapping.size; ++i) {
-            yoml_t *key = node->data.mapping.elements[i].key;
-            if (
-                    key->type == YOML_TYPE_SCALAR &&
-                    strcmp(key->data.scalar, "topic")
-                )
-            {
-                kafka_conf_set(rk_conf, key->data.scalar, node->data.mapping.elements[i].value->data.scalar);
-            }
-        }
-
-        yoml_t *t;
-        /* topic */
-        if ((t = yoml_get(node, "topic")) != NULL) {
-            switch (t->type)
-            {
-                case YOML_TYPE_MAPPING:
-                    for (size_t i = 0; i != t->data.mapping.size; ++i)
-                    {
-                        yoml_t *key = t->data.mapping.elements[i].key;
-                        if (
-                                key->type == YOML_TYPE_SCALAR && 
-                                strcmp(key->data.scalar, "name") &&
-                                strcmp(key->data.scalar, "partition") &&
-                                strcmp(key->data.scalar, "message")
-                            )
-                        {
-                            kafka_topic_conf_set(rkt_conf, key->data.scalar, t->data.mapping.elements[i].value->data.scalar);
-                        }
-                    }
-                    yoml_t *y;
-                    /* get name */
-                    if ((y = yoml_get(t, "name")) != NULL) {
-                        if (y->type != YOML_TYPE_SCALAR) {
-                            h2o_configurator_errprintf(cmd, y, "`name` must be scalar");
-                            return -1;
-                        }
-                        topic = y->data.scalar;
-                    }
-                    /* get partition */
-                    if ((y = yoml_get(t, "partition")) != NULL) {
-                        if (y->type != YOML_TYPE_SCALAR) {
-                            h2o_configurator_errprintf(cmd, y, "`partition` must be scalar");
-                            return -1;
-                        }
-                        partition = atoi(y->data.scalar);
-                    }
-                    /* get message */
-                    if ((y = yoml_get(node, "message")) != NULL) {
-                        if (y->type != YOML_TYPE_SCALAR) {
-                            h2o_configurator_errprintf(cmd, y, "`message` must be a scalar");
-                            return -1;
-                        }
-                        fmt = y->data.scalar;
-                    }
-                    break;
-                case YOML_TYPE_SCALAR:
-                    topic = t->data.scalar;
-                    break;
-                default:
-                    h2o_configurator_errprintf(cmd, t, "`topic` must be scalar");
-                    return -1;
-            }
-        }
-    } break;
-    default:
+    if(node->type != YOML_TYPE_MAPPING)
+    {
         h2o_configurator_errprintf(cmd, node, "node must be a scalar or a mapping");
         return -1;
     }
 
-    if (!ctx->dry_run) {
-        if ((kh = h2o_kafka_log_open_handle(rk_conf, rkt_conf, topic, partition, fmt)) == NULL)
+    rk_conf = rd_kafka_conf_new();
+    for (size_t i = 0; i != node->data.mapping.size; ++i) {
+        yoml_t *key = node->data.mapping.elements[i].key;
+        yoml_t *value = node->data.mapping.elements[i].value;
+        if(strcmp(key->data.scalar, "topic") == 0)
+        {
+            continue;
+        }
+        if (key->type != YOML_TYPE_SCALAR)
+        {
+            h2o_configurator_errprintf(cmd, value, "kafka configuration must be scalar");
             return -1;
-        h2o_vector_reserve(NULL, self->handles, self->handles->size + 1);
-        self->handles->entries[self->handles->size++] = kh;
+        }
+        kafka_conf_set(rk_conf, key->data.scalar, value->data.scalar);
     }
 
+    for (size_t i = 0; i != node->data.mapping.size; ++i)
+    {
+        yoml_t *key = node->data.mapping.elements[i].key;
+        yoml_t *value = node->data.mapping.elements[i].value;
+        if(strcmp(key->data.scalar, "topic") != 0)
+        {
+            continue;
+        }
+        if (key->type != YOML_TYPE_MAPPING)
+        {
+            h2o_configurator_errprintf(cmd, value, "`topic` must be map");
+            return -1;
+        }
+        char* topic = NULL;
+        int32_t partition = RD_KAFKA_PARTITION_UA;
+        const char *fmt = NULL;
+        rd_kafka_topic_conf_t* rkt_conf = rd_kafka_topic_conf_new();
+        for (size_t i = 0; i != value->data.mapping.size; ++i)
+        {
+            yoml_t *topic_key = value->data.mapping.elements[i].key;
+            yoml_t *topic_value = value->data.mapping.elements[i].value;
+            if(topic_key->type != YOML_TYPE_SCALAR)
+            {
+                h2o_configurator_errprintf(cmd, value, "kafka.topic configuration must be scalar");
+                return -1;
+            }
+            if (strcmp(topic_key->data.scalar, "name") == 0) {
+                if (topic_value->type != YOML_TYPE_SCALAR) {
+                    h2o_configurator_errprintf(cmd, topic_value, "`name` must be scalar");
+                    return -1;
+                }
+                topic = topic_value->data.scalar;
+            }
+            else
+            if (strcmp(topic_key->data.scalar, "partition") == 0) {
+                if (topic_value->type != YOML_TYPE_SCALAR) {
+                    h2o_configurator_errprintf(cmd, topic_value, "`partition` must be scalar");
+                    return -1;
+                }
+                partition = atoi(topic_value->data.scalar);
+            }
+            else
+            if (strcmp(topic_key->data.scalar, "message") == 0) {
+                if (topic_value->type != YOML_TYPE_SCALAR) {
+                    h2o_configurator_errprintf(cmd, topic_value, "`message` must be a scalar");
+                    return -1;
+                }
+                fmt = topic_value->data.scalar;
+            }
+            else
+            {
+                kafka_topic_conf_set(rkt_conf, topic_key->data.scalar, topic_value->data.scalar);
+            }
+        }
+        if(topic == NULL)
+        {
+            h2o_configurator_errprintf(cmd, value, "`topic->name` must be a declared");
+            return -1;
+        }
+        if (!ctx->dry_run)
+        {
+            h2o_kafka_log_handle_t *kh;
+            if ((kh = h2o_kafka_log_open_handle(rk_conf, rkt_conf, topic, partition, fmt)) == NULL)
+                return -1;
+            h2o_vector_reserve(NULL, self->handles, self->handles->size + 1);
+            self->handles->entries[self->handles->size++] = kh;
+        }
+    }
     return 0;
 }
 
