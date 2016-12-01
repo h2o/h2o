@@ -25,6 +25,13 @@ hosts:
         partition_hash: <optional_format_string>
         partition: <optional_integer>
         <... other_kafka_topic_configs>
+      topic:
+        name: h2o-kafka-2 <required>
+        message: <optional_format_string>
+        key: <optional_format_string>
+        partition_hash: <optional_format_string>
+        partition: <optional_integer>
+        <... other_kafka_topic_configs>
   "alternate.127.0.0.1.xip.io:8081":
     listen:
       port: 8081
