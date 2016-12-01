@@ -34,8 +34,10 @@
 #include "librdkafka/rdkafka.h"
 
 struct st_h2o_kafka_log_handle_t {
-    h2o_logconf_t *logconf;
-
+    h2o_logconf_t *logconf_message;
+    h2o_logconf_t *logconf_key;
+    h2o_logconf_t *logconf_hash;
+    // h2o_logconf_t *logconf;
 
     rd_kafka_t *rk;
 
@@ -60,12 +62,31 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
 {
     struct st_h2o_kafka_logger_t *self = (struct st_h2o_kafka_logger_t *)_self;
     h2o_kafka_log_handle_t *kh = self->kh;
-    char *logline, buf[4096];
-    size_t len;
+    char *logline_message;
+    char *logline_key = NULL;
+    char *logline_hash = NULL;
+    char buf_message[4096];
+    char buf_key[4096];
+    char buf_hash[4096];
+    size_t len_message = sizeof(buf_message);
+    size_t len_hash = 0;
+    size_t len_key = 0;
 
     /* stringify */
-    len = sizeof(buf);
-    logline = h2o_log_request(kh->logconf, req, &len, buf);
+    len_message = sizeof(buf_message);
+    logline_message = h2o_log_request(kh->logconf_message, req, &len_message, buf_message);
+    
+    if(kh->logconf_hash)
+    {
+    len_hash    = sizeof(buf_hash   );
+    logline_hash    = h2o_log_request(kh->logconf_hash   , req, &len_hash   , buf_hash   );
+    }
+    
+    if(kh->logconf_key)
+    {
+    len_key     = sizeof(buf_key    );
+    logline_key     = h2o_log_request(kh->logconf_key    , req, &len_key    , buf_key    );
+    }
 
     int attemp = 0;
     rd_kafka_poll(self->kh->rk, 0);
@@ -77,8 +98,8 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
                   self->kh->partition,
                                         // int msgflags
                   RD_KAFKA_MSG_F_COPY,
-                  logline, len,
-                  NULL, 0,              // const void *key, size_t keylen,
+                  logline_message, len_message,
+                  logline_key    , len_key    ,
                   NULL                  // void *msg_opaque (for callbacks, optional)
                   );
     if (res)
@@ -105,8 +126,13 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
     }
 
     /* free memory */
-    if (logline != buf)
-        free(logline);
+    if (logline_message != buf_message) free(logline_message);
+    
+    if (logline_key != NULL)
+    if (logline_hash    != buf_hash   ) free(logline_hash   );
+    
+    if (logline_key != NULL)
+    if (logline_key     != buf_key    ) free(logline_key    );
 }
 
 // int h2o_kafka_log_open_log(const char *path)
@@ -151,7 +177,9 @@ static void on_dispose_handle(void *_kh)
 {
     h2o_kafka_log_handle_t *kh = _kh;
 
-    h2o_logconf_dispose(kh->logconf);
+    h2o_logconf_dispose(kh->logconf_message);
+    h2o_logconf_dispose(kh->logconf_key);
+    h2o_logconf_dispose(kh->logconf_hash);
     // close(kh->fd);
 }
 
@@ -160,16 +188,32 @@ h2o_kafka_log_handle_t *h2o_kafka_log_open_handle(
     rd_kafka_topic_conf_t* rkt_conf,
     const char *topic,
     int32_t partition,
-    const char *fmt)
+    const char *fmt_messages,
+    const char *fmt_key,
+    const char *fmt_hash)
 {
-    h2o_logconf_t *logconf;
+    h2o_logconf_t *logconf_message;
+    h2o_logconf_t *logconf_key= NULL;
+    h2o_logconf_t *logconf_hash = NULL;
     h2o_kafka_log_handle_t *kh;
     char errbuf[512];
 
     /* default to combined log format */
-    if (fmt == NULL)
-        fmt = "%h %l %u %t \"%r\" %s %b \"%{Referer}i\" \"%{User-agent}i\"";
-    if ((logconf = h2o_logconf_compile(fmt, H2O_LOGCONF_ESCAPE_APACHE, errbuf)) == NULL)
+    if (fmt_messages == NULL)
+        fmt_messages = "%h %l %u %t \"%r\" %s %b \"%{Referer}i\" \"%{User-agent}i\"";
+    if ((logconf_message = h2o_logconf_compile(fmt_messages, H2O_LOGCONF_ESCAPE_APACHE, errbuf)) == NULL)
+    {
+        fprintf(stderr, "%s\n", errbuf);
+        return NULL;
+    }
+    if (fmt_key != NULL)
+    if ((logconf_key     = h2o_logconf_compile(fmt_key     , H2O_LOGCONF_ESCAPE_APACHE, errbuf)) == NULL)
+    {
+        fprintf(stderr, "%s\n", errbuf);
+        return NULL;
+    }
+    if (fmt_hash != NULL)
+    if ((logconf_hash    = h2o_logconf_compile(fmt_hash    , H2O_LOGCONF_ESCAPE_APACHE, errbuf)) == NULL)
     {
         fprintf(stderr, "%s\n", errbuf);
         return NULL;
@@ -178,7 +222,11 @@ h2o_kafka_log_handle_t *h2o_kafka_log_open_handle(
     rd_kafka_t *rk = rd_kafka_new(RD_KAFKA_PRODUCER, rk_conf, errbuf, sizeof(errbuf));
     if (rk == NULL)
     {
-        h2o_logconf_dispose(logconf);
+        h2o_logconf_dispose(logconf_message);
+        if(logconf_key)
+        h2o_logconf_dispose(logconf_key    );
+        if(logconf_hash)
+        h2o_logconf_dispose(logconf_hash   );
         fprintf(stderr, "%s\n", errbuf);
         return NULL;
     }
@@ -186,7 +234,11 @@ h2o_kafka_log_handle_t *h2o_kafka_log_open_handle(
     rd_kafka_topic_t *rkt = rd_kafka_topic_new(rk, topic, rkt_conf);
     if (rkt == NULL)
     {
-        h2o_logconf_dispose(logconf);
+        h2o_logconf_dispose(logconf_message);
+        if(logconf_key)
+        h2o_logconf_dispose(logconf_key    );
+        if(logconf_hash)
+        h2o_logconf_dispose(logconf_hash   );
         fprintf(stderr, "%s\n", errbuf);
         return NULL;
     }
@@ -198,7 +250,9 @@ h2o_kafka_log_handle_t *h2o_kafka_log_open_handle(
     // }
 
     kh = h2o_mem_alloc_shared(NULL, sizeof(*kh), on_dispose_handle);
-    kh->logconf = logconf;
+    kh->logconf_message = logconf_message;
+    kh->logconf_key     = logconf_key    ;
+    kh->logconf_hash    = logconf_hash   ;
     kh->rk = rk;
     kh->rkt = rkt;
     kh->partition = partition;

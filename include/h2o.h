@@ -1549,7 +1549,9 @@ h2o_kafka_log_handle_t *h2o_kafka_log_open_handle(rd_kafka_conf_t* rk_conf,
     rd_kafka_topic_conf_t* rkt_conf,
     const char *topic,
     int32_t partition,
-    const char *fmt);
+    const char *fmt_messages,
+    const char *fmt_key,
+    const char *fmt_hash);
 h2o_logger_t *h2o_kafka_log_register(h2o_pathconf_t *pathconf, h2o_kafka_log_handle_t *handle);
 void h2o_kafka_log_register_configurator(h2o_globalconf_t *conf);
 

@@ -32,28 +32,30 @@ struct st_h2o_kafka_log_configurator_t {
     st_h2o_kafka_log_handle_vector_t _handles_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
-void kafka_conf_set(rd_kafka_conf_t *rk_conf, const char* key, const char* value)
+int kafka_conf_set(rd_kafka_conf_t *rk_conf, const char* key, const char* value)
 {
     char errbuf[512];
 
     int res = rd_kafka_conf_set(rk_conf, key, value, &(errbuf[0]), sizeof(errbuf));
     if (res != RD_KAFKA_CONF_OK)
     {
-        fprintf(stderr, "Abort: %s\n", &(errbuf[0]));
-        abort();
+        fprintf(stderr, "Kafka configuration error: %s\n", &(errbuf[0]));
+        return -1;
     }
+    return 0;
 }
 
-void kafka_topic_conf_set(rd_kafka_topic_conf_t *rk_conf, const char* key, const char* value)
+int kafka_topic_conf_set(rd_kafka_topic_conf_t *rk_conf, const char* key, const char* value)
 {
     char errbuf[512];
 
     int res = rd_kafka_topic_conf_set(rk_conf, key, value, &(errbuf[0]), sizeof(errbuf));
     if (res != RD_KAFKA_CONF_OK)
     {
-        fprintf(stderr, "Abort: %s\n", &(errbuf[0]));
-        abort();
+        fprintf(stderr, "Kafka topic configuration error: %s\n", &(errbuf[0]));
+        return -1;
     }
+    return 0;
 }
 
 static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -80,7 +82,8 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
             h2o_configurator_errprintf(cmd, value, "kafka configuration must be scalar");
             return -1;
         }
-        kafka_conf_set(rk_conf, key->data.scalar, value->data.scalar);
+        if(kafka_conf_set(rk_conf, key->data.scalar, value->data.scalar))
+            return -1;
     }
 
     for (size_t i = 0; i != node->data.mapping.size; ++i)
@@ -98,7 +101,9 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
         }
         char* topic = NULL;
         int32_t partition = RD_KAFKA_PARTITION_UA;
-        const char *fmt = NULL;
+        const char *fmt_message = NULL;
+        const char *fmt_key     = NULL;
+        const char *fmt_hash    = NULL;
         rd_kafka_topic_conf_t* rkt_conf = rd_kafka_topic_conf_new();
         for (size_t i = 0; i != value->data.mapping.size; ++i)
         {
@@ -130,11 +135,28 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
                     h2o_configurator_errprintf(cmd, topic_value, "`message` must be a scalar");
                     return -1;
                 }
-                fmt = topic_value->data.scalar;
+                fmt_message = topic_value->data.scalar;
+            }
+            else
+            if (strcmp(topic_key->data.scalar, "key") == 0) {
+                if (topic_value->type != YOML_TYPE_SCALAR) {
+                    h2o_configurator_errprintf(cmd, topic_value, "`key` must be a scalar");
+                    return -1;
+                }
+                fmt_message = topic_value->data.scalar;
+            }
+            else
+            if (strcmp(topic_key->data.scalar, "partition_hash") == 0) {
+                if (topic_value->type != YOML_TYPE_SCALAR) {
+                    h2o_configurator_errprintf(cmd, topic_value, "`partition_hash` must be a scalar");
+                    return -1;
+                }
+                fmt_message = topic_value->data.scalar;
             }
             else
             {
-                kafka_topic_conf_set(rkt_conf, topic_key->data.scalar, topic_value->data.scalar);
+                if(kafka_topic_conf_set(rkt_conf, topic_key->data.scalar, topic_value->data.scalar))
+                    return -1;
             }
         }
         if(topic == NULL)
@@ -145,7 +167,7 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
         if (!ctx->dry_run)
         {
             h2o_kafka_log_handle_t *kh;
-            if ((kh = h2o_kafka_log_open_handle(rk_conf, rkt_conf, topic, partition, fmt)) == NULL)
+            if ((kh = h2o_kafka_log_open_handle(rk_conf, rkt_conf, topic, partition, fmt_message, fmt_key, fmt_hash)) == NULL)
                 return -1;
             h2o_vector_reserve(NULL, self->handles, self->handles->size + 1);
             self->handles->entries[self->handles->size++] = kh;
