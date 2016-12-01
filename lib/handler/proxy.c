@@ -155,8 +155,11 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
         }
     }
     h2o_url_copy(NULL, &self->upstream, upstream);
-    if (to_sa_err)
+    if (to_sa_err) {
         h2o_strtolower(self->upstream.host.base, self->upstream.host.len);
+    } else {
+        self->upstream.host_is_unix_path = 1;
+    }
     self->config = *config;
     if (self->config.ssl_ctx != NULL)
         SSL_CTX_up_ref(self->config.ssl_ctx);

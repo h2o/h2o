@@ -66,7 +66,7 @@ static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, 
         goto NoRewrite;
     if (loc_parsed.scheme != &H2O_URL_SCHEME_HTTP)
         goto NoRewrite;
-    if (!h2o_lcstris(loc_parsed.host.base, loc_parsed.host.len, match->host.base, match->host.len))
+    if (!h2o_url_compare_hosts(loc_parsed.host, match->host, match->host_is_unix_path))
         goto NoRewrite;
     if (h2o_url_get_port(&loc_parsed) != h2o_url_get_port(match))
         goto NoRewrite;

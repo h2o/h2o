@@ -38,6 +38,7 @@ typedef struct st_h2o_url_t {
     h2o_iovec_t host;
     h2o_iovec_t path;
     uint16_t _port;
+    int host_is_unix_path;
 } h2o_url_t;
 
 /**
@@ -107,6 +108,7 @@ inline int h2o_url_init(h2o_url_t *url, const h2o_url_scheme_t *scheme, h2o_iove
     url->scheme = scheme;
     url->authority = authority;
     url->path = path;
+    url->host_is_unix_path = 0;
     return 0;
 }
 
@@ -119,6 +121,17 @@ inline h2o_iovec_t h2o_url_stringify(h2o_mem_pool_t *pool, const h2o_url_t *url)
 {
     h2o_url_t tmp;
     return h2o_url_resolve(pool, url, NULL, &tmp);
+}
+
+/**
+ * Compares to hostnames, taking into account whether they contain a
+ * unix path (the comparison will be case insensitive) or not.
+ */
+static inline int h2o_url_compare_hosts(const h2o_iovec_t host_a, const h2o_iovec_t host_b, int host_is_unix_path)
+{
+    if (!host_is_unix_path)
+        return h2o_lcstris(host_a.base, host_a.len, host_b.base, host_b.len);
+    return host_a.len == host_b.len && !strncasecmp(host_a.base, host_b.base, host_b.len);
 }
 
 #endif
