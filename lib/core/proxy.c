@@ -204,13 +204,18 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
         offset += sprintf(buf.base + offset, "content-length: %zu\r\n", req->entity.len);
     }
 
-    h2o_headers_t rewrited_headers = {};
-    h2o_headers_command_t *cmd;
-    h2o_vector_reserve(&req->pool, &rewrited_headers, req->headers.capacity);
-    memcpy(rewrited_headers.entries, req->headers.entries, sizeof(req->headers.entries[0]) * req->headers.size);
-    rewrited_headers.size = req->headers.size;
-    for (cmd = req->overrides->header_cmds->entries; cmd->cmd != H2O_HEADERS_CMD_NULL; ++cmd)
-        h2o_rewrite_headers(&req->pool, &rewrited_headers, cmd);
+    h2o_headers_t rewrited_headers = req->headers;
+    if (req->overrides != NULL && req->overrides->header_cmds != NULL && req->overrides->header_cmds->size != 0) {
+        rewrited_headers.entries = NULL;
+        rewrited_headers.size = 0;
+        rewrited_headers.capacity = 0;
+        h2o_headers_command_t *cmd;
+        h2o_vector_reserve(&req->pool, &rewrited_headers, req->headers.capacity);
+        memcpy(rewrited_headers.entries, req->headers.entries, sizeof(req->headers.entries[0]) * req->headers.size);
+        rewrited_headers.size = req->headers.size;
+        for (cmd = req->overrides->header_cmds->entries; cmd->cmd != H2O_HEADERS_CMD_NULL; ++cmd)
+            h2o_rewrite_headers(&req->pool, &rewrited_headers, cmd);
+    }
     {
         const h2o_header_t *h, *h_end;
         for (h = rewrited_headers.entries, h_end = h + rewrited_headers.size; h != h_end; ++h) {
