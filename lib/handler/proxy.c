@@ -49,6 +49,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     overrides->location_rewrite.path_prefix = req->pathconf->path;
     overrides->use_proxy_protocol = self->config.use_proxy_protocol;
     overrides->client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
+    overrides->header_cmds = &self->config.header_cmds;
 
     /* determine the scheme and authority */
     if (self->config.preserve_host) {
@@ -57,13 +58,6 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     } else {
         scheme = self->upstream.scheme;
         authority = &self->upstream.authority;
-    }
-
-    /* rewrite headers */
-    if (self->config.header_cmds.size != 0) {
-        h2o_headers_command_t *cmd;
-        for (cmd = self->config.header_cmds.entries; cmd->cmd != H2O_HEADERS_CMD_NULL; ++cmd)
-            h2o_rewrite_headers(&req->pool, &req->headers, cmd);
     }
 
     /* request reprocess */

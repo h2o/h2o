@@ -98,6 +98,8 @@ typedef struct st_h2o_hostconf_t h2o_hostconf_t;
 typedef struct st_h2o_globalconf_t h2o_globalconf_t;
 typedef struct st_h2o_mimemap_t h2o_mimemap_t;
 typedef struct st_h2o_logconf_t h2o_logconf_t;
+typedef struct st_h2o_headers_command_t h2o_headers_command_t;
+typedef H2O_VECTOR(h2o_headers_command_t) h2o_headers_command_vector_t;
 
 /**
  * a predefined, read-only, fast variant of h2o_iovec_t, defined in h2o/token.h
@@ -840,6 +842,10 @@ typedef struct st_h2o_req_overrides_t {
      * whether if the PROXY header should be sent
      */
     unsigned use_proxy_protocol : 1;
+    /**
+     * headers rewrite commands to be used when sending requests to upstream (or NULL)
+     */
+    h2o_headers_command_vector_t *header_cmds;
 } h2o_req_overrides_t;
 
 /**
@@ -1727,13 +1733,11 @@ enum {
     H2O_HEADERS_CMD_UNSET       /* removes the named header(s) */
 };
 
-typedef struct st_h2o_headers_command_t {
+struct st_h2o_headers_command_t {
     int cmd;
     h2o_iovec_t *name; /* maybe a token */
     h2o_iovec_t value;
-} h2o_headers_command_t;
-
-typedef H2O_VECTOR(h2o_headers_command_t) h2o_headers_command_vector_t;
+};
 
 /**
  * registers a list of commands terminated by cmd==H2O_HEADERS_CMD_NULL

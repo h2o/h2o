@@ -203,9 +203,17 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
         RESERVE(sizeof("content-length: " H2O_UINT64_LONGEST_STR) - 1);
         offset += sprintf(buf.base + offset, "content-length: %zu\r\n", req->entity.len);
     }
+
+    h2o_headers_t rewrited_headers = {};
+    h2o_headers_command_t *cmd;
+    h2o_vector_reserve(&req->pool, &rewrited_headers, req->headers.capacity);
+    memcpy(rewrited_headers.entries, req->headers.entries, sizeof(req->headers.entries[0]) * req->headers.size);
+    rewrited_headers.size = req->headers.size;
+    for (cmd = req->overrides->header_cmds->entries; cmd->cmd != H2O_HEADERS_CMD_NULL; ++cmd)
+        h2o_rewrite_headers(&req->pool, &rewrited_headers, cmd);
     {
         const h2o_header_t *h, *h_end;
-        for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h) {
+        for (h = rewrited_headers.entries, h_end = h + rewrited_headers.size; h != h_end; ++h) {
             if (h2o_iovec_is_token(h->name)) {
                 const h2o_token_t *token = (void *)h->name;
                 if (token->proxy_should_drop) {
