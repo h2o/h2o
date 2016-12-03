@@ -274,27 +274,6 @@ static int on_config_preserve_x_forwarded_proto(h2o_configurator_command_t *cmd,
     return 0;
 }
 
-#define DEFINE_2ARG(fn, cmd_id)                                                                                                    \
-static int fn(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)                                  \
-{                                                                                                                              \
-    struct proxy_configurator_t *self = (void *)cmd->configurator;\
-    return h2o_on_config_header_2arg(cmd, ctx, cmd_id, node, &self->vars->header_cmds);                                                                      \
-}
-
-DEFINE_2ARG(on_config_header_add, H2O_HEADERS_CMD_ADD)
-DEFINE_2ARG(on_config_header_append, H2O_HEADERS_CMD_APPEND)
-DEFINE_2ARG(on_config_header_merge, H2O_HEADERS_CMD_MERGE)
-DEFINE_2ARG(on_config_header_set, H2O_HEADERS_CMD_SET)
-DEFINE_2ARG(on_config_header_setifempty, H2O_HEADERS_CMD_SETIFEMPTY)
-
-#undef DEFINE_2ARG
-
-static int on_config_header_unset(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
-{
-    struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_on_config_header_unset(cmd, ctx, node, &self->vars->header_cmds);
-}
-
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)_self;
@@ -352,6 +331,12 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
     return 0;
 }
 
+static h2o_headers_command_vector_t *get_headers_commands(h2o_configurator_t *_self)
+{
+    struct proxy_configurator_t *self = (void *)_self;
+    return &self->vars->header_cmds;
+}
+
 void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
 {
     struct proxy_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
@@ -399,13 +384,5 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.emit-x-forwarded-headers",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_emit_x_forwarded_headers);
-#define DEFINE_CMD(name, cb)                                                                                                       \
-    h2o_configurator_define_command(&c->super, name, H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, cb)
-    DEFINE_CMD("proxy.header.add", on_config_header_add);
-    DEFINE_CMD("proxy.header.append", on_config_header_append);
-    DEFINE_CMD("proxy.header.merge", on_config_header_merge);
-    DEFINE_CMD("proxy.header.set", on_config_header_set);
-    DEFINE_CMD("proxy.header.setifempty", on_config_header_setifempty);
-    DEFINE_CMD("proxy.header.unset", on_config_header_unset);
-#undef DEFINE_CMD
+    h2o_configurator_define_headers_commands(conf, &c->super, "proxy.header", get_headers_commands);
 }

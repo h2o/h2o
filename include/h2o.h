@@ -1733,6 +1733,8 @@ typedef struct st_h2o_headers_command_t {
     h2o_iovec_t value;
 } h2o_headers_command_t;
 
+typedef H2O_VECTOR(h2o_headers_command_t) h2o_headers_command_vector_t;
+
 /**
  * registers a list of commands terminated by cmd==H2O_HEADERS_CMD_NULL
  */
@@ -1757,7 +1759,7 @@ typedef struct st_h2o_proxy_config_vars_t {
         int enabled;
         uint64_t timeout;
     } websocket;
-    H2O_VECTOR(h2o_headers_command_t) header_cmds;
+    h2o_headers_command_vector_t header_cmds;
     SSL_CTX *ssl_ctx; /* optional */
 } h2o_proxy_config_vars_t;
 

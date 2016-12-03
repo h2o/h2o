@@ -266,7 +266,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/throttle_resp.c
     lib/handler/configurator/status.c
     lib/handler/configurator/http2_debug_state.c
-    lib/handler/configurator/util.c
+    lib/handler/configurator/headers_util.c
 
     lib/http1.c
 
