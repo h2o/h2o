@@ -91,16 +91,23 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
     int attemp = 0;
     rd_kafka_poll(self->kh->rk, 0);
     /* emit */
+    struct timeval ts = req->timestamps.request_begin_at;
     L:
     attemp++;
-    int res = rd_kafka_produce(
+    int res = rd_kafka_producev(
                   self->kh->rkt,
+                  RD_KAFKA_VTYPE_PARTITION,
                   self->kh->partition,
-                                        // int msgflags
+                  RD_KAFKA_VTYPE_MSGFLAGS,
                   RD_KAFKA_MSG_F_COPY,
+                  RD_KAFKA_VTYPE_VALUE,
                   logline_message, len_message,
+                  RD_KAFKA_VTYPE_KEY
                   logline_key    , len_key    ,
-                  NULL                  // void *msg_opaque (for callbacks, optional)
+                  RD_KAFKA_VTYPE_OPAQUE,
+                  NULL,                  // void *msg_opaque (for callbacks, optional)
+                  RD_KAFKA_VTYPE_TIMESTAMP,
+                  ts.tv_sec * 1000 + ts/tv_usec / 1000
                   );
     if (res)
     {
