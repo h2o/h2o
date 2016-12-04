@@ -95,19 +95,14 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
     L:
     attemp++;
     int res = rd_kafka_producev(
-                  self->kh->rkt,
-                  RD_KAFKA_VTYPE_PARTITION,
-                  self->kh->partition,
-                  RD_KAFKA_VTYPE_MSGFLAGS,
-                  RD_KAFKA_MSG_F_COPY,
-                  RD_KAFKA_VTYPE_VALUE,
-                  logline_message, len_message,
-                  RD_KAFKA_VTYPE_KEY
-                  logline_key    , len_key    ,
-                  RD_KAFKA_VTYPE_OPAQUE,
-                  NULL,                  // void *msg_opaque (for callbacks, optional)
-                  RD_KAFKA_VTYPE_TIMESTAMP,
-                  ts.tv_sec * 1000 + ts/tv_usec / 1000
+                  self->kh->rk,
+                  RD_KAFKA_V_RKT(self->kh->rkt),
+                  RD_KAFKA_V_PARTITION(self->kh->partition),
+                  RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                  RD_KAFKA_V_VALUE(logline_message, len_message),
+                  RD_KAFKA_V_KEY(logline_key, len_key),
+                  RD_KAFKA_V_TIMESTAMP(ts.tv_sec * 1000 + ts.tv_usec / 1000),
+                  RD_KAFKA_V_END
                   );
     if (res)
     {
