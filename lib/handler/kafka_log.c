@@ -94,16 +94,24 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
     struct timeval ts = req->timestamps.request_begin_at;
     L:
     attemp++;
+    // int res = rd_kafka_produce(
+    //         self->kh->rkt,
+    //         self->kh->partition,
+    //         RD_KAFKA_MSG_F_COPY,
+    //         logline_message, len_message,
+    //         logline_key, len_key,
+    //         NULL
+    //     );
     int res = rd_kafka_producev(
-                  self->kh->rk,
-                  RD_KAFKA_V_RKT(self->kh->rkt),
-                  RD_KAFKA_V_PARTITION(self->kh->partition),
-                  RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                  RD_KAFKA_V_VALUE(logline_message, len_message),
-                  RD_KAFKA_V_KEY(logline_key, len_key),
-                  RD_KAFKA_V_TIMESTAMP(ts.tv_sec * 1000 + ts.tv_usec / 1000),
-                  RD_KAFKA_V_END
-                  );
+        self->kh->rk,
+        RD_KAFKA_V_RKT(self->kh->rkt),
+        RD_KAFKA_V_PARTITION(self->kh->partition),
+        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+        RD_KAFKA_V_VALUE(logline_message, len_message),
+        RD_KAFKA_V_KEY(logline_key, len_key),
+        RD_KAFKA_V_TIMESTAMP((int64_t)(ts.tv_sec) * 1000 + (int64_t)(ts.tv_usec) / 1000),
+        RD_KAFKA_V_END
+        );
     if (res)
     {
         int err = rd_kafka_errno();
