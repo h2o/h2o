@@ -1,0 +1,7 @@
+GET /?resp:status=200&resp:x-reproxy-url=http://127.0.0.1%3A51369/?resp:status=302%26resp:location=index.txt HTTP/1.1
+Host: 127.0.0.1:50661
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+
+
+--MARK--

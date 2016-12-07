@@ -1,0 +1,7 @@
+GET /?resp:status=302&resp:location=http://127.0.0.1%3A51369/abc HTTP/1.1
+Host: 127.0.0.1:50661
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+
+
+--MARK--
