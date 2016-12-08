@@ -19,6 +19,13 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+
+
+/*
+ * This file implements a test harness for using h2o with LibFuzzer.
+ * See http://llvm.org/docs/LibFuzzer.html for more info.
+ */
+
 #define H2O_USE_EPOLL 1
 #include <string.h>
 #include <errno.h>
@@ -48,6 +55,10 @@
 #  error "Please defined one of HTTP1 or HTTP2, but not both"
 #endif
 
+
+/*
+ * Registers a request handler with h2o
+ */
 static h2o_pathconf_t *register_handler(h2o_hostconf_t *hostconf, const char *path, int (*on_req)(h2o_handler_t *, h2o_req_t *))
 {
     h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, path, 0);
@@ -56,6 +67,10 @@ static h2o_pathconf_t *register_handler(h2o_hostconf_t *hostconf, const char *pa
     return pathconf;
 }
 
+
+/*
+ * Request handler used for testing. Returns a basic "200 OK" response.
+ */
 static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
 {
     static h2o_generator_t generator = {NULL, NULL};
@@ -73,6 +88,12 @@ static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
     return 0;
 }
 
+
+/*
+ * Request handler used for testing reproxy requests. Returns a basic "200 OK"
+ * response.
+ * See https://h2o.examp1e.net/configure/reproxy_directives.html for more info.
+ */
 static int reproxy_test(h2o_handler_t *self, h2o_req_t *req)
 {
     if (!h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
@@ -104,12 +125,19 @@ static int drain(int fd)
     return 0;
 }
 
+
+/* Args passed to h2o client thread (see below) */
 struct writer_thread_arg {
     char *buf;
     size_t len;
     int fd;
 };
 
+
+/*
+ * Thread: Writes fuzzed input to socket and then reads results back. Acts
+ * as a client to h2o.
+ */
 void *writer_thread(void *arg)
 {
     struct writer_thread_arg *wta = (struct writer_thread_arg *)arg;
@@ -120,6 +148,10 @@ void *writer_thread(void *arg)
     char *buf = wta->buf;
     int len = wta->len;
 
+    /*
+     * Send fuzzed input and read results until the socket is closed (or
+     * something spurious happens)
+     */
     while(cnt++ < 20 && (pos < len || sockinp >= 0)) {
 #define MARKER "\n--MARK--\n"
         /* send 1 packet */
@@ -158,6 +190,11 @@ void *writer_thread(void *arg)
     return NULL;
 }
 
+
+/*
+ * Creates socketpair and passes fuzzed input to a thread (the HTTP[/2] client)
+ * for writing to the target h2o server. Returns the server socket.
+ */
 static int feeder(pthread_t *t, char *buf, size_t len)
 {
     int pair[2];
@@ -174,15 +211,22 @@ static int feeder(pthread_t *t, char *buf, size_t len)
     return pair[1];
 }
 
+
+/*
+ * Creates a client thread and uses it to pass fuzzed input to h2o server.
+ * Returns server socket fd.
+ */
 static int create_accepted(pthread_t *t, char *buf, size_t len)
 {
     int fd;
     h2o_socket_t *sock;
     struct timeval connected_at = *h2o_get_timestamp(&ctx, NULL, NULL);
 
+    /* Create an HTTP[/2] client) that will send the fuzzed input */
     fd = feeder(t, buf, len);
     assert(fd >= 0);
 
+    /* Pass the server socket to h2o and invoke request processing */
     sock = h2o_evloop_socket_create(ctx.loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION);
 
 #if defined(HTTP1)
@@ -194,11 +238,20 @@ static int create_accepted(pthread_t *t, char *buf, size_t len)
     return fd;
 }
 
+
+/*
+ * Returns true if fd if valid. Used to determine when connection is closed.
+ */
 static int is_valid_fd(int fd)
 {
     return fcntl(fd, F_GETFD) != -1 || errno != EBADF;
 }
 
+
+/*
+ * Entry point for libfuzzer.
+ * See http://llvm.org/docs/LibFuzzer.html for more info
+ */
 int init_done;
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 {
@@ -207,6 +260,10 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
     h2o_hostconf_t *hostconf;
     pthread_t t;
 
+    /*
+     * Perform one-time initialization: create a single h2o host with multiple
+     * request handlers
+     */
     if (!init_done) {
         signal(SIGPIPE, SIG_IGN);
 
@@ -225,14 +282,21 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         accept_ctx.hosts = config.hosts;
         init_done = 1;
     }
+
+    /*
+     * Create a client thread that will pass the fuzzed input to the h2o server
+     * and read the results (and exit when done).
+     */
     c = create_accepted(&t, (char *)Data, (size_t)Size);
     if (c < 0) {
         goto Error;
     }
 
+    /* Loop until the connection is closed by the client or server */
     while (is_valid_fd(c) && h2o_evloop_run(ctx.loop, INT32_MAX) == 0)
         ;
 
+    /* Wait for the client thread to exit */
     pthread_join(t, NULL);
     return 0;
 Error:
