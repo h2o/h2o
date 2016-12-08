@@ -9,8 +9,13 @@
 
 
 #ifdef __cplusplus
+#ifdef MRB_ENABLE_CXX_EXCEPTION
+#define MRB_BEGIN_DECL
+#define MRB_END_DECL
+#else
 # define MRB_BEGIN_DECL extern "C" {
 # define MRB_END_DECL	}
+#endif
 #else
 /** Start declarations in C mode */
 # define MRB_BEGIN_DECL

@@ -245,7 +245,6 @@ codedump(mrb_state *mrb, mrb_irep *irep)
         printf("\tbreak\t"); break;
       default:
         printf("\tbroken\t"); break;
-        break;
       }
       print_lv(mrb, irep, c, RA);
       break;
@@ -323,7 +322,7 @@ codedump(mrb_state *mrb, mrb_irep *irep)
              GETARG_C(c));
       break;
     case OP_EQ:
-      printf("OP_EQ\tR%d\t:%s\t%d\n", GETARG_A(c),
+      printf("OP_EQ\t\tR%d\t:%s\t%d\n", GETARG_A(c),
              mrb_sym2name(mrb, irep->syms[GETARG_B(c)]),
              GETARG_C(c));
       break;

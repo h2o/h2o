@@ -8,6 +8,7 @@
 #include <mruby/class.h>
 #include <mruby/numeric.h>
 #include <mruby/string.h>
+#include <mruby/class.h>
 
 MRB_API mrb_bool
 mrb_obj_eq(mrb_state *mrb, mrb_value v1, mrb_value v2)
@@ -265,6 +266,7 @@ mrb_init_object(mrb_state *mrb)
   struct RClass *f;
 
   mrb->nil_class   = n = mrb_define_class(mrb, "NilClass",   mrb->object_class);
+  MRB_SET_INSTANCE_TT(n, MRB_TT_TRUE);
   mrb_undef_class_method(mrb, n, "new");
   mrb_define_method(mrb, n, "&",    false_and,      MRB_ARGS_REQ(1));  /* 15.2.4.3.1  */
   mrb_define_method(mrb, n, "^",    false_xor,      MRB_ARGS_REQ(1));  /* 15.2.4.3.2  */
@@ -274,6 +276,7 @@ mrb_init_object(mrb_state *mrb)
   mrb_define_method(mrb, n, "inspect", nil_inspect, MRB_ARGS_NONE());
 
   mrb->true_class  = t = mrb_define_class(mrb, "TrueClass",  mrb->object_class);
+  MRB_SET_INSTANCE_TT(t, MRB_TT_TRUE);
   mrb_undef_class_method(mrb, t, "new");
   mrb_define_method(mrb, t, "&",    true_and,       MRB_ARGS_REQ(1));  /* 15.2.5.3.1  */
   mrb_define_method(mrb, t, "^",    true_xor,       MRB_ARGS_REQ(1));  /* 15.2.5.3.2  */
@@ -282,6 +285,7 @@ mrb_init_object(mrb_state *mrb)
   mrb_define_method(mrb, t, "inspect", true_to_s,   MRB_ARGS_NONE());
 
   mrb->false_class = f = mrb_define_class(mrb, "FalseClass", mrb->object_class);
+  MRB_SET_INSTANCE_TT(f, MRB_TT_TRUE);
   mrb_undef_class_method(mrb, f, "new");
   mrb_define_method(mrb, f, "&",    false_and,      MRB_ARGS_REQ(1));  /* 15.2.6.3.1  */
   mrb_define_method(mrb, f, "^",    false_xor,      MRB_ARGS_REQ(1));  /* 15.2.6.3.2  */
@@ -348,7 +352,7 @@ mrb_check_convert_type(mrb_state *mrb, mrb_value val, enum mrb_vtype type, const
 {
   mrb_value v;
 
-  if (mrb_type(val) == type && type != MRB_TT_DATA) return val;
+  if (mrb_type(val) == type && type != MRB_TT_DATA && type != MRB_TT_ISTRUCT) return val;
   v = convert_type(mrb, val, tname, method, FALSE);
   if (mrb_nil_p(v) || mrb_type(v) != type) return mrb_nil_value();
   return v;
@@ -380,7 +384,7 @@ static const struct types {
 /*    {MRB_TT_VARMAP,  "Varmap"}, */ /* internal use: dynamic variables */
 /*    {MRB_TT_NODE,  "Node"}, */ /* internal use: syntax tree node */
 /*    {MRB_TT_UNDEF,  "undef"}, */ /* internal use: #undef; should not happen */
-    {-1,  0}
+  {MRB_TT_MAXDEFINE,  0}
 };
 
 MRB_API void
@@ -390,7 +394,7 @@ mrb_check_type(mrb_state *mrb, mrb_value x, enum mrb_vtype t)
   enum mrb_vtype xt;
 
   xt = mrb_type(x);
-  if ((xt != t) || (xt == MRB_TT_DATA)) {
+  if ((xt != t) || (xt == MRB_TT_DATA) || (xt == MRB_TT_ISTRUCT)) {
     while (type->type < MRB_TT_MAXDEFINE) {
       if (type->type == t) {
         const char *etype;
@@ -440,7 +444,7 @@ mrb_any_to_s(mrb_state *mrb, mrb_value obj)
   mrb_str_cat_lit(mrb, str, "#<");
   mrb_str_cat_cstr(mrb, str, cname);
   mrb_str_cat_lit(mrb, str, ":");
-  mrb_str_concat(mrb, str, mrb_ptr_to_str(mrb, mrb_cptr(obj)));
+  mrb_str_concat(mrb, str, mrb_ptr_to_str(mrb, mrb_ptr(obj)));
   mrb_str_cat_lit(mrb, str, ">");
 
   return str;

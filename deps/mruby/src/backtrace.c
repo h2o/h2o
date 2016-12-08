@@ -19,7 +19,7 @@ struct backtrace_location_raw {
   int lineno;
   const char *filename;
   mrb_sym method_id;
-  const char *sep;
+  char sep;
   struct RClass *klass;
 };
 
@@ -28,7 +28,7 @@ struct backtrace_location {
   int lineno;
   const char *filename;
   const char *method;
-  const char *sep;
+  char sep;
   const char *class_name;
 };
 
@@ -58,7 +58,7 @@ print_backtrace_i(mrb_state *mrb, struct backtrace_location *loc, void *data)
 
   if (loc->method) {
     if (loc->class_name) {
-      fprintf(args->stream, ":in %s%s%s", loc->class_name, loc->sep, loc->method);
+      fprintf(args->stream, ":in %s%c%s", loc->class_name, loc->sep, loc->method);
     }
     else {
       fprintf(args->stream, ":in %s", loc->method);
@@ -88,7 +88,7 @@ get_backtrace_i(mrb_state *mrb, struct backtrace_location *loc, void *data)
 
     if (loc->class_name) {
       mrb_str_cat_cstr(mrb, str, loc->class_name);
-      mrb_str_cat_cstr(mrb, str, loc->sep);
+      mrb_str_cat(mrb, str, &loc->sep, 1);
     }
 
     mrb_str_cat_cstr(mrb, str, loc->method);
@@ -134,10 +134,10 @@ each_backtrace(mrb_state *mrb, mrb_int ciidx, mrb_code *pc0, each_backtrace_func
     if (loc.lineno == -1) continue;
 
     if (ci->target_class == ci->proc->target_class) {
-      loc.sep = ".";
+      loc.sep = '.';
     }
     else {
-      loc.sep = "#";
+      loc.sep = '#';
     }
 
     if (!loc.filename) {
@@ -160,7 +160,7 @@ static void
 output_backtrace_i(mrb_state *mrb, struct backtrace_location_raw *loc_raw, void *data)
 {
   struct backtrace_location loc;
-  struct output_backtrace_args *args = data;
+  struct output_backtrace_args *args = (struct output_backtrace_args *)data;
 
   loc.i          = loc_raw->i;
   loc.lineno     = loc_raw->lineno;
@@ -175,7 +175,10 @@ output_backtrace_i(mrb_state *mrb, struct backtrace_location_raw *loc_raw, void 
 static void
 output_backtrace(mrb_state *mrb, mrb_int ciidx, mrb_code *pc0, output_stream_func func, void *data)
 {
-  each_backtrace(mrb, ciidx, pc0, output_backtrace_i, data);
+  struct output_backtrace_args args;
+  args.func = func;
+  args.data = data;
+  each_backtrace(mrb, ciidx, pc0, output_backtrace_i, &args);
 }
 
 static void
@@ -238,7 +241,7 @@ print_backtrace_saved(mrb_state *mrb)
 
       method_name = mrb_sym2name(mrb, entry->method_id);
       if (entry->klass) {
-        fprintf(stream, ":in %s%s%s",
+        fprintf(stream, ":in %s%c%s",
                 mrb_class_name(mrb, entry->klass),
                 entry->sep,
                 method_name);
@@ -327,7 +330,7 @@ save_backtrace_i(mrb_state *mrb,
 {
   mrb_backtrace_entry *entry;
 
-  if (loc_raw->i >= mrb->backtrace.n_allocated) {
+  if (mrb->backtrace.n >= mrb->backtrace.n_allocated) {
     int new_n_allocated;
     if (mrb->backtrace.n_allocated == 0) {
       new_n_allocated = 8;
@@ -335,7 +338,7 @@ save_backtrace_i(mrb_state *mrb,
     else {
       new_n_allocated = mrb->backtrace.n_allocated * 2;
     }
-    mrb->backtrace.entries =
+    mrb->backtrace.entries = (mrb_backtrace_entry *)
       mrb_realloc(mrb,
                   mrb->backtrace.entries,
                   sizeof(mrb_backtrace_entry) * new_n_allocated);
@@ -406,7 +409,7 @@ mrb_restore_backtrace(mrb_state *mrb)
 
       if (entry->klass) {
         mrb_str_cat_cstr(mrb, mrb_entry, mrb_class_name(mrb, entry->klass));
-        mrb_str_cat_cstr(mrb, mrb_entry, entry->sep);
+        mrb_str_cat(mrb, mrb_entry, &entry->sep, 1);
       }
 
       mrb_str_cat_cstr(mrb, mrb_entry, mrb_sym2name(mrb, entry->method_id));

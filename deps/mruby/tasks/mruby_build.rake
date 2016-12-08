@@ -120,6 +120,7 @@ module MRuby
     def enable_cxx_abi
       return if @cxx_exception_disabled or @cxx_abi_enabled
       compilers.each { |c| c.defines += %w(MRB_ENABLE_CXX_EXCEPTION) }
+      compilers.each { |c| c.flags << c.cxx_compile_flag }
       linker.command = cxx.command if toolchains.find { |v| v == 'gcc' }
       @cxx_abi_enabled = true
     end
@@ -135,9 +136,13 @@ module MRuby
 #define __STDC_CONSTANT_MACROS
 #define __STDC_LIMIT_MACROS
 
+#ifndef MRB_ENABLE_CXX_EXCEPTION
 extern "C" {
+#endif
 #include "#{src}"
+#ifndef MRB_ENABLE_CXX_EXCEPTION
 }
+#endif
 
 #{src == "#{MRUBY_ROOT}/src/error.c"? 'mrb_int mrb_jmpbuf::jmpbuf_id = 0;' : ''}
 EOS

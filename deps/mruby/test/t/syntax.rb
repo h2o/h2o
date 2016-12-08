@@ -38,6 +38,26 @@ assert('yield', '11.3.5') do
   assert_raise LocalJumpError do
     yield
   end
+  assert_raise LocalJumpError do
+    o = Object.new
+    def o.foo
+      yield
+    end
+    o.foo
+  end
+end
+
+assert('redo in a for loop (#3275)') do
+  sum = 0
+  for i in 1..10
+    sum += i
+    i -= 1
+    if i > 0
+      redo
+    end
+  end
+
+  assert_equal 220, sum
 end
 
 assert('Abbreviated variable assignment', '11.4.2.3.2') do
@@ -248,6 +268,13 @@ assert('multiple assignment (nosplat array rhs)') do
   assert_equal 2, g
 end
 
+assert('multiple assignment (empty array rhs #3236, #3239)') do
+  a,b,*c = []; assert_equal [nil, nil, []], [a, b, c]
+  a,b,*c = [1]; assert_equal [1, nil, []], [a, b, c]
+  a,b,*c = [nil]; assert_equal [nil,nil, []], [a, b, c]
+  a,b,*c = [[]]; assert_equal [[], nil, []], [a, b, c]
+end
+
 assert('Return values of case statements') do
   a = [] << case 1
   when 3 then 2
@@ -298,6 +325,36 @@ assert('Return values of no expression case statement') do
     end
 
   assert_equal 1, when_value
+end
+
+assert('splat object in assignment') do
+  o = Object.new
+  def o.to_a
+    nil
+  end
+  assert_equal [o], (a = *o)
+
+  def o.to_a
+    1
+  end
+  assert_raise(TypeError) { a = *o }
+
+  def o.to_a
+    [2]
+  end
+  assert_equal [2], (a = *o)
+end
+
+assert('splat object in case statement') do
+  o = Object.new
+  def o.to_a
+    nil
+  end
+  a = case o
+  when *o
+    1
+  end
+  assert_equal 1, a
 end
 
 assert('splat in case statement') do

@@ -45,7 +45,7 @@ class String
   def lstrip
     a = 0
     z = self.size - 1
-    a += 1 while " \f\n\r\t\v".include?(self[a]) and a <= z
+    a += 1 while a <= z and " \f\n\r\t\v".include?(self[a])
     (z >= 0) ? self[a..z] : ""
   end
 
@@ -62,7 +62,7 @@ class String
   def rstrip
     a = 0
     z = self.size - 1
-    z -= 1 while " \f\n\r\t\v\0".include?(self[z]) and a <= z
+    z -= 1 while a <= z and " \f\n\r\t\v\0".include?(self[z])
     (z >= 0) ? self[a..z] : ""
   end
 
@@ -78,8 +78,8 @@ class String
   def strip
     a = 0
     z = self.size - 1
-    a += 1 while " \f\n\r\t\v".include?(self[a]) and a <= z
-    z -= 1 while " \f\n\r\t\v\0".include?(self[z]) and a <= z
+    a += 1 while a <= z and " \f\n\r\t\v".include?(self[a])
+    z -= 1 while a <= z and " \f\n\r\t\v\0".include?(self[z])
     (z >= 0) ? self[a..z] : ""
   end
 
@@ -207,7 +207,7 @@ class String
       else
         idx = arg1
         idx += self.size if arg1 < 0
-        validated = true if idx >=0 && arg1 < self.size   
+        validated = true if idx >=0 && arg1 < self.size
       end
       if validated
         str = self[arg1]
@@ -254,14 +254,13 @@ class String
   #     "abcd".insert(-1, 'X')   #=> "abcdX"
   #
   def insert(idx, str)
-    pos = idx.to_i
-    pos += self.size + 1 if pos < 0
-
-    raise IndexError, "index #{idx.to_i} out of string" if pos < 0 || pos > self.size
-
-    return self + str if pos == -1
-    return str + self if pos == 0
-    return self[0..pos - 1] + str + self[pos..-1]
+    if idx == -1
+      return self << str
+    elsif idx < 0
+      idx += 1
+    end
+    self[idx, 0] = str
+    self
   end
 
   ##
@@ -285,6 +284,29 @@ class String
       newstr << padstr
     end
     return newstr.slice(0,idx)
+  end
+
+  ##
+  #  call-seq:
+  #     str.rjust(integer, padstr=' ')   -> new_str
+  #
+  #  If <i>integer</i> is greater than the length of <i>str</i>, returns a new
+  #  <code>String</code> of length <i>integer</i> with <i>str</i> right justified
+  #  and padded with <i>padstr</i>; otherwise, returns <i>str</i>.
+  #
+  #     "hello".rjust(4)            #=> "hello"
+  #     "hello".rjust(20)           #=> "               hello"
+  #     "hello".rjust(20, '1234')   #=> "123412341234123hello"
+  def rjust(idx, padstr = ' ')
+    if idx <= self.size
+      return self
+    end
+      padsize = idx - self.size
+      newstr = padstr.dup
+      while newstr.size <= padsize
+        newstr << padstr
+      end
+    return newstr.slice(0,padsize) + self
   end
 
   #     str.upto(other_str, exclusive=false) {|s| block }   -> str
@@ -332,7 +354,7 @@ class String
 
   def chars(&block)
     if block_given?
-      self.split('').map do |i|
+      self.split('').each do |i|
         block.call(i)
       end
       self
@@ -340,13 +362,21 @@ class String
       self.split('')
     end
   end
-  alias each_char chars
+
+  def each_char(&block)
+    return to_enum :each_char unless block
+
+    split('').each do |i|
+      block.call(i)
+    end
+    self
+  end
 
   def codepoints(&block)
     len = self.size
 
     if block_given?
-      self.split('').map do|x|
+      self.split('').each do|x|
         block.call(x.ord)
       end
       self

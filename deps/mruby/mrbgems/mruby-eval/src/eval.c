@@ -26,6 +26,8 @@ get_closure_irep(mrb_state *mrb, int level)
   }
 
   if (!e) return NULL;
+  if (!MRB_ENV_STACK_SHARED_P(e)) return NULL;
+
   proc = c->cibase[e->cioff].proc;
 
   if (!proc || MRB_PROC_CFUNC_P(proc)) {
@@ -130,8 +132,10 @@ patch_irep(mrb_state *mrb, mrb_irep *irep, int bnest)
   }
 }
 
+void mrb_codedump_all(mrb_state*, struct RProc*);
+
 static struct RProc*
-create_proc_from_string(mrb_state *mrb, char *s, int len, mrb_value binding, char *file, mrb_int line)
+create_proc_from_string(mrb_state *mrb, char *s, int len, mrb_value binding, const char *file, mrb_int line)
 {
   mrbc_context *cxt;
   struct mrb_parser_state *p;
@@ -145,12 +149,13 @@ create_proc_from_string(mrb_state *mrb, char *s, int len, mrb_value binding, cha
 
   cxt = mrbc_context_new(mrb);
   cxt->lineno = line;
-  if (file) {
-    mrbc_filename(mrb, cxt, file);
+
+  if (!file) {
+    file = "(eval)";
   }
+  mrbc_filename(mrb, cxt, file);
   cxt->capture_errors = TRUE;
   cxt->no_optimize = TRUE;
-  //  cxt->dump_result = TRUE;
 
   p = mrb_parse_nstring(mrb, s, len, cxt);
 
@@ -210,7 +215,7 @@ f_eval(mrb_state *mrb, mrb_value self)
   mrb_get_args(mrb, "s|ozi", &s, &len, &binding, &file, &line);
 
   proc = create_proc_from_string(mrb, s, len, binding, file, line);
-  ret = mrb_toplevel_run(mrb, proc);
+  ret = mrb_top_run(mrb, proc, mrb->c->stack[0], 0);
   if (mrb->exc) {
     mrb_exc_raise(mrb, mrb_obj_value(mrb->exc));
   }
@@ -237,12 +242,15 @@ f_instance_eval(mrb_state *mrb, mrb_value self)
     char *file = NULL;
     mrb_int line = 1;
     mrb_value cv;
+    struct RProc *proc;
 
     mrb_get_args(mrb, "s|zi", &s, &len, &file, &line);
     c->ci->acc = CI_ACC_SKIP;
     cv = mrb_singleton_class(mrb, self);
     c->ci->target_class = mrb_class_ptr(cv);
-    return mrb_run(mrb, create_proc_from_string(mrb, s, len, mrb_nil_value(), file, line), self);
+    proc = create_proc_from_string(mrb, s, len, mrb_nil_value(), file, line);
+    mrb->c->ci->env = NULL;
+    return mrb_vm_run(mrb, proc, mrb->c->stack[0], 0);
   }
   else {
     mrb_get_args(mrb, "&", &b);

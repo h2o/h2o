@@ -16,6 +16,13 @@ assert('Hash#[]', '15.2.13.4.2') do
   a = { 'abc' => 'abc' }
 
   assert_equal 'abc', a['abc']
+
+  # Hash#[] should call #default (#3272)
+  hash = {}
+  def hash.default(k); self[k] = 1; end
+  hash[:foo] += 1
+
+  assert_equal 2, hash[:foo]
 end
 
 assert('Hash#[]=', '15.2.13.4.3') do
@@ -37,6 +44,10 @@ assert('Hash#dup') do
   b = a.dup
   a['a'] = 2
   assert_equal({'a' => 1}, b)
+
+  c = Hash.new { |h, k| h[k] = k.upcase }
+  d = c.dup
+  assert_equal("FOO", d["foo"])
 end
 
 assert('Hash#default', '15.2.13.4.5') do
@@ -239,6 +250,10 @@ assert('Hash#replace', '15.2.13.4.23') do
   a = Hash.new{|h,x| x}
   b.replace(a)
   assert_equal(127, b[127])
+
+   assert_raise(TypeError) do
+    { 'abc_key' => 'abc_value' }.replace "a"
+  end
 end
 
 assert('Hash#shift', '15.2.13.4.24') do

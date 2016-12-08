@@ -32,3 +32,8 @@ end
 assert('NilClass#to_s', '15.2.4.3.5') do
   assert_equal '', nil.to_s
 end
+
+assert('safe navigation') do
+  assert_nil nil&.size
+  assert_equal 0, []&.size
+end

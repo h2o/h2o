@@ -22,6 +22,8 @@ assert('Kernel#Integer') do
   assert_equal(26, Integer("0x1a"))
   assert_equal(930, Integer("0930", 10))
   assert_equal(7, Integer("111", 2))
+  assert_equal(0, Integer("0"))
+  assert_equal(0, Integer("00000"))
   assert_raise(TypeError) { Integer(nil) }
 end
 

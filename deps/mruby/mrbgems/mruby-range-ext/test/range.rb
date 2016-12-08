@@ -10,6 +10,7 @@ end
 assert('Range#first') do
   assert_equal 10, (10..20).first
   assert_equal [10, 11, 12], (10..20).first(3)
+  assert_equal [0, 1, 2], (0..Float::INFINITY).first(3)
 end
 
 assert('Range#last') do
@@ -25,5 +26,7 @@ assert('Range#size') do
   assert_equal 6, (1...6.3).size
   assert_equal 5, (1...6.0).size
   assert_equal 5, (1.1...6).size
+  assert_equal 15, (1.0..15.9).size
+  assert_equal Float::INFINITY, (0..Float::INFINITY).size
   assert_nil ('a'..'z').size
 end

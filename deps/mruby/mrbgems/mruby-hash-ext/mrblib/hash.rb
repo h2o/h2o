@@ -365,4 +365,21 @@ class Hash
       key?(key) and self[key] == val
     }
   end
+
+  ##
+  # call-seq:
+  #   hsh.dig(key,...)                 -> object
+  #
+  # Extracts the nested value specified by the sequence of <i>key</i>
+  # objects by calling +dig+ at each step, returning +nil+ if any
+  # intermediate step is +nil+.
+  #
+  def dig(idx,*args)
+    n = self[idx]
+    if args.size > 0
+      n&.dig(*args)
+    else
+      n
+    end
+  end
 end
