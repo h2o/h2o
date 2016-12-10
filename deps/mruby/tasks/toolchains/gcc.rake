@@ -1,4 +1,4 @@
-MRuby::Toolchain.new(:gcc) do |conf|
+MRuby::Toolchain.new(:gcc) do |conf, _params|
   [conf.cc, conf.objc, conf.asm].each do |cc|
     cc.command = ENV['CC'] || 'gcc'
     cc.flags = [ENV['CFLAGS'] || %w(-g -std=gnu99 -O3 -Wall -Werror-implicit-function-declaration -Wdeclaration-after-statement -Wwrite-strings)]
@@ -6,6 +6,7 @@ MRuby::Toolchain.new(:gcc) do |conf|
     cc.option_include_path = '-I%s'
     cc.option_define = '-D%s'
     cc.compile_options = '%{flags} -MMD -o %{outfile} -c %{infile}'
+    cc.cxx_compile_flag = '-x c++ -std=c++03'
   end
 
   [conf.cxx].each do |cxx|
@@ -15,6 +16,7 @@ MRuby::Toolchain.new(:gcc) do |conf|
     cxx.option_include_path = '-I%s'
     cxx.option_define = '-D%s'
     cxx.compile_options = '%{flags} -MMD -o %{outfile} -c %{infile}'
+    cxx.cxx_compile_flag = '-x c++ -std=c++03'
   end
 
   conf.linker do |linker|

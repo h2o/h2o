@@ -159,16 +159,24 @@ class String
     anum = args.size
     if anum == 2
       pos, value = args
-      if pos.kind_of? String
+      case pos
+      when String
         posnum = self.index(pos)
         if posnum
           b = self[0, posnum.to_i]
           a = self[(posnum + pos.length)..-1]
           self.replace([b, value, a].join(''))
-          return value
         else
           raise IndexError, "string not matched"
         end
+      when Range
+        head = pos.begin
+        tail = pos.end
+        tail += self.length if tail < 0
+        unless pos.exclude_end?
+          tail += 1
+        end
+        return self[head, tail-head]=value
       else
         pos += self.length if pos < 0
         if pos < 0 || pos > self.length
@@ -177,8 +185,8 @@ class String
         b = self[0, pos.to_i]
         a = self[pos + 1..-1]
         self.replace([b, value, a].join(''))
-        return value
       end
+      return value
     elsif anum == 3
       pos, len, value = args
       pos += self.length if pos < 0

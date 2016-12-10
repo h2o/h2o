@@ -114,6 +114,9 @@ mrb_proc_parameters(mrb_state *mrb, mrb_value self)
     // TODO cfunc aspec is not implemented yet
     return mrb_ary_new(mrb);
   }
+  if (!irep) {
+    return mrb_ary_new(mrb);
+  }
   if (!irep->lv) {
     return mrb_ary_new(mrb);
   }

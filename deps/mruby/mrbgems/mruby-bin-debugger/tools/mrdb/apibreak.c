@@ -97,7 +97,7 @@ check_file_lineno( struct mrb_irep *irep, const char *file, uint16_t lineno )
       result = MRB_DEBUG_BP_FILE_OK;
 
       fix_lineno = check_lineno( info_file, lineno );
-      if(fix_lineno != 0) { 
+      if(fix_lineno != 0) {
         return result | MRB_DEBUG_BP_LINENO_OK;
       }
     }
@@ -200,7 +200,7 @@ mrb_debug_set_break_line( mrb_state *mrb, mrb_debug_context *dbg, const char *fi
     return MRB_DEBUG_BREAK_INVALID_FILE;
   }else if(result == MRB_DEBUG_BP_FILE_OK) {
     return MRB_DEBUG_BREAK_INVALID_LINENO;
-  } 
+  }
 
   set_file = mrb_malloc(mrb, strlen(file) + 1);
 
@@ -272,7 +272,7 @@ mrb_debug_get_breaknum( mrb_state *mrb, mrb_debug_context *dbg )
   return dbg->bpnum;
 }
 
-int32_t 
+int32_t
 mrb_debug_get_break_all( mrb_state *mrb, mrb_debug_context *dbg, uint32_t size, mrb_debug_breakpoint *bp )
 {
   uint32_t get_size = 0;
@@ -315,7 +315,7 @@ mrb_debug_get_break( mrb_state *mrb, mrb_debug_context *dbg, uint32_t bpno, mrb_
   return 0;
 }
 
-int32_t 
+int32_t
 mrb_debug_delete_break( mrb_state *mrb, mrb_debug_context *dbg, uint32_t bpno )
 {
   uint32_t i;
@@ -346,7 +346,7 @@ mrb_debug_delete_break( mrb_state *mrb, mrb_debug_context *dbg, uint32_t bpno )
   return MRB_DEBUG_OK;
 }
 
-int32_t 
+int32_t
 mrb_debug_delete_break_all( mrb_state *mrb, mrb_debug_context *dbg )
 {
   uint32_t i;
@@ -364,7 +364,7 @@ mrb_debug_delete_break_all( mrb_state *mrb, mrb_debug_context *dbg )
   return MRB_DEBUG_OK;
 }
 
-int32_t 
+int32_t
 mrb_debug_enable_break( mrb_state *mrb, mrb_debug_context *dbg, uint32_t bpno )
 {
   int32_t index = 0;
@@ -399,7 +399,7 @@ mrb_debug_enable_break_all( mrb_state *mrb, mrb_debug_context *dbg )
   return MRB_DEBUG_OK;
 }
 
-int32_t 
+int32_t
 mrb_debug_disable_break( mrb_state *mrb, mrb_debug_context *dbg, uint32_t bpno )
 {
   int32_t index = 0;
@@ -418,7 +418,7 @@ mrb_debug_disable_break( mrb_state *mrb, mrb_debug_context *dbg, uint32_t bpno )
   return MRB_DEBUG_OK;
 }
 
-int32_t 
+int32_t
 mrb_debug_disable_break_all( mrb_state *mrb, mrb_debug_context *dbg )
 {
   uint32_t i;
@@ -483,7 +483,7 @@ mrb_debug_check_breakpoint_line( mrb_state *mrb, mrb_debug_context *dbg, const c
 }
 
 
-int32_t 
+int32_t
 mrb_debug_check_breakpoint_method( mrb_state *mrb, mrb_debug_context *dbg, struct RClass *class_obj, mrb_sym method_sym, mrb_bool* isCfunc )
 {
   mrb_debug_breakpoint *bp;

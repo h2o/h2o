@@ -14,7 +14,7 @@ class BinTest_MrubyBinDebugger
 
     # compile
     `./bin/mrbc -g -o "#{bin.path}" "#{script.path}"`
-    
+
     # add mrdb quit
     testcase << {:cmd=>"quit"}
 

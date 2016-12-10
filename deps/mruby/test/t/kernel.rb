@@ -221,6 +221,14 @@ assert('Kernel#dup', '15.3.1.3.9') do
   assert_false c.respond_to?(:test)
 end
 
+assert('Kernel#dup class') do
+  assert_nothing_raised do
+    Array.dup.new(200)
+    Range.dup.new(2, 3)
+    String.dup.new("a"*50)
+  end
+end
+
 # Kernel#eval is provided by mruby-eval mrbgem '15.3.1.3.12'
 
 assert('Kernel#extend', '15.3.1.3.13') do
@@ -423,6 +431,11 @@ end
 
 assert('Kernel#public_methods', '15.3.1.3.38') do
   assert_equal Array, public_methods.class
+  class Foo
+    def foo
+    end
+  end
+  assert_equal [:foo], Foo.new.public_methods(false)
 end
 
 # Kernel#puts is defined in mruby-print mrbgem. '15.3.1.3.39'
@@ -505,6 +518,21 @@ end
 
 assert('Kernel#to_s', '15.3.1.3.46') do
   assert_equal to_s.class, String
+end
+
+assert('Kernel#to_s on primitives') do
+  begin
+    Fixnum.alias_method :to_s_, :to_s
+    Fixnum.remove_method :to_s
+
+    assert_nothing_raised do
+      # segfaults if mrb_cptr is used
+      1.to_s
+    end
+  ensure
+    Fixnum.alias_method :to_s, :to_s_
+    Fixnum.remove_method :to_s_
+  end
 end
 
 assert('Kernel.local_variables', '15.3.1.2.7') do

@@ -10,6 +10,7 @@
 #include <mruby/khash.h>
 #include <mruby/string.h>
 #include <mruby/dump.h>
+#include <mruby/class.h>
 
 /* ------------------------------------------------------ */
 typedef struct symbol_name {
@@ -481,6 +482,8 @@ mrb_init_symbol(mrb_state *mrb)
   struct RClass *sym;
 
   mrb->symbol_class = sym = mrb_define_class(mrb, "Symbol", mrb->object_class);                 /* 15.2.11 */
+  MRB_SET_INSTANCE_TT(sym, MRB_TT_SYMBOL);
+  mrb_undef_class_method(mrb,  sym, "new");
 
   mrb_define_method(mrb, sym, "===",             sym_equal,      MRB_ARGS_REQ(1));              /* 15.2.11.3.1  */
   mrb_define_method(mrb, sym, "id2name",         mrb_sym_to_s,   MRB_ARGS_NONE());              /* 15.2.11.3.2  */

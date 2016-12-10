@@ -74,3 +74,15 @@ assert('Array#shuffle!(random)') do
 
   ary1 != [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] and 10.times { |x| ary1.include? x } and ary1 == ary2
 end
+
+assert('Array#sample checks input length after reading arguments') do
+  $ary = [1, 2, 3]
+  class ArrayChange
+    def to_i
+      $ary << 4
+      4
+    end
+  end
+
+  assert_equal [1, 2, 3, 4], $ary.sample(ArrayChange.new).sort
+end

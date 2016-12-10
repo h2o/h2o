@@ -251,6 +251,19 @@ assert('String#chomp!', '15.2.10.5.10') do
   assert_equal 'abc', e
 end
 
+assert('String#chomp! uses the correct length') do
+  class A
+    def to_str
+      $s.replace("AA")
+      "A"
+    end
+  end
+
+  $s = "AAA"
+  $s.chomp!(A.new)
+  assert_equal $s, "A"
+end
+
 assert('String#chop', '15.2.10.5.11') do
   a = ''.chop
   b = 'abc'.chop
@@ -381,8 +394,6 @@ assert('String#hash', '15.2.10.5.20') do
 end
 
 assert('String#include?', '15.2.10.5.21') do
-  assert_true 'abc'.include?(97)
-  assert_false 'abc'.include?(100)
   assert_true 'abc'.include?('a')
   assert_false 'abc'.include?('d')
 end
@@ -685,4 +696,3 @@ assert('String#freeze') do
 
   assert_raise(RuntimeError) { str.upcase! }
 end
-

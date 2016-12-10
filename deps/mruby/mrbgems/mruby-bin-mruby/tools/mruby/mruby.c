@@ -6,6 +6,7 @@
 #include <mruby/compile.h>
 #include <mruby/dump.h>
 #include <mruby/variable.h>
+#include <mruby/throw.h>
 
 #ifdef MRB_DISABLE_STDIO
 static void
@@ -176,6 +177,8 @@ main(int argc, char **argv)
   mrbc_context *c;
   mrb_value v;
   mrb_sym zero_sym;
+  struct mrb_jmpbuf c_jmp;
+  int ai;
 
   if (mrb == NULL) {
     fputs("Invalid mrb_state, exiting mruby\n", stderr);
@@ -189,59 +192,67 @@ main(int argc, char **argv)
     return n;
   }
 
-  ARGV = mrb_ary_new_capa(mrb, args.argc);
-  for (i = 0; i < args.argc; i++) {
-    char* utf8 = mrb_utf8_from_locale(args.argv[i], -1);
-    if (utf8) {
-      mrb_ary_push(mrb, ARGV, mrb_str_new_cstr(mrb, utf8));
+  ai = mrb_gc_arena_save(mrb);
+  MRB_TRY(&c_jmp) {
+    mrb->jmp = &c_jmp;
+    ARGV = mrb_ary_new_capa(mrb, args.argc);
+    for (i = 0; i < args.argc; i++) {
+      char* utf8 = mrb_utf8_from_locale(args.argv[i], -1);
+      if (utf8) {
+        mrb_ary_push(mrb, ARGV, mrb_str_new_cstr(mrb, utf8));
+        mrb_utf8_free(utf8);
+      }
+    }
+    mrb_define_global_const(mrb, "ARGV", ARGV);
+
+    c = mrbc_context_new(mrb);
+    if (args.verbose)
+      c->dump_result = TRUE;
+    if (args.check_syntax)
+      c->no_exec = TRUE;
+
+    /* Set $0 */
+    zero_sym = mrb_intern_lit(mrb, "$0");
+    if (args.rfp) {
+      const char *cmdline;
+      cmdline = args.cmdline ? args.cmdline : "-";
+      mrbc_filename(mrb, c, cmdline);
+      mrb_gv_set(mrb, zero_sym, mrb_str_new_cstr(mrb, cmdline));
+    }
+    else {
+      mrbc_filename(mrb, c, "-e");
+      mrb_gv_set(mrb, zero_sym, mrb_str_new_lit(mrb, "-e"));
+    }
+
+    /* Load program */
+    if (args.mrbfile) {
+      v = mrb_load_irep_file_cxt(mrb, args.rfp, c);
+    }
+    else if (args.rfp) {
+      v = mrb_load_file_cxt(mrb, args.rfp, c);
+    }
+    else {
+      char* utf8 = mrb_utf8_from_locale(args.cmdline, -1);
+      if (!utf8) abort();
+      v = mrb_load_string_cxt(mrb, utf8, c);
       mrb_utf8_free(utf8);
     }
-  }
-  mrb_define_global_const(mrb, "ARGV", ARGV);
 
-  c = mrbc_context_new(mrb);
-  if (args.verbose)
-    c->dump_result = TRUE;
-  if (args.check_syntax)
-    c->no_exec = TRUE;
-
-  /* Set $0 */
-  zero_sym = mrb_intern_lit(mrb, "$0");
-  if (args.rfp) {
-    const char *cmdline;
-    cmdline = args.cmdline ? args.cmdline : "-";
-    mrbc_filename(mrb, c, cmdline);
-    mrb_gv_set(mrb, zero_sym, mrb_str_new_cstr(mrb, cmdline));
-  }
-  else {
-    mrbc_filename(mrb, c, "-e");
-    mrb_gv_set(mrb, zero_sym, mrb_str_new_lit(mrb, "-e"));
-  }
-
-  /* Load program */
-  if (args.mrbfile) {
-    v = mrb_load_irep_file_cxt(mrb, args.rfp, c);
-  }
-  else if (args.rfp) {
-    v = mrb_load_file_cxt(mrb, args.rfp, c);
-  }
-  else {
-    char* utf8 = mrb_utf8_from_locale(args.cmdline, -1);
-    if (!utf8) abort();
-    v = mrb_load_string_cxt(mrb, utf8, c);
-    mrb_utf8_free(utf8);
-  }
-
-  mrbc_context_free(mrb, c);
-  if (mrb->exc) {
-    if (!mrb_undef_p(v)) {
-      mrb_print_error(mrb);
+    mrb_gc_arena_restore(mrb, ai);
+    mrbc_context_free(mrb, c);
+    if (mrb->exc) {
+      if (!mrb_undef_p(v)) {
+        mrb_print_error(mrb);
+      }
+      n = -1;
     }
-    n = -1;
+    else if (args.check_syntax) {
+      printf("Syntax OK\n");
+    }
   }
-  else if (args.check_syntax) {
-    printf("Syntax OK\n");
+  MRB_CATCH(&c_jmp) {           /* error */
   }
+  MRB_END_EXC(&c_jmp);
   cleanup(mrb, &args);
 
   return n == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
