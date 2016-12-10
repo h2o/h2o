@@ -818,8 +818,6 @@ gen_values(codegen_scope *s, node *t, int val)
         }
       }
       else {
-        codegen(s, t->car->cdr, NOVAL);
-        t = t->cdr;
         while (t) {
           codegen(s, t->car, NOVAL);
           t = t->cdr;
@@ -2560,13 +2558,31 @@ codegen(codegen_scope *s, node *tree, int val)
       genop(s, MKOP_A(OP_TCLASS, cursp()));
       push();
       while (t) {
-        int symbol = new_msym(s, sym(t->car));
+        int symbol;
+        if (num >= CALL_MAXARGS - 1) {
+          pop_n(num);
+          genop(s, MKOP_ABC(OP_ARRAY, cursp(), cursp(), num));
+          while (t) {
+            symbol = new_msym(s, sym(t->car));
+            push();
+            genop(s, MKOP_ABx(OP_LOADSYM, cursp(), symbol));
+            pop();
+            genop(s, MKOP_AB(OP_ARYPUSH, cursp(), cursp()+1));
+            t = t->cdr;
+          }
+          num = CALL_MAXARGS;
+          break;
+        }
+        symbol = new_msym(s, sym(t->car));
         genop(s, MKOP_ABx(OP_LOADSYM, cursp(), symbol));
         push();
         t = t->cdr;
         num++;
       }
-      pop_n(num + 1);
+      pop();
+      if (num < CALL_MAXARGS) {
+        pop_n(num);
+      }
       genop(s, MKOP_ABC(OP_SEND, cursp(), undef, num));
       if (val) {
         push();

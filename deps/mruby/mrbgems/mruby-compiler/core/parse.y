@@ -3946,6 +3946,7 @@ parse_string(parser_state *p)
           }
         }
         if ((len-1 == hinf->term_len) && (strncmp(s, hinf->term, len-1) == 0)) {
+          if (c < 0) p->parsing_heredoc = NULL;
           return tHEREDOC_END;
         }
       }
@@ -5692,8 +5693,8 @@ mrb_parse_string(mrb_state *mrb, const char *s, mrbc_context *c)
   return mrb_parse_nstring(mrb, s, strlen(s), c);
 }
 
-static mrb_value
-load_exec(mrb_state *mrb, parser_state *p, mrbc_context *c)
+MRB_API mrb_value
+mrb_load_exec(mrb_state *mrb, struct mrb_parser_state *p, mrbc_context *c)
 {
   struct RClass *target = mrb->object_class;
   struct RProc *proc;
@@ -5752,7 +5753,7 @@ load_exec(mrb_state *mrb, parser_state *p, mrbc_context *c)
 MRB_API mrb_value
 mrb_load_file_cxt(mrb_state *mrb, FILE *f, mrbc_context *c)
 {
-  return load_exec(mrb, mrb_parse_file(mrb, f, c), c);
+  return mrb_load_exec(mrb, mrb_parse_file(mrb, f, c), c);
 }
 
 MRB_API mrb_value
@@ -5765,7 +5766,7 @@ mrb_load_file(mrb_state *mrb, FILE *f)
 MRB_API mrb_value
 mrb_load_nstring_cxt(mrb_state *mrb, const char *s, int len, mrbc_context *c)
 {
-  return load_exec(mrb, mrb_parse_nstring(mrb, s, len, c), c);
+  return mrb_load_exec(mrb, mrb_parse_nstring(mrb, s, len, c), c);
 }
 
 MRB_API mrb_value

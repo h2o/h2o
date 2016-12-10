@@ -741,10 +741,12 @@ obj_free(mrb_state *mrb, struct RBasic *obj)
     {
       struct REnv *e = (struct REnv*)obj;
 
-      if (!MRB_ENV_STACK_SHARED_P(e)) {
-        mrb_free(mrb, e->stack);
-        e->stack = NULL;
+      if (MRB_ENV_STACK_SHARED_P(e)) {
+        /* cannot be freed */
+        return;
       }
+      mrb_free(mrb, e->stack);
+      e->stack = NULL;
     }
     break;
 
@@ -998,9 +1000,13 @@ incremental_sweep_phase(mrb_state *mrb, mrb_gc *gc, size_t limit)
       if (is_dead(gc, &p->as.basic)) {
         if (p->as.basic.tt != MRB_TT_FREE) {
           obj_free(mrb, &p->as.basic);
-          p->as.free.next = page->freelist;
-          page->freelist = (struct RBasic*)p;
-          freed++;
+          if (p->as.basic.tt == MRB_TT_FREE) {
+            p->as.free.next = page->freelist;
+            page->freelist = (struct RBasic*)p;
+            freed++;
+          } else {
+            dead_slot = 0;
+          }
         }
       }
       else {

@@ -163,6 +163,7 @@ struct mrb_parser_state {
 MRB_API struct mrb_parser_state* mrb_parser_new(mrb_state*);
 MRB_API void mrb_parser_free(struct mrb_parser_state*);
 MRB_API void mrb_parser_parse(struct mrb_parser_state*,mrbc_context*);
+MRB_API double mrb_float_read(const char*, char**);
 
 MRB_API void mrb_parser_set_filename(struct mrb_parser_state*, char const*);
 MRB_API char const* mrb_parser_get_filename(struct mrb_parser_state*, uint16_t idx);
@@ -174,6 +175,7 @@ MRB_API struct mrb_parser_state* mrb_parse_file(mrb_state*,FILE*,mrbc_context*);
 MRB_API struct mrb_parser_state* mrb_parse_string(mrb_state*,const char*,mrbc_context*);
 MRB_API struct mrb_parser_state* mrb_parse_nstring(mrb_state*,const char*,int,mrbc_context*);
 MRB_API struct RProc* mrb_generate_code(mrb_state*, struct mrb_parser_state*);
+MRB_API mrb_value mrb_load_exec(mrb_state *mrb, struct mrb_parser_state *p, mrbc_context *c);
 
 /* program load functions */
 #ifndef MRB_DISABLE_STDIO

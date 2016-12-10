@@ -2770,14 +2770,6 @@ mrb_init_string(mrb_state *mrb)
 #include <ctype.h>
 #include <errno.h>
 
-#ifndef __STDC__
-# ifdef __GNUC__
-#  define const __const__
-# else
-#  define const
-# endif
-#endif
-
 static const int maxExponent = 511; /* Largest possible base 10 exponent.  Any
                                      * exponent larger than this will already
                                      * produce underflow or overflow, so there's

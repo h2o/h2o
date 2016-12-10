@@ -357,7 +357,11 @@ flo_shift(mrb_state *mrb, mrb_value x, mrb_int width)
     while (width++) {
       val /= 2;
     }
+#if defined(_ISOC99_SOURCE)
     val = trunc(val);
+#else
+    val = val > 0 ? floor(val) : ceil(val);
+#endif
     if (val == 0 && mrb_float(x) < 0) {
       return mrb_fixnum_value(-1);
     }
