@@ -32,7 +32,7 @@ static size_t sz_min(size_t x, size_t y)
 }
 
 h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req,
-                                          const h2o_http2_priority_t *received_priority, int is_prio)
+                                          const h2o_http2_priority_t *received_priority)
 {
     h2o_http2_stream_t *stream = h2o_mem_alloc(sizeof(*stream));
 
@@ -54,7 +54,7 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
         memset(&stream->req.upgrade, 0, sizeof(stream->req.upgrade));
     stream->req._ostr_top = &stream->_ostr_final;
 
-    h2o_http2_conn_register_stream(conn, stream, is_prio);
+    h2o_http2_conn_register_stream(conn, stream);
 
     ++conn->num_streams.priority.open;
     stream->_num_streams_slot = &conn->num_streams.priority;
