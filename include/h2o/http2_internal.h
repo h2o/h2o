@@ -259,7 +259,7 @@ int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *pa
                                            const char **err_desc, int *err_is_stream_level);
 
 /* connection */
-void h2o_http2_conn_register_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int is_prio);
+void h2o_http2_conn_register_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 static h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uint32_t stream_id);
 void h2o_http2_conn_push_path(h2o_http2_conn_t *conn, h2o_iovec_t path, h2o_http2_stream_t *src_stream);
@@ -271,7 +271,7 @@ static void h2o_http2_conn_init_casper(h2o_http2_conn_t *conn, unsigned capacity
 /* stream */
 static int h2o_http2_stream_is_push(uint32_t stream_id);
 h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req,
-                                          const h2o_http2_priority_t *received_priority, int is_prio);
+                                          const h2o_http2_priority_t *received_priority);
 static void h2o_http2_stream_update_open_slot(h2o_http2_stream_t *stream, h2o_http2_conn_num_streams_t *slot);
 static void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_http2_stream_state_t new_state);
 static void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
@@ -438,6 +438,12 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
 inline void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     assert(h2o_http2_scheduler_is_open(&stream->_refs.scheduler));
+
+    /* adjust max-open */
+    uint32_t *max_open =
+        h2o_http2_stream_is_push(stream->stream_id) ? &conn->push_stream_ids.max_open : &conn->pull_stream_ids.max_open;
+    if (*max_open < stream->stream_id)
+        *max_open = stream->stream_id;
     h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_RECV_HEADERS);
     h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
 }
