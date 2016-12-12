@@ -200,22 +200,21 @@ h2o_kafka_log_handle_t *h2o_kafka_log_open_handle(
     h2o_kafka_log_handle_t *kh;
     char errbuf[512];
 
-    /* default to combined log format */
     if (fmt_messages == NULL)
-        fmt_messages = "%h %l %u %t \"%r\" %s %b \"%{Referer}i\" \"%{User-agent}i\"";
-    if ((logconf_message = h2o_logconf_compile(fmt_messages, H2O_LOGCONF_ESCAPE_APACHE, errbuf)) == NULL)
+        fmt_messages = "{\"tsusec\": %{usec}t,\"remote\": \"%h\",\"status\":%s,\"proto\":\"%H\",\"method\":\"%m\",\"query\":\"%q\",\"date\":\"%{%Y-%m-%d}t\",\"path\":\"%U\",\"server\":\"%V\",\"responseSize\": %b, \"connectionId\":%{connection-id}x, \"http2StreamId\": %{http2.stream-id}x, \"connectTime\": %{connect-time}x, \"timeHeader\": %{request-header-time}x, \"timeBody\": %{request-body-time}x, \"timeProcess\": %{process-time}x, \"timeResponse\": %{response-time}x, \"timeDuration\": %{duration}x, \"sslVersion\":\"%{ssl.protocol-version}x\",\"sslReused\": %{ssl.session-reused}x,\"sslCipher\":\"%{ssl.cipher}x\",\"sslCipherBits\": %{ssl.cipher-bits}x,\"headers\":{ \"user-agent\":\"%{user-agent}i\", \"accept\":\"%{accept}i\", \"accept-encoding\":\"%{accept-encoding}i\", \"accept-language\":\"%{accept-language}i\", \"cache-control\":\"%{cache-control}i\", \"connection\":\"%{connection}i\", \"cookie\":\"%{cookie}i\", \"host\":\"%{host}i\",\"referer\":\"%{referer}i\",\"upgrade-insecure-requests\":\"%{upgrade-insecure-requests}i\"}}";
+    if ((logconf_message = h2o_logconf_compile(fmt_messages, H2O_LOGCONF_ESCAPE_JSON, errbuf)) == NULL)
     {
         fprintf(stderr, "%s\n", errbuf);
         return NULL;
     }
     if (fmt_key != NULL)
-    if ((logconf_key     = h2o_logconf_compile(fmt_key     , H2O_LOGCONF_ESCAPE_APACHE, errbuf)) == NULL)
+    if ((logconf_key     = h2o_logconf_compile(fmt_key     , H2O_LOGCONF_ESCAPE_JSON, errbuf)) == NULL)
     {
         fprintf(stderr, "%s\n", errbuf);
         return NULL;
     }
     if (fmt_hash != NULL)
-    if ((logconf_hash    = h2o_logconf_compile(fmt_hash    , H2O_LOGCONF_ESCAPE_APACHE, errbuf)) == NULL)
+    if ((logconf_hash    = h2o_logconf_compile(fmt_hash    , H2O_LOGCONF_ESCAPE_JSON, errbuf)) == NULL)
     {
         fprintf(stderr, "%s\n", errbuf);
         return NULL;
