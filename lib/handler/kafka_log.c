@@ -88,20 +88,12 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
     logline_key     = h2o_log_request(kh->logconf_key    , req, &len_key    , buf_key    );
     }
 
-    int attemp = 0;
+    int attempt = 0;
     rd_kafka_poll(self->kh->rk, 0);
     /* emit */
     struct timeval ts = req->timestamps.request_begin_at;
     L:
-    attemp++;
-    // int res = rd_kafka_produce(
-    //         self->kh->rkt,
-    //         self->kh->partition,
-    //         RD_KAFKA_MSG_F_COPY,
-    //         logline_message, len_message,
-    //         logline_key, len_key,
-    //         NULL
-    //     );
+    attempt++;
     int res = rd_kafka_producev(
         self->kh->rk,
         RD_KAFKA_V_RKT(self->kh->rkt),
@@ -120,7 +112,7 @@ static void log_access(h2o_logger_t *_self, h2o_req_t *req)
         switch(err)
         {
             case ENOBUFS:
-                if(attemp < 2)
+                if(attempt < 2)
                 {
                     rd_kafka_poll(self->kh->rk, 10);
                     goto L;
