@@ -1563,6 +1563,11 @@ typedef struct st_h2o_compress_context_t {
      */
     void (*compress)(struct st_h2o_compress_context_t *self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
                      h2o_iovec_t **outbufs, size_t *outbufcnt);
+    /**
+     * decompress
+     */
+    void (*decompress)(struct st_h2o_compress_context_t *self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                     h2o_iovec_t **outbufs, size_t *outbufcnt);
 } h2o_compress_context_t;
 
 typedef struct st_h2o_compress_args_t {
@@ -1583,6 +1588,10 @@ void h2o_compress_register(h2o_pathconf_t *pathconf, h2o_compress_args_t *args);
  * instantiates the gzip compressor
  */
 h2o_compress_context_t *h2o_compress_gzip_open(h2o_mem_pool_t *pool, int quality);
+/**
+ * instantiates the gzip compressor
+ */
+h2o_compress_context_t *h2o_decompress_gzip_open(h2o_mem_pool_t *pool);
 /**
  * instantiates the brotli compressor (only available if H2O_USE_BROTLI is set)
  */
@@ -1677,7 +1686,7 @@ void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/file.c */
 
-enum { H2O_FILE_FLAG_NO_ETAG = 0x1, H2O_FILE_FLAG_DIR_LISTING = 0x2, H2O_FILE_FLAG_SEND_COMPRESSED = 0x4 };
+enum { H2O_FILE_FLAG_NO_ETAG = 0x1, H2O_FILE_FLAG_DIR_LISTING = 0x2, H2O_FILE_FLAG_SEND_COMPRESSED = 0x4, H2O_FILE_FLAG_GUNZIP = 0x8 };
 
 typedef struct st_h2o_file_handler_t h2o_file_handler_t;
 
