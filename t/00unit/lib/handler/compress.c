@@ -72,7 +72,7 @@ void test_gzip_simple(void)
 
     h2o_compress_context_t *compressor = h2o_compress_gzip_open(&pool, Z_BEST_SPEED);
     inbuf = h2o_iovec_init(H2O_STRLIT("hello world"));
-    compressor->compress(compressor, &inbuf, 1, 1, &outbufs, &outbufcnt);
+    compressor->transform(compressor, &inbuf, 1, 1, &outbufs, &outbufcnt);
 
     check_result(outbufs, outbufcnt, H2O_STRLIT("hello world"));
 
@@ -105,7 +105,7 @@ void test_gzip_multi(void)
     h2o_mem_init_pool(&pool);
 
     h2o_compress_context_t *compressor = h2o_compress_gzip_open(&pool, Z_BEST_SPEED);
-    compressor->compress(compressor, inbufs, sizeof(inbufs) / sizeof(inbufs[0]), 1, &outbufs, &outbufcnt);
+    compressor->transform(compressor, inbufs, sizeof(inbufs) / sizeof(inbufs[0]), 1, &outbufs, &outbufcnt);
 
     assert(outbufcnt > 1); /* we want to test multi-vec output */
 

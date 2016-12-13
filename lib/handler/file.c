@@ -318,7 +318,7 @@ static void send_decompressed(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t 
     h2o_iovec_t *outbufs;
     size_t outbufcnt;
 
-    self->decompressor->decompress(self->decompressor, inbufs, inbufcnt, state, &outbufs, &outbufcnt);
+    self->decompressor->transform(self->decompressor, inbufs, inbufcnt, state, &outbufs, &outbufcnt);
     h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, state);
 }
 
@@ -371,7 +371,7 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     /* dynamically setup gzip decompress ostream */
     if (self->gunzip) {
         struct st_gzip_decompress_t *decoder = (void *)h2o_add_ostream(req, sizeof(struct st_gzip_decompress_t), &req->_ostr_top);
-        decoder->decompressor = h2o_decompress_gzip_open(&req->pool);
+        decoder->decompressor = h2o_compress_gunzip_open(&req->pool);
         decoder->super.do_send = send_decompressed;
     }
 

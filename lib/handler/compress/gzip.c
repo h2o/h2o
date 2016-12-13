@@ -38,6 +38,11 @@ struct st_gzip_context_t {
     iovec_vector_t bufs;
 };
 
+static void do_compress(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                        h2o_iovec_t **outbufs, size_t *outbufcnt);
+static void do_decompress(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                          h2o_iovec_t **outbufs, size_t *outbufcnt);
+
 static void *alloc_cb(void *_unused, unsigned int cnt, unsigned int sz)
 {
     return h2o_mem_alloc(cnt * (size_t)sz);
@@ -109,7 +114,7 @@ static void do_process(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_
     *outbufcnt = outbufindex + 1;
 
     if (!h2o_send_state_is_in_progress(state)) {
-        if (self->super.compress != NULL) {
+        if (self->super.transform == do_compress) {
             deflateEnd(&self->zs);
         } else {
             inflateEnd(&self->zs);
@@ -136,7 +141,7 @@ static void do_free(void *_self)
     size_t i;
 
     if (self->zs_is_open) {
-        if (self->super.compress != NULL) {
+        if (self->super.transform == do_compress) {
             deflateEnd(&self->zs);
         } else {
             inflateEnd(&self->zs);
@@ -153,8 +158,7 @@ static struct st_gzip_context_t *gzip_open(h2o_mem_pool_t *pool)
     struct st_gzip_context_t *self = h2o_mem_alloc_shared(pool, sizeof(*self), do_free);
 
     self->super.name = h2o_iovec_init(H2O_STRLIT("gzip"));
-    self->super.compress = NULL;
-    self->super.decompress = NULL;
+    self->super.transform = NULL;
     self->zs.zalloc = alloc_cb;
     self->zs.zfree = free_cb;
     self->zs.opaque = NULL;
@@ -168,17 +172,17 @@ static struct st_gzip_context_t *gzip_open(h2o_mem_pool_t *pool)
 h2o_compress_context_t *h2o_compress_gzip_open(h2o_mem_pool_t *pool, int quality)
 {
     struct st_gzip_context_t *self = gzip_open(pool);
-    self->super.compress = do_compress;
+    self->super.transform = do_compress;
     /* Z_BEST_SPEED for on-the-fly compression, memlevel set to 8 as suggested by the manual */
     deflateInit2(&self->zs, quality, Z_DEFLATED, WINDOW_BITS, 8, Z_DEFAULT_STRATEGY);
 
     return &self->super;
 }
 
-h2o_compress_context_t *h2o_decompress_gzip_open(h2o_mem_pool_t *pool)
+h2o_compress_context_t *h2o_compress_gunzip_open(h2o_mem_pool_t *pool)
 {
     struct st_gzip_context_t *self = gzip_open(pool);
-    self->super.decompress = do_decompress;
+    self->super.transform = do_decompress;
     inflateInit2(&self->zs, WINDOW_BITS);
 
     return &self->super;
