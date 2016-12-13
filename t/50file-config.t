@@ -2,7 +2,6 @@ use strict;
 use warnings;
 use Test::More;
 use t::Util;
-use Gzip::Faster qw/gunzip_file/;
 
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
@@ -78,7 +77,7 @@ EOT
     my $index_orig_len = (stat 't/assets/doc_root/index.txt')[7];
     my $index_gz_len = (stat 't/assets/doc_root/index.txt.gz')[7];
     my $index_br_len = (stat 't/assets/doc_root/index.txt.br')[7];
-    my $alice2_orig_len = length(gunzip_file('t/assets/doc_root/alice2.txt.gz'));
+    my $alice2_orig_len = `gzip -cd < t/assets/doc_root/alice2.txt.gz | wc -c`;
     my $alice2_gz_len = (stat 't/assets/doc_root/alice2.txt.gz')[7];
 
     $doit->("", "", ['/index.txt', '/'], $index_orig_len);
