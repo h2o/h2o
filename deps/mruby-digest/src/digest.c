@@ -308,7 +308,7 @@ lib_md_digest(mrb_state *mrb, const struct mrb_md *md)
   unsigned char mdstr[EVP_MAX_MD_SIZE];
 
   EVP_MD_CTX_copy(&ctx, md->ctx);
-  EVP_DigestFinal_ex(&ctx, mdstr, &mdlen);
+  EVP_DigestFinal(&ctx, mdstr, &mdlen);
   return mrb_str_new(mrb, (char *)mdstr, mdlen);
 }
 
