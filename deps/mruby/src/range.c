@@ -252,9 +252,10 @@ static mrb_bool
 range_beg_len(mrb_state *mrb, mrb_value range, mrb_int *begp, mrb_int *lenp, mrb_int len, mrb_bool trunc)
 {
   mrb_int beg, end;
-  struct RRange *r = mrb_range_ptr(mrb, range);
+  struct RRange *r;
 
   if (mrb_type(range) != MRB_TT_RANGE) return FALSE;
+  r = mrb_range_ptr(mrb, range);
 
   beg = mrb_int(mrb, r->edges->beg);
   end = mrb_int(mrb, r->edges->end);

@@ -257,6 +257,11 @@ assert('Kernel#extend works on toplevel', '15.3.1.3.13') do
   assert_true respond_to?(:test_method)
 end
 
+assert('Kernel#freeze') do
+  obj = Object.new
+  assert_equal obj, obj.freeze
+end
+
 assert('Kernel#global_variables', '15.3.1.3.14') do
   assert_equal Array, global_variables.class
 end

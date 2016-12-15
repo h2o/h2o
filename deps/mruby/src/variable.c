@@ -489,6 +489,9 @@ mrb_obj_iv_set(mrb_state *mrb, struct RObject *obj, mrb_sym sym, mrb_value v)
 {
   iv_tbl *t = obj->iv;
 
+  if (MRB_FROZEN_P(obj)) {
+    mrb_raisef(mrb, E_RUNTIME_ERROR, "can't modify frozen %S", mrb_obj_value(obj));
+  }
   if (!t) {
     t = obj->iv = iv_new(mrb);
   }

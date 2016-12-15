@@ -62,10 +62,6 @@ struct RString {
 #define RSTR_SET_NOFREE_FLAG(s) ((s)->flags |= MRB_STR_NOFREE)
 #define RSTR_UNSET_NOFREE_FLAG(s) ((s)->flags &= ~MRB_STR_NOFREE)
 
-#define RSTR_FROZEN_P(s) ((s)->flags & MRB_STR_FROZEN)
-#define RSTR_SET_FROZEN_FLAG(s) ((s)->flags |= MRB_STR_FROZEN)
-#define RSTR_UNSET_FROZEN_FLAG(s) ((s)->flags &= ~MRB_STR_FROZEN)
-
 /*
  * Returns a pointer from a Ruby string
  */
@@ -80,7 +76,6 @@ MRB_API mrb_int mrb_str_strlen(mrb_state*, struct RString*);
 
 #define MRB_STR_SHARED    1
 #define MRB_STR_NOFREE    2
-#define MRB_STR_FROZEN    4
 #define MRB_STR_NO_UTF    8
 #define MRB_STR_EMBED    16
 #define MRB_STR_EMBED_LEN_MASK 0x3e0

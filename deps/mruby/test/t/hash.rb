@@ -366,3 +366,10 @@ assert('Hash#rehash') do
   h.rehash
   assert_equal("b", h[[:b]])
 end
+
+assert('Hash#freeze') do
+  h = {}.freeze
+  assert_raise(RuntimeError) do
+    h[:a] = 'b'
+  end
+end

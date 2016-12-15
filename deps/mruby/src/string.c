@@ -118,8 +118,8 @@ mrb_str_buf_new(mrb_state *mrb, size_t capa)
   return mrb_obj_value(s);
 }
 
-static inline void
-resize_capa(mrb_state *mrb, struct RString *s, mrb_int capacity)
+static void
+resize_capa(mrb_state *mrb, struct RString *s, size_t capacity)
 {
   if (RSTR_EMBED_P(s)) {
     if (RSTRING_EMBED_LEN_MAX < capacity) {
@@ -133,6 +133,9 @@ resize_capa(mrb_state *mrb, struct RString *s, mrb_int capacity)
     }
   }
   else {
+#if SIZE_MAX > MRB_INT_MAX
+    mrb_assert(capacity <= MRB_INT_MAX);
+#endif
     s->as.heap.ptr = (char *)mrb_realloc(mrb, RSTR_PTR(s), capacity+1);
     s->as.heap.aux.capa = capacity;
   }
@@ -156,14 +159,14 @@ str_buf_cat(mrb_state *mrb, struct RString *s, const char *ptr, size_t len)
   else
     capa = s->as.heap.aux.capa;
 
-  if (RSTR_LEN(s) >= MRB_INT_MAX - (mrb_int)len) {
+  total = RSTR_LEN(s)+len;
+  if (total >= MRB_INT_MAX) {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "string size too big");
   }
-  total = RSTR_LEN(s)+len;
   if (capa <= total) {
     while (total > capa) {
       if (capa + 1 >= MRB_INT_MAX / 2) {
-        capa = (total + 4095) / 4096;
+        capa = MRB_INT_MAX;
         break;
       }
       capa = (capa + 1) * 2;
@@ -501,7 +504,7 @@ str_index(mrb_state *mrb, mrb_value str, mrb_value sub, mrb_int offset)
 static void
 check_frozen(mrb_state *mrb, struct RString *s)
 {
-  if (RSTR_FROZEN_P(s)) {
+  if (MRB_FROZEN_P(s)) {
     mrb_raise(mrb, E_RUNTIME_ERROR, "can't modify frozen string");
   }
 }
@@ -698,15 +701,6 @@ mrb_str_modify(mrb_state *mrb, struct RString *s)
     RSTR_UNSET_NOFREE_FLAG(s);
     return;
   }
-}
-
-static mrb_value
-mrb_str_freeze(mrb_state *mrb, mrb_value str)
-{
-  struct RString *s = mrb_str_ptr(str);
-
-  RSTR_SET_FROZEN_FLAG(s);
-  return str;
 }
 
 MRB_API mrb_value
@@ -2217,7 +2211,7 @@ mrb_string_value_cstr(mrb_state *mrb, mrb_value *ptr)
   char *p = RSTR_PTR(ps);
 
   if (!p || p[len] != '\0') {
-    if (RSTR_FROZEN_P(ps)) {
+    if (MRB_FROZEN_P(ps)) {
       *ptr = str = mrb_str_dup(mrb, str);
       ps = mrb_str_ptr(str);
     }
@@ -2746,8 +2740,6 @@ mrb_init_string(mrb_state *mrb)
   mrb_define_method(mrb, s, "upcase!",         mrb_str_upcase_bang,     MRB_ARGS_NONE()); /* 15.2.10.5.43 */
   mrb_define_method(mrb, s, "inspect",         mrb_str_inspect,         MRB_ARGS_NONE()); /* 15.2.10.5.46(x) */
   mrb_define_method(mrb, s, "bytes",           mrb_str_bytes,           MRB_ARGS_NONE());
-
-  mrb_define_method(mrb, s, "freeze",          mrb_str_freeze,          MRB_ARGS_NONE());
 }
 
 /*

@@ -654,11 +654,13 @@ mrb_yield_with_class(mrb_state *mrb, mrb_value b, mrb_int argc, const mrb_value 
   if (MRB_PROC_CFUNC_P(p)) {
     val = p->body.func(mrb, self);
     mrb->c->stack = mrb->c->ci->stackent;
-    cipop(mrb);
   }
   else {
+    int cioff = mrb->c->ci - mrb->c->cibase;
     val = mrb_run(mrb, p, self);
+    mrb->c->ci = mrb->c->cibase + cioff;
   }
+  cipop(mrb);
   return val;
 }
 
