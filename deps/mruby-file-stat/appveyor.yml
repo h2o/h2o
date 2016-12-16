@@ -11,7 +11,7 @@ install:
   - ruby --version
   - gem --version
   - gcc --version
-  - gem install rake
+  - gem install rake --force
   - cd ..
   - git clone --depth 1 https://github.com/mruby/mruby.git
   - cd mruby
