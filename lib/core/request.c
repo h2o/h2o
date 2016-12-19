@@ -205,6 +205,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
     req->preferred_chunk_size = SIZE_MAX;
 
     if (src != NULL) {
+        size_t i;
 #define COPY(buf)                                                                                                                  \
     do {                                                                                                                           \
         req->buf.base = h2o_mem_alloc_pool(&req->pool, src->buf.len);                                                              \
@@ -216,9 +217,6 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
         COPY(input.path);
         req->input.scheme = src->input.scheme;
         req->version = src->version;
-        h2o_vector_reserve(&req->pool, &req->headers, src->headers.size);
-        memcpy(req->headers.entries, src->headers.entries, sizeof(req->headers.entries[0]) * src->headers.size);
-        req->headers.size = src->headers.size;
         req->entity = src->entity;
         req->http1_is_persistent = src->http1_is_persistent;
         req->timestamps = src->timestamps;
@@ -229,8 +227,19 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
             req->upgrade.len = 0;
         }
 #undef COPY
+        h2o_vector_reserve(&req->pool, &req->headers, src->headers.size);
+        req->headers.size = src->headers.size;
+        for (i = 0; i != src->headers.size; ++i) {
+            h2o_header_t *dst_header = req->headers.entries + i, *src_header = src->headers.entries + i;
+            if (h2o_iovec_is_token(src_header->name)) {
+                dst_header->name = src_header->name;
+            } else {
+                dst_header->name = h2o_mem_alloc_pool(&req->pool, sizeof(*dst_header->name));
+                *dst_header->name = h2o_strdup(&req->pool, src_header->name->base, src_header->name->len);
+            }
+            dst_header->value = h2o_strdup(&req->pool, src_header->value.base, src_header->value.len);
+        }
         if (src->env.size != 0) {
-            size_t i;
             h2o_vector_reserve(&req->pool, &req->env, src->env.size);
             req->env.size = src->env.size;
             for (i = 0; i != req->env.size; ++i)
