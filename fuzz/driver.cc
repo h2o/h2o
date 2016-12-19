@@ -20,7 +20,6 @@
  * IN THE SOFTWARE.
  */
 
-
 /*
  * This file implements a test harness for using h2o with LibFuzzer.
  * See http://llvm.org/docs/LibFuzzer.html for more info.
@@ -30,7 +29,6 @@
 #include <string.h>
 #include <errno.h>
 #include <limits.h>
-#include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <signal.h>
@@ -42,19 +40,20 @@
 #include <wait.h>
 #include <malloc.h>
 #include <unistd.h>
+#include <fcntl.h>
+
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 #include "h2o/memcached.h"
 
 #if !defined(HTTP1) && !defined(HTTP2)
-#  error "Please defined one of HTTP1 or HTTP2"
+#error "Please defined one of HTTP1 or HTTP2"
 #endif
 
 #if defined(HTTP1) && defined(HTTP2)
-#  error "Please defined one of HTTP1 or HTTP2, but not both"
+#error "Please defined one of HTTP1 or HTTP2, but not both"
 #endif
-
 
 /*
  * Registers a request handler with h2o
@@ -66,7 +65,6 @@ static h2o_pathconf_t *register_handler(h2o_hostconf_t *hostconf, const char *pa
     handler->on_req = on_req;
     return pathconf;
 }
-
 
 /*
  * Request handler used for testing. Returns a basic "200 OK" response.
@@ -87,7 +85,6 @@ static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
 
     return 0;
 }
-
 
 /*
  * Request handler used for testing reproxy requests. Returns a basic "200 OK"
@@ -111,7 +108,6 @@ static h2o_globalconf_t config;
 static h2o_context_t ctx;
 static h2o_accept_ctx_t accept_ctx;
 
-
 /* copy from src to dst, return true if src has EOF */
 static int drain(int fd)
 {
@@ -119,20 +115,32 @@ static int drain(int fd)
     ssize_t n;
 
     n = read(fd, buf, sizeof(buf));
-    if(n <= 0) {
+    if (n <= 0) {
         return 1;
     }
     return 0;
 }
 
-
-/* Args passed to h2o client thread (see below) */
 struct writer_thread_arg {
     char *buf;
     size_t len;
     int fd;
 };
 
+static void read_fully(int fd, char *buf, size_t len)
+{
+    int done = 0;
+    while (len) {
+        int ret;
+        while ((ret = read(fd, buf + done, len)) == -1 && errno == EINTR)
+            ;
+        if (ret <= 0) {
+            abort();
+        }
+        done += ret;
+        len -= ret;
+    }
+}
 
 /*
  * Thread: Writes fuzzed input to socket and then reads results back. Acts
@@ -140,90 +148,110 @@ struct writer_thread_arg {
  */
 void *writer_thread(void *arg)
 {
-    struct writer_thread_arg *wta = (struct writer_thread_arg *)arg;
-    int pos = 0;
-    int sockinp = wta->fd;
-    int sockoutp = wta->fd;
-    int cnt = 0;
-    char *buf = wta->buf;
-    int len = wta->len;
+    int rfd = (long)arg;
+    while (1) {
+        int pos, sockinp, sockoutp, cnt, len;
+        char *buf;
+        struct writer_thread_arg *wta;
 
-    /*
-     * Send fuzzed input and read results until the socket is closed (or
-     * something spurious happens)
-     */
-    while(cnt++ < 20 && (pos < len || sockinp >= 0)) {
+        read_fully(rfd, (char *)&wta, sizeof(wta));
+
+        pos = 0;
+        sockinp = wta->fd;
+        sockoutp = wta->fd;
+        cnt = 0;
+        buf = wta->buf;
+        len = wta->len;
+
+        /*
+         * Send fuzzed input and read results until the socket is closed (or
+         * something spurious happens)
+         */
+        while (cnt++ < 20 && (pos < len || sockinp >= 0)) {
 #define MARKER "\n--MARK--\n"
-        /* send 1 packet */
-        if(pos < len) {
-            char *p = (char *)memmem(buf + pos, len - pos, MARKER, sizeof(MARKER) - 1);
-            if(p) {
-                int l = p - (buf + pos);
-                write(sockoutp, buf + pos, l);
-                pos += l;
-                pos += sizeof(MARKER) - 1;
+            /* send 1 packet */
+            if (pos < len) {
+                char *p = (char *)memmem(buf + pos, len - pos, MARKER, sizeof(MARKER) - 1);
+                if (p) {
+                    int l = p - (buf + pos);
+                    write(sockoutp, buf + pos, l);
+                    pos += l;
+                    pos += sizeof(MARKER) - 1;
+                }
+            } else {
+                if (sockinp >= 0) {
+                    shutdown(sockinp, SHUT_WR);
+                }
             }
-        } else {
-            if(sockinp >= 0) {
-                shutdown(sockinp, SHUT_WR);
+
+            /* drain socket */
+            if (sockinp >= 0) {
+                struct timeval timeo;
+                fd_set rd;
+                int n;
+
+                FD_ZERO(&rd);
+                FD_SET(sockinp, &rd);
+                timeo.tv_sec = 0;
+                timeo.tv_usec = 10 * 1000;
+                n = select(sockinp + 1, &rd, NULL, NULL, &timeo);
+                if (n > 0 && FD_ISSET(sockinp, &rd) && drain(sockinp)) {
+                    sockinp = -1;
+                }
             }
         }
-
-        /* drain socket */
-        if(sockinp >= 0) {
-            struct timeval timeo;
-            fd_set rd;
-            int n;
-
-            FD_ZERO(&rd);
-            FD_SET(sockinp, &rd);
-            timeo.tv_sec = 0;
-            timeo.tv_usec = 10 * 1000;
-            n = select(sockinp+1, &rd, NULL, NULL, &timeo);
-            if(n > 0 && FD_ISSET(sockinp, &rd) && drain(sockinp)) {
-                sockinp = -1;
-            }
-        }
+        close(wta->fd);
+        free(wta);
     }
-    close(wta->fd);
-    free(wta);
-    return NULL;
 }
 
+static void write_fully(int fd, char *buf, size_t len)
+{
+    int done = 0;
+    while (len) {
+        int ret;
+        while ((ret = write(fd, buf + done, len)) == -1 && errno == EINTR)
+            ;
+        if (ret <= 0) {
+            abort();
+        }
+        done += ret;
+        len -= ret;
+    }
+}
 
 /*
  * Creates socketpair and passes fuzzed input to a thread (the HTTP[/2] client)
  * for writing to the target h2o server. Returns the server socket.
  */
-static int feeder(pthread_t *t, char *buf, size_t len)
+static int feeder(int sfd, char *buf, size_t len)
 {
     int pair[2];
     struct writer_thread_arg *wta;
 
-    if(socketpair(AF_UNIX, SOCK_STREAM, 0, pair) == -1)
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, pair) == -1)
         return -1;
 
     wta = (struct writer_thread_arg *)malloc(sizeof(*wta));
     wta->fd = pair[0];
     wta->buf = buf;
     wta->len = len;
-    assert(pthread_create(t, NULL, writer_thread, wta) == 0);
+    write_fully(sfd, (char *)&wta, sizeof(wta));
     return pair[1];
 }
-
 
 /*
  * Creates a client thread and uses it to pass fuzzed input to h2o server.
  * Returns server socket fd.
  */
-static int create_accepted(pthread_t *t, char *buf, size_t len)
+static int create_accepted(int sfd, char *buf, size_t len)
 {
     int fd;
     h2o_socket_t *sock;
     struct timeval connected_at = *h2o_get_timestamp(&ctx, NULL, NULL);
 
     /* Create an HTTP[/2] client that will send the fuzzed input */
-    fd = feeder(t, buf, len);
+    fd = feeder(sfd, buf, len);
     assert(fd >= 0);
 
     /* Pass the server socket to h2o and invoke request processing */
@@ -238,7 +266,6 @@ static int create_accepted(pthread_t *t, char *buf, size_t len)
     return fd;
 }
 
-
 /*
  * Returns true if fd if valid. Used to determine when connection is closed.
  */
@@ -247,12 +274,12 @@ static int is_valid_fd(int fd)
     return fcntl(fd, F_GETFD) != -1 || errno != EBADF;
 }
 
-
 /*
  * Entry point for libfuzzer.
  * See http://llvm.org/docs/LibFuzzer.html for more info
  */
-int init_done;
+static int init_done;
+static int job_queue[2];
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 {
     int c;
@@ -280,6 +307,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 
         accept_ctx.ctx = &ctx;
         accept_ctx.hosts = config.hosts;
+        assert(socketpair(AF_UNIX, SOCK_STREAM, 0, job_queue) == 0);
+        assert(pthread_create(&t, NULL, writer_thread, (void *)(long)job_queue[1]) == 0);
         init_done = 1;
     }
 
@@ -287,7 +316,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
      * Create a client thread that will pass the fuzzed input to the h2o server
      * and read the results (and exit when done).
      */
-    c = create_accepted(&t, (char *)Data, (size_t)Size);
+    c = create_accepted(job_queue[0], (char *)Data, (size_t)Size);
     if (c < 0) {
         goto Error;
     }
@@ -296,8 +325,6 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
     while (is_valid_fd(c) && h2o_evloop_run(ctx.loop, INT32_MAX) == 0)
         ;
 
-    /* Wait for the client thread to exit */
-    pthread_join(t, NULL);
     return 0;
 Error:
     return 1;
