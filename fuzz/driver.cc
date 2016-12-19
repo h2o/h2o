@@ -121,12 +121,16 @@ static int drain(int fd)
     return 0;
 }
 
+/* A request sent from client thread to h2o server */
 struct writer_thread_arg {
     char *buf;
     size_t len;
     int fd;
 };
 
+/*
+ * Reads writer_thread_arg from fd and stores to buf
+ */
 static void read_fully(int fd, char *buf, size_t len)
 {
     int done = 0;
@@ -142,9 +146,28 @@ static void read_fully(int fd, char *buf, size_t len)
     }
 }
 
+/* 
+ * Writes the writer_thread_args at buf to fd 
+ */
+static void write_fully(int fd, char *buf, size_t len)
+{
+    int done = 0;
+    while (len) {
+        int ret;
+        while ((ret = write(fd, buf + done, len)) == -1 && errno == EINTR)
+            ;
+        if (ret <= 0) {
+            abort();
+        }
+        done += ret;
+        len -= ret;
+    }
+}
+
 /*
- * Thread: Writes fuzzed input to socket and then reads results back. Acts
- * as a client to h2o.
+ * Thread: Loops writing fuzzed req to socket and then reading results back. 
+ * Acts as a client to h2o. *arg points to file descripter to read 
+ * writer_thread_args from.
  */
 void *writer_thread(void *arg)
 {
@@ -154,6 +177,7 @@ void *writer_thread(void *arg)
         char *buf;
         struct writer_thread_arg *wta;
 
+        /* Get fuzzed request */
         read_fully(rfd, (char *)&wta, sizeof(wta));
 
         pos = 0;
@@ -164,7 +188,7 @@ void *writer_thread(void *arg)
         len = wta->len;
 
         /*
-         * Send fuzzed input and read results until the socket is closed (or
+         * Send fuzzed req and read results until the socket is closed (or
          * something spurious happens)
          */
         while (cnt++ < 20 && (pos < len || sockinp >= 0)) {
@@ -205,24 +229,9 @@ void *writer_thread(void *arg)
     }
 }
 
-static void write_fully(int fd, char *buf, size_t len)
-{
-    int done = 0;
-    while (len) {
-        int ret;
-        while ((ret = write(fd, buf + done, len)) == -1 && errno == EINTR)
-            ;
-        if (ret <= 0) {
-            abort();
-        }
-        done += ret;
-        len -= ret;
-    }
-}
-
 /*
- * Creates socketpair and passes fuzzed input to a thread (the HTTP[/2] client)
- * for writing to the target h2o server. Returns the server socket.
+ * Creates socket pair and passes fuzzed req to a thread (the HTTP[/2] client)
+ * for writing to the target h2o server. Returns the server socket fd.
  */
 static int feeder(int sfd, char *buf, size_t len)
 {
@@ -241,7 +250,8 @@ static int feeder(int sfd, char *buf, size_t len)
 }
 
 /*
- * Creates a client thread and uses it to pass fuzzed input to h2o server.
+ * Creates/connects socket pair for client/server interaction and passes
+ * fuzzed request to client for sending.
  * Returns server socket fd.
  */
 static int create_accepted(int sfd, char *buf, size_t len)
@@ -250,7 +260,7 @@ static int create_accepted(int sfd, char *buf, size_t len)
     h2o_socket_t *sock;
     struct timeval connected_at = *h2o_get_timestamp(&ctx, NULL, NULL);
 
-    /* Create an HTTP[/2] client that will send the fuzzed input */
+    /* Create an HTTP[/2] client that will send the fuzzed request */
     fd = feeder(sfd, buf, len);
     assert(fd >= 0);
 
@@ -288,12 +298,12 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
     pthread_t t;
 
     /*
-     * Perform one-time initialization: create a single h2o host with multiple
-     * request handlers
+     * Perform one-time initialization
      */
     if (!init_done) {
         signal(SIGPIPE, SIG_IGN);
 
+        /* Create a single h2o host with multiple request handlers */
         h2o_config_init(&config);
         config.http2.idle_timeout = 10 * 1000;
         config.http1.req_timeout = 10 * 1000;
@@ -307,14 +317,16 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 
         accept_ctx.ctx = &ctx;
         accept_ctx.hosts = config.hosts;
+
+        /* Create a thread to act as the HTTP client */
         assert(socketpair(AF_UNIX, SOCK_STREAM, 0, job_queue) == 0);
         assert(pthread_create(&t, NULL, writer_thread, (void *)(long)job_queue[1]) == 0);
         init_done = 1;
     }
 
     /*
-     * Create a client thread that will pass the fuzzed input to the h2o server
-     * and read the results (and exit when done).
+     * Pass fuzzed request to client thread and get h2o server socket for
+     * use below
      */
     c = create_accepted(job_queue[0], (char *)Data, (size_t)Size);
     if (c < 0) {
