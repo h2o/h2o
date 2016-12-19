@@ -126,6 +126,7 @@ struct writer_thread_arg {
     char *buf;
     size_t len;
     int fd;
+    pthread_barrier_t barrier;
 };
 
 /*
@@ -225,6 +226,7 @@ void *writer_thread(void *arg)
             }
         }
         close(wta->fd);
+	pthread_barrier_wait(&wta->barrier);
         free(wta);
     }
 }
@@ -233,7 +235,7 @@ void *writer_thread(void *arg)
  * Creates socket pair and passes fuzzed req to a thread (the HTTP[/2] client)
  * for writing to the target h2o server. Returns the server socket fd.
  */
-static int feeder(int sfd, char *buf, size_t len)
+static int feeder(int sfd, char *buf, size_t len, pthread_barrier_t **barrier)
 {
     int pair[2];
     struct writer_thread_arg *wta;
@@ -245,6 +247,9 @@ static int feeder(int sfd, char *buf, size_t len)
     wta->fd = pair[0];
     wta->buf = buf;
     wta->len = len;
+    pthread_barrier_init(&wta->barrier, NULL, 2);
+    *barrier = &wta->barrier;
+
     write_fully(sfd, (char *)&wta, sizeof(wta));
     return pair[1];
 }
@@ -254,14 +259,14 @@ static int feeder(int sfd, char *buf, size_t len)
  * fuzzed request to client for sending.
  * Returns server socket fd.
  */
-static int create_accepted(int sfd, char *buf, size_t len)
+static int create_accepted(int sfd, char *buf, size_t len, pthread_barrier_t **barrier)
 {
     int fd;
     h2o_socket_t *sock;
     struct timeval connected_at = *h2o_get_timestamp(&ctx, NULL, NULL);
 
     /* Create an HTTP[/2] client that will send the fuzzed request */
-    fd = feeder(sfd, buf, len);
+    fd = feeder(sfd, buf, len, barrier);
     assert(fd >= 0);
 
     /* Pass the server socket to h2o and invoke request processing */
@@ -328,7 +333,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
      * Pass fuzzed request to client thread and get h2o server socket for
      * use below
      */
-    c = create_accepted(job_queue[0], (char *)Data, (size_t)Size);
+    pthread_barrier_t *end;
+    c = create_accepted(job_queue[0], (char *)Data, (size_t)Size, &end);
     if (c < 0) {
         goto Error;
     }
@@ -337,6 +343,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
     while (is_valid_fd(c) && h2o_evloop_run(ctx.loop, INT32_MAX) == 0)
         ;
 
+    pthread_barrier_wait(end);
+    pthread_barrier_destroy(end);
     return 0;
 Error:
     return 1;
