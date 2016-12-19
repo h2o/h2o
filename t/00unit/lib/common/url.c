@@ -33,6 +33,34 @@ static void test_normalize_path(void)
     h2o_iovec_t input;
     h2o_iovec_t b;
 
+    input = h2o_iovec_init(NULL, 0);
+    b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes);
+    ok(b.len == 1);
+    ok(memcmp(b.base, H2O_STRLIT("/")) == 0);
+    ok(q == SIZE_MAX);
+    ok(norm_indexes == NULL);
+
+    input = h2o_iovec_init(H2O_STRLIT("a"));
+    b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes);
+    ok(b.len == 2);
+    ok(memcmp(b.base, H2O_STRLIT("/a")) == 0);
+    ok(q == SIZE_MAX);
+    ok(norm_indexes != NULL);
+    ok(norm_indexes[0] == 0);
+    ok(norm_indexes[1] == 1);
+    norm_indexes = NULL;
+
+    input = h2o_iovec_init(H2O_STRLIT("aa"));
+    b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes);
+    ok(b.len == 3);
+    ok(memcmp(b.base, H2O_STRLIT("/aa")) == 0);
+    ok(q == SIZE_MAX);
+    ok(norm_indexes != NULL);
+    ok(norm_indexes[0] == 0);
+    ok(norm_indexes[1] == 1);
+    ok(norm_indexes[2] == 2);
+    norm_indexes = NULL;
+
     input = h2o_iovec_init(H2O_STRLIT("/"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes);
     ok(b.len == 1);

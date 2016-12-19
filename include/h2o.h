@@ -924,7 +924,7 @@ struct st_h2o_req_t {
      */
     h2o_iovec_t path_normalized;
     /**
-     * Map of indexes of `path_normalized` into the next character in `path`
+     * Map of indexes of `path_normalized` into the next character in `path`; built only if `path` required normalization
      */
     size_t *norm_indexes;
     /**
