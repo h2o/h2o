@@ -500,7 +500,12 @@ new_lit(codegen_scope *s, mrb_value val)
   return i;
 }
 
-static inline int
+/* method symbols should be fit in 9 bits */
+#define MAXMSYMLEN 512
+/* maximum symbol numbers */
+#define MAXSYMLEN 65536
+
+static int
 new_msym(codegen_scope *s, mrb_sym sym)
 {
   size_t i, len;
@@ -508,20 +513,20 @@ new_msym(codegen_scope *s, mrb_sym sym)
   mrb_assert(s->irep);
 
   len = s->irep->slen;
-  if (len > 256) len = 256;
+  if (len > MAXMSYMLEN) len = MAXMSYMLEN;
   for (i=0; i<len; i++) {
     if (s->irep->syms[i] == sym) return i;
     if (s->irep->syms[i] == 0) break;
   }
-  if (i == 256) {
-    codegen_error(s, "too many symbols (max 256)");
+  if (i == MAXMSYMLEN) {
+    codegen_error(s, "too many symbols (max " MRB_STRINGIZE(MAXMSYMLEN) ")");
   }
   s->irep->syms[i] = sym;
   if (i == s->irep->slen) s->irep->slen++;
   return i;
 }
 
-static inline int
+static int
 new_sym(codegen_scope *s, mrb_sym sym)
 {
   size_t i;
@@ -529,13 +534,18 @@ new_sym(codegen_scope *s, mrb_sym sym)
   for (i=0; i<s->irep->slen; i++) {
     if (s->irep->syms[i] == sym) return i;
   }
-  if (s->irep->slen > 125 && s->irep->slen < 256) {
-    s->irep->syms = (mrb_sym *)codegen_realloc(s, s->irep->syms, sizeof(mrb_sym)*65536);
-    for (i = 0; i < 256 - s->irep->slen; i++) {
+  if (s->irep->slen == MAXSYMLEN) {
+    codegen_error(s, "too many symbols (max " MRB_STRINGIZE(MAXSYMLEN) ")");
+  }
+
+  if (s->irep->slen > MAXMSYMLEN/2 && s->scapa == MAXMSYMLEN) {
+    s->scapa = MAXSYMLEN;
+    s->irep->syms = (mrb_sym *)codegen_realloc(s, s->irep->syms, sizeof(mrb_sym)*MAXSYMLEN);
+    for (i = s->irep->slen; i < MAXMSYMLEN; i++) {
       static const mrb_sym mrb_sym_zero = { 0 };
-      s->irep->syms[i + s->irep->slen] = mrb_sym_zero;
+      s->irep->syms[i] = mrb_sym_zero;
     }
-    s->irep->slen = 256;
+    s->irep->slen = MAXMSYMLEN;
   }
   s->irep->syms[s->irep->slen] = sym;
   return s->irep->slen++;
@@ -2221,6 +2231,10 @@ codegen(codegen_scope *s, node *tree, int val)
     {
       nt = (intptr_t)tree->car;
       tree = tree->cdr;
+      if (!val) {
+        codegen(s, tree, NOVAL);
+        break;
+      }
       switch (nt) {
       case NODE_FLOAT:
         {
@@ -2756,7 +2770,7 @@ scope_new(mrb_state *mrb, codegen_scope *prev, node *lv)
   p->irep->pool = (mrb_value*)mrb_malloc(mrb, sizeof(mrb_value)*p->pcapa);
   p->irep->plen = 0;
 
-  p->scapa = 256;
+  p->scapa = MAXMSYMLEN;
   p->irep->syms = (mrb_sym*)mrb_malloc(mrb, sizeof(mrb_sym)*p->scapa);
   p->irep->slen = 0;
 

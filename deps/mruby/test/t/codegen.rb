@@ -81,3 +81,13 @@ assert('next in normal loop with 127 arguments') do
     end
   end
 end
+
+assert('negate literal register alignment') do
+  a = *case
+  when 0
+    -0.0
+    2
+  end
+
+  assert_equal [2], a
+end

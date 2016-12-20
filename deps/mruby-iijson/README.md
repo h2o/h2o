@@ -8,7 +8,7 @@
  - [JSON.generate](http://docs.ruby-lang.org/en/2.2.0/JSON.html#method-i-generate)
  - [JSON.load](http://docs.ruby-lang.org/en/2.2.0/JSON.html#method-i-load)
  - [JSON.parse](http://docs.ruby-lang.org/en/2.2.0/JSON.html#method-i-parse)
-
+ - `Array#to_json`, `Fixnum#to_json`, `Float#to_json`, `Hash#to_json`, `String#to_json`, ...
 
 ## Example:
 
@@ -38,13 +38,13 @@ h = {
   :Zip       => "94107",
   :Country   => "US"
 }
-p JSON.generate(h)
-puts JSON.generate(JSON.parse(p), {:pretty_print => true, :indent_with => 2})
+p h.to_json
+puts JSON.generate(h, {:pretty_print => true, :indent_with => 2})
 ```
 
 ```
-{"Image"=>{"Thumbnail"=>{"Url"=>"http://www.example.com/image/481989943", "Height"=>125, "Width"=>"100"}, "Title"=>"View from 15th Floor", "Height"=>600, "Width"=>800, "IDs"=>[116, 943, 234, 38793]}}
-"{\"Longitude\":-122.3959,\"Address\":\"\",\"City\":\"SAN FRANCISCO\",\"State\":\"CA\",\"precision\":\"zip\",\"Latitude\":37.7668,\"Zip\":\"94107\",\"Country\":\"US\"}"
+{"Image"=>{"Width"=>800, "Height"=>600, "Title"=>"View from 15th Floor", "Thumbnail"=>{"Url"=>"http://www.example.com/image/481989943", "Height"=>125, "Width"=>"100"}, "IDs"=>[116, 943, 234, 38793]}}
+"{\"precision\":\"zip\",\"Latitude\":37.766800000000003,\"Longitude\":-122.3959,\"Address\":\"\",\"City\":\"SAN FRANCISCO\",\"State\":\"CA\",\"Zip\":\"94107\",\"Country\":\"US\"}"
 {
   "precision": "zip",
   "Latitude": 37.766800000000003,

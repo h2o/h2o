@@ -3430,6 +3430,7 @@ void_expr_error(parser_state *p, node *n)
 {
   int c;
 
+  if (n == NULL) return;
   c = (int)(intptr_t)n->car;
   switch (c) {
   case NODE_BREAK:
@@ -3922,6 +3923,7 @@ parse_string(parser_state *p)
   int beg = (intptr_t)p->lex_strterm->cdr->cdr->car;
   int end = (intptr_t)p->lex_strterm->cdr->cdr->cdr;
   parser_heredoc_info *hinf = (type & STR_FUNC_HEREDOC) ? parsing_heredoc_inf(p) : NULL;
+  int cmd_state = p->cmd_start;
 
   if (beg == 0) beg = -3;       /* should never happen */
   if (end == 0) end = -3;
@@ -4126,10 +4128,12 @@ parse_string(parser_state *p)
     return tREGEXP;
   }
   yylval.nd = new_str(p, tok(p), toklen(p));
-  if (IS_LABEL_SUFFIX(0)) {
-    p->lstate = EXPR_BEG;
-    nextc(p);
-    return tLABEL_END;
+  if (IS_LABEL_POSSIBLE()) {
+    if (IS_LABEL_SUFFIX(0)) {
+      p->lstate = EXPR_BEG;
+      nextc(p);
+      return tLABEL_END;
+    }
   }
 
   return tSTRING;

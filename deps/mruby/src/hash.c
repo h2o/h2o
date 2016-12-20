@@ -98,9 +98,9 @@ static void mrb_hash_modify(mrb_state *mrb, mrb_value hash);
 static inline mrb_value
 mrb_hash_ht_key(mrb_state *mrb, mrb_value key)
 {
-  if (mrb_string_p(key) && !RSTR_FROZEN_P(mrb_str_ptr(key))) {
+  if (mrb_string_p(key) && !MRB_FROZEN_P(mrb_str_ptr(key))) {
     key = mrb_str_dup(mrb, key);
-    RSTR_SET_FROZEN_FLAG(mrb_str_ptr(key));
+    MRB_SET_FROZEN_FLAG(mrb_str_ptr(key));
   }
   return key;
 }
@@ -278,6 +278,9 @@ mrb_hash_tbl(mrb_state *mrb, mrb_value hash)
 static void
 mrb_hash_modify(mrb_state *mrb, mrb_value hash)
 {
+  if (MRB_FROZEN_P(mrb_hash_ptr(hash))) {
+    mrb_raise(mrb, E_RUNTIME_ERROR, "can't modify frozen hash");
+  }
   mrb_hash_tbl(mrb, hash);
 }
 

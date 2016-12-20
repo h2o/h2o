@@ -373,3 +373,10 @@ assert("Array#rindex") do
   $a = [2, 3, 4, 5, 6, 7, 8, 9, 10, Sneaky.new]
   assert_equal 0, $a.rindex(1)
 end
+
+assert('Array#freeze') do
+  a = [].freeze
+  assert_raise(RuntimeError) do
+    a[0] = 1
+  end
+end
