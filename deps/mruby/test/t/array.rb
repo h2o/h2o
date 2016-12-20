@@ -82,6 +82,14 @@ assert('Array#[]=', '15.2.12.5.5') do
   a = [1,2,3,4,5]
   a[2...4] = 6
   assert_equal([1,2,6,5], a)
+
+  # passing self (#3274)
+  a = [1,2,3]
+  a[1,0] = a
+  assert_equal([1,1,2,3,2,3], a)
+  a = [1,2,3]
+  a[-1,0] = a
+  assert_equal([1,2,1,2,3,3], a)
 end
 
 assert('Array#clear', '15.2.12.5.6') do
@@ -98,6 +106,11 @@ end
 
 assert('Array#concat', '15.2.12.5.8') do
   assert_equal([1,2,3,4], [1, 2].concat([3, 4]))
+
+  # passing self (#3302)
+  a = [1,2,3]
+  a.concat(a)
+  assert_equal([1,2,3,1,2,3], a)
 end
 
 assert('Array#delete_at', '15.2.12.5.9') do
@@ -318,7 +331,8 @@ end
 assert('Array#hash', '15.2.12.5.35') do
   a = [ 1, 2, 3 ]
 
-  assert_true(a.hash.is_a? Integer)
+  #assert_true(a.hash.is_a? Integer)
+  assert_true(a.hash.is_a? Integral)  # mruby special
   assert_equal([1,2].hash, [1,2].hash)
 end
 
@@ -346,4 +360,23 @@ assert("Array (Longish inline array)") do
   h = Hash.new(0)
   ary.each {|p| h[p.class] += 1}
   assert_equal({Array=>200}, h)
+end
+
+assert("Array#rindex") do
+  class Sneaky
+    def ==(*)
+      $a.clear
+      $a.replace([1])
+      false
+    end
+  end
+  $a = [2, 3, 4, 5, 6, 7, 8, 9, 10, Sneaky.new]
+  assert_equal 0, $a.rindex(1)
+end
+
+assert('Array#freeze') do
+  a = [].freeze
+  assert_raise(RuntimeError) do
+    a[0] = 1
+  end
 end

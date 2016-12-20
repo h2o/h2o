@@ -582,7 +582,7 @@ mrb_code_fetch_hook(mrb_state *mrb, mrb_irep *irep, mrb_code *pc, mrb_value *reg
     if (!file || (dbg->prvfile == file && dbg->prvline == line)) {
       return;
     }
-    if((uint32_t)(dbg->prvci) < (uint32_t)(mrb->c->ci)) {
+    if((intptr_t)(dbg->prvci) < (intptr_t)(mrb->c->ci)) {
       return;
     }
     dbg->prvci = NULL;
@@ -691,7 +691,7 @@ main(int argc, char **argv)
   }
   mrdb->dbg->xm = DBG_INIT;
   mrdb->dbg->ccnt = 1;
-  
+
   /* setup hook functions */
   mrb->code_fetch_hook = mrb_code_fetch_hook;
   mrdb->dbg->break_hook = mrb_debug_break_hook;
@@ -738,21 +738,21 @@ main(int argc, char **argv)
       mrb_p(mrb, v);
     }
   }
-  
+
   mrdb->dbg->prvfile = "-";
   mrdb->dbg->prvline = 0;
-  
+
   while (1) {
     cmd = get_and_parse_command(mrb, mrdb);
     mrb_assert(cmd);
-    
+
     if (cmd->id == DBGCMD_QUIT) {
       break;
     }
-    
+
     if( cmd->func(mrb, mrdb) == DBGST_RESTART ) goto l_restart;
   }
-  
+
   cleanup(mrb, &args);
 
   return 0;

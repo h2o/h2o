@@ -275,8 +275,9 @@ class Array
   #  +default+ value.
   #
   #  Alternatively, if a block is given it will only be executed when an
-  #  invalid +index+ is referenced.  Negative values of +index+ count from the
-  #  end of the array.
+  #  invalid +index+ is referenced.
+  #
+  #  Negative values of +index+ count from the end of the array.
   #
   #     a = [ 11, 22, 33, 44 ]
   #     a.fetch(1)               #=> 22
@@ -743,5 +744,22 @@ class Array
   #
   def to_ary
     self
+  end
+
+  ##
+  # call-seq:
+  #   ary.dig(idx, ...)                 -> object
+  #
+  # Extracts the nested value specified by the sequence of <i>idx</i>
+  # objects by calling +dig+ at each step, returning +nil+ if any
+  # intermediate step is +nil+.
+  #
+  def dig(idx,*args)
+    n = self[idx]
+    if args.size > 0
+      n&.dig(*args)
+    else
+      n
+    end
   end
 end

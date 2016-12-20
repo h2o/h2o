@@ -384,7 +384,41 @@ assert('class variable and class << self style class method') do
   assert_equal("value", ClassVariableTest.class_variable)
 end
 
+assert('class variable in module and class << self style class method') do
+  module ClassVariableInModuleTest
+    @@class_variable = "value"
+    class << self
+      def class_variable
+        @@class_variable
+      end
+    end
+  end
+
+  assert_equal("value", ClassVariableInModuleTest.class_variable)
+end
+
+assert('overriding class variable with a module (#3235)') do
+  module ModuleWithCVar
+    @@class_variable = 1
+  end
+  class CVarOverrideTest
+    @@class_variable = 2
+    include ModuleWithCVar
+
+    assert_equal(1, @@class_variable)
+  end
+end
+
 assert('class with non-class/module outer raises TypeError') do
   assert_raise(TypeError) { class 0::C1; end }
   assert_raise(TypeError) { class []::C2; end }
+end
+
+assert("remove_method doesn't segfault if the passed in argument isn't a symbol") do
+  klass = Class.new
+  assert_raise(TypeError) { klass.remove_method nil }
+  assert_raise(TypeError) { klass.remove_method 123 }
+  assert_raise(TypeError) { klass.remove_method 1.23 }
+  assert_raise(NameError) { klass.remove_method "hello" }
+  assert_raise(TypeError) { klass.remove_method Class.new }
 end

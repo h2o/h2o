@@ -139,6 +139,7 @@ mrb_obj_id(mrb_value obj)
   case MRB_TT_EXCEPTION:
   case MRB_TT_FILE:
   case MRB_TT_DATA:
+  case MRB_TT_ISTRUCT:
   default:
     return MakeID(mrb_ptr(obj));
   }
@@ -179,7 +180,18 @@ mrb_word_boxing_cptr_value(mrb_state *mrb, void *p)
 MRB_API mrb_bool
 mrb_regexp_p(mrb_state *mrb, mrb_value v)
 {
-  return mrb_class_defined(mrb, REGEXP_CLASS) && mrb_obj_is_kind_of(mrb, v, mrb_class_get(mrb, REGEXP_CLASS));
+  if (mrb->flags & MRB_STATE_NO_REGEXP) {
+    return FALSE;
+  }
+  if ((mrb->flags & MRB_STATE_REGEXP) || mrb_class_defined(mrb, REGEXP_CLASS)) {
+    mrb->flags |= MRB_STATE_REGEXP;
+    return mrb_obj_is_kind_of(mrb, v, mrb_class_get(mrb, REGEXP_CLASS));
+  }
+  else {
+    mrb->flags |= MRB_STATE_REGEXP;
+    mrb->flags |= MRB_STATE_NO_REGEXP;
+  }
+  return FALSE;
 }
 
 #if defined _MSC_VER && _MSC_VER < 1900

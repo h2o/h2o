@@ -2,7 +2,7 @@ module Enumerable
 
   # = Enumerable#lazy implementation
   #
-  # Enumerable#lazy returns an instance of Enumerable::Lazy.
+  # Enumerable#lazy returns an instance of Enumerator::Lazy.
   # You can use it just like as normal Enumerable object,
   # except these methods act as 'lazy':
   #
@@ -16,9 +16,11 @@ module Enumerable
   #   - flat_map  collect_concat
   #   - zip
   def lazy
-    Lazy.new(self)
+    Enumerator::Lazy.new(self)
   end
+end
 
+class Enumerator
   # == Acknowledgements
   #
   #   Based on https://github.com/yhara/enumerable-lazy
@@ -39,6 +41,15 @@ module Enumerable
         end
       }
     end
+
+    def to_enum(meth=:each, *args, &block)
+      lz = Lazy.new(self, &block)
+      lz.obj = self
+      lz.meth = meth
+      lz.args = args
+      lz
+    end
+    alias enum_for to_enum
 
     def map(&block)
       Lazy.new(self){|yielder, val|

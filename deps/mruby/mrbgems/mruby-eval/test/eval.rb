@@ -64,6 +64,8 @@ assert('String instance_eval') do
   assert_equal(['test.rb', 10]) { obj.instance_eval('[__FILE__, __LINE__]', 'test.rb', 10)}
   assert_equal('test') { obj.instance_eval('@test') }
   assert_equal('test') { obj.instance_eval { @test } }
+  o = Object.new
+  assert_equal ['', o, o], o.instance_eval("[''].each { |s| break [s, o, self] }")
 end
 
 assert('Kernel.#eval(string) context') do

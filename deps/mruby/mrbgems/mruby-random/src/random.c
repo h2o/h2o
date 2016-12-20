@@ -79,10 +79,10 @@ get_opt(mrb_state* mrb)
   mrb_get_args(mrb, "|o", &arg);
 
   if (!mrb_nil_p(arg)) {
-    if (!mrb_fixnum_p(arg)) {
+    arg = mrb_check_convert_type(mrb, arg, MRB_TT_FIXNUM, "Fixnum", "to_int");
+    if (mrb_nil_p(arg)) {
       mrb_raise(mrb, E_ARGUMENT_ERROR, "invalid argument type");
     }
-    arg = mrb_check_convert_type(mrb, arg, MRB_TT_FIXNUM, "Fixnum", "to_int");
     if (mrb_fixnum(arg) < 0) {
       arg = mrb_fixnum_value(0 - mrb_fixnum(arg));
     }
@@ -266,7 +266,7 @@ mrb_ary_sample(mrb_state *mrb, mrb_value ary)
   mrb_int n = 0;
   mrb_bool given;
   mt_state *random = NULL;
-  mrb_int len = RARRAY_LEN(ary);
+  mrb_int len;
 
   mrb_get_args(mrb, "|i?d", &n, &given, &random, &mt_state_type);
   if (random == NULL) {
@@ -274,6 +274,7 @@ mrb_ary_sample(mrb_state *mrb, mrb_value ary)
   }
   mrb_random_rand_seed(mrb, random);
   mt_rand(random);
+  len = RARRAY_LEN(ary);
   if (!given) {                 /* pick one element */
     switch (len) {
     case 0:

@@ -11,6 +11,7 @@
 #include <mruby/string.h>
 #include <mruby/variable.h>
 #include <mruby/error.h>
+#include <mruby/istruct.h>
 
 typedef enum {
   NOEX_PUBLIC    = 0x00,
@@ -284,6 +285,7 @@ copy_class(mrb_state *mrb, mrb_value dst, mrb_value src)
   }
   dc->mt = kh_copy(mt, mrb, sc->mt);
   dc->super = sc->super;
+  MRB_SET_INSTANCE_TT(dc, MRB_INSTANCE_TT(sc));
 }
 
 static void
@@ -300,6 +302,9 @@ init_copy(mrb_state *mrb, mrb_value dest, mrb_value obj)
     case MRB_TT_DATA:
     case MRB_TT_EXCEPTION:
       mrb_iv_copy(mrb, dest, obj);
+      break;
+    case MRB_TT_ISTRUCT:
+      mrb_istruct_copy(dest, obj);
       break;
 
     default:
@@ -443,6 +448,15 @@ mrb_obj_extend_m(mrb_state *mrb, mrb_value self)
 
   mrb_get_args(mrb, "*", &argv, &argc);
   return mrb_obj_extend(mrb, argc, argv, self);
+}
+
+static mrb_value
+mrb_obj_freeze(mrb_state *mrb, mrb_value self)
+{
+  struct RBasic *b = mrb_basic_ptr(self);
+
+  MRB_SET_FROZEN_FLAG(b);
+  return self;
 }
 
 /* 15.3.1.3.15 */
@@ -722,9 +736,7 @@ mrb_obj_singleton_methods(mrb_state *mrb, mrb_bool recur, mrb_value obj)
 static mrb_value
 mrb_obj_methods(mrb_state *mrb, mrb_bool recur, mrb_value obj, mrb_method_flag_t flag)
 {
-  if (recur)
-    return mrb_class_instance_method_list(mrb, recur, mrb_class(mrb, obj), 0);
-  return mrb_obj_singleton_methods(mrb, recur, obj);
+  return mrb_class_instance_method_list(mrb, recur, mrb_class(mrb, obj), 0);
 }
 /* 15.3.1.3.31 */
 /*
@@ -962,10 +974,11 @@ obj_respond_to(mrb_state *mrb, mrb_value self)
   if (!respond_to_p) {
     rtm_id = mrb_intern_lit(mrb, "respond_to_missing?");
     if (basic_obj_respond_to(mrb, self, rtm_id, !priv)) {
-      mrb_value args[2];
+      mrb_value args[2], v;
       args[0] = mid;
       args[1] = mrb_bool_value(priv);
-      return mrb_funcall_argv(mrb, self, rtm_id, 2, args);
+      v = mrb_funcall_argv(mrb, self, rtm_id, 2, args);
+      return mrb_bool_value(mrb_bool(v));
     }
   }
   return mrb_bool_value(respond_to_p);
@@ -1075,7 +1088,8 @@ mrb_local_variables(mrb_state *mrb, mrb_value self)
     struct REnv *e = proc->env;
 
     while (e) {
-      if (!MRB_PROC_CFUNC_P(mrb->c->cibase[e->cioff].proc)) {
+      if (MRB_ENV_STACK_SHARED_P(e) &&
+          !MRB_PROC_CFUNC_P(mrb->c->cibase[e->cioff].proc)) {
         irep = mrb->c->cibase[e->cioff].proc->body.irep;
         if (irep->lv) {
           for (i = 0; i + 1 < irep->nlocals; ++i) {
@@ -1119,6 +1133,7 @@ mrb_init_kernel(mrb_state *mrb)
   mrb_define_method(mrb, krn, "eql?",                       mrb_obj_equal_m,                 MRB_ARGS_REQ(1));    /* 15.3.1.3.10 */
   mrb_define_method(mrb, krn, "equal?",                     mrb_obj_equal_m,                 MRB_ARGS_REQ(1));    /* 15.3.1.3.11 */
   mrb_define_method(mrb, krn, "extend",                     mrb_obj_extend_m,                MRB_ARGS_ANY());     /* 15.3.1.3.13 */
+  mrb_define_method(mrb, krn, "freeze",                     mrb_obj_freeze,                  MRB_ARGS_NONE());
   mrb_define_method(mrb, krn, "global_variables",           mrb_f_global_variables,          MRB_ARGS_NONE());    /* 15.3.1.3.14 */
   mrb_define_method(mrb, krn, "hash",                       mrb_obj_hash,                    MRB_ARGS_NONE());    /* 15.3.1.3.15 */
   mrb_define_method(mrb, krn, "initialize_copy",            mrb_obj_init_copy,               MRB_ARGS_REQ(1));    /* 15.3.1.3.16 */
