@@ -489,6 +489,14 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
             } else {
                 next_unnormalized = req->pathconf->path.len;
             }
+
+            /*
+             * Special case: the input path didn't have any '/' including the first,
+             * so the first character is actually found at '0'
+             */
+            if (req->path.base[0] != '/' && next_unnormalized == 1) {
+                next_unnormalized = 0;
+            }
             parts[num_parts++] = (h2o_iovec_t){req->path.base + next_unnormalized, req->path.len - next_unnormalized};
         }
     }

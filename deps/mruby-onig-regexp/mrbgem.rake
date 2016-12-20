@@ -6,10 +6,14 @@ MRuby::Gem::Specification.new('mruby-onig-regexp') do |spec|
     return if @onigmo_bundled
     @onigmo_bundled = true
 
+    visualcpp = ENV['VisualStudioVersion'] || ENV['VSINSTALLDIR']
+
     require 'open3'
 
-    # remove libonig
-    linker.libraries = []
+    # remove libonig, instead link directly against pthread
+    unless ENV['OS'] == 'Windows_NT'
+      linker.libraries = ['pthread']
+    end
 
     version = '5.15.0'
     oniguruma_dir = "#{build_dir}/onig-#{version}"
@@ -43,6 +47,7 @@ MRuby::Gem::Specification.new('mruby-onig-regexp') do |spec|
 
     libonig_objs_dir = "#{oniguruma_dir}/libonig_objs"
     libmruby_a = libfile("#{build.build_dir}/lib/libmruby")
+    objext = visualcpp ? '.obj' : '.o'
 
     file oniguruma_lib => header do |t|
       Dir.chdir(oniguruma_dir) do
@@ -62,16 +67,30 @@ MRuby::Gem::Specification.new('mruby-onig-regexp') do |spec|
           run_command e, 'make'
         else
           run_command e, 'cmd /c "copy /Y win32 > NUL"'
-          run_command e, 'make -f Makefile.mingw'
+          if visualcpp
+            run_command e, 'nmake -f Makefile'
+          else
+            run_command e, 'make -f Makefile.mingw'
+          end
         end
       end
 
       FileUtils.mkdir_p libonig_objs_dir
-      Dir.chdir(libonig_objs_dir) { `ar x #{oniguruma_lib}` }
-      file libmruby_a => Dir.glob("#{libonig_objs_dir}/*.o")
+      Dir.chdir(libonig_objs_dir) do
+        unless visualcpp
+          `ar x #{oniguruma_lib}`
+        else
+          winname = oniguruma_lib.gsub(%'/', '\\')
+          `lib -nologo -list #{winname}`.each_line do |line|
+            line.chomp!
+            `lib -nologo -extract:#{line} #{winname}`
+          end
+        end
+      end
+      file libmruby_a => Dir.glob("#{libonig_objs_dir}/*#{objext}")
     end
 
-    file libmruby_a => Dir.glob("#{libonig_objs_dir}/*.o") if File.exists? oniguruma_lib
+    file libmruby_a => Dir.glob("#{libonig_objs_dir}/*#{objext}") if File.exists? oniguruma_lib
 
     file "#{dir}/src/mruby_onig_regexp.c" => oniguruma_lib
     cc.include_paths << oniguruma_dir

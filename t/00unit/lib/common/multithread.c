@@ -111,7 +111,7 @@ static void *worker_main(void *_unused)
 #if H2O_USE_LIBUV
         uv_run(worker_thread.loop, UV_RUN_ONCE);
 #else
-        h2o_evloop_run(worker_thread.loop);
+        h2o_evloop_run(worker_thread.loop, INT32_MAX);
 #endif
     }
 
@@ -139,7 +139,7 @@ void test_lib__common__multithread_c(void)
 #if H2O_USE_LIBUV
         uv_run(main_thread.loop, UV_RUN_ONCE);
 #else
-        h2o_evloop_run(main_thread.loop);
+        h2o_evloop_run(main_thread.loop, INT32_MAX);
 #endif
     }
 

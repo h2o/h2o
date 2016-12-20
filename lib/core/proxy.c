@@ -100,6 +100,35 @@ static h2o_iovec_t build_request_merge_headers(h2o_mem_pool_t *pool, h2o_iovec_t
     return merged;
 }
 
+/*
+ * A request without neither Content-Length or Transfer-Encoding header implies a zero-length request body (see 6th rule of RFC 7230
+ * 3.3.3).
+ * OTOH, section 3.3.3 states:
+ *
+ *   A user agent SHOULD send a Content-Length in a request message when
+ *   no Transfer-Encoding is sent and the request method defines a meaning
+ *   for an enclosed payload body.  For example, a Content-Length header
+ *   field is normally sent in a POST request even when the value is 0
+ *   (indicating an empty payload body).  A user agent SHOULD NOT send a
+ *   Content-Length header field when the request message does not contain
+ *   a payload body and the method semantics do not anticipate such a
+ *   body.
+ *
+ * PUT and POST define a meaning for the payload body, let's emit a
+ * Content-Length header if it doesn't exist already, since the server
+ * might send a '411 Length Required' response.
+ *
+ * see also: ML thread starting at https://lists.w3.org/Archives/Public/ietf-http-wg/2016JulSep/0580.html
+ */
+static int req_requires_content_length(h2o_req_t *req)
+{
+    int is_put_or_post =
+        (req->method.len >= 1 && req->method.base[0] == 'P' && (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("POST")) ||
+                                                                h2o_memis(req->method.base, req->method.len, H2O_STRLIT("PUT"))));
+
+    return is_put_or_post && h2o_find_header(&req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, -1) == -1;
+}
+
 static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket_handshake, int use_proxy_protocol)
 {
     h2o_iovec_t buf;
@@ -170,7 +199,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
     buf.base[offset++] = '\r';
     buf.base[offset++] = '\n';
     assert(offset <= buf.len);
-    if (req->entity.base != NULL) {
+    if (req->entity.base != NULL || req_requires_content_length(req)) {
         RESERVE(sizeof("content-length: " H2O_UINT64_LONGEST_STR) - 1);
         offset += sprintf(buf.base + offset, "content-length: %zu\r\n", req->entity.len);
     }
@@ -342,6 +371,17 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     return 0;
 }
 
+static char compress_hint_to_enum(const char *val, size_t len)
+{
+    if (h2o_lcstris(val, len, H2O_STRLIT("on"))) {
+        return H2O_COMPRESS_HINT_ENABLE;
+    }
+    if (h2o_lcstris(val, len, H2O_STRLIT("off"))) {
+        return H2O_COMPRESS_HINT_DISABLE;
+    }
+    return H2O_COMPRESS_HINT_AUTO;
+}
+
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
                                        h2o_iovec_t msg, h2o_http1client_header_t *headers, size_t num_headers)
 {
@@ -392,6 +432,9 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 goto AddHeaderDuped;
             } else if (token == H2O_TOKEN_LINK) {
                 h2o_push_path_in_link_header(req, headers[i].value, headers[i].value_len);
+            } else if (token == H2O_TOKEN_X_COMPRESS_HINT) {
+                req->compress_hint = compress_hint_to_enum(headers[i].value, headers[i].value_len);
+                goto Skip;
             }
         /* default behaviour, transfer the header downstream */
         AddHeaderDuped:

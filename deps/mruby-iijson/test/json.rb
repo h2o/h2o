@@ -113,3 +113,14 @@ assert('JSON.parse: empty string is not a valid JSON text') do
     JSON.parse ""
   end
 end
+
+assert('#to_json') do
+  assert_equal 'false',     false.to_json
+  assert_equal 'null',      nil.to_json
+  assert_equal 'true',      true.to_json
+  assert_equal '1',         1.to_json
+  assert_equal '3.125',      3.125.to_json
+  assert_equal '"str"',     "str".to_json
+  assert_equal '["one",2]', [ "one", 2 ].to_json
+  assert_equal '{"a":1}',   { "a" => 1 }.to_json
+end

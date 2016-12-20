@@ -84,6 +84,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
         h2o_iovec_t label_escaped = h2o_htmlescape(pool, files.entries[i], strlen(files.entries[i]));
 ?<LI><A HREF="<?= link_escaped ?>"><?= label_escaped ?></A>
     }
+?</UL>
 
     return _;
 }

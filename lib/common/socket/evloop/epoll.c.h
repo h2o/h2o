@@ -100,7 +100,7 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
     return 0;
 }
 
-int evloop_do_proceed(h2o_evloop_t *_loop)
+int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
 {
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)_loop;
     struct epoll_event events[256];
@@ -111,7 +111,8 @@ int evloop_do_proceed(h2o_evloop_t *_loop)
         return -1;
 
     /* poll */
-    nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), get_max_wait(&loop->super));
+    max_wait = adjust_max_wait(&loop->super, max_wait);
+    nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), max_wait);
     update_now(&loop->super);
     if (nevents == -1)
         return -1;

@@ -230,7 +230,7 @@ void test_build_destination_escaping(void)
     h2o_req_t req;
     h2o_iovec_t dest;
     int escape = 0;
-    int i;
+    int i, j;
     struct {
         char *pathconf;
         char *dest;
@@ -265,16 +265,19 @@ void test_build_destination_escaping(void)
     };
     h2o_init_request(&req, NULL, NULL);
 
-    for (i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
-        h2o_pathconf_t conf = {NULL, {tests[i].pathconf, strlen(tests[i].pathconf)}};
-        req.pathconf = &conf;
-        req.path = req.input.path = h2o_iovec_init(tests[i].input, strlen(tests[i].input));
-        req.norm_indexes = NULL;
-        req.path_normalized = h2o_url_normalize_path(&req.pool, req.path.base, req.path.len, &req.query_at, &req.norm_indexes);
-        dest = h2o_build_destination(&req, tests[i].dest, strlen(tests[i].dest), escape);
-        note("%s: %d", tests[i].input, i);
-        ok(dest.len == strlen(tests[i].output));
-        ok(h2o_memis(dest.base, dest.len, tests[i].output, strlen(tests[i].output)));
+    /* 'j' runs the test with a missing leading '/' in the input path */
+    for (j = 0; j <= 1; j++) {
+        for (i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
+            h2o_pathconf_t conf = {NULL, {tests[i].pathconf, strlen(tests[i].pathconf)}};
+            req.pathconf = &conf;
+            req.path = req.input.path = h2o_iovec_init(tests[i].input + j, strlen(tests[i].input) - j);
+            req.norm_indexes = NULL;
+            req.path_normalized = h2o_url_normalize_path(&req.pool, req.path.base, req.path.len, &req.query_at, &req.norm_indexes);
+            dest = h2o_build_destination(&req, tests[i].dest, strlen(tests[i].dest), escape);
+            note("%s: %d, %sskipping the leading '/'", tests[i].input, i, !j? "not " : "");
+            ok(dest.len == strlen(tests[i].output));
+            ok(h2o_memis(dest.base, dest.len, tests[i].output, strlen(tests[i].output)));
+        }
     }
 
     h2o_mem_clear_pool(&req.pool);

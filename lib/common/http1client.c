@@ -388,7 +388,8 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 
     if (err == NULL) {
         /* success */
-    } else if (err == h2o_socket_error_ssl_cert_name_mismatch && (SSL_CTX_get_verify_mode(client->super.ctx->ssl_ctx) & SSL_VERIFY_PEER) == 0) {
+    } else if (err == h2o_socket_error_ssl_cert_name_mismatch &&
+               (SSL_CTX_get_verify_mode(client->super.ctx->ssl_ctx) & SSL_VERIFY_PEER) == 0) {
         /* peer verification skipped */
     } else {
         on_connect_error(client, err);

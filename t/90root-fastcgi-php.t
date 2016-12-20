@@ -11,6 +11,8 @@ plan skip_all => 'test requires root privileges'
     unless $< == 0;
 plan skip_all => 'user: nobody does not exist'
     unless getpwnam 'nobody';
+plan skip_all => 'user: daemon does not exist'
+    unless getpwnam 'daemon';
 
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
@@ -47,7 +49,7 @@ file.custom-handler:
   extension: .php
   fastcgi.spawn:
     command: "exec php-cgi"
-    user:    nobody
+    user:    daemon
 hosts:
   default:
     paths:

@@ -44,4 +44,3 @@ void test_percent_encode_zero_byte(void)
 
     h2o_mem_clear_pool(&req.pool);
 }
-

@@ -231,8 +231,8 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
     struct sockaddr_un sa;
     h2o_fastcgi_config_vars_t config_vars;
     int ret = -1;
-    struct passwd spawn_pwbuf, *spawn_pw;
-    char spawn_buf[65536];
+    struct passwd h2o_user_pwbuf, *h2o_user_pw;
+    char h2o_user_buf[65536];
 
     memset(&sa, 0, sizeof(sa));
 
@@ -266,19 +266,16 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
         return -1;
     }
 
-    /* obtain uid & gid of spawn_user */
-    if (spawn_user != NULL) {
+    /* obtain uid & gid of the client that connects to the FastCGI daemon (i.e. H2O after dropping privileges) */
+    if (ctx->globalconf->user != NULL) {
         /* change ownership of temporary directory */
-        if (getpwnam_r(spawn_user, &spawn_pwbuf, spawn_buf, sizeof(spawn_buf), &spawn_pw) != 0) {
-            h2o_configurator_errprintf(cmd, node, "getpwnam_r(3) failed to get password file entry");
-            goto Exit;
-        }
-        if (spawn_pw == NULL) {
-            h2o_configurator_errprintf(cmd, node, "unknown user:%s", spawn_user);
+        if (getpwnam_r(ctx->globalconf->user, &h2o_user_pwbuf, h2o_user_buf, sizeof(h2o_user_buf), &h2o_user_pw) != 0 ||
+            h2o_user_pw == NULL) {
+            h2o_configurator_errprintf(cmd, node, "getpwnam_r(3) failed to obtain uid of user:%s", ctx->globalconf->user);
             goto Exit;
         }
     } else {
-        spawn_pw = NULL;
+        h2o_user_pw = NULL;
     }
 
     { /* build args */
@@ -287,9 +284,9 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
         argv[i++] = "--rm";
         argv[i++] = dirname;
         argv[i++] = "--";
-        if (spawn_pw != NULL) {
+        if (spawn_user != NULL) {
             argv[i++] = setuidgid_cmd_path = h2o_configurator_get_cmd_path("share/h2o/setuidgid");
-            argv[i++] = spawn_pw->pw_name;
+            argv[i++] = spawn_user;
         }
         argv[i++] = "/bin/sh";
         argv[i++] = "-c";
@@ -312,13 +309,13 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
             goto Exit;
         }
         /* change ownership of temporary directory */
-        if (spawn_pw != NULL && chown(dirname, spawn_pw->pw_uid, spawn_pw->pw_gid) != 0) {
+        if (h2o_user_pw != NULL && chown(dirname, h2o_user_pw->pw_uid, h2o_user_pw->pw_gid) != 0) {
             h2o_configurator_errprintf(cmd, node, "chown(2) failed to change ownership of temporary directory:%s:%s", dirname,
                                        strerror(errno));
             goto Exit;
         }
         /* launch spawnfcgi command */
-        if ((spawner_fd = create_spawnproc(cmd, node, dirname, argv, &sa, spawn_pw)) == -1) {
+        if ((spawner_fd = create_spawnproc(cmd, node, dirname, argv, &sa, h2o_user_pw)) == -1) {
             goto Exit;
         }
     }

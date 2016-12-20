@@ -253,7 +253,7 @@ fmt_fp(struct fmt_args *f, long double y, int w, int p, int fl, int t)
     if (z>d+1) z=d+1;
   }
   for (; z>a && !z[-1]; z--);
-  
+
   if ((t|32)=='g') {
     if (!p) p++;
     if (p>e && e>=-4) {
@@ -354,7 +354,7 @@ fmt_core(struct fmt_args *f, const char *fmt, mrb_float flo)
     return fmt_fp(f, flo, 0, p, 0, *fmt);
   default:
     return -1;
-  } 
+  }
 }
 
 mrb_value

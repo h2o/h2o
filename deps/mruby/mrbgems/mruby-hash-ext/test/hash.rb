@@ -236,3 +236,9 @@ assert('Hash#>') do
   assert_false(h2 > h1)
   assert_false(h2 > h2)
 end
+
+assert("Hash#dig") do
+  h = {a:{b:{c:1}}}
+  assert_equal(1, h.dig(:a, :b, :c))
+  assert_nil(h.dig(:d))
+end

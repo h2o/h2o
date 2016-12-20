@@ -445,6 +445,7 @@
 		1058F6EC1D7CC81E00FFFFA3 /* openssl_backport.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = openssl_backport.h; sourceTree = "<group>"; };
 		1063FE901BB291300064D9C7 /* compress_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = compress_directives.mt; sourceTree = "<group>"; };
 		106530A51D82C09E005B2C60 /* percent-encode-zero-byte.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "percent-encode-zero-byte.c"; sourceTree = "<group>"; };
+		106530A81D8A21A7005B2C60 /* 80reverse-proxy-missing-content-length-for-post.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "80reverse-proxy-missing-content-length-for-post.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		1065E6EF19B8C64200686E72 /* evloop.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = evloop.c.h; sourceTree = "<group>"; };
 		1065E6F619B99E6D00686E72 /* kqueue.c.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = kqueue.c.h; sourceTree = "<group>"; };
 		1065E6F719B9B1AC00686E72 /* epoll.c.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = epoll.c.h; sourceTree = "<group>"; };
@@ -1471,6 +1472,7 @@
 				104481271BFC05FC0007863F /* 80issues595.t */,
 				10952D591C5082F7000D664C /* 80issues-from-proxy-reproxy-to-different-host.t */,
 				109EEFD81D77B336001F11D1 /* 80one-byte-window.t */,
+				106530A81D8A21A7005B2C60 /* 80reverse-proxy-missing-content-length-for-post.t */,
 				10B6D4501C727315005F0CF8 /* 80yaml-merge.t */,
 				104B9A451A5D1004009EEE64 /* 90live-fetch-ocsp-response.t */,
 				109EEFE31D77B350001F11D1 /* 90live-sni.t */,

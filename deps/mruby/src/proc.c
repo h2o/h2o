@@ -135,12 +135,12 @@ mrb_proc_cfunc_env_get(mrb_state *mrb, mrb_int idx)
   return e->stack[idx];
 }
 
-MRB_API void
+void
 mrb_proc_copy(struct RProc *a, struct RProc *b)
 {
   a->flags = b->flags;
   a->body = b->body;
-  if (!MRB_PROC_CFUNC_P(a)) {
+  if (!MRB_PROC_CFUNC_P(a) && a->body.irep) {
     a->body.irep->refcnt++;
   }
   a->target_class = b->target_class;
@@ -188,18 +188,13 @@ mrb_proc_call_cfunc(mrb_state *mrb, struct RProc *p, mrb_value self)
   return (p->body.func)(mrb, self);
 }
 
-mrb_code*
-mrb_proc_iseq(mrb_state *mrb, struct RProc *p)
-{
-  return p->body.irep->iseq;
-}
-
 /* 15.2.17.4.2 */
 static mrb_value
 mrb_proc_arity(mrb_state *mrb, mrb_value self)
 {
   struct RProc *p = mrb_proc_ptr(self);
-  mrb_code *iseq = mrb_proc_iseq(mrb, p);
+  struct mrb_irep *irep;
+  mrb_code *iseq;
   mrb_aspec aspec;
   int ma, op, ra, pa, arity;
 
@@ -208,6 +203,12 @@ mrb_proc_arity(mrb_state *mrb, mrb_value self)
     return mrb_fixnum_value(-1);
   }
 
+  irep = p->body.irep;
+  if (!irep) {
+    return mrb_fixnum_value(0);
+  }
+
+  iseq = irep->iseq;
   /* arity is depend on OP_ENTER */
   if (GET_OPCODE(*iseq) != OP_ENTER) {
     return mrb_fixnum_value(0);
