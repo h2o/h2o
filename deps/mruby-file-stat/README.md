@@ -50,13 +50,6 @@ stat.setuid?
 stat.setgid?
 stat.sticky?
 stat.ftype #=> socket, link, file, blockSpecial, directory, characterSpecial, fifo or unknown
-
-# Obsolete methods
-# Please use https://github.com/ksss/mruby-process-ext if you want to use these
-Process.uid
-Process.gid
-Process.euid
-Process.egid
 ```
 
 This library is wrap of struct stat.
