@@ -2868,7 +2868,11 @@ mrb_float_read(const char *string, char **endPtr)
 	mantSize -= 1;			/* One of the digits was the point. */
     }
     if (mantSize > 18) {
-	fracExp = decPt - 18;
+	if (decPt - 18 > 29999) {
+	    fracExp = 29999;
+	} else {
+	    fracExp = decPt - 18;
+	}
 	mantSize = 18;
     } else {
 	fracExp = decPt - mantSize;
@@ -2922,6 +2926,9 @@ mrb_float_read(const char *string, char **endPtr)
 	}
 	while (isdigit(*p)) {
 	    exp = exp * 10 + (*p - '0');
+	    if (exp > 19999) {
+		exp = 19999;
+	    }
 	    p += 1;
 	}
     }

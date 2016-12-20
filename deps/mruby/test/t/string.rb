@@ -596,10 +596,14 @@ assert('String#to_f', '15.2.10.5.38') do
   a = ''.to_f
   b = '123456789'.to_f
   c = '12345.6789'.to_f
+  d = '1e-2147483648'.to_f
+  e = '1e2147483648'.to_f
 
   assert_float(0.0, a)
   assert_float(123456789.0, b)
   assert_float(12345.6789, c)
+  assert_float(0, d)
+  assert_float(Float::INFINITY, e)
 end
 
 assert('String#to_i', '15.2.10.5.39') do

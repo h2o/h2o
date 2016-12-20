@@ -937,6 +937,7 @@ mrb_ary_splat(mrb_state *mrb, mrb_value v)
       recv_class,
       mrb_obj_value(mrb_obj_class(mrb, a))
     );
+    /* not reached */
     return mrb_undef_value();
   }
 }

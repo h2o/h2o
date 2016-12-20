@@ -2231,13 +2231,9 @@ codegen(codegen_scope *s, node *tree, int val)
     {
       nt = (intptr_t)tree->car;
       tree = tree->cdr;
-      if (!val) {
-        codegen(s, tree, NOVAL);
-        break;
-      }
       switch (nt) {
       case NODE_FLOAT:
-        {
+        if (val) {
           char *p = (char*)tree;
           mrb_float f = mrb_float_read(p, NULL);
           int off = new_lit(s, mrb_float_value(s->mrb, -f));
@@ -2248,7 +2244,7 @@ codegen(codegen_scope *s, node *tree, int val)
         break;
 
       case NODE_INT:
-        {
+        if (val) {
           char *p = (char*)tree->car;
           int base = (intptr_t)tree->cdr->car;
           mrb_int i;
@@ -2277,7 +2273,7 @@ codegen(codegen_scope *s, node *tree, int val)
         break;
 
       default:
-        {
+        if (val) {
           int sym = new_msym(s, mrb_intern_lit(s->mrb, "-"));
 
           genop(s, MKOP_ABx(OP_LOADI, cursp(), 0));
@@ -2285,6 +2281,9 @@ codegen(codegen_scope *s, node *tree, int val)
           codegen(s, tree, VAL);
           pop(); pop();
           genop(s, MKOP_ABC(OP_SUB, cursp(), sym, 2));
+        }
+        else {
+          codegen(s, tree, NOVAL);
         }
         break;
       }

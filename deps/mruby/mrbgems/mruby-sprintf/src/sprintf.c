@@ -136,29 +136,62 @@ mrb_fix2binstr(mrb_state *mrb, mrb_value x, int base)
   blen += (l);\
 } while (0)
 
-#define GETARG() (!mrb_undef_p(nextvalue) ? nextvalue : \
-  posarg == -1 ? \
-  (mrb_raisef(mrb, E_ARGUMENT_ERROR, "unnumbered(%S) mixed with numbered", mrb_fixnum_value(nextarg)), mrb_undef_value()) : \
-  posarg == -2 ? \
-  (mrb_raisef(mrb, E_ARGUMENT_ERROR, "unnumbered(%S) mixed with named", mrb_fixnum_value(nextarg)), mrb_undef_value()) : \
+static void
+check_next_arg(mrb_state *mrb, int posarg, int nextarg)
+{
+  switch (posarg) {
+  case -1:
+    mrb_raisef(mrb, E_ARGUMENT_ERROR, "unnumbered(%S) mixed with numbered", mrb_fixnum_value(nextarg));
+    break;
+  case -2:
+    mrb_raisef(mrb, E_ARGUMENT_ERROR, "unnumbered(%S) mixed with named", mrb_fixnum_value(nextarg));
+    break;
+  default:
+    break;
+  }
+}
+
+static void
+check_pos_arg(mrb_state *mrb, int posarg, int n)
+{
+  if (posarg > 0) {
+    mrb_raisef(mrb, E_ARGUMENT_ERROR, "numbered(%S) after unnumbered(%S)", mrb_fixnum_value(n));
+  }
+  if (posarg == -2) {
+    mrb_raisef(mrb, E_ARGUMENT_ERROR, "numbered(%S) after named", mrb_fixnum_value(n));
+  }
+  if (n < 1) {
+    mrb_raisef(mrb, E_ARGUMENT_ERROR, "invalid index - %S$", mrb_fixnum_value(n));
+  }
+}
+
+static void
+check_name_arg(mrb_state *mrb, int posarg, const char *name, int len)
+{
+  if (posarg > 0) {
+    mrb_raisef(mrb, E_ARGUMENT_ERROR, "named%S after unnumbered(%S)",
+               mrb_str_new(mrb, (name), (len)), mrb_fixnum_value(posarg));
+  }
+  if (posarg == -1) {
+    mrb_raisef(mrb, E_ARGUMENT_ERROR, "named%S after numbered", mrb_str_new(mrb, (name), (len)));
+  }
+}
+
+#define GETNEXTARG() (\
+  check_next_arg(mrb, posarg, nextarg),\
   (posarg = nextarg++, GETNTHARG(posarg)))
 
-#define GETPOSARG(n) (posarg > 0 ? \
-  (mrb_raisef(mrb, E_ARGUMENT_ERROR, "numbered(%S) after unnumbered(%S)", mrb_fixnum_value(n), mrb_fixnum_value(posarg)), mrb_undef_value()) : \
-  posarg == -2 ? \
-  (mrb_raisef(mrb, E_ARGUMENT_ERROR, "numbered(%S) after named", mrb_fixnum_value(n)), mrb_undef_value()) : \
-  ((n < 1) ? \
-  (mrb_raisef(mrb, E_ARGUMENT_ERROR, "invalid index - %S$", mrb_fixnum_value(n)), mrb_undef_value()) : \
-  (posarg = -1, GETNTHARG(n))))
+#define GETARG() (!mrb_undef_p(nextvalue) ? nextvalue : GETNEXTARG())
+
+#define GETPOSARG(n) (\
+  check_pos_arg(mrb, posarg, n),\
+  (posarg = -1, GETNTHARG(n)))
 
 #define GETNTHARG(nth) \
   ((nth >= argc) ? (mrb_raise(mrb, E_ARGUMENT_ERROR, "too few arguments"), mrb_undef_value()) : argv[nth])
 
-#define GETNAMEARG(id, name, len) ( \
-  posarg > 0 ? \
-  (mrb_raisef(mrb, E_ARGUMENT_ERROR, "named%S after unnumbered(%S)", mrb_str_new(mrb, (name), (len)), mrb_fixnum_value(posarg)), mrb_undef_value()) : \
-  posarg == -1 ? \
-  (mrb_raisef(mrb, E_ARGUMENT_ERROR, "named%S after numbered", mrb_str_new(mrb, (name), (len))), mrb_undef_value()) :    \
+#define GETNAMEARG(id, name, len) (\
+  check_name_arg(mrb, posarg, name, len),\
   (posarg = -2, mrb_hash_fetch(mrb, get_hash(mrb, &hash, argc, argv), id, mrb_undef_value())))
 
 #define GETNUM(n, val) \
@@ -182,7 +215,7 @@ mrb_fix2binstr(mrb_state *mrb, mrb_value x, int base)
     tmp_v = GETPOSARG(n); \
   } \
   else { \
-    tmp_v = GETARG(); \
+    tmp_v = GETNEXTARG(); \
     p = t; \
   } \
   num = mrb_fixnum(tmp_v); \
@@ -687,10 +720,10 @@ retry:
           CHECK(n);
           memcpy(buf+blen, c, n);
           blen += n;
-          FILL(' ', width-1);
+          if (width>0) FILL(' ', width-1);
         }
         else {
-          FILL(' ', width-1);
+          if (width>0) FILL(' ', width-1);
           CHECK(n);
           memcpy(buf+blen, c, n);
           blen += n;
