@@ -682,6 +682,37 @@ int h2o_socket_get_ssl_cipher_bits(h2o_socket_t *sock)
     return sock->ssl != NULL ? SSL_get_cipher_bits(sock->ssl->ssl, NULL) : 0;
 }
 
+ int SSL_SESSION_has_ticket(const SSL_SESSION *s);
+ unsigned long SSL_SESSION_get_ticket_lifetime_hint(const SSL_SESSION *s);
+ void SSL_SESSION_get0_ticket(const SSL_SESSION *s, const unsigned char **tick,
+                              size_t *len);
+
+h2o_iovec_t h2o_socket_log_ssl_session_ticket(h2o_socket_t *sock, h2o_mem_pool_t *pool)
+{
+    if(sock->ssl && SSL_SESSION_has_ticket(sock->ssl->handshake.server.async_resumption.session_data))
+    {
+        const unsigned char *tick = NULL;
+        size_t len = 0;
+        SSL_SESSION_get0_ticket(sock->ssl->handshake.server.async_resumption.session_data, &tick, &len);
+        char *s = (char *)(pool != NULL ? h2o_mem_alloc_pool(pool, len * 2)
+                                        : h2o_mem_alloc(len * 2));
+        for (size_t i = 0; i < len; i++)
+        {
+            int c = tick[i];
+            int h = c >> 4;
+            int l = c & 7;
+            s[i * 2 + 0] = h > 10 ? h - 10 + 'A' : h + '0';
+            s[i * 2 + 1] = l > 10 ? l - 10 + 'A' : l + '0';
+        }
+        return h2o_iovec_init(s, len);
+    }
+    else
+    {
+        // returns empty data
+        return h2o_iovec_init(H2O_STRLIT(""));
+    }
+}
+
 h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *pool)
 {
     int bits = h2o_socket_get_ssl_cipher_bits(sock);
