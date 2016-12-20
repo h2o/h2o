@@ -1,7 +1,22 @@
 Revision history for H2O.
 
+2.0.5 2016-12-21 06:00:00+0000
+	- [security fix] fix use-after-free vulnerability CVE-2016-7835 #1144 (Frederik Deweerdt, Kazuho Oku)
+	- [core] fix busy loop after receiving SIGTERM (linux) #1100 (Kazuho Oku, Frederik Deweerdt)
+	- [core] don't try to register kevent changes more than once (*BSD, OS X) #1113 (Ichito Nagata)
+	- [compress] set `vary: accept-encoding` upon negotiation failure of the compression method #1083 (Frederik Deweerdt)
+	- [file] add missing `</ul>` #1106 (Kazuho Oku)
+	- [http2] fix a bug that left connections open #1090 (Kazuho Oku)
+	- [http2] ignore PRIORITY frames that reference closed pushed streams #1105 (Frederik Deweerdt)
+	- [http2] add `Secure` attribute to the casper cookie #1134 (Kazuho Oku)
+	- [http2] permit use of HEADERS with a smaller stream ID than a preceding PRIORITY #1136 (Frederik Deweerdt, Kazuho Oku)
+	- [mruby] update mruby to HEAD #1135 (Kazuho Oku)
+	- [proxy] set `content-length: 0` when receiving a zero-byte POST or PUT #1080 (Frederik Deweerdt)
+	- [ssl] update libressl to 2.4.4 #1127 (Kazuho Oku)
+	- [ssl] erase OCSP stapling data when the stapling updater returns a permanent failure #1117 (Kazuho Oku)
+
 2.0.4 2016-09-14 08:00:00+0000
-	- [security fix][core] fix DoS attack vector CVE-2016-4864 (Frederik Deweerdt, Kazuho Oku)
+	- [security fix][core] fix DoS attack vector CVE-2016-4864 #1077 (Frederik Deweerdt, Kazuho Oku)
 	- [libh2o] fix crash on connect timeout #960 (disigma)
 
 2.0.3 2016-09-07 22:03:00+0000
