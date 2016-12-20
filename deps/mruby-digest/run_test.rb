@@ -20,6 +20,8 @@ end
 
 MRuby::Build.new do |conf|
   toolchain :gcc
+  enable_debug
+  enable_test
   conf.gembox 'default'
 
   conf.gem File.expand_path(File.dirname(__FILE__))

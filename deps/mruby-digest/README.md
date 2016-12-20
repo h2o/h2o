@@ -1,6 +1,9 @@
 mruby-digest
 =========
 
+This library is a fork of [github.com/iij/mruby-digest](https://github.com/iij/mruby-digest).
+Unlike the original, this fork does not have any dependencies; it uses [picohash](https://github.com/kazuho/picohash) - a public domain library for hash calculation.
+
 ## Features
 
 Message Digest and HMAC classes are available.  They are compatible with CRuby's ones.
@@ -28,13 +31,9 @@ Digest::MD5.digest('ruby')
 Digest::MD5.hexdigest('ruby')
 ```
 
-## Requirement
-- OpenSSL library (libcrypto.a) on Unix systems
-- Common Crypto library on MacOSX
-
 ## License
 
-Copyright (c) 2012 Internet Initiative Japan Inc.
+Copyright (c) 2012-2015 Internet Initiative Japan Inc., Kazuho Oku
 
 Permission is hereby granted, free of charge, to any person obtaining a 
 copy of this software and associated documentation files (the "Software"), 
