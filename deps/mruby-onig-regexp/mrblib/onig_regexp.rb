@@ -128,6 +128,12 @@ class String
   end
 end
 
+module Kernel
+  def =~(_)
+    nil
+  end
+end
+
 Regexp = OnigRegexp unless Object.const_defined?(:Regexp)
 MatchData = OnigMatchData unless Object.const_defined? :MatchData
 
