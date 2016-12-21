@@ -24,46 +24,48 @@
 
 static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    const char *dest;
+    yoml_t *url;
     int status = 302; /* default is temporary redirect */
     int internal = 0; /* default is external redirect */
-    yoml_t *t;
 
     switch (node->type) {
     case YOML_TYPE_SCALAR:
-        dest = node->data.scalar;
+        url = node;
         break;
-    case YOML_TYPE_MAPPING:
-        if ((t = yoml_get(node, "url")) == NULL) {
+    case YOML_TYPE_MAPPING: {
+        yoml_t *status_node, *internal_node;
+        if (h2o_configurator_parse_attributes(cmd, node, {"url", &url}, {"status", &status_node}, {"internal", &internal_node}) !=
+            0)
+            return -1;
+        if (url == NULL) {
             h2o_configurator_errprintf(cmd, node, "mandatory property `url` is missing");
             return -1;
         }
-        if (t->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, t, "property `url` must be a string");
+        if (url->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, url, "property `url` must be a string");
             return -1;
         }
-        dest = t->data.scalar;
-        if ((t = yoml_get(node, "status")) == NULL) {
+        if (status_node == NULL) {
             h2o_configurator_errprintf(cmd, node, "mandatory property `status` is missing");
             return -1;
         }
-        if (h2o_configurator_scanf(cmd, t, "%d", &status) != 0)
+        if (h2o_configurator_scanf(cmd, status_node, "%d", &status) != 0)
             return -1;
         if (!(300 <= status && status <= 399)) {
-            h2o_configurator_errprintf(cmd, t, "value of property `status` should be within 300 to 399");
+            h2o_configurator_errprintf(cmd, status_node, "value of property `status` should be within 300 to 399");
             return -1;
         }
-        if ((t = yoml_get(node, "internal")) != NULL) {
-            if ((internal = (int)h2o_configurator_get_one_of(cmd, t, "NO,YES")) == -1)
+        if (internal_node != NULL) {
+            if ((internal = (int)h2o_configurator_get_one_of(cmd, internal_node, "NO,YES")) == -1)
                 return -1;
         }
-        break;
+    } break;
     default:
         h2o_configurator_errprintf(cmd, node, "value must be a string or a mapping");
         return -1;
     }
 
-    h2o_redirect_register(ctx->pathconf, internal, status, dest);
+    h2o_redirect_register(ctx->pathconf, internal, status, url->data.scalar);
 
     return 0;
 }

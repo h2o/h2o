@@ -90,29 +90,31 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
         servname = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING: {
-        yoml_t *t;
-        if ((t = yoml_get(node, "host")) != NULL) {
-            if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, t, "`host` is not a string");
+        yoml_t *host_node, *port_node, *type_node;
+        if (h2o_configurator_parse_attributes(cmd, node, {"host", &host_node}, {"port", &port_node}, {"type", &type_node}) != 0)
+            return -1;
+        if (host_node != NULL) {
+            if (host_node->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, host_node, "`host` is not a string");
                 return -1;
             }
-            hostname = t->data.scalar;
+            hostname = host_node->data.scalar;
         }
-        if ((t = yoml_get(node, "port")) == NULL) {
+        if (port_node == NULL) {
             h2o_configurator_errprintf(cmd, node, "cannot find mandatory property `port`");
             return -1;
         }
-        if (t->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, node, "`port` is not a string");
+        if (port_node->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, port_node, "`port` is not a string");
             return -1;
         }
-        servname = t->data.scalar;
-        if ((t = yoml_get(node, "type")) != NULL) {
-            if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, t, "`type` is not a string");
+        servname = port_node->data.scalar;
+        if (type_node != NULL) {
+            if (type_node->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, type_node, "`type` is not a string");
                 return -1;
             }
-            type = t->data.scalar;
+            type = type_node->data.scalar;
         }
     } break;
     default:
@@ -242,23 +244,26 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
         spawn_cmd = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING: {
-        yoml_t *t;
-        if ((t = yoml_get(node, "command")) == NULL) {
+        yoml_t *command_node, *user_node;
+        if (h2o_configurator_parse_attributes(cmd, node, {"command", &command_node}, {"user", &user_node}) != 0)
+            return -1;
+        if (command_node == NULL) {
             h2o_configurator_errprintf(cmd, node, "mandatory attribute `command` does not exist");
             return -1;
         }
-        if (t->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, node, "attribute `command` must be scalar");
+        if (command_node->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, command_node, "attribute `command` must be scalar");
             return -1;
         }
-        spawn_cmd = t->data.scalar;
-        spawn_user = ctx->globalconf->user;
-        if ((t = yoml_get(node, "user")) != NULL) {
-            if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, node, "attribute `user` must be scalar");
+        spawn_cmd = command_node->data.scalar;
+        if (user_node != NULL) {
+            if (user_node->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, user_node, "attribute `user` must be scalar");
                 return -1;
             }
-            spawn_user = t->data.scalar;
+            spawn_user = user_node->data.scalar;
+        } else {
+            spawn_user = ctx->globalconf->user;
         }
     } break;
     default:
