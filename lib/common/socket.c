@@ -682,6 +682,27 @@ int h2o_socket_get_ssl_cipher_bits(h2o_socket_t *sock)
     return sock->ssl != NULL ? SSL_get_cipher_bits(sock->ssl->ssl, NULL) : 0;
 }
 
+
+h2o_iovec_t h2o_socket_log_ssl_session_id(h2o_socket_t *sock, h2o_mem_pool_t *pool)
+{
+    h2o_iovec_t key;
+    unsigned id_len;
+    const unsigned char *id;
+
+    switch (sock->ssl->handshake.server.async_resumption.state) {
+        case ASYNC_RESUMPTION_STATE_COMPLETE:
+            id = SSL_SESSION_get_id(sock->ssl->ssl->session, &id_len);
+            #define BASE64_LENGTH(len) (((len) + 2) / 3 * 4 + 1)
+            key.base = (char *)(pool != NULL ? h2o_mem_alloc_pool(pool, BASE64_LENGTH(id_len))
+                                            : h2o_mem_alloc(BASE64_LENGTH(id_len)));
+            #undef BASE64_LENGTH
+            key.len = h2o_base64_encode(key.base, id, id_len, 1);
+            return key;
+        default:
+            return h2o_iovec_init(H2O_STRLIT("INVALID_SESSION_ID"));
+    }
+}
+
 h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *pool)
 {
     int bits = h2o_socket_get_ssl_cipher_bits(sock);

@@ -765,6 +765,7 @@ DEFINE_TLS_LOGGER(protocol_version)
 DEFINE_TLS_LOGGER(session_reused)
 DEFINE_TLS_LOGGER(cipher)
 DEFINE_TLS_LOGGER(cipher_bits)
+DEFINE_TLS_LOGGER(session_id)
 
 #undef DEFINE_TLS_LOGGER
 
@@ -798,7 +799,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
         get_socket,   /* get underlying socket */
         NULL,         /* get debug state */
         {{
-            {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits}, /* ssl */
+            {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */
             {log_request_index},                                                     /* http1 */
             {NULL}                                                                   /* http2 */
         }}};
