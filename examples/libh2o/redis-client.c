@@ -68,13 +68,13 @@ static void dump_reply(redisReply *reply, unsigned indent)
     }
 }
 
-static void on_redis_command(redisReply *reply, void *cb_data)
+static void on_redis_command(void *_reply, void *cb_data)
 {
-    if (reply == NULL) {
+    if (_reply == NULL) {
         fprintf(stderr, "redis command failed due to some connection problems\n");
         return;
     }
-    dump_reply(reply, 0);
+    dump_reply((redisReply *)_reply, 0);
 }
 
 static void on_redis_connect(void)
@@ -127,7 +127,7 @@ int main(int argc, char **argv)
 #if H2O_USE_LIBUV
         uv_run(loop, UV_RUN_DEFAULT);
 #else
-        h2o_evloop_run(loop);
+        h2o_evloop_run(loop, INT32_MAX);
 #endif
     }
 

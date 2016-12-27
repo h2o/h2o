@@ -44,6 +44,7 @@
 
 #define FREEZE_STRING(v) MRB_SET_FROZEN_FLAG(mrb_obj_ptr(v))
 
+__thread h2o_mruby_context_t *h2o_mruby_initializing_context = NULL;
 __thread h2o_mruby_generator_t *h2o_mruby_current_generator = NULL;
 
 void h2o_mruby__assert_failed(mrb_state *mrb, const char *file, int line)
@@ -306,6 +307,7 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
 
     h2o_mruby_send_chunked_init_context(shared_ctx);
     h2o_mruby_http_request_init_context(shared_ctx);
+    h2o_mruby_redis_init_context(shared_ctx);
 
     return shared_ctx;
 }
@@ -336,14 +338,18 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
 
     handler_ctx->handler = handler;
     handler_ctx->shared = get_shared_context(ctx);
+    handler_ctx->ctx = ctx;
 
     /* compile code (must be done for each thread) */
     int arena = mrb_gc_arena_save(handler_ctx->shared->mrb);
+    h2o_mruby_initializing_context = handler_ctx;
     mrb_value proc = h2o_mruby_compile_code(handler_ctx->shared->mrb, &handler->config, NULL);
+    h2o_mruby_initializing_context = NULL;
 
     handler_ctx->proc =
         mrb_funcall_argv(handler_ctx->shared->mrb, mrb_ary_entry(handler_ctx->shared->constants, H2O_MRUBY_PROC_APP_TO_FIBER),
                          handler_ctx->shared->symbols.sym_call, 1, &proc);
+
     h2o_mruby_assert(handler_ctx->shared->mrb);
     mrb_gc_arena_restore(handler_ctx->shared->mrb, arena);
     mrb_gc_protect(handler_ctx->shared->mrb, handler_ctx->proc);
@@ -739,6 +745,9 @@ void h2o_mruby_run_fiber(h2o_mruby_generator_t *generator, mrb_value receiver, m
                     break;
                 case H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK:
                     input = h2o_mruby_http_fetch_chunk_callback(generator, receiver, args, &next_action);
+                    break;
+                case H2O_MRUBY_CALLBACK_ID_REDIS_JOIN_REPLY:
+                    input = h2o_mruby_redis_join_reply_callback(generator, receiver, args, &next_action);
                     break;
                 default:
                     input = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpected callback id sent from rack app");

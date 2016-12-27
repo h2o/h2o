@@ -64,6 +64,11 @@ h2o_redis_conn_t *h2o_redis_create_connection(h2o_loop_t *loop, size_t sz)
     return conn;
 }
 
+static void invoke_deferred(h2o_redis_conn_t *conn, h2o_timeout_entry_t *timeout)
+{
+    h2o_timeout_link(conn->loop, &conn->_defer_timeout, timeout);
+}
+
 static void on_connect_error_deferred(h2o_timeout_entry_t *timeout_entry)
 {
     h2o_redis_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_redis_conn_t, _timeout_entry, timeout_entry);
@@ -90,13 +95,16 @@ void h2o_redis_connect(h2o_redis_conn_t *conn, const char *host, uint16_t port)
     if (redis->err != REDIS_OK) {
         /* some connection failures can be detected at this time */
         conn->_timeout_entry.cb = on_connect_error_deferred;
-        h2o_timeout_link(conn->loop, &conn->_defer_timeout, &conn->_timeout_entry);
+        invoke_deferred(conn, &conn->_timeout_entry);
         return;
     }
 
     attach_loop(redis, conn->loop);
     redisAsyncSetConnectCallback(redis, on_redis_connect);
     redisAsyncSetDisconnectCallback(redis, on_redis_disconnect);
+
+    if (conn->create_reader != NULL)
+        conn->_redis->c.reader = conn->create_reader(conn);
 }
 
 void h2o_redis_disconnect(h2o_redis_conn_t *conn)
@@ -112,7 +120,7 @@ static void on_command(redisAsyncContext *redis, void *reply, void *privdata)
 {
     struct st_h2o_redis_command_t *command = (struct st_h2o_redis_command_t *)privdata;
     if (command->cb != NULL) {
-        command->cb((redisReply *)reply, command->data);
+        command->cb(reply, command->data);
     }
     free(command);
 }
@@ -124,7 +132,7 @@ static void on_command_error_deferred(h2o_timeout_entry_t *entry)
     on_command(command->conn->_redis, NULL, command);
 }
 
-h2o_redis_command_t *h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, const char *format, ...)
+static h2o_redis_command_t *create_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data)
 {
     h2o_redis_command_t *command = h2o_mem_alloc(sizeof(h2o_redis_command_t));
     *command = (struct st_h2o_redis_command_t){NULL};
@@ -132,20 +140,36 @@ h2o_redis_command_t *h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command
     command->cb = cb;
     command->data = cb_data;
     command->_timeout_entry.cb = on_command_error_deferred;
+    return command;
+}
+
+h2o_redis_command_t *h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, const char *format, ...)
+{
+    h2o_redis_command_t *command = create_command(conn, cb, cb_data);
 
     if (conn->state == H2O_REDIS_CONNECTION_STATE_CLOSED) {
-        h2o_timeout_link(conn->loop, &conn->_defer_timeout, &command->_timeout_entry);
+        invoke_deferred(conn, &command->_timeout_entry);
     } else {
         va_list ap;
         va_start(ap, format);
-        if (redisvAsyncCommand(conn->_redis, on_command, command, format, ap) != REDIS_OK) {
-            /* the case that redisAsyncContext is disconnecting or freeing */
-            /* call the callback immediately with NULL reply */
-            h2o_timeout_link(conn->loop, &conn->_defer_timeout, &command->_timeout_entry);
-        }
+        int ret = redisvAsyncCommand(conn->_redis, on_command, command, format, ap);
         va_end(ap);
-    }
 
+        if (ret != REDIS_OK)
+            invoke_deferred(conn, &command->_timeout_entry);
+    }
+    return command;
+}
+
+h2o_redis_command_t *h2o_redis_command_argv(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, int argc, const char **argv, const size_t *argvlen)
+{
+    h2o_redis_command_t *command = create_command(conn, cb, cb_data);
+
+    if (conn->state == H2O_REDIS_CONNECTION_STATE_CLOSED) {
+        invoke_deferred(conn, &command->_timeout_entry);
+    } else if (redisAsyncCommandArgv(conn->_redis, on_command, command, argc, argv, argvlen) != REDIS_OK) {
+        invoke_deferred(conn, &command->_timeout_entry);
+    }
     return command;
 }
 

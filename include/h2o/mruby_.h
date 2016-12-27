@@ -63,6 +63,9 @@ enum {
     H2O_MRUBY_HTTP_REQUEST_CLASS,
     H2O_MRUBY_HTTP_INPUT_STREAM_CLASS,
 
+    /* used by redis.c */
+    H2O_MRUBY_REDIS_COMMAND_CLASS,
+
     H2O_MRUBY_NUM_CONSTANTS
 };
 
@@ -94,6 +97,7 @@ typedef struct st_h2o_mruby_context_t {
     h2o_mruby_handler_t *handler;
     mrb_value proc;
     h2o_mruby_shared_context_t *shared;
+    h2o_context_t *ctx;
 } h2o_mruby_context_t;
 
 typedef struct st_h2o_mruby_chunked_t h2o_mruby_chunked_t;
@@ -111,6 +115,7 @@ typedef struct st_h2o_mruby_generator_t {
 #define H2O_MRUBY_CALLBACK_ID_SEND_CHUNKED_EOS -2
 #define H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE -3
 #define H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK -4
+#define H2O_MRUBY_CALLBACK_ID_REDIS_JOIN_REPLY -5
 
 enum { H2O_MRUBY_CALLBACK_NEXT_ACTION_STOP, H2O_MRUBY_CALLBACK_NEXT_ACTION_IMMEDIATE, H2O_MRUBY_CALLBACK_NEXT_ACTION_ASYNC };
 
@@ -139,6 +144,7 @@ enum { H2O_MRUBY_CALLBACK_NEXT_ACTION_STOP, H2O_MRUBY_CALLBACK_NEXT_ACTION_IMMED
     } while (0)
 
 /* handler/mruby.c */
+extern __thread h2o_mruby_context_t *h2o_mruby_initializing_context;
 extern __thread h2o_mruby_generator_t *h2o_mruby_current_generator;
 void h2o_mruby__assert_failed(mrb_state *mrb, const char *file, int line);
 mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v);
@@ -169,6 +175,11 @@ mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_generator_t *generator, 
                                               int *next_action);
 h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb, mrb_value obj, void (*cb)(h2o_mruby_generator_t *));
 h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx, int *is_final);
+
+/* handler/mruby/redis.c */
+void h2o_mruby_redis_init_context(h2o_mruby_shared_context_t *ctx);
+mrb_value h2o_mruby_redis_join_reply_callback(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value args,
+                                              int *next_action);
 
 /* handler/configurator/mruby.c */
 void h2o_mruby_register_configurator(h2o_globalconf_t *conf);
