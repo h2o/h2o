@@ -111,12 +111,11 @@ mrb_value h2o_mruby_create_data_instance(mrb_state *mrb, mrb_value class_obj, vo
     return mrb_obj_value(data);
 }
 
-mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config, char *errbuf)
+struct RProc *h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config, char *errbuf)
 {
     mrbc_context *cxt;
     struct mrb_parser_state *parser;
     struct RProc *proc = NULL;
-    mrb_value result = mrb_nil_value();
 
     /* parse */
     if ((cxt = mrbc_context_new(mrb)) == NULL) {
@@ -152,40 +151,10 @@ mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config
         abort();
     }
 
-    /* reset configuration context */
-    h2o_mruby_eval_expr(mrb, "H2O::ConfigurationContext.reset");
-    h2o_mruby_assert(mrb);
-
-    /* run code and generate handler */
-    result = mrb_run(mrb, proc, mrb_top_self(mrb));
-    if (mrb->exc != NULL) {
-        mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
-        struct RString *error = mrb_str_ptr(obj);
-        snprintf(errbuf, 256, "%s", error->as.heap.ptr);
-        mrb->exc = 0;
-        result = mrb_nil_value();
-        goto Exit;
-    } else if (mrb_nil_p(result)) {
-        snprintf(errbuf, 256, "returned value is not callable");
-        goto Exit;
-    }
-
-    /* call post_handler_generation hooks */
-    mrb_funcall_argv(mrb, h2o_mruby_eval_expr(mrb, "H2O::ConfigurationContext.instance"),
-                     mrb_intern_lit(mrb, "call_post_handler_generation_hooks"), 1, &result);
-    if (mrb->exc != NULL) {
-        mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
-        struct RString *error = mrb_str_ptr(obj);
-        snprintf(errbuf, 256, "%s", error->as.heap.ptr);
-        mrb->exc = 0;
-        result = mrb_nil_value();
-        goto Exit;
-    }
-
 Exit:
     mrb_parser_free(parser);
     mrbc_context_free(mrb, cxt);
-    return result;
+    return proc;
 }
 
 static h2o_iovec_t convert_header_name_to_env(h2o_mem_pool_t *pool, const char *name, size_t len)
@@ -329,6 +298,32 @@ static h2o_mruby_shared_context_t *get_shared_context(h2o_context_t *ctx)
     return *data;
 }
 
+mrb_value generate_handler_proc(mrb_state *mrb, struct RProc *proc)
+{
+
+    /* reset configuration context */
+    h2o_mruby_eval_expr(mrb, "H2O::ConfigurationContext.reset");
+    h2o_mruby_assert(mrb);
+
+    /* run code and generate handler */
+    mrb_value result = mrb_run(mrb, proc, mrb_top_self(mrb));
+    if (mrb->exc != NULL)
+        return mrb_nil_value();
+
+    if (mrb_nil_p(result)) {
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "returned value is not callable"));
+        return mrb_nil_value();
+    }
+
+    /* call post_handler_generation hooks */
+    mrb_funcall_argv(mrb, h2o_mruby_eval_expr(mrb, "H2O::ConfigurationContext.instance"),
+                     mrb_intern_lit(mrb, "call_post_handler_generation_hooks"), 1, &result);
+    if (mrb->exc != NULL)
+        return mrb_nil_value();
+
+    return result;
+}
+
 static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
 {
     h2o_mruby_handler_t *handler = (void *)_handler;
@@ -337,16 +332,28 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
     handler_ctx->handler = handler;
     handler_ctx->shared = get_shared_context(ctx);
 
+    mrb_state *mrb = handler_ctx->shared->mrb;
+
     /* compile code (must be done for each thread) */
-    int arena = mrb_gc_arena_save(handler_ctx->shared->mrb);
-    mrb_value proc = h2o_mruby_compile_code(handler_ctx->shared->mrb, &handler->config, NULL);
+    int arena = mrb_gc_arena_save(mrb);
+
+    struct RProc *compiled = h2o_mruby_compile_code(mrb, &handler->config, NULL);
+    mrb_value proc = generate_handler_proc(mrb, compiled);
+    if (mrb->exc != NULL) {
+        mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
+        struct RString *error = mrb_str_ptr(obj);
+        /* TODO: what information should be displayed here? */
+        fprintf(stderr, "mruby raised: %s\n", error->as.heap.ptr);
+        mrb->exc = NULL;
+        return;
+    }
 
     handler_ctx->proc =
-        mrb_funcall_argv(handler_ctx->shared->mrb, mrb_ary_entry(handler_ctx->shared->constants, H2O_MRUBY_PROC_APP_TO_FIBER),
+        mrb_funcall_argv(mrb, mrb_ary_entry(handler_ctx->shared->constants, H2O_MRUBY_PROC_APP_TO_FIBER),
                          handler_ctx->shared->symbols.sym_call, 1, &proc);
     h2o_mruby_assert(handler_ctx->shared->mrb);
-    mrb_gc_arena_restore(handler_ctx->shared->mrb, arena);
-    mrb_gc_protect(handler_ctx->shared->mrb, handler_ctx->proc);
+    mrb_gc_arena_restore(mrb, arena);
+    mrb_gc_protect(mrb, handler_ctx->proc);
 
     h2o_context_set_handler_context(ctx, &handler->super, handler_ctx);
 }

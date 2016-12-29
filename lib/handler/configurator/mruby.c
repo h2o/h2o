@@ -36,9 +36,8 @@ struct mruby_configurator_t {
 
 static int compile_test(mrb_state *mrb, h2o_mruby_config_vars_t *config, char *errbuf)
 {
-    mrb_value result = h2o_mruby_compile_code(mrb, config, errbuf);
-    int ok = !mrb_nil_p(result);
-    return ok;
+    struct RProc *result = h2o_mruby_compile_code(mrb, config, errbuf);
+    return result != NULL;
 }
 
 static mrb_state *get_mrb(struct mruby_configurator_t *self)
