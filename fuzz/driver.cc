@@ -126,6 +126,7 @@ struct writer_thread_arg {
     char *buf;
     size_t len;
     int fd;
+    int ofd;
     pthread_barrier_t barrier;
 };
 
@@ -226,7 +227,8 @@ void *writer_thread(void *arg)
             }
         }
         close(wta->fd);
-	pthread_barrier_wait(&wta->barrier);
+        close(wta->ofd);
+        pthread_barrier_wait(&wta->barrier);
         free(wta);
     }
 }
@@ -245,6 +247,7 @@ static int feeder(int sfd, char *buf, size_t len, pthread_barrier_t **barrier)
 
     wta = (struct writer_thread_arg *)malloc(sizeof(*wta));
     wta->fd = pair[0];
+    wta->ofd = pair[1];
     wta->buf = buf;
     wta->len = len;
     pthread_barrier_init(&wta->barrier, NULL, 2);
@@ -312,6 +315,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         h2o_config_init(&config);
         config.http2.idle_timeout = 10 * 1000;
         config.http1.req_timeout = 10 * 1000;
+        config.proxy.io_timeout = 10 * 1000;
         hostconf = h2o_config_register_host(&config, h2o_iovec_init(H2O_STRLIT("default")), 65535);
         register_handler(hostconf, "/chunked-test", chunked_test);
         h2o_reproxy_register(register_handler(hostconf, "/reproxy-test", reproxy_test));
@@ -340,7 +344,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
     }
 
     /* Loop until the connection is closed by the client or server */
-    while (is_valid_fd(c) && h2o_evloop_run(ctx.loop, INT32_MAX) == 0)
+    while (is_valid_fd(c) && h2o_evloop_run(ctx.loop, 10))
         ;
 
     pthread_barrier_wait(end);
