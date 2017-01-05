@@ -1,5 +1,9 @@
 Revision history for H2O.
 
+2.0.6 2017-01-05 05:31:00+0000
+	- [compress] fix the compression quality being ignored #1154 (Yannick Koechlin)
+	- [mruby] stop GIT access during build #1149 (parly)
+
 2.0.5 2016-12-21 06:00:00+0000
 	- [security fix] fix use-after-free vulnerability CVE-2016-7835 #1144 (Frederik Deweerdt, Kazuho Oku)
 	- [core] fix busy loop after receiving SIGTERM (linux) #1100 (Kazuho Oku, Frederik Deweerdt)
