@@ -579,8 +579,10 @@ static void on_upgrade_complete(h2o_socket_t *socket, const char *err)
     if (err == 0) {
         sock = conn->sock;
         reqsize = conn->_reqsize;
+	close_connection(conn, 0);
+    } else {
+	close_connection(conn, 1);
     }
-    close_connection(conn, 0);
 
     cb(data, sock, reqsize);
 }
