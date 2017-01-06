@@ -1,0 +1,518 @@
+GET /reproxy-test/.well¿known/h1/../te HTTP/1.1
+Host: 127.0.0.1ÿÿurl/7ÿÿÿÿ.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ¶¶ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿst/.well¿known/h2/../te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7ÿÿÿÿ.49.0-DEV
+A6ccept:ÿÿurl/7ÿÿÿÿ.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿ.0PRI * HTTP/2.0.ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ¶¶¶¶¶¶G:schemET /chunked-tesÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/0.1
+Host: 127.0PRI * HTTP/2.0.1:514(8
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oi ctUpgrade, H127.0PRI * HTTP/2.0.1:51408
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:514(8
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oi ctUpgrade, H.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/1.1
+Host: t/halfdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0./..1458
+connen:oAccept: */fdome.jpg HTTP/1.1
+1:51408
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/0.1
+Host: 127.0PRI * HTTP/2.0.1:514(8
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oi ctUpgrade, H127.0PRI * HTTP/2.0.1:51408
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:514(8
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oi ctUpgrade, Hÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ¶¶¶ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ¶¶¶¶¶¶G:schemET /chunked-tesÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ¶¶¶¶¶¶G:schemET /chunked-tesÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/0.1
+Host: 127.0PRI * HTTP/2.0.1:514(8
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oi ctUpgrade, H127.0PRI * HTTP/2.0.1:51408
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:514(8
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oi ctUpgrade, H.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/1.1
+Host: t/halfdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0./..1458
+connen:oAccept: */fdome.jpg HTTP/1.1
+1:51408
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 12/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/0.1
+Host: 127.0PRI * HTTP/2.0.1:514(8
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oi ctUpgrade, H127.0PRI * HTTP/2.0.1:51408
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:514(8
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oi ctUpgrade, H.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/1.1
+Host: t/halfdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0./..1458
+connen:oAccept: */fdome.jpg HTTP/1.1
+1:51408
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/0.1
+Host: 127.0PRI * HTTP/2.0.1:514(8
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oi ctUpgrade, H127.0PRI * HTTP/2.0.1:51408
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:514(8
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oi ctUpgrade, Hÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ¶¶¶ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ¶¶¶¶¶¶G:schemET /chunked-tesÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ¶¶¶¶¶¶G:schemET /chunked-tesÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/0.1
+Host: 127.0PRI * HTTP/2.0.1:514(8
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oi ctUpgrade, H127.0PRI * HTTP/2.0.1:51408
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:514(8
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oi ctUpgrade, H.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/1.1
+Host: t/halfdome.jpg HTTP/1.1
+7.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/0.1
+Host: 127.0PRI * HTTP/2.0.1:514(8
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oi ctUpgrade, H127.0PRI * HTTP/2.0.1:51408
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:514(8
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oi ctUpgrade, H.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/1.1
+Host: t/halfdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range;!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0./..1458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRIÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿt/halfdome.jpg HTTP/0.1
+Host: 127.0PRI * HTTP/2.0.1:514(8
+Range:!bytst/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oAccept: */fdome.jpg HTTP/1.1
+Host: 127.0PRI * HTTP/2.0.1:51408
+Range:!by
+
+GET /chunked-test/reproxy-test/index.txz HTTP/1.1
+host: 127.0:0.1:51458
+connen:oi ctUpgrade, H127.0PRI * HTTP/2.0.1:5¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶ÿÿÿÿÿÿÿÿÿ */*
+
+
+--MARKÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ */*
+
+
+--MARK1408
+Range:!bytst/halfdome.jpg HTTP/1.1 ‚ˆ`ÕH_+çÊ†A‹\pÜl-6÷S*/*zŠªiÒšÄÀW--
+‹‡  %        ‚              ˆ`ÕH_+§ggggggááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááááággggg     -
+
+--MARK--
+               
+--MARK--
+
+--MARK--

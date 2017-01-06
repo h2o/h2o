@@ -1,0 +1,8 @@
+G/ T=http:/../7.0.0.1:50904/index.txt HTTP/1.1
+Host: 017.2.0.1:50612
+User-Agent: curl/7.49.0-DEV
+Accept: ;*/*
+
+
+--MARK--
+../

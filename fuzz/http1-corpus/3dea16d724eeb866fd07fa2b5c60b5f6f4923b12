@@ -1,0 +1,8 @@
+G/ TE?resp:x-reproxy-url=http://127.0.0.1:50914/index.txt HTTP/1.1
+Host: 1Host: 127.0.0.1:50612
+User27.0.0.1:50612
+User-Agent: curh/7.490-.DEV
+Accept: */*
+
+
+--MARK--

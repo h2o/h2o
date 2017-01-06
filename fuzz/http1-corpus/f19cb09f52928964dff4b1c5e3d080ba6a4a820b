@@ -1,0 +1,365 @@
+G:schemÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn:*/*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdo'me.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTupgradtings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0..1:131055
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent:ÿÿÿÿ nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127.0.0r!rrrrrrrrrrrrrrrrrrrrrrr
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0..1:131055
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrr-settings: AAMAAABkrrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127.0.0r!rrrrrrrrrrrrrrrrrrrrrrr
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0..1:131055
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.TP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127.0.0r!rrrrrrrrrrrrrrrrrrrrrrr
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0..1:131055
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127.0.0r!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrBkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127.0.0r!rrrrrrrrrrrrrrrrrrrrrrr
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0..1:131055
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrr-settings: AAMAAABkrrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127.0.0r!rrrrrrrrrrrrrrrrrrrrrrr
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0..1:131055
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.TP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127.0.0r!rrrrrrrrrrrrrrrrrrrrrrr
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0..1:131055
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127.0.0r!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: d/*
+user-agent: nghttp2rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16AABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127..1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127.0.0.1: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdo'me.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTupgradtings
+upgYrade: h2c
+http 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0..1:131055
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127.0.0r!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16AABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127..1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /h.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+usrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.TP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127.0.0r!rrrrrrrrrrrrrrrrrrrrrrr
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0..1:131055
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+hos                                              t: 127.0.0.1:51135
+coneotincn:rrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127.0.0r!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16AABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127..1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /h.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/reproxy-test-MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+hos       €         €          ÿ        ÿ
+--MARK--
+         €         €          ÿ        
+PRI * HTÿ
+--MARK--

@@ -1,0 +1,59 @@
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/7.49.0-DEV
+A6ccept:ÿÿÿst/.well¿known/h2/../te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6cc*******ept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/7.49.0-DEV
+A6ccept:ÿÿÿst/.well¿known/h2/../te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6:50492
+User-Agent: c:schemurl/7.49.0-DEV
+A6ccept:ÿÿÿst/.well¿known/h2/../te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6cc*******ept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/te PRI * HTTP/2st: 127.0.0.1:50492
+User-Agent: c:schemurl/7.49.0-DEV
+A6ccept:ÿÿÿst/.well¿known/h2/../te HTTP/1.1
+Host: 12*****ept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/7.49.0-DEV
+A6ccept:ÿÿÿst/.well¿known/h2/../te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6:50492
+User-Agent: c:schemurl/7.49.0-DEV
+A6ccept:ÿÿÿst/.well¿known/h2/../te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6cc*******ept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/te PRI * HTTP/2st: 127.0.0.1:50492
+User-Agent: c:schemurl/7.49.0-DEV
+A6ccept:ÿÿÿst/.well¿known/h2/../te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6cc*******ept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ */*
+
+
+--cc*******ept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ */*
+
+
+--MARKÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ */*
+7.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6cc*******ept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ */*
+
+
+--cc*******ept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ */*
+
+
+--MARKÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ */*
+ÿÿÿÿÿ */*
+
+
+--MARKÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ */*
+
+
+--MARK--

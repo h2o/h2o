@@ -1,7 +1,0 @@
-GET /streaming-body?resp:status=200&resp:x-reproxy-url=http://127.0.0.1%3A50605/index.txt HTTP/1.1
-Host: 127.0.0.1:50765
-User-Agent: curl/7.49.0-DEV
-Accept: */*
-
-
---MARK--

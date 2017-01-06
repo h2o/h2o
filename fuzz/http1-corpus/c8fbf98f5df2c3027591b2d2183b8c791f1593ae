@@ -1,0 +1,22 @@
+GET /websocket/ HTTP/1.1
+Connection: upgrade
+Upgrade: websocket
+Sec-Websocket-Key: abcde
+Sec-Websocket-Version: 1world 2
+ world 1
+
+--MARK--
+hello world 1
+
+--MARK--
+hello world 3
+
+--MARK--
+hello world 4
+
+--MARK-- world 9
+
+--MARK--
+hello world 10
+
+--MARK/--
