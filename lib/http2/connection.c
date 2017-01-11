@@ -1361,6 +1361,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
     return 0;
 Error:
     h2o_linklist_unlink(&http2conn->_conns);
+    kh_destroy(h2o_http2_stream_t, http2conn->streams);
     free(http2conn);
     return -1;
 }
