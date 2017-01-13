@@ -32,7 +32,8 @@ enum {
     ELEMENT_TYPE_REMOTE_ADDR,                   /* %h */
     ELEMENT_TYPE_LOGNAME,                       /* %l */
     ELEMENT_TYPE_METHOD,                        /* %m */
-    ELEMENT_TYPE_LOCAL_PORT,                    /* %p */
+    ELEMENT_TYPE_LOCAL_PORT,                    /* %p, %{local}p */
+    ELEMENT_TYPE_REMOTE_PORT,                   /* %{remote}p */
     ELEMENT_TYPE_QUERY,                         /* %q */
     ELEMENT_TYPE_REQUEST_LINE,                  /* %r */
     ELEMENT_TYPE_STATUS,                        /* %s */
@@ -139,6 +140,16 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                         LAST_ELEMENT()->data.name = name;
                     }
                 } break;
+                case 'p':
+                    if (h2o_memis(pt, quote_end - pt, H2O_STRLIT("local"))) {
+                        NEW_ELEMENT(ELEMENT_TYPE_LOCAL_PORT);
+                    } else if (h2o_memis(pt, quote_end - pt, H2O_STRLIT("remote"))) {
+                        NEW_ELEMENT(ELEMENT_TYPE_REMOTE_PORT);
+                    } else {
+                        sprintf(errbuf, "failed to compile log format: unknown specifier for %%{...}p");
+                        goto Error;
+                    }
+                    break;
                 case 't':
                     if (h2o_memis(pt, quote_end - pt, H2O_STRLIT("sec"))) {
                         NEW_ELEMENT(ELEMENT_TYPE_TIMESTAMP_SEC_SINCE_EPOCH);
@@ -493,6 +504,10 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         case ELEMENT_TYPE_LOCAL_PORT: /* %p */
             RESERVE(sizeof(H2O_UINT16_LONGEST_STR) - 1);
             pos = append_port(pos, req->conn->callbacks->get_sockname, req->conn);
+            break;
+        case ELEMENT_TYPE_REMOTE_PORT: /* %{remote}p */
+            RESERVE(sizeof(H2O_UINT16_LONGEST_STR) - 1);
+            pos = append_port(pos, req->conn->callbacks->get_peername, req->conn);
             break;
         case ELEMENT_TYPE_QUERY: /* %q */
             if (req->input.query_at != SIZE_MAX) {

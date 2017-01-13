@@ -85,13 +85,16 @@ subtest "strftime-special" => sub {
 };
 
 subtest "more-fields" => sub {
+    my $local_port = "";
     doit(
         sub {
             my $server = shift;
-            system("curl --silent http://127.0.0.1:$server->{port}/ > /dev/null");
+            my $resp = `curl --silent -w ',\%{local_port}' http://127.0.0.1:$server->{port}/`;
+            like $resp, qr{,(\d+)$}s;
+            $local_port = do { $resp =~ /,(\d+)$/s; $1 };
         },
-        '\"%A:%p\"',
-        sub { my $server = shift; qr{^\"127\.0\.0\.1:$server->{port}\"$} },
+        '\"%A:%p\" \"%{local}p\" \"%{remote}p\"',
+        sub { my $server = shift; qr{^\"127\.0\.0\.1:$server->{port}\" \"$server->{port}\" \"$local_port\"$} },
     );
 };
 
