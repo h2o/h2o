@@ -102,7 +102,7 @@ static void *requests_status_init(void)
                 SEPARATOR
         /* connection */
         X_ELEMENT("connection-id") SEPARATOR X_ELEMENT("ssl.protocol-version") SEPARATOR X_ELEMENT("ssl.session-reused")
-            SEPARATOR X_ELEMENT("ssl.cipher") SEPARATOR X_ELEMENT("ssl.cipher-bits") SEPARATOR
+            SEPARATOR X_ELEMENT("ssl.cipher") SEPARATOR X_ELEMENT("ssl.cipher-bits") SEPARATOR X_ELEMENT("ssl.session-ticket") SEPARATOR
         /* http1 */
         X_ELEMENT("http1.request-index") SEPARATOR
         /* http2 */
