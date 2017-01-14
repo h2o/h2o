@@ -33,6 +33,7 @@ enum {
     ELEMENT_TYPE_LOGNAME,                       /* %l */
     ELEMENT_TYPE_METHOD,                        /* %m */
     ELEMENT_TYPE_LOCAL_PORT,                    /* %p */
+    ELEMENT_TYPE_REMOTE_PORT,                   /* %{remote}p */
     ELEMENT_TYPE_QUERY,                         /* %q */
     ELEMENT_TYPE_REQUEST_LINE,                  /* %r */
     ELEMENT_TYPE_STATUS,                        /* %s */
@@ -137,6 +138,11 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     } else {
                         NEW_ELEMENT(modifier == 'i' ? ELEMENT_TYPE_IN_HEADER_STRING : ELEMENT_TYPE_OUT_HEADER_STRING);
                         LAST_ELEMENT()->data.name = name;
+                    }
+                } break;
+                case 'p': {
+                    if (h2o_memis(pt, quote_end - pt, H2O_STRLIT("remote"))) {
+                        NEW_ELEMENT(ELEMENT_TYPE_REMOTE_PORT);
                     }
                 } break;
                 case 't':
@@ -361,6 +367,24 @@ Fail:
     return pos;
 }
 
+static char *append_remote_port(char *pos, socklen_t (*cb)(h2o_conn_t *conn, struct sockaddr *sa), h2o_conn_t *conn)
+{
+    struct sockaddr_storage ss;
+    socklen_t sslen;
+
+    if ((sslen = conn->callbacks->get_peername(conn, (void *)&ss)) == 0)
+        goto Fail;
+    int32_t port = h2o_socket_getport((void *)&ss);
+    if (port == -1)
+        goto Fail;
+    pos += sprintf(pos, "%" PRIu16, (uint16_t)port);
+    return pos;
+
+Fail:
+    *pos++ = '-';
+    return pos;
+}
+
 #define DURATION_MAX_LEN (sizeof(H2O_INT32_LONGEST_STR ".999999") - 1)
 
 #define APPEND_DURATION(pos, name)                                                                                                 \
@@ -493,6 +517,10 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         case ELEMENT_TYPE_LOCAL_PORT: /* %p */
             RESERVE(sizeof(H2O_UINT16_LONGEST_STR) - 1);
             pos = append_port(pos, req->conn->callbacks->get_sockname, req->conn);
+            break;
+        case ELEMENT_TYPE_REMOTE_PORT: /* %{remote}p */
+            RESERVE(sizeof(H2O_UINT16_LONGEST_STR) - 1);
+            pos = append_remote_port(pos, req->conn->callbacks->get_sockname, req->conn);
             break;
         case ELEMENT_TYPE_QUERY: /* %q */
             if (req->input.query_at != SIZE_MAX) {
