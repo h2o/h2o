@@ -178,6 +178,11 @@ inline int h2o_lcstris(const char *target, size_t target_len, const char *test, 
     return h2o__lcstris_core(target, test, test_len);
 }
 
+inline size_t h2o_base64_encode_capacity(unsigned len)
+{
+    return (((len) + 2) / 3 * 4 + 1);
+}
+
 #ifdef __cplusplus
 }
 #endif
