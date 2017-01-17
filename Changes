@@ -1,5 +1,47 @@
 Revision history for H2O.
 
+2.1.0 TBD
+	- [core] TCP latency optimization #873 #1076 (Kazuho Oku)
+	- [core] provide tag to include other YAML files from the configuration file #1022 (Ichito Nagata)
+	- [core] accept sequence of mappings for path-level configuration #1042 (Ichito Nagata)
+	- [core] fix broken support for TCP Fast Open in OS X #1065 (Ichito Nagata)
+	- [access-log] provide directive to emit request-level errors #1075 (Kazuho Oku)
+	- [access-log] emit values of all `set-cookie` headers concatenated #1161 (Kazuho Oku)
+	- [fastcgi] fix connection failure when `fastcgi.spawn` is used with an uid #1119 (Kazuho Oku)
+	- [file] more pre-defined MIME types #1103 (Joe Duarte)
+	- [http2][proxy] recognize link rel=preload headers in interim response as a trigger to push resources #916 (Kazuho Oku)
+	- [http1][http2] validate characters used in the headers #974 #1044 (Frederik Deweerdt, Kazuho Oku)
+	- [http1][http2] notify error downstream when an error occurred while generating a response #1031 (Frederik Deweerdt)
+	- [http1][http2] fix resource leak upon upgrade failure to HTTP/2 #1161 (Frederik Deweerdt)
+	- [http2] add `http2-push-preload` directive to turn off H2 push being initiated by link rel=preload header #929 (Kazuho Oku)
+	- [http2] add support for `cache-digest` header #967 #988 (Kazuho Oku)
+	- [http2] drop `host` header in HTTP/2 layer #973 #998 (Frederik Deweerdt, Kazuho Oku)
+	- [http2] don't use etag for calculating casper cookie #986 (Kazuho Oku)
+	- [http2] add support for H2 debug state #1019 (Ichito Nagata)
+	- [mruby] add dos_detector mruby handler #1013 (Ichito Nagata)
+	- [mruby] add DSL for access control lists (acl) #1016 (Ichito Nagata)
+	- [mruby] share mruby state and constants between handlers #1032 (Ichito Nagata)
+	- [mruby] add library for address-block-based access control #1038 (Ichito Nagata)
+	- [proxy] add an option to connect to upstream using PROXY protocol #930 (Kazuho Oku)
+	- [proxy] don't escape `:` in URI path #977 (Frederik Deweerdt)
+	- [proxy] preserve received URLs as much as possible #985 #1071 (Frederik Deweerdt)
+	- [proxy] add an option to prevent emiting x-forwarded-* headers #999 (Frederik Deweerdt)
+	- [proxy] cache TLS session used for upstream connections #1053 (Ichito Nagata)
+	- [proxy] turn on/off on-the-fly compression based on the `x-compress-hint` header #1085 (Frederik Deweerdt)
+	- [ssl] set add_lock callback to prevent unnecessary lock-add-unlock #983 (Roberto Guimaraes)
+	- [ssl] add support for OpenSSL 1.1.0 #1064 (Kazuho Oku)
+	- [status] collect and report HTTP statistics #893 (Frederik Deweerdt)
+	- [status] report additional stats when jemalloc is used #1017 (Frederik Deweerdt)
+	- [throttle] add new handler for throttling the response bandwidth #917 (Justin Zhu)
+	- [libh2o] provide `h2o_rand` that calls the appropriate random function depending on the OS #927 (David CARLIER)
+	- [libh2o] do not require use of picohttpparser.h when using the HTTP/1 client #946 (Kazuho Oku)
+	- [libh2o] install library files to the correct location #1116 (Frederik Deweerdt)
+	- [misc] provide `crash-handler` directive to customize crash logging #935 (Frederik Deweerdt)
+	- [misc] guess the default location of h2o.conf #969 (Davsid Carlier)
+	- [misc] allow to disable libuv even when it is found #995 (Frederik Deweerdt)
+	- [misc] add font/woff2 to the default mime-type mapping #1066 (Andy Davies)
+	- [misc] mark JavaScript and JSON files as compressible by default #1067 (Kazuho Oku)
+
 2.0.6 2017-01-05 05:31:00+0000
 	- [compress] fix the compression quality being ignored #1154 (Yannick Koechlin)
 	- [mruby] stop GIT access during build #1149 (parly)
@@ -176,8 +218,8 @@ Revision history for H2O.
 	- [misc] downgrade required CMake version to 2.8.11 #594 (Kazuho Oku)
 
 1.5.4 2015-11-12 04:05:00+0000
-        - [access-log] do not emit protocol and authority for `%U` #586 (Kazuho Oku)
-        - [ssl] fix handshake failure with older versions of Android (2.x) #591 (Kazuho Oku)
+	- [access-log] do not emit protocol and authority for `%U` #586 (Kazuho Oku)
+	- [ssl] fix handshake failure with older versions of Android (2.x) #591 (Kazuho Oku)
 
 1.5.3 2015-11-06 04:30:00+0000
 	- [core] decode url-encoded character at the end of path #567 (Kazuho Oku)
