@@ -73,108 +73,214 @@ static void test_extract_push_path_from_link_header(void)
     h2o_mem_pool_t pool;
     h2o_iovec_vector_t paths;
     h2o_iovec_t path;
+    h2o_iovec_t filtered_value;
     h2o_iovec_t base_path = {H2O_STRLIT("/basepath/")}, input_authority = {H2O_STRLIT("basehost")},
                 other_authority = {H2O_STRLIT("otherhost")};
 #define INPUT base_path, &H2O_URL_SCHEME_HTTP, input_authority
     h2o_mem_init_pool(&pool);
+    h2o_iovec_t value;
 
+    value = h2o_iovec_init(H2O_STRLIT("<http://basehost/otherpath>; rel=preload"));
     paths =
-        h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http://basehost/otherpath>; rel=preload"), INPUT, NULL, NULL);
+        h2o_extract_push_path_from_link_header(&pool, value.base, value.len, INPUT, NULL, NULL, &filtered_value);
     ok(paths.size == 1);
     path = paths.entries[0];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/otherpath")));
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
 
-    paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</otherpath>; rel=preload"), INPUT, NULL, NULL);
+    value = h2o_iovec_init(H2O_STRLIT("</otherpath>; rel=preload"));
+    paths = h2o_extract_push_path_from_link_header(&pool, value.base, value.len, INPUT, NULL, NULL, &filtered_value);
     ok(paths.size == 1);
     path = paths.entries[0];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/otherpath")));
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
 
-    paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<otherpath>; rel=preload"), INPUT, NULL, NULL);
+    value = h2o_iovec_init(H2O_STRLIT("<otherpath>; rel=preload"));
+    paths = h2o_extract_push_path_from_link_header(&pool, value.base, value.len, INPUT, NULL, NULL, &filtered_value);
     ok(paths.size == 1);
     path = paths.entries[0];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/basepath/otherpath")));
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
 
-    paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<../otherpath>; rel=preload"), INPUT, NULL, NULL);
+    value = h2o_iovec_init(H2O_STRLIT("<../otherpath>; rel=preload"));
+    paths = h2o_extract_push_path_from_link_header(&pool, value.base, value.len, INPUT, NULL, NULL, &filtered_value);
     ok(paths.size == 1);
     path = paths.entries[0];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/otherpath")));
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
 
-    paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http:otherpath>; rel=preload"), INPUT, NULL, NULL);
+    value = h2o_iovec_init(H2O_STRLIT("<http:otherpath>; rel=preload"));
+    paths = h2o_extract_push_path_from_link_header(&pool, value.base, value.len, INPUT, NULL, NULL, &filtered_value);
     ok(paths.size == 1);
     path = paths.entries[0];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/basepath/otherpath")));
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
 
-    paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<../otherpath>; rel=author"), INPUT, NULL, NULL);
+    value = h2o_iovec_init(H2O_STRLIT("<../otherpath>; rel=author"));
+    paths = h2o_extract_push_path_from_link_header(&pool, value.base, value.len, INPUT, NULL, NULL, &filtered_value);
     ok(paths.size == 0);
-    paths =
-        h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http://basehost:81/otherpath>; rel=preload"), INPUT, NULL, NULL);
-    ok(paths.size == 0);
-    paths =
-        h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<https://basehost/otherpath>; rel=preload"), INPUT, NULL, NULL);
-    ok(paths.size == 0);
-    paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<https:otherpath>; rel=preload"), INPUT, NULL, NULL);
-    ok(paths.size == 0);
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
 
-    paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</otherpath>; rel=preload"), INPUT, &H2O_URL_SCHEME_HTTPS,
-                                                   &input_authority);
+    value = h2o_iovec_init(H2O_STRLIT("<http://basehost:81/otherpath>; rel=preload"));
+    paths =
+        h2o_extract_push_path_from_link_header(&pool, value.base, value.len, INPUT, NULL, NULL, &filtered_value);
     ok(paths.size == 0);
-    paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</otherpath>; rel=preload"), INPUT, &H2O_URL_SCHEME_HTTP,
-                                                   &input_authority);
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
+
+    value = h2o_iovec_init(H2O_STRLIT("<https://basehost/otherpath>; rel=preload"));
+    paths =
+        h2o_extract_push_path_from_link_header(&pool, value.base, value.len, INPUT, NULL, NULL, &filtered_value);
+    ok(paths.size == 0);
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
+
+    value = h2o_iovec_init(H2O_STRLIT("<https:otherpath>; rel=preload"));
+    paths = h2o_extract_push_path_from_link_header(&pool, value.base, value.len, INPUT, NULL, NULL, &filtered_value);
+    ok(paths.size == 0);
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
+
+    value = h2o_iovec_init(H2O_STRLIT("</otherpath>; rel=preload"));
+    paths = h2o_extract_push_path_from_link_header(&pool, value.base, value.len, INPUT, &H2O_URL_SCHEME_HTTPS,
+                                                   &input_authority, &filtered_value);
+    ok(paths.size == 0);
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
+
+    value = h2o_iovec_init(H2O_STRLIT("</otherpath>; rel=preload"));
+    paths = h2o_extract_push_path_from_link_header(&pool, value.base, value.len, INPUT, &H2O_URL_SCHEME_HTTP,
+                                                   &input_authority, &filtered_value);
     ok(paths.size == 1);
     path = paths.entries[0];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/otherpath")));
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
 
-    paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</otherpath>; rel=preload"), INPUT, &H2O_URL_SCHEME_HTTP,
-                                                   &other_authority);
+    value = h2o_iovec_init(H2O_STRLIT("</otherpath>; rel=preload"));
+    paths = h2o_extract_push_path_from_link_header(&pool, value.base, value.len, INPUT, &H2O_URL_SCHEME_HTTP,
+                                                   &other_authority, &filtered_value);
     ok(paths.entries == 0);
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
 
-    paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http://basehost/otherpath>; rel=preload"), INPUT,
-                                                   &H2O_URL_SCHEME_HTTP, &other_authority);
+    value = h2o_iovec_init(H2O_STRLIT("<http://basehost/otherpath>; rel=preload"));
+    paths = h2o_extract_push_path_from_link_header(&pool, value.base, value.len, INPUT,
+                                                   &H2O_URL_SCHEME_HTTP, &other_authority, &filtered_value);
     ok(paths.size == 1);
     path = paths.entries[0];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/otherpath")));
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
 
-    paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("<http:otherpath>; rel=preload; nopush"), INPUT, NULL, NULL);
+    value = h2o_iovec_init(H2O_STRLIT("<http:otherpath>; rel=preload; nopush"));
+    paths = h2o_extract_push_path_from_link_header(&pool, value.base, value.len, INPUT, NULL, NULL, &filtered_value);
     ok(paths.entries == 0);
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
 
-    paths = h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</firstpath>; rel=preload, </secondpath>; rel=preload"),
-                                                   INPUT, &H2O_URL_SCHEME_HTTP, &input_authority);
+    value = h2o_iovec_init(H2O_STRLIT("</firstpath>; rel=preload, </secondpath>; rel=preload"));
+    paths = h2o_extract_push_path_from_link_header(&pool, value.base, value.len,
+                                                   INPUT, &H2O_URL_SCHEME_HTTP, &input_authority, &filtered_value);
     ok(paths.size == 2);
     path = paths.entries[0];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/firstpath")));
     path = paths.entries[1];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/secondpath")));
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
 
+    value = h2o_iovec_init(H2O_STRLIT("</firstpath>; rel=preload; nopush, </secondpath>; rel=preload"));
     paths =
-        h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</firstpath>; rel=preload; nopush, </secondpath>; rel=preload"),
-                                               INPUT, &H2O_URL_SCHEME_HTTP, &input_authority);
+        h2o_extract_push_path_from_link_header(&pool, value.base, value.len,
+                                               INPUT, &H2O_URL_SCHEME_HTTP, &input_authority, &filtered_value);
     ok(paths.size == 1);
     path = paths.entries[0];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/secondpath")));
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
 
+    value = h2o_iovec_init(H2O_STRLIT("</firstpath>; rel=preload; nopush, </secondpath>; nopush; rel=preload; </thirdpath>"));
     paths = h2o_extract_push_path_from_link_header(
-        &pool, H2O_STRLIT("</firstpath>; rel=preload; nopush, </secondpath>; nopush; rel=preload; </thirdpath>"), INPUT,
-        &H2O_URL_SCHEME_HTTP, &input_authority);
+        &pool, value.base, value.len, INPUT,
+        &H2O_URL_SCHEME_HTTP, &input_authority, &filtered_value);
     ok(paths.size == 0);
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
 
+    value = h2o_iovec_init(H2O_STRLIT("</firstpath>; rel=preload; nopush, <secondpath>; rel=notpreload"));
     paths =
-        h2o_extract_push_path_from_link_header(&pool, H2O_STRLIT("</firstpath>; rel=preload; nopush, <secondpath>; rel=notpreload"),
-                                               INPUT, &H2O_URL_SCHEME_HTTP, &input_authority);
+        h2o_extract_push_path_from_link_header(&pool, value.base, value.len,
+                                               INPUT, &H2O_URL_SCHEME_HTTP, &input_authority, &filtered_value);
     ok(paths.size == 0);
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
 
+    value = h2o_iovec_init(H2O_STRLIT("</firstpath>; rel=preload, </secondpath>; rel=preload; nopush, </thirdpath>; rel=preload"));
     paths = h2o_extract_push_path_from_link_header(
-        &pool, H2O_STRLIT("</firstpath>; rel=preload, </secondpath>; rel=preload; nopush, </thirdpath>; rel=preload"), INPUT,
-        &H2O_URL_SCHEME_HTTP, &input_authority);
+        &pool, value.base, value.len, INPUT,
+        &H2O_URL_SCHEME_HTTP, &input_authority, &filtered_value);
     ok(paths.size == 2);
     path = paths.entries[0];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/firstpath")));
     path = paths.entries[1];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/thirdpath")));
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
 
     h2o_mem_clear_pool(&pool);
 #undef INPUT
 }
 
+static void test_extract_push_path_from_link_header_push_only(void)
+{
+    h2o_mem_pool_t pool;
+    h2o_iovec_vector_t paths;
+    h2o_iovec_t path;
+    h2o_iovec_t filtered_value;
+    h2o_iovec_t base_path = {H2O_STRLIT("/basepath/")}, input_authority = {H2O_STRLIT("basehost")};
+#define INPUT base_path, &H2O_URL_SCHEME_HTTP, input_authority
+    h2o_mem_init_pool(&pool);
+    h2o_iovec_t value;
+
+    value = h2o_iovec_init(H2O_STRLIT("</firstpath>; rel=preload, </secondpath>; rel=preload; nopush, </thirdpath>; rel=preload, </fourthpath>; rel=preload; x-http2-push-only"));
+    paths = h2o_extract_push_path_from_link_header(
+        &pool, value.base, value.len, INPUT,
+        &H2O_URL_SCHEME_HTTP, &input_authority, &filtered_value);
+    ok(paths.size == 3);
+    path = paths.entries[0];
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/firstpath")));
+    path = paths.entries[1];
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/thirdpath")));
+    path = paths.entries[2];
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/fourthpath")));
+    value = h2o_iovec_init(H2O_STRLIT("</firstpath>; rel=preload, </secondpath>; rel=preload; nopush, </thirdpath>; rel=preload"));
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
+
+    value = h2o_iovec_init(H2O_STRLIT("</firstpath>; rel=preload; x-http2-push-only, </secondpath>; rel=preload; nopush, </thirdpath>; rel=preload, </fourthpath>; rel=preload; x-http2-push-only"));
+    paths = h2o_extract_push_path_from_link_header(
+        &pool, value.base, value.len, INPUT,
+        &H2O_URL_SCHEME_HTTP, &input_authority, &filtered_value);
+    ok(paths.size == 3);
+    path = paths.entries[0];
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/firstpath")));
+    path = paths.entries[1];
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/thirdpath")));
+    path = paths.entries[2];
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/fourthpath")));
+    value = h2o_iovec_init(H2O_STRLIT(" </secondpath>; rel=preload; nopush, </thirdpath>; rel=preload"));
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
+
+    value = h2o_iovec_init(H2O_STRLIT("</firstpath>; rel=preload, </secondpath>; rel=preload; x-http2-push-only, </thirdpath>; rel=preload; nopush, </fourthpath>; rel=preload; x-http2-push-only"));
+    paths = h2o_extract_push_path_from_link_header(
+        &pool, value.base, value.len, INPUT,
+        &H2O_URL_SCHEME_HTTP, &input_authority, &filtered_value);
+    ok(paths.size == 3);
+    path = paths.entries[0];
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/firstpath")));
+    path = paths.entries[1];
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/secondpath")));
+    path = paths.entries[2];
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/fourthpath")));
+    value = h2o_iovec_init(H2O_STRLIT("</firstpath>; rel=preload, </thirdpath>; rel=preload; nopush"));
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
+
+    value = h2o_iovec_init(H2O_STRLIT("firstpath; rel=preload, </secondpath>; rel=preload; x-http2-push-only, </thirdpath>; rel=preload; nopush, </fourthpath>; rel=preload; x-http2-push-only"));
+    paths = h2o_extract_push_path_from_link_header(
+        &pool, value.base, value.len, INPUT,
+        &H2O_URL_SCHEME_HTTP, &input_authority, &filtered_value);
+    ok(paths.size == 0);
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
+
+    h2o_mem_clear_pool(&pool);
+}
 void test_build_destination(void)
 {
     h2o_pathconf_t conf_not_slashed = {NULL, {H2O_STRLIT("/abc")}}, conf_slashed = {NULL, {H2O_STRLIT("/abc/")}};
@@ -287,6 +393,7 @@ void test_lib__core__util_c()
 {
     subtest("parse_proxy_line", test_parse_proxy_line);
     subtest("extract_push_path_from_link_header", test_extract_push_path_from_link_header);
+    subtest("extract_push_path_from_link_header_push_only", test_extract_push_path_from_link_header_push_only);
     subtest("test_build_destination", test_build_destination);
     subtest("test_build_destination_escaping", test_build_destination_escaping);
 }

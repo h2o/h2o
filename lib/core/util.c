@@ -392,12 +392,13 @@ static void push_one_path(h2o_mem_pool_t *pool, h2o_iovec_vector_t *paths_to_pus
 h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
                                                           h2o_iovec_t base_path, const h2o_url_scheme_t *input_scheme,
                                                           h2o_iovec_t input_authority, const h2o_url_scheme_t *base_scheme,
-                                                          h2o_iovec_t *base_authority)
+                                                          h2o_iovec_t *base_authority, h2o_iovec_t *filtered_value)
 {
     h2o_iovec_vector_t paths_to_push = {NULL};
     h2o_iovec_t iter = h2o_iovec_init(value, value_len), token_value;
     const char *token;
     size_t token_len;
+    int push_only = 0;
 
     /* extract URL values from Link: </pushed.css>; rel=preload */
     do {
@@ -416,12 +417,45 @@ h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, 
                 preload++;
             } else if (h2o_lcstris(token, token_len, H2O_STRLIT("nopush"))) {
                 nopush++;
+            } else if (h2o_lcstris(token, token_len, H2O_STRLIT("x-http2-push-only"))) {
+                push_only++;
             }
         }
+
         if (!nopush && preload)
             push_one_path(pool, &paths_to_push, &url, base_path, input_scheme, input_authority, base_scheme, base_authority);
     } while (token != NULL);
 
+    if (push_only) {
+	    /* slow path and alloc only when x-http2-push-only is used. We
+	     * remove the links containing the attribute */
+	    filtered_value->base = h2o_mem_alloc_pool(pool, value_len);
+        filtered_value->len = 0;
+        iter = h2o_iovec_init(value, value_len);
+        const char *link_start = value;
+        while ((token = h2o_next_token(&iter, ',', &token_len, NULL)) != NULL) {
+            const char *attr_token;
+            size_t attr_token_len;
+            h2o_iovec_t attr_iter = h2o_iovec_init(token, token_len);
+            push_only = 0;
+            while ((attr_token = h2o_next_token(&attr_iter, ';', &attr_token_len, NULL)) != NULL) {
+                if (h2o_lcstris(attr_token, attr_token_len, H2O_STRLIT("x-http2-push-only")))
+                    push_only++;
+            }
+            if (!push_only) {
+                size_t link_len;
+                if (filtered_value->len) {
+                    memcpy(filtered_value->base + filtered_value->len++, ",", 1);
+                }
+                link_len = (token + token_len) - link_start;
+                memcpy(filtered_value->base + filtered_value->len, link_start, link_len);
+                filtered_value->len += link_len;
+            }
+            link_start = token + token_len + 1;
+        }
+    } else {
+	    *filtered_value = h2o_iovec_init(value, value_len);
+    }
     return paths_to_push;
 }
 
