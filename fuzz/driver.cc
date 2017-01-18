@@ -107,6 +107,7 @@ static int reproxy_test(h2o_handler_t *self, h2o_req_t *req)
 static h2o_globalconf_t config;
 static h2o_context_t ctx;
 static h2o_accept_ctx_t accept_ctx;
+static int client_timeout_ms;
 
 /* copy from src to dst, return true if src has EOF */
 static int drain(int fd)
@@ -147,8 +148,8 @@ static void read_fully(int fd, char *buf, size_t len)
     }
 }
 
-/* 
- * Writes the writer_thread_args at buf to fd 
+/*
+ * Writes the writer_thread_args at buf to fd
  */
 static void write_fully(int fd, char *buf, size_t len)
 {
@@ -166,8 +167,8 @@ static void write_fully(int fd, char *buf, size_t len)
 }
 
 /*
- * Thread: Loops writing fuzzed req to socket and then reading results back. 
- * Acts as a client to h2o. *arg points to file descripter to read 
+ * Thread: Loops writing fuzzed req to socket and then reading results back.
+ * Acts as a client to h2o. *arg points to file descripter to read
  * writer_thread_args from.
  */
 void *writer_thread(void *arg)
@@ -218,7 +219,7 @@ void *writer_thread(void *arg)
                 FD_ZERO(&rd);
                 FD_SET(sockinp, &rd);
                 timeo.tv_sec = 0;
-                timeo.tv_usec = 10 * 1000;
+                timeo.tv_usec = client_timeout_ms * 1000;
                 n = select(sockinp + 1, &rd, NULL, NULL, &timeo);
                 if (n > 0 && FD_ISSET(sockinp, &rd) && drain(sockinp)) {
                     sockinp = -1;
@@ -306,7 +307,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
      * Perform one-time initialization
      */
     if (!init_done) {
+        const char *client_timeout_ms_str;
         signal(SIGPIPE, SIG_IGN);
+
+        if ((client_timeout_ms_str = getenv("H2O_FUZZER_CLIENT_TIMEOUT")) != NULL)
+            client_timeout_ms = atoi(client_timeout_ms_str);
+        if (!client_timeout_ms)
+            client_timeout_ms = 10;
 
         /* Create a single h2o host with multiple request handlers */
         h2o_config_init(&config);
