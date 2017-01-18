@@ -27,6 +27,7 @@ static int on_config_debug_state(h2o_configurator_command_t *cmd, h2o_configurat
     switch (h2o_configurator_get_one_of(cmd, node, "minimum,hpack")) {
     case 0: /* minimum */
         h2o_http2_debug_state_register(ctx->hostconf, 0);
+        return 0;
     case 1: /* with hpack state*/
         h2o_http2_debug_state_register(ctx->hostconf, 1);
         return 0;
