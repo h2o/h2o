@@ -127,11 +127,15 @@ inline h2o_iovec_t h2o_url_stringify(h2o_mem_pool_t *pool, const h2o_url_t *url)
  * Compares to hostnames, taking into account whether they contain a
  * unix path (the comparison will be case insensitive) or not.
  */
-static inline int h2o_url_compare_hosts(const h2o_iovec_t host_a, const h2o_iovec_t host_b, int host_is_unix_path)
+static inline int h2o_url_hosts_are_equal(const h2o_url_t *url_a, const h2o_url_t *url_b)
 {
-    if (!host_is_unix_path)
-        return h2o_lcstris(host_a.base, host_a.len, host_b.base, host_b.len);
-    return host_a.len == host_b.len && !strncasecmp(host_a.base, host_b.base, host_b.len);
+    if (url_a->host_is_unix_path != url_b->host_is_unix_path)
+        return 0;
+
+    if (!url_a->host_is_unix_path)
+        return h2o_lcstris(url_a->host.base, url_a->host.len, url_b->host.base, url_b->host.len);
+    else
+        return !strncasecmp(url_a->host.base, url_b->host.base, url_b->host.len);
 }
 
 #endif
