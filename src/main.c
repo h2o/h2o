@@ -1157,17 +1157,12 @@ static int on_config_crash_handler(h2o_configurator_command_t *cmd, h2o_configur
 
 static int on_config_crash_handler_wait_pipe_close(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
-        case 0: /* off */
-            conf.crash_handler_wait_pipe_close = 0;
-            break;
-        case 1: /* on */
-            conf.crash_handler_wait_pipe_close = 1;
-            break;
-        default: /* error */
-            return -1;
-    }
+    ssize_t v;
 
+    if ((v = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+
+    conf.crash_handler_wait_pipe_close = (int)v;
     return 0;
 }
 
@@ -1298,7 +1293,6 @@ static int popen_crash_handler(void)
         perror("failed to set FD_CLOEXEC on pipefds[1]");
         return -1;
     }
-
     /* spawn the logger */
     int mapped_fds[] = {pipefds[0], 0, /* output of the pipe is connected to STDIN of the spawned process */
                         2, 1,          /* STDOUT of the spawned process in connected to STDERR of h2o */
@@ -1330,7 +1324,8 @@ static void on_sigfatal(int signo)
         struct pollfd pfd[1];
         pfd[0].fd = crash_handler_fd;
         pfd[0].events = POLLERR | POLLHUP;
-        while (poll(pfd, 1, -1) == -1 && errno == EINTR);
+        while (poll(pfd, 1, -1) == -1 && errno == EINTR)
+            ;
     }
 
     raise(signo);
@@ -1765,7 +1760,8 @@ static void setup_configurators(void)
                                         on_config_temp_buffer_path);
         h2o_configurator_define_command(c, "crash-handler", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_crash_handler);
-        h2o_configurator_define_command(c, "crash-handler.wait-pipe-close", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        h2o_configurator_define_command(c, "crash-handler.wait-pipe-close",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_crash_handler_wait_pipe_close);
     }
 
