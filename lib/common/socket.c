@@ -763,9 +763,10 @@ static void create_ssl(h2o_socket_t *sock, SSL_CTX *ssl_ctx)
 
 static SSL_SESSION *on_async_resumption_get(SSL *ssl,
 #if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)
-    const
+                                            const
 #endif
-    unsigned char *data, int len, int *copy)
+                                            unsigned char *data,
+                                            int len, int *copy)
 {
     h2o_socket_t *sock = BIO_get_data(SSL_get_rbio(ssl));
 

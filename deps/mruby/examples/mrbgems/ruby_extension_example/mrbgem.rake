@@ -11,6 +11,8 @@ MRuby::Gem::Specification.new('ruby_extension_example') do |spec|
   # Add libraries
   # spec.linker.libraries << 'external_lib'
 
+  spec.add_dependency('mruby-print', :core => 'mruby-print')
+
   # Default build files
   # spec.rbfiles = Dir.glob("#{dir}/mrblib/*.rb")
   # spec.objs = Dir.glob("#{dir}/src/*.{c,cpp,m,asm,S}").map { |f| objfile(f.relative_path_from(dir).pathmap("#{build_dir}/%X")) }

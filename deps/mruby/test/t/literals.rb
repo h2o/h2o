@@ -26,7 +26,7 @@ assert('Literals Numerical', '8.7.6.2') do
   assert_equal 10000000, 10_000_000
   assert_equal       10, 1_0
   # integer with exponent
-  assert_equal 10.0, 1e1,
+  assert_equal 10.0, 1e1
   assert_equal(0.1, 1e-1)
   assert_equal 10.0, 1e+1
   # float with exponent

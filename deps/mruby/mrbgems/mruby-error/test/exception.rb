@@ -5,7 +5,7 @@ assert 'mrb_protect' do
   end
   # failure in protect returns [exception, true]
   result = ExceptionTest.mrb_protect { raise 'test' }
-  assert_kind_of RuntimeError, result[0]    
+  assert_kind_of RuntimeError, result[0]
   assert_true result[1]
 end
 

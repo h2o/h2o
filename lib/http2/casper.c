@@ -25,7 +25,7 @@
 #include "h2o/http2_casper.h"
 
 #define COOKIE_NAME "h2o_casper"
-#define COOKIE_ATTRIBUTES "; Path=/; Expires=Tue, 01 Jan 2030 00:00:00 GMT"
+#define COOKIE_ATTRIBUTES "; Path=/; Expires=Tue, 01 Jan 2030 00:00:00 GMT; Secure"
 
 struct st_h2o_http2_casper_t {
     H2O_VECTOR(uint64_t) keys;

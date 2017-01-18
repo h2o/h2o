@@ -1,6 +1,13 @@
 ##
 # Symbol ISO Test
 
+assert('Symbol') do
+  assert_equal :"a", :a
+  assert_equal :"a#{1}", :a1
+  assert_equal :'a', :a
+  assert_equal :'a#{1}', :"a\#{1}"
+end
+
 assert('Symbol', '15.2.11') do
   assert_equal Class, Symbol.class
 end

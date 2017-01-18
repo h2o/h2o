@@ -154,6 +154,7 @@ class Hash
   #
   # ISO 15.2.13.4.23
   def replace(hash)
+    raise TypeError, "can't convert argument into Hash" unless hash.respond_to?(:to_hash)
     self.clear
     hash = hash.to_hash
     hash.each_key{|k|
@@ -200,7 +201,7 @@ class Hash
     }.join(", ")+"}"
   end
   ##
-  # Return the contents of this hash as a string. 
+  # Return the contents of this hash as a string.
  #
   # ISO 15.2.13.4.30 (x)
   def inspect

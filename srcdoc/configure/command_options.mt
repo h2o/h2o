@@ -28,4 +28,9 @@ Options:
 EOT
 ?>
 
+<p>
+The default path of the configuration file may differ depending on the distribution.
+Please run <code>h2o --help</code> to find out the location.
+</p>
+
 ? })

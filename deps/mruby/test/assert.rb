@@ -213,7 +213,7 @@ def report()
   t_print("\n")
 
   $asserts.each do |msg|
-    puts msg
+    t_print "#{msg}\n"
   end
 
   $total_test = $ok_test+$ko_test+$kill_test
@@ -232,7 +232,7 @@ end
 ##
 # Performs fuzzy check for equality on methods returning floats
 def check_float(a, b)
-  tolerance = 1e-12
+  tolerance = Mrbtest::FLOAT_TOLERANCE
   a = a.to_f
   b = b.to_f
   if a.finite? and b.finite?

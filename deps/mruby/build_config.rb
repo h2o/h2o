@@ -122,6 +122,18 @@ MRuby::Build.new('test') do |conf|
   conf.gembox 'default'
 end
 
+MRuby::Build.new('bench') do |conf|
+  # Gets set by the VS command prompts.
+  if ENV['VisualStudioVersion'] || ENV['VSINSTALLDIR']
+    toolchain :visualcpp
+  else
+    toolchain :gcc
+    conf.cc.flags << '-O3'
+  end
+
+  conf.gembox 'default'
+end
+
 # Define cross build settings
 # MRuby::CrossBuild.new('32bit') do |conf|
 #   toolchain :gcc

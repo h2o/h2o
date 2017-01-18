@@ -167,6 +167,11 @@ As an example, it is possible to log timestamps in millisecond resolution using 
 <tr><td><code>http2.priority.received.parent</code><td>parent stream ID of the most recent priority specified by the client
 <tr><td><code>http2.priority.received.weight</code><td>weight of the most recent priority specified by the client
 </table>
+<table>
+<caption>Miscellaneous</caption>
+<tr><th>Name<th>Description
+<tr><td><code>error</code><td>request-level errors. Unless specified otherwise by using the <a href="configure/base_directives.html#error-log.emit-request-errors"><code>error-log.emit-request-errors</code></a> directive, the same messages are emitted to the <a href="configure/base_directives.html#error-log">error-log</a>. (since v2.1)
+</table>
 </table>
 
 <p>
@@ -179,6 +184,10 @@ Note that you may need to quote (and escape) the format string as required by YA
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global, host, path, extension</dd>
+<dt>See also:</dt>
+<dd><a href="configure/base_directives.html#error-log"><code>error-log</code></a>
+<a href="configure/base_directives.html#error-log.emit-request-errors"><code>error-log.emit-request-errors</code></a>
+</dd>
 </dl>
 
 

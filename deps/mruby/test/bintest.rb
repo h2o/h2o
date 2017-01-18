@@ -20,6 +20,11 @@ def shellquote(s)
 end
 
 ARGV.each do |gem|
+  case RbConfig::CONFIG['host_os']
+  when /mswin(?!ce)|mingw|cygwin|bccwin/
+    gem = gem.gsub('\\', '/')
+  end
+
   Dir["#{gem}/bintest/**/*.rb"].each do |file|
     load file
   end

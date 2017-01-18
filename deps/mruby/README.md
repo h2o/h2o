@@ -26,13 +26,15 @@ following command:
 
     $ git clone https://github.com/mruby/mruby.git
 
+You can also install and compile mruby using [ruby-install](https://github.com/postmodern/ruby-install), [ruby-build](https://github.com/rbenv/ruby-build) or [rvm](https://github.com/rvm/rvm).
+
 ## mruby home-page
 
 The URL of the mruby home-page is: [http://www.mruby.org](http://www.mruby.org).
 
 ## Mailing list
 
-We don't have mailing list, but you can use [GitHub issues](https://github.com/mruby/mruby).
+We don't have a mailing list, but you can use [GitHub issues](https://github.com/mruby/mruby).
 
 ## How to compile and install (mruby and gems)
 

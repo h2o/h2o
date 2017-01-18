@@ -97,7 +97,7 @@ Forwards the requests to the specified URL, and proxies the response.
 </div>
 
 <p>
-If you want load balancing multiple backends, replace 127.0.0.1 with hostname witch returns IP addresses via DNS or /etc/hosts.
+If you want load balancing multiple backends, replace 127.0.0.1 with hostname which returns IP addresses via DNS or /etc/hosts.
 </p>
 <p>
 In addition to TCP/IP over IPv4 and IPv6, the proxy handler can also connect to an HTTP server listening to a Unix socket.
@@ -123,7 +123,7 @@ A boolean flag (<code>ON</code> or <code>OFF</code>) designating whether or not 
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
-<dd>global, host, path</dd>
+<dd>global, host, path, extension</dd>
 <dt>Default:</dt>
 <dd><code><pre>proxy.preserve-host: OFF</pre></code>
 </dl>
@@ -151,6 +151,32 @@ However in case H2O is run behind a trusted HTTPS proxy, such protection might n
 <dd>global</dd>
 <dt>Default:</dt>
 <dd><code><pre>proxy.preserve-x-forwarded-proto: OFF</pre></code>
+</dl>
+
+<div id="proxy.proxy-protocol" class="directive-head">
+<div class="directive-since">since v2.1</div>
+<h3><a href="configure/proxy_directives.html#proxy.proxy-protocol"><code>"proxy.proxy-protocol"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if <a href="http://www.haproxy.org/download/1.5/doc/proxy-protocol.txt" target="_blank">PROXY protocol</a> should be used when connecting to the application server.
+</p>
+
+<p>
+When using the PROXY protocol, connections to the application server cannot be persistent (i.e. <a href="configure/proxy_directives.html#proxy.timeout.keepalive"><code>proxy.timeout.keepalive</code></a> must be set to zero).
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extension</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.proxy-protocol: OFF</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/proxy_directives.html#proxy.timeout.keepalive"><code>proxy.timeout.keepalive</code></a>
+</dd>
 </dl>
 
 <div id="proxy.emit-x-forwarded-headers" class="directive-head">
@@ -194,10 +220,41 @@ By default, H2O uses <code>share/h2o/ca-bundle.crt</code>.  The file contains a 
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
-<dd>global, host, path</dd>
+<dd>global, host, path, extension</dd>
 <dt>See also:</dt>
 <dd><a href="configure/proxy_directives.html#proxy.ssl.verify-peer"><code>proxy.ssl.verify-peer</code></a>
 </dd>
+</dl>
+
+<div id="proxy.ssl.session-cache" class="directive-head">
+<div class="directive-since">since v2.1</div>
+<h3><a href="configure/proxy_directives.html#proxy.ssl.session-cache"><code>"proxy.ssl.session-cache"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Specifies whether if and how a session cache should be used for TLS connections to the application server.
+</p>
+
+<p>
+Since version 2.1, result of the TLS handshakes to the application server is memoized and later used to resume the connection, unless set to <code>OFF</code> using this directive.
+If the value is a mapping, then the following two attributes must be specified:
+<dl>
+<dt>lifetime:</dt>
+<dd>validity of session cache entries in seconds</dd>
+<dt>capacity:</dt>
+<dd>maxmum number of entries to be kept in the session cache</dd>
+</dl>
+If set to <code>ON</code>, <code>lifetime</code> and <code>capacity</code> will be set to 86,400 (one day) and 4,096.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extension</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.ssl.session-cache: ON</pre></code>
 </dl>
 
 <div id="proxy.ssl.verify-peer" class="directive-head">
@@ -218,7 +275,7 @@ If set to <code>ON</code>, the HTTP client implementation of H2O verifies the pe
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
-<dd>global, host, path</dd>
+<dd>global, host, path, extension</dd>
 <dt>Default:</dt>
 <dd><code><pre>proxy.ssl.verify-peer: ON</pre></code>
 <dt>See also:</dt>
@@ -239,7 +296,7 @@ Sets the upstream I/O timeout in milliseconds.
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
-<dd>global, host, path</dd>
+<dd>global, host, path, extension</dd>
 <dt>Default:</dt>
 <dd><code><pre>proxy.timeout.io: 30000</pre></code>
 </dl>
@@ -263,7 +320,7 @@ The value should be set to something smaller than that being set at the upstream
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
-<dd>global, host, path</dd>
+<dd>global, host, path, extension</dd>
 <dt>Default:</dt>
 <dd><code><pre>proxy.timeout.keepalive: 2000</pre></code>
 </dl>
@@ -288,7 +345,7 @@ Support for WebSocket is considered experimental for the time being and therefor
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
-<dd>global, host, path</dd>
+<dd>global, host, path, extension</dd>
 <dt>Default:</dt>
 <dd><code><pre>proxy.websocket: OFF</pre></code>
 </dl>
@@ -306,7 +363,7 @@ Sets idle timeout of a WebSocket connection being proxied.
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
-<dd>global, host, path</dd>
+<dd>global, host, path, extension</dd>
 <dt>Default:</dt>
 <dd><code><pre>proxy.websocket.timeout: 300000</pre></code>
 </dl>

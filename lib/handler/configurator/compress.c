@@ -109,13 +109,13 @@ static int on_config_compress(h2o_configurator_command_t *cmd, h2o_configurator_
             yoml_t *key = node->data.mapping.elements[i].key;
             yoml_t *value = node->data.mapping.elements[i].value;
             if (key->type == YOML_TYPE_SCALAR && strcasecmp(key->data.scalar, "gzip") == 0) {
-                if (obtain_quality(node, 1, 9, DEFAULT_GZIP_QUALITY, &self->vars->gzip.quality) != 0) {
+                if (obtain_quality(value, 1, 9, DEFAULT_GZIP_QUALITY, &self->vars->gzip.quality) != 0) {
                     h2o_configurator_errprintf(
                         cmd, value, "value of gzip attribute must be either of `OFF`, `ON` or an integer value between 1 and 9");
                     return -1;
                 }
             } else if (key->type == YOML_TYPE_SCALAR && strcasecmp(key->data.scalar, "br") == 0) {
-                if (obtain_quality(node, 0, 11, DEFAULT_BROTLI_QUALITY, &self->vars->brotli.quality) != 0) {
+                if (obtain_quality(value, 0, 11, DEFAULT_BROTLI_QUALITY, &self->vars->brotli.quality) != 0) {
                     h2o_configurator_errprintf(
                         cmd, value, "value of br attribute must be either of `OFF`, `ON` or an integer between 0 and 11");
                     return -1;

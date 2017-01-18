@@ -149,3 +149,6 @@ pptest     ["1","2"], "1\0002",  "Z*Z"
 unpacktest ["1","3"], "1\00023", "Z3Z"
 
 packtest   [1, 2], "\x01\x02", "CyC"
+
+packtest   [65], "A", 'U'
+packtest   [59411], "\xEE\xA0\x93", 'U'

@@ -22,7 +22,7 @@ dbgcmd_run(mrb_state *mrb, mrdb_state *mrdb)
       mrb_raise(mrb, exc, "Restart mrdb.");
     }
   }
-  
+
   return DBGST_RESTART;
 }
 

@@ -251,6 +251,19 @@ assert('String#chomp!', '15.2.10.5.10') do
   assert_equal 'abc', e
 end
 
+assert('String#chomp! uses the correct length') do
+  class A
+    def to_str
+      $s.replace("AA")
+      "A"
+    end
+  end
+
+  $s = "AAA"
+  $s.chomp!(A.new)
+  assert_equal $s, "A"
+end
+
 assert('String#chop', '15.2.10.5.11') do
   a = ''.chop
   b = 'abc'.chop
@@ -381,8 +394,6 @@ assert('String#hash', '15.2.10.5.20') do
 end
 
 assert('String#include?', '15.2.10.5.21') do
-  assert_true 'abc'.include?(97)
-  assert_false 'abc'.include?(100)
   assert_true 'abc'.include?('a')
   assert_false 'abc'.include?('d')
 end
@@ -585,10 +596,14 @@ assert('String#to_f', '15.2.10.5.38') do
   a = ''.to_f
   b = '123456789'.to_f
   c = '12345.6789'.to_f
+  d = '1e-2147483648'.to_f
+  e = '1e2147483648'.to_f
 
   assert_float(0.0, a)
   assert_float(123456789.0, b)
   assert_float(12345.6789, c)
+  assert_float(0, d)
+  assert_float(Float::INFINITY, e)
 end
 
 assert('String#to_i', '15.2.10.5.39') do
@@ -685,4 +700,3 @@ assert('String#freeze') do
 
   assert_raise(RuntimeError) { str.upcase! }
 end
-

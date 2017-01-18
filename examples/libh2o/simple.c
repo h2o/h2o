@@ -255,7 +255,7 @@ int main(int argc, char **argv)
 #if H2O_USE_LIBUV
     uv_run(ctx.loop, UV_RUN_DEFAULT);
 #else
-    while (h2o_evloop_run(ctx.loop) == 0)
+    while (h2o_evloop_run(ctx.loop, INT32_MAX) == 0)
         ;
 #endif
 

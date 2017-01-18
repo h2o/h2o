@@ -1,6 +1,7 @@
 require 'pathname'
 require 'forwardable'
 require 'tsort'
+require 'shellwords'
 
 module MRuby
   module Gem
@@ -17,6 +18,7 @@ module MRuby
       attr_accessor :name, :dir, :build
       alias mruby build
       attr_accessor :build_config_initializer
+      attr_accessor :mrblib_dir, :objs_dir
 
       attr_accessor :version
       attr_accessor :description, :summary
@@ -44,6 +46,8 @@ module MRuby
         @name = name
         @initializer = block
         @version = "0.0.0"
+        @mrblib_dir = "mrblib"
+        @objs_dir = "src"
         MRuby::Gem.current = self
       end
 
@@ -54,8 +58,8 @@ module MRuby
         end
         @linker = LinkerConfig.new([], [], [], [], [])
 
-        @rbfiles = Dir.glob("#{dir}/mrblib/**/*.rb").sort
-        @objs = Dir.glob("#{dir}/src/*.{c,cpp,cxx,cc,m,asm,s,S}").map do |f|
+        @rbfiles = Dir.glob("#{@dir}/#{@mrblib_dir}/**/*.rb").sort
+        @objs = Dir.glob("#{@dir}/#{@objs_dir}/*.{c,cpp,cxx,cc,m,asm,s,S}").map do |f|
           objfile(f.relative_path_from(@dir).to_s.pathmap("#{build_dir}/%X"))
         end
 
@@ -121,6 +125,21 @@ module MRuby
 
       def test_rbireps
         "#{build_dir}/gem_test.c"
+      end
+
+      def search_package(name, version_query=nil)
+        package_query = name
+        package_query += " #{version_query}" if version_query
+        _pp "PKG-CONFIG", package_query
+        escaped_package_query = Shellwords.escape(package_query)
+        if system("pkg-config --exists #{escaped_package_query}")
+          cc.flags += [`pkg-config --cflags #{escaped_package_query}`.strip]
+          cxx.flags += [`pkg-config --cflags #{escaped_package_query}`.strip]
+          linker.flags += [`pkg-config --libs #{escaped_package_query}`.strip]
+          true
+        else
+          false
+        end
       end
 
       def funcname
@@ -413,9 +432,12 @@ module MRuby
           # as circular dependency has already detected in the caller.
           import_include_paths(dep_g)
 
+          dep_g.export_include_paths.uniq!
           g.compilers.each do |compiler|
             compiler.include_paths += dep_g.export_include_paths
             g.export_include_paths += dep_g.export_include_paths
+            compiler.include_paths.uniq!
+            g.export_include_paths.uniq!
           end
         end
       end

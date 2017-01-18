@@ -98,9 +98,9 @@ static void mrb_hash_modify(mrb_state *mrb, mrb_value hash);
 static inline mrb_value
 mrb_hash_ht_key(mrb_state *mrb, mrb_value key)
 {
-  if (mrb_string_p(key) && !RSTR_FROZEN_P(mrb_str_ptr(key))) {
+  if (mrb_string_p(key) && !MRB_FROZEN_P(mrb_str_ptr(key))) {
     key = mrb_str_dup(mrb, key);
-    RSTR_SET_FROZEN_FLAG(mrb_str_ptr(key));
+    MRB_SET_FROZEN_FLAG(mrb_str_ptr(key));
   }
   return key;
 }
@@ -172,10 +172,8 @@ mrb_hash_get(mrb_state *mrb, mrb_value hash, mrb_value key)
   }
 
   /* not found */
-  if (MRB_RHASH_PROCDEFAULT_P(hash)) {
-    return mrb_funcall(mrb, RHASH_PROCDEFAULT(hash), "call", 2, hash, key);
-  }
-  return RHASH_IFNONE(hash);
+  /* xxx mrb_funcall_tailcall(mrb, hash, "default", 1, key); */
+  return mrb_funcall(mrb, hash, "default", 1, key);
 }
 
 MRB_API mrb_value
@@ -227,6 +225,7 @@ mrb_hash_dup(mrb_state *mrb, mrb_value hash)
   struct RHash* ret;
   khash_t(ht) *h, *ret_h;
   khiter_t k, ret_k;
+  mrb_value ifnone, vret;
 
   h = RHASH_TBL(hash);
   ret = (struct RHash*)mrb_obj_alloc(mrb, MRB_TT_HASH, mrb->hash_class);
@@ -245,7 +244,18 @@ mrb_hash_dup(mrb_state *mrb, mrb_value hash)
     }
   }
 
-  return mrb_obj_value(ret);
+  if (MRB_RHASH_DEFAULT_P(hash)) {
+    ret->flags |= MRB_HASH_DEFAULT;
+  }
+  if (MRB_RHASH_PROCDEFAULT_P(hash)) {
+    ret->flags |= MRB_HASH_PROC_DEFAULT;
+  }
+  vret = mrb_obj_value(ret);
+  ifnone = RHASH_IFNONE(hash);
+  if (!mrb_nil_p(ifnone)) {
+      mrb_iv_set(mrb, vret, mrb_intern_lit(mrb, "ifnone"), ifnone);
+  }
+  return vret;
 }
 
 MRB_API mrb_value
@@ -268,6 +278,9 @@ mrb_hash_tbl(mrb_state *mrb, mrb_value hash)
 static void
 mrb_hash_modify(mrb_state *mrb, mrb_value hash)
 {
+  if (MRB_FROZEN_P(mrb_hash_ptr(hash))) {
+    mrb_raise(mrb, E_RUNTIME_ERROR, "can't modify frozen hash");
+  }
   mrb_hash_tbl(mrb, hash);
 }
 
@@ -323,7 +336,10 @@ mrb_hash_init(mrb_state *mrb, mrb_value hash)
     RHASH(hash)->flags |= MRB_HASH_PROC_DEFAULT;
     ifnone = block;
   }
-  mrb_iv_set(mrb, hash, mrb_intern_lit(mrb, "ifnone"), ifnone);
+  if (!mrb_nil_p(ifnone)) {
+    RHASH(hash)->flags |= MRB_HASH_DEFAULT;
+    mrb_iv_set(mrb, hash, mrb_intern_lit(mrb, "ifnone"), ifnone);
+  }
   return hash;
 }
 
@@ -379,13 +395,16 @@ mrb_hash_default(mrb_state *mrb, mrb_value hash)
   mrb_bool given;
 
   mrb_get_args(mrb, "|o?", &key, &given);
-  if (MRB_RHASH_PROCDEFAULT_P(hash)) {
-    if (!given) return mrb_nil_value();
-    return mrb_funcall(mrb, RHASH_PROCDEFAULT(hash), "call", 2, hash, key);
+  if (MRB_RHASH_DEFAULT_P(hash)) {
+    if (MRB_RHASH_PROCDEFAULT_P(hash)) {
+      if (!given) return mrb_nil_value();
+      return mrb_funcall(mrb, RHASH_PROCDEFAULT(hash), "call", 2, hash, key);
+    }
+    else {
+      return RHASH_IFNONE(hash);
+    }
   }
-  else {
-    return RHASH_IFNONE(hash);
-  }
+  return mrb_nil_value();
 }
 
 /* 15.2.13.4.6  */
@@ -417,8 +436,13 @@ mrb_hash_set_default(mrb_state *mrb, mrb_value hash)
   mrb_get_args(mrb, "o", &ifnone);
   mrb_hash_modify(mrb, hash);
   mrb_iv_set(mrb, hash, mrb_intern_lit(mrb, "ifnone"), ifnone);
-  RHASH(hash)->flags &= ~(MRB_HASH_PROC_DEFAULT);
-
+  RHASH(hash)->flags &= ~MRB_HASH_PROC_DEFAULT;
+  if (!mrb_nil_p(ifnone)) {
+    RHASH(hash)->flags |= MRB_HASH_DEFAULT;
+  }
+  else {
+    RHASH(hash)->flags &= ~MRB_HASH_DEFAULT;
+  }
   return ifnone;
 }
 
@@ -468,7 +492,14 @@ mrb_hash_set_default_proc(mrb_state *mrb, mrb_value hash)
   mrb_get_args(mrb, "o", &ifnone);
   mrb_hash_modify(mrb, hash);
   mrb_iv_set(mrb, hash, mrb_intern_lit(mrb, "ifnone"), ifnone);
-  RHASH(hash)->flags |= MRB_HASH_PROC_DEFAULT;
+  if (!mrb_nil_p(ifnone)) {
+    RHASH(hash)->flags |= MRB_HASH_PROC_DEFAULT;
+    RHASH(hash)->flags |= MRB_HASH_DEFAULT;
+  }
+  else {
+    RHASH(hash)->flags &= ~MRB_HASH_DEFAULT;
+    RHASH(hash)->flags &= ~MRB_HASH_PROC_DEFAULT;
+  }
 
   return ifnone;
 }
@@ -561,12 +592,15 @@ mrb_hash_shift(mrb_state *mrb, mrb_value hash)
     }
   }
 
-  if (MRB_RHASH_PROCDEFAULT_P(hash)) {
-    return mrb_funcall(mrb, RHASH_PROCDEFAULT(hash), "call", 2, hash, mrb_nil_value());
+  if (MRB_RHASH_DEFAULT_P(hash)) {
+    if (MRB_RHASH_PROCDEFAULT_P(hash)) {
+      return mrb_funcall(mrb, RHASH_PROCDEFAULT(hash), "call", 2, hash, mrb_nil_value());
+    }
+    else {
+      return RHASH_IFNONE(hash);
+    }
   }
-  else {
-    return RHASH_IFNONE(hash);
-  }
+  return mrb_nil_value();
 }
 
 /* 15.2.13.4.4  */
@@ -724,7 +758,7 @@ mrb_hash_keys(mrb_state *mrb, mrb_value hash)
  *
  */
 
-static mrb_value
+MRB_API mrb_value
 mrb_hash_values(mrb_state *mrb, mrb_value hash)
 {
   khash_t(ht) *h = RHASH_TBL(hash);

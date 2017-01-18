@@ -32,7 +32,7 @@ proxy.reverse.url: "http://127.0.0.1:8080/"
 EOT
 ?>
 <p>
-If you want load balancing multiple backends, replace 127.0.0.1 with hostname witch returns IP addresses via DNS or /etc/hosts.
+If you want load balancing multiple backends, replace 127.0.0.1 with hostname which returns IP addresses via DNS or /etc/hosts.
 </p>
 <p>
 In addition to TCP/IP over IPv4 and IPv6, the proxy handler can also connect to an HTTP server listening to a Unix socket.
@@ -44,7 +44,7 @@ Path to the unix socket should be surrounded by square brackets, and prefixed wi
 <?
 $ctx->{directive}->(
     name    => "proxy.preserve-host",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     default => q{proxy.preserve-host: OFF},
     desc    => q{A boolean flag (<code>ON</code> or <code>OFF</code>) designating whether or not to pass <code>Host</code> header from incoming request to upstream.},
 )->(sub {});
@@ -67,6 +67,23 @@ However in case H2O is run behind a trusted HTTPS proxy, such protection might n
 
 <?
 $ctx->{directive}->(
+    name     => "proxy.proxy-protocol",
+    levels   => [ qw(global host path extension) ],
+    since    => "2.1",
+    see_also => render_mt(<<'EOT'),
+<a href="configure/proxy_directives.html#proxy.timeout.keepalive"><code>proxy.timeout.keepalive</code></a>
+EOT
+    default  => q{proxy.proxy-protocol: OFF},
+    desc     => q{A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if <a href="http://www.haproxy.org/download/1.5/doc/proxy-protocol.txt" target="_blank">PROXY protocol</a> should be used when connecting to the application server.},
+)->(sub {
+?>
+<p>
+When using the PROXY protocol, connections to the application server cannot be persistent (i.e. <a href="configure/proxy_directives.html#proxy.timeout.keepalive"><code>proxy.timeout.keepalive</code></a> must be set to zero).
+</p>
+? })
+
+<?
+$ctx->{directive}->(
     name    => "proxy.emit-x-forwarded-headers",
     levels  => [ qw(global) ],
     since   => "2.1",
@@ -82,7 +99,7 @@ By default, when forwarding an HTTP request H2O sends its own <code>x-forwarded-
 <?
 $ctx->{directive}->(
     name    => "proxy.ssl.cafile",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     since   => "2.0",
     desc    => "Specifies the file storing the list of trusted root certificates.",
     see_also => render_mt(<<'EOT'),
@@ -97,8 +114,30 @@ By default, H2O uses <code>share/h2o/ca-bundle.crt</code>.  The file contains a 
 
 <?
 $ctx->{directive}->(
+    name    => "proxy.ssl.session-cache",
+    levels  => [ qw(global host path extension) ],
+    since   => "2.1",
+    default => "proxy.ssl.session-cache: ON",
+    desc    => "Specifies whether if and how a session cache should be used for TLS connections to the application server.",
+)->(sub {
+?>
+<p>
+Since version 2.1, result of the TLS handshakes to the application server is memoized and later used to resume the connection, unless set to <code>OFF</code> using this directive.
+If the value is a mapping, then the following two attributes must be specified:
+<dl>
+<dt>lifetime:</dt>
+<dd>validity of session cache entries in seconds</dd>
+<dt>capacity:</dt>
+<dd>maxmum number of entries to be kept in the session cache</dd>
+</dl>
+If set to <code>ON</code>, <code>lifetime</code> and <code>capacity</code> will be set to 86,400 (one day) and 4,096.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
     name    => "proxy.ssl.verify-peer",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     since   => "2.0",
     desc    => "A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if the server certificate and hostname should be verified.",
     default => q{proxy.ssl.verify-peer: ON},
@@ -115,7 +154,7 @@ If set to <code>ON</code>, the HTTP client implementation of H2O verifies the pe
 <?
 $ctx->{directive}->(
     name    => "proxy.timeout.io",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     default => q{proxy.timeout.io: 30000},
     desc    => q{Sets the upstream I/O timeout in milliseconds.},
 )->(sub {});
@@ -124,7 +163,7 @@ $ctx->{directive}->(
 <?
 $ctx->{directive}->(
     name    => "proxy.timeout.keepalive",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     default => q{proxy.timeout.keepalive: 2000},
     desc    => 'Sets the upstream timeout for idle connections in milliseconds.',
 )->(sub {
@@ -138,7 +177,7 @@ The value should be set to something smaller than that being set at the upstream
 <?
 $ctx->{directive}->(
     name    => "proxy.websocket",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     default => q{proxy.websocket: OFF},
     desc    => q{A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not to allow upgrading the proxied connection to <a href="https://tools.ietf.org/html/rfc6455">the WebSocket protocol</a>.},
 )->(sub {
@@ -154,7 +193,7 @@ Support for WebSocket is considered experimental for the time being and therefor
 <?
 $ctx->{directive}->(
     name    => "proxy.websocket.timeout",
-    levels  => [ qw(global host path) ],
+    levels  => [ qw(global host path extension) ],
     default => q{proxy.websocket.timeout: 300000},
     desc    => q{Sets idle timeout of a WebSocket connection being proxied.},
 )->(sub {})

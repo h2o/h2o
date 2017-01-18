@@ -38,6 +38,7 @@ enum node_type {
   NODE_CVDECL,
   NODE_OP_ASGN,
   NODE_CALL,
+  NODE_SCALL,
   NODE_FCALL,
   NODE_VCALL,
   NODE_SUPER,

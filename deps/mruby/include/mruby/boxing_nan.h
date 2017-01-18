@@ -53,23 +53,27 @@ typedef struct mrb_value {
 #define mrb_float_pool(mrb,f) mrb_float_value(mrb,f)
 
 #define mrb_tt(o)       ((enum mrb_vtype)(((o).value.ttt & 0xfc000)>>14)-1)
-#define mrb_type(o)     ((uint32_t)0xfff00000 < (o).value.ttt ? mrb_tt(o) : MRB_TT_FLOAT)
+#define mrb_type(o)     (enum mrb_vtype)((uint32_t)0xfff00000 < (o).value.ttt ? mrb_tt(o) : MRB_TT_FLOAT)
 #define mrb_ptr(o)      ((void*)((((uintptr_t)0x3fffffffffff)&((uintptr_t)((o).value.p)))<<2))
 #define mrb_float(o)    (o).f
 #define mrb_cptr(o)     mrb_ptr(o)
 #define mrb_fixnum(o)   (o).value.i
 #define mrb_symbol(o)   (o).value.sym
 
+#ifdef MRB_64BIT
+#define BOXNAN_SHIFT_LONG_POINTER(v) (((uintptr_t)(v)>>34)&0x3fff)
+#else
+#define BOXNAN_SHIFT_LONG_POINTER(v) 0
+#endif
+
 #define BOXNAN_SET_VALUE(o, tt, attr, v) do {\
-  switch (tt) {\
-  case MRB_TT_FALSE:\
-  case MRB_TT_TRUE:\
-  case MRB_TT_UNDEF:\
-  case MRB_TT_FIXNUM:\
-  case MRB_TT_SYMBOL: (o).attr = (v); break;\
-  default: (o).value.i = 0; (o).value.p = (void*)((uintptr_t)(o).value.p | (((uintptr_t)(v))>>2)); break;\
-  }\
-  (o).value.ttt = (0xfff00000|(((tt)+1)<<14));\
+  (o).attr = (v);\
+  (o).value.ttt = 0xfff00000 | (((tt)+1)<<14);\
+} while (0)
+
+#define BOXNAN_SET_OBJ_VALUE(o, tt, v) do {\
+  (o).value.p = (void*)((uintptr_t)(v)>>2);\
+  (o).value.ttt = (0xfff00000|(((tt)+1)<<14)|BOXNAN_SHIFT_LONG_POINTER(v));\
 } while (0)
 
 #define SET_FLOAT_VALUE(mrb,r,v) do { \
@@ -86,8 +90,8 @@ typedef struct mrb_value {
 #define SET_BOOL_VALUE(r,b) BOXNAN_SET_VALUE(r, b ? MRB_TT_TRUE : MRB_TT_FALSE, value.i, 1)
 #define SET_INT_VALUE(r,n) BOXNAN_SET_VALUE(r, MRB_TT_FIXNUM, value.i, (n))
 #define SET_SYM_VALUE(r,v) BOXNAN_SET_VALUE(r, MRB_TT_SYMBOL, value.sym, (v))
-#define SET_OBJ_VALUE(r,v) BOXNAN_SET_VALUE(r, (((struct RObject*)(v))->tt), value.p, (v))
-#define SET_CPTR_VALUE(mrb,r,v) BOXNAN_SET_VALUE(r, MRB_TT_CPTR, value.p, v)
+#define SET_OBJ_VALUE(r,v) BOXNAN_SET_OBJ_VALUE(r, (((struct RObject*)(v))->tt), (v))
+#define SET_CPTR_VALUE(mrb,r,v) BOXNAN_SET_OBJ_VALUE(r, MRB_TT_CPTR, v)
 #define SET_UNDEF_VALUE(r) BOXNAN_SET_VALUE(r, MRB_TT_UNDEF, value.i, 0)
 
 #endif  /* MRUBY_BOXING_NAN_H */

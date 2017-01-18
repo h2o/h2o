@@ -25,43 +25,45 @@
 #include "h2o.h"
 
 enum {
-    ELEMENT_TYPE_EMPTY,                      /* empty element (with suffix only) */
-    ELEMENT_TYPE_LOCAL_ADDR,                 /* %A */
-    ELEMENT_TYPE_BYTES_SENT,                 /* %b */
-    ELEMENT_TYPE_PROTOCOL,                   /* %H */
-    ELEMENT_TYPE_REMOTE_ADDR,                /* %h */
-    ELEMENT_TYPE_LOGNAME,                    /* %l */
-    ELEMENT_TYPE_METHOD,                     /* %m */
-    ELEMENT_TYPE_LOCAL_PORT,                 /* %p */
-    ELEMENT_TYPE_QUERY,                      /* %q */
-    ELEMENT_TYPE_REQUEST_LINE,               /* %r */
-    ELEMENT_TYPE_STATUS,                     /* %s */
-    ELEMENT_TYPE_TIMESTAMP,                  /* %t */
-    ELEMENT_TYPE_TIMESTAMP_STRFTIME,         /* %{...}t */
-    ELEMENT_TYPE_TIMESTAMP_SEC_SINCE_EPOCH,  /* %{sec}t */
-    ELEMENT_TYPE_TIMESTAMP_MSEC_SINCE_EPOCH, /* %{msec}t */
-    ELEMENT_TYPE_TIMESTAMP_USEC_SINCE_EPOCH, /* %{usec}t */
-    ELEMENT_TYPE_TIMESTAMP_MSEC_FRAC,        /* %{msec_frac}t */
-    ELEMENT_TYPE_TIMESTAMP_USEC_FRAC,        /* %{usec_frac}t */
-    ELEMENT_TYPE_URL_PATH,                   /* %U */
-    ELEMENT_TYPE_REMOTE_USER,                /* %u */
-    ELEMENT_TYPE_AUTHORITY,                  /* %V */
-    ELEMENT_TYPE_HOSTCONF,                   /* %v */
-    ELEMENT_TYPE_IN_HEADER_TOKEN,            /* %{data.header_token}i */
-    ELEMENT_TYPE_IN_HEADER_STRING,           /* %{data.name}i */
-    ELEMENT_TYPE_OUT_HEADER_TOKEN,           /* %{data.header_token}o */
-    ELEMENT_TYPE_OUT_HEADER_STRING,          /* %{data.name}o */
-    ELEMENT_TYPE_EXTENDED_VAR,               /* %{data.name}x */
-    ELEMENT_TYPE_CONNECTION_ID,              /* %{connection-id}x */
-    ELEMENT_TYPE_CONNECT_TIME,               /* %{connect-time}x */
-    ELEMENT_TYPE_REQUEST_HEADER_TIME,        /* %{request-header-time}x */
-    ELEMENT_TYPE_REQUEST_BODY_TIME,          /* %{request-body-time}x */
-    ELEMENT_TYPE_REQUEST_TOTAL_TIME,         /* %{request-total-time}x */
-    ELEMENT_TYPE_PROCESS_TIME,               /* %{process-time}x */
-    ELEMENT_TYPE_RESPONSE_TIME,              /* %{response-total-time}x */
-    ELEMENT_TYPE_DURATION,                   /* %{duration}x */
-    ELEMENT_TYPE_ERROR,                      /* %{error}x */
-    ELEMENT_TYPE_PROTOCOL_SPECIFIC,          /* %{protocol-specific...}x */
+    ELEMENT_TYPE_EMPTY,                         /* empty element (with suffix only) */
+    ELEMENT_TYPE_LOCAL_ADDR,                    /* %A */
+    ELEMENT_TYPE_BYTES_SENT,                    /* %b */
+    ELEMENT_TYPE_PROTOCOL,                      /* %H */
+    ELEMENT_TYPE_REMOTE_ADDR,                   /* %h */
+    ELEMENT_TYPE_LOGNAME,                       /* %l */
+    ELEMENT_TYPE_METHOD,                        /* %m */
+    ELEMENT_TYPE_LOCAL_PORT,                    /* %p, %{local}p */
+    ELEMENT_TYPE_REMOTE_PORT,                   /* %{remote}p */
+    ELEMENT_TYPE_QUERY,                         /* %q */
+    ELEMENT_TYPE_REQUEST_LINE,                  /* %r */
+    ELEMENT_TYPE_STATUS,                        /* %s */
+    ELEMENT_TYPE_TIMESTAMP,                     /* %t */
+    ELEMENT_TYPE_TIMESTAMP_STRFTIME,            /* %{...}t */
+    ELEMENT_TYPE_TIMESTAMP_SEC_SINCE_EPOCH,     /* %{sec}t */
+    ELEMENT_TYPE_TIMESTAMP_MSEC_SINCE_EPOCH,    /* %{msec}t */
+    ELEMENT_TYPE_TIMESTAMP_USEC_SINCE_EPOCH,    /* %{usec}t */
+    ELEMENT_TYPE_TIMESTAMP_MSEC_FRAC,           /* %{msec_frac}t */
+    ELEMENT_TYPE_TIMESTAMP_USEC_FRAC,           /* %{usec_frac}t */
+    ELEMENT_TYPE_URL_PATH,                      /* %U */
+    ELEMENT_TYPE_REMOTE_USER,                   /* %u */
+    ELEMENT_TYPE_AUTHORITY,                     /* %V */
+    ELEMENT_TYPE_HOSTCONF,                      /* %v */
+    ELEMENT_TYPE_IN_HEADER_TOKEN,               /* %{data.header_token}i */
+    ELEMENT_TYPE_IN_HEADER_STRING,              /* %{data.name}i */
+    ELEMENT_TYPE_OUT_HEADER_TOKEN,              /* %{data.header_token}o */
+    ELEMENT_TYPE_OUT_HEADER_STRING,             /* %{data.name}o */
+    ELEMENT_TYPE_OUT_HEADER_TOKEN_CONCATENATED, /* %{data.header_token}o */
+    ELEMENT_TYPE_EXTENDED_VAR,                  /* %{data.name}x */
+    ELEMENT_TYPE_CONNECTION_ID,                 /* %{connection-id}x */
+    ELEMENT_TYPE_CONNECT_TIME,                  /* %{connect-time}x */
+    ELEMENT_TYPE_REQUEST_HEADER_TIME,           /* %{request-header-time}x */
+    ELEMENT_TYPE_REQUEST_BODY_TIME,             /* %{request-body-time}x */
+    ELEMENT_TYPE_REQUEST_TOTAL_TIME,            /* %{request-total-time}x */
+    ELEMENT_TYPE_PROCESS_TIME,                  /* %{process-time}x */
+    ELEMENT_TYPE_RESPONSE_TIME,                 /* %{response-total-time}x */
+    ELEMENT_TYPE_DURATION,                      /* %{duration}x */
+    ELEMENT_TYPE_ERROR,                         /* %{error}x */
+    ELEMENT_TYPE_PROTOCOL_SPECIFIC,             /* %{protocol-specific...}x */
     NUM_ELEMENT_TYPES
 };
 
@@ -126,13 +128,28 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     token = h2o_lookup_token(name.base, name.len);
                     if (token != NULL) {
                         free(name.base);
-                        NEW_ELEMENT(modifier == 'i' ? ELEMENT_TYPE_IN_HEADER_TOKEN : ELEMENT_TYPE_OUT_HEADER_TOKEN);
-                        LAST_ELEMENT()->data.header_token = token;
+                        if (modifier == 'o' && token == H2O_TOKEN_SET_COOKIE) {
+                            NEW_ELEMENT(ELEMENT_TYPE_OUT_HEADER_TOKEN_CONCATENATED);
+                            LAST_ELEMENT()->data.header_token = token;
+                        } else {
+                            NEW_ELEMENT(modifier == 'i' ? ELEMENT_TYPE_IN_HEADER_TOKEN : ELEMENT_TYPE_OUT_HEADER_TOKEN);
+                            LAST_ELEMENT()->data.header_token = token;
+                        }
                     } else {
                         NEW_ELEMENT(modifier == 'i' ? ELEMENT_TYPE_IN_HEADER_STRING : ELEMENT_TYPE_OUT_HEADER_STRING);
                         LAST_ELEMENT()->data.name = name;
                     }
                 } break;
+                case 'p':
+                    if (h2o_memis(pt, quote_end - pt, H2O_STRLIT("local"))) {
+                        NEW_ELEMENT(ELEMENT_TYPE_LOCAL_PORT);
+                    } else if (h2o_memis(pt, quote_end - pt, H2O_STRLIT("remote"))) {
+                        NEW_ELEMENT(ELEMENT_TYPE_REMOTE_PORT);
+                    } else {
+                        sprintf(errbuf, "failed to compile log format: unknown specifier for %%{...}p");
+                        goto Error;
+                    }
+                    break;
                 case 't':
                     if (h2o_memis(pt, quote_end - pt, H2O_STRLIT("sec"))) {
                         NEW_ELEMENT(ELEMENT_TYPE_TIMESTAMP_SEC_SINCE_EPOCH);
@@ -488,6 +505,10 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             RESERVE(sizeof(H2O_UINT16_LONGEST_STR) - 1);
             pos = append_port(pos, req->conn->callbacks->get_sockname, req->conn);
             break;
+        case ELEMENT_TYPE_REMOTE_PORT: /* %{remote}p */
+            RESERVE(sizeof(H2O_UINT16_LONGEST_STR) - 1);
+            pos = append_port(pos, req->conn->callbacks->get_peername, req->conn);
+            break;
         case ELEMENT_TYPE_QUERY: /* %q */
             if (req->input.query_at != SIZE_MAX) {
                 size_t len = req->input.path.len - req->input.query_at;
@@ -583,29 +604,46 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             pos = append_unsafe_string(pos, req->hostconf->authority.hostport.base, req->hostconf->authority.hostport.len);
             break;
 
-#define EMIT_HEADER(headers, _index)                                                                                               \
+#define EMIT_HEADER(headers, findcall, concat)                                                                                     \
     do {                                                                                                                           \
-        ssize_t index = (_index);                                                                                                  \
-        if (index == -1)                                                                                                           \
+        ssize_t index = -1;                                                                                                        \
+        int found = 0;                                                                                                             \
+        while ((index = (findcall)) != -1) {                                                                                       \
+            if (found) {                                                                                                           \
+                RESERVE(2);                                                                                                        \
+                *pos++ = ',';                                                                                                      \
+                *pos++ = ' ';                                                                                                      \
+            } else {                                                                                                               \
+                found = 1;                                                                                                         \
+            }                                                                                                                      \
+            const h2o_header_t *header = (headers)->entries + index;                                                               \
+            RESERVE(header->value.len *unsafe_factor);                                                                             \
+            pos = append_unsafe_string(pos, header->value.base, header->value.len);                                                \
+            if (!concat)                                                                                                           \
+                break;                                                                                                             \
+        }                                                                                                                          \
+        if (!found)                                                                                                                \
             goto EmitDash;                                                                                                         \
-        const h2o_header_t *header = (headers)->entries + index;                                                                   \
-        RESERVE(header->value.len *unsafe_factor);                                                                                 \
-        pos = append_unsafe_string(pos, header->value.base, header->value.len);                                                    \
     } while (0)
+
         case ELEMENT_TYPE_IN_HEADER_TOKEN:
-            EMIT_HEADER(&req->headers, h2o_find_header(&req->headers, element->data.header_token, SIZE_MAX));
+            EMIT_HEADER(&req->headers, h2o_find_header(&req->headers, element->data.header_token, index), 0);
             break;
         case ELEMENT_TYPE_IN_HEADER_STRING:
             EMIT_HEADER(&req->headers,
-                        h2o_find_header_by_str(&req->headers, element->data.name.base, element->data.name.len, SIZE_MAX));
+                        h2o_find_header_by_str(&req->headers, element->data.name.base, element->data.name.len, index), 0);
             break;
         case ELEMENT_TYPE_OUT_HEADER_TOKEN:
-            EMIT_HEADER(&req->res.headers, h2o_find_header(&req->res.headers, element->data.header_token, SIZE_MAX));
+            EMIT_HEADER(&req->res.headers, h2o_find_header(&req->res.headers, element->data.header_token, index), 0);
             break;
         case ELEMENT_TYPE_OUT_HEADER_STRING:
             EMIT_HEADER(&req->res.headers,
-                        h2o_find_header_by_str(&req->res.headers, element->data.name.base, element->data.name.len, SIZE_MAX));
+                        h2o_find_header_by_str(&req->res.headers, element->data.name.base, element->data.name.len, index), 0);
             break;
+        case ELEMENT_TYPE_OUT_HEADER_TOKEN_CONCATENATED:
+            EMIT_HEADER(&req->res.headers, h2o_find_header(&req->res.headers, element->data.header_token, index), 1);
+            break;
+
 #undef EMIT_HEADER
 
         case ELEMENT_TYPE_CONNECTION_ID:

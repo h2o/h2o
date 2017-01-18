@@ -494,6 +494,18 @@ end
 
 # Not ISO specified
 
+assert('Module#define_method') do
+  c = Class.new {
+    define_method(:m1) { :ok }
+    define_method(:m2, Proc.new { :ok })
+  }
+  assert_equal c.new.m1, :ok
+  assert_equal c.new.m2, :ok
+  assert_raise(TypeError) do
+    Class.new { define_method(:n1, nil) }
+  end
+end
+
 # @!group prepend
   assert('Module#prepend') do
     module M0

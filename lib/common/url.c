@@ -40,86 +40,78 @@ static int decode_hex(int ch)
     return -1;
 }
 
-static size_t handle_special_paths(const char *const start, const char *dst, const char *const last_slash)
+static size_t handle_special_paths(const char *path, size_t off, size_t last_slash)
 {
-    size_t part_size = dst - last_slash;
-    const char *orig_dst = dst;
+    size_t orig_off = off, part_size = off - last_slash;
 
-    if (part_size == 2 && dst[-1] == '.') {
-        dst--;
-    } else if (part_size == 3 && dst[-2] == '.' && dst[-1] == '.') {
-        dst -= 2;
-        if (dst - 1 > start) {
-            for (--dst; dst[-1] != '/'; --dst)
+    if (part_size == 2 && path[off - 1] == '.') {
+        --off;
+    } else if (part_size == 3 && path[off - 2] == '.' && path[off - 1] == '.') {
+        off -= 2;
+        if (off > 1) {
+            for (--off; path[off - 1] != '/'; --off)
                 ;
         }
     }
-    return orig_dst - dst;
+    return orig_off - off;
 }
 
 /* Perform path normalization and URL decoding in one pass.
- * @norm_indexes is used to store a mapping from the characters in @path
- * to the ones in the returned iovec. */
-static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *path, size_t len, size_t *query_at, size_t **norm_indexes)
+ * See h2o_req_t for the purpose of @norm_indexes. */
+static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *src, size_t src_len, size_t *query_at, size_t **norm_indexes)
 {
-    const char *s = path;
-    size_t i;
-    h2o_iovec_t ret;
     char *dst;
-    const char *last_slash;
-    size_t *nindexes;
-    size_t rewind;
+    size_t src_off = 0, dst_off = 0, last_slash, rewind;
 
     { /* locate '?', and set len to the end of input path */
-        const char *q = memchr(path, '?', len);
+        const char *q = memchr(src, '?', src_len);
         if (q != NULL) {
-            len = *query_at = q - path;
+            src_len = *query_at = q - src;
         } else {
             *query_at = SIZE_MAX;
         }
     }
 
-    dst = ret.base = h2o_mem_alloc_pool(pool, len);
-    *norm_indexes = nindexes = h2o_mem_alloc_pool(pool, len * sizeof(*norm_indexes[0]));
-    *dst++ = '/';
+    /* dst can be 1 byte more than src if src is missing the prefixing '/' */
+    dst = h2o_mem_alloc_pool(pool, src_len + 1);
+    *norm_indexes = h2o_mem_alloc_pool(pool, (src_len + 1) * sizeof(*norm_indexes[0]));
 
-    if (*s == '/') {
-        s++;
-        len--;
-    }
-    *nindexes++ = s - path;
-    last_slash = ret.base;
+    if (src[0] == '/')
+        src_off++;
+    last_slash = dst_off;
+    dst[dst_off] = '/';
+    (*norm_indexes)[dst_off] = src_off;
+    dst_off++;
 
     /* decode %xx */
-    for (i = 0; i < len;) {
+    while (src_off < src_len) {
         int hi, lo;
         char decoded;
 
-        if (s[i] == '%' && (i + 2 < len) && (hi = decode_hex(s[i + 1])) != -1 && (lo = decode_hex(s[i + 2])) != -1) {
+        if (src[src_off] == '%' && (src_off + 2 < src_len) && (hi = decode_hex(src[src_off + 1])) != -1 &&
+            (lo = decode_hex(src[src_off + 2])) != -1) {
             decoded = (hi << 4) | lo;
-            i += 3;
+            src_off += 3;
         } else {
-            decoded = s[i++];
+            decoded = src[src_off++];
         }
         if (decoded == '/') {
-            rewind = handle_special_paths(ret.base, dst, last_slash);
+            rewind = handle_special_paths(dst, dst_off, last_slash);
             if (rewind > 0) {
-                nindexes -= rewind;
-                dst -= rewind;
-                last_slash = dst - 1;
+                dst_off -= rewind;
+                last_slash = dst_off - 1;
                 continue;
             }
-            last_slash = dst;
+            last_slash = dst_off;
         }
-        *dst++ = decoded;
-        *nindexes++ = &s[i] - path;
+        dst[dst_off] = decoded;
+        (*norm_indexes)[dst_off] = src_off;
+        dst_off++;
     }
-    rewind = handle_special_paths(ret.base, dst, last_slash);
-    dst -= rewind;
+    rewind = handle_special_paths(dst, dst_off, last_slash);
+    dst_off -= rewind;
 
-    ret.len = dst - ret.base;
-
-    return ret;
+    return h2o_iovec_init(dst, dst_off);
 }
 
 h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t len, size_t *query_at, size_t **norm_indexes)
@@ -127,10 +119,16 @@ h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_
     const char *p = path, *end = path + len;
     h2o_iovec_t ret;
 
-    if (len == 0 || path[0] != '/')
-        goto Rewrite;
-
     *query_at = SIZE_MAX;
+    *norm_indexes = NULL;
+
+    if (len == 0) {
+        ret = h2o_iovec_init("/", 1);
+        return ret;
+    }
+
+    if (path[0] != '/')
+        goto Rewrite;
 
     for (; p + 1 < end; ++p) {
         if ((p[0] == '/' && p[1] == '.') || p[0] == '%') {

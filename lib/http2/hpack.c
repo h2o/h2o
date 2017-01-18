@@ -404,8 +404,8 @@ Redo:
     if (do_index) {
         struct st_h2o_hpack_header_table_entry_t *entry =
             header_table_add(hpack_header_table, result->name->len + result->value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET, SIZE_MAX);
-        entry->err_desc = *err_desc;
         if (entry != NULL) {
+            entry->err_desc = *err_desc;
             entry->name = result->name;
             if (!h2o_iovec_is_token(entry->name))
                 h2o_mem_addref_shared(entry->name);

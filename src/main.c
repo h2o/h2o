@@ -334,6 +334,7 @@ static void *ocsp_updater_thread(void *_ssl_conf)
             }
             break;
         default: /* permanent failure */
+            update_ocsp_stapling(ssl_conf, NULL);
             fprintf(stderr, "[OCSP Stapling] disabled for certificate file:%s\n", ssl_conf->certificate_file);
             goto Exit;
         }
@@ -1455,14 +1456,17 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             break;
         update_listener_state(listeners);
         /* run the loop once */
-        h2o_evloop_run(conf.threads[thread_index].ctx.loop);
+        h2o_evloop_run(conf.threads[thread_index].ctx.loop, INT32_MAX);
         h2o_filecache_clear(conf.threads[thread_index].ctx.filecache);
     }
 
     if (thread_index == 0)
         fprintf(stderr, "received SIGTERM, gracefully shutting down\n");
 
-    /* shutdown requested, close the listeners, notify the protocol handlers */
+    /* shutdown requested, unregister, close the listeners and notify the protocol handlers */
+    for (i = 0; i != conf.num_listeners; ++i)
+        h2o_socket_read_stop(listeners[i].sock);
+    h2o_evloop_run(conf.threads[thread_index].ctx.loop, 0);
     for (i = 0; i != conf.num_listeners; ++i) {
         h2o_socket_close(listeners[i].sock);
         listeners[i].sock = NULL;
@@ -1471,7 +1475,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
 
     /* wait until all the connection gets closed */
     while (num_connections(0) != 0)
-        h2o_evloop_run(conf.threads[thread_index].ctx.loop);
+        h2o_evloop_run(conf.threads[thread_index].ctx.loop, INT32_MAX);
 
     /* the process that detects num_connections becoming zero performs the last cleanup */
     if (conf.pid_file != NULL)
@@ -1564,6 +1568,7 @@ struct extra_status_jemalloc_cb_arg {
     size_t written;
 };
 
+#if JEMALLOC_STATS == 1
 static void extra_status_jemalloc_cb(void *ctx, const char *stats)
 {
     size_t cur_len;
@@ -1611,6 +1616,7 @@ err:
     out->err = 1;
     return;
 }
+#endif
 
 static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_req_t *req)
 {
@@ -1690,7 +1696,6 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
     ret.base[ret.len + arg.written] = '\0';
     ret.len += arg.written;
     return ret;
-#undef BUFSIZE
 
 jemalloc_err:
     /* couldn't fit the jemalloc output, exiting */
@@ -1699,6 +1704,7 @@ jemalloc_err:
 #endif /* JEMALLOC_STATS == 1 */
 
     return ret;
+#undef BUFSIZE
 }
 
 static void setup_configurators(void)
@@ -1829,7 +1835,7 @@ int main(int argc, char **argv)
                        "  h2o [options]\n"
                        "\n"
                        "Options:\n"
-                       "  -c, --conf FILE    configuration file (default: h2o.conf)\n"
+                       "  -c, --conf FILE    configuration file (default: %s)\n"
                        "  -m, --mode <mode>  specifies one of the following mode\n"
                        "                     - worker: invoked process handles incoming connections\n"
                        "                               (default)\n"
@@ -1849,7 +1855,8 @@ int main(int argc, char **argv)
                        "\n"
                        "Please refer to the documentation under `share/doc/h2o` (or available online at\n"
                        "http://h2o.examp1e.net/) for how to configure the server.\n"
-                       "\n");
+                       "\n",
+                       H2O_TO_STR(H2O_CONFIG_PATH));
                 exit(0);
                 break;
             case ':':

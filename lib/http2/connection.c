@@ -58,7 +58,7 @@ static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{16}, {H2O_HTTP2
 static void initiate_graceful_shutdown(h2o_context_t *ctx);
 static int close_connection(h2o_http2_conn_t *conn);
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
-static int do_emit_writereq(h2o_http2_conn_t *conn);
+static void do_emit_writereq(h2o_http2_conn_t *conn);
 static void on_read(h2o_socket_t *sock, const char *err);
 static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_len);
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
@@ -182,9 +182,6 @@ void h2o_http2_conn_register_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *
 {
     khiter_t iter;
     int r;
-
-    if (!h2o_http2_stream_is_push(stream->stream_id) && conn->pull_stream_ids.max_open < stream->stream_id)
-        conn->pull_stream_ids.max_open = stream->stream_id;
 
     iter = kh_put(h2o_http2_stream_t, conn->streams, stream->stream_id, &r);
     assert(iter != kh_end(conn->streams));
@@ -614,6 +611,14 @@ static int handle_priority_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
         if (h2o_http2_scheduler_get_weight(&stream->_refs.scheduler) != 257)
             set_priority(conn, stream, &payload, 1);
     } else {
+        if (h2o_http2_stream_is_push(frame->stream_id)) {
+            /* Ignore PRIORITY frames for closed or idle pushed streams */
+            return 0;
+        } else {
+            /* Ignore PRIORITY frames for closed pull streams */
+            if (frame->stream_id <= conn->pull_stream_ids.max_open)
+                return 0;
+        }
         if (conn->num_streams.priority.open >= conn->super.ctx->globalconf->http2.max_streams_for_priority) {
             *err_desc = "too many streams in idle/closed state";
             /* RFC 7540 10.5: An endpoint MAY treat activity that is suspicious as a connection error (Section 5.4.1) of type
@@ -974,22 +979,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
 #endif
 
     /* write more, if possible */
-    if (do_emit_writereq(conn))
-        return;
-
-    /* close the connection if necessary */
-    switch (conn->state) {
-    case H2O_HTTP2_CONN_STATE_OPEN:
-        break;
-    case H2O_HTTP2_CONN_STATE_HALF_CLOSED:
-        if (conn->num_streams.pull.half_closed + conn->num_streams.push.half_closed != 0)
-            break;
-        conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
-    /* fall-thru */
-    case H2O_HTTP2_CONN_STATE_IS_CLOSING:
-        close_connection_now(conn);
-        return;
-    }
+    do_emit_writereq(conn);
 }
 
 static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *still_is_active, void *cb_arg)
@@ -1015,7 +1005,7 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
     return h2o_http2_conn_get_buffer_window(conn) > 0 ? 0 : -1;
 }
 
-int do_emit_writereq(h2o_http2_conn_t *conn)
+void do_emit_writereq(h2o_http2_conn_t *conn)
 {
     assert(conn->_write.buf_in_flight == NULL);
 
@@ -1023,16 +1013,27 @@ int do_emit_writereq(h2o_http2_conn_t *conn)
     if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING && h2o_http2_conn_get_buffer_window(conn) > 0)
         h2o_http2_scheduler_run(&conn->scheduler, emit_writereq_of_openref, conn);
 
-    if (conn->_write.buf->size == 0)
-        return 0;
-
-    { /* write */
+    if (conn->_write.buf->size != 0) {
+        /* write and wait for completion */
         h2o_iovec_t buf = {conn->_write.buf->bytes, conn->_write.buf->size};
         h2o_socket_write(conn->sock, &buf, 1, on_write_complete);
         conn->_write.buf_in_flight = conn->_write.buf;
         h2o_buffer_init(&conn->_write.buf, &wbuf_buffer_prototype);
     }
-    return 1;
+
+    /* close the connection if necessary */
+    switch (conn->state) {
+    case H2O_HTTP2_CONN_STATE_OPEN:
+        break;
+    case H2O_HTTP2_CONN_STATE_HALF_CLOSED:
+        if (conn->num_streams.pull.half_closed + conn->num_streams.push.half_closed != 0)
+            break;
+        conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
+    /* fall-thru */
+    case H2O_HTTP2_CONN_STATE_IS_CLOSING:
+        close_connection_now(conn);
+        break;
+    }
 }
 
 static void emit_writereq(h2o_timeout_entry_t *entry)
@@ -1251,8 +1252,7 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
         return;
 
     /* open the stream */
-    conn->push_stream_ids.max_open += 2;
-    h2o_http2_stream_t *stream = h2o_http2_stream_open(conn, conn->push_stream_ids.max_open, NULL, &h2o_http2_default_priority);
+    h2o_http2_stream_t *stream = h2o_http2_stream_open(conn, conn->push_stream_ids.max_open + 2, NULL, &h2o_http2_default_priority);
     stream->received_priority.dependency = src_stream->stream_id;
     stream->push.parent_stream_id = src_stream->stream_id;
     h2o_http2_scheduler_open(&stream->_refs.scheduler, &src_stream->_refs.scheduler.node, 16, 0);
@@ -1360,6 +1360,8 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
 
     return 0;
 Error:
+    h2o_linklist_unlink(&http2conn->_conns);
+    kh_destroy(h2o_http2_stream_t, http2conn->streams);
     free(http2conn);
     return -1;
 }

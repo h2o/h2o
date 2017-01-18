@@ -25,7 +25,8 @@ struct RRange {
   mrb_bool excl : 1;
 };
 
-#define mrb_range_ptr(v)    ((struct RRange*)(mrb_ptr(v)))
+MRB_API struct RRange* mrb_range_ptr(mrb_state *mrb, mrb_value v);
+#define mrb_range_raw_ptr(v) ((struct RRange*)mrb_ptr(v))
 #define mrb_range_value(p)  mrb_obj_value((void*)(p))
 
 /*

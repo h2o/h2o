@@ -7,7 +7,11 @@
 #ifndef MRB_THROW_H
 #define MRB_THROW_H
 
-#ifdef MRB_ENABLE_CXX_EXCEPTION
+#if defined(MRB_ENABLE_CXX_EXCEPTION) && !defined(__cplusplus)
+#error Trying to use C++ exception handling in C code
+#endif
+
+#if defined(MRB_ENABLE_CXX_EXCEPTION) && defined(__cplusplus)
 
 #define MRB_TRY(buf) do { try {
 #define MRB_CATCH(buf) } catch(mrb_jmpbuf_impl e) { if (e != (buf)->impl) { throw e; }
@@ -40,7 +44,7 @@ typedef mrb_int mrb_jmpbuf_impl;
 struct mrb_jmpbuf {
   mrb_jmpbuf_impl impl;
 
-#ifdef MRB_ENABLE_CXX_EXCEPTION
+#if defined(MRB_ENABLE_CXX_EXCEPTION) && defined(__cplusplus)
   static mrb_int jmpbuf_id;
   mrb_jmpbuf() : impl(jmpbuf_id++) {}
 #endif
