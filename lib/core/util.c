@@ -396,24 +396,39 @@ h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, 
 {
     h2o_iovec_vector_t paths_to_push = {NULL};
     h2o_iovec_t iter = h2o_iovec_init(value, value_len), token_value;
-    const char *token;
-    size_t token_len;
-    int push_only = 0;
+    const char *link_start;
+    const char *token = NULL;
+    size_t token_len, link_len = 0, fv_index = 0;
+    char fv_buf[value_len];
 
     /* extract URL values from Link: </pushed.css>; rel=preload */
     do {
+        link_start = iter.base;
         if ((token = h2o_next_token(&iter, ';', &token_len, NULL)) == NULL)
-            break;
+            goto CopyRemainder;
+
         /* first element should be <URL> */
-        if (!(token_len >= 2 && token[0] == '<' && token[token_len - 1] == '>'))
-            break;
+        if (!(token_len >= 2 && token[0] == '<' && token[token_len - 1] == '>')) {
+            memcpy(fv_buf + fv_index, token, token_len);
+            fv_index += token_len;
+            memcpy(fv_buf + fv_index++, ";", 1);
+            goto CopyRemainder;
+        }
+
+        link_len = (token + token_len) - link_start;
+
         h2o_iovec_t url = h2o_iovec_init(token + 1, token_len - 2);
         /* find rel=preload */
-        int preload = 0, nopush = 0;
+        int preload = 0, nopush = 0, push_only = 0;
         while ((token = h2o_next_token(&iter, ';', &token_len, &token_value)) != NULL &&
                !h2o_memis(token, token_len, H2O_STRLIT(","))) {
+            if (token_value.base) {
+                link_len = (token_value.base + token_value.len) - link_start;
+            } else {
+                link_len = (token + token_len) - link_start;
+            }
             if (h2o_lcstris(token, token_len, H2O_STRLIT("rel")) &&
-                h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload"))) {
+                    h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload"))) {
                 preload++;
             } else if (h2o_lcstris(token, token_len, H2O_STRLIT("nopush"))) {
                 nopush++;
@@ -424,35 +439,22 @@ h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, 
 
         if (!nopush && preload)
             push_one_path(pool, &paths_to_push, &url, base_path, input_scheme, input_authority, base_scheme, base_authority);
+        if (!push_only) {
+            if (fv_index)
+                memcpy(fv_buf + fv_index++, ",", 1);
+            memcpy(fv_buf + fv_index, link_start, link_len);
+            fv_index += link_len;
+        }
     } while (token != NULL);
 
-    if (push_only) {
-	    /* slow path and alloc only when x-http2-push-only is used. We
-	     * remove the links containing the attribute */
-	    filtered_value->base = h2o_mem_alloc_pool(pool, value_len);
-        filtered_value->len = 0;
-        iter = h2o_iovec_init(value, value_len);
-        const char *link_start = value;
-        while ((token = h2o_next_token(&iter, ',', &token_len, NULL)) != NULL) {
-            const char *attr_token;
-            size_t attr_token_len;
-            h2o_iovec_t attr_iter = h2o_iovec_init(token, token_len);
-            push_only = 0;
-            while ((attr_token = h2o_next_token(&attr_iter, ';', &attr_token_len, NULL)) != NULL) {
-                if (h2o_lcstris(attr_token, attr_token_len, H2O_STRLIT("x-http2-push-only")))
-                    push_only++;
-            }
-            if (!push_only) {
-                size_t link_len;
-                if (filtered_value->len) {
-                    memcpy(filtered_value->base + filtered_value->len++, ",", 1);
-                }
-                link_len = (token + token_len) - link_start;
-                memcpy(filtered_value->base + filtered_value->len, link_start, link_len);
-                filtered_value->len += link_len;
-            }
-            link_start = token + token_len + 1;
-        }
+CopyRemainder:
+    if (fv_index) {
+	    /* slow path and alloc only when x-http2-push-only is used */
+	    memcpy(fv_buf + fv_index, iter.base, iter.len);
+	    fv_index += iter.len;
+	    filtered_value->base = h2o_mem_alloc_pool(pool, fv_index);
+	    memcpy(filtered_value->base, fv_buf, fv_index);
+	    filtered_value->len = fv_index;
     } else {
 	    *filtered_value = h2o_iovec_init(value, value_len);
     }
