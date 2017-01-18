@@ -1,6 +1,6 @@
 Revision history for H2O.
 
-2.1.0 TBD
+2.1.0 2017-01-17 23:43:27+0000
 	- [core] TCP latency optimization #873 #1076 (Kazuho Oku)
 	- [core] provide tag to include other YAML files from the configuration file #1022 (Ichito Nagata)
 	- [core] accept sequence of mappings for path-level configuration #1042 (Ichito Nagata)
