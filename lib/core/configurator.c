@@ -318,8 +318,10 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
         path_ctx->mimemap = &path_ctx->pathconf->mimemap;
 
         yoml_t *config_node = convert_path_config_node(cmd, value);
-        if (config_node == NULL)
+        if (config_node == NULL) {
+            destroy_context(path_ctx);
             return -1;
+        }
 
         int cmd_ret = h2o_configurator_apply_commands(path_ctx, config_node, H2O_CONFIGURATOR_FLAG_PATH, NULL);
         destroy_context(path_ctx);
