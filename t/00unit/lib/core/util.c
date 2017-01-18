@@ -255,7 +255,7 @@ static void test_extract_push_path_from_link_header_push_only(void)
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/thirdpath")));
     path = paths.entries[2];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/fourthpath")));
-    value = h2o_iovec_init(H2O_STRLIT(" </secondpath>; rel=preload; nopush, </thirdpath>; rel=preload"));
+    value = h2o_iovec_init(H2O_STRLIT("</secondpath>; rel=preload; nopush, </thirdpath>; rel=preload"));
     ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
 
     value = h2o_iovec_init(H2O_STRLIT("</firstpath>; rel=preload, </secondpath>; rel=preload; x-http2-push-only, </thirdpath>; rel=preload; nopush, </fourthpath>; rel=preload; x-http2-push-only"));
@@ -270,6 +270,20 @@ static void test_extract_push_path_from_link_header_push_only(void)
     path = paths.entries[2];
     ok(h2o_memis(path.base, path.len, H2O_STRLIT("/fourthpath")));
     value = h2o_iovec_init(H2O_STRLIT("</firstpath>; rel=preload, </thirdpath>; rel=preload; nopush"));
+    ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
+
+    value = h2o_iovec_init(H2O_STRLIT("</firstpath>; rel=preload; x-http2-push-only, </secondpath>; rel=preload, </thirdpath>; rel=preload; x-http2-push-only, </fourthpath>; rel=preload; nopush"));
+    paths = h2o_extract_push_path_from_link_header(
+        &pool, value.base, value.len, INPUT,
+        &H2O_URL_SCHEME_HTTP, &input_authority, &filtered_value);
+    ok(paths.size == 3);
+    path = paths.entries[0];
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/firstpath")));
+    path = paths.entries[1];
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/secondpath")));
+    path = paths.entries[2];
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/thirdpath")));
+    value = h2o_iovec_init(H2O_STRLIT("</secondpath>; rel=preload, </fourthpath>; rel=preload; nopush"));
     ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
 
     value = h2o_iovec_init(H2O_STRLIT("firstpath; rel=preload, </secondpath>; rel=preload; x-http2-push-only, </thirdpath>; rel=preload; nopush, </fourthpath>; rel=preload; x-http2-push-only"));

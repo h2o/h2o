@@ -396,39 +396,38 @@ h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, 
 {
     h2o_iovec_vector_t paths_to_push = {NULL};
     h2o_iovec_t iter = h2o_iovec_init(value, value_len), token_value;
-    const char *link_start;
-    const char *token = NULL;
-    size_t token_len, link_len = 0, fv_index = 0;
-    char fv_buf[value_len];
+    const char *token = NULL, *element_start, *element_end, *element_next;
+    size_t token_len;
+    *filtered_value = h2o_iovec_init(NULL, 0);
+
+#define PUSH_FILTERED_VALUE_LIT(l_) do { \
+        memcpy(filtered_value->base + filtered_value->len, l_, sizeof(l_) - 1); \
+        filtered_value->len += sizeof(l_) - 1; \
+} while (0)
+
+#define PUSH_FILTERED_VALUE(s, e) do { \
+        memcpy(filtered_value->base + filtered_value->len, s, e - s); \
+        filtered_value->len += e - s; \
+} while (0)
+    element_start = iter.base;
 
     /* extract URL values from Link: </pushed.css>; rel=preload */
     do {
-        link_start = iter.base;
         if ((token = h2o_next_token(&iter, ';', &token_len, NULL)) == NULL)
             goto CopyRemainder;
 
         /* first element should be <URL> */
         if (!(token_len >= 2 && token[0] == '<' && token[token_len - 1] == '>')) {
-            memcpy(fv_buf + fv_index, token, token_len);
-            fv_index += token_len;
-            memcpy(fv_buf + fv_index++, ";", 1);
             goto CopyRemainder;
         }
-
-        link_len = (token + token_len) - link_start;
 
         h2o_iovec_t url = h2o_iovec_init(token + 1, token_len - 2);
         /* find rel=preload */
         int preload = 0, nopush = 0, push_only = 0;
         while ((token = h2o_next_token(&iter, ';', &token_len, &token_value)) != NULL &&
                !h2o_memis(token, token_len, H2O_STRLIT(","))) {
-            if (token_value.base) {
-                link_len = (token_value.base + token_value.len) - link_start;
-            } else {
-                link_len = (token + token_len) - link_start;
-            }
             if (h2o_lcstris(token, token_len, H2O_STRLIT("rel")) &&
-                    h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload"))) {
+                h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload"))) {
                 preload++;
             } else if (h2o_lcstris(token, token_len, H2O_STRLIT("nopush"))) {
                 nopush++;
@@ -437,28 +436,44 @@ h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, 
             }
         }
 
+        element_end = token ? iter.base - 1 : iter.base;
+        element_next = token ? iter.base + 1 : iter.base;
+
         if (!nopush && preload)
             push_one_path(pool, &paths_to_push, &url, base_path, input_scheme, input_authority, base_scheme, base_authority);
-        if (!push_only) {
-            if (fv_index)
-                memcpy(fv_buf + fv_index++, ",", 1);
-            memcpy(fv_buf + fv_index, link_start, link_len);
-            fv_index += link_len;
+        if (push_only) {
+            if (filtered_value->base == NULL) {
+                const char *prev_comma = element_end - 1;
+                for (; prev_comma > element_start; --prev_comma)
+                    if (*prev_comma == ',')
+                        break;
+                if (prev_comma > element_start) {
+                    filtered_value->base = h2o_mem_alloc_pool(pool, value_len * 2);
+                    filtered_value->len = 0;
+                    PUSH_FILTERED_VALUE(element_start, prev_comma);
+                }
+            }
+            element_start = element_next;
+        } else {
+            if (filtered_value->base != NULL) {
+                PUSH_FILTERED_VALUE_LIT(", ");
+                PUSH_FILTERED_VALUE(element_start, element_end);
+                element_start = element_next;
+            }
         }
     } while (token != NULL);
 
 CopyRemainder:
-    if (fv_index) {
-	    /* slow path and alloc only when x-http2-push-only is used */
-	    memcpy(fv_buf + fv_index, iter.base, iter.len);
-	    fv_index += iter.len;
-	    filtered_value->base = h2o_mem_alloc_pool(pool, fv_index);
-	    memcpy(filtered_value->base, fv_buf, fv_index);
-	    filtered_value->len = fv_index;
-    } else {
+    if (filtered_value->base != NULL)
+        PUSH_FILTERED_VALUE(element_start, value + value_len);
+    else
 	    *filtered_value = h2o_iovec_init(value, value_len);
-    }
+
     return paths_to_push;
+
+#undef PUSH_FILTERED_VALUE_LIT
+#undef PUSH_FILTERED_VALUE
+
 }
 
 int h2o_get_compressible_types(const h2o_headers_t *headers)
