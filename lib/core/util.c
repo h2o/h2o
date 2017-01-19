@@ -409,12 +409,11 @@ h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, 
     /* extract URL values from Link: </pushed.css>; rel=preload */
     do {
         if ((token = h2o_next_token(&iter, ';', &token_len, NULL)) == NULL)
-            goto CopyRemainder;
+            break;
 
         /* first element should be <URL> */
-        if (!(token_len >= 2 && token[0] == '<' && token[token_len - 1] == '>')) {
-            goto CopyRemainder;
-        }
+        if (!(token_len >= 2 && token[0] == '<' && token[token_len - 1] == '>'))
+            break;
 
         h2o_iovec_t url = h2o_iovec_init(token + 1, token_len - 2);
         /* find rel=preload */
@@ -458,7 +457,6 @@ h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, 
         }
     } while (token != NULL);
 
-CopyRemainder:
     if (filtered_value->base != NULL)
         PUSH_FILTERED_VALUE(element_start, value + value_len - element_start);
     else
