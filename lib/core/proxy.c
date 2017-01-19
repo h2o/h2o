@@ -204,21 +204,23 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
         offset += sprintf(buf.base + offset, "content-length: %zu\r\n", req->entity.len);
     }
 
-    h2o_headers_t rewrited_headers = req->headers;
+    /* rewrite headers if necessary */
+    h2o_headers_t req_headers = req->headers;
     if (req->overrides != NULL && req->overrides->headers_cmds != NULL) {
-        rewrited_headers.entries = NULL;
-        rewrited_headers.size = 0;
-        rewrited_headers.capacity = 0;
+        req_headers.entries = NULL;
+        req_headers.size = 0;
+        req_headers.capacity = 0;
         h2o_headers_command_t *cmd;
-        h2o_vector_reserve(&req->pool, &rewrited_headers, req->headers.capacity);
-        memcpy(rewrited_headers.entries, req->headers.entries, sizeof(req->headers.entries[0]) * req->headers.size);
-        rewrited_headers.size = req->headers.size;
+        h2o_vector_reserve(&req->pool, &req_headers, req->headers.capacity);
+        memcpy(req_headers.entries, req->headers.entries, sizeof(req->headers.entries[0]) * req->headers.size);
+        req_headers.size = req->headers.size;
         for (cmd = req->overrides->headers_cmds; cmd->cmd != H2O_HEADERS_CMD_NULL; ++cmd)
-            h2o_rewrite_headers(&req->pool, &rewrited_headers, cmd);
+            h2o_rewrite_headers(&req->pool, &req_headers, cmd);
     }
+
     {
         const h2o_header_t *h, *h_end;
-        for (h = rewrited_headers.entries, h_end = h + rewrited_headers.size; h != h_end; ++h) {
+        for (h = req_headers.entries, h_end = h + req_headers.size; h != h_end; ++h) {
             if (h2o_iovec_is_token(h->name)) {
                 const h2o_token_t *token = (void *)h->name;
                 if (token->proxy_should_drop) {
