@@ -205,7 +205,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
     }
 
     h2o_headers_t rewrited_headers = req->headers;
-    if (req->overrides != NULL && req->overrides->header_cmds != NULL && req->overrides->header_cmds->size != 0) {
+    if (req->overrides != NULL && req->overrides->headers_cmds != NULL) {
         rewrited_headers.entries = NULL;
         rewrited_headers.size = 0;
         rewrited_headers.capacity = 0;
@@ -213,7 +213,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
         h2o_vector_reserve(&req->pool, &rewrited_headers, req->headers.capacity);
         memcpy(rewrited_headers.entries, req->headers.entries, sizeof(req->headers.entries[0]) * req->headers.size);
         rewrited_headers.size = req->headers.size;
-        for (cmd = req->overrides->header_cmds->entries; cmd->cmd != H2O_HEADERS_CMD_NULL; ++cmd)
+        for (cmd = req->overrides->headers_cmds; cmd->cmd != H2O_HEADERS_CMD_NULL; ++cmd)
             h2o_rewrite_headers(&req->pool, &rewrited_headers, cmd);
     }
     {

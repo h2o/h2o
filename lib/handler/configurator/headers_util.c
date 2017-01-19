@@ -45,9 +45,8 @@ static int extract_name_value(const char *src, h2o_iovec_t **name, h2o_iovec_t *
     return 0;
 }
 
-static int add_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2o_iovec_t *name, h2o_iovec_t value, void *header_cmd_vector)
+static int add_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2o_iovec_t *name, h2o_iovec_t value, h2o_headers_command_t **cmds)
 {
-    H2O_VECTOR(h2o_headers_command_t) *header_cmds = header_cmd_vector;
     if (h2o_iovec_is_token(name)) {
         const h2o_token_t *token = (void *)name;
         if (h2o_headers_is_prohibited_name(token)) {
@@ -56,13 +55,12 @@ static int add_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2
         }
     }
 
-    h2o_vector_reserve(NULL, header_cmds, header_cmds->size + 1);
-    header_cmds->entries[header_cmds->size++] = (h2o_headers_command_t){cmd_id, name, value};
+    h2o_headers_append_command(cmds, cmd_id, name, value);
     return 0;
 }
 
 static int on_config_header_2arg(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
-                                     int cmd_id, yoml_t *node, h2o_headers_command_vector_t *header_cmd_vector)
+                                     int cmd_id, yoml_t *node, h2o_headers_command_t **headers_cmds)
 {
     h2o_iovec_t *name, value;
 
@@ -70,7 +68,7 @@ static int on_config_header_2arg(h2o_configurator_command_t *cmd, h2o_configurat
         h2o_configurator_errprintf(cmd, node, "failed to parse the value; should be in form of `name: value`");
         return -1;
     }
-    if (add_cmd(cmd, node, cmd_id, name, value, header_cmd_vector) != 0) {
+    if (add_cmd(cmd, node, cmd_id, name, value, headers_cmds) != 0) {
         if (!h2o_iovec_is_token(name))
             free(name->base);
         free(value.base);

@@ -250,6 +250,9 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         return -1;
     }
 
+    if (self->vars->headers_cmds != NULL)
+        h2o_mem_addref_shared(self->vars->headers_cmds);
+
     /* register */
     h2o_proxy_register_reverse_proxy(ctx->pathconf, &parsed, self->vars);
 
@@ -279,12 +282,8 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
     struct proxy_configurator_t *self = (void *)_self;
 
     memcpy(self->vars + 1, self->vars, sizeof(*self->vars));
-    /* header related */
-    h2o_vector_reserve(NULL, &self->vars[1].header_cmds, self->vars->header_cmds.size);
-    memcpy(self->vars[1].header_cmds.entries, self->vars->header_cmds.entries,
-           sizeof(self->vars->header_cmds.entries[0]) * self->vars->header_cmds.size);
-    self->vars[1].header_cmds.size = self->vars->header_cmds.size;
-    /* ends */
+    if (self->vars[1].headers_cmds != NULL)
+        h2o_mem_addref_shared(self->vars[1].headers_cmds);
     ++self->vars;
 
     if (ctx->pathconf == NULL && ctx->hostconf == NULL) {
@@ -318,23 +317,17 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
         SSL_CTX_free(self->vars->ssl_ctx);
     }
 
-    /* header related */
-    if (ctx->pathconf != NULL && self->vars->header_cmds.size != 0) {
-        h2o_vector_reserve(NULL, &self->vars->header_cmds, self->vars->header_cmds.size + 1);
-        self->vars->header_cmds.entries[self->vars->header_cmds.size] =(h2o_headers_command_t){H2O_HEADERS_CMD_NULL};
-    } else {
-        free(self->vars->header_cmds.entries);
-    }
-    /* header related changes end */
+    if (self->vars->headers_cmds != NULL)
+        h2o_mem_release_shared(self->vars->headers_cmds);
 
     --self->vars;
     return 0;
 }
 
-static h2o_headers_command_vector_t *get_headers_commands(h2o_configurator_t *_self)
+static h2o_headers_command_t **get_headers_commands(h2o_configurator_t *_self)
 {
     struct proxy_configurator_t *self = (void *)_self;
-    return &self->vars->header_cmds;
+    return &self->vars->headers_cmds;
 }
 
 void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
@@ -347,7 +340,6 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->vars->keepalive_timeout = 2000;
     c->vars->websocket.enabled = 0; /* have websocket proxying disabled by default; until it becomes non-experimental */
     c->vars->websocket.timeout = H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT;
-    memset(&c->vars->header_cmds, 0, sizeof(c->vars->header_cmds)); /* header related */
 
     /* setup handlers */
     c->super.enter = on_config_enter;

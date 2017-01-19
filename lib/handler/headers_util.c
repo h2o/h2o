@@ -34,6 +34,29 @@ static void remove_header(h2o_headers_t *headers, h2o_headers_command_t *cmd)
     headers->size = dst;
 }
 
+void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_iovec_t *name, h2o_iovec_t value)
+{
+    h2o_headers_command_t *new_cmds;
+    size_t cnt;
+
+    if (*cmds != NULL) {
+        for (cnt = 0; (*cmds)[cnt].cmd != H2O_HEADERS_CMD_NULL; ++cnt)
+            ;
+    } else {
+        cnt = 0;
+    }
+
+    new_cmds = h2o_mem_alloc_shared(NULL, (cnt + 2) * sizeof(*new_cmds), NULL);
+    if (*cmds != NULL)
+        memcpy(new_cmds, *cmds, cnt * sizeof(*new_cmds));
+    new_cmds[cnt] = (h2o_headers_command_t){cmd, name, value};
+    new_cmds[cnt + 1] = (h2o_headers_command_t){H2O_HEADERS_CMD_NULL};
+
+    if (*cmds != NULL)
+        h2o_mem_release_shared(*cmds);
+    *cmds = new_cmds;
+}
+
 void h2o_rewrite_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_headers_command_t *cmd)
 {
     h2o_header_t *target;

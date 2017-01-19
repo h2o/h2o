@@ -75,7 +75,7 @@ typedef int (*h2o_configurator_dispose_cb)(h2o_configurator_t *configurator);
 typedef int (*h2o_configurator_enter_cb)(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, yoml_t *node);
 typedef int (*h2o_configurator_exit_cb)(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, yoml_t *node);
 typedef int (*h2o_configurator_command_cb)(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node);
-typedef h2o_headers_command_vector_t *(*h2o_configurator_get_headers_commands_cb)(h2o_configurator_t *conf);
+typedef h2o_headers_command_t **(*h2o_configurator_get_headers_commands_cb)(h2o_configurator_t *conf);
 
 struct st_h2o_configurator_command_t {
     /**

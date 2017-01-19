@@ -99,7 +99,6 @@ typedef struct st_h2o_globalconf_t h2o_globalconf_t;
 typedef struct st_h2o_mimemap_t h2o_mimemap_t;
 typedef struct st_h2o_logconf_t h2o_logconf_t;
 typedef struct st_h2o_headers_command_t h2o_headers_command_t;
-typedef H2O_VECTOR(h2o_headers_command_t) h2o_headers_command_vector_t;
 
 /**
  * a predefined, read-only, fast variant of h2o_iovec_t, defined in h2o/token.h
@@ -845,7 +844,7 @@ typedef struct st_h2o_req_overrides_t {
     /**
      * headers rewrite commands to be used when sending requests to upstream (or NULL)
      */
-    h2o_headers_command_vector_t *header_cmds;
+    h2o_headers_command_t *headers_cmds;
 } h2o_req_overrides_t;
 
 /**
@@ -1763,7 +1762,7 @@ typedef struct st_h2o_proxy_config_vars_t {
         int enabled;
         uint64_t timeout;
     } websocket;
-    h2o_headers_command_vector_t header_cmds;
+    h2o_headers_command_t *headers_cmds;
     SSL_CTX *ssl_ctx; /* optional */
 } h2o_proxy_config_vars_t;
 
@@ -1823,6 +1822,10 @@ void h2o_status_register_configurator(h2o_globalconf_t *conf);
     
 /* lib/handler/headers_util.c */
 
+/**
+ * appends a headers command to the list
+ */
+void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_iovec_t *name, h2o_iovec_t value);
 /**
  * rewrite headers by the command provided
  */

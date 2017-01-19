@@ -25,16 +25,17 @@
 
 struct headers_configurator_t {
     h2o_configurator_t super;
-    h2o_headers_command_vector_t * cmds, _cmd_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+    h2o_headers_command_t **cmds, *_cmd_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct headers_configurator_t *self = (void *)_self;
 
-    h2o_vector_reserve(NULL, &self->cmds[1], self->cmds[0].size);
-    memcpy(self->cmds[1].entries, self->cmds[0].entries, sizeof(self->cmds->entries[0]) * self->cmds->size);
-    self->cmds[1].size = self->cmds[0].size;
+    self->cmds[1] = self->cmds[0];
+    if (self->cmds[1] != NULL)
+        h2o_mem_addref_shared(self->cmds[1]);
+
     ++self->cmds;
     return 0;
 }
@@ -43,20 +44,19 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 {
     struct headers_configurator_t *self = (void *)_self;
 
-    if (ctx->pathconf != NULL && self->cmds->size != 0) {
-        h2o_vector_reserve(NULL, self->cmds, self->cmds->size + 1);
-        self->cmds->entries[self->cmds->size] = (h2o_headers_command_t){H2O_HEADERS_CMD_NULL};
-        h2o_headers_register(ctx->pathconf, self->cmds->entries);
-    } else {
-        free(self->cmds->entries);
+    if (ctx->pathconf != NULL && *self->cmds != NULL) {
+        if (*self->cmds != NULL)
+            h2o_mem_addref_shared(*self->cmds);
+        h2o_headers_register(ctx->pathconf, *self->cmds);
     }
-    memset(self->cmds, 0, sizeof(*self->cmds));
 
+    if (*self->cmds != NULL)
+        h2o_mem_release_shared(*self->cmds);
     --self->cmds;
     return 0;
 }
 
-static h2o_headers_command_vector_t *get_headers_commands(h2o_configurator_t *_self)
+static h2o_headers_command_t **get_headers_commands(h2o_configurator_t *_self)
 {
     struct headers_configurator_t *self = (void *)_self;
     return self->cmds;
