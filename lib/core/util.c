@@ -400,14 +400,9 @@ h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, 
     size_t token_len;
     *filtered_value = h2o_iovec_init(NULL, 0);
 
-#define PUSH_FILTERED_VALUE_LIT(l_) do { \
-        memcpy(filtered_value->base + filtered_value->len, l_, sizeof(l_) - 1); \
-        filtered_value->len += sizeof(l_) - 1; \
-} while (0)
-
-#define PUSH_FILTERED_VALUE(s, e) do { \
-        memcpy(filtered_value->base + filtered_value->len, s, e - s); \
-        filtered_value->len += e - s; \
+#define PUSH_FILTERED_VALUE(s, l) do { \
+        memcpy(filtered_value->base + filtered_value->len, s, l); \
+        filtered_value->len += l; \
 } while (0)
     element_start = iter.base;
 
@@ -450,14 +445,14 @@ h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, 
                 if (prev_comma > element_start) {
                     filtered_value->base = h2o_mem_alloc_pool(pool, value_len * 2);
                     filtered_value->len = 0;
-                    PUSH_FILTERED_VALUE(element_start, prev_comma);
+                    PUSH_FILTERED_VALUE(element_start, prev_comma - element_start);
                 }
             }
             element_start = element_next;
         } else {
             if (filtered_value->base != NULL) {
-                PUSH_FILTERED_VALUE_LIT(", ");
-                PUSH_FILTERED_VALUE(element_start, element_end);
+                PUSH_FILTERED_VALUE(", ", 2);
+                PUSH_FILTERED_VALUE(element_start, element_end - element_start);
                 element_start = element_next;
             }
         }
@@ -465,15 +460,13 @@ h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, 
 
 CopyRemainder:
     if (filtered_value->base != NULL)
-        PUSH_FILTERED_VALUE(element_start, value + value_len);
+        PUSH_FILTERED_VALUE(element_start, value + value_len - element_start);
     else
 	    *filtered_value = h2o_iovec_init(value, value_len);
 
     return paths_to_push;
 
-#undef PUSH_FILTERED_VALUE_LIT
 #undef PUSH_FILTERED_VALUE
-
 }
 
 int h2o_get_compressible_types(const h2o_headers_t *headers)
