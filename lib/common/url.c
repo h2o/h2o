@@ -227,6 +227,7 @@ static int parse_authority_and_path(const char *src, const char *url_end, h2o_ur
     const char *p = h2o_url_parse_hostport(src, url_end - src, &parsed->host, &parsed->_port);
     if (p == NULL)
         return -1;
+    parsed->host_is_unix_path = 0;
     parsed->authority = h2o_iovec_init(src, p - src);
     if (p == url_end) {
         parsed->path = h2o_iovec_init(H2O_STRLIT("/"));
@@ -279,6 +280,7 @@ int h2o_url_parse_relative(const char *url, size_t url_len, h2o_url_t *parsed)
     /* reset authority, host, port, and set path */
     parsed->authority = (h2o_iovec_t){NULL};
     parsed->host = (h2o_iovec_t){NULL};
+    parsed->host_is_unix_path = 0;
     parsed->_port = 65535;
     parsed->path = h2o_iovec_init(p, url_end - p);
 
