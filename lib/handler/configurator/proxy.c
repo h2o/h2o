@@ -250,6 +250,9 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         return -1;
     }
 
+    if (self->vars->headers_cmds != NULL)
+        h2o_mem_addref_shared(self->vars->headers_cmds);
+
     /* register */
     h2o_proxy_register_reverse_proxy(ctx->pathconf, &parsed, self->vars);
 
@@ -279,6 +282,8 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
     struct proxy_configurator_t *self = (void *)_self;
 
     memcpy(self->vars + 1, self->vars, sizeof(*self->vars));
+    if (self->vars[1].headers_cmds != NULL)
+        h2o_mem_addref_shared(self->vars[1].headers_cmds);
     ++self->vars;
 
     if (ctx->pathconf == NULL && ctx->hostconf == NULL) {
@@ -312,8 +317,17 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
         SSL_CTX_free(self->vars->ssl_ctx);
     }
 
+    if (self->vars->headers_cmds != NULL)
+        h2o_mem_release_shared(self->vars->headers_cmds);
+
     --self->vars;
     return 0;
+}
+
+static h2o_headers_command_t **get_headers_commands(h2o_configurator_t *_self)
+{
+    struct proxy_configurator_t *self = (void *)_self;
+    return &self->vars->headers_cmds;
 }
 
 void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
@@ -362,4 +376,5 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.emit-x-forwarded-headers",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_emit_x_forwarded_headers);
+    h2o_configurator_define_headers_commands(conf, &c->super, "proxy.header", get_headers_commands);
 }
