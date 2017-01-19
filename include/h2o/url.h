@@ -38,7 +38,6 @@ typedef struct st_h2o_url_t {
     h2o_iovec_t host;
     h2o_iovec_t path;
     uint16_t _port;
-    int host_is_unix_path;
 } h2o_url_t;
 
 /**
@@ -108,7 +107,6 @@ inline int h2o_url_init(h2o_url_t *url, const h2o_url_scheme_t *scheme, h2o_iove
     url->scheme = scheme;
     url->authority = authority;
     url->path = path;
-    url->host_is_unix_path = 0;
     return 0;
 }
 
@@ -123,19 +121,27 @@ inline h2o_iovec_t h2o_url_stringify(h2o_mem_pool_t *pool, const h2o_url_t *url)
     return h2o_url_resolve(pool, url, NULL, &tmp);
 }
 
+static inline int h2o_url_host_is_unix_path(h2o_iovec_t host)
+{
+    if (host.len < 6) {
+        return 0;
+    }
+    return h2o_memis(host.base, 6, H2O_STRLIT("unix:/"));
+}
+
 /**
  * Compares to hostnames, taking into account whether they contain a
  * unix path (the comparison will be case sensitive) or not.
  */
 static inline int h2o_url_hosts_are_equal(const h2o_url_t *url_a, const h2o_url_t *url_b)
 {
-    if (url_a->host_is_unix_path != url_b->host_is_unix_path)
+    if (url_a->host.len != url_b->host.len)
         return 0;
 
-    if (!url_a->host_is_unix_path)
-        return h2o_lcstris(url_a->host.base, url_a->host.len, url_b->host.base, url_b->host.len);
-    else
+    if (h2o_url_host_is_unix_path(url_a->host) && h2o_url_host_is_unix_path(url_b->host))
         return h2o_memis(url_a->host.base, url_a->host.len, url_b->host.base, url_b->host.len);
+    else
+        return h2o_lcstris(url_a->host.base, url_a->host.len, url_b->host.base, url_b->host.len);
 }
 
 #endif
