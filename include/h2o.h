@@ -1821,7 +1821,7 @@ void h2o_duration_stats_register(h2o_globalconf_t *conf);
  */
 void h2o_status_register_configurator(h2o_globalconf_t *conf);
     
-/* lib/handler/util.c */
+/* lib/handler/headers_util.c */
 
 /**
  * rewrite headers by the command provided
