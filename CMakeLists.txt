@@ -248,7 +248,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/reproxy.c
     lib/handler/throttle_resp.c
     lib/handler/status.c
-    lib/handler/util.c
+    lib/handler/headers_util.c
     lib/handler/status/events.c
     lib/handler/status/requests.c
     lib/handler/http2_debug_state.c
