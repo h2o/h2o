@@ -173,7 +173,7 @@ char *h2o_configurator_get_cmd_path(const char *cmd);
  * lib/handler/configurator/headers_util.c
  */
 void h2o_configurator_define_headers_commands(h2o_globalconf_t *global_conf, h2o_configurator_t *conf, const char *prefix,
-                                             h2o_configurator_get_headers_commands_cb get_commands);
+                                              h2o_configurator_get_headers_commands_cb get_commands);
 
 void h2o_configurator__init_core(h2o_globalconf_t *conf);
 void h2o_configurator__dispose_configurators(h2o_globalconf_t *conf);

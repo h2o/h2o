@@ -45,7 +45,8 @@ static int extract_name_value(const char *src, h2o_iovec_t **name, h2o_iovec_t *
     return 0;
 }
 
-static int add_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2o_iovec_t *name, h2o_iovec_t value, h2o_headers_command_t **cmds)
+static int add_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2o_iovec_t *name, h2o_iovec_t value,
+                   h2o_headers_command_t **cmds)
 {
     if (h2o_iovec_is_token(name)) {
         const h2o_token_t *token = (void *)name;
@@ -59,8 +60,8 @@ static int add_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2
     return 0;
 }
 
-static int on_config_header_2arg(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
-                                     int cmd_id, yoml_t *node, h2o_headers_command_t **headers_cmds)
+static int on_config_header_2arg(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, int cmd_id, yoml_t *node,
+                                 h2o_headers_command_t **headers_cmds)
 {
     h2o_iovec_t *name, value;
 
@@ -94,11 +95,11 @@ static int on_config_header_unset(h2o_configurator_command_t *cmd, h2o_configura
     return 0;
 }
 
-#define DEFINE_2ARG(fn, cmd_id)                                         \
-    static int fn(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node) \
-    {                                                                   \
-        struct headers_util_configurator_t *self = (void *)cmd->configurator;  \
-        return on_config_header_2arg(cmd, ctx, cmd_id, node, self->get_commands(self->child)); \
+#define DEFINE_2ARG(fn, cmd_id)                                                                                                    \
+    static int fn(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)                                  \
+    {                                                                                                                              \
+        struct headers_util_configurator_t *self = (void *)cmd->configurator;                                                      \
+        return on_config_header_2arg(cmd, ctx, cmd_id, node, self->get_commands(self->child));                                     \
     }
 
 DEFINE_2ARG(on_config_header_add, H2O_HEADERS_CMD_ADD)
@@ -110,15 +111,15 @@ DEFINE_2ARG(on_config_header_setifempty, H2O_HEADERS_CMD_SETIFEMPTY)
 #undef DEFINE_2ARG
 
 void h2o_configurator_define_headers_commands(h2o_globalconf_t *global_conf, h2o_configurator_t *conf, const char *prefix,
-                                             h2o_configurator_get_headers_commands_cb get_commands)
+                                              h2o_configurator_get_headers_commands_cb get_commands)
 {
     struct headers_util_configurator_t *c = (void *)h2o_configurator_create(global_conf, sizeof(*c));
     c->child = conf;
     c->get_commands = get_commands;
     size_t prefix_len = strlen(prefix);
 
-#define DEFINE_CMD_NAME(name, suffix)                                    \
-    char *name = h2o_strdup(NULL, prefix, prefix_len + sizeof(suffix) - 1).base;\
+#define DEFINE_CMD_NAME(name, suffix)                                                                                              \
+    char *name = h2o_strdup(NULL, prefix, prefix_len + sizeof(suffix) - 1).base;                                                   \
     memcpy(name + prefix_len, suffix, sizeof(suffix))
 
     DEFINE_CMD_NAME(add_directive, ".add");
@@ -129,7 +130,7 @@ void h2o_configurator_define_headers_commands(h2o_globalconf_t *global_conf, h2o
     DEFINE_CMD_NAME(unset_directive, ".unset");
 #undef DEFINE_CMD_NAME
 
-#define DEFINE_CMD(name, cb)                                            \
+#define DEFINE_CMD(name, cb)                                                                                                       \
     h2o_configurator_define_command(&c->super, name, H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, cb)
     DEFINE_CMD(add_directive, on_config_header_add);
     DEFINE_CMD(append_directive, on_config_header_append);

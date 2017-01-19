@@ -1819,7 +1819,7 @@ void h2o_duration_stats_register(h2o_globalconf_t *conf);
  * registers the configurator
  */
 void h2o_status_register_configurator(h2o_globalconf_t *conf);
-    
+
 /* lib/handler/headers_util.c */
 
 /**
