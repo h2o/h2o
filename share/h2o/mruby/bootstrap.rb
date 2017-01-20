@@ -38,24 +38,23 @@ module H2O
 
     cached = nil
     runner = Proc.new do |args|
-      req, generator = *args
-      fiber = cached || Fiber.new do |req|
+      fiber = cached || Fiber.new do |req, generator|
         self_fiber = Fiber.current
         while 1
           begin
             while 1
               resp = app.call(req)
               cached = self_fiber
-              req = Fiber.yield(*resp, generator)
+              (req, generator) = Fiber.yield(*resp, generator)
             end
           rescue => e
             cached = self_fiber
-            req = Fiber.yield([-1, e, generator])
+            (req, generator) = Fiber.yield([-1, e, generator])
           end
         end
       end
       cached = nil
-      fiber.resume(req)
+      fiber.resume(*args)
     end
 
     configurer = Proc.new do

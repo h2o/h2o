@@ -747,7 +747,6 @@ void h2o_mruby_run_fiber(h2o_mruby_shared_context_t *shared_ctx, mrb_value recei
     mrb_value output;
     mrb_int status;
     h2o_mruby_generator_t *generator = NULL;
-    mrb_value args;
 
     while (1) {
         /* send input to fiber */
@@ -771,15 +770,15 @@ void h2o_mruby_run_fiber(h2o_mruby_shared_context_t *shared_ctx, mrb_value recei
         switch (status) {
         case H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED:
             mrb->exc = mrb_obj_ptr(mrb_ary_entry(output, 1));
+            generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(output, 2));
             goto GotException;
         case H2O_MRUBY_CALLBACK_ID_CONFIGURING_APP:
         case H2O_MRUBY_CALLBACK_ID_CONFIGURED_APP:
             return;
-        default:
-            receiver = mrb_ary_entry(output, 1);
-            args = mrb_ary_entry(output, 2);
-            break;
         }
+
+        receiver = mrb_ary_entry(output, 1);
+        mrb_value args = mrb_ary_entry(output, 2);
 
         if (mrb_array_p(args)) {
             int run_again = 0;
