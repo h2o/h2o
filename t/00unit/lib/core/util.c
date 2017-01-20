@@ -214,14 +214,6 @@ static void test_extract_push_path_from_link_header(void)
     ok(paths.size == 0);
     ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
 
-    value = h2o_iovec_init(H2O_STRLIT("</firstpath>; rel=preload; x-http2-push-only, bar"));
-    paths = h2o_extract_push_path_from_link_header(&pool, value.base, value.len, INPUT, &H2O_URL_SCHEME_HTTP, &input_authority,
-                                                   &filtered_value);
-    ok(paths.size == 1);
-    path = paths.entries[0];
-    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/firstpath")));
-    ok(h2o_memis(H2O_STRLIT("bar"), filtered_value.base, filtered_value.len));
-
     h2o_mem_clear_pool(&pool);
 #undef INPUT
 }
@@ -314,6 +306,14 @@ static void test_extract_push_path_from_link_header_push_only(void)
                                                    &filtered_value);
     ok(paths.size == 0);
     ok(h2o_memis(value.base, value.len, filtered_value.base, filtered_value.len));
+
+    value = h2o_iovec_init(H2O_STRLIT("</firstpath>; rel=preload; x-http2-push-only, bar"));
+    paths = h2o_extract_push_path_from_link_header(&pool, value.base, value.len, INPUT, &H2O_URL_SCHEME_HTTP, &input_authority,
+                                                   &filtered_value);
+    ok(paths.size == 1);
+    path = paths.entries[0];
+    ok(h2o_memis(path.base, path.len, H2O_STRLIT("/firstpath")));
+    ok(h2o_memis(H2O_STRLIT("bar"), filtered_value.base, filtered_value.len));
 
     h2o_mem_clear_pool(&pool);
 }
