@@ -275,6 +275,11 @@ static void h2o_vector__erase(h2o_vector_t *vector, size_t element_size, size_t 
 static int h2o_memis(const void *target, size_t target_len, const void *test, size_t test_len);
 
 /**
+ * variant of memchr that searches the string from tail
+ */
+static void *h2o_memrchr(const void *s, int c, size_t n);
+
+/**
  * secure memset
  */
 static void *h2o_mem_set_secure(void *b, int c, size_t len);
@@ -393,6 +398,18 @@ inline int h2o_memis(const void *_target, size_t target_len, const void *_test, 
     if (target[0] != test[0])
         return 0;
     return memcmp(target + 1, test + 1, test_len - 1) == 0;
+}
+
+inline void *h2o_memrchr(const void *s, int c, size_t n)
+{
+    if (n != 0) {
+        const char *p = (const char *)s + n;
+        do {
+            if (*--p == c)
+                return (void *)p;
+        } while (p != s);
+    }
+    return NULL;
 }
 
 inline void *h2o_mem_set_secure(void *b, int c, size_t len)

@@ -356,20 +356,20 @@ Unknown:
     return 15;
 }
 
-static void push_one_path(h2o_mem_pool_t *pool, h2o_iovec_vector_t *paths_to_push, h2o_iovec_t *url, h2o_iovec_t base_path,
+static void push_one_path(h2o_mem_pool_t *pool, h2o_iovec_vector_t *paths_to_push, h2o_iovec_t url, h2o_iovec_t base_path,
                           const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority, const h2o_url_scheme_t *base_scheme,
                           h2o_iovec_t *base_authority)
 {
     h2o_url_t parsed, resolved;
 
     /* check the authority, and extract absolute path */
-    if (h2o_url_parse_relative(url->base, url->len, &parsed) != 0)
+    if (h2o_url_parse_relative(url.base, url.len, &parsed) != 0)
         return;
 
     /* fast-path for abspath form */
-    if (base_scheme == NULL && parsed.scheme == NULL && parsed.authority.base == NULL && url->len != 0 && url->base[0] == '/') {
+    if (base_scheme == NULL && parsed.scheme == NULL && parsed.authority.base == NULL && url.len != 0 && url.base[0] == '/') {
         h2o_vector_reserve(pool, paths_to_push, paths_to_push->size + 1);
-        paths_to_push->entries[paths_to_push->size++] = h2o_strdup(pool, url->base, url->len);
+        paths_to_push->entries[paths_to_push->size++] = h2o_strdup(pool, url.base, url.len);
         return;
     }
 
@@ -392,12 +392,23 @@ static void push_one_path(h2o_mem_pool_t *pool, h2o_iovec_vector_t *paths_to_pus
 h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
                                                           h2o_iovec_t base_path, const h2o_url_scheme_t *input_scheme,
                                                           h2o_iovec_t input_authority, const h2o_url_scheme_t *base_scheme,
-                                                          h2o_iovec_t *base_authority)
+                                                          h2o_iovec_t *base_authority, h2o_iovec_t *filtered_value)
 {
     h2o_iovec_vector_t paths_to_push = {NULL};
     h2o_iovec_t iter = h2o_iovec_init(value, value_len), token_value;
     const char *token;
     size_t token_len;
+    *filtered_value = h2o_iovec_init(NULL, 0);
+
+#define PUSH_FILTERED_VALUE(s, e)                                                                                                  \
+    do {                                                                                                                           \
+        if (filtered_value->len != 0) {                                                                                            \
+            memcpy(filtered_value->base + filtered_value->len, ", ", 2);                                                           \
+            filtered_value->len += 2;                                                                                              \
+        }                                                                                                                          \
+        memcpy(filtered_value->base + filtered_value->len, (s), (e) - (s));                                                        \
+        filtered_value->len += (e) - (s);                                                                                          \
+    } while (0)
 
     /* extract URL values from Link: </pushed.css>; rel=preload */
     do {
@@ -406,9 +417,9 @@ h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, 
         /* first element should be <URL> */
         if (!(token_len >= 2 && token[0] == '<' && token[token_len - 1] == '>'))
             break;
-        h2o_iovec_t url = h2o_iovec_init(token + 1, token_len - 2);
+        h2o_iovec_t url_with_brackets = h2o_iovec_init(token, token_len);
         /* find rel=preload */
-        int preload = 0, nopush = 0;
+        int preload = 0, nopush = 0, push_only = 0;
         while ((token = h2o_next_token(&iter, ';', &token_len, &token_value)) != NULL &&
                !h2o_memis(token, token_len, H2O_STRLIT(","))) {
             if (h2o_lcstris(token, token_len, H2O_STRLIT("rel")) &&
@@ -416,13 +427,38 @@ h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, 
                 preload++;
             } else if (h2o_lcstris(token, token_len, H2O_STRLIT("nopush"))) {
                 nopush++;
+            } else if (h2o_lcstris(token, token_len, H2O_STRLIT("x-http2-push-only"))) {
+                push_only++;
             }
         }
+        /* push the path */
         if (!nopush && preload)
-            push_one_path(pool, &paths_to_push, &url, base_path, input_scheme, input_authority, base_scheme, base_authority);
+            push_one_path(pool, &paths_to_push, h2o_iovec_init(url_with_brackets.base + 1, url_with_brackets.len - 2), base_path,
+                          input_scheme, input_authority, base_scheme, base_authority);
+        /* store the elements that needs to be preserved to filtered_value */
+        if (push_only) {
+            if (filtered_value->base == NULL) {
+                /* the max. size of filtered_value would be x2 in the worst case, when "," is converted to ", " */
+                filtered_value->base = h2o_mem_alloc_pool(pool, value_len * 2);
+                const char *prev_comma = h2o_memrchr(value, ',', url_with_brackets.base - value);
+                if (prev_comma != NULL)
+                    PUSH_FILTERED_VALUE(value, prev_comma);
+            }
+        } else if (filtered_value->base != NULL) {
+            PUSH_FILTERED_VALUE(url_with_brackets.base, token != NULL ? token : value + value_len);
+        }
     } while (token != NULL);
 
+    if (filtered_value->base != NULL) {
+        if (token != NULL)
+            PUSH_FILTERED_VALUE(token, value + value_len);
+    } else {
+        *filtered_value = h2o_iovec_init(value, value_len);
+    }
+
     return paths_to_push;
+
+#undef PUSH_FILTERED_VALUE
 }
 
 int h2o_get_compressible_types(const h2o_headers_t *headers)
