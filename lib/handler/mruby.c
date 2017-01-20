@@ -747,12 +747,7 @@ void h2o_mruby_run_fiber(h2o_mruby_shared_context_t *shared_ctx, mrb_value recei
     mrb_value output;
     mrb_int status;
     h2o_mruby_generator_t *generator = NULL;
-
-    // FIXME: do what?
-//    if (!mrb_obj_eq(mrb, ctx->proc, receiver)) {
-//        mrb_gc_unregister(mrb, receiver);
-//        mrb_gc_protect(mrb, receiver);
-//    }
+    mrb_value args;
 
     while (1) {
         /* send input to fiber */
@@ -768,52 +763,47 @@ void h2o_mruby_run_fiber(h2o_mruby_shared_context_t *shared_ctx, mrb_value recei
         if (mrb->exc != NULL)
             goto GotException;
         status = mrb_fixnum(v);
-        /* take special action depending on the status code */
-        if (status < 0) {
-            if (status == H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED) {
-                mrb->exc = mrb_obj_ptr(mrb_ary_entry(output, 1));
-                goto GotException;
-            } else if (status == H2O_MRUBY_CALLBACK_ID_CONFIGURING_APP) {
-                return;
-            } else if (status == H2O_MRUBY_CALLBACK_ID_CONFIGURED_APP) {
-                return;
-            }
 
+        /* if no special actions were necessary, then the output is a rack response */
+        if (status >= 0) break;
+
+        /* take special action depending on the status code */
+        switch (status) {
+        case H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED:
+            mrb->exc = mrb_obj_ptr(mrb_ary_entry(output, 1));
+            goto GotException;
+        case H2O_MRUBY_CALLBACK_ID_CONFIGURING_APP:
+        case H2O_MRUBY_CALLBACK_ID_CONFIGURED_APP:
+            return;
+        default:
             receiver = mrb_ary_entry(output, 1);
-            int next_action = H2O_MRUBY_CALLBACK_NEXT_ACTION_IMMEDIATE;
-            mrb_value args = mrb_ary_entry(output, 2);
-            if (mrb_array_p(args)) {
-                switch (status) {
-                case H2O_MRUBY_CALLBACK_ID_SEND_CHUNKED_EOS:
-                    input = h2o_mruby_send_chunked_eos_callback(shared_ctx, receiver, args, &next_action);
-                    break;
-                case H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE:
-                    input = h2o_mruby_http_join_response_callback(shared_ctx, receiver, args, &next_action);
-                    break;
-                case H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK:
-                    input = h2o_mruby_http_fetch_chunk_callback(shared_ctx, receiver, args, &next_action);
-                    break;
-                default:
-                    input = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpected callback id sent from rack app");
-                    break;
-                }
-            } else {
-                input = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "callback from rack app did not receive an array arg");
-            }
-            switch (next_action) {
-            case H2O_MRUBY_CALLBACK_NEXT_ACTION_STOP:
-                return;
-            case H2O_MRUBY_CALLBACK_NEXT_ACTION_ASYNC:
-                goto Async;
+            args = mrb_ary_entry(output, 2);
+            break;
+        }
+
+        if (mrb_array_p(args)) {
+            int run_again = 0;
+            switch (status) {
+            case H2O_MRUBY_CALLBACK_ID_SEND_CHUNKED_EOS:
+                input = h2o_mruby_send_chunked_eos_callback(shared_ctx, receiver, args, &run_again);
+                break;
+            case H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE:
+                input = h2o_mruby_http_join_response_callback(shared_ctx, receiver, args, &run_again);
+                break;
+            case H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK:
+                input = h2o_mruby_http_fetch_chunk_callback(shared_ctx, receiver, args, &run_again);
+                break;
             default:
-                assert(next_action == H2O_MRUBY_CALLBACK_NEXT_ACTION_IMMEDIATE);
+                input = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpected callback id sent from rack app");
+                run_again = 1;
                 break;
             }
-            goto Next;
+            if (run_again == 0) return;
+
+        } else {
+            input = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "callback from rack app did not receive an array arg");
         }
-        /* if no special actions were necessary, then the output is a rack response */
-        break;
-    Next:
+
         mrb_gc_protect(mrb, receiver);
         mrb_gc_protect(mrb, input);
     }
@@ -840,7 +830,6 @@ void h2o_mruby_run_fiber(h2o_mruby_shared_context_t *shared_ctx, mrb_value recei
     return;
 
 GotException:
-
     if (generator == NULL) {
         /* exception raised in configuration phase */
         fprintf(stderr, "unexpected ruby error %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
@@ -857,12 +846,6 @@ GotException:
         }
     }
 
-    return;
-
-Async:
-    // FIXME
-//    if (!mrb_obj_eq(mrb, generator->ctx->proc, receiver))
-//        mrb_gc_register(mrb, receiver);
     return;
 }
 

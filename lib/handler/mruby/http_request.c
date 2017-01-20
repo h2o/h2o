@@ -54,11 +54,20 @@ struct st_h2o_mruby_http_request_context_t {
 
 };
 
+static void attach_receiver(struct st_h2o_mruby_http_request_context_t *ctx, mrb_value receiver)
+{
+    assert(mrb_nil_p(ctx->receiver));
+    ctx->receiver = receiver;
+    mrb_gc_register(ctx->shared_ctx->mrb, receiver);
+}
+
 static mrb_value detach_receiver(struct st_h2o_mruby_http_request_context_t *ctx)
 {
     mrb_value ret = ctx->receiver;
     assert(!mrb_nil_p(ret));
     ctx->receiver = mrb_nil_value();
+    mrb_gc_unregister(ctx->shared_ctx->mrb, ret);
+    mrb_gc_protect(ctx->shared_ctx->mrb, ret);
     return ret;
 }
 
@@ -389,7 +398,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
 }
 
 mrb_value h2o_mruby_http_join_response_callback(h2o_mruby_shared_context_t *shared_ctx, mrb_value receiver, mrb_value args,
-                                                int *next_action)
+                                                int *run_again)
 {
     mrb_state *mrb = shared_ctx->mrb;
     struct st_h2o_mruby_http_request_context_t *ctx;
@@ -397,13 +406,12 @@ mrb_value h2o_mruby_http_join_response_callback(h2o_mruby_shared_context_t *shar
     if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &request_type)) == NULL)
         return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "HttpRequest#join wrong self");
 
-    ctx->receiver = receiver;
-    *next_action = H2O_MRUBY_CALLBACK_NEXT_ACTION_ASYNC;
+    attach_receiver(ctx, receiver);
     return mrb_nil_value();
 }
 
 mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_shared_context_t *shared_ctx, mrb_value receiver, mrb_value args,
-                                              int *next_action)
+                                              int *run_again)
 {
     mrb_state *mrb = shared_ctx->mrb;
     struct st_h2o_mruby_http_request_context_t *ctx;
@@ -414,9 +422,9 @@ mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_shared_context_t *shared
 
     if (ctx->resp.has_content) {
         ret = build_chunk(ctx);
+        *run_again = 1;
     } else {
-        ctx->receiver = receiver;
-        *next_action = H2O_MRUBY_CALLBACK_NEXT_ACTION_ASYNC;
+        attach_receiver(ctx, receiver);
         ret = mrb_nil_value();
     }
 

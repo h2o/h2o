@@ -117,8 +117,6 @@ typedef struct st_h2o_mruby_generator_t {
 #define H2O_MRUBY_CALLBACK_ID_CONFIGURING_APP -5
 #define H2O_MRUBY_CALLBACK_ID_CONFIGURED_APP -6
 
-enum { H2O_MRUBY_CALLBACK_NEXT_ACTION_STOP, H2O_MRUBY_CALLBACK_NEXT_ACTION_IMMEDIATE, H2O_MRUBY_CALLBACK_NEXT_ACTION_ASYNC };
-
 #define h2o_mruby_assert(mrb)                                                                                                      \
     if (mrb->exc != NULL)                                                                                                          \
     h2o_mruby__assert_failed(mrb, __FILE__, __LINE__)
