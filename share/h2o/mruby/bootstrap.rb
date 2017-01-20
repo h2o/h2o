@@ -28,4 +28,52 @@ module H2O
     end
   end
 
+  # TODO: embed in c code
+  def self.prepare_app(conf_proc)
+    pendings = []
+    app = Proc.new do |req|
+      pendings.push([Fiber.current, req])
+      Fiber.yield([-5])
+    end
+
+    cached = nil
+    runner = Proc.new do |args|
+      req, generator = *args
+      fiber = cached || Fiber.new do |req|
+        self_fiber = Fiber.current
+        while 1
+          begin
+            while 1
+              resp = app.call(req)
+              cached = self_fiber
+              req = Fiber.yield(*resp, generator)
+            end
+          rescue => e
+            cached = self_fiber
+            req = Fiber.yield([-1, e, generator])
+          end
+        end
+      end
+      cached = nil
+      fiber.resume(req)
+    end
+
+    configurer = Proc.new do
+      fiber = Fiber.new do
+        app = conf_proc.call
+        if !pendings.empty?
+          pendings.each do |pending|
+            # FIXME: this doesn't work!
+            pendings[0].resume(pendings[1])
+          end
+          pendings.clear
+        end
+        [-6]
+      end
+      fiber.resume
+    end
+
+    [runner, configurer]
+  end
+
 end

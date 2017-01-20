@@ -145,7 +145,7 @@ mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator, mrb_valu
     generator->super.proceed = do_proceed;
     generator->chunked = chunked;
 
-    if ((chunked->shortcut.client = h2o_mruby_http_set_shortcut(generator->ctx->shared->mrb, body, on_shortcut_notify)) != NULL) {
+    if ((chunked->shortcut.client = h2o_mruby_http_set_shortcut(generator->ctx->shared->mrb, body, on_shortcut_notify, generator)) != NULL) {
         chunked->type = H2O_MRUBY_CHUNKED_TYPE_SHORTCUT;
         chunked->shortcut.remaining = NULL;
         on_shortcut_notify(generator);
@@ -189,12 +189,14 @@ static mrb_value check_precond(mrb_state *mrb, h2o_mruby_generator_t *generator)
 
 static mrb_value send_chunked_method(mrb_state *mrb, mrb_value self)
 {
-    h2o_mruby_generator_t *generator = h2o_mruby_current_generator;
     const char *s;
     mrb_int len;
+    mrb_value gen;
 
     /* parse args */
-    mrb_get_args(mrb, "s", &s, &len);
+    mrb_get_args(mrb, "so", &s, &len, &gen);
+
+    h2o_mruby_generator_t *generator = h2o_mruby_get_generator(mrb, gen);
 
     { /* precond check */
         mrb_value exc = check_precond(mrb, generator);
@@ -222,10 +224,11 @@ static mrb_value send_chunked_method(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-mrb_value h2o_mruby_send_chunked_eos_callback(h2o_mruby_generator_t *generator, mrb_value receiver, mrb_value input,
+mrb_value h2o_mruby_send_chunked_eos_callback(h2o_mruby_shared_context_t *shared_ctx, mrb_value receiver, mrb_value args,
                                               int *next_action)
 {
-    mrb_state *mrb = generator->ctx->shared->mrb;
+    mrb_state *mrb = shared_ctx->mrb;
+    h2o_mruby_generator_t *generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(args, 0));
 
     { /* precond check */
         mrb_value exc = check_precond(mrb, generator);
