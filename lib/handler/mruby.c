@@ -832,8 +832,10 @@ void h2o_mruby_run_fiber(h2o_mruby_shared_context_t *shared_ctx, mrb_value recei
     }
 
     generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(output, 3));
-    if (generator == NULL)
+    if (generator == NULL) {
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "missing generator"));
         goto GotException;
+    }
 
     /* send the response (unless req is already closed) */
     if (generator->req == NULL)
@@ -846,20 +848,21 @@ void h2o_mruby_run_fiber(h2o_mruby_shared_context_t *shared_ctx, mrb_value recei
     return;
 
 GotException:
-    if (generator != NULL) {
-        if (generator->req != NULL) {
-            report_exception(generator->req, mrb);
-            if (generator->req->_generator == NULL) {
-                h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
-            } else {
-                h2o_mruby_send_chunked_close(generator);
-            }
+
+    if (generator == NULL) {
+        /* exception raised in configuration phase */
+        fprintf(stderr, "unexpected ruby error %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
+        mrb->exc = NULL;
+        return;
+    }
+
+    if (generator->req != NULL) {
+        report_exception(generator->req, mrb);
+        if (generator->req->_generator == NULL) {
+            h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
+        } else {
+            h2o_mruby_send_chunked_close(generator);
         }
-    } else {
-        mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
-        struct RString *error = mrb_str_ptr(obj);
-        fprintf(stderr, "unexpected ruby error %s", error->as.heap.ptr);
-        mrb->exc = NULL; // FIXME: how to handle this case?
     }
 
     return;

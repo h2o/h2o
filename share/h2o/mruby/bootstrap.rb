@@ -60,7 +60,15 @@ module H2O
 
     configurer = Proc.new do
       fiber = Fiber.new do
-        app = conf_proc.call
+        begin
+          app = conf_proc.call
+        rescue => e
+          app = Proc.new do |req|
+            [500, {}, ['Internal Server Error']]
+          end
+          raise e
+        end
+
         if !pendings.empty?
           pendings.each do |pending|
             # FIXME: this doesn't work!
