@@ -37,6 +37,7 @@ struct st_h2o_mruby_http_request_context_t {
         h2o_iovec_t body; /* body.base != NULL indicates that post content exists (and the length MAY be zero) */
         unsigned method_is_head : 1;
         unsigned has_transfer_encoding : 1;
+        h2o_iovec_t _bufs[2];
     } req;
     struct {
         h2o_buffer_t *after_closed; /* when client becomes NULL, rest of the data will be stored to this pointer */
@@ -53,29 +54,6 @@ struct st_h2o_mruby_http_request_context_t {
 
 };
 
-static void on_gc_dispose_request(mrb_state *mrb, void *_ctx)
-{
-    struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
-    if (ctx != NULL)
-        ctx->refs.request = mrb_nil_value();
-}
-
-const static struct mrb_data_type request_type = {"http_request", on_gc_dispose_request};
-
-static void on_gc_dispose_input_stream(mrb_state *mrb, void *_ctx)
-{
-    struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
-    if (ctx != NULL)
-        ctx->refs.input_stream = mrb_nil_value();
-}
-
-const static struct mrb_data_type input_stream_type = {"http_input_stream", on_gc_dispose_input_stream};
-
-static mrb_value create_downstream_closed_exception(mrb_state *mrb)
-{
-    return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "downstream HTTP closed");
-}
-
 static mrb_value detach_receiver(struct st_h2o_mruby_http_request_context_t *ctx)
 {
     mrb_value ret = ctx->receiver;
@@ -84,33 +62,42 @@ static mrb_value detach_receiver(struct st_h2o_mruby_http_request_context_t *ctx
     return ret;
 }
 
-// FIXME: who calls this?
-static void on_dispose(void *_ctx)
+static void dispose_context(h2o_mruby_http_request_context_t *ctx)
 {
-    struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
+    assert(mrb_nil_p(ctx->refs.request) && mrb_nil_p(ctx->refs.input_stream));
 
     /* clear the refs */
     if (ctx->client != NULL) {
         h2o_http1client_cancel(ctx->client);
         ctx->client = NULL;
     }
-    if (!mrb_nil_p(ctx->refs.request))
-        DATA_PTR(ctx->refs.request) = NULL;
-    if (!mrb_nil_p(ctx->refs.input_stream))
-        DATA_PTR(ctx->refs.input_stream) = NULL;
 
     /* clear bufs */
     h2o_buffer_dispose(&ctx->req.buf);
     h2o_buffer_dispose(&ctx->resp.after_closed);
 
-    /* notify the app, if it is waiting to hear from us */
-    if (!mrb_nil_p(ctx->receiver)) {
-        mrb_state *mrb = ctx->shared_ctx->mrb;
-        int gc_arena = mrb_gc_arena_save(mrb);
-        h2o_mruby_run_fiber(ctx->shared_ctx, detach_receiver(ctx), create_downstream_closed_exception(mrb), NULL);
-        mrb_gc_arena_restore(mrb, gc_arena);
-    }
+    free(ctx);
 }
+
+static void on_gc_dispose_request(mrb_state *mrb, void *_ctx)
+{
+    struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
+    if (ctx == NULL) return;
+    ctx->refs.request = mrb_nil_value();
+    if (mrb_nil_p(ctx->refs.input_stream)) dispose_context(ctx);
+}
+
+const static struct mrb_data_type request_type = {"http_request", on_gc_dispose_request};
+
+static void on_gc_dispose_input_stream(mrb_state *mrb, void *_ctx)
+{
+    struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
+    if (ctx == NULL) return;
+    ctx->refs.input_stream = mrb_nil_value();
+    if (mrb_nil_p(ctx->refs.request)) dispose_context(ctx);
+}
+
+const static struct mrb_data_type input_stream_type = {"http_input_stream", on_gc_dispose_input_stream};
 
 static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int status, const h2o_header_t *headers_sorted,
                           size_t num_headers)
@@ -274,13 +261,16 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
         return NULL;
     }
 
-    // FIXME: who frees this?
-    *reqbufs = h2o_mem_alloc(sizeof(**reqbufs) * 2);
-    **reqbufs = h2o_iovec_init(ctx->req.buf->bytes, ctx->req.buf->size);
-    *reqbufcnt = 1;
-    if (ctx->req.body.base != NULL)
-        (*reqbufs)[(*reqbufcnt)++] = ctx->req.body;
+    ctx->req._bufs[0] = h2o_iovec_init(ctx->req.buf->bytes, ctx->req.buf->size);
+    if (ctx->req.body.base != NULL) {
+        *reqbufcnt = 2;
+        ctx->req._bufs[1] = ctx->req.body;
+    } else {
+        *reqbufcnt = 1;
+    }
+    *reqbufs = ctx->req._bufs;
     *method_is_head = ctx->req.method_is_head;
+
     return on_head;
 }
 
@@ -326,7 +316,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     mrb_get_args(mrb, "s|H", &arg_url, &arg_url_len, &arg_hash);
 
     /* allocate context and initialize */
-    ctx = h2o_mem_alloc(sizeof(*ctx)); // FIXME: who frees this?
+    ctx = h2o_mem_alloc(sizeof(*ctx));
     memset(ctx, 0, sizeof(*ctx));
     ctx->shared_ctx = mrb->ud;
     ctx->receiver = mrb_nil_value();
