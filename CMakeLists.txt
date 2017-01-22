@@ -25,7 +25,7 @@ CMAKE_POLICY(SET CMP0003 NEW)
 PROJECT(h2o)
 
 SET(VERSION_MAJOR "2")
-SET(VERSION_MINOR "1")
+SET(VERSION_MINOR "2")
 SET(VERSION_PATCH "0")
 SET(VERSION_PRERELEASE "-DEV")
 SET(VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}${VERSION_PRERELEASE}")
@@ -248,6 +248,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/reproxy.c
     lib/handler/throttle_resp.c
     lib/handler/status.c
+    lib/handler/headers_util.c
     lib/handler/status/events.c
     lib/handler/status/requests.c
     lib/handler/http2_debug_state.c
@@ -265,6 +266,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/throttle_resp.c
     lib/handler/configurator/status.c
     lib/handler/configurator/http2_debug_state.c
+    lib/handler/configurator/headers_util.c
 
     lib/http1.c
 

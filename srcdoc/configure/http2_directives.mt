@@ -99,12 +99,15 @@ The downside is that obeying the requirement increases the interaction between t
 Starting from version 2.1, H2O provides directives that lets the users tune how the TCP/IP stack is used depending on the observed RTT, CWND, and the additional latency imposed by the interaction between the server and the OS.
 </p>
 <p>
-For TCP/IP connections with greater RTT and smaller CWND than the configured threshold (i.e. a long-distance TCP connection during slow start), the server will try to keep the size of HTTP/2 frames unsent as small as possible so that it can switch to sending a higher-priority response.
+For TCP/IP connections with greater RTT and smaller CWND than the configured threshold, the server will try to keep the size of HTTP/2 frames unsent as small as possible so that it can switch to sending a higher-priority response.
 Benchmarks suggest that users can expect in average 1 RTT reduction when this optimization is enabled.
 For connections that do not meet the criteria, the server will utilize the TCP/IP stack in ordinary ways.
 </p>
 <p>
-The optimization is supported only on Linux and OS X, the two operating systems that provide access to <code>TCP_INFO</code> and an interface to adjust the size of the unsent buffer (<code>TCP_NOTSENT_LOWAT</code>).
+The default values of the thresholds have been chosen that the optimization will come into action for mobile and long-distance networks but not when a proxy exists on the network.
+</p>
+<p>
+The optimization is supported only on Linux and OS X. The two are the operating systems that provide access to <code>TCP_INFO</code> and an interface to adjust the size of the unsent buffer (<code>TCP_NOTSENT_LOWAT</code>).
 </p>
 <p>
 Please refer to the documentation of the directives below to configure the optimization:
@@ -112,6 +115,12 @@ Please refer to the documentation of the directives below to configure the optim
 <li><a href="configure/http2_directives.html#http2-latency-optimization-min-rtt"><code>http2-latency-optimization-min-rtt</code></a></li>
 <li><a href="configure/http2_directives.html#http2-latency-optimization-max-additional-delay"><code>http2-latency-optimization-max-additional-delay</code></a></li>
 <li><a href="configure/http2_directives.html#http2-latency-optimization-max-cwnd"><code>http2-latency-optimization-max-cwnd</code></a></li>
+</ul>
+</p>
+<p>
+See also:
+<ul>
+<li><a href="http://www.slideshare.net/kazuho/reorganizing-website-architecture-for-http2-and-beyond">Reorganizing Website Architecture for HTTP/2 and Beyond</a> pp.14-21</li>
 </ul>
 </p>
 

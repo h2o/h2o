@@ -66,7 +66,7 @@ static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, 
         goto NoRewrite;
     if (loc_parsed.scheme != &H2O_URL_SCHEME_HTTP)
         goto NoRewrite;
-    if (!h2o_lcstris(loc_parsed.host.base, loc_parsed.host.len, match->host.base, match->host.len))
+    if (!h2o_url_hosts_are_equal(&loc_parsed, match))
         goto NoRewrite;
     if (h2o_url_get_port(&loc_parsed) != h2o_url_get_port(match))
         goto NoRewrite;
@@ -203,9 +203,24 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
         RESERVE(sizeof("content-length: " H2O_UINT64_LONGEST_STR) - 1);
         offset += sprintf(buf.base + offset, "content-length: %zu\r\n", req->entity.len);
     }
+
+    /* rewrite headers if necessary */
+    h2o_headers_t req_headers = req->headers;
+    if (req->overrides != NULL && req->overrides->headers_cmds != NULL) {
+        req_headers.entries = NULL;
+        req_headers.size = 0;
+        req_headers.capacity = 0;
+        h2o_headers_command_t *cmd;
+        h2o_vector_reserve(&req->pool, &req_headers, req->headers.capacity);
+        memcpy(req_headers.entries, req->headers.entries, sizeof(req->headers.entries[0]) * req->headers.size);
+        req_headers.size = req->headers.size;
+        for (cmd = req->overrides->headers_cmds; cmd->cmd != H2O_HEADERS_CMD_NULL; ++cmd)
+            h2o_rewrite_headers(&req->pool, &req_headers, cmd);
+    }
+
     {
         const h2o_header_t *h, *h_end;
-        for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h) {
+        for (h = req_headers.entries, h_end = h + req_headers.size; h != h_end; ++h) {
             if (h2o_iovec_is_token(h->name)) {
                 const h2o_token_t *token = (void *)h->name;
                 if (token->proxy_should_drop) {
@@ -431,7 +446,12 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 }
                 goto AddHeaderDuped;
             } else if (token == H2O_TOKEN_LINK) {
-                h2o_push_path_in_link_header(req, headers[i].value, headers[i].value_len);
+                h2o_iovec_t new_value;
+                new_value = h2o_push_path_in_link_header(req, headers[i].value, headers[i].value_len);
+                if (!new_value.len)
+                    goto Skip;
+                headers[i].value = new_value.base;
+                headers[i].value_len = new_value.len;
             } else if (token == H2O_TOKEN_X_COMPRESS_HINT) {
                 req->compress_hint = compress_hint_to_enum(headers[i].value, headers[i].value_len);
                 goto Skip;

@@ -31,6 +31,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <poll.h>
 #include <pthread.h>
 #include <pwd.h>
 #include <signal.h>
@@ -157,6 +158,7 @@ static struct {
         char _unused3_avoir_false_sharing[32];
     } state;
     char *crash_handler;
+    int crash_handler_wait_pipe_close;
 } conf = {
     {NULL},                                 /* globalconf */
     RUN_MODE_WORKER,                        /* dry-run */
@@ -174,6 +176,7 @@ static struct {
     0,                                      /* initialized_threads */
     {{0}},                                  /* state */
     "share/h2o/annotate-backtrace-symbols", /* crash_handler */
+    0,                                      /* crash_handler_wait_pipe_close */
 };
 
 static neverbleed_t *neverbleed = NULL;
@@ -1153,6 +1156,17 @@ static int on_config_crash_handler(h2o_configurator_command_t *cmd, h2o_configur
     return 0;
 }
 
+static int on_config_crash_handler_wait_pipe_close(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    ssize_t v;
+
+    if ((v = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+
+    conf.crash_handler_wait_pipe_close = (int)v;
+    return 0;
+}
+
 static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
 {
     FILE *fp;
@@ -1306,6 +1320,14 @@ static void on_sigfatal(int signo)
     void *frames[128];
     int framecnt = backtrace(frames, sizeof(frames) / sizeof(frames[0]));
     backtrace_symbols_fd(frames, framecnt, crash_handler_fd);
+
+    if (conf.crash_handler_wait_pipe_close) {
+        struct pollfd pfd[1];
+        pfd[0].fd = crash_handler_fd;
+        pfd[0].events = POLLERR | POLLHUP;
+        while (poll(pfd, 1, -1) == -1 && errno == EINTR)
+            ;
+    }
 
     raise(signo);
 }
@@ -1744,6 +1766,9 @@ static void setup_configurators(void)
                                         on_config_temp_buffer_path);
         h2o_configurator_define_command(c, "crash-handler", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_crash_handler);
+        h2o_configurator_define_command(c, "crash-handler.wait-pipe-close",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_crash_handler_wait_pipe_close);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);

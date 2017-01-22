@@ -899,6 +899,30 @@ standard input of the program.</p>
 <dd><code><pre>crash-handler: &quot;${H2O_ROOT}/share/h2o/annotate-backtrace-symbols&quot;</pre></code>
 </dl>
 
+<div id="crash-handler.wait-pipe-close" class="directive-head">
+<div class="directive-since">since v2.1</div>
+<h3><a href="configure/base_directives.html#crash-handler.wait-pipe-close"><code>"crash-handler.wait-pipe-close"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Whether <code>h2o</code> should wait for the crash handler pipe to close before exiting.
+</p>
+
+<p>When this setting is <code>ON</code>, <code>h2o</code> will wait
+for the pipe to the crash handler to be closed before exiting.
+This can be useful if you use a custom handler that inspects the dying
+process.</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>crash-handler.wait-pipe-close: OFF</pre></code>
+</dl>
+
 
 
 

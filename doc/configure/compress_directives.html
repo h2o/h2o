@@ -60,13 +60,14 @@ Compress Directives
 
 
 <p>
-The compress handler performs on-the-fly compression - it compresses the contents of an HTTP response as it is being sent, if all of the following conditions are met:
-<ul>
-<li>client indicates itself to be capable of decompressing the response transparently with the use of <a href="https://tools.ietf.org/html/rfc7231#section-5.3.4"><code>Accept-Encoding</code></a> header</li>
-<li>the response is deemed compressible (by checking the content-type, see <a href="configure/file_directives.html#file.mime.addtypes"><code>file.mime.addtypes</code></a>)</li>
-</ul>
-</ul>
+The compress handler performs on-the-fly compression - it compresses the contents of an HTTP response as it is being sent, if the client indicates itself to be capable of decompressing the response transparently with the use of <a href="https://tools.ietf.org/html/rfc7231#section-5.3.4"><code>Accept-Encoding</code></a> header</li>, and if the response is deemed compressible according to the following rules.
 </p>
+<p>
+If <code>x-compress-hint</code> response header does not exist or the value is <code>auto</code>, then whether if the response is considered compressible depends on the <code>is_compressible</code> attribute assigned to the content type (see <a href="configure/file_directives.html#file.mime.addtypes"><code>file.mime.addtypes</code></a>).
+If <code>x-compress-hint</code> response header exists and the value is <code>on</code>, the response is always considered to be compressible.
+If the value of the response header is set to <code>off</code>, then the response never gets compressed.
+</p>
+
 <p>
 The following are the  configuration directives recognized by the handler.
 </p>
