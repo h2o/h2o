@@ -1,0 +1,23 @@
+GET /reproxy-test/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key: aGET /indGET /index.on: Upgrade, HTTP2-Settings
+upgrade: h2c
+ettings: AAMAAABkAAQAAP__
+ttp2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key: aGET /indGET /index.on: Upgrade, HTTP2-Settings
+upgrade: h2c
+ettings: AAMAAABkAAQAAP__
+accept: */*
+user-agent: nghttp2/1:schem
+
+
+--MARK--
+PRI *ex.tx *ex.txt HTTP 

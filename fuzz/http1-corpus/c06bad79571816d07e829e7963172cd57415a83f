@@ -1,0 +1,29 @@
+GET / HTTP/1.1
+host:host.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.: 127.0rep.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿ49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.%%%%%%%%%%%%/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/7.49'.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+H-A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0./1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿ'ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ:ÿÿÿÿÿÿÿÿÿÿ */*
+
+
+--MARKÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ:schemÿÿÿÿÿÿÿÿ */*
+
+
+--MARK--

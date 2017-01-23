@@ -1,0 +1,6 @@
+GET /halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range: bytes=100-99Accept: */*
+
+
+--MARK--

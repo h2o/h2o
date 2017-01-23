@@ -1,0 +1,7 @@
+GET / HTTP/1.1
+Hts :o127.0.0.1:51302
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+
+
+--MARK--

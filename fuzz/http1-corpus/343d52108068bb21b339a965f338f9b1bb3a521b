@@ -1,0 +1,29 @@
+POST/chunked-test / HTTP/1.1
+Host: curl/7.ÿÿÿÿÿÿÿÿ
+Accept: */*
+Te:`applurl/7.ÿÿÿÿÿÿÿÿ
+Accept:' */*
+Te:`applicationhunked-test / HTTP/1.1
+Host: curl/7.ÿÿÿÿÿÿÿÿ
+Accept: */*
+Te:`applurl/7.ÿÿÿÿÿÿÿÿ
+Accept:' */*PRI * HTTP/2.0
+
+SM
+
+form-urlencoded
+
+a:
+helication/x-www-form-urlencoded
+
+/x-www-form-urlencoded
+
+a:
+helication/x-www-form-urlencoded
+
+a:
+helloworld
+1
+
+
+--MARK--

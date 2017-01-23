@@ -1,0 +1,28 @@
+GET /index.txt HTTP/1.1
+host: 127.0.0.1:50583
+connection: Upgrade, HTTP2-Settings
+u27.0.0.1:50583
+connection: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-sent-Type: appluser-nnection: Upgrade, HTTP2-Settinpgrade: h2c
+http2-sent-Type: appluser-nnection: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-sent-Type: appluser-agent: nghttp2/1.16.1
+
+tion/x-www-form-urlencodeÿÿ
+
+0
+hello
+0
+
+
+--Magent: nghttp2/1.16.1
+
+tion/x-www-form-urlencodeÿÿ
+
+0
+hello
+0
+
+
+--MARK--

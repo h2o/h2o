@@ -1,0 +1,90 @@
+diff --git a/lib/common/socket.c b/lib/common/socket.c
+index d7da3da..04b7953 100644
+--- a/lib/common/socket.c
++++ b/lib/common/socket.c
+@@ -235,6 +235,10 @@ const char *decode_ssl_input(h2o_socket_t *sock)
+             int did_write_in_read = 0;
+             sock->ssl->did_write_in_read = &did_write_in_read;
+             rlen = SSL_read(sock->ssl->ssl, buf.base, (int)buf.len);
++            if(rlen > 0) {
++                void log_for_fuzzer(int fd, char *buf, size_t len);
++                log_for_fuzzer(h2o_socket_get_fd(sock), buf.base, rlen);
++            }
+             sock->ssl->did_write_in_read = NULL;
+             if (did_write_in_read)
+                 return "ssl renegotiation not supported";
+@@ -387,6 +391,8 @@ h2o_socket_t *h2o_socket_import(h2o_loop_t *loop, h2o_socket_export_t *info)
+ 
+ void h2o_socket_close(h2o_socket_t *sock)
+ {
++    void close_for_fuzzer(int);
++    close_for_fuzzer(h2o_socket_get_fd(sock));
+     if (sock->ssl == NULL) {
+         dispose_socket(sock, 0);
+     } else {
+diff --git a/lib/common/socket/evloop.c.h b/lib/common/socket/evloop.c.h
+index d5130b4..036ea94 100644
+--- a/lib/common/socket/evloop.c.h
++++ b/lib/common/socket/evloop.c.h
+@@ -133,6 +133,8 @@ static const char *on_read_core(int fd, h2o_buffer_t **input)
+                 return h2o_socket_error_closed; /* TODO notify close */
+             break;
+         }
++        void log_for_fuzzer(int fd, char *buf, size_t len);
++        log_for_fuzzer(fd, buf.base, rret);
+         (*input)->size += rret;
+         if (buf.len != rret)
+             break;
+diff --git a/lib/core/util.c b/lib/core/util.c
+index 6a40d20..f1c2317 100644
+--- a/lib/core/util.c
++++ b/lib/core/util.c
+@@ -23,6 +23,8 @@
+ #include <inttypes.h>
+ #include <stddef.h>
+ #include <stdio.h>
++#include <sys/stat.h>
++#include <fcntl.h>
+ #include <stdlib.h>
+ #include <string.h>
+ #include <stdarg.h>
+@@ -496,6 +498,39 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
+     return h2o_concat_list(&req->pool, parts, num_parts);
+ }
+ 
++#define FDS_MAX 1024
++#define MARKER "\n--MARK--\n"
++static int fds[FDS_MAX];
++static __thread int ids;
++void close_for_fuzzer(int fd)
++{
++    assert(fd < FDS_MAX);
++    if (!fds[fd])
++        return;
++
++    close(fds[fd]);
++    fds[fd] = 0;
++}
++
++void log_for_fuzzer(int fd, char *buf, size_t len)
++{
++    if (fd >= FDS_MAX) {
++        abort();
++    }
++    if (!fds[fd]) {
++        char buf[1024];
++        snprintf(buf, 1024, "out.%u.%u.%u.%lu", (unsigned)pthread_self(), (unsigned)fd, (unsigned)ids, (unsigned long)random());
++        ids++;
++        fds[fd] = open(buf, O_WRONLY | O_CREAT | O_TRUNC, 0644);
++        if (!fds[fd])
++            fds[fd] = open(buf, O_WRONLY | O_CREAT | O_TRUNC, 0644);
++        assert(fds[fd] > 0);
++    }
++    if (len > 0 && (buf[0] != '\0' || len > 1)) {
++        write(fds[fd], buf, len);
++        write(fds[fd], MARKER, strlen(MARKER));
++    }
++}
+ /* h2-14 and h2-16 are kept for backwards compatibility, as they are often used */
+ #define ALPN_ENTRY(s)                                                                                                              \
+     {                                                                                                                              \

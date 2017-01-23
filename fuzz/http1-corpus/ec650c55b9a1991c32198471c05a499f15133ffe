@@ -1,0 +1,7 @@
+G:schemesp:status=200&resp:x-reproxy-url=http://%5Bunix%3A%2Ftmp%2F5qCsq5NZ_J€ ªÃ?resp:status=302%26resp:location=https://default/files/index.txt HTTP/1.1
+Host: 127.0.0.1:51458
+User-Agent: curl/4.69.0-DEV
+Accx-rept: */*
+
+
+--MARK--

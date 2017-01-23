@@ -1,0 +1,444 @@
+G:schemÿÿET /chunked-test/halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAˆˆˆAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrhttp2/1.16oneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /chunked-test HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http3-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTPs
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrkade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAˆˆˆAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /chunked-test HTTP/1.1
+host: 127.0®0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http3-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: '/*
+user-agent: nghttp2/1.16oneotincn: Upgrda,H eTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrde, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAˆˆˆAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /chunked-test HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http3-settings: AAMAAABkrrrrrrr;rrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrTPs
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAˆˆˆAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /chunked-test HTTP/1.1
+host: 127.0®0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http3-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: '/*
+user-agent: nghttp2/1.16oneotincn: Upgrda,H eTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrde, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAˆˆˆAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /chunked-test HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http3-settings: AAMAAABkrrrrrrr;rrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: '/*
+user-agent: nghttp2/1.16oneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrraccept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /chunked-test HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http3-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrr1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: '/*
+user-agent: nghttp2/1.16oneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-setti*ngs: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /chunked-test HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http3-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgraÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿde, HTTPs
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAˆˆˆAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /chunked-test HTTP/1.1
+host: 127.0®0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http3-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: '/*
+user-agent: nghttp2/1.16oneotincn: Upgrda,H eTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrde, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAˆˆˆAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /chunked-test HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http3-settings: AAMAAABkrrrrr/*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTPs
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAˆˆˆAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__P__
+
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /chunked-test HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http3-settings: AAMAAABkrrrrrrr;rrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrTPs
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAˆˆˆAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /chunked-test HTTP/1.1
+host: 127.0®0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http3-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: '/*
+user-agent: nghttp2/1.16oneotincn: Upgrda,H eTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrde, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAˆˆˆAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /chunked-test HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http3-settings: AAMAAABkrrrrrrr;rrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: '/*
+user-agent: nghttp2/1.16oneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrraccept: */*
+user
+
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /chunked-test HTTP/1.1
+host: 127.0®0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http3-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrr:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http3-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, ;HTTPs
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAˆˆˆAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /chunked-test HTTP/1.1
+host: 127.0®0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http3-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: '/*
+user-agent: nghttp2/1.16oneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrqrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /chunked-test HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http3-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrralfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrr2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: '/*rrrrrrrAAQAAP__
+accept: '/*
+user-agent: nghttp2/1.16.1
+
+
+-rr:rrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: '/*
+user-agent: nghttp2/1.16.1
+
+
+--MARK-- * HTTP/2.0
+
+SM
+
+            d   ÿÿ                 8ÿú        d                 	                --MARK-- * HTTP/2.0
+
+SM
+
+            d   ÿÿ                 È          d                 	                    ngs: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAˆˆˆAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /chunked-test HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http3-settings: AAMAAABkrrrrrrr;rrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /hÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿalfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTPs
+upgrade: h2c
+http2-settings:../MAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAˆˆˆAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr   
+--MARK--
+       
+--MARK--
+         €         €          ÿ        ÿ
+--MARK--
+         €         €          ÿ        
+PRI * HTÿ
+--MARK--

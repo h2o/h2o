@@ -1,0 +1,18 @@
+GET /websocket/ HMARK--
+hello world 1
+
+--MARK--
+hello world 1
+
+--MARK--
+hello world 3
+
+--MARK--
+hello world 4
+
+--MARK-- world 9
+
+--MARK--
+hello world 10
+
+--MARK/--
