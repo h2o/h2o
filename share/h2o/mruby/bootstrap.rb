@@ -57,15 +57,18 @@ module H2O
 
     configurator = Proc.new do
       fiber = Fiber.new do
-        e = nil
         begin
           app = conf_proc.call
+          if !app.respond_to?(:call)
+            raise "app is not callable"
+          end
         rescue => e
           app = Proc.new do |req|
             [500, {}, ['Internal Server Error']]
           end
+          Fiber.yield([-1, e])
         end
-        [-6, e]
+        [-6]
       end
       fiber.resume
     end
