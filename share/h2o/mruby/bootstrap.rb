@@ -29,9 +29,12 @@ module H2O
   end
 
   # TODO: embed in c code
+  CALLBACK_ID_EXCEPTION_RAISED = -1
+  CALLBACK_ID_CONFIGURING_APP = -2
+  CALLBACK_ID_CONFIGURED_APP = -3
   def self.prepare_app(conf_proc)
     app = Proc.new do |req|
-      Fiber.yield([-5])
+      [CALLBACK_ID_CONFIGURING_APP, nil, nil]
     end
 
     cached = nil
@@ -47,7 +50,7 @@ module H2O
             end
           rescue => e
             cached = self_fiber
-            (req, generator) = Fiber.yield([-1, e, generator])
+            (req, generator) = Fiber.yield([CALLBACK_ID_EXCEPTION_RAISED, e, generator])
           end
         end
       end
@@ -66,9 +69,9 @@ module H2O
           app = Proc.new do |req|
             [500, {}, ['Internal Server Error']]
           end
-          Fiber.yield([-1, e])
+          Fiber.yield([CALLBACK_ID_EXCEPTION_RAISED, e])
         end
-        [-6]
+        [CALLBACK_ID_CONFIGURED_APP]
       end
       fiber.resume
     end
