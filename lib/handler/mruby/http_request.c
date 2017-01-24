@@ -374,7 +374,12 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     if (mrb_hash_p(arg_hash)) {
         mrb_value body = mrb_hash_get(mrb, arg_hash, mrb_symbol_value(ctx->shared_ctx->symbols.sym_body));
         if (!mrb_nil_p(body)) {
-            // FIXME: how to handlefastpath and who frees this?
+            if (!mrb_string_p(body)) {
+                body = mrb_funcall(mrb, body, "read", 0);
+                if (!mrb_string_p(body))
+                    mrb_raise(mrb, E_ARGUMENT_ERROR, "body.read did not return string");
+            }
+            // FIXME: how to handle fastpath and who frees this?
             ctx->req.body = h2o_strdup(NULL, RSTRING_PTR(body), RSTRING_LEN(body));
             if (!ctx->req.has_transfer_encoding) {
                 char buf[64];

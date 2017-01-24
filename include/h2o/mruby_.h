@@ -109,6 +109,9 @@ typedef struct st_h2o_mruby_generator_t {
     h2o_mruby_context_t *ctx;
     mrb_value rack_input;
     h2o_mruby_chunked_t *chunked;
+    struct {
+        mrb_value generator;
+    } refs;
 } h2o_mruby_generator_t;
 
 #define H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED -1 /* used to notify exception, does not execution to mruby code */

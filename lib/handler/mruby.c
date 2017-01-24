@@ -50,7 +50,15 @@ void h2o_mruby__assert_failed(mrb_state *mrb, const char *file, int line)
     abort();
 }
 
-const static struct mrb_data_type generator_type = {"generator", mrb_free};
+static void on_gc_dispose_generator(mrb_state *mrb, void *_generator)
+{
+    h2o_mruby_generator_t *generator = _generator;
+    if (generator == NULL) return;
+    generator->refs.generator = mrb_nil_value();
+}
+
+const static struct mrb_data_type generator_type = {"generator", on_gc_dispose_generator};
+
 h2o_mruby_generator_t *h2o_mruby_get_generator(mrb_state *mrb, mrb_value obj)
 {
     h2o_mruby_generator_t *generator = mrb_data_check_get_ptr(mrb, obj, &generator_type);
@@ -623,6 +631,9 @@ static void on_generator_dispose(void *_generator)
     clear_rack_input(generator);
     generator->req = NULL;
 
+    if (!mrb_nil_p(generator->refs.generator))
+        DATA_PTR(generator->refs.generator) = NULL;
+
     if (generator->chunked != NULL)
         h2o_mruby_send_chunked_dispose(generator);
 }
@@ -646,6 +657,8 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     mrb_value env = build_env(generator);
 
     mrb_value gen = h2o_mruby_create_data_instance(shared->mrb, mrb_ary_entry(shared->constants, H2O_MRUBY_GENERATOR_CLASS), generator, &generator_type);
+    generator->refs.generator = gen;
+
     mrb_value args = mrb_ary_new(shared->mrb);
     mrb_ary_set(shared->mrb, args, 0, env);
     mrb_ary_set(shared->mrb, args, 1, gen);
@@ -717,8 +730,12 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
     if (!mrb_nil_p(body)) {
         h2o_start_response(generator->req, &generator->super);
         mrb_value receiver = h2o_mruby_send_chunked_init(generator, body);
-        if (!mrb_nil_p(receiver))
-            h2o_mruby_run_fiber(generator->ctx->shared, receiver, body, 0);
+        if (!mrb_nil_p(receiver)) {
+            mrb_value input = mrb_ary_new_capa(mrb, 2);
+            mrb_ary_set(mrb, input, 0, body);
+            mrb_ary_set(mrb, input, 1, generator->refs.generator);
+            h2o_mruby_run_fiber(generator->ctx->shared, receiver, input, 0);
+        }
         return;
     }
 
