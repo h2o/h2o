@@ -32,9 +32,10 @@ module H2O
   CALLBACK_ID_EXCEPTION_RAISED = -1
   CALLBACK_ID_CONFIGURING_APP = -2
   CALLBACK_ID_CONFIGURED_APP = -3
-  def self.prepare_app(conf_proc)
+  def self.prepare_app(args)
+    conf_proc, context = *args
     app = Proc.new do |req|
-      [CALLBACK_ID_CONFIGURING_APP, nil, nil]
+      [CALLBACK_ID_CONFIGURING_APP, context]
     end
 
     cached = nil
@@ -65,13 +66,13 @@ module H2O
           if !app.respond_to?(:call)
             raise "app is not callable"
           end
+          [CALLBACK_ID_CONFIGURED_APP, context]
         rescue => e
           app = Proc.new do |req|
             [500, {}, ['Internal Server Error']]
           end
-          Fiber.yield([CALLBACK_ID_EXCEPTION_RAISED, e])
+          [CALLBACK_ID_EXCEPTION_RAISED, context, e]
         end
-        [CALLBACK_ID_CONFIGURED_APP]
       end
       fiber.resume
     end

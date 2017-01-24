@@ -50,6 +50,15 @@ void h2o_mruby__assert_failed(mrb_state *mrb, const char *file, int line)
     abort();
 }
 
+static void on_gc_dispose_context(mrb_state *mrb, void *_ctx)
+{
+    h2o_mruby_context_t *ctx = _ctx;
+    if (ctx == NULL) return;
+    ctx->refs.context = mrb_nil_value();
+}
+
+const static struct mrb_data_type context_type = {"context", on_gc_dispose_context};
+
 static void on_gc_dispose_generator(mrb_state *mrb, void *_generator)
 {
     h2o_mruby_generator_t *generator = _generator;
@@ -297,14 +306,15 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
     shared_ctx->symbols.sym_body = mrb_intern_lit(shared_ctx->mrb, "body");
     shared_ctx->symbols.sym_async = mrb_intern_lit(shared_ctx->mrb, "async");
 
-    shared_ctx->pendings = mrb_ary_new(shared_ctx->mrb);
-
     h2o_mruby_send_chunked_init_context(shared_ctx);
     h2o_mruby_http_request_init_context(shared_ctx);
 
     struct RClass *module = mrb_define_module(shared_ctx->mrb, "H2O");
     struct RClass *generator_klass = mrb_define_class_under(shared_ctx->mrb, module, "Generator", shared_ctx->mrb->object_class);
     mrb_ary_set(shared_ctx->mrb, shared_ctx->constants, H2O_MRUBY_GENERATOR_CLASS, mrb_obj_value(generator_klass));
+
+    struct RClass *context_klass = mrb_define_class_under(shared_ctx->mrb, module, "Context", shared_ctx->mrb->object_class);
+    mrb_ary_set(shared_ctx->mrb, shared_ctx->constants, H2O_MRUBY_CONTEXT_CLASS, mrb_obj_value(context_klass));
 
     return shared_ctx;
 }
@@ -344,8 +354,11 @@ mrb_value generate_handler_proc(h2o_mruby_context_t *ctx)
     if (mrb->exc != NULL)
         return mrb_nil_value();
 
+    mrb_value args = mrb_ary_new_capa(mrb, 2);
+    mrb_ary_set(mrb, args, 0, proc);
+    mrb_ary_set(mrb, args, 1, ctx->refs.context);
     mrb_value result =
-        mrb_funcall_argv(mrb, mrb_obj_value(mrb_module_get(mrb, "H2O")), mrb_intern_lit(mrb, "prepare_app"), 1, &proc);
+        mrb_funcall_argv(mrb, mrb_obj_value(mrb_module_get(mrb, "H2O")), mrb_intern_lit(mrb, "prepare_app"), 1, &args);
     // FIXME: embed prepare_app code in H2O_MRUBY_PROC_APP_TO_FIBER later
     // mrb_value result = mrb_funcall_argv(mrb, mrb_ary_entry(ctx->shared->constants, H2O_MRUBY_PROC_APP_TO_FIBER), ctx->shared->symbols.sym_call, 1, &proc);
     assert(mrb_array_p(result));
@@ -378,9 +391,11 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
 
     mrb_state *mrb = handler_ctx->shared->mrb;
 
+    handler_ctx->refs.context = h2o_mruby_create_data_instance(mrb, mrb_ary_entry(handler_ctx->shared->constants, H2O_MRUBY_CONTEXT_CLASS), handler_ctx, &context_type);
+    handler_ctx->pendings = mrb_ary_new(mrb);
+
     /* compile code (must be done for each thread) */
     int arena = mrb_gc_arena_save(mrb);
-
 
     handler_ctx->proc = generate_handler_proc(handler_ctx);
     if (mrb->exc != NULL) {
@@ -404,6 +419,9 @@ static void on_context_dispose(h2o_handler_t *_handler, h2o_context_t *ctx)
 
     if (handler_ctx == NULL)
         return;
+
+    if (!mrb_nil_p(handler_ctx->refs.context))
+        DATA_PTR(handler_ctx->refs.context) = NULL;
 
     free(handler_ctx);
 }
@@ -754,6 +772,15 @@ GotException:
 }
 
 
+static h2o_mruby_context_t *get_context_from_ref(mrb_state *mrb, mrb_value ref)
+{
+    h2o_mruby_context_t *ctx = mrb_data_check_get_ptr(mrb, ref, &context_type);
+    if (ctx == NULL) {
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "missing context"));
+    }
+    return ctx;
+}
+
 void h2o_mruby_run_fiber(h2o_mruby_shared_context_t *shared_ctx, mrb_value receiver, mrb_value input, int *is_delegate)
 {
     mrb_state *mrb = shared_ctx->mrb;
@@ -785,24 +812,30 @@ void h2o_mruby_run_fiber(h2o_mruby_shared_context_t *shared_ctx, mrb_value recei
             generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(output, 2));
             goto GotException;
         } else if (status == H2O_MRUBY_CALLBACK_ID_CONFIGURING_APP) {
+            h2o_mruby_context_t *ctx = get_context_from_ref(mrb, mrb_ary_entry(output, 1));
+            if (ctx == NULL)
+                goto GotException;
             mrb_value pending = mrb_ary_new_capa(mrb, 2);
             mrb_ary_set(mrb, pending, 0, receiver);
             mrb_ary_set(mrb, pending, 1, input);
-            mrb_ary_push(mrb, shared_ctx->pendings, pending);
+            mrb_ary_push(mrb, ctx->pendings, pending);
             return;
         } else if (status == H2O_MRUBY_CALLBACK_ID_CONFIGURED_APP) {
-            mrb_int len = mrb_ary_len(mrb, shared_ctx->pendings);
-            for (size_t i = 0; i != len; ++i) {
-                mrb_value pending = mrb_ary_entry(shared_ctx->pendings, i);
+            h2o_mruby_context_t *ctx = get_context_from_ref(mrb, mrb_ary_entry(output, 1));
+            if (ctx == NULL)
+                goto GotException;
+            mrb_int len = mrb_ary_len(mrb, ctx->pendings);
+            for (mrb_int i = 0; i != len; ++i) {
+                mrb_value pending = mrb_ary_entry(ctx->pendings, i);
                 mrb_value resumer = mrb_ary_entry(pending, 0);
                 mrb_value args = mrb_ary_entry(pending, 1);
                 h2o_mruby_run_fiber(shared_ctx, resumer, args, NULL);
             }
-            mrb_ary_clear(mrb, shared_ctx->pendings);
+            ctx->pendings = mrb_nil_value();
 
-            mrb_value exc = mrb_ary_entry(output, 1);
+            mrb_value exc = mrb_ary_entry(output, 2);
             if (! mrb_nil_p(exc)) {
-                mrb->exc = mrb_obj_ptr(mrb_ary_entry(output, 1));
+                mrb->exc = mrb_obj_ptr(exc);
                 goto GotException;
             }
 

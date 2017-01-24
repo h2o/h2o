@@ -56,6 +56,7 @@ enum {
     H2O_MRUBY_PROC_EACH_TO_ARRAY,
     H2O_MRUBY_PROC_APP_TO_FIBER,
 
+    H2O_MRUBY_CONTEXT_CLASS,
     H2O_MRUBY_GENERATOR_CLASS,
 
     /* used by chunked.c */
@@ -91,13 +92,16 @@ typedef struct st_h2o_mruby_shared_context_t {
         mrb_sym sym_body;
         mrb_sym sym_async;
     } symbols;
-    mrb_value pendings;
 } h2o_mruby_shared_context_t;
 
 typedef struct st_h2o_mruby_context_t {
     h2o_mruby_handler_t *handler;
     mrb_value proc;
     h2o_mruby_shared_context_t *shared;
+    mrb_value pendings;
+    struct {
+        mrb_value context;
+    } refs;
 } h2o_mruby_context_t;
 
 typedef struct st_h2o_mruby_chunked_t h2o_mruby_chunked_t;
