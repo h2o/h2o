@@ -9,7 +9,13 @@ module H2O
     end
     def initialize()
       @values = {}
-      @post_handler_generation_hooks = []
+      @post_handler_generation_hooks = [
+        proc {|handler|
+          if !handler.respond_to?(:call)
+            raise "app is not callable"
+          end
+        }
+      ]
     end
     def get_value(key)
       @values[key]
@@ -62,16 +68,15 @@ module H2O
     configurator = Proc.new do
       fiber = Fiber.new do
         begin
+          ConfigurationContext.reset
           app = conf_proc.call
-          if !app.respond_to?(:call)
-            raise "app is not callable"
-          end
+          ConfigurationContext.instance.call_post_handler_generation_hooks(app)
           [CALLBACK_ID_CONFIGURED_APP, context]
         rescue => e
           app = Proc.new do |req|
             [500, {}, ['Internal Server Error']]
           end
-          [CALLBACK_ID_EXCEPTION_RAISED, context, e]
+          [CALLBACK_ID_CONFIGURED_APP, context, e]
         end
       end
       fiber.resume

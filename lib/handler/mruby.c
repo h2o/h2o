@@ -345,10 +345,6 @@ mrb_value generate_handler_proc(h2o_mruby_context_t *ctx)
 
     struct RProc *compiled = h2o_mruby_compile_code(mrb, &ctx->handler->config, NULL);
 
-    /* reset configuration context */
-    h2o_mruby_eval_expr(mrb, "H2O::ConfigurationContext.reset");
-    h2o_mruby_assert(mrb);
-
     /* run code and generate handler */
     mrb_value proc = mrb_run(mrb, compiled, mrb_top_self(mrb));
     if (mrb->exc != NULL)
@@ -371,12 +367,6 @@ mrb_value generate_handler_proc(h2o_mruby_context_t *ctx)
 
     // run configurator
     h2o_mruby_run_fiber(ctx->shared, configurator, mrb_nil_value(), NULL);
-
-    /* call post_handler_generation hooks */
-    mrb_funcall_argv(mrb, h2o_mruby_eval_expr(mrb, "H2O::ConfigurationContext.instance"),
-                     mrb_intern_lit(mrb, "call_post_handler_generation_hooks"), 1, &result);
-    if (mrb->exc != NULL)
-        return mrb_nil_value();
 
     return runner;
 }
@@ -403,6 +393,7 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
         fprintf(stderr, "mruby raised: %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
         mrb->exc = NULL;
         return;
+
     }
 
     h2o_mruby_assert(handler_ctx->shared->mrb);
@@ -771,7 +762,6 @@ GotException:
     h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
 }
 
-
 static h2o_mruby_context_t *get_context_from_ref(mrb_state *mrb, mrb_value ref)
 {
     h2o_mruby_context_t *ctx = mrb_data_check_get_ptr(mrb, ref, &context_type);
@@ -897,7 +887,7 @@ void h2o_mruby_run_fiber(h2o_mruby_shared_context_t *shared_ctx, mrb_value recei
 GotException:
     if (generator == NULL) {
         /* exception raised in configuration phase */
-        fprintf(stderr, "unexpected ruby error %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
+        fprintf(stderr, "mruby raised in configuration phase: %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
         mrb->exc = NULL;
         return;
     }
