@@ -353,17 +353,11 @@ mrb_value generate_handler_proc(h2o_mruby_context_t *ctx)
     if (mrb->exc != NULL)
         return mrb_nil_value();
 
-    // TODO: check configurer?
-    if (mrb_nil_p(result)) {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "returned value is not callable"));
-        return mrb_nil_value();
-    }
-
     mrb_value runner = mrb_ary_entry(result, 0);
-    mrb_value configurer = mrb_ary_entry(result, 1);
+    mrb_value configurator = mrb_ary_entry(result, 1);
 
-    // run configurer
-    h2o_mruby_run_fiber(ctx->shared, configurer, mrb_nil_value(), NULL);
+    // run configurator
+    h2o_mruby_run_fiber(ctx->shared, configurator, mrb_nil_value(), NULL);
 
     /* call post_handler_generation hooks */
     mrb_funcall_argv(mrb, h2o_mruby_eval_expr(mrb, "H2O::ConfigurationContext.instance"),

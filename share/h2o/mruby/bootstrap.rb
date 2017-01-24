@@ -55,7 +55,7 @@ module H2O
       fiber.resume(*args)
     end
 
-    configurer = Proc.new do
+    configurator = Proc.new do
       fiber = Fiber.new do
         e = nil
         begin
@@ -70,7 +70,7 @@ module H2O
       fiber.resume
     end
 
-    [runner, configurer]
+    [runner, configurator]
   end
 
 end
