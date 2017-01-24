@@ -91,6 +91,7 @@ typedef struct st_h2o_mruby_shared_context_t {
         mrb_sym sym_body;
         mrb_sym sym_async;
     } symbols;
+    mrb_value pendings;
 } h2o_mruby_shared_context_t;
 
 typedef struct st_h2o_mruby_context_t {

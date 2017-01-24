@@ -30,9 +30,7 @@ module H2O
 
   # TODO: embed in c code
   def self.prepare_app(conf_proc)
-    pendings = []
     app = Proc.new do |req|
-      pendings.push([Fiber.current, req])
       Fiber.yield([-5])
     end
 
@@ -59,23 +57,15 @@ module H2O
 
     configurer = Proc.new do
       fiber = Fiber.new do
+        e = nil
         begin
           app = conf_proc.call
         rescue => e
           app = Proc.new do |req|
             [500, {}, ['Internal Server Error']]
           end
-          raise e
         end
-
-        if !pendings.empty?
-          pendings.each do |pending|
-            # FIXME: this doesn't work!
-            pendings[0].resume(pendings[1])
-          end
-          pendings.clear
-        end
-        [-6]
+        [-6, e]
       end
       fiber.resume
     end

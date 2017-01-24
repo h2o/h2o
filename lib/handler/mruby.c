@@ -289,6 +289,8 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
     shared_ctx->symbols.sym_body = mrb_intern_lit(shared_ctx->mrb, "body");
     shared_ctx->symbols.sym_async = mrb_intern_lit(shared_ctx->mrb, "async");
 
+    shared_ctx->pendings = mrb_ary_new(shared_ctx->mrb);
+
     h2o_mruby_send_chunked_init_context(shared_ctx);
     h2o_mruby_http_request_init_context(shared_ctx);
 
@@ -767,13 +769,32 @@ void h2o_mruby_run_fiber(h2o_mruby_shared_context_t *shared_ctx, mrb_value recei
         if (status >= 0) break;
 
         /* take special action depending on the status code */
-        switch (status) {
-        case H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED:
+        if (status == H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED) {
             mrb->exc = mrb_obj_ptr(mrb_ary_entry(output, 1));
             generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(output, 2));
             goto GotException;
-        case H2O_MRUBY_CALLBACK_ID_CONFIGURING_APP:
-        case H2O_MRUBY_CALLBACK_ID_CONFIGURED_APP:
+        } else if (status == H2O_MRUBY_CALLBACK_ID_CONFIGURING_APP) {
+            mrb_value pending = mrb_ary_new_capa(mrb, 2);
+            mrb_ary_set(mrb, pending, 0, receiver);
+            mrb_ary_set(mrb, pending, 1, input);
+            mrb_ary_push(mrb, shared_ctx->pendings, pending);
+            return;
+        } else if (status == H2O_MRUBY_CALLBACK_ID_CONFIGURED_APP) {
+            mrb_int len = mrb_ary_len(mrb, shared_ctx->pendings);
+            for (size_t i = 0; i != len; ++i) {
+                mrb_value pending = mrb_ary_entry(shared_ctx->pendings, i);
+                mrb_value resumer = mrb_ary_entry(pending, 0);
+                mrb_value args = mrb_ary_entry(pending, 1);
+                h2o_mruby_run_fiber(shared_ctx, resumer, args, NULL);
+            }
+            mrb_ary_clear(mrb, shared_ctx->pendings);
+
+            mrb_value exc = mrb_ary_entry(output, 1);
+            if (! mrb_nil_p(exc)) {
+                mrb->exc = mrb_obj_ptr(mrb_ary_entry(output, 1));
+                goto GotException;
+            }
+
             return;
         }
 
