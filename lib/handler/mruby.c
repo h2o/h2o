@@ -338,37 +338,25 @@ static h2o_mruby_shared_context_t *get_shared_context(h2o_context_t *ctx)
     return *data;
 }
 
-mrb_value generate_handler_proc(h2o_mruby_context_t *ctx)
+mrb_value prepare_fibers(h2o_mruby_context_t *ctx)
 {
-
     mrb_state *mrb = ctx->shared->mrb;
 
     struct RProc *compiled = h2o_mruby_compile_code(mrb, &ctx->handler->config, NULL);
 
     /* run code and generate handler */
-    mrb_value proc = mrb_run(mrb, compiled, mrb_top_self(mrb));
-    if (mrb->exc != NULL)
-        return mrb_nil_value();
+    mrb_value conf_proc = mrb_run(mrb, compiled, mrb_top_self(mrb));
+    assert(mrb->exc == NULL);
 
     mrb_value args = mrb_ary_new_capa(mrb, 2);
-    mrb_ary_set(mrb, args, 0, proc);
+    mrb_ary_set(mrb, args, 0, conf_proc);
     mrb_ary_set(mrb, args, 1, ctx->refs.context);
+    /* FIXME: embed prepare_app code in H2O_MRUBY_PROC_APP_TO_FIBER later */
     mrb_value result =
         mrb_funcall_argv(mrb, mrb_obj_value(mrb_module_get(mrb, "H2O")), mrb_intern_lit(mrb, "prepare_app"), 1, &args);
-    // FIXME: embed prepare_app code in H2O_MRUBY_PROC_APP_TO_FIBER later
-    // mrb_value result = mrb_funcall_argv(mrb, mrb_ary_entry(ctx->shared->constants, H2O_MRUBY_PROC_APP_TO_FIBER), ctx->shared->symbols.sym_call, 1, &proc);
     assert(mrb_array_p(result));
 
-    if (mrb->exc != NULL)
-        return mrb_nil_value();
-
-    mrb_value runner = mrb_ary_entry(result, 0);
-    mrb_value configurator = mrb_ary_entry(result, 1);
-
-    // run configurator
-    h2o_mruby_run_fiber(ctx->shared, configurator, mrb_nil_value(), NULL);
-
-    return runner;
+    return result;
 }
 
 static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
@@ -387,18 +375,24 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
     /* compile code (must be done for each thread) */
     int arena = mrb_gc_arena_save(mrb);
 
-    handler_ctx->proc = generate_handler_proc(handler_ctx);
+    mrb_value fibers = prepare_fibers(handler_ctx);
     if (mrb->exc != NULL) {
-        /* TODO: what information should be displayed here? */
         fprintf(stderr, "mruby raised: %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
         mrb->exc = NULL;
         return;
-
     }
+    assert(mrb_array_p(fibers));
 
+    handler_ctx->proc = mrb_ary_entry(fibers, 0);
+
+    /* run configurator */
+    mrb_value configurator = mrb_ary_entry(fibers, 1);
+    h2o_mruby_run_fiber(handler_ctx->shared, configurator, mrb_nil_value(), NULL);
     h2o_mruby_assert(handler_ctx->shared->mrb);
+
     mrb_gc_arena_restore(mrb, arena);
     mrb_gc_protect(mrb, handler_ctx->proc);
+    mrb_gc_protect(mrb, configurator);
 
     h2o_context_set_handler_context(ctx, &handler->super, handler_ctx);
 }
