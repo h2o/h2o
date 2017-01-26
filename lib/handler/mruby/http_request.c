@@ -73,17 +73,23 @@ static mrb_value detach_receiver(struct st_h2o_mruby_http_request_context_t *ctx
 
 static void dispose_context(h2o_mruby_http_request_context_t *ctx)
 {
-    assert(mrb_nil_p(ctx->refs.request) && mrb_nil_p(ctx->refs.input_stream));
-
     /* clear the refs */
     if (ctx->client != NULL) {
         h2o_http1client_cancel(ctx->client);
         ctx->client = NULL;
     }
 
+    if (!mrb_nil_p(ctx->refs.request))
+        DATA_PTR(ctx->refs.request) = NULL;
+    if (!mrb_nil_p(ctx->refs.input_stream))
+        DATA_PTR(ctx->refs.input_stream) = NULL;
+
     /* clear bufs */
     h2o_buffer_dispose(&ctx->req.buf);
     h2o_buffer_dispose(&ctx->resp.after_closed);
+
+    if (ctx->req.body.base != NULL)
+        free(ctx->req.body.base);
 
     free(ctx);
 }
@@ -175,6 +181,8 @@ static void post_error(struct st_h2o_mruby_http_request_context_t *ctx, const ch
     ctx->resp.has_content = 1;
 
     post_response(ctx, 500, headers_sorted, sizeof(headers_sorted) / sizeof(headers_sorted[0]));
+
+    dispose_context(ctx);
 }
 
 static mrb_value build_chunk(struct st_h2o_mruby_http_request_context_t *ctx)
@@ -226,6 +234,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
             mrb_gc_arena_restore(ctx->shared_ctx->mrb, gc_arena);
         }
     }
+    dispose_context(ctx);
     return 0;
 }
 
