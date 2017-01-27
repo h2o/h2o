@@ -248,7 +248,10 @@ static void reader_main(h2o_memcached_context_t *ctx)
 
     /* connect to server and start the writer thread */
     connect_to_server(conn.ctx, &conn.yrmcds);
-    pthread_create(&writer_thread, NULL, writer_main, &conn);
+    if (pthread_create(&writer_thread, NULL, writer_main, &conn) != 0) {
+        perror("pthread_create");
+        abort();
+    }
 
     pthread_mutex_lock(&conn.ctx->mutex);
     ++conn.ctx->num_threads_connected;
