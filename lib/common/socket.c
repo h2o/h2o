@@ -216,6 +216,8 @@ static void setup_bio(h2o_socket_t *sock)
     }
 
     BIO *bio = BIO_new(bio_methods);
+    if (bio == NULL)
+        h2o_fatal("no memory");
     BIO_set_data(bio, sock);
     BIO_set_init(bio, 1);
     SSL_set_bio(sock->ssl->ssl, bio, bio);
