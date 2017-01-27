@@ -73,6 +73,8 @@ static mrb_value detach_receiver(struct st_h2o_mruby_http_request_context_t *ctx
 
 static void dispose_context(h2o_mruby_http_request_context_t *ctx)
 {
+    assert(mrb_nil_p(ctx->refs.request) && mrb_nil_p(ctx->refs.input_stream));
+
     /* clear the refs */
     if (ctx->client != NULL) {
         h2o_http1client_cancel(ctx->client);
@@ -181,8 +183,6 @@ static void post_error(struct st_h2o_mruby_http_request_context_t *ctx, const ch
     ctx->resp.has_content = 1;
 
     post_response(ctx, 500, headers_sorted, sizeof(headers_sorted) / sizeof(headers_sorted[0]));
-
-    dispose_context(ctx);
 }
 
 static mrb_value build_chunk(struct st_h2o_mruby_http_request_context_t *ctx)
@@ -234,7 +234,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
             mrb_gc_arena_restore(ctx->shared_ctx->mrb, gc_arena);
         }
     }
-    dispose_context(ctx);
+
     return 0;
 }
 
@@ -417,8 +417,10 @@ mrb_value h2o_mruby_http_join_response_callback(h2o_mruby_shared_context_t *shar
     mrb_state *mrb = shared_ctx->mrb;
     struct st_h2o_mruby_http_request_context_t *ctx;
 
-    if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &request_type)) == NULL)
+    if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &request_type)) == NULL) {
+        *run_again = 1;
         return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "HttpRequest#join wrong self");
+    }
 
     attach_receiver(ctx, receiver);
     return mrb_nil_value();
@@ -431,8 +433,10 @@ mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_shared_context_t *shared
     struct st_h2o_mruby_http_request_context_t *ctx;
     mrb_value ret;
 
-    if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &input_stream_type)) == NULL)
+    if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &input_stream_type)) == NULL) {
+        *run_again = 1;
         return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "_HttpInputStream#each wrong self");
+    }
 
     if (ctx->resp.has_content) {
         ret = build_chunk(ctx);

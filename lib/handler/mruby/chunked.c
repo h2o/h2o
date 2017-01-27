@@ -232,8 +232,10 @@ mrb_value h2o_mruby_send_chunked_eos_callback(h2o_mruby_shared_context_t *shared
 
     { /* precond check */
         mrb_value exc = check_precond(mrb, generator);
-        if (!mrb_nil_p(exc))
+        if (!mrb_nil_p(exc)) {
+            *run_again = 1;
             return exc;
+        }
     }
 
     h2o_mruby_send_chunked_close(generator);
