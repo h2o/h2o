@@ -248,7 +248,8 @@ int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *chi
     /* create pipe for reading the result */
     if (pipe(respfds) != 0)
         goto Exit;
-    fcntl(respfds[0], F_SETFD, O_CLOEXEC);
+    if (fcntl(respfds[0], F_SETFD, O_CLOEXEC) < 0)
+        goto Exit;
 
     /* spawn */
     int mapped_fds[] = {respfds[1], 1, /* stdout of the child process is read from the pipe */
