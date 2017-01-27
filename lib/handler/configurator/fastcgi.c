@@ -184,7 +184,8 @@ static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const
         pipe_fds[1] = -1;
         goto Error;
     }
-    fcntl(pipe_fds[1], F_SETFD, FD_CLOEXEC);
+    if (fcntl(pipe_fds[1], F_SETFD, FD_CLOEXEC) < 0)
+        goto Error;
 
     /* spawn */
     int mapped_fds[] = {listen_fd, 0,   /* listen_fd to 0 */
