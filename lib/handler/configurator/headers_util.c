@@ -119,7 +119,8 @@ void h2o_configurator_define_headers_commands(h2o_globalconf_t *global_conf, h2o
     size_t prefix_len = strlen(prefix);
 
 #define DEFINE_CMD_NAME(name, suffix)                                                                                              \
-    char *name = h2o_strdup(NULL, prefix, prefix_len + sizeof(suffix) - 1).base;                                                   \
+    char *name = h2o_mem_alloc(prefix_len + sizeof(suffix));                                                                       \
+    memcpy(name, prefix, prefix_len);                                                                                              \
     memcpy(name + prefix_len, suffix, sizeof(suffix))
 
     DEFINE_CMD_NAME(add_directive, ".add");
