@@ -38,7 +38,8 @@ h2o_iovec_t h2o_file_read(const char *fn)
     /* open */
     if ((fd = open(fn, O_RDONLY | O_CLOEXEC)) == -1)
         goto Error;
-    fstat(fd, &st);
+    if (fstat(fd, &st))
+        goto Error;
     /* allocate memory */
     if (st.st_size > SIZE_MAX) {
         errno = ENOMEM;
