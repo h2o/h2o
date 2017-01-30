@@ -580,6 +580,6 @@ ELSE ()
 ENDIF ()
 
 # Retain CXX_FLAGS for std c++ compatiability across fuzz build/test environments
-IF (NOT BUILD_FUZZER)
+IF (NOT OSS_FUZZ)
     SET(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}")
-ENDIF (NOT BUILD_FUZZER)
+ENDIF (NOT OSS_FUZZ)
