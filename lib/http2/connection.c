@@ -392,11 +392,11 @@ static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn, const uint
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
-    h2o_buffer_reserve(&conn->_headers_unparsed, frame.length);
-    memcpy(conn->_headers_unparsed->bytes + conn->_headers_unparsed->size, frame.payload, frame.length);
-    conn->_headers_unparsed->size += frame.length;
+    if (conn->_headers_unparsed->size + frame.length <= H2O_MAX_REQLEN) {
+        h2o_buffer_reserve(&conn->_headers_unparsed, frame.length);
+        memcpy(conn->_headers_unparsed->bytes + conn->_headers_unparsed->size, frame.payload, frame.length);
+        conn->_headers_unparsed->size += frame.length;
 
-    if (conn->_headers_unparsed->size <= H2O_MAX_REQLEN) {
         if ((frame.flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) != 0) {
             conn->_read_expect = expect_default;
             if (stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS) {
