@@ -55,6 +55,12 @@
 #error "Please defined one of HTTP1 or HTTP2, but not both"
 #endif
 
+static h2o_globalconf_t config;
+static h2o_context_t ctx;
+static h2o_accept_ctx_t accept_ctx;
+static int client_timeout_ms;
+static char unix_listener[PATH_MAX];
+
 /*
  * Registers a request handler with h2o
  */
@@ -93,21 +99,18 @@ static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
  */
 static int reproxy_test(h2o_handler_t *self, h2o_req_t *req)
 {
+    char url[1024];
     if (!h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET")))
         return -1;
 
+    snprintf(url, sizeof(url), "http://[%s]/", unix_listener);
     req->res.status = 200;
     req->res.reason = "OK";
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT("http://www.ietf.org/"));
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT(url));
     h2o_send_inline(req, H2O_STRLIT("you should never see this!\n"));
 
     return 0;
 }
-
-static h2o_globalconf_t config;
-static h2o_context_t ctx;
-static h2o_accept_ctx_t accept_ctx;
-static int client_timeout_ms;
 
 /* copy from src to dst, return true if src has EOF */
 static int drain(int fd)
@@ -308,8 +311,12 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
      */
     if (!init_done) {
         const char *client_timeout_ms_str;
+        char tmpname[] = "/tmp/h2o-fuzz-XXXXXX";
+        char *dirname;
         signal(SIGPIPE, SIG_IGN);
 
+        dirname = mkdtemp(tmpname);
+        snprintf(unix_listener, sizeof(unix_listener), "%s/_.sock", dirname);
         if ((client_timeout_ms_str = getenv("H2O_FUZZER_CLIENT_TIMEOUT")) != NULL)
             client_timeout_ms = atoi(client_timeout_ms_str);
         if (!client_timeout_ms)
@@ -320,7 +327,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         config.http2.idle_timeout = 10 * 1000;
         config.http1.req_timeout = 10 * 1000;
         config.proxy.io_timeout = 10 * 1000;
-        hostconf = h2o_config_register_host(&config, h2o_iovec_init(H2O_STRLIT("default")), 65535);
+        hostconf = h2o_config_register_host(&config, h2o_iovec_init(H2O_STRLIT(unix_listener)), 65535);
         register_handler(hostconf, "/chunked-test", chunked_test);
         h2o_reproxy_register(register_handler(hostconf, "/reproxy-test", reproxy_test));
         h2o_file_register(h2o_config_register_path(hostconf, "/", 0), "./examples/doc_root", NULL, NULL, 0);
