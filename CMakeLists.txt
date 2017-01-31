@@ -535,7 +535,7 @@ IF (BUILD_FUZZER)
     SET_TARGET_PROPERTIES(h2o-fuzzer-http2 PROPERTIES COMPILE_FLAGS "-DHTTP2")
     SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address")
     IF (OSS_FUZZ)
-        # Use https://github.com/google/oss-fuzz compatiable options
+        # Use https://github.com/google/oss-fuzz compatible options
         SET(LIB_FUZZER FuzzingEngine)
         SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer")
         SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer")
