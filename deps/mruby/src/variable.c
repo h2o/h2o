@@ -44,7 +44,7 @@ iv_new(mrb_state *mrb)
 {
   iv_tbl *t;
 
-  t = mrb_malloc(mrb, sizeof(iv_tbl));
+  t = (iv_tbl*)mrb_malloc(mrb, sizeof(iv_tbl));
   t->size = 0;
   t->rootseg =  NULL;
   t->last_len = 0;
@@ -102,7 +102,7 @@ iv_put(mrb_state *mrb, iv_tbl *t, mrb_sym sym, mrb_value val)
     return;
   }
 
-  seg = mrb_malloc(mrb, sizeof(segment));
+  seg = (segment*)mrb_malloc(mrb, sizeof(segment));
   if (!seg) return;
   seg->next = NULL;
   seg->key[0] = sym;
@@ -489,6 +489,9 @@ mrb_obj_iv_set(mrb_state *mrb, struct RObject *obj, mrb_sym sym, mrb_value v)
 {
   iv_tbl *t = obj->iv;
 
+  if (MRB_FROZEN_P(obj)) {
+    mrb_raisef(mrb, E_RUNTIME_ERROR, "can't modify frozen %S", mrb_obj_value(obj));
+  }
   if (!t) {
     t = obj->iv = iv_new(mrb);
   }
@@ -760,26 +763,30 @@ mrb_mod_cv_get(mrb_state *mrb, struct RClass * c, mrb_sym sym)
 {
   struct RClass * cls = c;
   mrb_value v;
+  int given = FALSE;
 
   while (c) {
     if (c->iv && iv_get(mrb, c->iv, sym, &v)) {
-      return v;
+      given = TRUE;
     }
     c = c->super;
   }
+  if (given) return v;
   if (cls && cls->tt == MRB_TT_SCLASS) {
     mrb_value klass;
 
     klass = mrb_obj_iv_get(mrb, (struct RObject *)cls,
                            mrb_intern_lit(mrb, "__attached__"));
     c = mrb_class_ptr(klass);
-    if (c->tt == MRB_TT_CLASS) {
+    if (c->tt == MRB_TT_CLASS || c->tt == MRB_TT_MODULE) {
+      given = FALSE;
       while (c) {
         if (c->iv && iv_get(mrb, c->iv, sym, &v)) {
-          return v;
+          given = TRUE;
         }
         c = c->super;
       }
+      if (given) return v;
     }
   }
   mrb_name_error(mrb, sym, "uninitialized class variable %S in %S",

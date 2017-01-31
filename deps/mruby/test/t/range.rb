@@ -43,10 +43,11 @@ assert('Range#first', '15.2.14.4.7') do
 end
 
 assert('Range#include?', '15.2.14.4.8') do
-  a = (1..10)
+  assert_true (1..10).include?(10)
+  assert_false (1..10).include?(11)
 
-  assert_true a.include?(5)
-  assert_false a.include?(20)
+  assert_true (1...10).include?(9)
+  assert_false (1...10).include?(10)
 end
 
 assert('Range#initialize', '15.2.14.4.9') do
@@ -57,6 +58,8 @@ assert('Range#initialize', '15.2.14.4.9') do
   assert_true a.exclude_end?
   assert_equal (1..10), b
   assert_false b.exclude_end?
+
+  assert_raise(NameError) { (0..1).send(:initialize, 1, 3) }
 end
 
 assert('Range#last', '15.2.14.4.10') do

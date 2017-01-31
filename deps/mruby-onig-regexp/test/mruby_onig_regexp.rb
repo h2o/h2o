@@ -94,6 +94,7 @@ assert("OnigRegexp#inspect") do
 
   assert_equal '/(https?:\/\/[^\/]+)[-a-zA-Z0-9.\/]+/', reg.inspect
   assert_equal '/abc\nd\te/mi', OnigRegexp.new("abc\nd\te", OnigRegexp::MULTILINE | OnigRegexp::IGNORECASE).inspect
+  assert_equal '/abc/min', OnigRegexp.new("abc", OnigRegexp::MULTILINE | OnigRegexp::IGNORECASE, "none").inspect
 end
 
 assert("OnigRegexp#to_s") do
@@ -101,6 +102,7 @@ assert("OnigRegexp#to_s") do
   assert_equal '(?-mix:ab+c)', /ab+c/.to_s
   assert_equal '(?mx-i:ab+c)', OnigRegexp.new("ab+c", OnigRegexp::MULTILINE | OnigRegexp::EXTENDED).to_s
   assert_equal '(?mi-x:ab+c)', /ab+c/im.to_s
+  assert_equal '(?mi-x:ab+c)', /ab+c/imn.to_s
 end
 
 assert("OnigRegexp#to_s (composition)") do
@@ -143,6 +145,10 @@ assert("OnigRegexp#match (ignorecase)") do
     m = OnigRegexp.new(reg, OnigRegexp::IGNORECASE|OnigRegexp::EXTENDED).match(str)
     assert_equal result, m[0] if assert_false m.nil?
   end
+end
+
+assert("OnigRegexp#match (none encoding)") do
+  assert_equal 2, /\x82/n =~ "あ"
 end
 
 assert('OnigRegexp.version') do

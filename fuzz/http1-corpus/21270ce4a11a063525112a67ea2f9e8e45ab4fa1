@@ -1,0 +1,395 @@
+GET /repro../test/ind../\ex.txt HTTP/1.1
+host: 127.0.0.1:50991
+connec4ion: Upgrade, Öproxy-test/ind../\ex.txt HTTP/1.1
+host: 127.0.0.1:50991
+connec4ion: Upgrade, ÖupgradÖÖGET /echo-headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ811
+User-Agent: cGET /echo-headers HTTP/1.1
+Host: 127.0.0.1:50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖTP/1.1
+Host: 127.0.0.1:50811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ.0.1:50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖTP/1.1
+Host: 127.0.0.1:50811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖec4ion: Upgrade, ÖÖÖÖÖÖÖÖÖGET /echo-ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖTP/1.1
+Host: 127.0.0.1:50811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖ/chunked-testÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖec4ion: Upgrade, ÖÖÖÖÖÖÖÖÖGET /echo-headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ811
+User-Agent: cGET /echo-headers HTTP/1.1
+Host: 127.0.0.1:50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127e.comurl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖTP/1.1
+Host: 127.0.0.1:50811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖec4ion: Upgrade, ÖÖÖÖÖÖÖÖÖGET /echo-ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖTP/1.1
+Host: 127.0.0.1:50811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖec4ion: Upgrade, ÖÖÖÖÖÖÖÖÖGET /echo-headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ811
+User-Agent: cGET /echo-headers HTTP/1.1
+Host: 127.0.0.1:50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7.49headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ811
+User-Agent: cGET /echo-headers HTTP/1.1
+Host: 127.0.0.1:50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖTP/1.1
+Host: 127.0.0.1:50811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖ50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7upgradÖÖGET /echo-headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ81.0.2
+Via: 2 exaG:schemÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAmplccept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7upgradÖÖGET /echo-headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖ: curl/7.49.0-DEV
+Accept: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖarded-For: 127.0.0.2
+Via: 2 example.comurl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖTP/1.1
+Host: 127.0.0.1:50811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖ–ÖÖÖÖÖÖ5cept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 exa
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖTP/1.1
+Host: 127.0.0.1:50811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖec4ion: Upgrade, ÖÖÖÖÖÖÖÖÖGET /echo-ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖTP/1.1
+Host: 127.0.0.1:50811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖec4ion: Upgrade, ÖÖÖÖÖÖÖÖÖGET /echo-headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ811
+User-Agent: cGET /echo-headers HTTP/1.1
+Host: 127.0.0.1:50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127e.comurl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖTP/1.1
+Host: 127.0.0.1:50811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖec4ion: Upgrade, ÖÖÖÖÖÖÖÖÖGET /echo-ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖTP/1.1
+Host: 127.0.0.1:50811
+User-Agent: curl/7.49*0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖec4ion: Upgrade, ÖÖÖÖÖÖÖÖÖGET /echo-headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ811
+User-Agent: cGET /echo-headers HTTP/1.1
+Host: 127.0.0.1:50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7.49headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ811
+User-Agent: cGET /echo-headers HTTP/1.1
+Host: 127.0.0.1:50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖTP/1.1
+Host: 127.0.0.1:50811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖ50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7upgradÖÖGET /echo-headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ81.0.2
+Via: 2 exaG:schemÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAmplccept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7upgradÖÖGET /echo-headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖ: curl/7.49.0-DEV
+Accept: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖarded-For: 127.0.0.2
+Via: 2 example.comurl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖTP/1.1
+Host: 127.0.0.1:50811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖ–ÖÖÖÖÖÖ5cept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 examplccept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7upgradÖÖGET /echo-headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ
+
+ÖÖÖÖÖÖÖÖngs
+upgrade: h2c
+ãããããããããããããããããããããããããããããããã1
+host: 127.0.0.1:51135
+coneotincn: Uããhttp2-settings: pgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrAAMAAABkAAQAAP__
+accept: */*
+user-agent: nghttp2/1:schem
+
+
+--MARK--
+rrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127.0.0r!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+usPer-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿRI * ÿÿET /reproxy-test HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settingmplccept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7upgradÖÖGET /echo-headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ
+
+ÖÖÖÖÖÖÖÖngs
+upgrade: h2c
+ãããããããããããããããããããããããããããããããã1
+host: 127.0.0.1:51135
+coneotincn: Uããhttp2-settings: pgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrAAMAAABkAAQAAP__
+accept: */*
+user-agent: nghttp2/1:schem
+
+
+--MARK--
+rrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /reproxy-test HTTP/1.1
+host: 127.0.0r!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+usPer-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrr h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿRI * ÿÿET /reproxy-test HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /h.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrAAQAAP__
+accept: */*
+user-agent: nghttp2/reproxy-test-MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+hos       €         €          ÿ        ÿ
+--MARK--
+         €         €          ÿ      
+  
+PRI * HTÿ
+--MARK--

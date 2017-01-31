@@ -153,12 +153,18 @@ class Enumerator
   #
   def with_index(offset=0)
     return to_enum :with_index, offset unless block_given?
-    raise TypeError, "no implicit conversion of #{offset.class} into Integer" unless offset.respond_to?(:to_int)
+    offset = if offset.nil?
+      0
+    elsif offset.respond_to?(:to_int)
+      offset.to_int
+    else
+      raise TypeError, "no implicit conversion of #{offset.class} into Integer"
+    end
 
-    n = offset.to_int - 1
-    enumerator_block_call do |i|
+    n = offset - 1
+    enumerator_block_call do |*i|
       n += 1
-      yield [i,n]
+      yield i.__svalue, n
     end
   end
 
@@ -516,6 +522,7 @@ class Enumerator
 
   # just for internal
   class Generator
+    include Enumerable
     def initialize(&block)
       raise TypeError, "wrong argument type #{self.class} (expected Proc)" unless block.kind_of? Proc
 

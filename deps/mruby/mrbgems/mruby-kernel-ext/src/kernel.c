@@ -61,7 +61,7 @@ mrb_f_integer(mrb_state *mrb, mrb_value self)
  *     Float(arg)    -> float
  *
  *  Returns <i>arg</i> converted to a float. Numeric types are converted
- *  directly, the rest are converted using <i>arg</i>.to_f. 
+ *  directly, the rest are converted using <i>arg</i>.to_f.
  *
  *     Float(1)           #=> 1.0
  *     Float(123.456)     #=> 123.456

@@ -1,0 +1,8 @@
+GET / HTTP/1.1
+Ho: st127.0.0.1:50874
+User-Agent: curl/
+Accept: */*
+Accept-Encoding: deflate
+
+
+--MARK--

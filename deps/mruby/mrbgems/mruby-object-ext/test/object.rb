@@ -23,3 +23,31 @@ assert('Object#tap') do
   ], ret
   assert_equal(:tap_ok, Class.new {def m; tap{return :tap_ok}; end}.new.m)
 end
+
+assert('instance_exec on primitives with class and module definition') do
+  begin
+    class A
+      1.instance_exec do
+        class B
+        end
+      end
+    end
+
+    assert_kind_of Class, A::B
+  ensure
+    Object.remove_const :A
+  end
+
+  begin
+    class A
+      1.instance_exec do
+        module B
+        end
+      end
+    end
+
+    assert_kind_of Module, A::B
+  ensure
+    Object.remove_const :A
+  end
+end

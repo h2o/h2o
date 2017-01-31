@@ -1,0 +1,85 @@
+GET /reproxy-test/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h2C
+http2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key: aGET /indGET /index.on:est/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+connectiupgradon: Upgrade, HTTP2- h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key: aGET /indGET /index.on:est/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+content-location: Upgrade, HTTP2-Settings
+upgrade: h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h3c
+http2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key: aGET /ings
+upgrade: h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h2C
+http2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key: aGET /indGET /index.on:est/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+connectiupgradon: Upgrade, HTTP2- h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key: aGET /indGET /index.on:est/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+content-location: Upgrade, HTTP2-Settings
+upgrade: h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key: aGET /indGET /index.on: Upgrade, HTTP2-Settin Upgrade, HTTP2-Settings
+upgrade: h2c
+ettings: AAMAAABkAAQAAP__
+accept-rangettp2-settings: AAMAAGET /websocueSettings
+upgrade: h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key: aGET /indGET /indexdGET /index.on: Upgrade, HTTP2-Setec-Websocket-Key: aGET /indGET /index.on:est/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+content-location: Upgrade, HTTP2-Settings
+upgrade: h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h3c
+http2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key: aGET /ings
+upgrade: h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h2C
+http2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key: aGET /indGET /index.on:est/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+connectiupgradon: Upgrade, HTTP2- h2c
+h0.1:51458
+connectiupgradon: Uttp1/1:schem
+
+
+--MARK--
+PRI *ex.tx *ex.txt HTTP 

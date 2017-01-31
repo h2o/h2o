@@ -4,11 +4,11 @@ module Kernel
   begin
     eval "1", nil
     def _eval_load(*args)
-      Kernel.eval(*args)
+      self.eval(*args)
     end
   rescue ArgumentError
     def _eval_load(*args)
-      Kernel.eval(args[0])
+      self.eval(args[0])
     end
   end
 

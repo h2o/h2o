@@ -25,7 +25,7 @@ CMAKE_POLICY(SET CMP0003 NEW)
 PROJECT(h2o)
 
 SET(VERSION_MAJOR "2")
-SET(VERSION_MINOR "1")
+SET(VERSION_MINOR "2")
 SET(VERSION_PATCH "0")
 SET(VERSION_PRERELEASE "-DEV")
 SET(VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}${VERSION_PRERELEASE}")
@@ -248,6 +248,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/reproxy.c
     lib/handler/throttle_resp.c
     lib/handler/status.c
+    lib/handler/headers_util.c
     lib/handler/status/events.c
     lib/handler/status/requests.c
     lib/handler/http2_debug_state.c
@@ -265,6 +266,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/throttle_resp.c
     lib/handler/configurator/status.c
     lib/handler/configurator/http2_debug_state.c
+    lib/handler/configurator/headers_util.c
 
     lib/http1.c
 
@@ -522,6 +524,24 @@ ENDIF (LIBUV_FOUND)
 
 ADD_CUSTOM_TARGET(check-as-root env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -v t/90root-*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+IF (BUILD_FUZZER)
+    IF(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        MESSAGE(FATAL_ERROR "The fuzzer needs clang as a compiler")
+    ENDIF()
+    ADD_EXECUTABLE(h2o-fuzzer-http1 fuzz/driver.cc)
+    ADD_EXECUTABLE(h2o-fuzzer-http2 fuzz/driver.cc)
+    SET_TARGET_PROPERTIES(h2o-fuzzer-http1 PROPERTIES COMPILE_FLAGS "-DHTTP1")
+    SET_TARGET_PROPERTIES(h2o-fuzzer-http2 PROPERTIES COMPILE_FLAGS "-DHTTP2")
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer -fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer -fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters")
+    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address")
+    TARGET_LINK_LIBRARIES(h2o-fuzzer-http1 libh2o-evloop ${EXTRA_LIBS} ${CMAKE_CURRENT_BINARY_DIR}/libFuzzer.a)
+    TARGET_LINK_LIBRARIES(h2o-fuzzer-http2 libh2o-evloop ${EXTRA_LIBS} ${CMAKE_CURRENT_BINARY_DIR}/libFuzzer.a)
+    ADD_CUSTOM_TARGET(libFuzzer ${CMAKE_CURRENT_SOURCE_DIR}/misc/build_libFuzzer.sh WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+    ADD_DEPENDENCIES(h2o-fuzzer-http1 libFuzzer)
+    ADD_DEPENDENCIES(h2o-fuzzer-http2 libFuzzer)
+ENDIF (BUILD_FUZZER)
 
 # environment-specific tweaks
 IF (APPLE)

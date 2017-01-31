@@ -10,8 +10,19 @@
 #include <limits.h>
 #include <stdint.h>
 
+/* architecture selection: */
+/* specify -DMRB_32BIT or -DMRB_64BIT to override */
+#if !defined(MRB_32BIT) && !defined(MRB_64BIT)
 #if UINT64_MAX == SIZE_MAX
+#define MRB_64BIT
 #define MRB_INT64
+#else
+#define MRB_32BIT
+#endif
+#endif
+
+#if defined(MRB_32BIT) && defined(MRB_64BIT)
+#error Cannot build for 32 and 64 bit architecture at the same time
 #endif
 
 /* configuration options: */

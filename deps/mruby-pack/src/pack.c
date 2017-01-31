@@ -28,7 +28,7 @@ enum {
   PACK_DIR_QUAD,	/* Q */
   //PACK_DIR_INT,	/* i */
   //PACK_DIR_VAX,
-  //PACK_DIR_UTF8,	/* U */
+  PACK_DIR_UTF8,  /* U */
   //PACK_DIR_BER,
   PACK_DIR_DOUBLE,	/* E */
   PACK_DIR_FLOAT,	/* f */
@@ -409,6 +409,45 @@ unpack_float(mrb_state *mrb, const unsigned char * src, int srclen, mrb_value ar
 }
 
 static int
+pack_utf8(mrb_state *mrb, mrb_value o, mrb_value str, mrb_int sidx, long count, unsigned int flags)
+{
+  char utf8[4];
+  int len;
+  
+  unsigned long c = mrb_fixnum(o);
+
+  /* Unicode character */
+  /* from mruby-compiler gem */
+  if (c < 0x80) {
+    utf8[0] = (char)c;
+    len = 1;
+  }
+  else if (c < 0x800) {
+    utf8[0] = (char)(0xC0 | (c >> 6));
+    utf8[1] = (char)(0x80 | (c & 0x3F));
+    len = 2;
+  }
+  else if (c < 0x10000) {
+    utf8[0] = (char)(0xE0 |  (c >> 12)        );
+    utf8[1] = (char)(0x80 | ((c >>  6) & 0x3F));
+    utf8[2] = (char)(0x80 | ( c        & 0x3F));
+    len = 3;
+  }
+  else {
+    utf8[0] = (char)(0xF0 |  (c >> 18)        );
+    utf8[1] = (char)(0x80 | ((c >> 12) & 0x3F));
+    utf8[2] = (char)(0x80 | ((c >>  6) & 0x3F));
+    utf8[3] = (char)(0x80 | ( c        & 0x3F));
+    len = 4;
+  }
+  
+  str = str_len_ensure(mrb, str, sidx + len);
+  memcpy(RSTRING_PTR(str) + sidx, utf8, len);
+  
+  return len;
+}
+
+static int
 pack_a(mrb_state *mrb, mrb_value src, mrb_value dst, mrb_int didx, long count, unsigned int flags)
 {
   int copylen, slen, padlen;
@@ -453,14 +492,14 @@ unpack_a(mrb_state *mrb, const void *src, int slen, mrb_value ary, long count, u
   const char *cp, *sptr;
   long copylen;
 
-  sptr = src;
+  sptr = (const char *)src;
   if (count != -1 && count < slen)  {
     slen = count;
   }
   copylen = slen;
 
   if (flags & PACK_FLAG_Z) {  /* "Z" */
-    if ((cp = memchr(sptr, '\0', slen)) != NULL) {
+    if ((cp = (const char *)memchr(sptr, '\0', slen)) != NULL) {
       copylen = cp - sptr;
       if (count == -1) {
         slen = copylen + 1;
@@ -539,7 +578,7 @@ unpack_h(mrb_state *mrb, const void *src, int slen, mrb_value ary, int count, un
     bshift = 0;
   }
 
-  sptr = src;
+  sptr = (const char *)src;
 
   if (count == -1)
     count = slen * 2;
@@ -647,7 +686,7 @@ unpack_m(mrb_state *mrb, const void *src, int slen, mrb_value ary, unsigned int 
   const char *sptr, *sptr0;
   char *dptr, *dptr0;
 
-  sptr0 = sptr = src;
+  sptr0 = sptr = (const char *)src;
 
   dlen = slen / 4 * 3;  /* an estimated value - may be shorter */
   dst = mrb_str_new(mrb, NULL, dlen);
@@ -856,6 +895,10 @@ alias:
     size = 2;
     flags |= PACK_FLAG_SIGNED;
     break;
+  case 'U':
+    dir = PACK_DIR_UTF8;
+    type = PACK_TYPE_INTEGER;
+    break;
   case 'V':  /* = "L<" */
     dir = PACK_DIR_LONG;
     type = PACK_TYPE_INTEGER;
@@ -989,6 +1032,9 @@ mrb_pack_pack(mrb_state *mrb, mrb_value ary)
       case PACK_DIR_FLOAT:
         ridx += pack_float(mrb, o, result, ridx, flags);
         break;
+      case PACK_DIR_UTF8:
+        ridx += pack_utf8(mrb, o, result, ridx, count, flags);
+        break;
       default:
         break;
       }
@@ -1029,7 +1075,7 @@ mrb_pack_unpack(mrb_state *mrb, mrb_value str)
       continue;
 
     if (flags & PACK_FLAG_COUNT2) {
-      sptr = RSTRING_PTR(str) + srcidx;
+      sptr = (const unsigned char *)RSTRING_PTR(str) + srcidx;
       switch (dir) {
       case PACK_DIR_HEX:
         srcidx += unpack_h(mrb, sptr, srclen - srcidx, result, count, flags);
@@ -1049,7 +1095,7 @@ mrb_pack_unpack(mrb_state *mrb, mrb_value str)
         break;
       }
 
-      sptr = RSTRING_PTR(str) + srcidx;
+      sptr = (const unsigned char *)RSTRING_PTR(str) + srcidx;
       switch (dir) {
       case PACK_DIR_CHAR:
         srcidx += unpack_c(mrb, sptr, srclen - srcidx, result, flags);

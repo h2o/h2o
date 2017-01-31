@@ -131,7 +131,7 @@ mrb_ary_to_h(mrb_state *mrb, mrb_value ary)
 
     if (mrb_nil_p(v)) {
       mrb_raisef(mrb, E_TYPE_ERROR, "wrong element type %S at %S (expected array)",
-        mrb_str_new_cstr(mrb,  mrb_obj_classname(mrb, RARRAY_PTR(ary)[i])),
+        mrb_str_new_cstr(mrb,  mrb_obj_classname(mrb, ary_elt(ary, i))),
         mrb_fixnum_value(i)
       );
     }

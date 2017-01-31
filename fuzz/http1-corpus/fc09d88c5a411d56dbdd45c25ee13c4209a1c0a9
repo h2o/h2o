@@ -1,0 +1,9 @@
+GES /chunked-test/inŸŸßŸŸŸŸŸŸŸŸŸŸŸŸŸŸŸŸd´x.txt HTTP/1.1
+host: 127.0.0.1:51046
+cmnnection: Upgrade, HTTP2-S!ettings
+ugprade: h2c
+http2-settings: AAMAAABkAAQAAP__
+t:caep c*/*
+user-agept: nghttp2/1.16.1
+
+--MARK--

@@ -41,7 +41,7 @@
 #define STATUS_FALLTHRU 399
 #define FALLTHRU_SET_PREFIX "x-fallthru-set-"
 
-#define FREEZE_STRING(v) RSTR_SET_FROZEN_FLAG(mrb_str_ptr(v))
+#define FREEZE_STRING(v) MRB_SET_FROZEN_FLAG(mrb_obj_ptr(v))
 
 __thread h2o_mruby_generator_t *h2o_mruby_current_generator = NULL;
 

@@ -160,35 +160,7 @@ end
 #
 # ISO 15.2.9
 class Float
-  include Integral
   # mruby special - since mruby integers may be upgraded to floats,
   # floats should be compatible to integers.
-  def >> other
-    n = self.to_i
-    other = other.to_i
-    if other < 0
-      n << -other
-    else
-      other.times { n /= 2 }
-      if n.abs < 1
-        if n >= 0
-          0
-        else
-          -1
-        end
-      else
-        n.to_i
-      end
-    end
-  end
-  def << other
-    n = self.to_i
-    other = other.to_i
-    if other < 0
-      n >> -other
-    else
-      other.times { n *= 2 }
-      n
-    end
-  end
+  include Integral
 end

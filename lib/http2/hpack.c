@@ -302,7 +302,7 @@ static struct st_h2o_hpack_header_table_entry_t *header_table_add(h2o_hpack_head
     }
 
     ++table->num_entries;
-    table->entry_start_index = (table->entry_start_index - 1 + table->entry_capacity) % table->entry_capacity;
+    table->entry_start_index = (table->entry_start_index + table->entry_capacity - 1) % table->entry_capacity;
     return table->entries + table->entry_start_index;
 }
 

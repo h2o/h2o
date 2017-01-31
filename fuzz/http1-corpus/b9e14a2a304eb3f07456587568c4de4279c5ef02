@@ -1,0 +1,73 @@
+GET /websocket/ HTTP/2.1
+Connection: upgpade
+Upgrade: websocket
+Sec-Websocket-Key: abcde
+Sec-Websocket-Version: 13
+
+
+--MARK--
+hello world 1
+
+--MARK--
+hello world 2
+
+--MARK--
+hello world 3
+
+--MARK--
+hello world 4
+
+--MARK--
+hello world 5
+
+--MARK--
+hello world 6
+
+--MARK--
+hello world 7
+
+--MARK--
+hello world 8
+
+--MARK--
+hello w /websocket/ HTTP/2.1
+Connection: upgpade
+Upgrade: websocket
+Sec-Websocket-Key: abcde
+Sec-Websocket-Version: 13
+
+
+--MARK--
+hello world 1
+
+--MARK--
+hello world 2
+
+--MARK--
+hello world 3
+
+--MARK--
+hello world 4
+
+--MARK--
+hello world 5
+
+--MARK--
+hello world 6
+
+--MARK--
+hello world 7
+
+--MARK--
+hello world 8
+
+--MARK--
+hello world 9
+
+--MARK--
+hello world 1orld 9
+
+--MARK--
+hello world 10
+
+--MARK--

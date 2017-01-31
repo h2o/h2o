@@ -255,17 +255,22 @@ mrb_exc_set(mrb_state *mrb, mrb_value exc)
 {
   if (!mrb->gc.out_of_memory && mrb->backtrace.n > 0) {
     mrb_value target_exc = mrb_nil_value();
+    int ai;
+
+    ai = mrb_gc_arena_save(mrb);
     if ((mrb->exc && !have_backtrace(mrb, mrb->exc))) {
       target_exc = mrb_obj_value(mrb->exc);
     }
-    else if (!mrb_nil_p(exc) && mrb_obj_ptr(exc) == mrb->backtrace.exc) {
-      target_exc = exc;
+    else if (!mrb_nil_p(exc) && mrb->backtrace.exc) {
+      target_exc = mrb_obj_value(mrb->backtrace.exc);
+      mrb_gc_protect(mrb, target_exc);
     }
     if (!mrb_nil_p(target_exc)) {
       mrb_value backtrace;
       backtrace = mrb_restore_backtrace(mrb);
       set_backtrace(mrb, target_exc, backtrace);
     }
+    mrb_gc_arena_restore(mrb, ai);
   }
 
   mrb->backtrace.n = 0;
@@ -273,6 +278,8 @@ mrb_exc_set(mrb_state *mrb, mrb_value exc)
     mrb->exc = 0;
   }
   else {
+    if (!mrb_obj_is_kind_of(mrb, exc, mrb->eException_class))
+      mrb_raise(mrb, E_TYPE_ERROR, "exception object expected");
     mrb->exc = mrb_obj_ptr(exc);
   }
 }
@@ -458,7 +465,7 @@ exception_call:
   }
   if (argc > 0) {
     if (!mrb_obj_is_kind_of(mrb, mesg, mrb->eException_class))
-      mrb_raise(mrb, E_TYPE_ERROR, "exception object expected");
+      mrb_raise(mrb, mrb->eException_class, "exception object expected");
     if (argc > 2)
       set_backtrace(mrb, mesg, argv[2]);
   }
@@ -525,6 +532,9 @@ mrb_init_exception(mrb_state *mrb)
   mrb->eStandardError_class = mrb_define_class(mrb, "StandardError", mrb->eException_class); /* 15.2.23 */
   runtime_error = mrb_define_class(mrb, "RuntimeError", mrb->eStandardError_class);          /* 15.2.28 */
   mrb->nomem_err = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, runtime_error, "Out of memory"));
+#ifdef MRB_GC_FIXED_ARENA
+  mrb->arena_err = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, runtime_error, "arena overflow error"));
+#endif
   script_error = mrb_define_class(mrb, "ScriptError", mrb->eException_class);                /* 15.2.37 */
   mrb_define_class(mrb, "SyntaxError", script_error);                                        /* 15.2.38 */
   mrb_define_class(mrb, "SystemStackError", exception);

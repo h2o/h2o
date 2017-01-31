@@ -1,0 +1,6 @@
+GET /hello HTTP/0.1
+Host: 127.0.0.1:51461User-Agent: curl/7.49.0-DEV
+Accept: */*
+
+
+--MARK--

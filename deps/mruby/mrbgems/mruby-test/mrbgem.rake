@@ -146,6 +146,19 @@ MRuby::Gem::Specification.new('mruby-test') do |spec|
   end
 
   init = "#{spec.dir}/init_mrbtest.c"
+
+  # store the last gem selection and make the re-build
+  # of the test gem depending on a change to the gem
+  # selection
+  active_gems = "#{build_dir}/active_gems.lst"
+  FileUtils.mkdir_p File.dirname(active_gems)
+  open(active_gems, 'w+') do |f|
+    build.gems.each do |g|
+      f.puts g.name
+    end
+  end
+  file clib => active_gems
+
   file mlib => clib
   file clib => init do |t|
     _pp "GEN", "*.rb", "#{clib.relative_path}"

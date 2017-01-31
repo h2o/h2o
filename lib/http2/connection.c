@@ -183,9 +183,6 @@ void h2o_http2_conn_register_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *
     khiter_t iter;
     int r;
 
-    if (!h2o_http2_stream_is_push(stream->stream_id) && conn->pull_stream_ids.max_open < stream->stream_id)
-        conn->pull_stream_ids.max_open = stream->stream_id;
-
     iter = kh_put(h2o_http2_stream_t, conn->streams, stream->stream_id, &r);
     assert(iter != kh_end(conn->streams));
     kh_val(conn->streams, iter) = stream;
@@ -395,11 +392,11 @@ static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn, const uint
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
-    h2o_buffer_reserve(&conn->_headers_unparsed, frame.length);
-    memcpy(conn->_headers_unparsed->bytes + conn->_headers_unparsed->size, frame.payload, frame.length);
-    conn->_headers_unparsed->size += frame.length;
+    if (conn->_headers_unparsed->size + frame.length <= H2O_MAX_REQLEN) {
+        h2o_buffer_reserve(&conn->_headers_unparsed, frame.length);
+        memcpy(conn->_headers_unparsed->bytes + conn->_headers_unparsed->size, frame.payload, frame.length);
+        conn->_headers_unparsed->size += frame.length;
 
-    if (conn->_headers_unparsed->size <= H2O_MAX_REQLEN) {
         if ((frame.flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) != 0) {
             conn->_read_expect = expect_default;
             if (stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS) {
@@ -744,8 +741,10 @@ static int handle_ping_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
     if ((ret = h2o_http2_decode_ping_payload(&payload, frame, err_desc)) != 0)
         return ret;
 
-    h2o_http2_encode_ping_frame(&conn->_write.buf, 1, payload.data);
-    h2o_http2_conn_request_write(conn);
+    if ((frame->flags & H2O_HTTP2_FRAME_FLAG_ACK) == 0) {
+        h2o_http2_encode_ping_frame(&conn->_write.buf, 1, payload.data);
+        h2o_http2_conn_request_write(conn);
+    }
 
     return 0;
 }
@@ -1255,8 +1254,7 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
         return;
 
     /* open the stream */
-    conn->push_stream_ids.max_open += 2;
-    h2o_http2_stream_t *stream = h2o_http2_stream_open(conn, conn->push_stream_ids.max_open, NULL, &h2o_http2_default_priority);
+    h2o_http2_stream_t *stream = h2o_http2_stream_open(conn, conn->push_stream_ids.max_open + 2, NULL, &h2o_http2_default_priority);
     stream->received_priority.dependency = src_stream->stream_id;
     stream->push.parent_stream_id = src_stream->stream_id;
     h2o_http2_scheduler_open(&stream->_refs.scheduler, &src_stream->_refs.scheduler.node, 16, 0);
@@ -1364,6 +1362,8 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
 
     return 0;
 Error:
+    h2o_linklist_unlink(&http2conn->_conns);
+    kh_destroy(h2o_http2_stream_t, http2conn->streams);
     free(http2conn);
     return -1;
 }

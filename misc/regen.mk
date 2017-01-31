@@ -30,8 +30,8 @@ share/h2o/fastcgi-cgi: FORCE
 
 share/h2o/ca-bundle.crt: FORCE
 	cd share/h2o; \
-	../../misc/mk-ca-bundle.pl \
-	rm -f share/h2o/certdata.txt
+	../../misc/mk-ca-bundle.pl; \
+	rm -f certdata.txt
 
 FORCE:
 

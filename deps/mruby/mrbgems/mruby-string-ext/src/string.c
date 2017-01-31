@@ -23,10 +23,11 @@ static mrb_value
 mrb_str_setbyte(mrb_state *mrb, mrb_value str)
 {
   mrb_int pos, byte;
-  long len = RSTRING_LEN(str);
+  long len;
 
   mrb_get_args(mrb, "ii", &pos, &byte);
 
+  len = RSTRING_LEN(str);
   if (pos < -len || len <= pos)
     mrb_raisef(mrb, E_INDEX_ERROR, "index %S is out of array", mrb_fixnum_value(pos));
   if (pos < 0)
@@ -307,8 +308,9 @@ mrb_str_lines(mrb_state *mrb, mrb_value self)
   int ai;
   mrb_int len;
   mrb_value arg;
-  char *p = RSTRING_PTR(self), *t;
-  char *e = p + RSTRING_LEN(self);
+  char *b = RSTRING_PTR(self);
+  char *p = b, *t;
+  char *e = b + RSTRING_LEN(self);
 
   mrb_get_args(mrb, "&", &blk);
 
@@ -322,6 +324,12 @@ mrb_str_lines(mrb_state *mrb, mrb_value self)
       len = (mrb_int) (p - t);
       arg = mrb_str_new(mrb, t, len);
       mrb_yield_argv(mrb, blk, 1, &arg);
+      if (b != RSTRING_PTR(self)) {
+        ptrdiff_t diff = p - b;
+        b = RSTRING_PTR(self);
+        p = b + diff;
+      }
+      e = b + RSTRING_LEN(self);
     }
     return self;
   }
@@ -529,7 +537,7 @@ mrb_str_ord(mrb_state* mrb, mrb_value str)
 {
   if (RSTRING_LEN(str) == 0)
     mrb_raise(mrb, E_ARGUMENT_ERROR, "empty string");
-  return mrb_fixnum_value(RSTRING_PTR(str)[0]);
+  return mrb_fixnum_value((unsigned char)RSTRING_PTR(str)[0]);
 }
 #endif
 

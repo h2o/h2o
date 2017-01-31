@@ -175,4 +175,9 @@ builder {
         sleep 1.1;
         [200, ["content-type" => "text/plain; charset=utf-8", "content-length" => 11], ["hello world"]];
     };
+    mount "/push-attr" => sub {
+        my $env = shift;
+        my $query = Plack::Request->new($env)->query_parameters;
+        [200, ["content-type" => "text/plain; charset=utf-8", "content-length" => 11, "link" => "$query->{'pushes'}"], ["hello world"]];
+    };
 };

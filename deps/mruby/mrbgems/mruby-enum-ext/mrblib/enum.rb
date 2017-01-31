@@ -58,13 +58,14 @@ module Enumerable
 
   def take(n)
     raise TypeError, "no implicit conversion of #{n.class} into Integer" unless n.respond_to?(:to_int)
-    raise ArgumentError, "attempt to take negative size" if n < 0
-
-    n = n.to_int
+    i = n.to_int
+    raise ArgumentError, "attempt to take negative size" if i < 0
     ary = []
+    return ary if i == 0
     self.each do |*val|
-      break if ary.size >= n
       ary << val.__svalue
+      i -= 1
+      break if i == 0
     end
     ary
   end
@@ -214,21 +215,28 @@ module Enumerable
   # Returns the first element, or the first +n+ elements, of the enumerable.
   # If the enumerable is empty, the first form returns <code>nil</code>, and the
   # second form returns an empty array.
-  def first(n=NONE)
-    if n == NONE
+  def first(*args)
+    case args.length
+    when 0
       self.each do |*val|
         return val.__svalue
       end
       return nil
-    else
-      a = []
-      i = 0
+    when 1
+      n = args[0]
+      raise TypeError, "no implicit conversion of #{n.class} into Integer" unless n.respond_to?(:to_int)
+      i = n.to_int
+      raise ArgumentError, "attempt to take negative size" if i < 0
+      ary = []
+      return ary if i == 0
       self.each do |*val|
-        break if n<=i
-        a.push val.__svalue
-        i += 1
+        ary << val.__svalue
+        i -= 1
+        break if i == 0
       end
-      a
+      ary
+    else
+      raise ArgumentError, "wrong number of arguments (given #{args.length}, expected 0..1)"
     end
   end
 
@@ -384,11 +392,11 @@ module Enumerable
         min = val
         first = false
       else
+        val = val.__svalue
         if block
-          max = val.__svalue if block.call(*val, max) > 0
-          min = val.__svalue if block.call(*val, min) < 0
+          max = val if block.call(val, max) > 0
+          min = val if block.call(val, min) < 0
         else
-          val = val.__svalue
           max = val if (val <=> max) > 0
           min = val if (val <=> min) < 0
         end
@@ -573,35 +581,38 @@ module Enumerable
   #     a.cycle(2) { |x| puts x }  # print, a, b, c, a, b, c.
   #
 
-  def cycle(n=nil, &block)
-    return to_enum(:cycle, n) if !block && n.nil?
+  def cycle(nv = nil, &block)
+    return to_enum(:cycle, nv) unless block
+
+    n = nil
+
+    if nv.nil?
+      n = -1
+    else
+      unless nv.respond_to?(:to_int)
+        raise TypeError, "no implicit conversion of #{nv.class} into Integer"
+      end
+      n = nv.to_int
+      unless n.kind_of?(Integer)
+        raise TypeError, "no implicit conversion of #{nv.class} into Integer"
+      end
+      return nil if n <= 0
+    end
 
     ary = []
-    if n.nil?
-      self.each do|*val|
-        ary.push val
-        block.call(*val)
-      end
-      loop do
-        ary.each do|e|
-          block.call(*e)
-        end
-      end
-    else
-      raise TypeError, "no implicit conversion of #{n.class} into Integer" unless n.respond_to?(:to_int)
+    each do |*i|
+      ary.push(i)
+      yield(*i)
+    end
+    return nil if ary.empty?
 
-      n = n.to_int
-      self.each do|*val|
-        ary.push val
-      end
-      count = 0
-      while count < n
-        ary.each do|e|
-          block.call(*e)
-        end
-        count += 1
+    while n < 0 || 0 < (n -= 1)
+      ary.each do |i|
+        yield(*i)
       end
     end
+
+    nil
   end
 
   ##

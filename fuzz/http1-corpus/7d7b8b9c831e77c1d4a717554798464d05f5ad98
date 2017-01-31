@@ -1,0 +1,7 @@
+GET /?resp:status=200&resp:x-reproxy-url=http://%5Bunix%3A%2Ftmp%2F8nPmpn7kve%5D/?resp:status=302%26resp:location=https://default/files/index.txt HTTP/1.1
+Host: 127.0.0.1:51300
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+
+
+--MARK--

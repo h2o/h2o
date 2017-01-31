@@ -642,4 +642,19 @@ standard input of the program.</p>
 <p>If the path is not absolute, it is prefixed with <code>${H2O_ROOT}/</code>.</p>
 ? })
 
+<?
+$ctx->{directive}->(
+    name   => "crash-handler.wait-pipe-close",
+    levels => [ qw(global) ],
+    desc   => q{Whether <code>h2o</code> should wait for the crash handler pipe to close before exiting.},
+    default  => q{crash-handler.wait-pipe-close: OFF},
+    since    => "2.1",
+)->(sub {
+?>
+<p>When this setting is <code>ON</code>, <code>h2o</code> will wait
+for the pipe to the crash handler to be closed before exiting.
+This can be useful if you use a custom handler that inspects the dying
+process.</p>
+? })
+
 ? })

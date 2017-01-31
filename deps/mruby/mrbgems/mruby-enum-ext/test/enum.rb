@@ -128,6 +128,13 @@ assert("Enumerable#cycle") do
   ["a", "b", "c"].cycle(2) { |v| a << v }
   assert_equal ["a", "b", "c", "a", "b", "c"], a
   assert_raise(TypeError) { ["a", "b", "c"].cycle("a") { |v| a << v } }
+
+  empty = Class.new do
+    include Enumerable
+    def each
+    end
+  end
+  assert_nil empty.new.cycle { break :nope }
 end
 
 assert("Enumerable#find_index") do

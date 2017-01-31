@@ -44,3 +44,17 @@ EOS
   script.flush
   assert_equal "\"test\"\n\"fin\"\n", `#{cmd('mruby')} #{script.path}`
 end
+
+assert('garbage collecting built-in classes') do
+  script = Tempfile.new('test.rb')
+
+  script.write <<RUBY
+NilClass = nil
+GC.start
+Array.dup
+print nil.class.name
+RUBY
+  script.flush
+  assert_equal "NilClass", `#{cmd('mruby')} #{script.path}`
+  assert_equal 0, $?.exitstatus
+end

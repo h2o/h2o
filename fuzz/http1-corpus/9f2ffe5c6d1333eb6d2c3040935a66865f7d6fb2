@@ -1,0 +1,7 @@
+GET S/ HTTP/1.1
+host:host.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+
+
+--MARK--

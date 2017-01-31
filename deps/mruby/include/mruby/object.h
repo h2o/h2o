@@ -22,6 +22,10 @@ struct RBasic {
 };
 #define mrb_basic_ptr(v) ((struct RBasic*)(mrb_ptr(v)))
 
+#define MRB_FROZEN_P(o) ((o)->flags & MRB_FLAG_IS_FROZEN)
+#define MRB_SET_FROZEN_FLAG(o) ((o)->flags |= MRB_FLAG_IS_FROZEN)
+#define MRB_UNSET_FROZEN_FLAG(o) ((o)->flags &= ~MRB_FLAG_IS_FROZEN)
+
 struct RObject {
   MRB_OBJECT_HEADER;
   struct iv_tbl *iv;

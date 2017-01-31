@@ -151,12 +151,15 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
 static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const char *dirname, char *const *argv,
                             struct sockaddr_un *sa, struct passwd *pw)
 {
-    int listen_fd, pipe_fds[2] = {-1, -1};
+    int ret, listen_fd = -1, pipe_fds[2] = {-1, -1};
 
     /* build socket path */
     sa->sun_family = AF_UNIX;
-    strcpy(sa->sun_path, dirname);
-    strcat(sa->sun_path, "/_");
+    ret = snprintf(sa->sun_path, sizeof(sa->sun_path), "%s/_", dirname);
+    if (ret < 0 || ret >= sizeof(sa->sun_path)) {
+        h2o_configurator_errprintf(cmd, node, "unix socket path too long: %s", dirname);
+        goto Error;
+    }
 
     /* create socket */
     if ((listen_fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
@@ -184,7 +187,8 @@ static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const
         pipe_fds[1] = -1;
         goto Error;
     }
-    fcntl(pipe_fds[1], F_SETFD, FD_CLOEXEC);
+    if (fcntl(pipe_fds[1], F_SETFD, FD_CLOEXEC) < 0)
+        goto Error;
 
     /* spawn */
     int mapped_fds[] = {listen_fd, 0,   /* listen_fd to 0 */
