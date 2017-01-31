@@ -181,13 +181,13 @@ subtest 'extensions' => sub {
     );
 };
 
-subtest 'ssltest' => sub {
+subtest 'ssl-log' => sub {
     doit(
         sub {
             my $server = shift;
-            system("curl --silent https://127.0.0.1:$server->{tls_port}/ > /dev/null");
+            system("curl --silent -k https://127.0.0.1:$server->{tls_port}/ > /dev/null");
         },
-        '%{error}x',
+        '%{ssl.session-id}x',
         qr{^\S+$}s,
     );
 };
