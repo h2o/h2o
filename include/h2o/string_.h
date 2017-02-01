@@ -77,6 +77,10 @@ static void h2o_strtoupper(char *s, size_t len);
  */
 static int h2o_lcstris(const char *target, size_t target_len, const char *test, size_t test_len);
 /**
+ * turns the length of a string into the length of the same string encoded in base64
+ */
+static size_t h2o_base64_encode_capacity(unsigned len);
+/**
  * parses a positive number of return SIZE_MAX if failed
  */
 size_t h2o_strtosize(const char *s, size_t len);
@@ -176,6 +180,11 @@ inline int h2o_lcstris(const char *target, size_t target_len, const char *test, 
     if (target_len != test_len)
         return 0;
     return h2o__lcstris_core(target, test, test_len);
+}
+
+inline size_t h2o_base64_encode_capacity(unsigned len)
+{
+    return (((len) + 2) / 3 * 4 + 1);
 }
 
 #ifdef __cplusplus

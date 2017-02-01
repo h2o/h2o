@@ -579,9 +579,9 @@ static void on_upgrade_complete(h2o_socket_t *socket, const char *err)
     if (err == 0) {
         sock = conn->sock;
         reqsize = conn->_reqsize;
-	close_connection(conn, 0);
+        close_connection(conn, 0);
     } else {
-	close_connection(conn, 1);
+        close_connection(conn, 1);
     }
 
     cb(data, sock, reqsize);
@@ -767,6 +767,7 @@ DEFINE_TLS_LOGGER(protocol_version)
 DEFINE_TLS_LOGGER(session_reused)
 DEFINE_TLS_LOGGER(cipher)
 DEFINE_TLS_LOGGER(cipher_bits)
+DEFINE_TLS_LOGGER(session_id)
 
 #undef DEFINE_TLS_LOGGER
 
@@ -800,9 +801,9 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
         get_socket,   /* get underlying socket */
         NULL,         /* get debug state */
         {{
-            {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits}, /* ssl */
-            {log_request_index},                                                     /* http1 */
-            {NULL}                                                                   /* http2 */
+            {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */
+            {log_request_index},                                                                     /* http1 */
+            {NULL}                                                                                   /* http2 */
         }}};
     struct st_h2o_http1_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx->ctx, ctx->hosts, connected_at, &callbacks);
 

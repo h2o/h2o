@@ -15,6 +15,9 @@ sub doit {
     unlink "$tempdir/access_log";
 
     my $server = spawn_h2o(<< "EOT");
+ssl-session-resumption:
+  mode: cache
+  cache-store: internal
 hosts:
   default:
     paths:
@@ -178,6 +181,17 @@ subtest 'extensions' => sub {
             }
             @expected;
         },
+    );
+};
+
+subtest 'ssl-log' => sub {
+    doit(
+        sub {
+            my $server = shift;
+            system("curl --silent -k https://127.0.0.1:$server->{tls_port}/ > /dev/null");
+        },
+        '%{ssl.session-id}x',
+        qr{^\S+$}s,
     );
 };
 
