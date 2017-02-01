@@ -755,6 +755,7 @@ typedef struct st_h2o_conn_callbacks_t {
                 h2o_iovec_t (*session_reused)(h2o_req_t *req);
                 h2o_iovec_t (*cipher)(h2o_req_t *req);
                 h2o_iovec_t (*cipher_bits)(h2o_req_t *req);
+                h2o_iovec_t (*session_ticket)(h2o_req_t *req);
             } ssl;
             struct {
                 h2o_iovec_t (*request_index)(h2o_req_t *req);

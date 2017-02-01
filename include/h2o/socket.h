@@ -264,6 +264,8 @@ static h2o_iovec_t h2o_socket_log_ssl_protocol_version(h2o_socket_t *sock, h2o_m
 static h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 static h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+h2o_iovec_t h2o_socket_log_ssl_session_ticket(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+
 /**
  * compares socket addresses
  */
