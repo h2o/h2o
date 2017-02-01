@@ -29,6 +29,12 @@
 #include "h2o/http1client.h"
 #include "h2o/tunnel.h"
 
+struct rp_generator_t;
+struct await_send_arg_t {
+    struct rp_generator_t *proxy_generator;
+    h2o_socket_cb cb;
+};
+
 struct rp_generator_t {
     h2o_generator_t super;
     h2o_req_t *src_req;
@@ -41,6 +47,8 @@ struct rp_generator_t {
     h2o_doublebuffer_t sending;
     int is_websocket_handshake;
     int had_body_error; /* set if an error happened while fetching the body so that we can propagate the error */
+    void (*await_send)(struct await_send_arg_t *);
+    struct await_send_arg_t await_send_arg;
 };
 
 struct rp_ws_upgrade_info_t {
@@ -377,6 +385,10 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
 
     h2o_doublebuffer_consume(&self->sending);
     do_send(self);
+    if (self->await_send) {
+        self->await_send(&self->await_send_arg);
+        self->await_send = NULL;
+    }
 }
 
 static void on_websocket_upgrade_complete(void *_info, h2o_socket_t *sock, size_t reqsize)
@@ -404,9 +416,16 @@ static inline void on_websocket_upgrade(struct rp_generator_t *self, h2o_timeout
     h2o_http1_upgrade(req, NULL, 0, on_websocket_upgrade_complete, info);
 }
 
+static void await_send(struct await_send_arg_t *asc)
+{
+    if (asc->proxy_generator->client)
+        h2o_socket_read_start(asc->proxy_generator->client->sock, asc->cb);
+}
+
 static int on_body(h2o_http1client_t *client, const char *errstr)
 {
     struct rp_generator_t *self = client->data;
+    h2o_req_overrides_t *overrides = self->src_req->overrides;
 
     if (errstr != NULL) {
         /* detach the content */
@@ -420,6 +439,13 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     }
     if (self->sending.bytes_inflight == 0)
         do_send(self);
+
+    if (self->client && self->client->sock && overrides && self->client->sock->input->size > overrides->max_buffer_size) {
+        self->await_send = await_send;
+        self->await_send_arg.proxy_generator = self;
+        self->await_send_arg.cb = self->client->sock->_cb.read;
+        h2o_socket_read_stop(self->client->sock);
+    }
 
     return 0;
 }
@@ -609,6 +635,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, int keepalive, 
         self->is_websocket_handshake = 0;
     }
     self->had_body_error = 0;
+    self->await_send = NULL;
     self->up_req.bufs[1] = build_request_rest_headers(req, keepalive, self->is_websocket_handshake);
     self->up_req.bufs[2] = req->entity;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
