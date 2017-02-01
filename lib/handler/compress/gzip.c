@@ -82,6 +82,7 @@ static size_t process_chunk(struct st_gzip_context_t *self, const void *src, siz
         self->zs.next_out = (void *)(self->bufs.entries[bufindex].base + self->bufs.entries[bufindex].len);
         self->zs.avail_out = (unsigned)(BUF_SIZE - self->bufs.entries[bufindex].len);
         ret = proc(&self->zs, flush);
+        /* inflate() returns Z_BUF_ERROR if flush is set to Z_FINISH at the middle of the compressed data */
         assert(ret == Z_OK || ret == Z_STREAM_END || ret == Z_BUF_ERROR);
         self->bufs.entries[bufindex].len = BUF_SIZE - self->zs.avail_out;
     } while (self->zs.avail_out == 0 && ret != Z_STREAM_END);
