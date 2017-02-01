@@ -132,7 +132,6 @@ const char *h2o_socket_error_ssl_decode = "SSL decode error";
 
 static void (*resumption_get_async)(h2o_socket_t *sock, h2o_iovec_t session_id);
 static void (*resumption_new)(h2o_iovec_t session_id, h2o_iovec_t session_data);
-static void (*resumption_remove)(h2o_iovec_t session_id);
 
 static int read_bio(BIO *b, char *out, int len)
 {
@@ -804,17 +803,6 @@ static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
     return 0;
 }
 
-static void on_async_resumption_remove(SSL_CTX *ssl_ctx, SSL_SESSION *session)
-{
-    if (resumption_remove == NULL) {
-        return;
-    }
-
-    unsigned idlen;
-    const unsigned char *id = SSL_SESSION_get_id(session, &idlen);
-    resumption_remove(h2o_iovec_init(id, idlen));
-}
-
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
     if (err == NULL) {
@@ -1033,19 +1021,16 @@ void h2o_socket_ssl_resume_server_handshake(h2o_socket_t *sock, h2o_iovec_t sess
     }
 }
 
-void h2o_socket_ssl_async_resumption_init(h2o_socket_ssl_resumption_get_async_cb get_async_cb,
-                                          h2o_socket_ssl_resumption_new_cb new_cb, h2o_socket_ssl_resumption_remove_cb remove_cb)
+void h2o_socket_ssl_async_resumption_init(h2o_socket_ssl_resumption_get_async_cb get_async_cb, h2o_socket_ssl_resumption_new_cb new_cb)
 {
     resumption_get_async = get_async_cb;
     resumption_new = new_cb;
-    resumption_remove = remove_cb;
 }
 
 void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx)
 {
     SSL_CTX_sess_set_get_cb(ctx, on_async_resumption_get);
     SSL_CTX_sess_set_new_cb(ctx, on_async_resumption_new);
-    SSL_CTX_sess_set_remove_cb(ctx, on_async_resumption_remove);
     /* if necessary, it is the responsibility of the caller to disable the internal cache */
 }
 

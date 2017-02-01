@@ -95,7 +95,7 @@ void h2o_accept_setup_async_ssl_resumption(h2o_memcached_context_t *memc, unsign
 {
     async_resumption_context.memc = memc;
     async_resumption_context.expiration = expiration;
-    h2o_socket_ssl_async_resumption_init(async_resumption_get, async_resumption_new, NULL);
+    h2o_socket_ssl_async_resumption_init(async_resumption_get, async_resumption_new);
 }
 
 void on_accept_timeout(h2o_timeout_entry_t *entry)
