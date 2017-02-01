@@ -25,6 +25,7 @@
 #include <mruby/error.h>
 #include <mruby/string.h>
 #include "h2o/mruby_.h"
+#include "embedded.c.h"
 
 struct st_h2o_mruby_chunked_t {
     h2o_doublebuffer_t sending;
@@ -255,17 +256,12 @@ void h2o_mruby_send_chunked_init_context(h2o_mruby_shared_context_t *shared_ctx)
 {
     mrb_state *mrb = shared_ctx->mrb;
 
+    h2o_mruby_eval_expr(mrb, H2O_MRUBY_CODE_CHUNKED);
+    h2o_mruby_assert(mrb);
+
     mrb_define_method(mrb, mrb->kernel_module, "_h2o_send_chunk", send_chunked_method, MRB_ARGS_ARG(1, 0));
     h2o_mruby_define_callback(mrb, "_h2o_send_chunk_eos", H2O_MRUBY_CALLBACK_ID_SEND_CHUNKED_EOS);
-    mrb_ary_set(mrb, shared_ctx->constants, H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER,
-                h2o_mruby_eval_expr(mrb, "Proc.new do |src|\n"
-                                         "  fiber = Fiber.new do\n"
-                                         "    src.each do |chunk|\n"
-                                         "      _h2o_send_chunk(chunk)\n"
-                                         "    end\n"
-                                         "    _h2o_send_chunk_eos()\n"
-                                         "  end\n"
-                                         "  fiber.resume\n"
-                                         "end"));
+
+    mrb_ary_set(mrb, shared_ctx->constants, H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER, mrb_funcall(mrb, mrb_top_self(mrb), "_h2o_chunked_proc_each_to_fiber", 0));
     h2o_mruby_assert(mrb);
 }
