@@ -91,16 +91,11 @@ static void async_resumption_new(h2o_iovec_t session_id, h2o_iovec_t session_dat
                       H2O_MEMCACHED_ENCODE_KEY | H2O_MEMCACHED_ENCODE_VALUE);
 }
 
-static void async_resumption_remove(h2o_iovec_t session_id)
-{
-    h2o_memcached_delete(async_resumption_context.memc, session_id, H2O_MEMCACHED_ENCODE_KEY);
-}
-
 void h2o_accept_setup_async_ssl_resumption(h2o_memcached_context_t *memc, unsigned expiration)
 {
     async_resumption_context.memc = memc;
     async_resumption_context.expiration = expiration;
-    h2o_socket_ssl_async_resumption_init(async_resumption_get, async_resumption_new, async_resumption_remove);
+    h2o_socket_ssl_async_resumption_init(async_resumption_get, async_resumption_new, NULL);
 }
 
 void on_accept_timeout(h2o_timeout_entry_t *entry)

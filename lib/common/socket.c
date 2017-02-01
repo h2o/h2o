@@ -806,6 +806,10 @@ static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
 
 static void on_async_resumption_remove(SSL_CTX *ssl_ctx, SSL_SESSION *session)
 {
+    if (resumption_remove == NULL) {
+        return;
+    }
+
     unsigned idlen;
     const unsigned char *id = SSL_SESSION_get_id(session, &idlen);
     resumption_remove(h2o_iovec_init(id, idlen));
