@@ -24,6 +24,7 @@
  * This file implements a test harness for using h2o with LibFuzzer.
  * See http://llvm.org/docs/LibFuzzer.html for more info.
  */
+#define H2O_USE_EPOLL 1
 
 #include "h2o.h"
 #include "h2o/url.h"
