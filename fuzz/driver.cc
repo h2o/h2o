@@ -135,7 +135,7 @@ static void read_fully(int fd, char *buf, size_t len)
 /*
  * Writes the writer_thread_args at buf to fd
  */
-static void write_fully(int fd, char *buf, size_t len)
+static void write_fully(int fd, char *buf, size_t len, int abort_on_err)
 {
     int done = 0;
     while (len) {
@@ -143,7 +143,10 @@ static void write_fully(int fd, char *buf, size_t len)
         while ((ret = write(fd, buf + done, len)) == -1 && errno == EINTR)
             ;
         if (ret <= 0) {
-            abort();
+            if (abort_on_err)
+                abort();
+            else
+                return;
         }
         done += ret;
         len -= ret;
@@ -177,7 +180,7 @@ void *upstream_thread(void *arg)
             continue;
         }
         read(cfs, rbuf, sizeof(rbuf));
-        write_fully(cfs, (char *)OK_RESP, OK_RESP_LEN);
+        write_fully(cfs, (char *)OK_RESP, OK_RESP_LEN, 0);
         close(cfs);
     }
 }
@@ -266,7 +269,7 @@ static int feeder(int sfd, char *buf, size_t len, pthread_barrier_t **barrier)
     pthread_barrier_init(&wta->barrier, NULL, 2);
     *barrier = &wta->barrier;
 
-    write_fully(sfd, (char *)&wta, sizeof(wta));
+    write_fully(sfd, (char *)&wta, sizeof(wta), 1);
     return pair[1];
 }
 
