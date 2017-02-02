@@ -11,7 +11,7 @@ tokens:
 	misc/tokens.pl
 
 lib/handler/mruby/embedded.c.h: misc/embed_mruby_code.pl \
-								lib/handler/mruby/embedded/core.rb \
+                                lib/handler/mruby/embedded/core.rb \
                                 lib/handler/mruby/embedded/http_request.rb \
                                 lib/handler/mruby/embedded/chunked.rb
 	misc/embed_mruby_code.pl $^ > $@
