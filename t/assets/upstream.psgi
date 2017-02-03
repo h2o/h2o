@@ -139,6 +139,17 @@ builder {
             ],
         ];
     };
+    mount "/big-stream" => sub {
+        my $env = shift;
+        my $query = Plack::Request->new($env)->parameters;
+        my $size = $query->{size} || 1024;
+        return sub {
+            my $responder = shift;
+            my $writer = $responder->([ 200, [ 'content-type' => 'text/plain' ] ]);
+            $writer->write("a" x $size);
+            $writer->close;
+        };
+    };
     mount "/infinite-stream" => sub {
         my $env = shift;
         return sub {
