@@ -31,6 +31,21 @@
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 {
     h2o_url_t url;
-    h2o_url_parse((const char *)Data, Size, &url);
+    int ret;
+    ret = h2o_url_parse((const char *)Data, Size, &url);
+    if (ret != -1) {
+        size_t total = 0, i;
+        assert(url.scheme != NULL);
+        for (i = 0; i < url.authority.len; i++)
+            if (url.authority.base[i])
+                total++;
+        for (i = 0; i < url.host.len; i++)
+            if (url.host.base[i])
+                total++;
+        for (i = 0; i < url.path.len; i++)
+            if (url.path.base[i])
+                total++;
+        assert(total <= Size * 2);
+    }
     return 0;
 }
