@@ -43,7 +43,7 @@ static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, s
     h2o_iovec_t *outbufs;
     size_t outbufcnt;
 
-    self->compressor->compress(self->compressor, inbufs, inbufcnt, state, &outbufs, &outbufcnt);
+    self->compressor->transform(self->compressor, inbufs, inbufcnt, state, &outbufs, &outbufcnt);
     h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, state);
 }
 

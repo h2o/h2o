@@ -38,6 +38,11 @@ struct st_gzip_context_t {
     iovec_vector_t bufs;
 };
 
+static void do_compress(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                        h2o_iovec_t **outbufs, size_t *outbufcnt);
+static void do_decompress(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                          h2o_iovec_t **outbufs, size_t *outbufcnt);
+
 static void *alloc_cb(void *_unused, unsigned int cnt, unsigned int sz)
 {
     return h2o_mem_alloc(cnt * (size_t)sz);
@@ -54,15 +59,17 @@ static void expand_buf(iovec_vector_t *bufs)
     bufs->entries[bufs->size++] = h2o_iovec_init(h2o_mem_alloc(BUF_SIZE), 0);
 }
 
-static size_t compress_chunk(struct st_gzip_context_t *self, const void *src, size_t len, int flush, size_t bufindex)
+typedef int (*processor)(z_streamp strm, int flush);
+
+static size_t process_chunk(struct st_gzip_context_t *self, const void *src, size_t len, int flush, size_t bufindex, processor proc)
 {
     int ret;
 
     self->zs.next_in = (void *)src;
     self->zs.avail_in = (unsigned)len;
 
-    /* man says: If deflate returns with avail_out == 0, this function must be called again with the same value of the flush
-     * parameter and more output space (updated avail_out), until the flush is complete (deflate returns with non-zero avail_out).
+    /* man says: If inflate/deflate returns with avail_out == 0, this function must be called again with the same value of the flush
+     * parameter and more output space (updated avail_out), until the flush is complete (function returns with non-zero avail_out).
      */
     do {
         /* expand buffer (note: in case of Z_SYNC_FLUSH we need to supply at least 6 bytes of output buffer) */
@@ -74,16 +81,17 @@ static size_t compress_chunk(struct st_gzip_context_t *self, const void *src, si
         }
         self->zs.next_out = (void *)(self->bufs.entries[bufindex].base + self->bufs.entries[bufindex].len);
         self->zs.avail_out = (unsigned)(BUF_SIZE - self->bufs.entries[bufindex].len);
-        ret = deflate(&self->zs, flush);
-        assert(ret == Z_OK || ret == Z_STREAM_END);
+        ret = proc(&self->zs, flush);
+        /* inflate() returns Z_BUF_ERROR if flush is set to Z_FINISH at the middle of the compressed data */
+        assert(ret == Z_OK || ret == Z_STREAM_END || ret == Z_BUF_ERROR);
         self->bufs.entries[bufindex].len = BUF_SIZE - self->zs.avail_out;
     } while (self->zs.avail_out == 0 && ret != Z_STREAM_END);
 
     return bufindex;
 }
 
-static void do_compress(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
-                        h2o_iovec_t **outbufs, size_t *outbufcnt)
+static void do_process(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                        h2o_iovec_t **outbufs, size_t *outbufcnt, processor proc)
 {
     struct st_gzip_context_t *self = (void *)_self;
     size_t outbufindex;
@@ -95,21 +103,37 @@ static void do_compress(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size
     if (inbufcnt != 0) {
         size_t i;
         for (i = 0; i != inbufcnt - 1; ++i)
-            outbufindex = compress_chunk(self, inbufs[i].base, inbufs[i].len, Z_NO_FLUSH, outbufindex);
+            outbufindex = process_chunk(self, inbufs[i].base, inbufs[i].len, Z_NO_FLUSH, outbufindex, proc);
         last_buf = inbufs[i];
     } else {
         last_buf = h2o_iovec_init(NULL, 0);
     }
-    outbufindex = compress_chunk(self, last_buf.base, last_buf.len, h2o_send_state_is_in_progress(state) ? Z_SYNC_FLUSH : Z_FINISH,
-                                 outbufindex);
+    outbufindex = process_chunk(self, last_buf.base, last_buf.len, h2o_send_state_is_in_progress(state) ? Z_SYNC_FLUSH : Z_FINISH,
+                                 outbufindex, proc);
 
     *outbufs = self->bufs.entries;
     *outbufcnt = outbufindex + 1;
 
     if (!h2o_send_state_is_in_progress(state)) {
-        deflateEnd(&self->zs);
+        if (self->super.transform == do_compress) {
+            deflateEnd(&self->zs);
+        } else {
+            inflateEnd(&self->zs);
+        }
         self->zs_is_open = 0;
     }
+}
+
+static void do_compress(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                        h2o_iovec_t **outbufs, size_t *outbufcnt)
+{
+    do_process(_self, inbufs, inbufcnt, state, outbufs, outbufcnt, (processor)deflate);
+}
+
+static void do_decompress(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                        h2o_iovec_t **outbufs, size_t *outbufcnt)
+{
+    do_process(_self, inbufs, inbufcnt, state, outbufs, outbufcnt, (processor)inflate);
 }
 
 static void do_free(void *_self)
@@ -117,28 +141,50 @@ static void do_free(void *_self)
     struct st_gzip_context_t *self = _self;
     size_t i;
 
-    if (self->zs_is_open)
-        deflateEnd(&self->zs);
+    if (self->zs_is_open) {
+        if (self->super.transform == do_compress) {
+            deflateEnd(&self->zs);
+        } else {
+            inflateEnd(&self->zs);
+        }
+    }
 
     for (i = 0; i != self->bufs.size; ++i)
         free(self->bufs.entries[i].base);
     free(self->bufs.entries);
 }
 
-h2o_compress_context_t *h2o_compress_gzip_open(h2o_mem_pool_t *pool, int quality)
+static struct st_gzip_context_t *gzip_open(h2o_mem_pool_t *pool)
 {
     struct st_gzip_context_t *self = h2o_mem_alloc_shared(pool, sizeof(*self), do_free);
 
     self->super.name = h2o_iovec_init(H2O_STRLIT("gzip"));
-    self->super.compress = do_compress;
+    self->super.transform = NULL;
     self->zs.zalloc = alloc_cb;
     self->zs.zfree = free_cb;
     self->zs.opaque = NULL;
-    /* Z_BEST_SPEED for on-the-fly compression, memlevel set to 8 as suggested by the manual */
-    deflateInit2(&self->zs, quality, Z_DEFLATED, WINDOW_BITS, 8, Z_DEFAULT_STRATEGY);
     self->zs_is_open = 1;
     self->bufs = (iovec_vector_t){NULL};
     expand_buf(&self->bufs);
+
+    return self;
+}
+
+h2o_compress_context_t *h2o_compress_gzip_open(h2o_mem_pool_t *pool, int quality)
+{
+    struct st_gzip_context_t *self = gzip_open(pool);
+    self->super.transform = do_compress;
+    /* Z_BEST_SPEED for on-the-fly compression, memlevel set to 8 as suggested by the manual */
+    deflateInit2(&self->zs, quality, Z_DEFLATED, WINDOW_BITS, 8, Z_DEFAULT_STRATEGY);
+
+    return &self->super;
+}
+
+h2o_compress_context_t *h2o_compress_gunzip_open(h2o_mem_pool_t *pool)
+{
+    struct st_gzip_context_t *self = gzip_open(pool);
+    self->super.transform = do_decompress;
+    inflateInit2(&self->zs, WINDOW_BITS);
 
     return &self->super;
 }

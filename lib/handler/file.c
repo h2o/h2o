@@ -49,6 +49,7 @@ struct st_h2o_sendfile_generator_t {
     h2o_iovec_t content_encoding;
     unsigned send_vary : 1;
     unsigned send_etag : 1;
+    unsigned gunzip : 1;
     char *buf;
     struct {
         size_t filesize;
@@ -79,6 +80,11 @@ struct st_h2o_specific_file_handler_t {
     h2o_iovec_t real_path;
     h2o_mimemap_type_t *mime_type;
     int flags;
+};
+
+struct st_gzip_decompress_t {
+    h2o_ostream_t super;
+    h2o_compress_context_t *decompressor;
 };
 
 static const char *default_index_files[] = {"index.html", "index.htm", "index.txt", NULL};
@@ -231,7 +237,8 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
 {
     struct st_h2o_sendfile_generator_t *self;
     h2o_filecache_ref_t *fileref;
-    h2o_iovec_t content_encoding;
+    h2o_iovec_t content_encoding = (h2o_iovec_t){NULL};
+    unsigned gunzip = 0;
 
     *is_dir = 0;
 
@@ -253,9 +260,19 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
 #undef TRY_VARIANT
         }
     }
-    if ((fileref = h2o_filecache_open_file(req->conn->ctx->filecache, path, O_RDONLY | O_CLOEXEC)) == NULL)
-        return NULL;
-    content_encoding = (h2o_iovec_t){NULL};
+    if ((fileref = h2o_filecache_open_file(req->conn->ctx->filecache, path, O_RDONLY | O_CLOEXEC)) != NULL) {
+        goto Opened;
+    }
+    if ((flags & H2O_FILE_FLAG_GUNZIP) != 0 && req->version >= 0x101){
+        char *variant_path = h2o_mem_alloc_pool(&req->pool, path_len + sizeof(".gz"));
+        memcpy(variant_path, path, path_len);
+        strcpy(variant_path + path_len, ".gz");
+        if ((fileref = h2o_filecache_open_file(req->conn->ctx->filecache, variant_path, O_RDONLY | O_CLOEXEC)) != NULL) {
+            gunzip = 1;
+            goto Opened;
+        }
+    }
+    return NULL;
 
 Opened:
     if (S_ISDIR(fileref->st.st_mode)) {
@@ -276,6 +293,7 @@ Opened:
     self->content_encoding = content_encoding;
     self->send_vary = (flags & H2O_FILE_FLAG_SEND_COMPRESSED) != 0;
     self->send_etag = (flags & H2O_FILE_FLAG_NO_ETAG) == 0;
+    self->gunzip = gunzip;
 
     return self;
 }
@@ -294,6 +312,16 @@ static void add_headers_unconditional(struct st_h2o_sendfile_generator_t *self, 
         h2o_set_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
 }
 
+static void send_decompressed(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
+{
+    struct st_gzip_decompress_t *self = (void *)_self;
+    h2o_iovec_t *outbufs;
+    size_t outbufcnt;
+
+    self->decompressor->transform(self->decompressor, inbufs, inbufcnt, state, &outbufs, &outbufcnt);
+    h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, state);
+}
+
 static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *req, int status, const char *reason,
                          h2o_iovec_t mime_type, h2o_mime_attributes_t *mime_attr, int is_get)
 {
@@ -303,7 +331,7 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     /* setup response */
     req->res.status = status;
     req->res.reason = reason;
-    req->res.content_length = self->bytesleft;
+    req->res.content_length = self->gunzip ? SIZE_MAX : self->bytesleft;
     req->res.mime_attr = mime_attr;
 
     if (self->ranged.range_count > 1) {
@@ -339,6 +367,13 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
 
     /* send data */
     h2o_start_response(req, &self->super);
+
+    /* dynamically setup gzip decompress ostream */
+    if (self->gunzip) {
+        struct st_gzip_decompress_t *decoder = (void *)h2o_add_ostream(req, sizeof(struct st_gzip_decompress_t), &req->_ostr_top);
+        decoder->decompressor = h2o_compress_gunzip_open(&req->pool);
+        decoder->super.do_send = send_decompressed;
+    }
 
     if (self->ranged.range_count == 1)
         self->file.off = self->ranged.range_infos[0];

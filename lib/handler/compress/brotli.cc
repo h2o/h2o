@@ -35,7 +35,7 @@ namespace {
     public:
         brotli_context(int quality, size_t estimated_content_length) : brotli_(NULL) {
             name = h2o_iovec_init(H2O_STRLIT("br"));
-            compress = _compress;
+            transform = _compress;
             params_.quality = quality;
             if (estimated_content_length != std::numeric_limits<size_t>::max())
                 _update_lgwin(params_, estimated_content_length);
