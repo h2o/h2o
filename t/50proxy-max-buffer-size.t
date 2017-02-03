@@ -2,6 +2,7 @@ use strict;
 use warnings;
 use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
+use IO::Socket::INET;
 use t::Util;
 
 plan skip_all => 'nghttp not found'
@@ -17,22 +18,35 @@ plan skip_all => 'curl not found'
     unless prog_exists('curl');
 
 my $upstream_port = empty_port();
-my $upstream_hostport = "127.0.0.1:$upstream_port";
 
 sub create_upstream {
-    my @args = (
-        qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen),
-        $upstream_hostport,
-        ASSETS_DIR . "/upstream.psgi",
+# creating a listening socket
+    my $socket = new IO::Socket::INET (
+        LocalHost => '127.0.0.1',
+        LocalPort => $upstream_port,
+        Proto => 'tcp',
+        Listen => 1,
+        Reuse => 1
     );
-    spawn_server(
-        argv     => \@args,
-        is_ready =>  sub {
-            $upstream_hostport =~ /:([0-9]+)$/s
-                or die "failed to extract port number";
-            check_port($1);
-        },
-    );
+    die "cannot create socket $!\n" unless $socket;
+    return $socket;
+};
+
+sub handler_curl {
+    my $socket = shift;
+    my $client_socket = $socket->accept();
+
+    my $data = "";
+    print($client_socket->recv($data, 4096));
+
+    my $header = "HTTP/1.0 200 Ok\r\nConnection: close\r\n\r\n";
+    $client_socket->send($header);
+    my $start = time();
+    $client_socket->send("a" x 200000000);
+    my $duration = time() - $start;
+    $client_socket->send("\n$duration");
+
+    close($client_socket);
 };
 
 my $upstream = create_upstream();
@@ -43,7 +57,7 @@ sub max_buffer_size_test {
     my $directive = "";
 
     if ($max_on == 1) {
-        $directive = "proxy.max-buffer-size: 10000";
+        $directive = "proxy.max-buffer-size: 1000";
     }
     my $server = spawn_h2o(<< "EOT");
 hosts:
@@ -54,50 +68,32 @@ hosts:
         $directive
 EOT
 
-    #
-
-    my $nghttp_pid = open(NGHTTP, "nghttp -t 10 -nv 'http://127.0.0.1:$server->{'port'}/big-stream?size=30000000' 2>&1 |");
-
-    sleep(1);
-    kill 'STOP', $nghttp_pid;
-    my $n=0;
-    my $saw_tmp_file = 0;
-    while ($n < 100) {
-        $n++;
-        chomp(my $nr_tmp_file = `lsof -np $server->{'pid'} 2> /dev/null | grep '/tmp/h2o.' | grep deleted | wc -l`);
-        if ($nr_tmp_file > 0) {
-            $saw_tmp_file = 1;
-            last;
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my $start = time();
+        open(CURL, "$curl --limit-rate 40M -s $proto://127.0.0.1:$port/ 2>&1 | tail -n 1 |");
+        handler_curl($upstream);
+        my $resp = <CURL>;
+        my $duration = time() - $start;
+        # handle_curl() writes 200M and curl downloads at 40M/s, so it
+        # should take about 5 seconds to download
+        # when the proxy.max-buffer-size is not set, H2O will buffer the
+        # whole 200M, so the time spent in handler_curl() will be very small.
+        # OTOH, when the setting is set, it will take about the same time
+        # to write to H2O, as it will take for curl download  the response
+        if ($max_on) {
+            ok($duration - $resp <= 2, "Writing to H2O was as fast as the curl download");
+        } else {
+            ok($duration - $resp > 3, "Writing to H2O was much faster than the curl download");
         }
-        sleep .1;
-    }
-    if ($max_on) {
-        ok($saw_tmp_file == 0, "Didn't see a temporary file");
-    } else {
-        ok($saw_tmp_file == 1, "Saw a temporary file");
-    }
-
-    chomp(my $estab = `lsof -np $server->{'pid'} 2> /dev/null | grep ESTABLISHED | grep $upstream_port | wc -l`);
-    if ($max_on == 1) {
-        ok($estab ==  1, "Connection to upstream was not closed");
-    } else {
-        ok($estab ==  0, "Connection to upstream has been closed");
-    }
-    kill 'CONT', $nghttp_pid;
-
-    my $saw_end = 0;
-    while (<NGHTTP>) {
-        if (/NO_ERROR/) {
-            $saw_end = 1;
-            close(NGHTTP);
-            last;
-        }
-    }
-
-    ok($saw_end == 1, "Stream finished as expected");
+    });
 }
 
-max_buffer_size_test(0);
-max_buffer_size_test(1);
+subtest "no max buffer size" => sub {
+    max_buffer_size_test(0);
+};
+subtest "max buffer size" => sub {
+    max_buffer_size_test(1);
+};
 
 done_testing();
