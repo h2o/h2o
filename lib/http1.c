@@ -415,6 +415,7 @@ static void send_bad_request(struct st_h2o_http1_conn_t *conn)
 
     assert(conn->req.version == 0 && "request has not been parsed successfully");
     h2o_socket_write(conn->sock, (h2o_iovec_t *)&resp, 1, send_bad_request_on_complete);
+    h2o_socket_read_stop(conn->sock);
 }
 
 static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
