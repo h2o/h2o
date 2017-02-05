@@ -296,7 +296,7 @@ void h2o_accept_setup_redis_ssl_resumption(const char *host, uint16_t port, unsi
     async_resumption_context.redis.prefix = h2o_strdup(NULL, prefix, SIZE_MAX);
     async_resumption_context.expiration = expiration;
 
-    h2o_socket_ssl_async_resumption_init(redis_resumption_get, redis_resumption_new, NULL);
+    h2o_socket_ssl_async_resumption_init(redis_resumption_get, redis_resumption_new);
 
     accept_data_callbacks.create = create_redis_accept_data;
     accept_data_callbacks.destroy = destroy_redis_accept_data;
