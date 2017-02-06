@@ -26,6 +26,7 @@
 #include <mruby/string.h>
 #include <mruby_input_stream.h>
 #include "h2o/mruby_.h"
+#include "embedded.c.h"
 
 struct st_h2o_mruby_http_request_context_t {
     h2o_mruby_generator_t *generator;
@@ -467,46 +468,21 @@ h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx
 void h2o_mruby_http_request_init_context(h2o_mruby_shared_context_t *ctx)
 {
     mrb_state *mrb = ctx->mrb;
+
+    h2o_mruby_eval_expr(mrb, H2O_MRUBY_CODE_HTTP_REQUEST);
+    h2o_mruby_assert(mrb);
+
     struct RClass *module, *klass;
+    module = mrb_define_module(mrb, "H2O");
 
     mrb_define_method(mrb, mrb->kernel_module, "http_request", http_request_method, MRB_ARGS_ARG(1, 2));
 
-    module = mrb_define_module(mrb, "H2O");
-    klass = mrb_define_class_under(mrb, module, "HttpRequest", mrb->object_class);
+    klass = mrb_class_get_under(mrb, module, "HttpRequest");
     mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_REQUEST_CLASS, mrb_obj_value(klass));
 
-    klass = mrb_define_class_under(mrb, module, "HttpInputStream", mrb->object_class);
+    klass = mrb_class_get_under(mrb, module, "HttpInputStream");
     mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_INPUT_STREAM_CLASS, mrb_obj_value(klass));
 
     h2o_mruby_define_callback(mrb, "_h2o__http_join_response", H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE);
     h2o_mruby_define_callback(mrb, "_h2o__http_fetch_chunk", H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK);
-
-    h2o_mruby_eval_expr(mrb, "module H2O\n"
-                             "  class HttpRequest\n"
-                             "    def join\n"
-                             "      if !@resp\n"
-                             "        @resp = _h2o__http_join_response(self)\n"
-                             "      end\n"
-                             "      @resp\n"
-                             "    end\n"
-                             "    def _set_response(resp)\n"
-                             "      @resp = resp\n"
-                             "    end\n"
-                             "  end\n"
-                             "  class HttpInputStream\n"
-                             "    def each\n"
-                             "      while c = _h2o__http_fetch_chunk(self)\n"
-                             "        yield c\n"
-                             "      end\n"
-                             "    end\n"
-                             "    def join\n"
-                             "      s = \"\"\n"
-                             "      each do |c|\n"
-                             "        s << c\n"
-                             "      end\n"
-                             "      s\n"
-                             "    end\n"
-                             "  end\n"
-                             "end");
-    h2o_mruby_assert(mrb);
 }
