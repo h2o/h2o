@@ -1,4 +1,5 @@
 $LOAD_PATH << 'share/h2o/mruby'
+require 'lib/handler/mruby/embedded/bootstrap.rb'
 require 'misc/mruby-mtest/mrblib/mtest_unit.rb'
 require 'acl.rb'
 

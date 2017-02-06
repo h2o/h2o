@@ -21,6 +21,13 @@
 
 module Kernel
 
+  def _h2o_try_preload()
+    begin
+      require 'preloads.rb'
+    rescue LoadError => e
+    end
+  end
+
   def _h2o_define_callback(name, id)
     Kernel.define_method(name) do |*args|
       ret = Fiber.yield([ id, _h2o_create_resumer(), args ])

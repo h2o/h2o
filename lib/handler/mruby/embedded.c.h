@@ -6,6 +6,12 @@
 /* lib/handler/mruby/embedded/core.rb */
 #define H2O_MRUBY_CODE_CORE                                                                                                        \
     "module Kernel\n"                                                                                                              \
+    "  def _h2o_try_preload()\n"                                                                                                   \
+    "    begin\n"                                                                                                                  \
+    "      require 'preloads.rb'\n"                                                                                                \
+    "    rescue LoadError => e\n"                                                                                                  \
+    "    end\n"                                                                                                                    \
+    "  end\n"                                                                                                                      \
     "  def _h2o_define_callback(name, id)\n"                                                                                       \
     "    Kernel.define_method(name) do |*args|\n"                                                                                  \
     "      ret = Fiber.yield([ id, _h2o_create_resumer(), args ])\n"                                                               \
@@ -61,9 +67,41 @@
     "  end\n"                                                                                                                      \
     "end\n"
 
+/* lib/handler/mruby/embedded/bootstrap.rb */
+#define H2O_MRUBY_CODE_BOOTSTRAP                                                                                                   \
+    "module ::H2O\n"                                                                                                               \
+    "  class ConfigurationContext\n"                                                                                               \
+    "    def self.instance()\n"                                                                                                    \
+    "      @@instance\n"                                                                                                           \
+    "    end\n"                                                                                                                    \
+    "    def self.reset()\n"                                                                                                       \
+    "      @@instance = self.new()\n"                                                                                              \
+    "    end\n"                                                                                                                    \
+    "    def initialize()\n"                                                                                                       \
+    "      @values = {}\n"                                                                                                         \
+    "      @post_handler_generation_hooks = []\n"                                                                                  \
+    "    end\n"                                                                                                                    \
+    "    def get_value(key)\n"                                                                                                     \
+    "      @values[key]\n"                                                                                                         \
+    "    end\n"                                                                                                                    \
+    "    def set_value(key, value)\n"                                                                                              \
+    "      @values[key] = value\n"                                                                                                 \
+    "    end\n"                                                                                                                    \
+    "    def delete_value(key)\n"                                                                                                  \
+    "      @values[key].delete\n"                                                                                                  \
+    "    end\n"                                                                                                                    \
+    "    def add_post_handler_generation_hook(hook)\n"                                                                             \
+    "      @post_handler_generation_hooks << hook\n"                                                                               \
+    "    end\n"                                                                                                                    \
+    "    def call_post_handler_generation_hooks(handler)\n"                                                                        \
+    "      @post_handler_generation_hooks.each {|hook| hook.call(handler) }\n"                                                     \
+    "    end\n"                                                                                                                    \
+    "  end\n"                                                                                                                      \
+    "end\n"
+
 /* lib/handler/mruby/embedded/http_request.rb */
 #define H2O_MRUBY_CODE_HTTP_REQUEST                                                                                                \
-    "module H2O\n"                                                                                                                 \
+    "module ::H2O\n"                                                                                                               \
     "  class HttpRequest\n"                                                                                                        \
     "    def join\n"                                                                                                               \
     "      if !@resp\n"                                                                                                            \
