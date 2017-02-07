@@ -828,6 +828,11 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
         h2o_iovec_t vec = h2o_buffer_reserve(&conn->_write.buf, SETTINGS_HOST_BIN.len);
         memcpy(vec.base, SETTINGS_HOST_BIN.base, SETTINGS_HOST_BIN.len);
         conn->_write.buf->size += SETTINGS_HOST_BIN.len;
+        h2o_iovec_t origin_frame = conn->super.ctx->globalconf->http2.origin_frame;
+        if (origin_frame.base) {
+            /* write origin frame */
+            h2o_http2_encode_origin_frame(&conn->_write.buf, origin_frame);
+        }
         h2o_http2_conn_request_write(conn);
     }
 

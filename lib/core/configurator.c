@@ -448,6 +448,41 @@ static int on_config_http2_latency_optimization_max_cwnd(h2o_configurator_comman
     return h2o_configurator_scanf(cmd, node, "%u", &ctx->globalconf->http2.latency_optimization.max_cwnd);
 }
 
+static int on_config_http2_origin_frame(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
+                                        yoml_t *node)
+{
+    switch (node->type) {
+    case YOML_TYPE_SCALAR:
+        ctx->globalconf->http2.origin_frame = h2o_strdup_shared(NULL, node->data.scalar, strlen(node->data.scalar));
+        h2o_strtolower(ctx->globalconf->http2.origin_frame.base, ctx->globalconf->http2.origin_frame.len);
+        break;
+    case YOML_TYPE_SEQUENCE: {
+        size_t i;
+        uint16_t elem_lens[node->data.sequence.size];
+        h2o_iovec_t elems[node->data.sequence.size * 2];
+        for (i = 0; i != node->data.sequence.size; ++i) {
+            yoml_t *element = node->data.sequence.elements[i];
+            if (element->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, element, "element of a sequence passed to unsetenv must be a scalar");
+                return -1;
+            }
+            elem_lens[i] = htons(strlen(element->data.scalar));
+            elems[i*2].base = (char *)&elem_lens[i];
+            elems[i*2].len = 2;
+            elems[i*2 + 1].base = element->data.scalar;
+            elems[i*2 + 1].len = strlen(element->data.scalar);
+        }
+        ctx->globalconf->http2.origin_frame = h2o_concat_list(NULL, elems, node->data.sequence.size * 2);
+        h2o_strtolower(ctx->globalconf->http2.origin_frame.base, ctx->globalconf->http2.origin_frame.len);
+    } break;
+    default:
+        h2o_configurator_errprintf(cmd, node, "argument to unsetenv must be either a scalar or a sequence");
+        return -1;
+    }
+
+    return 0;
+}
+
 static int on_config_http2_reprioritize_blocking_assets(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
                                                         yoml_t *node)
 {
@@ -884,6 +919,10 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "http2-latency-optimization-max-cwnd",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_latency_optimization_max_cwnd);
+        h2o_configurator_define_command(&c->super, "http2-origin-frame",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL |
+                                            H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
+                                        on_config_http2_origin_frame);
         h2o_configurator_define_command(&c->super, "http2-reprioritize-blocking-assets",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
                                             H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,

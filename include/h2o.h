@@ -370,6 +370,8 @@ struct st_h2o_globalconf_t {
          * list of callbacks
          */
         h2o_protocol_callbacks_t callbacks;
+        /* */
+        h2o_iovec_t origin_frame;
     } http2;
 
     struct {
