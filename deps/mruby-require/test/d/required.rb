@@ -10,3 +10,10 @@ lvar1 = 1
 def proc0
   :proc0
 end
+
+# define a new method of an existing class.
+class MrubyRequireClass
+  def foo
+    :foo
+  end
+end
