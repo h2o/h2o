@@ -19,7 +19,7 @@
 # IN THE SOFTWARE.
 #
 
-module ::H2O
+module H2O
 
   module ACL
 

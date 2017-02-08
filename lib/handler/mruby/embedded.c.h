@@ -69,7 +69,7 @@
 
 /* lib/handler/mruby/embedded/bootstrap.rb */
 #define H2O_MRUBY_CODE_BOOTSTRAP                                                                                                   \
-    "module ::H2O\n"                                                                                                               \
+    "module H2O\n"                                                                                                                 \
     "  class ConfigurationContext\n"                                                                                               \
     "    def self.instance()\n"                                                                                                    \
     "      @@instance\n"                                                                                                           \
@@ -101,7 +101,7 @@
 
 /* lib/handler/mruby/embedded/http_request.rb */
 #define H2O_MRUBY_CODE_HTTP_REQUEST                                                                                                \
-    "module ::H2O\n"                                                                                                               \
+    "module H2O\n"                                                                                                                 \
     "  class HttpRequest\n"                                                                                                        \
     "    def join\n"                                                                                                               \
     "      if !@resp\n"                                                                                                            \
