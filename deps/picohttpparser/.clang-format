@@ -4,3 +4,4 @@ IndentWidth: 4
 ColumnLimit: 132
 BreakBeforeBraces: Linux
 AllowShortFunctionsOnASingleLine: None
+SortIncludes: false

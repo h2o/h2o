@@ -60,12 +60,15 @@
         return NULL;                                                                                                               \
     }
 
-#define EXPECT_CHAR(ch)                                                                                                            \
-    CHECK_EOF();                                                                                                                   \
+#define EXPECT_CHAR_NO_CHECK(ch)                                                                                                   \
     if (*buf++ != ch) {                                                                                                            \
         *ret = -1;                                                                                                                 \
         return NULL;                                                                                                               \
     }
+
+#define EXPECT_CHAR(ch)                                                                                                            \
+    CHECK_EOF();                                                                                                                   \
+    EXPECT_CHAR_NO_CHECK(ch);
 
 #define ADVANCE_TOKEN(tok, toklen)                                                                                                 \
     do {                                                                                                                           \
@@ -110,7 +113,7 @@ static const char *findchar_fast(const char *buf, const char *buf_end, const cha
 
         size_t left = (buf_end - buf) & ~15;
         do {
-            __m128i b16 = _mm_loadu_si128((void *)buf);
+            __m128i b16 = _mm_loadu_si128((const __m128i *)buf);
             int r = _mm_cmpestri(ranges16, ranges_size, b16, 16, _SIDD_LEAST_SIGNIFICANT | _SIDD_CMP_RANGES | _SIDD_UBYTE_OPS);
             if (unlikely(r != 16)) {
                 buf += r;
@@ -225,40 +228,42 @@ static const char *is_complete(const char *buf, const char *buf_end, size_t last
     return NULL;
 }
 
-/* *_buf is always within [buf, buf_end) upon success */
-static const char *parse_int(const char *buf, const char *buf_end, int *value, int *ret)
-{
-    int v;
-    CHECK_EOF();
-    if (!('0' <= *buf && *buf <= '9')) {
-        *ret = -1;
-        return NULL;
-    }
-    v = 0;
-    for (;; ++buf) {
-        CHECK_EOF();
-        if ('0' <= *buf && *buf <= '9') {
-            v = v * 10 + *buf - '0';
-        } else {
-            break;
-        }
-    }
+#define PARSE_INT(valp_, mul_)                                                                                                     \
+    if (*buf < '0' || '9' < *buf) {                                                                                                \
+        buf++;                                                                                                                     \
+        *ret = -1;                                                                                                                 \
+        return NULL;                                                                                                               \
+    }                                                                                                                              \
+    *(valp_) = (mul_) * (*buf++ - '0');
 
-    *value = v;
-    return buf;
-}
+#define PARSE_INT_3(valp_)                                                                                                         \
+    do {                                                                                                                           \
+        int res_ = 0;                                                                                                              \
+        PARSE_INT(&res_, 100)                                                                                                      \
+        *valp_ = res_;                                                                                                             \
+        PARSE_INT(&res_, 10)                                                                                                       \
+        *valp_ += res_;                                                                                                            \
+        PARSE_INT(&res_, 1)                                                                                                        \
+        *valp_ += res_;                                                                                                            \
+    } while (0)
 
 /* returned pointer is always within [buf, buf_end), or null */
 static const char *parse_http_version(const char *buf, const char *buf_end, int *minor_version, int *ret)
 {
-    EXPECT_CHAR('H');
-    EXPECT_CHAR('T');
-    EXPECT_CHAR('T');
-    EXPECT_CHAR('P');
-    EXPECT_CHAR('/');
-    EXPECT_CHAR('1');
-    EXPECT_CHAR('.');
-    return parse_int(buf, buf_end, minor_version, ret);
+    /* we want at least [HTTP/1.<two chars>] to try to parse */
+    if (buf_end - buf < 9) {
+        *ret = -2;
+        return NULL;
+    }
+    EXPECT_CHAR_NO_CHECK('H');
+    EXPECT_CHAR_NO_CHECK('T');
+    EXPECT_CHAR_NO_CHECK('T');
+    EXPECT_CHAR_NO_CHECK('P');
+    EXPECT_CHAR_NO_CHECK('/');
+    EXPECT_CHAR_NO_CHECK('1');
+    EXPECT_CHAR_NO_CHECK('.');
+    PARSE_INT(minor_version, 1);
+    return buf;
 }
 
 static const char *parse_headers(const char *buf, const char *buf_end, struct phr_header *headers, size_t *num_headers,
@@ -282,14 +287,14 @@ static const char *parse_headers(const char *buf, const char *buf_end, struct ph
             /* parsing name, but do not discard SP before colon, see
              * http://www.mozilla.org/security/announce/2006/mfsa2006-33.html */
             headers[*num_headers].name = buf;
-            static const char ranges1[] __attribute__((aligned(16))) = "\x00 "  /* control chars and up to SP */
-                                                                       "\"\""   /* 0x22 */
-                                                                       "()"     /* 0x28,0x29 */
-                                                                       ",,"     /* 0x2c */
-                                                                       "//"     /* 0x2f */
-                                                                       ":@"     /* 0x3a-0x40 */
-                                                                       "[]"     /* 0x5b-0x5d */
-                                                                       "{\377"; /* 0x7b-0xff */
+            static const char ALIGNED(16) ranges1[] = "\x00 "  /* control chars and up to SP */
+                                                      "\"\""   /* 0x22 */
+                                                      "()"     /* 0x28,0x29 */
+                                                      ",,"     /* 0x2c */
+                                                      "//"     /* 0x2f */
+                                                      ":@"     /* 0x3a-0x40 */
+                                                      "[]"     /* 0x5b-0x5d */
+                                                      "{\377"; /* 0x7b-0xff */
             int found;
             buf = findchar_fast(buf, buf_end, ranges1, sizeof(ranges1) - 1, &found);
             if (!found) {
@@ -401,10 +406,13 @@ static const char *parse_response(const char *buf, const char *buf_end, int *min
         *ret = -1;
         return NULL;
     }
-    /* parse status code */
-    if ((buf = parse_int(buf, buf_end, status, ret)) == NULL) {
+    /* parse status code, we want at least [:digit:][:digit:][:digit:]<other char> to try to parse */
+    if (buf_end - buf < 4) {
+        *ret = -2;
         return NULL;
     }
+    PARSE_INT_3(status);
+
     /* skip space */
     if (*buf++ != ' ') {
         *ret = -1;
