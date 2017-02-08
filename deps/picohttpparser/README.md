@@ -23,7 +23,7 @@ The library exposes four functions: `phr_parse_request`, `phr_parse_response`, `
 
 The example below reads an HTTP request from socket `sock` using `read(2)`, parses it using `phr_parse_request`, and prints the details.
 
-```
+```c
 char buf[4096], *method, *path;
 int pret, minor_version;
 struct phr_header headers[100];
@@ -71,7 +71,7 @@ for (i = 0; i != num_headers; ++i) {
 
 The example below decodes incoming data in chunked-encoding.  The data is decoded in-place.
 
-```
+```c
 struct phr_chunked_decoder decoder = {}; /* zero-clear */
 char *buf = malloc(4096);
 size_t size = 0, capacity = 4096, rsize;
