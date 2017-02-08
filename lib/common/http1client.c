@@ -217,7 +217,7 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
 static void on_error_before_head(struct st_h2o_http1client_private_t *client, const char *errstr)
 {
     assert(!client->_can_keepalive);
-    client->_cb.on_head(&client->super, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0);
+    client->_cb.on_head(&client->super, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, NULL, 0);
     close_client(client);
 }
 
@@ -227,6 +227,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
     int minor_version, http_status, rlen, is_eos;
     const char *msg;
     struct phr_header headers[100];
+    h2o_str_case_t *ucase[100];
     size_t msg_len, num_headers, i;
     h2o_socket_cb reader;
 
@@ -251,8 +252,10 @@ static void on_head(h2o_socket_t *sock, const char *err)
     }
 
     /* convert the header names to lowercase */
-    for (i = 0; i != num_headers; ++i)
+    for (i = 0; i != num_headers; ++i) {
+        ucase[i] = h2o_str_case_record(NULL, headers[i].name, headers[i].name_len);
         h2o_strtolower((char *)headers[i].name, headers[i].name_len);
+    }
 
     /* handle 1xx response (except 101, which is handled by on_head callback) */
     if (100 <= http_status && http_status <= 199 && http_status != 101) {
@@ -311,7 +314,10 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
     /* call the callback */
     client->_cb.on_body = client->_cb.on_head(&client->super, is_eos ? h2o_http1client_error_is_eos : NULL, minor_version,
-                                              http_status, h2o_iovec_init(msg, msg_len), (void *)headers, num_headers);
+                                              http_status, h2o_iovec_init(msg, msg_len), (void *)headers, ucase, num_headers);
+    for (i = 0; i != num_headers; ++i)
+        free(ucase[i]);
+
     if (is_eos) {
         close_client(client);
         return;

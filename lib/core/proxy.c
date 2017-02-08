@@ -41,6 +41,7 @@ struct rp_generator_t {
     h2o_doublebuffer_t sending;
     int is_websocket_handshake;
     int had_body_error; /* set if an error happened while fetching the body so that we can propagate the error */
+    int preserve_case;
 };
 
 struct rp_ws_upgrade_info_t {
@@ -167,6 +168,13 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
         memcpy(buf.base + offset, (s), (l));                                                                                       \
         offset += (l);                                                                                                             \
     } while (0)
+#define APPEND_ORIG_CASE(s, l, oc)                                                                                                 \
+    do {                                                                                                                           \
+        memcpy(buf.base + offset, (s), (l));                                                                                       \
+        if (oc)                                                                                                                    \
+            h2o_str_case_restore(oc, buf.base + offset, l);                                                                        \
+        offset += (l);                                                                                                             \
+    } while (0)
 #define APPEND_STRLIT(lit) APPEND((lit), sizeof(lit) - 1)
 #define FLATTEN_PREFIXED_VALUE(prefix, value, add_size)                                                                            \
     do {                                                                                                                           \
@@ -245,7 +253,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
                 continue;
         AddHeader:
             RESERVE(h->name->len + h->value.len + 2);
-            APPEND(h->name->base, h->name->len);
+            APPEND_ORIG_CASE(h->name->base, h->name->len, h->orig_case);
             buf.base[offset++] = ':';
             buf.base[offset++] = ' ';
             APPEND(h->value.base, h->value.len);
@@ -287,6 +295,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
 
 #undef RESERVE
 #undef APPEND
+#undef APPEND_ORIG_CASE
 #undef APPEND_STRLIT
 #undef FLATTEN_PREFIXED_VALUE
 
@@ -397,8 +406,8 @@ static char compress_hint_to_enum(const char *val, size_t len)
     return H2O_COMPRESS_HINT_AUTO;
 }
 
-static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
-                                       h2o_iovec_t msg, h2o_http1client_header_t *headers, size_t num_headers)
+h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
+                                h2o_http1client_header_t *headers, h2o_str_case_t **ocase, size_t num_headers)
 {
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
@@ -415,6 +424,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     req->res.status = status;
     req->res.reason = h2o_strdup(&req->pool, msg.base, msg.len).base;
     for (i = 0; i != num_headers; ++i) {
+        h2o_header_t *h;
         const h2o_token_t *token = h2o_lookup_token(headers[i].name, headers[i].name_len);
         h2o_iovec_t value;
         if (token != NULL) {
@@ -460,12 +470,16 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
         AddHeaderDuped:
             value = h2o_strdup(&req->pool, headers[i].value, headers[i].value_len);
         AddHeader:
-            h2o_add_header(&req->pool, &req->res.headers, token, value.base, value.len);
+            h = h2o_add_header(&req->pool, &req->res.headers, token, value.base, value.len);
+            if (req->conn->ctx->globalconf->proxy.preserve_original_case && ocase)
+                h->orig_case = h2o_str_case_dup(&req->pool, ocase[i], headers[i].name_len);
         Skip:;
         } else {
             h2o_iovec_t name = h2o_strdup(&req->pool, headers[i].name, headers[i].name_len);
             h2o_iovec_t value = h2o_strdup(&req->pool, headers[i].value, headers[i].value_len);
-            h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, value.base, value.len);
+            h = h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, value.base, value.len);
+            if (req->conn->ctx->globalconf->proxy.preserve_original_case && ocase)
+                h->orig_case = h2o_str_case_dup(&req->pool, ocase[i], headers[i].name_len);
         }
     }
 

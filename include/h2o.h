@@ -389,6 +389,11 @@ struct st_h2o_globalconf_t {
          * a boolean flag if set to true, instructs the proxy to emit x-forwarded-proto and x-forwarded-for headers
          */
         int emit_x_forwarded_headers;
+        /**
+         * a boolean flag if set to true, instructs the proxy to forward headers in the same case they were received
+         * (only active in the HTTP/1 case)
+         */
+        int preserve_original_case;
     } proxy;
 
     /**
@@ -542,6 +547,11 @@ struct st_h2o_context_t {
     int shutdown_requested;
 
     /**
+     * flag indicating whether a proxy is forwarding headers with case sensitivity preserved
+     */
+    int proxy_preserve_case;
+
+    /**
      * SSL handshake timeout
      */
     h2o_timeout_t handshake_timeout;
@@ -628,6 +638,10 @@ typedef struct st_h2o_header_t {
      * value of the header
      */
     h2o_iovec_t value;
+    /**
+     * If non-NULL, contains a bitfield indicating whether a character in name was upper case
+     */
+    h2o_str_case_t *orig_case;
 } h2o_header_t;
 
 /**
@@ -1088,12 +1102,13 @@ ssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, s
 /**
  * adds a header to list
  */
-void h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len);
+h2o_header_t *h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value,
+                             size_t value_len);
 /**
  * adds a header to list
  */
-void h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
-                           const char *value, size_t value_len);
+h2o_header_t *h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len,
+                                    int maybe_token, const char *value, size_t value_len);
 /**
  * adds or replaces a header into the list
  */
@@ -1569,7 +1584,7 @@ typedef struct st_h2o_compress_context_t {
      * compress or decompress callback
      */
     void (*transform)(struct st_h2o_compress_context_t *self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
-                     h2o_iovec_t **outbufs, size_t *outbufcnt);
+                      h2o_iovec_t **outbufs, size_t *outbufcnt);
 } h2o_compress_context_t;
 
 typedef struct st_h2o_compress_args_t {
