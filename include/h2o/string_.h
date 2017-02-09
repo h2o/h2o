@@ -91,7 +91,7 @@ size_t h2o_strtosize(const char *s, size_t len);
 size_t h2o_strtosizefwd(char **s, size_t len);
 
 typedef struct st_h2o_str_case_t {
-    uint8_t ucase[0];
+    uint8_t ucase[1];
 } h2o_str_case_t;
 
 static inline h2o_str_case_t *h2o_str_case_dup(h2o_mem_pool_t *pool, h2o_str_case_t *ucase, size_t strlen)

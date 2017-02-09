@@ -307,15 +307,13 @@ static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, int re
                     }
                 } else {
                     h = h2o_add_header(pool, headers, name_token, src[i].value, src[i].value_len);
-                    if (record_case)
-                        h->orig_case = orig_case;
+                    h->orig_case = orig_case;
                     if (name_token == H2O_TOKEN_CONNECTION)
                         *connection = headers->entries[headers->size - 1].value;
                 }
             } else {
                 h = h2o_add_header_by_str(pool, headers, src[i].name, src[i].name_len, 0, src[i].value, src[i].value_len);
-                if (record_case)
-                    h->orig_case = orig_case;
+                h->orig_case = orig_case;
             }
         }
     }
