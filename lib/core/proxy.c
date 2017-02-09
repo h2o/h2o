@@ -253,7 +253,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
                 continue;
         AddHeader:
             RESERVE(h->name->len + h->value.len + 2);
-            APPEND_ORIG_CASE(h->name->base, h->name->len, h->orig_case);
+            APPEND_ORIG_CASE(h->name->base, h->name->len, h->orig_hname_case);
             buf.base[offset++] = ':';
             buf.base[offset++] = ' ';
             APPEND(h->value.base, h->value.len);
@@ -407,7 +407,7 @@ static char compress_hint_to_enum(const char *val, size_t len)
 }
 
 h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
-                                h2o_http1client_header_t *headers, h2o_str_case_t **ocase, size_t num_headers)
+                                h2o_http1client_header_t *headers, h2o_str_case_t **orig_hname_case, size_t num_headers)
 {
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
@@ -471,15 +471,15 @@ h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, i
             value = h2o_strdup(&req->pool, headers[i].value, headers[i].value_len);
         AddHeader:
             h = h2o_add_header(&req->pool, &req->res.headers, token, value.base, value.len);
-            if (req->conn->ctx->globalconf->proxy.preserve_original_case && ocase)
-                h->orig_case = h2o_str_case_dup(&req->pool, ocase[i], headers[i].name_len);
+            if (req->conn->ctx->globalconf->proxy.preserve_original_case && orig_hname_case)
+                h->orig_hname_case = h2o_str_case_dup(&req->pool, orig_hname_case[i], headers[i].name_len);
         Skip:;
         } else {
             h2o_iovec_t name = h2o_strdup(&req->pool, headers[i].name, headers[i].name_len);
             h2o_iovec_t value = h2o_strdup(&req->pool, headers[i].value, headers[i].value_len);
             h = h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, value.base, value.len);
-            if (req->conn->ctx->globalconf->proxy.preserve_original_case && ocase)
-                h->orig_case = h2o_str_case_dup(&req->pool, ocase[i], headers[i].name_len);
+            if (req->conn->ctx->globalconf->proxy.preserve_original_case && orig_hname_case)
+                h->orig_hname_case = h2o_str_case_dup(&req->pool, orig_hname_case[i], headers[i].name_len);
         }
     }
 

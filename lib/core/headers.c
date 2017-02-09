@@ -34,7 +34,7 @@ static h2o_header_t *add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2
     slot->name = name;
     slot->value.base = (char *)value;
     slot->value.len = value_len;
-    slot->orig_case = NULL;
+    slot->orig_hname_case = NULL;
 
     return slot;
 }

@@ -226,8 +226,9 @@ static void on_head(h2o_socket_t *sock, const char *err)
     struct st_h2o_http1client_private_t *client = sock->data;
     int minor_version, http_status, rlen, is_eos;
     const char *msg;
-    struct phr_header headers[100];
-    h2o_str_case_t *ucase[100];
+#define MAX_HEADERS 100
+    struct phr_header headers[MAX_HEADERS];
+    h2o_str_case_t *header_name_case[MAX_HEADERS];
     size_t msg_len, num_headers, i;
     h2o_socket_cb reader;
 
@@ -253,7 +254,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
     /* convert the header names to lowercase */
     for (i = 0; i != num_headers; ++i) {
-        ucase[i] = h2o_str_case_record(NULL, headers[i].name, headers[i].name_len);
+        header_name_case[i] = h2o_str_case_record(NULL, headers[i].name, headers[i].name_len);
         h2o_strtolower((char *)headers[i].name, headers[i].name_len);
     }
 
@@ -313,10 +314,11 @@ static void on_head(h2o_socket_t *sock, const char *err)
     }
 
     /* call the callback */
-    client->_cb.on_body = client->_cb.on_head(&client->super, is_eos ? h2o_http1client_error_is_eos : NULL, minor_version,
-                                              http_status, h2o_iovec_init(msg, msg_len), (void *)headers, ucase, num_headers);
+    client->_cb.on_body =
+        client->_cb.on_head(&client->super, is_eos ? h2o_http1client_error_is_eos : NULL, minor_version, http_status,
+                            h2o_iovec_init(msg, msg_len), (void *)headers, header_name_case, num_headers);
     for (i = 0; i != num_headers; ++i)
-        free(ucase[i]);
+        free(header_name_case[i]);
 
     if (is_eos) {
         close_client(client);
@@ -333,6 +335,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
     client->_timeout.cb = on_body_timeout;
     h2o_socket_read_start(sock, reader);
     reader(client->super.sock, 0);
+#undef MAX_HEADERS
 }
 
 static void on_head_timeout(h2o_timeout_entry_t *entry)

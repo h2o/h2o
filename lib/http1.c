@@ -267,8 +267,8 @@ static int create_entity_reader(struct st_h2o_http1_conn_t *conn, const struct p
     return -1;
 }
 
-static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, int record_case, const struct phr_header *src, size_t len,
-                            h2o_iovec_t *connection, h2o_iovec_t *host, h2o_iovec_t *upgrade, h2o_iovec_t *expect)
+static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, int record_hname_case, const struct phr_header *src,
+                            size_t len, h2o_iovec_t *connection, h2o_iovec_t *host, h2o_iovec_t *upgrade, h2o_iovec_t *expect)
 {
     ssize_t entity_header_index = -1;
 
@@ -281,9 +281,9 @@ static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, int re
         for (i = 0; i != len; ++i) {
             const h2o_token_t *name_token;
             h2o_header_t *h;
-            h2o_str_case_t *orig_case = NULL;
-            if (record_case)
-                orig_case = h2o_str_case_record(pool, src[i].name, src[i].name_len);
+            h2o_str_case_t *orig_hname_case = NULL;
+            if (record_hname_case)
+                orig_hname_case = h2o_str_case_record(pool, src[i].name, src[i].name_len);
             /* convert to lower-case in-place */
             h2o_strtolower((char *)src[i].name, src[i].name_len);
             if ((name_token = h2o_lookup_token(src[i].name, src[i].name_len)) != NULL) {
@@ -307,13 +307,13 @@ static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, int re
                     }
                 } else {
                     h = h2o_add_header(pool, headers, name_token, src[i].value, src[i].value_len);
-                    h->orig_case = orig_case;
+                    h->orig_hname_case = orig_hname_case;
                     if (name_token == H2O_TOKEN_CONNECTION)
                         *connection = headers->entries[headers->size - 1].value;
                 }
             } else {
                 h = h2o_add_header_by_str(pool, headers, src[i].name, src[i].name_len, 0, src[i].value, src[i].value_len);
-                h->orig_case = orig_case;
+                h->orig_hname_case = orig_hname_case;
             }
         }
     }
@@ -644,8 +644,8 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
                 }
             }
             memcpy(dst, header->name->base, header->name->len);
-            if (header->orig_case)
-                h2o_str_case_restore(header->orig_case, dst, header->name->len);
+            if (header->orig_hname_case)
+                h2o_str_case_restore(header->orig_hname_case, dst, header->name->len);
             dst += header->name->len;
             *dst++ = ':';
             *dst++ = ' ';

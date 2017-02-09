@@ -94,46 +94,23 @@ typedef struct st_h2o_str_case_t {
     uint8_t ucase[1];
 } h2o_str_case_t;
 
-static inline h2o_str_case_t *h2o_str_case_dup(h2o_mem_pool_t *pool, h2o_str_case_t *ucase, size_t strlen)
-{
-    size_t ucase_len = (strlen / 8) + 1;
-    h2o_str_case_t *rc;
-    if (pool)
-        rc = (h2o_str_case_t *)h2o_mem_alloc_pool(pool, ucase_len);
-    else
-        rc = (h2o_str_case_t *)h2o_mem_alloc(ucase_len);
-    memcpy(rc, ucase, ucase_len);
-    return rc;
-}
-
-static inline h2o_str_case_t *h2o_str_case_record(h2o_mem_pool_t *pool, const char *str, size_t len)
-{
-    size_t i;
-    size_t ucase_len = (len / 8) + 1;
-    h2o_str_case_t *rc;
-    if (pool)
-        rc = (h2o_str_case_t *)h2o_mem_alloc_pool(pool, ucase_len);
-    else
-        rc = (h2o_str_case_t *)h2o_mem_alloc(ucase_len);
-    memset(rc, 0, ucase_len);
-    for (i = 0; i < len; i++)
-        if (str[i] >= 'A' && str[i] <= 'Z')
-            rc->ucase[i / 8] |= (1 << (i % 8));
-    return rc;
-}
-
-static inline void h2o_str_case_restore(h2o_str_case_t *hsc, char *str, size_t len)
-{
-    size_t i;
-    for (i = 0; i < len; i++) {
-        if (hsc->ucase[i / 8] & (1 << (i % 8)))
-            str[i] -= 0x20;
-    }
-}
+/**
+ * Copies an existing h2o_str_case_t structure
+ */
+static h2o_str_case_t *h2o_str_case_dup(h2o_mem_pool_t *pool, h2o_str_case_t *ucase, size_t strlen);
+/**
+ * Returns a h2o_str_case_t recording the place where upper case characters appear
+ */
+static h2o_str_case_t *h2o_str_case_record(h2o_mem_pool_t *pool, const char *str, size_t len);
 
 /**
-* base64 url decoder
-*/
+ * Given a pre-recorded @hsc, restore the upper case letters as they were at the time of recording
+ */
+static void h2o_str_case_restore(h2o_str_case_t *hsc, char *str, size_t len);
+
+/**
+ * base64 url decoder
+ */
 h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t len);
 /**
  * base64 encoder (note: the function emits trailing '\0')
@@ -227,6 +204,43 @@ inline int h2o_lcstris(const char *target, size_t target_len, const char *test, 
 inline size_t h2o_base64_encode_capacity(unsigned len)
 {
     return (((len) + 2) / 3 * 4 + 1);
+}
+
+inline h2o_str_case_t *h2o_str_case_dup(h2o_mem_pool_t *pool, h2o_str_case_t *ucase, size_t strlen)
+{
+    size_t ucase_len = (strlen / 8) + 1;
+    h2o_str_case_t *rc;
+    if (pool)
+        rc = (h2o_str_case_t *)h2o_mem_alloc_pool(pool, ucase_len);
+    else
+        rc = (h2o_str_case_t *)h2o_mem_alloc(ucase_len);
+    memcpy(rc, ucase, ucase_len);
+    return rc;
+}
+
+inline h2o_str_case_t *h2o_str_case_record(h2o_mem_pool_t *pool, const char *str, size_t len)
+{
+    size_t i;
+    size_t ucase_len = (len / 8) + 1;
+    h2o_str_case_t *rc;
+    if (pool)
+        rc = (h2o_str_case_t *)h2o_mem_alloc_pool(pool, ucase_len);
+    else
+        rc = (h2o_str_case_t *)h2o_mem_alloc(ucase_len);
+    memset(rc, 0, ucase_len);
+    for (i = 0; i < len; i++)
+        if (str[i] >= 'A' && str[i] <= 'Z')
+            rc->ucase[i / 8] |= (1 << (i % 8));
+    return rc;
+}
+
+inline void h2o_str_case_restore(h2o_str_case_t *hsc, char *str, size_t len)
+{
+    size_t i;
+    for (i = 0; i < len; i++) {
+        if (hsc->ucase[i / 8] & (1 << (i % 8)))
+            str[i] -= 0x20;
+    }
 }
 
 #ifdef __cplusplus
