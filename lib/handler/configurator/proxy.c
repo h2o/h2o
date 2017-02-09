@@ -289,7 +289,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
     if (ctx->pathconf == NULL && ctx->hostconf == NULL) {
         /* is global conf, setup the default SSL context */
         self->vars->ssl_ctx = create_ssl_ctx();
-        char *ca_bundle = h2o_configurator_get_cmd_path("share/h2o/ca-bundle.crt");
+        char *ca_bundle = h2o_get_shared_path(NULL, "ca-bundle.crt");
         if (SSL_CTX_load_verify_locations(self->vars->ssl_ctx, ca_bundle, NULL) != 1)
             fprintf(stderr, "Warning: failed to load the default certificates file at %s. Proxying to HTTPS servers may fail.\n",
                     ca_bundle);

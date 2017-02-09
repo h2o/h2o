@@ -203,13 +203,9 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
     if (local_path.len == 0 || h2o_memis(local_path.base, local_path.len, H2O_STRLIT("/"))) {
         /* root of the handler returns HTML that renders the status */
-        h2o_iovec_t fn;
-        const char *root = getenv("H2O_ROOT");
-        if (root == NULL)
-            root = H2O_TO_STR(H2O_ROOT);
-        fn = h2o_concat(&req->pool, h2o_iovec_init(root, strlen(root)), h2o_iovec_init(H2O_STRLIT("/share/h2o/status/index.html")));
+        char *fn = h2o_get_shared_path(&req->pool, "status/index.html");
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("no-cache"));
-        return h2o_file_send(req, 200, "OK", fn.base, h2o_iovec_init(H2O_STRLIT("text/html; charset=utf-8")), 0);
+        return h2o_file_send(req, 200, "OK", fn, h2o_iovec_init(H2O_STRLIT("text/html; charset=utf-8")), 0);
     } else if (h2o_memis(local_path.base, local_path.len, H2O_STRLIT("/json"))) {
         int ret;
         /* "/json" maps to the JSON API */

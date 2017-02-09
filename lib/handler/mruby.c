@@ -56,22 +56,24 @@ void h2o_mruby__assert_failed(mrb_state *mrb, const char *file, int line)
 
 void h2o_mruby_setup_globals(mrb_state *mrb)
 {
-    const char *root = getenv("H2O_ROOT");
-    if (root == NULL)
-        root = H2O_TO_STR(H2O_ROOT);
-    mrb_gv_set(mrb, mrb_intern_lit(mrb, "$H2O_ROOT"), mrb_str_new(mrb, root, strlen(root)));
+    const char *root = h2o_get_root();
+    mrb_gv_set(mrb, mrb_intern_lit(mrb, "$H2O_ROOT"), mrb_str_new_cstr(mrb, root));
 
-    h2o_mruby_eval_expr(mrb, "$LOAD_PATH << \"#{$H2O_ROOT}/share/h2o/mruby\"");
+    char *share_dir = h2o_get_shared_path(NULL, "mruby");
+    mrb_ary_push(mrb, mrb_gv_get(mrb, mrb_intern_lit(mrb, "$LOAD_PATH")), mrb_str_new_cstr(mrb, share_dir));
     h2o_mruby_assert(mrb);
 
     /* require core modules and include built-in libraries */
-    h2o_mruby_eval_expr(mrb, "require \"preloads.rb\"");
+    char *preloads_path = h2o_get_shared_path(NULL, "mruby/preloads.rb");
+    mrb_funcall(mrb, mrb_top_self(mrb), "require", 1, mrb_str_new_cstr(mrb, preloads_path));
     if (mrb->exc != NULL) {
         mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
         struct RString *error = mrb_str_ptr(obj);
-        fprintf(stderr, "an error occurred while loading %s/%s: %s", root, "share/h2o/mruby/preloads.rb", error->as.heap.ptr);
+        fprintf(stderr, "an error occurred while loading %s: %s", preloads_path, error->as.heap.ptr);
         abort();
     }
+    free(share_dir);
+    free(preloads_path);
 }
 
 mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v)
