@@ -327,7 +327,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
      */
     if (!init_done) {
         const char *client_timeout_ms_str;
-        char tmpname[] = "/tmp/h2o-fuzz-XXXXXX";
+        static char tmpname[] = "/tmp/h2o-fuzz-XXXXXX";
         char *dirname;
         h2o_url_t upstream;
         signal(SIGPIPE, SIG_IGN);
