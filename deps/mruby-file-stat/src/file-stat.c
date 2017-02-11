@@ -94,7 +94,7 @@
 #  define S_ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
 #endif
 
-#include "extconf.h"
+#include "config.h"
 
 #define STAT(p,s) stat(p,s)
 #ifdef HAVE_LSTAT
@@ -152,11 +152,18 @@ file_s_lstat(mrb_state *mrb, mrb_value klass)
   struct RClass *file_class;
   struct RClass *stat_class;
   struct stat st, *ptr;
-  mrb_value fname;
-  mrb_get_args(mrb, "S", &fname);
+  mrb_value fname, tmp;
+  char *path;
 
-  if (LSTAT(RSTRING_PTR(fname), &st) == -1) {
-    mrb_sys_fail(mrb, RSTRING_PTR(fname));
+  mrb_get_args(mrb, "o", &fname);
+
+  tmp = mrb_check_convert_type(mrb, fname, MRB_TT_STRING, "String", "to_path");
+  if (mrb_nil_p(tmp)) {
+    tmp = mrb_convert_type(mrb, fname, MRB_TT_STRING, "String", "to_str");
+  }
+  path = mrb_str_to_cstr(mrb, tmp);
+  if (LSTAT(path, &st) == -1) {
+    mrb_sys_fail(mrb, path);
   }
 
   file_class = mrb_class_ptr(klass);
@@ -171,15 +178,21 @@ static mrb_value
 stat_initialize(mrb_state *mrb, mrb_value self)
 {
   struct stat st, *ptr;
-  mrb_value fname;
+  mrb_value fname, tmp;
+  char *path;
 
-  mrb_get_args(mrb, "S", &fname);
+  mrb_get_args(mrb, "o", &fname);
 
-  if (STAT(RSTRING_PTR(fname), &st) == -1) {
-    mrb_sys_fail(mrb, RSTRING_PTR(fname));
+  tmp = mrb_check_convert_type(mrb, fname, MRB_TT_STRING, "String", "to_path");
+  if (mrb_nil_p(tmp)) {
+    tmp = mrb_convert_type(mrb, fname, MRB_TT_STRING, "String", "to_str");
+  }
+  path = mrb_str_to_cstr(mrb, tmp);
+  if (STAT(path, &st) == -1) {
+    mrb_sys_fail(mrb, path);
   }
 
-  ptr = DATA_PTR(self);
+  ptr = (struct stat *)DATA_PTR(self);
   if (ptr) {
     mrb_free(mrb, ptr);
   }
@@ -224,7 +237,7 @@ get_stat(mrb_state *mrb, mrb_value self)
 {
   struct stat *st;
 
-  st = mrb_data_get_ptr(mrb, self, &mrb_stat_type);
+  st = (struct stat *)mrb_data_get_ptr(mrb, self, &mrb_stat_type);
   if (!st) mrb_raise(mrb, E_TYPE_ERROR, "uninitialized File::Stat");
   return st;
 }
@@ -791,41 +804,12 @@ stat_owned_real_p(mrb_state *mrb, mrb_value self)
   return get_stat(mrb, self)->st_uid == getuid() ? mrb_true_value() : mrb_false_value();
 }
 
-static mrb_value
-process_getuid(mrb_state *mrb, mrb_value mod)
-{
-  mrb_warn(mrb, "`Process.uid' method was deprecated.\nPlease use https://github.com/ksss/mruby-process-ext\n");
-  return mrb_fixnum_value((mrb_int)getuid());
-}
-
-static mrb_value
-process_getgid(mrb_state *mrb, mrb_value mod)
-{
-  mrb_warn(mrb, "`Process.gid' This method was deprecated.\nPlease use https://github.com/ksss/mruby-process-ext\n");
-  return mrb_fixnum_value((mrb_int)getgid());
-}
-
-static mrb_value
-process_geteuid(mrb_state *mrb, mrb_value mod)
-{
-  mrb_warn(mrb, "`Process.euid' This method was deprecated.\nPlease use https://github.com/ksss/mruby-process-ext\n");
-  return mrb_fixnum_value((mrb_int)geteuid());
-}
-
-static mrb_value
-process_getegid(mrb_state *mrb, mrb_value mod)
-{
-  mrb_warn(mrb, "`Process.egid' method was deprecated.\nPlease use https://github.com/ksss/mruby-process-ext\n");
-  return mrb_fixnum_value((mrb_int)getegid());
-}
-
 void
 mrb_mruby_file_stat_gem_init(mrb_state* mrb)
 {
   struct RClass *io = mrb_define_class(mrb, "IO", mrb->object_class);
   struct RClass *file = mrb_define_class(mrb, "File", io);
   struct RClass *stat = mrb_define_class_under(mrb, file, "Stat", mrb->object_class);
-  struct RClass *process = mrb_define_module(mrb, "Process");
 
   MRB_SET_INSTANCE_TT(stat, MRB_TT_DATA);
 
@@ -881,23 +865,6 @@ mrb_mruby_file_stat_gem_init(mrb_state* mrb)
 
   mrb_define_method(mrb, stat, "owned?", stat_owned_p, MRB_ARGS_NONE());
   mrb_define_method(mrb, stat, "owned_real?", stat_owned_real_p, MRB_ARGS_NONE());
-
-  /*
-  Obsolete methods
-  Avoid install when already defined by other lib
-  */
-  if (!mrb_obj_respond_to(mrb, ((struct RObject *)process)->c, mrb_intern_lit(mrb, "uid"))) {
-    mrb_define_class_method(mrb, process, "uid", process_getuid, MRB_ARGS_NONE());
-  }
-  if (!mrb_obj_respond_to(mrb, ((struct RObject *)process)->c, mrb_intern_lit(mrb, "gid"))) {
-    mrb_define_class_method(mrb, process, "gid", process_getgid, MRB_ARGS_NONE());
-  }
-  if (!mrb_obj_respond_to(mrb, ((struct RObject *)process)->c, mrb_intern_lit(mrb, "euid"))) {
-    mrb_define_class_method(mrb, process, "euid", process_geteuid, MRB_ARGS_NONE());
-  }
-  if (!mrb_obj_respond_to(mrb, ((struct RObject *)process)->c, mrb_intern_lit(mrb, "egid"))) {
-    mrb_define_class_method(mrb, process, "egid", process_getegid, MRB_ARGS_NONE());
-  }
 }
 
 void
