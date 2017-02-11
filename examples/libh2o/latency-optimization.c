@@ -312,6 +312,7 @@ int main(int argc, char **argv)
             port = argv[optind];
             hostport = malloc(strlen(host) + strlen(port) + 2);
             sprintf(hostport, "%s:%s", host, port);
+            free(hostport);
         }
     }
 
