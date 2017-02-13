@@ -542,11 +542,6 @@ struct st_h2o_context_t {
     int shutdown_requested;
 
     /**
-     * flag indicating whether a proxy is forwarding headers with case sensitivity preserved
-     */
-    int proxy_preserve_case;
-
-    /**
      * SSL handshake timeout
      */
     h2o_timeout_t handshake_timeout;
