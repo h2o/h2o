@@ -2,6 +2,7 @@ assert("Kernel.require") do
   # see d/required.rb
   $gvar1 = 0
   lvar1 = 0
+  class MrubyRequireClass; end
 
   assert_true require(File.join(File.dirname(__FILE__), "d", "required.rb"))
 
@@ -21,4 +22,7 @@ assert("Kernel.require") do
 
   # Kernel.require can define a toplevel procedure
   assert_equal :proc0, proc0
+
+  # Kernel.require can add a method to an existing class
+  assert_equal :foo, MrubyRequireClass.new.foo
 end

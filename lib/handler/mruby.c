@@ -64,12 +64,18 @@ void h2o_mruby_setup_globals(mrb_state *mrb)
     h2o_mruby_eval_expr(mrb, "$LOAD_PATH << \"#{$H2O_ROOT}/share/h2o/mruby\"");
     h2o_mruby_assert(mrb);
 
-    /* require core modules and include built-in libraries */
-    h2o_mruby_eval_expr(mrb, "require \"preloads.rb\"");
+    h2o_mruby_eval_expr(mrb, H2O_MRUBY_CODE_CORE);
+    h2o_mruby_assert(mrb);
+
+    h2o_mruby_eval_expr(mrb, H2O_MRUBY_CODE_BOOTSTRAP);
+    h2o_mruby_assert(mrb);
+
+    /* require and include built-in libraries, if exists */
+    mrb_funcall(mrb, mrb_top_self(mrb), "_h2o_try_preload", 0);
     if (mrb->exc != NULL) {
         mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
         struct RString *error = mrb_str_ptr(obj);
-        fprintf(stderr, "an error occurred while loading %s/%s: %s", root, "share/h2o/mruby/preloads.rb", error->as.heap.ptr);
+        fprintf(stderr, "an error occurred while preloading: %s", error->as.heap.ptr);
         abort();
     }
 }
@@ -265,9 +271,6 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
 
 #undef SET_LITERAL
 #undef SET_STRING
-
-    h2o_mruby_eval_expr(mrb, H2O_MRUBY_CODE_CORE);
-    h2o_mruby_assert(mrb);
 
     mrb_ary_set(mrb, ary, H2O_MRUBY_PROC_EACH_TO_ARRAY, mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_proc_each_to_array", 0));
     h2o_mruby_assert(mrb);
