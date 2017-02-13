@@ -56,10 +56,10 @@ run_with_curl($server, sub {
         }
         my $resp = join("", @lines);
         if ($curl =~ /http2/) {
-            like($forwarded, qr{upper-case:\s*TheValue}, "Request header name is lowercase");
+            like($forwarded, qr{upper-case:\s*TheValue}, "Request header name is lowercased");
             like($resp, qr{myresponseheader:\s*1}, "Response header name is lowercase");
         } else {
-            like($forwarded, qr{Upper-Case:\s*TheValue}, "Request header name is lowercase");
+            like($forwarded, qr{Upper-Case:\s*TheValue}, "Request header name is not lowercased");
             like($resp, qr{MyResponseHeader:\s*1}, "Response header name has case preserved");
         }
     });

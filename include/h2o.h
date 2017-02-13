@@ -389,11 +389,6 @@ struct st_h2o_globalconf_t {
          * a boolean flag if set to true, instructs the proxy to emit x-forwarded-proto and x-forwarded-for headers
          */
         int emit_x_forwarded_headers;
-        /**
-         * a boolean flag if set to true, instructs the proxy to forward headers in the same case they were received
-         * (only active in the HTTP/1 case)
-         */
-        int preserve_original_case;
     } proxy;
 
     /**

@@ -417,7 +417,7 @@ h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, i
     req->res.reason = h2o_strdup(&req->pool, msg.base, msg.len).base;
     for (i = 0; i != num_headers; ++i) {
         h2o_header_t *h;
-        const h2o_token_t *token = h2o_lookup_token(headers[i].name->base, headers[i].name->len);
+        const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers[i].name);
         h2o_iovec_t value;
         if (token != NULL) {
             if (token->proxy_should_drop) {

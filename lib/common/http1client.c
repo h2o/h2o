@@ -257,22 +257,19 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
         for (i = 0; i != num_headers; ++i) {
             const h2o_token_t *token;
-            char orig_hname[src_headers[i].name_len];
+            char *orig_hname;
 
-            memcpy(orig_hname, src_headers[i].name, src_headers[i].name_len);
+            orig_hname = h2o_strdup(NULL, src_headers[i].name, src_headers[i].name_len).base;
             h2o_strtolower((char *)src_headers[i].name, src_headers[i].name_len);
             token = h2o_lookup_token(src_headers[i].name, src_headers[i].name_len);
-
             if (token != NULL) {
                 headers[i].name = (h2o_iovec_t *)&token->buf;
-                headers[i].value = h2o_iovec_init(src_headers[i].value, src_headers[i].value_len);
-                headers[i].orig_hname = h2o_strdup(NULL, orig_hname, src_headers[i].name_len).base;
             } else {
                 header_names[i] = h2o_iovec_init(src_headers[i].name, src_headers[i].name_len);
                 headers[i].name = &header_names[i];
-                headers[i].value = h2o_iovec_init(src_headers[i].value, src_headers[i].value_len);
-                headers[i].orig_hname = h2o_strdup(NULL, orig_hname, src_headers[i].name_len).base;
             }
+            headers[i].value = h2o_iovec_init(src_headers[i].value, src_headers[i].value_len);
+            headers[i].orig_hname = orig_hname;
         }
     }
 
@@ -335,6 +332,9 @@ static void on_head(h2o_socket_t *sock, const char *err)
     client->_cb.on_body = client->_cb.on_head(&client->super, is_eos ? h2o_http1client_error_is_eos : NULL, minor_version,
                                               http_status, h2o_iovec_init(msg, msg_len), headers, num_headers);
 
+    for (i = 0; i != num_headers; ++i) {
+        free((void *)headers[i].orig_hname);
+    }
     if (is_eos) {
         close_client(client);
         return;
