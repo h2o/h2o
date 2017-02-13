@@ -275,11 +275,11 @@ static void on_head(h2o_socket_t *sock, const char *err)
             client->super.informational_cb(&client->super, minor_version, http_status, h2o_iovec_init(msg, msg_len), headers,
                                            num_headers) != 0) {
             close_client(client);
-            return;
+            goto Exit;
         }
         h2o_buffer_consume(&client->super.sock->input, rlen);
         h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
-        return;
+        goto Exit;
     }
 
     /* parse the headers */
@@ -301,13 +301,13 @@ static void on_head(h2o_socket_t *sock, const char *err)
                 /* continue */
             } else {
                 on_error_before_head(client, "unexpected type of transfer-encoding");
-                return;
+                goto Exit;
             }
         } else if (headers[i].name == &H2O_TOKEN_CONTENT_LENGTH->buf) {
             if ((client->_body_decoder.content_length.bytesleft = h2o_strtosize(headers[i].value.base, headers[i].value.len)) ==
                 SIZE_MAX) {
                 on_error_before_head(client, "invalid content-length");
-                return;
+                goto Exit;
             }
             if (reader != on_body_chunked)
                 reader = on_body_content_length;
@@ -328,16 +328,13 @@ static void on_head(h2o_socket_t *sock, const char *err)
     client->_cb.on_body = client->_cb.on_head(&client->super, is_eos ? h2o_http1client_error_is_eos : NULL, minor_version,
                                               http_status, h2o_iovec_init(msg, msg_len), headers, num_headers);
 
-    for (i = 0; i != num_headers; ++i) {
-        free((void *)headers[i].orig_hname);
-    }
     if (is_eos) {
         close_client(client);
-        return;
+        goto Exit;
     } else if (client->_cb.on_body == NULL) {
         client->_can_keepalive = 0;
         close_client(client);
-        return;
+        goto Exit;
     }
 
     h2o_buffer_consume(&client->super.sock->input, rlen);
@@ -346,6 +343,10 @@ static void on_head(h2o_socket_t *sock, const char *err)
     client->_timeout.cb = on_body_timeout;
     h2o_socket_read_start(sock, reader);
     reader(client->super.sock, 0);
+
+Exit:
+    for (i = 0; i != num_headers; ++i)
+        free((void *)headers[i].orig_hname);
 #undef MAX_HEADERS
 }
 
