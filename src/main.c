@@ -78,6 +78,7 @@ struct listener_ssl_config_t {
     H2O_VECTOR(h2o_iovec_t) hostnames;
     char *certificate_file;
     SSL_CTX *ctx;
+    h2o_iovec_t *http2_origin_frame;
 #ifndef OPENSSL_NO_OCSP
     struct {
         uint64_t interval;
@@ -392,6 +393,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     SSL_CTX *ssl_ctx = NULL;
     yoml_t *certificate_file = NULL, *key_file = NULL, *dh_file = NULL, *minimum_version = NULL, *cipher_suite = NULL,
            *ocsp_update_cmd = NULL, *ocsp_update_interval_node = NULL, *ocsp_max_failures_node = NULL;
+    h2o_iovec_t *http2_origin_frame = NULL;
     long ssl_options = SSL_OP_ALL;
     uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
     unsigned ocsp_max_failures = 3;              /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
@@ -462,6 +464,49 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                     h2o_configurator_errprintf(cmd, value, "property of `neverbleed` must be either of: `ON`, `OFF");
                     return -1;
                 }
+                continue;
+            }
+            if (strcmp(key->data.scalar, "http2-origin-frame") == 0) {
+                switch (value->type) {
+                case YOML_TYPE_SCALAR:
+                {
+                    uint16_t name_size;
+                    name_size = strlen(value->data.scalar);
+                    h2o_strtolower(value->data.scalar, name_size);
+                    http2_origin_frame = h2o_mem_alloc(sizeof(*http2_origin_frame));
+                    http2_origin_frame->len = sizeof(uint16_t) + name_size;
+                    http2_origin_frame->base = h2o_mem_alloc(http2_origin_frame->len);
+
+                    memcpy(http2_origin_frame->base + sizeof(name_size), value->data.scalar, name_size);
+                    name_size = htons(name_size);
+                    memcpy(http2_origin_frame->base, &name_size, sizeof(name_size));
+                } break;
+                case YOML_TYPE_SEQUENCE:
+                {
+                     size_t i;
+                     uint16_t elem_lens[value->data.sequence.size];
+                     h2o_iovec_t elems[value->data.sequence.size * 2];
+                     for (i = 0; i != value->data.sequence.size; ++i) {
+                         yoml_t *element = value->data.sequence.elements[i];
+                         if (element->type != YOML_TYPE_SCALAR) {
+                             h2o_configurator_errprintf(cmd, element, "element of a sequence passed to unsetenv must be a scalar");
+                             return -1;
+                         }
+                         elem_lens[i] = htons(strlen(element->data.scalar));
+                         elems[i*2].base = (char *)&elem_lens[i];
+                         elems[i*2].len = 2;
+                         elems[i*2 + 1].base = element->data.scalar;
+                         elems[i*2 + 1].len = strlen(element->data.scalar);
+                         h2o_strtolower(elems[i*2 + 1].base, elems[i*2 + 1].len);
+                     }
+                     http2_origin_frame = h2o_mem_alloc(sizeof(*http2_origin_frame));
+                     *http2_origin_frame = h2o_concat_list(NULL, elems, value->data.sequence.size * 2);
+                } break;
+                default:
+                    h2o_configurator_errprintf(cmd, value, "argument to `http2-origin-frame` must be either a scalar or a sequence");
+                    return -1;
+                }
+                /* TODO */
                 continue;
             }
             h2o_configurator_errprintf(cmd, key, "unknown property: %s", key->data.scalar);
@@ -614,6 +659,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             listener_setup_ssl_add_host(ssl_config, ctx->hostconf->authority.hostport);
         }
         ssl_config->ctx = ssl_ctx;
+        ssl_config->http2_origin_frame = http2_origin_frame;
         ssl_config->certificate_file = h2o_strdup(NULL, certificate_file->data.scalar, SIZE_MAX).base;
 #ifdef OPENSSL_NO_OCSP
         if (ocsp_update_interval != 0)
@@ -1461,8 +1507,10 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         memset(listeners + i, 0, sizeof(listeners[i]));
         listeners[i].accept_ctx.ctx = &conf.threads[thread_index].ctx;
         listeners[i].accept_ctx.hosts = listener_config->hosts;
-        if (listener_config->ssl.size != 0)
-            listeners[i].accept_ctx.ssl_ctx = listener_config->ssl.entries[0]->ctx;
+        if (listener_config->ssl.size != 0) {
+            listeners[i].accept_ctx.ssl.ssl_ctx = listener_config->ssl.entries[0]->ctx;
+            listeners[i].accept_ctx.ssl.http2_origin_frame = listener_config->ssl.entries[0]->http2_origin_frame;
+        }
         listeners[i].accept_ctx.expect_proxy_line = listener_config->proxy_protocol;
         listeners[i].accept_ctx.libmemcached_receiver = &conf.threads[thread_index].memcached;
         listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);

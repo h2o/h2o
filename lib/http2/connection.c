@@ -828,10 +828,9 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
         h2o_iovec_t vec = h2o_buffer_reserve(&conn->_write.buf, SETTINGS_HOST_BIN.len);
         memcpy(vec.base, SETTINGS_HOST_BIN.base, SETTINGS_HOST_BIN.len);
         conn->_write.buf->size += SETTINGS_HOST_BIN.len;
-        h2o_iovec_t origin_frame = conn->super.ctx->globalconf->http2.origin_frame;
-        if (origin_frame.base) {
+        if (conn->http2_origin_frame) {
             /* write origin frame */
-            h2o_http2_encode_origin_frame(&conn->_write.buf, origin_frame);
+            h2o_http2_encode_origin_frame(&conn->_write.buf, *conn->http2_origin_frame);
         }
         h2o_http2_conn_request_write(conn);
     }
@@ -1312,9 +1311,10 @@ static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *c
     return 0;
 }
 
-void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
+void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, h2o_iovec_t *http2_origin_frame, struct timeval connected_at)
 {
     h2o_http2_conn_t *conn = create_conn(ctx->ctx, ctx->hosts, sock, connected_at);
+    conn->http2_origin_frame = http2_origin_frame;
     sock->data = conn;
     h2o_socket_read_start(conn->sock, on_read);
     update_idle_timeout(conn);

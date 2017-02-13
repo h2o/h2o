@@ -480,7 +480,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                 conn->sock = NULL;
                 close_connection(conn, 1);
                 /* and accept as http2 connection */
-                h2o_http2_accept(&accept_ctx, sock, connected_at);
+                h2o_http2_accept(&accept_ctx, sock, NULL, connected_at);
                 return;
             }
         }

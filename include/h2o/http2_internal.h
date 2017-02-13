@@ -233,6 +233,7 @@ struct st_h2o_http2_conn_t {
     } _write;
     h2o_cache_t *push_memo;
     h2o_http2_casper_t *casper;
+    h2o_iovec_t *http2_origin_frame;
 };
 
 int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t *src, size_t len, const char **err_desc);
