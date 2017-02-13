@@ -89,7 +89,6 @@ size_t h2o_strtosize(const char *s, size_t len);
  * *s will set to right after the number in string or right after the end of string.
  */
 size_t h2o_strtosizefwd(char **s, size_t len);
-
 /**
  * base64 url decoder
  */
