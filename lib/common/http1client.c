@@ -26,10 +26,6 @@
 #include <sys/types.h>
 #include <sys/un.h>
 #include "picohttpparser.h"
-#include "h2o/string_.h"
-#include "h2o/hostinfo.h"
-#include "h2o/http1client.h"
-#include "h2o/url.h"
 #include "h2o.h"
 
 struct st_h2o_http1client_private_t {

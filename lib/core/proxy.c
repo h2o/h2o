@@ -41,7 +41,6 @@ struct rp_generator_t {
     h2o_doublebuffer_t sending;
     int is_websocket_handshake;
     int had_body_error; /* set if an error happened while fetching the body so that we can propagate the error */
-    int preserve_case;
 };
 
 struct rp_ws_upgrade_info_t {
@@ -398,8 +397,8 @@ static char compress_hint_to_enum(const char *val, size_t len)
     return H2O_COMPRESS_HINT_AUTO;
 }
 
-h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
-                                h2o_header_t *headers, size_t num_headers)
+static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
+                                       h2o_header_t *headers, size_t num_headers)
 {
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
