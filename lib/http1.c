@@ -643,10 +643,7 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
                     header = &cache_control_private;
                 }
             }
-            if (header->orig_hname)
-                memcpy(dst, header->orig_hname, header->name->len);
-            else
-                memcpy(dst, header->name->base, header->name->len);
+            memcpy(dst, header->orig_hname ? header->orig_hname : header->name->base, header->name->len);
             dst += header->name->len;
             *dst++ = ':';
             *dst++ = ' ';
