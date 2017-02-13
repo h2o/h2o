@@ -320,53 +320,6 @@ static void test_at_position(void)
     ok(ret != 0);
 }
 
-static void test_str_case(void)
-{
-	int i, j;
-#define MAX_SIZE 256
-	char tests[][MAX_SIZE] = {
-		"",
-		"User-Agent",
-		"Date",
-		"date",
-	};
-    char tmp1[MAX_SIZE], tmp2[MAX_SIZE];
-
-    h2o_mem_pool_t pool;
-    h2o_mem_init_pool(&pool);
-
-	for (i = 0; i < sizeof(tests)/sizeof(tests[0]); i++) {
-        for (j = 0; j < 2; j++) {
-            h2o_str_case_t *rc1, *rc2;
-            size_t l;
-
-            l = strlen(tests[i]);
-            strcpy(tmp1, tests[i]);
-            strcpy(tmp2, tests[i]);
-
-            rc1 = h2o_str_case_record(j ? &pool : NULL, tmp1, l);
-            rc2 = h2o_str_case_dup(j ? &pool : NULL, rc1, l);
-
-            h2o_strtolower(tmp1, l);
-            h2o_strtolower(tmp2, l);
-
-
-            h2o_str_case_restore(rc1, tmp1, l);
-            h2o_str_case_restore(rc2, tmp2, l);
-
-            ok(!strcmp(tmp1, tmp2));
-            ok(!strcmp(tests[i], tmp2));
-
-            if (!j) {
-                free(rc1);
-                free(rc2);
-            }
-        }
-	}
-
-    h2o_mem_clear_pool(&pool);
-}
-
 void test_lib__common__string_c(void)
 {
     subtest("strstr", test_strstr);
@@ -379,5 +332,4 @@ void test_lib__common__string_c(void)
     subtest("htmlescape", test_htmlescape);
     subtest("uri_escape", test_uri_escape);
     subtest("at_position", test_at_position);
-    subtest("str_case", test_str_case);
 }

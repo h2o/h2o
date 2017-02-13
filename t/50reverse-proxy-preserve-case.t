@@ -37,11 +37,7 @@ sub handler_curl {
 };
 
 
-sub test_preserve_case {
-    my $preserve_case = shift;
-    my $preserve_case_str = $preserve_case ? "ON" : "OFF";
-    my $server = spawn_h2o(<< "EOT");
-proxy.preserve-original-case: $preserve_case_str
+my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
     paths:
@@ -49,27 +45,23 @@ hosts:
         proxy.reverse.url: http://127.0.0.1.XIP.IO:$upstream_port
 EOT
 
-    run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            open(CURL, "$curl -HUpper-Case:TheValue -svo /dev/null $proto://127.0.0.1:$port/ 2>&1 |");
-            my $forwarded = handler_curl($upstream);
-            my @lines;
-            while (<CURL>) {
-                push(@lines, $_);
+run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        open(CURL, "$curl -HUpper-Case:TheValue -svo /dev/null $proto://127.0.0.1:$port/ 2>&1 |");
+        my $forwarded = handler_curl($upstream);
+        my @lines;
+        while (<CURL>) {
+            push(@lines, $_);
 
-            }
-            my $resp = join("", @lines);
-            if ($preserve_case == 0 or $curl =~ /http2/) {
-                like($forwarded, qr{upper-case:\s*TheValue}, "Request header name is lowercase");
-                like($resp, qr{myresponseheader:\s*1}, "Response header name is lowercase");
-            } else {
-                like($forwarded, qr{Upper-Case:\s*TheValue}, "Request header name is lowercase");
-                like($resp, qr{MyResponseHeader:\s*1}, "Response header name has case preserved");
-            }
-        });
-}
-
-test_preserve_case(1);
-test_preserve_case(0);
+        }
+        my $resp = join("", @lines);
+        if ($curl =~ /http2/) {
+            like($forwarded, qr{upper-case:\s*TheValue}, "Request header name is lowercase");
+            like($resp, qr{myresponseheader:\s*1}, "Response header name is lowercase");
+        } else {
+            like($forwarded, qr{Upper-Case:\s*TheValue}, "Request header name is lowercase");
+            like($resp, qr{MyResponseHeader:\s*1}, "Response header name has case preserved");
+        }
+    });
 
 done_testing();

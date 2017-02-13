@@ -639,9 +639,9 @@ typedef struct st_h2o_header_t {
      */
     h2o_iovec_t value;
     /**
-     * If non-NULL, contains a bitfield indicating whether a character in @name was upper case
+     * The name of the header as originally received from the client
      */
-    h2o_str_case_t *orig_hname_case;
+    const char *orig_hname;
 } h2o_header_t;
 
 /**

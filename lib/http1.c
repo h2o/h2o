@@ -281,9 +281,10 @@ static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, int re
         for (i = 0; i != len; ++i) {
             const h2o_token_t *name_token;
             h2o_header_t *h;
-            h2o_str_case_t *orig_hname_case = NULL;
-            if (record_hname_case)
-                orig_hname_case = h2o_str_case_record(pool, src[i].name, src[i].name_len);
+            char orig_case[src[i].name_len];
+
+            /* preserve the original case */
+            memcpy(orig_case, src[i].name, src[i].name_len);
             /* convert to lower-case in-place */
             h2o_strtolower((char *)src[i].name, src[i].name_len);
             if ((name_token = h2o_lookup_token(src[i].name, src[i].name_len)) != NULL) {
@@ -307,13 +308,13 @@ static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, int re
                     }
                 } else {
                     h = h2o_add_header(pool, headers, name_token, src[i].value, src[i].value_len);
-                    h->orig_hname_case = orig_hname_case;
+                    h->orig_hname = h2o_strdup(pool, orig_case, src[i].name_len).base;
                     if (name_token == H2O_TOKEN_CONNECTION)
                         *connection = headers->entries[headers->size - 1].value;
                 }
             } else {
                 h = h2o_add_header_by_str(pool, headers, src[i].name, src[i].name_len, 0, src[i].value, src[i].value_len);
-                h->orig_hname_case = orig_hname_case;
+                h->orig_hname = h2o_strdup(pool, orig_case, src[i].name_len).base;
             }
         }
     }
@@ -643,9 +644,10 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
                     header = &cache_control_private;
                 }
             }
-            memcpy(dst, header->name->base, header->name->len);
-            if (header->orig_hname_case)
-                h2o_str_case_restore(header->orig_hname_case, dst, header->name->len);
+            if (header->orig_hname)
+                memcpy(dst, header->orig_hname, header->name->len);
+            else
+                memcpy(dst, header->name->base, header->name->len);
             dst += header->name->len;
             *dst++ = ':';
             *dst++ = ' ';

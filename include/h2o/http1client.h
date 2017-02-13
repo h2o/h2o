@@ -32,25 +32,17 @@ extern "C" {
 #include "h2o/timeout.h"
 #include "h2o/cache.h"
 
-struct phr_header;
 typedef struct st_h2o_http1client_t h2o_http1client_t;
 
-/* the definition MUST match that of `struct phr_header` */
-typedef struct st_h2o_http1client_header_t {
-    const char *name;
-    size_t name_len;
-    const char *value;
-    size_t value_len;
-} h2o_http1client_header_t;
-
+struct st_h2o_header_t;
 typedef int (*h2o_http1client_body_cb)(h2o_http1client_t *client, const char *errstr);
 typedef h2o_http1client_body_cb (*h2o_http1client_head_cb)(h2o_http1client_t *client, const char *errstr, int minor_version,
-                                                           int status, h2o_iovec_t msg, h2o_http1client_header_t *headers,
-                                                           h2o_str_case_t **orig_hname_case, size_t num_headers);
+                                                           int status, h2o_iovec_t msg, struct st_h2o_header_t *headers,
+                                                           size_t num_headers);
 typedef h2o_http1client_head_cb (*h2o_http1client_connect_cb)(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs,
                                                               size_t *reqbufcnt, int *method_is_head);
 typedef int (*h2o_http1client_informational_cb)(h2o_http1client_t *client, int minor_version, int status, h2o_iovec_t msg,
-                                                h2o_http1client_header_t *headers, size_t num_headers);
+                                                struct st_h2o_header_t *headers, size_t num_headers);
 
 typedef struct st_h2o_http1client_ctx_t {
     h2o_loop_t *loop;
