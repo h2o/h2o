@@ -175,7 +175,7 @@ static struct {
     0,                                      /* shutdown_requested */
     0,                                      /* initialized_threads */
     {{0}},                                  /* state */
-    "share/h2o/annotate-backtrace-symbols", /* crash_handler */
+    NULL,                                   /* crash_handler */
     0,                                      /* crash_handler_wait_pipe_close */
 };
 
@@ -623,7 +623,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         SSL_CTX_set_tlsext_status_arg(ssl_ctx, ssl_config);
         pthread_mutex_init(&ssl_config->ocsp_stapling.response.mutex, NULL);
         ssl_config->ocsp_stapling.cmd = ocsp_update_cmd != NULL ? h2o_strdup(NULL, ocsp_update_cmd->data.scalar, SIZE_MAX).base
-                                                                : "share/h2o/fetch-ocsp-response";
+                                                                : h2o_get_shared_path(NULL, "fetch-ocsp-response");
         if (ocsp_update_interval != 0) {
             switch (conf.run_mode) {
             case RUN_MODE_WORKER:
@@ -1282,7 +1282,8 @@ static void on_sigterm(int signo)
 #ifdef __GLIBC__
 static int popen_crash_handler(void)
 {
-    char *cmd_fullpath = h2o_configurator_get_cmd_path(conf.crash_handler), *argv[] = {cmd_fullpath, NULL};
+    char *cmd_fullpath = conf.crash_handler == NULL ? h2o_get_shared_path(NULL, "annotate-backtrace-symbols") : h2o_configurator_get_cmd_path(conf.crash_handler);
+    char *argv[] = {cmd_fullpath, NULL};
     int pipefds[2];
 
     /* create pipe */
@@ -1511,7 +1512,7 @@ static char **build_server_starter_argv(const char *h2o_cmd, const char *config_
     size_t i;
 
     h2o_vector_reserve(NULL, &args, 1);
-    args.entries[args.size++] = h2o_configurator_get_cmd_path("share/h2o/start_server");
+    args.entries[args.size++] = h2o_get_shared_path(NULL, "start_server");
 
     /* error-log and pid-file are the directives that are handled by server-starter */
     if (conf.pid_file != NULL) {
@@ -1869,7 +1870,7 @@ int main(int argc, char **argv)
                        "                               the errors are logged to the file instead of\n"
                        "                               being emitted to STDERR\n"
                        "                     - master: invoked process becomes a master process (using\n"
-                       "                               the `share/h2o/start_server` command) and spawns\n"
+                       "                               the `share/h2o/" H2O_VERSION "/start_server` command) and spawns\n"
                        "                               a worker process for handling incoming\n"
                        "                               connections. Users may send SIGHUP to the master\n"
                        "                               process to reconfigure or upgrade the server.\n"
@@ -1878,7 +1879,7 @@ int main(int argc, char **argv)
                        "  -v, --version      prints the version number\n"
                        "  -h, --help         print this help\n"
                        "\n"
-                       "Please refer to the documentation under `share/doc/h2o` (or available online at\n"
+                       "Please refer to the documentation under `share/doc/h2o/" H2O_VERSION "` (or available online at\n"
                        "http://h2o.examp1e.net/) for how to configure the server.\n"
                        "\n",
                        H2O_TO_STR(H2O_CONFIG_PATH));

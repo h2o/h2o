@@ -284,12 +284,12 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
 
     { /* build args */
         size_t i = 0;
-        argv[i++] = kill_on_close_cmd_path = h2o_configurator_get_cmd_path("share/h2o/kill-on-close");
+        argv[i++] = kill_on_close_cmd_path = h2o_get_shared_path(NULL, "kill-on-close");
         argv[i++] = "--rm";
         argv[i++] = dirname;
         argv[i++] = "--";
         if (spawn_user != NULL) {
-            argv[i++] = setuidgid_cmd_path = h2o_configurator_get_cmd_path("share/h2o/setuidgid");
+            argv[i++] = setuidgid_cmd_path = h2o_get_shared_path(NULL, "setuidgid");
             argv[i++] = spawn_user;
         }
         argv[i++] = "/bin/sh";
