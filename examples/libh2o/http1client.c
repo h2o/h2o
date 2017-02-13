@@ -21,11 +21,7 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
-#include "h2o/hostinfo.h"
-#include "h2o/socketpool.h"
-#include "h2o/string_.h"
-#include "h2o/url.h"
-#include "h2o/http1client.h"
+#include "h2o.h"
 
 static h2o_socketpool_t *sockpool;
 static h2o_mem_pool_t pool;
