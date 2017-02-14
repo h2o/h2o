@@ -263,7 +263,7 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
     if ((fileref = h2o_filecache_open_file(req->conn->ctx->filecache, path, O_RDONLY | O_CLOEXEC)) != NULL) {
         goto Opened;
     }
-    if ((flags & H2O_FILE_FLAG_GUNZIP) != 0 && req->version >= 0x101){
+    if ((flags & H2O_FILE_FLAG_GUNZIP) != 0 && req->version >= 0x101) {
         char *variant_path = h2o_mem_alloc_pool(&req->pool, path_len + sizeof(".gz"));
         memcpy(variant_path, path, path_len);
         strcpy(variant_path + path_len, ".gz");

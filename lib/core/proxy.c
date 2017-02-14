@@ -397,8 +397,8 @@ static char compress_hint_to_enum(const char *val, size_t len)
     return H2O_COMPRESS_HINT_AUTO;
 }
 
-static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
-                                       h2o_header_t *headers, size_t num_headers)
+static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
+                                       h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers)
 {
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
@@ -465,7 +465,8 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
         } else {
             h2o_iovec_t name = h2o_strdup(&req->pool, headers[i].name->base, headers[i].name->len);
             h2o_iovec_t value = h2o_strdup(&req->pool, headers[i].value.base, headers[i].value.len);
-            h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, headers[i].orig_name, value.base, value.len);
+            h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, headers[i].orig_name, value.base,
+                                  value.len);
         }
     }
 

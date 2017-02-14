@@ -269,11 +269,13 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
     h2o_mruby_eval_expr(mrb, H2O_MRUBY_CODE_CORE);
     h2o_mruby_assert(mrb);
 
-    mrb_ary_set(mrb, ary, H2O_MRUBY_PROC_EACH_TO_ARRAY, mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_proc_each_to_array", 0));
+    mrb_ary_set(mrb, ary, H2O_MRUBY_PROC_EACH_TO_ARRAY,
+                mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_proc_each_to_array", 0));
     h2o_mruby_assert(mrb);
 
     /* sends exception using H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED */
-    mrb_ary_set(mrb, ary, H2O_MRUBY_PROC_APP_TO_FIBER, mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_proc_app_to_fiber", 0));
+    mrb_ary_set(mrb, ary, H2O_MRUBY_PROC_APP_TO_FIBER,
+                mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_proc_app_to_fiber", 0));
     h2o_mruby_assert(mrb);
 
     mrb_gc_arena_restore(mrb, gc_arena);
