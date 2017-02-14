@@ -556,7 +556,7 @@ void h2o_evloop_destroy(h2o_evloop_t *loop)
     
     //now all socket are disposedand and placed in linked list statechanged
     //we can freeing memory in cycle by next_statechanged,
-    while(sock=(loop->_statechanged.head->_next_statechanged) != NULL){
+    while((struct st_h2o_evloop_socket_t*)sock=(loop->_statechanged.head->_next_statechanged)) != NULL){
         free(loop->_statechanged.head);
         loop->_statechanged.head=loop->_statechanged.head->_next_statechanged;
     }
