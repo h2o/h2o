@@ -33,7 +33,9 @@
 #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #include <sys/ioctl.h>
 #endif
+#if H2O_USE_PICOTLS
 #include "picotls.h"
+#endif
 #include "h2o/socket.h"
 #include "h2o/timeout.h"
 
@@ -54,12 +56,11 @@
 #include "../../deps/ssl-conservatory/openssl/openssl_hostname_validation.c"
 
 struct st_h2o_socket_ssl_t {
-    enum { H2O_SOCKET_CRYPTO_UNDETERMINED = 0, H2O_SOCKET_CRYPTO_OPENSSL, H2O_SOCKET_CRYPTO_PICOTLS } crypto;
     SSL_CTX *ssl_ctx;
-    union {
-        ptls_t *ptls;
-        SSL *ossl;
-    };
+    SSL *ossl;
+#if H2O_USE_PICOTLS
+    ptls_t *ptls;
+#endif
     int *did_write_in_read; /* used for detecting and closing the connection upon renegotiation (FIXME implement renegotiation) */
     size_t record_overhead;
     struct {
@@ -160,10 +161,19 @@ static int read_bio(BIO *b, char *out, int len)
     return len;
 }
 
+static void write_ssl_bytes(h2o_socket_t *sock, const void *in, size_t len)
+{
+    if (len != 0) {
+        void *bytes_alloced = h2o_mem_alloc_pool(&sock->ssl->output.pool, len);
+        memcpy(bytes_alloced, in, len);
+        h2o_vector_reserve(&sock->ssl->output.pool, &sock->ssl->output.bufs, sock->ssl->output.bufs.size + 1);
+        sock->ssl->output.bufs.entries[sock->ssl->output.bufs.size++] = h2o_iovec_init(bytes_alloced, len);
+    }
+}
+
 static int write_bio(BIO *b, const char *in, int len)
 {
     h2o_socket_t *sock = BIO_get_data(b);
-    void *bytes_alloced;
 
     /* FIXME no support for SSL renegotiation (yet) */
     if (sock->ssl->did_write_in_read != NULL) {
@@ -171,15 +181,7 @@ static int write_bio(BIO *b, const char *in, int len)
         return -1;
     }
 
-    if (len == 0)
-        return 0;
-
-    bytes_alloced = h2o_mem_alloc_pool(&sock->ssl->output.pool, len);
-    memcpy(bytes_alloced, in, len);
-
-    h2o_vector_reserve(&sock->ssl->output.pool, &sock->ssl->output.bufs, sock->ssl->output.bufs.size + 1);
-    sock->ssl->output.bufs.entries[sock->ssl->output.bufs.size++] = h2o_iovec_init(bytes_alloced, len);
-
+    write_ssl_bytes(sock, in, len);
     return len;
 }
 
@@ -786,9 +788,8 @@ int32_t h2o_socket_getport(struct sockaddr *sa)
     }
 }
 
-static void create_ssl(h2o_socket_t *sock)
+static void create_ossl(h2o_socket_t *sock)
 {
-    sock->ssl->crypto = H2O_SOCKET_CRYPTO_OPENSSL;
     sock->ssl->ossl = SSL_new(sock->ssl->ssl_ctx);
     setup_bio(sock);
 }
@@ -882,12 +883,65 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 static void proceed_handshake(h2o_socket_t *sock, const char *err)
 {
     h2o_iovec_t first_input = {NULL};
-    int ret;
+    int ret = 0;
 
     sock->_cb.write = NULL;
 
     if (err != NULL) {
         goto Complete;
+    }
+
+    if (sock->ssl->ossl == NULL) {
+#if H2O_USE_PICOTLS
+        /* prepare I/O */
+        size_t consumed = sock->ssl->input.encrypted->size;
+        ptls_buffer_t wbuf;
+        ptls_buffer_init(&wbuf, "", 0);
+
+        if (sock->ssl->ptls != NULL) {
+            /* picotls in action, proceed the handshake */
+            ptls_buffer_init(&wbuf, NULL, 0);
+            ret = ptls_handshake(sock->ssl->ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
+        } else {
+            /* start using picotls if the first packet contains TLS 1.3 CH */
+            ptls_context_t *ptls_ctx = h2o_socket_ssl_get_picotls_context(sock->ssl->ssl_ctx);
+            if (ptls_ctx != NULL) {
+                ptls_t *ptls = ptls_new(ptls_ctx, NULL);
+                if (ptls == NULL)
+                    h2o_fatal("no memory");
+                ret = ptls_handshake(ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
+                if ((ret == 0 || ret == PTLS_ERROR_HANDSHAKE_IN_PROGRESS) && wbuf.off != 0) {
+                    sock->ssl->ptls = ptls;
+                    sock->ssl->handshake.server.async_resumption.state = ASYNC_RESUMPTION_STATE_COMPLETE;
+                } else {
+                    ptls_free(ptls);
+                }
+            }
+        }
+
+        if (sock->ssl->ptls != NULL) {
+            /* complete I/O done by picotls */
+            switch (ret) {
+            case 0:
+            case PTLS_ERROR_HANDSHAKE_IN_PROGRESS:
+                if (wbuf.off) {
+                    h2o_socket_read_stop(sock);
+                    flush_pending_ssl(sock, ret == 0 ? on_handshake_complete : proceed_handshake);
+                } else {
+                    h2o_socket_read_start(sock, proceed_handshake);
+                }
+                break;
+            default:
+                /* FIXME send alert in wbuf before calling the callback */
+                on_handshake_complete(sock, "picotls handshake error");
+                break;
+            }
+            return;
+        }
+#endif
+
+        /* fallback to openssl if the attempt failed */
+        create_ossl(sock);
     }
 
     if (sock->ssl->handshake.server.async_resumption.state == ASYNC_RESUMPTION_STATE_RECORD) {
@@ -916,7 +970,7 @@ Redo:
         /* sent async request, reset the ssl state, and wait for async response */
         assert(ret < 0);
         SSL_free(sock->ssl->ossl);
-        create_ssl(sock);
+        create_ossl(sock);
         clear_output_buffer(sock->ssl);
         h2o_buffer_consume(&sock->ssl->input.encrypted, sock->ssl->input.encrypted->size);
         h2o_buffer_reserve(&sock->ssl->input.encrypted, first_input.len);
@@ -982,7 +1036,6 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
     sock->ssl = h2o_mem_alloc(sizeof(*sock->ssl));
     memset(sock->ssl, 0, offsetof(struct st_h2o_socket_ssl_t, output.pool));
 
-    sock->ssl->crypto = H2O_SOCKET_CRYPTO_UNDETERMINED;
     sock->ssl->ssl_ctx = ssl_ctx;
 
     /* setup the buffers; sock->input should be empty, sock->ssl->input.encrypted should contain the initial input, if any */
@@ -994,7 +1047,6 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
     }
 
     h2o_mem_init_pool(&sock->ssl->output.pool);
-    create_ssl(sock);
 
     sock->ssl->handshake.cb = handshake_cb;
     if (server_name == NULL) {
@@ -1068,7 +1120,38 @@ void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx)
     /* if necessary, it is the responsibility of the caller to disable the internal cache */
 }
 
-static void on_dispose_ssl_ctx_ex_data(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl, void *argp)
+#if H2O_USE_PICOTLS
+
+static int get_ptls_index(void)
+{
+    static int index = -1;
+
+    if (index == -1) {
+        static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+        pthread_mutex_lock(&mutex);
+        if (index == -1) {
+            index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, NULL);
+            assert(index != -1);
+        }
+        pthread_mutex_unlock(&mutex);
+    }
+
+    return index;
+}
+
+ptls_context_t *h2o_socket_ssl_get_picotls_context(SSL_CTX *ossl)
+{
+    return SSL_CTX_get_ex_data(ossl, get_ptls_index());
+}
+
+void h2o_socket_ssl_set_picotls_context(SSL_CTX *ossl, ptls_context_t *ptls)
+{
+    SSL_CTX_set_ex_data(ossl, get_ptls_index(), ptls);
+}
+
+#endif
+
+static void on_dispose_ssl_ctx_session_cache(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl, void *argp)
 {
     h2o_cache_t *ssl_session_cache = (h2o_cache_t *)ptr;
     if (ssl_session_cache != NULL)
@@ -1081,7 +1164,7 @@ static int get_ssl_session_cache_index(void)
     static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_lock(&mutex);
     if (index == -1) {
-        index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, on_dispose_ssl_ctx_ex_data);
+        index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, on_dispose_ssl_ctx_session_cache);
         assert(index != -1);
     }
     pthread_mutex_unlock(&mutex);
