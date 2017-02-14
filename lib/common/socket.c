@@ -33,6 +33,7 @@
 #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #include <sys/ioctl.h>
 #endif
+#include "picotls.h"
 #include "h2o/socket.h"
 #include "h2o/timeout.h"
 
@@ -53,7 +54,12 @@
 #include "../../deps/ssl-conservatory/openssl/openssl_hostname_validation.c"
 
 struct st_h2o_socket_ssl_t {
-    SSL *ssl;
+    enum { H2O_SOCKET_CRYPTO_UNDETERMINED = 0, H2O_SOCKET_CRYPTO_OPENSSL, H2O_SOCKET_CRYPTO_PICOTLS } crypto;
+    SSL_CTX *ssl_ctx;
+    union {
+        ptls_t *ptls;
+        SSL *ossl;
+    };
     int *did_write_in_read; /* used for detecting and closing the connection upon renegotiation (FIXME implement renegotiation) */
     size_t record_overhead;
     struct {
@@ -219,7 +225,7 @@ static void setup_bio(h2o_socket_t *sock)
         h2o_fatal("no memory");
     BIO_set_data(bio, sock);
     BIO_set_init(bio, 1);
-    SSL_set_bio(sock->ssl->ssl, bio, bio);
+    SSL_set_bio(sock->ssl->ossl, bio, bio);
 }
 
 const char *decode_ssl_input(h2o_socket_t *sock)
@@ -227,7 +233,7 @@ const char *decode_ssl_input(h2o_socket_t *sock)
     assert(sock->ssl != NULL);
     assert(sock->ssl->handshake.cb == NULL);
 
-    while (sock->ssl->input.encrypted->size != 0 || SSL_pending(sock->ssl->ssl)) {
+    while (sock->ssl->input.encrypted->size != 0 || SSL_pending(sock->ssl->ossl)) {
         int rlen;
         h2o_iovec_t buf = h2o_buffer_reserve(&sock->input, 4096);
         if (buf.base == NULL)
@@ -235,13 +241,13 @@ const char *decode_ssl_input(h2o_socket_t *sock)
         { /* call SSL_read (while detecting SSL renegotiation and reporting it as error) */
             int did_write_in_read = 0;
             sock->ssl->did_write_in_read = &did_write_in_read;
-            rlen = SSL_read(sock->ssl->ssl, buf.base, (int)buf.len);
+            rlen = SSL_read(sock->ssl->ossl, buf.base, (int)buf.len);
             sock->ssl->did_write_in_read = NULL;
             if (did_write_in_read)
                 return "ssl renegotiation not supported";
         }
         if (rlen == -1) {
-            if (SSL_get_error(sock->ssl->ssl, rlen) != SSL_ERROR_WANT_READ) {
+            if (SSL_get_error(sock->ssl->ossl, rlen) != SSL_ERROR_WANT_READ) {
                 return h2o_socket_error_ssl_decode;
             }
             break;
@@ -268,12 +274,12 @@ static void clear_output_buffer(struct st_h2o_socket_ssl_t *ssl)
 
 static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
 {
-    if (!SSL_is_server(ssl->ssl)) {
+    if (!SSL_is_server(ssl->ossl)) {
         free(ssl->handshake.client.server_name);
         free(ssl->handshake.client.session_cache_key.base);
     }
-    SSL_free(ssl->ssl);
-    ssl->ssl = NULL;
+    SSL_free(ssl->ossl);
+    ssl->ossl = NULL;
     h2o_buffer_dispose(&ssl->input.encrypted);
     clear_output_buffer(ssl);
     free(ssl);
@@ -317,14 +323,14 @@ static void shutdown_ssl(h2o_socket_t *sock, const char *err)
         goto Close;
     }
 
-    if ((ret = SSL_shutdown(sock->ssl->ssl)) == -1) {
+    if ((ret = SSL_shutdown(sock->ssl->ossl)) == -1) {
         goto Close;
     }
 
     if (sock->ssl->output.bufs.size != 0) {
         h2o_socket_read_stop(sock);
         flush_pending_ssl(sock, ret == 1 ? dispose_socket : shutdown_ssl);
-    } else if (ret == 2 && SSL_get_error(sock->ssl->ssl, ret) == SSL_ERROR_WANT_READ) {
+    } else if (ret == 2 && SSL_get_error(sock->ssl->ossl, ret) == SSL_ERROR_WANT_READ) {
         h2o_socket_read_start(sock, shutdown_ssl);
     } else {
         goto Close;
@@ -596,7 +602,7 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
                 size_t sz = bufs[0].len - off;
                 if (sz > ssl_record_size)
                     sz = ssl_record_size;
-                ret = SSL_write(sock->ssl->ssl, bufs[0].base + off, (int)sz);
+                ret = SSL_write(sock->ssl->ossl, bufs[0].base + off, (int)sz);
                 if (ret != sz) {
                     /* The error happens if SSL_write is called after SSL_read returns a fatal error (e.g. due to corrupt TCP packet
                      * being received). We need to take care of this since some protocol implementations send data after the read-
@@ -665,22 +671,22 @@ socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa)
 
 const char *h2o_socket_get_ssl_protocol_version(h2o_socket_t *sock)
 {
-    return sock->ssl != NULL ? SSL_get_version(sock->ssl->ssl) : NULL;
+    return sock->ssl != NULL ? SSL_get_version(sock->ssl->ossl) : NULL;
 }
 
 int h2o_socket_get_ssl_session_reused(h2o_socket_t *sock)
 {
-    return sock->ssl != NULL ? (int)SSL_session_reused(sock->ssl->ssl) : -1;
+    return sock->ssl != NULL ? (int)SSL_session_reused(sock->ssl->ossl) : -1;
 }
 
 const char *h2o_socket_get_ssl_cipher(h2o_socket_t *sock)
 {
-    return sock->ssl != NULL ? SSL_get_cipher_name(sock->ssl->ssl) : NULL;
+    return sock->ssl != NULL ? SSL_get_cipher_name(sock->ssl->ossl) : NULL;
 }
 
 int h2o_socket_get_ssl_cipher_bits(h2o_socket_t *sock)
 {
-    return sock->ssl != NULL ? SSL_get_cipher_bits(sock->ssl->ssl, NULL) : 0;
+    return sock->ssl != NULL ? SSL_get_cipher_bits(sock->ssl->ossl, NULL) : 0;
 }
 
 h2o_iovec_t h2o_socket_log_ssl_session_id(h2o_socket_t *sock, h2o_mem_pool_t *pool)
@@ -688,7 +694,7 @@ h2o_iovec_t h2o_socket_log_ssl_session_id(h2o_socket_t *sock, h2o_mem_pool_t *po
     h2o_iovec_t key;
     unsigned id_len;
     const unsigned char *id;
-    SSL_SESSION *session = SSL_get_session(sock->ssl->ssl);
+    SSL_SESSION *session = SSL_get_session(sock->ssl->ossl);
     if (session == NULL)
         return h2o_iovec_init(H2O_STRLIT("-"));
 
@@ -780,9 +786,10 @@ int32_t h2o_socket_getport(struct sockaddr *sa)
     }
 }
 
-static void create_ssl(h2o_socket_t *sock, SSL_CTX *ssl_ctx)
+static void create_ssl(h2o_socket_t *sock)
 {
-    sock->ssl->ssl = SSL_new(ssl_ctx);
+    sock->ssl->crypto = H2O_SOCKET_CRYPTO_OPENSSL;
+    sock->ssl->ossl = SSL_new(sock->ssl->ssl_ctx);
     setup_bio(sock);
 }
 
@@ -830,7 +837,7 @@ static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
     if (err == NULL) {
-        const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ssl);
+        const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ossl);
         switch (SSL_CIPHER_get_id(cipher)) {
         case TLS1_CK_RSA_WITH_AES_128_GCM_SHA256:
         case TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256:
@@ -858,7 +865,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     /* set ssl session into the cache */
     if (sock->ssl->handshake.client.session_cache != NULL) {
         if (err == NULL || err == h2o_socket_error_ssl_cert_name_mismatch) {
-            SSL_SESSION *session = SSL_get1_session(sock->ssl->ssl);
+            SSL_SESSION *session = SSL_get1_session(sock->ssl->ossl);
             h2o_cache_set(sock->ssl->handshake.client.session_cache, h2o_now(h2o_socket_get_loop(sock)),
                           sock->ssl->handshake.client.session_cache_key, sock->ssl->handshake.client.session_cache_key_hash,
                           h2o_iovec_init(session, 1));
@@ -894,10 +901,10 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
     }
 
 Redo:
-    if (SSL_is_server(sock->ssl->ssl)) {
-        ret = SSL_accept(sock->ssl->ssl);
+    if (SSL_is_server(sock->ssl->ossl)) {
+        ret = SSL_accept(sock->ssl->ossl);
     } else {
-        ret = SSL_connect(sock->ssl->ssl);
+        ret = SSL_connect(sock->ssl->ossl);
     }
 
     switch (sock->ssl->handshake.server.async_resumption.state) {
@@ -908,9 +915,8 @@ Redo:
     case ASYNC_RESUMPTION_STATE_REQUEST_SENT: {
         /* sent async request, reset the ssl state, and wait for async response */
         assert(ret < 0);
-        SSL_CTX *ssl_ctx = SSL_get_SSL_CTX(sock->ssl->ssl);
-        SSL_free(sock->ssl->ssl);
-        create_ssl(sock, ssl_ctx);
+        SSL_free(sock->ssl->ossl);
+        create_ssl(sock);
         clear_output_buffer(sock->ssl);
         h2o_buffer_consume(&sock->ssl->input.encrypted, sock->ssl->input.encrypted->size);
         h2o_buffer_reserve(&sock->ssl->input.encrypted, first_input.len);
@@ -923,9 +929,9 @@ Redo:
         break;
     }
 
-    if (ret == 0 || (ret < 0 && SSL_get_error(sock->ssl->ssl, ret) != SSL_ERROR_WANT_READ)) {
+    if (ret == 0 || (ret < 0 && SSL_get_error(sock->ssl->ossl, ret) != SSL_ERROR_WANT_READ)) {
         /* failed */
-        long verify_result = SSL_get_verify_result(sock->ssl->ssl);
+        long verify_result = SSL_get_verify_result(sock->ssl->ossl);
         if (verify_result != X509_V_OK) {
             err = X509_verify_cert_error_string(verify_result);
         } else {
@@ -939,8 +945,8 @@ Redo:
         flush_pending_ssl(sock, ret == 1 ? on_handshake_complete : proceed_handshake);
     } else {
         if (ret == 1) {
-            if (!SSL_is_server(sock->ssl->ssl)) {
-                X509 *cert = SSL_get_peer_certificate(sock->ssl->ssl);
+            if (!SSL_is_server(sock->ssl->ossl)) {
+                X509 *cert = SSL_get_peer_certificate(sock->ssl->ossl);
                 if (cert != NULL) {
                     switch (validate_hostname(sock->ssl->handshake.client.server_name, cert)) {
                     case MatchFound:
@@ -976,6 +982,9 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
     sock->ssl = h2o_mem_alloc(sizeof(*sock->ssl));
     memset(sock->ssl, 0, offsetof(struct st_h2o_socket_ssl_t, output.pool));
 
+    sock->ssl->crypto = H2O_SOCKET_CRYPTO_UNDETERMINED;
+    sock->ssl->ssl_ctx = ssl_ctx;
+
     /* setup the buffers; sock->input should be empty, sock->ssl->input.encrypted should contain the initial input, if any */
     h2o_buffer_init(&sock->ssl->input.encrypted, &h2o_socket_buffer_prototype);
     if (sock->input->size != 0) {
@@ -985,19 +994,19 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
     }
 
     h2o_mem_init_pool(&sock->ssl->output.pool);
-    create_ssl(sock, ssl_ctx);
+    create_ssl(sock);
 
     sock->ssl->handshake.cb = handshake_cb;
     if (server_name == NULL) {
         /* is server */
-        if (SSL_CTX_sess_get_get_cb(ssl_ctx) != NULL)
+        if (SSL_CTX_sess_get_get_cb(sock->ssl->ssl_ctx) != NULL)
             sock->ssl->handshake.server.async_resumption.state = ASYNC_RESUMPTION_STATE_RECORD;
         if (sock->ssl->input.encrypted->size != 0)
             proceed_handshake(sock, 0);
         else
             h2o_socket_read_start(sock, proceed_handshake);
     } else {
-        h2o_cache_t *session_cache = h2o_socket_ssl_get_session_cache(ssl_ctx);
+        h2o_cache_t *session_cache = h2o_socket_ssl_get_session_cache(sock->ssl->ssl_ctx);
         if (session_cache != NULL) {
             struct sockaddr_storage sa;
             int32_t port;
@@ -1017,13 +1026,13 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
                                                             sock->ssl->handshake.client.session_cache_key,
                                                             sock->ssl->handshake.client.session_cache_key_hash);
                 if (cacheref != NULL) {
-                    SSL_set_session(sock->ssl->ssl, (SSL_SESSION *)cacheref->value.base);
+                    SSL_set_session(sock->ssl->ossl, (SSL_SESSION *)cacheref->value.base);
                     h2o_cache_release(session_cache, cacheref);
                 }
             }
         }
         sock->ssl->handshake.client.server_name = h2o_strdup(NULL, server_name, SIZE_MAX).base;
-        SSL_set_tlsext_host_name(sock->ssl->ssl, sock->ssl->handshake.client.server_name);
+        SSL_set_tlsext_host_name(sock->ssl->ossl, sock->ssl->handshake.client.server_name);
         proceed_handshake(sock, 0);
     }
 }
@@ -1045,7 +1054,8 @@ void h2o_socket_ssl_resume_server_handshake(h2o_socket_t *sock, h2o_iovec_t sess
     }
 }
 
-void h2o_socket_ssl_async_resumption_init(h2o_socket_ssl_resumption_get_async_cb get_async_cb, h2o_socket_ssl_resumption_new_cb new_cb)
+void h2o_socket_ssl_async_resumption_init(h2o_socket_ssl_resumption_get_async_cb get_async_cb,
+                                          h2o_socket_ssl_resumption_new_cb new_cb)
 {
     resumption_get_async = get_async_cb;
     resumption_new = new_cb;
@@ -1103,11 +1113,11 @@ h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)
 
 #if H2O_USE_ALPN
     if (len == 0)
-        SSL_get0_alpn_selected(sock->ssl->ssl, &data, &len);
+        SSL_get0_alpn_selected(sock->ssl->ossl, &data, &len);
 #endif
 #if H2O_USE_NPN
     if (len == 0)
-        SSL_get0_next_proto_negotiated(sock->ssl->ssl, &data, &len);
+        SSL_get0_next_proto_negotiated(sock->ssl->ossl, &data, &len);
 #endif
 
     return h2o_iovec_init(data, len);
