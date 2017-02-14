@@ -2492,7 +2492,7 @@ int ptls_send(ptls_t *tls, ptls_buffer_t *sendbuf, const void *_input, size_t in
         if (pt_size > PTLS_MAX_PLAINTEXT_RECORD_SIZE)
             pt_size = PTLS_MAX_PLAINTEXT_RECORD_SIZE;
         buffer_push_record(sendbuf, PTLS_CONTENT_TYPE_APPDATA, {
-            if ((ret = ptls_buffer_reserve(sendbuf, pt_size + 256)) != 0)
+            if ((ret = ptls_buffer_reserve(sendbuf, pt_size + PTLS_MAX_RECORD_OVERHEAD - 5)) != 0)
                 goto Exit;
             if ((ret = ptls_aead_transform(tls->traffic_protection.enc.aead, sendbuf->base + sendbuf->off, &enc_size, input,
                                            pt_size, PTLS_CONTENT_TYPE_APPDATA)) != 0)

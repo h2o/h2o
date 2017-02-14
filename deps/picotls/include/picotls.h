@@ -28,6 +28,7 @@
 #define PTLS_MAX_SECRET_SIZE 32
 #define PTLS_MAX_IV_SIZE 16
 #define PTLS_MAX_DIGEST_SIZE 64
+#define PTLS_MAX_RECORD_OVERHEAD (5 + 16 + 1) /* maximum per-record overhead (header + tag + type) */
 
 /* cipher-suites */
 #define PTLS_CIPHER_SUITE_AES_128_GCM_SHA256 0x1301

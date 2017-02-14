@@ -627,19 +627,34 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
                 size_t sz = bufs[0].len - off;
                 if (sz > ssl_record_size)
                     sz = ssl_record_size;
-                ret = SSL_write(sock->ssl->ossl, bufs[0].base + off, (int)sz);
-                if (ret != sz) {
-                    /* The error happens if SSL_write is called after SSL_read returns a fatal error (e.g. due to corrupt TCP packet
-                     * being received). We need to take care of this since some protocol implementations send data after the read-
-                     * side of the connection gets closed (note that protocol implementations are (yet) incapable of distinguishing
-                     * a normal shutdown and close due to an error using the `status` value of the read callback).
-                     */
-                    clear_output_buffer(sock->ssl);
-                    flush_pending_ssl(sock, cb);
-#ifndef H2O_USE_LIBUV
-                    ((struct st_h2o_evloop_socket_t *)sock)->_flags |= H2O_SOCKET_FLAG_IS_WRITE_ERROR;
+#if H2O_USE_PICOTLS
+                if (sock->ssl->ptls != NULL) {
+                    size_t dst_size = sz + PTLS_MAX_RECORD_OVERHEAD;
+                    void *dst = h2o_mem_alloc_pool(&sock->ssl->output.pool, dst_size);
+                    ptls_buffer_t wbuf;
+                    ptls_buffer_init(&wbuf, dst, dst_size);
+                    ret = ptls_send(sock->ssl->ptls, &wbuf, bufs[0].base + off, sz);
+                    assert(ret == 0);
+                    assert(!wbuf.is_allocated);
+                    h2o_vector_reserve(&sock->ssl->output.pool, &sock->ssl->output.bufs, sock->ssl->output.bufs.size + 1);
+                    sock->ssl->output.bufs.entries[sock->ssl->output.bufs.size++] = h2o_iovec_init(dst, wbuf.off);
+                } else
 #endif
-                    return;
+                {
+                    ret = SSL_write(sock->ssl->ossl, bufs[0].base + off, (int)sz);
+                    if (ret != sz) {
+                        /* The error happens if SSL_write is called after SSL_read returns a fatal error (e.g. due to corrupt TCP packet
+                         * being received). We need to take care of this since some protocol implementations send data after the read-
+                         * side of the connection gets closed (note that protocol implementations are (yet) incapable of distinguishing
+                         * a normal shutdown and close due to an error using the `status` value of the read callback).
+                         */
+                        clear_output_buffer(sock->ssl);
+                        flush_pending_ssl(sock, cb);
+#ifndef H2O_USE_LIBUV
+                        ((struct st_h2o_evloop_socket_t *)sock)->_flags |= H2O_SOCKET_FLAG_IS_WRITE_ERROR;
+#endif
+                        return;
+                    }
                 }
                 off += sz;
             }
@@ -863,7 +878,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     if (err == NULL) {
 #if H2O_USE_PICOTLS
         if (sock->ssl->ptls != NULL) {
-            sock->ssl->record_overhead = 5 /* header */ + 16 /* tag */;
+            sock->ssl->record_overhead = 5 /* header */ + 16 /* tag */ + 1 /* type */;
         } else {
 #endif
         const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ossl);
