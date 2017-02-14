@@ -245,7 +245,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
                 continue;
         AddHeader:
             RESERVE(h->name->len + h->value.len + 2);
-            APPEND(h->orig_hname ? h->orig_hname : h->name->base, h->name->len);
+            APPEND(h->orig_name ? h->orig_name : h->name->base, h->name->len);
             buf.base[offset++] = ':';
             buf.base[offset++] = ' ';
             APPEND(h->value.base, h->value.len);
@@ -462,13 +462,13 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
             value = h2o_strdup(&req->pool, headers[i].value.base, headers[i].value.len);
         AddHeader:
             h = h2o_add_header(&req->pool, &req->res.headers, token, value.base, value.len);
-            h->orig_hname = h2o_strdup(&req->pool, headers[i].orig_hname, headers[i].name->len).base;
+            h->orig_name = h2o_strdup(&req->pool, headers[i].orig_name, headers[i].name->len).base;
         Skip:;
         } else {
             h2o_iovec_t name = h2o_strdup(&req->pool, headers[i].name->base, headers[i].name->len);
             h2o_iovec_t value = h2o_strdup(&req->pool, headers[i].value.base, headers[i].value.len);
             h = h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, value.base, value.len);
-            h->orig_hname = h2o_strdup(&req->pool, headers[i].orig_hname, headers[i].name->len).base;
+            h->orig_name = h2o_strdup(&req->pool, headers[i].orig_name, headers[i].name->len).base;
         }
     }
 

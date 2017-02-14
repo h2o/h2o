@@ -253,9 +253,9 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
         for (i = 0; i != num_headers; ++i) {
             const h2o_token_t *token;
-            char *orig_hname;
+            char *orig_name;
 
-            orig_hname = h2o_strdup(NULL, src_headers[i].name, src_headers[i].name_len).base;
+            orig_name = h2o_strdup(NULL, src_headers[i].name, src_headers[i].name_len).base;
             h2o_strtolower((char *)src_headers[i].name, src_headers[i].name_len);
             token = h2o_lookup_token(src_headers[i].name, src_headers[i].name_len);
             if (token != NULL) {
@@ -265,7 +265,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
                 headers[i].name = &header_names[i];
             }
             headers[i].value = h2o_iovec_init(src_headers[i].value, src_headers[i].value_len);
-            headers[i].orig_hname = orig_hname;
+            headers[i].orig_name = orig_name;
         }
     }
 
@@ -346,7 +346,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
 Exit:
     for (i = 0; i != num_headers; ++i)
-        free((void *)headers[i].orig_hname);
+        free((void *)headers[i].orig_name);
 #undef MAX_HEADERS
 }
 

@@ -257,10 +257,10 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
                 *dst_header->name = h2o_strdup(&req->pool, src_header->name->base, src_header->name->len);
             }
             dst_header->value = h2o_strdup(&req->pool, src_header->value.base, src_header->value.len);
-            if (!src_header->orig_hname)
-                dst_header->orig_hname = src_header->orig_hname;
+            if (!src_header->orig_name)
+                dst_header->orig_name = src_header->orig_name;
             else
-                dst_header->orig_hname = h2o_strdup(&req->pool, src_header->orig_hname, src_header->name->len).base;
+                dst_header->orig_name = h2o_strdup(&req->pool, src_header->orig_name, src_header->name->len).base;
         }
         if (src->env.size != 0) {
             h2o_vector_reserve(&req->pool, &req->env, src->env.size);

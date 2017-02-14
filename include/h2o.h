@@ -625,13 +625,13 @@ typedef struct st_h2o_header_t {
      */
     h2o_iovec_t *name;
     /**
+     * The name of the header as originally received from the client, same length as `name`
+     */
+    const char *orig_name;
+    /**
      * value of the header
      */
     h2o_iovec_t value;
-    /**
-     * The name of the header as originally received from the client
-     */
-    const char *orig_hname;
 } h2o_header_t;
 
 /**
