@@ -70,9 +70,6 @@
 
 #define PTLS_SERVER_NAME_TYPE_HOSTNAME 0
 
-#define PTLS_ALERT_LEVEL_WARNING 1
-#define PTLS_ALERT_LEVEL_FATAL 2
-
 #define PTLS_SERVER_CERTIFICATE_VERIFY_CONTEXT_STRING "TLS 1.3, server CertificateVerify"
 #define PTLS_CLIENT_CERTIFICATE_VERIFY_CONTEXT_STRING "TLS 1.3, client CertificateVerify"
 #define PTLS_MAX_CERTIFICATE_VERIFY_SIGNDATA_SIZE                                                                                  \
@@ -782,20 +779,6 @@ static size_t build_certificate_verify_signdata(uint8_t *data, struct st_ptls_ke
     assert(datalen <= PTLS_MAX_CERTIFICATE_VERIFY_SIGNDATA_SIZE);
 
     return datalen;
-}
-
-static int send_alert(ptls_t *tls, ptls_buffer_t *sendbuf, uint8_t level, uint8_t description)
-{
-    size_t rec_start = sendbuf->off;
-    int ret = 0;
-
-    buffer_push_record(sendbuf, PTLS_CONTENT_TYPE_ALERT, { ptls_buffer_push(sendbuf, level, description); });
-    if (tls->traffic_protection.enc.aead != NULL &&
-        (ret = buffer_encrypt_record(sendbuf, rec_start, tls->traffic_protection.enc.aead)) != 0)
-        goto Exit;
-
-Exit:
-    return ret;
 }
 
 static int calc_verify_data(void *output, struct st_ptls_key_schedule_t *sched, const void *secret)
@@ -2403,7 +2386,7 @@ int ptls_handshake(ptls_t *tls, ptls_buffer_t *sendbuf, const void *input, size_
         assert(input == NULL || *inlen == 0);
         return send_client_hello(tls, sendbuf, properties);
     case PTLS_STATE_CLIENT_SEND_EARLY_DATA:
-        if ((ret = send_alert(tls, sendbuf, PTLS_ALERT_LEVEL_WARNING, PTLS_ALERT_END_OF_EARLY_DATA)) != 0)
+        if ((ret = ptls_send_alert(tls, sendbuf, PTLS_ALERT_LEVEL_WARNING, PTLS_ALERT_END_OF_EARLY_DATA)) != 0)
             return ret;
         tls->state = PTLS_STATE_CLIENT_EXPECT_SERVER_HELLO;
         break;
@@ -2434,8 +2417,8 @@ int ptls_handshake(ptls_t *tls, ptls_buffer_t *sendbuf, const void *input, size_
         sendbuf->off = sendbuf_orig_off;
         /* send alert immediately */
         if (PTLS_ERROR_GET_CLASS(ret) != PTLS_ERROR_CLASS_PEER_ALERT)
-            if (send_alert(tls, sendbuf, PTLS_ALERT_LEVEL_FATAL,
-                           PTLS_ERROR_GET_CLASS(ret) == PTLS_ERROR_CLASS_SELF_ALERT ? ret : PTLS_ALERT_INTERNAL_ERROR) != 0)
+            if (ptls_send_alert(tls, sendbuf, PTLS_ALERT_LEVEL_FATAL,
+                                PTLS_ERROR_GET_CLASS(ret) == PTLS_ERROR_CLASS_SELF_ALERT ? ret : PTLS_ALERT_INTERNAL_ERROR) != 0)
                 sendbuf->off = sendbuf_orig_off;
     }
 
@@ -2504,6 +2487,21 @@ int ptls_send(ptls_t *tls, ptls_buffer_t *sendbuf, const void *_input, size_t in
 Exit:
     return ret;
 }
+
+int ptls_send_alert(ptls_t *tls, ptls_buffer_t *sendbuf, uint8_t level, uint8_t description)
+{
+    size_t rec_start = sendbuf->off;
+    int ret = 0;
+
+    buffer_push_record(sendbuf, PTLS_CONTENT_TYPE_ALERT, { ptls_buffer_push(sendbuf, level, description); });
+    if (tls->traffic_protection.enc.aead != NULL &&
+        (ret = buffer_encrypt_record(sendbuf, rec_start, tls->traffic_protection.enc.aead)) != 0)
+        goto Exit;
+
+Exit:
+    return ret;
+}
+
 
 struct st_picotls_hmac_context_t {
     ptls_hash_context_t super;

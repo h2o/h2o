@@ -56,6 +56,9 @@
 #define PTLS_ERROR_TO_ALERT(e) ((e)&0xff)
 
 /* alerts */
+#define PTLS_ALERT_LEVEL_WARNING 1
+#define PTLS_ALERT_LEVEL_FATAL 2
+
 #define PTLS_ALERT_CLOSE_NOTIFY 0
 #define PTLS_ALERT_END_OF_EARLY_DATA 1
 #define PTLS_ALERT_UNEXPECTED_MESSAGE 10
@@ -473,6 +476,10 @@ int ptls_receive(ptls_t *tls, ptls_buffer_t *plaintextbuf, const void *input, si
  * encrypts given buffer into multiple TLS records
  */
 int ptls_send(ptls_t *tls, ptls_buffer_t *sendbuf, const void *input, size_t inlen);
+/**
+ * sends an alert
+ */
+int ptls_send_alert(ptls_t *tls, ptls_buffer_t *sendbuf, uint8_t level, uint8_t description);
 /**
  *
  */

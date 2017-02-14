@@ -299,12 +299,20 @@ static void clear_output_buffer(struct st_h2o_socket_ssl_t *ssl)
 
 static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
 {
-    if (!SSL_is_server(ssl->ossl)) {
-        free(ssl->handshake.client.server_name);
-        free(ssl->handshake.client.session_cache_key.base);
+#if H2O_USE_PICOTLS
+    if (ssl->ptls != NULL) {
+        ptls_free(ssl->ptls);
+        ssl->ptls = NULL;
     }
-    SSL_free(ssl->ossl);
-    ssl->ossl = NULL;
+#endif
+    if (ssl->ossl != NULL) {
+        if (!SSL_is_server(ssl->ossl)) {
+            free(ssl->handshake.client.server_name);
+            free(ssl->handshake.client.session_cache_key.base);
+        }
+        SSL_free(ssl->ossl);
+        ssl->ossl = NULL;
+    }
     h2o_buffer_dispose(&ssl->input.encrypted);
     clear_output_buffer(ssl);
     free(ssl);
@@ -348,8 +356,21 @@ static void shutdown_ssl(h2o_socket_t *sock, const char *err)
         goto Close;
     }
 
-    if ((ret = SSL_shutdown(sock->ssl->ossl)) == -1) {
-        goto Close;
+#if H2O_USE_PICOTLS
+    if (sock->ssl->ptls != NULL) {
+        ptls_buffer_t wbuf;
+        uint8_t wbuf_small[64];
+        ptls_buffer_init(&wbuf, wbuf_small, sizeof(wbuf_small));
+        if ((ret = ptls_send_alert(sock->ssl->ptls, &wbuf, PTLS_ALERT_LEVEL_WARNING,PTLS_ALERT_CLOSE_NOTIFY)) != 0)
+            goto Close;
+        h2o_vector_reserve(&sock->ssl->output.pool, &sock->ssl->output.bufs, sock->ssl->output.bufs.size + 1);
+        sock->ssl->output.bufs.entries[sock->ssl->output.bufs.size++] = h2o_strdup(&sock->ssl->output.pool, (void *)wbuf.base, wbuf.off);
+        ptls_buffer_dispose(&wbuf);
+    } else
+#endif
+    {
+        if ((ret = SSL_shutdown(sock->ssl->ossl)) == -1)
+            goto Close;
     }
 
     if (sock->ssl->output.bufs.size != 0) {
