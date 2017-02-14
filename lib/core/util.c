@@ -126,7 +126,7 @@ static void on_ssl_handshake_complete(h2o_socket_t *sock, const char *err)
     for (ident = h2o_http2_alpn_protocols; ident->len != 0; ++ident) {
         if (proto.len == ident->len && memcmp(proto.base, ident->base, proto.len) == 0) {
             /* connect as http2 */
-            h2o_http2_accept(data->ctx, sock, data->ctx->ssl.http2_origin_frame, data->connected_at);
+            h2o_http2_accept(data->ctx, sock, data->connected_at);
             goto Exit;
         }
     }
@@ -258,8 +258,8 @@ static void on_read_proxy_line(h2o_socket_t *sock, const char *err)
         break;
     }
 
-    if (data->ctx->ssl.ssl_ctx != NULL) {
-        h2o_socket_ssl_handshake(sock, data->ctx->ssl.ssl_ctx, NULL, on_ssl_handshake_complete);
+    if (data->ctx->ssl_ctx != NULL) {
+        h2o_socket_ssl_handshake(sock, data->ctx->ssl_ctx, NULL, on_ssl_handshake_complete);
     } else {
         struct st_h2o_accept_data_t *data = sock->data;
         sock->data = NULL;
@@ -272,12 +272,12 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
 {
     struct timeval connected_at = *h2o_get_timestamp(ctx->ctx, NULL, NULL);
 
-    if (ctx->expect_proxy_line || ctx->ssl.ssl_ctx != NULL) {
+    if (ctx->expect_proxy_line || ctx->ssl_ctx != NULL) {
         create_accept_data(ctx, sock, connected_at);
         if (ctx->expect_proxy_line) {
             h2o_socket_read_start(sock, on_read_proxy_line);
         } else {
-            h2o_socket_ssl_handshake(sock, ctx->ssl.ssl_ctx, NULL, on_ssl_handshake_complete);
+            h2o_socket_ssl_handshake(sock, ctx->ssl_ctx, NULL, on_ssl_handshake_complete);
         }
     } else {
         h2o_http1_accept(ctx, sock, connected_at);

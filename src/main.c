@@ -1508,8 +1508,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         listeners[i].accept_ctx.ctx = &conf.threads[thread_index].ctx;
         listeners[i].accept_ctx.hosts = listener_config->hosts;
         if (listener_config->ssl.size != 0) {
-            listeners[i].accept_ctx.ssl.ssl_ctx = listener_config->ssl.entries[0]->ctx;
-            listeners[i].accept_ctx.ssl.http2_origin_frame = listener_config->ssl.entries[0]->http2_origin_frame;
+            listeners[i].accept_ctx.ssl_ctx = listener_config->ssl.entries[0]->ctx;
+            listeners[i].accept_ctx.http2_origin_frame = listener_config->ssl.entries[0]->http2_origin_frame;
         }
         listeners[i].accept_ctx.expect_proxy_line = listener_config->proxy_protocol;
         listeners[i].accept_ctx.libmemcached_receiver = &conf.threads[thread_index].memcached;

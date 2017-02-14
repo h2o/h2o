@@ -1311,10 +1311,10 @@ static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *c
     return 0;
 }
 
-void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, h2o_iovec_t *http2_origin_frame, struct timeval connected_at)
+void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
     h2o_http2_conn_t *conn = create_conn(ctx->ctx, ctx->hosts, sock, connected_at);
-    conn->http2_origin_frame = http2_origin_frame;
+    conn->http2_origin_frame = ctx->http2_origin_frame;
     sock->data = conn;
     h2o_socket_read_start(conn->sock, on_read);
     update_idle_timeout(conn);

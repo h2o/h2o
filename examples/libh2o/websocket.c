@@ -81,15 +81,15 @@ static int setup_ssl(const char *cert_file, const char *key_file)
     SSL_library_init();
     OpenSSL_add_all_algorithms();
 
-    accept_ctx.ssl.ssl_ctx = SSL_CTX_new(SSLv23_server_method());
-    SSL_CTX_set_options(accept_ctx.ssl.ssl_ctx, SSL_OP_NO_SSLv2);
+    accept_ctx.ssl_ctx = SSL_CTX_new(SSLv23_server_method());
+    SSL_CTX_set_options(accept_ctx.ssl_ctx, SSL_OP_NO_SSLv2);
 
     /* load certificate and private key */
-    if (SSL_CTX_use_certificate_file(accept_ctx.ssl.ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
+    if (SSL_CTX_use_certificate_file(accept_ctx.ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
         fprintf(stderr, "an error occurred while trying to load server certificate file:%s\n", cert_file);
         return -1;
     }
-    if (SSL_CTX_use_PrivateKey_file(accept_ctx.ssl.ssl_ctx, key_file, SSL_FILETYPE_PEM) != 1) {
+    if (SSL_CTX_use_PrivateKey_file(accept_ctx.ssl_ctx, key_file, SSL_FILETYPE_PEM) != 1) {
         fprintf(stderr, "an error occurred while trying to load private key file:%s\n", key_file);
         return -1;
     }
