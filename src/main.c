@@ -387,6 +387,24 @@ static void listener_setup_ssl_add_host(struct listener_ssl_config_t *ssl_config
     ssl_config->hostnames.entries[ssl_config->hostnames.size++] = h2o_iovec_init(host.base, host_end - host.base);
 }
 
+static h2o_iovec_t *build_http2_origin_frame(const h2o_iovec_t *origins, size_t nr_origins)
+{
+    size_t i;
+    h2o_iovec_t *http2_origin_frame = h2o_mem_alloc(sizeof(*http2_origin_frame));
+    uint16_t lengths[nr_origins];
+    h2o_iovec_t elems[nr_origins * 2];
+    for (i = 0; i < nr_origins; i++) {
+        lengths[i] = htons(origins[i].len);
+        elems[i*2].base = (char *)&lengths[i];
+        elems[i*2].len = 2;
+        elems[i*2 + 1].base = origins[i].base;
+        elems[i*2 + 1].len = origins[i].len;
+        h2o_strtolower(origins[i].base, origins[i].len);
+    }
+    *http2_origin_frame = h2o_concat_list(NULL, elems, nr_origins * 2);
+    return http2_origin_frame;
+}
+
 static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *listen_node,
                               yoml_t *ssl_node, struct listener_config_t *listener, int listener_is_new)
 {
@@ -467,46 +485,35 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 continue;
             }
             if (strcmp(key->data.scalar, "http2-origin-frame") == 0) {
+                h2o_iovec_t *origins;
+                size_t nr_origins;
                 switch (value->type) {
                 case YOML_TYPE_SCALAR:
-                {
-                    uint16_t name_size;
-                    name_size = strlen(value->data.scalar);
-                    h2o_strtolower(value->data.scalar, name_size);
-                    http2_origin_frame = h2o_mem_alloc(sizeof(*http2_origin_frame));
-                    http2_origin_frame->len = sizeof(uint16_t) + name_size;
-                    http2_origin_frame->base = h2o_mem_alloc(http2_origin_frame->len);
-
-                    memcpy(http2_origin_frame->base + sizeof(name_size), value->data.scalar, name_size);
-                    name_size = htons(name_size);
-                    memcpy(http2_origin_frame->base, &name_size, sizeof(name_size));
-                } break;
+                    nr_origins = 1;
+                    origins = alloca(sizeof(*origins));
+                    origins[0].base = value->data.scalar;
+                    origins[0].len = strlen(value->data.scalar);
+                    break;
                 case YOML_TYPE_SEQUENCE:
                 {
                      size_t i;
-                     uint16_t elem_lens[value->data.sequence.size];
-                     h2o_iovec_t elems[value->data.sequence.size * 2];
+                     nr_origins = value->data.sequence.size;
+                     origins = alloca(sizeof(*origins) * nr_origins);
                      for (i = 0; i != value->data.sequence.size; ++i) {
                          yoml_t *element = value->data.sequence.elements[i];
                          if (element->type != YOML_TYPE_SCALAR) {
                              h2o_configurator_errprintf(cmd, element, "element of a sequence passed to unsetenv must be a scalar");
                              return -1;
                          }
-                         elem_lens[i] = htons(strlen(element->data.scalar));
-                         elems[i*2].base = (char *)&elem_lens[i];
-                         elems[i*2].len = 2;
-                         elems[i*2 + 1].base = element->data.scalar;
-                         elems[i*2 + 1].len = strlen(element->data.scalar);
-                         h2o_strtolower(elems[i*2 + 1].base, elems[i*2 + 1].len);
+                         origins[i].base = element->data.scalar;
+                         origins[i].len = strlen(element->data.scalar);
                      }
-                     http2_origin_frame = h2o_mem_alloc(sizeof(*http2_origin_frame));
-                     *http2_origin_frame = h2o_concat_list(NULL, elems, value->data.sequence.size * 2);
                 } break;
                 default:
                     h2o_configurator_errprintf(cmd, value, "argument to `http2-origin-frame` must be either a scalar or a sequence");
                     return -1;
                 }
-                /* TODO */
+                http2_origin_frame = build_http2_origin_frame(origins, nr_origins);
                 continue;
             }
             h2o_configurator_errprintf(cmd, key, "unknown property: %s", key->data.scalar);
