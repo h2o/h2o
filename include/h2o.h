@@ -1092,13 +1092,11 @@ ssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, s
 /**
  * adds a header to list
  */
-h2o_header_t *h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value,
-                             size_t value_len);
+void h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *orig_name, const char *value, size_t value_len);
 /**
  * adds a header to list
  */
-h2o_header_t *h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len,
-                                    int maybe_token, const char *value, size_t value_len);
+void h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token, const char *orig_name, const char *value, size_t value_len);
 /**
  * adds or replaces a header into the list
  */

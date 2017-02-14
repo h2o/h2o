@@ -280,7 +280,6 @@ static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const 
         h2o_vector_reserve(pool, headers, len);
         for (i = 0; i != len; ++i) {
             const h2o_token_t *name_token;
-            h2o_header_t *h;
             char orig_case[src[i].name_len];
 
             /* preserve the original case */
@@ -307,14 +306,12 @@ static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const 
                         assert(!"logic flaw");
                     }
                 } else {
-                    h = h2o_add_header(pool, headers, name_token, src[i].value, src[i].value_len);
-                    h->orig_name = h2o_strdup(pool, orig_case, src[i].name_len).base;
+                    h2o_add_header(pool, headers, name_token, orig_case, src[i].value, src[i].value_len);
                     if (name_token == H2O_TOKEN_CONNECTION)
                         *connection = headers->entries[headers->size - 1].value;
                 }
             } else {
-                h = h2o_add_header_by_str(pool, headers, src[i].name, src[i].name_len, 0, src[i].value, src[i].value_len);
-                h->orig_name = h2o_strdup(pool, orig_case, src[i].name_len).base;
+                h2o_add_header_by_str(pool, headers, src[i].name, src[i].name_len, 0, orig_case, src[i].value, src[i].value_len);
             }
         }
     }

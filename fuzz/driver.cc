@@ -86,7 +86,7 @@ static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
     h2o_iovec_t body = h2o_strdup(&req->pool, "hello world\n", SIZE_MAX);
     req->res.status = 200;
     req->res.reason = "OK";
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/plain"));
     h2o_start_response(req, &generator);
     h2o_send(req, &body, 1, H2O_SEND_STATE_FINAL);
 

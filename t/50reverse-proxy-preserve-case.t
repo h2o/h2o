@@ -29,8 +29,9 @@ sub handler_curl {
     my $data = "";
     $client_socket->recv($data, 4906);
 
-    my $resp = "HTTP/1.0 200 Ok\r\nConnection: close\r\nMyResponseHeader:1\r\n\r\nOk";
+    my $resp = "HTTP/1.0 200 Ok\r\nMyResponseHeader:1\r\nContent-Length:2\r\nConnection: close\r\n\r\nOk";
     $client_socket->send($resp);
+    $client_socket->flush;
 
     close($client_socket);
     return $data;
@@ -42,12 +43,12 @@ hosts:
   default:
     paths:
       /:
-        proxy.reverse.url: http://127.0.0.1.XIP.IO:$upstream_port
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
 EOT
 
 run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
-        open(CURL, "$curl -HUpper-Case:TheValue -svo /dev/null $proto://127.0.0.1:$port/ 2>&1 |");
+        open(CURL, "$curl -HUpper-Case:TheValue -kv $proto://127.0.0.1:$port/ 2>&1 |");
         my $forwarded = handler_curl($upstream);
         my @lines;
         while (<CURL>) {

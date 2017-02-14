@@ -415,10 +415,9 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     req->res.status = status;
     req->res.reason = h2o_strdup(&req->pool, msg.base, msg.len).base;
     for (i = 0; i != num_headers; ++i) {
-        h2o_header_t *h;
-        const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers[i].name);
-        h2o_iovec_t value;
-        if (token != NULL) {
+        if (h2o_iovec_is_token(headers[i].name)) {
+            const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers[i].name);
+            h2o_iovec_t value;
             if (token->proxy_should_drop) {
                 goto Skip;
             }
@@ -461,21 +460,19 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
         AddHeaderDuped:
             value = h2o_strdup(&req->pool, headers[i].value.base, headers[i].value.len);
         AddHeader:
-            h = h2o_add_header(&req->pool, &req->res.headers, token, value.base, value.len);
-            h->orig_name = h2o_strdup(&req->pool, headers[i].orig_name, headers[i].name->len).base;
+            h2o_add_header(&req->pool, &req->res.headers, token, headers[i].orig_name, value.base, value.len);
         Skip:;
         } else {
             h2o_iovec_t name = h2o_strdup(&req->pool, headers[i].name->base, headers[i].name->len);
             h2o_iovec_t value = h2o_strdup(&req->pool, headers[i].value.base, headers[i].value.len);
-            h = h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, value.base, value.len);
-            h->orig_name = h2o_strdup(&req->pool, headers[i].orig_name, headers[i].name->len).base;
+            h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, headers[i].orig_name, value.base, value.len);
         }
     }
 
     if (self->is_websocket_handshake && req->res.status == 101) {
         h2o_http1client_ctx_t *client_ctx = get_client_ctx(req);
         assert(client_ctx->websocket_timeout != NULL);
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, H2O_STRLIT("websocket"));
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
         on_websocket_upgrade(self, client_ctx->websocket_timeout);
         self->client = NULL;
         return NULL;

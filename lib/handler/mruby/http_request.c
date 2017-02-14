@@ -163,7 +163,7 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
 static void post_error(struct st_h2o_mruby_http_request_context_t *ctx, const char *errstr)
 {
     static const h2o_header_t headers_sorted[] = {
-        {&H2O_TOKEN_CONTENT_TYPE->buf, {H2O_STRLIT("text/plain; charset=utf-8")}},
+        {&H2O_TOKEN_CONTENT_TYPE->buf, NULL, {H2O_STRLIT("text/plain; charset=utf-8")}},
     };
 
     ctx->client = NULL;
