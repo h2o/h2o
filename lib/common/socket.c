@@ -643,10 +643,11 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
                 {
                     ret = SSL_write(sock->ssl->ossl, bufs[0].base + off, (int)sz);
                     if (ret != sz) {
-                        /* The error happens if SSL_write is called after SSL_read returns a fatal error (e.g. due to corrupt TCP packet
-                         * being received). We need to take care of this since some protocol implementations send data after the read-
-                         * side of the connection gets closed (note that protocol implementations are (yet) incapable of distinguishing
-                         * a normal shutdown and close due to an error using the `status` value of the read callback).
+                        /* The error happens if SSL_write is called after SSL_read returns a fatal error (e.g. due to corrupt TCP
+                         * packet being received). We need to take care of this since some protocol implementations send data after
+                         * the read-side of the connection gets closed (note that protocol implementations are (yet) incapable of
+                         * distinguishing a normal shutdown and close due to an error using the `status` value of the read
+                         * callback).
                          */
                         clear_output_buffer(sock->ssl);
                         flush_pending_ssl(sock, cb);
@@ -879,34 +880,33 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 #if H2O_USE_PICOTLS
         if (sock->ssl->ptls != NULL) {
             sock->ssl->record_overhead = 5 /* header */ + 16 /* tag */ + 1 /* type */;
-        } else {
+        } else
 #endif
-        const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ossl);
-        switch (SSL_CIPHER_get_id(cipher)) {
-        case TLS1_CK_RSA_WITH_AES_128_GCM_SHA256:
-        case TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256:
-        case TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
-        case TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:
-        case TLS1_CK_RSA_WITH_AES_256_GCM_SHA384:
-        case TLS1_CK_DHE_RSA_WITH_AES_256_GCM_SHA384:
-        case TLS1_CK_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
-        case TLS1_CK_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:
-            sock->ssl->record_overhead = 5 /* header */ + 8 /* record_iv_length (RFC 5288 3) */ + 16 /* tag (RFC 5116 5.1) */;
-            break;
+        {
+            const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ossl);
+            switch (SSL_CIPHER_get_id(cipher)) {
+            case TLS1_CK_RSA_WITH_AES_128_GCM_SHA256:
+            case TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256:
+            case TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
+            case TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:
+            case TLS1_CK_RSA_WITH_AES_256_GCM_SHA384:
+            case TLS1_CK_DHE_RSA_WITH_AES_256_GCM_SHA384:
+            case TLS1_CK_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
+            case TLS1_CK_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:
+                sock->ssl->record_overhead = 5 /* header */ + 8 /* record_iv_length (RFC 5288 3) */ + 16 /* tag (RFC 5116 5.1) */;
+                break;
 #if defined(TLS1_CK_DHE_RSA_CHACHA20_POLY1305)
-        case TLS1_CK_DHE_RSA_CHACHA20_POLY1305:
-        case TLS1_CK_ECDHE_RSA_CHACHA20_POLY1305:
-        case TLS1_CK_ECDHE_ECDSA_CHACHA20_POLY1305:
-            sock->ssl->record_overhead = 5 /* header */ + 16 /* tag */;
-            break;
+            case TLS1_CK_DHE_RSA_CHACHA20_POLY1305:
+            case TLS1_CK_ECDHE_RSA_CHACHA20_POLY1305:
+            case TLS1_CK_ECDHE_ECDSA_CHACHA20_POLY1305:
+                sock->ssl->record_overhead = 5 /* header */ + 16 /* tag */;
+                break;
 #endif
-        default:
-            sock->ssl->record_overhead = 32; /* sufficiently large number that can hold most payloads */
-            break;
+            default:
+                sock->ssl->record_overhead = 32; /* sufficiently large number that can hold most payloads */
+                break;
+            }
         }
-#if H2O_USE_PICOTLS
-        }
-#endif
     }
 
     /* set ssl session into the cache */
