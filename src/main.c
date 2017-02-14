@@ -51,6 +51,11 @@
 #ifdef __GLIBC__
 #include <execinfo.h>
 #endif
+#if H2O_USE_PICOTLS
+#include "picotls.h"
+#include "picotls/minicrypto.h"
+#include "picotls/openssl.h"
+#endif
 #include "cloexec.h"
 #include "yoml-parser.h"
 #include "neverbleed.h"
@@ -659,6 +664,28 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         }
 #endif
     }
+
+#if H2O_USE_PICOTLS
+    {
+        ptls_context_t *pctx = h2o_mem_alloc(sizeof(*pctx));
+        ptls_openssl_lookup_certificate_t *lc = h2o_mem_alloc(sizeof(*lc));
+
+        STACK_OF(X509) *certs;
+        SSL_CTX_get0_chain_certs(ssl_ctx, &certs);
+        if (certs != NULL) {
+            certs = sk_X509_dup(certs);
+        } else {
+            certs = sk_X509_new_null();
+        }
+        sk_X509_unshift(certs, SSL_CTX_get0_certificate(ssl_ctx));
+
+        ptls_openssl_init_lookup_certificate(lc);
+        ptls_openssl_lookup_certificate_add_identity(lc, "example.com", SSL_CTX_get0_privatekey(ssl_ctx), certs);
+
+        *pctx = (ptls_context_t){ptls_openssl_random_bytes, ptls_openssl_key_exchanges, ptls_openssl_cipher_suites, &lc->super};
+        h2o_socket_ssl_set_picotls_context(ssl_ctx, pctx);
+    }
+#endif
 
     return 0;
 
