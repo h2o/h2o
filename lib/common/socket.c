@@ -359,12 +359,11 @@ static void shutdown_ssl(h2o_socket_t *sock, const char *err)
 #if H2O_USE_PICOTLS
     if (sock->ssl->ptls != NULL) {
         ptls_buffer_t wbuf;
-        uint8_t wbuf_small[64];
+        uint8_t wbuf_small[2 + PTLS_MAX_RECORD_OVERHEAD];
         ptls_buffer_init(&wbuf, wbuf_small, sizeof(wbuf_small));
         if ((ret = ptls_send_alert(sock->ssl->ptls, &wbuf, PTLS_ALERT_LEVEL_WARNING,PTLS_ALERT_CLOSE_NOTIFY)) != 0)
             goto Close;
-        h2o_vector_reserve(&sock->ssl->output.pool, &sock->ssl->output.bufs, sock->ssl->output.bufs.size + 1);
-        sock->ssl->output.bufs.entries[sock->ssl->output.bufs.size++] = h2o_strdup(&sock->ssl->output.pool, (void *)wbuf.base, wbuf.off);
+        write_ssl_bytes(sock, wbuf.base, wbuf.off);
         ptls_buffer_dispose(&wbuf);
     } else
 #endif
@@ -967,7 +966,6 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
 
         if (sock->ssl->ptls != NULL) {
             /* picotls in action, proceed the handshake */
-            ptls_buffer_init(&wbuf, NULL, 0);
             ret = ptls_handshake(sock->ssl->ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
         } else {
             /* start using picotls if the first packet contains TLS 1.3 CH */
