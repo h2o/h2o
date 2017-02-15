@@ -31,6 +31,7 @@
 #include <mruby/compile.h>
 #include <mruby/error.h>
 #include <mruby/hash.h>
+#include <mruby/opcode.h>
 #include <mruby/string.h>
 #include <mruby/throw.h>
 #include <mruby/variable.h>
@@ -135,18 +136,6 @@ struct RProc *h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *co
     struct mrb_parser_state *parser;
     struct RProc *proc = NULL;
 
-    // FIXME: how to pass compiled RProc* as an argument?
-    const char *header = "Proc.new do\n";
-    const char *footer = "\nend\n";
-    size_t len = config->source.len + strlen(header) + strlen(footer) + 1;
-    char *base = h2o_mem_alloc(len);
-    memset(base, 0, len);
-    memcpy(base, header, strlen(header));
-    memcpy(base + strlen(header), config->source.base, config->source.len);
-    memcpy(base + strlen(header) + config->source.len, footer, strlen(footer));
-    const h2o_iovec_t source = h2o_iovec_init(base, len);
-
-
     /* parse */
     if ((cxt = mrbc_context_new(mrb)) == NULL) {
         fprintf(stderr, "%s: no memory\n", H2O_MRUBY_MODULE_NAME);
@@ -156,7 +145,7 @@ struct RProc *h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *co
         mrbc_filename(mrb, cxt, config->path);
     cxt->capture_errors = 1;
     cxt->lineno = config->lineno;
-    if ((parser = mrb_parse_nstring(mrb, source.base, (int)source.len, cxt)) == NULL) {
+    if ((parser = mrb_parse_nstring(mrb, config->source.base, (int)config->source.len, cxt)) == NULL) {
         fprintf(stderr, "%s: no memory\n", H2O_MRUBY_MODULE_NAME);
         abort();
     }
@@ -168,7 +157,7 @@ struct RProc *h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *co
         }
         snprintf(errbuf, 256, "line %d:%s", parser->error_buffer[0].lineno, parser->error_buffer[0].message);
         strcat(errbuf, "\n\n");
-        if (h2o_str_at_position(errbuf + strlen(errbuf), source.base, source.len,
+        if (h2o_str_at_position(errbuf + strlen(errbuf), config->source.base, config->source.len,
                                 parser->error_buffer[0].lineno - config->lineno + 1, parser->error_buffer[0].column) != 0) {
             /* remove trailing "\n\n" in case we failed to append the source code at the error location */
             errbuf[strlen(errbuf) - 2] = '\0';
@@ -333,19 +322,25 @@ static h2o_mruby_shared_context_t *get_shared_context(h2o_context_t *ctx)
     return *data;
 }
 
+static void replace_stop_with_return(mrb_state *mrb, mrb_irep *irep)
+{
+    assert(irep->iseq[irep->ilen - 1] == MKOP_A(OP_STOP, 0));
+    irep->iseq[irep->ilen - 1] = MKOP_AB(OP_RETURN, irep->nlocals, OP_R_NORMAL);
+}
+
 mrb_value prepare_fibers(h2o_mruby_context_t *ctx)
 {
     mrb_state *mrb = ctx->shared->mrb;
 
     struct RProc *compiled = h2o_mruby_compile_code(mrb, &ctx->handler->config, NULL);
 
-    /* run code and generate handler */
-    mrb_value conf_proc = mrb_run(mrb, compiled, mrb_top_self(mrb));
-    assert(mrb->exc == NULL);
+    /* make compiled RProc* able to be passed as argument */
+    struct RProc *conf_proc = mrb_closure_new(mrb, compiled->body.irep);
+    replace_stop_with_return(mrb, conf_proc->body.irep);
 
-    /* FIXME: embed prepare_app code in H2O_MRUBY_PROC_APP_TO_FIBER later */
+    /* run code and generate handler */
     mrb_value result =
-        mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_prepare_app", 2, conf_proc, ctx->refs.context);
+        mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_prepare_app", 2, mrb_obj_value(conf_proc), ctx->refs.context);
     assert(mrb_array_p(result));
 
     return result;
