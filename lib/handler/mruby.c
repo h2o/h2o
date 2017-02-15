@@ -277,11 +277,6 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
                 mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_proc_each_to_array", 0));
     h2o_mruby_assert(mrb);
 
-    /* sends exception using H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED */
-    mrb_ary_set(mrb, ary, H2O_MRUBY_PROC_APP_TO_FIBER,
-                mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_proc_app_to_fiber", 0));
-    h2o_mruby_assert(mrb);
-
     mrb_gc_arena_restore(mrb, gc_arena);
     return ary;
 }
@@ -348,12 +343,9 @@ mrb_value prepare_fibers(h2o_mruby_context_t *ctx)
     mrb_value conf_proc = mrb_run(mrb, compiled, mrb_top_self(mrb));
     assert(mrb->exc == NULL);
 
-    mrb_value args = mrb_ary_new_capa(mrb, 2);
-    mrb_ary_set(mrb, args, 0, conf_proc);
-    mrb_ary_set(mrb, args, 1, ctx->refs.context);
     /* FIXME: embed prepare_app code in H2O_MRUBY_PROC_APP_TO_FIBER later */
     mrb_value result =
-        mrb_funcall_argv(mrb, mrb_obj_value(mrb_module_get(mrb, "H2O")), mrb_intern_lit(mrb, "prepare_app"), 1, &args);
+        mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_prepare_app", 2, conf_proc, ctx->refs.context);
     assert(mrb_array_p(result));
 
     return result;
