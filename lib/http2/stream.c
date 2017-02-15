@@ -65,8 +65,8 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     h2o_http2_conn_unregister_stream(conn, stream);
-    if (stream->_req_body != NULL)
-        h2o_buffer_dispose(&stream->_req_body);
+    if (stream->req._req_body.body != NULL)
+        h2o_buffer_dispose(&stream->req._req_body.body);
     if (stream->cache_digests != NULL)
         h2o_cache_digests_destroy(stream->cache_digests);
     h2o_dispose_request(&stream->req);
@@ -339,6 +339,10 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
 
     /* send headers */
     switch (stream->state) {
+    case H2O_HTTP2_STREAM_STATE_RECV_BODY:
+        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
+        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
+    /* fallthru */
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
         if (send_headers(conn, stream) != 0)
             return;

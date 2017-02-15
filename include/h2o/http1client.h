@@ -47,8 +47,20 @@ typedef int (*h2o_http1client_body_cb)(h2o_http1client_t *client, const char *er
 typedef h2o_http1client_body_cb (*h2o_http1client_head_cb)(h2o_http1client_t *client, const char *errstr, int minor_version,
                                                            int status, h2o_iovec_t msg, h2o_http1client_header_t *headers,
                                                            size_t num_headers);
-typedef h2o_http1client_head_cb (*h2o_http1client_connect_cb)(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs,
-                                                              size_t *reqbufcnt, int *method_is_head);
+/* TODO should not have to declare that struct */
+struct st_h2o_req_t;
+typedef void (*h2o_req_body_done_cb)(struct st_h2o_req_t *req, size_t written);
+enum req_body_chunk_ret {
+    ALLOC_ERR,
+    NO_STREAM_WINDOW_UPDATE,
+    STREAM_WINDOW_UPDATE,
+};
+typedef enum req_body_chunk_ret (*on_req_body_cb)(h2o_socket_t *sock, h2o_iovec_t reqbufs, const char *err, int is_end);
+typedef enum req_body_chunk_ret (*h2o_req_body_cb)(struct st_h2o_req_t *req, h2o_iovec_t body_chunk, int is_end, void *priv, h2o_req_body_done_cb h2o_req_body_done);
+typedef int (*h2o_req_body_pull_cb)(void *priv, h2o_iovec_t **reqbufs, size_t *reqbufcnt, const char **errstr, on_req_body_cb on_req_body, void *on_req_body_priv);
+
+typedef h2o_http1client_head_cb (*h2o_http1client_connect_cb)(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
+                                          int *method_is_head, on_req_body_cb on_req_body, h2o_req_body_done_cb *req_body_done, void **req_body_done_ctx, h2o_buffer_t **body_buf);
 typedef int (*h2o_http1client_informational_cb)(h2o_http1client_t *client, int minor_version, int status, h2o_iovec_t msg,
                                                 h2o_http1client_header_t *headers, size_t num_headers);
 
@@ -77,9 +89,9 @@ struct st_h2o_http1client_t {
 extern const char *const h2o_http1client_error_is_eos;
 
 void h2o_http1client_connect(h2o_http1client_t **client, void *data, h2o_http1client_ctx_t *ctx, h2o_iovec_t host, uint16_t port,
-                             int is_ssl, h2o_http1client_connect_cb cb);
+                             int is_ssl, h2o_http1client_connect_cb cb, int is_chunked);
 void h2o_http1client_connect_with_pool(h2o_http1client_t **client, void *data, h2o_http1client_ctx_t *ctx,
-                                       h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb);
+                                       h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb, int is_chunked);
 void h2o_http1client_cancel(h2o_http1client_t *client);
 h2o_socket_t *h2o_http1client_steal_socket(h2o_http1client_t *client);
 

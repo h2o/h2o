@@ -263,15 +263,15 @@ sub run_with_curl {
     my ($server, $cb) = @_;
     plan skip_all => "curl not found"
         unless prog_exists("curl");
-    subtest "http/1" => sub {
-        $cb->("http", $server->{port}, "curl");
-    };
-    subtest "https/1" => sub {
-        my $cmd = "curl --insecure";
-        $cmd .= " --http1.1"
-            if curl_supports_http2();
-        $cb->("https", $server->{tls_port}, $cmd);
-    };
+#   subtest "http/1" => sub {
+#       $cb->("http", $server->{port}, "curl");
+#   };
+#   subtest "https/1" => sub {
+#       my $cmd = "curl --insecure";
+#       $cmd .= " --http1.1"
+#           if curl_supports_http2();
+#       $cb->("https", $server->{tls_port}, $cmd);
+#   };
     subtest "https/2" => sub {
         plan skip_all => "curl does not support HTTP/2"
             unless curl_supports_http2();

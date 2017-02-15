@@ -124,6 +124,7 @@ typedef struct st_h2o_handler_t {
     void (*on_context_dispose)(struct st_h2o_handler_t *self, h2o_context_t *ctx);
     void (*dispose)(struct st_h2o_handler_t *self);
     int (*on_req)(struct st_h2o_handler_t *self, h2o_req_t *req);
+    int has_body_stream;
 } h2o_handler_t;
 
 /**
@@ -954,7 +955,7 @@ struct st_h2o_req_t {
      */
     h2o_headers_t headers;
     /**
-     * the request entity (base == NULL if none)
+     * the request entity (base == NULL if none), can't be used if the handler is streaming the body
      */
     h2o_iovec_t entity;
     /**
@@ -1030,6 +1031,17 @@ struct st_h2o_req_t {
     h2o_ostream_t *_ostr_top;
     size_t _next_filter_index;
     h2o_timeout_entry_t _timeout_entry;
+
+
+    h2o_req_body_cb _req_body_cb;
+    void *_req_body_priv;
+    h2o_req_body_done_cb _req_body_done_cb;
+
+    struct {
+        h2o_buffer_t *body;
+        size_t streamed_body_size;
+    } _req_body;
+
     /* per-request memory pool (placed at the last since the structure is large) */
     h2o_mem_pool_t pool;
 };
@@ -1181,6 +1193,8 @@ void h2o_dispose_request(h2o_req_t *req);
  * called by the connection layer to start processing a request that is ready
  */
 void h2o_process_request(h2o_req_t *req);
+/** TODO */
+h2o_handler_t *h2o_find_handler(h2o_req_t *req);
 /**
  * delegates the request to the next handler; called asynchronously by handlers that returned zero from `on_req`
  */

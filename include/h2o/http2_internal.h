@@ -159,7 +159,6 @@ struct st_h2o_http2_stream_t {
     h2o_http2_window_t output_window;
     h2o_http2_window_t input_window;
     h2o_http2_priority_t received_priority;
-    h2o_buffer_t *_req_body;         /* NULL unless request body IS expected */
     size_t _expected_content_length; /* SIZE_MAX if unknown */
     H2O_VECTOR(h2o_iovec_t) _data;
     h2o_ostream_pull_cb _pull_cb;
@@ -230,6 +229,7 @@ struct st_h2o_http2_conn_t {
         h2o_timeout_entry_t timeout_entry;
         h2o_http2_window_t window;
     } _write;
+    unsigned _request_body_in_progress : 1;
     h2o_cache_t *push_memo;
     h2o_http2_casper_t *casper;
 };
@@ -281,6 +281,7 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
 static int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream);
 void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 static void h2o_http2_stream_send_push_promise(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
+static size_t h2o_http2_stream_body_size(h2o_http2_stream_t *stream);
 
 /* misc */
 static void h2o_http2_window_init(h2o_http2_window_t *window, const h2o_http2_settings_t *peer_settings);
@@ -459,6 +460,16 @@ inline void h2o_http2_stream_send_push_promise(h2o_http2_conn_t *conn, h2o_http2
     h2o_hpack_flatten_request(&conn->_write.buf, &conn->_output_header_table, stream->stream_id, conn->peer_settings.max_frame_size,
                               &stream->req, stream->push.parent_stream_id);
     stream->push.promise_sent = 1;
+}
+
+inline size_t h2o_http2_stream_body_size(h2o_http2_stream_t *stream)
+{
+    if (stream->req._req_body_done_cb)
+        return stream->req._req_body.streamed_body_size;
+    else if (stream->req._req_body.body)
+        return stream->req._req_body.body->size;
+
+    return 0;
 }
 
 inline uint16_t h2o_http2_decode16u(const uint8_t *src)

@@ -51,6 +51,15 @@ struct st_h2o_http1client_private_t {
             size_t bytes_decoded_in_buf;
         } chunked;
     } _body_decoder;
+    h2o_req_body_done_cb req_body_done;
+    size_t to_ack;
+    void *req_body_done_ctx;
+    char chunk_len_str[18]; /* SIZE_MAX in hex + CRLF */
+    h2o_buffer_t *_body_buf;
+    h2o_buffer_t *_body_buf_in_flight;
+    unsigned last_crlf_done : 1;
+    unsigned is_chunked : 1;
+    unsigned _body_buf_is_done : 1;
 };
 
 static void close_client(struct st_h2o_http1client_private_t *client)
@@ -183,6 +192,7 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
         const char *errstr;
         int cb_ret;
         size_t newsz = sock->bytes_read;
+
         switch (phr_decode_chunked(&client->_body_decoder.chunked.decoder, inbuf->bytes + inbuf->size - newsz, &newsz)) {
         case -1: /* error */
             newsz = sock->bytes_read;
@@ -346,9 +356,108 @@ static void on_send_request(h2o_socket_t *sock, const char *err)
         return;
     }
 
+    if (client->is_chunked && !client->last_crlf_done) {
+        client->last_crlf_done = 1;
+        h2o_iovec_t last = h2o_iovec_init(H2O_STRLIT("0\r\n"));
+        h2o_socket_write(client->super.sock, &last, 1, on_send_request);
+        return;
+    }
+
     h2o_socket_read_start(client->super.sock, on_head);
     client->_timeout.cb = on_head_timeout;
     h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
+}
+
+static enum req_body_chunk_ret on_req_body(h2o_socket_t *sock, h2o_iovec_t body_chunk, const char *err, int is_done);
+static void on_req_body_done(h2o_socket_t *sock, const char *err)
+{
+    struct st_h2o_http1client_private_t *client = sock->data;
+
+    if (err) {
+        on_send_request(client->super.sock, err);
+        return;
+    }
+
+    if (client->to_ack) {
+        client->req_body_done(client->req_body_done_ctx, client->to_ack);
+        client->to_ack = 0;
+    } else if (client->_body_buf_in_flight) {
+        client->req_body_done(client->req_body_done_ctx, client->_body_buf_in_flight->size);
+        h2o_buffer_consume(&client->_body_buf_in_flight, client->_body_buf_in_flight->size);
+    }
+
+    if (client->_body_buf && client->_body_buf->size) {
+        on_req_body(client->super.sock, h2o_iovec_init(NULL, 0), NULL, client->_body_buf_is_done);
+    } else {
+        client->super.sock->_cb.write = NULL; /*TODO: necessary? */
+        if (client->_body_buf_is_done)
+            on_send_request(client->super.sock, NULL);
+    }
+}
+
+static void swap_buffers(h2o_buffer_t **a, h2o_buffer_t **b)
+{
+    h2o_buffer_t *swap;
+    swap = *b;
+    *b = *a;
+    *a = swap;
+}
+
+static enum req_body_chunk_ret on_req_body(h2o_socket_t *sock, h2o_iovec_t body_chunk, const char *err, int is_done)
+{
+    struct st_h2o_http1client_private_t *client = sock->data;
+
+    //fprintf(stderr, "%s:%d chunk:%zu bb:%zu, bbif:%zu err:%s\n", __func__, __LINE__, body_chunk.len, client->_body_buf ? client->_body_buf->size : 0, client->_body_buf_in_flight ? client->_body_buf_in_flight->size : 0, err?"(null)":err);
+
+    if (err) {
+        on_send_request(sock, err);
+        return NO_STREAM_WINDOW_UPDATE;
+    }
+
+    client->_body_buf_is_done = is_done;
+
+    if (body_chunk.len) {
+        h2o_iovec_t buf;
+
+        if (!client->_body_buf) {
+            h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
+        }
+        buf = h2o_buffer_reserve(&client->_body_buf, body_chunk.len);
+        if (!buf.base)
+            return ALLOC_ERR;
+        memcpy(buf.base, body_chunk.base, body_chunk.len);
+        client->_body_buf->size += body_chunk.len;
+    }
+
+    if (client->super.sock->_cb.write) {
+        return NO_STREAM_WINDOW_UPDATE;
+    }
+    assert(!client->_body_buf_in_flight || !client->_body_buf_in_flight->size);
+
+    swap_buffers(&client->_body_buf, &client->_body_buf_in_flight);
+    //fprintf(stderr, "%s:%d chunk:%zu bb:%zu, bbif:%zu err:%s\n", __func__, __LINE__, body_chunk.len, client->_body_buf ? client->_body_buf->size : 0, client->_body_buf_in_flight ? client->_body_buf_in_flight->size : 0, err?"(null)":err);
+
+    if (client->is_chunked) {
+        if (is_done && !client->_body_buf_in_flight->size) {
+            on_send_request(sock, err);
+            return NO_STREAM_WINDOW_UPDATE;
+        }
+        h2o_iovec_t chunk_and_reqbufs[3];
+
+        chunk_and_reqbufs[0].len = snprintf(client->chunk_len_str, sizeof(client->chunk_len_str), "%zX\r\n", client->_body_buf_in_flight->size);
+        chunk_and_reqbufs[0].base = client->chunk_len_str;
+
+        chunk_and_reqbufs[1] = h2o_iovec_init(client->_body_buf_in_flight->bytes, client->_body_buf_in_flight->size);
+        chunk_and_reqbufs[2] = h2o_iovec_init("\r\n", 2);
+
+        //fprintf(stderr, "%s:%d is_done:%d\n", __func__, __LINE__, is_done);
+        h2o_socket_write(client->super.sock, chunk_and_reqbufs, 3, on_req_body_done);
+    } else {
+        h2o_iovec_t iov = h2o_iovec_init(client->_body_buf_in_flight->bytes, client->_body_buf_in_flight->size);
+
+        h2o_socket_write(client->super.sock, &iov, 1, on_req_body_done);
+    }
+    return NO_STREAM_WINDOW_UPDATE;
 }
 
 static void on_send_timeout(h2o_timeout_entry_t *entry)
@@ -360,7 +469,7 @@ static void on_send_timeout(h2o_timeout_entry_t *entry)
 static void on_connect_error(struct st_h2o_http1client_private_t *client, const char *errstr)
 {
     assert(errstr != NULL);
-    client->_cb.on_connect(&client->super, errstr, NULL, NULL, NULL);
+    client->_cb.on_connect(&client->super, errstr, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
     close_client(client);
 }
 
@@ -369,12 +478,21 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
     h2o_iovec_t *reqbufs;
     size_t reqbufcnt;
 
-    if ((client->_cb.on_head = client->_cb.on_connect(&client->super, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head)) ==
-        NULL) {
+    if ((client->_cb.on_head = client->_cb.on_connect(&client->super, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head, on_req_body, &client->req_body_done, &client->req_body_done_ctx, &client->_body_buf)) == NULL) {
         close_client(client);
         return;
     }
-    h2o_socket_write(client->super.sock, reqbufs, reqbufcnt, on_send_request);
+    if (client->req_body_done) {
+        int i;
+        client->to_ack = 0;
+        for (i = 0; i < reqbufcnt; i++)
+            client->to_ack += reqbufs[0].len;
+
+        h2o_socket_write(client->super.sock, reqbufs, reqbufcnt, on_req_body_done);
+    } else {
+        h2o_socket_write(client->super.sock, reqbufs, reqbufcnt, on_send_request);
+    }
+
     /* TODO no need to set the timeout if all data has been written into TCP sendbuf */
     client->_timeout.cb = on_send_timeout;
     h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
@@ -469,7 +587,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
 }
 
 static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
-                                                          h2o_iovec_t ssl_server_name, h2o_http1client_connect_cb cb)
+                                                          h2o_iovec_t ssl_server_name, h2o_http1client_connect_cb cb, int is_chunked)
 {
     struct st_h2o_http1client_private_t *client = h2o_mem_alloc(sizeof(*client));
 
@@ -478,6 +596,7 @@ static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_c
         client->super.ssl.server_name = h2o_strdup(NULL, ssl_server_name.base, ssl_server_name.len).base;
     client->super.data = data;
     client->_cb.on_connect = cb;
+    client->is_chunked = is_chunked;
     /* caller needs to setup _cb, timeout.cb, sock, and sock->data */
 
     if (_client != NULL)
@@ -488,13 +607,13 @@ static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_c
 const char *const h2o_http1client_error_is_eos = "end of stream";
 
 void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx, h2o_iovec_t host, uint16_t port,
-                             int is_ssl, h2o_http1client_connect_cb cb)
+                             int is_ssl, h2o_http1client_connect_cb cb, int is_chunked)
 {
     struct st_h2o_http1client_private_t *client;
     char serv[sizeof("65536")];
 
     /* setup */
-    client = create_client(_client, data, ctx, is_ssl ? host : h2o_iovec_init(NULL, 0), cb);
+    client = create_client(_client, data, ctx, is_ssl ? host : h2o_iovec_init(NULL, 0), cb, is_chunked);
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);
 
@@ -527,10 +646,10 @@ void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1c
 }
 
 void h2o_http1client_connect_with_pool(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
-                                       h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb)
+                                       h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb, int is_chunked)
 {
     struct st_h2o_http1client_private_t *client =
-        create_client(_client, data, ctx, sockpool->is_ssl ? sockpool->peer.host : h2o_iovec_init(NULL, 0), cb);
+        create_client(_client, data, ctx, sockpool->is_ssl ? sockpool->peer.host : h2o_iovec_init(NULL, 0), cb, is_chunked);
     client->super.sockpool.pool = sockpool;
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);

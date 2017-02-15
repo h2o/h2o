@@ -177,6 +177,33 @@ static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
     call_handlers(req, req->pathconf->handlers.entries);
 }
 
+static h2o_handler_t *find_handler(h2o_req_t *req, h2o_hostconf_t *hostconf)
+{
+    h2o_pathconf_t *selected_pathconf = &hostconf->fallback_path;
+    size_t i;
+
+    /* setup pathconf, or redirect to "path/" */
+    for (i = 0; i != hostconf->paths.size; ++i) {
+        h2o_pathconf_t *candidate = hostconf->paths.entries + i;
+        if (req->path_normalized.len >= candidate->path.len &&
+            memcmp(req->path_normalized.base, candidate->path.base, candidate->path.len) == 0 &&
+            (candidate->path.base[candidate->path.len - 1] == '/' || req->path_normalized.len == candidate->path.len ||
+             req->path_normalized.base[candidate->path.len] == '/')) {
+            selected_pathconf = candidate;
+            break;
+        }
+    }
+    h2o_req_bind_conf(req, hostconf, selected_pathconf);
+
+    h2o_handler_t **handler = req->pathconf->handlers.entries;
+    h2o_handler_t **end = req->pathconf->handlers.entries + req->pathconf->handlers.size;
+
+    for (; handler != end; ++handler)
+        return *handler;
+
+    return NULL;
+}
+
 static void deferred_proceed_cb(h2o_timeout_entry_t *entry)
 {
     h2o_req_t *req = H2O_STRUCT_FROM_MEMBER(h2o_req_t, _timeout_entry, entry);
@@ -281,6 +308,12 @@ void h2o_dispose_request(h2o_req_t *req)
     }
 
     h2o_mem_clear_pool(&req->pool);
+}
+
+h2o_handler_t *h2o_find_handler(h2o_req_t *req)
+{
+    h2o_hostconf_t *hostconf = setup_before_processing(req);
+    return find_handler(req, hostconf);
 }
 
 void h2o_process_request(h2o_req_t *req)
