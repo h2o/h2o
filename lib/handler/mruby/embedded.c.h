@@ -33,9 +33,9 @@
     "  H2O_CALLBACK_ID_EXCEPTION_RAISED = -1\n"                                                                                    \
     "  H2O_CALLBACK_ID_CONFIGURING_APP = -2\n"                                                                                     \
     "  H2O_CALLBACK_ID_CONFIGURED_APP = -3\n"                                                                                      \
-    "  def _h2o_prepare_app(conf_proc, context)\n"                                                                                 \
+    "  def _h2o_prepare_app(conf_proc)\n"                                                                                          \
     "    app = Proc.new do |req|\n"                                                                                                \
-    "      [H2O_CALLBACK_ID_CONFIGURING_APP, context]\n"                                                                           \
+    "      [H2O_CALLBACK_ID_CONFIGURING_APP]\n"                                                                                    \
     "    end\n"                                                                                                                    \
     "    cached = nil\n"                                                                                                           \
     "    runner = Proc.new do |args|\n"                                                                                            \
@@ -63,12 +63,12 @@
     "          H2O::ConfigurationContext.reset\n"                                                                                  \
     "          app = conf_proc.call\n"                                                                                             \
     "          H2O::ConfigurationContext.instance.call_post_handler_generation_hooks(app)\n"                                       \
-    "          [H2O_CALLBACK_ID_CONFIGURED_APP, context]\n"                                                                        \
+    "          [H2O_CALLBACK_ID_CONFIGURED_APP]\n"                                                                                 \
     "        rescue => e\n"                                                                                                        \
     "          app = Proc.new do |req|\n"                                                                                          \
     "            [500, {}, ['Internal Server Error']]\n"                                                                           \
     "          end\n"                                                                                                              \
-    "          [H2O_CALLBACK_ID_CONFIGURED_APP, context, e]\n"                                                                     \
+    "          [H2O_CALLBACK_ID_CONFIGURED_APP, e]\n"                                                                              \
     "        end\n"                                                                                                                \
     "      end\n"                                                                                                                  \
     "      fiber.resume\n"                                                                                                         \

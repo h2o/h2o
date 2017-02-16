@@ -224,10 +224,10 @@ static mrb_value send_chunked_method(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-mrb_value h2o_mruby_send_chunked_eos_callback(h2o_mruby_shared_context_t *shared_ctx, mrb_value receiver, mrb_value args,
+mrb_value h2o_mruby_send_chunked_eos_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args,
                                               int *run_again)
 {
-    mrb_state *mrb = shared_ctx->mrb;
+    mrb_state *mrb = mctx->shared->mrb;
     h2o_mruby_generator_t *generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(args, 0));
 
     { /* precond check */

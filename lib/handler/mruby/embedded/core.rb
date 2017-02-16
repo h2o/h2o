@@ -51,9 +51,9 @@ module Kernel
   H2O_CALLBACK_ID_EXCEPTION_RAISED = -1
   H2O_CALLBACK_ID_CONFIGURING_APP = -2
   H2O_CALLBACK_ID_CONFIGURED_APP = -3
-  def _h2o_prepare_app(conf_proc, context)
+  def _h2o_prepare_app(conf_proc)
     app = Proc.new do |req|
-      [H2O_CALLBACK_ID_CONFIGURING_APP, context]
+      [H2O_CALLBACK_ID_CONFIGURING_APP]
     end
 
     cached = nil
@@ -83,12 +83,12 @@ module Kernel
           H2O::ConfigurationContext.reset
           app = conf_proc.call
           H2O::ConfigurationContext.instance.call_post_handler_generation_hooks(app)
-          [H2O_CALLBACK_ID_CONFIGURED_APP, context]
+          [H2O_CALLBACK_ID_CONFIGURED_APP]
         rescue => e
           app = Proc.new do |req|
             [500, {}, ['Internal Server Error']]
           end
-          [H2O_CALLBACK_ID_CONFIGURED_APP, context, e]
+          [H2O_CALLBACK_ID_CONFIGURED_APP, e]
         end
       end
       fiber.resume
