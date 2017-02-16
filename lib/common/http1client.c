@@ -224,10 +224,11 @@ static void on_head(h2o_socket_t *sock, const char *err)
     int minor_version, http_status, rlen, is_eos;
     const char *msg;
 #define MAX_HEADERS 100
-    h2o_header_t headers[MAX_HEADERS];
-    h2o_iovec_t header_names[MAX_HEADERS];
+    h2o_header_t *headers;
+    h2o_iovec_t *header_names;
     size_t msg_len, num_headers, i;
     h2o_socket_cb reader;
+    h2o_mem_pool_t pool;
 
     h2o_timeout_unlink(&client->_timeout);
 
@@ -235,6 +236,11 @@ static void on_head(h2o_socket_t *sock, const char *err)
         on_error_before_head(client, "I/O error (head)");
         return;
     }
+
+    h2o_mem_init_pool(&pool);
+
+    headers = h2o_mem_alloc_pool(&pool, sizeof(*headers) * MAX_HEADERS);
+    header_names = h2o_mem_alloc_pool(&pool, sizeof(*header_names) * MAX_HEADERS);
 
     {
         struct phr_header src_headers[MAX_HEADERS];
@@ -245,17 +251,17 @@ static void on_head(h2o_socket_t *sock, const char *err)
         switch (rlen) {
         case -1: /* error */
             on_error_before_head(client, "failed to parse the response");
-            return;
+            goto Exit;
         case -2: /* incomplete */
             h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
-            return;
+            goto Exit;
         }
 
         for (i = 0; i != num_headers; ++i) {
             const h2o_token_t *token;
             char *orig_name;
 
-            orig_name = h2o_strdup(NULL, src_headers[i].name, src_headers[i].name_len).base;
+            orig_name = h2o_strdup(&pool, src_headers[i].name, src_headers[i].name_len).base;
             h2o_strtolower((char *)src_headers[i].name, src_headers[i].name_len);
             token = h2o_lookup_token(src_headers[i].name, src_headers[i].name_len);
             if (token != NULL) {
@@ -345,8 +351,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
     reader(client->super.sock, 0);
 
 Exit:
-    for (i = 0; i != num_headers; ++i)
-        free((void *)headers[i].orig_name);
+    h2o_mem_clear_pool(&pool);
 #undef MAX_HEADERS
 }
 
