@@ -359,7 +359,7 @@ static void shutdown_ssl(h2o_socket_t *sock, const char *err)
 #if H2O_USE_PICOTLS
     if (sock->ssl->ptls != NULL) {
         ptls_buffer_t wbuf;
-        uint8_t wbuf_small[2 + PTLS_MAX_RECORD_OVERHEAD];
+        uint8_t wbuf_small[32];
         ptls_buffer_init(&wbuf, wbuf_small, sizeof(wbuf_small));
         if ((ret = ptls_send_alert(sock->ssl->ptls, &wbuf, PTLS_ALERT_LEVEL_WARNING,PTLS_ALERT_CLOSE_NOTIFY)) != 0)
             goto Close;
@@ -649,7 +649,7 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
                     sz = ssl_record_size;
 #if H2O_USE_PICOTLS
                 if (sock->ssl->ptls != NULL) {
-                    size_t dst_size = sz + PTLS_MAX_RECORD_OVERHEAD;
+                    size_t dst_size = sz + ptls_get_record_overhead(sock->ssl->ptls);
                     void *dst = h2o_mem_alloc_pool(&sock->ssl->output.pool, dst_size);
                     ptls_buffer_t wbuf;
                     ptls_buffer_init(&wbuf, dst, dst_size);
@@ -971,7 +971,7 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
             /* start using picotls if the first packet contains TLS 1.3 CH */
             ptls_context_t *ptls_ctx = h2o_socket_ssl_get_picotls_context(sock->ssl->ssl_ctx);
             if (ptls_ctx != NULL) {
-                ptls_t *ptls = ptls_new(ptls_ctx, NULL);
+                ptls_t *ptls = ptls_new(ptls_ctx, 1);
                 if (ptls == NULL)
                     h2o_fatal("no memory");
                 ret = ptls_handshake(ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
