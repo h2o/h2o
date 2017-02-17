@@ -715,12 +715,17 @@ static int setup_traffic_protection(ptls_t *tls, ptls_cipher_suite_t *cs, int is
     return 0;
 }
 
+#define SESSION_IDENTIFIER_MAGIC "ptls0000" /* the number should be changed upon incompatible format change */
+#define SESSION_IDENTIFIER_MAGIC_SIZE (sizeof(SESSION_IDENTIFIER_MAGIC) - 1)
+
 int encode_session_identifier(ptls_buffer_t *buf, uint32_t ticket_age_add, struct st_ptls_key_schedule_t *sched,
                               const char *server_name, uint16_t csid)
 {
     int ret = 0;
 
     ptls_buffer_push_block(buf, 2, {
+        /* format id */
+        ptls_buffer_pushv(buf, SESSION_IDENTIFIER_MAGIC, SESSION_IDENTIFIER_MAGIC_SIZE);
         /* date */
         ptls_buffer_push64(buf, gettime_millis());
         /* resumption master secret */
@@ -752,6 +757,12 @@ int decode_session_identifier(uint64_t *issued_at, ptls_iovec_t *psk, uint32_t *
     int ret = 0;
 
     decode_block(src, end, 2, {
+        if (end - src < SESSION_IDENTIFIER_MAGIC_SIZE ||
+            memcmp(src, SESSION_IDENTIFIER_MAGIC, SESSION_IDENTIFIER_MAGIC_SIZE) != 0) {
+            ret = PTLS_ALERT_DECODE_ERROR;
+            goto Exit;
+        }
+        src += SESSION_IDENTIFIER_MAGIC_SIZE;
         if ((ret = decode64(issued_at, &src, end)) != 0)
             goto Exit;
         decode_open_block(src, end, 2, {
