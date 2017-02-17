@@ -30,6 +30,9 @@
 #include <openssl/ssl.h>
 #include "yoml-parser.h"
 #include "yrmcds.h"
+#if H2O_USE_PICOTLS
+#include "picotls.h"
+#endif
 #include "h2o/file.h"
 #include "h2o.h"
 #include "h2o/configurator.h"
@@ -232,7 +235,7 @@ static struct st_session_ticket_t *find_ticket_for_encryption(session_ticket_vec
     return NULL;
 }
 
-static int ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx, int enc)
+static int ticket_key_callback(unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx, int enc)
 {
     int ret;
     pthread_rwlock_rdlock(&session_tickets.rwlock);
@@ -272,6 +275,11 @@ static int ticket_key_callback(SSL *ssl, unsigned char *key_name, unsigned char 
 Exit:
     pthread_rwlock_unlock(&session_tickets.rwlock);
     return ret;
+}
+
+static int ticket_key_callback_ossl(SSL *ssl, unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx, int enc)
+{
+    return ticket_key_callback(key_name, iv, ctx, hctx, enc);
 }
 
 static int update_tickets(session_ticket_vector_t *tickets, uint64_t now)
@@ -868,8 +876,17 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts)
         pthread_attr_setdetachstate(&attr, 1);
         h2o_multithread_create_thread(&tid, &attr, conf.ticket.update_thread, NULL);
         size_t i;
-        for (i = 0; i != num_contexts; ++i)
-            SSL_CTX_set_tlsext_ticket_key_cb(contexts[i], ticket_key_callback);
+        for (i = 0; i != num_contexts; ++i) {
+            SSL_CTX *ctx = contexts[i];
+            SSL_CTX_set_tlsext_ticket_key_cb(ctx, ticket_key_callback_ossl);
+#if H2O_USE_PICOTLS
+            static ptls_encrypt_ticket_t encryptor = {NULL}, decryptor = {NULL};
+            ptls_context_t *pctx = h2o_socket_ssl_get_picotls_context(ctx);
+            pctx->ticket_lifetime = conf.lifetime;
+            pctx->encrypt_ticket = &encryptor;
+            pctx->decrypt_ticket = &decryptor;
+#endif
+        }
     } else {
         size_t i;
         for (i = 0; i != num_contexts; ++i)
