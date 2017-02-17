@@ -242,7 +242,7 @@ const char *decode_ssl_input(h2o_socket_t *sock)
             ptls_buffer_t rbuf;
             int ret;
             h2o_buffer_reserve(&sock->input, sock->ssl->input.encrypted->size);
-            ptls_buffer_init(&rbuf, sock->input->bytes, sock->ssl->input.encrypted->size);
+            ptls_buffer_init(&rbuf, sock->input->bytes + sock->input->size, sock->ssl->input.encrypted->size);
             do {
                 size_t consumed = src_end - src;
                 if ((ret = ptls_receive(sock->ssl->ptls, &rbuf, src, &consumed)) != 0)
