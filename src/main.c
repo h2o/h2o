@@ -718,7 +718,11 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                            ptls_openssl_cipher_suites,
                                            {NULL, 0},
                                            &pctx->ch.super,
-                                           &pctx->sc.super},
+                                           &pctx->sc.super,
+                                           NULL,
+                                           0,
+                                           8192,
+                                           1},
                                           {{on_picotls_client_hello}, listener}};
         ptls_openssl_init_sign_certificate(&pctx->sc, SSL_CTX_get0_privatekey(ssl_ctx));
         STACK_OF(X509) * certs;
