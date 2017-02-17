@@ -1265,8 +1265,8 @@ h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)
 
 #if H2O_USE_PICOTLS
     if (sock->ssl->ptls != NULL) {
-        /* FIXME */
-        return h2o_iovec_init(NULL, 0);
+        const char *proto = ptls_get_negotiated_protocol(sock->ssl->ptls);
+        return proto != NULL ? h2o_iovec_init(proto, strlen(proto)) : h2o_iovec_init(NULL, 0);
     }
 #endif
 

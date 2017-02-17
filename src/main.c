@@ -276,7 +276,7 @@ static int on_picotls_client_hello(ptls_on_client_hello_t *_self, ptls_t *tls, p
     }
 
     /* handle ALPN */
-    if (signature_algorithms != NULL) {
+    if (num_negotiated_protocols != 0) {
         const h2o_iovec_t *server_pref;
         for (server_pref = h2o_alpn_protocols; server_pref->len != 0; ++server_pref) {
             size_t i;
