@@ -899,7 +899,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     if (err == NULL) {
 #if H2O_USE_PICOTLS
         if (sock->ssl->ptls != NULL) {
-            sock->ssl->record_overhead = 5 /* header */ + 16 /* tag */ + 1 /* type */;
+            sock->ssl->record_overhead = ptls_get_record_overhead(sock->ssl->ptls);
         } else
 #endif
         {
