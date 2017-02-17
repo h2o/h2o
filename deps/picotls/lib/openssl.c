@@ -656,7 +656,7 @@ static int serialize_cert(X509 *cert, ptls_iovec_t *dst)
     return 0;
 }
 
-int ptls_openssl_load_certificates(ptls_context_t *ctx, X509 *cert, STACK_OF(X509) *chain)
+int ptls_openssl_load_certificates(ptls_context_t *ctx, X509 *cert, STACK_OF(X509) * chain)
 {
     ptls_iovec_t *list = NULL;
     size_t slot = 0, count = (cert != NULL) + (chain != NULL ? sk_X509_num(chain) : 0);
@@ -794,6 +794,123 @@ void ptls_openssl_dispose_verify_certificate(ptls_openssl_verify_certificate_t *
 {
     X509_STORE_free(self->cert_store);
     free(self);
+}
+
+#define TICKET_LABEL_SIZE 16
+#define TICKET_IV_SIZE EVP_MAX_IV_LENGTH
+
+int ptls_openssl_encrypt_ticket(ptls_buffer_t *buf, ptls_iovec_t src,
+                                int (*cb)(unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx, int enc))
+{
+    EVP_CIPHER_CTX cctx;
+    HMAC_CTX hctx;
+    uint8_t *dst;
+    int clen, ret;
+
+    EVP_CIPHER_CTX_init(&cctx);
+    HMAC_CTX_init(&hctx);
+
+    if ((ret = ptls_buffer_reserve(buf, TICKET_LABEL_SIZE + TICKET_IV_SIZE + src.len + EVP_MAX_BLOCK_LENGTH + EVP_MAX_MD_SIZE)) !=
+        0)
+        goto Exit;
+    dst = buf->base + buf->off;
+
+    /* fill label and iv, as well as obtaining the keys */
+    if (!(*cb)(dst, dst + TICKET_LABEL_SIZE, &cctx, &hctx, 1)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += TICKET_LABEL_SIZE + TICKET_IV_SIZE;
+
+    /* encrypt */
+    if (!EVP_EncryptUpdate(&cctx, dst, &clen, src.base, (int)src.len)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += clen;
+    if (!EVP_EncryptFinal(&cctx, dst, &clen)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += clen;
+
+    /* append hmac */
+    if (!HMAC_Update(&hctx, buf->base + buf->off, dst - (buf->base + buf->off)) || !HMAC_Final(&hctx, dst, NULL)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += HMAC_size(&hctx);
+
+    assert(dst <= buf->base + buf->capacity);
+    buf->off += dst - (buf->base + buf->off);
+    ret = 0;
+
+Exit:
+    EVP_CIPHER_CTX_cleanup(&cctx);
+    HMAC_cleanup(&hctx);
+    return ret;
+}
+
+int ptls_openssl_decrypt_ticket(ptls_buffer_t *buf, ptls_iovec_t src,
+                                int (*cb)(unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx, int enc))
+{
+    EVP_CIPHER_CTX cctx;
+    HMAC_CTX hctx;
+    int clen, ret;
+
+    EVP_CIPHER_CTX_init(&cctx);
+    HMAC_CTX_init(&hctx);
+
+    /* obtain cipher and hash context.
+     * Note: no need to handle renew, since in picotls we always send a new ticket to minimize the chance of ticket reuse */
+    if (src.len < TICKET_LABEL_SIZE + TICKET_IV_SIZE) {
+        ret = PTLS_ALERT_DECODE_ERROR;
+        goto Exit;
+    }
+    if (!(*cb)(src.base, src.base + TICKET_LABEL_SIZE, &cctx, &hctx, 0)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+
+    /* check hmac, and exclude label, iv, hmac */
+    size_t hmac_size = HMAC_size(&hctx);
+    if (src.len < TICKET_LABEL_SIZE + TICKET_IV_SIZE + hmac_size) {
+        ret = PTLS_ALERT_DECODE_ERROR;
+        goto Exit;
+    }
+    src.len -= hmac_size;
+    uint8_t hmac[EVP_MAX_MD_SIZE];
+    if (!HMAC_Update(&hctx, src.base, src.len) || !HMAC_Final(&hctx, hmac, NULL)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    if (memcmp(src.base + src.len, hmac, hmac_size) != 0) {
+        ret = PTLS_ALERT_HANDSHAKE_FAILURE;
+        goto Exit;
+    }
+    src.base += TICKET_LABEL_SIZE + TICKET_IV_SIZE;
+    src.len -= TICKET_LABEL_SIZE + TICKET_IV_SIZE;
+
+    /* decrypt */
+    if ((ret = ptls_buffer_reserve(buf, src.len)) != 0)
+        goto Exit;
+    if (!EVP_DecryptUpdate(&cctx, buf->base + buf->off, &clen, src.base, (int)src.len)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    buf->off += clen;
+    if (!EVP_DecryptFinal(&cctx, buf->base + buf->off, &clen)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    buf->off += clen;
+
+    ret = 0;
+
+Exit:
+    EVP_CIPHER_CTX_cleanup(&cctx);
+    HMAC_cleanup(&hctx);
+    return ret;
 }
 
 ptls_key_exchange_algorithm_t ptls_openssl_secp256r1 = {PTLS_GROUP_SECP256R1, secp256r1_create_key_exchange,
