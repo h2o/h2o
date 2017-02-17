@@ -559,7 +559,7 @@ void h2o_evloop_destroy(h2o_evloop_t *loop)
     while((struct st_h2o_evloop_socket_t*)(sock=loop->_statechanged.head->_next_statechanged) != NULL){
 
         free(loop->_statechanged.head);
-        loop->_statechanged.head=loop->_statechanged.head->_next_statechanged;
+        loop->_statechanged.head=sock;
     }
     sock=loop->_statechanged.head;
     free(sock);
