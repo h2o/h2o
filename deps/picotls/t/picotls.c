@@ -118,10 +118,18 @@ static void test_aes128gcm(void)
     test_ciphersuite(find_aes128gcmsha256(ctx), find_aes128gcmsha256(ctx_peer));
 }
 
-static void test_handshake(ptls_iovec_t ticket, int use_resumption, int use_early_data)
+static int save_client_hello(ptls_on_client_hello_t *self, ptls_t *tls, ptls_iovec_t server_name, const ptls_iovec_t *protocols,
+                             size_t num_protocols, const uint16_t *signature_algorithms, size_t num_signature_algorithms)
+{
+    ptls_set_server_name(tls, (const char *)server_name.base, server_name.len);
+    ptls_set_negotiated_protocol(tls, (const char *)protocols[0].base, protocols[0].len);
+    return 0;
+}
+
+static void test_handshake(ptls_iovec_t ticket, int check_ch, int use_resumption, int use_early_data)
 {
     ptls_t *client, *server;
-    ptls_handshake_properties_t client_hs_prop = {{ticket}};
+    ptls_handshake_properties_t client_hs_prop = {{{NULL}, ticket}};
     uint8_t cbuf_small[16384], sbuf_small[16384], decbuf_small[16384];
     ptls_buffer_t cbuf, sbuf, decbuf;
     size_t consumed, max_early_data_size = 0;
@@ -129,11 +137,20 @@ static void test_handshake(ptls_iovec_t ticket, int use_resumption, int use_earl
     const char *req = "GET / HTTP/1.0\r\n\r\n";
     const char *resp = "HTTP/1.0 200 OK\r\n\r\nhello world\n";
 
-    client = ptls_new(ctx, "example.com");
-    server = ptls_new(ctx_peer, NULL);
+    client = ptls_new(ctx, 0);
+    server = ptls_new(ctx_peer, 1);
     ptls_buffer_init(&cbuf, cbuf_small, sizeof(cbuf_small));
     ptls_buffer_init(&sbuf, sbuf_small, sizeof(sbuf_small));
     ptls_buffer_init(&decbuf, decbuf_small, sizeof(decbuf_small));
+
+    if (check_ch) {
+        static ptls_on_client_hello_t cb = {save_client_hello};
+        ctx_peer->on_client_hello = &cb;
+        static const ptls_iovec_t protocols[] = {{(uint8_t *)"h2", 2}, {(uint8_t *)"http/1.1", 8}};
+        client_hs_prop.client.negotiated_protocols.list = protocols;
+        client_hs_prop.client.negotiated_protocols.count = sizeof(protocols) / sizeof(protocols[0]);
+        ptls_set_server_name(client, "example.com", 0);
+    }
 
     if (use_early_data) {
         assert(ctx_peer->max_early_data_size != 0);
@@ -153,6 +170,15 @@ static void test_handshake(ptls_iovec_t ticket, int use_resumption, int use_earl
     ret = ptls_handshake(server, &sbuf, cbuf.base, &consumed, NULL);
     ok(ret == 0);
     ok(sbuf.off != 0);
+    if (check_ch) {
+        ok(ptls_get_server_name(server) != NULL);
+        ok(strcmp(ptls_get_server_name(server), "example.com") == 0);
+        ok(ptls_get_negotiated_protocol(server) != NULL);
+        ok(strcmp(ptls_get_negotiated_protocol(server), "h2") == 0);
+    } else {
+        ok(ptls_get_server_name(server) == NULL);
+        ok(ptls_get_negotiated_protocol(server) == NULL);
+    }
 
     if (use_early_data) {
         ok(consumed < cbuf.off);
@@ -180,6 +206,15 @@ static void test_handshake(ptls_iovec_t ticket, int use_resumption, int use_earl
     ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, NULL);
     ok(ret == 0);
     ok(cbuf.off != 0);
+    if (check_ch) {
+        ok(ptls_get_server_name(client) != NULL);
+        ok(strcmp(ptls_get_server_name(client), "example.com") == 0);
+        ok(ptls_get_negotiated_protocol(client) != NULL);
+        ok(strcmp(ptls_get_negotiated_protocol(client), "h2") == 0);
+    } else {
+        ok(ptls_get_server_name(server) == NULL);
+        ok(ptls_get_negotiated_protocol(server) == NULL);
+    }
 
     if (use_resumption) {
         ok(consumed < sbuf.off);
@@ -230,28 +265,30 @@ static void test_handshake(ptls_iovec_t ticket, int use_resumption, int use_earl
     ptls_buffer_dispose(&decbuf);
     ptls_free(client);
     ptls_free(server);
+
+    if (check_ch)
+        ctx_peer->on_client_hello = NULL;
 }
 
-static ptls_lookup_certificate_t *lc_orig;
-size_t lc_callcnt;
+static ptls_sign_certificate_t *sc_orig;
+size_t sc_callcnt;
 
-static int lookup_certificate(ptls_lookup_certificate_t *self, ptls_t *tls, uint16_t *sign_algorithm,
-                              int (**signer)(void *sign_ctx, ptls_buffer_t *outbuf, ptls_iovec_t input), void **signer_data,
-                              ptls_iovec_t **certs, size_t *num_certs, const char *server_name,
-                              const uint16_t *signature_algorithms, size_t num_signature_algorithms)
+static int sign_certificate(ptls_sign_certificate_t *self, ptls_t *tls, uint16_t *selected_algorithm, ptls_buffer_t *output,
+                            ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
 {
-    ++lc_callcnt;
-    return lc_orig->cb(lc_orig, tls, sign_algorithm, signer, signer_data, certs, num_certs, server_name, signature_algorithms,
-                       num_signature_algorithms);
+    ++sc_callcnt;
+    return sc_orig->cb(sc_orig, tls, selected_algorithm, output, input, algorithms, num_algorithms);
 }
 
 static void test_full_handshake(void)
 {
-    lc_callcnt = 0;
-    test_handshake(ptls_iovec_init(NULL, 0), 0, 0);
-    ok(lc_callcnt == 1);
-    test_handshake(ptls_iovec_init(NULL, 0), 0, 0);
-    ok(lc_callcnt == 2);
+    sc_callcnt = 0;
+    test_handshake(ptls_iovec_init(NULL, 0), 0, 0, 0);
+    ok(sc_callcnt == 1);
+    test_handshake(ptls_iovec_init(NULL, 0), 0, 0, 0);
+    ok(sc_callcnt == 2);
+    test_handshake(ptls_iovec_init(NULL, 0), 1, 0, 0);
+    ok(sc_callcnt == 3);
 }
 
 static int copy_ticket(ptls_encrypt_ticket_t *self, ptls_t *tls, ptls_buffer_t *dst, ptls_iovec_t src)
@@ -294,23 +331,23 @@ static void test_resumption(void)
     ctx_peer->decrypt_ticket = &et;
     ctx->save_ticket = &st;
 
-    lc_callcnt = 0;
-    test_handshake(saved_ticket, 1, 0);
-    ok(lc_callcnt == 1);
+    sc_callcnt = 0;
+    test_handshake(saved_ticket, 0, 1, 0);
+    ok(sc_callcnt == 1);
     ok(saved_ticket.base != NULL);
 
     /* psk using saved ticket */
-    test_handshake(saved_ticket, 1, 0);
-    ok(lc_callcnt == 1);
+    test_handshake(saved_ticket, 0, 1, 0);
+    ok(sc_callcnt == 1);
 
     /* psk-dhe using saved ticket */
     ctx->require_dhe_on_psk = 1;
-    test_handshake(saved_ticket, 1, 0);
-    ok(lc_callcnt == 1);
+    test_handshake(saved_ticket, 0, 1, 0);
+    ok(sc_callcnt == 1);
     ctx->require_dhe_on_psk = 0;
 
     /* 0-rtt psk using saved ticket */
-    test_handshake(saved_ticket, 1, 1);
+    test_handshake(saved_ticket, 0, 1, 1);
 
     ctx_peer->ticket_lifetime = 0;
     ctx_peer->max_early_data_size = 0;
@@ -325,14 +362,14 @@ void test_picotls(void)
     subtest("hkdf", test_hkdf);
     subtest("aead-aes128gcm", test_aes128gcm);
 
-    ptls_lookup_certificate_t lc = {lookup_certificate};
-    lc_orig = ctx_peer->lookup_certificate;
-    ctx_peer->lookup_certificate = &lc;
+    ptls_sign_certificate_t sc = {sign_certificate};
+    sc_orig = ctx_peer->sign_certificate;
+    ctx_peer->sign_certificate = &sc;
 
     subtest("full-handshake", test_full_handshake);
     subtest("resumption", test_resumption);
 
-    ctx_peer->lookup_certificate = lc_orig;
+    ctx_peer->sign_certificate = sc_orig;
 }
 
 void test_key_exchange(ptls_key_exchange_algorithm_t *algo)

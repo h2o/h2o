@@ -310,9 +310,8 @@ static int secp256r1_key_exchange(ptls_iovec_t *pubkey, ptls_iovec_t *secret, pt
     return secp_key_exchange(NID_X9_62_prime256v1, pubkey, secret, peerkey);
 }
 
-static int rsapss_sign(void *data, ptls_buffer_t *outbuf, ptls_iovec_t input)
+static int rsapss_sign(EVP_PKEY *key, ptls_buffer_t *outbuf, ptls_iovec_t input)
 {
-    EVP_PKEY *key = data;
     EVP_MD_CTX *ctx = NULL;
     EVP_PKEY_CTX *pkey_ctx;
     size_t siglen;
@@ -366,7 +365,6 @@ Exit:
 struct aead_crypto_context_t {
     ptls_aead_context_t super;
     EVP_CIPHER_CTX *evp_ctx;
-    size_t tag_size;
 };
 
 static void aead_dispose_crypto(ptls_aead_context_t *_ctx)
@@ -382,6 +380,7 @@ static int aead_do_encrypt(ptls_aead_context_t *_ctx, void *_output, size_t *out
 {
     struct aead_crypto_context_t *ctx = (struct aead_crypto_context_t *)_ctx;
     uint8_t *output = _output;
+    size_t tag_size = ctx->super.algo->tag_size;
     int blocklen;
 
     *outlen = 0;
@@ -398,9 +397,9 @@ static int aead_do_encrypt(ptls_aead_context_t *_ctx, void *_output, size_t *out
     if (!EVP_EncryptFinal_ex(ctx->evp_ctx, output + *outlen, &blocklen))
         return PTLS_ERROR_LIBRARY;
     *outlen += blocklen;
-    if (!EVP_CIPHER_CTX_ctrl(ctx->evp_ctx, EVP_CTRL_GCM_GET_TAG, (int)ctx->tag_size, output + *outlen))
+    if (!EVP_CIPHER_CTX_ctrl(ctx->evp_ctx, EVP_CTRL_GCM_GET_TAG, (int)tag_size, output + *outlen))
         return PTLS_ERROR_LIBRARY;
-    *outlen += ctx->tag_size;
+    *outlen += tag_size;
 
     return 0;
 }
@@ -410,20 +409,20 @@ static int aead_do_decrypt(ptls_aead_context_t *_ctx, void *_output, size_t *out
 {
     struct aead_crypto_context_t *ctx = (struct aead_crypto_context_t *)_ctx;
     uint8_t *output = _output;
+    size_t tag_size = ctx->super.algo->tag_size;
     int blocklen;
 
     *outlen = 0;
 
-    if (inlen < ctx->tag_size)
+    if (inlen < tag_size)
         return PTLS_ALERT_BAD_RECORD_MAC;
 
     if (!EVP_DecryptInit_ex(ctx->evp_ctx, NULL, NULL, NULL, iv))
         return PTLS_ERROR_LIBRARY;
-    if (!EVP_DecryptUpdate(ctx->evp_ctx, output, &blocklen, input, (int)(inlen - ctx->tag_size)))
+    if (!EVP_DecryptUpdate(ctx->evp_ctx, output, &blocklen, input, (int)(inlen - tag_size)))
         return PTLS_ERROR_LIBRARY;
     *outlen += blocklen;
-    if (!EVP_CIPHER_CTX_ctrl(ctx->evp_ctx, EVP_CTRL_GCM_SET_TAG, (int)ctx->tag_size,
-                             (void *)((uint8_t *)input + inlen - ctx->tag_size)))
+    if (!EVP_CIPHER_CTX_ctrl(ctx->evp_ctx, EVP_CTRL_GCM_SET_TAG, (int)tag_size, (void *)((uint8_t *)input + inlen - tag_size)))
         return PTLS_ERROR_LIBRARY;
     if (!EVP_DecryptFinal_ex(ctx->evp_ctx, output + *outlen, &blocklen))
         return PTLS_ALERT_BAD_RECORD_MAC;
@@ -432,7 +431,7 @@ static int aead_do_decrypt(ptls_aead_context_t *_ctx, void *_output, size_t *out
     return 0;
 }
 
-static int aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, const void *key, const EVP_CIPHER *cipher, size_t tag_size)
+static int aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, const void *key, const EVP_CIPHER *cipher)
 {
     struct aead_crypto_context_t *ctx = (struct aead_crypto_context_t *)_ctx;
     int ret;
@@ -440,7 +439,6 @@ static int aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, const void *
     ctx->super.dispose_crypto = aead_dispose_crypto;
     ctx->super.do_transform = is_enc ? aead_do_encrypt : aead_do_decrypt;
     ctx->evp_ctx = NULL;
-    ctx->tag_size = tag_size;
 
     if ((ctx->evp_ctx = EVP_CIPHER_CTX_new()) == NULL) {
         ret = PTLS_ERROR_NO_MEMORY;
@@ -471,7 +469,7 @@ Error:
 
 static int aead_aes128gcm_setup_crypto(ptls_aead_context_t *ctx, int is_enc, const void *key)
 {
-    return aead_setup_crypto(ctx, is_enc, key, EVP_aes_128_gcm(), 16);
+    return aead_setup_crypto(ctx, is_enc, key, EVP_aes_128_gcm());
 }
 
 struct sha256_context_t {
@@ -535,83 +533,34 @@ static ptls_hash_context_t *sha256_create(void)
     return &ctx->super;
 }
 
-static int ascii_tolower(int ch)
+static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, uint16_t *selected_algorithm, ptls_buffer_t *outbuf,
+                            ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
 {
-    return ('A' <= ch && ch <= 'Z') ? ch + 0x20 : ch;
-}
+    ptls_openssl_sign_certificate_t *self = (ptls_openssl_sign_certificate_t *)_self;
 
-static int ascii_streq_caseless(ptls_iovec_t x, ptls_iovec_t y)
-{
-    size_t i;
-    if (x.len != y.len)
-        return 0;
-    for (i = 0; i != x.len; ++i)
-        if (ascii_tolower(x.base[i]) != ascii_tolower(y.base[i]))
-            return 0;
-    return 0;
-}
-
-static uint16_t select_compatible_signature_algorithm(EVP_PKEY *key, const uint16_t *signature_algorithms,
-                                                      size_t num_signature_algorithms)
-{
-    size_t i;
-
-    switch (EVP_PKEY_id(key)) {
+    /* decide the signature algorithm to use */
+    switch (EVP_PKEY_id(self->key)) {
     case EVP_PKEY_RSA:
-        /* Section 4.4.2: RSA signatures MUST use an RSASSA-PSS algorithm, regardless of whether RSASSA-PKCS1-v1_5 algorithms appear
-         * in "signature_algorithms". */
-        for (i = 0; i != num_signature_algorithms; ++i)
-            if (signature_algorithms[i] == PTLS_SIGNATURE_RSA_PSS_SHA256)
-                return PTLS_SIGNATURE_RSA_PSS_SHA256;
+        *selected_algorithm = PTLS_SIGNATURE_RSA_PSS_SHA256;
         break;
     case EVP_PKEY_EC:
-        for (i = 0; i != num_signature_algorithms; ++i)
-            if (signature_algorithms[i] == PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256)
-                return PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256;
+        *selected_algorithm = PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256;
         break;
     default:
         assert(!"logic flaw");
         break;
     }
 
-    return UINT16_MAX;
-}
-
-static int lookup_certificate(ptls_lookup_certificate_t *_self, ptls_t *tls, uint16_t *sign_algorithm,
-                              int (**signer)(void *sign_ctx, ptls_buffer_t *outbuf, ptls_iovec_t input), void **signer_data,
-                              ptls_iovec_t **certs, size_t *num_certs, const char *server_name,
-                              const uint16_t *signature_algorithms, size_t num_signature_algorithms)
-{
-    ptls_openssl_lookup_certificate_t *self = (ptls_openssl_lookup_certificate_t *)_self;
-    struct st_ptls_openssl_identity_t *identity;
-
-    if (self->count == 0)
-        return PTLS_ALERT_HANDSHAKE_FAILURE;
-
-    if (server_name != NULL) {
-        size_t i, server_name_len = strlen(server_name);
-        for (i = 0; i != self->count; ++i) {
-            identity = self->identities[i];
-            if (ascii_streq_caseless(ptls_iovec_init(server_name, server_name_len), identity->name) &&
-                (*sign_algorithm = select_compatible_signature_algorithm(identity->key, signature_algorithms,
-                                                                         num_signature_algorithms)) != UINT16_MAX)
+    { /* report failure if the select algorithm cannot be used */
+        size_t i;
+        for (i = 0; i != num_algorithms; ++i)
+            if (algorithms[i] == *selected_algorithm)
                 goto Found;
-        }
-    }
-    /* not found, use the first one, if the signing algorithm matches */
-    identity = self->identities[0];
-    if ((*sign_algorithm = select_compatible_signature_algorithm(identity->key, signature_algorithms, num_signature_algorithms)) ==
-        UINT16_MAX)
         return PTLS_ALERT_HANDSHAKE_FAILURE;
+    Found:;
+    }
 
-Found:
-    /* setup the rest */
-    *signer = rsapss_sign;
-    *signer_data = identity->key;
-    *certs = identity->certs;
-    *num_certs = identity->num_certs;
-
-    return 0;
+    return rsapss_sign(self->key, outbuf, input);
 }
 
 static X509 *to_x509(ptls_iovec_t vec)
@@ -669,99 +618,81 @@ Exit:
     return ret;
 }
 
-static void free_identity(struct st_ptls_openssl_identity_t *identity)
+int ptls_openssl_init_sign_certificate(ptls_openssl_sign_certificate_t *self, EVP_PKEY *key)
 {
-    size_t i;
-
-    free(identity->name.base);
-    if (identity->key != NULL)
-        EVP_PKEY_free(identity->key);
-    for (i = 0; i != identity->num_certs; ++i)
-        free(identity->certs[i].base);
-    free(identity);
-}
-
-void ptls_openssl_init_lookup_certificate(ptls_openssl_lookup_certificate_t *self)
-{
-    *self = (ptls_openssl_lookup_certificate_t){{lookup_certificate}};
-}
-
-void ptls_openssl_dispose_lookup_certificate(ptls_openssl_lookup_certificate_t *self)
-{
-    size_t i;
-    for (i = 0; i != self->count; ++i)
-        free_identity(self->identities[i]);
-    free(self->identities);
-    free(self);
-}
-
-int ptls_openssl_lookup_certificate_add_identity(ptls_openssl_lookup_certificate_t *self, const char *server_name, EVP_PKEY *key,
-                                                 STACK_OF(X509) * certs)
-{
-    struct st_ptls_openssl_identity_t *slot, **new_identities;
-    size_t i;
-    int ret;
-
-    if ((slot = malloc(offsetof(struct st_ptls_openssl_identity_t, certs) + sizeof(slot->certs[0]) * sk_X509_num(certs))) == NULL) {
-        ret = PTLS_ERROR_NO_MEMORY;
-        goto Error;
-    }
-
-    *slot = (struct st_ptls_openssl_identity_t){{NULL}};
-    if ((slot->name.base = (uint8_t *)strdup(server_name)) == NULL) {
-        ret = PTLS_ERROR_NO_MEMORY;
-        goto Error;
-    }
-    slot->name.len = strlen(server_name);
-
-    EVP_PKEY_up_ref(key);
-    slot->key = key;
     switch (EVP_PKEY_id(key)) {
     case EVP_PKEY_RSA:
         break;
     case EVP_PKEY_EC:
-        if (!eckey_is_on_group(key, NID_X9_62_prime256v1)) {
-            ret = PTLS_ERROR_INCOMPATIBLE_KEY;
-            goto Error;
-        }
+        if (!eckey_is_on_group(key, NID_X9_62_prime256v1))
+            return PTLS_ERROR_INCOMPATIBLE_KEY;
         break;
     default:
-        ret = PTLS_ERROR_INCOMPATIBLE_KEY;
-        goto Error;
+        return PTLS_ERROR_INCOMPATIBLE_KEY;
     }
 
-    slot->num_certs = sk_X509_num(certs);
-    for (i = 0; i != slot->num_certs; ++i) {
-        X509 *cert = sk_X509_value(certs, (int)i);
-        int len = i2d_X509(cert, NULL);
-        if (len <= 0) {
-            ret = PTLS_ERROR_LIBRARY;
-            goto Error;
-        }
-        if ((slot->certs[i].base = malloc(len)) == NULL) {
-            ret = PTLS_ERROR_NO_MEMORY;
-            goto Error;
-        }
-        unsigned char *p = slot->certs[i].base;
-        if (i2d_X509(cert, &p) != len) {
-            ret = PTLS_ERROR_LIBRARY;
-            goto Error;
-        }
-        slot->certs[i].len = len;
-    }
-
-    if ((new_identities = realloc(self->identities, sizeof(self->identities[0]) * (self->count + 1))) == NULL) {
-        ret = PTLS_ERROR_NO_MEMORY;
-        goto Error;
-    }
-    self->identities = new_identities;
-    self->identities[self->count++] = slot;
+    EVP_PKEY_up_ref(key);
+    *self = (ptls_openssl_sign_certificate_t){{sign_certificate}, key};
 
     return 0;
+}
 
-Error:
-    if (slot != NULL)
-        free_identity(slot);
+void ptls_openssl_dispose_sign_certificate(ptls_openssl_sign_certificate_t *self)
+{
+    EVP_PKEY_free(self->key);
+}
+
+static int serialize_cert(X509 *cert, ptls_iovec_t *dst)
+{
+    int len = i2d_X509(cert, NULL);
+    assert(len > 0);
+
+    if ((dst->base = malloc(len)) == NULL)
+        return PTLS_ERROR_NO_MEMORY;
+    unsigned char *p = dst->base;
+    dst->len = i2d_X509(cert, &p);
+    assert(len == dst->len);
+
+    return 0;
+}
+
+int ptls_openssl_load_certificates(ptls_context_t *ctx, X509 *cert, STACK_OF(X509) *chain)
+{
+    ptls_iovec_t *list = NULL;
+    size_t slot = 0, count = (cert != NULL) + (chain != NULL ? sk_X509_num(chain) : 0);
+    int ret;
+
+    assert(ctx->certificates.list == NULL);
+
+    if ((list = malloc(sizeof(*list) * count)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if (cert != NULL) {
+        if ((ret = serialize_cert(cert, list + slot++)) != 0)
+            goto Exit;
+    }
+    if (chain != NULL) {
+        int i;
+        for (i = 0; i != sk_X509_num(chain); ++i) {
+            if ((ret = serialize_cert(sk_X509_value(chain, i), list + slot++)) != 0)
+                goto Exit;
+        }
+    }
+
+    assert(slot == count);
+
+    ctx->certificates.list = list;
+    ctx->certificates.count = count;
+    ret = 0;
+
+Exit:
+    if (ret != 0 && list != NULL) {
+        size_t i;
+        for (i = 0; i != slot; ++i)
+            free(list[i].base);
+        free(list);
+    }
     return ret;
 }
 
@@ -868,7 +799,7 @@ void ptls_openssl_dispose_verify_certificate(ptls_openssl_verify_certificate_t *
 ptls_key_exchange_algorithm_t ptls_openssl_secp256r1 = {PTLS_GROUP_SECP256R1, secp256r1_create_key_exchange,
                                                         secp256r1_key_exchange};
 ptls_key_exchange_algorithm_t *ptls_openssl_key_exchanges[] = {&ptls_openssl_secp256r1, NULL};
-ptls_aead_algorithm_t ptls_openssl_aes128gcm = {16, 12, sizeof(struct aead_crypto_context_t), aead_aes128gcm_setup_crypto};
+ptls_aead_algorithm_t ptls_openssl_aes128gcm = {16, 12, 16, sizeof(struct aead_crypto_context_t), aead_aes128gcm_setup_crypto};
 ptls_hash_algorithm_t ptls_openssl_sha256 = {64, 32, sha256_create};
 ptls_cipher_suite_t ptls_openssl_aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_openssl_aes128gcm,
                                                     &ptls_openssl_sha256};

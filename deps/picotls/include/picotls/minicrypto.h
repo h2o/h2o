@@ -24,19 +24,17 @@
 
 #include "picotls.h"
 
+#define SECP256R1_PRIVATE_KEY_SIZE 32
+#define SECP256R1_PUBLIC_KEY_SIZE 65 /* including the header */
+#define SECP256R1_SHARED_SECRET_SIZE 32
+
+typedef struct st_ptls_minicrypto_secp256r1sha256_sign_certificate_t {
+    ptls_sign_certificate_t super;
+    uint8_t key[SECP256R1_PRIVATE_KEY_SIZE];
+} ptls_minicrypto_secp256r1sha256_sign_certificate_t;
+
 void ptls_minicrypto_random_bytes(void *buf, size_t len);
-
-typedef struct st_ptls_minicrypto_lookup_certificate_t {
-    ptls_lookup_certificate_t super;
-    struct st_ptls_minicrypto_identity_t **identities;
-    size_t count;
-} ptls_minicrypto_lookup_certificate_t;
-
-void ptls_minicrypto_init_lookup_certificate(ptls_minicrypto_lookup_certificate_t *self);
-void ptls_minicrypto_dispose_lookup_certificate(ptls_minicrypto_lookup_certificate_t *self);
-int ptls_minicrypto_lookup_certificate_add_identity(ptls_minicrypto_lookup_certificate_t *self, const char *server_name,
-                                                    uint16_t signature_algorithm, ptls_iovec_t key, ptls_iovec_t *certs,
-                                                    size_t num_certs);
+int ptls_minicrypto_init_secp256r1sha256_sign_certificate(ptls_minicrypto_secp256r1sha256_sign_certificate_t *self, ptls_iovec_t key);
 
 extern ptls_key_exchange_algorithm_t ptls_minicrypto_secp256r1, ptls_minicrypto_x25519;
 extern ptls_key_exchange_algorithm_t *ptls_minicrypto_key_exchanges[];

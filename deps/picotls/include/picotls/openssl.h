@@ -35,23 +35,15 @@ extern ptls_cipher_suite_t *ptls_openssl_cipher_suites[];
 
 void ptls_openssl_random_bytes(void *buf, size_t len);
 
-struct st_ptls_openssl_identity_t {
-    ptls_iovec_t name;
+typedef struct st_ptls_openssl_sign_certificate_t {
+    ptls_sign_certificate_t super;
     EVP_PKEY *key;
-    size_t num_certs;
-    ptls_iovec_t certs[1];
-};
+} ptls_openssl_sign_certificate_t;
 
-typedef struct st_ptls_openssl_lookup_certificate_t {
-    ptls_lookup_certificate_t super;
-    struct st_ptls_openssl_identity_t **identities;
-    size_t count;
-} ptls_openssl_lookup_certificate_t;
+int ptls_openssl_init_sign_certificate(ptls_openssl_sign_certificate_t *self, EVP_PKEY *key);
+void ptls_openssl_dispose_sign_certificate(ptls_openssl_sign_certificate_t *self);
+int ptls_openssl_load_certificates(ptls_context_t *ctx, X509 *cert, STACK_OF(X509) *chain);
 
-void ptls_openssl_init_lookup_certificate(ptls_openssl_lookup_certificate_t *self);
-void ptls_openssl_dispose_lookup_certificate(ptls_openssl_lookup_certificate_t *self);
-int ptls_openssl_lookup_certificate_add_identity(ptls_openssl_lookup_certificate_t *self, const char *server_name, EVP_PKEY *key,
-                                                 STACK_OF(X509) * certs);
 typedef struct st_ptls_openssl_verify_certificate_t {
     ptls_verify_certificate_t super;
     X509_STORE *cert_store;

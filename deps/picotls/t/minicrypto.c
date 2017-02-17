@@ -40,14 +40,18 @@ static void test_x25519_key_exchange(void)
 static void test_secp256r1_sign(void)
 {
     const char *msg = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef";
-    uint8_t pub[SECP256R1_PUBLIC_KEY_SIZE], priv[SECP256R1_PRIVATE_KEY_SIZE];
+    ptls_minicrypto_secp256r1sha256_sign_certificate_t signer = {{secp256r1sha256_sign}};
+    uint8_t pub[SECP256R1_PUBLIC_KEY_SIZE];
+    uint16_t selected;
     ptls_buffer_t sigbuf;
     uint32_t sigbuf_small[128];
 
-    uECC_make_key(pub, priv, uECC_secp256r1());
+    uECC_make_key(pub, signer.key, uECC_secp256r1());
     ptls_buffer_init(&sigbuf, sigbuf_small, sizeof(sigbuf_small));
 
-    ok(secp256r1sha256_sign(priv, &sigbuf, ptls_iovec_init(msg, 32)) == 0);
+    ok(secp256r1sha256_sign(&signer.super, NULL, &selected, &sigbuf, ptls_iovec_init(msg, 32),
+                            (uint16_t[]){PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256}, 1) == 0);
+    ok(selected == PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256);
 
     /* FIXME verify sign */
 
@@ -60,15 +64,15 @@ int main(int argc, char **argv)
     subtest("x25519", test_x25519_key_exchange);
     subtest("secp256r1-sign", test_secp256r1_sign);
 
-    ptls_minicrypto_lookup_certificate_t lookup_certificate;
-    ptls_iovec_t key = ptls_iovec_init(SECP256R1_PRIVATE_KEY, sizeof(SECP256R1_PRIVATE_KEY) - 1),
-                 cert = ptls_iovec_init(SECP256R1_CERTIFICATE, sizeof(SECP256R1_CERTIFICATE) - 1);
-    ptls_minicrypto_init_lookup_certificate(&lookup_certificate);
-    ptls_minicrypto_lookup_certificate_add_identity(&lookup_certificate, "example.com", PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256, key,
-                                                    &cert, 1);
+    ptls_iovec_t cert = ptls_iovec_init(SECP256R1_CERTIFICATE, sizeof(SECP256R1_CERTIFICATE) - 1);
 
-    ptls_context_t ctxbuf = {ptls_minicrypto_random_bytes, ptls_minicrypto_key_exchanges, ptls_minicrypto_cipher_suites,
-                             &lookup_certificate.super};
+    ptls_minicrypto_secp256r1sha256_sign_certificate_t sign_certificate;
+    ptls_minicrypto_init_secp256r1sha256_sign_certificate(&sign_certificate,
+                                                          ptls_iovec_init(SECP256R1_PRIVATE_KEY, SECP256R1_PRIVATE_KEY_SIZE));
+
+    ptls_context_t ctxbuf = {
+        ptls_minicrypto_random_bytes, ptls_minicrypto_key_exchanges, ptls_minicrypto_cipher_suites, {&cert, 1}, NULL,
+        &sign_certificate.super};
     ctx = ctx_peer = &ctxbuf;
 
     subtest("picotls", test_picotls);

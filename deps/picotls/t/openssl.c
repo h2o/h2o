@@ -86,52 +86,48 @@ static void test_ecdh_key_exchange(void)
 
 static void test_rsa_sign(void)
 {
-    ptls_openssl_lookup_certificate_t *lookup_certificate = (ptls_openssl_lookup_certificate_t *)ctx->lookup_certificate;
-
-    ok(select_compatible_signature_algorithm(lookup_certificate->identities[0]->key,
-                                             (uint16_t[]){PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256}, 1) == UINT16_MAX);
-    ok(select_compatible_signature_algorithm(lookup_certificate->identities[0]->key,
-                                             (uint16_t[]){PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256, PTLS_SIGNATURE_RSA_PSS_SHA256},
-                                             2) == PTLS_SIGNATURE_RSA_PSS_SHA256);
+    ptls_openssl_sign_certificate_t *sc = (ptls_openssl_sign_certificate_t *)ctx->sign_certificate;
 
     const void *message = "hello world";
     ptls_buffer_t sigbuf;
     uint8_t sigbuf_small[1024];
 
     ptls_buffer_init(&sigbuf, sigbuf_small, sizeof(sigbuf_small));
-    ok(rsapss_sign(lookup_certificate->identities[0]->key, &sigbuf, ptls_iovec_init(message, strlen(message))) == 0);
+    ok(rsapss_sign(sc->key, &sigbuf, ptls_iovec_init(message, strlen(message))) == 0);
 
     /* TODO verify */
 
     ptls_buffer_dispose(&sigbuf);
 }
 
-static void setup_certificate_lookup(ptls_openssl_lookup_certificate_t *lookup)
+static void setup_certificate(ptls_iovec_t *dst)
 {
-    ptls_openssl_init_lookup_certificate(lookup);
+    BIO *bio = BIO_new_mem_buf(RSA_CERTIFICATE, strlen(RSA_CERTIFICATE));
+    X509 *cert = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+    assert(cert != NULL || !!"failed to load certificate");
+    BIO_free(bio);
 
+    dst->base = NULL;
+    dst->len = i2d_X509(cert, &dst->base);
+
+    X509_free(cert);
+}
+
+static void setup_sign_certificate(ptls_openssl_sign_certificate_t *sc)
+{
     BIO *bio = BIO_new_mem_buf(RSA_PRIVATE_KEY, strlen(RSA_PRIVATE_KEY));
     EVP_PKEY *pkey = PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
     assert(pkey != NULL || !"failed to load private key");
     BIO_free(bio);
 
-    bio = BIO_new_mem_buf(RSA_CERTIFICATE, strlen(RSA_CERTIFICATE));
-    X509 *cert = PEM_read_bio_X509(bio, NULL, NULL, NULL);
-    assert(cert != NULL || !!"failed to load certificate");
-    BIO_free(bio);
+    ptls_openssl_init_sign_certificate(sc, pkey);
 
-    STACK_OF(X509) *certs = sk_X509_new(NULL);
-    sk_X509_push(certs, cert);
-    ptls_openssl_lookup_certificate_add_identity(lookup, "example.com", pkey, certs);
-    sk_X509_free(certs);
-
-    X509_free(cert);
     EVP_PKEY_free(pkey);
 }
 
 int main(int argc, char **argv)
 {
-    ptls_openssl_lookup_certificate_t openssl_lookup_certificate;
+    ptls_openssl_sign_certificate_t openssl_sign_certificate;
     ptls_openssl_verify_certificate_t openssl_verify_certificate;
 
     ERR_load_crypto_strings();
@@ -143,24 +139,31 @@ int main(int argc, char **argv)
     ENGINE_register_all_digests();
 #endif
 
-    setup_certificate_lookup(&openssl_lookup_certificate);
+    ptls_iovec_t cert;
+    setup_certificate(&cert);
+    setup_sign_certificate(&openssl_sign_certificate);
     ptls_openssl_init_verify_certificate(&openssl_verify_certificate, NULL);
-    ptls_context_t openssl_ctx = {ptls_openssl_random_bytes, ptls_openssl_key_exchanges, ptls_openssl_cipher_suites,
-                                  &openssl_lookup_certificate.super, &openssl_verify_certificate.super};
+    ptls_context_t openssl_ctx = {ptls_openssl_random_bytes,
+                                  ptls_openssl_key_exchanges,
+                                  ptls_openssl_cipher_suites,
+                                  {&cert, 1},
+                                  NULL, &openssl_sign_certificate.super, &openssl_verify_certificate.super};
     ctx = ctx_peer = &openssl_ctx;
 
     subtest("ecdh-key-exchange", test_ecdh_key_exchange);
     subtest("rsa-sign", test_rsa_sign);
     subtest("picotls", test_picotls);
 
-    ptls_minicrypto_lookup_certificate_t minicrypto_lookup_certificate;
-    ptls_minicrypto_init_lookup_certificate(&minicrypto_lookup_certificate);
+    ptls_minicrypto_secp256r1sha256_sign_certificate_t minicrypto_sign_certificate;
     ptls_iovec_t minicrypto_certificate = ptls_iovec_init(SECP256R1_CERTIFICATE, sizeof(SECP256R1_CERTIFICATE) - 1);
-    ptls_minicrypto_lookup_certificate_add_identity(
-        &minicrypto_lookup_certificate, "example.com", PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256,
-        ptls_iovec_init(SECP256R1_PRIVATE_KEY, sizeof(SECP256R1_PRIVATE_KEY) - 1), &minicrypto_certificate, 1);
-    ptls_context_t minicrypto_ctx = {ptls_minicrypto_random_bytes, ptls_minicrypto_key_exchanges, ptls_minicrypto_cipher_suites,
-                                     &minicrypto_lookup_certificate.super};
+    ptls_minicrypto_init_secp256r1sha256_sign_certificate(
+        &minicrypto_sign_certificate, ptls_iovec_init(SECP256R1_PRIVATE_KEY, sizeof(SECP256R1_PRIVATE_KEY) - 1));
+    ptls_context_t minicrypto_ctx = {ptls_minicrypto_random_bytes,
+                                     ptls_minicrypto_key_exchanges,
+                                     ptls_minicrypto_cipher_suites,
+                                     {&minicrypto_certificate, 1},
+                                     NULL,
+                                     &minicrypto_sign_certificate.super};
     ctx_peer = &minicrypto_ctx;
     subtest("vs. minicrypto", test_picotls);
 

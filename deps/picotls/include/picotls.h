@@ -28,7 +28,6 @@
 #define PTLS_MAX_SECRET_SIZE 32
 #define PTLS_MAX_IV_SIZE 16
 #define PTLS_MAX_DIGEST_SIZE 64
-#define PTLS_MAX_RECORD_OVERHEAD (5 + 16 + 1) /* maximum per-record overhead (header + tag + type) */
 
 /* cipher-suites */
 #define PTLS_CIPHER_SUITE_AES_128_GCM_SHA256 0x1301
@@ -161,6 +160,10 @@ typedef const struct st_ptls_aead_algorithm_t {
      */
     size_t iv_size;
     /**
+     * size of the tag
+     */
+    size_t tag_size;
+    /**
      * size of memory allocated for ptls_aead_context_t. AEAD implementations can set this value to something greater than
      * sizeof(ptls_aead_context_t) and stuff additional data at the bottom of the struct.
      */
@@ -237,13 +240,16 @@ typedef const struct st_ptls_cipher_suite_t {
     } ptls_##name##_t
 
 /**
- * after receiving ClientHello, the core calls the callback to obtain the certificate chain to be sent to the client as well as
- * a pointer to a function that should be called for signing the handshake using the private key associated to the certificate
+ * after receiving ClientHello, the core calls the optional callback to give a chance to the swap the context depending on the input
+ * values. The callback is required to call `ptls_set_server_name` if an SNI extension needs to be sent to the client.
  */
-PTLS_CALLBACK_TYPE(int, lookup_certificate, ptls_t *tls, uint16_t *sign_algorithm,
-                   int (**signer)(void *sign_ctx, ptls_buffer_t *outbuf, ptls_iovec_t input), void **signer_data,
-                   ptls_iovec_t **certs, size_t *num_certs, const char *server_name, const uint16_t *signature_algorithms,
-                   size_t num_signature_algorithms);
+PTLS_CALLBACK_TYPE(int, on_client_hello, ptls_t *tls, ptls_iovec_t server_name, const ptls_iovec_t *negotiated_protocols,
+                   size_t num_negotiated_protocols, const uint16_t *signature_algorithms, size_t num_signature_algorithms);
+/**
+ * when gerenating CertificateVerify, the core calls the callback to sign the handshake context using the certificate.
+ */
+PTLS_CALLBACK_TYPE(int, sign_certificate, ptls_t *tls, uint16_t *selected_algorithm, ptls_buffer_t *output, ptls_iovec_t input,
+                   const uint16_t *algorithms, size_t num_algorithms);
 /**
  * after receiving Certificate, the core calls the callback to verify the certificate chain and to obtain a pointer to a
  * callback that should be used for verifying CertificateVerify. If an error occurs between a successful return from this
@@ -280,9 +286,20 @@ typedef struct st_ptls_context_t {
      */
     ptls_cipher_suite_t **cipher_suites;
     /**
+     * list of certificates
+     */
+    struct {
+        ptls_iovec_t *list;
+        size_t count;
+    } certificates;
+    /**
      *
      */
-    ptls_lookup_certificate_t *lookup_certificate;
+    ptls_on_client_hello_t *on_client_hello;
+    /**
+     *
+     */
+    ptls_sign_certificate_t *sign_certificate;
     /**
      *
      */
@@ -322,6 +339,13 @@ typedef struct st_ptls_context_t {
  */
 typedef union st_ptls_handshake_properties_t {
     struct {
+        /**
+         * list of protocols offered through ALPN
+         */
+        struct {
+            const ptls_iovec_t *list;
+            size_t count;
+        } negotiated_protocols;
         /**
          * session ticket sent to the application via save_ticket callback
          */
@@ -442,7 +466,7 @@ int ptls_buffer_push_asn1_ubigint(ptls_buffer_t *buf, const void *bignum, size_t
  * create a object to handle new TLS connection. Client-side of a TLS connection is created if server_name is non-NULL. Otherwise,
  * a server-side connection is created.
  */
-ptls_t *ptls_new(ptls_context_t *ctx, const char *server_name);
+ptls_t *ptls_new(ptls_context_t *ctx, int is_client);
 /**
  * releases all resources associated to the object
  */
@@ -452,9 +476,31 @@ void ptls_free(ptls_t *tls);
  */
 ptls_context_t *ptls_get_context(ptls_t *tls);
 /**
+ * updates the context of a connection. Can be called from `on_client_hello` callback.
+ */
+void ptls_set_context(ptls_t *tls, ptls_context_t *ctx);
+/**
  * returns the client-random
  */
 ptls_iovec_t ptls_get_client_random(ptls_t *tls);
+/**
+ * returns the server-name (NULL if SNI is not used or failed to negotiate)
+ */
+const char *ptls_get_server_name(ptls_t *tls);
+/**
+ * sets the server-name (for client the value sent in SNI). If server_name_len is zero, then strlen(server_name) is called to
+ * determine
+ * the length of the name.
+ */
+int ptls_set_server_name(ptls_t *tls, const char *server_name, size_t server_name_len);
+/**
+ * returns the negotiated protocol (or NULL)
+ */
+const char *ptls_get_negotiated_protocol(ptls_t *tls);
+/**
+ * sets the negotiated protocol. If protocol_len is zero, strlen(protocol) is called to determine the length of the protocol name.
+ */
+int ptls_set_negotiated_protocol(ptls_t *tls, const char *protocol, size_t protocol_len);
 /**
  * returns if the received data is early data
  */
@@ -476,6 +522,10 @@ int ptls_receive(ptls_t *tls, ptls_buffer_t *plaintextbuf, const void *input, si
  * encrypts given buffer into multiple TLS records
  */
 int ptls_send(ptls_t *tls, ptls_buffer_t *sendbuf, const void *input, size_t inlen);
+/**
+ * returns per-record overhead
+ */
+size_t ptls_get_record_overhead(ptls_t *tls);
 /**
  * sends an alert
  */

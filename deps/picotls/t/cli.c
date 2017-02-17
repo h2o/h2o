@@ -136,12 +136,15 @@ Exit:
 
 static int handle_connection(int fd, ptls_context_t *ctx, const char *server_name, ptls_handshake_properties_t *hsprop)
 {
-    ptls_t *tls = ptls_new(ctx, server_name);
+    ptls_t *tls = ptls_new(ctx, server_name == NULL);
     uint8_t rbuf[1024], wbuf_small[1024], early_data[1024];
     ptls_buffer_t wbuf;
     int stdin_closed = 0, ret;
     size_t early_data_size = 0, roff;
     ssize_t rret;
+
+    if (server_name != NULL)
+        ptls_set_server_name(tls, server_name, 0);
 
     if (server_name != NULL && hsprop->client.max_early_data_size != NULL) {
         /* using early data */
@@ -415,13 +418,16 @@ int main(int argc, char **argv)
     ENGINE_register_all_digests();
 #endif
 
-    ptls_openssl_lookup_certificate_t lookup_certificate;
+    ptls_iovec_t _certs[16];
+    ptls_openssl_sign_certificate_t sign_certificate = {{NULL}};
     ptls_encrypt_ticket_t encrypt_ticket = {encrypt_ticket_cb}, decrypt_ticket = {decrypt_ticket_cb};
     ptls_save_ticket_t save_ticket = {save_ticket_cb};
     ptls_context_t ctx = {ptls_openssl_random_bytes,
                           ptls_openssl_key_exchanges,
                           ptls_openssl_cipher_suites,
-                          &lookup_certificate.super,
+                          {_certs, 0},
+                          NULL,
+                          &sign_certificate.super,
                           NULL,
                           86400,
                           8192,
@@ -432,13 +438,9 @@ int main(int argc, char **argv)
     ptls_openssl_verify_certificate_t verify_certificate = {{NULL}};
     ptls_handshake_properties_t hsprop = {{{NULL}}};
     const char *host, *port;
-    STACK_OF(X509) *certs = NULL;
-    EVP_PKEY *pkey = NULL;
     int use_early_data = 0, ch;
     struct sockaddr_storage sa;
     socklen_t salen;
-
-    ptls_openssl_init_lookup_certificate(&lookup_certificate);
 
     while ((ch = getopt(argc, argv, "c:k:es:l:vh")) != -1) {
         switch (ch) {
@@ -449,11 +451,12 @@ int main(int argc, char **argv)
                 fprintf(stderr, "failed to open file:%s:%s\n", optarg, strerror(errno));
                 return 1;
             }
-            certs = sk_X509_new(NULL);
-            while ((cert = PEM_read_X509(fp, NULL, NULL, NULL)) != NULL)
-                sk_X509_push(certs, cert);
+            while ((cert = PEM_read_X509(fp, NULL, NULL, NULL)) != NULL) {
+                ptls_iovec_t *dst = ctx.certificates.list + ctx.certificates.count++;
+                dst->len = i2d_X509(cert, &dst->base);
+            }
             fclose(fp);
-            if (sk_X509_num(certs) == 0) {
+            if (ctx.certificates.count == 0) {
                 fprintf(stderr, "failed to load certificate chain from file:%s\n", optarg);
                 return 1;
             }
@@ -464,12 +467,14 @@ int main(int argc, char **argv)
                 fprintf(stderr, "failed to open file:%s:%s\n", optarg, strerror(errno));
                 return 1;
             }
-            pkey = PEM_read_PrivateKey(fp, NULL, NULL, NULL);
+            EVP_PKEY *pkey = PEM_read_PrivateKey(fp, NULL, NULL, NULL);
             fclose(fp);
             if (pkey == NULL) {
                 fprintf(stderr, "failed to load private key from file:%s\n", optarg);
                 return 1;
             }
+            ptls_openssl_init_sign_certificate(&sign_certificate, pkey);
+            EVP_PKEY_free(pkey);
         } break;
         case 'e':
             use_early_data = 1;
@@ -494,9 +499,9 @@ int main(int argc, char **argv)
     }
     argc -= optind;
     argv += optind;
-    if (certs != NULL || pkey != NULL) {
+    if (ctx.certificates.count != 0 || sign_certificate.key != NULL) {
         /* server */
-        if (certs == NULL || pkey == NULL) {
+        if (ctx.certificates.count == 0 || sign_certificate.key == NULL) {
             fprintf(stderr, "-c and -k options must be used together\n");
             return 1;
         }
@@ -508,9 +513,6 @@ int main(int argc, char **argv)
             fprintf(stderr, "-e option cannot be used for server\n");
             return 1;
         }
-        ptls_openssl_lookup_certificate_add_identity(&lookup_certificate, "example.com", pkey, certs);
-        sk_X509_free(certs);
-        EVP_PKEY_free(pkey);
     } else {
         /* client */
         if (session_file != NULL) {
@@ -537,7 +539,7 @@ int main(int argc, char **argv)
     if (resolve_address((struct sockaddr *)&sa, &salen, host, port) != 0)
         exit(1);
 
-    if (certs != NULL) {
+    if (ctx.certificates.count != 0) {
         return run_server((struct sockaddr *)&sa, salen, &ctx, &hsprop);
     } else {
         return run_client((struct sockaddr *)&sa, salen, &ctx, host, &hsprop);

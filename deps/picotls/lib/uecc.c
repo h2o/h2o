@@ -30,10 +30,6 @@
 #include "picotls.h"
 #include "picotls/minicrypto.h"
 
-#define SECP256R1_PRIVATE_KEY_SIZE 32
-#define SECP256R1_PUBLIC_KEY_SIZE 65 /* including the header */
-#define SECP256R1_SHARED_SECRET_SIZE 32
-
 #define TYPE_UNCOMPRESSED_PUBLIC_KEY 4
 
 struct st_secp256r1_key_exhchange_t {
@@ -130,43 +126,20 @@ Exit:
     return ret;
 }
 
-struct st_ptls_minicrypto_identity_t {
-    ptls_iovec_t name;
-    uint8_t key[SECP256R1_PRIVATE_KEY_SIZE];
-    size_t num_certs;
-    ptls_iovec_t certs[1];
-};
-
-static void free_identity(struct st_ptls_minicrypto_identity_t *identity)
+static int secp256r1sha256_sign(ptls_sign_certificate_t *_self, ptls_t *tls, uint16_t *selected_algorithm, ptls_buffer_t *outbuf,
+                                ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
 {
-    size_t i;
-    free(identity->name.base);
-    for (i = 0; i != identity->num_certs; ++i)
-        free(identity->certs[i].base);
-    ptls_clear_memory(identity->key, sizeof(identity->key));
-    free(identity);
-}
-
-static int ascii_tolower(int ch)
-{
-    return ('A' <= ch && ch <= 'Z') ? ch + 0x20 : ch;
-}
-
-static int ascii_streq_caseless(ptls_iovec_t x, ptls_iovec_t y)
-{
-    size_t i;
-    if (x.len != y.len)
-        return 0;
-    for (i = 0; i != x.len; ++i)
-        if (ascii_tolower(x.base[i]) != ascii_tolower(y.base[i]))
-            return 0;
-    return 0;
-}
-
-static int secp256r1sha256_sign(void *data, ptls_buffer_t *outbuf, ptls_iovec_t input)
-{
+    ptls_minicrypto_secp256r1sha256_sign_certificate_t *self = (ptls_minicrypto_secp256r1sha256_sign_certificate_t *)_self;
     uint8_t hash[32], sig[64];
+    size_t i;
     int ret;
+
+    /* check algorithm */
+    for (i = 0; i != num_algorithms; ++i)
+        if (algorithms[i] == PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256)
+            break;
+    if (i == num_algorithms)
+        return PTLS_ALERT_HANDSHAKE_FAILURE;
 
     { /* calc hash */
         cf_sha256_context ctx;
@@ -177,7 +150,7 @@ static int secp256r1sha256_sign(void *data, ptls_buffer_t *outbuf, ptls_iovec_t 
     }
 
     /* sign */
-    uECC_sign(data, hash, sizeof(hash), sig, uECC_secp256r1());
+    uECC_sign(self->key, hash, sizeof(hash), sig, uECC_secp256r1());
 
     /* encode using DER */
     ptls_buffer_push_asn1_sequence(outbuf, {
@@ -187,6 +160,7 @@ static int secp256r1sha256_sign(void *data, ptls_buffer_t *outbuf, ptls_iovec_t 
             goto Exit;
     });
 
+    *selected_algorithm = PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256;
     ret = 0;
 
 Exit:
@@ -195,105 +169,16 @@ Exit:
     return ret;
 }
 
-static int lookup_certificate(ptls_lookup_certificate_t *_self, ptls_t *tls, uint16_t *sign_algorithm,
-                              int (**signer)(void *sign_ctx, ptls_buffer_t *outbuf, ptls_iovec_t input), void **signer_data,
-                              ptls_iovec_t **certs, size_t *num_certs, const char *server_name,
-                              const uint16_t *signature_algorithms, size_t num_signature_algorithms)
+int ptls_minicrypto_init_secp256r1sha256_sign_certificate(ptls_minicrypto_secp256r1sha256_sign_certificate_t *self,
+                                                          ptls_iovec_t key)
 {
-    ptls_minicrypto_lookup_certificate_t *self = (ptls_minicrypto_lookup_certificate_t *)_self;
-    struct st_ptls_minicrypto_identity_t *identity;
-    size_t i;
+    if (key.len != sizeof(self->key))
+        return PTLS_ERROR_INCOMPATIBLE_KEY;
 
-    if (self->count == 0)
-        return PTLS_ALERT_HANDSHAKE_FAILURE;
-
-    for (i = 0; i != num_signature_algorithms; ++i)
-        if (signature_algorithms[i] == PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256)
-            goto FoundMatchingSig;
-    return PTLS_ALERT_HANDSHAKE_FAILURE;
-
-FoundMatchingSig:
-    if (server_name != NULL) {
-        size_t server_name_len = strlen(server_name);
-        for (i = 0; i != self->count; ++i) {
-            identity = self->identities[i];
-            if (ascii_streq_caseless(ptls_iovec_init(server_name, server_name_len), identity->name))
-                goto FoundIdentity;
-        }
-    }
-    identity = self->identities[0]; /* use default */
-
-FoundIdentity:
-    /* setup the rest */
-    *sign_algorithm = PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256;
-    *signer = secp256r1sha256_sign;
-    *signer_data = identity->key;
-    *certs = identity->certs;
-    *num_certs = identity->num_certs;
+    self->super.cb = secp256r1sha256_sign;
+    memcpy(self->key, key.base, sizeof(self->key));
 
     return 0;
-}
-
-void ptls_minicrypto_init_lookup_certificate(ptls_minicrypto_lookup_certificate_t *self)
-{
-    *self = (ptls_minicrypto_lookup_certificate_t){{lookup_certificate}};
-}
-
-void ptls_minicrypto_dispose_lookup_certificate(ptls_minicrypto_lookup_certificate_t *self)
-{
-    size_t i;
-    for (i = 0; i != self->count; ++i)
-        free_identity(self->identities[i]);
-}
-
-int ptls_minicrypto_lookup_certificate_add_identity(ptls_minicrypto_lookup_certificate_t *self, const char *server_name,
-                                                    uint16_t signature_algorithm, ptls_iovec_t key, ptls_iovec_t *certs,
-                                                    size_t num_certs)
-{
-    struct st_ptls_minicrypto_identity_t *identity = NULL, **list;
-    int ret;
-
-    /* check args */
-    if (!(signature_algorithm == PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256 && key.len == sizeof(identity->key))) {
-        ret = PTLS_ERROR_INCOMPATIBLE_KEY;
-        goto Exit;
-    }
-
-    /* create new identity object */
-    if ((identity = (struct st_ptls_minicrypto_identity_t *)malloc(offsetof(struct st_ptls_minicrypto_identity_t, certs) +
-                                                                   sizeof(identity->certs[0]) * num_certs)) == NULL) {
-        ret = PTLS_ERROR_NO_MEMORY;
-        goto Exit;
-    }
-    *identity = (struct st_ptls_minicrypto_identity_t){{NULL}};
-    if ((identity->name.base = (uint8_t *)strdup(server_name)) == NULL) {
-        ret = PTLS_ERROR_NO_MEMORY;
-        goto Exit;
-    }
-    identity->name.len = strlen(server_name);
-    memcpy(identity->key, key.base, key.len);
-    for (; identity->num_certs != num_certs; ++identity->num_certs) {
-        if ((identity->certs[identity->num_certs].base = (uint8_t *)malloc(certs[identity->num_certs].len)) == NULL) {
-            ret = PTLS_ERROR_NO_MEMORY;
-            goto Exit;
-        }
-        memcpy(identity->certs[identity->num_certs].base, certs[identity->num_certs].base, certs[identity->num_certs].len);
-        identity->certs[identity->num_certs].len = certs[identity->num_certs].len;
-    }
-
-    /* add to the list */
-    if ((list = realloc(self->identities, sizeof(self->identities[0]) * (self->count + 1))) == NULL) {
-        ret = PTLS_ERROR_NO_MEMORY;
-        goto Exit;
-    }
-    self->identities = list;
-    self->identities[self->count++] = identity;
-
-    ret = 0;
-Exit:
-    if (ret != 0 && identity != NULL)
-        free_identity(identity);
-    return ret;
 }
 
 ptls_key_exchange_algorithm_t ptls_minicrypto_secp256r1 = {PTLS_GROUP_SECP256R1, secp256r1_create_key_exchange,
