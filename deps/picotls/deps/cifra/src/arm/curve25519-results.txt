@@ -1,0 +1,22 @@
+STM32F0
+donna-before-opt:	12907000c
+donna-after-opt:	17294000c
+donna-reset-opt:	12947000c
+~20k
+
+donna -O2 -Os:		15268000c
+donna -O2 -Os noasm:	20453000c
+donna -Os:		15748000c
+7.4k
+
+donna -O3:		12907000c	16KB	3380b
+donna -Os:		15748000c	7.4KB	3148b
+donna -O2:		15218000c	7.9KB	3148b
+
+tweetnacl -O2:		68876000c	3.0KB	2268b
+tweetnacl -Os:		75979000c	2.8KB	2244b
+tweetnacl -O3:		69622000c	8.9KB	2900b
+
+naclref -Os:		47813000c	3.2KB	4012b
+naclref -O3:		35059000c	4.1KB	4044b
+naclref -O2:		34309000c	3.5KB	4036b
