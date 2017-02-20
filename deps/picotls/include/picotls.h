@@ -79,7 +79,7 @@
 
 /* internal errors */
 #define PTLS_ERROR_NO_MEMORY (PTLS_ERROR_CLASS_INTERNAL + 1)
-#define PTLS_ERROR_HANDSHAKE_IN_PROGRESS (PTLS_ERROR_CLASS_INTERNAL + 2)
+#define PTLS_ERROR_IN_PROGRESS (PTLS_ERROR_CLASS_INTERNAL + 2)
 #define PTLS_ERROR_LIBRARY (PTLS_ERROR_CLASS_INTERNAL + 3)
 #define PTLS_ERROR_INCOMPATIBLE_KEY (PTLS_ERROR_CLASS_INTERNAL + 4)
 #define PTLS_ERROR_SESSION_NOT_FOUND (PTLS_ERROR_CLASS_INTERNAL + 5)
@@ -528,11 +528,11 @@ int ptls_is_early_data(ptls_t *tls);
 int ptls_is_psk_handshake(ptls_t *tls);
 /**
  * proceeds with the handshake, optionally taking some input from peer. The function returns zero in case the handshake completed
- * successfully. PTLS_ERROR_HANDSHAKE_IN_PROGRESS is returned in case the handshake is incomplete. Otherwise, an error value is
- * returned. The contents of sendbuf should be sent to the client, regardless of whether if an error is returned. inlen is an
- * argument used for both input and output. As an input, the arguments takes the size of the data available as input. Upon return
- * the value is updated to the number of bytes consumed by the handshake. In case the returned value is
- * PTLS_ERROR_HANDSHAKE_IN_PROGRESS there is a guarantee that all the input are consumed (i.e. the value of inlen does not change).
+ * successfully. PTLS_ERROR_IN_PROGRESS is returned in case the handshake is incomplete. Otherwise, an error value is returned. The
+ * contents of sendbuf should be sent to the client, regardless of whether if an error is returned. inlen is an argument used for
+ * both input and output. As an input, the arguments takes the size of the data available as input. Upon return the value is updated
+ * to the number of bytes consumed by the handshake. In case the returned value is PTLS_ERROR_IN_PROGRESS there is a guarantee that
+ * all the input are consumed (i.e. the value of inlen does not change).
  */
 int ptls_handshake(ptls_t *tls, ptls_buffer_t *sendbuf, const void *input, size_t *inlen, ptls_handshake_properties_t *args);
 /**

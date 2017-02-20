@@ -157,7 +157,7 @@ static void test_handshake(ptls_iovec_t ticket, int check_ch, int use_resumption
         client_hs_prop.client.max_early_data_size = &max_early_data_size;
     }
     ret = ptls_handshake(client, &cbuf, NULL, NULL, &client_hs_prop);
-    ok(ret == PTLS_ERROR_HANDSHAKE_IN_PROGRESS);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
     ok(cbuf.off != 0);
 
     if (use_early_data) {

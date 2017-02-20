@@ -1082,7 +1082,7 @@ static int send_client_hello(ptls_t *tls, ptls_buffer_t *sendbuf, ptls_handshake
     } else {
         tls->state = PTLS_STATE_CLIENT_EXPECT_SERVER_HELLO;
     }
-    ret = PTLS_ERROR_HANDSHAKE_IN_PROGRESS;
+    ret = PTLS_ERROR_IN_PROGRESS;
 
 Exit:
     ptls_clear_memory(binder_key, sizeof(binder_key));
@@ -1221,7 +1221,7 @@ static int client_handle_hello(ptls_t *tls, ptls_iovec_t message)
         goto Exit;
 
     tls->state = PTLS_STATE_CLIENT_EXPECT_ENCRYPTED_EXTENSIONS;
-    ret = PTLS_ERROR_HANDSHAKE_IN_PROGRESS;
+    ret = PTLS_ERROR_IN_PROGRESS;
 
 Exit:
     if (ecdh_secret.base != NULL) {
@@ -1278,7 +1278,7 @@ static int client_handle_encrypted_extensions(ptls_t *tls, ptls_iovec_t message,
 
     key_schedule_update_hash(tls->key_schedule, message.base, message.len);
     tls->state = tls->is_psk_handshake ? PTLS_STATE_CLIENT_EXPECT_FINISHED : PTLS_STATE_CLIENT_EXPECT_CERTIFICATE;
-    ret = PTLS_ERROR_HANDSHAKE_IN_PROGRESS;
+    ret = PTLS_ERROR_IN_PROGRESS;
 
 Exit:
     return ret;
@@ -1319,7 +1319,7 @@ static int client_handle_certificate(ptls_t *tls, ptls_iovec_t message)
 
     key_schedule_update_hash(tls->key_schedule, message.base, message.len);
     tls->state = PTLS_STATE_CLIENT_EXPECT_CERTIFICATE_VERIFY;
-    ret = PTLS_ERROR_HANDSHAKE_IN_PROGRESS;
+    ret = PTLS_ERROR_IN_PROGRESS;
 
 Exit:
     return ret;
@@ -1366,7 +1366,7 @@ static int client_handle_certificate_verify(ptls_t *tls, ptls_iovec_t message)
 
     key_schedule_update_hash(tls->key_schedule, message.base, message.len);
     tls->state = PTLS_STATE_CLIENT_EXPECT_FINISHED;
-    ret = PTLS_ERROR_HANDSHAKE_IN_PROGRESS;
+    ret = PTLS_ERROR_IN_PROGRESS;
 
 Exit:
     return ret;
@@ -1912,7 +1912,7 @@ static int server_handle_hello(ptls_t *tls, ptls_buffer_t *sendbuf, ptls_iovec_t
             tls->state = PTLS_STATE_SERVER_EXPECT_SECOND_CLIENT_HELLO;
             if (ch.psk.early_data_indication)
                 tls->server.skip_early_data = 1;
-            ret = PTLS_ERROR_HANDSHAKE_IN_PROGRESS;
+            ret = PTLS_ERROR_IN_PROGRESS;
             goto Exit;
         } else {
             ret = PTLS_ALERT_HANDSHAKE_FAILURE;
@@ -2163,7 +2163,7 @@ static int parse_record(ptls_t *tls, struct st_ptls_record_t *rec, const uint8_t
     /* fill and parse the header */
     while (tls->recvbuf.rec.off < 5) {
         if (src == end)
-            return PTLS_ERROR_HANDSHAKE_IN_PROGRESS;
+            return PTLS_ERROR_IN_PROGRESS;
         tls->recvbuf.rec.base[tls->recvbuf.rec.off++] = *src++;
     }
     if ((ret = parse_record_header(rec, tls->recvbuf.rec.base)) != 0)
@@ -2188,7 +2188,7 @@ static int parse_record(ptls_t *tls, struct st_ptls_record_t *rec, const uint8_t
         rec->fragment = tls->recvbuf.rec.base + 5;
         ret = 0;
     } else {
-        ret = PTLS_ERROR_HANDSHAKE_IN_PROGRESS;
+        ret = PTLS_ERROR_IN_PROGRESS;
     }
 
     *len -= end - src;
@@ -2444,7 +2444,7 @@ static int handle_input(ptls_t *tls, ptls_buffer_t *sendbuf, ptls_buffer_t *decr
         if ((ret = ptls_aead_transform(tls->traffic_protection.dec.aead, decryptbuf->base + decryptbuf->off, &rec.length,
                                        rec.fragment, rec.length, 0)) != 0) {
             if (tls->server.skip_early_data) {
-                ret = PTLS_ERROR_HANDSHAKE_IN_PROGRESS;
+                ret = PTLS_ERROR_IN_PROGRESS;
                 goto NextRecord;
             }
             return ret;
@@ -2459,7 +2459,7 @@ static int handle_input(ptls_t *tls, ptls_buffer_t *sendbuf, ptls_buffer_t *decr
             return PTLS_ALERT_UNEXPECTED_MESSAGE;
         rec.type = rec.fragment[--rec.length];
     } else if (rec.type == PTLS_CONTENT_TYPE_APPDATA && tls->server.skip_early_data) {
-        ret = PTLS_ERROR_HANDSHAKE_IN_PROGRESS;
+        ret = PTLS_ERROR_IN_PROGRESS;
         goto NextRecord;
     }
 
@@ -2484,7 +2484,7 @@ static int handle_input(ptls_t *tls, ptls_buffer_t *sendbuf, ptls_buffer_t *decr
         }
 
         /* handle the messages */
-        ret = PTLS_ERROR_HANDSHAKE_IN_PROGRESS;
+        ret = PTLS_ERROR_IN_PROGRESS;
         while (src_end - src >= 4) {
             uint32_t body_len = ntoh24(src + 1);
             if (src_end - src < 4 + body_len)
@@ -2492,7 +2492,7 @@ static int handle_input(ptls_t *tls, ptls_buffer_t *sendbuf, ptls_buffer_t *decr
             ret = handle_handshake_message(tls, sendbuf, ptls_iovec_init(src, 4 + body_len), properties);
             switch (ret) {
             case 0:
-            case PTLS_ERROR_HANDSHAKE_IN_PROGRESS:
+            case PTLS_ERROR_IN_PROGRESS:
                 break;
             default:
                 ptls_buffer_dispose(&tls->recvbuf.mess);
@@ -2572,8 +2572,8 @@ int ptls_handshake(ptls_t *tls, ptls_buffer_t *sendbuf, const void *input, size_
     ptls_buffer_init(&decryptbuf, decryptbuf_small, sizeof(decryptbuf_small));
 
     /* perform handhake until completion or until all the input has been swallowed */
-    ret = PTLS_ERROR_HANDSHAKE_IN_PROGRESS;
-    while (ret == PTLS_ERROR_HANDSHAKE_IN_PROGRESS && src != src_end) {
+    ret = PTLS_ERROR_IN_PROGRESS;
+    while (ret == PTLS_ERROR_IN_PROGRESS && src != src_end) {
         size_t consumed = src_end - src;
         ret = handle_input(tls, sendbuf, &decryptbuf, src, &consumed, properties);
         src += consumed;
@@ -2582,7 +2582,7 @@ int ptls_handshake(ptls_t *tls, ptls_buffer_t *sendbuf, const void *input, size_
 
     ptls_buffer_dispose(&decryptbuf);
 
-    if (!(ret == 0 || ret == PTLS_ERROR_HANDSHAKE_IN_PROGRESS)) {
+    if (!(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS)) {
         /* flush partially written response */
         ptls_clear_memory(sendbuf->base + sendbuf_orig_off, sendbuf->off - sendbuf_orig_off);
         sendbuf->off = sendbuf_orig_off;
@@ -2614,7 +2614,7 @@ int ptls_receive(ptls_t *tls, ptls_buffer_t *decryptbuf, const void *_input, siz
         switch (ret) {
         case 0:
             break;
-        case PTLS_ERROR_HANDSHAKE_IN_PROGRESS:
+        case PTLS_ERROR_IN_PROGRESS:
             ret = 0;
             break;
         case PTLS_ERROR_CLASS_PEER_ALERT + PTLS_ALERT_CLOSE_NOTIFY:
