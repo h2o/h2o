@@ -1,0 +1,17 @@
+CMakeCache.txt
+CMakeFiles/
+CTestTestfile.cmake
+Makefile
+Testing/
+cmake_install.cmake
+h2get
+read_bits
+.h2get_history
+GPATH
+GRTAGS
+GTAGS
+t
+tags
+mruby/
+.*.sw?
+test_*
