@@ -137,7 +137,12 @@ static char **build_spawn_env(void)
     return newenv;
 }
 
-pid_t h2o_spawnp(const char *cmd, char *const *argv, const int *mapped_fds, int cloexec_mutex_is_locked)
+static int is_valid_fd(int fd)
+{
+    return fcntl(fd, F_GETFD) != -1 || errno != EBADF;
+}
+
+pid_t h2o_spawnp(const char *cmd, char *const *argv, int *mapped_fds, int cloexec_mutex_is_locked)
 {
 #if defined(__linux__)
 
@@ -158,11 +163,26 @@ pid_t h2o_spawnp(const char *cmd, char *const *argv, const int *mapped_fds, int 
     if ((pid = fork()) == 0) {
         /* in child process, map the file descriptors and execute; return the errnum through pipe if exec failed */
         if (mapped_fds != NULL) {
-            for (; *mapped_fds != -1; mapped_fds += 2) {
-                if (mapped_fds[0] != mapped_fds[1]) {
-                    if (mapped_fds[1] != -1)
-                        dup2(mapped_fds[0], mapped_fds[1]);
-                    close(mapped_fds[0]);
+            int i;
+            for (i = 0; mapped_fds[i] != -1; i += 2) {
+                int src = mapped_fds[i], dst = mapped_fds[i + 1];
+                if (dst == -1) {
+                    close(src);
+                    continue;
+                }
+                if (src != dst) {
+                    if (is_valid_fd(dst)) {
+                        int j, newsrc = -1;
+                        for (j = i; mapped_fds[j] != -1; j += 2) {
+                            if (mapped_fds[j] == dst) {
+                                if (newsrc == -1)
+                                    newsrc = dup(dst);
+                                mapped_fds[j] = newsrc;
+                            }
+                        }
+                    }
+                    dup2(src, dst);
+                    close(src);
                 }
             }
         }
