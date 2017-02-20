@@ -368,9 +368,11 @@ static void shutdown_ssl(h2o_socket_t *sock, const char *err)
         ret = 1; /* close the socket after sending close_notify */
     } else
 #endif
-    {
+    if (sock->ssl->ossl != NULL) {
         if ((ret = SSL_shutdown(sock->ssl->ossl)) == -1)
             goto Close;
+    } else {
+        goto Close;
     }
 
     if (sock->ssl->output.bufs.size != 0) {
@@ -733,80 +735,83 @@ socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa)
 
 const char *h2o_socket_get_ssl_protocol_version(h2o_socket_t *sock)
 {
-    if (sock->ssl == NULL)
-        return NULL;
+    if (sock->ssl != NULL) {
 #if H2O_USE_PICOTLS
-    if (sock->ssl->ptls != NULL)
-        return "TLSv1.3";
+        if (sock->ssl->ptls != NULL)
+            return "TLSv1.3";
 #endif
-    return SSL_get_version(sock->ssl->ossl);
+        if (sock->ssl->ossl != NULL)
+            return SSL_get_version(sock->ssl->ossl);
+    }
+    return NULL;
 }
 
 int h2o_socket_get_ssl_session_reused(h2o_socket_t *sock)
 {
-    if (sock->ssl == NULL)
-        return -1;
+    if (sock->ssl != NULL) {
 #if H2O_USE_PICOTLS
-    if (sock->ssl->ptls != NULL)
-        return ptls_is_psk_handshake(sock->ssl->ptls);
+        if (sock->ssl->ptls != NULL)
+            return ptls_is_psk_handshake(sock->ssl->ptls);
 #endif
-    return (int)SSL_session_reused(sock->ssl->ossl);
+        if (sock->ssl->ossl != NULL)
+            return (int)SSL_session_reused(sock->ssl->ossl);
+    }
+    return -1;
 }
 
 const char *h2o_socket_get_ssl_cipher(h2o_socket_t *sock)
 {
-    if (sock->ssl == NULL)
-        return NULL;
+    if (sock->ssl != NULL) {
 #if H2O_USE_PICOTLS
-    if (sock->ssl->ptls != NULL) {
-        ptls_cipher_suite_t *cipher = ptls_get_cipher(sock->ssl->ptls);
-        if (cipher == NULL)
-            return NULL;
-        return cipher->aead->name;
-    }
+        if (sock->ssl->ptls != NULL) {
+            ptls_cipher_suite_t *cipher = ptls_get_cipher(sock->ssl->ptls);
+            if (cipher != NULL)
+                return cipher->aead->name;
+        } else
 #endif
-    return SSL_get_cipher_name(sock->ssl->ossl);
+        if (sock->ssl->ossl != NULL)
+            return SSL_get_cipher_name(sock->ssl->ossl);
+    }
+    return NULL;
 }
 
 int h2o_socket_get_ssl_cipher_bits(h2o_socket_t *sock)
 {
-    if (sock->ssl == NULL)
-        return 0;
+    if (sock->ssl != NULL) {
 #if H2O_USE_PICOTLS
-    if (sock->ssl->ptls != NULL) {
-        ptls_cipher_suite_t *cipher = ptls_get_cipher(sock->ssl->ptls);
-        if (cipher == NULL)
-            return 0;
-        return (int)cipher->aead->key_size;
-    }
+        if (sock->ssl->ptls != NULL) {
+            ptls_cipher_suite_t *cipher = ptls_get_cipher(sock->ssl->ptls);
+            if (cipher != NULL)
+                return 0;
+            return (int)cipher->aead->key_size;
+        } else
 #endif
-    return SSL_get_cipher_bits(sock->ssl->ossl, NULL);
+        if (sock->ssl->ossl != NULL)
+            return SSL_get_cipher_bits(sock->ssl->ossl, NULL);
+    }
+    return 0;
 }
 
 h2o_iovec_t h2o_socket_get_ssl_session_id(h2o_socket_t *sock)
 {
-    static const h2o_iovec_t nullvec = {NULL};
-
-    if (sock->ssl == NULL)
-        return nullvec;
-
+    if (sock->ssl != NULL) {
 #if H2O_USE_PICOTLS
-    if (sock->ssl->ptls != NULL) {
-        /* FIXME */
-        return nullvec;
-    }
+        if (sock->ssl->ptls != NULL) {
+            /* FIXME */
+        } else
 #endif
+        if (sock->ssl->ossl != NULL) {
+            SSL_SESSION *session;
+            if (sock->ssl->handshake.server.async_resumption.state == ASYNC_RESUMPTION_STATE_COMPLETE &&
+                (session = SSL_get_session(sock->ssl->ossl)) != NULL) {
+                unsigned id_len;
+                const unsigned char *id = SSL_SESSION_get_id(session, &id_len);
+                return h2o_iovec_init(id, id_len);
+            }
+        }
+    }
 
-    if (sock->ssl->handshake.server.async_resumption.state != ASYNC_RESUMPTION_STATE_COMPLETE)
-        return nullvec;
-
-    SSL_SESSION *session = SSL_get_session(sock->ssl->ossl);
-    if (session == NULL)
-        return nullvec;
-
-    unsigned id_len;
-    const unsigned char *id = SSL_SESSION_get_id(session, &id_len);
-    return h2o_iovec_init(id, id_len);
+    return h2o_iovec_init(NULL, 0);
 }
 
 h2o_iovec_t h2o_socket_log_ssl_session_id(h2o_socket_t *sock, h2o_mem_pool_t *pool)
@@ -990,7 +995,8 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     h2o_socket_cb handshake_cb = sock->ssl->handshake.cb;
     sock->_cb.write = NULL;
     sock->ssl->handshake.cb = NULL;
-    decode_ssl_input(sock);
+    if (err == NULL)
+        decode_ssl_input(sock);
     handshake_cb(sock, err);
 }
 
