@@ -1181,6 +1181,7 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
         else
             h2o_socket_read_start(sock, proceed_handshake);
     } else {
+        create_ossl(sock);
         h2o_cache_t *session_cache = h2o_socket_ssl_get_session_cache(sock->ssl->ssl_ctx);
         if (session_cache != NULL) {
             struct sockaddr_storage sa;
