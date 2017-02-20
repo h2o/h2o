@@ -51,6 +51,11 @@
 #ifdef __GLIBC__
 #include <execinfo.h>
 #endif
+#if H2O_USE_PICOTLS
+#include "picotls.h"
+#include "picotls/minicrypto.h"
+#include "picotls/openssl.h"
+#endif
 #include "cloexec.h"
 #include "yoml-parser.h"
 #include "neverbleed.h"
@@ -211,42 +216,83 @@ static void setup_ecc_key(SSL_CTX *ssl_ctx)
 #endif
 }
 
+static struct listener_ssl_config_t *resolve_sni(struct listener_config_t *listener, const char *name, size_t name_len)
+{
+    size_t i, j;
+
+    for (i = 0; i != listener->ssl.size; ++i) {
+        struct listener_ssl_config_t *ssl_config = listener->ssl.entries[i];
+        for (j = 0; j != ssl_config->hostnames.size; ++j) {
+            if (ssl_config->hostnames.entries[j].base[0] == '*') {
+                /* matching against "*.foo.bar" */
+                size_t cmplen = ssl_config->hostnames.entries[j].len - 1;
+                if (!(cmplen < name_len && h2o_lcstris(name + name_len - cmplen, cmplen, ssl_config->hostnames.entries[j].base + 1,
+                                                       ssl_config->hostnames.entries[j].len - 1)))
+                    continue;
+            } else {
+                if (!h2o_lcstris(name, name_len, ssl_config->hostnames.entries[j].base, ssl_config->hostnames.entries[j].len))
+                    continue;
+            }
+            /* found */
+            return listener->ssl.entries[i];
+        }
+    }
+    return listener->ssl.entries[0];
+}
+
 static int on_sni_callback(SSL *ssl, int *ad, void *arg)
 {
     struct listener_config_t *listener = arg;
-    const char *name = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
-    size_t ctx_index = 0;
+    const char *server_name = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
 
-    if (name != NULL) {
-        size_t i, j, name_len = strlen(name);
-        for (i = 0; i != listener->ssl.size; ++i) {
-            struct listener_ssl_config_t *ssl_config = listener->ssl.entries[i];
-            for (j = 0; j != ssl_config->hostnames.size; ++j) {
-                if (ssl_config->hostnames.entries[j].base[0] == '*') {
-                    /* matching against "*.foo.bar" */
-                    size_t cmplen = ssl_config->hostnames.entries[j].len - 1;
-                    if (!(cmplen < name_len &&
-                          h2o_lcstris(name + name_len - cmplen, cmplen, ssl_config->hostnames.entries[j].base + 1,
-                                      ssl_config->hostnames.entries[j].len - 1)))
-                        continue;
-                } else {
-                    if (!h2o_lcstris(name, name_len, ssl_config->hostnames.entries[j].base, ssl_config->hostnames.entries[j].len))
-                        continue;
-                }
-
-                ctx_index = i;
-                goto Found;
-            }
-        }
-        ctx_index = 0;
-    Found:;
+    if (server_name != NULL) {
+        struct listener_ssl_config_t *resolved = resolve_sni(listener, server_name, strlen(server_name));
+        if (resolved->ctx != SSL_get_SSL_CTX(ssl))
+            SSL_set_SSL_CTX(ssl, resolved->ctx);
     }
-
-    if (SSL_get_SSL_CTX(ssl) != listener->ssl.entries[ctx_index]->ctx)
-        SSL_set_SSL_CTX(ssl, listener->ssl.entries[ctx_index]->ctx);
 
     return SSL_TLSEXT_ERR_OK;
 }
+
+#if H2O_USE_PICOTLS
+struct st_on_client_hello_ptls_t {
+    ptls_on_client_hello_t super;
+    struct listener_config_t *listener;
+};
+
+static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls_iovec_t server_name,
+                                const ptls_iovec_t *negotiated_protocols, size_t num_negotiated_protocols,
+                                const uint16_t *signature_algorithms, size_t num_signature_algorithms)
+{
+    struct st_on_client_hello_ptls_t *self = (struct st_on_client_hello_ptls_t *)_self;
+    int ret = 0;
+
+    /* handle SNI */
+    if (server_name.base != NULL) {
+        struct listener_ssl_config_t *resolved = resolve_sni(self->listener, (const char *)server_name.base, server_name.len);
+        ptls_context_t *newctx = h2o_socket_ssl_get_picotls_context(resolved->ctx);
+        ptls_set_context(tls, newctx);
+        ptls_set_server_name(tls, (const char *)server_name.base, server_name.len);
+    }
+
+    /* handle ALPN */
+    if (num_negotiated_protocols != 0) {
+        const h2o_iovec_t *server_pref;
+        for (server_pref = h2o_alpn_protocols; server_pref->len != 0; ++server_pref) {
+            size_t i;
+            for (i = 0; i != num_negotiated_protocols; ++i)
+                if (h2o_memis(server_pref->base, server_pref->len, negotiated_protocols[i].base, negotiated_protocols[i].len))
+                    goto ALPN_Found;
+        }
+        return PTLS_ALERT_NO_APPLICATION_PROTOCOL;
+    ALPN_Found:
+        if ((ret = ptls_set_negotiated_protocol(tls, server_pref->base, server_pref->len)) != 0)
+            return ret;
+    }
+
+    return ret;
+}
+#endif
 
 #ifndef OPENSSL_NO_OCSP
 
@@ -659,6 +705,41 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         }
 #endif
     }
+
+#if H2O_USE_PICOTLS
+    {
+        static const ptls_key_exchange_algorithm_t *key_exchanges[] = {&ptls_minicrypto_x25519, &ptls_openssl_secp256r1, NULL};
+        struct st_fat_context_t {
+            ptls_context_t ctx;
+            struct st_on_client_hello_ptls_t ch;
+            ptls_openssl_sign_certificate_t sc;
+        } *pctx = h2o_mem_alloc(sizeof(*pctx));
+        *pctx = (struct st_fat_context_t){{ptls_openssl_random_bytes,
+                                           key_exchanges,
+                                           ptls_openssl_cipher_suites,
+                                           {NULL, 0},
+                                           &pctx->ch.super,
+                                           NULL,
+                                           &pctx->sc.super,
+                                           NULL,
+                                           0,
+                                           8192,
+                                           1},
+                                          {{on_client_hello_ptls}, listener}};
+        /* for libressl, we need to create a fake connection to obtain the key and the certificate */
+        SSL *fakeconn = SSL_new(ssl_ctx);
+        assert(fakeconn != NULL);
+        EVP_PKEY *key = SSL_get_privatekey(fakeconn);
+        X509 *cert = SSL_get_certificate(fakeconn);
+        SSL_free(fakeconn);
+        STACK_OF(X509) * certs;
+        SSL_CTX_get_extra_chain_certs(ssl_ctx, &certs);
+        ptls_openssl_init_sign_certificate(&pctx->sc, key);
+        ptls_openssl_load_certificates(&pctx->ctx, cert, certs);
+
+        h2o_socket_ssl_set_picotls_context(ssl_ctx, &pctx->ctx);
+    }
+#endif
 
     return 0;
 
