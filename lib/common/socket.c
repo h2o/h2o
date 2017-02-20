@@ -1023,7 +1023,7 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
                 if (ptls == NULL)
                     h2o_fatal("no memory");
                 ret = ptls_handshake(ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
-                if ((ret == 0 || ret == PTLS_ERROR_HANDSHAKE_IN_PROGRESS) && wbuf.off != 0) {
+                if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && wbuf.off != 0) {
                     sock->ssl->ptls = ptls;
                     sock->ssl->handshake.server.async_resumption.state = ASYNC_RESUMPTION_STATE_COMPLETE;
                 } else {
@@ -1037,7 +1037,7 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
             h2o_buffer_consume(&sock->ssl->input.encrypted, consumed);
             switch (ret) {
             case 0:
-            case PTLS_ERROR_HANDSHAKE_IN_PROGRESS:
+            case PTLS_ERROR_IN_PROGRESS:
                 if (wbuf.off != 0) {
                     h2o_socket_read_stop(sock);
                     write_ssl_bytes(sock, wbuf.base, wbuf.off);
