@@ -98,8 +98,9 @@ static void add(uint8_t *out, size_t nout, const uint8_t *in, size_t nin)
   assert(nout >= nin);
 
   uint16_t carry = 0;
-  
-  for (int oi = nout - 1, ii = nin - 1;
+  int oi, ii;
+
+  for (oi = nout - 1, ii = nin - 1;
        oi >= 0;
        ii--, oi--)
   {

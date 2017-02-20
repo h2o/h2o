@@ -12,28 +12,8 @@
 /* Evaluates to the number of items in array-type variable arr. */
 #define ARRAYCOUNT(arr) (sizeof arr / sizeof arr[0])
 
-/* Normal MIN/MAX macros.  Evaluate argument expressions only once. */
 #ifndef MIN
-  #define MIN(x, y) \
-    ({ typeof (x) __x = (x); \
-       typeof (y) __y = (y); \
-       __x < __y ? __x : __y; })
-#endif
-#ifndef MAX
-  #define MAX(x, y) \
-    ({ typeof (x) __x = (x); \
-       typeof (y) __y = (y); \
-       __x > __y ? __x : __y; })
-#endif
-
-/* Swap two values.  Uses GCC type inference magic. */
-#ifndef SWAP
-  #define SWAP(x, y) \
-    do { \
-      typeof (x) __tmp = (x); \
-      (x) = (y); \
-      (y) = __tmp; \
-    } while (0)
+# define MIN(x, y) ((x) < (y) ? (x) : (y))
 #endif
 
 /** Stringify its argument. */

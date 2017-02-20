@@ -132,7 +132,8 @@ static inline void write64_le(uint64_t v, uint8_t buf[8])
  *  out and in may alias. */
 static inline void xor_b8(uint8_t *out, const uint8_t *in, uint8_t b8, size_t len)
 {
-  for (size_t i = 0; i < len; i++)
+  size_t i;
+  for (i = 0; i < len; i++)
     out[i] = in[i] ^ b8;
 }
 
@@ -140,7 +141,8 @@ static inline void xor_b8(uint8_t *out, const uint8_t *in, uint8_t b8, size_t le
  *  out, x and y may alias. */
 static inline void xor_bb(uint8_t *out, const uint8_t *x, const uint8_t *y, size_t len)
 {
-  for (size_t i = 0; i < len; i++)
+  size_t i;
+  for (i = 0; i < len; i++)
     out[i] = x[i] ^ y[i];
 }
 
@@ -148,7 +150,8 @@ static inline void xor_bb(uint8_t *out, const uint8_t *x, const uint8_t *y, size
  * out and x may alias. */
 static inline void xor_words(uint32_t *out, const uint32_t *x, size_t nwords)
 {
-  for (size_t i = 0; i < nwords; i++)
+  size_t i;
+  for (i = 0; i < nwords; i++)
     out[i] ^= x[i];
 }
 
@@ -172,9 +175,9 @@ static inline uint8_t mask_u8(uint32_t x, uint32_t y)
  *  way. */
 static inline uint32_t select_u32(uint32_t i, volatile const uint32_t *tab, uint32_t n)
 {
-  uint32_t r = 0;
+  uint32_t r = 0, ii;
 
-  for (uint32_t ii = 0; ii < n; ii++)
+  for (ii = 0; ii < n; ii++)
   {
     uint32_t mask = mask_u32(i, ii);
     r = (r & ~mask) | (tab[ii] & mask);
@@ -188,8 +191,9 @@ static inline uint32_t select_u32(uint32_t i, volatile const uint32_t *tab, uint
 static inline uint8_t select_u8(uint32_t i, volatile const uint8_t *tab, uint32_t n)
 {
   uint8_t r = 0;
+  uint32_t ii;
 
-  for (uint32_t ii = 0; ii < n; ii++)
+  for (ii = 0; ii < n; ii++)
   {
     uint8_t mask = mask_u8(i, ii);
     r = (r & ~mask) | (tab[ii] & mask);
@@ -208,8 +212,9 @@ static inline void select_u8x4(uint8_t *a, uint8_t *b, uint8_t *c, uint8_t *d,
           rc = 0,
           rd = 0;
   uint8_t mask;
+  uint32_t i;
 
-  for (uint32_t i = 0; i < n; i++)
+  for (i = 0; i < n; i++)
   {
     uint8_t item = tab[i];
 
@@ -278,8 +283,9 @@ static inline void copy_bytes_unaligned(uint8_t *out, const uint8_t *in, size_t 
   uint8_t bit_off = offset & 7;
   uint8_t rmask = (1 << bit_off) - 1;
   uint8_t lmask = ~rmask;
+  size_t i;
 
-  for (size_t i = 0; i < len; i++)
+  for (i = 0; i < len; i++)
   {
     out[i] = (in[i + byte_off] << bit_off) & lmask;
     out[i] |= (in[i + byte_off + 1] >> (8 - bit_off)) & rmask;

@@ -257,7 +257,8 @@ void cf_aes_encrypt(const cf_aes_context *ctx,
   add_round_key(state, round_keys);
   round_keys += 4;
 
-  for (uint32_t round = 1; round < ctx->rounds; round++)
+  uint32_t round;
+  for (round = 1; round < ctx->rounds; round++)
   {
     sub_block(state);
     shift_rows(state);
@@ -377,7 +378,8 @@ void cf_aes_decrypt(const cf_aes_context *ctx,
   add_round_key(state, round_keys);
   round_keys -= 4;
 
-  for (uint32_t round = ctx->rounds - 1; round != 0; round--)
+  uint32_t round;
+  for (round = ctx->rounds - 1; round != 0; round--)
   {
     inv_shift_rows(state);
     inv_sub_block(state);

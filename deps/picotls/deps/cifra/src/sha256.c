@@ -89,7 +89,8 @@ static void sha256_update_block(void *vctx, const uint8_t *inp)
            h = ctx->H[7],
            Wt;
 
-  for (size_t t = 0; t < 64; t++)
+  size_t t;
+  for (t = 0; t < 64; t++)
   {
     /* For W[0..16] we process the input into W.
      * For W[16..64] we compute the next W value:

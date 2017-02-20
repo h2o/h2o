@@ -94,7 +94,8 @@ void cf_gf128_mul(const cf_gf128 x, const cf_gf128 y, cf_gf128 out)
   memset(Z, 0, sizeof Z);
   memcpy(V, y, sizeof V);
 
-  for (int i = 0; i < 128; i++)
+  int i;
+  for (i = 0; i < 128; i++)
   {
     uint32_t word = x[i >> 5];
     uint8_t bit = (word >> (31 - (i & 31))) & 1;
