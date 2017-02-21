@@ -1,6 +1,8 @@
 picotls
 ===
 
+[![Build Status](https://travis-ci.org/h2o/picotls.svg?branch=master)](https://travis-ci.org/h2o/picotls)
+
 Picotls is a [TLS 1.3](https://tlswg.github.io/tls13-spec/) implementation written in C.
 
 At the moment, the library implements Draft 18 of the specification, including support 0-RTT resumption using PSK or PSK-DHE.

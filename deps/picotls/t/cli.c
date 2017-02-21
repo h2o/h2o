@@ -343,7 +343,7 @@ static void fprinthex(FILE *fp, ptls_iovec_t vec)
         fprintf(fp, "%02x", vec.base[i]);
 }
 
-static void log_secret(ptls_t *tls, const char *label, ptls_iovec_t secret)
+static void log_secret_cb(ptls_log_secret_t *self, ptls_t *tls, const char *label, ptls_iovec_t secret)
 {
     fprintf(secret_fp, "%s ", label);
     fprinthex(secret_fp, ptls_get_client_random(tls));
@@ -425,6 +425,7 @@ int main(int argc, char **argv)
     ptls_openssl_sign_certificate_t sign_certificate = {{NULL}};
     ptls_encrypt_ticket_t encrypt_ticket = {encrypt_ticket_cb}, decrypt_ticket = {decrypt_ticket_cb};
     ptls_save_ticket_t save_ticket = {save_ticket_cb};
+    ptls_log_secret_t log_secret = {log_secret_cb};
     ptls_context_t ctx = {ptls_openssl_random_bytes,
                           ptls_openssl_key_exchanges,
                           ptls_openssl_cipher_suites,
@@ -491,7 +492,7 @@ int main(int argc, char **argv)
                 fprintf(stderr, "failed to open file:%s:%s\n", optarg, strerror(errno));
                 return 1;
             }
-            ctx.log_secret = log_secret;
+            ctx.log_secret = &log_secret;
             break;
         case 'v':
             ptls_openssl_init_verify_certificate(&verify_certificate, NULL);
