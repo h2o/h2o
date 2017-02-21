@@ -173,6 +173,7 @@ struct st_h2o_http2_stream_t {
             unsigned casper_is_ready : 1;
         } pull;
     };
+    unsigned response_blocked_by_server : 1;
     /* references governed by connection.c for handling various things */
     struct {
         h2o_linklist_t link;
@@ -216,6 +217,7 @@ struct st_h2o_http2_conn_t {
         h2o_http2_conn_num_streams_t priority;
         h2o_http2_conn_num_streams_t pull;
         h2o_http2_conn_num_streams_t push;
+        uint32_t response_blocked_by_server;
     } num_streams;
     /* internal */
     h2o_http2_scheduler_node_t scheduler;
@@ -280,6 +282,7 @@ static int h2o_http2_stream_is_push(uint32_t stream_id);
 h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req,
                                           const h2o_http2_priority_t *received_priority);
 static void h2o_http2_stream_update_open_slot(h2o_http2_stream_t *stream, h2o_http2_conn_num_streams_t *slot);
+static void h2o_http2_stream_set_response_blocked_by_server(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, unsigned on);
 static void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_http2_stream_state_t new_state);
 static void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
@@ -379,6 +382,19 @@ inline void h2o_http2_stream_update_open_slot(h2o_http2_stream_t *stream, h2o_ht
     stream->_num_streams_slot = slot;
 }
 
+inline void h2o_http2_stream_set_response_blocked_by_server(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, unsigned on)
+{
+    if (on) {
+        assert(!stream->response_blocked_by_server);
+        stream->response_blocked_by_server = 1;
+        ++conn->num_streams.response_blocked_by_server;
+    } else {
+        assert(stream->response_blocked_by_server);
+        stream->response_blocked_by_server = 0;
+        --conn->num_streams.response_blocked_by_server;
+    }
+}
+
 inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_http2_stream_state_t new_state)
 {
     switch (new_state) {
@@ -400,6 +416,7 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
         break;
     case H2O_HTTP2_STREAM_STATE_REQ_PENDING:
         stream->state = new_state;
+        h2o_http2_stream_set_response_blocked_by_server(conn, stream, 1);
         break;
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
         assert(stream->state == H2O_HTTP2_STREAM_STATE_REQ_PENDING);
@@ -440,6 +457,8 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
         stream->req.timestamps.response_end_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
         --stream->_num_streams_slot->open;
         stream->_num_streams_slot = NULL;
+        if (stream->response_blocked_by_server)
+            h2o_http2_stream_set_response_blocked_by_server(conn, stream, 0);
         break;
     }
 }

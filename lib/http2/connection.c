@@ -134,8 +134,7 @@ static void update_idle_timeout(h2o_http2_conn_t *conn)
 {
     h2o_timeout_unlink(&conn->_timeout_entry);
 
-    /* no active streams */
-    if (conn->num_streams.pull.half_closed + conn->num_streams.push.half_closed == 0) {
+    if (!conn->num_streams.response_blocked_by_server && conn->_write.buf_in_flight == NULL) {
         conn->_timeout_entry.cb = on_idle_timeout;
         h2o_timeout_link(conn->super.ctx->loop, &conn->super.ctx->http2.idle_timeout, &conn->_timeout_entry);
     }
@@ -1059,6 +1058,9 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
         }
     }
 
+    /* update the timeout now that the states have been updated */
+    update_idle_timeout(conn);
+
     /* cancel the write callback if scheduled (as the generator may have scheduled a write just before this function gets called) */
     if (h2o_timeout_is_linked(&conn->_write.timeout_entry))
         h2o_timeout_unlink(&conn->_write.timeout_entry);
@@ -1112,6 +1114,7 @@ void do_emit_writereq(h2o_http2_conn_t *conn)
         h2o_socket_write(conn->sock, &buf, 1, on_write_complete);
         conn->_write.buf_in_flight = conn->_write.buf;
         h2o_buffer_init(&conn->_write.buf, &wbuf_buffer_prototype);
+        update_idle_timeout(conn);
     }
 
     /* close the connection if necessary */
