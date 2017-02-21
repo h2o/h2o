@@ -897,7 +897,7 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts)
 #if H2O_USE_PICOTLS
             static ptls_encrypt_ticket_t encryptor = {encrypt_ticket_key_ptls}, decryptor = {decrypt_ticket_key_ptls};
             ptls_context_t *pctx = h2o_socket_ssl_get_picotls_context(ctx);
-            pctx->ticket_lifetime = conf.lifetime;
+            pctx->ticket_lifetime = 86400 * 7; // FIXME conf.lifetime;
             pctx->encrypt_ticket = &encryptor;
             pctx->decrypt_ticket = &decryptor;
 #endif
