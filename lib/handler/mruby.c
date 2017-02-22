@@ -273,11 +273,13 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
     h2o_mruby_eval_expr(mrb, H2O_MRUBY_CODE_CORE);
     h2o_mruby_assert(mrb);
 
-    mrb_ary_set(mrb, ary, H2O_MRUBY_PROC_EACH_TO_ARRAY, mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_proc_each_to_array", 0));
+    mrb_ary_set(mrb, ary, H2O_MRUBY_PROC_EACH_TO_ARRAY,
+                mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_proc_each_to_array", 0));
     h2o_mruby_assert(mrb);
 
     /* sends exception using H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED */
-    mrb_ary_set(mrb, ary, H2O_MRUBY_PROC_APP_TO_FIBER, mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_proc_app_to_fiber", 0));
+    mrb_ary_set(mrb, ary, H2O_MRUBY_PROC_APP_TO_FIBER,
+                mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_proc_app_to_fiber", 0));
     h2o_mruby_assert(mrb);
 
     mrb_gc_arena_restore(mrb, gc_arena);
@@ -545,7 +547,7 @@ static int handle_response_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
             if (token == H2O_TOKEN_LINK)
                 h2o_push_path_in_link_header(req, value.base, value.len);
             value = h2o_strdup(&req->pool, value.base, value.len);
-            h2o_add_header(&req->pool, &req->res.headers, token, value.base, value.len);
+            h2o_add_header(&req->pool, &req->res.headers, token, NULL, value.base, value.len);
         }
     } else if (name.len > fallthru_set_prefix.len &&
                h2o_memis(name.base, fallthru_set_prefix.len, fallthru_set_prefix.base, fallthru_set_prefix.len)) {
@@ -559,7 +561,7 @@ static int handle_response_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
         *slot = h2o_strdup(&req->pool, value.base, value.len);
     } else {
         value = h2o_strdup(&req->pool, value.base, value.len);
-        h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, value.base, value.len);
+        h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, NULL, value.base, value.len);
     }
 
     return 0;

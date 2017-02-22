@@ -625,6 +625,10 @@ typedef struct st_h2o_header_t {
      */
     h2o_iovec_t *name;
     /**
+     * The name of the header as originally received from the client, same length as `name`
+     */
+    const char *orig_name;
+    /**
      * value of the header
      */
     h2o_iovec_t value;
@@ -1088,12 +1092,13 @@ ssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, s
 /**
  * adds a header to list
  */
-void h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len);
+void h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *orig_name,
+                    const char *value, size_t value_len);
 /**
  * adds a header to list
  */
 void h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
-                           const char *value, size_t value_len);
+                           const char *orig_name, const char *value, size_t value_len);
 /**
  * adds or replaces a header into the list
  */
@@ -1569,7 +1574,7 @@ typedef struct st_h2o_compress_context_t {
      * compress or decompress callback
      */
     void (*transform)(struct st_h2o_compress_context_t *self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
-                     h2o_iovec_t **outbufs, size_t *outbufcnt);
+                      h2o_iovec_t **outbufs, size_t *outbufcnt);
 } h2o_compress_context_t;
 
 typedef struct st_h2o_compress_args_t {
@@ -1688,7 +1693,12 @@ void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/file.c */
 
-enum { H2O_FILE_FLAG_NO_ETAG = 0x1, H2O_FILE_FLAG_DIR_LISTING = 0x2, H2O_FILE_FLAG_SEND_COMPRESSED = 0x4, H2O_FILE_FLAG_GUNZIP = 0x8 };
+enum {
+    H2O_FILE_FLAG_NO_ETAG = 0x1,
+    H2O_FILE_FLAG_DIR_LISTING = 0x2,
+    H2O_FILE_FLAG_SEND_COMPRESSED = 0x4,
+    H2O_FILE_FLAG_GUNZIP = 0x8
+};
 
 typedef struct st_h2o_file_handler_t h2o_file_handler_t;
 

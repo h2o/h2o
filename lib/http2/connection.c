@@ -1275,7 +1275,7 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
             if (h2o_iovec_is_token(src_header->name)) {
                 h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, src_header->name);
                 if (token->copy_for_push_request) {
-                    h2o_add_header(&stream->req.pool, &stream->req.headers, token,
+                    h2o_add_header(&stream->req.pool, &stream->req.headers, token, NULL,
                                    h2o_strdup(&stream->req.pool, src_header->value.base, src_header->value.len).base,
                                    src_header->value.len);
                 }
@@ -1357,7 +1357,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
     /* send response */
     req->res.status = 101;
     req->res.reason = "Switching Protocols";
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, H2O_STRLIT("h2c"));
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("h2c"));
     h2o_http1_upgrade(req, (h2o_iovec_t *)&SETTINGS_HOST_BIN, 1, on_upgrade_complete, http2conn);
 
     return 0;
