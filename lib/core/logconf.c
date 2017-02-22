@@ -375,8 +375,6 @@ Fail:
     return pos;
 }
 
-#define DURATION_MAX_LEN (sizeof(H2O_INT32_LONGEST_STR ".999999") - 1)
-
 #define APPEND_DURATION(pos, name)                                                                                                 \
     do {                                                                                                                           \
         int64_t delta_usec;                                                                                                        \
@@ -384,6 +382,7 @@ Fail:
             goto EmitNull;                                                                                                         \
         int32_t delta_sec = (int32_t)(delta_usec / (1000 * 1000));                                                                 \
         delta_usec -= ((int64_t)delta_sec * (1000 * 1000));                                                                        \
+        RESERVE(sizeof(H2O_INT32_LONGEST_STR ".999999") - 1);                                                                      \
         pos += sprintf(pos, "%" PRId32, delta_sec);                                                                                \
         if (delta_usec != 0) {                                                                                                     \
             int i;                                                                                                                 \
@@ -631,37 +630,30 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             break;
 
         case ELEMENT_TYPE_CONNECT_TIME:
-            RESERVE(DURATION_MAX_LEN);
             APPEND_DURATION(pos, connect_time);
             break;
 
         case ELEMENT_TYPE_REQUEST_HEADER_TIME:
-            RESERVE(DURATION_MAX_LEN);
             APPEND_DURATION(pos, header_time);
             break;
 
         case ELEMENT_TYPE_REQUEST_BODY_TIME:
-            RESERVE(DURATION_MAX_LEN);
             APPEND_DURATION(pos, body_time);
             break;
 
         case ELEMENT_TYPE_REQUEST_TOTAL_TIME:
-            RESERVE(DURATION_MAX_LEN);
             APPEND_DURATION(pos, request_total_time);
             break;
 
         case ELEMENT_TYPE_PROCESS_TIME:
-            RESERVE(DURATION_MAX_LEN);
             APPEND_DURATION(pos, process_time);
             break;
 
         case ELEMENT_TYPE_RESPONSE_TIME:
-            RESERVE(DURATION_MAX_LEN);
             APPEND_DURATION(pos, response_time);
             break;
 
         case ELEMENT_TYPE_DURATION:
-            RESERVE(DURATION_MAX_LEN);
             APPEND_DURATION(pos, duration);
             break;
 
