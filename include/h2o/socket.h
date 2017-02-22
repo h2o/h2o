@@ -364,7 +364,7 @@ inline size_t h2o_socket_prepare_for_latency_optimized_write(h2o_socket_t *sock,
 inline h2o_iovec_t h2o_socket_log_ssl_protocol_version(h2o_socket_t *sock, h2o_mem_pool_t *pool)
 {
     const char *s = h2o_socket_get_ssl_protocol_version(sock);
-    return s != NULL ? h2o_iovec_init(s, strlen(s)) : h2o_iovec_init(H2O_STRLIT("-"));
+    return s != NULL ? h2o_iovec_init(s, strlen(s)) : h2o_iovec_init(NULL, 0);
 }
 
 inline h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem_pool_t *pool)
@@ -375,14 +375,14 @@ inline h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem
     case 1:
         return h2o_iovec_init(H2O_STRLIT("1"));
     default:
-        return h2o_iovec_init(H2O_STRLIT("-"));
+        return h2o_iovec_init(NULL, 0);
     }
 }
 
 inline h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t *pool)
 {
     const char *s = h2o_socket_get_ssl_cipher(sock);
-    return s != NULL ? h2o_iovec_init(s, strlen(s)) : h2o_iovec_init(H2O_STRLIT("-"));
+    return s != NULL ? h2o_iovec_init(s, strlen(s)) : h2o_iovec_init(NULL, 0);
 }
 
 inline int h2o_sliding_counter_is_running(h2o_sliding_counter_t *counter)
