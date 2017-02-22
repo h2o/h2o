@@ -1236,6 +1236,43 @@ Exit:
     return ret;
 }
 
+static int log_secret_fd = -2; /* -2 - uninitialized, -1 - unused */
+
+static void log_secret_ptls(ptls_log_event_t *self, ptls_t *tls, const char *type, const char *fmt, ...)
+{
+    ptls_iovec_t random_vec = ptls_get_client_random(tls);
+    char *buf, *random_str = alloca(random_vec.len * 2 + 1);
+    size_t capacity = 256, len;
+    va_list args;
+
+    va_start(args, fmt);
+
+    h2o_hex_encode(random_str, random_vec.base, random_vec.len);
+
+Redo:
+    buf = alloca(capacity);
+    len = 0;
+
+#define APPEND(fn, ...)                                                                                                            \
+    do {                                                                                                                           \
+        len += fn(buf + len, capacity - len, __VA_ARGS__);                                                                         \
+        if (len >= capacity) {                                                                                                     \
+            capacity = len + 256;                                                                                                  \
+            goto Redo;                                                                                                             \
+        }                                                                                                                          \
+    } while (0)
+
+    APPEND(snprintf, "%s %s ", type, random_str);
+    APPEND(vsnprintf, fmt, args);
+    APPEND(snprintf, "\n");
+
+#undef APPEND
+
+    write(log_secret_fd, buf, len);
+
+    va_end(args);
+}
+
 #if H2O_USE_FUSION
 
 static ptls_cipher_suite_t **replace_ciphersuites(ptls_cipher_suite_t **input, ptls_cipher_suite_t **replacements)
@@ -2123,6 +2160,22 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             }
             if (listener->quic.ctx != NULL && listener->quic.ctx->tls == NULL)
                 listener->quic.ctx->tls = ssl_config->identities[0].ptls.ctx;
+            /* setup SSLKEYLOGFILE if a new picotls context has been initailized */
+            if (identity->ptls.ctx != NULL) {
+                if (log_secret_fd == -2) {
+                    const char *sslkeylogfile;
+                    if ((sslkeylogfile = getenv("SSLKEYLOGFILE")) != NULL) {
+                        if ((log_secret_fd = open(sslkeylogfile, O_CREAT | O_WRONLY | O_APPEND, 0600)) == -1) {
+                            fprintf(stderr, "failed to open SSLKEYLOGFILE:%s:%s\n", sslkeylogfile, strerror(errno));
+                            goto Error;
+                        }
+                    }
+                }
+                if (log_secret_fd >= 0) {
+                    static ptls_log_event_t log_secret = {log_secret_ptls};
+                    identity->ptls.ctx->log_event = &log_secret;
+                }
+            }
         } else if (raw_pubkey.base != NULL) {
             h2o_configurator_errprintf(cmd, *parsed->certificate_file, "raw public key can only be used with TLS 1.3 or QUIC");
             goto Error;
