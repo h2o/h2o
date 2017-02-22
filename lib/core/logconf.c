@@ -396,31 +396,6 @@ Fail:
         }                                                                                                                          \
     } while (0);
 
-static char *append_duration(char *pos, struct timeval *from, struct timeval *until)
-{
-    if (h2o_timeval_is_null(from) || h2o_timeval_is_null(until)) {
-        *pos++ = '-';
-    } else {
-        int32_t delta_sec = (int32_t)until->tv_sec - (int32_t)from->tv_sec;
-        int32_t delta_usec = (int32_t)until->tv_usec - (int32_t)from->tv_usec;
-        if (delta_usec < 0) {
-            delta_sec -= 1;
-            delta_usec += 1000000;
-        }
-        pos += sprintf(pos, "%" PRId32, delta_sec);
-        if (delta_usec != 0) {
-            int i;
-            *pos++ = '.';
-            for (i = 5; i >= 0; --i) {
-                pos[i] = '0' + delta_usec % 10;
-                delta_usec /= 10;
-            }
-            pos += 6;
-        }
-    }
-    return pos;
-}
-
 static char *expand_line_buf(char *line, size_t cur_size, size_t required, int should_realloc)
 {
     size_t new_size = cur_size;
@@ -670,7 +645,6 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         case ELEMENT_TYPE_REQUEST_TOTAL_TIME:
             RESERVE(DURATION_MAX_LEN);
             APPEND_DURATION(pos, request_total_time);
-            pos = append_duration(pos, &req->timestamps.request_begin_at, &req->processed_at.at);
             break;
 
         case ELEMENT_TYPE_PROCESS_TIME:
