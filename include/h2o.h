@@ -1542,7 +1542,7 @@ void h2o_mimemap_get_default_attributes(const char *mime, h2o_mime_attributes_t 
 typedef struct st_h2o_access_log_filehandle_t h2o_access_log_filehandle_t;
 
 int h2o_access_log_open_log(const char *path);
-h2o_access_log_filehandle_t *h2o_access_log_open_handle(const char *path, const char *fmt);
+h2o_access_log_filehandle_t *h2o_access_log_open_handle(const char *path, const char *fmt, int escape);
 h2o_logger_t *h2o_access_log_register(h2o_pathconf_t *pathconf, h2o_access_log_filehandle_t *handle);
 void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
 
