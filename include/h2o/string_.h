@@ -79,7 +79,7 @@ static int h2o_lcstris(const char *target, size_t target_len, const char *test, 
 /**
  * turns the length of a string into the length of the same string encoded in base64
  */
-static size_t h2o_base64_encode_capacity(unsigned len);
+static size_t h2o_base64_encode_capacity(size_t len);
 /**
  * parses a positive number of return SIZE_MAX if failed
  */
@@ -182,7 +182,7 @@ inline int h2o_lcstris(const char *target, size_t target_len, const char *test, 
     return h2o__lcstris_core(target, test, test_len);
 }
 
-inline size_t h2o_base64_encode_capacity(unsigned len)
+inline size_t h2o_base64_encode_capacity(size_t len)
 {
     return (((len) + 2) / 3 * 4 + 1);
 }

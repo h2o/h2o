@@ -70,6 +70,8 @@ ELSE ()
 ENDIF ()
 OPTION(WITH_MRUBY "whether or not to build with mruby support" ${WITH_MRUBY_DEFAULT})
 
+OPTION(WITH_PICOTLS "whether or not to build with picotls" "ON")
+
 IF (WITH_BUNDLED_SSL)
     SET(BUNDLED_SSL_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/include")
     SET(BUNDLED_SSL_LIBRARIES "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/lib/libssl.a" "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/lib/libcrypto.a")
@@ -186,6 +188,29 @@ SET(BROTLI_SOURCE_FILES
     deps/brotli/enc/streams.cc
     deps/brotli/enc/utf8_util.cc
     lib/handler/compress/brotli.cc)
+
+SET(PICOTLS_INCLUDE_DIRECTORIES
+    deps/picotls/deps/cifra/src/ext
+    deps/picotls/deps/cifra/src
+    deps/picotls/deps/micro-ecc
+    deps/picotls/include)
+
+SET(PICOTLS_SOURCE_FILES
+    deps/picotls/deps/micro-ecc/uECC.c
+    deps/picotls/deps/cifra/src/aes.c
+    deps/picotls/deps/cifra/src/blockwise.c
+    deps/picotls/deps/cifra/src/chash.c
+    deps/picotls/deps/cifra/src/curve25519.c
+    deps/picotls/deps/cifra/src/drbg.c
+    deps/picotls/deps/cifra/src/hmac.c
+    deps/picotls/deps/cifra/src/gcm.c
+    deps/picotls/deps/cifra/src/gf128.c
+    deps/picotls/deps/cifra/src/modes.c
+    deps/picotls/deps/cifra/src/sha256.c
+    deps/picotls/lib/picotls.c
+    deps/picotls/lib/cifra.c
+    deps/picotls/lib/uecc.c
+    deps/picotls/lib/openssl.c)
 
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
@@ -429,6 +454,11 @@ IF (WITH_MRUBY)
         lib/handler/configurator/mruby.c)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_MRUBY=1")
 ENDIF (WITH_MRUBY)
+IF (WITH_PICOTLS)
+    LIST(APPEND STANDALONE_SOURCE_FILES ${PICOTLS_SOURCE_FILES})
+    SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_PICOTLS=1")
+    INCLUDE_DIRECTORIES(${PICOTLS_INCLUDE_DIRECTORIES})
+ENDIF ()
 ADD_EXECUTABLE(h2o ${STANDALONE_SOURCE_FILES})
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS ${STANDALONE_COMPILE_FLAGS})
 IF (WITH_BUNDLED_SSL)
