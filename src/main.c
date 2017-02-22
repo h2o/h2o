@@ -21,6 +21,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <alloca.h>
 #include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
@@ -461,6 +462,28 @@ Exit:
     return ret;
 }
 
+static int log_secret_fd = -2; /* -2 - uninitialized, -1 - unused */
+
+static void log_secret_ptls(ptls_log_secret_t *self, ptls_t *tls, const char *label, ptls_iovec_t secret)
+{
+    size_t label_len = strlen(label);
+    ptls_iovec_t client_random = ptls_get_client_random(tls);
+
+    char *buf = alloca(label_len + 1 + client_random.len * 2 + 1 + secret.len * 2 + 1), *p = buf;
+
+    memcpy(p, label, label_len);
+    p += label_len;
+    *p++ = ' ';
+    h2o_hex_encode(p, client_random.base, client_random.len);
+    p += client_random.len * 2;
+    *p++ = ' ';
+    h2o_hex_encode(p, secret.base, secret.len);
+    p += secret.len * 2;
+    *p++ = '\n';
+
+    write(log_secret_fd, buf, p - buf);
+}
+
 #endif
 
 static void listener_setup_ssl_add_host(struct listener_ssl_config_t *ssl_config, h2o_iovec_t host)
@@ -781,6 +804,20 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         SSL_CTX_get_extra_chain_certs(ssl_ctx, &certs);
         ptls_openssl_init_sign_certificate(&pctx->sc, key);
         ptls_openssl_load_certificates(&pctx->ctx, cert, certs);
+
+        if (log_secret_fd == -2) {
+            const char *sslkeylogfile;
+            if ((sslkeylogfile = getenv("SSLKEYLOGFILE")) != NULL) {
+                if ((log_secret_fd = open(sslkeylogfile, O_CREAT | O_WRONLY | O_APPEND, 0600)) == -1) {
+                    fprintf(stderr, "failed to open SSLKEYLOGFILE:%s:%s\n", sslkeylogfile, strerror(errno));
+                    goto Error;
+                }
+            }
+        }
+        if (log_secret_fd >= 0) {
+            static ptls_log_secret_t log_secret = {log_secret_ptls};
+            pctx->ctx.log_secret = &log_secret;
+        }
 
         h2o_socket_ssl_set_picotls_context(ssl_ctx, &pctx->ctx);
     }
