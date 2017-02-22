@@ -461,6 +461,51 @@ Exit:
     return ret;
 }
 
+static void listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_config_t *ssl_config, SSL_CTX *ssl_ctx)
+{
+    static const ptls_key_exchange_algorithm_t *key_exchanges[] = {&ptls_minicrypto_x25519, &ptls_openssl_secp256r1, NULL};
+    struct st_fat_context_t {
+        ptls_context_t ctx;
+        struct st_on_client_hello_ptls_t ch;
+        struct st_staple_ocsp_ptls_t so;
+        ptls_openssl_sign_certificate_t sc;
+    } *pctx = h2o_mem_alloc(sizeof(*pctx));
+    EVP_PKEY *key;
+    X509 *cert;
+    STACK_OF(X509) * cert_chain;
+
+    *pctx = (struct st_fat_context_t){{ptls_openssl_random_bytes,
+                                       key_exchanges,
+                                       ptls_openssl_cipher_suites,
+                                       {NULL, 0},
+                                       &pctx->ch.super,
+                                       &pctx->so.super,
+                                       &pctx->sc.super,
+                                       NULL,
+                                       0,
+                                       8192,
+                                       1},
+                                      {{on_client_hello_ptls}, listener},
+                                      {{on_staple_ocsp_ptls}, ssl_config}};
+
+    { /* obtain key and cert (via fake connection for libressl compatibility) */
+        SSL *fakeconn = SSL_new(ssl_ctx);
+        assert(fakeconn != NULL);
+        key = SSL_get_privatekey(fakeconn);
+        assert(key != NULL);
+        cert = SSL_get_certificate(fakeconn);
+        assert(cert != NULL);
+        SSL_free(fakeconn);
+    }
+
+    SSL_CTX_get_extra_chain_certs(ssl_ctx, &cert_chain);
+
+    ptls_openssl_init_sign_certificate(&pctx->sc, key);
+    ptls_openssl_load_certificates(&pctx->ctx, cert, cert_chain);
+
+    h2o_socket_ssl_set_picotls_context(ssl_ctx, &pctx->ctx);
+}
+
 #endif
 
 static void listener_setup_ssl_add_host(struct listener_ssl_config_t *ssl_config, h2o_iovec_t host)
@@ -750,40 +795,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 #endif
 
 #if H2O_USE_PICOTLS
-    {
-        static const ptls_key_exchange_algorithm_t *key_exchanges[] = {&ptls_minicrypto_x25519, &ptls_openssl_secp256r1, NULL};
-        struct st_fat_context_t {
-            ptls_context_t ctx;
-            struct st_on_client_hello_ptls_t ch;
-            struct st_staple_ocsp_ptls_t so;
-            ptls_openssl_sign_certificate_t sc;
-        } *pctx = h2o_mem_alloc(sizeof(*pctx));
-        *pctx = (struct st_fat_context_t){{ptls_openssl_random_bytes,
-                                           key_exchanges,
-                                           ptls_openssl_cipher_suites,
-                                           {NULL, 0},
-                                           &pctx->ch.super,
-                                           &pctx->so.super,
-                                           &pctx->sc.super,
-                                           NULL,
-                                           0,
-                                           8192,
-                                           1},
-                                          {{on_client_hello_ptls}, listener},
-                                          {{on_staple_ocsp_ptls}, ssl_config}};
-        /* for libressl, we need to create a fake connection to obtain the key and the certificate */
-        SSL *fakeconn = SSL_new(ssl_ctx);
-        assert(fakeconn != NULL);
-        EVP_PKEY *key = SSL_get_privatekey(fakeconn);
-        X509 *cert = SSL_get_certificate(fakeconn);
-        SSL_free(fakeconn);
-        STACK_OF(X509) * certs;
-        SSL_CTX_get_extra_chain_certs(ssl_ctx, &certs);
-        ptls_openssl_init_sign_certificate(&pctx->sc, key);
-        ptls_openssl_load_certificates(&pctx->ctx, cert, certs);
-
-        h2o_socket_ssl_set_picotls_context(ssl_ctx, &pctx->ctx);
-    }
+    listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx);
 #endif
 
     return 0;
