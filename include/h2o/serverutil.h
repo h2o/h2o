@@ -62,7 +62,7 @@ size_t h2o_server_starter_get_fds(int **_fds);
  *        pair is not -1.  If the second value is -1, then `close` is called with the first value as the argument.
  * @return pid of the process being spawned if successful, or -1 if otherwise
  */
-pid_t h2o_spawnp(const char *cmd, char *const *argv, const int *mapped_fds, int clocexec_mutex_is_locked);
+pid_t h2o_spawnp(const char *cmd, char *const *argv, int *mapped_fds, int clocexec_mutex_is_locked);
 
 /**
  * executes a command and returns its output
