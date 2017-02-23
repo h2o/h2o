@@ -539,29 +539,22 @@ void h2o_evloop_destroy(h2o_evloop_t *loop)
 {
     struct st_h2o_evloop_socket_t *sock;
     //dispose all socket
-    while (loop->_pending_as_server != NULL || loop->_pending_as_client != NULL) {
         while ((sock = loop->_pending_as_client) != NULL) {
             loop->_pending_as_client = sock->_next_pending;
             sock->_next_pending = sock;
-            do_dispose_socket((h2o_socket_t *)sock);
+            h2o_socket_close((h2o_socket_t *)sock);
         }
-        if ((sock = loop->_pending_as_server) != NULL) {
+        while ((sock = loop->_pending_as_server) != NULL) {
             loop->_pending_as_server = sock->_next_pending;
             sock->_next_pending = sock;        
-            do_dispose_socket((h2o_socket_t *)sock);
+            h2o_socket_close((h2o_socket_t *)sock);
         }
-    }
-      //looks like no need to free  _timeouts 
-      //h2o_timeout__do_dispose(loop,  loop->_timeouts);
-    
     //now all socket are disposedand and placed in linked list statechanged
     //we can freeing memory in cycle by next_statechanged,
-    while((struct st_h2o_evloop_socket_t*)(sock=loop->_statechanged.head->_next_statechanged) != NULL){
-        free(loop->_statechanged.head);
-        loop->_statechanged.head=sock;
+    while((sock=loop->_statechanged.head) != NULL){
+        loop->_statechanged.head = sock->_next_statechanged;
+        free(sock);
     }
-    sock=loop->_statechanged.head;
-    free(sock);
     //lastly we need to free loop memory
     free(loop);
 }
