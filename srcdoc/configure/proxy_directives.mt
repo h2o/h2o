@@ -97,6 +97,24 @@ By default, when forwarding an HTTP request H2O sends its own <code>x-forwarded-
 ? })
 
 <?
+for my $action (qw(add append merge set setifempty unset)) {
+    $ctx->{directive}->(
+        name    => "proxy.header.$action",
+        levels  => [ qw(global host path extensions) ],
+        since   => "2.2",
+        desc    => "Modifies the request headers sent to the application server.",
+    )->(sub {
+?>
+<p>
+The behavior is identical to <a href="configure/headers_directives.html#header.<?= $action ?>"><code>header.<?= $action ?></code></a> except for the fact that it affects the request sent to the application server.
+Please refer to the documentation of the <a href="configure/headers_directives.html">headers handler</a> to see how the directives can be used to mangle the headers.
+</p>
+<?
+    });
+}
+?>
+
+<?
 $ctx->{directive}->(
     name    => "proxy.ssl.cafile",
     levels  => [ qw(global host path extension) ],
