@@ -522,12 +522,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                               yoml_t *ssl_node, struct listener_config_t *listener, int listener_is_new)
 {
     SSL_CTX *ssl_ctx = NULL;
-    yoml_t *certificate_file = NULL, *key_file = NULL, *dh_file = NULL, *minimum_version = NULL, *cipher_suite = NULL,
-           *ocsp_update_cmd = NULL, *ocsp_update_interval_node = NULL, *ocsp_max_failures_node = NULL;
+    yoml_t *certificate_file = NULL, *key_file = NULL, *dh_file = NULL, *min_version = NULL, *max_version = NULL,
+           *cipher_suite = NULL, *ocsp_update_cmd = NULL, *ocsp_update_interval_node = NULL, *ocsp_max_failures_node = NULL;
     long ssl_options = SSL_OP_ALL;
     uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
     unsigned ocsp_max_failures = 3;              /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
-    int use_neverbleed = 1;                      /* enabled by default */
+    int use_neverbleed = 1, use_picotls = 1;     /* enabled by default */
 
     if (!listener_is_new) {
         if (listener->ssl.size != 0 && ssl_node == NULL) {
@@ -567,7 +567,10 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     }
             FETCH_PROPERTY("certificate-file", certificate_file);
             FETCH_PROPERTY("key-file", key_file);
-            FETCH_PROPERTY("minimum-version", minimum_version);
+            FETCH_PROPERTY("min-version", min_version);
+            FETCH_PROPERTY("minimum-version", min_version);
+            FETCH_PROPERTY("max-version", max_version);
+            FETCH_PROPERTY("maximum-version", max_version);
             FETCH_PROPERTY("cipher-suite", cipher_suite);
             FETCH_PROPERTY("ocsp-update-cmd", ocsp_update_cmd);
             FETCH_PROPERTY("ocsp-update-interval", ocsp_update_interval_node);
@@ -608,9 +611,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             h2o_configurator_errprintf(cmd, ssl_node, "could not find mandatory property `key-file`");
             return -1;
         }
-        if (minimum_version != NULL) {
+        if (min_version != NULL) {
 #define MAP(tok, op)                                                                                                               \
-    if (strcasecmp(minimum_version->data.scalar, tok) == 0) {                                                                      \
+    if (strcasecmp(min_version->data.scalar, tok) == 0) {                                                                          \
         ssl_options |= (op);                                                                                                       \
         goto VersionFound;                                                                                                         \
     }
@@ -625,11 +628,15 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             MAP("tlsv1.3", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1 | SSL_OP_NO_TLSv1_2);
 #endif
 #undef MAP
-            h2o_configurator_errprintf(cmd, minimum_version, "unknown protocol version: %s", minimum_version->data.scalar);
+            h2o_configurator_errprintf(cmd, min_version, "unknown protocol version: %s", min_version->data.scalar);
         VersionFound:;
         } else {
             /* default is >= TLSv1 */
             ssl_options |= SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
+        }
+        if (max_version != NULL) {
+            if (strcasecmp(max_version->data.scalar, "tlsv1.3") < 0)
+                use_picotls = 0;
         }
         if (ocsp_update_interval_node != NULL) {
             if (h2o_configurator_scanf(cmd, ocsp_update_interval_node, "%" PRIu64, &ocsp_update_interval) != 0)
@@ -795,7 +802,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 #endif
 
 #if H2O_USE_PICOTLS
-    listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx);
+    if (use_picotls)
+        listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx);
 #endif
 
     return 0;
