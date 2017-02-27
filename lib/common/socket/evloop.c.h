@@ -538,6 +538,10 @@ static void run_pending(h2o_evloop_t *loop)
 void h2o_evloop_destroy(h2o_evloop_t *loop)
 {
     struct st_h2o_evloop_socket_t *sock;
+
+    /* timeouts are governed by the application and MUST be destroyed prior to destroying the loop */
+    assert(h2o_linklist_is_empty(&loop->_timeouts));
+
     //dispose all socket
         while ((sock = loop->_pending_as_client) != NULL) {
             loop->_pending_as_client = sock->_next_pending;
