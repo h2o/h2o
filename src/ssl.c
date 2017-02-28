@@ -278,7 +278,8 @@ Exit:
     return ret;
 }
 
-static int ticket_key_callback_ossl(SSL *ssl, unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx, int enc)
+static int ticket_key_callback_ossl(SSL *ssl, unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx,
+                                    int enc)
 {
     return ticket_key_callback(key_name, iv, ctx, hctx, enc);
 }

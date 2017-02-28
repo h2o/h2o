@@ -461,7 +461,8 @@ Exit:
     return ret;
 }
 
-static void listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_config_t *ssl_config, SSL_CTX *ssl_ctx)
+static void listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_config_t *ssl_config,
+                                       SSL_CTX *ssl_ctx)
 {
     static const ptls_key_exchange_algorithm_t *key_exchanges[] = {&ptls_minicrypto_x25519, &ptls_openssl_secp256r1, NULL};
     struct st_fat_context_t {
@@ -764,8 +765,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     SSL_CTX_set_tlsext_status_arg(ssl_ctx, ssl_config);
 #endif
     pthread_mutex_init(&ssl_config->ocsp_stapling.response.mutex, NULL);
-    ssl_config->ocsp_stapling.cmd = ocsp_update_cmd != NULL ? h2o_strdup(NULL, ocsp_update_cmd->data.scalar, SIZE_MAX).base
-                                                            : "share/h2o/fetch-ocsp-response";
+    ssl_config->ocsp_stapling.cmd =
+        ocsp_update_cmd != NULL ? h2o_strdup(NULL, ocsp_update_cmd->data.scalar, SIZE_MAX).base : "share/h2o/fetch-ocsp-response";
     if (ocsp_update_interval != 0) {
         switch (conf.run_mode) {
         case RUN_MODE_WORKER:
@@ -791,8 +792,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                            certificate_file->data.scalar);
                 break;
             default:
-                h2o_configurator_errprintf(cmd, certificate_file,
-                                           "[OCSP Stapling] does not work, will be disabled for file:%s\n",
+                h2o_configurator_errprintf(cmd, certificate_file, "[OCSP Stapling] does not work, will be disabled for file:%s\n",
                                            certificate_file->data.scalar);
                 break;
             }

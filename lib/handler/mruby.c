@@ -68,7 +68,8 @@ void h2o_mruby_setup_globals(mrb_state *mrb)
     h2o_mruby_eval_expr(mrb, "require \"#{$H2O_ROOT}/share/h2o/mruby/preloads.rb\"");
     if (mrb->exc != NULL) {
         if (mrb_obj_is_instance_of(mrb, mrb_obj_value(mrb->exc), mrb_class_get(mrb, "LoadError"))) {
-            fprintf(stderr, "file \"%s/%s\" not found. Did you forget to run `make install` ?", root, "share/h2o/mruby/preloads.rb");
+            fprintf(stderr, "file \"%s/%s\" not found. Did you forget to run `make install` ?", root,
+                    "share/h2o/mruby/preloads.rb");
         } else {
             mrb_value obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
             struct RString *error = mrb_str_ptr(obj);

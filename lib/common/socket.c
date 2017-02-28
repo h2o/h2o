@@ -361,14 +361,14 @@ static void shutdown_ssl(h2o_socket_t *sock, const char *err)
         ptls_buffer_t wbuf;
         uint8_t wbuf_small[32];
         ptls_buffer_init(&wbuf, wbuf_small, sizeof(wbuf_small));
-        if ((ret = ptls_send_alert(sock->ssl->ptls, &wbuf, PTLS_ALERT_LEVEL_WARNING,PTLS_ALERT_CLOSE_NOTIFY)) != 0)
+        if ((ret = ptls_send_alert(sock->ssl->ptls, &wbuf, PTLS_ALERT_LEVEL_WARNING, PTLS_ALERT_CLOSE_NOTIFY)) != 0)
             goto Close;
         write_ssl_bytes(sock, wbuf.base, wbuf.off);
         ptls_buffer_dispose(&wbuf);
         ret = 1; /* close the socket after sending close_notify */
     } else
 #endif
-    if (sock->ssl->ossl != NULL) {
+        if (sock->ssl->ossl != NULL) {
         if ((ret = SSL_shutdown(sock->ssl->ossl)) == -1)
             goto Close;
     } else {
@@ -769,7 +769,7 @@ const char *h2o_socket_get_ssl_cipher(h2o_socket_t *sock)
                 return cipher->aead->name;
         } else
 #endif
-        if (sock->ssl->ossl != NULL)
+            if (sock->ssl->ossl != NULL)
             return SSL_get_cipher_name(sock->ssl->ossl);
     }
     return NULL;
@@ -786,7 +786,7 @@ int h2o_socket_get_ssl_cipher_bits(h2o_socket_t *sock)
             return (int)cipher->aead->key_size;
         } else
 #endif
-        if (sock->ssl->ossl != NULL)
+            if (sock->ssl->ossl != NULL)
             return SSL_get_cipher_bits(sock->ssl->ossl, NULL);
     }
     return 0;
@@ -800,7 +800,7 @@ h2o_iovec_t h2o_socket_get_ssl_session_id(h2o_socket_t *sock)
             /* FIXME */
         } else
 #endif
-        if (sock->ssl->ossl != NULL) {
+            if (sock->ssl->ossl != NULL) {
             SSL_SESSION *session;
             if (sock->ssl->handshake.server.async_resumption.state == ASYNC_RESUMPTION_STATE_COMPLETE &&
                 (session = SSL_get_session(sock->ssl->ossl)) != NULL) {
@@ -822,7 +822,7 @@ h2o_iovec_t h2o_socket_log_ssl_session_id(h2o_socket_t *sock, h2o_mem_pool_t *po
         return h2o_iovec_init(H2O_STRLIT("-"));
 
     base64id.base = pool != NULL ? h2o_mem_alloc_pool(pool, h2o_base64_encode_capacity(rawid.len))
-                                         : h2o_mem_alloc(h2o_base64_encode_capacity(rawid.len));
+                                 : h2o_mem_alloc(h2o_base64_encode_capacity(rawid.len));
     base64id.len = h2o_base64_encode(base64id.base, rawid.base, rawid.len, 1);
     return base64id;
 }
