@@ -288,7 +288,7 @@ static void test_if_modified_since(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_MODIFIED_SINCE, lm_date, H2O_TIMESTR_RFC1123_LEN);
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_MODIFIED_SINCE, NULL, lm_date, H2O_TIMESTR_RFC1123_LEN);
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 304);
         ok(conn->body->size == 0);
@@ -300,7 +300,7 @@ static void test_if_modified_since(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_MODIFIED_SINCE,
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_MODIFIED_SINCE, NULL,
                        H2O_STRLIT("Sun, 06 Nov 1994 08:49:37 GMT"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
@@ -311,7 +311,7 @@ static void test_if_modified_since(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_MODIFIED_SINCE,
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_MODIFIED_SINCE, NULL,
                        H2O_STRLIT("Wed, 18 May 2033 12:33:20 GMT"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 304);
@@ -345,7 +345,7 @@ static void test_if_match(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_NONE_MATCH, etag.base, etag.len);
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_NONE_MATCH, NULL, etag.base, etag.len);
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 304);
         ok(conn->body->size == 0);
@@ -377,7 +377,7 @@ static void test_range_req(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=0-10"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytes=0-10"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 206);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
@@ -390,7 +390,7 @@ static void test_range_req(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=990-1100"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytes=990-1100"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 206);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
@@ -403,7 +403,7 @@ static void test_range_req(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=989-"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytes=989-"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 206);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
@@ -416,7 +416,7 @@ static void test_range_req(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-21"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytes=-21"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 206);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
@@ -429,7 +429,7 @@ static void test_range_req(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-2100"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytes=-2100"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 206);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
@@ -442,7 +442,7 @@ static void test_range_req(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-0-10, 9-, -10"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytes=-0-10, 9-, -10"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 416);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain; charset=utf-8"));
@@ -455,7 +455,7 @@ static void test_range_req(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=0-10-12, 9-, -10"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytes=0-10-12, 9-, -10"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 416);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain; charset=utf-8"));
@@ -468,7 +468,7 @@ static void test_range_req(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytfasdf"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytfasdf"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 416);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain; charset=utf-8"));
@@ -481,7 +481,7 @@ static void test_range_req(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-0"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytes=-0"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 416);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain; charset=utf-8"));
@@ -494,7 +494,7 @@ static void test_range_req(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=1000-1001"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytes=1000-1001"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 416);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain; charset=utf-8"));
@@ -507,7 +507,7 @@ static void test_range_req(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=900-100"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytes=900-100"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 416);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain; charset=utf-8"));
@@ -520,7 +520,7 @@ static void test_range_req(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-0, 0-0"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytes=-0, 0-0"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 206);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
@@ -537,7 +537,7 @@ static void test_range_req(void)
         size_t mimebaselen = strlen("multipart/byteranges; boundary=");
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=-0, 0-9,-11"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytes=-0, 0-9,-11"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 206);
         if ((content_type_index = h2o_find_header(&conn->req.res.headers, H2O_TOKEN_CONTENT_TYPE, -1)) == -1) {
@@ -567,7 +567,7 @@ static void test_range_req(void)
         size_t mimebaselen = strlen("multipart/byteranges; boundary=");
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, H2O_STRLIT("bytes=,\t,1-3 ,, ,5-9,"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytes=,\t,1-3 ,, ,5-9,"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 206);
         if ((content_type_index = h2o_find_header(&conn->req.res.headers, H2O_TOKEN_CONTENT_TYPE, -1)) == -1) {

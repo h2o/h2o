@@ -86,7 +86,7 @@ static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
     h2o_iovec_t body = h2o_strdup(&req->pool, "hello world\n", SIZE_MAX);
     req->res.status = 200;
     req->res.reason = "OK";
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/plain"));
     h2o_start_response(req, &generator);
     h2o_send(req, &body, 1, H2O_SEND_STATE_FINAL);
 
@@ -153,8 +153,9 @@ static void write_fully(int fd, char *buf, size_t len, int abort_on_err)
     }
 }
 
-#define OK_RESP "HTTP/1.0 200 OK\r\n" \
-                "Connection: Close\r\n\r\nOk"
+#define OK_RESP                                                                                                                    \
+    "HTTP/1.0 200 OK\r\n"                                                                                                          \
+    "Connection: Close\r\n\r\nOk"
 #define OK_RESP_LEN (sizeof(OK_RESP) - 1)
 
 void *upstream_thread(void *arg)
@@ -168,8 +169,8 @@ void *upstream_thread(void *arg)
     struct sockaddr_un addr;
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, path, sizeof(addr.sun_path)-1);
-    assert(bind(sd, (struct sockaddr*)&addr, sizeof(addr)) == 0);
+    strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
+    assert(bind(sd, (struct sockaddr *)&addr, sizeof(addr)) == 0);
     assert(listen(sd, 100) == 0);
 
     while (1) {
@@ -349,7 +350,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         hostconf = h2o_config_register_host(&config, h2o_iovec_init(H2O_STRLIT(unix_listener)), 65535);
         register_handler(hostconf, "/chunked-test", chunked_test);
         h2o_url_parse(unix_listener, strlen(unix_listener), &upstream);
-        void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstream, h2o_proxy_config_vars_t *config);
+        void h2o_proxy_register_reverse_proxy(h2o_pathconf_t * pathconf, h2o_url_t * upstream, h2o_proxy_config_vars_t * config);
         h2o_proxy_register_reverse_proxy(h2o_config_register_path(hostconf, "/reproxy-test", 0), &upstream, &proxy_config);
         h2o_file_register(h2o_config_register_path(hostconf, "/", 0), "./examples/doc_root", NULL, NULL, 0);
 
@@ -378,7 +379,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 
     /* Loop until the connection is closed by the client or server */
     while (is_valid_fd(c)) {
-	    h2o_evloop_run(ctx.loop, 10);
+        h2o_evloop_run(ctx.loop, 10);
     }
 
     pthread_barrier_wait(end);

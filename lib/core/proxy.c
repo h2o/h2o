@@ -245,7 +245,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
                 continue;
         AddHeader:
             RESERVE(h->name->len + h->value.len + 2);
-            APPEND(h->name->base, h->name->len);
+            APPEND(h->orig_name ? h->orig_name : h->name->base, h->name->len);
             buf.base[offset++] = ':';
             buf.base[offset++] = ' ';
             APPEND(h->value.base, h->value.len);
@@ -398,7 +398,7 @@ static char compress_hint_to_enum(const char *val, size_t len)
 }
 
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
-                                       h2o_iovec_t msg, h2o_http1client_header_t *headers, size_t num_headers)
+                                       h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers)
 {
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
@@ -415,15 +415,15 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     req->res.status = status;
     req->res.reason = h2o_strdup(&req->pool, msg.base, msg.len).base;
     for (i = 0; i != num_headers; ++i) {
-        const h2o_token_t *token = h2o_lookup_token(headers[i].name, headers[i].name_len);
-        h2o_iovec_t value;
-        if (token != NULL) {
+        if (h2o_iovec_is_token(headers[i].name)) {
+            const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers[i].name);
+            h2o_iovec_t value;
             if (token->proxy_should_drop) {
                 goto Skip;
             }
             if (token == H2O_TOKEN_CONTENT_LENGTH) {
                 if (req->res.content_length != SIZE_MAX ||
-                    (req->res.content_length = h2o_strtosize(headers[i].value, headers[i].value_len)) == SIZE_MAX) {
+                    (req->res.content_length = h2o_strtosize(headers[i].value.base, headers[i].value.len)) == SIZE_MAX) {
                     self->client = NULL;
                     h2o_req_log_error(req, "lib/core/proxy.c", "%s", "invalid response from upstream (malformed content-length)");
                     h2o_send_error_502(req, "Gateway Error", "invalid response from upstream", 0);
@@ -434,45 +434,46 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                 if (req->res_is_delegated && (300 <= status && status <= 399) && status != 304) {
                     self->client = NULL;
                     h2o_iovec_t method = h2o_get_redirect_method(req->method, status);
-                    h2o_send_redirect_internal(req, method, headers[i].value, headers[i].value_len, 1);
+                    h2o_send_redirect_internal(req, method, headers[i].value.base, headers[i].value.len, 1);
                     return NULL;
                 }
                 if (req->overrides != NULL && req->overrides->location_rewrite.match != NULL) {
-                    value =
-                        rewrite_location(&req->pool, headers[i].value, headers[i].value_len, req->overrides->location_rewrite.match,
-                                         req->input.scheme, req->input.authority, req->overrides->location_rewrite.path_prefix);
+                    value = rewrite_location(&req->pool, headers[i].value.base, headers[i].value.len,
+                                             req->overrides->location_rewrite.match, req->input.scheme, req->input.authority,
+                                             req->overrides->location_rewrite.path_prefix);
                     if (value.base != NULL)
                         goto AddHeader;
                 }
                 goto AddHeaderDuped;
             } else if (token == H2O_TOKEN_LINK) {
                 h2o_iovec_t new_value;
-                new_value = h2o_push_path_in_link_header(req, headers[i].value, headers[i].value_len);
+                new_value = h2o_push_path_in_link_header(req, headers[i].value.base, headers[i].value.len);
                 if (!new_value.len)
                     goto Skip;
-                headers[i].value = new_value.base;
-                headers[i].value_len = new_value.len;
+                headers[i].value.base = new_value.base;
+                headers[i].value.len = new_value.len;
             } else if (token == H2O_TOKEN_X_COMPRESS_HINT) {
-                req->compress_hint = compress_hint_to_enum(headers[i].value, headers[i].value_len);
+                req->compress_hint = compress_hint_to_enum(headers[i].value.base, headers[i].value.len);
                 goto Skip;
             }
         /* default behaviour, transfer the header downstream */
         AddHeaderDuped:
-            value = h2o_strdup(&req->pool, headers[i].value, headers[i].value_len);
+            value = h2o_strdup(&req->pool, headers[i].value.base, headers[i].value.len);
         AddHeader:
-            h2o_add_header(&req->pool, &req->res.headers, token, value.base, value.len);
+            h2o_add_header(&req->pool, &req->res.headers, token, headers[i].orig_name, value.base, value.len);
         Skip:;
         } else {
-            h2o_iovec_t name = h2o_strdup(&req->pool, headers[i].name, headers[i].name_len);
-            h2o_iovec_t value = h2o_strdup(&req->pool, headers[i].value, headers[i].value_len);
-            h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, value.base, value.len);
+            h2o_iovec_t name = h2o_strdup(&req->pool, headers[i].name->base, headers[i].name->len);
+            h2o_iovec_t value = h2o_strdup(&req->pool, headers[i].value.base, headers[i].value.len);
+            h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, headers[i].orig_name, value.base,
+                                  value.len);
         }
     }
 
     if (self->is_websocket_handshake && req->res.status == 101) {
         h2o_http1client_ctx_t *client_ctx = get_client_ctx(req);
         assert(client_ctx->websocket_timeout != NULL);
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, H2O_STRLIT("websocket"));
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
         on_websocket_upgrade(self, client_ctx->websocket_timeout);
         self->client = NULL;
         return NULL;
@@ -489,15 +490,15 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     return on_body;
 }
 
-static int on_1xx(h2o_http1client_t *client, int minor_version, int status, h2o_iovec_t msg, h2o_http1client_header_t *headers,
+static int on_1xx(h2o_http1client_t *client, int minor_version, int status, h2o_iovec_t msg, h2o_header_t *headers,
                   size_t num_headers)
 {
     struct rp_generator_t *self = client->data;
     size_t i;
 
     for (i = 0; i != num_headers; ++i) {
-        if (h2o_memis(headers[i].name, headers[i].name_len, H2O_STRLIT("link")))
-            h2o_push_path_in_link_header(self->src_req, headers[i].value, headers[i].value_len);
+        if (headers[i].name == &H2O_TOKEN_LINK->buf)
+            h2o_push_path_in_link_header(self->src_req, headers[i].value.base, headers[i].value.len);
     }
 
     return 0;

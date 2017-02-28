@@ -1,6 +1,28 @@
 Revision history for H2O.
 
-2.1.0 TBD
+2.2.0-beta1 2017-02-28 02:20:00+0000
+	- [core] add `crash-handler.wait-pipe-close` parameter #1092 (Frederik Deweerdt)
+	- [access-log] do not emit request-total-time twice #1017 (Kazuho Oku)
+	- [fastcgi] fix a bug that closes the FastCGI listener socket during startup #1203 (Frederik Deweerdt)
+	- [file] add directive for serving gzipped files, decompressing them on-the-fly #1140 (Ichito Nagata)
+	- [headers] fix buffer overrun during startup #1180 (Frederik Deweerdt)
+	- [http1][proxy] preserve the cases of characters used in header names #1194 (Frederik Deweerdt)
+	- [http1][proxy] fix undefined behavior in HTTP/1 parser #1189 (Frederik Deweerdt)
+	- [http2] recognize `x-http2-push-only` attribute on `link` header #1169 (Frederik Deweerdt)
+	- [http2] add optional timeout for closing connections upon graceful shutdown #1108 (Frederik Deweerdt)
+	- [http2] do not ack an acked PING frame #1175 (Moto Ishisawa)
+	- [http2] reject requests exceeding the maximum allowed size more efficiently #1183 (Frederik Deweerdt)
+	- [mruby] remove dependenty to mkmf #1197 (Yuki Kurihara)
+	- [proxy] add directives for tweaking headers sent to upstream #1126 (Justin Zhu)
+	- [proxy] retain case-sensitivity of unix socket paths #1131 (Frederik Deweerdt)
+	- [ssl] add directive for logging session ID #1164 (Yannick Koechlin)
+	- [ssl] add support for TLS 1.3 draft-18 #1204 (Kazuho Oku)
+	- [ssl] stop evicting session entries in memcached when they are removed from internal cache #1185 (Ichito Nagata)
+	- [libh2o] implement `h2o_evloop_destroy` #1200 (kazan417)
+	- [misc] add test code for fuzzing #1174 #1182 #1191 #1192 (Frederik Deweerdt, Jonathan Foote)
+	- [misc] fix issues reported by Coverity #1168 #1172 #1179 (Harrison Bowden, Frederik Deweerdt)
+
+2.1.0 2017-01-17 23:43:27+0000
 	- [core] TCP latency optimization #873 #1076 (Kazuho Oku)
 	- [core] provide tag to include other YAML files from the configuration file #1022 (Ichito Nagata)
 	- [core] accept sequence of mappings for path-level configuration #1042 (Ichito Nagata)
