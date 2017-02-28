@@ -238,4 +238,15 @@ subtest 'escape' => sub {
     }
 };
 
+subtest "json-null" => sub {
+    doit(
+        sub {
+            my $server = shift;
+            system("curl --silent http://127.0.0.1:$server->{port}/ > /dev/null");
+        },
+        { format => '\\"%h\\" %l', escape => 'json' },
+        qr{^"127\.0\.0\.1" null$},
+    );
+};
+
 done_testing;
