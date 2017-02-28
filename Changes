@@ -1,6 +1,6 @@
 Revision history for H2O.
 
-2.2.0-beta1 TBD
+2.2.0-beta1 2017-02-28 02:20:00+0000
 	- [core] add `crash-handler.wait-pipe-close` parameter #1092 (Frederik Deweerdt)
 	- [access-log] do not emit request-total-time twice #1017 (Kazuho Oku)
 	- [fastcgi] fix a bug that closes the FastCGI listener socket during startup #1203 (Frederik Deweerdt)
