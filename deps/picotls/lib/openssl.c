@@ -49,19 +49,6 @@ void ptls_openssl_random_bytes(void *buf, size_t len)
     RAND_bytes(buf, (int)len);
 }
 
-static int eckey_is_on_group(EVP_PKEY *pkey, int nid)
-{
-    EC_KEY *eckey = EVP_PKEY_get1_EC_KEY(pkey);
-    int ret = 0;
-
-    if (eckey != NULL) {
-        ret = EC_GROUP_get_curve_name(EC_KEY_get0_group(eckey)) == nid;
-        EC_KEY_free(eckey);
-    }
-
-    return ret;
-}
-
 static EC_KEY *ecdh_gerenate_key(EC_GROUP *group)
 {
     EC_KEY *key;
@@ -310,7 +297,7 @@ static int secp256r1_key_exchange(ptls_iovec_t *pubkey, ptls_iovec_t *secret, pt
     return secp_key_exchange(NID_X9_62_prime256v1, pubkey, secret, peerkey);
 }
 
-static int rsapss_sign(EVP_PKEY *key, ptls_buffer_t *outbuf, ptls_iovec_t input)
+static int do_sign(EVP_PKEY *key, ptls_buffer_t *outbuf, ptls_iovec_t input, const EVP_MD *md)
 {
     EVP_MD_CTX *ctx = NULL;
     EVP_PKEY_CTX *pkey_ctx;
@@ -321,7 +308,7 @@ static int rsapss_sign(EVP_PKEY *key, ptls_buffer_t *outbuf, ptls_iovec_t input)
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
     }
-    if (EVP_DigestSignInit(ctx, &pkey_ctx, EVP_sha256(), NULL, key) != 1) {
+    if (EVP_DigestSignInit(ctx, &pkey_ctx, md, NULL, key) != 1) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
@@ -537,30 +524,20 @@ static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, uint16_
                             ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
 {
     ptls_openssl_sign_certificate_t *self = (ptls_openssl_sign_certificate_t *)_self;
+    const struct st_ptls_openssl_signature_scheme_t *scheme;
 
-    /* decide the signature algorithm to use */
-    switch (EVP_PKEY_id(self->key)) {
-    case EVP_PKEY_RSA:
-        *selected_algorithm = PTLS_SIGNATURE_RSA_PSS_SHA256;
-        break;
-    case EVP_PKEY_EC:
-        *selected_algorithm = PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256;
-        break;
-    default:
-        assert(!"logic flaw");
-        break;
-    }
-
-    { /* report failure if the select algorithm cannot be used */
+    /* select the algorithm */
+    for (scheme = self->schemes; scheme->scheme_id != UINT16_MAX; ++scheme) {
         size_t i;
         for (i = 0; i != num_algorithms; ++i)
-            if (algorithms[i] == *selected_algorithm)
+            if (algorithms[i] == scheme->scheme_id)
                 goto Found;
-        return PTLS_ALERT_HANDSHAKE_FAILURE;
-    Found:;
     }
+    return PTLS_ALERT_HANDSHAKE_FAILURE;
 
-    return rsapss_sign(self->key, outbuf, input);
+Found:
+    *selected_algorithm = scheme->scheme_id;
+    return do_sign(self->key, outbuf, input, scheme->scheme_md);
 }
 
 static X509 *to_x509(ptls_iovec_t vec)
@@ -573,7 +550,7 @@ static int verify_sign(void *verify_ctx, ptls_iovec_t data, ptls_iovec_t signatu
 {
     EVP_PKEY *key = verify_ctx;
     EVP_MD_CTX *ctx = NULL;
-    EVP_PKEY_CTX *pkey_ctx;
+    EVP_PKEY_CTX *pkey_ctx = NULL;
     int ret = 0;
 
     if (data.base == NULL)
@@ -614,25 +591,54 @@ static int verify_sign(void *verify_ctx, ptls_iovec_t data, ptls_iovec_t signatu
 Exit:
     if (ctx != NULL)
         EVP_MD_CTX_destroy(ctx);
-    EVP_PKEY_free(key);
     return ret;
 }
 
 int ptls_openssl_init_sign_certificate(ptls_openssl_sign_certificate_t *self, EVP_PKEY *key)
 {
+    *self = (ptls_openssl_sign_certificate_t){{sign_certificate}};
+    size_t scheme_index = 0;
+
+#define PUSH_SCHEME(id, md) self->schemes[scheme_index++] = (struct st_ptls_openssl_signature_scheme_t){id, md}
+
     switch (EVP_PKEY_id(key)) {
     case EVP_PKEY_RSA:
+        PUSH_SCHEME(PTLS_SIGNATURE_RSA_PSS_SHA256, EVP_sha256());
+        PUSH_SCHEME(PTLS_SIGNATURE_RSA_PSS_SHA384, EVP_sha384());
+        PUSH_SCHEME(PTLS_SIGNATURE_RSA_PSS_SHA512, EVP_sha512());
         break;
-    case EVP_PKEY_EC:
-        if (!eckey_is_on_group(key, NID_X9_62_prime256v1))
+    case EVP_PKEY_EC: {
+        EC_KEY *eckey = EVP_PKEY_get1_EC_KEY(key);
+        switch (EC_GROUP_get_curve_name(EC_KEY_get0_group(eckey))) {
+        case NID_X9_62_prime256v1:
+            PUSH_SCHEME(PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256, EVP_sha256());
+            break;
+#if defined(NID_secp384r1) && !OPENSSL_NO_SHA384
+        case NID_secp384r1:
+            PUSH_SCHEME(PTLS_SIGNATURE_ECDSA_SECP384R1_SHA384, EVP_sha384());
+            break;
+#endif
+#if defined(NID_secp384r1) && !OPENSSL_NO_SHA512
+        case NID_secp521r1:
+            PUSH_SCHEME(PTLS_SIGNATURE_ECDSA_SECP521R1_SHA512, EVP_sha512());
+            break;
+#endif
+        default:
+            EC_KEY_free(eckey);
             return PTLS_ERROR_INCOMPATIBLE_KEY;
-        break;
+        }
+        EC_KEY_free(eckey);
+    } break;
     default:
         return PTLS_ERROR_INCOMPATIBLE_KEY;
     }
+    PUSH_SCHEME(UINT16_MAX, NULL);
+    assert(scheme_index <= sizeof(self->schemes) / sizeof(self->schemes[0]));
+
+#undef PUSH_SCHEME
 
     EVP_PKEY_up_ref(key);
-    *self = (ptls_openssl_sign_certificate_t){{sign_certificate}, key};
+    self->key = key;
 
     return 0;
 }
