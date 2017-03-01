@@ -722,7 +722,7 @@ static int setup_traffic_protection(ptls_t *tls, ptls_cipher_suite_t *cs, int is
 #define SESSION_IDENTIFIER_MAGIC_SIZE (sizeof(SESSION_IDENTIFIER_MAGIC) - 1)
 
 int encode_session_identifier(ptls_buffer_t *buf, uint32_t ticket_age_add, struct st_ptls_key_schedule_t *sched,
-                              const char *server_name, uint16_t csid)
+                              const char *server_name, uint16_t csid, const char *negotiated_protocol)
 {
     int ret = 0;
 
@@ -748,6 +748,11 @@ int encode_session_identifier(ptls_buffer_t *buf, uint32_t ticket_age_add, struc
             if (server_name != NULL)
                 ptls_buffer_pushv(buf, server_name, strlen(server_name));
         });
+        /* alpn */
+        ptls_buffer_push_block(buf, 1, {
+            if (negotiated_protocol != NULL)
+                ptls_buffer_pushv(buf, negotiated_protocol, strlen(negotiated_protocol));
+        });
     });
 
 Exit:
@@ -755,7 +760,7 @@ Exit:
 }
 
 int decode_session_identifier(uint64_t *issued_at, ptls_iovec_t *psk, uint32_t *ticket_age_add, ptls_iovec_t *server_name,
-                              uint16_t *csid, const uint8_t *src, const uint8_t *end)
+                              uint16_t *csid, ptls_iovec_t *negotiated_protocol, const uint8_t *src, const uint8_t *end)
 {
     int ret = 0;
 
@@ -778,6 +783,10 @@ int decode_session_identifier(uint64_t *issued_at, ptls_iovec_t *psk, uint32_t *
             goto Exit;
         decode_open_block(src, end, 2, {
             *server_name = ptls_iovec_init(src, end - src);
+            src = end;
+        });
+        decode_open_block(src, end, 1, {
+            *negotiated_protocol = ptls_iovec_init(src, end - src);
             src = end;
         });
     });
@@ -890,7 +899,8 @@ static int send_session_ticket(ptls_t *tls, ptls_buffer_t *sendbuf)
 
     /* build the raw nsk */
     ptls_buffer_init(&session_id, session_id_smallbuf, sizeof(session_id_smallbuf));
-    ret = encode_session_identifier(&session_id, ticket_age_add, tls->key_schedule, tls->server_name, tls->cipher_suite->id);
+    ret = encode_session_identifier(&session_id, ticket_age_add, tls->key_schedule, tls->server_name, tls->cipher_suite->id,
+                                    tls->negotiated_protocol);
     if (ret != 0)
         goto Exit;
 
@@ -1754,10 +1764,15 @@ Exit:
     return ret;
 }
 
+static int vec_is_string(ptls_iovec_t x, const char *y)
+{
+    return strncmp((const char *)x.base, y, x.len) == 0 && y[x.len] == '\0';
+}
+
 static int try_psk_handshake(ptls_t *tls, size_t *psk_index, struct st_ptls_client_hello_t *ch, ptls_iovec_t ch_trunc)
 {
     ptls_buffer_t decbuf;
-    ptls_iovec_t ticket_psk, ticket_server_name;
+    ptls_iovec_t ticket_psk, ticket_server_name, ticket_negotiated_protocol;
     uint64_t issue_at;
     uint32_t age_add;
     uint16_t ticket_csid;
@@ -1772,16 +1787,14 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, struct st_ptls_clie
         decbuf.off = 0;
         if ((tls->ctx->decrypt_ticket->cb(tls->ctx->decrypt_ticket, tls, &decbuf, input)) != 0)
             continue;
-        if (decode_session_identifier(&issue_at, &ticket_psk, &age_add, &ticket_server_name, &ticket_csid, decbuf.base,
-                                      decbuf.base + decbuf.off) != 0)
+        if (decode_session_identifier(&issue_at, &ticket_psk, &age_add, &ticket_server_name, &ticket_csid,
+                                      &ticket_negotiated_protocol, decbuf.base, decbuf.base + decbuf.off) != 0)
             continue;
         /* check server-name */
         if (ticket_server_name.len != 0) {
             if (tls->server_name == NULL)
                 continue;
-            if (strncmp(tls->server_name, (const char *)ticket_server_name.base, ticket_server_name.len) != 0)
-                continue;
-            if (tls->server_name[ticket_server_name.len] != '\0')
+            if (!vec_is_string(ticket_server_name, tls->server_name))
                 continue;
         } else {
             if (tls->server_name != NULL)
@@ -1790,6 +1803,13 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, struct st_ptls_clie
         /* check cipher-suite */
         if (ticket_csid != tls->cipher_suite->id)
             continue;
+        /* check negotiated-protocol */
+        if (ticket_negotiated_protocol.len != 0) {
+            if (tls->negotiated_protocol == NULL)
+                continue;
+            if (!vec_is_string(ticket_negotiated_protocol, tls->negotiated_protocol))
+                continue;
+        }
         /* check the length of the decrypted psk and the PSK binder */
         if (ticket_psk.len != tls->key_schedule->algo->digest_size)
             continue;
