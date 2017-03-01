@@ -461,8 +461,8 @@ Exit:
     return ret;
 }
 
-static void listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_config_t *ssl_config,
-                                       SSL_CTX *ssl_ctx)
+static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_config_t *ssl_config,
+                                              SSL_CTX *ssl_ctx)
 {
     static const ptls_key_exchange_algorithm_t *key_exchanges[] = {&ptls_minicrypto_x25519, &ptls_openssl_secp256r1, NULL};
     struct st_fat_context_t {
@@ -474,6 +474,7 @@ static void listener_setup_ssl_picotls(struct listener_config_t *listener, struc
     EVP_PKEY *key;
     X509 *cert;
     STACK_OF(X509) * cert_chain;
+    int ret;
 
     *pctx = (struct st_fat_context_t){{ptls_openssl_random_bytes,
                                        key_exchanges,
@@ -499,12 +500,18 @@ static void listener_setup_ssl_picotls(struct listener_config_t *listener, struc
         SSL_free(fakeconn);
     }
 
-    SSL_CTX_get_extra_chain_certs(ssl_ctx, &cert_chain);
+    if (ptls_openssl_init_sign_certificate(&pctx->sc, key) != 0) {
+        free(pctx);
+        return "failed to setup private key";
+    }
 
-    ptls_openssl_init_sign_certificate(&pctx->sc, key);
-    ptls_openssl_load_certificates(&pctx->ctx, cert, cert_chain);
+    SSL_CTX_get_extra_chain_certs(ssl_ctx, &cert_chain);
+    ret = ptls_openssl_load_certificates(&pctx->ctx, cert, cert_chain);
+    assert(ret == 0);
 
     h2o_socket_ssl_set_picotls_context(ssl_ctx, &pctx->ctx);
+
+    return NULL;
 }
 
 #endif
@@ -802,8 +809,11 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 #endif
 
 #if H2O_USE_PICOTLS
-    if (use_picotls)
-        listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx);
+    if (use_picotls) {
+        const char *errstr = listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx);
+        if (errstr != NULL)
+            h2o_configurator_errprintf(cmd, ssl_node, "%s; TLS 1.3 will be disabled\n", errstr);
+    }
 #endif
 
     return 0;
