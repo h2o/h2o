@@ -42,6 +42,22 @@
 #define EVP_PKEY_up_ref(p) CRYPTO_add(&(p)->references, 1, CRYPTO_LOCK_EVP_PKEY)
 #define X509_STORE_up_ref(p) CRYPTO_add(&(p)->references, 1, CRYPTO_LOCK_X509_STORE)
 
+static HMAC_CTX *HMAC_CTX_new(void)
+{
+    HMAC_CTX *ctx;
+
+    if ((ctx = OPENSSL_malloc(sizeof(*ctx))) == NULL)
+        return NULL;
+    HMAC_CTX_init(ctx);
+    return ctx;
+}
+
+static void HMAC_CTX_free(HMAC_CTX *ctx)
+{
+    HMAC_CTX_cleanup(ctx);
+    OPENSSL_free(ctx);
+}
+
 #endif
 
 void ptls_openssl_random_bytes(void *buf, size_t len)
@@ -808,13 +824,19 @@ void ptls_openssl_dispose_verify_certificate(ptls_openssl_verify_certificate_t *
 int ptls_openssl_encrypt_ticket(ptls_buffer_t *buf, ptls_iovec_t src,
                                 int (*cb)(unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx, int enc))
 {
-    EVP_CIPHER_CTX cctx;
-    HMAC_CTX hctx;
+    EVP_CIPHER_CTX *cctx = NULL;
+    HMAC_CTX *hctx = NULL;
     uint8_t *dst;
     int clen, ret;
 
-    EVP_CIPHER_CTX_init(&cctx);
-    HMAC_CTX_init(&hctx);
+    if ((cctx = EVP_CIPHER_CTX_new()) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if ((hctx = HMAC_CTX_new()) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
 
     if ((ret = ptls_buffer_reserve(buf, TICKET_LABEL_SIZE + TICKET_IV_SIZE + src.len + EVP_MAX_BLOCK_LENGTH + EVP_MAX_MD_SIZE)) !=
         0)
@@ -822,50 +844,58 @@ int ptls_openssl_encrypt_ticket(ptls_buffer_t *buf, ptls_iovec_t src,
     dst = buf->base + buf->off;
 
     /* fill label and iv, as well as obtaining the keys */
-    if (!(*cb)(dst, dst + TICKET_LABEL_SIZE, &cctx, &hctx, 1)) {
+    if (!(*cb)(dst, dst + TICKET_LABEL_SIZE, cctx, hctx, 1)) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
     dst += TICKET_LABEL_SIZE + TICKET_IV_SIZE;
 
     /* encrypt */
-    if (!EVP_EncryptUpdate(&cctx, dst, &clen, src.base, (int)src.len)) {
+    if (!EVP_EncryptUpdate(cctx, dst, &clen, src.base, (int)src.len)) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
     dst += clen;
-    if (!EVP_EncryptFinal(&cctx, dst, &clen)) {
+    if (!EVP_EncryptFinal(cctx, dst, &clen)) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
     dst += clen;
 
     /* append hmac */
-    if (!HMAC_Update(&hctx, buf->base + buf->off, dst - (buf->base + buf->off)) || !HMAC_Final(&hctx, dst, NULL)) {
+    if (!HMAC_Update(hctx, buf->base + buf->off, dst - (buf->base + buf->off)) || !HMAC_Final(hctx, dst, NULL)) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
-    dst += HMAC_size(&hctx);
+    dst += HMAC_size(hctx);
 
     assert(dst <= buf->base + buf->capacity);
     buf->off += dst - (buf->base + buf->off);
     ret = 0;
 
 Exit:
-    EVP_CIPHER_CTX_cleanup(&cctx);
-    HMAC_cleanup(&hctx);
+    if (cctx != NULL)
+        EVP_CIPHER_CTX_cleanup(cctx);
+    if (hctx != NULL)
+        HMAC_CTX_free(hctx);
     return ret;
 }
 
 int ptls_openssl_decrypt_ticket(ptls_buffer_t *buf, ptls_iovec_t src,
                                 int (*cb)(unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx, int enc))
 {
-    EVP_CIPHER_CTX cctx;
-    HMAC_CTX hctx;
+    EVP_CIPHER_CTX *cctx = NULL;
+    HMAC_CTX *hctx = NULL;
     int clen, ret;
 
-    EVP_CIPHER_CTX_init(&cctx);
-    HMAC_CTX_init(&hctx);
+    if ((cctx = EVP_CIPHER_CTX_new()) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if ((hctx = HMAC_CTX_new()) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
 
     /* obtain cipher and hash context.
      * Note: no need to handle renew, since in picotls we always send a new ticket to minimize the chance of ticket reuse */
@@ -873,20 +903,20 @@ int ptls_openssl_decrypt_ticket(ptls_buffer_t *buf, ptls_iovec_t src,
         ret = PTLS_ALERT_DECODE_ERROR;
         goto Exit;
     }
-    if (!(*cb)(src.base, src.base + TICKET_LABEL_SIZE, &cctx, &hctx, 0)) {
+    if (!(*cb)(src.base, src.base + TICKET_LABEL_SIZE, cctx, hctx, 0)) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
 
     /* check hmac, and exclude label, iv, hmac */
-    size_t hmac_size = HMAC_size(&hctx);
+    size_t hmac_size = HMAC_size(hctx);
     if (src.len < TICKET_LABEL_SIZE + TICKET_IV_SIZE + hmac_size) {
         ret = PTLS_ALERT_DECODE_ERROR;
         goto Exit;
     }
     src.len -= hmac_size;
     uint8_t hmac[EVP_MAX_MD_SIZE];
-    if (!HMAC_Update(&hctx, src.base, src.len) || !HMAC_Final(&hctx, hmac, NULL)) {
+    if (!HMAC_Update(hctx, src.base, src.len) || !HMAC_Final(hctx, hmac, NULL)) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
@@ -900,12 +930,12 @@ int ptls_openssl_decrypt_ticket(ptls_buffer_t *buf, ptls_iovec_t src,
     /* decrypt */
     if ((ret = ptls_buffer_reserve(buf, src.len)) != 0)
         goto Exit;
-    if (!EVP_DecryptUpdate(&cctx, buf->base + buf->off, &clen, src.base, (int)src.len)) {
+    if (!EVP_DecryptUpdate(cctx, buf->base + buf->off, &clen, src.base, (int)src.len)) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
     buf->off += clen;
-    if (!EVP_DecryptFinal(&cctx, buf->base + buf->off, &clen)) {
+    if (!EVP_DecryptFinal(cctx, buf->base + buf->off, &clen)) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
@@ -914,8 +944,10 @@ int ptls_openssl_decrypt_ticket(ptls_buffer_t *buf, ptls_iovec_t src,
     ret = 0;
 
 Exit:
-    EVP_CIPHER_CTX_cleanup(&cctx);
-    HMAC_cleanup(&hctx);
+    if (cctx != NULL)
+        EVP_CIPHER_CTX_cleanup(cctx);
+    if (hctx != NULL)
+        HMAC_CTX_free(hctx);
     return ret;
 }
 
