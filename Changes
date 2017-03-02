@@ -2,6 +2,7 @@ Revision history for H2O.
 
 2.2.0-beta1 2017-02-28 02:20:00+0000
 	- [core] add `crash-handler.wait-pipe-close` parameter #1092 (Frederik Deweerdt)
+	- [access-log] add `%{remote}p` for logging the remote port #1166 (Kazuho Oku)
 	- [access-log] do not emit request-total-time twice #1017 (Kazuho Oku)
 	- [fastcgi] fix a bug that closes the FastCGI listener socket during startup #1203 (Frederik Deweerdt)
 	- [file] add directive for serving gzipped files, decompressing them on-the-fly #1140 (Ichito Nagata)
