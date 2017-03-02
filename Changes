@@ -1,5 +1,10 @@
 Revision history for H2O.
 
+2.2.0-beta2 TBD
+	- [access-log] add support for JSON-style escapes and null #1208 (Kazuho Oku)
+	- [ssl] fix crash when a secp384r1, secp521r1 certificate is used with TLS 1.3 #1214 (Kazuho Oku)
+	- [ssl] fix build failure with OpenSSL 1.1.0 #1216 (Kazuho Oku)
+
 2.2.0-beta1 2017-02-28 02:20:00+0000
 	- [core] add `crash-handler.wait-pipe-close` parameter #1092 (Frederik Deweerdt)
 	- [access-log] add `%{remote}p` for logging the remote port #1166 (Kazuho Oku)
