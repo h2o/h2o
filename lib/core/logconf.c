@@ -501,7 +501,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             if (env_var == NULL || env_var->len < 1)
                 goto EmitNull;
             RESERVE(env_var->len * unsafe_factor);
-            pos = append_unsafe_string(pos, env_var->base, env_var->len);
+            pos = append_safe_string(pos, env_var->base, env_var->len);
             } break;
         case ELEMENT_TYPE_QUERY: /* %q */
             if (req->input.query_at != SIZE_MAX) {
