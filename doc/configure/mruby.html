@@ -254,7 +254,7 @@ When HTTPS is used, servers are verified using the properties of <a href="config
             parsed_json = JSON.parse(input)
             parsed_json["time"] = Time.now.to_i
             logdata = parsed_json.to_s
-            [200, {"x-fallthru-set-POSTDATA" => logdata}, ["nix"]]
+            [204, {"x-fallthru-set-POSTDATA" => logdata}, []]
           end
     access-log:
       path: /dev/stdout
