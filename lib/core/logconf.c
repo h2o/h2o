@@ -498,7 +498,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             break;
         case ELEMENT_TYPE_ENV_VAR:  /* %{..}e */  {
             h2o_iovec_t *env_var = h2o_req_getenv(req, element->data.name.base, element->data.name.len, 0);
-            if (env_var == NULL || env_var->len < 1)
+            if (env_var == NULL || env_var->len < 0)
                 goto EmitNull;
             RESERVE(env_var->len * unsafe_factor);
             pos = append_safe_string(pos, env_var->base, env_var->len);
