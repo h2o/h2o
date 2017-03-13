@@ -99,6 +99,7 @@ If the supplied argument is a mapping, its <code>path</code> property is conside
 <pre><code>access-log:
     path: /path/to/access-log-file
     format: &quot;%h %l %u %t \&quot;%r\&quot; %s %b&quot;
+    escape: &quot;apache&quot;
 </code></pre>
 </div>
 
@@ -118,6 +119,7 @@ The list of format strings recognized by H2O is as follows.
 <tr><td><code>%m</code><td>request method (e.g. <code>GET</code>, <code>POST</code>)
 <tr><td><code>%p</code><td>local port (<code>%{local}p</code> is a synonym that is supported since version 2.2)
 <tr><td><code>%{remote}p</code><td>remote port (since version 2.2)
+<tr><td><code>%{<i>VARNAME</i>}e</code><td>cgi environment variable (since version 2.3) 
 <tr><td><code>%q</code><td>query string (<code>?</code> is prepended if exists, otherwise an empty string)
 <tr><td><code>%r</code><td>request line (e.g. <code>GET / HTTP/1.1</code>)
 <tr><td><code>%s</code><td>status code (e.g. <code>200</code>)
