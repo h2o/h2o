@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
@@ -15,7 +15,7 @@ plan skip_all => 'mruby support is off'
 
 subtest "basic" => sub {
     # spawn upstream
-    my $upstream_port = empty_port();
+    my $upstream_port = safe_empty_port();
     my $upstream = spawn_server(
         argv     => [
             qw(plackup -s Starlet --access-log /dev/null -p), $upstream_port, ASSETS_DIR . "/upstream.psgi",
@@ -60,6 +60,7 @@ EOT
     subtest 'h2c' => sub {
         $doit->('https', '', $server->{tls_port});
     };
+    safe_empty_port_release($upstream_port);
 };
 
 

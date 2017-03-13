@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
@@ -15,7 +15,7 @@ plan skip_all => 'curl not found'
     unless prog_exists('curl');
 
 # start upstream
-my $upstream_port = empty_port();
+my $upstream_port = safe_empty_port();
 my $upstream = spawn_server(
     argv     => [
         qw(plackup -MPlack::App::File -s Starlet --access-log /dev/null -p), $upstream_port,
@@ -100,5 +100,7 @@ EOT
     my $resp = `curl --silent --dump-header /dev/stderr "http://127.0.0.1:$server->{port}/?resp:x-reproxy-url=http://127.0.0.1:$upstream_port/index.txt" 2>&1 > /dev/null`;
     like $resp, qr{^HTTP/1\.1 502 }s;
 };
+
+safe_empty_port_release($upstream_port);
 
 done_testing;

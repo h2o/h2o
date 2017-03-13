@@ -79,4 +79,8 @@ subtest "port3" => sub {
     like $resp, qr{\r\n\r\nhost3$}s;
 };
 
+for (@ports) {
+    safe_empty_port_release($_);
+}
+
 done_testing;

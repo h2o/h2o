@@ -3,7 +3,7 @@ use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempfile);
 use Getopt::Long;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use URI::Escape;
 use t::Util;
@@ -52,7 +52,8 @@ my ($unix_socket_file, $unix_socket_guard) = do {
     );
 } if $unix_socket;
 
-my $upstream = $unix_socket_file ? "[unix:$unix_socket_file]" : "127.0.0.1:@{[empty_port()]}";
+my $upstream_port = safe_empty_port();
+my $upstream = $unix_socket_file ? "[unix:$unix_socket_file]" : "127.0.0.1:@{[$upstream_port]}";
 
 my $guard = do {
     local $ENV{FORCE_CHUNKED} = $starlet_force_chunked;
@@ -245,5 +246,5 @@ subtest 'nghttp' => sub {
         $doit->('https', '', $server->{tls_port});
     };
 };
-
+safe_empty_port_release($upstream_port);
 done_testing;

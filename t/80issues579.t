@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
@@ -14,7 +14,7 @@ plan skip_all => 'nghttp not found'
     unless prog_exists('nghttp');
 
 # spawn upstream
-my $upstream_port = empty_port();
+my $upstream_port = safe_empty_port();
 my $upstream = spawn_server(
     argv     => [
         qw(plackup -s Starlet --access-log /dev/null -p), $upstream_port, ASSETS_DIR . "/upstream.psgi",
@@ -42,4 +42,5 @@ EOT
 my $resp = `nghttp -n --stat "http://127.0.0.1:$server->{port}/index.txt"`;
 like $resp, qr{\nid\s*responseEnd\s.*\s/assets/index\.js\n.*\s/index\.txt\n}is, 'should receive pushed blocking asset from file handler before the main response';
 
+safe_empty_port_release($upstream_port);
 done_testing;

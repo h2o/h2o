@@ -1,13 +1,13 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
 plan skip_all => 'nghttp not found'
     unless prog_exists('nghttp');
 
-my $upstream_port = empty_port();
+my $upstream_port = safe_empty_port();
 $| = 1;
 my $socket = new IO::Socket::INET (
     LocalHost => '127.0.0.1',
@@ -48,4 +48,5 @@ foreach (split(/\r\n/, $req)) {
 }
 
 ok($host_headers == 1, "Only saw one host: header");
+safe_empty_port_release($upstream_port);
 done_testing();

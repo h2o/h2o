@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempfile);
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
@@ -11,9 +11,10 @@ plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 
 subtest "tcp" => sub {
-    my $port = empty_port();
+    my $port = safe_empty_port();
     my $upstream = spawn_upstream($port);
     doit("127.0.0.1:$port");
+    safe_empty_port_release($port);
 };
 
 subtest "unix-socket" => sub {
