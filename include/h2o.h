@@ -395,6 +395,10 @@ struct st_h2o_globalconf_t {
          * a boolean flag if set to true, instructs the proxy to emit x-forwarded-proto and x-forwarded-for headers
          */
         int emit_x_forwarded_headers;
+        /**
+         * a boolean flag if set to true, instructs the proxy to emit a via header
+         */
+        int emit_via_header;
     } proxy;
 
     /**

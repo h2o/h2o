@@ -139,6 +139,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
     h2o_iovec_t cookie_buf = {NULL}, xff_buf = {NULL}, via_buf = {NULL};
     int preserve_x_forwarded_proto = req->conn->ctx->globalconf->proxy.preserve_x_forwarded_proto;
     int emit_x_forwarded_headers = req->conn->ctx->globalconf->proxy.emit_x_forwarded_headers;
+    int emit_via_header = req->conn->ctx->globalconf->proxy.emit_via_header;
 
     /* for x-f-f */
     if ((sslen = req->conn->callbacks->get_peername(req->conn, (void *)&ss)) != 0)
@@ -231,6 +232,9 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
                     cookie_buf = build_request_merge_headers(&req->pool, cookie_buf, h->value, ';');
                     continue;
                 } else if (token == H2O_TOKEN_VIA) {
+                    if (!emit_via_header) {
+                        goto AddHeader;
+                    }
                     via_buf = build_request_merge_headers(&req->pool, via_buf, h->value, ',');
                     continue;
                 } else if (token == H2O_TOKEN_X_FORWARDED_FOR) {
@@ -273,17 +277,21 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
         buf.base[offset++] = '\r';
         buf.base[offset++] = '\n';
     }
-    FLATTEN_PREFIXED_VALUE("via: ", via_buf, sizeof("1.1 ") - 1 + req->input.authority.len);
-    if (req->version < 0x200) {
-        buf.base[offset++] = '1';
-        buf.base[offset++] = '.';
-        buf.base[offset++] = '0' + (0x100 <= req->version && req->version <= 0x109 ? req->version - 0x100 : 0);
-    } else {
-        buf.base[offset++] = '2';
+    if (emit_via_header) {
+        FLATTEN_PREFIXED_VALUE("via: ", via_buf, sizeof("1.1 ") - 1 + req->input.authority.len);
+        if (req->version < 0x200) {
+            buf.base[offset++] = '1';
+            buf.base[offset++] = '.';
+            buf.base[offset++] = '0' + (0x100 <= req->version && req->version <= 0x109 ? req->version - 0x100 : 0);
+        } else {
+            buf.base[offset++] = '2';
+        }
+        buf.base[offset++] = ' ';
+        APPEND(req->input.authority.base, req->input.authority.len);
+        buf.base[offset++] = '\r';
+        buf.base[offset++] = '\n';
     }
-    buf.base[offset++] = ' ';
-    APPEND(req->input.authority.base, req->input.authority.len);
-    APPEND_STRLIT("\r\n\r\n");
+    APPEND_STRLIT("\r\n");
 
 #undef RESERVE
 #undef APPEND
