@@ -421,7 +421,7 @@ int main(int argc, char **argv)
     ENGINE_register_all_digests();
 #endif
 
-    ptls_iovec_t _certs[16];
+    ptls_iovec_t _certs[16] = {{NULL}};
     ptls_openssl_sign_certificate_t sign_certificate = {{NULL}};
     ptls_encrypt_ticket_t encrypt_ticket = {encrypt_ticket_cb}, decrypt_ticket = {decrypt_ticket_cb};
     ptls_save_ticket_t save_ticket = {save_ticket_cb};

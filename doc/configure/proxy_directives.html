@@ -199,7 +199,33 @@ By default, when forwarding an HTTP request H2O sends its own <code>x-forwarded-
 <dd>global</dd>
 <dt>Default:</dt>
 <dd><code><pre>proxy.emit-x-forwarded-headers: ON</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/proxy_directives.html#proxy.emit-via-header"><code>proxy.emit-via-header</code></a>
+</dd>
 </dl>
+
+<div id="proxy.emit-via-header" class="directive-head">
+<div class="directive-since">since v2.2</div>
+<h3><a href="configure/proxy_directives.html#proxy.emit-via-header"><code>"proxy.emit-via-header"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if the server adds or appends an entry to the <code>via</code> request header.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.emit-via-header: ON</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/proxy_directives.html#proxy.emit-x-forwarded-headers"><code>proxy.emit-x-forwarded-headers</code></a>
+</dd>
+</dl>
+
 
 <div id="proxy.header.add" class="directive-head">
 <div class="directive-since">since v2.2</div>

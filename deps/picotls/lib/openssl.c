@@ -42,24 +42,27 @@
 #define EVP_PKEY_up_ref(p) CRYPTO_add(&(p)->references, 1, CRYPTO_LOCK_EVP_PKEY)
 #define X509_STORE_up_ref(p) CRYPTO_add(&(p)->references, 1, CRYPTO_LOCK_X509_STORE)
 
+static HMAC_CTX *HMAC_CTX_new(void)
+{
+    HMAC_CTX *ctx;
+
+    if ((ctx = OPENSSL_malloc(sizeof(*ctx))) == NULL)
+        return NULL;
+    HMAC_CTX_init(ctx);
+    return ctx;
+}
+
+static void HMAC_CTX_free(HMAC_CTX *ctx)
+{
+    HMAC_CTX_cleanup(ctx);
+    OPENSSL_free(ctx);
+}
+
 #endif
 
 void ptls_openssl_random_bytes(void *buf, size_t len)
 {
     RAND_bytes(buf, (int)len);
-}
-
-static int eckey_is_on_group(EVP_PKEY *pkey, int nid)
-{
-    EC_KEY *eckey = EVP_PKEY_get1_EC_KEY(pkey);
-    int ret = 0;
-
-    if (eckey != NULL) {
-        ret = EC_GROUP_get_curve_name(EC_KEY_get0_group(eckey)) == nid;
-        EC_KEY_free(eckey);
-    }
-
-    return ret;
 }
 
 static EC_KEY *ecdh_gerenate_key(EC_GROUP *group)
@@ -310,7 +313,7 @@ static int secp256r1_key_exchange(ptls_iovec_t *pubkey, ptls_iovec_t *secret, pt
     return secp_key_exchange(NID_X9_62_prime256v1, pubkey, secret, peerkey);
 }
 
-static int rsapss_sign(EVP_PKEY *key, ptls_buffer_t *outbuf, ptls_iovec_t input)
+static int do_sign(EVP_PKEY *key, ptls_buffer_t *outbuf, ptls_iovec_t input, const EVP_MD *md)
 {
     EVP_MD_CTX *ctx = NULL;
     EVP_PKEY_CTX *pkey_ctx;
@@ -321,7 +324,7 @@ static int rsapss_sign(EVP_PKEY *key, ptls_buffer_t *outbuf, ptls_iovec_t input)
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
     }
-    if (EVP_DigestSignInit(ctx, &pkey_ctx, EVP_sha256(), NULL, key) != 1) {
+    if (EVP_DigestSignInit(ctx, &pkey_ctx, md, NULL, key) != 1) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
@@ -537,30 +540,20 @@ static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, uint16_
                             ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
 {
     ptls_openssl_sign_certificate_t *self = (ptls_openssl_sign_certificate_t *)_self;
+    const struct st_ptls_openssl_signature_scheme_t *scheme;
 
-    /* decide the signature algorithm to use */
-    switch (EVP_PKEY_id(self->key)) {
-    case EVP_PKEY_RSA:
-        *selected_algorithm = PTLS_SIGNATURE_RSA_PSS_SHA256;
-        break;
-    case EVP_PKEY_EC:
-        *selected_algorithm = PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256;
-        break;
-    default:
-        assert(!"logic flaw");
-        break;
-    }
-
-    { /* report failure if the select algorithm cannot be used */
+    /* select the algorithm */
+    for (scheme = self->schemes; scheme->scheme_id != UINT16_MAX; ++scheme) {
         size_t i;
         for (i = 0; i != num_algorithms; ++i)
-            if (algorithms[i] == *selected_algorithm)
+            if (algorithms[i] == scheme->scheme_id)
                 goto Found;
-        return PTLS_ALERT_HANDSHAKE_FAILURE;
-    Found:;
     }
+    return PTLS_ALERT_HANDSHAKE_FAILURE;
 
-    return rsapss_sign(self->key, outbuf, input);
+Found:
+    *selected_algorithm = scheme->scheme_id;
+    return do_sign(self->key, outbuf, input, scheme->scheme_md);
 }
 
 static X509 *to_x509(ptls_iovec_t vec)
@@ -573,7 +566,7 @@ static int verify_sign(void *verify_ctx, ptls_iovec_t data, ptls_iovec_t signatu
 {
     EVP_PKEY *key = verify_ctx;
     EVP_MD_CTX *ctx = NULL;
-    EVP_PKEY_CTX *pkey_ctx;
+    EVP_PKEY_CTX *pkey_ctx = NULL;
     int ret = 0;
 
     if (data.base == NULL)
@@ -614,25 +607,54 @@ static int verify_sign(void *verify_ctx, ptls_iovec_t data, ptls_iovec_t signatu
 Exit:
     if (ctx != NULL)
         EVP_MD_CTX_destroy(ctx);
-    EVP_PKEY_free(key);
     return ret;
 }
 
 int ptls_openssl_init_sign_certificate(ptls_openssl_sign_certificate_t *self, EVP_PKEY *key)
 {
+    *self = (ptls_openssl_sign_certificate_t){{sign_certificate}};
+    size_t scheme_index = 0;
+
+#define PUSH_SCHEME(id, md) self->schemes[scheme_index++] = (struct st_ptls_openssl_signature_scheme_t){id, md}
+
     switch (EVP_PKEY_id(key)) {
     case EVP_PKEY_RSA:
+        PUSH_SCHEME(PTLS_SIGNATURE_RSA_PSS_SHA256, EVP_sha256());
+        PUSH_SCHEME(PTLS_SIGNATURE_RSA_PSS_SHA384, EVP_sha384());
+        PUSH_SCHEME(PTLS_SIGNATURE_RSA_PSS_SHA512, EVP_sha512());
         break;
-    case EVP_PKEY_EC:
-        if (!eckey_is_on_group(key, NID_X9_62_prime256v1))
+    case EVP_PKEY_EC: {
+        EC_KEY *eckey = EVP_PKEY_get1_EC_KEY(key);
+        switch (EC_GROUP_get_curve_name(EC_KEY_get0_group(eckey))) {
+        case NID_X9_62_prime256v1:
+            PUSH_SCHEME(PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256, EVP_sha256());
+            break;
+#if defined(NID_secp384r1) && !OPENSSL_NO_SHA384
+        case NID_secp384r1:
+            PUSH_SCHEME(PTLS_SIGNATURE_ECDSA_SECP384R1_SHA384, EVP_sha384());
+            break;
+#endif
+#if defined(NID_secp384r1) && !OPENSSL_NO_SHA512
+        case NID_secp521r1:
+            PUSH_SCHEME(PTLS_SIGNATURE_ECDSA_SECP521R1_SHA512, EVP_sha512());
+            break;
+#endif
+        default:
+            EC_KEY_free(eckey);
             return PTLS_ERROR_INCOMPATIBLE_KEY;
-        break;
+        }
+        EC_KEY_free(eckey);
+    } break;
     default:
         return PTLS_ERROR_INCOMPATIBLE_KEY;
     }
+    PUSH_SCHEME(UINT16_MAX, NULL);
+    assert(scheme_index <= sizeof(self->schemes) / sizeof(self->schemes[0]));
+
+#undef PUSH_SCHEME
 
     EVP_PKEY_up_ref(key);
-    *self = (ptls_openssl_sign_certificate_t){{sign_certificate}, key};
+    self->key = key;
 
     return 0;
 }
@@ -802,13 +824,19 @@ void ptls_openssl_dispose_verify_certificate(ptls_openssl_verify_certificate_t *
 int ptls_openssl_encrypt_ticket(ptls_buffer_t *buf, ptls_iovec_t src,
                                 int (*cb)(unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx, int enc))
 {
-    EVP_CIPHER_CTX cctx;
-    HMAC_CTX hctx;
+    EVP_CIPHER_CTX *cctx = NULL;
+    HMAC_CTX *hctx = NULL;
     uint8_t *dst;
     int clen, ret;
 
-    EVP_CIPHER_CTX_init(&cctx);
-    HMAC_CTX_init(&hctx);
+    if ((cctx = EVP_CIPHER_CTX_new()) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if ((hctx = HMAC_CTX_new()) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
 
     if ((ret = ptls_buffer_reserve(buf, TICKET_LABEL_SIZE + TICKET_IV_SIZE + src.len + EVP_MAX_BLOCK_LENGTH + EVP_MAX_MD_SIZE)) !=
         0)
@@ -816,50 +844,58 @@ int ptls_openssl_encrypt_ticket(ptls_buffer_t *buf, ptls_iovec_t src,
     dst = buf->base + buf->off;
 
     /* fill label and iv, as well as obtaining the keys */
-    if (!(*cb)(dst, dst + TICKET_LABEL_SIZE, &cctx, &hctx, 1)) {
+    if (!(*cb)(dst, dst + TICKET_LABEL_SIZE, cctx, hctx, 1)) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
     dst += TICKET_LABEL_SIZE + TICKET_IV_SIZE;
 
     /* encrypt */
-    if (!EVP_EncryptUpdate(&cctx, dst, &clen, src.base, (int)src.len)) {
+    if (!EVP_EncryptUpdate(cctx, dst, &clen, src.base, (int)src.len)) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
     dst += clen;
-    if (!EVP_EncryptFinal(&cctx, dst, &clen)) {
+    if (!EVP_EncryptFinal(cctx, dst, &clen)) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
     dst += clen;
 
     /* append hmac */
-    if (!HMAC_Update(&hctx, buf->base + buf->off, dst - (buf->base + buf->off)) || !HMAC_Final(&hctx, dst, NULL)) {
+    if (!HMAC_Update(hctx, buf->base + buf->off, dst - (buf->base + buf->off)) || !HMAC_Final(hctx, dst, NULL)) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
-    dst += HMAC_size(&hctx);
+    dst += HMAC_size(hctx);
 
     assert(dst <= buf->base + buf->capacity);
     buf->off += dst - (buf->base + buf->off);
     ret = 0;
 
 Exit:
-    EVP_CIPHER_CTX_cleanup(&cctx);
-    HMAC_cleanup(&hctx);
+    if (cctx != NULL)
+        EVP_CIPHER_CTX_cleanup(cctx);
+    if (hctx != NULL)
+        HMAC_CTX_free(hctx);
     return ret;
 }
 
 int ptls_openssl_decrypt_ticket(ptls_buffer_t *buf, ptls_iovec_t src,
                                 int (*cb)(unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx, int enc))
 {
-    EVP_CIPHER_CTX cctx;
-    HMAC_CTX hctx;
+    EVP_CIPHER_CTX *cctx = NULL;
+    HMAC_CTX *hctx = NULL;
     int clen, ret;
 
-    EVP_CIPHER_CTX_init(&cctx);
-    HMAC_CTX_init(&hctx);
+    if ((cctx = EVP_CIPHER_CTX_new()) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if ((hctx = HMAC_CTX_new()) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
 
     /* obtain cipher and hash context.
      * Note: no need to handle renew, since in picotls we always send a new ticket to minimize the chance of ticket reuse */
@@ -867,20 +903,20 @@ int ptls_openssl_decrypt_ticket(ptls_buffer_t *buf, ptls_iovec_t src,
         ret = PTLS_ALERT_DECODE_ERROR;
         goto Exit;
     }
-    if (!(*cb)(src.base, src.base + TICKET_LABEL_SIZE, &cctx, &hctx, 0)) {
+    if (!(*cb)(src.base, src.base + TICKET_LABEL_SIZE, cctx, hctx, 0)) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
 
     /* check hmac, and exclude label, iv, hmac */
-    size_t hmac_size = HMAC_size(&hctx);
+    size_t hmac_size = HMAC_size(hctx);
     if (src.len < TICKET_LABEL_SIZE + TICKET_IV_SIZE + hmac_size) {
         ret = PTLS_ALERT_DECODE_ERROR;
         goto Exit;
     }
     src.len -= hmac_size;
     uint8_t hmac[EVP_MAX_MD_SIZE];
-    if (!HMAC_Update(&hctx, src.base, src.len) || !HMAC_Final(&hctx, hmac, NULL)) {
+    if (!HMAC_Update(hctx, src.base, src.len) || !HMAC_Final(hctx, hmac, NULL)) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
@@ -894,12 +930,12 @@ int ptls_openssl_decrypt_ticket(ptls_buffer_t *buf, ptls_iovec_t src,
     /* decrypt */
     if ((ret = ptls_buffer_reserve(buf, src.len)) != 0)
         goto Exit;
-    if (!EVP_DecryptUpdate(&cctx, buf->base + buf->off, &clen, src.base, (int)src.len)) {
+    if (!EVP_DecryptUpdate(cctx, buf->base + buf->off, &clen, src.base, (int)src.len)) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
     buf->off += clen;
-    if (!EVP_DecryptFinal(&cctx, buf->base + buf->off, &clen)) {
+    if (!EVP_DecryptFinal(cctx, buf->base + buf->off, &clen)) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
@@ -908,8 +944,10 @@ int ptls_openssl_decrypt_ticket(ptls_buffer_t *buf, ptls_iovec_t src,
     ret = 0;
 
 Exit:
-    EVP_CIPHER_CTX_cleanup(&cctx);
-    HMAC_cleanup(&hctx);
+    if (cctx != NULL)
+        EVP_CIPHER_CTX_cleanup(cctx);
+    if (hctx != NULL)
+        HMAC_CTX_free(hctx);
     return ret;
 }
 

@@ -819,7 +819,7 @@ h2o_iovec_t h2o_socket_log_ssl_session_id(h2o_socket_t *sock, h2o_mem_pool_t *po
     h2o_iovec_t base64id, rawid = h2o_socket_get_ssl_session_id(sock);
 
     if (rawid.base == NULL)
-        return h2o_iovec_init(H2O_STRLIT("-"));
+        return h2o_iovec_init(NULL, 0);
 
     base64id.base = pool != NULL ? h2o_mem_alloc_pool(pool, h2o_base64_encode_capacity(rawid.len))
                                  : h2o_mem_alloc(h2o_base64_encode_capacity(rawid.len));
@@ -836,7 +836,7 @@ h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *p
         size_t len = sprintf(s, "%" PRId16, (int16_t)bits);
         return h2o_iovec_init(s, len);
     } else {
-        return h2o_iovec_init(H2O_STRLIT("-"));
+        return h2o_iovec_init(NULL, 0);
     }
 }
 

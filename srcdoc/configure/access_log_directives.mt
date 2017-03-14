@@ -30,12 +30,21 @@ EOT
 
 <p>
 If the supplied argument is a mapping, its <code>path</code> property is considered as the path of the log file or the pipe command, and the <code>format</code> property is treated as the format of the log file.
+Starting from version 2.2, <code>escape</code> property can be used to specify the escape sequence that should be used to emit unsafe octets.
+</p>
+
+<p>
+Two forms of escape sequences are supported.
+If <code>apache</code> is specified as the value of the <code>escape</code> property, unsafe octets are emitted in the form of <code>\xNN</code>, where N is a hexadecimal number in lower case.
+If <code>json</code> is specified, unsafe octets are emitted in the form of <code>\u00NN</code>.
+<code>apache</code> is the default escape method.
 </p>
 
 <?= $ctx->{example}->('Emit access log to file using Common Log Format', <<'EOT')
 access-log:
     path: /path/to/access-log-file
     format: "%h %l %u %t \"%r\" %s %b"
+    escape: apache
 EOT
 ?>
 
@@ -52,7 +61,8 @@ The list of format strings recognized by H2O is as follows.
 <tr><td><code>%h</code><td>remote address (e.g. <code>1.2.3.4</code>)
 <tr><td><code>%l</code><td>remote logname (always <code>-</code>)
 <tr><td><code>%m</code><td>request method (e.g. <code>GET</code>, <code>POST</code>)
-<tr><td><code>%p</code><td>local port
+<tr><td><code>%p</code><td>local port (<code>%{local}p</code> is a synonym that is supported since version 2.2)
+<tr><td><code>%{remote}p</code><td>remote port (since version 2.2)
 <tr><td><code>%q</code><td>query string (<code>?</code> is prepended if exists, otherwise an empty string)
 <tr><td><code>%r</code><td>request line (e.g. <code>GET / HTTP/1.1</code>)
 <tr><td><code>%s</code><td>status code (e.g. <code>200</code>)

@@ -1,7 +1,16 @@
 Revision history for H2O.
 
+2.2.0-beta2 TBD
+	- [access-log] add support for JSON-style escapes and null #1208 (Kazuho Oku)
+	- [access-log] add specifier for logging per-request environment variables #1221 (Yannick Koechlin)
+	- [http1] stop reading from socket after sending 400 to avoid the risk of assertion failure #1223 (Frederik Deweerdt)
+	- [proxy] add directive for controlling the `via` request header #1225 (Frederik Deweerdt)
+	- [ssl] fix crash when a secp384r1, secp521r1 certificate is used with TLS 1.3 #1214 (Kazuho Oku)
+	- [ssl] fix build failure with OpenSSL 1.1.0 #1216 (Kazuho Oku)
+
 2.2.0-beta1 2017-02-28 02:20:00+0000
 	- [core] add `crash-handler.wait-pipe-close` parameter #1092 (Frederik Deweerdt)
+	- [access-log] add `%{remote}p` for logging the remote port #1166 (Kazuho Oku)
 	- [access-log] do not emit request-total-time twice #1017 (Kazuho Oku)
 	- [fastcgi] fix a bug that closes the FastCGI listener socket during startup #1203 (Frederik Deweerdt)
 	- [file] add directive for serving gzipped files, decompressing them on-the-fly #1140 (Ichito Nagata)

@@ -15,15 +15,19 @@ MRuby::Gem::Specification.new('mruby-onig-regexp') do |spec|
       linker.libraries = ['pthread']
     end
 
-    version = '5.15.0'
-    oniguruma_dir = "#{build_dir}/onig-#{version}"
-    oniguruma_lib = libfile "#{oniguruma_dir}/.libs/libonig"
+    version = '6.1.1'
+    oniguruma_dir = "#{build_dir}/onigmo-#{version}"
+    oniguruma_lib = libfile "#{oniguruma_dir}/.libs/libonigmo"
     unless ENV['OS'] == 'Windows_NT'
-      oniguruma_lib = libfile "#{oniguruma_dir}/.libs/libonig"
+      oniguruma_lib = libfile "#{oniguruma_dir}/.libs/libonigmo"
     else
-      oniguruma_lib = libfile "#{oniguruma_dir}/onig_s"
+      if ENV['PROCESSOR_ARCHITECTURE'] == 'AMD64'
+        oniguruma_lib = libfile "#{oniguruma_dir}/build-x86-64/onigmo"
+      else
+        oniguruma_lib = libfile "#{oniguruma_dir}/build-i686/onigmo"
+      end
     end
-    header = "#{oniguruma_dir}/oniguruma.h"
+    header = "#{oniguruma_dir}/onigmo.h"
 
     task :clean do
       FileUtils.rm_rf [oniguruma_dir]
@@ -63,7 +67,7 @@ MRuby::Gem::Specification.new('mruby-onig-regexp') do |spec|
 
           _pp 'autotools', oniguruma_dir
           run_command e, './autogen.sh' if File.exists? 'autogen.sh'
-          run_command e, "./configure --disable-shared --enable-static --enable-multithread #{host}"
+          run_command e, "./configure --disable-shared --enable-static #{host}"
           run_command e, 'make'
         else
           run_command e, 'cmd /c "copy /Y win32 > NUL"'
@@ -94,10 +98,14 @@ MRuby::Gem::Specification.new('mruby-onig-regexp') do |spec|
 
     file "#{dir}/src/mruby_onig_regexp.c" => oniguruma_lib
     cc.include_paths << oniguruma_dir
+    cc.defines += ['HAVE_ONIGMO_H']
   end
 
-
-  if build.cc.respond_to? :search_header_path and build.cc.search_header_path 'oniguruma.h'
+  if spec.respond_to? :search_package and spec.search_package 'onigmo'
+    spec.cc.defines += ['HAVE_ONIGMO_H']
+  elsif spec.respond_to? :search_package and spec.search_package 'oniguruma'
+    spec.cc.defines += ['HAVE_ONIGURUMA_H']
+  elsif build.cc.respond_to? :search_header_path and build.cc.search_header_path 'oniguruma.h'
     spec.linker.libraries << 'onig'
   else
     spec.bundle_onigmo

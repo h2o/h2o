@@ -36,9 +36,15 @@ extern ptls_cipher_suite_t *ptls_openssl_cipher_suites[];
 
 void ptls_openssl_random_bytes(void *buf, size_t len);
 
+struct st_ptls_openssl_signature_scheme_t {
+    uint16_t scheme_id;
+    const EVP_MD *scheme_md;
+};
+
 typedef struct st_ptls_openssl_sign_certificate_t {
     ptls_sign_certificate_t super;
     EVP_PKEY *key;
+    struct st_ptls_openssl_signature_scheme_t schemes[4]; /* terminated by .scheme_id == UINT16_MAX */
 } ptls_openssl_sign_certificate_t;
 
 int ptls_openssl_init_sign_certificate(ptls_openssl_sign_certificate_t *self, EVP_PKEY *key);
