@@ -191,6 +191,7 @@ Or in the example below, the handler triggers <a href="configure/http2_directive
 </code></pre>
 </div>
 
+
 <h3 id="http-client">Using the HTTP Client</h3>
 
 <p>
@@ -237,31 +238,6 @@ Since the API provides an asynchronous HTTP client, it is possible to effectivel
 When HTTPS is used, servers are verified using the properties of <a href="configure/proxy_directives.html#proxy.ssl.cafile"><code>proxy.ssl.cafile</code></a> and <a href="configure/proxy_directives.html#proxy.ssl.verify-peer"><code>proxy.ssl.verify-peer</code></a> specified at the global level.
 </p>
 
-
-<h3 id="json">Parsing and logging JSON</h3>
-
-<p>
-  This example shows how to read request data, parse json and then log data from mruby by setting a <code>x-fallthrough-set-..</code> header
-</p>
-
-<div class="example">
-<div class="caption">Example. Logging the content of a POST request via Env variable</div>
-<pre><code>paths:
-  &quot;/&quot;:
-    mruby.handler: |
-          Proc.new do |env|
-            input = env["rack.input"] ? env["rack.input"].read : '{"default": "true"}'
-            parsed_json = JSON.parse(input)
-            parsed_json["time"] = Time.now.to_i
-            logdata = parsed_json.to_s
-            [204, {"x-fallthru-set-POSTDATA" => logdata}, []]
-          end
-    access-log:
-      path: /dev/stdout
-      escape: json
-      format: '{"POST": %{POSTDATA}e}'
-</code></pre>
-</div>
 
 
 
