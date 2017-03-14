@@ -118,6 +118,89 @@ static void test_aes128gcm(void)
     test_ciphersuite(find_aes128gcmsha256(ctx), find_aes128gcmsha256(ctx_peer));
 }
 
+static struct {
+    struct {
+        uint8_t buf[32];
+        size_t len;
+        int is_end_of_record;
+    } vec[16];
+    size_t count;
+} test_fragmented_message_queue = {{{{0}}}};
+
+static int test_fragmented_message_record(ptls_t *tls, ptls_buffer_t *sendbuf, ptls_iovec_t message, int is_end_of_record,
+                                          ptls_handshake_properties_t *properties)
+{
+    memcpy(test_fragmented_message_queue.vec[test_fragmented_message_queue.count].buf, message.base, message.len);
+    test_fragmented_message_queue.vec[test_fragmented_message_queue.count].len = message.len;
+    test_fragmented_message_queue.vec[test_fragmented_message_queue.count].is_end_of_record = is_end_of_record;
+    ++test_fragmented_message_queue.count;
+
+    return 0;
+}
+
+static void test_fragmented_message(void)
+{
+    ptls_t tls = {NULL};
+    struct st_ptls_record_t rec = {PTLS_CONTENT_TYPE_HANDSHAKE, 0x0301};
+    int ret;
+
+#define SET_RECORD(lit)                                                                                                            \
+    do {                                                                                                                           \
+        rec.length = sizeof(lit) - 1;                                                                                              \
+        rec.fragment = (const uint8_t *)(lit);                                                                                     \
+    } while (0)
+
+    /* not fragmented */
+    test_fragmented_message_queue.count = 0;
+    SET_RECORD("\x01\x00\x00\x03"
+               "abc");
+    ret = handle_handshake_record(&tls, test_fragmented_message_record, NULL, &rec, NULL);
+    ok(ret == 0);
+    ok(test_fragmented_message_queue.count == 1);
+    ok(test_fragmented_message_queue.vec[0].len == rec.length);
+    ok(memcmp(test_fragmented_message_queue.vec[0].buf, rec.fragment, rec.length) == 0);
+    ok(test_fragmented_message_queue.vec[0].is_end_of_record);
+    ok(tls.recvbuf.mess.base == NULL);
+
+    /* fragmented */
+    test_fragmented_message_queue.count = 0;
+    SET_RECORD("\x01\x00\x00\x03"
+               "a");
+    ret = handle_handshake_record(&tls, test_fragmented_message_record, NULL, &rec, NULL);
+    ok(ret == 0);
+    ok(tls.recvbuf.mess.base != NULL);
+    ok(test_fragmented_message_queue.count == 0);
+    SET_RECORD("bc\x02\x00\x00\x02"
+               "de"
+               "\x03");
+    ret = handle_handshake_record(&tls, test_fragmented_message_record, NULL, &rec, NULL);
+    ok(ret == 0);
+    ok(test_fragmented_message_queue.count == 2);
+    ok(test_fragmented_message_queue.vec[0].len == 7);
+    ok(memcmp(test_fragmented_message_queue.vec[0].buf, "\x01\x00\x00\x03"
+                                                        "abc",
+              7) == 0);
+    ok(!test_fragmented_message_queue.vec[0].is_end_of_record);
+    ok(test_fragmented_message_queue.vec[1].len == 6);
+    ok(memcmp(test_fragmented_message_queue.vec[1].buf, "\x02\x00\x00\x02"
+                                                        "de",
+              6) == 0);
+    ok(!test_fragmented_message_queue.vec[1].is_end_of_record);
+    SET_RECORD("\x00\x00\x03"
+               "end");
+    ret = handle_handshake_record(&tls, test_fragmented_message_record, NULL, &rec, NULL);
+    ok(ret == 0);
+    ok(tls.recvbuf.mess.base == NULL);
+    ok(test_fragmented_message_queue.count == 3);
+    ok(test_fragmented_message_queue.vec[2].len == 7);
+    ok(memcmp(test_fragmented_message_queue.vec[2].buf, "\x03\x00\x00\x03"
+                                                        "end",
+              7) == 0);
+    ok(test_fragmented_message_queue.vec[2].is_end_of_record);
+
+#undef SET_RECORD
+}
+
 static int save_client_hello(ptls_on_client_hello_t *self, ptls_t *tls, ptls_iovec_t server_name, const ptls_iovec_t *protocols,
                              size_t num_protocols, const uint16_t *signature_algorithms, size_t num_signature_algorithms)
 {
@@ -361,6 +444,8 @@ void test_picotls(void)
     subtest("hmac-sha256", test_hmac_sha256);
     subtest("hkdf", test_hkdf);
     subtest("aead-aes128gcm", test_aes128gcm);
+
+    subtest("fragmented-message", test_fragmented_message);
 
     ptls_sign_certificate_t sc = {sign_certificate};
     sc_orig = ctx_peer->sign_certificate;

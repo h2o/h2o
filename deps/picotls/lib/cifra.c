@@ -48,7 +48,7 @@ static void read_entropy(uint8_t *entropy, size_t size)
 
     while (size != 0) {
         ssize_t rret;
-        while ((rret = read(fd, entropy, sizeof(entropy))) == -1 && errno == EINTR)
+        while ((rret = read(fd, entropy, size)) == -1 && errno == EINTR)
             ;
         if (rret < 0) {
             perror("ptls_minicrypto_random_bytes");
@@ -160,7 +160,7 @@ static int x25519_key_exchange(ptls_iovec_t *pubkey, ptls_iovec_t *secret, ptls_
 Exit:
     ptls_clear_memory(priv, sizeof(priv));
     if (pub != NULL && ret != 0)
-        ptls_clear_memory(pub, sizeof(pub));
+        ptls_clear_memory(pub, X25519_KEY_SIZE);
     return ret;
 }
 
